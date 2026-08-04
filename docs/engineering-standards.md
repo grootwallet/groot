@@ -1,0 +1,36 @@
+# Engineering standards
+
+## Dependency direction
+
+`route → reusable component → WalletPort → dummy or Tauri adapter → Rust command → domain/persistence/network boundary`
+
+Dependencies point inward. Routes never select adapters. Rust commands translate DTOs and stable errors; pure domain functions own validation. BDK, Miniscript, SQLite, Core RPC, HWI, platform storage, and filesystem details stay behind their Rust modules.
+
+## Change shape
+
+1. State the invariant and acceptance criteria.
+2. Change the smallest owning layer.
+3. Add pure unit tests first, then adapter/command integration, then the minimum E2E proof.
+4. Update product, architecture, flow, implementation-status, testing, and ADR documents that own the changed claim.
+5. Run `pnpm validate`; add Rust and visual checks when applicable.
+
+## Review rules
+
+- Reject boolean “success” responses when a stable typed result/error is needed.
+- Reject UI-recomputed transaction facts when the PSBT can provide them.
+- Reject new global state for credentials, signing material, proposals, or wallet truth.
+- Reject unbounded input/output, silent fallback, network ambiguity, log payloads, and destructive broad filesystem targets.
+- Reject a production claim supported only by dummy, simulator, snapshot, or mocked evidence.
+- Prefer a small pure function and exhaustive table tests over condition-heavy route or command code.
+
+## Test pyramid
+
+- Unit: every policy branch, boundary value, parser failure, state transition, and stable error mapping.
+- Integration: database transactions, restart/corruption, BDK descriptors/PSBTs, Core sync/broadcast, and HWI transport adapters.
+- E2E: every user-visible flow, important failure/retry state, accessibility contract, and responsive layout.
+
+Coverage percentages are a floor, not evidence of correct assertions. Security-critical branches require explicit named tests even when line coverage is already complete.
+
+## AI contribution contract
+
+Agents read the nearest `AGENTS.md`, canonical docs, and applicable ADRs before editing. They preserve unrelated work, cite exact test evidence, distinguish unverified external requirements, and never weaken a safety gate merely to make a test or demo pass.

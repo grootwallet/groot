@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title">
+  <title id="title">Satchel wallet icon</title>
+  <rect width="1024" height="1024" fill="#141416"/>
+  <rect x="192" y="192" width="640" height="640" rx="176" fill="#F2A900"/>
+  <path d="M445 300v424M445 326h124c82 0 132 38 132 104 0 56-36 91-96 101 72 9 115 48 115 111 0 74-56 116-149 116H445M445 510h118c57 0 88-24 88-67 0-42-31-64-88-64H445M445 681h128c63 0 97-25 97-72 0-46-34-70-97-70H445M500 244v56M584 244v56M500 724v56M584 724v56" fill="none" stroke="#18130A" stroke-width="54" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

@@ -1,0 +1,25 @@
+export const MAX_TRANSFER_BYTES = 256 * 1024;
+
+export function validateTransferText(value: string): string {
+  const normalized = value.trim();
+  if (!normalized) throw new Error('The transfer file is empty.');
+  if (new TextEncoder().encode(normalized).byteLength > MAX_TRANSFER_BYTES) {
+    throw new Error('The transfer file is larger than 256 KiB.');
+  }
+  return normalized;
+}
+
+export async function readTransferFile(file: File): Promise<string> {
+  if (file.size > MAX_TRANSFER_BYTES) throw new Error('The transfer file is larger than 256 KiB.');
+  return validateTransferText(await file.text());
+}
+
+export function downloadText(filename: string, value: string): void {
+  const blob = new Blob([validateTransferText(value)], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}

@@ -1,0 +1,95 @@
+import { describe, expect, it } from 'vitest';
+import {
+  MULTISIG_ACCOUNT_PATH,
+  coordinatorProgress,
+  descriptorPreview,
+  normalizeCosigner,
+  validatePolicyDraft,
+  type CosignerDraft
+} from './policy';
+
+const cosigner = (overrides: Partial<CosignerDraft> = {}): CosignerDraft => ({
+  id: crypto.randomUUID(),
+  label: 'Coldcard',
+  fingerprint: 'a1b2c3d4',
+  xpub: 'tpubD6NzVbkrYhZ4Y-public-regtest-key-1',
+  derivationPath: "m/48'/1'/0'/2'",
+  source: 'manual',
+  ...overrides
+});
+
+describe('multisig policy invariants', () => {
+  it('uses the standard native-SegWit multisig account path', () => {
+    expect(MULTISIG_ACCOUNT_PATH).toBe("m/48'/1'/0'/2'");
+  });
+
+  it('accepts the deliberately narrow v1 policy envelope', () => {
+    const keys = [
+      cosigner(),
+      cosigner({ id: 'two', label: 'Ledger', fingerprint: 'b1b2c3d4', xpub: 'tpubD6NzVbkrYhZ4Y-public-regtest-key-2' }),
+      cosigner({ id: 'three', label: 'Trezor', fingerprint: 'c1b2c3d4', xpub: 'tpubD6NzVbkrYhZ4Y-public-regtest-key-3' })
+    ];
+    expect(validatePolicyDraft({ name: 'Family vault', threshold: 2, cosigners: keys })).toEqual([]);
+  });
+
+  it('rejects unsafe thresholds, too few keys, and oversized policies', () => {
+    expect(validatePolicyDraft({ name: 'Vault', threshold: 1, cosigners: [cosigner(), cosigner({ fingerprint: 'b1b2c3d4' })] })).toContain('At least 2 signatures are required.');
+    expect(validatePolicyDraft({ name: 'Vault', threshold: 2, cosigners: [cosigner()] })).toContain('Add at least 3 cosigners.');
+    expect(validatePolicyDraft({ name: 'Vault', threshold: 8, cosigners: Array.from({ length: 8 }, (_, index) => cosigner({ id: String(index), fingerprint: index.toString(16).padStart(8, '0'), xpub: `tpub-key-${index}` })) })).toContain('V1 supports at most 7 cosigners.');
+    const enough = [cosigner(), cosigner({ fingerprint: 'b1b2c3d4', xpub: 'two' }), cosigner({ fingerprint: 'c1b2c3d4', xpub: 'three' })];
+    expect(validatePolicyDraft({ name: '', threshold: 4, cosigners: enough })).toEqual(expect.arrayContaining(['A wallet name is required.', 'The threshold cannot exceed the number of cosigners.']));
+    expect(validatePolicyDraft({ name: 'Vault', threshold: 2.5, cosigners: enough })).toContain('At least 2 signatures are required.');
+  });
+
+  it('rejects empty labels, malformed fingerprints, and non-BIP48 origins', () => {
+    const errors = validatePolicyDraft({ name: 'Vault', threshold: 2, cosigners: [
+      cosigner({ label: '' }),
+      cosigner({ fingerprint: 'not-hex', xpub: 'two' }),
+      cosigner({ fingerprint: 'c1b2c3d4', xpub: 'three', derivationPath: "m/84'/1'/0'" })
+    ] });
+    expect(errors).toEqual(expect.arrayContaining([
+      'Every cosigner needs a label.',
+      'Every master fingerprint must contain 8 hexadecimal characters.',
+      `Every v1 key must use ${MULTISIG_ACCOUNT_PATH}.`
+    ]));
+  });
+
+  it('rejects duplicate fingerprints and duplicate account xpubs', () => {
+    const first = cosigner();
+    const duplicateFingerprint = cosigner({ id: 'two', label: 'Duplicate fingerprint', xpub: 'tpub-other-key' });
+    const duplicateXpub = cosigner({ id: 'three', label: 'Duplicate xpub', fingerprint: 'ffffffff' });
+    const errors = validatePolicyDraft({ name: 'Vault', threshold: 2, cosigners: [first, duplicateFingerprint, duplicateXpub] });
+    expect(errors).toContain('Every cosigner must have a unique master fingerprint.');
+    expect(errors).toContain('Every cosigner must have a unique account xpub.');
+  });
+
+  it('normalizes labels and fingerprints without altering public keys', () => {
+    expect(normalizeCosigner(cosigner({ label: '  Office   Coldcard ', fingerprint: 'A1B2C3D4' }))).toMatchObject({
+      label: 'Office Coldcard',
+      fingerprint: 'a1b2c3d4',
+      xpub: 'tpubD6NzVbkrYhZ4Y-public-regtest-key-1'
+    });
+  });
+
+  it('renders stable fingerprint-sorted receive and change descriptors', () => {
+    const keys = [cosigner({ fingerprint: 'ffffffff', xpub: 'last' }), cosigner({ fingerprint: '00000000', xpub: 'first' })];
+    expect(descriptorPreview(2, keys)).toBe("wsh(sortedmulti(2,[00000000/48'/1'/0'/2']first/0/*,[ffffffff/48'/1'/0'/2']last/0/*))");
+    expect(descriptorPreview(2, keys, 1)).toContain('first/1/*');
+  });
+});
+
+describe('coordinator signing progress', () => {
+  it('reports which devices signed and whether the PSBT can be finalized', () => {
+    expect(coordinatorProgress(2, [
+      { cosignerId: 'a', status: 'signed' },
+      { cosignerId: 'b', status: 'ready' },
+      { cosignerId: 'c', status: 'unavailable' }
+    ])).toEqual({ signed: 1, required: 2, remaining: 1, canFinalize: false });
+
+    expect(coordinatorProgress(2, [
+      { cosignerId: 'a', status: 'signed' },
+      { cosignerId: 'b', status: 'signed' },
+      { cosignerId: 'c', status: 'ready' }
+    ])).toEqual({ signed: 2, required: 2, remaining: 0, canFinalize: true });
+  });
+});

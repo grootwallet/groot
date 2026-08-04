@@ -1,0 +1,52 @@
+{
+  "name": "satchel-wallet",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:regtest": "vite --mode regtest",
+    "build": "vite build",
+    "build:regtest": "vite build --mode regtest",
+    "preview": "vite preview",
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage --coverage.provider=v8 --coverage.reporter=text --coverage.include=src/lib/wallet/policy.ts --coverage.include=src/lib/multisig/policy.ts --coverage.thresholds.lines=100 --coverage.thresholds.functions=100 --coverage.thresholds.branches=100 --coverage.thresholds.statements=100",
+    "test:coverage:rust": "cargo llvm-cov --manifest-path src-tauri/Cargo.toml --lib --summary-only --ignore-filename-regex 'src/(wallet|lib|hardware|network|registry|airgap|native_backup|secure_store)\\.rs' --fail-under-lines 99 --fail-under-functions 100 --fail-under-regions 97",
+    "test:coverage:rust:all": "cargo llvm-cov --manifest-path src-tauri/Cargo.toml --lib --summary-only",
+    "test:e2e": "playwright test",
+    "test:regtest": "bash scripts/regtest/test.sh",
+    "test:release-gate": "bash scripts/release/check-mainnet-gate.sh",
+    "test:boundaries": "bash scripts/quality/check-boundaries.sh",
+    "test:full": "pnpm validate && pnpm test:coverage && pnpm test:coverage:rust && pnpm test:e2e",
+    "test:watch": "vitest",
+    "validate": "pnpm test:boundaries && pnpm test:release-gate && pnpm check && pnpm test && pnpm build",
+    "regtest:start": "bash scripts/regtest/start.sh",
+    "regtest:status": "bash scripts/regtest/status.sh",
+    "regtest:mine": "bash scripts/regtest/mine.sh",
+    "regtest:send": "bash scripts/regtest/send.sh",
+    "regtest:stop": "bash scripts/regtest/stop.sh",
+    "hardware:preflight": "bash scripts/hardware/preflight.sh",
+    "tauri": "tauri"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.1",
+    "@sveltejs/adapter-static": "latest",
+    "@sveltejs/kit": "2.69.3",
+    "@sveltejs/vite-plugin-svelte": "latest",
+    "@tauri-apps/cli": "latest",
+    "@types/qrcode": "^1.5.6",
+    "@vitest/coverage-v8": "^4.1.10",
+    "svelte": "5.56.5",
+    "svelte-check": "4.7.3",
+    "typescript": "^5.9.3",
+    "vite": "8.1.5",
+    "vitest": "latest"
+  },
+  "dependencies": {
+    "@lucide/svelte": "1.24.0",
+    "@tauri-apps/api": "latest",
+    "@tauri-apps/plugin-clipboard-manager": "~2.3.2",
+    "qrcode": "^1.5.4"
+  }
+}
