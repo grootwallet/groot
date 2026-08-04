@@ -147,6 +147,33 @@ test('creates and verifies a simple 2-of-3 descriptor wallet', async ({ page }) 
   await expect(page.getByRole('heading', { name: 'Family vault' })).toBeVisible();
 });
 
+test('reveals draft errors only after review and keeps cosigner identity readable', async ({ page }) => {
+  await page.goto('/multisig/new');
+  await page.getByRole('button', { name: 'Add a cosigner' }).click();
+  await page.getByRole('button', { name: 'Enter public key' }).click();
+  await page.getByLabel('Cosigner label').fill(keys[0].label);
+  await page.getByLabel('Master fingerprint').fill(keys[0].fingerprint);
+  await page.getByLabel('Account xpub').fill(keys[0].xpub);
+  await page.getByRole('button', { name: 'Add key' }).click();
+
+  await expect(page.getByText('Device fingerprint', { exact: true })).toBeVisible();
+  await expect(page.getByText('Manual entry', { exact: true })).toBeVisible();
+  await expect(page.getByText(keys[0].xpub, { exact: true })).toBeVisible();
+  await expect(page.locator('.policy-errors')).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Review wallet' }).click();
+  await expect(page.getByText('A wallet name is required.')).toBeVisible();
+  await expect(page.getByText('Add 2 more cosigners.')).toBeVisible();
+  await expect(page.getByText('The threshold cannot exceed the number of cosigners.')).toHaveCount(0);
+  const keyLayout = await page.locator('.cosigner-public-key code').evaluate((element) => ({
+    whiteSpace: getComputedStyle(element).whiteSpace,
+    scrollWidth: element.scrollWidth,
+    clientWidth: element.clientWidth
+  }));
+  expect(keyLayout.whiteSpace).toBe('normal');
+  expect(keyLayout.scrollWidth).toBeLessThanOrEqual(keyLayout.clientWidth);
+});
+
 test('compiles and simulates guided Miniscript recovery policies', async ({ page }) => {
   await page.goto('/multisig/new');
   await page.getByLabel('Wallet name').fill('Policy lab vault');
@@ -206,8 +233,9 @@ test('blocks a duplicate device before review', async ({ page }) => {
     await page.getByLabel('Account xpub').fill(key.xpub);
     await page.getByRole('button', { name: 'Add key' }).click();
   }
+  await expect(page.getByText('Every cosigner must have a unique master fingerprint.')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Review wallet' }).click();
   await expect(page.getByText('Every cosigner must have a unique master fingerprint.')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Review wallet' })).toBeDisabled();
 });
 
 test('coordinator has no horizontal overflow on mobile', async ({ page }, testInfo) => {

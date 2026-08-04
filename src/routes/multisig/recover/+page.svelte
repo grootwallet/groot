@@ -1,13 +1,15 @@
 <script lang="ts">
   import { Check, FileUp } from '@lucide/svelte';
   import { goto } from '$app/navigation';
+  import { onDestroy } from 'svelte';
   import Button from '$lib/components/Button.svelte';
   import PasswordField from '$lib/components/PasswordField.svelte';
   import { toast } from '$lib/stores/toasts';
   import { walletService, type RecoveryDrill } from '$lib/wallet';
   let backup=$state(''),pin=$state(''),confirmation=$state(''),drill=$state<RecoveryDrill|null>(null),verified=$state(false),busy=$state(false),error=$state('');
   async function inspect(){busy=true;error='';drill=null;verified=false;try{drill=await walletService.recoveryDrill(backup);}catch(cause){error=cause instanceof Error?cause.message:'Invalid backup.';}finally{busy=false;}}
-  async function recover(){if(!drill||!verified||pin!==confirmation)return;busy=true;error='';try{await walletService.recoverMultisig(backup,pin);pin='';confirmation='';toast({title:'Vault recovered',description:'Descriptors were restored and will rescan from genesis.',tone:'success'});await goto('/multisig');}catch(cause){error=cause instanceof Error?cause.message:'Recovery failed.';}finally{busy=false;}}
+  onDestroy(()=>{pin='';confirmation='';});
+  async function recover(){if(!drill||!verified||pin!==confirmation)return;busy=true;error='';try{await walletService.recoverMultisig(backup,pin);toast({title:'Vault recovered',description:'Descriptors were restored and will rescan from genesis.',tone:'success'});await goto('/multisig');}catch(cause){error=cause instanceof Error?cause.message:'Recovery failed.';}finally{pin='';confirmation='';busy=false;}}
 </script>
 <div class="page narrow-page"><header class="page-header"><div><p class="eyebrow">DESCRIPTOR RECOVERY</p><h1>Recover multisig vault</h1><p class="subtitle">Restore a public coordinator from its Satchel descriptor backup.</p></div><Button variant="secondary" href="/settings">Cancel</Button></header>
 <section class="form-card"><label class="field"><span>Descriptor backup</span><textarea aria-label="Recovery descriptor backup" rows="10" bind:value={backup} placeholder="Paste the Satchel JSON backup"></textarea></label><Button variant="secondary" class="full" disabled={!backup.trim()||busy} onclick={inspect}><FileUp size={15}/>Validate backup</Button>

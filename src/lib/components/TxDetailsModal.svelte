@@ -35,6 +35,6 @@
       <div><dt>{transaction.direction === 'received' ? 'Received at' : 'Sent to'}</dt><dd class="mono">{transaction.address}</dd></div>
     </dl>
     <button class="hash-box" onclick={copyTxid}><span>Transaction ID</span><code>{transaction.id}</code><Copy size={16} /></button>
-    {#if defaultConfig.explorerUrl}<a class="explorer-link" href="{defaultConfig.explorerUrl}/tx/{transaction.id}" target="_blank" rel="noreferrer">View on mempool.space <ExternalLink size={14} /></a>{/if}
+    {#if defaultConfig.explorerUrl}<a class="explorer-link" href="{defaultConfig.explorerUrl}/tx/{transaction.id}" target="_blank" rel="noopener noreferrer">View on mempool.space <ExternalLink size={14} /></a>{/if}
   {/if}
 </Modal>

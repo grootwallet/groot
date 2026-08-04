@@ -9,10 +9,10 @@ Satchel is an onchain-only Bitcoin wallet and multisig coordinator for desktop, 
 - **Shell:** Tauri v2, using the shared Rust library entry point required by desktop and mobile.
 - **Frontend:** SvelteKit in SPA mode with `adapter-static`; Svelte 5 and local shadcn-svelte-style primitives.
 - **Wallet core:** Rust with `bdk_wallet` and its pinned Miniscript dependency, 24-word BIP39 recovery, BIP84 single-key descriptors, BIP48 `wsh(sortedmulti(...))` multisig descriptors, PSBTs, and SQLite persistence.
-- **Hardware boundary:** Bitcoin Core HWI is behind `HardwareTransport`. The CLI is resolved only from an absolute build-time or operating-system installation path; it never searches `PATH`. It uses fixed arguments, null stdin, bounded concurrent output reads, and a timeout. USB is desktop-only; bounded PSBT/descriptor files are the current cross-platform path.
+- **Hardware boundary:** Bitcoin Core HWI is behind `HardwareTransport`. The CLI is canonicalized from an absolute build-time or operating-system installation path; it never searches `PATH`, rejects group/world-writable executables on Unix, and runs without the inherited process environment. Every device command carries the type and path from a fresh enumeration, plus fixed arguments, null stdin, bounded concurrent output reads, and a timeout. USB is desktop-only; bounded PSBT/descriptor files are the current cross-platform path.
 - **Current chain source:** `bdk_bitcoind_rpc` against the isolated local Bitcoin Core node. The Core `satchel-dev` wallet is only a faucet/miner and never owns Satchel keys.
 - **Network boundary:** `ChainBackend` distinguishes local Core, authenticated remote Core, and public Esplora. HTTPS is mandatory remotely, URL credentials are rejected, and presets match exact endpoints. Only local Core is wired to sync today.
-- **Secrets:** a random AES-256-GCM data key encrypts the mnemonic. The data key is independently wrapped by the Argon2id-derived credential key and a device key, and both must authenticate to open the envelope. Apple targets keep the device key in Keychain; other targets use the private application sandbox with owner-only files pending platform certification. SQLite contains watch-only descriptors and public wallet state.
+- **Secrets:** a random AES-256-GCM data key encrypts the mnemonic. The data key is independently wrapped by the Argon2id-derived credential key and a device key, and both must authenticate to open the envelope. Apple targets keep the device key in Keychain; other targets use the private application sandbox with owner-only files pending platform certification. Keychain lookup failures other than an explicit item-not-found error fail closed and never rotate the wrapping key. SQLite contains watch-only descriptors and public wallet state.
 
 ## Trust boundary
 
@@ -30,7 +30,7 @@ Commands return typed errors with stable codes. Svelte translates those into inl
 
 ## Persistence model
 
-- BDK changesets and chain state are persisted transactionally in SQLite.
+- BDK changesets and chain state are persisted transactionally in per-wallet SQLite files. Connections enforce owner-only file permissions on Unix, a bounded busy timeout, foreign keys, untrusted schema mode, and SQLite defensive mode. The application has no hosted database or multi-tenant server today, so RLS is not an applicable control; introducing either requires a new trust-boundary ADR and tenant-isolation policy.
 - Address labels are written in the same transaction as address revelation and are immutable by schema/command design.
 - Multiple external addresses may have `awaiting_payment = true` concurrently. Creating one does not mutate earlier requests. Discarding targets one address by derivation index and is allowed only when it has no observed transaction; it marks that address retired without making BDK forget or stop monitoring it.
 - Frozen outpoints are stored separately from BDK chain state. Automatic builders mark all frozen outpoints unspendable. Manual builders accept only the exact validated outpoint set and reject frozen inputs.

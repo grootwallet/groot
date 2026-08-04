@@ -27,7 +27,7 @@ pnpm tauri dev
 
 Record only vendor/model, firmware, host OS, HWI version, date, and pass/fail/limitation. Keep the report under `hardware-certification.local/`, which is gitignored.
 
-1. Connect and unlock one device; open its Bitcoin app.
+1. Connect and unlock one device; keep it ready over USB (and open its Bitcoin app when that vendor requires one).
 2. Create a 2-of-3 vault and import its BIP48 public account key through HWI.
 3. Confirm the on-device fingerprint matches the locally saved record.
 4. Disconnect/reconnect and run the health check.

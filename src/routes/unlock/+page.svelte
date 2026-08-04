@@ -1,7 +1,7 @@
 <script lang="ts">
   import { ArrowLeft, LockKeyhole, Plus, Trash2 } from '@lucide/svelte';
   import { goto } from '$app/navigation';
-  import { onMount } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import Button from '$lib/components/Button.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import PasswordField from '$lib/components/PasswordField.svelte';
@@ -25,6 +25,11 @@
     const registry = await walletService.profiles();
     profiles = registry.wallets;
     selectedWalletId = registry.selectedWalletId;
+  });
+
+  onDestroy(() => {
+    credential = '';
+    resetConfirmation = '';
   });
 
   async function selectWallet(walletId: string) {

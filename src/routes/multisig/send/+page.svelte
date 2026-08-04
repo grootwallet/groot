@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Check, Copy, Cpu, Download, FileUp, LockKeyhole, X } from '@lucide/svelte';
-  import { onMount } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import Button from '$lib/components/Button.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import PasswordField from '$lib/components/PasswordField.svelte';
@@ -15,12 +15,13 @@
   let address=$state(''), amount=$state(''), selectedRate=$state(2), pin=$state(''), imported=$state(''), txid=$state(''), error=$state('');
   let busy=$state(false), deviceOpen=$state(false), importOpen=$state(false), devices=$state<HardwareDevice[]>([]);
   const amountSats=$derived(Number(amount||0)), addressValid=$derived(hasAddressPrefixForNetwork(address,defaultConfig.network)), valid=$derived(addressValid&&Number.isSafeInteger(amountSats)&&amountSats>0&&selectedRate>0);
+  onDestroy(()=>{pin='';imported='';});
   onMount(async()=>{try{wallet=await walletService.multisigWallet();estimates=await walletService.estimateFees();selectedRate=Number(estimates.standard);proposal=(await walletService.multisigProposals())[0]??null;}catch(cause){error=cause instanceof Error?cause.message:'Could not load vault.';}});
   async function prepare(){if(!valid)return;busy=true;error='';try{proposal=await walletService.prepareMultisigPayment(address,sats(amountSats),feeRate(selectedRate));}catch(cause){error=cause instanceof Error?cause.message:'Could not prepare payment.';}finally{busy=false;}}
   async function scan(){deviceOpen=true;busy=true;error='';try{devices=await walletService.listHardwareDevices();}catch(cause){devices=[];error=cause instanceof Error?cause.message:'Could not find hardware.';}finally{busy=false;}}
   async function sign(device:HardwareDevice){if(!proposal)return;busy=true;try{proposal=await walletService.signMultisigWithHardware(proposal.proposalId,device.id);deviceOpen=false;toast({title:'Signature added',description:`${proposal.signed} of ${proposal.required} signatures`,tone:'success'});}catch(cause){error=cause instanceof Error?cause.message:'Device signing failed.';}finally{busy=false;}}
   async function importPsbt(){if(!proposal||!imported.trim())return;busy=true;try{proposal=await walletService.importMultisigProposal(proposal.proposalId,imported);imported='';importOpen=false;toast({title:'Signed PSBT merged',description:`${proposal.signed} of ${proposal.required} signatures`,tone:'success'});}catch(cause){error=cause instanceof Error?cause.message:'PSBT import failed.';}finally{busy=false;}}
-  async function broadcast(){if(!proposal||!pin)return;busy=true;error='';try{const result=await walletService.broadcastMultisigProposal(proposal.proposalId,pin);txid=result.txid;pin='';toast({title:'Vault transaction broadcast',description:result.syncPending?'Accepted by the node. Balance refresh is pending.':`Balance ${shortSats(result.snapshot.balance.total)} sats`,tone:'success'});}catch(cause){error=cause instanceof Error?cause.message:'Broadcast failed.';pin='';}finally{busy=false;}}
+  async function broadcast(){if(!proposal||!pin)return;busy=true;error='';try{const result=await walletService.broadcastMultisigProposal(proposal.proposalId,pin);txid=result.txid;toast({title:'Vault transaction broadcast',description:result.syncPending?'Accepted by the node. Balance refresh is pending.':`Balance ${shortSats(result.snapshot.balance.total)} sats`,tone:'success'});}catch(cause){error=cause instanceof Error?cause.message:'Broadcast failed.';}finally{pin='';busy=false;}}
   async function cancel(){if(!proposal)return;await walletService.cancelMultisigProposal(proposal.proposalId);proposal=null;address='';amount='';}
   async function copyPsbt(){if(!proposal)return;await copyText(proposal.psbt);toast({title:'PSBT copied',tone:'success'});}
   async function loadPsbtFile(event:Event){const input=event.currentTarget as HTMLInputElement;const file=input.files?.[0];input.value='';if(!file)return;try{imported=await readTransferFile(file);toast({title:'Signed PSBT file loaded',tone:'success'});}catch(cause){error=cause instanceof Error?cause.message:'Could not read PSBT file.';}}

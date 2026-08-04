@@ -1,6 +1,7 @@
 <script lang="ts">
   import { ArrowLeft, Check, ChevronDown, ChevronRight, Clock3, Cpu, FileKey, Plus, ShieldCheck, Trash2, Users } from '@lucide/svelte';
   import { goto } from '$app/navigation';
+  import { onDestroy } from 'svelte';
   import Button from '$lib/components/Button.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import PasswordField from '$lib/components/PasswordField.svelte';
@@ -31,19 +32,43 @@
   let standardRecipe = $state<'2of3' | '3of5' | 'custom'>('2of3');
   let customCosignerCount = $state(3);
   let showDescriptor = $state(false);
+  let reviewAttempted = $state(false);
   const policy = $derived({ name, threshold, cosigners });
   const standardCosignerCount = $derived(standardRecipe === '2of3' ? 3 : standardRecipe === '3of5' ? 5 : customCosignerCount);
   const requiredKeys = $derived(templateKind === 'standard' ? standardCosignerCount : 4);
   const errors = $derived([...validatePolicyDraft(policy), ...(cosigners.length !== requiredKeys ? [`${templateKind === 'standard' ? 'This wallet' : 'This template'} needs exactly ${requiredKeys} cosigners.`] : [])]);
+  const visibleErrors = $derived.by(() => {
+    if (cosigners.length === requiredKeys) return errors;
+    const countErrors = new Set([
+      'Add at least 3 cosigners.',
+      'The threshold cannot exceed the number of cosigners.',
+      `${templateKind === 'standard' ? 'This wallet' : 'This template'} needs exactly ${requiredKeys} cosigners.`
+    ]);
+    const remaining = requiredKeys - cosigners.length;
+    const countGuidance = remaining > 0
+      ? `Add ${remaining} more cosigner${remaining === 1 ? '' : 's'}.`
+      : `Remove ${Math.abs(remaining)} cosigner${remaining === -1 ? '' : 's'}.`;
+    return [...errors.filter((item) => !countErrors.has(item)), countGuidance];
+  });
   const recoveryTemplate = $derived.by<RecoveryTemplate | null>(() => {
     if (templateKind === 'standard' || cosigners.length < 4) return null;
     return { type: 'recovery', immediate: { threshold: 2, signerIds: cosigners.slice(0, 3).map((key) => key.id) }, recovery: { threshold: 1, signerIds: [cosigners[3].id], availableAfterBlocks: templateKind === 'inheritance' ? 52_560 : 4_320 } };
   });
 
+  onDestroy(() => { credential = ''; confirmation = ''; });
+
   function chooseSource(next: CosignerSource) {
     source = next;
     pickerOpen = false;
     keyOpen = true;
+  }
+
+  function sourceLabel(value: CosignerSource) {
+    return value === 'usb' ? 'USB' : value === 'virtual' ? 'USB demo' : value === 'qr' ? 'QR code' : value === 'file' ? 'File' : 'Manual entry';
+  }
+
+  function sourceHeading(value: CosignerSource) {
+    return value === 'usb' || value === 'virtual' ? 'Connection' : 'Imported via';
   }
 
   function chooseTemplate(next: 'standard' | 'recovery' | 'inheritance') {
@@ -99,7 +124,10 @@
   }
 
   async function review() {
-    busy = true; error = '';
+    reviewAttempted = true;
+    error = '';
+    if (errors.length > 0) return;
+    busy = true;
     try {
       if (recoveryTemplate) {
         const analysis = await walletService.analyzeRecoveryPolicy(recoveryTemplate, cosigners);
@@ -117,11 +145,10 @@
     try {
       if (recoveryTemplate) await walletService.createRecoveryMultisig(name, recoveryTemplate, cosigners, credential);
       else await walletService.createMultisig(policy, credential);
-      credential = ''; confirmation = '';
       toast({ title: 'Multisig wallet created', description: `${threshold} signatures are required to spend.`, tone: 'success' });
       await goto('/multisig');
     } catch (cause) { error = cause instanceof Error ? cause.message : 'Could not create the wallet.'; }
-    finally { busy = false; }
+    finally { credential = ''; confirmation = ''; busy = false; }
   }
 </script>
 
@@ -158,14 +185,26 @@
         <div class="key-heading"><div><h2>Cosigners</h2><p>Use a different device or backup for every key.</p></div><Button variant="secondary" size="small" disabled={cosigners.length >= requiredKeys} onclick={() => pickerOpen = true}><Plus size={15}/>{cosigners.length >= requiredKeys ? 'All added' : 'Add a cosigner'}</Button></div>
         <div class="cosigner-list">
           {#each cosigners as signer, i}
-            <article><span class="device-number">{i + 1}</span><span><strong>{signer.label}</strong><small>{signer.fingerprint} · {signer.source}</small><code>{signer.xpub}</code></span><button aria-label="Remove {signer.label}" onclick={() => cosigners = cosigners.filter((item) => item.id !== signer.id)}><Trash2 size={15}/></button></article>
+            <article class="cosigner-card">
+              <span class="device-number" aria-hidden="true">{i + 1}</span>
+              <div class="cosigner-card-body">
+                <strong class="cosigner-name">{signer.label}</strong>
+                <dl class="cosigner-metadata">
+                  <div><dt>Device fingerprint</dt><dd><code>{signer.fingerprint.toLowerCase()}</code></dd></div>
+                  <div><dt>{sourceHeading(signer.source)}</dt><dd><span class="source-badge">{sourceLabel(signer.source)}</span></dd></div>
+                  <div class="cosigner-public-key"><dt>Public account key</dt><dd><code>{signer.xpub}</code></dd></div>
+                </dl>
+              </div>
+              <button class="remove-cosigner" aria-label="Remove {signer.label}" title="Remove cosigner" onclick={() => cosigners = cosigners.filter((item) => item.id !== signer.id)}><Trash2 size={16}/></button>
+            </article>
           {:else}
             <div class="keys-empty"><FileKey size={22}/><strong>No cosigners yet</strong><span>Add {requiredKeys} independent keys for this template.</span></div>
           {/each}
         </div>
-        {#if cosigners.length > 0 && errors.length}<div class="policy-errors" aria-live="polite">{#each errors as item}<p>{item}</p>{/each}</div>{/if}
+        {#if cosigners.length > 0}<p class="cosigner-progress" aria-live="polite">{cosigners.length} of {requiredKeys} cosigners added</p>{/if}
+        {#if reviewAttempted && visibleErrors.length}<div class="policy-errors" aria-live="polite">{#each visibleErrors as item}<p>{item}</p>{/each}</div>{/if}
         {#if error}<p class="form-error">{error}</p>{/if}
-        <div class="coordinator-actions"><Button variant="secondary" href="/settings"><ArrowLeft size={16}/>Cancel</Button><Button disabled={errors.length > 0 || busy} onclick={review}>{busy ? 'Building…' : 'Review wallet'}<ChevronRight size={16}/></Button></div>
+        <div class="coordinator-actions"><Button variant="secondary" href="/settings"><ArrowLeft size={16}/>Cancel</Button><Button disabled={busy} onclick={review}>{busy ? 'Building…' : 'Review wallet'}<ChevronRight size={16}/></Button></div>
       </section>
       <aside class="safety-panel"><ShieldCheck size={22}/><h2>Before you continue</h2><p>Satchel stores public descriptors only. It cannot spend without enough signatures.</p><ul><li>Back up the wallet descriptor.</li><li>Verify each fingerprint on its device.</li><li>Keep devices in separate places.</li></ul><code>{MULTISIG_ACCOUNT_PATH}</code></aside>
     </div>
@@ -194,7 +233,7 @@
   </div>
 </Modal>
 
-<Modal open={hardwareOpen} title="Connect hardware device" description="Unlock the device and open its Bitcoin app, then verify the fingerprint on-device." onclose={() => hardwareOpen = false}>
+<Modal open={hardwareOpen} title="Connect hardware device" description="Unlock the device and keep it ready over USB, then verify the fingerprint on-device." onclose={() => hardwareOpen = false}>
   <label class="field"><span>Cosigner label</span><input bind:value={label} placeholder="Defaults to device model" maxlength="48"/></label>
   {#if hardwareBusy}<div class="device-scan"><Cpu size={20}/><span>Looking for devices…</span></div>
   {:else if hardware.length === 0}<div class="device-scan"><Cpu size={20}/><strong>No device found</strong><span>Install Bitcoin Core HWI, connect one device, and try again. QR and manual import work on every platform.</span><Button variant="secondary" size="small" onclick={scanHardware}>Scan again</Button></div>

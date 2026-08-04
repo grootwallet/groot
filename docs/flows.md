@@ -58,6 +58,8 @@ Selecting a saved cosigner opens public device details. For USB/virtual sources,
 
 The default recipe is 2-of-3; 3-of-5 is the larger-group recipe. Advanced mode permits 2 ≤ M ≤ N with 3 ≤ N ≤ 7. 1-of-N is excluded because it has no multisig theft protection. Duplicate fingerprints/xpubs, invalid origins, invalid test-network keys, private descriptors, and unsafe thresholds block review. Creation stores checksummed public descriptors, public cosigner metadata, a watch-only BDK database, and an encrypted app-PIN marker.
 
+While the draft is incomplete, setup presents neutral progress such as “1 of 3 cosigners added.” Validation failures appear only after **Review wallet** is attempted, then update as the draft is corrected. Each imported cosigner card labels the device fingerprint and connection/import source explicitly and wraps the complete public account key without truncating it.
+
 ## Multisig payment target flow
 
 This flow is implemented for regtest; see `docs/implementation-status.md` for certification limits.

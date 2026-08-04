@@ -1,6 +1,6 @@
 <script lang="ts">
   import { ArrowRight, Check, CircleDot, Gauge, LockKeyhole } from '@lucide/svelte';
-  import { onMount } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import Button from '$lib/components/Button.svelte';
   import PasswordField from '$lib/components/PasswordField.svelte';
   import { shortSats } from '$lib/data';
@@ -47,6 +47,10 @@
     } catch (cause) {
       toast({ title: 'Could not load wallet', description: cause instanceof Error ? cause.message : undefined, tone: 'danger' });
     }
+  });
+
+  onDestroy(() => {
+    passphrase = '';
   });
 
   async function prepare() {

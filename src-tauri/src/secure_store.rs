@@ -22,6 +22,8 @@ const KEY_BYTES: usize = 32;
 const NONCE_BYTES: usize = 12;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 const KEYCHAIN_SERVICE: &str = "app.satchel.wallet.device-wrap.v1";
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+const ERR_SEC_ITEM_NOT_FOUND: i32 = -25_300;
 
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum SecureStoreError {
@@ -68,8 +70,10 @@ impl DeviceKeyProvider for SystemDeviceKeyProvider {
     fn get_or_create(&self, metadata_path: &Path) -> Result<Vec<u8>, SecureStoreError> {
         use security_framework::passwords::{get_generic_password, set_generic_password};
         let account = account(metadata_path)?;
-        if let Ok(key) = get_generic_password(KEYCHAIN_SERVICE, &account) {
-            return validate_device_key(key);
+        match get_generic_password(KEYCHAIN_SERVICE, &account) {
+            Ok(key) => return validate_device_key(key),
+            Err(error) if error.code() == ERR_SEC_ITEM_NOT_FOUND => {}
+            Err(_) => return Err(SecureStoreError::Unavailable),
         }
         let mut key = vec![0_u8; KEY_BYTES];
         OsRng.fill_bytes(&mut key);
@@ -200,13 +204,12 @@ fn write_owner_only(path: &Path, bytes: &[u8]) -> Result<(), SecureStoreError> {
 }
 
 fn read_metadata(path: &Path) -> Result<Metadata, SecureStoreError> {
+    let metadata = fs::symlink_metadata(path).map_err(|_| SecureStoreError::Unavailable)?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return Err(SecureStoreError::Corrupt);
+    }
     let file = File::open(path).map_err(|_| SecureStoreError::Unavailable)?;
-    if file
-        .metadata()
-        .map_err(|_| SecureStoreError::Unavailable)?
-        .len()
-        > MAX_METADATA_BYTES
-    {
+    if metadata.len() > MAX_METADATA_BYTES {
         return Err(SecureStoreError::Corrupt);
     }
     let mut encoded = String::new();
@@ -388,6 +391,24 @@ mod tests {
             load_with_provider(&metadata, "x", &provider),
             Err(SecureStoreError::Corrupt)
         );
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn metadata_rejects_symlink_storage() {
+        use std::os::unix::fs::symlink;
+
+        let directory = directory();
+        fs::create_dir_all(&directory).unwrap();
+        let target = directory.join("target.json");
+        fs::write(&target, b"{}").unwrap();
+        let metadata = directory.join("secret.json");
+        symlink(&target, &metadata).unwrap();
+        assert!(matches!(
+            read_metadata(&metadata),
+            Err(SecureStoreError::Corrupt)
+        ));
         fs::remove_dir_all(directory).unwrap();
     }
 

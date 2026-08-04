@@ -7,7 +7,7 @@
   import { defaultConfig, networkName } from '$lib/config';
   import { walletService } from '$lib/wallet';
   import { goto } from '$app/navigation';
-  import { onMount } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import type { WalletProfile } from '$lib/wallet/contracts';
   let deleting = $state(false);
   let confirmText = $state('');
@@ -24,6 +24,10 @@
     const registry = await walletService.profiles();
     profiles = registry.wallets;
     selectedWalletId = registry.selectedWalletId;
+  });
+  onDestroy(() => {
+    deleteCredential = '';
+    confirmText = '';
   });
   async function selectWallet(profile: WalletProfile) {
     if (profile.id === selectedWalletId) return;

@@ -67,12 +67,19 @@ pub trait HardwareTransport: Send + Sync {
     fn enumerate(&self) -> Result<Vec<u8>, HardwareError>;
     fn account_xpub(
         &self,
+        device_type: &str,
         device_path: &str,
         derivation_path: &str,
     ) -> Result<Vec<u8>, HardwareError>;
-    fn sign_psbt(&self, device_path: &str, psbt: &str) -> Result<Vec<u8>, HardwareError>;
+    fn sign_psbt(
+        &self,
+        device_type: &str,
+        device_path: &str,
+        psbt: &str,
+    ) -> Result<Vec<u8>, HardwareError>;
     fn display_descriptor_address(
         &self,
+        device_type: &str,
         device_path: &str,
         descriptor: &str,
     ) -> Result<Vec<u8>, HardwareError>;
@@ -113,10 +120,18 @@ impl HwiCli {
         }
     }
 
-    fn device_command(&self, device_path: &str, command: &str, value: &str) -> Vec<String> {
+    fn device_command(
+        &self,
+        device_type: &str,
+        device_path: &str,
+        command: &str,
+        value: &str,
+    ) -> Vec<String> {
         vec![
             "--chain".into(),
             self.chain.as_hwi_argument().into(),
+            "--device-type".into(),
+            device_type.into(),
             "--device-path".into(),
             device_path.into(),
             command.into(),
@@ -140,30 +155,38 @@ impl HardwareTransport for HwiCli {
 
     fn account_xpub(
         &self,
+        device_type: &str,
         device_path: &str,
         derivation_path: &str,
     ) -> Result<Vec<u8>, HardwareError> {
         run_program(
             &self.program,
-            &self.device_command(device_path, "getxpub", derivation_path),
+            &self.device_command(device_type, device_path, "getxpub", derivation_path),
             DEFAULT_TIMEOUT,
         )
     }
 
-    fn sign_psbt(&self, device_path: &str, psbt: &str) -> Result<Vec<u8>, HardwareError> {
+    fn sign_psbt(
+        &self,
+        device_type: &str,
+        device_path: &str,
+        psbt: &str,
+    ) -> Result<Vec<u8>, HardwareError> {
         run_program(
             &self.program,
-            &self.device_command(device_path, "signtx", psbt),
+            &self.device_command(device_type, device_path, "signtx", psbt),
             DEFAULT_TIMEOUT,
         )
     }
 
     fn display_descriptor_address(
         &self,
+        device_type: &str,
         device_path: &str,
         descriptor: &str,
     ) -> Result<Vec<u8>, HardwareError> {
-        let mut arguments = self.device_command(device_path, "displayaddress", "--desc");
+        let mut arguments =
+            self.device_command(device_type, device_path, "displayaddress", "--desc");
         arguments.push(descriptor.into());
         run_program(&self.program, &arguments, DEFAULT_TIMEOUT)
     }
@@ -200,9 +223,11 @@ fn run_program(
     if !program.is_absolute() {
         return Err(HardwareError::Unavailable);
     }
+    let program = trusted_executable(program)?;
     validate_arguments(arguments)?;
     let mut child = Command::new(program)
         .args(arguments)
+        .env_clear()
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -237,6 +262,26 @@ fn run_program(
     Ok(stdout)
 }
 
+fn trusted_executable(program: &Path) -> Result<PathBuf, HardwareError> {
+    let canonical = program
+        .canonicalize()
+        .map_err(|_| HardwareError::Unavailable)?;
+    let metadata = canonical
+        .metadata()
+        .map_err(|_| HardwareError::Unavailable)?;
+    if !metadata.is_file() {
+        return Err(HardwareError::Unavailable);
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if metadata.permissions().mode() & 0o022 != 0 {
+            return Err(HardwareError::Unavailable);
+        }
+    }
+    Ok(canonical)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -263,6 +308,21 @@ mod tests {
             run_program(Path::new("hwi"), &["enumerate".into()], Duration::ZERO),
             Err(HardwareError::Unavailable)
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn rejects_group_or_world_writable_executables() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let path = std::env::temp_dir().join(format!("satchel-hwi-{}", std::process::id()));
+        std::fs::write(&path, b"#!/bin/sh\nexit 0\n").unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o777)).unwrap();
+        assert_eq!(
+            run_program(&path, &["enumerate".into()], Duration::from_secs(1)),
+            Err(HardwareError::Unavailable)
+        );
+        std::fs::remove_file(path).unwrap();
     }
 
     #[test]
@@ -336,23 +396,25 @@ mod tests {
     fn constructs_fixed_hwi_commands_for_every_supported_operation() {
         let test = HwiCli::for_chain(HwiChain::Test);
         assert_eq!(
-            test.device_command("usb:1", "getxpub", "m/48'/1'/0'/2'"),
+            test.device_command("coldcard", "usb:1", "getxpub", "m/48'/1'/0'/2'"),
             [
                 "--chain",
                 "test",
+                "--device-type",
+                "coldcard",
                 "--device-path",
                 "usb:1",
                 "getxpub",
                 "m/48'/1'/0'/2'"
             ]
         );
-        let arguments = test.device_command("usb:1", "signtx", "cHNidP8=");
-        assert_eq!(arguments[4], "signtx");
-        assert_eq!(arguments[5], "cHNidP8=");
+        let arguments = test.device_command("coldcard", "usb:1", "signtx", "cHNidP8=");
+        assert_eq!(arguments[6], "signtx");
+        assert_eq!(arguments[7], "cHNidP8=");
 
         let main = HwiCli::for_chain(HwiChain::Main);
         assert_eq!(
-            main.device_command("usb:2", "getxpub", "m/48'/0'/0'/2'")[..2],
+            main.device_command("coldcard", "usb:2", "getxpub", "m/48'/0'/0'/2'")[..2],
             ["--chain", "main"]
         );
         assert_eq!(HwiChain::Main.as_hwi_argument(), "main");
@@ -367,15 +429,15 @@ mod tests {
         };
         assert_eq!(transport.enumerate(), Err(HardwareError::Unavailable));
         assert_eq!(
-            transport.account_xpub("usb:1", "m/48'/1'/0'/2'"),
+            transport.account_xpub("coldcard", "usb:1", "m/48'/1'/0'/2'"),
             Err(HardwareError::Unavailable)
         );
         assert_eq!(
-            transport.sign_psbt("usb:1", "cHNidP8="),
+            transport.sign_psbt("coldcard", "usb:1", "cHNidP8="),
             Err(HardwareError::Unavailable)
         );
         assert_eq!(
-            transport.display_descriptor_address("usb:1", "wsh(pk(tpub...))#checksum"),
+            transport.display_descriptor_address("coldcard", "usb:1", "wsh(pk(tpub...))#checksum"),
             Err(HardwareError::Unavailable)
         );
     }

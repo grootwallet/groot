@@ -59,6 +59,16 @@ impl Default for WalletRegistry {
 }
 
 pub fn load(path: &Path) -> Result<WalletRegistry, RegistryError> {
+    let metadata = fs::symlink_metadata(path).map_err(|error| {
+        if error.kind() == std::io::ErrorKind::NotFound {
+            RegistryError::Missing
+        } else {
+            RegistryError::Io
+        }
+    })?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return Err(RegistryError::Corrupt);
+    }
     let file = File::open(path).map_err(|error| {
         if error.kind() == std::io::ErrorKind::NotFound {
             RegistryError::Missing
@@ -66,7 +76,7 @@ pub fn load(path: &Path) -> Result<WalletRegistry, RegistryError> {
             RegistryError::Io
         }
     })?;
-    if file.metadata().map_err(|_| RegistryError::Io)?.len() > MAX_REGISTRY_BYTES {
+    if metadata.len() > MAX_REGISTRY_BYTES {
         return Err(RegistryError::Corrupt);
     }
     let mut encoded = String::new();
@@ -297,6 +307,25 @@ mod tests {
         )
         .unwrap();
         assert_eq!(load(&path), Err(RegistryError::UnsupportedVersion));
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn registry_rejects_symlink_storage() {
+        use std::os::unix::fs::symlink;
+
+        let dir = test_dir();
+        fs::create_dir_all(&dir).unwrap();
+        let target = dir.join("target.json");
+        fs::write(
+            &target,
+            serde_json::to_vec(&WalletRegistry::default()).unwrap(),
+        )
+        .unwrap();
+        let link = dir.join("registry.json");
+        symlink(&target, &link).unwrap();
+        assert_eq!(load(&link), Err(RegistryError::Corrupt));
         fs::remove_dir_all(dir).unwrap();
     }
 

@@ -17,10 +17,17 @@ Hardware Wallet Interface execution also crosses a process boundary. Resolving a
 - Core broadcast is idempotent by expected txid. Once accepted, proposal broadcast state and the notification row are committed atomically. Failure to refresh the chain afterward is reported as `syncPending`, not as a failed broadcast.
 - Notification rows are durable, unique, ordered, and remain pending until explicit acknowledgement. This provides at-least-once delivery across crashes; consumers must use stable IDs and persistent wallet state idempotently. Satchel does not claim impossible cross-process exactly-once UI delivery.
 - Single-key deletion requires the credential and exact `DELETE`; multisig deletion requires the credential, exact wallet name, and an in-session recovery drill bound to the current descriptor.
-- HWI is launched only from an absolute build-time or known operating-system installation path. `PATH` lookup is prohibited. Device-sensitive operations re-enumerate the exact device path and require a fingerprint belonging to the selected wallet.
+- HWI is launched only from an absolute build-time or known operating-system installation path. `PATH` lookup is prohibited. Device commands include both the freshly enumerated device type and exact path, as required by HWI. Device-sensitive operations re-enumerate and require a fingerprint belonging to the selected wallet.
 
 ## Consequences
 
 Unlocking one wallet cannot authorize another. Authentication cooldown survives ordinary restart attacks. A renderer crash cannot silently consume a notification, and a post-broadcast sync outage cannot encourage an accidental duplicate payment. Retry may display an already-pending notification again, which is safer than loss and is handled idempotently.
 
 The in-process serialization is not a cross-process file lock. Production packaging must enforce a single app instance or add an interprocess registry lock. Physical device compatibility, HWI artifact hash/version verification, platform keystore certification, background notification scheduling, and external review remain mainnet blockers under ADR 0012.
+
+## Hardening addendum — 2026-08-04
+
+- A denied or unavailable Apple Keychain lookup is distinct from an absent item and must fail closed; it must never create a replacement device-wrapping key.
+- Wallet databases and private metadata reject symlink/non-regular storage. SQLite connections use owner-only permissions on Unix, a busy timeout, foreign keys, untrusted-schema mode, and defensive mode.
+- HWI execution canonicalizes the configured binary, rejects group/world-writable executables on Unix, and clears the inherited environment before spawning.
+- Credential and mnemonic IPC inputs are bounded. Credential fields are cleared on every attempt and route teardown.

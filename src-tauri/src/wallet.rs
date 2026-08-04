@@ -18,7 +18,7 @@ use bdk_wallet::{
     chain::{ChainPosition, ConfirmationBlockTime},
     descriptor::{Descriptor, DescriptorPublicKey},
     psbt::PsbtUtils,
-    rusqlite::{params, Connection, OptionalExtension},
+    rusqlite::{config::DbConfig, params, Connection, OptionalExtension},
     template::{Bip84, Bip84Public},
     KeychainKind, PersistedWallet, SignOptions, Wallet,
 };
@@ -52,6 +52,8 @@ use crate::secure_store::{self, SecureStoreError};
 const NETWORK: Network = Network::Regtest;
 const RPC_URL: &str = "http://127.0.0.1:18443";
 const MAX_PRIVATE_JSON_BYTES: u64 = 256 * 1024;
+const MAX_CREDENTIAL_BYTES: usize = 1_024;
+const MAX_MNEMONIC_INPUT_BYTES: usize = 4_096;
 const ONBOARDING_SESSION_SECONDS: u64 = 15 * 60;
 const UNLOCK_IDLE_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 
@@ -313,18 +315,33 @@ struct HwiDevice {
 struct HwiXpub {
     xpub: Option<String>,
     error: Option<String>,
+    code: Option<i64>,
 }
 
 #[derive(Deserialize)]
 struct HwiPsbt {
     psbt: Option<String>,
     error: Option<String>,
+    code: Option<i64>,
 }
 
 #[derive(Deserialize)]
 struct HwiAddress {
     address: Option<String>,
     error: Option<String>,
+    code: Option<i64>,
+}
+
+fn missing_hwi_value(code: Option<i64>, value: &str) -> ApiError {
+    let message = match code {
+        Some(-3 | -12) => "Reconnect and unlock the device, then try again.",
+        Some(-14) => "The action was cancelled on the hardware wallet.",
+        Some(-15) => "The hardware wallet is busy. Finish the current action and try again.",
+        Some(-8 | -9) => "This hardware wallet does not support the requested operation.",
+        Some(-1 | -2 | -4 | -7) => "Satchel could not select the enumerated hardware wallet.",
+        _ => value,
+    };
+    api_error("hardware_unavailable", message)
 }
 
 fn app_data_dir(app: &AppHandle) -> ApiResult<PathBuf> {
@@ -445,7 +462,7 @@ fn profile_from_directory(
 ) -> ApiResult<WalletProfile> {
     let (name, checksum) = match kind {
         WalletKind::SingleKey => {
-            let mut db = Connection::open(directory.join("wallet.sqlite")).map_err(internal)?;
+            let mut db = open_wallet_database(&directory.join("wallet.sqlite"))?;
             let wallet = load_wallet(&mut db)?;
             (
                 "Primary wallet".to_owned(),
@@ -475,17 +492,18 @@ fn profile_from_directory(
 }
 
 fn ensure_registry_migrated(app: &AppHandle) -> ApiResult<()> {
+    let app_data = app_data_dir(app)?;
+    ensure_private_directory(&app_data)?;
+    ensure_private_directory(&wallets_root(app)?)?;
     let path = registry_path(app)?;
     if path.exists() {
         registry::load(&path).map_err(registry_api_error)?;
         return Ok(());
     }
-    let app_data = app_data_dir(app)?;
     let legacy = [
         (app_data.join("regtest-wallet"), WalletKind::SingleKey),
         (app_data.join("regtest-multisig"), WalletKind::Multisig),
     ];
-    fs::create_dir_all(wallets_root(app)?).map_err(internal)?;
     let mut registry = WalletRegistry::default();
     let mut moves = Vec::<(PathBuf, PathBuf)>::new();
     for (legacy_directory, kind) in legacy {
@@ -505,6 +523,20 @@ fn ensure_registry_migrated(app: &AppHandle) -> ApiResult<()> {
         moves.push((legacy_directory, profile_directory(app, id)?));
     }
     migrate_directories_with_rollback(&moves, || save_registry(app, &registry))
+}
+
+fn ensure_private_directory(path: &Path) -> ApiResult<()> {
+    fs::create_dir_all(path).map_err(internal)?;
+    let metadata = fs::symlink_metadata(path).map_err(internal)?;
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        return Err(internal("Private storage is not a regular directory."));
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(path, fs::Permissions::from_mode(0o700)).map_err(internal)?;
+    }
+    Ok(())
 }
 
 fn migrate_directories_with_rollback(
@@ -534,13 +566,31 @@ fn prepare_profile_directory(app: &AppHandle) -> ApiResult<(Uuid, PathBuf)> {
     ensure_registry_migrated(app)?;
     let id = Uuid::new_v4();
     let directory = profile_directory(app, id)?;
-    fs::create_dir_all(&directory).map_err(internal)?;
+    ensure_private_directory(&wallets_root(app)?)?;
+    ensure_private_directory(&directory)?;
+    Ok((id, directory))
+}
+
+fn open_wallet_database(path: &Path) -> ApiResult<Connection> {
+    if let Ok(metadata) = fs::symlink_metadata(path) {
+        if metadata.file_type().is_symlink() || !metadata.is_file() {
+            return Err(internal("Wallet database storage is not a regular file."));
+        }
+    }
+    let db = Connection::open(path).map_err(internal)?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(&directory, fs::Permissions::from_mode(0o700)).map_err(internal)?;
+        fs::set_permissions(path, fs::Permissions::from_mode(0o600)).map_err(internal)?;
     }
-    Ok((id, directory))
+    db.busy_timeout(Duration::from_secs(5)).map_err(internal)?;
+    db.set_db_config(DbConfig::SQLITE_DBCONFIG_DEFENSIVE, true)
+        .map_err(internal)?;
+    db.set_db_config(DbConfig::SQLITE_DBCONFIG_ENABLE_FKEY, true)
+        .map_err(internal)?;
+    db.execute_batch("PRAGMA trusted_schema = OFF;")
+        .map_err(internal)?;
+    Ok(db)
 }
 
 fn commit_profile(app: &AppHandle, profile: WalletProfile) -> ApiResult<()> {
@@ -619,6 +669,22 @@ fn normalize_label(label: &str) -> ApiResult<String> {
         ));
     }
     Ok(label.to_owned())
+}
+
+fn validate_credential(credential: &str) -> ApiResult<()> {
+    if credential.is_empty() {
+        return Err(api_error(
+            "invalid_credential",
+            "A passphrase / PIN is required.",
+        ));
+    }
+    if credential.len() > MAX_CREDENTIAL_BYTES {
+        return Err(api_error(
+            "invalid_credential",
+            "The passphrase / PIN is too long.",
+        ));
+    }
+    Ok(())
 }
 
 fn init_app_schema(db: &Connection) -> ApiResult<()> {
@@ -723,7 +789,7 @@ fn open_auth_db(app: &AppHandle) -> ApiResult<Connection> {
             "The selected wallet database could not be found.",
         ));
     }
-    let db = Connection::open(path).map_err(internal)?;
+    let db = open_wallet_database(&path)?;
     init_app_schema(&db)?;
     Ok(db)
 }
@@ -761,7 +827,7 @@ fn open_db(app: &AppHandle) -> ApiResult<Connection> {
             "No wallet exists on this device.",
         ));
     }
-    let db = Connection::open(path).map_err(internal)?;
+    let db = open_wallet_database(&path)?;
     init_app_schema(&db)?;
     Ok(db)
 }
@@ -774,7 +840,7 @@ fn open_multisig_db(app: &AppHandle) -> ApiResult<Connection> {
             "No multisig wallet exists on this device.",
         ));
     }
-    let db = Connection::open(path).map_err(internal)?;
+    let db = open_wallet_database(&path)?;
     init_app_schema(&db)?;
     Ok(db)
 }
@@ -860,6 +926,7 @@ fn decrypt_payload(secret: EncryptedSecret, credential: &str) -> ApiResult<Vec<u
 }
 
 fn decrypt_mnemonic(app: &AppHandle, credential: &str) -> ApiResult<Mnemonic> {
+    validate_credential(credential)?;
     let path = secret_path(app)?;
     let encoded = read_private_text(&path).map_err(|_| {
         api_error(
@@ -932,7 +999,15 @@ fn read_multisig_metadata(app: &AppHandle) -> ApiResult<MultisigWalletDto> {
             "No multisig wallet exists on this device.",
         )
     })?;
-    serde_json::from_str(&encoded).map_err(internal)
+    let wallet: MultisigWalletDto = serde_json::from_str(&encoded).map_err(internal)?;
+    let profile = selected_profile_of_kind(app, WalletKind::Multisig)?;
+    if descriptor_checksum(&wallet.external_descriptor)? != profile.descriptor_checksum {
+        return Err(api_error(
+            "wallet_corrupt",
+            "The multisig wallet metadata does not match the registered wallet identity.",
+        ));
+    }
+    Ok(wallet)
 }
 
 fn recovery_policy_type(template: &RecoveryTemplate) -> &'static str {
@@ -1054,6 +1129,7 @@ fn multisig_fingerprints(
 }
 
 fn verify_multisig_credential(app: &AppHandle, credential: &str) -> ApiResult<()> {
+    validate_credential(credential)?;
     let path = multisig_secret_path(app)?;
     let encoded = read_private_text(&path).map_err(|_| {
         api_error(
@@ -1222,8 +1298,12 @@ fn persist_secret_material(path: &Path, material: &[u8], credential: &str) -> Ap
 }
 
 fn read_private_text(path: &Path) -> ApiResult<String> {
+    let metadata = fs::symlink_metadata(path).map_err(internal)?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return Err(internal("Private storage is not a regular file."));
+    }
     let file = File::open(path).map_err(internal)?;
-    if file.metadata().map_err(internal)?.len() > MAX_PRIVATE_JSON_BYTES {
+    if metadata.len() > MAX_PRIVATE_JSON_BYTES {
         return Err(internal("Private storage payload is too large."));
     }
     let mut encoded = String::new();
@@ -1249,16 +1329,11 @@ fn create_from_mnemonic(
             "Wallet names must contain 1 to 48 characters.",
         ));
     }
-    if credential.is_empty() {
-        return Err(api_error(
-            "invalid_credential",
-            "A passphrase / PIN is required.",
-        ));
-    }
+    validate_credential(credential)?;
     let (id, dir) = prepare_profile_directory(app)?;
     let result = (|| {
         let (external, internal_template) = watch_templates(&mnemonic, credential)?;
-        let mut db = Connection::open(dir.join("wallet.sqlite")).map_err(internal)?;
+        let mut db = open_wallet_database(&dir.join("wallet.sqlite"))?;
         init_app_schema(&db)?;
         let wallet = Wallet::create(external, internal_template)
             .network(NETWORK)
@@ -1652,6 +1727,12 @@ pub fn wallet_recover(
     let _operation = operation_guard(&state)?;
     let mnemonic_words = Zeroizing::new(mnemonic);
     let credential = Zeroizing::new(credential);
+    if mnemonic_words.len() > MAX_MNEMONIC_INPUT_BYTES {
+        return Err(api_error(
+            "invalid_mnemonic",
+            "Enter a valid 24-word recovery phrase.",
+        ));
+    }
     let mnemonic = Mnemonic::parse(mnemonic_words.trim())
         .map_err(|_| api_error("invalid_mnemonic", "Enter a valid 24-word recovery phrase."))?;
     if mnemonic.word_count() != 24 {
@@ -1869,7 +1950,7 @@ fn hardware_api_error(error: HardwareError) -> ApiError {
 fn verify_connected_hardware_identity(
     device_id: &str,
     expected_fingerprints: &[String],
-) -> ApiResult<()> {
+) -> ApiResult<String> {
     let encoded = hwi_cli().enumerate().map_err(hardware_api_error)?;
     let devices: Vec<HwiDevice> = serde_json::from_slice(&encoded).map_err(internal)?;
     let device = devices
@@ -1896,7 +1977,7 @@ fn verify_connected_hardware_identity(
             "The connected device is not a cosigner in this wallet policy.",
         ));
     }
-    Ok(())
+    Ok(device.device_type)
 }
 
 #[tauri::command]
@@ -1940,7 +2021,7 @@ pub async fn hardware_check_cosigner(cosigner: CosignerInput) -> ApiResult<Cosig
             if !matched {
                 return Err(api_error(
                     "hardware_unavailable",
-                    "Connect and unlock this device, then open its Bitcoin app.",
+                    "Connect and unlock this device, then keep it ready over USB.",
                 ));
             }
             Ok(CosignerHealthDto {
@@ -1990,15 +2071,16 @@ pub async fn hardware_import_cosigner(
             )
         })?;
         let output = hwi_cli()
-            .account_xpub(&device_id, crate::multisig::MULTISIG_ACCOUNT_PATH)
+            .account_xpub(
+                &device.device_type,
+                &device_id,
+                crate::multisig::MULTISIG_ACCOUNT_PATH,
+            )
             .map_err(hardware_api_error)?;
         let response: HwiXpub = serde_json::from_slice(&output).map_err(internal)?;
         let xpub = response.xpub.ok_or_else(|| {
             drop(response.error);
-            api_error(
-                "hardware_unavailable",
-                "The device did not return an account xpub.",
-            )
+            missing_hwi_value(response.code, "The device did not return an account xpub.")
         })?;
         let input = crate::multisig::CosignerInput {
             id: Uuid::new_v4().to_string(),
@@ -2043,9 +2125,9 @@ pub async fn hardware_verify_multisig_address(
         .map(|cosigner| cosigner.fingerprint.clone())
         .collect::<Vec<_>>();
     let displayed = tauri::async_runtime::spawn_blocking(move || {
-        verify_connected_hardware_identity(&device_id, &expected_fingerprints)?;
+        let device_type = verify_connected_hardware_identity(&device_id, &expected_fingerprints)?;
         hwi_cli()
-            .display_descriptor_address(&device_id, &descriptor)
+            .display_descriptor_address(&device_type, &device_id, &descriptor)
             .map_err(hardware_api_error)
     })
     .await
@@ -2053,8 +2135,8 @@ pub async fn hardware_verify_multisig_address(
     let response: HwiAddress = serde_json::from_slice(&displayed).map_err(internal)?;
     let actual = response.address.ok_or_else(|| {
         drop(response.error);
-        api_error(
-            "hardware_command_failed",
+        missing_hwi_value(
+            response.code,
             "The device did not return the displayed address.",
         )
     })?;
@@ -2103,7 +2185,7 @@ pub fn multisig_wallet(
     if !path.exists() {
         return Ok(None);
     }
-    let encoded = fs::read_to_string(path).map_err(internal)?;
+    let encoded = read_private_text(&path)?;
     serde_json::from_str(&encoded).map(Some).map_err(internal)
 }
 
@@ -2164,13 +2246,11 @@ pub fn multisig_recover(
 ) -> ApiResult<MultisigWalletDto> {
     let _operation = operation_guard(&state)?;
     let credential = Zeroizing::new(credential);
-    if credential.is_empty() {
-        return Err(api_error("invalid_credential", "An app PIN is required."));
-    }
+    validate_credential(credential.as_str())?;
     let backup = validate_multisig_backup(&encoded_backup)?;
     let (id, dir) = prepare_profile_directory(&app)?;
     let result = (|| {
-        let mut db = Connection::open(dir.join("wallet.sqlite")).map_err(internal)?;
+        let mut db = open_wallet_database(&dir.join("wallet.sqlite"))?;
         init_app_schema(&db)?;
         Wallet::create(
             backup.wallet.external_descriptor.clone(),
@@ -2495,17 +2575,14 @@ pub async fn hardware_sign_multisig(
         .map(|cosigner| cosigner.fingerprint.clone())
         .collect::<Vec<_>>();
     let signed = tauri::async_runtime::spawn_blocking(move || {
-        verify_connected_hardware_identity(&device_id, &expected_fingerprints)?;
+        let device_type = verify_connected_hardware_identity(&device_id, &expected_fingerprints)?;
         let output = hwi_cli()
-            .sign_psbt(&device_id, &encoded)
+            .sign_psbt(&device_type, &device_id, &encoded)
             .map_err(hardware_api_error)?;
         let response: HwiPsbt = serde_json::from_slice(&output).map_err(internal)?;
         response.psbt.ok_or_else(|| {
             drop(response.error);
-            api_error(
-                "hardware_unavailable",
-                "The device did not return a signed PSBT.",
-            )
+            missing_hwi_value(response.code, "The device did not return a signed PSBT.")
         })
     })
     .await
@@ -2619,14 +2696,12 @@ pub fn multisig_create(
 ) -> ApiResult<MultisigWalletDto> {
     let _operation = operation_guard(&state)?;
     let credential = Zeroizing::new(credential);
-    if credential.is_empty() {
-        return Err(api_error("invalid_credential", "An app PIN is required."));
-    }
+    validate_credential(credential.as_str())?;
     reject_virtual_cosigners(&policy.cosigners)?;
     let preview = policy.preview().map_err(policy_api_error)?;
     let (id, dir) = prepare_profile_directory(&app)?;
     let result = (|| {
-        let mut db = Connection::open(dir.join("wallet.sqlite")).map_err(internal)?;
+        let mut db = open_wallet_database(&dir.join("wallet.sqlite"))?;
         init_app_schema(&db)?;
         Wallet::create(
             preview.external_descriptor.clone(),
@@ -2680,9 +2755,7 @@ pub fn multisig_recovery_create(
 ) -> ApiResult<MultisigWalletDto> {
     let _operation = operation_guard(&state)?;
     let credential = Zeroizing::new(credential);
-    if credential.is_empty() {
-        return Err(api_error("invalid_credential", "An app PIN is required."));
-    }
+    validate_credential(credential.as_str())?;
     reject_virtual_cosigners(&cosigners)?;
     let policy = PolicyInput {
         name: name.clone(),
@@ -2698,7 +2771,7 @@ pub fn multisig_recovery_create(
         .unwrap_or(2);
     let (id, dir) = prepare_profile_directory(&app)?;
     let result = (|| {
-        let mut db = Connection::open(dir.join("wallet.sqlite")).map_err(internal)?;
+        let mut db = open_wallet_database(&dir.join("wallet.sqlite"))?;
         init_app_schema(&db)?;
         Wallet::create(
             analysis.external_descriptor.clone(),
@@ -3050,6 +3123,22 @@ mod tests {
     }
 
     #[test]
+    fn credential_and_mnemonic_inputs_are_bounded() {
+        assert_eq!(
+            validate_credential("").unwrap_err().code,
+            "invalid_credential"
+        );
+        assert!(validate_credential(&"x".repeat(MAX_CREDENTIAL_BYTES)).is_ok());
+        assert_eq!(
+            validate_credential(&"x".repeat(MAX_CREDENTIAL_BYTES + 1))
+                .unwrap_err()
+                .code,
+            "invalid_credential"
+        );
+        assert!(WORDS.len() < MAX_MNEMONIC_INPUT_BYTES);
+    }
+
+    #[test]
     fn command_boundary_error_translation_is_complete_and_stable() {
         let registry_cases = [
             (RegistryError::Missing, "wallet_not_found"),
@@ -3139,6 +3228,28 @@ mod tests {
             }),
             "expanding"
         );
+    }
+
+    #[test]
+    fn hwi_response_codes_become_safe_actionable_errors() {
+        let cases = [
+            (-3, "Reconnect and unlock"),
+            (-12, "Reconnect and unlock"),
+            (-14, "cancelled"),
+            (-15, "busy"),
+            (-8, "does not support"),
+            (-9, "does not support"),
+            (-1, "could not select"),
+            (-2, "could not select"),
+            (-4, "could not select"),
+            (-7, "could not select"),
+        ];
+        for (code, expected) in cases {
+            let error = missing_hwi_value(Some(code), "fallback");
+            assert_eq!(error.code, "hardware_unavailable");
+            assert!(error.message.contains(expected));
+        }
+        assert_eq!(missing_hwi_value(None, "fallback").message, "fallback");
     }
 
     #[test]
@@ -3354,6 +3465,48 @@ mod tests {
         }
         fs::write(&path, vec![b'x'; MAX_PRIVATE_JSON_BYTES as usize + 1]).unwrap();
         assert_eq!(read_private_text(&path).unwrap_err().code, "internal_error");
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn wallet_database_is_owner_only_and_uses_defensive_settings() {
+        let dir = std::env::temp_dir().join(format!("satchel-db-test-{}", Uuid::new_v4()));
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("wallet.sqlite");
+        let db = open_wallet_database(&path).unwrap();
+        assert!(db.db_config(DbConfig::SQLITE_DBCONFIG_DEFENSIVE).unwrap());
+        assert!(db.db_config(DbConfig::SQLITE_DBCONFIG_ENABLE_FKEY).unwrap());
+        let trusted: bool = db
+            .query_row("PRAGMA trusted_schema", [], |row| row.get(0))
+            .unwrap();
+        assert!(!trusted);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(
+                fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+                0o600
+            );
+        }
+        drop(db);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn wallet_database_rejects_symlink_storage() {
+        use std::os::unix::fs::symlink;
+
+        let dir = std::env::temp_dir().join(format!("satchel-db-link-{}", Uuid::new_v4()));
+        fs::create_dir_all(&dir).unwrap();
+        let target = dir.join("target.sqlite");
+        Connection::open(&target).unwrap();
+        let link = dir.join("wallet.sqlite");
+        symlink(&target, &link).unwrap();
+        assert_eq!(
+            open_wallet_database(&link).unwrap_err().code,
+            "internal_error"
+        );
         fs::remove_dir_all(dir).unwrap();
     }
 

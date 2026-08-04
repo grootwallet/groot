@@ -102,6 +102,7 @@ Require the selected wallet credential, explicit typed confirmation, and a backu
 
 1. User names the wallet and chooses a recommended 2-of-3 or 3-of-5 recipe, or opens advanced M-of-N controls within the safe v1 envelope of 2–7 signatures and 3–7 cosigners. Satchel does not offer 1-of-N because one stolen key could spend alone; users who want one key should create a single-key wallet.
 2. Add each cosigner through a Rust hardware transport or import its master fingerprint and BIP48 account xpub through QR/file/manual entry.
+   Draft progress is neutral before review. Missing-field and policy errors appear only after the user attempts **Review wallet**. Imported-key cards identify the device fingerprint and connection/import method and make the complete public account key readable without horizontal overflow.
 3. Reject duplicate fingerprints, duplicate account xpubs, wrong-network keys, private descriptors, and nonstandard origins.
 4. Rust constructs canonical checksummed external/change `wsh(sortedmulti())` descriptors and BDK derives the verification address.
 5. User verifies connected devices where supported and confirms an offline descriptor backup before the wallet can receive funds.

@@ -172,7 +172,7 @@ export class DummyWalletAdapter implements WalletPort {
     if (cosigner.source === 'usb' || cosigner.source === 'virtual') {
       const devices = await this.listHardwareDevices();
       const connected = devices.find((device) => device.connected && device.fingerprint?.toLowerCase() === cosigner.fingerprint.toLowerCase());
-      if (!connected) throw new WalletError('hardware_unavailable', 'Connect and unlock this device, then open its Bitcoin app.');
+      if (!connected) throw new WalletError('hardware_unavailable', 'Connect and unlock this device, then keep it ready over USB.');
       return { status: 'healthy' as const, checkedAt, summary: `Connected identity matches ${cosigner.fingerprint}.` };
     }
     return { status: 'record_valid' as const, checkedAt, summary: 'Public key, fingerprint, and derivation path are complete. Physical presence cannot be checked for an offline key.' };

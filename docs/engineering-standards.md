@@ -23,6 +23,16 @@ Dependencies point inward. Routes never select adapters. Rust commands translate
 - Reject a production claim supported only by dummy, simulator, snapshot, or mocked evidence.
 - Prefer a small pure function and exhaustive table tests over condition-heavy route or command code.
 
+## Supply-chain rules
+
+- Do not add, update, or remove a dependency as a side effect of unrelated work. State the capability and threat-boundary reason first.
+- Keep direct versions exact, commit both lockfiles, and use only `--frozen-lockfile` / `--locked` in automation. Never hand-edit lockfile integrity values.
+- Node dependency lifecycle scripts remain disabled. Any future exception must name one exact package/version, explain the required script, inspect its published source, and record the decision before allowlisting it.
+- GitHub Actions use immutable commit SHAs, job permissions stay read-only by default, and checkout credentials are not persisted. CI must not publish release artifacts from pull-request jobs.
+- Vendored Rust code is reviewable source, not implicitly trusted source. Changes under `src-tauri/vendor/`, either lockfile, CI workflows, package-manager configuration, Tauri capabilities, or release scripts require an explicit supply-chain/security review.
+- Advisory scanners are one signal. A green scan does not replace provenance, license review, feature review, maintainer-risk review, reproducible builds, SBOMs, signed artifacts, or independent review.
+- Do not run a wallet release from an unreviewed CI artifact. Mainnet release provenance and signing remain blocked by the canonical checklist.
+
 ## Test pyramid
 
 - Unit: every policy branch, boundary value, parser failure, state transition, and stable error mapping.

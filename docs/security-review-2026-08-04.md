@@ -9,7 +9,9 @@ The review covered the Svelte/WalletPort boundary, Tauri commands, BDK/Miniscrip
 ## Controls verified or added
 
 - Generated mnemonics remain Rust-owned and zeroized; credential/recovery inputs are cleared after every frontend attempt.
+- Credential and mnemonic IPC inputs are bounded. Multisig credential fields are also cleared on route teardown, so navigation cannot retain an authorization value in component state.
 - Secret envelopes use explicit Argon2id parameters, authenticated encryption, a device wrapping key, bounded metadata, and RAII zeroization on every return path.
+- Apple Keychain denial/unavailability now fails closed instead of being confused with an absent item; a failed lookup cannot silently generate a replacement wrapping key.
 - Unlock sessions are wallet-UUID scoped, idle-expiring, switch-safe, and explicitly lockable. Authentication cooldown persists per wallet across restarts.
 - State-changing native commands are serialized. Proposal signature merges use compare-and-swap persistence and cannot become ready unless BDK can finalize the collected signatures.
 - Amounts are integer satoshis. Review values come from the persisted PSBT proposal, including the fee rate actually applied by the builder.
@@ -18,18 +20,20 @@ The review covered the Svelte/WalletPort boundary, Tauri commands, BDK/Miniscrip
 - Single-key deletion requires credential plus exact confirmation. Multisig deletion requires credential, exact name, and a recovery drill bound to the current descriptor.
 - Backup imports recompile descriptors/policies and reject mismatched policy type, threshold, paths, network, private material, or noncanonical descriptors.
 - Local Core endpoints must be loopback. Remote backend policy rejects URL credentials, cleartext remote transport, and forged presets.
-- HWI never uses a shell or ambient `PATH`; it has bounded arguments/output, null stdin, timeout/kill, discarded raw stderr, explicit chain, and exact connected-fingerprint checks.
+- Wallet databases and private metadata reject symlink/non-regular storage. SQLite files are owner-only on Unix and connections enable a busy timeout, foreign keys, untrusted-schema mode, and SQLite defensive mode. Wallet directories are owner-only and multisig metadata must match the registered descriptor checksum.
+- HWI never uses a shell, ambient `PATH`, or inherited environment; the executable is canonicalized and group/world-writable binaries are rejected on Unix. Commands bind the freshly enumerated device type and exact path, with bounded arguments/output, null stdin, timeout/kill, discarded raw stderr, explicit chain, and exact connected-fingerprint checks.
 - File/air-gap, wallet/cosigner, network, and policy inputs are bounded and reject control data, wrong networks, duplicate identities, and unsafe thresholds.
-- CI tools, Node packages, Rust toolchain, and GitHub Actions are pinned; Cargo operations use the committed lockfile. npm and RustSec scans report no known vulnerabilities. RustSec still reports inherited unmaintained/unsound warnings in the Tauri Linux GTK3 dependency tree, tracked as a release dependency risk.
+- CI tools, the pnpm runtime, Node packages, Rust toolchain, and GitHub Actions are pinned; Cargo operations use the committed lockfile. Node dependency lifecycle scripts are disabled project-wide, package tarballs retain lockfile integrity hashes, and the pnpm store is verified. CI runs npm and RustSec advisory checks. This local audit could not refresh either advisory feed because outbound registry DNS was unavailable, so a green CI advisory job remains required release evidence. Known informational warnings in the inherited Tauri Linux GTK3 dependency tree remain a tracked release dependency risk.
+- The Vercel build is a deterministic browser demo only: it has no database, API server, authentication service, signing keys, or multi-tenant state. RLS is therefore not applicable. Its response policy now includes CSP, frame denial, MIME/referrer controls, restricted browser capabilities, COOP/CORP, and HSTS.
 
 ## Evidence
 
 - Frontend policy: 100% statements, branches, functions, and lines.
-- Rust security core: 99.53% lines and 100% functions; 62 Rust unit tests pass under strict Clippy.
-- Whole Rust library regression floor: 55.46% lines and 53.69% functions. This number includes platform/Tauri orchestration that cannot be honestly covered by portable unit tests.
+- Rust security core: 99.53% lines and 100% functions; 69 Rust unit tests pass under strict Clippy.
+- Whole Rust library: 56.55% lines and 54.58% functions. This number includes platform/Tauri orchestration that cannot be honestly covered by portable unit tests.
 - Playwright: 43 passed across desktop Chromium and mobile WebKit; one desktop-only duplicate of a mobile overflow assertion is intentionally skipped.
 - Live regtest: real fresh 2-of-3 descriptors, funding, PSBT construction, two signatures, finalization, Core broadcast, confirmation, and BDK resync pass.
-- Production Svelte build, architecture boundary check, mainnet release gate, npm audit, Cargo audit, formatting, tests, and strict linting pass.
+- Production Svelte build, architecture boundary check, mainnet release gate, formatting, tests, strict linting, and configured coverage floors pass locally. npm and Cargo advisory scans remain delegated to CI because their registries were unreachable from this sandbox.
 
 ## Mainnet and production blockers
 

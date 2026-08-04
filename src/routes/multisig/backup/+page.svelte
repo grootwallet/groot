@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Check, ClipboardCheck, Copy, Download, FileKey, FileUp, Trash2 } from '@lucide/svelte';
   import { goto } from '$app/navigation';
+  import { onDestroy } from 'svelte';
   import Button from '$lib/components/Button.svelte';
   import PasswordField from '$lib/components/PasswordField.svelte';
   import { copyText } from '$lib/clipboard';
@@ -16,6 +17,8 @@
   let deletePin = $state('');
   let busy = $state(false);
   let error = $state('');
+
+  onDestroy(() => { pin = ''; deletePin = ''; confirmation = ''; backup = ''; });
 
   $effect(() => { void walletService.multisigWallet().then((value) => wallet = value); });
 
@@ -37,8 +40,8 @@
     if (!wallet || !drill?.matchesCurrentWallet) return;
     busy = true; error = '';
     try { await walletService.deleteMultisig(deletePin, confirmation); toast({ title: 'Vault deleted', description: 'Local coordinator data was removed. Your descriptor backup remains recoverable.' }); await goto('/settings'); }
-    catch (cause) { error = cause instanceof Error ? cause.message : 'Could not delete the vault.'; deletePin = ''; }
-    finally { busy = false; }
+    catch (cause) { error = cause instanceof Error ? cause.message : 'Could not delete the vault.'; }
+    finally { deletePin = ''; busy = false; }
   }
 
   async function importBackup(event: Event) {
