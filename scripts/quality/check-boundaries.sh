@@ -8,6 +8,8 @@ fail() {
   exit 1
 }
 
+command -v rg >/dev/null 2>&1 || fail "ripgrep (rg) is required"
+
 if rg -n "wallet/(dummy|tauri)" src/routes src/lib/components; then
   fail "routes/components must depend on WalletPort through the wallet composition root"
 fi

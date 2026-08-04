@@ -6,6 +6,8 @@ use argon2::Argon2;
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use rand::{rngs::OsRng, RngCore};
 use serde::{Deserialize, Serialize};
+#[cfg(not(any(target_os = "macos", target_os = "ios")))]
+use std::path::PathBuf;
 use std::{
     fs::{self, File, OpenOptions},
     io::{Read, Write},
@@ -18,6 +20,7 @@ const VERSION: u8 = 2;
 const MAX_METADATA_BYTES: u64 = 256 * 1024;
 const KEY_BYTES: usize = 32;
 const NONCE_BYTES: usize = 12;
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 const KEYCHAIN_SERVICE: &str = "app.satchel.wallet.device-wrap.v1";
 
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
@@ -50,6 +53,7 @@ trait DeviceKeyProvider {
 
 struct SystemDeviceKeyProvider;
 
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 fn account(metadata_path: &Path) -> Result<String, SecureStoreError> {
     metadata_path
         .parent()
@@ -315,6 +319,11 @@ pub fn forget_device_key(metadata_path: &Path) {
             let _ = delete_generic_password(KEYCHAIN_SERVICE, &account);
         }
     }
+
+    #[cfg(not(any(target_os = "macos", target_os = "ios")))]
+    if let Ok(path) = sandbox_key_path(metadata_path) {
+        let _ = fs::remove_file(path);
+    }
 }
 
 #[cfg(test)]
@@ -382,6 +391,21 @@ mod tests {
             load_with_provider(&metadata, "x", &provider),
             Err(SecureStoreError::Corrupt)
         );
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "ios")))]
+    #[test]
+    fn forgetting_a_wallet_removes_the_sandbox_device_key() {
+        let directory = directory();
+        fs::create_dir_all(&directory).unwrap();
+        let metadata = directory.join("secret.json");
+        let device_key = sandbox_key_path(&metadata).unwrap();
+        fs::write(&device_key, vec![7_u8; KEY_BYTES]).unwrap();
+
+        forget_device_key(&metadata);
+
+        assert!(!device_key.exists());
         fs::remove_dir_all(directory).unwrap();
     }
 }

@@ -8,6 +8,8 @@ fail() {
   exit 1
 }
 
+command -v rg >/dev/null 2>&1 || fail "ripgrep (rg) is required"
+
 rg -F "export const SUPPORTED_NETWORKS = ['signet', 'testnet4', 'regtest'] as const;" src/lib/config.ts >/dev/null \
   || fail "the browser network allowlist changed"
 rg -F "const NETWORK: Network = Network::Regtest;" src-tauri/src/wallet.rs >/dev/null \
