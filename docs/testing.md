@@ -15,7 +15,7 @@ Use for deterministic policy and hostile inputs. Each invariant gets the happy p
 
 Rust unit tests own cryptography-adjacent behavior: credential encryption failures, authentication cooldown, descriptor canonicalization, backup validation, notification persistence, Miniscript compilation, adversarial PSBT merge rules, atomic/bounded storage, registry corruption, backend URL policy, HWI process limits, and air-gap frame limits. `pnpm test:coverage:rust` enforces the deterministic security-core scope (`auth`, `multisig`, `notifications`, `proposal`, and `recovery`) at 99% lines, 100% functions, and 97% regions. Platform-native UI and secure-store adapters still run in the Rust suite, but are excluded from this portable line threshold and require platform acceptance evidence.
 
-The restart layer uses file-backed SQLite: it persists a payment PSBT, frozen outpoint, and notification, drops every handle, reconstructs fresh state, and verifies exact recovery and exactly-once drain. It then injects corrupt PSBT and frozen rows. Registry migration tests simulate an interrupted commit and require every directory to return to its original path.
+The restart layer uses file-backed SQLite: it persists a payment PSBT, frozen outpoint, authentication cooldown, and notification, drops every handle, reconstructs fresh state, and verifies exact recovery plus pending-until-acknowledged delivery. It then injects corrupt PSBT and frozen rows. Registry migration tests simulate an interrupted commit and require every directory to return to its original path.
 
 Secret-envelope units use an in-memory device-key provider to prove that the correct credential alone, correct device key alone, corrupt metadata, oversized metadata, and mismatched wrapped keys all fail. Platform adapters compile with the native app and are exercised in platform acceptance without returning test secrets to the webview.
 
@@ -25,7 +25,7 @@ The whole Rust library is reported separately with `pnpm test:coverage:rust:all`
 
 `pnpm test:regtest` talks to the isolated Bitcoin Core node. It creates fresh descriptor keys and addresses on every run, funds a real `wsh(sortedmulti())` wallet, syncs BDK, builds a real PSBT, signs it with two isolated signers, finalizes it in the coordinator, broadcasts it, and verifies that the transaction returns through sync. Fresh keys prevent prior regtest state from making tests order-dependent.
 
-Integration tests must assert state on both sides of a boundary: for example, BDK balance plus Core acceptance, persisted proposal plus reconstructed PSBT, or notification row plus exactly-once drain. Signet is a smoke/rehearsal layer after deterministic regtest is green; it is not used for exhaustive edge cases.
+Integration tests must assert state on both sides of a boundary: for example, BDK balance plus Core acceptance, persisted proposal plus reconstructed PSBT, or notification row plus pending/acknowledged state. Signet is a smoke/rehearsal layer after deterministic regtest is green; it is not used for exhaustive edge cases.
 
 ### End-to-end tests
 
@@ -45,7 +45,7 @@ Virtual signer coverage is mandatory in CI. Physical certification is separate a
 | --- | --- | --- | --- | --- | --- |
 | F01 | Generate 24 words and create | Rust pending session + device/credential envelope; TS recovery count + theme contrast | Descriptor derivation tests | Fixture onboarding + 24-word light/dark contrast | Green on regtest; native platform certification remains |
 | F02 | Recover 24 words + credential | Invalid length/credential | Descriptor backup round-trip | 23-word rejection then recovery | Green fixture; full Core rescan expansion pending |
-| F03 | Unlock/wrong PIN/rate limit | Auth cooldown + AEAD rejection + exact regtest-reset confirmation | Selected-profile routing and deletion | Wrong then correct credential; reveal control; exit/switch routes; locked regtest deletion; light/dark contrast | Green |
+| F03 | Unlock/wrong PIN/rate limit | Persisted per-wallet auth cooldown + AEAD rejection + wallet-bound idle session + exact regtest-reset confirmation | Selected-profile routing and deletion | Wrong then correct credential; reveal control; exit/switch/explicit-lock routes; locked regtest deletion; light/dark contrast | Green |
 | F04 | Overview/balance/recent activity | Snapshot accounting helpers | Core-backed BDK sync | Overview visible | Green |
 | F05 | Activity/filter/details | DTO/accounting tests | Core transaction round-trip | Explicit empty state, filter, and details modal | Green |
 | F06 | UTXO list, manual selection, freeze/unfreeze | Selection normalization, persistence/corruption/restart | BDK exact-input builder and persisted freeze table | Select, freeze, unfreeze, carry to Send, restore auto | Green |
@@ -53,8 +53,8 @@ Virtual signer coverage is mandatory in CI. Physical certification is separate a
 | F08 | Discard unused awaiting address | All discard branches | SQLite conditional update | Independent confirmed discard while other requests remain active | Green |
 | F09 | Fee presets/custom validation | Amount/rate boundaries | Real fee-funded PSBT | Zero custom disabled; valid custom enabled | Green |
 | F10 | Single-key review/sign/broadcast | Active-network address prefix, credential + persisted trusted-PSBT restart/corruption rules | Core signing path shares BDK signer options | Receive address round trip, wrong PIN, updated-balance broadcast | Green on regtest |
-| F11 | Exactly-once receive/confirmation/broadcast notices | SQLite uniqueness/order/drain | Broadcast inserted after Core acceptance | Durable state plus toast host | Green backend; background scheduling pending |
-| F12 | Single-key delete | Tombstone/idempotence/non-directory | Filesystem boundary | Typed DELETE gate | Green; no flash-erasure claim |
+| F11 | Durable receive/confirmation/broadcast notices | SQLite uniqueness/order/pending/explicit ack | Broadcast state + notice commit after Core acceptance | Durable state plus toast host | Green at-least-once delivery; background scheduling pending |
+| F12 | Single-key delete | Credential verification + tombstone/idempotence/non-directory | Filesystem boundary | PIN plus typed DELETE gate | Green; no flash-erasure claim |
 | F13 | Multisig policy/manual setup | Canonical descriptors + all validation branches, including M/N bounds | BDK accepts descriptors | 2-of-3 and 3-of-5 recipes; advanced 3-of-4; 1-of-N exclusion; duplicate rejection | Green |
 | F14 | Hardware enumerate/xpub/sign/address display/health | Fixed args, timeout, output, injection, stable errors; native rejection of virtual sources | Virtual isolated signers | Device-details modal; connected fingerprint match; honest offline-record check; virtual HWI setup/sign | Harness green; physical certification external |
 | F15 | Multisig receive/sync | Descriptor and label rules | Funded WSH address | Receive QR | Green |

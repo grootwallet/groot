@@ -5,6 +5,7 @@ import {
   type FeeEstimates,
   type FeeRate,
   type CoinSelection,
+  type BroadcastResult,
   type PaymentProposal,
   type Sats,
   type WalletEvent,
@@ -17,6 +18,7 @@ import type { RecoveryDrill, RecoveryPolicyAnalysis, RecoveryTemplate } from './
 import type { PolicyDraft } from '$lib/multisig/policy';
 
 type BackendError = { code?: string; message?: string };
+type NotificationEnvelope = { id: number; event: WalletEvent };
 
 async function command<T>(name: string, args?: Record<string, unknown>): Promise<T> {
   try {
@@ -67,7 +69,8 @@ export class TauriWalletAdapter implements WalletPort {
   createWallet(name: string, credential: string) { return command<void>('wallet_create', { name, credential }); }
   recoverWallet(name: string, mnemonic: string, credential: string) { return command<void>('wallet_recover', { name, mnemonic, credential }); }
   unlock(credential: string) { return command<void>('wallet_unlock', { credential }); }
-  deleteWallet() { return command<void>('wallet_delete'); }
+  lock() { return command<void>('wallet_lock'); }
+  deleteWallet(credential: string, confirmation: string) { return command<void>('wallet_delete', { credential, confirmation }); }
   resetRegtestWallet(confirmation: string) { return command<void>('wallet_reset_regtest', { confirmation }); }
   async snapshot() {
     const snapshot = normalizeSnapshot(await command<WalletSnapshot>('wallet_snapshot'));
@@ -89,10 +92,10 @@ export class TauriWalletAdapter implements WalletPort {
     return command<PaymentProposal>('tx_prepare', { recipient, amount, feeRate, coinSelection });
   }
   async signAndBroadcast(proposalId: string, credential: string) {
-    const result = await command<{ txid: string; snapshot: WalletSnapshot }>('tx_sign_and_broadcast', { proposalId, credential });
+    const result = await command<BroadcastResult>('tx_sign_and_broadcast', { proposalId, credential });
     result.snapshot = normalizeSnapshot(result.snapshot);
     this.#last = result.snapshot;
-    this.#emit({ type: 'transaction_broadcast', txid: result.txid, balance: result.snapshot.balance.total });
+    await this.#drainNotifications(false);
     return result;
   }
   listHardwareDevices() { return command<HardwareDevice[]>('hardware_list'); }
@@ -119,8 +122,10 @@ export class TauriWalletAdapter implements WalletPort {
   importMultisigProposal(proposalId: string, signedPsbt: string) { return command<MultisigProposal>('multisig_proposal_import', { proposalId, signedPsbt }); }
   signMultisigWithHardware(proposalId: string, deviceId: string) { return command<MultisigProposal>('hardware_sign_multisig', { proposalId, deviceId }); }
   async broadcastMultisigProposal(proposalId: string, credential: string) {
-    const result = await command<{ txid: string; snapshot: WalletSnapshot }>('multisig_proposal_broadcast', { proposalId, credential });
-    result.snapshot = normalizeSnapshot(result.snapshot); return result;
+    const result = await command<BroadcastResult>('multisig_proposal_broadcast', { proposalId, credential });
+    result.snapshot = normalizeSnapshot(result.snapshot);
+    await this.#drainNotifications(true);
+    return result;
   }
   cancelMultisigProposal(proposalId: string) { return command<void>('multisig_proposal_cancel', { proposalId }); }
   subscribe(listener: (event: WalletEvent) => void) {
@@ -128,8 +133,11 @@ export class TauriWalletAdapter implements WalletPort {
     return () => this.#listeners.delete(listener);
   }
   async #drainNotifications(multisig: boolean) {
-    const events = await command<WalletEvent[]>('wallet_notifications', { multisig });
-    events.forEach((event) => this.#emit(event));
+    const envelopes = await command<NotificationEnvelope[]>('wallet_notifications', { multisig });
+    for (const envelope of envelopes) this.#emit(envelope.event);
+    if (envelopes.length) {
+      await command<void>('wallet_notifications_ack', { multisig, ids: envelopes.map((envelope) => envelope.id) });
+    }
   }
   #emit(event: WalletEvent) { this.#listeners.forEach((listener) => listener(event)); }
 }

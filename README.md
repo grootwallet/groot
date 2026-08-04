@@ -48,7 +48,7 @@ The static web demo is intentionally marked **Interactive prototype** on every s
 
 Open **Vault → Create multisig wallet**. V1 uses BIP48 test-network account keys at `m/48'/1'/0'/2'` and Rust builds canonical checksummed `wsh(sortedmulti(...))` receive/change descriptors. A 2-of-3 policy is recommended.
 
-Manual public-key entry works everywhere. Desktop hardware import additionally requires [Bitcoin Core HWI](https://github.com/bitcoin-core/HWI) to provide the `hwi` executable. Connect and unlock one supported device, open its Bitcoin app, then choose **Add a cosigner → Connect hardware device**. Seed words and private keys must never be entered into Satchel's coordinator.
+Manual public-key entry works everywhere. Desktop hardware import additionally requires [Bitcoin Core HWI](https://github.com/bitcoin-core/HWI) at a trusted absolute installation path (`/opt/homebrew/bin/hwi`, `/usr/local/bin/hwi`, or `/usr/bin/hwi`), or an absolute `SATCHEL_HWI_PATH` supplied when compiling Satchel. Satchel never searches ambient `PATH`. Connect and unlock one supported device, open its Bitcoin app, then choose **Add a cosigner → Connect hardware device**. Seed words and private keys must never be entered into Satchel's coordinator.
 
 The coordinator setup, policy validation, HWI xpub import, descriptor persistence, watch-only BDK database, PSBT signing, sync, balance, labeled receive, and immediate-path broadcast flows are implemented. Guided recovery and inheritance templates compile and persist real Miniscript descriptors; coordinator-assisted spending through the delayed path remains a V2 gate. Consult [implementation status](docs/implementation-status.md) before treating a UI surface as production-ready.
 
@@ -119,6 +119,7 @@ Before connecting a physical signer, run `pnpm hardware:preflight` and follow th
 - [Engineering and AI contribution standards](docs/engineering-standards.md)
 - [Hardware certification](docs/hardware-certification.md)
 - [Mainnet release checklist](docs/mainnet-release-checklist.md)
+- [Latest internal security review](docs/security-review-2026-08-04.md)
 - [Manual regtest acceptance](docs/manual-regtest-test-plan.md)
 - [Architectural decisions](docs/adr/)
 

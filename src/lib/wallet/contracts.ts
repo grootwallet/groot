@@ -31,6 +31,12 @@ export type PaymentProposal = {
   selectedOutpoints: string[];
 };
 
+export type BroadcastResult = {
+  txid: string;
+  snapshot: WalletSnapshot;
+  syncPending: boolean;
+};
+
 export type CoinSelection = { mode: 'auto' } | { mode: 'manual'; outpoints: string[] };
 
 export type HardwareDevice = {
@@ -178,7 +184,8 @@ export interface WalletPort {
   createWallet(name: string, credential: string): Promise<void>;
   recoverWallet(name: string, mnemonic: string, credential: string): Promise<void>;
   unlock(credential: string): Promise<void>;
-  deleteWallet(): Promise<void>;
+  lock(): Promise<void>;
+  deleteWallet(credential: string, confirmation: string): Promise<void>;
   resetRegtestWallet(confirmation: string): Promise<void>;
   snapshot(): Promise<WalletSnapshot>;
   sync(): Promise<WalletSnapshot>;
@@ -187,7 +194,7 @@ export interface WalletPort {
   estimateFees(): Promise<FeeEstimates>;
   setCoinFrozen(outpoint: string, frozen: boolean): Promise<void>;
   preparePayment(recipient: string, amount: Sats, feeRate: FeeRate, coinSelection?: CoinSelection): Promise<PaymentProposal>;
-  signAndBroadcast(proposalId: string, credential: string): Promise<{ txid: string; snapshot: WalletSnapshot }>;
+  signAndBroadcast(proposalId: string, credential: string): Promise<BroadcastResult>;
   listHardwareDevices(): Promise<HardwareDevice[]>;
   checkHardwareCosigner(cosigner: CosignerDraft): Promise<CosignerHealthCheck>;
   importHardwareCosigner(deviceId: string, label: string): Promise<CosignerDraft>;
@@ -208,7 +215,7 @@ export interface WalletPort {
   multisigProposals(): Promise<MultisigProposal[]>;
   importMultisigProposal(proposalId: string, signedPsbt: string): Promise<MultisigProposal>;
   signMultisigWithHardware(proposalId: string, deviceId: string): Promise<MultisigProposal>;
-  broadcastMultisigProposal(proposalId: string, credential: string): Promise<{ txid: string; snapshot: WalletSnapshot }>;
+  broadcastMultisigProposal(proposalId: string, credential: string): Promise<BroadcastResult>;
   cancelMultisigProposal(proposalId: string): Promise<void>;
   subscribe(listener: (event: WalletEvent) => void): () => void;
 }

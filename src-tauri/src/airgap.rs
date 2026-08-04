@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 pub const MAX_AIRGAP_BYTES: usize = 256 * 1024;
 pub const MAX_PARTS: usize = 512;
+pub const MAX_TAG_BYTES: usize = 128;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AirgapError {
     Empty,
@@ -28,6 +29,12 @@ impl MultipartDecoder {
     ) -> Result<bool, AirgapError> {
         if payload.is_empty() {
             return Err(AirgapError::Empty);
+        }
+        if tag.is_empty()
+            || tag.len() > MAX_TAG_BYTES
+            || tag.chars().any(|character| character.is_control())
+        {
+            return Err(AirgapError::InvalidPart);
         }
         if total == 0 || index >= total {
             return Err(AirgapError::InvalidPart);
@@ -86,6 +93,11 @@ mod tests {
             Err(AirgapError::TooManyParts)
         );
         assert_eq!(d.ingest("x", 0, 1, b""), Err(AirgapError::Empty));
+        assert_eq!(d.ingest("", 0, 1, b"a"), Err(AirgapError::InvalidPart));
+        assert_eq!(
+            d.ingest(&"x".repeat(MAX_TAG_BYTES + 1), 0, 1, b"a"),
+            Err(AirgapError::InvalidPart)
+        );
         d.ingest("x", 0, 2, b"a").unwrap();
         assert_eq!(d.ingest("y", 1, 2, b"b"), Err(AirgapError::MismatchedSet));
         assert_eq!(

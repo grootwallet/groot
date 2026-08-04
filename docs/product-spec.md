@@ -43,7 +43,7 @@ Wallets have immutable UUID identities, user-visible names, network and kind met
 
 ### Unlock
 
-Incorrect entry shows “Incorrect passphrase / PIN.” It does not reveal whether a guessed credential maps to any other BIP39 wallet. Rate limiting and platform secure storage harden repeated attempts.
+Incorrect entry shows “Incorrect passphrase / PIN.” It does not reveal whether a guessed credential maps to any other BIP39 wallet. Rate limiting persists per wallet across restarts. Unlock state belongs only to the selected wallet, expires after five minutes without activity, and can be cleared immediately from Settings.
 
 The locked screen names the selected wallet, permits switching profiles, and always offers a route back to wallet setup. Existing-wallet setup can be closed from every step without completing or replacing the selected wallet. Every passphrase/PIN field has an explicit show/hide control so the user can verify an entry before submitting it.
 
@@ -86,17 +86,17 @@ Show amount, outpoint, label, address, confirmations, and frozen state. Users ca
 
 ## Notifications
 
-Exactly-once in-app toasts are produced for:
+Durable in-app notification events are produced for:
 
 - local transaction broadcast, with updated balance;
 - newly observed incoming transaction, with updated balance;
 - first confirmation, with updated balance.
 
-Later confirmations do not create toasts. Persistent transaction state remains the source of truth.
+Later confirmations do not create events. Delivery is explicitly acknowledged and may repeat after a crash before acknowledgement; stable event IDs and persistent transaction state make handling idempotent. Persistent transaction state remains the source of truth.
 
 ## Delete wallet
 
-Require explicit typed confirmation and a backup warning. Close handles, zeroize/clear in-memory keys, remove encrypted secret material and local wallet database, and return to onboarding. Deletion affects only this device and cannot recall broadcast transactions.
+Require the selected wallet credential, explicit typed confirmation, and a backup warning. Close handles, zeroize/clear in-memory keys, remove encrypted secret material and local wallet database, and return to onboarding. Multisig deletion also requires a successful recovery drill for the exact current descriptor. Deletion affects only this device and cannot recall broadcast transactions or guarantee physical flash erasure.
 
 ## Multisig coordinator
 

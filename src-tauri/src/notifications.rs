@@ -1,6 +1,6 @@
 #[cfg(test)]
 use bdk_wallet::rusqlite::OptionalExtension;
-use bdk_wallet::rusqlite::{params, Connection, Transaction};
+use bdk_wallet::rusqlite::{params, params_from_iter, Connection};
 use serde::Serialize;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -19,6 +19,12 @@ pub enum WalletNotification {
         txid: String,
         balance: u64,
     },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct NotificationEnvelope {
+    pub id: i64,
+    pub event: WalletNotification,
 }
 
 impl WalletNotification {
@@ -73,40 +79,47 @@ pub fn enqueue(
 
 fn decode_row(
     row: &bdk_wallet::rusqlite::Row<'_>,
-) -> bdk_wallet::rusqlite::Result<WalletNotification> {
+) -> bdk_wallet::rusqlite::Result<NotificationEnvelope> {
+    let id = row.get(0)?;
     let kind = row.get::<_, String>(1)?;
     let txid = row.get(2)?;
     let amount = row.get(3)?;
     let balance = row.get(4)?;
-    match kind.as_str() {
-        "payment_received" => Ok(WalletNotification::PaymentReceived {
+    let event = match kind.as_str() {
+        "payment_received" => WalletNotification::PaymentReceived {
             txid,
             amount,
             balance,
-        }),
-        "first_confirmation" => Ok(WalletNotification::FirstConfirmation { txid, balance }),
-        "transaction_broadcast" => Ok(WalletNotification::TransactionBroadcast { txid, balance }),
-        _ => Err(bdk_wallet::rusqlite::Error::InvalidQuery),
-    }
+        },
+        "first_confirmation" => WalletNotification::FirstConfirmation { txid, balance },
+        "transaction_broadcast" => WalletNotification::TransactionBroadcast { txid, balance },
+        _ => return Err(bdk_wallet::rusqlite::Error::InvalidQuery),
+    };
+    Ok(NotificationEnvelope { id, event })
 }
 
-pub fn drain(db: &mut Connection) -> bdk_wallet::rusqlite::Result<Vec<WalletNotification>> {
-    let transaction = db.transaction()?;
-    let events = unread(&transaction)?;
-    transaction.execute(
-        "UPDATE satchel_notifications SET delivered = 1 WHERE delivered = 0",
-        [],
-    )?;
-    transaction.commit()?;
-    Ok(events)
-}
-
-fn unread(transaction: &Transaction<'_>) -> bdk_wallet::rusqlite::Result<Vec<WalletNotification>> {
-    let mut statement = transaction.prepare(
+pub fn pending(db: &Connection) -> bdk_wallet::rusqlite::Result<Vec<NotificationEnvelope>> {
+    let mut statement = db.prepare(
         "SELECT id,kind,txid,amount,balance FROM satchel_notifications WHERE delivered = 0 ORDER BY id",
     )?;
     let rows = statement.query_map([], decode_row)?.collect();
     rows
+}
+
+pub fn acknowledge(db: &mut Connection, ids: &[i64]) -> bdk_wallet::rusqlite::Result<usize> {
+    if ids.is_empty() {
+        return Ok(0);
+    }
+    let transaction = db.transaction()?;
+    let placeholders = std::iter::repeat_n("?", ids.len())
+        .collect::<Vec<_>>()
+        .join(",");
+    let changed = transaction.execute(
+        &format!("UPDATE satchel_notifications SET delivered = 1 WHERE delivered = 0 AND id IN ({placeholders})"),
+        params_from_iter(ids.iter()),
+    )?;
+    transaction.commit()?;
+    Ok(changed)
 }
 
 #[cfg(test)]
@@ -131,7 +144,7 @@ mod tests {
     }
 
     #[test]
-    fn events_are_unique_ordered_and_delivered_exactly_once() {
+    fn events_are_unique_ordered_and_remain_pending_until_acknowledged() {
         let mut db = db();
         let received = WalletNotification::PaymentReceived {
             txid: "a".repeat(64),
@@ -145,13 +158,29 @@ mod tests {
         assert!(enqueue(&db, &received, 1).unwrap());
         assert!(!enqueue(&db, &received, 2).unwrap());
         assert!(enqueue(&db, &confirmed, 3).unwrap());
-        assert_eq!(drain(&mut db).unwrap(), vec![received, confirmed]);
-        assert!(drain(&mut db).unwrap().is_empty());
+        let events = pending(&db).unwrap();
+        assert_eq!(
+            events
+                .iter()
+                .map(|item| item.event.clone())
+                .collect::<Vec<_>>(),
+            vec![received, confirmed]
+        );
+        assert_eq!(pending(&db).unwrap(), events);
+        assert_eq!(
+            acknowledge(
+                &mut db,
+                &events.iter().map(|item| item.id).collect::<Vec<_>>()
+            )
+            .unwrap(),
+            2
+        );
+        assert!(pending(&db).unwrap().is_empty());
     }
 
     #[test]
     fn broadcast_and_corrupt_rows_are_handled_without_duplicate_delivery() {
-        let mut db = db();
+        let db = db();
         let broadcast = WalletNotification::TransactionBroadcast {
             txid: "b".repeat(64),
             balance: 9,
@@ -159,15 +188,15 @@ mod tests {
         enqueue(&db, &broadcast, 1).unwrap();
         assert!(was_enqueued(&db, "transaction_broadcast", &"b".repeat(64)).unwrap());
         assert!(!was_enqueued(&db, "first_confirmation", "missing").unwrap());
-        assert_eq!(drain(&mut db).unwrap(), vec![broadcast]);
+        assert_eq!(pending(&db).unwrap()[0].event, broadcast);
     }
 
     #[test]
     fn unknown_persisted_notification_kind_fails_closed() {
-        let mut db = db();
+        let db = db();
         db.execute_batch("PRAGMA ignore_check_constraints=ON;")
             .unwrap();
         db.execute("INSERT INTO satchel_notifications(kind,txid,amount,balance,created_at) VALUES('unknown','x',0,0,1)", []).unwrap();
-        assert!(drain(&mut db).is_err());
+        assert!(pending(&db).is_err());
     }
 }

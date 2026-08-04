@@ -23,6 +23,8 @@
   let estimates = $state<FeeEstimates | null>(null);
   let proposal = $state<PaymentProposal | null>(null);
   let txid = $state('');
+  let sentAmount = $state(0);
+  let balanceSyncPending = $state(false);
   let coins = $state<Utxo[]>([]);
   let selectedCoins = $state<string[]>([]);
   let showCoins = $state(false);
@@ -30,9 +32,9 @@
   const fees = $derived({ slow: Number(estimates?.economy ?? 1), medium: Number(estimates?.standard ?? 2), fast: Number(estimates?.priority ?? 5) });
   const selectedFeeRate = $derived(speed === 'custom' ? Number(customFee || 0) : fees[speed as keyof typeof fees]);
   const fee = $derived(Number(proposal?.fee ?? Math.max(0, Math.round(selectedFeeRate * 141))));
-  const amountSats = $derived(Math.round(Number(amount || 0)));
+  const amountSats = $derived(Number(amount || 0));
   const addressValid = $derived(hasAddressPrefixForNetwork(address, defaultConfig.network));
-  const valid = $derived(addressValid && amountSats > 0 && amountSats + fee <= available && selectedFeeRate > 0);
+  const valid = $derived(addressValid && Number.isSafeInteger(amountSats) && amountSats > 0 && amountSats + fee <= available && selectedFeeRate > 0);
 
   onMount(async () => {
     try {
@@ -75,6 +77,8 @@
     try {
       const result = await walletService.signAndBroadcast(proposal.proposalId, passphrase);
       txid = result.txid;
+      sentAmount = Number(proposal.amount);
+      balanceSyncPending = result.syncPending;
       available = result.snapshot.balance.total;
       passphrase = '';
       step = 4;
@@ -104,21 +108,21 @@
       </div><small>Fee estimates: {estimates?.source ?? 'loading…'} · Estimated fee {shortSats(fee)} sats</small></div>
       <Button type="submit" disabled={!valid || preparing} size="large" class="full">{preparing ? 'Preparing…' : 'Review payment'}<ArrowRight size={17} /></Button>
     </form>
-  {:else if step === 2}
+  {:else if step === 2 && proposal}
     <section class="form-card">
-      <div class="review-amount"><span>You send</span><strong>{shortSats(amountSats)} <small>sats</small></strong></div>
-      <dl class="details-list"><div><dt>To</dt><dd class="mono">{address}</dd></div><div><dt>Coins</dt><dd>{selectedCoins.length ? `${selectedCoins.length} manually selected` : 'Automatic selection'}</dd></div><div><dt>Fee rate</dt><dd>{selectedFeeRate} sat/vB</dd></div><div><dt>Network fee</dt><dd>{shortSats(fee)} sats</dd></div><div class="total"><dt>Total</dt><dd>{shortSats(amountSats + fee)} sats</dd></div></dl>
+      <div class="review-amount"><span>You send</span><strong>{shortSats(proposal.amount)} <small>sats</small></strong></div>
+      <dl class="details-list"><div><dt>To</dt><dd class="mono">{proposal.recipient}</dd></div><div><dt>Coins</dt><dd>{proposal.selectedOutpoints.length ? `${proposal.selectedOutpoints.length} selected` : 'Automatic selection'}</dd></div><div><dt>Fee rate</dt><dd>{proposal.feeRate} sat/vB</dd></div><div><dt>Network fee</dt><dd>{shortSats(proposal.fee)} sats</dd></div><div class="total"><dt>Total</dt><dd>{shortSats(proposal.total)} sats</dd></div></dl>
       <div class="warning-box">Bitcoin transactions cannot be reversed. Verify the address and amount before signing.</div>
       <div class="split-actions"><Button variant="secondary" size="large" onclick={() => { proposal = null; step = 1; }}>Back</Button><Button size="large" onclick={() => step = 3}>Continue to sign<ArrowRight size={17} /></Button></div>
     </section>
-  {:else if step === 3}
+  {:else if step === 3 && proposal}
     <form class="form-card sign-card" onsubmit={(event) => { event.preventDefault(); broadcast(); }}>
       <span class="sign-icon"><LockKeyhole size={25} /></span><h2>Authorize payment</h2><p>Enter your wallet passphrase to unlock the signing keys. It never leaves this device.</p>
       <PasswordField label="Passphrase / PIN" bind:value={passphrase} oninput={() => credentialError = ''} placeholder="Enter wallet passphrase / PIN" autocomplete="current-password" error={credentialError} hint="The same credential used when the wallet was created." />
-      <Button type="submit" size="large" class="full" disabled={!passphrase || broadcasting}>{broadcasting ? 'Signing & broadcasting…' : `Sign & broadcast ${shortSats(amountSats)} sats`}</Button>
+      <Button type="submit" size="large" class="full" disabled={!passphrase || broadcasting}>{broadcasting ? 'Signing & broadcasting…' : `Sign & broadcast ${shortSats(proposal.amount)} sats`}</Button>
       <Button variant="ghost" class="full" onclick={() => step = 2}>Back to review</Button>
     </form>
   {:else}
-    <section class="empty-state success-state"><span class="empty-icon success"><Check size={25} /></span><h2>Payment sent</h2><p>{shortSats(amountSats)} sats was broadcast to the Bitcoin network.</p><div class="txid-box"><span>Transaction ID</span><code>{txid}</code></div><Button onclick={() => { step = 1; address=''; amount=''; passphrase=''; proposal=null; txid=''; }}>Make another payment</Button><a href="/activity">View transaction</a></section>
+    <section class="empty-state success-state"><span class="empty-icon success"><Check size={25} /></span><h2>Payment sent</h2><p>{shortSats(sentAmount)} sats was broadcast to the Bitcoin network.{#if balanceSyncPending} Balance refresh is pending; sync when the node is available.{/if}</p><div class="txid-box"><span>Transaction ID</span><code>{txid}</code></div><Button onclick={() => { step = 1; address=''; amount=''; passphrase=''; proposal=null; txid=''; sentAmount=0; balanceSyncPending=false; }}>Make another payment</Button><a href="/activity">View transaction</a></section>
   {/if}
 </div>

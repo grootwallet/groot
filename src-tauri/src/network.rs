@@ -31,10 +31,10 @@ fn is_loopback(host: &str) -> bool {
 
 impl ChainBackend {
     pub fn validate(&self) -> Result<Url, NetworkConfigError> {
-        let (raw, remote, preset) = match self {
-            Self::LocalCore { url } => (url, false, None),
-            Self::RemoteCore { url } => (url, true, None),
-            Self::Esplora { url, preset } => (url, true, preset.as_deref()),
+        let (raw, local_only, remote, preset) = match self {
+            Self::LocalCore { url } => (url, true, false, None),
+            Self::RemoteCore { url } => (url, false, true, None),
+            Self::Esplora { url, preset } => (url, false, true, preset.as_deref()),
         };
         let parsed = Url::parse(raw).map_err(|_| NetworkConfigError::InvalidUrl)?;
         if !parsed.username().is_empty() || parsed.password().is_some() {
@@ -44,6 +44,9 @@ impl ChainBackend {
             return Err(NetworkConfigError::UnsupportedScheme);
         }
         let host = parsed.host_str().ok_or(NetworkConfigError::InvalidUrl)?;
+        if local_only && !is_loopback(host) {
+            return Err(NetworkConfigError::InsecureRemote);
+        }
         if remote && parsed.scheme() != "https" && !is_loopback(host) {
             return Err(NetworkConfigError::InsecureRemote);
         }
@@ -78,6 +81,13 @@ mod tests {
     }
     #[test]
     fn rejects_credentials_cleartext_remote_and_forged_presets() {
+        assert_eq!(
+            ChainBackend::LocalCore {
+                url: "https://node.example:8332".into()
+            }
+            .validate(),
+            Err(NetworkConfigError::InsecureRemote)
+        );
         assert_eq!(
             ChainBackend::RemoteCore {
                 url: "http://node.example:8332".into()

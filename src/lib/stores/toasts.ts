@@ -2,9 +2,10 @@ import { writable } from 'svelte/store';
 
 export type Toast = { id: number; title: string; description?: string; tone?: 'default' | 'success' | 'danger' };
 export const toasts = writable<Toast[]>([]);
+let nextToastId = 0;
 
 export function toast(input: Omit<Toast, 'id'>) {
-  const id = Date.now();
+  const id = ++nextToastId;
   toasts.update((items) => [...items, { ...input, id }]);
   setTimeout(() => toasts.update((items) => items.filter((item) => item.id !== id)), 4200);
 }

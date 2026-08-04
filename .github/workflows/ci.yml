@@ -16,11 +16,11 @@ jobs:
   frontend:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
           version: 10
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
           cache: pnpm
@@ -29,6 +29,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends ripgrep
       - run: pnpm install --frozen-lockfile
+      - run: pnpm audit --prod --audit-level high
       - run: pnpm validate
       - run: pnpm test:coverage
       - run: pnpm exec playwright install --with-deps chromium webkit
@@ -40,7 +41,7 @@ jobs:
       run:
         working-directory: src-tauri
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Install Tauri Linux dependencies
         run: |
           sudo apt-get update
@@ -51,12 +52,22 @@ jobs:
             libssl-dev \
             libwebkit2gtk-4.1-dev \
             patchelf
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
         with:
+          toolchain: 1.97.1
           components: clippy,rustfmt
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
           workspaces: src-tauri
       - run: cargo fmt --check
-      - run: cargo clippy --all-targets --all-features -- -D warnings
-      - run: cargo test --all-features
+      - run: cargo clippy --locked --all-targets --all-features -- -D warnings
+      - run: cargo test --locked --all-features
+      - name: Install security and coverage tools
+        run: |
+          cargo install cargo-audit --locked --version 0.22.2
+          cargo install cargo-llvm-cov --locked --version 0.8.7
+      - run: cargo audit --file Cargo.lock
+      - name: Enforce security-core coverage
+        run: cargo llvm-cov --locked --lib --summary-only --ignore-filename-regex 'src/(wallet|lib|hardware|network|registry|airgap|native_backup|secure_store)\.rs' --fail-under-lines 99 --fail-under-functions 100 --fail-under-regions 97
+      - name: Prevent whole-library coverage regression
+        run: cargo llvm-cov --locked --lib --summary-only --fail-under-lines 55 --fail-under-functions 51

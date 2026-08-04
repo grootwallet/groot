@@ -52,7 +52,7 @@
       toast({title:'Wallet created',description:'Your regtest wallet is ready.',tone:'success'});
       await goto('/');
     } catch (cause) { error = cause instanceof WalletError ? cause.message : 'Could not create wallet.'; }
-    finally { busy = false; }
+    finally { passphrase = ''; confirmation = ''; words = []; busy = false; }
   }
 
   async function recoverWallet() {
@@ -63,7 +63,7 @@
       toast({title:'Wallet recovered',description:'Sync to restore transaction history.',tone:'success'});
       await goto('/');
     } catch (cause) { error = cause instanceof WalletError ? cause.message : 'Could not recover wallet.'; }
-    finally { busy = false; }
+    finally { recovery = ''; passphrase = ''; busy = false; }
   }
 
   async function returnToWallet() {

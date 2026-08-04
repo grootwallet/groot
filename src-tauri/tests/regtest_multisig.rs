@@ -94,11 +94,9 @@ fn descriptor(keys: &[TestKey], branch: u8, private_index: Option<usize>) -> Str
 }
 
 #[test]
+#[ignore = "requires the isolated Bitcoin Core regtest harness"]
 fn funds_builds_signs_and_broadcasts_a_real_two_of_three_psbt() {
-    if std::env::var_os("SATCHEL_RUN_REGTEST").is_none() {
-        eprintln!("skipped: run with SATCHEL_RUN_REGTEST=1 while regtest is active");
-        return;
-    }
+    assert!(std::env::var_os("SATCHEL_RUN_REGTEST").is_some());
     let keys = keys();
     let mut db = Connection::open_in_memory().unwrap();
     let mut coordinator = Wallet::create(descriptor(&keys, 0, None), descriptor(&keys, 1, None))

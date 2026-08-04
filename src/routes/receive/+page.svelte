@@ -19,14 +19,18 @@
   let showQr = $state(false);
   let showDetails = $state(false);
   let copied = $state(false);
+  let qrGeneration = 0;
   let discardTarget = $state<ReceiveAddress | null>(null);
   let awaiting = $derived(awaitingPaymentAddresses(addresses));
   let history = $derived(addresses.filter((address) => address.status !== 'awaiting'));
   onMount(load);
   $effect(() => {
     const address = current?.address;
+    const generation = ++qrGeneration;
     qrDataUrl = '';
-    if (address) QRCode.toDataURL(`bitcoin:${address}`, { width: 320, margin: 2, errorCorrectionLevel: 'M' }).then((value) => { if (current?.address === address) qrDataUrl = value; });
+    if (address) QRCode.toDataURL(`bitcoin:${address}`, { width: 320, margin: 2, errorCorrectionLevel: 'M' })
+      .then((value) => { if (generation === qrGeneration && current?.address === address) qrDataUrl = value; })
+      .catch((cause) => { if (generation === qrGeneration) toast({ title: 'Could not generate QR code', description: cause instanceof Error ? cause.message : undefined, tone: 'danger' }); });
   });
   async function load() {
     try { const snapshot = await walletService.snapshot(); addresses = snapshot.receiveAddresses; current = awaitingPaymentAddresses(addresses)[0] ?? null; }

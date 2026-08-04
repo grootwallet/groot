@@ -1,6 +1,9 @@
 use crate::recovery::{RecoveryTemplate, TimedSpendingPath};
 use bdk_wallet::{
-    bitcoin::bip32::{Fingerprint, Xpub},
+    bitcoin::{
+        bip32::{Fingerprint, Xpub},
+        NetworkKind,
+    },
     descriptor::{Descriptor, DescriptorPublicKey},
 };
 use serde::{Deserialize, Serialize};
@@ -33,10 +36,15 @@ pub struct CosignerInput {
 
 impl CosignerInput {
     pub fn parse_for_validation(&self) -> Result<(), PolicyError> {
+        let account_xpub =
+            Xpub::from_str(self.xpub.trim()).map_err(|_| PolicyError::InvalidDescriptor)?;
         if self.derivation_path != MULTISIG_ACCOUNT_PATH
+            || self.id.trim().is_empty()
+            || self.id.len() > 128
             || self.label.trim().is_empty()
+            || self.label.chars().count() > 48
             || Fingerprint::from_str(self.fingerprint.trim()).is_err()
-            || Xpub::from_str(self.xpub.trim()).is_err()
+            || account_xpub.network != NetworkKind::Test
         {
             return Err(PolicyError::InvalidDescriptor);
         }
@@ -93,6 +101,7 @@ impl PolicyInput {
             .cosigners
             .iter()
             .map(|key| {
+                key.parse_for_validation()?;
                 Ok(CosignerKey {
                     id: key.id.clone(),
                     label: key.label.clone(),
@@ -203,9 +212,16 @@ impl MultisigPolicy {
         }
         if cosigners
             .iter()
-            .any(|cosigner| cosigner.label.trim().is_empty())
+            .any(|cosigner| cosigner.label.trim().is_empty() || cosigner.label.chars().count() > 48)
         {
             return Err(PolicyError::InvalidName);
+        }
+        let ids = cosigners
+            .iter()
+            .map(|cosigner| cosigner.id.trim())
+            .collect::<HashSet<_>>();
+        if ids.len() != cosigners.len() || ids.iter().any(|id| id.is_empty()) {
+            return Err(PolicyError::InvalidDescriptor);
         }
         let fingerprints = cosigners
             .iter()

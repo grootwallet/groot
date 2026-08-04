@@ -10,6 +10,14 @@ pub struct AuthThrottle {
 }
 
 impl AuthThrottle {
+    pub fn restore(failures: u32, retry_at: u64) -> Self {
+        Self { failures, retry_at }
+    }
+
+    pub fn snapshot(&self) -> (u32, u64) {
+        (self.failures, self.retry_at)
+    }
+
     pub fn check(&self, now: u64) -> Result<(), Duration> {
         if now < self.retry_at {
             Err(Duration::from_secs(self.retry_at - now))

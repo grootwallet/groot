@@ -1,7 +1,8 @@
 <script lang="ts">
-  import { Check, ChevronRight, KeyRound, Moon, Network, Plus, ShieldCheck, Sun, Trash2, WalletCards } from '@lucide/svelte';
+  import { Check, ChevronRight, KeyRound, LockKeyhole, Moon, Network, Plus, ShieldCheck, Sun, Trash2, WalletCards } from '@lucide/svelte';
   import Button from '$lib/components/Button.svelte';
   import Modal from '$lib/components/Modal.svelte';
+  import PasswordField from '$lib/components/PasswordField.svelte';
   import { toast } from '$lib/stores/toasts';
   import { defaultConfig, networkName } from '$lib/config';
   import { walletService } from '$lib/wallet';
@@ -10,6 +11,7 @@
   import type { WalletProfile } from '$lib/wallet/contracts';
   let deleting = $state(false);
   let confirmText = $state('');
+  let deleteCredential = $state('');
   let busy = $state(false);
   let checking = $state(false);
   let connected = $state<boolean | null>(null);
@@ -35,16 +37,20 @@
     catch (cause) { connected = false; toast({ title: 'Node unavailable', description: cause instanceof Error ? cause.message : undefined, tone: 'danger' }); }
     finally { checking = false; }
   }
+  async function lockNow() {
+    await walletService.lock();
+    await goto('/unlock');
+  }
   async function deleteWallet() {
     busy = true;
     try {
-      await walletService.deleteWallet();
-      deleting = false; confirmText = '';
+      await walletService.deleteWallet(deleteCredential, confirmText);
+      deleting = false; confirmText = ''; deleteCredential = '';
       toast({ title: 'Wallet deleted', description: 'Local wallet data and encrypted key material were removed.' });
       const registry = await walletService.profiles();
       await goto(registry.wallets.length ? '/unlock' : '/welcome');
     } catch (cause) { toast({ title: 'Could not delete wallet', description: cause instanceof Error ? cause.message : undefined, tone: 'danger' }); }
-    finally { busy = false; }
+    finally { deleteCredential = ''; busy = false; }
   }
 </script>
 
@@ -53,6 +59,7 @@
   <section class="settings-group"><h2>Wallet</h2>
     <div class="setting-row"><span class="setting-icon"><ShieldCheck size={18} /></span><span><strong>Recovery phrase</strong><small>Shown once during setup; keep your offline backup</small></span></div>
     <div class="setting-row"><span class="setting-icon"><KeyRound size={18} /></span><span><strong>Passphrase / PIN</strong><small>Fixed for this wallet; derives, unlocks, and signs</small></span></div>
+    <button onclick={lockNow}><span class="setting-icon"><LockKeyhole size={18}/></span><span><strong>Lock now</strong><small>Signing access also locks after 5 minutes without wallet activity</small></span><ChevronRight size={16}/></button>
   </section>
   <section class="settings-group wallet-manager"><h2>Wallets</h2>
     {#each profiles as profile}
@@ -80,6 +87,7 @@
 
 <Modal open={deleting} title="Delete this wallet?" description="This permanently removes wallet data from this device." onclose={() => deleting = false}>
   <div class="warning-box danger"><strong>Make sure your recovery phrase is backed up.</strong> Without it, your bitcoin cannot be recovered.</div>
+  <PasswordField label="Passphrase / PIN" bind:value={deleteCredential} autocomplete="current-password" />
   <label class="field"><span>Type DELETE to confirm</span><input bind:value={confirmText} placeholder="DELETE" /></label>
-  <div class="modal-footer"><Button variant="secondary" onclick={() => deleting = false}>Cancel</Button><Button variant="danger" disabled={confirmText !== 'DELETE' || busy} onclick={deleteWallet}>{busy ? 'Deleting…' : 'Delete wallet'}</Button></div>
+  <div class="modal-footer"><Button variant="secondary" onclick={() => { deleting = false; deleteCredential = ''; }}>Cancel</Button><Button variant="danger" disabled={confirmText !== 'DELETE' || !deleteCredential || busy} onclick={deleteWallet}>{busy ? 'Deleting…' : 'Delete wallet'}</Button></div>
 </Modal>

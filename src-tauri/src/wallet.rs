@@ -13,12 +13,12 @@ use bdk_wallet::{
     bitcoin::{
         bip32::{DerivationPath, Xpriv, Xpub},
         secp256k1::Secp256k1,
-        Address, Amount, FeeRate, Network, NetworkKind, OutPoint, Psbt,
+        Address, Amount, FeeRate, Network, NetworkKind, OutPoint, Psbt, Transaction, Txid,
     },
     chain::{ChainPosition, ConfirmationBlockTime},
     descriptor::{Descriptor, DescriptorPublicKey},
     psbt::PsbtUtils,
-    rusqlite::{params, Connection},
+    rusqlite::{params, Connection, OptionalExtension},
     template::{Bip84, Bip84Public},
     KeychainKind, PersistedWallet, SignOptions, Wallet,
 };
@@ -30,8 +30,8 @@ use std::{
     io::{Read, Write},
     path::{Path, PathBuf},
     str::FromStr,
-    sync::{Arc, Mutex},
-    time::{SystemTime, UNIX_EPOCH},
+    sync::{Arc, Mutex, MutexGuard},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 use tauri::{AppHandle, Manager, State};
 use uuid::Uuid;
@@ -53,6 +53,7 @@ const NETWORK: Network = Network::Regtest;
 const RPC_URL: &str = "http://127.0.0.1:18443";
 const MAX_PRIVATE_JSON_BYTES: u64 = 256 * 1024;
 const ONBOARDING_SESSION_SECONDS: u64 = 15 * 60;
+const UNLOCK_IDLE_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 
 fn hwi_cli() -> HwiCli {
     HwiCli::for_chain(if NETWORK == Network::Bitcoin {
@@ -82,23 +83,52 @@ fn internal(error: impl ToString) -> ApiError {
     api_error("internal_error", error)
 }
 
-fn require_unlocked(state: &State<'_, AppState>) -> ApiResult<()> {
-    if *state.unlocked.lock().map_err(internal)? {
-        Ok(())
-    } else {
-        Err(api_error(
-            "wallet_locked",
-            "Enter your passphrase / PIN to unlock Satchel.",
-        ))
+fn operation_guard<'a>(state: &'a State<'_, AppState>) -> ApiResult<MutexGuard<'a, ()>> {
+    state.operations.lock().map_err(internal)
+}
+
+fn require_unlocked(app: &AppHandle, state: &State<'_, AppState>) -> ApiResult<Uuid> {
+    let selected = selected_profile(app)?.id;
+    let mut unlocked = state.unlocked_wallet.lock().map_err(internal)?;
+    if let Some(session) = unlocked.as_mut() {
+        if session.wallet_id == selected && session.last_activity.elapsed() <= UNLOCK_IDLE_TIMEOUT {
+            session.last_activity = Instant::now();
+            return Ok(selected);
+        }
     }
+    *unlocked = None;
+    Err(api_error(
+        "wallet_locked",
+        "Enter your passphrase / PIN to unlock Satchel.",
+    ))
+}
+
+fn unlock_selected(app: &AppHandle, state: &State<'_, AppState>) -> ApiResult<()> {
+    let selected = selected_profile(app)?.id;
+    *state.unlocked_wallet.lock().map_err(internal)? = Some(UnlockedSession {
+        wallet_id: selected,
+        last_activity: Instant::now(),
+    });
+    Ok(())
+}
+
+fn lock_wallet(state: &State<'_, AppState>) -> ApiResult<()> {
+    *state.unlocked_wallet.lock().map_err(internal)? = None;
+    Ok(())
 }
 
 #[derive(Default)]
 pub struct AppState {
+    operations: Mutex<()>,
     proposals: Mutex<HashMap<String, PendingProposal>>,
-    unlocked: Mutex<bool>,
-    auth_throttle: Mutex<AuthThrottle>,
+    unlocked_wallet: Mutex<Option<UnlockedSession>>,
     pending_mnemonic: Mutex<Option<PendingMnemonic>>,
+    verified_recovery: Mutex<HashMap<Uuid, String>>,
+}
+
+struct UnlockedSession {
+    wallet_id: Uuid,
+    last_activity: Instant,
 }
 
 #[derive(Debug)]
@@ -212,6 +242,7 @@ pub enum CoinSelectionInput {
 pub struct BroadcastResultDto {
     txid: String,
     snapshot: WalletSnapshotDto,
+    sync_pending: bool,
 }
 
 #[derive(Serialize)]
@@ -556,6 +587,19 @@ fn rpc_client() -> ApiResult<Client> {
         .map_err(|error| api_error("network_unavailable", error))
 }
 
+fn broadcast_transaction(transaction: &Transaction) -> ApiResult<Txid> {
+    let expected = transaction.compute_txid();
+    let rpc = rpc_client()?;
+    match rpc.send_raw_transaction(transaction) {
+        Ok(txid) if txid == expected => Ok(txid),
+        Ok(_) => Err(internal(
+            "Bitcoin Core returned a transaction ID that did not match the signed transaction.",
+        )),
+        Err(_) if rpc.get_raw_transaction_info(&expected, None).is_ok() => Ok(expected),
+        Err(error) => Err(api_error("broadcast_failed", error)),
+    }
+}
+
 fn now() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -601,6 +645,11 @@ fn init_app_schema(db: &Connection) -> ApiResult<()> {
         CREATE TABLE IF NOT EXISTS satchel_frozen_coins (
             outpoint TEXT PRIMARY KEY,
             frozen_at INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS satchel_auth_throttle (
+            singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
+            failures INTEGER NOT NULL CHECK(failures >= 0),
+            retry_at INTEGER NOT NULL CHECK(retry_at >= 0)
         );",
     )
     .map_err(internal)?;
@@ -623,8 +672,11 @@ fn frozen_outpoints(db: &Connection) -> ApiResult<Vec<OutPoint>> {
     outpoints
 }
 
-fn check_auth_throttle(state: &State<'_, AppState>) -> ApiResult<()> {
-    if let Err(remaining) = state.auth_throttle.lock().map_err(internal)?.check(now()) {
+fn check_auth_throttle(app: &AppHandle, state: &State<'_, AppState>) -> ApiResult<()> {
+    let _ = state;
+    let db = open_auth_db(app)?;
+    let throttle = load_auth_throttle(&db)?;
+    if let Err(remaining) = throttle.check(now()) {
         return Err(api_error(
             "rate_limited",
             format!(
@@ -636,8 +688,14 @@ fn check_auth_throttle(state: &State<'_, AppState>) -> ApiResult<()> {
     Ok(())
 }
 
-fn record_auth_result<T>(state: &State<'_, AppState>, result: &ApiResult<T>) -> ApiResult<()> {
-    let mut throttle = state.auth_throttle.lock().map_err(internal)?;
+fn record_auth_result<T>(
+    app: &AppHandle,
+    state: &State<'_, AppState>,
+    result: &ApiResult<T>,
+) -> ApiResult<()> {
+    let _ = state;
+    let mut db = open_auth_db(app)?;
+    let mut throttle = load_auth_throttle(&db)?;
     match result {
         Ok(_) => throttle.succeeded(),
         Err(error) if error.code == "invalid_credential" => {
@@ -645,6 +703,53 @@ fn record_auth_result<T>(state: &State<'_, AppState>, result: &ApiResult<T>) -> 
         }
         Err(_) => {}
     }
+    save_auth_throttle(&mut db, &throttle)
+}
+
+fn reset_auth_throttle(app: &AppHandle, state: &State<'_, AppState>) -> ApiResult<()> {
+    let _ = state;
+    let mut db = open_auth_db(app)?;
+    let mut throttle = AuthThrottle::default();
+    throttle.succeeded();
+    save_auth_throttle(&mut db, &throttle)
+}
+
+fn open_auth_db(app: &AppHandle) -> ApiResult<Connection> {
+    let profile = selected_profile(app)?;
+    let path = profile_directory(app, profile.id)?.join("wallet.sqlite");
+    if !path.is_file() {
+        return Err(api_error(
+            "wallet_not_found",
+            "The selected wallet database could not be found.",
+        ));
+    }
+    let db = Connection::open(path).map_err(internal)?;
+    init_app_schema(&db)?;
+    Ok(db)
+}
+
+fn load_auth_throttle(db: &Connection) -> ApiResult<AuthThrottle> {
+    let persisted = db
+        .query_row(
+            "SELECT failures, retry_at FROM satchel_auth_throttle WHERE singleton = 1",
+            [],
+            |row| Ok((row.get::<_, u32>(0)?, row.get::<_, u64>(1)?)),
+        )
+        .optional()
+        .map_err(internal)?;
+    Ok(persisted
+        .map(|(failures, retry_at)| AuthThrottle::restore(failures, retry_at))
+        .unwrap_or_default())
+}
+
+fn save_auth_throttle(db: &mut Connection, throttle: &AuthThrottle) -> ApiResult<()> {
+    let (failures, retry_at) = throttle.snapshot();
+    db.execute(
+        "INSERT INTO satchel_auth_throttle(singleton, failures, retry_at) VALUES(1, ?1, ?2)\
+         ON CONFLICT(singleton) DO UPDATE SET failures = excluded.failures, retry_at = excluded.retry_at",
+        params![failures, retry_at],
+    )
+    .map_err(internal)?;
     Ok(())
 }
 
@@ -830,6 +935,14 @@ fn read_multisig_metadata(app: &AppHandle) -> ApiResult<MultisigWalletDto> {
     serde_json::from_str(&encoded).map_err(internal)
 }
 
+fn recovery_policy_type(template: &RecoveryTemplate) -> &'static str {
+    match template {
+        RecoveryTemplate::Recovery { .. } => "recovery",
+        RecoveryTemplate::Decaying { .. } => "decaying",
+        RecoveryTemplate::Expanding { .. } => "expanding",
+    }
+}
+
 fn validate_multisig_backup(encoded: &str) -> ApiResult<MultisigBackupDto> {
     if encoded.len() > 256 * 1024 {
         return Err(api_error(
@@ -837,7 +950,7 @@ fn validate_multisig_backup(encoded: &str) -> ApiResult<MultisigBackupDto> {
             "The descriptor backup is too large.",
         ));
     }
-    let backup: MultisigBackupDto = serde_json::from_str(encoded)
+    let mut backup: MultisigBackupDto = serde_json::from_str(encoded)
         .map_err(|_| api_error("invalid_backup", "Enter a valid Satchel descriptor backup."))?;
     if backup.version != 1 || backup.network != "regtest" || backup.wallet.kind != "multisig" {
         return Err(api_error(
@@ -851,14 +964,24 @@ fn validate_multisig_backup(encoded: &str) -> ApiResult<MultisigBackupDto> {
         cosigners: backup.wallet.cosigners.clone(),
     };
     reject_virtual_cosigners(&policy.cosigners)?;
-    let (expected_external, expected_internal) =
+    let (expected_external, expected_internal, expected_policy_type, expected_paths) =
         if let Some(template) = &backup.wallet.recovery_template {
             let analysis =
                 analyze_template(template, &backup.wallet.cosigners).map_err(recovery_api_error)?;
-            (analysis.external_descriptor, analysis.internal_descriptor)
+            (
+                analysis.external_descriptor,
+                analysis.internal_descriptor,
+                recovery_policy_type(template),
+                analysis.paths,
+            )
         } else {
             let preview = policy.preview().map_err(policy_api_error)?;
-            (preview.external_descriptor, preview.internal_descriptor)
+            (
+                preview.external_descriptor,
+                preview.internal_descriptor,
+                "standard",
+                Vec::new(),
+            )
         };
     if expected_external != backup.wallet.external_descriptor
         || expected_internal != backup.wallet.internal_descriptor
@@ -868,6 +991,22 @@ fn validate_multisig_backup(encoded: &str) -> ApiResult<MultisigBackupDto> {
             "The descriptors do not match the included cosigner policy.",
         ));
     }
+    let expected_threshold = expected_paths
+        .first()
+        .map(|path| path.threshold)
+        .unwrap_or(backup.wallet.threshold);
+    if backup.wallet.policy_type != expected_policy_type
+        || backup.wallet.spending_paths != expected_paths
+        || backup.wallet.threshold != expected_threshold
+    {
+        return Err(api_error(
+            "backup_mismatch",
+            "The displayed policy metadata does not match the verified descriptors.",
+        ));
+    }
+    backup.wallet.policy_type = expected_policy_type.to_owned();
+    backup.wallet.spending_paths = expected_paths;
+    backup.wallet.threshold = expected_threshold;
     for encoded_descriptor in [
         &backup.wallet.external_descriptor,
         &backup.wallet.internal_descriptor,
@@ -1101,7 +1240,7 @@ fn create_from_mnemonic(
     app: &AppHandle,
     name: String,
     mnemonic: Mnemonic,
-    credential: String,
+    credential: &str,
 ) -> ApiResult<()> {
     let name = name.trim();
     if name.is_empty() || name.chars().count() > 48 {
@@ -1118,7 +1257,7 @@ fn create_from_mnemonic(
     }
     let (id, dir) = prepare_profile_directory(app)?;
     let result = (|| {
-        let (external, internal_template) = watch_templates(&mnemonic, &credential)?;
+        let (external, internal_template) = watch_templates(&mnemonic, credential)?;
         let mut db = Connection::open(dir.join("wallet.sqlite")).map_err(internal)?;
         init_app_schema(&db)?;
         let wallet = Wallet::create(external, internal_template)
@@ -1126,7 +1265,7 @@ fn create_from_mnemonic(
             .create_wallet(&mut db)
             .map_err(internal)?;
         let words = Zeroizing::new(mnemonic.to_string());
-        persist_secret_material(&dir.join("secret.json"), words.as_bytes(), &credential)?;
+        persist_secret_material(&dir.join("secret.json"), words.as_bytes(), credential)?;
         commit_profile(
             app,
             WalletProfile {
@@ -1422,13 +1561,14 @@ pub fn wallet_select(
     state: State<'_, AppState>,
     wallet_id: String,
 ) -> ApiResult<WalletProfile> {
+    let _operation = operation_guard(&state)?;
     let id = Uuid::parse_str(&wallet_id)
         .map_err(|_| api_error("wallet_not_found", "The selected wallet does not exist."))?;
     let mut registry = load_registry(&app)?;
     registry.select(id).map_err(registry_api_error)?;
     save_registry(&app, &registry)?;
     state.proposals.lock().map_err(internal)?.clear();
-    *state.unlocked.lock().map_err(internal)? = false;
+    lock_wallet(&state)?;
     registry
         .wallets
         .into_iter()
@@ -1438,6 +1578,7 @@ pub fn wallet_select(
 
 #[tauri::command]
 pub fn wallet_generate_mnemonic(app: AppHandle, state: State<'_, AppState>) -> ApiResult<()> {
+    let _operation = operation_guard(&state)?;
     let mut entropy = [0_u8; 32];
     OsRng.fill_bytes(&mut entropy);
     let mnemonic = Mnemonic::from_entropy(&entropy).map_err(internal)?;
@@ -1460,6 +1601,7 @@ pub fn wallet_generate_mnemonic(app: AppHandle, state: State<'_, AppState>) -> A
 
 #[tauri::command]
 pub fn wallet_cancel_onboarding(state: State<'_, AppState>) -> ApiResult<()> {
+    let _operation = operation_guard(&state)?;
     state.pending_mnemonic.lock().map_err(internal)?.take();
     Ok(())
 }
@@ -1471,6 +1613,8 @@ pub fn wallet_create(
     name: String,
     credential: String,
 ) -> ApiResult<()> {
+    let _operation = operation_guard(&state)?;
+    let credential = Zeroizing::new(credential);
     let pending = state
         .pending_mnemonic
         .lock()
@@ -1489,11 +1633,11 @@ pub fn wallet_create(
         ));
     }
     let mnemonic = Mnemonic::parse(pending.words.as_str()).map_err(internal)?;
-    if let Err(error) = create_from_mnemonic(&app, name, mnemonic, credential) {
+    if let Err(error) = create_from_mnemonic(&app, name, mnemonic, credential.as_str()) {
         *state.pending_mnemonic.lock().map_err(internal)? = Some(pending);
         return Err(error);
     }
-    *state.unlocked.lock().map_err(internal)? = true;
+    unlock_selected(&app, &state)?;
     Ok(())
 }
 
@@ -1505,7 +1649,10 @@ pub fn wallet_recover(
     mnemonic: String,
     credential: String,
 ) -> ApiResult<()> {
-    let mnemonic = Mnemonic::parse(mnemonic.trim())
+    let _operation = operation_guard(&state)?;
+    let mnemonic_words = Zeroizing::new(mnemonic);
+    let credential = Zeroizing::new(credential);
+    let mnemonic = Mnemonic::parse(mnemonic_words.trim())
         .map_err(|_| api_error("invalid_mnemonic", "Enter a valid 24-word recovery phrase."))?;
     if mnemonic.word_count() != 24 {
         return Err(api_error(
@@ -1513,8 +1660,8 @@ pub fn wallet_recover(
             "Satchel requires exactly 24 recovery words.",
         ));
     }
-    create_from_mnemonic(&app, name, mnemonic, credential)?;
-    *state.unlocked.lock().map_err(internal)? = true;
+    create_from_mnemonic(&app, name, mnemonic, credential.as_str())?;
+    unlock_selected(&app, &state)?;
     Ok(())
 }
 
@@ -1524,21 +1671,31 @@ pub fn wallet_unlock(
     state: State<'_, AppState>,
     credential: String,
 ) -> ApiResult<()> {
-    check_auth_throttle(&state)?;
+    let _operation = operation_guard(&state)?;
+    let credential = Zeroizing::new(credential);
+    check_auth_throttle(&app, &state)?;
     let result = match selected_profile(&app)?.kind {
-        WalletKind::SingleKey => decrypt_mnemonic(&app, &credential).map(|_| ()),
-        WalletKind::Multisig => verify_multisig_credential(&app, &credential),
+        WalletKind::SingleKey => decrypt_mnemonic(&app, credential.as_str()).map(|_| ()),
+        WalletKind::Multisig => verify_multisig_credential(&app, credential.as_str()),
         WalletKind::WatchOnly => Ok(()),
     };
-    record_auth_result(&state, &result)?;
+    record_auth_result(&app, &state, &result)?;
     result?;
-    *state.unlocked.lock().map_err(internal)? = true;
+    unlock_selected(&app, &state)?;
     Ok(())
 }
 
 #[tauri::command]
+pub fn wallet_lock(state: State<'_, AppState>) -> ApiResult<()> {
+    let _operation = operation_guard(&state)?;
+    state.proposals.lock().map_err(internal)?.clear();
+    lock_wallet(&state)
+}
+
+#[tauri::command]
 pub fn wallet_snapshot(app: AppHandle, state: State<'_, AppState>) -> ApiResult<WalletSnapshotDto> {
-    require_unlocked(&state)?;
+    let _operation = operation_guard(&state)?;
+    require_unlocked(&app, &state)?;
     let mut db = open_db(&app)?;
     let wallet = load_wallet(&mut db)?;
     snapshot_from(&wallet, &db, None, false)
@@ -1546,7 +1703,8 @@ pub fn wallet_snapshot(app: AppHandle, state: State<'_, AppState>) -> ApiResult<
 
 #[tauri::command]
 pub fn wallet_sync(app: AppHandle, state: State<'_, AppState>) -> ApiResult<WalletSnapshotDto> {
-    require_unlocked(&state)?;
+    let _operation = operation_guard(&state)?;
+    require_unlocked(&app, &state)?;
     let mut db = open_db(&app)?;
     let mut wallet = load_wallet(&mut db)?;
     sync_loaded_wallet(&mut wallet, &mut db)?;
@@ -1560,14 +1718,39 @@ pub fn wallet_notifications(
     app: AppHandle,
     state: State<'_, AppState>,
     multisig: bool,
-) -> ApiResult<Vec<WalletNotification>> {
-    require_unlocked(&state)?;
+) -> ApiResult<Vec<notifications::NotificationEnvelope>> {
+    let _operation = operation_guard(&state)?;
+    require_unlocked(&app, &state)?;
+    let db = if multisig {
+        open_multisig_db(&app)?
+    } else {
+        open_db(&app)?
+    };
+    notifications::pending(&db).map_err(internal)
+}
+
+#[tauri::command]
+pub fn wallet_notifications_ack(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    multisig: bool,
+    ids: Vec<i64>,
+) -> ApiResult<()> {
+    let _operation = operation_guard(&state)?;
+    require_unlocked(&app, &state)?;
+    if ids.len() > 1_000 || ids.iter().any(|id| *id <= 0) {
+        return Err(api_error(
+            "internal_error",
+            "The notification acknowledgement is invalid.",
+        ));
+    }
     let mut db = if multisig {
         open_multisig_db(&app)?
     } else {
         open_db(&app)?
     };
-    notifications::drain(&mut db).map_err(internal)
+    notifications::acknowledge(&mut db, &ids).map_err(internal)?;
+    Ok(())
 }
 
 #[tauri::command]
@@ -1576,7 +1759,8 @@ pub fn address_create(
     state: State<'_, AppState>,
     label: String,
 ) -> ApiResult<ReceiveAddressDto> {
-    require_unlocked(&state)?;
+    let _operation = operation_guard(&state)?;
+    require_unlocked(&app, &state)?;
     let label = normalize_label(&label)?;
     let mut db = open_db(&app)?;
     let mut transaction = db.transaction().map_err(internal)?;
@@ -1607,7 +1791,8 @@ pub fn address_create(
 
 #[tauri::command]
 pub fn address_discard(app: AppHandle, state: State<'_, AppState>, id: u32) -> ApiResult<()> {
-    require_unlocked(&state)?;
+    let _operation = operation_guard(&state)?;
+    require_unlocked(&app, &state)?;
     let db = open_db(&app)?;
     let changed = db
         .execute(
@@ -1631,7 +1816,8 @@ pub fn coin_set_frozen(
     outpoint: String,
     frozen: bool,
 ) -> ApiResult<()> {
-    require_unlocked(&state)?;
+    let _operation = operation_guard(&state)?;
+    require_unlocked(&app, &state)?;
     let parsed = OutPoint::from_str(outpoint.trim())
         .map_err(|_| api_error("internal_error", "The selected coin outpoint is invalid."))?;
     let mut db = open_db(&app)?;
@@ -1678,6 +1864,39 @@ fn hardware_api_error(error: HardwareError) -> ApiError {
         HardwareError::Io => "Communication with the hardware wallet failed.",
     };
     api_error(error.code(), message)
+}
+
+fn verify_connected_hardware_identity(
+    device_id: &str,
+    expected_fingerprints: &[String],
+) -> ApiResult<()> {
+    let encoded = hwi_cli().enumerate().map_err(hardware_api_error)?;
+    let devices: Vec<HwiDevice> = serde_json::from_slice(&encoded).map_err(internal)?;
+    let device = devices
+        .into_iter()
+        .find(|device| device.path == device_id)
+        .ok_or_else(|| {
+            api_error(
+                "hardware_unavailable",
+                "The selected device is no longer connected.",
+            )
+        })?;
+    let fingerprint = device.fingerprint.ok_or_else(|| {
+        api_error(
+            "hardware_unavailable",
+            "The device did not return a master fingerprint.",
+        )
+    })?;
+    if !expected_fingerprints
+        .iter()
+        .any(|expected| expected.eq_ignore_ascii_case(&fingerprint))
+    {
+        return Err(api_error(
+            "unknown_signer",
+            "The connected device is not a cosigner in this wallet policy.",
+        ));
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -1803,7 +2022,7 @@ pub async fn hardware_verify_multisig_address(
     device_id: String,
     address_id: u32,
 ) -> ApiResult<()> {
-    require_unlocked(&state)?;
+    require_unlocked(&app, &state)?;
     let metadata = read_multisig_metadata(&app)?;
     let db = open_multisig_db(&app)?;
     let expected: String = db
@@ -1818,7 +2037,13 @@ pub async fn hardware_verify_multisig_address(
         .at_derivation_index(address_id)
         .map_err(internal)?
         .to_string();
+    let expected_fingerprints = metadata
+        .cosigners
+        .iter()
+        .map(|cosigner| cosigner.fingerprint.clone())
+        .collect::<Vec<_>>();
     let displayed = tauri::async_runtime::spawn_blocking(move || {
+        verify_connected_hardware_identity(&device_id, &expected_fingerprints)?;
         hwi_cli()
             .display_descriptor_address(&device_id, &descriptor)
             .map_err(hardware_api_error)
@@ -1858,7 +2083,11 @@ pub fn recovery_policy_analyze(
 }
 
 #[tauri::command]
-pub fn multisig_wallet(app: AppHandle) -> ApiResult<Option<MultisigWalletDto>> {
+pub fn multisig_wallet(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> ApiResult<Option<MultisigWalletDto>> {
+    let _operation = operation_guard(&state)?;
     ensure_registry_migrated(&app)?;
     let registry = registry::load(&registry_path(&app)?).map_err(registry_api_error)?;
     let Some(selected) = registry.selected_wallet_id else {
@@ -1884,10 +2113,12 @@ pub fn multisig_export(
     state: State<'_, AppState>,
     credential: String,
 ) -> ApiResult<String> {
-    require_unlocked(&state)?;
-    check_auth_throttle(&state)?;
-    let verified = verify_multisig_credential(&app, &credential);
-    record_auth_result(&state, &verified)?;
+    let _operation = operation_guard(&state)?;
+    let credential = Zeroizing::new(credential);
+    require_unlocked(&app, &state)?;
+    check_auth_throttle(&app, &state)?;
+    let verified = verify_multisig_credential(&app, credential.as_str());
+    record_auth_result(&app, &state, &verified)?;
     verified?;
     let backup = MultisigBackupDto {
         version: 1,
@@ -1900,14 +2131,24 @@ pub fn multisig_export(
 #[tauri::command]
 pub fn multisig_recovery_drill(
     app: AppHandle,
+    state: State<'_, AppState>,
     encoded_backup: String,
 ) -> ApiResult<RecoveryDrillDto> {
+    let _operation = operation_guard(&state)?;
     let backup = validate_multisig_backup(&encoded_backup)?;
     let first_address = first_multisig_address(&backup.wallet)?;
     let matches_current_wallet = read_multisig_metadata(&app)
         .and_then(|wallet| first_multisig_address(&wallet))
         .map(|current| current == first_address)
         .unwrap_or(false);
+    if matches_current_wallet {
+        let wallet_id = selected_profile_of_kind(&app, WalletKind::Multisig)?.id;
+        state
+            .verified_recovery
+            .lock()
+            .map_err(internal)?
+            .insert(wallet_id, backup.wallet.external_descriptor.clone());
+    }
     Ok(RecoveryDrillDto {
         first_address,
         matches_current_wallet,
@@ -1921,6 +2162,8 @@ pub fn multisig_recover(
     encoded_backup: String,
     credential: String,
 ) -> ApiResult<MultisigWalletDto> {
+    let _operation = operation_guard(&state)?;
+    let credential = Zeroizing::new(credential);
     if credential.is_empty() {
         return Err(api_error("invalid_credential", "An app PIN is required."));
     }
@@ -1937,8 +2180,12 @@ pub fn multisig_recover(
         .create_wallet(&mut db)
         .map_err(internal)?;
         let marker = format!("satchel-multisig:{}", backup.wallet.external_descriptor);
-        secure_store::store(&dir.join("secret.json"), marker.as_bytes(), &credential)
-            .map_err(secure_store_error)?;
+        secure_store::store(
+            &dir.join("secret.json"),
+            marker.as_bytes(),
+            credential.as_str(),
+        )
+        .map_err(secure_store_error)?;
         write_private_json(&dir.join("wallet.json"), &backup.wallet)?;
         commit_multisig_profile(&app, id, &backup.wallet)?;
         Ok(backup.wallet)
@@ -1946,7 +2193,7 @@ pub fn multisig_recover(
     if result.is_err() {
         let _ = fs::remove_dir_all(&dir);
     } else {
-        *state.unlocked.lock().map_err(internal)? = true;
+        unlock_selected(&app, &state)?;
     }
     result
 }
@@ -1958,22 +2205,41 @@ pub fn multisig_delete(
     credential: String,
     confirmation: String,
 ) -> ApiResult<()> {
-    require_unlocked(&state)?;
+    let _operation = operation_guard(&state)?;
+    let credential = Zeroizing::new(credential);
+    require_unlocked(&app, &state)?;
     let wallet = read_multisig_metadata(&app)?;
+    let wallet_id = selected_profile_of_kind(&app, WalletKind::Multisig)?.id;
+    let drill_verified = state
+        .verified_recovery
+        .lock()
+        .map_err(internal)?
+        .get(&wallet_id)
+        .is_some_and(|descriptor| descriptor == &wallet.external_descriptor);
+    if !drill_verified {
+        return Err(api_error(
+            "backup_mismatch",
+            "Run a successful recovery drill before deleting this coordinator.",
+        ));
+    }
     if confirmation != wallet.name {
         return Err(api_error(
             "confirmation_mismatch",
             "Type the exact wallet name to delete this coordinator.",
         ));
     }
-    check_auth_throttle(&state)?;
-    let verified = verify_multisig_credential(&app, &credential);
-    record_auth_result(&state, &verified)?;
+    check_auth_throttle(&app, &state)?;
+    let verified = verify_multisig_credential(&app, credential.as_str());
+    record_auth_result(&app, &state, &verified)?;
     verified?;
-    let id = selected_profile_of_kind(&app, WalletKind::Multisig)?.id;
-    let dir = profile_directory(&app, id)?;
-    delete_registered_wallet(&app, id, &dir)?;
-    *state.unlocked.lock().map_err(internal)? = false;
+    let dir = profile_directory(&app, wallet_id)?;
+    delete_registered_wallet(&app, wallet_id, &dir)?;
+    state
+        .verified_recovery
+        .lock()
+        .map_err(internal)?
+        .remove(&wallet_id);
+    lock_wallet(&state)?;
     Ok(())
 }
 
@@ -1982,7 +2248,8 @@ pub fn multisig_snapshot(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> ApiResult<WalletSnapshotDto> {
-    require_unlocked(&state)?;
+    let _operation = operation_guard(&state)?;
+    require_unlocked(&app, &state)?;
     let mut db = open_multisig_db(&app)?;
     let wallet = load_wallet(&mut db)?;
     snapshot_from(&wallet, &db, None, true)
@@ -1990,7 +2257,8 @@ pub fn multisig_snapshot(
 
 #[tauri::command]
 pub fn multisig_sync(app: AppHandle, state: State<'_, AppState>) -> ApiResult<WalletSnapshotDto> {
-    require_unlocked(&state)?;
+    let _operation = operation_guard(&state)?;
+    require_unlocked(&app, &state)?;
     let mut db = open_multisig_db(&app)?;
     let mut wallet = load_wallet(&mut db)?;
     sync_loaded_wallet(&mut wallet, &mut db)?;
@@ -2005,7 +2273,8 @@ pub fn multisig_address_create(
     state: State<'_, AppState>,
     label: String,
 ) -> ApiResult<ReceiveAddressDto> {
-    require_unlocked(&state)?;
+    let _operation = operation_guard(&state)?;
+    require_unlocked(&app, &state)?;
     let label = normalize_label(&label)?;
     let mut db = open_multisig_db(&app)?;
     let mut transaction = db.transaction().map_err(internal)?;
@@ -2040,7 +2309,8 @@ pub fn multisig_address_discard(
     state: State<'_, AppState>,
     id: u32,
 ) -> ApiResult<()> {
-    require_unlocked(&state)?;
+    let _operation = operation_guard(&state)?;
+    require_unlocked(&app, &state)?;
     let db = open_multisig_db(&app)?;
     let changed = db
         .execute(
@@ -2065,7 +2335,8 @@ pub fn multisig_tx_prepare(
     amount: u64,
     fee_rate: f64,
 ) -> ApiResult<MultisigProposalDto> {
-    require_unlocked(&state)?;
+    let _operation = operation_guard(&state)?;
+    require_unlocked(&app, &state)?;
     if amount == 0 {
         return Err(api_error(
             "invalid_amount",
@@ -2083,7 +2354,8 @@ pub fn multisig_tx_prepare(
     let address = unchecked
         .require_network(NETWORK)
         .map_err(|_| api_error("invalid_address", "The address is not for regtest."))?;
-    let rate = FeeRate::from_sat_per_vb(fee_rate.ceil() as u64)
+    let applied_fee_rate = fee_rate.ceil();
+    let rate = FeeRate::from_sat_per_vb(applied_fee_rate as u64)
         .ok_or_else(|| api_error("invalid_amount", "Fee rate must be greater than zero."))?;
     let metadata = read_multisig_metadata(&app)?;
     let mut db = open_multisig_db(&app)?;
@@ -2109,7 +2381,7 @@ pub fn multisig_tx_prepare(
     let created_at = now();
     db.execute(
         "INSERT INTO satchel_proposals (proposal_id, recipient, amount, fee, fee_rate, psbt, status, created_at) VALUES (?1,?2,?3,?4,?5,?6,'collecting',?7)",
-        params![proposal_id, address.to_string(), amount, fee, fee_rate, encoded, created_at],
+        params![proposal_id, address.to_string(), amount, fee, applied_fee_rate, encoded, created_at],
     ).map_err(internal)?;
     load_multisig_proposal(&db, &metadata, &proposal_id)
 }
@@ -2119,7 +2391,8 @@ pub fn multisig_proposals(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> ApiResult<Vec<MultisigProposalDto>> {
-    require_unlocked(&state)?;
+    let _operation = operation_guard(&state)?;
+    require_unlocked(&app, &state)?;
     let metadata = read_multisig_metadata(&app)?;
     let db = open_multisig_db(&app)?;
     let mut statement = db.prepare(
@@ -2152,22 +2425,42 @@ fn import_multisig_proposal(
     signed_psbt: &str,
 ) -> ApiResult<MultisigProposalDto> {
     let metadata = read_multisig_metadata(app)?;
-    let db = open_multisig_db(app)?;
+    let mut db = open_multisig_db(app)?;
     let current = load_multisig_proposal(&db, &metadata, proposal_id)?;
-    let mut original = decode_psbt(&current.psbt).map_err(proposal_api_error)?;
+    let original_encoded = current.psbt.clone();
+    let mut original = decode_psbt(&original_encoded).map_err(proposal_api_error)?;
     let imported = decode_psbt(signed_psbt).map_err(proposal_api_error)?;
     let fingerprints = multisig_fingerprints(&metadata)?;
     let progress = merge_signed_psbt(&mut original, imported, &fingerprints, metadata.threshold)
         .map_err(proposal_api_error)?;
+    if progress.can_finalize {
+        let wallet = load_wallet(&mut db)?;
+        let mut validation = original.clone();
+        if !wallet
+            .finalize_psbt(&mut validation, SignOptions::default())
+            .map_err(internal)?
+        {
+            return Err(api_error(
+                "finalization_failed",
+                "The collected signatures do not validly satisfy this wallet policy.",
+            ));
+        }
+    }
     let status = if progress.can_finalize {
         "ready"
     } else {
         "collecting"
     };
-    db.execute(
-        "UPDATE satchel_proposals SET psbt = ?1, status = ?2 WHERE proposal_id = ?3 AND status IN ('collecting','ready')",
-        params![encode_psbt(&original), status, proposal_id],
+    let changed = db.execute(
+        "UPDATE satchel_proposals SET psbt = ?1, status = ?2 WHERE proposal_id = ?3 AND status IN ('collecting','ready') AND psbt = ?4",
+        params![encode_psbt(&original), status, proposal_id, original_encoded],
     ).map_err(internal)?;
+    if changed != 1 {
+        return Err(api_error(
+            "proposal_mismatch",
+            "The proposal changed while signatures were being merged. Reload it and try again.",
+        ));
+    }
     load_multisig_proposal(&db, &metadata, proposal_id)
 }
 
@@ -2178,7 +2471,8 @@ pub fn multisig_proposal_import(
     proposal_id: String,
     signed_psbt: String,
 ) -> ApiResult<MultisigProposalDto> {
-    require_unlocked(&state)?;
+    let _operation = operation_guard(&state)?;
+    require_unlocked(&app, &state)?;
     import_multisig_proposal(&app, &proposal_id, &signed_psbt)
 }
 
@@ -2189,13 +2483,19 @@ pub async fn hardware_sign_multisig(
     proposal_id: String,
     device_id: String,
 ) -> ApiResult<MultisigProposalDto> {
-    require_unlocked(&state)?;
+    require_unlocked(&app, &state)?;
     let metadata = read_multisig_metadata(&app)?;
     let db = open_multisig_db(&app)?;
     let proposal = load_multisig_proposal(&db, &metadata, &proposal_id)?;
     drop(db);
     let encoded = proposal.psbt;
+    let expected_fingerprints = metadata
+        .cosigners
+        .iter()
+        .map(|cosigner| cosigner.fingerprint.clone())
+        .collect::<Vec<_>>();
     let signed = tauri::async_runtime::spawn_blocking(move || {
+        verify_connected_hardware_identity(&device_id, &expected_fingerprints)?;
         let output = hwi_cli()
             .sign_psbt(&device_id, &encoded)
             .map_err(hardware_api_error)?;
@@ -2220,10 +2520,12 @@ pub fn multisig_proposal_broadcast(
     proposal_id: String,
     credential: String,
 ) -> ApiResult<BroadcastResultDto> {
-    require_unlocked(&state)?;
-    check_auth_throttle(&state)?;
-    let credential_result = verify_multisig_credential(&app, &credential);
-    record_auth_result(&state, &credential_result)?;
+    let _operation = operation_guard(&state)?;
+    let credential = Zeroizing::new(credential);
+    require_unlocked(&app, &state)?;
+    check_auth_throttle(&app, &state)?;
+    let credential_result = verify_multisig_credential(&app, credential.as_str());
+    record_auth_result(&app, &state, &credential_result)?;
     credential_result?;
     let metadata = read_multisig_metadata(&app)?;
     let mut db = open_multisig_db(&app)?;
@@ -2246,19 +2548,30 @@ pub fn multisig_proposal_broadcast(
         ));
     }
     let transaction = psbt.extract_tx().map_err(internal)?;
-    let txid = rpc_client()?
-        .send_raw_transaction(&transaction)
-        .map_err(|error| api_error("broadcast_failed", error))?;
-    db.execute(
-        "UPDATE satchel_proposals SET status = 'broadcast', txid = ?1 WHERE proposal_id = ?2",
-        params![txid.to_string(), proposal_id],
-    )
-    .map_err(internal)?;
+    let txid = broadcast_transaction(&transaction)?;
     let mut wallet = load_wallet(&mut db)?;
-    sync_loaded_wallet(&mut wallet, &mut db)?;
-    let snapshot = snapshot_from(&wallet, &db, Some(now().to_string()), true)?;
-    notifications::enqueue(
+    let sync_pending = sync_loaded_wallet(&mut wallet, &mut db).is_err();
+    let snapshot = snapshot_from(
+        &wallet,
         &db,
+        (!sync_pending).then(|| now().to_string()),
+        true,
+    )?;
+    let persisted = db.transaction().map_err(internal)?;
+    let changed = persisted
+        .execute(
+            "UPDATE satchel_proposals SET status = 'broadcast', txid = ?1 WHERE proposal_id = ?2 AND status IN ('collecting','ready')",
+            params![txid.to_string(), proposal_id],
+        )
+        .map_err(internal)?;
+    if changed != 1 {
+        return Err(api_error(
+            "proposal_mismatch",
+            "The proposal changed while it was being broadcast.",
+        ));
+    }
+    notifications::enqueue(
+        &persisted,
         &WalletNotification::TransactionBroadcast {
             txid: txid.to_string(),
             balance: snapshot.balance.total,
@@ -2266,9 +2579,11 @@ pub fn multisig_proposal_broadcast(
         now(),
     )
     .map_err(internal)?;
+    persisted.commit().map_err(internal)?;
     Ok(BroadcastResultDto {
         txid: txid.to_string(),
         snapshot,
+        sync_pending,
     })
 }
 
@@ -2278,7 +2593,8 @@ pub fn multisig_proposal_cancel(
     state: State<'_, AppState>,
     proposal_id: String,
 ) -> ApiResult<()> {
-    require_unlocked(&state)?;
+    let _operation = operation_guard(&state)?;
+    require_unlocked(&app, &state)?;
     let db = open_multisig_db(&app)?;
     let changed = db.execute(
         "UPDATE satchel_proposals SET status = 'cancelled' WHERE proposal_id = ?1 AND status IN ('collecting','ready')",
@@ -2301,6 +2617,8 @@ pub fn multisig_create(
     policy: PolicyInput,
     credential: String,
 ) -> ApiResult<MultisigWalletDto> {
+    let _operation = operation_guard(&state)?;
+    let credential = Zeroizing::new(credential);
     if credential.is_empty() {
         return Err(api_error("invalid_credential", "An app PIN is required."));
     }
@@ -2319,8 +2637,12 @@ pub fn multisig_create(
         .map_err(internal)?;
 
         let marker = format!("satchel-multisig:{}", preview.external_descriptor);
-        secure_store::store(&dir.join("secret.json"), marker.as_bytes(), &credential)
-            .map_err(secure_store_error)?;
+        secure_store::store(
+            &dir.join("secret.json"),
+            marker.as_bytes(),
+            credential.as_str(),
+        )
+        .map_err(secure_store_error)?;
         let wallet = MultisigWalletDto {
             kind: "multisig".to_owned(),
             name: preview.name,
@@ -2341,8 +2663,8 @@ pub fn multisig_create(
         let _ = fs::remove_dir_all(&dir);
     }
     if result.is_ok() {
-        *state.unlocked.lock().map_err(internal)? = true;
-        state.auth_throttle.lock().map_err(internal)?.succeeded();
+        unlock_selected(&app, &state)?;
+        reset_auth_throttle(&app, &state)?;
     }
     result
 }
@@ -2356,6 +2678,8 @@ pub fn multisig_recovery_create(
     cosigners: Vec<crate::multisig::CosignerInput>,
     credential: String,
 ) -> ApiResult<MultisigWalletDto> {
+    let _operation = operation_guard(&state)?;
+    let credential = Zeroizing::new(credential);
     if credential.is_empty() {
         return Err(api_error("invalid_credential", "An app PIN is required."));
     }
@@ -2384,8 +2708,12 @@ pub fn multisig_recovery_create(
         .create_wallet(&mut db)
         .map_err(internal)?;
         let marker = format!("satchel-multisig:{}", analysis.external_descriptor);
-        secure_store::store(&dir.join("secret.json"), marker.as_bytes(), &credential)
-            .map_err(secure_store_error)?;
+        secure_store::store(
+            &dir.join("secret.json"),
+            marker.as_bytes(),
+            credential.as_str(),
+        )
+        .map_err(secure_store_error)?;
         let wallet = MultisigWalletDto {
             kind: "multisig".to_owned(),
             name,
@@ -2394,7 +2722,7 @@ pub fn multisig_recovery_create(
             external_descriptor: analysis.external_descriptor,
             internal_descriptor: analysis.internal_descriptor,
             created_at: now().to_string(),
-            policy_type: "recovery".to_owned(),
+            policy_type: recovery_policy_type(&template).to_owned(),
             recovery_template: Some(template),
             spending_paths: analysis.paths,
         };
@@ -2406,8 +2734,8 @@ pub fn multisig_recovery_create(
         let _ = fs::remove_dir_all(&dir);
     }
     if result.is_ok() {
-        *state.unlocked.lock().map_err(internal)? = true;
-        state.auth_throttle.lock().map_err(internal)?.succeeded();
+        unlock_selected(&app, &state)?;
+        reset_auth_throttle(&app, &state)?;
     }
     result
 }
@@ -2421,7 +2749,8 @@ pub fn tx_prepare(
     fee_rate: f64,
     coin_selection: CoinSelectionInput,
 ) -> ApiResult<PaymentProposalDto> {
-    require_unlocked(&state)?;
+    let _operation = operation_guard(&state)?;
+    require_unlocked(&app, &state)?;
     if amount == 0 {
         return Err(api_error(
             "invalid_amount",
@@ -2439,7 +2768,8 @@ pub fn tx_prepare(
     let address = unchecked
         .require_network(NETWORK)
         .map_err(|_| api_error("invalid_address", "The address is not for regtest."))?;
-    let rate = FeeRate::from_sat_per_vb(fee_rate.ceil() as u64)
+    let applied_fee_rate = fee_rate.ceil();
+    let rate = FeeRate::from_sat_per_vb(applied_fee_rate as u64)
         .ok_or_else(|| api_error("invalid_amount", "Fee rate must be greater than zero."))?;
     let mut db = open_db(&app)?;
     let mut wallet = load_wallet(&mut db)?;
@@ -2503,7 +2833,7 @@ pub fn tx_prepare(
         recipient: address.to_string(),
         amount,
         fee,
-        fee_rate,
+        fee_rate: applied_fee_rate,
         total: amount.saturating_add(fee),
         selected_outpoints,
     };
@@ -2523,12 +2853,14 @@ pub fn tx_sign_and_broadcast(
     proposal_id: String,
     credential: String,
 ) -> ApiResult<BroadcastResultDto> {
-    require_unlocked(&state)?;
-    check_auth_throttle(&state)?;
-    let credential_result = decrypt_mnemonic(&app, &credential);
-    record_auth_result(&state, &credential_result)?;
+    let _operation = operation_guard(&state)?;
+    let credential = Zeroizing::new(credential);
+    require_unlocked(&app, &state)?;
+    check_auth_throttle(&app, &state)?;
+    let credential_result = decrypt_mnemonic(&app, credential.as_str());
+    record_auth_result(&app, &state, &credential_result)?;
     let mnemonic = credential_result?;
-    let master = root_key(&mnemonic, &credential)?;
+    let master = root_key(&mnemonic, credential.as_str())?;
     let mut db = open_db(&app)?;
     let mut proposal = state
         .proposals
@@ -2558,19 +2890,30 @@ pub fn tx_sign_and_broadcast(
         return Err(internal("The transaction could not be fully signed."));
     }
     let transaction = proposal.psbt.extract_tx().map_err(internal)?;
-    let txid = rpc_client()?
-        .send_raw_transaction(&transaction)
-        .map_err(|error| api_error("broadcast_failed", error))?;
-    db.execute(
-        "UPDATE satchel_proposals SET status = 'broadcast', txid = ?1 WHERE proposal_id = ?2 AND status = 'collecting'",
-        params![txid.to_string(), proposal_id],
-    )
-    .map_err(internal)?;
+    let txid = broadcast_transaction(&transaction)?;
     let mut wallet = load_wallet(&mut db)?;
-    sync_loaded_wallet(&mut wallet, &mut db)?;
-    let snapshot = snapshot_from(&wallet, &db, Some(now().to_string()), false)?;
-    notifications::enqueue(
+    let sync_pending = sync_loaded_wallet(&mut wallet, &mut db).is_err();
+    let snapshot = snapshot_from(
+        &wallet,
         &db,
+        (!sync_pending).then(|| now().to_string()),
+        false,
+    )?;
+    let persisted = db.transaction().map_err(internal)?;
+    let changed = persisted
+        .execute(
+            "UPDATE satchel_proposals SET status = 'broadcast', txid = ?1 WHERE proposal_id = ?2 AND status = 'collecting'",
+            params![txid.to_string(), proposal_id],
+        )
+        .map_err(internal)?;
+    if changed != 1 {
+        return Err(api_error(
+            "proposal_mismatch",
+            "The proposal changed while it was being broadcast.",
+        ));
+    }
+    notifications::enqueue(
+        &persisted,
         &WalletNotification::TransactionBroadcast {
             txid: txid.to_string(),
             balance: snapshot.balance.total,
@@ -2578,20 +2921,39 @@ pub fn tx_sign_and_broadcast(
         now(),
     )
     .map_err(internal)?;
+    persisted.commit().map_err(internal)?;
     Ok(BroadcastResultDto {
         txid: txid.to_string(),
         snapshot,
+        sync_pending,
     })
 }
 
 #[tauri::command]
-pub fn wallet_delete(app: AppHandle, state: State<'_, AppState>) -> ApiResult<()> {
-    require_unlocked(&state)?;
+pub fn wallet_delete(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    credential: String,
+    confirmation: String,
+) -> ApiResult<()> {
+    let _operation = operation_guard(&state)?;
+    require_unlocked(&app, &state)?;
+    if confirmation != "DELETE" {
+        return Err(api_error(
+            "confirmation_mismatch",
+            "Type DELETE exactly to remove this wallet.",
+        ));
+    }
+    let credential = Zeroizing::new(credential);
+    check_auth_throttle(&app, &state)?;
+    let verified = decrypt_mnemonic(&app, credential.as_str()).map(|_| ());
+    record_auth_result(&app, &state, &verified)?;
+    verified?;
     state.proposals.lock().map_err(internal)?.clear();
     let profile = selected_profile_of_kind(&app, WalletKind::SingleKey)?;
     let dir = profile_directory(&app, profile.id)?;
     delete_registered_wallet(&app, profile.id, &dir)?;
-    *state.unlocked.lock().map_err(internal)? = false;
+    lock_wallet(&state)?;
     Ok(())
 }
 
@@ -2601,11 +2963,12 @@ pub fn wallet_reset_regtest(
     state: State<'_, AppState>,
     confirmation: String,
 ) -> ApiResult<()> {
+    let _operation = operation_guard(&state)?;
     validate_regtest_reset_confirmation(&confirmation)?;
     state.proposals.lock().map_err(internal)?.clear();
     let profile = selected_profile(&app)?;
     delete_registered_wallet(&app, profile.id, &profile_directory(&app, profile.id)?)?;
-    *state.unlocked.lock().map_err(internal)? = false;
+    lock_wallet(&state)?;
     Ok(())
 }
 
@@ -2668,8 +3031,115 @@ fn delete_registered_wallet(app: &AppHandle, id: Uuid, path: &Path) -> ApiResult
 mod tests {
     use super::*;
     use crate::multisig::{CosignerInput, CosignerSource, MULTISIG_ACCOUNT_PATH};
+    use crate::recovery::{SpendingPath, TimedSpendingPath};
 
     const WORDS: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art";
+
+    #[test]
+    fn authentication_throttle_round_trips_through_wallet_storage() {
+        let mut db = Connection::open_in_memory().unwrap();
+        init_app_schema(&db).unwrap();
+        let mut throttle = AuthThrottle::default();
+        for _ in 0..7 {
+            throttle.failed(100);
+        }
+        save_auth_throttle(&mut db, &throttle).unwrap();
+        let restored = load_auth_throttle(&db).unwrap();
+        assert_eq!(restored.snapshot(), throttle.snapshot());
+        assert!(restored.check(100).is_err());
+    }
+
+    #[test]
+    fn command_boundary_error_translation_is_complete_and_stable() {
+        let registry_cases = [
+            (RegistryError::Missing, "wallet_not_found"),
+            (RegistryError::UnknownSelection, "wallet_not_found"),
+            (RegistryError::InvalidName, "invalid_wallet_name"),
+            (RegistryError::DuplicateIdentity, "wallet_already_exists"),
+            (RegistryError::Corrupt, "wallet_corrupt"),
+            (RegistryError::UnsupportedVersion, "wallet_corrupt"),
+            (RegistryError::InvalidNetwork, "internal_error"),
+            (RegistryError::InvalidChecksum, "internal_error"),
+            (RegistryError::DuplicateId, "internal_error"),
+            (RegistryError::Io, "internal_error"),
+        ];
+        for (error, code) in registry_cases {
+            assert_eq!(registry_api_error(error).code, code);
+        }
+
+        for error in [
+            PolicyError::InvalidName,
+            PolicyError::InvalidCosignerCount,
+            PolicyError::UnsafeThreshold,
+            PolicyError::DuplicateFingerprint,
+            PolicyError::DuplicateXpub,
+            PolicyError::InvalidDescriptor,
+        ] {
+            assert_eq!(policy_api_error(error).code, error.code());
+        }
+
+        for error in [
+            HardwareError::InvalidArgument,
+            HardwareError::Unavailable,
+            HardwareError::TimedOut,
+            HardwareError::OutputTooLarge,
+            HardwareError::CommandFailed,
+            HardwareError::Io,
+        ] {
+            assert_eq!(hardware_api_error(error).code, error.code());
+        }
+
+        assert_eq!(
+            secure_store_error(SecureStoreError::InvalidCredential).code,
+            "invalid_credential"
+        );
+        assert_eq!(
+            secure_store_error(SecureStoreError::Corrupt).code,
+            "wallet_corrupt"
+        );
+        assert_eq!(
+            secure_store_error(SecureStoreError::Unavailable).code,
+            "secure_storage_unavailable"
+        );
+    }
+
+    #[test]
+    fn descriptor_and_recovery_metadata_helpers_fail_closed() {
+        assert_eq!(
+            descriptor_checksum("wpkh(key)#12345678").unwrap(),
+            "12345678"
+        );
+        assert_eq!(
+            descriptor_checksum("wpkh(key)#short").unwrap_err().code,
+            "internal_error"
+        );
+        assert_eq!(
+            descriptor_checksum("wpkh(key)").unwrap_err().code,
+            "internal_error"
+        );
+
+        let immediate = SpendingPath::new(2, ["a", "b"]);
+        let delayed = TimedSpendingPath::new(144, 1, ["c"]);
+        assert_eq!(
+            recovery_policy_type(&RecoveryTemplate::Recovery {
+                immediate,
+                recovery: delayed.clone(),
+            }),
+            "recovery"
+        );
+        assert_eq!(
+            recovery_policy_type(&RecoveryTemplate::Decaying {
+                stages: vec![delayed.clone()],
+            }),
+            "decaying"
+        );
+        assert_eq!(
+            recovery_policy_type(&RecoveryTemplate::Expanding {
+                stages: vec![delayed],
+            }),
+            "expanding"
+        );
+    }
 
     #[test]
     fn native_boundary_rejects_browser_only_virtual_cosigners() {
@@ -2909,7 +3379,7 @@ mod tests {
     }
 
     #[test]
-    fn restart_restores_proposals_frozen_coins_and_exactly_once_notifications() {
+    fn restart_restores_proposals_frozen_coins_and_acknowledged_notifications() {
         use bdk_wallet::bitcoin::{absolute::LockTime, transaction::Version, Transaction};
 
         let directory = std::env::temp_dir().join(format!("satchel-restart-{}", Uuid::new_v4()));
@@ -2971,8 +3441,14 @@ mod tests {
                 .version,
             Version::TWO
         );
-        assert_eq!(notifications::drain(&mut restarted_db).unwrap().len(), 1);
-        assert!(notifications::drain(&mut restarted_db).unwrap().is_empty());
+        let pending = notifications::pending(&restarted_db).unwrap();
+        assert_eq!(pending.len(), 1);
+        notifications::acknowledge(
+            &mut restarted_db,
+            &pending.iter().map(|event| event.id).collect::<Vec<_>>(),
+        )
+        .unwrap();
+        assert!(notifications::pending(&restarted_db).unwrap().is_empty());
 
         restarted_db
             .execute(

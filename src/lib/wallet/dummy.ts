@@ -39,6 +39,7 @@ export class DummyWalletAdapter implements WalletPort {
   #multisigCredential = this.#exists ? prototypeCredential : '';
   #multisigProfileId: string | null = this.#exists ? 'fixture-multisig' : null;
   #multisigProposals = new Map<string, MultisigProposal>();
+  #recoveryVerified = false;
   #profiles: WalletProfile[] = this.#exists ? [
     { id: 'fixture-single', name: 'Everyday wallet', network: defaultConfig.network, kind: 'single_key', descriptorChecksum: 'fixture01', createdAt: 1 },
     { id: 'fixture-multisig', name: 'Family vault', network: defaultConfig.network, kind: 'multisig', descriptorChecksum: 'demo2of3', createdAt: 2 }
@@ -74,7 +75,11 @@ export class DummyWalletAdapter implements WalletPort {
     const expected = this.#selectedWalletId ? this.#credentials.get(this.#selectedWalletId) : undefined;
     if (credential !== expected) throw new WalletError('invalid_credential', 'Incorrect passphrase / PIN.');
   }
-  async deleteWallet() {
+  async lock() {}
+  async deleteWallet(credential: string, confirmation: string) {
+    if (confirmation !== 'DELETE') throw new WalletError('confirmation_mismatch', 'Type DELETE exactly.');
+    const expected = this.#selectedWalletId ? this.#credentials.get(this.#selectedWalletId) : undefined;
+    if (credential !== expected) throw new WalletError('invalid_credential', 'Incorrect passphrase / PIN.');
     if (this.#selectedWalletId) {
       this.#profiles = this.#profiles.filter((wallet) => wallet.id !== this.#selectedWalletId);
       this.#credentials.delete(this.#selectedWalletId);
@@ -86,7 +91,11 @@ export class DummyWalletAdapter implements WalletPort {
   }
   async resetRegtestWallet(confirmation: string) {
     if (confirmation !== 'RESET REGTEST') throw new WalletError('confirmation_mismatch', 'Type RESET REGTEST exactly.');
-    await this.deleteWallet();
+    if (this.#selectedWalletId) {
+      this.#profiles = this.#profiles.filter((wallet) => wallet.id !== this.#selectedWalletId);
+      this.#credentials.delete(this.#selectedWalletId);
+    }
+    this.#selectedWalletId = this.#profiles[0]?.id ?? null; this.#exists = this.#profiles.length > 0; this.#proposals.clear();
   }
 
   async snapshot(): Promise<WalletSnapshot> {
@@ -149,7 +158,7 @@ export class DummyWalletAdapter implements WalletPort {
     this.#balance = Math.max(0, this.#balance - Number(proposal.total));
     this.#emit({ type: 'transaction_broadcast', txid, balance: sats(this.#balance) });
     this.#proposals.delete(proposalId);
-    return { txid, snapshot: await this.snapshot() };
+    return { txid, snapshot: await this.snapshot(), syncPending: false };
   }
 
   async listHardwareDevices() {
@@ -206,6 +215,7 @@ export class DummyWalletAdapter implements WalletPort {
   async createMultisig(policy: PolicyDraft, credential: string): Promise<MultisigWallet> {
     if (!credential) throw new WalletError('invalid_credential', 'An app PIN is required.');
     const preview = await this.previewMultisig(policy);
+    this.#recoveryVerified = false;
     this.#multisig = { ...preview, kind: 'multisig', createdAt: new Date().toISOString(), policyType: 'standard' };
     this.#multisigCredential = credential;
     if (this.#multisigProfileId) { this.#profiles = this.#profiles.filter((wallet) => wallet.id !== this.#multisigProfileId); this.#credentials.delete(this.#multisigProfileId); }
@@ -217,6 +227,7 @@ export class DummyWalletAdapter implements WalletPort {
   async createRecoveryMultisig(name: string, template: RecoveryTemplate, cosigners: PolicyDraft['cosigners'], credential: string): Promise<MultisigWallet> {
     if (!credential) throw new WalletError('invalid_credential', 'An app PIN is required.');
     const analysis = await this.analyzeRecoveryPolicy(template, cosigners);
+    this.#recoveryVerified = false;
     this.#multisig = { kind: 'multisig', name: name.trim(), threshold: analysis.paths[0].threshold, cosigners, externalDescriptor: analysis.externalDescriptor, internalDescriptor: analysis.internalDescriptor, createdAt: new Date().toISOString(), policyType: 'recovery', recoveryTemplate: template, spendingPaths: analysis.paths };
     this.#multisigCredential = credential;
     if (this.#multisigProfileId) { this.#profiles = this.#profiles.filter((wallet) => wallet.id !== this.#multisigProfileId); this.#credentials.delete(this.#multisigProfileId); }
@@ -232,21 +243,22 @@ export class DummyWalletAdapter implements WalletPort {
     return JSON.stringify({ version: 1, network: defaultConfig.network, wallet: this.#multisig }, null, 2);
   }
   async recoveryDrill(encodedBackup: string) {
-    try { const parsed = JSON.parse(encodedBackup); return { firstAddress: `${addressPrefixForNetwork(defaultConfig.network)}qdummy5n8k2r7v4cx9s6jlawephgzuqf5t8ul`, matchesCurrentWallet: parsed?.wallet?.externalDescriptor === this.#multisig?.externalDescriptor }; }
+    try { const parsed = JSON.parse(encodedBackup); const matchesCurrentWallet = parsed?.wallet?.externalDescriptor === this.#multisig?.externalDescriptor; this.#recoveryVerified = matchesCurrentWallet; return { firstAddress: `${addressPrefixForNetwork(defaultConfig.network)}qdummy5n8k2r7v4cx9s6jlawephgzuqf5t8ul`, matchesCurrentWallet }; }
     catch { throw new WalletError('invalid_backup', 'Enter a valid Satchel descriptor backup.'); }
   }
   async recoverMultisig(encodedBackup: string, credential: string) {
     if (this.#multisig) throw new WalletError('wallet_already_exists', 'Delete the current multisig wallet before recovering another one.');
-    try { const parsed = JSON.parse(encodedBackup); if (parsed?.version !== 1 || parsed?.network !== defaultConfig.network || !parsed.wallet) throw new Error(); this.#multisig = parsed.wallet; this.#multisigCredential = credential; const profile = { id: crypto.randomUUID(), name: this.#multisig!.name, network: defaultConfig.network, kind: 'multisig' as const, descriptorChecksum: 'restored', createdAt: Date.now() }; this.#profiles.push(profile); this.#multisigProfileId = profile.id; this.#selectedWalletId = profile.id; this.#credentials.set(profile.id, credential); this.#exists = true; return structuredClone(this.#multisig!); }
+    try { const parsed = JSON.parse(encodedBackup); if (parsed?.version !== 1 || parsed?.network !== defaultConfig.network || !parsed.wallet) throw new Error(); this.#recoveryVerified = false; this.#multisig = parsed.wallet; this.#multisigCredential = credential; const profile = { id: crypto.randomUUID(), name: this.#multisig!.name, network: defaultConfig.network, kind: 'multisig' as const, descriptorChecksum: 'restored', createdAt: Date.now() }; this.#profiles.push(profile); this.#multisigProfileId = profile.id; this.#selectedWalletId = profile.id; this.#credentials.set(profile.id, credential); this.#exists = true; return structuredClone(this.#multisig!); }
     catch { throw new WalletError('invalid_backup', 'Enter a valid Satchel descriptor backup.'); }
   }
   async deleteMultisig(credential: string, confirmation: string) {
     if (!this.#multisig) throw new WalletError('wallet_not_found', 'No multisig wallet exists.');
+    if (!this.#recoveryVerified) throw new WalletError('backup_mismatch', 'Run a successful recovery drill before deleting this coordinator.');
     if (confirmation !== this.#multisig.name) throw new WalletError('confirmation_mismatch', 'Type the exact wallet name to delete this coordinator.');
     if (credential !== this.#multisigCredential) throw new WalletError('invalid_credential', 'Incorrect app PIN.');
     if (this.#multisigProfileId) { this.#profiles = this.#profiles.filter((wallet) => wallet.id !== this.#multisigProfileId); this.#credentials.delete(this.#multisigProfileId); }
     this.#selectedWalletId = this.#profiles[0]?.id ?? null; this.#exists = this.#profiles.length > 0;
-    this.#multisig = null; this.#multisigCredential = ''; this.#multisigProfileId = null; this.#multisigProposals.clear();
+    this.#multisig = null; this.#multisigCredential = ''; this.#multisigProfileId = null; this.#multisigProposals.clear(); this.#recoveryVerified = false;
   }
   async multisigSnapshot() { return this.snapshot(); }
   async syncMultisig() { return this.snapshot(); }
@@ -270,7 +282,7 @@ export class DummyWalletAdapter implements WalletPort {
     const proposal=this.#multisigProposals.get(proposalId); if(!proposal) throw new WalletError('proposal_not_found','Payment proposal was not found.');
     if(credential!==this.#multisigCredential) throw new WalletError('invalid_credential','Incorrect app PIN.');
     if(!proposal.canFinalize) throw new WalletError('internal_error','Collect the required signatures first.');
-    proposal.status='broadcast'; this.#balance=Math.max(0,this.#balance-Number(proposal.total)); const txid='7d4a2c7f9e317f9859d7a8566fe02d773afb09fcddb617dbda98bfba8f721234'; return {txid,snapshot:await this.snapshot()};
+    proposal.status='broadcast'; this.#balance=Math.max(0,this.#balance-Number(proposal.total)); const txid='7d4a2c7f9e317f9859d7a8566fe02d773afb09fcddb617dbda98bfba8f721234'; return {txid,snapshot:await this.snapshot(),syncPending:false};
   }
   async cancelMultisigProposal(proposalId:string) { const proposal=this.#multisigProposals.get(proposalId); if(!proposal) throw new WalletError('proposal_not_found','Payment proposal was not found.'); proposal.status='cancelled'; }
 

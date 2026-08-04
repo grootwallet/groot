@@ -2,7 +2,7 @@ use aes_gcm::{
     aead::{Aead, KeyInit},
     Aes256Gcm, Nonce,
 };
-use argon2::Argon2;
+use argon2::{Algorithm, Argon2, Params, Version};
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use rand::{rngs::OsRng, RngCore};
 use serde::{Deserialize, Serialize};
@@ -14,7 +14,7 @@ use std::{
     path::Path,
 };
 use uuid::Uuid;
-use zeroize::Zeroize;
+use zeroize::Zeroizing;
 
 const VERSION: u8 = 2;
 const MAX_METADATA_BYTES: u64 = 256 * 1024;
@@ -127,9 +127,18 @@ fn validate_device_key(key: Vec<u8>) -> Result<Vec<u8>, SecureStoreError> {
     }
 }
 
-fn derive_credential_key(credential: &str, salt: &[u8]) -> Result<Vec<u8>, SecureStoreError> {
-    let mut key = vec![0_u8; KEY_BYTES];
-    Argon2::default()
+fn credential_kdf() -> Result<Argon2<'static>, SecureStoreError> {
+    let params =
+        Params::new(19_456, 2, 1, Some(KEY_BYTES)).map_err(|_| SecureStoreError::Unavailable)?;
+    Ok(Argon2::new(Algorithm::Argon2id, Version::V0x13, params))
+}
+
+fn derive_credential_key(
+    credential: &str,
+    salt: &[u8],
+) -> Result<Zeroizing<Vec<u8>>, SecureStoreError> {
+    let mut key = Zeroizing::new(vec![0_u8; KEY_BYTES]);
+    credential_kdf()?
         .hash_password_into(credential.as_bytes(), salt, &mut key)
         .map_err(|_| SecureStoreError::Unavailable)?;
     Ok(key)
@@ -221,12 +230,12 @@ fn store_with_provider(
     credential: &str,
     provider: &impl DeviceKeyProvider,
 ) -> Result<(), SecureStoreError> {
-    let mut salt = vec![0_u8; 16];
-    let mut data_key = vec![0_u8; KEY_BYTES];
+    let mut salt = Zeroizing::new(vec![0_u8; 16]);
+    let mut data_key = Zeroizing::new(vec![0_u8; KEY_BYTES]);
     OsRng.fill_bytes(&mut salt);
     OsRng.fill_bytes(&mut data_key);
-    let mut credential_key = derive_credential_key(credential, &salt)?;
-    let mut device_key = provider.get_or_create(metadata_path)?;
+    let credential_key = derive_credential_key(credential, &salt)?;
+    let device_key = Zeroizing::new(provider.get_or_create(metadata_path)?);
     let (payload_nonce, payload) = encrypt(&data_key, secret)?;
     let (credential_nonce, credential_wrapped_key) = encrypt(&credential_key, &data_key)?;
     let (device_nonce, device_wrapped_key) = encrypt(&device_key, &data_key)?;
@@ -241,12 +250,7 @@ fn store_with_provider(
         device_wrapped_key: BASE64.encode(device_wrapped_key),
     };
     let encoded = serde_json::to_vec(&metadata).map_err(|_| SecureStoreError::Corrupt)?;
-    let result = write_owner_only(metadata_path, &encoded);
-    data_key.zeroize();
-    credential_key.zeroize();
-    device_key.zeroize();
-    salt.zeroize();
-    result
+    write_owner_only(metadata_path, &encoded)
 }
 
 fn load_with_provider(
@@ -255,48 +259,41 @@ fn load_with_provider(
     provider: &impl DeviceKeyProvider,
 ) -> Result<Vec<u8>, SecureStoreError> {
     let metadata = read_metadata(metadata_path)?;
-    let salt = decode(metadata.salt)?;
+    let salt = Zeroizing::new(decode(metadata.salt)?);
     if salt.len() != 16 {
         return Err(SecureStoreError::Corrupt);
     }
-    let mut credential_key = derive_credential_key(credential, &salt)?;
-    let mut device_key = provider.get(metadata_path)?;
-    let mut credential_data_key = decrypt(
+    let credential_key = derive_credential_key(credential, &salt)?;
+    let device_key = Zeroizing::new(provider.get(metadata_path)?);
+    let credential_data_key = Zeroizing::new(decrypt(
         &credential_key,
         &decode(metadata.credential_nonce)?,
         &decode(metadata.credential_wrapped_key)?,
-    )?;
-    let mut device_data_key = decrypt(
-        &device_key,
-        &decode(metadata.device_nonce)?,
-        &decode(metadata.device_wrapped_key)?,
-    )
-    .map_err(|_| SecureStoreError::Unavailable)?;
+    )?);
+    let device_data_key = Zeroizing::new(
+        decrypt(
+            &device_key,
+            &decode(metadata.device_nonce)?,
+            &decode(metadata.device_wrapped_key)?,
+        )
+        .map_err(|_| SecureStoreError::Unavailable)?,
+    );
     let mismatch = credential_data_key
         .iter()
-        .zip(&device_data_key)
+        .zip(device_data_key.iter())
         .fold(0_u8, |difference, (left, right)| {
             difference | (left ^ right)
         });
     if credential_data_key.len() != KEY_BYTES || device_data_key.len() != KEY_BYTES || mismatch != 0
     {
-        credential_data_key.zeroize();
-        device_data_key.zeroize();
-        credential_key.zeroize();
-        device_key.zeroize();
         return Err(SecureStoreError::Corrupt);
     }
-    let result = decrypt(
+    decrypt(
         &credential_data_key,
         &decode(metadata.payload_nonce)?,
         &decode(metadata.payload)?,
     )
-    .map_err(|_| SecureStoreError::Corrupt);
-    credential_data_key.zeroize();
-    device_data_key.zeroize();
-    credential_key.zeroize();
-    device_key.zeroize();
-    result
+    .map_err(|_| SecureStoreError::Corrupt)
 }
 
 pub fn store(

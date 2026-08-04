@@ -63,6 +63,28 @@ describe('multisig policy invariants', () => {
     expect(errors).toContain('Every cosigner must have a unique account xpub.');
   });
 
+  it('bounds wallet names, stable identifiers, and cosigner labels', () => {
+    const base = [
+      cosigner({ id: '', label: 'A' }),
+      cosigner({ id: 'x'.repeat(129), label: 'B', fingerprint: 'b1b2c3d4', xpub: 'tpub-key-2' }),
+      cosigner({ id: 'duplicate', label: 'C', fingerprint: 'c1b2c3d4', xpub: 'tpub-key-3' })
+    ];
+    expect(validatePolicyDraft({ name: 'x'.repeat(49), threshold: 2, cosigners: base })).toEqual(expect.arrayContaining([
+      'The wallet name must be 48 characters or fewer.',
+      'Every cosigner needs a bounded stable identifier.'
+    ]));
+
+    const duplicateIds = [
+      cosigner({ id: 'same', label: 'x'.repeat(49) }),
+      cosigner({ id: 'same', label: 'B', fingerprint: 'b1b2c3d4', xpub: 'tpub-key-2' }),
+      cosigner({ id: 'three', label: 'C', fingerprint: 'c1b2c3d4', xpub: 'tpub-key-3' })
+    ];
+    expect(validatePolicyDraft({ name: 'Vault', threshold: 2, cosigners: duplicateIds })).toEqual(expect.arrayContaining([
+      'Every cosigner must have a unique identifier.',
+      'Cosigner labels must be 48 characters or fewer.'
+    ]));
+  });
+
   it('normalizes labels and fingerprints without altering public keys', () => {
     expect(normalizeCosigner(cosigner({ label: '  Office   Coldcard ', fingerprint: 'A1B2C3D4' }))).toMatchObject({
       label: 'Office Coldcard',

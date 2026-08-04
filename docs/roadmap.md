@@ -21,7 +21,7 @@ The regtest app now has labeled receive addresses with enlarged QR and optional 
 ### 1. Existing wallet hardening
 
 - Finish create, recover, unlock, receive, discard, send, activity, UTXO, notification, and deletion tests.
-- Persist exactly-once notification markers in Rust.
+- Persist unique notification markers in Rust with explicit acknowledgement and idempotent at-least-once delivery.
 - Add unlock rate limiting and platform secure-storage wrapping.
 - Eliminate any secret-bearing webview DTO; use a trusted native recovery-word display before public networks.
 - Add instrumented Tauri command integration for frozen-coin persistence, exact-input PSBTs, restart behavior, filesystem deletion, and corrupted databases.

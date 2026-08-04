@@ -26,11 +26,11 @@ Each profile owns a UUID-isolated directory. Switching never reuses the prior wa
 
 The locked screen names the selected profile, can switch profiles without carrying credential state, and can return to the wallet chooser. Passphrase/PIN fields across onboarding, unlock, signing, descriptor export, recovery, and deletion have explicit show/hide controls.
 
-`settings → delete warning → type DELETE → Rust deletion → unlock next wallet / welcome`
+`settings → delete warning → credential + type DELETE → Rust verification/deletion → unlock next wallet / welcome`
 
 For a selected locked disposable regtest wallet: `locked → delete warning → type RESET REGTEST → Rust deletion → next wallet or welcome`. This works for either profile kind and is unavailable on public networks.
 
-Deletion is device-local. It never implies that transaction history disappeared from Bitcoin. Multisig deletion remains gated until descriptor-backup verification exists.
+Deletion is device-local. It never implies that transaction history disappeared from Bitcoin. Multisig deletion additionally requires an in-session successful recovery drill for the exact current descriptor, the wallet PIN, and its exact name.
 
 ## Receive
 
@@ -72,4 +72,4 @@ Each cosigner is `ready`, `awaiting`, `signing`, `signed`, `rejected`, or `unava
 - Payment received: first observation only, including updated balance.
 - First confirmation: zero-to-one confirmation transition only, including updated balance.
 
-The page/list is durable truth. Exactly-once markers persist in Rust and are atomically drained; background/resume scheduling remains a platform integration gate.
+The page/list is durable truth. Unique markers persist in Rust until explicitly acknowledged. Delivery is at-least-once across a crash before acknowledgement and consumers use stable IDs idempotently; background/resume scheduling remains a platform integration gate.

@@ -1,5 +1,6 @@
 use std::{
     io::Read,
+    path::{Path, PathBuf},
     process::{Command, Stdio},
     thread,
     time::{Duration, Instant},
@@ -77,9 +78,9 @@ pub trait HardwareTransport: Send + Sync {
     ) -> Result<Vec<u8>, HardwareError>;
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct HwiCli {
-    program: &'static str,
+    program: PathBuf,
     chain: HwiChain,
 }
 
@@ -107,7 +108,7 @@ impl Default for HwiCli {
 impl HwiCli {
     pub fn for_chain(chain: HwiChain) -> Self {
         Self {
-            program: "hwi",
+            program: trusted_hwi_path(),
             chain,
         }
     }
@@ -127,7 +128,7 @@ impl HwiCli {
 impl HardwareTransport for HwiCli {
     fn enumerate(&self) -> Result<Vec<u8>, HardwareError> {
         run_program(
-            self.program,
+            &self.program,
             &[
                 "--chain".into(),
                 self.chain.as_hwi_argument().into(),
@@ -143,7 +144,7 @@ impl HardwareTransport for HwiCli {
         derivation_path: &str,
     ) -> Result<Vec<u8>, HardwareError> {
         run_program(
-            self.program,
+            &self.program,
             &self.device_command(device_path, "getxpub", derivation_path),
             DEFAULT_TIMEOUT,
         )
@@ -151,7 +152,7 @@ impl HardwareTransport for HwiCli {
 
     fn sign_psbt(&self, device_path: &str, psbt: &str) -> Result<Vec<u8>, HardwareError> {
         run_program(
-            self.program,
+            &self.program,
             &self.device_command(device_path, "signtx", psbt),
             DEFAULT_TIMEOUT,
         )
@@ -164,15 +165,41 @@ impl HardwareTransport for HwiCli {
     ) -> Result<Vec<u8>, HardwareError> {
         let mut arguments = self.device_command(device_path, "displayaddress", "--desc");
         arguments.push(descriptor.into());
-        run_program(self.program, &arguments, DEFAULT_TIMEOUT)
+        run_program(&self.program, &arguments, DEFAULT_TIMEOUT)
     }
 }
 
+fn trusted_hwi_path() -> PathBuf {
+    if let Some(configured) = option_env!("SATCHEL_HWI_PATH") {
+        return PathBuf::from(configured);
+    }
+    #[cfg(target_os = "macos")]
+    return first_existing_absolute(&["/opt/homebrew/bin/hwi", "/usr/local/bin/hwi"]);
+    #[cfg(target_os = "linux")]
+    return first_existing_absolute(&["/usr/bin/hwi", "/usr/local/bin/hwi"]);
+    #[cfg(target_os = "windows")]
+    return PathBuf::from(r"C:\Program Files\Satchel\hwi.exe");
+    #[allow(unreachable_code)]
+    PathBuf::from("/unsupported-platform/hwi")
+}
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+fn first_existing_absolute(candidates: &[&str]) -> PathBuf {
+    candidates
+        .iter()
+        .map(PathBuf::from)
+        .find(|candidate| candidate.is_file())
+        .unwrap_or_else(|| PathBuf::from(candidates[0]))
+}
+
 fn run_program(
-    program: &str,
+    program: &Path,
     arguments: &[String],
     timeout: Duration,
 ) -> Result<Vec<u8>, HardwareError> {
+    if !program.is_absolute() {
+        return Err(HardwareError::Unavailable);
+    }
     validate_arguments(arguments)?;
     let mut child = Command::new(program)
         .args(arguments)
@@ -231,9 +258,17 @@ mod tests {
     }
 
     #[test]
+    fn rejects_relative_executable_paths_without_searching_path() {
+        assert_eq!(
+            run_program(Path::new("hwi"), &["enumerate".into()], Duration::ZERO),
+            Err(HardwareError::Unavailable)
+        );
+    }
+
+    #[test]
     fn preserves_argument_boundaries_without_shell_interpolation() {
         let output = run_program(
-            "/bin/echo",
+            Path::new("/bin/echo"),
             &["$(touch /tmp/satchel-must-not-exist)".to_owned()],
             Duration::from_secs(1),
         )
@@ -249,19 +284,23 @@ mod tests {
     fn reports_failure_timeout_and_missing_executable_without_output_leaks() {
         assert_eq!(
             run_program(
-                "/usr/bin/false",
+                Path::new("/usr/bin/false"),
                 &["test".to_owned()],
                 Duration::from_secs(1)
             ),
             Err(HardwareError::CommandFailed)
         );
         assert_eq!(
-            run_program("/bin/sleep", &["1".to_owned()], Duration::from_millis(10)),
+            run_program(
+                Path::new("/bin/sleep"),
+                &["1".to_owned()],
+                Duration::from_millis(10)
+            ),
             Err(HardwareError::TimedOut)
         );
         assert_eq!(
             run_program(
-                "/definitely/not/an/executable",
+                Path::new("/definitely/not/an/executable"),
                 &["test".to_owned()],
                 Duration::from_secs(1)
             ),
@@ -323,7 +362,7 @@ mod tests {
     #[test]
     fn transport_operations_share_the_fail_closed_process_boundary() {
         let transport = HwiCli {
-            program: "/definitely/not/an/executable",
+            program: PathBuf::from("/definitely/not/an/executable"),
             chain: HwiChain::Test,
         };
         assert_eq!(transport.enumerate(), Err(HardwareError::Unavailable));

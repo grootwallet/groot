@@ -9,12 +9,12 @@ This ledger prevents prototype UI from being mistaken for production wallet beha
 | Coin select/freeze/unfreeze | Yes | Yes, persisted exact-input BDK builder | Policy/UI E2E; corruption persistence unit | Regtest functional |
 | Labeled receive/discard/QR/copy/details | Yes | Yes | Policy and UI E2E | Regtest functional |
 | Single-key prepare/sign/broadcast | Yes, including Receive-address round trip | Yes, persisted restart-safe PSBT, auto or exact inputs | Network-prefix and wrong-PIN E2E; restart/corruption Rust tests | Regtest functional |
-| Single-key delete | Yes | Yes, symlink-safe tombstone removal | Filesystem unit + UI E2E | Regtest functional; no flash-erasure claim |
+| Single-key delete | Yes | Yes, credential + typed confirmation + symlink-safe tombstone removal | Filesystem unit + UI E2E | Regtest functional; no flash-erasure claim |
 | Multisig policy validation | Yes | Yes | TypeScript and Rust unit tests | Implemented |
 | BIP48 `wsh(sortedmulti)` descriptors | Yes preview | Yes, checksummed and BDK-parsed | Rust canonicalization/address tests | Implemented |
 | Coordinator PIN + watch-only persistence | Yes | Yes | Rust build/test/Clippy; setup E2E | Implemented |
 | Manual public-key import | Yes | Yes validation at preview/create | Duplicate and setup E2E | Implemented |
-| Desktop HWI enumerate/xpub/sign/address verify | Virtual devices plus session health details | Yes when `hwi` is installed; `hardware_check_cosigner` re-enumerates and matches the saved fingerprint | Process-boundary units + virtual signer integration + device-modal E2E | Certification-ready, not certified; offline records never claim physical verification |
+| Desktop HWI enumerate/xpub/sign/address verify | Virtual devices plus session health details | Yes from an absolute configured/known HWI path; health/address/sign operations re-enumerate and match the saved fingerprint | Process-boundary units + virtual signer integration + device-modal E2E | Integration-ready, not physically certified; packaged artifact verification pending |
 | File PSBT/backup exchange | Yes | Bounded Rust validation | Unit + desktop/mobile E2E | Functional |
 | UR/animated QR/camera exchange | Hidden | Bounded multipart foundation only | Hostile-frame units | Roadmap; not represented as UR |
 | Multisig receive/sync/balance | Yes | Yes, separate BDK database + labels | Descriptor address unit test; desktop/mobile route E2E | Regtest functional |

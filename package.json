@@ -12,8 +12,8 @@
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage --coverage.provider=v8 --coverage.reporter=text --coverage.include=src/lib/wallet/policy.ts --coverage.include=src/lib/multisig/policy.ts --coverage.thresholds.lines=100 --coverage.thresholds.functions=100 --coverage.thresholds.branches=100 --coverage.thresholds.statements=100",
-    "test:coverage:rust": "cargo llvm-cov --manifest-path src-tauri/Cargo.toml --lib --summary-only --ignore-filename-regex 'src/(wallet|lib|hardware|network|registry|airgap|native_backup|secure_store)\\.rs' --fail-under-lines 99 --fail-under-functions 100 --fail-under-regions 97",
-    "test:coverage:rust:all": "cargo llvm-cov --manifest-path src-tauri/Cargo.toml --lib --summary-only",
+    "test:coverage:rust": "cargo llvm-cov --locked --manifest-path src-tauri/Cargo.toml --lib --summary-only --ignore-filename-regex 'src/(wallet|lib|hardware|network|registry|airgap|native_backup|secure_store)\\.rs' --fail-under-lines 99 --fail-under-functions 100 --fail-under-regions 97",
+    "test:coverage:rust:all": "cargo llvm-cov --locked --manifest-path src-tauri/Cargo.toml --lib --summary-only",
     "test:e2e": "playwright test",
     "test:regtest": "bash scripts/regtest/test.sh",
     "test:release-gate": "bash scripts/release/check-mainnet-gate.sh",
@@ -30,23 +30,23 @@
     "tauri": "tauri"
   },
   "devDependencies": {
-    "@playwright/test": "^1.62.1",
-    "@sveltejs/adapter-static": "latest",
+    "@playwright/test": "1.62.1",
+    "@sveltejs/adapter-static": "3.0.10",
     "@sveltejs/kit": "2.69.3",
-    "@sveltejs/vite-plugin-svelte": "latest",
-    "@tauri-apps/cli": "latest",
-    "@types/qrcode": "^1.5.6",
-    "@vitest/coverage-v8": "^4.1.10",
+    "@sveltejs/vite-plugin-svelte": "7.2.0",
+    "@tauri-apps/cli": "2.11.4",
+    "@types/qrcode": "1.5.6",
+    "@vitest/coverage-v8": "4.1.10",
     "svelte": "5.56.5",
     "svelte-check": "4.7.3",
-    "typescript": "^5.9.3",
+    "typescript": "5.9.3",
     "vite": "8.1.5",
-    "vitest": "latest"
+    "vitest": "4.1.10"
   },
   "dependencies": {
     "@lucide/svelte": "1.24.0",
-    "@tauri-apps/api": "latest",
-    "@tauri-apps/plugin-clipboard-manager": "~2.3.2",
-    "qrcode": "^1.5.4"
+    "@tauri-apps/api": "2.11.1",
+    "@tauri-apps/plugin-clipboard-manager": "2.3.2",
+    "qrcode": "1.5.4"
   }
 }

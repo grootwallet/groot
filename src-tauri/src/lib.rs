@@ -19,6 +19,7 @@ pub fn run() {
         .manage(wallet::AppState::default())
         .invoke_handler(tauri::generate_handler![
             wallet::wallet_exists,
+            wallet::wallet_lock,
             wallet::wallet_profiles,
             wallet::wallet_select,
             wallet::wallet_generate_mnemonic,
@@ -29,6 +30,7 @@ pub fn run() {
             wallet::wallet_snapshot,
             wallet::wallet_sync,
             wallet::wallet_notifications,
+            wallet::wallet_notifications_ack,
             wallet::address_create,
             wallet::address_discard,
             wallet::coin_set_frozen,

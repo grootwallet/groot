@@ -21,11 +21,11 @@ Status: pre-release review; unresolved items are release blockers.
 ## Required controls
 
 - Rust owns secrets, descriptors, PSBT validation, signing, persistence, network checks, and broadcast.
-- HWI uses fixed argument arrays, null stdin, bounded concurrent output, timeout/kill, discarded stderr, exact fingerprint matching, and explicit chain selection.
+- HWI uses an absolute executable path, fixed argument arrays, null stdin, bounded concurrent output, timeout/kill, discarded stderr, exact fingerprint matching, and explicit chain selection. Mainnet packaging must additionally pin and verify the HWI artifact/version.
 - Mainnet requires a user-controlled Core backend initially, verified genesis hash, encrypted/authenticated RPC configuration, no credentials in URLs, and no silent backend fallback.
 - Review is derived from the persisted PSBT. Recipient, amount, fee, fee rate, inputs, change, network, policy, and signing path are verified before every signature.
 - Imported PSBTs must preserve the unsigned transaction, descriptor identity, known origins, allowed sighash, and absence of hostile finalization data.
-- Secrets are device-bound and credential-wrapped; authentication is throttled; deletion is scoped and recoverability is proven independently.
+- Secrets are device-bound and credential-wrapped; wallet-scoped authentication throttling survives restarts; unlock sessions are wallet-bound and idle-expiring; deletion requires fresh credential verification and multisig recoverability is proven independently.
 - Reproducible locked builds, least-privilege CI, artifact hashes/signatures, dependency review, SBOM, and external security review are required.
 
 ## Residual risks requiring explicit acceptance

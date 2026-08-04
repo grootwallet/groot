@@ -197,6 +197,7 @@ test('custom fees validate and wallet deletion requires typed confirmation', asy
 
   await page.goto('/settings');
   await page.getByRole('button', { name: 'Delete', exact: true }).click();
+  await page.getByLabel('Passphrase / PIN', { exact: true }).fill('prototype-passphrase');
   await page.getByLabel('Type DELETE to confirm').fill('delete');
   await expect(page.getByRole('button', { name: 'Delete wallet' })).toBeDisabled();
   await page.getByLabel('Type DELETE to confirm').fill('DELETE');
@@ -287,6 +288,8 @@ test('light and dark theme tokens keep readable text contrast', async ({ page })
 
     await page.goto('/unlock');
     await expect(page.locator('html')).toHaveAttribute('data-theme', theme.toLowerCase());
+    await expect(page.getByRole('heading', { name: 'Welcome back' })).toBeVisible();
+    await expect(page.getByRole('textbox', { name: 'Passphrase / PIN' })).toBeVisible();
     const unlockRatios = await page.evaluate(() => {
       const rgb = (value: string) => {
         if (value.startsWith('color(')) {
