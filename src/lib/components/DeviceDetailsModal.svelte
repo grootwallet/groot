@@ -3,15 +3,17 @@
   import type { CosignerDraft, CosignerSource } from '$lib/multisig/policy';
   import type { CosignerHealthCheck } from '$lib/wallet';
   import Button from './Button.svelte';
+  import LocalTimestamp from './LocalTimestamp.svelte';
   import Modal from './Modal.svelte';
 
-  let { signer, health, checking, onclose, oncheck, oncopy } = $props<{
+  let { signer, health, checking, onclose, oncheck, oncopy, history = [] } = $props<{
     signer: CosignerDraft | null;
     health: CosignerHealthCheck | null;
     checking: boolean;
     onclose: () => void;
     oncheck: () => void;
     oncopy: () => void;
+    history?: CosignerHealthCheck[];
   }>();
 
   function sourceName(source: CosignerSource) {
@@ -38,10 +40,16 @@
         <div class="public-key-detail"><dt>Public account key</dt><dd><code>{signer.xpub}</code><button aria-label="Copy public account key" onclick={oncopy}><Copy size={14}/></button></dd></div>
       </dl>
       <section class="health-card" aria-live="polite">
-        <div class="health-heading"><span class:checked={!!health && health.status !== 'attention'} class:attention={health?.status === 'attention'}><CheckCircle2 size={18}/></span><div><strong>Device health</strong><small>{health ? `Last checked ${new Date(health.checkedAt).toLocaleString()}` : 'Not checked in this session'}</small></div></div>
+        <div class="health-heading"><span class:checked={!!health && health.status !== 'attention'} class:attention={health?.status === 'attention'}><CheckCircle2 size={18}/></span><div><strong>Device health</strong><small>{#if health}Last checked <LocalTimestamp value={health.checkedAt}/>{:else}Not checked in this session{/if}</small></div></div>
         <p>{health?.summary ?? 'Run a check to verify the saved identity and current connection where available.'}</p>
         <Button variant="secondary" class="full" disabled={checking} onclick={oncheck}><RefreshCw size={15} class={checking ? 'spin' : ''}/>{checking ? 'Checking…' : 'Run health check'}</Button>
       </section>
+      {#if history.length}
+        <section class="health-history" aria-label="Health check history">
+          <div><strong>Recent checks</strong><small>This app session</small></div>
+          <ol>{#each history as entry}<li class:attention={entry.status === 'attention'}><span>{entry.status === 'attention' ? 'Needs attention' : entry.status === 'record_valid' ? 'Record valid' : 'Healthy'}</span><LocalTimestamp value={entry.checkedAt}/><small>{entry.summary}</small></li>{/each}</ol>
+        </section>
+      {/if}
     </div>
   {/if}
 </Modal>

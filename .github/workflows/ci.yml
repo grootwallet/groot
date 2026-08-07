@@ -32,10 +32,13 @@ jobs:
           sudo apt-get install -y --no-install-recommends ripgrep
       - run: pnpm install --frozen-lockfile
       - run: pnpm audit --prod --audit-level high
-      - run: pnpm validate
-      - run: pnpm test:coverage
+      - name: Static boundaries, release gates, and build
+        run: pnpm validate
+      - name: Unit and domain-policy coverage (pyramid base)
+        run: pnpm test:coverage
       - run: pnpm exec playwright install --with-deps chromium webkit
-      - run: pnpm test:e2e
+      - name: Browser acceptance tests (pyramid top)
+        run: pnpm test:acceptance
 
   rust:
     runs-on: ubuntu-latest
@@ -65,7 +68,8 @@ jobs:
           workspaces: src-tauri
       - run: cargo fmt --check
       - run: cargo clippy --locked --all-targets --all-features -- -D warnings
-      - run: cargo test --locked --all-features
+      - name: Rust unit and integration tests (pyramid base and middle)
+        run: cargo test --locked --all-features
       - name: Install security and coverage tools
         run: |
           cargo install cargo-audit --locked --version 0.22.2

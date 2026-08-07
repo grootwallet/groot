@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { ArrowLeft, LockKeyhole, Plus, Trash2 } from '@lucide/svelte';
-  import { goto } from '$app/navigation';
+  import { LockKeyhole, Trash2 } from '@lucide/svelte';
+  import { afterNavigate, goto } from '$app/navigation';
   import { onDestroy, onMount } from 'svelte';
   import Button from '$lib/components/Button.svelte';
   import Modal from '$lib/components/Modal.svelte';
@@ -19,34 +19,35 @@
   let profiles = $state<WalletProfile[]>([]);
   let selectedWalletId = $state<string | null>(null);
   let selectedProfile = $derived(profiles.find((wallet) => wallet.id === selectedWalletId));
+  let isSoftwareWallet = $derived(selectedProfile?.kind === 'single_key');
+  let credentialLabel = $derived(isSoftwareWallet ? 'Wallet passphrase' : 'App PIN');
+  let credentialPlaceholder = $derived(isSoftwareWallet ? 'Enter wallet passphrase' : 'Enter app PIN');
 
-  onMount(async () => {
-    if (!await walletService.exists()) { await goto('/welcome'); return; }
+  async function loadProfiles() {
     const registry = await walletService.profiles();
     profiles = registry.wallets;
     selectedWalletId = registry.selectedWalletId;
+  }
+
+  onMount(async () => {
+    if (!await walletService.exists()) { await goto('/welcome'); return; }
+    await loadProfiles();
   });
+  afterNavigate(() => { void loadProfiles(); });
 
   onDestroy(() => {
     credential = '';
     resetConfirmation = '';
   });
 
-  async function selectWallet(walletId: string) {
-    if (!walletId || walletId === selectedWalletId) return;
-    await walletService.selectWallet(walletId);
-    selectedWalletId = walletId;
-    credential = '';
-    error = '';
-  }
-
   async function unlock() {
     busy = true; error = '';
     try {
       await walletService.unlock(credential);
       credential = '';
-      const next = page.url.searchParams.get('next');
-      await goto(next === '/multisig' ? '/multisig' : '/');
+      const requested = page.url.searchParams.get('next');
+      const next = requested?.startsWith('/') && !requested.startsWith('//') && requested !== '/multisig' ? requested : '/';
+      await goto(next);
     }
     catch (cause) { error = cause instanceof Error ? cause.message : 'Could not unlock wallet.'; credential = ''; }
     finally { busy = false; }
@@ -69,28 +70,24 @@
   }
 </script>
 
-<div class="onboarding-overlay">
-  <header class="onboarding-brand"><span class="brand-mark">₿</span><span>Satchel</span><small>REGTEST</small></header>
+<div class="onboarding-overlay unlock-overlay">
   <main class="onboarding-card">
-    <button class="back-link" onclick={() => goto('/welcome?add=1')}><ArrowLeft size={16}/>Wallets</button>
-    <span class="sign-icon"><LockKeyhole size={25} /></span>
     <span class="setup-step">WALLET LOCKED</span>
-    <h1>Welcome back</h1>
-    <p>Enter the passphrase / PIN for {selectedProfile?.name ?? 'the selected wallet'}.</p>
-    {#if profiles.length > 1}<label class="field unlock-wallet-picker"><span>Wallet</span><select aria-label="Wallet to unlock" value={selectedWalletId ?? ''} onchange={(event) => selectWallet(event.currentTarget.value)}>{#each profiles as profile}<option value={profile.id}>{profile.name} · {profile.kind === 'multisig' ? 'Multisig' : 'Single-key'}</option>{/each}</select></label>{/if}
+    <span class="sign-icon"><LockKeyhole size={25} /></span>
+    <h1>{selectedProfile?.name ?? 'Unlock wallet'}</h1>
+    <p>{#if isSoftwareWallet}Enter this wallet’s passphrase to continue.{:else}Enter this wallet’s app PIN to continue.{/if}</p>
     {#if isPrototypeWallet}<p class="prototype-hint">UI prototype PIN: <code>prototype-passphrase</code></p>{/if}
     <form onsubmit={(event) => { event.preventDefault(); unlock(); }}>
-      <PasswordField label="Passphrase / PIN" bind:value={credential} placeholder="Enter wallet passphrase / PIN" autocomplete="current-password" {error} oninput={() => error = ''}/>
-      <Button type="submit" size="large" class="full" disabled={!credential || busy}>{busy ? 'Unlocking…' : 'Unlock wallet'}</Button>
+      <PasswordField label={credentialLabel} tooltip={isSoftwareWallet ? 'This BIP39 passphrase is required with your 24 recovery words and also unlocks Satchel. A different passphrase opens a different wallet.' : 'This app PIN protects local Satchel data only. It is not a hardware-wallet passphrase and is not part of a signer seed backup.'} bind:value={credential} placeholder={credentialPlaceholder} autocomplete="current-password" {error} oninput={() => error = ''}/>
+      <Button type="submit" size="large" class="full" disabled={!credential} loading={busy} loadingLabel="Unlocking wallet…">Unlock wallet</Button>
     </form>
-    <button class="locked-add" onclick={() => goto('/welcome?add=1')}><Plus size={14}/>Create or recover another wallet</button>
     {#if defaultConfig.network === 'regtest'}<button class="locked-reset" onclick={() => showReset = true}><Trash2 size={14}/>Delete this regtest wallet</button>{/if}
   </main>
   <footer class="onboarding-footer">Keys stay on this device · Open source</footer>
 </div>
 
 <Modal open={showReset} title="Delete this regtest wallet?" description={selectedProfile ? `Remove ${selectedProfile.name} from this device.` : 'Use this only for disposable local testing.'} onclose={() => { showReset = false; resetConfirmation = ''; }}>
-  <div class="warning-box danger"><strong>This removes the encrypted secret and wallet database from this device.</strong> It cannot be undone unless you have the correct 24 words and passphrase.</div>
+  <div class="warning-box danger"><strong>This removes the encrypted wallet data from this device.</strong> {#if isSoftwareWallet}It cannot be undone unless you have the correct 24 recovery words and wallet passphrase.{:else}It cannot be undone unless you have the public wallet backup and access to the required signer or signers.{/if}</div>
   <label class="field"><span>Type RESET REGTEST to confirm</span><input bind:value={resetConfirmation} placeholder="RESET REGTEST" autocomplete="off" /></label>
-  <div class="modal-footer"><Button variant="secondary" onclick={() => { showReset = false; resetConfirmation = ''; }}>Cancel</Button><Button variant="danger" disabled={resetConfirmation !== 'RESET REGTEST' || resetting} onclick={resetRegtestWallet}>{resetting ? 'Deleting…' : 'Delete test wallet'}</Button></div>
+  <div class="modal-footer"><Button variant="secondary" onclick={() => { showReset = false; resetConfirmation = ''; }}>Cancel</Button><Button variant="danger" disabled={resetConfirmation !== 'RESET REGTEST'} loading={resetting} loadingLabel="Deleting…" onclick={resetRegtestWallet}>Delete test wallet</Button></div>
 </Modal>

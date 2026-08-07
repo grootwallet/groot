@@ -22,11 +22,16 @@ fn regtest_dir() -> PathBuf {
 
 fn rpc() -> Client {
     let port = std::env::var("SATCHEL_RPC_PORT").unwrap_or_else(|_| "18443".to_owned());
-    Client::new(
-        &format!("http://127.0.0.1:{port}"),
-        Auth::CookieFile(regtest_dir().join("regtest/.cookie")),
-    )
-    .expect("regtest RPC client")
+    let (username, password) = Auth::CookieFile(regtest_dir().join("regtest/.cookie"))
+        .get_user_pass()
+        .expect("read regtest cookie");
+    let mut builder = jsonrpc::minreq_http::MinreqHttpTransport::builder()
+        .url(&format!("http://127.0.0.1:{port}"))
+        .expect("regtest RPC URL");
+    if let Some(username) = username {
+        builder = builder.basic_auth(username, password);
+    }
+    Client::from_jsonrpc(jsonrpc::Client::with_transport(builder.build()))
 }
 
 fn sync(wallet: &mut PersistedWallet<Connection>, db: &mut Connection) {
@@ -182,4 +187,107 @@ fn funds_builds_signs_and_broadcasts_a_real_two_of_three_psbt() {
     assert!(coordinator
         .transactions()
         .any(|transaction| transaction.tx_node.txid == txid));
+
+    let mut replacement_builder = coordinator
+        .build_fee_bump(txid)
+        .expect("the original transaction signals RBF");
+    replacement_builder.fee_rate(FeeRate::from_sat_per_vb(5).unwrap());
+    let mut replacement = replacement_builder.finish().expect("replacement PSBT");
+    for signer in 0..2 {
+        Wallet::create(
+            descriptor(&keys, 0, Some(signer)),
+            descriptor(&keys, 1, Some(signer)),
+        )
+        .network(Network::Regtest)
+        .create_wallet_no_persist()
+        .unwrap()
+        .sign(
+            &mut replacement,
+            SignOptions {
+                trust_witness_utxo: true,
+                try_finalize: false,
+                ..SignOptions::default()
+            },
+        )
+        .expect("replacement partial signature");
+    }
+    assert!(coordinator
+        .finalize_psbt(&mut replacement, SignOptions::default())
+        .expect("finalize replacement"));
+    let replacement_tx = replacement.extract_tx().expect("extract replacement");
+    let replacement_txid = rpc
+        .send_raw_transaction(&replacement_tx)
+        .expect("broadcast replacement");
+    assert_ne!(replacement_txid, txid);
+    sync(&mut coordinator, &mut db);
+
+    let child_input = coordinator
+        .list_unspent()
+        .filter(|output| output.outpoint.txid == replacement_txid)
+        .max_by_key(|output| output.txout.value)
+        .expect("replacement has wallet-controlled change");
+    let child_outpoint = child_input.outpoint;
+    let child_destination = coordinator
+        .reveal_next_address(KeychainKind::Internal)
+        .address
+        .script_pubkey();
+    let mut child_builder = coordinator.build_tx();
+    child_builder
+        .add_utxo(child_outpoint)
+        .expect("add CPFP input")
+        .manually_selected_only()
+        .drain_to(child_destination)
+        .fee_rate(FeeRate::from_sat_per_vb(10).unwrap());
+    let mut child = child_builder.finish().expect("CPFP PSBT");
+    for signer in 0..2 {
+        Wallet::create(
+            descriptor(&keys, 0, Some(signer)),
+            descriptor(&keys, 1, Some(signer)),
+        )
+        .network(Network::Regtest)
+        .create_wallet_no_persist()
+        .unwrap()
+        .sign(
+            &mut child,
+            SignOptions {
+                trust_witness_utxo: true,
+                try_finalize: false,
+                ..SignOptions::default()
+            },
+        )
+        .expect("CPFP partial signature");
+    }
+    assert!(coordinator
+        .finalize_psbt(&mut child, SignOptions::default())
+        .expect("finalize CPFP"));
+    let child_tx = child.extract_tx().expect("extract CPFP");
+    let child_txid = rpc.send_raw_transaction(&child_tx).expect("broadcast CPFP");
+    rpc.generate_to_address(1, &mining)
+        .expect("mine replacement package");
+    sync(&mut coordinator, &mut db);
+    assert!(coordinator
+        .get_tx(replacement_txid)
+        .unwrap()
+        .chain_position
+        .is_confirmed());
+    assert!(coordinator
+        .get_tx(child_txid)
+        .unwrap()
+        .chain_position
+        .is_confirmed());
+
+    let expected_balance = coordinator.balance().total();
+    let mut recovered_db = Connection::open_in_memory().unwrap();
+    let mut recovered = Wallet::create(descriptor(&keys, 0, None), descriptor(&keys, 1, None))
+        .network(Network::Regtest)
+        .lookahead(50)
+        .create_wallet(&mut recovered_db)
+        .expect("fresh recovery wallet");
+    sync(&mut recovered, &mut recovered_db);
+    assert_eq!(recovered.balance().total(), expected_balance);
+    assert!(recovered
+        .get_tx(child_txid)
+        .unwrap()
+        .chain_position
+        .is_confirmed());
 }

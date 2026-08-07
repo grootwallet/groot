@@ -27,6 +27,16 @@ zeroize = "1"
 tauri-plugin-clipboard-manager = "2"
 tauri-plugin-dialog = "2.7.2"
 url = "2"
+# Enables rustls for the already-transitive minreq transport used by bitcoincore-rpc.
+# This keeps remote RPC TLS inside the existing audited HTTP client rather than adding another client.
+minreq = { version = "=2.14.1", features = ["https-rustls"] }
+# Reviewed in ADR 0016: no build script, forbids unsafe code, MIT, and implements
+# the Blockchain Commons UR v2 fountain/Bytewords reference vectors.
+ur = "=0.4.1"
+# Enables the upstream rust-bitcoin JSON-RPC SOCKS5 transport for explicit Tor onion RPC.
+# `socks 0.3.4` was source-reviewed; no build script or process execution is present.
+# Direct RPC explicitly uses minreq because this feature changes simple_http globally.
+jsonrpc = { version = "=0.18.0", features = ["proxy"] }
 
 [target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
 security-framework = { path = "vendor/security-framework" }

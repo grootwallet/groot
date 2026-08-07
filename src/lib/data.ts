@@ -23,7 +23,7 @@ export let receiveAddresses: ReceiveAddress[] = [
 
 export const utxos: Utxo[] = [
   { outpoint: 'f7c42c16...a1ec:0', amount: 1_250_000, confirmations: 286, address: 'tb1q2la...p29a', label: 'Savings', frozen: false },
-  { outpoint: 'c807a142...52ad:1', amount: 842_150, confirmations: 94, address: 'tb1q6fn...w9s2', label: 'Personal', frozen: false },
+  { outpoint: 'c807a142...52ad:1', amount: 842_150, confirmations: 94, address: 'tb1q2la...p29a', label: 'Savings top-up', frozen: false },
   { outpoint: '12fed941...16ba:0', amount: 389_090, confirmations: 12, address: 'tb1q1jd...a04q', label: 'Refund', frozen: false }
 ];
 

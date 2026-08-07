@@ -7,7 +7,7 @@ export type FeeRate = number & { readonly __brand: 'SatPerVbyte' };
 
 export type WalletSnapshot = {
   network: SupportedNetwork;
-  balance: { confirmed: Sats; trustedPending: Sats; total: Sats };
+  balance: { confirmed: Sats; pending: Sats; trustedPending: Sats; total: Sats };
   transactions: Transaction[];
   utxos: Utxo[];
   receiveAddresses: ReceiveAddress[];
@@ -38,6 +38,7 @@ export type BroadcastResult = {
 };
 
 export type CoinSelection = { mode: 'auto' } | { mode: 'manual'; outpoints: string[] };
+export type AccelerationMethod = 'rbf' | 'cpfp';
 
 export type HardwareDevice = {
   id: string;
@@ -45,6 +46,26 @@ export type HardwareDevice = {
   model: string;
   fingerprint: string | null;
   connected: boolean;
+  status: 'ready' | 'needs_pin' | 'needs_passphrase' | 'needs_companion' | 'needs_device_unlock' | 'not_ready';
+  message: string;
+  action: 'import' | 'prompt_pin' | 'confirm_empty_passphrase' | 'retry' | 'none';
+};
+
+export type ExternalSignerSource = 'usb' | 'qr' | 'file' | 'manual';
+export type ExternalSigner = {
+  label: string;
+  fingerprint: string;
+  xpub: string;
+  derivationPath: string;
+  source: ExternalSignerSource;
+  deviceType: string | null;
+};
+export type ExternalSignerWallet = {
+  version: number;
+  name: string;
+  signer: ExternalSigner;
+  externalDescriptor: string;
+  internalDescriptor: string;
 };
 
 export type CosignerHealthCheck = {
@@ -110,12 +131,22 @@ export type WalletRegistry = {
   version: number;
   selectedWalletId: string | null;
   wallets: WalletProfile[];
+  inactivityTimeoutMinutes: number;
 };
+export type CoreNodeConfig = {
+  backend: { type: 'local_core' | 'remote_core'; url: string };
+  auth: 'cookie' | 'user_pass';
+  username: string | null;
+  torProxy?: string | null;
+};
+export type NodeStatus = { connected: boolean; blocks: number; backend: CoreNodeConfig };
+export type RecoveryScanSettings = { birthdayHeight: number; gapLimit: number };
 
 export type WalletEvent =
   | { type: 'payment_received'; txid: string; amount: Sats; balance: Sats }
   | { type: 'first_confirmation'; txid: string; balance: Sats }
-  | { type: 'transaction_broadcast'; txid: string; balance: Sats };
+  | { type: 'transaction_broadcast'; txid: string; balance: Sats }
+  | { type: 'wallet_updated'; walletKind: WalletProfile['kind']; snapshot: WalletSnapshot };
 
 export type WalletErrorCode =
   | 'invalid_credential'
@@ -125,6 +156,7 @@ export type WalletErrorCode =
   | 'address_not_discardable'
   | 'network_unavailable'
   | 'wallet_locked'
+  | 'invalid_inactivity_timeout'
   | 'wallet_not_found'
   | 'invalid_mnemonic'
   | 'invalid_label'
@@ -142,7 +174,18 @@ export type WalletErrorCode =
   | 'duplicate_fingerprint'
   | 'duplicate_xpub'
   | 'invalid_descriptor'
+  | 'invalid_signer_import'
+  | 'import_too_large'
+  | 'private_material_rejected'
+  | 'invalid_fingerprint'
+  | 'invalid_derivation_path'
+  | 'wrong_network'
+  | 'invalid_node_config'
   | 'hardware_unavailable'
+  | 'invalid_hardware_request'
+  | 'hardware_pin_rejected'
+  | 'hardware_challenge_expired'
+  | 'hardware_wallet_selection_required'
   | 'malformed_psbt'
   | 'psbt_too_large'
   | 'proposal_mismatch'
@@ -153,6 +196,7 @@ export type WalletErrorCode =
   | 'finalization_failed'
   | 'rate_limited'
   | 'invalid_backup'
+  | 'invalid_ur'
   | 'backup_too_large'
   | 'backup_mismatch'
   | 'confirmation_mismatch'
@@ -162,6 +206,7 @@ export type WalletErrorCode =
   | 'invalid_signer_count'
   | 'unknown_signer'
   | 'duplicate_signer'
+  | 'recovery_signer_reused'
   | 'invalid_delay'
   | 'invalid_key'
   | 'policy_too_complex'
@@ -178,6 +223,7 @@ export class WalletError extends Error {
 export interface WalletPort {
   exists(): Promise<boolean>;
   profiles(): Promise<WalletRegistry>;
+  saveInactivityTimeout(minutes: number): Promise<WalletRegistry>;
   selectWallet(walletId: string): Promise<WalletProfile>;
   generateMnemonic(): Promise<MnemonicPresentation>;
   cancelOnboarding(): Promise<void>;
@@ -187,23 +233,47 @@ export interface WalletPort {
   lock(): Promise<void>;
   deleteWallet(credential: string, confirmation: string): Promise<void>;
   resetRegtestWallet(confirmation: string): Promise<void>;
+  nodeConfig(): Promise<CoreNodeConfig>;
+  saveNodeConfig(config: CoreNodeConfig, password: string, credential: string): Promise<NodeStatus>;
+  testNodeConnection(): Promise<NodeStatus>;
+  recoveryScanSettings(): Promise<RecoveryScanSettings>;
+  saveRecoveryScanSettings(birthdayHeight: number, gapLimit: number, credential: string): Promise<RecoveryScanSettings>;
+  fullRescan(credential: string): Promise<WalletSnapshot>;
   snapshot(): Promise<WalletSnapshot>;
   sync(): Promise<WalletSnapshot>;
   createAddress(label: string): Promise<ReceiveAddress>;
   discardAddress(id: number): Promise<void>;
   estimateFees(): Promise<FeeEstimates>;
   setCoinFrozen(outpoint: string, frozen: boolean): Promise<void>;
+  setMultisigCoinFrozen(outpoint: string, frozen: boolean): Promise<void>;
   preparePayment(recipient: string, amount: Sats, feeRate: FeeRate, coinSelection?: CoinSelection): Promise<PaymentProposal>;
+  prepareAcceleration(txid: string, method: AccelerationMethod, feeRate: FeeRate): Promise<PaymentProposal>;
   signAndBroadcast(proposalId: string, credential: string): Promise<BroadcastResult>;
   listHardwareDevices(): Promise<HardwareDevice[]>;
+  promptHardwarePin(deviceId: string): Promise<string>;
+  sendHardwarePin(challengeId: string, pinPositions: string): Promise<void>;
   checkHardwareCosigner(cosigner: CosignerDraft): Promise<CosignerHealthCheck>;
-  importHardwareCosigner(deviceId: string, label: string): Promise<CosignerDraft>;
+  importHardwareCosigner(deviceId: string, label: string, allowEmptyPassphrase?: boolean): Promise<CosignerDraft>;
+  parseExternalSignerImport(encoded: string, label: string, source: ExternalSignerSource): Promise<ExternalSigner>;
+  importHardwareExternalSigner(deviceId: string, label: string, allowEmptyPassphrase?: boolean): Promise<ExternalSigner>;
+  createExternalSignerWallet(name: string, signer: ExternalSigner, credential: string): Promise<ExternalSignerWallet>;
+  externalSignerWallet(): Promise<ExternalSignerWallet>;
+  externalSignerProposals(): Promise<MultisigProposal[]>;
+  importExternalSignerProposal(proposalId: string, signedPsbt: string): Promise<MultisigProposal>;
+  signExternalWithHardware(proposalId: string, deviceId: string): Promise<MultisigProposal>;
+  broadcastExternalSignerProposal(proposalId: string, credential: string): Promise<BroadcastResult>;
+  cancelExternalSignerProposal(proposalId: string): Promise<void>;
   previewMultisig(policy: PolicyDraft): Promise<MultisigPreview>;
   analyzeRecoveryPolicy(template: RecoveryTemplate, cosigners: CosignerDraft[]): Promise<RecoveryPolicyAnalysis>;
   createMultisig(policy: PolicyDraft, credential: string): Promise<MultisigWallet>;
   createRecoveryMultisig(name: string, template: RecoveryTemplate, cosigners: CosignerDraft[], credential: string): Promise<MultisigWallet>;
   multisigWallet(): Promise<MultisigWallet | null>;
   exportMultisig(credential: string): Promise<string>;
+  exportMultisigBsms(credential: string): Promise<string>;
+  savePublicBackup(suggestedFilename: string, content: string): Promise<boolean>;
+  printPublicBackup(): Promise<void>;
+  inspectMultisigBsms(encodedBackup: string): Promise<RecoveryDrill>;
+  recoverMultisigBsms(name: string, encodedBackup: string, credential: string): Promise<MultisigWallet>;
   recoveryDrill(encodedBackup: string): Promise<RecoveryDrill>;
   recoverMultisig(encodedBackup: string, credential: string): Promise<MultisigWallet>;
   deleteMultisig(credential: string, confirmation: string): Promise<void>;
@@ -211,12 +281,15 @@ export interface WalletPort {
   syncMultisig(): Promise<WalletSnapshot>;
   createMultisigAddress(label: string): Promise<ReceiveAddress>;
   discardMultisigAddress(id: number): Promise<void>;
-  prepareMultisigPayment(recipient: string, amount: Sats, feeRate: FeeRate): Promise<MultisigProposal>;
+  prepareMultisigPayment(recipient: string, amount: Sats, feeRate: FeeRate, coinSelection?: CoinSelection): Promise<MultisigProposal>;
+  prepareMultisigAcceleration(txid: string, method: AccelerationMethod, feeRate: FeeRate): Promise<MultisigProposal>;
   multisigProposals(): Promise<MultisigProposal[]>;
   importMultisigProposal(proposalId: string, signedPsbt: string): Promise<MultisigProposal>;
   signMultisigWithHardware(proposalId: string, deviceId: string): Promise<MultisigProposal>;
   broadcastMultisigProposal(proposalId: string, credential: string): Promise<BroadcastResult>;
   cancelMultisigProposal(proposalId: string): Promise<void>;
+  encodePsbtUr(psbt: string, fragmentBytes?: number): Promise<string[]>;
+  decodePsbtUr(frames: string[]): Promise<string>;
   subscribe(listener: (event: WalletEvent) => void): () => void;
 }
 

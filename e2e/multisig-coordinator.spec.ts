@@ -15,7 +15,7 @@ test('spends end-to-end from the ready-made demo vault', async ({ page }) => {
   await page.getByRole('link', { name: 'Send', exact: true }).click();
   await page.getByLabel('Bitcoin address').fill('bcrt1qdummy00085n8k2r7v4cx9s6jlawephgzuqf5t8ul');
   await page.getByLabel('Amount').fill('50000');
-  await page.getByRole('button', { name: 'Review multisig payment' }).click();
+  await page.getByRole('button', { name: 'Review payment' }).click();
   for (const progress of ['1 of 2 collected', '2 of 2 collected']) {
     await page.getByRole('button', { name: 'Sign with device' }).click();
     await page.getByRole('button', { name: /Virtual Coldcard/ }).click();
@@ -25,6 +25,23 @@ test('spends end-to-end from the ready-made demo vault', async ({ page }) => {
   await page.getByRole('button', { name: 'Finalize & broadcast' }).click();
   await expect(page.getByRole('heading', { name: 'Transaction broadcast' })).toBeVisible();
   await expect(page.getByText('Balance 2,429,700 sats')).toBeVisible();
+});
+
+test('keeps advanced wallet actions compact and makes both descriptors inspectable', async ({ page }) => {
+  await page.goto('/multisig');
+  await page.getByRole('button', { name: 'More wallet actions' }).click();
+  await expect(page.getByRole('menuitem', { name: /Show descriptors/ })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: /Export & verify/ })).toBeVisible();
+  await page.getByRole('menuitem', { name: /Show descriptors/ }).click();
+  const descriptors = page.getByRole('dialog', { name: 'Wallet descriptors' });
+  await expect(descriptors.getByText('Portable wallet descriptor', { exact: true })).toBeVisible();
+  await expect(descriptors.getByText('/<0;1>/*', { exact: false })).toBeVisible();
+  await descriptors.getByText('View separate receive and change descriptors').click();
+  await expect(descriptors.getByText('Receive descriptor', { exact: true })).toBeVisible();
+  await expect(descriptors.getByText('Change descriptor', { exact: true })).toBeVisible();
+  await expect(descriptors.getByRole('button', { name: 'Copy receive descriptor' })).toBeVisible();
+  await expect(descriptors.getByRole('button', { name: 'Copy change descriptor' })).toBeVisible();
+  await descriptors.getByRole('button', { name: 'Close' }).click();
 });
 
 test('shows cosigner details and runs honest health checks', async ({ page }) => {
@@ -37,14 +54,98 @@ test('shows cosigner details and runs honest health checks', async ({ page }) =>
   await expect(coldcardDialog.getByText("m/48'/1'/0'/2'", { exact: true })).toBeVisible();
   await expect(coldcardDialog.getByText('Not checked in this session')).toBeVisible();
   await coldcardDialog.getByRole('button', { name: 'Run health check' }).click();
-  await expect(coldcardDialog.getByText('Connected identity matches f00dbabe.')).toBeVisible();
+  await expect(coldcardDialog.locator('.health-card').getByText('Connected identity matches f00dbabe.')).toBeVisible();
   await expect(coldcardDialog.getByText(/Last checked/)).toBeVisible();
+  await expect(coldcardDialog.getByText('Recent checks')).toBeVisible();
   await coldcardDialog.getByRole('button', { name: 'Close' }).click();
 
   await page.getByRole('button', { name: 'View Offline backup details' }).click();
   const backupDialog = page.getByRole('dialog', { name: 'Offline backup' });
   await backupDialog.getByRole('button', { name: 'Run health check' }).click();
-  await expect(backupDialog.getByText(/Physical presence cannot be checked for an offline key/)).toBeVisible();
+  await expect(backupDialog.locator('.health-card').getByText(/Physical presence cannot be checked for an offline key/)).toBeVisible();
+});
+
+test('uses the same wallet navigation for a multisig policy', async ({ page }) => {
+  await page.goto('/multisig');
+  const navigation = (page.viewportSize()?.width ?? 1180) <= 760 ? page.locator('.mobile-nav') : page.getByRole('complementary');
+  await expect(navigation.getByRole('link', { name: 'Overview' })).toBeVisible();
+  await expect(navigation.getByRole('link', { name: 'Activity' })).toBeVisible();
+  await expect(navigation.getByRole('link', { name: 'Coins' })).toBeVisible();
+  await expect(navigation.getByRole('link', { name: 'Policy', exact: true })).toBeVisible();
+  await navigation.getByRole('link', { name: 'Overview' }).click();
+  await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible();
+  await expect(page.getByText('2,481,240')).toBeVisible();
+  const isMobile = (page.viewportSize()?.width ?? 1180) <= 760;
+  const moreActions = page.getByRole('button', { name: 'More wallet actions' });
+  await expect(moreActions).toBeVisible();
+  if (isMobile) {
+    const mobileActions = page.locator('.mobile-actions');
+    await expect(mobileActions.getByRole('link', { name: 'Receive' })).toBeVisible();
+    await expect(mobileActions.getByRole('link', { name: 'Send' })).toBeVisible();
+    await expect(page.locator('.overview-inline-primary').first()).toBeHidden();
+  } else {
+    const receive = page.locator('.primary-actions .overview-inline-primary').filter({ hasText: 'Receive' });
+    const send = page.locator('.primary-actions .overview-inline-primary').filter({ hasText: 'Send' });
+    await expect(receive).toBeVisible();
+    await expect(send).toBeVisible();
+    const [moreBox, receiveBox, sendBox] = await Promise.all([
+      moreActions.boundingBox(),
+      receive.boundingBox(),
+      send.boundingBox()
+    ]);
+    expect(moreBox).not.toBeNull();
+    expect(receiveBox).not.toBeNull();
+    expect(sendBox).not.toBeNull();
+    expect(Math.abs((moreBox?.y ?? 0) - (receiveBox?.y ?? 0))).toBeLessThan(2);
+    expect(Math.abs((receiveBox?.y ?? 0) - (sendBox?.y ?? 0))).toBeLessThan(2);
+    expect(Math.abs((moreBox?.height ?? 0) - (receiveBox?.height ?? 0))).toBeLessThan(2);
+    expect(Math.abs((receiveBox?.height ?? 0) - (sendBox?.height ?? 0))).toBeLessThan(2);
+    expect(receiveBox?.x ?? 0).toBeLessThan(sendBox?.x ?? 0);
+    expect(sendBox?.x ?? 0).toBeLessThan(moreBox?.x ?? 0);
+  }
+  await moreActions.click();
+  const moreMenu = page.getByRole('menu', { name: 'More wallet actions' });
+  await expect(moreMenu).toBeVisible();
+  await page.locator('.balance-card').click({ position: { x: 20, y: 20 } });
+  await expect(moreMenu).toBeHidden();
+  await moreActions.click();
+  await page.keyboard.press('Escape');
+  await expect(moreMenu).toBeHidden();
+  await expect(moreActions).toBeFocused();
+  await navigation.getByRole('link', { name: 'Activity' }).click();
+  await expect(page.getByRole('heading', { name: 'Activity' })).toBeVisible();
+  await navigation.getByRole('link', { name: 'Coins' }).click();
+  await expect(page.getByRole('heading', { name: 'Coins' })).toBeVisible();
+});
+
+test('selects and freezes multisig coins before entering the send flow', async ({ page }) => {
+  await page.goto('/');
+  const isMobile = (page.viewportSize()?.width ?? 1180) <= 760;
+  if (isMobile) {
+    await page.getByRole('link', { name: 'Settings' }).click();
+    await page.locator('.wallet-manager').getByRole('button', { name: /Family vault/ }).click();
+  } else {
+    await page.getByRole('complementary').getByRole('button', { name: /Family vault/ }).click();
+  }
+  await page.getByLabel('App PIN', { exact: true }).fill('prototype-passphrase');
+  await page.getByRole('button', { name: 'Unlock wallet' }).click();
+  await page.getByRole('link', { name: 'Coins' }).click();
+
+  const coin = page.getByRole('checkbox', { name: 'Select Savings', exact: true });
+  await coin.check();
+  await expect(page.getByText('1,250,000 sats selected')).toBeVisible();
+  await page.getByRole('button', { name: 'Freeze selected' }).click();
+  await page.getByRole('dialog', { name: 'Freeze Savings?' }).getByRole('button', { name: 'Freeze coin' }).click();
+  await expect(page.getByRole('button', { name: 'Unfreeze Savings' })).toBeVisible();
+  await page.getByRole('button', { name: 'Unfreeze Savings' }).click();
+  await page.getByRole('dialog', { name: 'Unfreeze Savings?' }).getByRole('button', { name: 'Unfreeze coin' }).click();
+  await coin.check();
+  await page.getByRole('link', { name: 'Send selected coins' }).click();
+  await expect(page).toHaveURL(/\/multisig\/send\?coins=/);
+  await expect(page.getByText('Manual · 1 coin')).toBeVisible();
+  await page.getByRole('button', { name: /Manual · 1 coin/ }).click();
+  await page.getByRole('button', { name: 'Use automatic selection' }).click();
+  await expect(page.locator('.coin-mode').getByText('Automatic selection', { exact: true })).toBeVisible();
 });
 
 test('offers safe recipes and advanced M-of-N control', async ({ page }) => {
@@ -60,9 +161,139 @@ test('offers safe recipes and advanced M-of-N control', async ({ page }) => {
   await expect(page.getByText(/1-of-N wallet has no multisig theft protection/)).toBeVisible();
 });
 
+test('explains hardware readiness before scanning', async ({ page, browserName }) => {
+  await page.goto('/multisig/new');
+  await page.getByRole('button', { name: 'Hardware setup help' }).click();
+  const help = page.getByRole('dialog', { name: 'Prepare your hardware signer' });
+  await expect(help).toBeVisible();
+  await expect(help.getByText(/seed and private keys never leave the device/)).toBeVisible();
+  await help.getByRole('button', { name: 'Ledger' }).click();
+  await expect(help.getByText(/open Bitcoin Test/)).toBeVisible();
+  await help.getByRole('button', { name: 'BitBox02' }).click();
+  await expect(help.getByText(/confirm the same pairing code on both screens/)).toBeVisible();
+  await expect(help.getByText(/quit BitBoxApp completely/)).toBeVisible();
+  await help.getByRole('button', { name: 'Trezor' }).click();
+  await expect(help.getByText(/quit Trezor Suite completely/)).toBeVisible();
+  await expect(help.getByText(/locked Model One is expected/)).toBeVisible();
+  await expect(help.getByText(/Never enter a seed into Satchel/)).toBeVisible();
+  await help.getByRole('button', { name: 'Scan for devices' }).click();
+  const scan = page.getByRole('dialog', { name: 'Connect hardware device' });
+  await expect(scan.getByText('Unlock the signer, then release its USB connection')).toBeVisible();
+  await expect(scan.getByText(/open the wallet in BitBoxApp first/)).toBeVisible();
+  await expect(scan.getByText(/locked Trezor Model One is supported/)).toBeVisible();
+  expect(await scan.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+  expect(await scan.locator('.hardware-device-list').evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+  await expect(scan.getByRole('button', { name: /Scan again/ })).toBeVisible();
+  const modalBody = scan.locator('.modal-body');
+  expect(await modalBody.evaluate((element) => getComputedStyle(element).overflowY)).toBe('auto');
+  const modalCanScroll = await modalBody.evaluate((element) => element.scrollHeight > element.clientHeight);
+  if (modalCanScroll) {
+    if (browserName === 'webkit') {
+      await modalBody.evaluate((element) => element.scrollBy({ top: 480 }));
+    } else {
+      await modalBody.hover();
+      await page.mouse.wheel(0, 480);
+    }
+    expect(await modalBody.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+  }
+  await scan.getByRole('button', { name: 'Close' }).click();
+  expect(await page.evaluate(() => document.body.style.overflow)).toBe('');
+});
+
+test('unlocks a detected Trezor with the bounded PIN-position flow', async ({ page }) => {
+  await page.goto('/multisig/new');
+  await page.getByRole('button', { name: 'Add a cosigner' }).click();
+  await page.getByRole('button', { name: 'Connect hardware device' }).click();
+  const scan = page.getByRole('dialog', { name: 'Connect hardware device' });
+  await expect(scan.getByText('Virtual Trezor One')).toBeVisible();
+  await expect(scan.getByText('Unlock', { exact: true })).toBeVisible();
+  await scan.getByRole('button', { name: /Virtual Trezor One/ }).click();
+
+  const pin = page.getByRole('dialog', { name: 'Unlock Trezor' });
+  await expect(pin.getByText(/receives positions, never your PIN digits/)).toBeVisible();
+  await expect(pin.getByText(/grid deliberately stays blank/)).toBeVisible();
+  await expect(pin.getByRole('button', { name: 'Top left position' })).toHaveText('');
+  await pin.getByRole('button', { name: 'Top left position' }).click();
+  await pin.getByRole('button', { name: 'Bottom left position' }).click();
+  await pin.getByRole('button', { name: 'Top right position' }).click();
+  await expect(pin.getByLabel('3 PIN positions selected')).toHaveText('•••');
+  await pin.getByRole('button', { name: 'Unlock Trezor' }).click();
+  await expect(page.getByText('Hardware wallet unlocked')).toBeVisible();
+  const rescanned = page.getByRole('dialog', { name: 'Connect hardware device' });
+  await expect(rescanned).toBeVisible();
+  const unlocked = rescanned.getByRole('button', { name: /Virtual Trezor One/ });
+  await expect(unlocked.getByText('Choose wallet')).toBeVisible();
+  await unlocked.click();
+  const standard = page.getByRole('dialog', { name: 'Use Trezor standard wallet?' });
+  await standard.getByRole('button', { name: 'Use standard wallet' }).click();
+  await expect(page.getByRole('button', { name: 'View Virtual Trezor One details' })).toBeVisible();
+  await expect(page.getByText('c0ffee03')).toBeVisible();
+});
+
+test('explicitly selects a Trezor standard wallet without changing hidden wallets', async ({ page }) => {
+  await page.goto('/multisig/new');
+  await page.getByRole('button', { name: 'Add a cosigner' }).click();
+  await page.getByRole('button', { name: 'Connect hardware device' }).click();
+  const scan = page.getByRole('dialog', { name: 'Connect hardware device' });
+  const standard = scan.getByRole('button', { name: /Virtual Trezor Standard/ });
+  await expect(standard.getByText('Choose wallet')).toBeVisible();
+  await standard.click();
+
+  const choice = page.getByRole('dialog', { name: 'Use Trezor standard wallet?' });
+  await expect(choice.getByText(/does not disable, change, or reveal any hidden passphrase wallet/)).toBeVisible();
+  await choice.getByRole('button', { name: 'Use standard wallet' }).click();
+  await expect(page.getByRole('button', { name: 'View Virtual Trezor Standard details' })).toBeVisible();
+  await expect(page.getByText('c0ffee02')).toBeVisible();
+});
+
+test('imports a bounded public cosigner record from a mounted-file flow', async ({ page }) => {
+  await page.goto('/multisig/new');
+  await page.getByRole('button', { name: 'Add a cosigner' }).click();
+  await page.getByLabel('Public cosigner file').setInputFiles({
+    name: 'offline-signer.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify({
+      version: 1,
+      label: 'SD signer',
+      fingerprint: 'a1b2c3d4',
+      accountXpub: 'tpubD6NzVbkrYhZ4Y-e2e-public-key-from-sd',
+      derivationPath: "m/48'/1'/0'/2'"
+    }))
+  });
+  await expect(page.getByText('Public cosigner imported')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'View SD signer details' })).toBeVisible();
+  await page.getByRole('button', { name: 'View SD signer details' }).click();
+  await expect(page.getByRole('dialog', { name: 'SD signer' }).getByRole('definition').filter({ hasText: 'File import' })).toBeVisible();
+});
+
+test('opens and checks an imported hardware cosigner during setup', async ({ page }) => {
+  await page.goto('/multisig/new');
+  await page.getByRole('button', { name: 'Add a cosigner' }).click();
+  await page.getByRole('button', { name: 'Connect hardware device' }).click();
+  const scan = page.getByRole('dialog', { name: 'Connect hardware device' });
+  await scan.getByRole('button', { name: /Virtual Coldcard/ }).click();
+  const signerCard = page.getByRole('button', { name: 'View Virtual Coldcard details' });
+  const cardRow = signerCard.locator('..');
+  await expect(signerCard).toHaveCSS('appearance', 'none');
+  await signerCard.hover();
+  await expect(cardRow).toHaveCSS('box-shadow', /rgb\(36, 89, 169\)/);
+  const rowBounds = await cardRow.boundingBox();
+  const detailsBounds = await signerCard.boundingBox();
+  const removeBounds = await page.getByRole('button', { name: 'Remove Virtual Coldcard' }).boundingBox();
+  expect(rowBounds && detailsBounds && removeBounds).toBeTruthy();
+  expect(rowBounds!.x + rowBounds!.width).toBeGreaterThan(detailsBounds!.x + detailsBounds!.width);
+  expect(removeBounds!.x + removeBounds!.width).toBeLessThanOrEqual(rowBounds!.x + rowBounds!.width);
+  await signerCard.click();
+  const details = page.getByRole('dialog', { name: 'Virtual Coldcard' });
+  await expect(details.getByText('Not checked in this session')).toBeVisible();
+  await details.getByRole('button', { name: 'Run health check' }).click();
+  await expect(details.locator('.health-card').getByText('Connected identity matches f00dbabe.')).toBeVisible();
+  await expect(details.getByText(/Last checked/)).toBeVisible();
+});
+
 test('creates and verifies a simple 2-of-3 descriptor wallet', async ({ page }) => {
   await page.goto('/multisig/new');
-  await expect(page.getByRole('heading', { name: 'Create a multisig wallet' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Create a policy wallet' })).toBeVisible();
   await page.getByLabel('Wallet name').fill('Family vault');
 
   for (const key of keys) {
@@ -79,6 +310,8 @@ test('creates and verifies a simple 2-of-3 descriptor wallet', async ({ page }) 
   await expect(page.getByText('2 of 3 signatures')).toBeVisible();
   await page.getByRole('button', { name: 'Descriptor logic' }).click();
   await expect(page.getByTestId('descriptor-preview')).toContainText('wsh(sortedmulti(2,');
+  await expect(page.getByRole('button', { name: 'Copy receive descriptor' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Copy change descriptor' })).toBeVisible();
   await page.getByLabel('I saved the wallet descriptor').check();
   await page.getByLabel('App PIN', { exact: true }).fill('coordinator-pin');
   await page.getByLabel('Confirm app PIN', { exact: true }).fill('coordinator-pin');
@@ -88,14 +321,14 @@ test('creates and verifies a simple 2-of-3 descriptor wallet', async ({ page }) 
   await expect(page.getByRole('heading', { name: 'Family vault' })).toBeVisible();
   await expect(page.locator('header').getByText('2 of 3')).toBeVisible();
   await page.getByRole('main').getByRole('link', { name: 'Receive' }).click();
-  await expect(page.getByRole('heading', { name: 'Receive to vault' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Receive bitcoin' })).toBeVisible();
   await expect(page.getByRole('img', { name: /QR code for/ })).toBeVisible();
 
-  await page.getByRole('link', { name: 'Back to vault' }).click();
-  await page.getByRole('main').getByRole('link', { name: 'Send' }).click();
+  await page.getByRole('link', { name: 'Back to overview' }).click();
+  await page.locator('a:visible').filter({ hasText: /^Send$/ }).click();
   await page.getByLabel('Bitcoin address').fill('bcrt1qvaultdestination0000000000000000000000000');
   await page.getByLabel('Amount').fill('50000');
-  await page.getByRole('button', { name: 'Review multisig payment' }).click();
+  await page.getByRole('button', { name: 'Review payment' }).click();
   await expect(page.getByText('0 of 2 collected')).toBeVisible();
   for (const progress of ['1 of 2 collected', '2 of 2 collected']) {
     await page.getByRole('button', { name: 'Sign with device' }).click();
@@ -111,40 +344,100 @@ test('creates and verifies a simple 2-of-3 descriptor wallet', async ({ page }) 
 
   await page.getByRole('link', { name: 'Return to vault' }).click();
   await page.getByRole('link', { name: 'Export & verify' }).click();
+  const exportCard = page.locator('.backup-export-card');
+  await page.getByRole('button', { name: /Satchel JSON/ }).click();
+  await expect(exportCard.getByText('Re-authenticate this export')).toBeVisible();
+  await expect(exportCard.getByText(/exported descriptor is not encrypted/)).toBeVisible();
   await page.getByLabel('Backup app PIN', { exact: true }).fill('wrong-pin');
-  await page.getByRole('button', { name: 'Export descriptor backup' }).click();
-  await expect(page.getByText('Incorrect app PIN.')).toBeVisible();
+  await page.getByRole('button', { name: 'Authorize & prepare backup' }).click();
+  await expect(exportCard.getByText('That app PIN does not match Family vault.')).toBeVisible();
+  await expect(page.locator('.danger-card')).not.toContainText('That app PIN does not match Family vault.');
   await page.getByLabel('Backup app PIN', { exact: true }).fill('coordinator-pin');
-  await page.getByRole('button', { name: 'Export descriptor backup' }).click();
-  await expect(page.getByLabel('Descriptor backup')).toHaveValue(/"network": "regtest"/);
-  const descriptorBackup = await page.getByLabel('Descriptor backup').inputValue();
+  await page.getByRole('button', { name: 'Authorize & prepare backup' }).click();
+  await expect(page.getByLabel('Descriptor backup', { exact: true })).toHaveValue(/"network": "regtest"/);
+  const descriptorBackup = await page.getByLabel('Descriptor backup', { exact: true }).inputValue();
   const downloadPromise = page.waitForEvent('download');
-  await page.getByRole('button', { name: 'Save file' }).click();
-  await expect((await downloadPromise).suggestedFilename()).toBe('satchel-descriptor-backup.json');
+  await page.getByRole('button', { name: 'Download JSON' }).click();
+  await expect((await downloadPromise).suggestedFilename()).toBe('family-vault-backup.json');
+  await page.emulateMedia({ media: 'print' });
+  const printSheet = page.locator('.backup-print-sheet');
+  await expect(printSheet).toBeVisible();
+  await expect(exportCard).toBeHidden();
+  await expect(printSheet.getByText('Invalid Date', { exact: true })).toHaveCount(0);
+  await expect(printSheet.getByText(/UTC$/)).toBeVisible();
+  expect(await printSheet.locator('.print-descriptors').evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(' ').length)).toBe(1);
+  for (const qr of await printSheet.locator('.print-descriptors img').all()) {
+    expect(await qr.evaluate((element) => element.getBoundingClientRect().width)).toBeGreaterThanOrEqual(180);
+  }
+  await page.emulateMedia({ media: 'screen' });
+  await page.evaluate(() => { window.print = () => document.documentElement.setAttribute('data-print-called', 'true'); });
+  await page.getByRole('button', { name: 'Print / save PDF' }).click();
+  await expect(page.locator('html')).toHaveAttribute('data-print-called', 'true');
   await page.getByLabel('Backup file import').setInputFiles({
-    name: 'satchel-descriptor-backup.json',
+    name: 'family-vault-backup.json',
     mimeType: 'application/json',
     buffer: Buffer.from(descriptorBackup),
   });
-  await expect(page.getByText('Backup file loaded')).toBeVisible();
+  await expect(page.locator('.file-action.file-loaded')).toBeVisible();
+  await expect(page.locator('.file-action').getByText('family-vault-backup.json', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Run recovery drill' }).click();
   await expect(page.getByText('Backup verified')).toBeVisible();
-  await page.getByLabel('Vault name confirmation').fill('Family vault');
-  await page.getByLabel('Delete vault app PIN', { exact: true }).fill('wrong-pin');
-  await page.getByRole('button', { name: 'Delete vault from this device' }).click();
-  await expect(page.getByText('Incorrect app PIN.')).toBeVisible();
-  await page.getByLabel('Delete vault app PIN', { exact: true }).fill('coordinator-pin');
-  await page.getByRole('button', { name: 'Delete vault from this device' }).click();
+  await page.getByLabel('Wallet name confirmation').fill('Family vault');
+  await page.getByLabel('Delete wallet app PIN', { exact: true }).fill('wrong-pin');
+  await page.getByRole('button', { name: 'Delete wallet from this device' }).click();
+  await page.getByRole('dialog', { name: 'Permanently delete this wallet?' }).getByRole('button', { name: 'Delete permanently' }).click();
+  await expect(page.locator('.danger-card').getByText('That app PIN does not match Family vault.')).toBeVisible();
+  await page.getByLabel('Delete wallet app PIN', { exact: true }).fill('coordinator-pin');
+  await page.getByRole('button', { name: 'Delete wallet from this device' }).click();
+  await page.getByRole('dialog', { name: 'Permanently delete this wallet?' }).getByRole('button', { name: 'Delete permanently' }).click();
   await expect(page).toHaveURL(/\/settings$/);
-  await page.getByRole('button', { name: /Recover descriptor wallet/ }).click();
+  if ((page.viewportSize()?.width ?? 1180) <= 760) {
+    await page.locator('.wallet-manager').getByRole('button', { name: /Add wallet/ }).click();
+  } else {
+    await page.getByRole('complementary').getByRole('link', { name: /Add wallet/ }).click();
+  }
+  await page.getByRole('button', { name: 'Create new wallet' }).click();
+  await page.getByRole('link', { name: /Shared or recovery/ }).click();
+  await page.getByRole('link', { name: /Recover from backup/ }).click();
   await page.getByLabel('Recovery descriptor backup').fill(descriptorBackup);
   await page.getByRole('button', { name: 'Validate backup' }).click();
   await expect(page.getByText('Backup is valid')).toBeVisible();
   await page.getByLabel('I verified the first receive address').check();
   await page.getByLabel('New vault app PIN', { exact: true }).fill('restored-pin');
   await page.getByLabel('Confirm new vault app PIN', { exact: true }).fill('restored-pin');
-  await page.getByRole('button', { name: 'Recover vault' }).click();
+  await page.getByRole('button', { name: 'Recover wallet' }).click();
   await expect(page.getByRole('heading', { name: 'Family vault' })).toBeVisible();
+});
+
+test('exports and validates the recommended BSMS record', async ({ page }) => {
+  await page.goto('/multisig/backup');
+  await page.getByLabel('Backup app PIN', { exact: true }).fill('prototype-passphrase');
+  await page.getByRole('button', { name: 'Authorize & prepare backup' }).click();
+  await expect(page.getByLabel('Descriptor backup', { exact: true })).toHaveValue(/^BSMS 1\.0\n/);
+  await expect(page.getByLabel('Descriptor backup', { exact: true })).toHaveValue(/\/0\/\*,\/1\/\*/);
+  const downloadPromise = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Download BSMS' }).click();
+  await expect((await downloadPromise).suggestedFilename()).toBe('family-vault.bsms');
+  await page.getByRole('button', { name: 'Run recovery drill' }).click();
+  await expect(page.getByText('Backup verified')).toBeVisible();
+});
+
+test('shows one authoritative failure when a BSMS record belongs to another wallet', async ({ page }) => {
+  await page.goto('/multisig/backup');
+  await page.getByLabel('Backup app PIN', { exact: true }).fill('prototype-passphrase');
+  await page.getByRole('button', { name: 'Authorize & prepare backup' }).click();
+  const exported = await page.getByLabel('Descriptor backup', { exact: true }).inputValue();
+  const mismatched = exported.replace('/**', '/9/**');
+  await page.getByLabel('Backup file import').setInputFiles({
+    name: 'different-wallet.bsms',
+    mimeType: 'text/plain',
+    buffer: Buffer.from(mismatched),
+  });
+  await expect(page.locator('.file-action').getByText('different-wallet.bsms', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Run recovery drill' }).click();
+  await expect(page.locator('.drill-result').getByText('Backup does not match', { exact: true })).toBeVisible();
+  await expect(page.getByText('Recovery drill passed', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Delete wallet from this device' })).toBeDisabled();
 });
 
 test('reveals draft errors only after review and keeps cosigner identity readable', async ({ page }) => {
@@ -160,6 +453,14 @@ test('reveals draft errors only after review and keeps cosigner identity readabl
   await expect(page.getByText('Manual entry', { exact: true })).toBeVisible();
   await expect(page.getByText(keys[0].xpub, { exact: true })).toBeVisible();
   await expect(page.locator('.policy-errors')).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'View Coldcard details' }).click();
+  const details = page.getByRole('dialog', { name: 'Coldcard' });
+  await expect(details).toBeVisible();
+  await expect(details.getByText('Not checked in this session')).toBeVisible();
+  await details.getByRole('button', { name: 'Run health check' }).click();
+  await expect(details.getByText(/Physical presence cannot be checked for an offline key/)).toBeVisible();
+  await details.getByRole('button', { name: 'Close' }).click();
 
   await page.getByRole('button', { name: 'Review wallet' }).click();
   await expect(page.getByText('A wallet name is required.')).toBeVisible();
@@ -191,17 +492,20 @@ test('compiles and simulates guided Miniscript recovery policies', async ({ page
   await page.getByLabel('Confirm app PIN', { exact: true }).fill('policy-pin');
   await page.getByRole('button', { name: 'Create wallet' }).click();
   await page.getByRole('link', { name: 'Recovery policy lab' }).click();
-  await page.getByRole('button', { name: 'Compile & analyze policy' }).click();
-  await expect(page.getByText('Sanity checked')).toBeVisible();
-  await expect(page.getByText('After 4,320 blocks')).toBeVisible();
+  await expect(page.getByText('Experimental analysis only')).toBeVisible();
+  await expect(page.getByText('This lab never changes the selected wallet.')).toBeVisible();
+  await expect(page.getByText('Separate recovery key required')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Compile & analyze policy' })).toBeDisabled();
   await page.getByLabel('Policy template').selectOption('decaying');
   await page.getByRole('button', { name: 'Compile & analyze policy' }).click();
+  await expect(page.getByText('Sanity checked')).toBeVisible();
   await expect(page.getByText(/intentionally reduce theft resistance/)).toBeVisible();
 });
 
 test('creates a guided recovery descriptor from a visible template', async ({ page }) => {
   await page.goto('/multisig/new');
   await page.getByRole('button', { name: /Recovery path/ }).click();
+  await expect(page.getByText('Four independent keys required')).toBeVisible();
   await page.getByLabel('Wallet name').fill('Resilient vault');
   for (const key of [...keys, recoveryKey]) {
     await page.getByRole('button', { name: 'Add a cosigner' }).click();
@@ -211,6 +515,7 @@ test('creates a guided recovery descriptor from a visible template', async ({ pa
     await page.getByLabel('Account xpub').fill(key.xpub);
     await page.getByRole('button', { name: 'Add key' }).click();
   }
+  await expect(page.getByText('Recovery-only signer', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Review wallet' }).click();
   await expect(page.getByText('2 of 4 signatures')).toBeVisible();
   await page.getByRole('button', { name: 'Descriptor logic' }).click();

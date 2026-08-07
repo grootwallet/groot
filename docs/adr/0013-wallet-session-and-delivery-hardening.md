@@ -2,6 +2,8 @@
 
 Status: accepted
 
+The wallet-switch revocation clause is superseded by ADR 0017. UUID isolation and the five-minute monotonic idle deadline remain in force.
+
 ## Context
 
 Satchel supports multiple isolated wallets, persisted PSBT proposals, and webview notifications. A process-global unlock flag, restart-reset authentication delay, destructive notification drain, or UI-recomputed review field can turn otherwise correct boundaries into cross-wallet authorization, brute-force, lost-event, or transaction-intent failures.
@@ -28,6 +30,8 @@ The in-process serialization is not a cross-process file lock. Production packag
 ## Hardening addendum — 2026-08-04
 
 - A denied or unavailable Apple Keychain lookup is distinct from an absent item and must fail closed; it must never create a replacement device-wrapping key.
+- The legacy regtest-to-UUID profile migration may copy the existing device-wrapping key from its known legacy Keychain account only after that key and the submitted wallet credential authenticate the already-encrypted envelope. It never generates a replacement key, and all denial, absence, mismatch, and wrong-credential paths remain closed.
+- A macOS Keychain access error may retry the same item through the original Keychain Services API to allow native authorization after an ad-hoc development rebuild. Successfully read device keys are held in zeroizing process memory for the current launch only; denial and cancellation still fail closed.
 - Wallet databases and private metadata reject symlink/non-regular storage. SQLite connections use owner-only permissions on Unix, a busy timeout, foreign keys, untrusted-schema mode, and defensive mode.
-- HWI execution canonicalizes the configured binary, rejects group/world-writable executables on Unix, and clears the inherited environment before spawning.
+- HWI execution canonicalizes the configured binary, rejects group/world-writable executables on Unix, and clears the inherited environment before spawning. A later BitBox compatibility amendment restores only the canonical home directory resolved by Tauri because HWI must read the existing BitBoxApp pairing cache; no other ambient variable is inherited.
 - Credential and mnemonic IPC inputs are bounded. Credential fields are cleared on every attempt and route teardown.

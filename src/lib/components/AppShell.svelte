@@ -2,31 +2,39 @@
   import { page } from '$app/state';
   import { Activity, ArrowDownToLine, ArrowUpFromLine, Bitcoin, CircleDot, LayoutGrid, Plus, Settings, ShieldCheck } from '@lucide/svelte';
   import ToastHost from './ToastHost.svelte';
-  import { defaultConfig, networkName } from '$lib/config';
+  import WalletProfileList from './WalletProfileList.svelte';
+  import NetworkStatus from './NetworkStatus.svelte';
+  import ThemeToggle from './ThemeToggle.svelte';
+  import LanguageToggle from './LanguageToggle.svelte';
+  import { defaultConfig } from '$lib/config';
   import { onMount } from 'svelte';
   import { afterNavigate, goto } from '$app/navigation';
   import { isPrototypeWallet, walletService, WalletError } from '$lib/wallet';
+  import { createLiveSync, type LiveSyncController } from '$lib/wallet/live-sync';
   import { toast } from '$lib/stores/toasts';
   import { shortSats } from '$lib/data';
   import type { WalletProfile } from '$lib/wallet/contracts';
+  import { formatWalletCount, locale, t, type MessageKey } from '$lib/i18n';
   let { children } = $props();
-  const nav = [
-    { href: '/', label: 'Overview', icon: LayoutGrid },
-    { href: '/activity', label: 'Activity', icon: Activity },
-    { href: '/coins', label: 'Coins', icon: CircleDot },
-    { href: '/multisig', label: 'Vault', icon: ShieldCheck }
+  const nav: Array<{ href: string; label: MessageKey; icon: typeof LayoutGrid }> = [
+    { href: '/', label: 'overview', icon: LayoutGrid },
+    { href: '/activity', label: 'activity', icon: Activity },
+    { href: '/coins', label: 'coins', icon: CircleDot },
+    { href: '/multisig', label: 'policy', icon: ShieldCheck }
   ];
-  const active = (href: string) => href === '/multisig' ? page.url.pathname.startsWith(href) : page.url.pathname === href;
+  const active = (href: string) => href === '/multisig' ? page.url.pathname === href || page.url.pathname.startsWith('/multisig/policy') || page.url.pathname.startsWith('/multisig/backup') : page.url.pathname === href;
   let profiles = $state<WalletProfile[]>([]);
   let selectedWalletId = $state<string | null>(null);
+  let liveSync: LiveSyncController | undefined;
   let selectedProfile = $derived(profiles.find((wallet) => wallet.id === selectedWalletId));
-  let visibleNav = $derived(selectedProfile?.kind === 'multisig' ? [nav[3]] : nav);
-  let mobileItems = $derived(selectedProfile?.kind === 'multisig' ? [
-    { href: '/multisig', label: 'Vault', icon: ShieldCheck },
-    { href: '/multisig/receive', label: 'Receive', icon: ArrowDownToLine },
-    { href: '/multisig/send', label: 'Send', icon: ArrowUpFromLine }
-  ] : nav.slice(0, 3));
-  const showQuickActions = $derived(selectedProfile?.kind !== 'multisig' && page.url.pathname !== '/send' && page.url.pathname !== '/receive' && !page.url.pathname.startsWith('/multisig'));
+  let policyContext = $derived(selectedProfile?.kind === 'multisig' || page.url.pathname.startsWith('/multisig'));
+  let visibleNav = $derived(policyContext ? nav : nav.slice(0, 3));
+  let mobileItems = $derived(policyContext ? nav : nav.slice(0, 3));
+  let onboardingRoute = $derived(page.url.pathname === '/welcome');
+  let lockedRoute = $derived(page.url.pathname === '/unlock');
+  const showQuickActions = $derived(!lockedRoute && page.url.pathname !== '/send' && page.url.pathname !== '/receive' && !page.url.pathname.startsWith('/multisig'));
+  const receiveHref = $derived(selectedProfile?.kind === 'multisig' ? '/multisig/receive' : '/receive');
+  const sendHref = $derived(selectedProfile?.kind === 'multisig' ? '/multisig/send' : '/send');
 
   async function refreshProfiles() {
     try {
@@ -39,14 +47,31 @@
     }
   }
 
-  afterNavigate(() => { void refreshProfiles(); });
+  afterNavigate(() => {
+    void refreshProfiles();
+    if (!liveSync || isPrototypeWallet) return;
+    if (onboardingRoute || lockedRoute) liveSync.stop();
+    else liveSync.start();
+  });
 
   async function selectWallet(walletId: string) {
     if (!walletId || walletId === selectedWalletId) return;
     try {
       const profile = await walletService.selectWallet(walletId);
       selectedWalletId = profile.id;
-      await goto(`/unlock?next=${profile.kind === 'multisig' ? '/multisig' : '/'}`);
+      const destination = '/';
+      try {
+        if (profile.kind === 'multisig') await walletService.multisigSnapshot();
+        else await walletService.snapshot();
+        await goto(destination);
+        if (!isPrototypeWallet) liveSync?.start();
+      } catch (cause) {
+        if (cause instanceof WalletError && cause.code === 'wallet_locked') {
+          await goto(`/unlock?next=${destination}`);
+          return;
+        }
+        throw cause;
+      }
     } catch (cause) {
       toast({ title: 'Wallet not switched', description: cause instanceof Error ? cause.message : 'Could not select this wallet.', tone: 'danger' });
     }
@@ -57,6 +82,14 @@
       if (event.type === 'first_confirmation') toast({ title: 'First confirmation', description: `Transaction confirmed · Balance ${shortSats(event.balance)} sats`, tone: 'success' });
       if (event.type === 'transaction_broadcast') toast({ title: 'Transaction broadcast', description: `Balance ${shortSats(event.balance)} sats`, tone: 'success' });
     });
+    liveSync = createLiveSync(walletService, 10_000, (cause) => {
+      if (cause instanceof WalletError && cause.code === 'wallet_locked') {
+        liveSync?.stop();
+        void goto('/unlock');
+      }
+    });
+    const wakeWhenVisible = () => { if (document.visibilityState === 'visible') void liveSync?.runNow(); };
+    document.addEventListener('visibilitychange', wakeWhenVisible);
     void (async () => {
       try {
         if (!await walletService.exists()) { await goto('/welcome'); return; }
@@ -67,38 +100,43 @@
         const selected = profiles.find((wallet) => wallet.id === selectedWalletId);
         if (selected?.kind === 'multisig') {
           await walletService.multisigSnapshot();
-          if (!page.url.pathname.startsWith('/multisig') && page.url.pathname !== '/settings') await goto('/multisig');
         } else {
           await walletService.snapshot();
         }
+        if (!isPrototypeWallet) liveSync?.start();
       } catch (cause) {
         if (cause instanceof WalletError && cause.code === 'wallet_locked') await goto('/unlock');
       }
     })();
-    return unsubscribe;
+    return () => {
+      unsubscribe();
+      liveSync?.stop();
+      document.removeEventListener('visibilitychange', wakeWhenVisible);
+    };
   });
 </script>
 
-<div class="app-shell">
+<div class="app-shell" class:onboarding-shell={onboardingRoute}>
   <aside class="sidebar">
     <a class="brand" href="/"><span class="brand-mark"><Bitcoin size={18} /></span><span>Satchel</span></a>
     {#if profiles.length}
       <div class="wallet-switcher">
-        <label for="wallet-profile">Wallet</label>
-        <select id="wallet-profile" value={selectedWalletId ?? ''} onchange={(event) => selectWallet(event.currentTarget.value)}>
-          {#each profiles as profile}<option value={profile.id}>{profile.name}</option>{/each}
-        </select>
-        <a href="/welcome?add=1"><Plus size={14}/>Add wallet</a>
+        <span class="wallet-switcher-label">{t('wallets', $locale)} <strong>{formatWalletCount(profiles.length, $locale)}</strong></span>
+        <WalletProfileList {profiles} {selectedWalletId} onselect={selectWallet} compact />
+        <a href="/welcome?add=1"><Plus size={14}/>{t('addWallet', $locale)}</a>
       </div>
     {/if}
-    <nav class="side-nav">
-      {#each visibleNav as item}
-        <a href={item.href} class:active={active(item.href)}><item.icon size={17} /><span>{item.label}</span></a>
-      {/each}
-    </nav>
+    {#if !lockedRoute}
+      <nav class="side-nav">
+        {#each visibleNav as item}
+          <a href={item.href} class:active={active(item.href)} aria-current={active(item.href) ? 'page' : undefined}><item.icon size={17} /><span>{t(item.label, $locale)}</span></a>
+        {/each}
+      </nav>
+    {/if}
     <div class="sidebar-bottom">
-      <a href="/settings" class:active={active('/settings')}><Settings size={17} /><span>Settings</span></a>
-      <div class="network"><i></i><span>{networkName(defaultConfig.network)}</span></div>
+      {#if !lockedRoute}<a href="/settings" class:active={active('/settings')} aria-current={active('/settings') ? 'page' : undefined}><Settings size={17} /><span>{t('settings', $locale)}</span></a>{/if}
+      <div class="preference-toggles"><ThemeToggle /><LanguageToggle /></div>
+      <NetworkStatus network={defaultConfig.network} locked={lockedRoute} />
     </div>
   </aside>
 
@@ -107,17 +145,19 @@
     {@render children?.()}
   </main>
 
-  <nav class="mobile-nav">
+  {#if !lockedRoute}<nav class="mobile-nav" class:policy-nav={policyContext}>
     {#each mobileItems as item}
-      <a href={item.href} class:active={active(item.href)}><item.icon size={20} /><span>{item.label}</span></a>
+      <a href={item.href} class:active={active(item.href)} aria-current={active(item.href) ? 'page' : undefined}><item.icon size={20} /><span>{t(item.label, $locale)}</span></a>
     {/each}
-    <a href="/settings" class:active={active('/settings')}><Settings size={20} /><span>Settings</span></a>
-  </nav>
+    <a href="/settings" class:active={active('/settings')} aria-current={active('/settings') ? 'page' : undefined}><Settings size={20} /><span>{t('settings', $locale)}</span></a>
+  </nav>{/if}
+
+  {#if lockedRoute}<div class="locked-mobile-utilities"><ThemeToggle /><LanguageToggle /><NetworkStatus network={defaultConfig.network} locked /></div>{/if}
 
   {#if showQuickActions}
     <div class="mobile-actions">
-      <a class="mobile-action secondary" href="/receive"><ArrowDownToLine size={18} />Receive</a>
-      <a class="mobile-action primary" href="/send"><ArrowUpFromLine size={18} />Send</a>
+      <a class="mobile-action secondary" href={receiveHref}><ArrowDownToLine size={18} />{t('receive', $locale)}</a>
+      <a class="mobile-action primary" href={sendHref}><ArrowUpFromLine size={18} />{t('send', $locale)}</a>
     </div>
   {/if}
   <ToastHost />

@@ -112,6 +112,7 @@ pub enum RecoveryError {
     InvalidSignerCount,
     UnknownSigner,
     DuplicateSigner,
+    RecoverySignerReused,
     UnsafeThreshold,
     InvalidDelay,
     InvalidKey,
@@ -130,6 +131,7 @@ impl RecoveryError {
             Self::InvalidSignerCount => "invalid_signer_count",
             Self::UnknownSigner => "unknown_signer",
             Self::DuplicateSigner => "duplicate_signer",
+            Self::RecoverySignerReused => "recovery_signer_reused",
             Self::UnsafeThreshold => "unsafe_threshold",
             Self::InvalidDelay => "invalid_delay",
             Self::InvalidKey => "invalid_key",
@@ -348,6 +350,14 @@ pub fn analyze_template(
         } => {
             validate_path(immediate, &known)?;
             validate_path(&recovery.spending_path(), &known)?;
+            let immediate_signers = immediate.signer_ids.iter().collect::<HashSet<_>>();
+            if recovery
+                .signer_ids
+                .iter()
+                .any(|signer| immediate_signers.contains(signer))
+            {
+                return Err(RecoveryError::RecoverySignerReused);
+            }
             validate_delay(recovery.available_after_blocks)?;
             vec![
                 TimedSpendingPath::new(0, immediate.threshold, immediate.signer_ids.clone()),
@@ -475,6 +485,18 @@ mod tests {
         }
         assert!(analyzed.external_descriptor.contains("/0/*"));
         assert!(analyzed.internal_descriptor.contains("/1/*"));
+    }
+
+    #[test]
+    fn rejects_reusing_an_immediate_signer_as_the_recovery_key() {
+        let template = RecoveryTemplate::Recovery {
+            immediate: SpendingPath::new(2, ["key-1", "key-2", "key-3"]),
+            recovery: TimedSpendingPath::new(4_320, 1, ["key-3"]),
+        };
+        assert_eq!(
+            analyze_template(&template, &signers(3)).unwrap_err(),
+            RecoveryError::RecoverySignerReused
+        );
     }
 
     #[test]
@@ -620,6 +642,10 @@ mod tests {
             (RecoveryError::InvalidSignerCount, "invalid_signer_count"),
             (RecoveryError::UnknownSigner, "unknown_signer"),
             (RecoveryError::DuplicateSigner, "duplicate_signer"),
+            (
+                RecoveryError::RecoverySignerReused,
+                "recovery_signer_reused",
+            ),
             (RecoveryError::UnsafeThreshold, "unsafe_threshold"),
             (RecoveryError::InvalidDelay, "invalid_delay"),
             (RecoveryError::InvalidKey, "invalid_key"),

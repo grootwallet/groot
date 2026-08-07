@@ -43,3 +43,36 @@ export function selectedCoinTotal(coins: Utxo[], outpoints: string[]): number {
   const selected = new Set(outpoints);
   return coins.reduce((total, coin) => total + (selected.has(coin.outpoint) && !coin.frozen ? coin.amount : 0), 0);
 }
+
+export type AddressReuseInsight = {
+  address: string;
+  outpoints: string[];
+  labels: string[];
+  totalAmount: number;
+};
+
+export function addressReuseInsights(coins: Utxo[]): AddressReuseInsight[] {
+  const groups = new Map<string, AddressReuseInsight>();
+
+  for (const coin of coins) {
+    const address = coin.address.trim();
+    if (!address || address.toLowerCase() === 'unknown') continue;
+
+    const existing = groups.get(address);
+    if (existing) {
+      existing.outpoints.push(coin.outpoint);
+      existing.totalAmount += coin.amount;
+      if (coin.label && !existing.labels.includes(coin.label)) existing.labels.push(coin.label);
+      continue;
+    }
+
+    groups.set(address, {
+      address,
+      outpoints: [coin.outpoint],
+      labels: coin.label ? [coin.label] : [],
+      totalAmount: coin.amount
+    });
+  }
+
+  return [...groups.values()].filter((group) => group.outpoints.length > 1);
+}

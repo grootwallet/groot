@@ -9,9 +9,11 @@ use serde::{Deserialize, Serialize};
 #[cfg(not(any(target_os = "macos", target_os = "ios")))]
 use std::path::PathBuf;
 use std::{
+    collections::HashMap,
     fs::{self, File, OpenOptions},
     io::{Read, Write},
     path::Path,
+    sync::{Mutex, OnceLock},
 };
 use uuid::Uuid;
 use zeroize::Zeroizing;
@@ -33,6 +35,8 @@ pub enum SecureStoreError {
     InvalidCredential,
     #[error("secure storage is unavailable")]
     Unavailable,
+    #[error("secure storage device key was not found")]
+    DeviceKeyNotFound,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -51,9 +55,38 @@ struct Metadata {
 trait DeviceKeyProvider {
     fn get_or_create(&self, metadata_path: &Path) -> Result<Vec<u8>, SecureStoreError>;
     fn get(&self, metadata_path: &Path) -> Result<Vec<u8>, SecureStoreError>;
+    fn set(&self, metadata_path: &Path, key: &[u8]) -> Result<(), SecureStoreError>;
 }
 
 struct SystemDeviceKeyProvider;
+
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+fn device_key_cache() -> &'static Mutex<HashMap<String, Zeroizing<Vec<u8>>>> {
+    static CACHE: OnceLock<Mutex<HashMap<String, Zeroizing<Vec<u8>>>>> = OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+fn cached_device_key(account: &str) -> Option<Vec<u8>> {
+    device_key_cache()
+        .lock()
+        .ok()
+        .and_then(|cache| cache.get(account).map(|key| key.to_vec()))
+}
+
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+fn cache_device_key(account: &str, key: &[u8]) {
+    if let Ok(mut cache) = device_key_cache().lock() {
+        cache.insert(account.to_owned(), Zeroizing::new(key.to_vec()));
+    }
+}
+
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+fn remove_cached_device_key(account: &str) {
+    if let Ok(mut cache) = device_key_cache().lock() {
+        cache.remove(account);
+    }
+}
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 fn account(metadata_path: &Path) -> Result<String, SecureStoreError> {
@@ -66,28 +99,81 @@ fn account(metadata_path: &Path) -> Result<String, SecureStoreError> {
 }
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
+fn read_keychain_device_key(account: &str) -> Result<Vec<u8>, SecureStoreError> {
+    use security_framework::passwords::get_generic_password;
+
+    if let Some(key) = cached_device_key(account) {
+        return validate_device_key(key);
+    }
+
+    match get_generic_password(KEYCHAIN_SERVICE, account) {
+        Ok(key) => {
+            let key = validate_device_key(key)?;
+            cache_device_key(account, &key);
+            Ok(key)
+        }
+        Err(error) if error.code() == ERR_SEC_ITEM_NOT_FOUND => {
+            Err(SecureStoreError::DeviceKeyNotFound)
+        }
+        #[cfg(target_os = "macos")]
+        Err(_) => read_legacy_keychain_device_key(account),
+        #[cfg(target_os = "ios")]
+        Err(_) => Err(SecureStoreError::Unavailable),
+    }
+}
+
+// macOS still supports the original Keychain Services lookup API. Unlike a
+// failed SecItem query against an item owned by an older ad-hoc debug build,
+// this path gives Keychain Services another opportunity to authorize the
+// current executable. It reads the same Keychain item; it is not a weaker
+// fallback store.
+#[cfg(target_os = "macos")]
+fn read_legacy_keychain_device_key(account: &str) -> Result<Vec<u8>, SecureStoreError> {
+    use security_framework::os::macos::passwords::find_generic_password;
+
+    match find_generic_password(None, KEYCHAIN_SERVICE, account) {
+        Ok((password, _item)) => {
+            let key = validate_device_key(password.as_ref().to_vec())?;
+            cache_device_key(account, &key);
+            Ok(key)
+        }
+        Err(error) if error.code() == ERR_SEC_ITEM_NOT_FOUND => {
+            Err(SecureStoreError::DeviceKeyNotFound)
+        }
+        Err(_) => Err(SecureStoreError::Unavailable),
+    }
+}
+
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 impl DeviceKeyProvider for SystemDeviceKeyProvider {
     fn get_or_create(&self, metadata_path: &Path) -> Result<Vec<u8>, SecureStoreError> {
-        use security_framework::passwords::{get_generic_password, set_generic_password};
+        use security_framework::passwords::set_generic_password;
         let account = account(metadata_path)?;
-        match get_generic_password(KEYCHAIN_SERVICE, &account) {
-            Ok(key) => return validate_device_key(key),
-            Err(error) if error.code() == ERR_SEC_ITEM_NOT_FOUND => {}
-            Err(_) => return Err(SecureStoreError::Unavailable),
+        match read_keychain_device_key(&account) {
+            Ok(key) => return Ok(key),
+            Err(SecureStoreError::DeviceKeyNotFound) => {}
+            Err(error) => return Err(error),
         }
         let mut key = vec![0_u8; KEY_BYTES];
         OsRng.fill_bytes(&mut key);
         set_generic_password(KEYCHAIN_SERVICE, &account, &key)
             .map_err(|_| SecureStoreError::Unavailable)?;
+        cache_device_key(&account, &key);
         Ok(key)
     }
 
     fn get(&self, metadata_path: &Path) -> Result<Vec<u8>, SecureStoreError> {
-        use security_framework::passwords::get_generic_password;
-        validate_device_key(
-            get_generic_password(KEYCHAIN_SERVICE, &account(metadata_path)?)
-                .map_err(|_| SecureStoreError::Unavailable)?,
-        )
+        read_keychain_device_key(&account(metadata_path)?)
+    }
+
+    fn set(&self, metadata_path: &Path, key: &[u8]) -> Result<(), SecureStoreError> {
+        use security_framework::passwords::set_generic_password;
+        validate_device_key(key.to_vec())?;
+        let account = account(metadata_path)?;
+        set_generic_password(KEYCHAIN_SERVICE, &account, key)
+            .map_err(|_| SecureStoreError::Unavailable)?;
+        cache_device_key(&account, key);
+        Ok(())
     }
 }
 
@@ -105,7 +191,16 @@ impl DeviceKeyProvider for SystemDeviceKeyProvider {
     }
 
     fn get(&self, metadata_path: &Path) -> Result<Vec<u8>, SecureStoreError> {
-        read_sandbox_key(&sandbox_key_path(metadata_path)?)
+        let path = sandbox_key_path(metadata_path)?;
+        if !path.exists() {
+            return Err(SecureStoreError::DeviceKeyNotFound);
+        }
+        read_sandbox_key(&path)
+    }
+
+    fn set(&self, metadata_path: &Path, key: &[u8]) -> Result<(), SecureStoreError> {
+        validate_device_key(key.to_vec())?;
+        write_owner_only(&sandbox_key_path(metadata_path)?, key)
     }
 }
 
@@ -311,11 +406,67 @@ pub fn load(metadata_path: &Path, credential: &str) -> Result<Vec<u8>, SecureSto
     load_with_provider(metadata_path, credential, &SystemDeviceKeyProvider)
 }
 
+struct FixedDeviceKeyProvider(Vec<u8>);
+
+impl DeviceKeyProvider for FixedDeviceKeyProvider {
+    fn get_or_create(&self, _metadata_path: &Path) -> Result<Vec<u8>, SecureStoreError> {
+        Ok(self.0.clone())
+    }
+
+    fn get(&self, _metadata_path: &Path) -> Result<Vec<u8>, SecureStoreError> {
+        Ok(self.0.clone())
+    }
+
+    fn set(&self, _metadata_path: &Path, _key: &[u8]) -> Result<(), SecureStoreError> {
+        Err(SecureStoreError::Unavailable)
+    }
+}
+
+fn load_with_legacy_provider(
+    metadata_path: &Path,
+    legacy_metadata_path: &Path,
+    credential: &str,
+    current: &impl DeviceKeyProvider,
+    legacy: &impl DeviceKeyProvider,
+) -> Result<Vec<u8>, SecureStoreError> {
+    match load_with_provider(metadata_path, credential, current) {
+        Err(SecureStoreError::DeviceKeyNotFound) => {
+            let legacy_key = legacy.get(legacy_metadata_path)?;
+            let plaintext = load_with_provider(
+                metadata_path,
+                credential,
+                &FixedDeviceKeyProvider(legacy_key.clone()),
+            )?;
+            // Copy the same device key only after both the legacy key and user
+            // credential authenticate the existing envelope. Never rotate a
+            // missing key or make a wrong credential appear to repair a wallet.
+            current.set(metadata_path, &legacy_key)?;
+            Ok(plaintext)
+        }
+        result => result,
+    }
+}
+
+pub fn load_with_legacy_device_key(
+    metadata_path: &Path,
+    legacy_metadata_path: &Path,
+    credential: &str,
+) -> Result<Vec<u8>, SecureStoreError> {
+    load_with_legacy_provider(
+        metadata_path,
+        legacy_metadata_path,
+        credential,
+        &SystemDeviceKeyProvider,
+        &SystemDeviceKeyProvider,
+    )
+}
+
 pub fn forget_device_key(metadata_path: &Path) {
     #[cfg(any(target_os = "macos", target_os = "ios"))]
     {
         use security_framework::passwords::delete_generic_password;
         if let Ok(account) = account(metadata_path) {
+            remove_cached_device_key(&account);
             let _ = delete_generic_password(KEYCHAIN_SERVICE, &account);
         }
     }
@@ -345,7 +496,12 @@ mod tests {
                 .lock()
                 .unwrap()
                 .clone()
-                .ok_or(SecureStoreError::Unavailable)
+                .ok_or(SecureStoreError::DeviceKeyNotFound)
+        }
+
+        fn set(&self, _path: &Path, value: &[u8]) -> Result<(), SecureStoreError> {
+            *self.0.lock().unwrap() = Some(value.to_vec());
+            Ok(())
         }
     }
 
@@ -371,6 +527,33 @@ mod tests {
         assert_eq!(
             load_with_provider(&metadata, "correct", &provider),
             Err(SecureStoreError::Unavailable)
+        );
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn migrates_a_renamed_device_key_only_after_full_authentication() {
+        let directory = directory();
+        let metadata = directory.join("new-wallet").join("secret.json");
+        let legacy_metadata = directory.join("regtest-wallet").join("secret.json");
+        let legacy = MemoryProvider::default();
+        let current = MemoryProvider::default();
+        store_with_provider(&metadata, b"migration secret", "correct", &legacy).unwrap();
+
+        assert_eq!(
+            load_with_legacy_provider(&metadata, &legacy_metadata, "wrong", &current, &legacy,),
+            Err(SecureStoreError::InvalidCredential)
+        );
+        assert!(current.0.lock().unwrap().is_none());
+
+        assert_eq!(
+            load_with_legacy_provider(&metadata, &legacy_metadata, "correct", &current, &legacy,)
+                .unwrap(),
+            b"migration secret"
+        );
+        assert_eq!(
+            load_with_provider(&metadata, "correct", &current).unwrap(),
+            b"migration secret"
         );
         fs::remove_dir_all(directory).unwrap();
     }

@@ -13,6 +13,9 @@ No checkbox may be marked complete without a linked test artifact, review record
 - [ ] User-controlled Bitcoin Core is the only first-release mainnet backend; remote Core/Esplora have separate privacy review.
 - [ ] No fallback backend or fallback fee exists.
 - [ ] First mainnet release has an explicit per-transaction amount cap and no batch spending.
+- [ ] RBF and CPFP pass funded replacement, package-fee, rejection, restart, and confirmation-race tests.
+- [ ] Birthday/gap-limit recovery restores an independently known wallet with old history and a deliberately extended gap.
+- [ ] Direct remote Core over TLS and `.onion` Core over a loopback Tor proxy pass chain-identity, authentication, timeout, certificate, DNS-leak, and fail-closed tests.
 
 ## Hardware certification
 
@@ -20,6 +23,7 @@ No checkbox may be marked complete without a linked test artifact, review record
 - [ ] Trezor certification record complete.
 - [ ] Ledger certification record complete.
 - [ ] BitBox02 certification record complete.
+- [ ] Blockstream Jade certification record complete.
 - [ ] Each record covers setup/import, reconnect, fingerprint, policy registration, address display, signing, user rejection, wrong device, changed PSBT, and firmware/HWI compatibility.
 - [ ] At least two independent devices complete a real 2-of-3 Testnet4 spend and descriptor recovery drill.
 
@@ -34,7 +38,9 @@ No checkbox may be marked complete without a linked test artifact, review record
 ## Build and review
 
 - [ ] CI is green from a clean checkout with locked dependencies.
-- [ ] SBOM, dependency licenses/advisories, reproducible builds, artifact hashes, and code signing are verified.
+- [ ] Two independent clean machines produce matching unsigned binary hashes from the same commit and locked toolchain.
+- [ ] SBOM, dependency licenses/advisories, artifact provenance, macOS hardened-runtime signing/notarization, and update signature verification are complete.
+- [ ] BIP129/BSMS export/import and `crypto-psbt` UR/file exchange interoperate with at least two independent descriptor-aware coordinators/signers.
 - [ ] External Bitcoin wallet/security review is complete and findings are resolved.
 - [ ] Recovery drill is independently performed from documented backups in another descriptor-aware wallet.
 - [ ] Incident response, vulnerability disclosure, rollback, and signed update procedures are published.

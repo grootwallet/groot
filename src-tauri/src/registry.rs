@@ -8,6 +8,13 @@ use std::{
 use uuid::Uuid;
 
 pub const REGISTRY_VERSION: u8 = 1;
+pub const DEFAULT_INACTIVITY_TIMEOUT_MINUTES: u16 = 5;
+pub const MIN_INACTIVITY_TIMEOUT_MINUTES: u16 = 1;
+pub const MAX_INACTIVITY_TIMEOUT_MINUTES: u16 = 60;
+
+fn default_inactivity_timeout_minutes() -> u16 {
+    DEFAULT_INACTIVITY_TIMEOUT_MINUTES
+}
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum WalletKind {
@@ -31,6 +38,8 @@ pub struct WalletRegistry {
     pub version: u8,
     pub selected_wallet_id: Option<Uuid>,
     pub wallets: Vec<WalletProfile>,
+    #[serde(default = "default_inactivity_timeout_minutes")]
+    pub inactivity_timeout_minutes: u16,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RegistryError {
@@ -38,6 +47,7 @@ pub enum RegistryError {
     InvalidName,
     InvalidNetwork,
     InvalidChecksum,
+    InvalidInactivityTimeout,
     DuplicateId,
     DuplicateIdentity,
     UnknownSelection,
@@ -54,6 +64,7 @@ impl Default for WalletRegistry {
             version: REGISTRY_VERSION,
             selected_wallet_id: None,
             wallets: vec![],
+            inactivity_timeout_minutes: DEFAULT_INACTIVITY_TIMEOUT_MINUTES,
         }
     }
 }
@@ -124,6 +135,11 @@ impl WalletRegistry {
     pub fn validate(&self) -> Result<(), RegistryError> {
         if self.version != REGISTRY_VERSION {
             return Err(RegistryError::UnsupportedVersion);
+        }
+        if !(MIN_INACTIVITY_TIMEOUT_MINUTES..=MAX_INACTIVITY_TIMEOUT_MINUTES)
+            .contains(&self.inactivity_timeout_minutes)
+        {
+            return Err(RegistryError::InvalidInactivityTimeout);
         }
         let mut ids = HashSet::new();
         let mut identities = HashSet::new();
@@ -245,6 +261,9 @@ mod tests {
         };
         assert_eq!(r.validate(), Err(RegistryError::UnsupportedVersion));
         r.version = 1;
+        r.inactivity_timeout_minutes = 0;
+        assert_eq!(r.validate(), Err(RegistryError::InvalidInactivityTimeout));
+        r.inactivity_timeout_minutes = DEFAULT_INACTIVITY_TIMEOUT_MINUTES;
         let mut x = p(id);
         x.name = "".into();
         r.wallets = vec![x];
@@ -266,6 +285,17 @@ mod tests {
         r.wallets = vec![p(id)];
         r.selected_wallet_id = Some(Uuid::new_v4());
         assert_eq!(r.validate(), Err(RegistryError::UnknownSelection));
+    }
+
+    #[test]
+    fn older_registry_json_receives_the_secure_default_timeout() {
+        let decoded: WalletRegistry =
+            serde_json::from_str(r#"{"version":1,"selectedWalletId":null,"wallets":[]}"#).unwrap();
+        assert_eq!(
+            decoded.inactivity_timeout_minutes,
+            DEFAULT_INACTIVITY_TIMEOUT_MINUTES
+        );
+        decoded.validate().unwrap();
     }
 
     fn test_dir() -> std::path::PathBuf {

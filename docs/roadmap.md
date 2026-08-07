@@ -6,6 +6,19 @@ This roadmap is ordered by security dependency, not marketing priority. A phase 
 
 The regtest app now has labeled receive addresses with enlarged QR and optional derivation detail, persisted coin freeze/unfreeze, automatic or exact-input sends, recommended 2-of-3 and 3-of-5 creation plus safe advanced M-of-N controls, and real Rust-compiled delayed recovery/inheritance descriptor creation. The remaining gates below are ordered; unchecked work must not be presented as production-ready.
 
+## Pre-mainnet MVP closure — active
+
+Implementation exists for the following items, but the distinction between code-complete and evidence-complete is mandatory:
+
+1. **Hardware matrix:** finish disposable Testnet4 certification for Coldcard, Trezor, Ledger, BitBox02, and Jade using the local report template. Include cable where supported plus file/UR interchange, address identity, rejection, reconnect, RBF, CPFP, wrong-device, and recovery evidence. This cannot be completed without the physical devices.
+2. **Interoperability:** public BIP129/BSMS records and bounded `crypto-psbt` UR v2 are implemented. Complete vendor vectors and round trips with at least two independent descriptor-aware wallets. Encrypted BIP129 signer rounds are deferred.
+3. **Fee management:** RBF/CPFP proposal construction is implemented. Complete funded regtest and Testnet4 replacement/package confirmation races and hardware signatures.
+4. **Recovery:** birthday, gap-limit, and full-rescan controls are implemented. Add progress/cancellation for very large histories and certify a deliberately extended address gap.
+5. **Remote Core:** direct TLS and Tor-onion-through-loopback-SOCKS policy is implemented. Complete a real VPS TLS/Tor run, certificate failure, proxy loss, timeout, chain mismatch, and DNS-leak evidence.
+6. **Release:** unsigned clean-build/hash-comparison and macOS signature-verification scripts exist. Prove matching unsigned hashes on two clean machines, then sign/notarize, produce SBOM/provenance, and commission an independent review.
+
+Mainnet stays compile-time disabled until every checklist artifact is attached to an approved replacement for ADR 0012.
+
 ## Gate review — 2026-08-03
 
 - **Gate 1, existing wallet hardening:** green for regtest. Generated words use a native Rust-owned flow, secrets use credential plus device wrapping, notifications and proposals persist, unlock is throttled, and restart/corruption/deletion paths have regression tests. Public networks remain blocked on Android/Windows secure-storage certification and a packaged mobile lifecycle harness.
@@ -116,4 +129,11 @@ V2 exposes reviewed templates, not an unrestricted script editor. Every template
 - Taproot/Miniscript policies only after interoperability and hardware support are standardized and independently reviewed.
 - Optional full-node and remote Esplora backends with identical descriptor semantics.
 - Collaborative wallet invitations only with authenticated descriptor exchange; no cloud custody.
+- BIP329 label import/export without weakening immutable-label rules.
+- Wallet health dashboard: backup age, descriptor verification, node status, signer firmware evidence, and recovery drill reminders.
+- Batch payments, payment URI/QR requests, address book, and watch-only wallet promotion only after intent-review and privacy design.
+- Payjoin, collaborative transactions, coin-control privacy scoring, and Stonewall-style transaction construction require separate protocol and denial-of-service threat models.
+- Compact-filter/P2P synchronization similar in privacy objective to Wasabi requires a separate backend architecture; do not route it through a central Satchel service.
+- Hardware initialization/device management only through audited vendor SDKs with an explicit seed-backup UX. It must never make Satchel a seed transport or silently install firmware.
+- Desktop/mobile update delivery, rollback protection, release transparency, and long-term data migration compatibility.
 - Mainnet remains blocked on a dedicated threat model, external review, reproducible releases, physical-device certification, and end-to-end recovery checklist.

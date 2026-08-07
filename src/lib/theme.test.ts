@@ -59,7 +59,7 @@ describe('theme system', () => {
   }
 
   it('keeps component surfaces semantic and recovery words explicitly readable', () => {
-    expect(css).toContain('.mnemonic-grid > div { color: var(--text); background: var(--surface-control);');
+    expect(css).toMatch(/\.mnemonic-grid > div \{[^}]*color: var\(--text\);[^}]*background: var\(--surface-control\);/);
     expect(css).toContain('.mnemonic-grid strong { color: var(--text);');
     const componentRules = css.slice(css.indexOf('* {'));
     for (const legacyDarkSurface of ['#121214', '#151517', '#141416', '#101012']) {

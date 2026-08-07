@@ -1,5 +1,5 @@
 use std::{
-    io::Read,
+    io::{Read, Write},
     path::{Path, PathBuf},
     process::{Command, Stdio},
     thread,
@@ -7,6 +7,8 @@ use std::{
 };
 
 const MAX_ARGUMENT_BYTES: usize = 384 * 1024;
+const MAX_SECRET_INPUT_BYTES: usize = 128;
+const MAX_PIN_POSITIONS: usize = 50;
 const MAX_OUTPUT_BYTES: u64 = 384 * 1024;
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(90);
 
@@ -16,7 +18,7 @@ pub enum HardwareError {
     Unavailable,
     TimedOut,
     OutputTooLarge,
-    CommandFailed,
+    CommandFailed(Option<i64>),
     Io,
 }
 
@@ -27,7 +29,7 @@ impl HardwareError {
             Self::Unavailable => "hardware_unavailable",
             Self::TimedOut => "hardware_timeout",
             Self::OutputTooLarge => "hardware_response_too_large",
-            Self::CommandFailed => "hardware_command_failed",
+            Self::CommandFailed(_) => "hardware_command_failed",
             Self::Io => "hardware_io_error",
         }
     }
@@ -51,6 +53,14 @@ fn validate_arguments(arguments: &[String]) -> Result<(), HardwareError> {
     Ok(())
 }
 
+fn validate_master_fingerprint(fingerprint: &str) -> Result<(), HardwareError> {
+    if fingerprint.len() == 8 && fingerprint.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        Ok(())
+    } else {
+        Err(HardwareError::InvalidArgument)
+    }
+}
+
 fn read_bounded<R: Read>(reader: R) -> Result<Vec<u8>, HardwareError> {
     let mut bytes = Vec::new();
     reader
@@ -63,12 +73,35 @@ fn read_bounded<R: Read>(reader: R) -> Result<Vec<u8>, HardwareError> {
     Ok(bytes)
 }
 
+fn hwi_error_code(stdout: &[u8]) -> Option<i64> {
+    serde_json::from_slice::<serde_json::Value>(stdout)
+        .ok()?
+        .get("code")?
+        .as_i64()
+}
+
+fn pin_command_input(pin_positions: &[u8]) -> Result<Vec<u8>, HardwareError> {
+    if pin_positions.is_empty()
+        || pin_positions.len() > MAX_PIN_POSITIONS
+        || !pin_positions
+            .iter()
+            .all(|position| matches!(position, b'1'..=b'9'))
+    {
+        return Err(HardwareError::InvalidArgument);
+    }
+    let mut input = Vec::with_capacity(pin_positions.len() + 10);
+    input.extend_from_slice(b"sendpin ");
+    input.extend_from_slice(pin_positions);
+    input.extend_from_slice(b"\n\n");
+    Ok(input)
+}
+
 pub trait HardwareTransport: Send + Sync {
     fn enumerate(&self) -> Result<Vec<u8>, HardwareError>;
     fn account_xpub(
         &self,
         device_type: &str,
-        device_path: &str,
+        device_fingerprint: &str,
         derivation_path: &str,
     ) -> Result<Vec<u8>, HardwareError>;
     fn sign_psbt(
@@ -83,18 +116,28 @@ pub trait HardwareTransport: Send + Sync {
         device_path: &str,
         descriptor: &str,
     ) -> Result<Vec<u8>, HardwareError>;
+    fn prompt_pin(&self, device_type: &str, device_path: &str) -> Result<Vec<u8>, HardwareError>;
+    fn send_pin(
+        &self,
+        device_type: &str,
+        device_path: &str,
+        pin_positions: &[u8],
+    ) -> Result<Vec<u8>, HardwareError>;
 }
 
 #[derive(Debug, Clone)]
 pub struct HwiCli {
     program: PathBuf,
     chain: HwiChain,
+    home: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HwiChain {
     Main,
     Test,
+    Regtest,
+    Signet,
 }
 
 impl HwiChain {
@@ -102,6 +145,8 @@ impl HwiChain {
         match self {
             Self::Main => "main",
             Self::Test => "test",
+            Self::Regtest => "regtest",
+            Self::Signet => "signet",
         }
     }
 }
@@ -117,7 +162,13 @@ impl HwiCli {
         Self {
             program: trusted_hwi_path(),
             chain,
+            home: None,
         }
+    }
+
+    pub fn with_home(mut self, home: PathBuf) -> Result<Self, HardwareError> {
+        self.home = Some(trusted_home(&home)?);
+        Ok(self)
     }
 
     fn device_command(
@@ -138,6 +189,42 @@ impl HwiCli {
             value.into(),
         ]
     }
+
+    fn device_command_without_value(
+        &self,
+        device_type: &str,
+        device_path: &str,
+        command: &str,
+    ) -> Vec<String> {
+        vec![
+            "--chain".into(),
+            self.chain.as_hwi_argument().into(),
+            "--device-type".into(),
+            device_type.into(),
+            "--device-path".into(),
+            device_path.into(),
+            command.into(),
+        ]
+    }
+
+    fn fingerprint_command(
+        &self,
+        device_type: &str,
+        device_fingerprint: &str,
+        command: &str,
+        value: &str,
+    ) -> Vec<String> {
+        vec![
+            "--chain".into(),
+            self.chain.as_hwi_argument().into(),
+            "--device-type".into(),
+            device_type.into(),
+            "--fingerprint".into(),
+            device_fingerprint.into(),
+            command.into(),
+            value.into(),
+        ]
+    }
 }
 
 impl HardwareTransport for HwiCli {
@@ -150,19 +237,22 @@ impl HardwareTransport for HwiCli {
                 "enumerate".into(),
             ],
             DEFAULT_TIMEOUT,
+            self.home.as_deref(),
         )
     }
 
     fn account_xpub(
         &self,
         device_type: &str,
-        device_path: &str,
+        device_fingerprint: &str,
         derivation_path: &str,
     ) -> Result<Vec<u8>, HardwareError> {
+        validate_master_fingerprint(device_fingerprint)?;
         run_program(
             &self.program,
-            &self.device_command(device_type, device_path, "getxpub", derivation_path),
+            &self.fingerprint_command(device_type, device_fingerprint, "getxpub", derivation_path),
             DEFAULT_TIMEOUT,
+            self.home.as_deref(),
         )
     }
 
@@ -176,6 +266,7 @@ impl HardwareTransport for HwiCli {
             &self.program,
             &self.device_command(device_type, device_path, "signtx", psbt),
             DEFAULT_TIMEOUT,
+            self.home.as_deref(),
         )
     }
 
@@ -188,7 +279,40 @@ impl HardwareTransport for HwiCli {
         let mut arguments =
             self.device_command(device_type, device_path, "displayaddress", "--desc");
         arguments.push(descriptor.into());
-        run_program(&self.program, &arguments, DEFAULT_TIMEOUT)
+        run_program(
+            &self.program,
+            &arguments,
+            DEFAULT_TIMEOUT,
+            self.home.as_deref(),
+        )
+    }
+
+    fn prompt_pin(&self, device_type: &str, device_path: &str) -> Result<Vec<u8>, HardwareError> {
+        run_program(
+            &self.program,
+            &self.device_command_without_value(device_type, device_path, "promptpin"),
+            DEFAULT_TIMEOUT,
+            self.home.as_deref(),
+        )
+    }
+
+    fn send_pin(
+        &self,
+        device_type: &str,
+        device_path: &str,
+        pin_positions: &[u8],
+    ) -> Result<Vec<u8>, HardwareError> {
+        let arguments = self.device_command_without_value(device_type, device_path, "--stdin");
+        let mut input = pin_command_input(pin_positions)?;
+        let result = run_program_with_input(
+            &self.program,
+            &arguments,
+            DEFAULT_TIMEOUT,
+            self.home.as_deref(),
+            Some(&input),
+        );
+        input.fill(0);
+        result
     }
 }
 
@@ -219,16 +343,37 @@ fn run_program(
     program: &Path,
     arguments: &[String],
     timeout: Duration,
+    home: Option<&Path>,
+) -> Result<Vec<u8>, HardwareError> {
+    run_program_with_input(program, arguments, timeout, home, None)
+}
+
+fn run_program_with_input(
+    program: &Path,
+    arguments: &[String],
+    timeout: Duration,
+    home: Option<&Path>,
+    input: Option<&[u8]>,
 ) -> Result<Vec<u8>, HardwareError> {
     if !program.is_absolute() {
         return Err(HardwareError::Unavailable);
     }
     let program = trusted_executable(program)?;
     validate_arguments(arguments)?;
-    let mut child = Command::new(program)
-        .args(arguments)
-        .env_clear()
-        .stdin(Stdio::null())
+    if input.is_some_and(|bytes| bytes.is_empty() || bytes.len() > MAX_SECRET_INPUT_BYTES) {
+        return Err(HardwareError::InvalidArgument);
+    }
+    let mut command = Command::new(program);
+    command.args(arguments).env_clear();
+    if let Some(home) = home {
+        command.env("HOME", trusted_home(home)?);
+    }
+    let mut child = command
+        .stdin(if input.is_some() {
+            Stdio::piped()
+        } else {
+            Stdio::null()
+        })
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
@@ -237,6 +382,22 @@ fn run_program(
     let stderr = child.stderr.take().ok_or(HardwareError::Io)?;
     let stdout_reader = thread::spawn(move || read_bounded(stdout));
     let stderr_reader = thread::spawn(move || read_bounded(stderr));
+    if let Some(input) = input {
+        let mut secret = input.to_vec();
+        let write_result = child
+            .stdin
+            .take()
+            .ok_or(HardwareError::Io)
+            .and_then(|mut stdin| stdin.write_all(&secret).map_err(|_| HardwareError::Io));
+        secret.fill(0);
+        if let Err(error) = write_result {
+            let _ = child.kill();
+            let _ = child.wait();
+            let _ = stdout_reader.join();
+            let _ = stderr_reader.join();
+            return Err(error);
+        }
+    }
     let started = Instant::now();
     let status = loop {
         if let Some(status) = child.try_wait().map_err(|_| HardwareError::Io)? {
@@ -257,9 +418,19 @@ fn run_program(
         // HWI stderr can contain device paths and transaction details. It is deliberately
         // discarded here; callers expose a stable error without leaking it to the webview.
         drop(stderr);
-        return Err(HardwareError::CommandFailed);
+        return Err(HardwareError::CommandFailed(hwi_error_code(&stdout)));
     }
     Ok(stdout)
+}
+
+fn trusted_home(home: &Path) -> Result<PathBuf, HardwareError> {
+    let canonical = home
+        .canonicalize()
+        .map_err(|_| HardwareError::Unavailable)?;
+    if !canonical.is_absolute() || !canonical.is_dir() {
+        return Err(HardwareError::Unavailable);
+    }
+    Ok(canonical)
 }
 
 fn trusted_executable(program: &Path) -> Result<PathBuf, HardwareError> {
@@ -300,12 +471,26 @@ mod tests {
             validate_arguments(&["x".repeat(MAX_ARGUMENT_BYTES + 1)]),
             Err(HardwareError::InvalidArgument)
         );
+        assert_eq!(validate_master_fingerprint("f57a3a2b"), Ok(()));
+        assert_eq!(
+            validate_master_fingerprint("--debug"),
+            Err(HardwareError::InvalidArgument)
+        );
+        assert_eq!(
+            validate_master_fingerprint("f57a3a2b00"),
+            Err(HardwareError::InvalidArgument)
+        );
     }
 
     #[test]
     fn rejects_relative_executable_paths_without_searching_path() {
         assert_eq!(
-            run_program(Path::new("hwi"), &["enumerate".into()], Duration::ZERO),
+            run_program(
+                Path::new("hwi"),
+                &["enumerate".into()],
+                Duration::ZERO,
+                None,
+            ),
             Err(HardwareError::Unavailable)
         );
     }
@@ -319,7 +504,7 @@ mod tests {
         std::fs::write(&path, b"#!/bin/sh\nexit 0\n").unwrap();
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o777)).unwrap();
         assert_eq!(
-            run_program(&path, &["enumerate".into()], Duration::from_secs(1)),
+            run_program(&path, &["enumerate".into()], Duration::from_secs(1), None,),
             Err(HardwareError::Unavailable)
         );
         std::fs::remove_file(path).unwrap();
@@ -331,6 +516,7 @@ mod tests {
             Path::new("/bin/echo"),
             &["$(touch /tmp/satchel-must-not-exist)".to_owned()],
             Duration::from_secs(1),
+            None,
         )
         .expect("echo");
         assert_eq!(
@@ -346,15 +532,17 @@ mod tests {
             run_program(
                 Path::new("/usr/bin/false"),
                 &["test".to_owned()],
-                Duration::from_secs(1)
+                Duration::from_secs(1),
+                None,
             ),
-            Err(HardwareError::CommandFailed)
+            Err(HardwareError::CommandFailed(None))
         );
         assert_eq!(
             run_program(
                 Path::new("/bin/sleep"),
                 &["1".to_owned()],
-                Duration::from_millis(10)
+                Duration::from_millis(10),
+                None,
             ),
             Err(HardwareError::TimedOut)
         );
@@ -362,7 +550,8 @@ mod tests {
             run_program(
                 Path::new("/definitely/not/an/executable"),
                 &["test".to_owned()],
-                Duration::from_secs(1)
+                Duration::from_secs(1),
+                None,
             ),
             Err(HardwareError::Unavailable)
         );
@@ -384,12 +573,65 @@ mod tests {
             (HardwareError::Unavailable, "hardware_unavailable"),
             (HardwareError::TimedOut, "hardware_timeout"),
             (HardwareError::OutputTooLarge, "hardware_response_too_large"),
-            (HardwareError::CommandFailed, "hardware_command_failed"),
+            (
+                HardwareError::CommandFailed(Some(-12)),
+                "hardware_command_failed",
+            ),
             (HardwareError::Io, "hardware_io_error"),
         ];
         for (error, code) in errors {
             assert_eq!(error.code(), code);
         }
+    }
+
+    #[test]
+    fn retains_only_the_typed_hwi_code_from_failed_output() {
+        assert_eq!(
+            hwi_error_code(br#"{"error":"private device detail","code":-12}"#),
+            Some(-12)
+        );
+        assert_eq!(hwi_error_code(b"not json"), None);
+        assert_eq!(hwi_error_code(br#"{"code":"-12"}"#), None);
+    }
+
+    #[test]
+    fn trezor_pin_positions_are_bounded_and_built_only_for_stdin() {
+        assert_eq!(pin_command_input(b"719").unwrap(), b"sendpin 719\n\n");
+        assert_eq!(pin_command_input(b""), Err(HardwareError::InvalidArgument));
+        assert_eq!(
+            pin_command_input(b"120"),
+            Err(HardwareError::InvalidArgument)
+        );
+        assert_eq!(
+            pin_command_input(&[b'1'; MAX_PIN_POSITIONS + 1]),
+            Err(HardwareError::InvalidArgument)
+        );
+
+        let arguments =
+            HwiCli::default().device_command_without_value("trezor", "usb-device-path", "--stdin");
+        assert!(!arguments.iter().any(|argument| argument.contains("719")));
+        assert_eq!(arguments.last().map(String::as_str), Some("--stdin"));
+    }
+
+    #[test]
+    fn passes_only_a_validated_home_after_clearing_the_environment() {
+        let home = std::env::temp_dir();
+        let output = run_program(
+            Path::new("/usr/bin/env"),
+            &[],
+            Duration::from_secs(1),
+            Some(&home),
+        )
+        .unwrap();
+        let environment = String::from_utf8(output).unwrap();
+        assert_eq!(
+            environment,
+            format!("HOME={}\n", home.canonicalize().unwrap().display())
+        );
+        assert_eq!(
+            trusted_home(Path::new("relative")),
+            Err(HardwareError::Unavailable)
+        );
     }
 
     #[test]
@@ -419,6 +661,22 @@ mod tests {
         );
         assert_eq!(HwiChain::Main.as_hwi_argument(), "main");
         assert_eq!(HwiChain::Test.as_hwi_argument(), "test");
+        assert_eq!(HwiChain::Regtest.as_hwi_argument(), "regtest");
+        assert_eq!(HwiChain::Signet.as_hwi_argument(), "signet");
+
+        assert_eq!(
+            test.fingerprint_command("ledger", "f57a32b", "getxpub", "m/84'/1'/0'"),
+            [
+                "--chain",
+                "test",
+                "--device-type",
+                "ledger",
+                "--fingerprint",
+                "f57a32b",
+                "getxpub",
+                "m/84'/1'/0'"
+            ]
+        );
     }
 
     #[test]
@@ -426,10 +684,11 @@ mod tests {
         let transport = HwiCli {
             program: PathBuf::from("/definitely/not/an/executable"),
             chain: HwiChain::Test,
+            home: None,
         };
         assert_eq!(transport.enumerate(), Err(HardwareError::Unavailable));
         assert_eq!(
-            transport.account_xpub("coldcard", "usb:1", "m/48'/1'/0'/2'"),
+            transport.account_xpub("coldcard", "bed628c0", "m/48'/1'/0'/2'"),
             Err(HardwareError::Unavailable)
         );
         assert_eq!(

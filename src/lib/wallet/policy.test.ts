@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { feeRate, sats, WalletError } from './contracts';
-import { addressPrefixForNetwork, awaitingPaymentAddresses, canDiscardAddress, hasAddressPrefixForNetwork, normalizeCoinSelection, normalizePermanentLabel, recoveryWordCountIsValid, selectedCoinTotal } from './policy';
+import { addressPrefixForNetwork, addressReuseInsights, awaitingPaymentAddresses, canDiscardAddress, hasAddressPrefixForNetwork, normalizeCoinSelection, normalizePermanentLabel, recoveryWordCountIsValid, selectedCoinTotal } from './policy';
 
 describe('wallet invariants', () => {
   it('uses the active network address prefix', () => {
@@ -63,5 +63,35 @@ describe('wallet invariants', () => {
     ];
     expect(selectedCoinTotal(coins, ['a:0', 'missing:0'])).toBe(10);
     expect(selectedCoinTotal(coins, ['b:1'])).toBe(0);
+  });
+
+  it('identifies coins received to the same known address without changing spendability', () => {
+    const coins = [
+      { outpoint: 'a:0', amount: 10, confirmations: 1, address: ' bcrt1qreused ', label: 'First payment', frozen: false },
+      { outpoint: 'b:1', amount: 20, confirmations: 2, address: 'bcrt1qother', label: 'Other', frozen: false },
+      { outpoint: 'c:0', amount: 30, confirmations: 0, address: 'bcrt1qreused', label: 'Second payment', frozen: true },
+      { outpoint: 'e:0', amount: 5, confirmations: 1, address: 'bcrt1qreused', label: 'Second payment', frozen: false },
+      { outpoint: 'f:0', amount: 7, confirmations: 1, address: 'bcrt1qreused', label: '', frozen: false },
+      { outpoint: 'd:0', amount: 40, confirmations: 3, address: 'Unknown', label: 'Unknown', frozen: false }
+    ];
+
+    expect(addressReuseInsights(coins)).toEqual([{
+      address: 'bcrt1qreused',
+      outpoints: ['a:0', 'c:0', 'e:0', 'f:0'],
+      labels: ['First payment', 'Second payment'],
+      totalAmount: 52
+    }]);
+  });
+
+  it('does not report distinct, empty, or unknown addresses as reused', () => {
+    const coins = [
+      { outpoint: 'a:0', amount: 10, confirmations: 1, address: 'bcrt1qfirst', label: 'First', frozen: false },
+      { outpoint: 'b:0', amount: 20, confirmations: 1, address: 'bcrt1qsecond', label: 'Second', frozen: false },
+      { outpoint: 'e:0', amount: 5, confirmations: 1, address: 'bcrt1qunlabeled', label: '', frozen: false },
+      { outpoint: 'c:0', amount: 30, confirmations: 1, address: '', label: 'Missing', frozen: false },
+      { outpoint: 'd:0', amount: 40, confirmations: 1, address: 'unknown', label: 'Unknown', frozen: false }
+    ];
+
+    expect(addressReuseInsights(coins)).toEqual([]);
   });
 });

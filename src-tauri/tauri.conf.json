@@ -12,7 +12,7 @@
   "app": {
     "windows": [{ "title": "Satchel", "width": 1180, "height": 780, "minWidth": 380, "minHeight": 640 }],
     "security": {
-      "csp": "default-src 'self'; connect-src ipc: http://ipc.localhost; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self'; script-src 'self'; object-src 'none'; frame-src 'none'; frame-ancestors 'none'; worker-src 'none'; media-src 'none'; manifest-src 'none'; base-uri 'none'; form-action 'self'"
+      "csp": "default-src 'self'; connect-src ipc: http://ipc.localhost; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self'; script-src 'self'; object-src 'none'; frame-src 'none'; frame-ancestors 'none'; worker-src 'none'; media-src 'self' blob:; manifest-src 'none'; base-uri 'none'; form-action 'self'"
     }
   },
   "bundle": { "active": true, "targets": "all" }

@@ -1,19 +1,37 @@
 <script lang="ts">
-  import { Copy, ExternalLink } from '@lucide/svelte';
+  import { ArrowUp, Copy, ExternalLink, Layers } from '@lucide/svelte';
   import Modal from './Modal.svelte';
+  import Button from './Button.svelte';
   import { copyText } from '$lib/clipboard';
   import { defaultConfig } from '$lib/config';
   import { shortSats } from '$lib/data';
   import { toast } from '$lib/stores/toasts';
   import type { Transaction } from '$lib/types';
+  import { compactAddress } from '$lib/address-display';
+  import ReadableAddress from './ReadableAddress.svelte';
+  import LocalTimestamp from './LocalTimestamp.svelte';
 
-  let { transaction, onclose } = $props<{ transaction: Transaction | null; onclose: () => void }>();
+  let { transaction, multisig = false, onclose } = $props<{ transaction: Transaction | null; multisig?: boolean; onclose: () => void }>();
+  let showAddress = $state(false);
+  let addressCopied = $state(false);
 
   async function copyTxid() {
     if (!transaction) return;
     try {
       await copyText(transaction.id);
       toast({ title: 'Transaction ID copied', tone: 'success' });
+    } catch {
+      toast({ title: 'Copy failed', tone: 'danger' });
+    }
+  }
+
+  async function copyAddress() {
+    if (!transaction) return;
+    try {
+      await copyText(transaction.address);
+      addressCopied = true;
+      toast({ title: 'Address copied', tone: 'success' });
+      setTimeout(() => addressCopied = false, 1_500);
     } catch {
       toast({ title: 'Copy failed', tone: 'danger' });
     }
@@ -28,13 +46,15 @@
       <p>{transaction.label}</p>
     </div>
     <dl class="details-list">
-      <div><dt>Date</dt><dd>{transaction.date}</dd></div>
+      <div><dt>Date</dt><dd><LocalTimestamp value={transaction.date} /></dd></div>
       <div><dt>Confirmations</dt><dd>{transaction.confirmations}</dd></div>
       {#if transaction.block}<div><dt>Block</dt><dd>{transaction.block}</dd></div>{/if}
       {#if transaction.fee}<div><dt>Network fee</dt><dd>{shortSats(transaction.fee)} sats</dd></div>{/if}
-      <div><dt>{transaction.direction === 'received' ? 'Received at' : 'Sent to'}</dt><dd class="mono">{transaction.address}</dd></div>
+      <div><dt>{transaction.direction === 'received' ? 'Received at' : 'Sent to'}</dt><dd><button type="button" class="compact-address-button" aria-expanded={showAddress} onclick={() => showAddress = !showAddress}>{compactAddress(transaction.address)}</button></dd></div>
     </dl>
+    {#if showAddress}<ReadableAddress address={transaction.address} copied={addressCopied} oncopy={copyAddress}/>{/if}
     <button class="hash-box" onclick={copyTxid}><span>Transaction ID</span><code>{transaction.id}</code><Copy size={16} /></button>
+    {#if transaction.status === 'pending'}<div class="psbt-actions"><Button variant="secondary" href={`${multisig?'/multisig/send':'/send'}?accelerate=rbf&txid=${transaction.id}`}><ArrowUp size={15}/>Increase fee</Button><Button variant="secondary" href={`${multisig?'/multisig/send':'/send'}?accelerate=cpfp&txid=${transaction.id}`}><Layers size={15}/>Spend output (CPFP)</Button></div>{/if}
     {#if defaultConfig.explorerUrl}<a class="explorer-link" href="{defaultConfig.explorerUrl}/tx/{transaction.id}" target="_blank" rel="noopener noreferrer">View on mempool.space <ExternalLink size={14} /></a>{/if}
   {/if}
 </Modal>

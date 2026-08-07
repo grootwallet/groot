@@ -1,19 +1,19 @@
 <script lang="ts">
   import { X } from '@lucide/svelte';
+  import { lockModalScroll } from './modal-scroll-lock';
   let { open, title, description = '', onclose, children } = $props();
   let dialog = $state<HTMLDivElement>();
 
   $effect(() => {
     if (!open || typeof document === 'undefined') return;
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    const releaseScrollLock = lockModalScroll(document);
     queueMicrotask(() => {
       const first = dialog?.querySelector<HTMLElement>('button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [href], [tabindex]:not([tabindex="-1"])');
       (first ?? dialog)?.focus();
     });
     return () => {
-      document.body.style.overflow = previousOverflow;
+      releaseScrollLock();
       previousFocus?.focus();
     };
   });

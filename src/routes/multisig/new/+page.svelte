@@ -1,23 +1,55 @@
 <script lang="ts">
-  import { ArrowLeft, Check, ChevronDown, ChevronRight, Clock3, Cpu, FileKey, Plus, ShieldCheck, Trash2, Users } from '@lucide/svelte';
+  import { AlertTriangle, ArrowLeft, Check, ChevronDown, ChevronRight, CircleHelp, Clock3, Copy, Cpu, Download, FileKey, FileUp, Plus, RefreshCw, ShieldCheck, Trash2, Usb, Users } from '@lucide/svelte';
   import { goto } from '$app/navigation';
   import { onDestroy } from 'svelte';
   import Button from '$lib/components/Button.svelte';
+  import DeviceDetailsModal from '$lib/components/DeviceDetailsModal.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import PasswordField from '$lib/components/PasswordField.svelte';
+  import TrezorPinModal from '$lib/components/TrezorPinModal.svelte';
   import { toast } from '$lib/stores/toasts';
-  import { walletService, type HardwareDevice, type MultisigPreview, type RecoveryTemplate } from '$lib/wallet';
+  import { walletService, WalletError, type CosignerHealthCheck, type HardwareDevice, type MultisigPreview, type RecoveryTemplate, type WalletErrorCode } from '$lib/wallet';
   import { MULTISIG_ACCOUNT_PATH, validatePolicyDraft, type CosignerDraft, type CosignerSource } from '$lib/multisig/policy';
+  import { copyText } from '$lib/clipboard';
+  import { downloadText, readTransferFile, safeTransferFilename } from '$lib/transfer';
+  import { parsePublicCosignerFile } from '$lib/multisig/cosigner-import';
+  import { mergeHardwareDiscovery } from '$lib/hardware/discovery';
+
+  type HardwareGuideId = 'coldcard' | 'bitbox02' | 'ledger' | 'trezor' | 'jade';
+  const hardwareGuides: Array<{ id: HardwareGuideId; name: string; steps: string[] }> = [
+    { id: 'coldcard', name: 'Coldcard', steps: ['Finish device setup and make an offline seed backup.', 'Sign in and enable USB communication if it was disabled.', 'Leave the device unlocked and ready at its main menu.'] },
+    { id: 'bitbox02', name: 'BitBox02', steps: ['In BitBoxApp, enter the device password and confirm the same pairing code on both screens.', 'Wait until the wallet is visible, then quit BitBoxApp completely.', 'Reconnect and unlock BitBox02, then scan again in Satchel.'] },
+    { id: 'ledger', name: 'Ledger', steps: ['Finish device setup and make an offline recovery backup, then quit Ledger Live completely.', 'For Regtest, unlock the device and open Bitcoin Test—not the main Bitcoin app.', 'Start the import in Satchel, then approve the public-key export shown on Ledger.'] },
+    { id: 'trezor', name: 'Trezor', steps: ['Finish device setup and make an offline seed backup, then quit Trezor Suite completely. Closing its window is not enough.', 'Reconnect the device. A locked Model One is expected: select its Satchel card to open the position keypad while the device shows a scrambled PIN matrix.', 'Choose the standard no-passphrase wallet explicitly, or select a hidden wallet on-device when supported. Model One host passphrase entry is not yet supported.'] },
+    { id: 'jade', name: 'Jade', steps: ['Finish device setup and make an offline seed backup.', 'Log in on Jade with Recovery Phrase Login or QR PIN Unlock.', 'Keep Jade connected over USB while Satchel imports the public key.'] }
+  ];
 
   let name = $state('');
   let threshold = $state(2);
   let cosigners = $state<CosignerDraft[]>([]);
   let stage = $state<'keys' | 'review'>('keys');
   let pickerOpen = $state(false);
+  let pickerError = $state('');
   let keyOpen = $state(false);
   let hardwareOpen = $state(false);
   let hardware = $state<HardwareDevice[]>([]);
   let hardwareBusy = $state(false);
+  let hardwareProgress = $state('Looking for devices…');
+  let standardWalletOpen = $state(false);
+  let standardWalletDevice = $state<HardwareDevice | null>(null);
+  let pinOpen = $state(false);
+  let pinBusy = $state(false);
+  let pinChallenge = $state('');
+  let pinPositions = $state('');
+  let pinDevice = $state<HardwareDevice | null>(null);
+  let pinError = $state('');
+  let pinErrorCode = $state<WalletErrorCode | ''>('');
+  let hardwareHelpOpen = $state(false);
+  let hardwareHelpReturnsToScan = $state(false);
+  let hardwareGuide = $state<HardwareGuideId>('coldcard');
+  let selectedSigner = $state<CosignerDraft | null>(null);
+  let checkingSigner = $state(false);
+  let healthChecks = $state<Record<string, CosignerHealthCheck>>({});
   let source = $state<CosignerSource>('manual');
   let label = $state('');
   let fingerprint = $state('');
@@ -33,6 +65,7 @@
   let customCosignerCount = $state(3);
   let showDescriptor = $state(false);
   let reviewAttempted = $state(false);
+  let hardwareScanGeneration = 0;
   const policy = $derived({ name, threshold, cosigners });
   const standardCosignerCount = $derived(standardRecipe === '2of3' ? 3 : standardRecipe === '3of5' ? 5 : customCosignerCount);
   const requiredKeys = $derived(templateKind === 'standard' ? standardCosignerCount : 4);
@@ -54,13 +87,43 @@
     if (templateKind === 'standard' || cosigners.length < 4) return null;
     return { type: 'recovery', immediate: { threshold: 2, signerIds: cosigners.slice(0, 3).map((key) => key.id) }, recovery: { threshold: 1, signerIds: [cosigners[3].id], availableAfterBlocks: templateKind === 'inheritance' ? 52_560 : 4_320 } };
   });
+  const selectedHardwareGuide = $derived(hardwareGuides.find((guide) => guide.id === hardwareGuide) ?? hardwareGuides[0]);
 
-  onDestroy(() => { credential = ''; confirmation = ''; });
+  onDestroy(() => { credential = ''; confirmation = ''; pinPositions = ''; pinChallenge = ''; hardwareScanGeneration += 1; });
 
   function chooseSource(next: CosignerSource) {
     source = next;
     pickerOpen = false;
     keyOpen = true;
+  }
+
+  async function importCosignerFile(event: Event) {
+    const input = event.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file) return;
+    pickerError = '';
+    try {
+      const fallbackLabel = file.name.replace(/\.[^.]+$/, '').slice(0, 48);
+      const imported = parsePublicCosignerFile(await readTransferFile(file), fallbackLabel);
+      cosigners = [...cosigners, { id: crypto.randomUUID(), ...imported, source: 'file' }];
+      pickerOpen = false;
+      toast({ title: 'Public cosigner imported', description: `${imported.label} was loaded from a local file.`, tone: 'success' });
+    } catch (cause) {
+      pickerError = cause instanceof Error ? cause.message : 'Could not read the public-key file.';
+    }
+  }
+
+  function openHardwareHelp(returnToScan = false) {
+    hardwareHelpReturnsToScan = returnToScan;
+    if (returnToScan) hardwareOpen = false;
+    hardwareHelpOpen = true;
+  }
+
+  function closeHardwareHelp() {
+    hardwareHelpOpen = false;
+    if (hardwareHelpReturnsToScan) hardwareOpen = true;
+    hardwareHelpReturnsToScan = false;
   }
 
   function sourceLabel(value: CosignerSource) {
@@ -108,19 +171,128 @@
     label = ''; fingerprint = ''; xpub = ''; keyOpen = false;
   }
 
+  function removeCosigner(id: string) {
+    cosigners = cosigners.filter((item) => item.id !== id);
+    if (selectedSigner?.id === id) selectedSigner = null;
+    const { [id]: _removed, ...remainingChecks } = healthChecks;
+    healthChecks = remainingChecks;
+  }
+
+  async function copyPublicKey() {
+    if (!selectedSigner) return;
+    await copyText(selectedSigner.xpub);
+    toast({ title: 'Public key copied', description: `${selectedSigner.label} account key copied.`, tone: 'success' });
+  }
+
+  async function runDraftHealthCheck() {
+    if (!selectedSigner || checkingSigner) return;
+    const signer = selectedSigner;
+    checkingSigner = true;
+    try {
+      healthChecks[signer.id] = await walletService.checkHardwareCosigner(signer);
+      toast({ title: 'Health check passed', description: `${signer.label} is ready.`, tone: 'success' });
+    } catch (cause) {
+      const summary = cause instanceof Error ? cause.message : 'The device could not be verified.';
+      healthChecks[signer.id] = { checkedAt: new Date().toISOString(), summary, status: 'attention' };
+      toast({ title: 'Health check needs attention', description: summary, tone: 'danger' });
+    } finally {
+      checkingSigner = false;
+    }
+  }
+
   async function scanHardware() {
-    pickerOpen = false; hardwareOpen = true; hardwareBusy = true; error = '';
-    try { hardware = await walletService.listHardwareDevices(); }
-    catch (cause) { hardware = []; error = cause instanceof Error ? cause.message : 'Could not scan for devices.'; }
+    const generation = ++hardwareScanGeneration;
+    pickerOpen = false; hardwareOpen = true; hardware = []; hardwareBusy = true; hardwareProgress = 'Looking for devices…'; error = '';
+    try {
+      const first = await walletService.listHardwareDevices();
+      if (generation !== hardwareScanGeneration || !hardwareOpen) return;
+      hardware = first;
+      hardwareProgress = 'Checking for another connected signer…';
+      await new Promise((resolve) => setTimeout(resolve, 550));
+      if (generation !== hardwareScanGeneration || !hardwareOpen) return;
+      hardware = mergeHardwareDiscovery(first, await walletService.listHardwareDevices());
+    }
+    catch (cause) {
+      if (generation !== hardwareScanGeneration) return;
+      if (hardware.length === 0) error = cause instanceof Error ? cause.message : 'Could not scan for devices.';
+    }
+    finally { if (generation === hardwareScanGeneration) hardwareBusy = false; }
+  }
+
+  function closeHardwareScan() {
+    hardwareScanGeneration += 1;
+    hardwareOpen = false;
+    hardwareBusy = false;
+  }
+
+  async function copyDescriptor(value: string, branch: 'receive' | 'change') {
+    await copyText(value);
+    toast({ title: `${branch === 'receive' ? 'Receive' : 'Change'} descriptor copied`, description: 'Public watch-only descriptor copied.', tone: 'success' });
+  }
+
+  function saveDescriptorDraft() {
+    if (!preview) return;
+    downloadText(`${safeTransferFilename(preview.name)}-descriptors.txt`, `Wallet: ${preview.name}\nReceive descriptor:\n${preview.externalDescriptor}\n\nChange descriptor:\n${preview.internalDescriptor}\n`);
+  }
+
+  async function importHardware(device: HardwareDevice, allowEmptyPassphrase = false) {
+    const deviceLabel = label.trim() || device.label;
+    hardwareBusy = true;
+    hardwareProgress = device.model.startsWith('ledger')
+      ? 'Reading the multisig account key from Ledger…'
+      : device.model === 'bitbox02'
+        ? 'Reading the public key from BitBox02…'
+        : `Reading the public key from ${device.label}…`;
+    error = '';
+    try { cosigners = [...cosigners, await walletService.importHardwareCosigner(device.id, deviceLabel, allowEmptyPassphrase)]; hardwareOpen = false; standardWalletOpen = false; standardWalletDevice = null; label = ''; }
+    catch (cause) { error = cause instanceof Error ? cause.message : 'Could not read the public key.'; }
     finally { hardwareBusy = false; }
   }
 
-  async function importHardware(device: HardwareDevice) {
-    const deviceLabel = label.trim() || device.label;
-    hardwareBusy = true; error = '';
-    try { cosigners = [...cosigners, await walletService.importHardwareCosigner(device.id, deviceLabel)]; hardwareOpen = false; label = ''; }
-    catch (cause) { error = cause instanceof Error ? cause.message : 'Could not read the public key.'; }
-    finally { hardwareBusy = false; }
+  async function handleHardware(device: HardwareDevice) {
+    if (device.action === 'import') return importHardware(device);
+    if (device.action === 'prompt_pin') return startHardwarePin(device);
+    if (device.action === 'confirm_empty_passphrase') {
+      standardWalletDevice = device;
+      hardwareOpen = false;
+      standardWalletOpen = true;
+      return;
+    }
+    if (device.action === 'retry') return scanHardware();
+  }
+
+  async function startHardwarePin(device: HardwareDevice) {
+    const retrying = pinOpen;
+    hardwareBusy = true; pinBusy = retrying; error = ''; pinError = ''; pinErrorCode = ''; pinPositions = '';
+    try {
+      pinChallenge = await walletService.promptHardwarePin(device.id);
+      pinDevice = device;
+      hardwareOpen = false;
+      pinOpen = true;
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : 'Could not start the PIN matrix.';
+      if (retrying) {
+        pinErrorCode = cause instanceof WalletError ? cause.code : 'internal_error';
+        pinError = message;
+      } else error = message;
+    } finally { hardwareBusy = false; pinBusy = false; }
+  }
+
+  async function submitHardwarePin() {
+    if (!pinChallenge || !pinPositions || pinBusy) return;
+    pinBusy = true; pinError = ''; pinErrorCode = '';
+    let positions = pinPositions;
+    pinPositions = '';
+    try {
+      await walletService.sendHardwarePin(pinChallenge, positions);
+      pinChallenge = ''; pinOpen = false; pinDevice = null;
+      toast({ title: 'Hardware wallet unlocked', description: 'Scanning again for its public fingerprint.', tone: 'success' });
+      await scanHardware();
+    } catch (cause) {
+      pinChallenge = '';
+      pinErrorCode = cause instanceof WalletError ? cause.code : 'internal_error';
+      pinError = cause instanceof Error ? cause.message : 'Trezor did not accept that matrix entry.';
+    } finally { positions = ''; pinBusy = false; }
   }
 
   async function review() {
@@ -154,8 +326,8 @@
 
 <div class="page coordinator-page">
   <header class="page-header">
-    <div><p class="eyebrow">DESCRIPTOR WALLET</p><h1>Create a multisig wallet</h1><p class="subtitle">Combine independent keys. Satchel coordinates; your devices sign.</p></div>
-    <span class="network-chip">Regtest · Native SegWit</span>
+    <div><p class="eyebrow">WALLET POLICY</p><h1>Create a policy wallet</h1><p class="subtitle">Choose a simple shared policy or add a separate delayed recovery key.</p></div>
+    <div class="page-header-actions"><a class="secondary-link" href="/multisig/recover"><FileUp size={15}/>Recover from backup</a><span class="network-chip">Regtest · Native SegWit</span></div>
   </header>
   <nav class="creation-progress" aria-label="Wallet creation progress"><span class:active={stage === 'keys'}><b>1</b>Design</span><i class:active={stage === 'review'}></i><span class:active={stage === 'review'}><b>2</b>Verify</span><i></i><span><b>3</b>Back up</span></nav>
 
@@ -181,21 +353,25 @@
             <label class="field"><span>Total cosigners (N)</span><select aria-label="Total cosigners" value={customCosignerCount} onchange={(event) => setCustomCosignerCount(Number(event.currentTarget.value))}>{#each Array(5) as _, i}<option value={i + 3}>{i + 3}</option>{/each}</select></label>
           </div><p class="policy-guidance">Satchel starts at 2 signatures. A 1-of-N wallet has no multisig theft protection; use a single-key wallet instead.</p>
           {:else}<div class="recipe-summary"><strong>{threshold} of {requiredKeys} signatures</strong><span>{standardRecipe === '2of3' ? 'Lose one key without losing access.' : 'Designed for a larger family or team.'}</span></div>{/if}
-        {:else}<div class="path-visual"><span><b>NOW</b><strong>2 of 3 primary keys</strong></span><i></i><span><b>{templateKind === 'recovery' ? '~1 MONTH' : '~1 YEAR'}</b><strong>1 recovery key</strong></span></div>{/if}
+        {:else}<div class="path-visual"><span><b>NOW</b><strong>2 of 3 primary keys</strong></span><i></i><span><b>{templateKind === 'recovery' ? '~1 MONTH' : '~1 YEAR'}</b><strong>1 recovery key</strong></span></div><div class="recovery-separation"><ShieldCheck size={15}/><span><strong>Four independent keys required</strong><small>Key 4 is recovery-only. It is excluded from the immediate 2-of-3 branch and cannot be reused as a primary signer.</small></span></div>{/if}
         <div class="key-heading"><div><h2>Cosigners</h2><p>Use a different device or backup for every key.</p></div><Button variant="secondary" size="small" disabled={cosigners.length >= requiredKeys} onclick={() => pickerOpen = true}><Plus size={15}/>{cosigners.length >= requiredKeys ? 'All added' : 'Add a cosigner'}</Button></div>
         <div class="cosigner-list">
           {#each cosigners as signer, i}
             <article class="cosigner-card">
-              <span class="device-number" aria-hidden="true">{i + 1}</span>
-              <div class="cosigner-card-body">
-                <strong class="cosigner-name">{signer.label}</strong>
-                <dl class="cosigner-metadata">
-                  <div><dt>Device fingerprint</dt><dd><code>{signer.fingerprint.toLowerCase()}</code></dd></div>
-                  <div><dt>{sourceHeading(signer.source)}</dt><dd><span class="source-badge">{sourceLabel(signer.source)}</span></dd></div>
-                  <div class="cosigner-public-key"><dt>Public account key</dt><dd><code>{signer.xpub}</code></dd></div>
-                </dl>
-              </div>
-              <button class="remove-cosigner" aria-label="Remove {signer.label}" title="Remove cosigner" onclick={() => cosigners = cosigners.filter((item) => item.id !== signer.id)}><Trash2 size={16}/></button>
+              <button class="draft-cosigner-trigger" aria-label="View {signer.label} details" onclick={() => selectedSigner = signer}>
+                <span class="device-number" aria-hidden="true">{i + 1}</span>
+                <span class="cosigner-card-body">
+                  <strong class="cosigner-name">{signer.label}</strong>
+                  <span class="cosigner-metadata">
+                    {#if templateKind !== 'standard'}<span><small>Policy role</small><span class="source-badge">{i === 3 ? 'Recovery-only signer' : 'Primary signer'}</span></span>{/if}
+                    <span><small>Device fingerprint</small><code>{signer.fingerprint.toLowerCase()}</code></span>
+                    <span><small>{sourceHeading(signer.source)}</small><span class="source-badge">{sourceLabel(signer.source)}</span></span>
+                    <span class="cosigner-public-key"><small>Public account key</small><code>{signer.xpub}</code></span>
+                  </span>
+                </span>
+                <ChevronRight class="draft-row-chevron" size={16}/>
+              </button>
+              <button class="remove-cosigner" aria-label="Remove {signer.label}" title="Remove cosigner" onclick={() => removeCosigner(signer.id)}><Trash2 size={16}/></button>
             </article>
           {:else}
             <div class="keys-empty"><FileKey size={22}/><strong>No cosigners yet</strong><span>Add {requiredKeys} independent keys for this template.</span></div>
@@ -204,9 +380,9 @@
         {#if cosigners.length > 0}<p class="cosigner-progress" aria-live="polite">{cosigners.length} of {requiredKeys} cosigners added</p>{/if}
         {#if reviewAttempted && visibleErrors.length}<div class="policy-errors" aria-live="polite">{#each visibleErrors as item}<p>{item}</p>{/each}</div>{/if}
         {#if error}<p class="form-error">{error}</p>{/if}
-        <div class="coordinator-actions"><Button variant="secondary" href="/settings"><ArrowLeft size={16}/>Cancel</Button><Button disabled={busy} onclick={review}>{busy ? 'Building…' : 'Review wallet'}<ChevronRight size={16}/></Button></div>
+        <div class="coordinator-actions"><Button variant="secondary" href="/settings"><ArrowLeft size={16}/>Cancel</Button><Button loading={busy} loadingLabel="Building policy…" onclick={review}>Review wallet<ChevronRight size={16}/></Button></div>
       </section>
-      <aside class="safety-panel"><ShieldCheck size={22}/><h2>Before you continue</h2><p>Satchel stores public descriptors only. It cannot spend without enough signatures.</p><ul><li>Back up the wallet descriptor.</li><li>Verify each fingerprint on its device.</li><li>Keep devices in separate places.</li></ul><code>{MULTISIG_ACCOUNT_PATH}</code></aside>
+      <aside class="safety-panel"><ShieldCheck size={22}/><h2>Before you continue</h2><p>Satchel stores public descriptors only. It cannot spend without enough signatures.</p><ul><li>Back up the wallet descriptor.</li><li>Verify each fingerprint on its device.</li><li>Keep devices in separate places.</li></ul><button class="hardware-help-card" onclick={() => openHardwareHelp()}><CircleHelp size={17}/><span><strong>Hardware setup help</strong><small>Coldcard, BitBox02, Ledger, Trezor, Jade</small></span><ChevronRight size={14}/></button><code>{MULTISIG_ACCOUNT_PATH}</code></aside>
     </div>
   {:else if preview}
     <section class="form-card review-policy">
@@ -214,31 +390,65 @@
       <span class="setup-step">FINAL REVIEW</span><h2>{preview.name}</h2><p class="review-intro">Confirm the policy and save the descriptor before creating this wallet.</p>
       <div class="policy-summary"><strong>{threshold} of {cosigners.length} signatures</strong><span>wsh · sortedmulti · BIP48</span></div>
       <button class="descriptor-toggle" onclick={() => showDescriptor = !showDescriptor}>Descriptor logic <ChevronDown size={14} class={showDescriptor?'rotated':''}/></button>
-      {#if showDescriptor}<div class="descriptor-block" data-testid="descriptor-preview"><span>Receive descriptor</span><code>{preview.externalDescriptor}</code>{#if recoveryTemplate?.type === 'recovery'}<span>Spend paths</span><code>2 of first 3 now · 1 recovery key after {recoveryTemplate.recovery.availableAfterBlocks.toLocaleString()} blocks</code>{/if}</div>{/if}
+      {#if showDescriptor}<div class="descriptor-block" data-testid="descriptor-preview"><span class="descriptor-label"><span>Receive descriptor</span><button aria-label="Copy receive descriptor" onclick={() => copyDescriptor(preview!.externalDescriptor, 'receive')}><Copy size={14}/></button></span><code>{preview.externalDescriptor}</code><span class="descriptor-label"><span>Change descriptor</span><button aria-label="Copy change descriptor" onclick={() => copyDescriptor(preview!.internalDescriptor, 'change')}><Copy size={14}/></button></span><code>{preview.internalDescriptor}</code>{#if recoveryTemplate?.type === 'recovery'}<span>Spend paths</span><code>2 of first 3 now · 1 recovery key after {recoveryTemplate.recovery.availableAfterBlocks.toLocaleString()} blocks</code>{/if}<button class="descriptor-download" onclick={saveDescriptorDraft}><Download size={14}/>Save public descriptor text</button></div>{/if}
       <div class="review-signers">{#each preview.cosigners as signer}<div><Check size={14}/><span><strong>{signer.label}</strong><small>{signer.fingerprint}</small></span></div>{/each}</div>
       <label class="check-row"><input type="checkbox" bind:checked={saved}/><span><strong>I saved the wallet descriptor</strong><small>This public backup is required to recover addresses and coordinate signatures.</small></span></label>
       <div class="credential-grid"><PasswordField label="App PIN" inputLabel="App PIN" bind:value={credential} placeholder="Unlock this coordinator" autocomplete="new-password"/><PasswordField label="Confirm app PIN" inputLabel="Confirm app PIN" bind:value={confirmation} placeholder="Enter it again" autocomplete="new-password"/></div>
       <p class="credential-note">This PIN protects local coordinator data. Hardware devices keep their own signing credentials.</p>
       {#if credential && confirmation && credential !== confirmation}<p class="form-error">PINs do not match.</p>{/if}
       {#if error}<p class="form-error">{error}</p>{/if}
-      <Button class="full" size="large" disabled={!saved || !credential || credential !== confirmation || busy} onclick={create}>{busy ? 'Creating…' : 'Create wallet'}</Button>
+      <Button class="full" size="large" disabled={!saved || !credential || credential !== confirmation} loading={busy} loadingLabel="Creating wallet…" onclick={create}>Create wallet</Button>
     </section>
   {/if}
 </div>
 
-<Modal open={pickerOpen} title="Add a cosigner" description="Choose how to import this device’s public account key." onclose={() => pickerOpen = false}>
+<Modal open={pickerOpen} title="Add a cosigner" description="Choose how to import this device’s public account key." onclose={() => { pickerOpen = false; pickerError = ''; }}>
   <div class="source-list">
     <button onclick={scanHardware}><Cpu size={18}/><span><strong>Connect hardware device</strong><small>Desktop · Bitcoin Core HWI</small></span><ChevronRight size={15}/></button>
+    <label class="source-button"><FileUp size={18}/><span><strong>Import public-key file</strong><small>Mounted SD card or local JSON · 256 KiB maximum</small></span><ChevronRight size={15}/><input aria-label="Public cosigner file" type="file" accept=".json,application/json" onchange={importCosignerFile}/></label>
     <button onclick={() => chooseSource('manual')}><FileKey size={18}/><span><strong>Enter public key</strong><small>Paste an account xpub and fingerprint</small></span><ChevronRight size={15}/></button>
   </div>
+  {#if pickerError}<p class="form-error" aria-live="polite">{pickerError}</p>{/if}
 </Modal>
 
-<Modal open={hardwareOpen} title="Connect hardware device" description="Unlock the device and keep it ready over USB, then verify the fingerprint on-device." onclose={() => hardwareOpen = false}>
+<Modal open={hardwareOpen} title="Connect hardware device" description="Connect one initialized device over USB, then verify its fingerprint before adding it." onclose={closeHardwareScan}>
+  <div class="hardware-readiness"><Usb size={18}/><span><strong>Unlock the signer, then release its USB connection</strong><small>BitBox02: open the wallet in BitBoxApp first, then quit BitBoxApp completely before scanning. Quit Trezor Suite, Ledger Live, and other companion apps too. A locked Trezor Model One is supported from its Satchel card.</small></span><button onclick={() => openHardwareHelp(true)}>Device help</button></div>
   <label class="field"><span>Cosigner label</span><input bind:value={label} placeholder="Defaults to device model" maxlength="48"/></label>
-  {#if hardwareBusy}<div class="device-scan"><Cpu size={20}/><span>Looking for devices…</span></div>
-  {:else if hardware.length === 0}<div class="device-scan"><Cpu size={20}/><strong>No device found</strong><span>Install Bitcoin Core HWI, connect one device, and try again. QR and manual import work on every platform.</span><Button variant="secondary" size="small" onclick={scanHardware}>Scan again</Button></div>
-  {:else}<div class="source-list">{#each hardware as device}<button onclick={() => importHardware(device)}><Cpu size={18}/><span><strong>{device.label}</strong><small>{device.fingerprint} · {device.model}</small></span><ChevronRight size={15}/></button>{/each}</div>{/if}
-  {#if error}<p class="form-error">{error}</p>{/if}
+  {#if hardwareBusy}<div class="device-scan"><Cpu size={20}/><strong>{hardwareProgress}</strong>{#if hardwareProgress.includes('Ledger')}<span>Keep Bitcoin Test open for Regtest and confirm the export on the device screen.</span>{/if}</div>
+  {:else if hardware.length === 0}<div class="device-scan"><Cpu size={20}/><strong>{error ? 'Device needs attention' : 'No device found'}</strong><span>{error || 'HWI returned no device. For Coldcard, sign in first, enable its USB port, reconnect, then scan again. Other signers must be initialized, unlocked, and released by companion apps.'}</span><Button variant="secondary" size="small" onclick={scanHardware}>Scan again</Button></div>
+  {:else}<div class="source-list hardware-device-list">{#each hardware as device}<button disabled={device.action === 'none'} onclick={() => handleHardware(device)}><Cpu size={18}/><span><strong>{device.label}</strong><small>{device.fingerprint ? `Fingerprint ${device.fingerprint} · ${device.message}` : device.message}</small><em class:ready={device.status === 'ready'}>{device.status === 'ready' ? 'Ready' : device.status === 'needs_pin' ? 'Unlock' : device.action === 'confirm_empty_passphrase' ? 'Choose wallet' : device.action === 'retry' ? 'Scan again' : 'Unavailable'}</em></span>{#if device.action !== 'none'}<ChevronRight size={15}/>{/if}</button>{/each}<button class="hardware-rescan" onclick={scanHardware}><RefreshCw size={16}/><span><strong>Scan again</strong><small>Refresh the list after unlocking or connecting another signer.</small></span><ChevronRight size={15}/></button></div>{/if}
+  {#if error && hardware.length > 0}<div class="hardware-inline-error" role="alert"><AlertTriangle size={18}/><span><strong>Could not read the account key</strong><small>{error}</small></span><Button variant="secondary" size="small" onclick={scanHardware}>Try again</Button></div>{/if}
+</Modal>
+
+<Modal open={standardWalletOpen} title="Use Trezor standard wallet?" description="Passphrase protection can expose several independent wallets from the same device." onclose={() => { standardWalletOpen = false; standardWalletDevice = null; hardwareOpen = true; }}>
+  <div class="credential-warning"><ShieldCheck size={17}/><p><strong>No hardware passphrase for this cosigner</strong><span>This imports the key derived from the device seed alone. It does not disable, change, or reveal any hidden passphrase wallet you may use elsewhere.</span></p></div>
+  <p class="policy-guidance">Choose this only if you intentionally want the Trezor <strong>standard wallet</strong> in this multisig policy. Enabling or choosing a passphrase later opens a different hidden wallet; it does not change this cosigner. The imported fingerprint is permanently bound to this policy.</p>
+  <div class="modal-footer"><Button variant="secondary" onclick={() => { standardWalletOpen = false; standardWalletDevice = null; hardwareOpen = true; }}>Back</Button><Button disabled={!standardWalletDevice} loading={hardwareBusy} loadingLabel="Importing…" onclick={() => { if (standardWalletDevice) importHardware(standardWalletDevice, true); }}>Use standard wallet</Button></div>
+</Modal>
+
+<TrezorPinModal
+  open={pinOpen}
+  busy={pinBusy}
+  challengeReady={Boolean(pinChallenge)}
+  positions={pinPositions}
+  device={pinDevice}
+  errorCode={pinErrorCode}
+  error={pinError}
+  onappend={(position) => pinPositions += position}
+  ondelete={() => pinPositions = pinPositions.slice(0, -1)}
+  onclear={() => pinPositions = ''}
+  onsubmit={submitHardwarePin}
+  onretry={() => { if (pinDevice) startHardwarePin(pinDevice); }}
+  onclose={() => { pinOpen = false; pinPositions = ''; pinChallenge = ''; pinDevice = null; pinError = ''; pinErrorCode = ''; }}
+/>
+
+<Modal open={hardwareHelpOpen} title="Prepare your hardware signer" description="Satchel imports one public account key. Your seed and private keys never leave the device." onclose={closeHardwareHelp}>
+  <div class="hardware-guide">
+    <div class="hardware-guide-tabs" aria-label="Hardware signer model">{#each hardwareGuides as guide}<button class:active={hardwareGuide === guide.id} onclick={() => hardwareGuide = guide.id}>{guide.name}</button>{/each}</div>
+    <div class="hardware-guide-body"><span class="device-number"><Usb size={15}/></span><div><strong>{selectedHardwareGuide.name}</strong><ol>{#each selectedHardwareGuide.steps as step}<li>{step}</li>{/each}</ol></div></div>
+    <p><strong>Never enter a seed into Satchel.</strong> If a device asks you to restore or initialize it during this flow, cancel and complete that process using the device vendor’s trusted instructions first.</p>
+    <Button class="full" onclick={() => { hardwareHelpOpen = false; hardwareHelpReturnsToScan = false; scanHardware(); }}>Scan for devices</Button>
+  </div>
 </Modal>
 
 <Modal open={keyOpen} title="Enter public cosigner key" description="No private key or seed should ever be entered here." onclose={() => keyOpen = false}>
@@ -249,3 +459,5 @@
     <div class="modal-footer"><Button variant="secondary" onclick={() => keyOpen = false}>Cancel</Button><Button type="submit" disabled={!label.trim() || !/^[0-9a-fA-F]{8}$/.test(fingerprint.trim()) || !xpub.trim()}>Add key</Button></div>
   </form>
 </Modal>
+
+<DeviceDetailsModal signer={selectedSigner} health={selectedSigner ? healthChecks[selectedSigner.id] ?? null : null} checking={checkingSigner} onclose={() => selectedSigner = null} oncheck={runDraftHealthCheck} oncopy={copyPublicKey}/>

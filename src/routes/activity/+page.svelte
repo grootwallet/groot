@@ -4,16 +4,21 @@
   import type { Transaction } from '$lib/types';
   import { toast } from '$lib/stores/toasts';
   import { walletService } from '$lib/wallet';
+  import { sortTransactionsNewestFirst } from '$lib/wallet/presentation';
   import { onMount } from 'svelte';
   import { Activity } from '@lucide/svelte';
   let selected = $state<Transaction | null>(null);
   let transactions = $state<Transaction[]>([]);
   let filter = $state<'all' | 'received' | 'sent'>('all');
-  const visibleTransactions = $derived(filter === 'all' ? transactions : transactions.filter((transaction) => transaction.direction === filter));
+  let multisig = $state(false);
+  const visibleTransactions = $derived(sortTransactionsNewestFirst(filter === 'all' ? transactions : transactions.filter((transaction) => transaction.direction === filter)));
   onMount(async () => {
-    try { transactions = (await walletService.snapshot()).transactions; }
+    try { const registry=await walletService.profiles();multisig=registry.wallets.find((wallet)=>wallet.id===registry.selectedWalletId)?.kind==='multisig';const snapshot=multisig?await walletService.multisigSnapshot():await walletService.snapshot();transactions=snapshot.transactions; }
     catch (cause) { toast({ title: 'Could not load transactions', description: cause instanceof Error ? cause.message : undefined, tone: 'danger' }); }
   });
+  onMount(() => walletService.subscribe((event) => {
+    if (event.type === 'wallet_updated') { multisig = event.walletKind === 'multisig'; transactions = event.snapshot.transactions; }
+  }));
 </script>
 
 <div class="page">
@@ -27,4 +32,4 @@
   </section>
 </div>
 
-<TxDetailsModal transaction={selected} onclose={() => selected = null} />
+<TxDetailsModal transaction={selected} {multisig} onclose={() => selected = null} />
