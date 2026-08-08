@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Check, ChevronDown, ChevronRight, Clock3, Cpu, History, KeyRound, LockKeyhole, Moon, Network, Plus, RefreshCw, ShieldCheck, Sun, Trash2, WalletCards } from '@lucide/svelte';
+  import { Check, ChevronRight, Clock3, Cpu, History, KeyRound, LockKeyhole, Moon, Network, Plus, RefreshCw, ShieldCheck, Sun, Trash2, WalletCards } from '@lucide/svelte';
   import Button from '$lib/components/Button.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import PasswordField from '$lib/components/PasswordField.svelte';
@@ -21,7 +21,6 @@
   let selectedWalletId = $state<string | null>(null);
   let inactivityTimeoutMinutes = $state(5);
   let savingInactivityTimeout = $state(false);
-  let timeoutMenuOpen = $state(false);
   let selectedProfile = $derived(profiles.find((wallet) => wallet.id === selectedWalletId));
   let isSoftwareWallet = $derived(selectedProfile?.kind === 'single_key');
   let credentialLabel = $derived(isSoftwareWallet ? 'Wallet passphrase' : 'App PIN');
@@ -66,7 +65,6 @@
   async function saveInactivityTimeout(minutes: number) {
     const previous = inactivityTimeoutMinutes;
     inactivityTimeoutMinutes = minutes;
-    timeoutMenuOpen = false;
     savingInactivityTimeout = true;
     try {
       const registry = await walletService.saveInactivityTimeout(minutes);
@@ -123,12 +121,12 @@
   }
 </script>
 
-<div class="page narrow-page">
+<div class="page narrow-page settings-page">
   <header class="page-header"><div><p class="eyebrow">WALLET SETTINGS</p><h1>{selectedProfile?.name ?? 'Settings'}</h1><p class="subtitle">Wallet security and connection. Appearance is global.</p></div></header>
   <section class="settings-group immediate-security"><h2>Security</h2>
     <div class="settings-list">
       <button onclick={lockNow}><span class="setting-icon"><LockKeyhole size={18}/></span><span><strong>Lock {selectedProfile?.name ?? 'wallet'} now</strong><small>Lock only this wallet immediately.</small></span><ChevronRight size={16}/></button>
-      <div class="setting-row"><span class="setting-icon"><Clock3 size={18}/></span><span><strong>Automatic lock</strong><small>One global setting; each unlocked wallet tracks its own inactivity.</small></span><div class="timeout-picker"><button type="button" class="timeout-trigger" aria-label="Automatic lock inactivity period" aria-haspopup="listbox" aria-expanded={timeoutMenuOpen} disabled={savingInactivityTimeout} onclick={() => timeoutMenuOpen = !timeoutMenuOpen}><span>{timeoutOptions.find((option) => option.value === inactivityTimeoutMinutes)?.label}</span><ChevronDown size={15}/></button>{#if timeoutMenuOpen}<div class="timeout-menu" role="listbox">{#each timeoutOptions as option}<button type="button" role="option" aria-selected={option.value === inactivityTimeoutMinutes} class:active={option.value === inactivityTimeoutMinutes} onclick={() => saveInactivityTimeout(option.value)}><span>{option.label}</span>{#if option.value === inactivityTimeoutMinutes}<Check size={14}/>{/if}</button>{/each}</div>{/if}</div></div>
+      <div class="setting-row automatic-lock-row"><span class="setting-icon"><Clock3 size={18}/></span><span><strong>Automatic lock</strong><small>One global setting; each unlocked wallet tracks its own inactivity.</small></span><select class="timeout-choice" aria-label="Automatic lock inactivity period" value={inactivityTimeoutMinutes} disabled={savingInactivityTimeout} onchange={(event) => saveInactivityTimeout(Number(event.currentTarget.value))}>{#each timeoutOptions as option}<option value={option.value}>{option.label}</option>{/each}</select></div>
     </div>
   </section>
   <section class="settings-group current-wallet-settings"><h2>Backup and recovery</h2>
@@ -155,7 +153,7 @@
   </section>
   <section class="settings-group"><h2>Wallet node</h2>
     <div class="settings-list">
-      <button onclick={() => nodeOpen=true}><span class="setting-icon"><Network size={18} /></span><span><strong>Bitcoin Core node</strong><small>{networkName(defaultConfig.network)} · {node.backend.type === 'local_core' ? 'This Mac' : 'Trusted remote server'} · {node.backend.url}</small></span><ChevronRight size={16}/></button>
+      <button onclick={() => nodeOpen=true}><span class="setting-icon"><Network size={18} /></span><span><strong>Bitcoin Core node</strong><small>{networkName(defaultConfig.network)} · {node.backend.type === 'local_core' ? 'This Mac' : 'Trusted remote server'} · <span class="selectable-text">{node.backend.url}</span></small></span><ChevronRight size={16}/></button>
       <button disabled={checking} onclick={checkConnection}><span class="setting-icon"><Check size={18}/></span><span><strong>Test connection</strong><small>Verify RPC authentication and chain availability.</small></span><span class="badge" class:offline={connected === false}>{checking ? 'Checking…' : connected === true ? 'Connected' : connected === false ? 'Offline' : 'Check'}</span></button>
     </div>
   </section>

@@ -22,7 +22,7 @@
   .language-control { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-width: 0; }
   .language-control.labelled { width: 100%; }
   .language-control-copy { display: flex; align-items: center; gap: 12px; min-width: 0; }
-  .language-control-copy > span:last-child { display: grid; gap: 2px; }
+  .language-control-copy > span:last-child { min-width: 0; display: grid; gap: 2px; }
   .language-control-copy strong, .language-control-copy small { display: block; }
   .language-control-copy small { color: var(--muted); }
   .language-toggle { display: inline-flex; align-items: center; gap: 2px; flex: 0 0 auto; padding: 3px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-inset); }
@@ -32,6 +32,8 @@
   .language-toggle button.active { color: var(--on-blue); background: var(--fr-blue); }
 
   @media (max-width: 540px) {
-    .language-control.labelled { align-items: flex-start; flex-direction: column; }
+    .language-control.labelled { gap: 10px; }
+    .language-control-copy { gap: 10px; }
+    .language-toggle button { min-width: 29px; padding-inline: 5px; }
   }
 </style>

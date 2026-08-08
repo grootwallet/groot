@@ -7,16 +7,20 @@
   import AnimatedUrQr from '$lib/components/AnimatedUrQr.svelte';
   import UrQrScanner from '$lib/components/UrQrScanner.svelte';
   import RecipientAddressModal from '$lib/components/RecipientAddressModal.svelte';
+  import SendProgress from '$lib/components/SendProgress.svelte';
+  import SignerSummary from '$lib/components/SignerSummary.svelte';
   import { readTransferFile } from '$lib/transfer';
   import { shortSats } from '$lib/data';
   import { toast } from '$lib/stores/toasts';
-  import { feeRate as asFeeRate, sats, walletService, type CoinSelection, type FeeEstimates, type HardwareDevice, type MultisigProposal, type PaymentProposal } from '$lib/wallet';
+  import { feeRate as asFeeRate, sats, walletService, type CoinSelection, type ExternalSignerWallet, type FeeEstimates, type HardwareDevice, type MultisigProposal, type PaymentProposal } from '$lib/wallet';
   import type { Utxo } from '$lib/types';
   import { defaultConfig, networkName } from '$lib/config';
   import { addressPrefixForNetwork, hasAddressPrefixForNetwork } from '$lib/wallet/policy';
   import { compactAddress } from '$lib/address-display';
+  import { fly } from 'svelte/transition';
 
   let step = $state(1);
+  let draftStep = $state<1 | 2>(1);
   let address = $state('');
   let label = $state('');
   let amount = $state('');
@@ -36,6 +40,8 @@
   let coins = $state<Utxo[]>([]);
   let selectedCoins = $state<string[]>([]);
   let showCoins = $state(false);
+  let externalWallet = $state<ExternalSignerWallet | null>(null);
+  let signerSummaryReady = $state(false);
   let externalSigner = $state(false), externalProposal = $state<MultisigProposal|null>(null), deviceOpen = $state(false), addressOpen = $state(false), importOpen = $state(false), qrOpen = $state(false), qrScanOpen = $state(false), devices = $state<HardwareDevice[]>([]), deviceError = $state(''), imported = $state(''), urFrames = $state<string[]>([]), scannedFrames = $state<string[]>([]);
   const selection = $derived<CoinSelection>(selectedCoins.length ? { mode: 'manual', outpoints: selectedCoins } : { mode: 'auto' });
   const fees = $derived({ slow: Number(estimates?.economy ?? 1), medium: Number(estimates?.standard ?? 2), fast: Number(estimates?.priority ?? 5) });
@@ -44,14 +50,16 @@
   const amountSats = $derived(Number(amount || 0));
   const addressValid = $derived(hasAddressPrefixForNetwork(address, defaultConfig.network));
   const valid = $derived(addressValid && label.trim().length > 0 && label.trim().length <= 48 && Number.isSafeInteger(amountSats) && amountSats > 0 && amountSats + fee <= available && selectedFeeRate > 0);
+  const intentValid = $derived(addressValid && label.trim().length > 0 && label.trim().length <= 48);
+  const progressStep = $derived<1 | 2 | 3>(step === 1 ? draftStep : 3);
+  const signerItems = $derived(externalSigner && externalWallet ? [{ label: externalWallet.signer.label, fingerprint: externalWallet.signer.fingerprint, detail: externalWallet.signer.deviceType ?? 'External hardware signer' }] : [{ label: 'Satchel app', detail: 'Software signer · This device', software: true }]);
 
   onMount(async () => {
     try {
       const [snapshot, feeData, registry] = await Promise.all([walletService.snapshot(), walletService.estimateFees(), walletService.profiles()]);
       externalSigner = registry.wallets.find((profile) => profile.id === registry.selectedWalletId)?.kind === 'watch_only';
-      if (!externalSigner) {
-        try { await walletService.externalSignerWallet(); externalSigner = true; } catch { /* selected wallet is not externally signed */ }
-      }
+      try { externalWallet = await walletService.externalSignerWallet(); externalSigner = true; } catch { /* selected wallet is not externally signed */ }
+      signerSummaryReady = true;
       coins = snapshot.utxos;
       const requested = new URL(window.location.href).searchParams.get('coins')?.split(',').filter(Boolean) ?? [];
       selectedCoins = requested.filter((outpoint) => snapshot.utxos.some((coin) => coin.outpoint === outpoint && !coin.frozen));
@@ -67,6 +75,7 @@
         step = 2;
       }
     } catch (cause) {
+      signerSummaryReady = true;
       toast({ title: 'Could not load wallet', description: cause instanceof Error ? cause.message : undefined, tone: 'danger' });
     }
   });
@@ -126,31 +135,38 @@
 </script>
 
 <div class="page narrow-page send-page">
-  <header class="page-header"><div><p class="eyebrow">SEND</p><h1>Send bitcoin</h1><p class="subtitle">{step === 1 ? 'Enter payment details.' : step === 2 ? 'Review everything carefully.' : step === 3 ? 'Unlock, sign, and broadcast.' : 'Payment sent.'}</p></div></header>
-  <div class="stepper"><span class:active={step >= 1}>1</span><i class:active={step >= 2}></i><span class:active={step >= 2}>2</span><i class:active={step >= 3}></i><span class:active={step >= 3}>3</span></div>
+  <header class="page-header"><div><p class="eyebrow">SEND</p><h1>Send bitcoin</h1><p class="subtitle">{step === 1 && draftStep === 1 ? 'Name the payment and choose its recipient.' : step === 1 ? 'Choose the amount, coins, and network fee.' : step === 2 ? 'Review everything carefully.' : step === 3 ? 'Unlock, sign, and broadcast.' : 'Payment sent.'}</p></div></header>
+  {#if step < 4}<SendProgress current={progressStep} />{/if}
+  {#if step < 4 && signerSummaryReady}<SignerSummary signers={signerItems} signedFingerprints={externalProposal?.signedFingerprints ?? []} collecting={externalSigner && Boolean(proposal)} />{/if}
 
-  {#if step === 1}
-    <form class="form-card" onsubmit={(event) => { event.preventDefault(); prepare(); }}>
-      <div class="coin-control-field"><span>Coin selection</span><button type="button" class="coin-mode" onclick={() => showCoins = !showCoins}><CircleDot size={16}/><span><strong>{selectedCoins.length ? `Manual · ${selectedCoins.length} coin${selectedCoins.length === 1 ? '' : 's'}` : 'Automatic selection'}</strong><small>{selectedCoins.length ? `${shortSats(available)} sats available` : 'Frozen coins stay untouched'}</small></span><b>{showCoins ? 'Done' : 'Choose'}</b></button>
+  {#if step === 1 && draftStep === 1}
+    <form class="form-card send-stage-card" onsubmit={(event) => { event.preventDefault(); if (intentValid) draftStep = 2; }} in:fly={{ x: 8, duration: 180 }}>
+      <div class="send-stage-heading"><span>STEP 1</span><h2>What is this payment for?</h2><p>This permanent label helps you recognize the transaction later.</p></div>
+      <label class="field"><span>Payment label</span><input aria-label="Payment label" bind:value={label} placeholder="e.g. Hardware purchase, Pay Alex, Test transaction" maxlength="48" /><small>Required · cannot be changed · {label.length}/48</small></label>
+      <label class="field"><span>Bitcoin address</span><input aria-label="Bitcoin address" bind:value={address} placeholder="{addressPrefixForNetwork(defaultConfig.network)}q…" />{#if address && !addressValid}<em>Enter a valid {networkName(defaultConfig.network)} address</em>{/if}</label>
+      <Button type="submit" disabled={!intentValid} size="large" class="full">Continue to amount<ArrowRight size={17} /></Button>
+    </form>
+  {:else if step === 1}
+    <form class="form-card send-stage-card" onsubmit={(event) => { event.preventDefault(); prepare(); }} in:fly={{ x: 8, duration: 180 }}>
+      <div class="send-stage-heading"><span>STEP 2</span><h2>Fund the payment</h2><p>Set the amount, then keep automatic selection or choose specific coins.</p></div>
+      <label class="field"><span>Amount</span><div class="amount-input"><input aria-label="Amount" bind:value={amount} inputmode="numeric" placeholder="0" /><b>sats</b><button type="button" onclick={() => amount = String(Math.max(0, available - 1000))}>Max</button></div><small>Available: {shortSats(available)} sats</small></label>
+      <div class="coin-control-field"><span>Coin selection</span><button type="button" class="coin-mode" class:open={showCoins} aria-expanded={showCoins} onclick={() => showCoins = !showCoins}><CircleDot size={16}/><span><strong>{selectedCoins.length ? `Manual · ${selectedCoins.length} coin${selectedCoins.length === 1 ? '' : 's'}` : 'Automatic selection'}</strong><small>{selectedCoins.length ? `${shortSats(available)} sats available` : 'Frozen coins stay untouched'}</small></span><b>{showCoins ? 'Done' : 'Choose'}</b></button>
         {#if showCoins}<div class="send-coin-picker">{#each coins as coin}<label class:frozen={coin.frozen}><input type="checkbox" checked={selectedCoins.includes(coin.outpoint)} disabled={coin.frozen} onchange={(event) => toggleCoin(coin.outpoint, event.currentTarget.checked)}/><span><strong>{coin.label}</strong><small>{shortSats(coin.amount)} sats{coin.frozen ? ' · Frozen' : ''}</small></span></label>{/each}<button type="button" onclick={useAutomatic}>Use automatic selection</button></div>{/if}
       </div>
-      <label class="field"><span>Bitcoin address</span><input bind:value={address} placeholder="{addressPrefixForNetwork(defaultConfig.network)}q…" />{#if address && !addressValid}<em>Enter a valid {networkName(defaultConfig.network)} address</em>{/if}</label>
-      <label class="field"><span>Payment label</span><input bind:value={label} placeholder="e.g. Hardware purchase" maxlength="48" /><small>Required · cannot be changed · {label.length}/48</small></label>
-      <label class="field"><span>Amount</span><div class="amount-input"><input bind:value={amount} inputmode="numeric" placeholder="0" /><b>sats</b><button type="button" onclick={() => amount = String(Math.max(0, available - 1000))}>Max</button></div><small>Available: {shortSats(available)} sats</small></label>
       <div class="field"><span>Network fee</span><div class="fee-options">
         {#each [{id:'slow',name:'Economy',rate:fees.slow},{id:'medium',name:'Standard',rate:fees.medium},{id:'fast',name:'Priority',rate:fees.fast}] as option}
           <button type="button" class:active={speed === option.id} onclick={() => speed = option.id}><span><strong>{option.name}</strong><small>Next block</small></span><b>{option.rate} sat/vB</b></button>
         {/each}
         <button type="button" class:active={speed === 'custom'} onclick={() => speed = 'custom'}><span><strong>Custom</strong><small>Set rate</small></span>{#if speed === 'custom'}<input aria-label="Custom fee rate" bind:value={customFee} onclick={(event) => event.stopPropagation()} inputmode="decimal" placeholder="0" />{:else}<Gauge size={17} />{/if}</button>
       </div><small>Fee estimates: {estimates?.source ?? 'loading…'} · Estimated fee {shortSats(fee)} sats</small></div>
-      <Button type="submit" disabled={!valid} loading={preparing} loadingLabel="Preparing payment…" size="large" class="full">Review payment<ArrowRight size={17} /></Button>
+      <div class="split-actions"><Button variant="secondary" size="large" onclick={() => draftStep = 1}>Back</Button><Button type="submit" disabled={!valid} loading={preparing} loadingLabel="Preparing payment…" size="large">Review payment<ArrowRight size={17} /></Button></div>
     </form>
   {:else if step === 2 && proposal}
     <section class="form-card">
       <div class="review-amount"><span>You send</span><strong>{shortSats(proposal.amount)} <small>sats</small></strong></div>
       <dl class="details-list"><div><dt>To</dt><dd><button class="address-review-trigger mono" aria-label="View complete recipient address" onclick={() => addressOpen = true}>{compactAddress(proposal.recipient)}</button></dd></div><div><dt>Label</dt><dd>{proposal.label}</dd></div><div><dt>Coins</dt><dd>{proposal.selectedOutpoints.length ? `${proposal.selectedOutpoints.length} selected` : 'Automatic selection'}</dd></div><div><dt>Fee rate</dt><dd>{proposal.feeRate} sat/vB</dd></div><div><dt>Network fee</dt><dd>{shortSats(proposal.fee)} sats</dd></div><div class="total"><dt>Total</dt><dd>{shortSats(proposal.total)} sats</dd></div></dl>
       <div class="warning-box">Bitcoin transactions cannot be reversed. Verify the address and amount before signing.</div>
-      <div class="split-actions"><Button variant="secondary" size="large" onclick={() => { proposal = null; step = 1; }}>Back</Button><Button size="large" onclick={() => step = 3}>Continue to sign<ArrowRight size={17} /></Button></div>
+      <div class="split-actions"><Button variant="secondary" size="large" onclick={() => { proposal = null; step = 1; draftStep = 2; }}>Back</Button><Button size="large" onclick={() => step = 3}>Continue to sign<ArrowRight size={17} /></Button></div>
     </section>
   {:else if step === 3 && proposal && externalSigner}
     <section class="form-card sign-card">

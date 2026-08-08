@@ -168,8 +168,14 @@
 
   @media (max-width: 560px) {
     .coin-sort-menu {
-      right: auto;
-      left: 0;
+      position: fixed;
+      z-index: 90;
+      top: auto;
+      right: 18px;
+      bottom: calc(142px + env(safe-area-inset-bottom));
+      left: 18px;
+      max-height: calc(100dvh - 180px);
+      overflow-y: auto;
     }
   }
 </style>

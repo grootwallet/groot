@@ -13,6 +13,9 @@
   import type { Transaction, Utxo } from '$lib/types';
   import { formatConfirmationCount, locale, t } from '$lib/i18n';
   import { sortCoins, type CoinSortOrder } from '$lib/wallet/presentation';
+  import WalletSkeleton from '$lib/components/WalletSkeleton.svelte';
+  import { slide } from 'svelte/transition';
+  import LoadFailure from '$lib/components/LoadFailure.svelte';
 
   let utxos = $state<Utxo[]>([]);
   let transactions = $state<Transaction[]>([]);
@@ -22,6 +25,8 @@
   let busy = $state(false);
   let multisig = $state(false);
   let freezeIntent = $state<{ outpoints: string[]; frozen: boolean } | null>(null);
+  let loading = $state(true);
+  let loadError = $state('');
   const selectedTotal = $derived(selectedCoinTotal(utxos, selected));
   const sortedUtxos = $derived(sortCoins(utxos, transactions, sortOrder));
   const reuseInsights = $derived(addressReuseInsights(utxos));
@@ -35,10 +40,14 @@
       utxos = event.snapshot.utxos;
       transactions = event.snapshot.transactions;
       selected = selected.filter((outpoint) => utxos.some((coin) => coin.outpoint === outpoint && !coin.frozen));
+      loadError = '';
+      loading = false;
     }
   }));
 
   async function load() {
+    loading = true;
+    loadError = '';
     try {
       const registry = await walletService.profiles();
       multisig = registry.wallets.find((wallet) => wallet.id === registry.selectedWalletId)?.kind === 'multisig';
@@ -46,7 +55,10 @@
       utxos = snapshot.utxos;
       transactions = snapshot.transactions;
     } catch (cause) {
-      toast({ title: 'Could not load coins', description: cause instanceof Error ? cause.message : undefined, tone: 'danger' });
+      loadError = cause instanceof Error ? cause.message : 'Coin data could not be read.';
+      toast({ title: 'Could not load coins', description: loadError, tone: 'danger' });
+    } finally {
+      loading = false;
     }
   }
 
@@ -116,6 +128,11 @@
     <div class="coin-toolbar-actions">{#if selected.length}<Button variant="secondary" size="small" disabled={busy} onclick={() => requestFrozenState(selected, true)}><Snowflake size={15}/>Freeze selected</Button><Button size="small" href={sendHref}>Send selected coins</Button>{:else}<span class="auto-note"><CircleDot size={14}/>Automatic selection remains the default</span>{/if}<CoinSortMenu value={sortOrder} onchange={(next) => (sortOrder = next)}/></div>
   </section>
 
+  {#if loading}
+    <WalletSkeleton variant="coins" count={4} />
+  {:else if loadError}
+    <LoadFailure title="Coins are unavailable" description={loadError} onretry={load} />
+  {:else}
   <section class="coin-list selectable">
 		{#each sortedUtxos as utxo (utxo.outpoint)}
 			{@const reuse = reuseFor(utxo.outpoint)}
@@ -124,17 +141,22 @@
         <label class="coin-check"><input type="checkbox" aria-label="Select {utxo.label}" checked={selected.includes(utxo.outpoint)} disabled={utxo.frozen || busy} onchange={(event) => toggle(utxo.outpoint, event.currentTarget.checked)}/><span></span></label>
         <span class="coin-icon">{#if utxo.frozen}<Lock size={17}/>{:else}<CircleDot size={19}/>{/if}</span>
         <div class="coin-main">
-          <strong>{utxo.label}</strong>
+          <div class="coin-title"><strong>{utxo.label}</strong>{#if utxo.frozen}<span class="coin-status frozen">Frozen</span>{:else if reuse}<span class="coin-status reused">Address reused</span>{:else if !utxo.confirmations}<span class="coin-status pending">Unconfirmed</span>{/if}</div>
           <span>{shortSats(utxo.amount)} sats</span>
-          {#if reuse}<small class="coin-reuse"><AlertTriangle size={12}/>Address reused · {reuse.outpoints.length} linked coins</small>{/if}
         </div>
-        <div class="coin-meta">
-          {#if utxo.frozen}<strong class="frozen-label">Frozen</strong><button aria-label="Unfreeze {utxo.label}" disabled={busy} onclick={() => requestFrozenState([utxo.outpoint], false)}><Unlock size={13}/>Unfreeze</button>{:else if utxo.confirmations}<strong>{formatConfirmationCount(utxo.confirmations, $locale)}</strong>{:else}<strong>{t('unconfirmed', $locale)}</strong><span>{t('awaitingConfirmation', $locale)}</span>{/if}
-          <button class="coin-details-toggle" aria-expanded={expanded.includes(utxo.outpoint)} aria-label="{expanded.includes(utxo.outpoint) ? 'Hide' : 'Show'} details for {utxo.label}" onclick={() => toggleDetails(utxo.outpoint)}>Details <ChevronDown size={13} class={expanded.includes(utxo.outpoint) ? 'rotated' : ''}/></button>
+        <div class="coin-meta coin-actions-meta">
+          <div class="coin-row-actions">
+            {#if utxo.frozen}
+              <button class="coin-unfreeze-action" aria-label="Unfreeze {utxo.label}" disabled={busy} onclick={() => requestFrozenState([utxo.outpoint], false)}><Unlock size={14}/>Unfreeze</button>
+            {:else}
+              <button class="coin-freeze-action" aria-label="Freeze {utxo.label}" disabled={busy} onclick={() => requestFrozenState([utxo.outpoint], true)}><Snowflake size={14}/>Freeze</button>
+            {/if}
+            <button class="coin-details-toggle" aria-expanded={expanded.includes(utxo.outpoint)} aria-label="{expanded.includes(utxo.outpoint) ? 'Hide' : 'Show'} details for {utxo.label}" onclick={() => toggleDetails(utxo.outpoint)}>Details <ChevronDown size={13} class={expanded.includes(utxo.outpoint) ? 'rotated' : ''}/></button>
+          </div>
         </div>
         {#if expanded.includes(utxo.outpoint)}
-          <div class="coin-details">
-            <dl><div><dt>Receive label</dt><dd>{utxo.label}</dd></div><div><dt>Address</dt><dd><code>{compactAddress(utxo.address)}</code><button aria-label="Copy address" onclick={() => copy(utxo.address, 'Address')}><Copy size={13}/></button></dd></div><div><dt>Outpoint</dt><dd><code>{compactAddress(utxo.outpoint, 18, 10)}</code><button aria-label="Copy outpoint" onclick={() => copy(utxo.outpoint, 'Outpoint')}><Copy size={13}/></button></dd></div></dl>
+          <div class="coin-details" transition:slide={{ duration: 180 }}>
+            <dl><div><dt>Status</dt><dd>{utxo.confirmations ? formatConfirmationCount(utxo.confirmations, $locale) : `${t('unconfirmed', $locale)} · ${t('awaitingConfirmation', $locale)}`}</dd></div><div><dt>Receive label</dt><dd>{utxo.label}</dd></div><div><dt>Address</dt><dd><code>{compactAddress(utxo.address)}</code><button aria-label="Copy address" onclick={() => copy(utxo.address, 'Address')}><Copy size={13}/></button></dd></div><div><dt>Outpoint</dt><dd><code>{compactAddress(utxo.outpoint, 18, 10)}</code><button aria-label="Copy outpoint" onclick={() => copy(utxo.outpoint, 'Outpoint')}><Copy size={13}/></button></dd></div></dl>
 					{#if reuse}
 						<div class="coin-reuse-details">
 							<div class="coin-reuse-explanation">
@@ -163,6 +185,7 @@
       <div class="coins-empty"><CircleDot size={22}/><strong>No spendable outputs yet</strong><span>Received bitcoin will appear here after sync.</span></div>
     {/each}
   </section>
+  {/if}
 </div>
 
 <CoinFreezeConfirmModal

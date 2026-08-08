@@ -1,6 +1,6 @@
 const MAX_GROUP_LENGTH = 4;
 
-export function compactAddress(address: string, prefixLength = 24, suffixLength = 12): string {
+export function compactAddress(address: string, prefixLength = 12, suffixLength = 8): string {
   if (!address || address.length <= prefixLength + suffixLength + 1) return address;
   return `${address.slice(0, prefixLength)}…${address.slice(-suffixLength)}`;
 }

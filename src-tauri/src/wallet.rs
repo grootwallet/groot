@@ -425,13 +425,14 @@ pub struct ReceiveAddressDto {
 #[serde(rename_all = "camelCase")]
 pub struct TransactionDto {
     id: String,
+    kind: String,
     direction: String,
     amount: u64,
     fee: Option<u64>,
     status: String,
     confirmations: u32,
     date: String,
-    address: String,
+    address: Option<String>,
     label: String,
     block: Option<u32>,
 }
@@ -2304,7 +2305,7 @@ fn tx_counterparty(
     db: &Connection,
     tx: &bdk_wallet::bitcoin::Transaction,
     received: bool,
-) -> (String, String) {
+) -> (Option<String>, String) {
     let txid = tx.compute_txid().to_string();
     let outgoing_label = (!received)
         .then(|| {
@@ -2322,7 +2323,7 @@ fn tx_counterparty(
             {
                 if keychain == KeychainKind::External {
                     if let Some(metadata) = address_metadata(db, index) {
-                        return metadata;
+                        return (Some(metadata.0), metadata.1);
                     }
                 }
             }
@@ -2335,7 +2336,7 @@ fn tx_counterparty(
             {
                 if let Ok(address) = Address::from_script(&output.script_pubkey, NETWORK) {
                     return (
-                        address.to_string(),
+                        Some(address.to_string()),
                         outgoing_label
                             .clone()
                             .unwrap_or_else(|| "Sent payment".to_owned()),
@@ -2345,13 +2346,21 @@ fn tx_counterparty(
         }
     }
     (
-        "Unknown".to_owned(),
+        None,
         if received {
             "Received".to_owned()
         } else {
             outgoing_label.unwrap_or_else(|| "Sent payment".to_owned())
         },
     )
+}
+
+fn transaction_kind(received: bool, has_external_value_output: bool) -> &'static str {
+    if !received && !has_external_value_output {
+        "self_spend"
+    } else {
+        "payment"
+    }
 }
 
 fn address_rows(db: &Connection, multisig: bool) -> ApiResult<Vec<ReceiveAddressDto>> {
@@ -2395,7 +2404,16 @@ fn snapshot_from(
         let (sent, received) = wallet.sent_and_received(transaction);
         let is_received = received > sent;
         let transaction_fee = wallet.calculate_fee(transaction).ok();
-        let amount = if is_received {
+        let has_external_value_output = transaction.output.iter().any(|output| {
+            output.value > Amount::ZERO
+                && wallet
+                    .derivation_of_spk(output.script_pubkey.clone())
+                    .is_none()
+        });
+        let kind = transaction_kind(is_received, has_external_value_output);
+        let amount = if kind == "self_spend" {
+            transaction_fee.unwrap_or(Amount::ZERO)
+        } else if is_received {
             received - sent
         } else {
             (sent - received)
@@ -2403,9 +2421,14 @@ fn snapshot_from(
                 .unwrap_or(Amount::ZERO)
         };
         let (confirmations, block, date) = confirmations(&tx.chain_position, tip);
-        let (address, label) = tx_counterparty(wallet, db, transaction, is_received);
+        let (address, label) = if kind == "self_spend" {
+            (None, "Self-spend".to_owned())
+        } else {
+            tx_counterparty(wallet, db, transaction, is_received)
+        };
         transactions.push(TransactionDto {
             id: tx.tx_node.txid.to_string(),
+            kind: kind.to_owned(),
             direction: if is_received { "received" } else { "sent" }.to_owned(),
             amount: amount.to_sat(),
             fee: if is_received {
@@ -5332,6 +5355,14 @@ mod tests {
     }
 
     #[test]
+    fn transaction_kind_distinguishes_fee_only_self_spends_from_payments() {
+        assert_eq!(transaction_kind(false, false), "self_spend");
+        assert_eq!(transaction_kind(false, true), "payment");
+        assert_eq!(transaction_kind(true, false), "payment");
+        assert_eq!(transaction_kind(true, true), "payment");
+    }
+
+    #[test]
     fn authentication_throttle_round_trips_through_wallet_storage() {
         let mut db = Connection::open_in_memory().unwrap();
         init_app_schema(&db).unwrap();
@@ -6119,6 +6150,7 @@ mod tests {
         init_app_schema(&db).unwrap();
         let transaction = |id: &str, direction: &str, confirmations: u32| TransactionDto {
             id: id.repeat(64),
+            kind: "payment".to_owned(),
             direction: direction.to_owned(),
             amount: 42,
             fee: None,
@@ -6130,7 +6162,7 @@ mod tests {
             .to_owned(),
             confirmations,
             date: "1".to_owned(),
-            address: "bcrt1qnotificationfixture".to_owned(),
+            address: Some("bcrt1qnotificationfixture".to_owned()),
             label: "Test deposit".to_owned(),
             block: (confirmations > 0).then_some(1),
         };

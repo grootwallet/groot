@@ -1,7 +1,6 @@
 <script lang="ts">
   import Modal from './Modal.svelte';
   import ReadableAddress from './ReadableAddress.svelte';
-  import InsightTip from './InsightTip.svelte';
   import { copyText } from '$lib/clipboard';
   import { presentLocalTimestamp } from '$lib/date-time';
   import { toast } from '$lib/stores/toasts';
@@ -34,7 +33,7 @@
     <div class="address-detail-view">
       <div class="address-detail-status"><span class="status-dot" class:used={address.status === 'used'}></span><span><strong>{address.label}</strong><small>{address.status === 'awaiting' ? 'Awaiting payment' : address.status === 'used' ? 'Payment received' : 'Retired from presentation'}</small></span></div>
       <ReadableAddress address={address.address} {copied} oncopy={copy}/>
-      <dl><div><dt>Status</dt><dd>{address.status}</dd></div><div><dt>Created</dt><dd class="address-created-time">{#if created?.dateTime}<time datetime={created.dateTime}>{created.display}</time>{:else}<span>{created?.display}</span>{/if}<InsightTip label="Time details" text={created?.detail ?? ''}/></dd></div><div><dt>Derivation path</dt><dd><code>{address.derivationPath}</code></dd></div><div><dt>Address type</dt><dd>{walletType}</dd></div></dl>
+      <dl><div><dt>Status</dt><dd>{address.status}</dd></div><div><dt>Created</dt><dd class="address-created-time">{#if created?.dateTime}<time datetime={created.dateTime} title={created.detail}>{created.display}</time>{:else}<span title={created?.detail}>{created?.display}</span>{/if}</dd></div><div><dt>Derivation path</dt><dd><code>{address.derivationPath}</code></dd></div><div><dt>Address type</dt><dd>{walletType}</dd></div></dl>
       <p>The label is permanent. Spaces above are visual only; copying always uses the exact address.</p>
     </div>
   {/if}

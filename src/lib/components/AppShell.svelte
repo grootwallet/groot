@@ -5,7 +5,7 @@
   import WalletProfileList from './WalletProfileList.svelte';
   import NetworkStatus from './NetworkStatus.svelte';
   import ThemeToggle from './ThemeToggle.svelte';
-  import LanguageToggle from './LanguageToggle.svelte';
+  import DiscreetModeToggle from './DiscreetModeToggle.svelte';
   import { defaultConfig } from '$lib/config';
   import { onMount } from 'svelte';
   import { afterNavigate, goto } from '$app/navigation';
@@ -15,6 +15,7 @@
   import { shortSats } from '$lib/data';
   import type { WalletProfile } from '$lib/wallet/contracts';
   import { formatWalletCount, locale, t, type MessageKey } from '$lib/i18n';
+  import { provideWalletShellContext } from '$lib/wallet/shell-context';
   let { children } = $props();
   const nav: Array<{ href: string; label: MessageKey; icon: typeof LayoutGrid }> = [
     { href: '/', label: 'overview', icon: LayoutGrid },
@@ -32,7 +33,7 @@
   let mobileItems = $derived(policyContext ? nav : nav.slice(0, 3));
   let onboardingRoute = $derived(page.url.pathname === '/welcome');
   let lockedRoute = $derived(page.url.pathname === '/unlock');
-  const showQuickActions = $derived(!lockedRoute && page.url.pathname !== '/send' && page.url.pathname !== '/receive' && !page.url.pathname.startsWith('/multisig'));
+  const showQuickActions = $derived(!lockedRoute && (page.url.pathname === '/' || page.url.pathname === '/coins'));
   const receiveHref = $derived(selectedProfile?.kind === 'multisig' ? '/multisig/receive' : '/receive');
   const sendHref = $derived(selectedProfile?.kind === 'multisig' ? '/multisig/send' : '/send');
 
@@ -76,6 +77,11 @@
       toast({ title: 'Wallet not switched', description: cause instanceof Error ? cause.message : 'Could not select this wallet.', tone: 'danger' });
     }
   }
+  provideWalletShellContext({
+    profiles: () => profiles,
+    selectedWalletId: () => selectedWalletId,
+    selectWallet
+  });
   onMount(() => {
     const unsubscribe = walletService.subscribe((event) => {
       if (event.type === 'payment_received') toast({ title: 'Bitcoin received', description: `Received ${shortSats(event.amount)} sats · Balance ${shortSats(event.balance)} sats`, tone: 'success' });
@@ -116,7 +122,7 @@
   });
 </script>
 
-<div class="app-shell" class:onboarding-shell={onboardingRoute}>
+<div class="app-shell" class:onboarding-shell={onboardingRoute} class:mobile-actions-visible={showQuickActions}>
   <aside class="sidebar">
     <a class="brand" href="/"><span class="brand-mark"><Bitcoin size={18} /></span><span>Satchel</span></a>
     {#if profiles.length}
@@ -135,7 +141,7 @@
     {/if}
     <div class="sidebar-bottom">
       {#if !lockedRoute}<a href="/settings" class:active={active('/settings')} aria-current={active('/settings') ? 'page' : undefined}><Settings size={17} /><span>{t('settings', $locale)}</span></a>{/if}
-      <div class="preference-toggles"><ThemeToggle /><LanguageToggle /></div>
+      <div class="preference-toggles"><ThemeToggle /><DiscreetModeToggle /></div>
       <NetworkStatus network={defaultConfig.network} locked={lockedRoute} />
     </div>
   </aside>
@@ -152,7 +158,7 @@
     <a href="/settings" class:active={active('/settings')} aria-current={active('/settings') ? 'page' : undefined}><Settings size={20} /><span>{t('settings', $locale)}</span></a>
   </nav>{/if}
 
-  {#if lockedRoute}<div class="locked-mobile-utilities"><ThemeToggle /><LanguageToggle /><NetworkStatus network={defaultConfig.network} locked /></div>{/if}
+  {#if lockedRoute}<div class="locked-mobile-utilities"><ThemeToggle /><DiscreetModeToggle /><NetworkStatus network={defaultConfig.network} locked /></div>{/if}
 
   {#if showQuickActions}
     <div class="mobile-actions">

@@ -1,10 +1,11 @@
 <script lang="ts">
-  import { ChevronRight, Copy, Eye, FileKey, FlaskConical, MoreHorizontal, Plus, ShieldCheck, Usb } from '@lucide/svelte';
+  import { ChevronRight, Copy, Eye, FileKey, FlaskConical, Plus, ShieldCheck, Usb } from '@lucide/svelte';
   import { onMount } from 'svelte';
   import Button from '$lib/components/Button.svelte';
   import DeviceDetailsModal from '$lib/components/DeviceDetailsModal.svelte';
   import LocalTimestamp from '$lib/components/LocalTimestamp.svelte';
   import Modal from '$lib/components/Modal.svelte';
+  import OverflowMenuButton from '$lib/components/OverflowMenuButton.svelte';
   import { isPrototypeWallet, walletService, type CosignerHealthCheck, type MultisigWallet, type WalletSnapshot } from '$lib/wallet';
   import type { CosignerDraft, CosignerSource } from '$lib/multisig/policy';
   import { defaultConfig, networkName } from '$lib/config';
@@ -18,12 +19,30 @@
   let selectedSigner = $state<CosignerDraft | null>(null);
   let showDescriptors = $state(false);
   let moreOpen = $state(false);
+  let moreRoot = $state<HTMLDivElement | null>(null);
+  let moreTrigger = $state<HTMLButtonElement | null>(null);
   let checking = $state(false);
   let combinedDescriptor = $derived(wallet ? combineDescriptorBranches(wallet.externalDescriptor, wallet.internalDescriptor) : null);
   onMount(async () => { wallet = await walletService.multisigWallet(); if (wallet) { try { snapshot = await walletService.syncMultisig(); } catch (cause) { toast({title:'Vault is offline',description:cause instanceof Error?cause.message:undefined,tone:'danger'}); } } });
   onMount(() => walletService.subscribe((event) => {
     if (event.type === 'wallet_updated' && event.walletKind === 'multisig') snapshot = event.snapshot;
   }));
+  onMount(() => {
+    const closeOutside = (event: PointerEvent) => {
+      if (moreOpen && moreRoot && event.target instanceof Node && !moreRoot.contains(event.target)) moreOpen = false;
+    };
+    const closeEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || !moreOpen) return;
+      moreOpen = false;
+      requestAnimationFrame(() => moreTrigger?.focus());
+    };
+    document.addEventListener('pointerdown', closeOutside);
+    document.addEventListener('keydown', closeEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOutside);
+      document.removeEventListener('keydown', closeEscape);
+    };
+  });
   async function copyDescriptor(value: string, label: string) {
     await copyText(value);
     toast({ title: `${label} descriptor copied`, description: 'Public watch-only descriptor copied.', tone: 'success' });
@@ -67,7 +86,7 @@
 <div class="page coordinator-page">
   {#if wallet}
     <header class="page-header"><div><p class="eyebrow">WALLET POLICY</p><h1>{wallet.name}</h1><p class="subtitle">A watch-only wallet whose spending policy is enforced by independent keys.</p></div><span class="policy-pill">{wallet.threshold} of {wallet.cosigners.length}</span></header>
-    <section class="vault-hero"><span><ShieldCheck size={22}/></span><div class="vault-summary"><small>{shortSats(snapshot?.balance.total ?? 0)} sats · Spending policy</small><strong>{wallet.threshold} of {wallet.cosigners.length}</strong><p>Native SegWit · sortedmulti · {networkName(snapshot?.network ?? defaultConfig.network)}</p>{#if isPrototypeWallet}<p class="prototype-hint">Ready-to-test demo vault <span>·</span> PIN <code>prototype-passphrase</code></p>{/if}</div><div class="vault-actions"><div class="wallet-more"><button type="button" class="wallet-more-trigger" aria-label="More wallet actions" aria-haspopup="menu" aria-expanded={moreOpen} onclick={() => moreOpen=!moreOpen} onkeydown={(event) => { if (event.key === 'Escape') moreOpen=false; }}><MoreHorizontal size={18}/></button>{#if moreOpen}<div class="wallet-more-menu" role="menu" tabindex="-1" onkeydown={(event) => { if (event.key === 'Escape') moreOpen=false; }}><button role="menuitem" onclick={() => { moreOpen=false; showDescriptors=true; }}><Eye size={15}/><span><strong>Show descriptors</strong><small>Inspect receive and change logic</small></span></button><a role="menuitem" href="/multisig/backup"><FileKey size={15}/><span><strong>Export & verify</strong><small>Save a public wallet backup</small></span></a><a role="menuitem" href="/multisig/policy"><FlaskConical size={15}/><span><strong>Recovery policy lab</strong><small>Explore guided Miniscript paths</small></span></a></div>{/if}</div><Button variant="secondary" href="/multisig/receive">Receive</Button><Button href="/multisig/send">Send</Button></div></section>
+    <section class="vault-hero"><span><ShieldCheck size={22}/></span><div class="vault-summary"><small>{shortSats(snapshot?.balance.total ?? 0)} sats · Spending policy</small><strong>{wallet.threshold} of {wallet.cosigners.length}</strong><p>Native SegWit · sortedmulti · {networkName(snapshot?.network ?? defaultConfig.network)}</p>{#if isPrototypeWallet}<p class="prototype-hint">Ready-to-test demo vault <span>·</span> PIN <code>prototype-passphrase</code></p>{/if}</div><div class="vault-actions"><div class="wallet-more" bind:this={moreRoot}><OverflowMenuButton bind:element={moreTrigger} label="More wallet actions" expanded={moreOpen} onclick={() => moreOpen=!moreOpen}/>{#if moreOpen}<div class="wallet-more-menu" role="menu"><button role="menuitem" onclick={() => { moreOpen=false; showDescriptors=true; }}><Eye size={15}/><span><strong>Show descriptors</strong><small>Inspect receive and change logic</small></span></button><a role="menuitem" href="/multisig/backup"><FileKey size={15}/><span><strong>Export & verify</strong><small>Save a public wallet backup</small></span></a><a role="menuitem" href="/multisig/policy"><FlaskConical size={15}/><span><strong>Recovery policy lab</strong><small>Explore guided Miniscript paths</small></span></a></div>{/if}</div><Button variant="secondary" href="/multisig/receive">Receive</Button><Button href="/multisig/send">Send</Button></div></section>
     <div class="vault-grid">
       <section class="vault-cosigners"><div class="section-heading compact"><div><h2>Signing keys</h2><p>Sign with any {wallet.threshold} keys. Select one to inspect its identity and health history.</p></div></div><div class="saved-cosigner-list">{#each wallet.cosigners as signer, i}<article><button aria-label="View {signer.label} details" onclick={() => openSigner(signer)}><span class="device-number">{i + 1}</span><span class="saved-cosigner-copy"><strong>{signer.label}</strong><span><code>{signer.fingerprint.toLowerCase()}</code><i></i>{sourceName(signer.source)}{#if latestHealth(signer)}<i></i>Checked <LocalTimestamp value={latestHealth(signer)!.checkedAt}/>{/if}</span></span><span class="ready-badge" class:attention={latestHealth(signer)?.status === 'attention'}>{healthLabel(signer)}</span><ChevronRight class="row-chevron" size={16}/></button></article>{/each}</div></section>
       <aside class="vault-backup-card"><span class="vault-backup-icon"><FileKey size={20}/></span><div><h2>Backups & recovery</h2><p>Save the public policy, then verify it rebuilds the same first address.</p></div><Button variant="secondary" class="full" href="/multisig/backup">Export & verify</Button><Button variant="ghost" class="full" href="/multisig/policy">Recovery policy lab</Button></aside>

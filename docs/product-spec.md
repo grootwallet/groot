@@ -61,6 +61,8 @@ Regtest builds expose a locked-screen deletion action for the selected disposabl
 
 Show confirmed, pending, and total balance in satoshis; BTC and fiat are secondary display values only. Show sync recency and the latest three transactions. Receive and Send are the primary actions.
 
+A persisted global discreet mode hides wallet amounts across Overview and activity surfaces. It remains available as a quick desktop-shell control and from the balance card; it does not alter wallet accounting or transaction data.
+
 ## Receive
 
 1. User requests a new address.
@@ -74,7 +76,7 @@ Show confirmed, pending, and total balance in satoshis; BTC and fiat are seconda
 
 ## Send
 
-1. Enter/scan a network-valid address, a mandatory permanent payment label of at most 48 characters, and an integer satoshi amount. Rust stores the label with the proposal and resulting outgoing transaction; it is not editable or reused.
+1. A labeled three-stage progress indicator keeps every send flow consistent: **Intent**, **Amount & fee**, and **Review & sign**. Intent asks for the mandatory permanent payment label first, then a network-valid recipient address, so the user names the purpose before choosing how to fund it. Amount & fee contains the integer satoshi amount, coin selection, and fee rate. Rust stores the label with the proposal and resulting outgoing transaction; it is not editable or reused.
 2. Choose economy, standard, priority, or validated custom sat/vB rate.
 3. Use automatic coin selection by default, excluding frozen coins. The user may instead select one or more unfrozen UTXOs explicitly.
 4. Prepare a real unsigned transaction in Rust and return its authoritative review summary, including the selected inputs.
@@ -83,9 +85,11 @@ Show confirmed, pending, and total balance in satoshis; BTC and fiat are seconda
 7. Show a durable success state plus a transaction-broadcast toast with updated balance.
 8. A pending transaction may be accelerated through RBF when it signals replacement, or through CPFP when it has a spendable wallet-controlled output. Both paths create a new authoritative PSBT and return to the same review and signing flow.
 
+The send surface includes a compact public signer summary throughout the flow. Software wallets identify Satchel on the current device as the signer. External-hardware and multisig wallets show imported signer labels/models and shortened master fingerprints plus the required threshold; a signer is marked signed only from authoritative proposal data. Imported identity never implies that a device is currently connected or healthy.
+
 ## Activity and transaction details
 
-List received/sent transactions with label, amount, date, and pending/confirmation state. Details show transaction ID, inputs/outputs summary, fee when known, block/confirmations, and a network-correct explorer link on supported public test networks. Opening a third-party explorer carries a short privacy warning; local regtest transactions never receive a dead public-explorer link.
+List received/sent transactions with an authoritative typed classification, label, amount, date, and pending/confirmation state. A fee-only transaction whose value outputs all remain wallet-controlled is a **Self-spend**: its displayed wallet debit is the network fee and it has no counterparty address. Details show transaction ID, inputs/outputs summary, fee when known, block/confirmations, and a network-correct explorer link on supported public test networks. Opening a third-party explorer carries a short privacy warning; local regtest transactions never receive a dead public-explorer link. Compact addresses always preserve both identifying ends as `prefix…suffix`; opening one replaces that compact value with the complete grouped, copy-safe view rather than displaying both at once.
 
 An empty activity view explicitly says that the wallet has no transactions yet. Filtered empty states distinguish no received transactions from no sent transactions.
 
@@ -120,7 +124,7 @@ Require the selected wallet credential, explicit typed confirmation, and a backu
 4. Rust constructs canonical checksummed external/change `wsh(sortedmulti())` descriptors and BDK derives the verification address. Interchange presents the standard multipath `/<0;1>/*` form when the two branches are provably identical apart from branch number; separate receive and change descriptors remain available as optional detail and remain BDK's internal representation.
 5. User verifies connected devices where supported and confirms an offline descriptor backup before the wallet can receive funds. When a connected signer type requires wallet-policy registration, setup blocks completion until the user exports, imports, and verifies that policy on-device. Coldcard cosigners receive a BIP-380 descriptor export and explicit on-device name, threshold, and fingerprint acknowledgment.
    Selecting a cosigner during setup or from a saved wallet reveals its public fingerprint, BIP48 account path, import source, public account key, connection capability, last health check, and the bounded recent check log for the current app session. A new health check re-enumerates connected hardware and requires an exact fingerprint match. Offline/manual keys receive a public-record integrity check that must not imply physical verification. Before USB scanning, Satchel states that a signer must already be initialized with a seed and offline backup and that vendor companion apps must be fully quit before Satchel can own the USB session. Most devices must be unlocked and ready in their vendor-specific Bitcoin mode; a locked Trezor Model One instead exposes Satchel's PIN-position flow. When HWI reports PIN and passphrase requirements together, PIN unlock always precedes standard/hidden wallet selection and fingerprint import in both multisig and external single-key setup. A standard Trezor wallet remains valid if passphrase support is enabled later; the resulting hidden wallet is a separate identity that must be added as a separate Satchel wallet. BitBox02 help sequences vendor-app unlock before releasing USB to Satchel, and Ledger import visibly waits for on-device public-key export approval. Concise Coldcard, BitBox02, Ledger, Trezor, and Jade preparation help is available without exposing advanced descriptor details.
-6. Send creates and persists an authoritative PSBT. Partial signatures may arrive in any order over hardware, bounded `crypto-psbt` UR v2 QR, or file. PSBT export uses a native save dialog and validates the payload before writing. Canceling a proposal requires a destructive confirmation that reviews the payment and states how many collected signatures will be discarded; the initial cancel action never deletes directly. Leaving the signing page also requires confirmation and explicitly preserves the proposal and collected signatures for resumption.
+6. Send uses the same labeled **Intent → Amount & fee → Review & sign** stages as single-key wallets and presents the wallet threshold, signer labels/models, and shortened public fingerprints before proposal creation. It then creates and persists an authoritative PSBT. Partial signatures may arrive in any order over hardware, bounded `crypto-psbt` UR v2 QR, or file. PSBT export uses a native save dialog and validates the payload before writing. Canceling a proposal requires a destructive confirmation that reviews the payment and states how many collected signatures will be discarded; the initial cancel action never deletes directly. Leaving the signing page also requires confirmation and explicitly preserves the proposal and collected signatures for resumption.
 7. Rust validates and merges matching PSBTs, displays signature progress, and broadcasts only after the descriptor is satisfied and the transaction is finalized. Hardware discovery can be refreshed without closing the modal; identity and signing failures stay visible inside that modal with a recovery action.
 8. Hardware-only wallets use an app PIN verifier but have no coordinator-held mnemonic or private key.
 9. Setup offers visual standard, delayed-recovery, and inheritance templates. Descriptor logic is hidden by default but available before creation. Recovery/inheritance templates compile and persist real Miniscript descriptors in Rust; coordinator-assisted spending through a matured delayed branch remains a V2 release gate.
@@ -136,7 +140,7 @@ Mainnet, Lightning, arbitrary custom Miniscript editing, editable labels, contac
 
 ## Language and local preferences
 
-- English, French, and Spanish can be selected while locked or unlocked. The preference is stored locally, survives app relaunches, is applied before first paint, and is never synchronized over the network.
+- English, French, and Spanish are selected in the global **App appearance** section of Settings. The preference is stored locally, survives app relaunches, is applied before first paint, and is never synchronized over the network.
 - The shared localization boundary covers shell navigation, recurring statuses, and grammatical count labels. Untranslated domain copy falls back to English until it is added to the catalog; expanding the catalog must not change wallet contracts or trusted Rust behavior.
 - Wallet names, permanent labels, addresses, descriptors, transaction data, and user-entered text remain byte-for-byte user or protocol data and are never translated.
 - A wallet may be software single-key, external-signer single-key, or descriptor multisig. Each profile has isolated storage, app credential, descriptor identity, proposals, labels, and node configuration.

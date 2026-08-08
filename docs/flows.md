@@ -25,6 +25,8 @@ The generated words remain hidden until the user confirms their surroundings are
 
 Each profile owns a UUID-isolated directory and unlock session. Switching never lets one wallet authorize another, but it also does not revoke the wallet being left. Returning before that wallet's independent inactivity deadline opens it directly; an expired or never-unlocked wallet shows its own credential screen. The duration is one global preference for every wallet, defaults to five minutes, and is configurable under **Settings → Security → Automatic lock**. Activity in one wallet does not refresh another. Background polling does not count as activity. Deleting the selected profile chooses another remaining profile and returns to that profile's unlock state, or returns to onboarding if no wallets remain.
 
+Desktop exposes the selector in the persistent sidebar. Mobile exposes it beside Overview's overflow action; both use the same shell-owned registry and selection flow, and their popup menus stay inside the visible viewport.
+
 Wallet is the common top-level container. Software-key, hardware-key, shared multisig, and recovery/inheritance policies all use the same Overview, Activity, and Coins destinations. Policy is an additional detail destination for wallets with multiple signing paths; it is not a separate balance-bearing vault.
 
 ## Unlock and deletion
@@ -51,13 +53,17 @@ Any number of unused addresses may await payment concurrently. Each may transiti
 
 ## Single-key send
 
-`recipient+permanent label+amount+fee → persist Rust PSBT+label → authoritative review → credential → sign+broadcast → durable labeled success`
+`Intent: permanent label+recipient → Amount & fee: amount+coins+fee rate → persist Rust PSBT+label → Review & sign: authoritative review+credential → sign+broadcast → durable labeled success`
 
-The review is derived from the persisted PSBT, while Rust normalizes and persists the mandatory outgoing label alongside that proposal. The recipient is shown as `prefix…suffix` and opens a complete grouped, copy-safe detail modal. A wrong credential clears the field and leaves the reviewed proposal available for retry. Restart reloads the exact proposal; it does not rebuild transaction intent from UI fields. PSBT export opens the native file picker, validates a bounded PSBT at the Rust boundary, and reports a durable success or failure. Canceling first opens a destructive review of the payment and collected signatures; only the modal's confirmation calls the cancellation boundary. **Back to overview** opens a separate leave confirmation and preserves the proposal and signatures for later resumption. Broadcast emits a toast and returns an updated snapshot whose activity record uses the permanent outgoing label.
+Every stage is named in the same three-step progress indicator. A compact signer summary identifies Satchel on this device for software wallets, or the imported model/label and shortened public fingerprint for external hardware. The review is derived from the persisted PSBT, while Rust normalizes and persists the mandatory outgoing label alongside that proposal. The recipient is shown as `prefix…suffix` and opens a complete grouped, copy-safe detail modal. A wrong credential clears the field and leaves the reviewed proposal available for retry. Restart reloads the exact proposal; it does not rebuild transaction intent from UI fields. PSBT export opens the native file picker, validates a bounded PSBT at the Rust boundary, and reports a durable success or failure. Canceling first opens a destructive review of the payment and collected signatures; only the modal's confirmation calls the cancellation boundary. **Back to overview** opens a separate leave confirmation and preserves the proposal and signatures for later resumption. Broadcast emits a toast and returns an updated snapshot whose activity record uses the permanent outgoing label.
 
 `pending transaction → Increase fee (RBF) or Spend output (CPFP) → persisted acceleration PSBT → normal review/sign/broadcast`
 
 Acceleration never bypasses review or signer thresholds. Confirmed, non-replaceable, missing-output, insufficient-value, and confirmation-race states fail explicitly and remain retryable after sync.
+
+`wallet-owned inputs → only wallet-owned value outputs → Rust classifies self_spend → activity shows Self-spend and fee debit → no counterparty row`
+
+Transaction kind is authoritative snapshot data, not a UI guess from labels or zero amounts. Compact counterparty addresses and full grouped addresses are mutually exclusive presentation states.
 
 ## Multisig setup
 
@@ -91,9 +97,9 @@ While the draft is incomplete, setup presents neutral progress such as “1 of 3
 
 This flow is implemented for regtest; see `docs/implementation-status.md` for certification limits.
 
-`payment details → persisted unsigned PSBT → review → collect any k signatures → Miniscript satisfaction/finalization → broadcast`
+`Intent: permanent label+recipient → Amount & fee: amount+coins+fee rate → persisted unsigned PSBT → Review & sign: authoritative review+collect any k signatures → Miniscript satisfaction/finalization → broadcast`
 
-Each cosigner is `ready`, `awaiting`, `signing`, `signed`, `rejected`, or `unavailable`. USB, bounded `crypto-psbt` UR v2 QR, and file signatures converge on one Rust PSBT merge function. Imported data must match the proposal's unsigned transaction and descriptor identity. The app PIN unlocks coordinator data; it never substitutes for a hardware signature.
+The three stages use the same labeled progress indicator as single-key sends. A compact signer summary shows the threshold, imported signer labels/models, and shortened public fingerprints; it marks signatures only from the authoritative proposal and does not claim physical connectivity. Each cosigner is `ready`, `awaiting`, `signing`, `signed`, `rejected`, or `unavailable`. USB, bounded `crypto-psbt` UR v2 QR, and file signatures converge on one Rust PSBT merge function. Imported data must match the proposal's unsigned transaction and descriptor identity. The app PIN unlocks coordinator data; it never substitutes for a hardware signature.
 
 The hardware-signing modal always offers an in-place rescan. A signer outside the wallet quorum, an unavailable fingerprint, or a rejected signing request remains as a durable inline modal error; the page behind the overlay is never the sole error surface. Existing wallets with a Coldcard cosigner can export the same public registration descriptor directly from this modal, so an unknown-wallet failure is recoverable without rebuilding the coordinator.
 

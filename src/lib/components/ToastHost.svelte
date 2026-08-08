@@ -1,11 +1,12 @@
 <script lang="ts">
   import { Check, X, Radio } from '@lucide/svelte';
   import { toasts, dismissToast } from '$lib/stores/toasts';
+  import { fly } from 'svelte/transition';
 </script>
 
 <div class="toast-region" aria-live="polite">
   {#each $toasts as item (item.id)}
-    <div class="toast">
+    <div class="toast" transition:fly={{ x: 12, duration: 180 }}>
       <div class="toast-mark" class:success={item.tone === 'success'}>
         {#if item.tone === 'success'}<Check size={15} strokeWidth={2.5} />{:else}<Radio size={15} />{/if}
       </div>

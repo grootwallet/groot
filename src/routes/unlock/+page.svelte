@@ -41,6 +41,7 @@
   });
 
   async function unlock() {
+    if (busy || !credential) return;
     busy = true; error = '';
     try {
       await walletService.unlock(credential);
@@ -51,6 +52,12 @@
     }
     catch (cause) { error = cause instanceof Error ? cause.message : 'Could not unlock wallet.'; credential = ''; }
     finally { busy = false; }
+  }
+
+  function submitCredentialOnEnter(event: KeyboardEvent) {
+    if (event.key !== 'Enter' || event.isComposing || !(event.currentTarget instanceof HTMLInputElement)) return;
+    event.preventDefault();
+    event.currentTarget.form?.requestSubmit();
   }
 
   async function resetRegtestWallet() {
@@ -78,7 +85,7 @@
     <p>{#if isSoftwareWallet}Enter this wallet’s passphrase to continue.{:else}Enter this wallet’s app PIN to continue.{/if}</p>
     {#if isPrototypeWallet}<p class="prototype-hint">UI prototype PIN: <code>prototype-passphrase</code></p>{/if}
     <form onsubmit={(event) => { event.preventDefault(); unlock(); }}>
-      <PasswordField label={credentialLabel} tooltip={isSoftwareWallet ? 'This BIP39 passphrase is required with your 24 recovery words and also unlocks Satchel. A different passphrase opens a different wallet.' : 'This app PIN protects local Satchel data only. It is not a hardware-wallet passphrase and is not part of a signer seed backup.'} bind:value={credential} placeholder={credentialPlaceholder} autocomplete="current-password" {error} oninput={() => error = ''}/>
+      <PasswordField label={credentialLabel} tooltip={isSoftwareWallet ? 'This BIP39 passphrase is required with your 24 recovery words and also unlocks Satchel. A different passphrase opens a different wallet.' : 'This app PIN protects local Satchel data only. It is not a hardware-wallet passphrase and is not part of a signer seed backup.'} bind:value={credential} placeholder={credentialPlaceholder} autocomplete="current-password" {error} oninput={() => error = ''} onkeydown={submitCredentialOnEnter}/>
       <Button type="submit" size="large" class="full" disabled={!credential} loading={busy} loadingLabel="Unlocking wallet…">Unlock wallet</Button>
     </form>
     {#if defaultConfig.network === 'regtest'}<button class="locked-reset" onclick={() => showReset = true}><Trash2 size={14}/>Delete this regtest wallet</button>{/if}

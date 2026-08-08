@@ -196,7 +196,7 @@ export class DummyWalletAdapter implements WalletPort {
     }
     return proposal;
   }
-  async prepareAcceleration(txid: string, method: import('./contracts').AccelerationMethod, selectedRate: ReturnType<typeof feeRate>) { const tx=transactions.find((item)=>item.id===txid); if(!tx||tx.status!=='pending') throw new WalletError('internal_error','Only pending wallet transactions can be accelerated.'); return this.preparePayment(fixtureAddressForNetwork(tx.address),tx.label,sats(Math.max(1,tx.amount)),selectedRate); }
+  async prepareAcceleration(txid: string, method: import('./contracts').AccelerationMethod, selectedRate: ReturnType<typeof feeRate>) { const tx=transactions.find((item)=>item.id===txid); if(!tx||tx.status!=='pending'||!tx.address) throw new WalletError('internal_error','Only pending wallet payments can be accelerated.'); return this.preparePayment(fixtureAddressForNetwork(tx.address),tx.label,sats(Math.max(1,tx.amount)),selectedRate); }
 
   async signAndBroadcast(proposalId: string, credential: string) {
     const proposal = this.#proposals.get(proposalId);

@@ -10,10 +10,10 @@ export const wallet = {
 };
 
 export const transactions: Transaction[] = [
-  { id: '6a1b2c3d4e5f67890123456789abcdef6a1b2c3d4e5f67890123456789abcdef', direction: 'received', amount: 125_000, status: 'pending', confirmations: 0, date: 'Today, 14:32', address: 'tb1q8y4...ev8d', label: 'Invoice #104' },
-  { id: 'b8198ee0822acf04cb4f0a52ac13a5f4d1cc4e8f918d69e2559b26b9f5c54f09', direction: 'sent', amount: 420_000, fee: 2_184, status: 'confirmed', confirmations: 18, date: 'Jul 14, 09:18', address: 'tb1q9u7...0zkf', label: 'Hardware order', block: 4_231_842 },
-  { id: 'f7c42c16ea0a8f449aa21d1e561203a129d3476d43e9ef332103b2c1b005a1ec', direction: 'received', amount: 1_250_000, status: 'confirmed', confirmations: 286, date: 'Jul 08, 17:05', address: 'tb1q2la...p29a', label: 'Savings', block: 4_231_574 },
-  { id: '29d60f174b57d0b651e10d76f9a63cc1f9e00176e5b582a6f23fbaea950c4793', direction: 'sent', amount: 89_500, fee: 912, status: 'confirmed', confirmations: 944, date: 'Jun 22, 12:44', address: 'tb1q4jk...k2uz', label: 'Dinner', block: 4_230_916 }
+  { id: '6a1b2c3d4e5f67890123456789abcdef6a1b2c3d4e5f67890123456789abcdef', kind: 'payment', direction: 'received', amount: 125_000, status: 'pending', confirmations: 0, date: 'Today, 14:32', address: 'tb1q8y4...ev8d', label: 'Invoice #104' },
+  { id: 'b8198ee0822acf04cb4f0a52ac13a5f4d1cc4e8f918d69e2559b26b9f5c54f09', kind: 'payment', direction: 'sent', amount: 420_000, fee: 2_184, status: 'confirmed', confirmations: 18, date: 'Jul 14, 09:18', address: 'tb1q9u7...0zkf', label: 'Hardware order', block: 4_231_842 },
+  { id: 'f7c42c16ea0a8f449aa21d1e561203a129d3476d43e9ef332103b2c1b005a1ec', kind: 'payment', direction: 'received', amount: 1_250_000, status: 'confirmed', confirmations: 286, date: 'Jul 08, 17:05', address: 'tb1q2la...p29a', label: 'Savings', block: 4_231_574 },
+  { id: '29d60f174b57d0b651e10d76f9a63cc1f9e00176e5b582a6f23fbaea950c4793', kind: 'payment', direction: 'sent', amount: 89_500, fee: 912, status: 'confirmed', confirmations: 944, date: 'Jun 22, 12:44', address: 'tb1q4jk...k2uz', label: 'Dinner', block: 4_230_916 }
 ];
 
 export let receiveAddresses: ReceiveAddress[] = [

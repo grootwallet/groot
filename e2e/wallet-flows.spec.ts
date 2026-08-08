@@ -127,7 +127,7 @@ test('recovers exactly 24 words and unlock rejects the wrong credential', async 
   await page.getByRole('button', { name: 'Unlock wallet' }).click();
   await expect(page.getByText('Incorrect passphrase / PIN.')).toBeVisible();
   await page.getByLabel('Wallet passphrase', { exact: true }).fill('prototype-passphrase');
-  await page.getByRole('button', { name: 'Unlock wallet' }).click();
+  await page.getByLabel('Wallet passphrase', { exact: true }).press('Enter');
   await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible();
 });
 
@@ -232,7 +232,8 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   await page.getByRole('link', { name: 'Send', exact: true }).click();
   await page.getByLabel('Bitcoin address').fill('bcrt1qreceiver0000000000000000000000000000000');
   await page.getByLabel('Payment label').fill('Hardware test payment');
-  await page.getByLabel('Amount').fill('1200');
+  await page.getByRole('button', { name: 'Continue to amount' }).click();
+  await page.getByLabel('Amount', { exact: true }).fill('1200');
   await page.getByRole('button', { name: 'Review payment' }).click();
   await page.getByRole('button', { name: 'Continue to sign' }).click();
   await expect(page.getByRole('heading', { name: 'Sign on your hardware' })).toBeVisible();
@@ -316,10 +317,18 @@ test('unlocks a Trezor before choosing its standard single-key wallet', async ({
 test('overview, activity, UTXOs, and settings expose durable states', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible();
+  const overviewMore = page.getByRole('button', { name: 'More wallet actions' });
+  const actionHeight = (await overviewMore.boundingBox())?.height;
+  const referenceAction = (page.viewportSize()?.width ?? 1180) > 760
+    ? page.locator('.primary-actions .overview-inline-primary').first()
+    : page.locator('.mobile-actions .mobile-action').first();
+  expect(actionHeight).toBe((await referenceAction.boundingBox())?.height);
   const overviewTransaction = page.locator('.tx-row').first();
   await expect(overviewTransaction).toBeVisible();
   await overviewTransaction.click();
   await expect(page.getByRole('heading', { name: 'Transaction details' })).toBeVisible();
+  await expect(page.locator('.modal-layer')).not.toHaveAttribute('style', /opacity/);
+  await expect(page.locator('.modal-layer')).toHaveCSS('opacity', '1');
   await expect(page.getByText('Transaction ID', { exact: true })).toBeVisible();
   await expect(
     page.getByText('mempool.space cannot see local regtest transactions.')
@@ -333,8 +342,22 @@ test('overview, activity, UTXOs, and settings expose durable states', async ({ p
   const confirmedReceivedTransaction = page.locator('.tx-row:not(.pending)').first();
   await expect(confirmedReceivedTransaction).toBeVisible();
   await confirmedReceivedTransaction.click();
-  await expect(page.getByRole('heading', { name: 'Transaction details' })).toBeVisible();
+  const transactionDialog = page.getByRole('dialog', { name: 'Transaction details' });
+  await expect(transactionDialog).toBeVisible();
   await expect(page.getByText('Confirmations', { exact: true })).toBeVisible();
+  const transactionTime = transactionDialog.locator('time');
+  await expect(transactionTime).not.toContainText('local time');
+  await expect(transactionTime).toHaveAttribute('title', /Local time:.*UTC:/);
+  await page.waitForTimeout(220);
+  const compactTop = (await transactionDialog.boundingBox())?.y;
+  await transactionDialog.locator('.compact-address-button').click();
+  await expect(transactionDialog.getByRole('button', { name: 'Show compact address' })).toBeVisible();
+  const expandedTop = (await transactionDialog.boundingBox())?.y;
+  expect(compactTop).toBeDefined();
+  expect(expandedTop).toBeCloseTo(compactTop!, 0);
+  await transactionDialog.getByRole('button', { name: 'Show compact address' }).click();
+  const collapsedTop = (await transactionDialog.boundingBox())?.y;
+  expect(collapsedTop).toBeCloseTo(compactTop!, 0);
   await page.getByRole('button', { name: 'Close' }).click();
   await page.getByRole('link', { name: 'Coins' }).click();
   await expect(page.getByRole('heading', { name: 'Coins' })).toBeVisible();
@@ -449,6 +472,9 @@ test('coin control selects, freezes, and carries coins into send', async ({ page
   await first.check();
   await page.getByRole('link', { name: 'Send selected coins' }).click();
   await expect(page).toHaveURL(/\/send\?coins=/);
+  await page.getByLabel('Payment label').fill('Coin selection test');
+  await page.getByLabel('Bitcoin address').fill('bcrt1qreceiver0000000000000000000000000000000');
+  await page.getByRole('button', { name: 'Continue to amount' }).click();
   await expect(page.getByText('Manual · 1 coin')).toBeVisible();
   await page.getByRole('button', { name: /Manual · 1 coin/ }).click();
   await page.getByRole('button', { name: 'Use automatic selection' }).click();
@@ -457,9 +483,16 @@ test('coin control selects, freezes, and carries coins into send', async ({ page
 
 test('send reviews a proposal and rejects a wrong credential', async ({ page }) => {
   await page.goto('/send');
+  const paymentProgress = page.getByRole('navigation', { name: 'Payment progress' });
+  await expect(paymentProgress).toContainText('Intent');
+  await expect(paymentProgress).toContainText('Amount & fee');
+  await expect(paymentProgress).toContainText('Review & sign');
+  await expect(page.getByRole('region', { name: 'Payment signers' })).toContainText('Satchel app');
   await page.getByLabel('Bitcoin address').fill('bcrt1qreceiver0000000000000000000000000000000');
   await page.getByLabel('Payment label').fill('Test payment');
-  await page.getByLabel('Amount').fill('25000');
+  await page.getByRole('button', { name: 'Continue to amount' }).click();
+  await expect(paymentProgress.getByText('Amount & fee')).toBeVisible();
+  await page.getByLabel('Amount', { exact: true }).fill('25000');
   await page.getByRole('button', { name: 'Review payment' }).click();
   await expect(page.getByText('25,000')).toBeVisible();
   await page.getByRole('button', { name: 'Continue to sign' }).click();
@@ -479,7 +512,8 @@ test('an address copied from Receive completes the browser send flow', async ({ 
   await page.getByLabel('Bitcoin address').fill(receiveAddress);
   await page.getByLabel('Payment label').fill('Self transfer test');
   await expect(page.getByText(/Enter a valid .* address/)).toHaveCount(0);
-  await page.getByLabel('Amount').fill('25000');
+  await page.getByRole('button', { name: 'Continue to amount' }).click();
+  await page.getByLabel('Amount', { exact: true }).fill('25000');
   await expect(page.getByRole('button', { name: 'Review payment' })).toBeEnabled();
   await page.getByRole('button', { name: 'Review payment' }).click();
   await page.getByRole('button', { name: 'Continue to sign' }).click();
@@ -493,7 +527,8 @@ test('custom fees validate and wallet deletion requires typed confirmation', asy
   await page.goto('/send');
   await page.getByLabel('Bitcoin address').fill('bcrt1qreceiver0000000000000000000000000000000');
   await page.getByLabel('Payment label').fill('Coin control test');
-  await page.getByLabel('Amount').fill('1000');
+  await page.getByRole('button', { name: 'Continue to amount' }).click();
+  await page.getByLabel('Amount', { exact: true }).fill('1000');
   await page.getByRole('button', { name: /Custom/ }).click();
   await page.getByLabel('Custom fee rate').fill('0');
   await expect(page.getByRole('button', { name: 'Review payment' })).toBeDisabled();

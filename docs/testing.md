@@ -37,7 +37,7 @@ The browser adapter is a deterministic UI fixture. E2E success proves presentati
 
 Theme coverage has two layers: unit tests verify every semantic foreground/background token pair and reject legacy hard-coded dark surfaces; desktop/mobile E2E measures computed contrast on unlock and all 24 revealed recovery-word cells in both light and dark modes. Tests must inspect rendered foreground and background colors, not only root token values.
 
-Localization coverage unit-tests locale normalization, persistence, fallback behavior, and singular/plural confirmation and wallet counts. UI checks verify that the EN/FR/ES selector is available while locked and unlocked and that the pre-paint preference survives reload. Wallet policy, accounting, and Rust tests remain language-neutral.
+Localization coverage unit-tests locale normalization, persistence, fallback behavior, and singular/plural confirmation and wallet counts. UI checks verify that the EN/FR/ES selector is available in Settings and that the pre-paint preference survives reload. Wallet policy, accounting, and Rust tests remain language-neutral. Discreet-mode units cover restoration and persistence; transaction classification units verify that fee-only wallet-controlled transfers are emitted as self-spends rather than zero-amount payments.
 
 ### Hardware and platform tests
 

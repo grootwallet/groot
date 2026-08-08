@@ -10,11 +10,18 @@
   import { compactAddress } from '$lib/address-display';
   import ReadableAddress from './ReadableAddress.svelte';
   import LocalTimestamp from './LocalTimestamp.svelte';
+  import { discreetMode } from '$lib/privacy';
 
   let { transaction, multisig = false, onclose } = $props<{ transaction: Transaction | null; multisig?: boolean; onclose: () => void }>();
   let showAddress = $state(false);
   let addressCopied = $state(false);
   let explorerUrl = $derived(transaction ? transactionExplorerUrl(defaultConfig.network, transaction.id) : null);
+  let isSelfSpend = $derived(transaction?.kind === 'self_spend');
+
+  $effect(() => {
+    transaction?.id;
+    showAddress = false;
+  });
 
   async function copyTxid() {
     if (!transaction) return;
@@ -27,7 +34,7 @@
   }
 
   async function copyAddress() {
-    if (!transaction) return;
+    if (!transaction?.address) return;
     try {
       await copyText(transaction.address);
       addressCopied = true;
@@ -39,21 +46,22 @@
   }
 </script>
 
-<Modal open={!!transaction} title="Transaction details" {onclose}>
+<Modal open={!!transaction} title="Transaction details" preserveTop {onclose}>
   {#if transaction}
     <div class="detail-hero">
       <span class:pending={transaction.status === 'pending'}>{transaction.status}</span>
-      <strong class:positive={transaction.direction === 'received'}>{transaction.direction === 'received' ? '+' : '−'}{shortSats(transaction.amount)} <small>sats</small></strong>
-      <p>{transaction.label}</p>
+      <strong class:positive={transaction.direction === 'received'}>{#if $discreetMode}••••••{:else}{transaction.direction === 'received' ? '+' : '−'}{shortSats(transaction.amount)}{/if} <small>sats</small></strong>
+      <p>{isSelfSpend ? 'Self-spend · network fee' : transaction.label}</p>
     </div>
     <dl class="details-list">
       <div><dt>Date</dt><dd><LocalTimestamp value={transaction.date} /></dd></div>
       <div><dt>Confirmations</dt><dd>{transaction.confirmations}</dd></div>
       {#if transaction.block}<div><dt>Block</dt><dd>{transaction.block}</dd></div>{/if}
-      {#if transaction.fee}<div><dt>Network fee</dt><dd>{shortSats(transaction.fee)} sats</dd></div>{/if}
-      <div><dt>{transaction.direction === 'received' ? 'Received at' : 'Sent to'}</dt><dd><button type="button" class="compact-address-button" aria-expanded={showAddress} onclick={() => showAddress = !showAddress}>{compactAddress(transaction.address)}</button></dd></div>
+      {#if transaction.fee}<div><dt>Network fee</dt><dd>{$discreetMode ? '••••••' : shortSats(transaction.fee)} sats</dd></div>{/if}
+      {#if transaction.address && !showAddress}<div><dt>{transaction.direction === 'received' ? 'Received at' : 'Sent to'}</dt><dd><button type="button" class="compact-address-button" aria-expanded="false" onclick={() => showAddress = true}>{compactAddress(transaction.address)}</button></dd></div>{/if}
+      {#if isSelfSpend}<div><dt>Transaction type</dt><dd>Self-spend</dd></div>{/if}
     </dl>
-    {#if showAddress}<ReadableAddress address={transaction.address} copied={addressCopied} oncopy={copyAddress}/>{/if}
+    {#if showAddress && transaction.address}<div class="expanded-transaction-address"><ReadableAddress address={transaction.address} copied={addressCopied} oncopy={copyAddress}/><button type="button" onclick={() => showAddress = false}>Show compact address</button></div>{/if}
     <button class="hash-box" onclick={copyTxid}><span>Transaction ID</span><code>{transaction.id}</code><Copy size={16} /></button>
     {#if transaction.status === 'pending'}<div class="psbt-actions"><Button variant="secondary" href={`${multisig?'/multisig/send':'/send'}?accelerate=rbf&txid=${transaction.id}`}><ArrowUp size={15}/>Increase fee</Button><Button variant="secondary" href={`${multisig?'/multisig/send':'/send'}?accelerate=cpfp&txid=${transaction.id}`}><Layers size={15}/>Spend output (CPFP)</Button></div>{/if}
     {#if explorerUrl}

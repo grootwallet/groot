@@ -6,11 +6,11 @@ describe('date-time presentation', () => {
     expect(parseTimestamp('1786118029')?.toISOString()).toBe('2026-08-07T15:53:49.000Z');
   });
 
-  it('shows a readable local timestamp and exposes the exact timezone and UTC equivalent', () => {
+  it('shows a concise timestamp and exposes full local and UTC details', () => {
     expect(presentLocalTimestamp('2026-08-07T11:13:49.000Z', 'Europe/Andorra')).toEqual({
       dateTime: '2026-08-07T11:13:49.000Z',
-      display: 'August 7, 2026, 1:13:49 PM local time',
-      detail: 'Local timezone: Europe/Andorra. UTC: August 7, 2026, 11:13:49 AM UTC.'
+      display: 'August 7, 2026, 1:13 PM',
+      detail: 'Local time: August 7, 2026, 1:13:49 PM (Europe/Andorra). UTC: August 7, 2026, 11:13:49 AM UTC.'
     });
   });
 

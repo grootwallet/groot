@@ -6,6 +6,7 @@ import { pendingBalance, sortCoins, sortTransactionsNewestFirst } from './presen
 function transaction(id: string, date: string): Transaction {
   return {
     id,
+    kind: 'payment',
     direction: 'received',
     amount: 1,
     status: 'pending',

@@ -21,7 +21,7 @@ describe('readable address display', () => {
 describe('compactAddress', () => {
   it('preserves both identifying ends of a long address', () => {
     const address = 'bcrt1qmgtr92k8dw0cgqw445kgc8p54dz8azvan7hd93xdk4789a6dvylq8uvjuj';
-    expect(compactAddress(address)).toBe('bcrt1qmgtr92k8dw0cgqw445…6dvylq8uvjuj');
+    expect(compactAddress(address)).toBe('bcrt1qmgtr92…lq8uvjuj');
   });
 
   it('does not alter short values', () => {

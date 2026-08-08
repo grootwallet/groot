@@ -20,9 +20,17 @@ test('spends end-to-end from the ready-made demo vault', async ({ page }) => {
   await expect(page.getByText('Ready-to-test demo vault')).toBeVisible();
   await expect(page.getByText('2,481,240 sats')).toBeVisible();
   await page.getByRole('link', { name: 'Send', exact: true }).click();
+  const paymentProgress = page.getByRole('navigation', { name: 'Payment progress' });
+  await expect(paymentProgress).toContainText('Intent');
+  await expect(paymentProgress).toContainText('Amount & fee');
+  await expect(paymentProgress).toContainText('Review & sign');
+  const signerSummary = page.getByRole('region', { name: 'Payment signers' });
+  await expect(signerSummary).toContainText('2 of 3');
+  await expect(signerSummary).toContainText('Coldcard');
   await page.getByLabel('Bitcoin address').fill('bcrt1qdummy00085n8k2r7v4cx9s6jlawephgzuqf5t8ul');
   await page.getByLabel('Payment label').fill('Test purchase');
-  await page.getByLabel('Amount').fill('50000');
+  await page.getByRole('button', { name: 'Continue to amount' }).click();
+  await page.getByLabel('Amount', { exact: true }).fill('50000');
   await page.getByRole('button', { name: 'Review payment' }).click();
   await expect(page.getByText('Test purchase', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'View complete recipient address' }).click();
@@ -51,7 +59,7 @@ test('spends end-to-end from the ready-made demo vault', async ({ page }) => {
   for (const progress of ['1 of 2 collected', '2 of 2 collected']) {
     await page.getByRole('button', { name: 'Sign with device' }).click();
     await page.getByRole('button', { name: /Virtual Coldcard/ }).click();
-    await expect(page.getByText(progress)).toBeVisible();
+    await expect(signerSummary.getByText(progress)).toBeVisible();
   }
   await page.getByRole('button', { name: 'Back to overview' }).click();
   const leaveDialog = page.getByRole('dialog', { name: 'Leave signing?' });
@@ -59,14 +67,14 @@ test('spends end-to-end from the ready-made demo vault', async ({ page }) => {
   await expect(leaveDialog.getByText('2 of 2 collected', { exact: true })).toBeVisible();
   await leaveDialog.getByRole('button', { name: 'Keep signing' }).click();
   await expect(page).toHaveURL(/\/multisig\/send$/);
-  await expect(page.getByText('2 of 2 collected', { exact: true })).toBeVisible();
+  await expect(signerSummary.getByText('2 of 2 collected', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Cancel proposal' }).click();
   const cancelDialog = page.getByRole('dialog', { name: 'Cancel this proposal?' });
   await expect(cancelDialog.getByText('This cannot be undone.')).toBeVisible();
   await expect(cancelDialog.getByText('Test purchase', { exact: true })).toBeVisible();
   await expect(cancelDialog.getByText('2 of 2 collected', { exact: true })).toBeVisible();
   await cancelDialog.getByRole('button', { name: 'Keep proposal' }).click();
-  await expect(page.getByText('2 of 2 collected', { exact: true })).toBeVisible();
+  await expect(signerSummary.getByText('2 of 2 collected', { exact: true })).toBeVisible();
   await page.getByLabel('App PIN', { exact: true }).fill('prototype-passphrase');
   await page.getByRole('button', { name: 'Finalize & broadcast' }).click();
   await expect(page.getByRole('heading', { name: 'Transaction broadcast' })).toBeVisible();
@@ -78,7 +86,8 @@ test('requires explicit confirmation before discarding a multisig proposal', asy
   await page.getByRole('link', { name: 'Send', exact: true }).click();
   await page.getByLabel('Bitcoin address').fill('bcrt1qdummy00085n8k2r7v4cx9s6jlawephgzuqf5t8ul');
   await page.getByLabel('Payment label').fill('Cancel confirmation test');
-  await page.getByLabel('Amount').fill('25000');
+  await page.getByRole('button', { name: 'Continue to amount' }).click();
+  await page.getByLabel('Amount', { exact: true }).fill('25000');
   await page.getByRole('button', { name: 'Review payment' }).click();
 
   await page.getByRole('button', { name: 'Cancel proposal' }).click();
@@ -88,7 +97,7 @@ test('requires explicit confirmation before discarding a multisig proposal', asy
   await dialog.getByRole('button', { name: 'Cancel proposal' }).click();
 
   await expect(page.getByText('Proposal canceled', { exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Review payment' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Continue to amount' })).toBeVisible();
 });
 
 test('keeps advanced wallet actions compact and makes both descriptors inspectable', async ({ page }) => {
@@ -206,6 +215,9 @@ test('selects and freezes multisig coins before entering the send flow', async (
   await coin.check();
   await page.getByRole('link', { name: 'Send selected coins' }).click();
   await expect(page).toHaveURL(/\/multisig\/send\?coins=/);
+  await page.getByLabel('Payment label').fill('Vault coin selection');
+  await page.getByLabel('Bitcoin address').fill('bcrt1qdummy00085n8k2r7v4cx9s6jlawephgzuqf5t8ul');
+  await page.getByRole('button', { name: 'Continue to amount' }).click();
   await expect(page.getByText('Manual · 1 coin')).toBeVisible();
   await page.getByRole('button', { name: /Manual · 1 coin/ }).click();
   await page.getByRole('button', { name: 'Use automatic selection' }).click();
@@ -408,13 +420,15 @@ test('creates and verifies a simple 2-of-3 descriptor wallet', async ({ page }) 
   await page.locator('a:visible').filter({ hasText: /^Send$/ }).click();
   await page.getByLabel('Bitcoin address').fill('bcrt1qvaultdestination0000000000000000000000000');
   await page.getByLabel('Payment label').fill('Vault test payment');
-  await page.getByLabel('Amount').fill('50000');
+  await page.getByRole('button', { name: 'Continue to amount' }).click();
+  await page.getByLabel('Amount', { exact: true }).fill('50000');
   await page.getByRole('button', { name: 'Review payment' }).click();
-  await expect(page.getByText('0 of 2 collected')).toBeVisible();
+  const paymentSigners = page.getByRole('region', { name: 'Payment signers' });
+  await expect(paymentSigners.getByText('0 of 2 collected')).toBeVisible();
   for (const progress of ['1 of 2 collected', '2 of 2 collected']) {
     await page.getByRole('button', { name: 'Sign with device' }).click();
     await page.getByRole('button', { name: /Virtual Coldcard/ }).click();
-    await expect(page.getByText(progress)).toBeVisible();
+    await expect(paymentSigners.getByText(progress)).toBeVisible();
   }
   await page.getByLabel('App PIN', { exact: true }).fill('wrong-pin');
   await page.getByRole('button', { name: 'Finalize & broadcast' }).click();

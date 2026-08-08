@@ -1,12 +1,13 @@
 export type Transaction = {
   id: string;
+  kind: 'payment' | 'self_spend';
   direction: 'received' | 'sent';
   amount: number;
   fee?: number;
   status: 'confirmed' | 'pending';
   confirmations: number;
   date: string;
-  address: string;
+  address: string | null;
   label: string;
   block?: number;
 };

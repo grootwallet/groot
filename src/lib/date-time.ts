@@ -16,14 +16,14 @@ export function parseTimestamp(value: string): Date | null {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-function readableDate(date: Date, timeZone: string) {
+function readableDate(date: Date, timeZone: string, includeSeconds = true) {
   return new Intl.DateTimeFormat('en-US', {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
-    second: '2-digit',
+    ...(includeSeconds ? { second: '2-digit' as const } : {}),
     hour12: true,
     timeZone
   }).format(date).replace(' at ', ', ');
@@ -44,7 +44,7 @@ export function presentLocalTimestamp(
 
   return {
     dateTime: date.toISOString(),
-    display: `${readableDate(date, timeZone)} local time`,
-    detail: `Local timezone: ${timeZone}. UTC: ${readableDate(date, 'UTC')} UTC.`
+    display: readableDate(date, timeZone, false),
+    detail: `Local time: ${readableDate(date, timeZone)} (${timeZone}). UTC: ${readableDate(date, 'UTC')} UTC.`
   };
 }
