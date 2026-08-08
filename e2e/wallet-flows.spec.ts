@@ -231,15 +231,23 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
 
   await page.getByRole('link', { name: 'Send', exact: true }).click();
   await page.getByLabel('Bitcoin address').fill('bcrt1qreceiver0000000000000000000000000000000');
+  await page.getByLabel('Payment label').fill('Hardware test payment');
   await page.getByLabel('Amount').fill('1200');
   await page.getByRole('button', { name: 'Review payment' }).click();
   await page.getByRole('button', { name: 'Continue to sign' }).click();
   await expect(page.getByRole('heading', { name: 'Sign on your hardware' })).toBeVisible();
+  const psbtDownload = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Save unsigned PSBT' }).click();
+  await expect((await psbtDownload).suggestedFilename()).toMatch(/^satchel-.+\.psbt$/);
+  await expect(page.getByText('PSBT saved', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Show unsigned QR' }).click();
-  await expect(page.getByRole('dialog', { name: 'Unsigned PSBT' }).getByRole('img', { name: /crypto-psbt QR frame/ })).toBeVisible();
+  const unsignedQrDialog = page.getByRole('dialog', { name: 'Unsigned PSBT' });
+  const unsignedQrImage = unsignedQrDialog.getByRole('img', { name: /crypto-psbt QR frame/ });
+  await expect(unsignedQrImage).toBeVisible();
   await page.getByRole('button', { name: 'Close' }).click();
   await page.getByRole('button', { name: 'Scan signed QR' }).click();
-  await expect(page.getByText(/QR scanning is not available|Point the camera at a crypto-psbt QR/)).toBeVisible();
+  await expect(page.getByText(/Point the camera at a crypto-psbt QR|Camera access was denied|No usable camera is available/)).toBeVisible();
+  await expect(page.getByText('QR scanning is not available in this WebView. Import the PSBT file instead.')).toHaveCount(0);
   await page.getByRole('button', { name: 'Close' }).click();
   await page.getByRole('button', { name: 'Sign with cable' }).click();
   await page.getByRole('button', { name: /Virtual Coldcard/ }).click();
@@ -308,27 +316,35 @@ test('unlocks a Trezor before choosing its standard single-key wallet', async ({
 test('overview, activity, UTXOs, and settings expose durable states', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible();
-  await page.getByRole('button', { name: /Invoice #104/ }).click();
+  const overviewTransaction = page.locator('.tx-row').first();
+  await expect(overviewTransaction).toBeVisible();
+  await overviewTransaction.click();
   await expect(page.getByRole('heading', { name: 'Transaction details' })).toBeVisible();
   await expect(page.getByText('Transaction ID', { exact: true })).toBeVisible();
+  await expect(
+    page.getByText('mempool.space cannot see local regtest transactions.')
+  ).toBeVisible();
+  await expect(page.getByRole('link', { name: /View on mempool\.space/ })).toHaveCount(0);
   await page.getByRole('button', { name: 'Close' }).click();
   await page.getByRole('link', { name: 'Activity' }).click();
   await expect(page.getByRole('heading', { name: 'Activity' })).toBeVisible();
   await expect(page.locator('.tx-row.pending').getByText('Awaiting confirmation')).toBeVisible();
   await page.getByRole('button', { name: 'Received' }).click();
-  await expect(page.getByText('Invoice #104')).toBeVisible();
-  await page.getByRole('button', { name: /Invoice #104/ }).click();
+  const confirmedReceivedTransaction = page.locator('.tx-row:not(.pending)').first();
+  await expect(confirmedReceivedTransaction).toBeVisible();
+  await confirmedReceivedTransaction.click();
   await expect(page.getByRole('heading', { name: 'Transaction details' })).toBeVisible();
   await expect(page.getByText('Confirmations', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Close' }).click();
   await page.getByRole('link', { name: 'Coins' }).click();
   await expect(page.getByRole('heading', { name: 'Coins' })).toBeVisible();
-  const reusedCoin = page.locator('.coin-row').filter({ hasText: 'Savings' }).first();
+  const reusedCoin = page.locator('.coin-row').filter({ hasText: 'Address reused' }).first();
   await expect(reusedCoin.getByText(/Address reused/)).toBeVisible();
   await expect(reusedCoin.getByText('Outpoint', { exact: true })).toHaveCount(0);
   await reusedCoin.getByRole('button', { name: 'Show details' }).click();
   await expect(reusedCoin.getByText('Outpoint', { exact: true })).toBeVisible();
-  await expect(reusedCoin.getByText(/These 2 coins share one address/)).toBeVisible();
+    await expect(reusedCoin.getByText(/This coin shares its address with \d+ other coin/)).toBeVisible();
+  await expect(reusedCoin.getByText('Linked coin', { exact: true })).toBeVisible();
   await page.getByRole('link', { name: 'Settings' }).click();
   await expect(page.getByText('Delete wallet', { exact: true })).toBeVisible();
 });
@@ -442,6 +458,7 @@ test('coin control selects, freezes, and carries coins into send', async ({ page
 test('send reviews a proposal and rejects a wrong credential', async ({ page }) => {
   await page.goto('/send');
   await page.getByLabel('Bitcoin address').fill('bcrt1qreceiver0000000000000000000000000000000');
+  await page.getByLabel('Payment label').fill('Test payment');
   await page.getByLabel('Amount').fill('25000');
   await page.getByRole('button', { name: 'Review payment' }).click();
   await expect(page.getByText('25,000')).toBeVisible();
@@ -460,6 +477,7 @@ test('an address copied from Receive completes the browser send flow', async ({ 
   const receiveAddress = await page.locator('.receive-card .address-box code').innerText();
   await page.goto('/send');
   await page.getByLabel('Bitcoin address').fill(receiveAddress);
+  await page.getByLabel('Payment label').fill('Self transfer test');
   await expect(page.getByText(/Enter a valid .* address/)).toHaveCount(0);
   await page.getByLabel('Amount').fill('25000');
   await expect(page.getByRole('button', { name: 'Review payment' })).toBeEnabled();
@@ -474,6 +492,7 @@ test('an address copied from Receive completes the browser send flow', async ({ 
 test('custom fees validate and wallet deletion requires typed confirmation', async ({ page }) => {
   await page.goto('/send');
   await page.getByLabel('Bitcoin address').fill('bcrt1qreceiver0000000000000000000000000000000');
+  await page.getByLabel('Payment label').fill('Coin control test');
   await page.getByLabel('Amount').fill('1000');
   await page.getByRole('button', { name: /Custom/ }).click();
   await page.getByLabel('Custom fee rate').fill('0');

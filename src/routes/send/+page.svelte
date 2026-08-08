@@ -1,27 +1,31 @@
 <script lang="ts">
-  import { ArrowRight, Check, CircleDot, Cpu, Download, FileUp, Gauge, LockKeyhole, QrCode, ScanLine } from '@lucide/svelte';
+  import { AlertTriangle, ArrowRight, Check, CircleDot, Cpu, Download, FileUp, Gauge, LockKeyhole, QrCode, RefreshCw, ScanLine } from '@lucide/svelte';
   import { onDestroy, onMount } from 'svelte';
   import Button from '$lib/components/Button.svelte';
   import PasswordField from '$lib/components/PasswordField.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import AnimatedUrQr from '$lib/components/AnimatedUrQr.svelte';
   import UrQrScanner from '$lib/components/UrQrScanner.svelte';
-  import { downloadText, readTransferFile } from '$lib/transfer';
+  import RecipientAddressModal from '$lib/components/RecipientAddressModal.svelte';
+  import { readTransferFile } from '$lib/transfer';
   import { shortSats } from '$lib/data';
   import { toast } from '$lib/stores/toasts';
   import { feeRate as asFeeRate, sats, walletService, type CoinSelection, type FeeEstimates, type HardwareDevice, type MultisigProposal, type PaymentProposal } from '$lib/wallet';
   import type { Utxo } from '$lib/types';
   import { defaultConfig, networkName } from '$lib/config';
   import { addressPrefixForNetwork, hasAddressPrefixForNetwork } from '$lib/wallet/policy';
+  import { compactAddress } from '$lib/address-display';
 
   let step = $state(1);
   let address = $state('');
+  let label = $state('');
   let amount = $state('');
   let speed = $state('medium');
   let customFee = $state('');
   let passphrase = $state('');
   let credentialError = $state('');
   let broadcasting = $state(false);
+  let savingPsbt = $state(false);
   let preparing = $state(false);
   let available = $state(0);
   let estimates = $state<FeeEstimates | null>(null);
@@ -32,14 +36,14 @@
   let coins = $state<Utxo[]>([]);
   let selectedCoins = $state<string[]>([]);
   let showCoins = $state(false);
-  let externalSigner = $state(false), externalProposal = $state<MultisigProposal|null>(null), deviceOpen = $state(false), importOpen = $state(false), qrOpen = $state(false), qrScanOpen = $state(false), devices = $state<HardwareDevice[]>([]), imported = $state(''), urFrames = $state<string[]>([]), scannedFrames = $state<string[]>([]);
+  let externalSigner = $state(false), externalProposal = $state<MultisigProposal|null>(null), deviceOpen = $state(false), addressOpen = $state(false), importOpen = $state(false), qrOpen = $state(false), qrScanOpen = $state(false), devices = $state<HardwareDevice[]>([]), deviceError = $state(''), imported = $state(''), urFrames = $state<string[]>([]), scannedFrames = $state<string[]>([]);
   const selection = $derived<CoinSelection>(selectedCoins.length ? { mode: 'manual', outpoints: selectedCoins } : { mode: 'auto' });
   const fees = $derived({ slow: Number(estimates?.economy ?? 1), medium: Number(estimates?.standard ?? 2), fast: Number(estimates?.priority ?? 5) });
   const selectedFeeRate = $derived(speed === 'custom' ? Number(customFee || 0) : fees[speed as keyof typeof fees]);
   const fee = $derived(Number(proposal?.fee ?? Math.max(0, Math.round(selectedFeeRate * 141))));
   const amountSats = $derived(Number(amount || 0));
   const addressValid = $derived(hasAddressPrefixForNetwork(address, defaultConfig.network));
-  const valid = $derived(addressValid && Number.isSafeInteger(amountSats) && amountSats > 0 && amountSats + fee <= available && selectedFeeRate > 0);
+  const valid = $derived(addressValid && label.trim().length > 0 && label.trim().length <= 48 && Number.isSafeInteger(amountSats) && amountSats > 0 && amountSats + fee <= available && selectedFeeRate > 0);
 
   onMount(async () => {
     try {
@@ -58,7 +62,7 @@
       const accelerationTxid = url.searchParams.get('txid');
       if (accelerationTxid && (acceleration === 'rbf' || acceleration === 'cpfp')) {
         proposal = await walletService.prepareAcceleration(accelerationTxid, acceleration, asFeeRate(Number(feeData.priority)));
-        address = proposal.recipient; amount = String(proposal.amount); speed = 'fast';
+        address = proposal.recipient; label = proposal.label; amount = String(proposal.amount); speed = 'fast';
         if (externalSigner) externalProposal = (await walletService.externalSignerProposals()).find((item) => item.proposalId === proposal?.proposalId) ?? null;
         step = 2;
       }
@@ -75,7 +79,7 @@
     if (!valid) return;
     preparing = true;
     try {
-      proposal = await walletService.preparePayment(address, sats(amountSats), asFeeRate(selectedFeeRate), selection);
+      proposal = await walletService.preparePayment(address, label, sats(amountSats), asFeeRate(selectedFeeRate), selection);
       if (externalSigner) externalProposal = (await walletService.externalSignerProposals()).find((item) => item.proposalId === proposal?.proposalId) ?? null;
       step = 2;
     } catch (cause) {
@@ -112,11 +116,12 @@
       passphrase = '';
     } finally { broadcasting = false; }
   }
-  async function scanHardware(){deviceOpen=true;broadcasting=true;credentialError='';try{devices=await walletService.listHardwareDevices();}catch(cause){devices=[];credentialError=cause instanceof Error?cause.message:'Could not find hardware.';}finally{broadcasting=false;}}
-  async function signHardware(device:HardwareDevice){if(!proposal)return;broadcasting=true;credentialError='';try{externalProposal=await walletService.signExternalWithHardware(proposal.proposalId,device.id);deviceOpen=false;toast({title:'Hardware signature added',tone:'success'});}catch(cause){credentialError=cause instanceof Error?cause.message:'Hardware signing failed.';}finally{broadcasting=false;}}
+  async function scanHardware(){deviceOpen=true;broadcasting=true;deviceError='';try{devices=await walletService.listHardwareDevices();}catch(cause){devices=[];deviceError=cause instanceof Error?cause.message:'Could not find hardware.';}finally{broadcasting=false;}}
+  async function signHardware(device:HardwareDevice){if(!proposal)return;broadcasting=true;deviceError='';try{externalProposal=await walletService.signExternalWithHardware(proposal.proposalId,device.id);deviceOpen=false;toast({title:'Hardware signature added',tone:'success'});}catch(cause){deviceError=cause instanceof Error?cause.message:'Hardware signing failed.';}finally{broadcasting=false;}}
   async function importSigned(){if(!proposal||!imported.trim())return;broadcasting=true;credentialError='';try{externalProposal=await walletService.importExternalSignerProposal(proposal.proposalId,imported);imported='';importOpen=false;toast({title:'Signed PSBT validated',tone:'success'});}catch(cause){credentialError=cause instanceof Error?cause.message:'Signed PSBT was rejected.';}finally{broadcasting=false;}}
   async function loadSignedFile(event:Event){const input=event.currentTarget as HTMLInputElement;const file=input.files?.[0];input.value='';if(!file)return;try{imported=await readTransferFile(file);}catch(cause){credentialError=cause instanceof Error?cause.message:'Could not read PSBT.';}}
   async function showPsbtQr(){if(!externalProposal)return;broadcasting=true;credentialError='';try{urFrames=await walletService.encodePsbtUr(externalProposal.psbt);qrOpen=true;}catch(cause){credentialError=cause instanceof Error?cause.message:'Could not encode the PSBT QR.';}finally{broadcasting=false;}}
+  async function saveExternalPsbt(){if(!externalProposal||savingPsbt)return;savingPsbt=true;credentialError='';try{const saved=await walletService.savePsbt(`satchel-${externalProposal.proposalId}.psbt`,externalProposal.psbt);if(saved)toast({title:'PSBT saved',description:'The unsigned transaction was saved to the selected file.',tone:'success'});}catch(cause){credentialError=cause instanceof Error?cause.message:'Could not save the PSBT.';toast({title:'Could not save PSBT',description:credentialError,tone:'danger'});}finally{savingPsbt=false;}}
   async function receiveUrFrame(frame:string){if(scannedFrames.includes(frame))return;scannedFrames=[...scannedFrames,frame];try{imported=await walletService.decodePsbtUr(scannedFrames);qrScanOpen=false;await importSigned();}catch(cause){const message=cause instanceof Error?cause.message:'';if(!message.includes('Keep scanning'))credentialError=message||'The QR frame was rejected.';}}
 </script>
 
@@ -130,6 +135,7 @@
         {#if showCoins}<div class="send-coin-picker">{#each coins as coin}<label class:frozen={coin.frozen}><input type="checkbox" checked={selectedCoins.includes(coin.outpoint)} disabled={coin.frozen} onchange={(event) => toggleCoin(coin.outpoint, event.currentTarget.checked)}/><span><strong>{coin.label}</strong><small>{shortSats(coin.amount)} sats{coin.frozen ? ' · Frozen' : ''}</small></span></label>{/each}<button type="button" onclick={useAutomatic}>Use automatic selection</button></div>{/if}
       </div>
       <label class="field"><span>Bitcoin address</span><input bind:value={address} placeholder="{addressPrefixForNetwork(defaultConfig.network)}q…" />{#if address && !addressValid}<em>Enter a valid {networkName(defaultConfig.network)} address</em>{/if}</label>
+      <label class="field"><span>Payment label</span><input bind:value={label} placeholder="e.g. Hardware purchase" maxlength="48" /><small>Required · cannot be changed · {label.length}/48</small></label>
       <label class="field"><span>Amount</span><div class="amount-input"><input bind:value={amount} inputmode="numeric" placeholder="0" /><b>sats</b><button type="button" onclick={() => amount = String(Math.max(0, available - 1000))}>Max</button></div><small>Available: {shortSats(available)} sats</small></label>
       <div class="field"><span>Network fee</span><div class="fee-options">
         {#each [{id:'slow',name:'Economy',rate:fees.slow},{id:'medium',name:'Standard',rate:fees.medium},{id:'fast',name:'Priority',rate:fees.fast}] as option}
@@ -142,14 +148,14 @@
   {:else if step === 2 && proposal}
     <section class="form-card">
       <div class="review-amount"><span>You send</span><strong>{shortSats(proposal.amount)} <small>sats</small></strong></div>
-      <dl class="details-list"><div><dt>To</dt><dd class="mono">{proposal.recipient}</dd></div><div><dt>Coins</dt><dd>{proposal.selectedOutpoints.length ? `${proposal.selectedOutpoints.length} selected` : 'Automatic selection'}</dd></div><div><dt>Fee rate</dt><dd>{proposal.feeRate} sat/vB</dd></div><div><dt>Network fee</dt><dd>{shortSats(proposal.fee)} sats</dd></div><div class="total"><dt>Total</dt><dd>{shortSats(proposal.total)} sats</dd></div></dl>
+      <dl class="details-list"><div><dt>To</dt><dd><button class="address-review-trigger mono" aria-label="View complete recipient address" onclick={() => addressOpen = true}>{compactAddress(proposal.recipient)}</button></dd></div><div><dt>Label</dt><dd>{proposal.label}</dd></div><div><dt>Coins</dt><dd>{proposal.selectedOutpoints.length ? `${proposal.selectedOutpoints.length} selected` : 'Automatic selection'}</dd></div><div><dt>Fee rate</dt><dd>{proposal.feeRate} sat/vB</dd></div><div><dt>Network fee</dt><dd>{shortSats(proposal.fee)} sats</dd></div><div class="total"><dt>Total</dt><dd>{shortSats(proposal.total)} sats</dd></div></dl>
       <div class="warning-box">Bitcoin transactions cannot be reversed. Verify the address and amount before signing.</div>
       <div class="split-actions"><Button variant="secondary" size="large" onclick={() => { proposal = null; step = 1; }}>Back</Button><Button size="large" onclick={() => step = 3}>Continue to sign<ArrowRight size={17} /></Button></div>
     </section>
   {:else if step === 3 && proposal && externalSigner}
     <section class="form-card sign-card">
       <span class="sign-icon"><Cpu size={25}/></span><h2>Sign on your hardware</h2><p>Verify the address, amount, and fee on the signer. Satchel never receives its private key or hardware passphrase.</p>
-      <div class="psbt-actions"><Button variant="secondary" onclick={scanHardware}><Cpu size={16}/>Sign with cable</Button><Button variant="secondary" onclick={showPsbtQr}><QrCode size={16}/>Show unsigned QR</Button><Button variant="secondary" onclick={() => {scannedFrames=[];qrScanOpen=true;}}><ScanLine size={16}/>Scan signed QR</Button><Button variant="secondary" onclick={() => importOpen=true}><FileUp size={16}/>Import signed PSBT</Button><Button variant="secondary" onclick={() => externalProposal&&downloadText(`satchel-${externalProposal.proposalId}.psbt`,externalProposal.psbt)}><Download size={16}/>Save unsigned PSBT</Button></div>
+      <div class="psbt-actions"><Button variant="secondary" onclick={scanHardware}><Cpu size={16}/>Sign with cable</Button><Button variant="secondary" onclick={showPsbtQr}><QrCode size={16}/>Show unsigned QR</Button><Button variant="secondary" onclick={() => {scannedFrames=[];qrScanOpen=true;}}><ScanLine size={16}/>Scan signed QR</Button><Button variant="secondary" onclick={() => importOpen=true}><FileUp size={16}/>Import signed PSBT</Button><Button variant="secondary" loading={savingPsbt} loadingLabel="Saving PSBT…" onclick={saveExternalPsbt}><Download size={16}/>Save unsigned PSBT</Button></div>
       {#if externalProposal?.canFinalize}<div class="ready-panel"><Check size={18}/><div><strong>Signature verified</strong><small>Enter this wallet’s Satchel app PIN to broadcast.</small></div></div><PasswordField label="App PIN" bind:value={passphrase} oninput={() => credentialError=''} autocomplete="current-password" error={credentialError}/><Button size="large" class="full" disabled={!passphrase} loading={broadcasting} loadingLabel="Broadcasting…" onclick={broadcast}>Finalize & broadcast</Button>{:else if credentialError}<p class="form-error">{credentialError}</p>{/if}
       <Button variant="ghost" class="full" onclick={() => step=2}>Back to review</Button>
     </section>
@@ -161,11 +167,12 @@
       <Button variant="ghost" class="full" onclick={() => step = 2}>Back to review</Button>
     </form>
   {:else}
-    <section class="empty-state success-state"><span class="empty-icon success"><Check size={25} /></span><h2>Payment sent</h2><p>{shortSats(sentAmount)} sats was broadcast to the Bitcoin network.{#if balanceSyncPending} Balance refresh is pending; sync when the node is available.{/if}</p><div class="txid-box"><span>Transaction ID</span><code>{txid}</code></div><Button onclick={() => { step = 1; address=''; amount=''; passphrase=''; proposal=null; txid=''; sentAmount=0; balanceSyncPending=false; }}>Make another payment</Button><a href="/activity">View transaction</a></section>
+    <section class="empty-state success-state"><span class="empty-icon success"><Check size={25} /></span><h2>Payment sent</h2><p>{shortSats(sentAmount)} sats was broadcast to the Bitcoin network.{#if balanceSyncPending} Balance refresh is pending; sync when the node is available.{/if}</p><div class="txid-box"><span>Transaction ID</span><code>{txid}</code></div><Button onclick={() => { step = 1; address=''; label=''; amount=''; passphrase=''; proposal=null; txid=''; sentAmount=0; balanceSyncPending=false; }}>Make another payment</Button><a href="/activity">View transaction</a></section>
   {/if}
 </div>
 
-<Modal open={deviceOpen} title="Sign with hardware" description="Use the same passphrase-protected hardware wallet whose fingerprint you imported." onclose={() => deviceOpen=false}>{#if broadcasting}<div class="device-scan"><Cpu size={20}/><span>Scanning…</span></div>{:else if !devices.length}<div class="device-scan"><strong>No device found</strong><span>Unlock the signer, quit its companion app, and scan again.</span><Button variant="secondary" onclick={scanHardware}>Scan again</Button></div>{:else}<div class="source-list">{#each devices as device}<button onclick={() => signHardware(device)}><Cpu size={18}/><span><strong>{device.label}</strong><small>{device.fingerprint ?? device.message}</small></span></button>{/each}</div>{/if}</Modal>
+<Modal open={deviceOpen} title="Sign with hardware" description="Use the same passphrase-protected hardware wallet whose fingerprint you imported." onclose={() => deviceOpen=false}>{#if broadcasting}<div class="device-scan"><Cpu size={20}/><span>Communicating with hardware…</span></div>{:else if !devices.length}<div class="device-scan"><strong>No device found</strong><span>Unlock the signer, quit its companion app, and scan again.</span><Button variant="secondary" onclick={scanHardware}>Scan again</Button></div>{:else}<div class="source-list">{#each devices as device}<button onclick={() => signHardware(device)}><Cpu size={18}/><span><strong>{device.label}</strong><small>{device.fingerprint ?? device.message}</small></span></button>{/each}<button class="hardware-rescan" onclick={scanHardware}><RefreshCw size={16}/><span><strong>Rescan devices</strong><small>Refresh after connecting or unlocking another signer.</small></span></button></div>{/if}{#if deviceError}<div class="hardware-inline-error" role="alert"><AlertTriangle size={18}/><span><strong>Hardware signing failed</strong><small>{deviceError}</small></span><Button variant="secondary" size="small" onclick={scanHardware}>Rescan</Button></div>{/if}</Modal>
 <Modal open={importOpen} title="Import signed PSBT" description="Only a valid signature from this wallet’s exact fingerprint is accepted." onclose={() => importOpen=false}><label class="file-action"><FileUp size={16}/>Choose signed PSBT<input aria-label="Choose signed PSBT file" type="file" accept=".psbt,text/plain" onchange={loadSignedFile}/></label><label class="field"><span>Signed PSBT</span><textarea rows="6" bind:value={imported} placeholder="cHNidP8…"></textarea></label><div class="modal-footer"><Button variant="secondary" onclick={() => importOpen=false}>Cancel</Button><Button disabled={!imported.trim()} loading={broadcasting} loadingLabel="Validating…" onclick={importSigned}>Validate signature</Button></div></Modal>
 <Modal open={qrOpen} title="Unsigned PSBT" description="Scan with an offline signer. No private key data is encoded." onclose={() => qrOpen=false}><AnimatedUrQr frames={urFrames}/></Modal>
 <Modal open={qrScanOpen} title="Scan signed PSBT" description="Satchel accepts only crypto-psbt UR frames and verifies the exact proposal before importing." onclose={() => qrScanOpen=false}><UrQrScanner onframe={receiveUrFrame}/></Modal>
+<RecipientAddressModal open={addressOpen} address={proposal?.recipient ?? ''} label={proposal?.label ?? ''} onclose={() => addressOpen = false}/>

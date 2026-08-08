@@ -55,6 +55,7 @@
   let fingerprint = $state('');
   let xpub = $state('');
   let saved = $state(false);
+  let coldcardRegistered = $state(false);
   let credential = $state('');
   let confirmation = $state('');
   let preview = $state<MultisigPreview | null>(null);
@@ -88,6 +89,7 @@
     return { type: 'recovery', immediate: { threshold: 2, signerIds: cosigners.slice(0, 3).map((key) => key.id) }, recovery: { threshold: 1, signerIds: [cosigners[3].id], availableAfterBlocks: templateKind === 'inheritance' ? 52_560 : 4_320 } };
   });
   const selectedHardwareGuide = $derived(hardwareGuides.find((guide) => guide.id === hardwareGuide) ?? hardwareGuides[0]);
+  const coldcardRegistrationRequired = $derived(cosigners.some((signer) => signer.deviceType?.toLowerCase() === 'coldcard'));
 
   onDestroy(() => { credential = ''; confirmation = ''; pinPositions = ''; pinChallenge = ''; hardwareScanGeneration += 1; });
 
@@ -235,6 +237,15 @@
     downloadText(`${safeTransferFilename(preview.name)}-descriptors.txt`, `Wallet: ${preview.name}\nReceive descriptor:\n${preview.externalDescriptor}\n\nChange descriptor:\n${preview.internalDescriptor}\n`);
   }
 
+  function saveColdcardPolicy() {
+    if (!preview) return;
+    downloadText(
+      `${safeTransferFilename(preview.name)}-coldcard-policy.txt`,
+      `# Satchel multisig policy for COLDCARD\n# Import from Settings > Multisig Wallets > Import\n${preview.externalDescriptor}\n`
+    );
+    toast({ title: 'Coldcard policy saved', description: 'Import it on every Coldcard cosigner, then verify the policy on-device.', tone: 'success' });
+  }
+
   async function importHardware(device: HardwareDevice, allowEmptyPassphrase = false) {
     const deviceLabel = label.trim() || device.label;
     hardwareBusy = true;
@@ -312,7 +323,7 @@
   }
 
   async function create() {
-    if (!preview || !saved || !credential || credential !== confirmation) return;
+    if (!preview || !saved || (coldcardRegistrationRequired && !coldcardRegistered) || !credential || credential !== confirmation) return;
     busy = true; error = '';
     try {
       if (recoveryTemplate) await walletService.createRecoveryMultisig(name, recoveryTemplate, cosigners, credential);
@@ -327,7 +338,7 @@
 <div class="page coordinator-page">
   <header class="page-header">
     <div><p class="eyebrow">WALLET POLICY</p><h1>Create a policy wallet</h1><p class="subtitle">Choose a simple shared policy or add a separate delayed recovery key.</p></div>
-    <div class="page-header-actions"><a class="secondary-link" href="/multisig/recover"><FileUp size={15}/>Recover from backup</a><span class="network-chip">Regtest · Native SegWit</span></div>
+    <div class="page-header-actions"><a class="secondary-link" href="/multisig/recover" aria-label="Recover from backup"><FileUp size={15}/>Recover</a><span class="network-chip">Regtest · Native SegWit</span></div>
   </header>
   <nav class="creation-progress" aria-label="Wallet creation progress"><span class:active={stage === 'keys'}><b>1</b>Design</span><i class:active={stage === 'review'}></i><span class:active={stage === 'review'}><b>2</b>Verify</span><i></i><span><b>3</b>Back up</span></nav>
 
@@ -393,11 +404,12 @@
       {#if showDescriptor}<div class="descriptor-block" data-testid="descriptor-preview"><span class="descriptor-label"><span>Receive descriptor</span><button aria-label="Copy receive descriptor" onclick={() => copyDescriptor(preview!.externalDescriptor, 'receive')}><Copy size={14}/></button></span><code>{preview.externalDescriptor}</code><span class="descriptor-label"><span>Change descriptor</span><button aria-label="Copy change descriptor" onclick={() => copyDescriptor(preview!.internalDescriptor, 'change')}><Copy size={14}/></button></span><code>{preview.internalDescriptor}</code>{#if recoveryTemplate?.type === 'recovery'}<span>Spend paths</span><code>2 of first 3 now · 1 recovery key after {recoveryTemplate.recovery.availableAfterBlocks.toLocaleString()} blocks</code>{/if}<button class="descriptor-download" onclick={saveDescriptorDraft}><Download size={14}/>Save public descriptor text</button></div>{/if}
       <div class="review-signers">{#each preview.cosigners as signer}<div><Check size={14}/><span><strong>{signer.label}</strong><small>{signer.fingerprint}</small></span></div>{/each}</div>
       <label class="check-row"><input type="checkbox" bind:checked={saved}/><span><strong>I saved the wallet descriptor</strong><small>This public backup is required to recover addresses and coordinate signatures.</small></span></label>
+      {#if coldcardRegistrationRequired}<div class="hardware-policy-registration"><ShieldCheck size={18}/><div><strong>Register this wallet on Coldcard</strong><p>Coldcard must know the complete multisig policy before it can verify recipients and change. Save this BIP-380 descriptor, then import it from <b>Settings → Multisig Wallets → Import</b> on every Coldcard cosigner.</p><Button variant="secondary" size="small" onclick={saveColdcardPolicy}><Download size={14}/>Save Coldcard policy</Button></div></div><label class="check-row"><input type="checkbox" bind:checked={coldcardRegistered}/><span><strong>I imported and verified the policy on every Coldcard</strong><small>The name, signing threshold, and cosigner fingerprints matched on-device.</small></span></label>{/if}
       <div class="credential-grid"><PasswordField label="App PIN" inputLabel="App PIN" bind:value={credential} placeholder="Unlock this coordinator" autocomplete="new-password"/><PasswordField label="Confirm app PIN" inputLabel="Confirm app PIN" bind:value={confirmation} placeholder="Enter it again" autocomplete="new-password"/></div>
       <p class="credential-note">This PIN protects local coordinator data. Hardware devices keep their own signing credentials.</p>
       {#if credential && confirmation && credential !== confirmation}<p class="form-error">PINs do not match.</p>{/if}
       {#if error}<p class="form-error">{error}</p>{/if}
-      <Button class="full" size="large" disabled={!saved || !credential || credential !== confirmation} loading={busy} loadingLabel="Creating wallet…" onclick={create}>Create wallet</Button>
+      <Button class="full" size="large" disabled={!saved || (coldcardRegistrationRequired && !coldcardRegistered) || !credential || credential !== confirmation} loading={busy} loadingLabel="Creating wallet…" onclick={create}>Create wallet</Button>
     </section>
   {/if}
 </div>

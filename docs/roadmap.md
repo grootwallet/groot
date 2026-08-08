@@ -16,6 +16,7 @@ Implementation exists for the following items, but the distinction between code-
 4. **Recovery:** birthday, gap-limit, and full-rescan controls are implemented. Add progress/cancellation for very large histories and certify a deliberately extended address gap.
 5. **Remote Core:** direct TLS and Tor-onion-through-loopback-SOCKS policy is implemented. Complete a real VPS TLS/Tor run, certificate failure, proxy loss, timeout, chain mismatch, and DNS-leak evidence.
 6. **Release:** unsigned clean-build/hash-comparison and macOS signature-verification scripts exist. Prove matching unsigned hashes on two clean machines, then sign/notarize, produce SBOM/provenance, and commission an independent review.
+7. **Next signer models:** complete Jade/Jade Plus multisig-registration and PSBT round trips, then add BitBox02 Nova as a distinct certification target. Start Nova with desktop USB only after recording its real HWI identity and pairing behavior; do not inherit original BitBox02 support by model name. Treat Whisper/BLE on iOS as a separate authenticated transport and lifecycle project.
 
 Mainnet stays compile-time disabled until every checklist artifact is attached to an approved replacement for ADR 0012.
 
@@ -24,9 +25,9 @@ Mainnet stays compile-time disabled until every checklist artifact is attached t
 - **Gate 1, existing wallet hardening:** green for regtest. Generated words use a native Rust-owned flow, secrets use credential plus device wrapping, notifications and proposals persist, unlock is throttled, and restart/corruption/deletion paths have regression tests. Public networks remain blocked on Android/Windows secure-storage certification and a packaged mobile lifecycle harness.
 - **Gate 2, multiple-wallet registry:** green for regtest. Versioned UUID profiles now route isolated single-key and multisig directories; creation, selection, deletion, switching, and legacy migration/rollback are user-visible and tested.
 - **Gate 3, descriptor engine:** green for standard BIP48 WSH and guided recovery/decay/expansion compilation, checksums, canonicalization, and public-only enforcement. Delayed satisfaction selection in real funded transactions remains a V2 gate.
-- **Gate 4, setup UX:** guided 2-of-3/recovery/inheritance setup, manual/virtual/HWI xpub sources, descriptor insight, backup drill, and desktop/mobile flows are green. Standards-compliant UR/camera import remains hidden.
+- **Gate 4, setup UX:** guided 2-of-3/recovery/inheritance setup, manual/virtual/HWI xpub sources, descriptor insight, backup drill, bundled local UR/camera decoding, and desktop/mobile flows are green. Physical camera and signer interoperability certification remains external.
 - **Gate 5, signing coordinator:** proposal persistence, exact-PSBT merge validation, file save/import, HWI signing, threshold finalization, broadcast, cancellation, and restart-visible listing are implemented. Path-aware delayed signatures remain V2.
-- **Gate 6, hardware:** the Rust trait, fixed command builders, timeout/kill, bounded output, stderr suppression, xpub/sign, and device address comparison are implemented. No physical device was available in this workspace, so Coldcard/Trezor/Ledger/BitBox02 certification remains external and must record real firmware evidence.
+- **Gate 6, hardware:** the Rust trait, fixed command builders, timeout/kill, bounded output, stderr suppression, xpub/sign, and device address comparison are implemented. No physical device was available in this workspace, so Coldcard/Trezor/Ledger/BitBox02/Jade certification remains external and must record real firmware evidence. BitBox02 Nova is not yet an implemented alias or certified device.
 - **Gate 7, mainnet release:** intentionally blocked by ADR 0012. CI proves no current frontend/native build can select mainnet. The threat model, physical-device matrix, reproducible packages, platform secure storage, remote backend, independent review, and recovery rehearsal remain required evidence.
 
 ## V1 — simple descriptor multisig coordinator
@@ -74,14 +75,14 @@ Mainnet stays compile-time disabled until every checklist artifact is attached t
 
 - Integrate Bitcoin Core HWI behind a Rust trait for enumerate, fingerprint, BIP48 xpub, address display/policy registration, and PSBT signing.
 - Never shell-concatenate arguments, log PSBTs, request seed words, or accept device-returned private material.
-- First certification targets: Coldcard, Trezor, Ledger, and BitBox02, subject to available physical devices and current firmware.
+- First certification targets: Coldcard, Trezor, Ledger, BitBox02, and Jade, subject to available physical devices and current firmware. BitBox02 Nova follows as its own model/firmware/transport row after an explicit implementation change.
 - Record model, firmware, host OS, HWI version, supported setup/sign/display operations, simulator coverage, and known limitations.
 - Fail closed when device identity, network, origin, wallet policy, or returned PSBT differs.
 
 ### 7. Mobile and air-gapped parity
 
 - Use descriptor/key QR import and PSBT QR/file round trips as the universal flow.
-- Add UR/animated QR only after bounded-memory, frame-order, duplicate-frame, and malicious-payload tests.
+- Complete physical UR/camera certification after the implemented bounded-memory, frame-order, duplicate-frame, and malicious-payload tests.
 - Keep USB/HID desktop-specific; do not imply mobile USB support where the platform or device cannot provide it.
 - Verify camera permission, interruption, background/resume, and keyboard/safe-area behavior on iOS and Android.
 

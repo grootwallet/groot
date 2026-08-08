@@ -100,8 +100,8 @@ export class TauriWalletAdapter implements WalletPort {
   setCoinFrozen(outpoint: string, frozen: boolean) { return command<void>('coin_set_frozen', { outpoint, frozen }); }
   setMultisigCoinFrozen(outpoint: string, frozen: boolean) { return command<void>('multisig_coin_set_frozen', { outpoint, frozen }); }
   estimateFees() { return command<FeeEstimates>('fees_estimate'); }
-  preparePayment(recipient: string, amount: Sats, feeRate: FeeRate, coinSelection: CoinSelection = { mode: 'auto' }) {
-    return command<PaymentProposal>('tx_prepare', { recipient, amount, feeRate, coinSelection });
+  preparePayment(recipient: string, label: string, amount: Sats, feeRate: FeeRate, coinSelection: CoinSelection = { mode: 'auto' }) {
+    return command<PaymentProposal>('tx_prepare', { recipient, label, amount, feeRate, coinSelection });
   }
   prepareAcceleration(txid: string, method: import('./contracts').AccelerationMethod, feeRate: FeeRate) { return command<PaymentProposal>('tx_acceleration_prepare', { txid, method, feeRate }); }
   async signAndBroadcast(proposalId: string, credential: string) {
@@ -152,7 +152,7 @@ export class TauriWalletAdapter implements WalletPort {
   async syncMultisig() { const snapshot = normalizeSnapshot(await command<WalletSnapshot>('multisig_sync')); this.#last = snapshot; await this.#drainNotifications(true); this.#emit({ type: 'wallet_updated', walletKind: 'multisig', snapshot }); return snapshot; }
   createMultisigAddress(label: string) { return command<ReceiveAddress>('multisig_address_create', { label }).then(normalizeAddress); }
   discardMultisigAddress(id: number) { return command<void>('multisig_address_discard', { id }); }
-  prepareMultisigPayment(recipient: string, amount: Sats, feeRate: FeeRate, coinSelection: CoinSelection = { mode: 'auto' }) { return command<MultisigProposal>('multisig_tx_prepare', { recipient, amount, feeRate, coinSelection }); }
+  prepareMultisigPayment(recipient: string, label: string, amount: Sats, feeRate: FeeRate, coinSelection: CoinSelection = { mode: 'auto' }) { return command<MultisigProposal>('multisig_tx_prepare', { recipient, label, amount, feeRate, coinSelection }); }
   prepareMultisigAcceleration(txid: string, method: import('./contracts').AccelerationMethod, feeRate: FeeRate) { return command<MultisigProposal>('multisig_acceleration_prepare', { txid, method, feeRate }); }
   multisigProposals() { return command<MultisigProposal[]>('multisig_proposals'); }
   importMultisigProposal(proposalId: string, signedPsbt: string) { return command<MultisigProposal>('multisig_proposal_import', { proposalId, signedPsbt }); }
@@ -164,6 +164,7 @@ export class TauriWalletAdapter implements WalletPort {
     return result;
   }
   cancelMultisigProposal(proposalId: string) { return command<void>('multisig_proposal_cancel', { proposalId }); }
+  savePsbt(suggestedFilename: string, psbt: string) { return command<boolean>('psbt_file_save', { suggestedFilename, psbt }); }
   encodePsbtUr(psbt: string, fragmentBytes = 180) { return command<string[]>('ur_encode_psbt', { psbt, fragmentBytes }); }
   decodePsbtUr(frames: string[]) { return command<string>('ur_decode_psbt', { frames }); }
   subscribe(listener: (event: WalletEvent) => void) {

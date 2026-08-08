@@ -83,6 +83,21 @@ fn validate_public_backup_filename(value: &str) -> ApiResult<&str> {
     Ok(trimmed)
 }
 
+fn validate_psbt_filename(value: &str) -> ApiResult<&str> {
+    let trimmed = value.trim();
+    if trimmed.is_empty()
+        || trimmed.len() > 128
+        || trimmed.contains(['/', '\\', '\0'])
+        || !trimmed.ends_with(".psbt")
+    {
+        return Err(api_error(
+            "invalid_backup",
+            "Choose a valid .psbt filename.",
+        ));
+    }
+    Ok(trimmed)
+}
+
 #[tauri::command]
 pub async fn public_backup_save(
     app: AppHandle,
@@ -107,6 +122,47 @@ pub async fn public_backup_save(
             .file()
             .set_file_name(&filename)
             .add_filter("Satchel public backup", &[extension])
+            .blocking_save_file();
+        let Some(selected) = selected else {
+            return Ok(false);
+        };
+        let path = selected.into_path().map_err(internal)?;
+        let mut options = OpenOptions::new();
+        options.create(true).truncate(true).write(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        let mut file = options.open(&path).map_err(internal)?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).map_err(internal)?;
+        }
+        file.write_all(content.as_bytes()).map_err(internal)?;
+        file.sync_all().map_err(internal)?;
+        Ok(true)
+    })
+    .await
+    .map_err(internal)?
+}
+
+#[tauri::command]
+pub async fn psbt_file_save(
+    app: AppHandle,
+    suggested_filename: String,
+    psbt: String,
+) -> ApiResult<bool> {
+    let filename = validate_psbt_filename(&suggested_filename)?.to_owned();
+    let content = psbt.trim().to_owned();
+    decode_psbt(&content).map_err(proposal_api_error)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let selected = app
+            .dialog()
+            .file()
+            .set_file_name(&filename)
+            .add_filter("Partially signed Bitcoin transaction", &["psbt"])
             .blocking_save_file();
         let Some(selected) = selected else {
             return Ok(false);
@@ -431,6 +487,7 @@ pub struct RecoveryScanSettingsDto {
 pub struct PaymentProposalDto {
     proposal_id: String,
     recipient: String,
+    label: String,
     amount: u64,
     fee: u64,
     fee_rate: f64,
@@ -486,6 +543,7 @@ pub struct CosignerHealthDto {
 pub struct MultisigProposalDto {
     proposal_id: String,
     recipient: String,
+    label: String,
     amount: u64,
     fee: u64,
     fee_rate: f64,
@@ -1279,6 +1337,7 @@ fn init_app_schema(db: &Connection) -> ApiResult<()> {
         CREATE TABLE IF NOT EXISTS satchel_proposals (
             proposal_id TEXT PRIMARY KEY,
             recipient TEXT NOT NULL,
+            label TEXT NOT NULL DEFAULT 'Sent payment',
             amount INTEGER NOT NULL,
             fee INTEGER NOT NULL,
             fee_rate REAL NOT NULL,
@@ -1303,6 +1362,22 @@ fn init_app_schema(db: &Connection) -> ApiResult<()> {
         );",
     )
     .map_err(internal)?;
+    let has_proposal_label = db
+        .prepare("PRAGMA table_info(satchel_proposals)")
+        .map_err(internal)?
+        .query_map([], |row| row.get::<_, String>(1))
+        .map_err(internal)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(internal)?
+        .iter()
+        .any(|column| column == "label");
+    if !has_proposal_label {
+        db.execute(
+            "ALTER TABLE satchel_proposals ADD COLUMN label TEXT NOT NULL DEFAULT 'Sent payment'",
+            [],
+        )
+        .map_err(internal)?;
+    }
     notifications::init(db).map_err(internal)
 }
 
@@ -1895,10 +1970,10 @@ fn authorize_multisig_operation(
 }
 
 fn proposal_dto(
-    row: (String, String, u64, u64, f64, String, String, u64),
+    row: (String, String, String, u64, u64, f64, String, String, u64),
     wallet: &MultisigWalletDto,
 ) -> ApiResult<MultisigProposalDto> {
-    let (proposal_id, recipient, amount, fee, fee_rate, encoded, status, created_at) = row;
+    let (proposal_id, recipient, label, amount, fee, fee_rate, encoded, status, created_at) = row;
     let psbt = decode_psbt(&encoded).map_err(proposal_api_error)?;
     let fingerprints = multisig_fingerprints(wallet)?;
     let progress =
@@ -1906,6 +1981,7 @@ fn proposal_dto(
     Ok(MultisigProposalDto {
         proposal_id,
         recipient,
+        label,
         amount,
         fee,
         fee_rate,
@@ -1932,9 +2008,9 @@ fn load_multisig_proposal(
     proposal_id: &str,
 ) -> ApiResult<MultisigProposalDto> {
     let row = db.query_row(
-        "SELECT proposal_id, recipient, amount, fee, fee_rate, psbt, status, created_at FROM satchel_proposals WHERE proposal_id = ?1 AND status IN ('collecting','ready')",
+        "SELECT proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at FROM satchel_proposals WHERE proposal_id = ?1 AND status IN ('collecting','ready')",
         params![proposal_id],
-        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?, row.get(7)?)),
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?, row.get(7)?, row.get(8)?)),
     ).map_err(|_| api_error("proposal_not_found", "Payment proposal was not found or is no longer active."))?;
     proposal_dto(row, wallet)
 }
@@ -1945,10 +2021,11 @@ fn persist_single_proposal(
     psbt: &Psbt,
 ) -> ApiResult<()> {
     db.execute(
-        "INSERT INTO satchel_proposals (proposal_id, recipient, amount, fee, fee_rate, psbt, status, created_at) VALUES (?1,?2,?3,?4,?5,?6,'collecting',?7)",
+        "INSERT INTO satchel_proposals (proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,'collecting',?8)",
         params![
             proposal.proposal_id,
             proposal.recipient,
+            proposal.label,
             proposal.amount,
             proposal.fee,
             proposal.fee_rate,
@@ -2228,6 +2305,17 @@ fn tx_counterparty(
     tx: &bdk_wallet::bitcoin::Transaction,
     received: bool,
 ) -> (String, String) {
+    let txid = tx.compute_txid().to_string();
+    let outgoing_label = (!received)
+        .then(|| {
+            db.query_row(
+                "SELECT label FROM satchel_proposals WHERE txid = ?1 AND status = 'broadcast'",
+                params![txid],
+                |row| row.get::<_, String>(0),
+            )
+            .ok()
+        })
+        .flatten();
     if received {
         for output in &tx.output {
             if let Some((keychain, index)) = wallet.derivation_of_spk(output.script_pubkey.clone())
@@ -2246,14 +2334,23 @@ fn tx_counterparty(
                 .is_none()
             {
                 if let Ok(address) = Address::from_script(&output.script_pubkey, NETWORK) {
-                    return (address.to_string(), "Sent payment".to_owned());
+                    return (
+                        address.to_string(),
+                        outgoing_label
+                            .clone()
+                            .unwrap_or_else(|| "Sent payment".to_owned()),
+                    );
                 }
             }
         }
     }
     (
         "Unknown".to_owned(),
-        if received { "Received" } else { "Sent payment" }.to_owned(),
+        if received {
+            "Received".to_owned()
+        } else {
+            outgoing_label.unwrap_or_else(|| "Sent payment".to_owned())
+        },
     )
 }
 
@@ -2960,6 +3057,14 @@ fn hardware_api_error(error: HardwareError) -> ApiError {
 }
 
 fn hardware_device_api_error(error: HardwareError, device_type: &str) -> ApiError {
+    if device_type.eq_ignore_ascii_case("coldcard")
+        && matches!(error, HardwareError::CommandFailed(Some(-7)))
+    {
+        return api_error(
+            error.code(),
+            "Coldcard does not recognize this multisig wallet. Save the wallet policy in Satchel, import it from Settings → Multisig Wallets → Import on Coldcard, verify the threshold and fingerprints, then try again.",
+        );
+    }
     if device_type.eq_ignore_ascii_case("bitbox02")
         && matches!(
             error,
@@ -3258,6 +3363,7 @@ pub async fn hardware_import_cosigner(
             xpub,
             derivation_path: crate::multisig::MULTISIG_ACCOUNT_PATH.to_owned(),
             source: crate::multisig::CosignerSource::Usb,
+            device_type: Some(device.device_type),
         };
         input.parse_for_validation().map_err(policy_api_error)?;
         Ok(input)
@@ -3418,16 +3524,17 @@ pub fn external_signer_wallet(
 }
 
 fn external_proposal_dto(
-    row: (String, String, u64, u64, f64, String, String, u64),
+    row: (String, String, String, u64, u64, f64, String, String, u64),
     fingerprint: &str,
 ) -> ApiResult<MultisigProposalDto> {
-    let (proposal_id, recipient, amount, fee, fee_rate, encoded, status, created_at) = row;
+    let (proposal_id, recipient, label, amount, fee, fee_rate, encoded, status, created_at) = row;
     let psbt = decode_psbt(&encoded).map_err(proposal_api_error)?;
     let fingerprint = fingerprint.parse().map_err(internal)?;
     let progress = signature_progress(&psbt, &[fingerprint], 1).map_err(proposal_api_error)?;
     Ok(MultisigProposalDto {
         proposal_id,
         recipient,
+        label,
         amount,
         fee,
         fee_rate,
@@ -3454,9 +3561,9 @@ fn load_external_proposal(
     proposal_id: &str,
 ) -> ApiResult<MultisigProposalDto> {
     let row = db.query_row(
-        "SELECT proposal_id, recipient, amount, fee, fee_rate, psbt, status, created_at FROM satchel_proposals WHERE proposal_id = ?1 AND status IN ('collecting','ready')",
+        "SELECT proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at FROM satchel_proposals WHERE proposal_id = ?1 AND status IN ('collecting','ready')",
         params![proposal_id],
-        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?, row.get(7)?)),
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?, row.get(7)?, row.get(8)?)),
     ).map_err(|_| api_error("proposal_not_found", "Payment proposal was not found or is no longer active."))?;
     external_proposal_dto(row, &metadata.signer.fingerprint)
 }
@@ -3471,7 +3578,7 @@ pub fn external_signer_proposals(
     let metadata = read_external_signer_metadata(&app)?;
     let db = open_db(&app)?;
     let mut statement = db.prepare(
-        "SELECT proposal_id, recipient, amount, fee, fee_rate, psbt, status, created_at FROM satchel_proposals WHERE status IN ('collecting','ready') ORDER BY created_at DESC",
+        "SELECT proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at FROM satchel_proposals WHERE status IN ('collecting','ready') ORDER BY created_at DESC",
     ).map_err(internal)?;
     let rows = statement
         .query_map([], |row| {
@@ -3484,6 +3591,7 @@ pub fn external_signer_proposals(
                 row.get(5)?,
                 row.get(6)?,
                 row.get(7)?,
+                row.get(8)?,
             ))
         })
         .map_err(internal)?;
@@ -3887,6 +3995,7 @@ pub fn multisig_recover_bsms(
             xpub: key.xpub.to_string(),
             derivation_path: key.derivation_path,
             source: CosignerSource::Manual,
+            device_type: None,
         })
         .collect::<Vec<_>>();
     let preview = PolicyInput {
@@ -4147,12 +4256,14 @@ pub fn multisig_tx_prepare(
     app: AppHandle,
     state: State<'_, AppState>,
     recipient: String,
+    label: String,
     amount: u64,
     fee_rate: f64,
     coin_selection: CoinSelectionInput,
 ) -> ApiResult<MultisigProposalDto> {
     let _operation = operation_guard(&state)?;
     require_unlocked(&app, &state)?;
+    let label = normalize_label(&label)?;
     if amount == 0 {
         return Err(api_error(
             "invalid_amount",
@@ -4229,8 +4340,8 @@ pub fn multisig_tx_prepare(
     let encoded = encode_psbt(&psbt);
     let created_at = now();
     db.execute(
-        "INSERT INTO satchel_proposals (proposal_id, recipient, amount, fee, fee_rate, psbt, status, created_at) VALUES (?1,?2,?3,?4,?5,?6,'collecting',?7)",
-        params![proposal_id, address.to_string(), amount, fee, applied_fee_rate, encoded, created_at],
+        "INSERT INTO satchel_proposals (proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,'collecting',?8)",
+        params![proposal_id, address.to_string(), label, amount, fee, applied_fee_rate, encoded, created_at],
     ).map_err(internal)?;
     load_multisig_proposal(&db, &metadata, &proposal_id)
 }
@@ -4245,7 +4356,7 @@ pub fn multisig_proposals(
     let metadata = read_multisig_metadata(&app)?;
     let db = open_multisig_db(&app)?;
     let mut statement = db.prepare(
-        "SELECT proposal_id, recipient, amount, fee, fee_rate, psbt, status, created_at FROM satchel_proposals WHERE status IN ('collecting','ready') ORDER BY created_at DESC",
+        "SELECT proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at FROM satchel_proposals WHERE status IN ('collecting','ready') ORDER BY created_at DESC",
     ).map_err(internal)?;
     let rows = statement
         .query_map([], |row| {
@@ -4258,6 +4369,7 @@ pub fn multisig_proposals(
                 row.get(5)?,
                 row.get(6)?,
                 row.get(7)?,
+                row.get(8)?,
             ))
         })
         .map_err(internal)?;
@@ -4589,12 +4701,14 @@ pub fn tx_prepare(
     app: AppHandle,
     state: State<'_, AppState>,
     recipient: String,
+    label: String,
     amount: u64,
     fee_rate: f64,
     coin_selection: CoinSelectionInput,
 ) -> ApiResult<PaymentProposalDto> {
     let _operation = operation_guard(&state)?;
     require_unlocked(&app, &state)?;
+    let label = normalize_label(&label)?;
     if amount == 0 {
         return Err(api_error(
             "invalid_amount",
@@ -4676,6 +4790,7 @@ pub fn tx_prepare(
     let proposal = PaymentProposalDto {
         proposal_id: proposal_id.clone(),
         recipient: address.to_string(),
+        label,
         amount,
         fee,
         fee_rate: applied_fee_rate,
@@ -4804,6 +4919,7 @@ fn summarize_payment_psbt(
     Ok(PaymentProposalDto {
         proposal_id: Uuid::new_v4().to_string(),
         recipient: recipient.to_string(),
+        label: "Fee acceleration".to_owned(),
         amount: if external.is_empty() {
             0
         } else {
@@ -5005,8 +5121,8 @@ pub fn multisig_acceleration_prepare(
     )?;
     let encoded = encode_psbt(&psbt);
     db.execute(
-        "INSERT INTO satchel_proposals (proposal_id, recipient, amount, fee, fee_rate, psbt, status, created_at) VALUES (?1,?2,?3,?4,?5,?6,'collecting',?7)",
-        params![proposal.proposal_id, proposal.recipient, proposal.amount, proposal.fee, proposal.fee_rate, encoded, now()],
+        "INSERT INTO satchel_proposals (proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,'collecting',?8)",
+        params![proposal.proposal_id, proposal.recipient, proposal.label, proposal.amount, proposal.fee, proposal.fee_rate, encoded, now()],
     )
     .map_err(internal)?;
     wallet.persist(&mut db).map_err(internal)?;
@@ -5716,6 +5832,7 @@ mod tests {
             xpub: "fixture".to_owned(),
             derivation_path: MULTISIG_ACCOUNT_PATH.to_owned(),
             source: CosignerSource::Virtual,
+            device_type: None,
         };
 
         let error = reject_virtual_cosigners(&[cosigner]).expect_err("must reject fixture key");
@@ -5804,6 +5921,7 @@ mod tests {
                     xpub: Xpub::from_priv(&secp, &account).to_string(),
                     derivation_path: MULTISIG_ACCOUNT_PATH.to_owned(),
                     source: CosignerSource::Manual,
+                    device_type: None,
                 }
             })
             .collect::<Vec<_>>();
@@ -6083,6 +6201,7 @@ mod tests {
                 &PaymentProposalDto {
                     proposal_id: proposal_id.clone(),
                     recipient: "bcrt1qrestartfixture".into(),
+                    label: "Restart fixture".into(),
                     amount: 10,
                     fee: 1,
                     fee_rate: 1.0,
@@ -6215,6 +6334,32 @@ mod tests {
         }
         assert_eq!(
             validate_public_backup_filename(&format!("{}.json", "a".repeat(129)))
+                .unwrap_err()
+                .code,
+            "invalid_backup"
+        );
+    }
+
+    #[test]
+    fn psbt_filename_is_bounded_and_cannot_escape_the_save_location() {
+        assert_eq!(
+            validate_psbt_filename("payment.psbt").unwrap(),
+            "payment.psbt"
+        );
+        for invalid in [
+            "",
+            "payment.txt",
+            "../payment.psbt",
+            "folder/payment.psbt",
+            "payment.psbt\0extra",
+        ] {
+            assert_eq!(
+                validate_psbt_filename(invalid).unwrap_err().code,
+                "invalid_backup"
+            );
+        }
+        assert_eq!(
+            validate_psbt_filename(&format!("{}.psbt", "a".repeat(129)))
                 .unwrap_err()
                 .code,
             "invalid_backup"

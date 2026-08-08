@@ -124,7 +124,7 @@
   </div>
 </div>
 
-<Modal open={showGenerate} title="New receive address" description="The label is mandatory and cannot be edited later." onclose={() => showGenerate = false}>
+<Modal open={showGenerate} title="New receive address" description="Labels cannot be changed." onclose={() => showGenerate = false}>
   <form onsubmit={(e) => { e.preventDefault(); generate(); }}>
     <label class="field"><span>Permanent label</span><input bind:value={label} placeholder="e.g. Invoice #105" maxlength="48" /><small>{label.length}/48</small></label>
     <div class="modal-footer"><Button variant="secondary" onclick={() => showGenerate = false}>Cancel</Button><Button type="submit" disabled={!label.trim()} loading={busy} loadingLabel="Generating address…">Generate address</Button></div>
@@ -135,6 +135,6 @@
   {#if current && qrDataUrl}<div class="large-qr"><img src={qrDataUrl} alt="Large QR code for {current.address}"/><ReadableAddress address={current.address} {copied} oncopy={copy}/></div>{/if}
 </Modal>
 <Modal open={showDiscard} title="Discard {discardTarget?.label ?? 'this address'}?" description="It will be retired and never shown for payment again." onclose={() => { showDiscard = false; discardTarget = null; }}>
-  <div class="warning-box">This improves payment privacy. The wallet will still monitor the address in case funds arrive later.</div>
+  <div class="warning-box">Discarded addresses remain monitored.</div>
   <div class="modal-footer"><Button variant="secondary" onclick={() => { showDiscard = false; discardTarget = null; }}>Keep address</Button><Button variant="danger" loading={busy} loadingLabel="Discarding…" onclick={discard}>Discard address</Button></div>
 </Modal>

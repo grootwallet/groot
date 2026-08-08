@@ -21,8 +21,9 @@ Satchel combines Wasabi Wallet's calm, task-focused desktop density with the res
 - French blue `#2459a9` is the interactive accent; French red `#d3293a` marks high-consequence emphasis. Bitcoin amber `#e3aa19` is semantic, not decorative.
 - Red may also provide restrained identity cues—eyebrows, locked-state labels, a two-pixel edge, or a low-chroma tint—when the copy clearly describes a neutral state. Solid red surfaces and red error copy remain reserved for destructive actions and failures.
 - System sans-serif for dense UI, Iowan Old Style/Baskerville/Georgia for display headings, and system monospace for identifiers. No network font is required.
+- Primary UI copy is 12–14 pixels. Supporting copy may reach 10 pixels on desktop but should be at least 11 pixels on mobile; smaller type is reserved for print metadata and nonessential technical notation. Do not make the interface feel quieter by making required copy difficult to read.
 - Seven-to-fourteen-pixel radii; avoid pills except status/policy chips.
-- Motion is limited to short state transitions, toasts, and sync indicators. Respect reduced motion when animations expand.
+- Motion is limited to 140–220 ms state transitions, a restrained modal fade/rise, toasts, and sync indicators. It should clarify a state change rather than decorate a static page. `prefers-reduced-motion` removes meaningful movement globally.
 
 Tokens live in `src/app.css`. Component surfaces must use semantic tokens such as `--panel`, `--surface-control`, `--surface-inset`, and `--surface-icon`; hard-coded dark neutral backgrounds are prohibited because they break light mode. Reusable behavior belongs in `src/lib/components`; route files may compose components but must not introduce wallet policy.
 
@@ -64,6 +65,8 @@ Required review sizes are 1180×780 and 390×844. At mobile width, content must 
 ## Voice
 
 Use “bitcoin” for the asset and “Bitcoin” for the network/protocol. Prefer “2 of 3 signatures” to “quorum,” and “public account key” before “xpub.” Say **wallet passphrase** only for a Satchel-generated software wallet; it is part of the BIP39 backup and also unlocks Satchel. Say **app PIN** for multisig and external-hardware wallets; it protects local app data and is not a hardware passphrase or seed backup. Never imply that an app PIN can recover a hardware wallet or that a public descriptor can spend.
+
+Headings and controls should carry the flow whenever possible. Do not repeat a heading with a subtitle that merely restates it. Keep permanent consequences and recovery instructions explicit, but move protocol detail behind optional insight.
 
 ## Accessibility
 

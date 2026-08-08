@@ -24,6 +24,7 @@ export type FeeEstimates = {
 export type PaymentProposal = {
   proposalId: string;
   recipient: string;
+  label: string;
   amount: Sats;
   fee: Sats;
   feeRate: FeeRate;
@@ -246,7 +247,7 @@ export interface WalletPort {
   estimateFees(): Promise<FeeEstimates>;
   setCoinFrozen(outpoint: string, frozen: boolean): Promise<void>;
   setMultisigCoinFrozen(outpoint: string, frozen: boolean): Promise<void>;
-  preparePayment(recipient: string, amount: Sats, feeRate: FeeRate, coinSelection?: CoinSelection): Promise<PaymentProposal>;
+  preparePayment(recipient: string, label: string, amount: Sats, feeRate: FeeRate, coinSelection?: CoinSelection): Promise<PaymentProposal>;
   prepareAcceleration(txid: string, method: AccelerationMethod, feeRate: FeeRate): Promise<PaymentProposal>;
   signAndBroadcast(proposalId: string, credential: string): Promise<BroadcastResult>;
   listHardwareDevices(): Promise<HardwareDevice[]>;
@@ -281,13 +282,14 @@ export interface WalletPort {
   syncMultisig(): Promise<WalletSnapshot>;
   createMultisigAddress(label: string): Promise<ReceiveAddress>;
   discardMultisigAddress(id: number): Promise<void>;
-  prepareMultisigPayment(recipient: string, amount: Sats, feeRate: FeeRate, coinSelection?: CoinSelection): Promise<MultisigProposal>;
+  prepareMultisigPayment(recipient: string, label: string, amount: Sats, feeRate: FeeRate, coinSelection?: CoinSelection): Promise<MultisigProposal>;
   prepareMultisigAcceleration(txid: string, method: AccelerationMethod, feeRate: FeeRate): Promise<MultisigProposal>;
   multisigProposals(): Promise<MultisigProposal[]>;
   importMultisigProposal(proposalId: string, signedPsbt: string): Promise<MultisigProposal>;
   signMultisigWithHardware(proposalId: string, deviceId: string): Promise<MultisigProposal>;
   broadcastMultisigProposal(proposalId: string, credential: string): Promise<BroadcastResult>;
   cancelMultisigProposal(proposalId: string): Promise<void>;
+  savePsbt(suggestedFilename: string, psbt: string): Promise<boolean>;
   encodePsbtUr(psbt: string, fragmentBytes?: number): Promise<string[]>;
   decodePsbtUr(frames: string[]): Promise<string>;
   subscribe(listener: (event: WalletEvent) => void): () => void;

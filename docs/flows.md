@@ -51,9 +51,9 @@ Any number of unused addresses may await payment concurrently. Each may transiti
 
 ## Single-key send
 
-`recipient+amount+fee → persist Rust PSBT → authoritative review → credential → sign+broadcast → durable success`
+`recipient+permanent label+amount+fee → persist Rust PSBT+label → authoritative review → credential → sign+broadcast → durable labeled success`
 
-The review is derived from the persisted PSBT. A wrong credential clears the field and leaves the reviewed proposal available for retry. Restart reloads the exact proposal; it does not rebuild transaction intent from UI fields. Broadcast emits a toast and returns an updated snapshot.
+The review is derived from the persisted PSBT, while Rust normalizes and persists the mandatory outgoing label alongside that proposal. The recipient is shown as `prefix…suffix` and opens a complete grouped, copy-safe detail modal. A wrong credential clears the field and leaves the reviewed proposal available for retry. Restart reloads the exact proposal; it does not rebuild transaction intent from UI fields. PSBT export opens the native file picker, validates a bounded PSBT at the Rust boundary, and reports a durable success or failure. Canceling first opens a destructive review of the payment and collected signatures; only the modal's confirmation calls the cancellation boundary. **Back to overview** opens a separate leave confirmation and preserves the proposal and signatures for later resumption. Broadcast emits a toast and returns an updated snapshot whose activity record uses the permanent outgoing label.
 
 `pending transaction → Increase fee (RBF) or Spend output (CPFP) → persisted acceleration PSBT → normal review/sign/broadcast`
 
@@ -61,12 +61,12 @@ Acceleration never bypasses review or signer thresholds. Confirmed, non-replacea
 
 ## Multisig setup
 
-`name+recipe or advanced M-of-N → add 3–7 cosigners → Rust validation/descriptor preview → descriptor backup acknowledgment+app PIN → persisted coordinator`
+`name+recipe or advanced M-of-N → add 3–7 cosigners → Rust validation/descriptor preview → signer policy registration when required → descriptor backup acknowledgment+app PIN → persisted coordinator`
 
 Cosigner import paths:
 
 - Desktop USB: Rust invokes Bitcoin Core HWI, enumerates a device, and requests the fixed BIP48 test-network account xpub.
-- Mounted file: bounded Satchel or compatible Coldcard-style JSON containing only a test-chain public origin, fingerprint, and BIP48 account tpub. Private/recovery material, wrong-network paths, and extended private keys are rejected. Manual entry remains available. PSBT signing also supports bounded `crypto-psbt` UR v2 animation/camera where the platform decoder is available, with file/text fallback.
+- Mounted file: bounded Satchel or compatible Coldcard-style JSON containing only a test-chain public origin, fingerprint, and BIP48 account tpub. Private/recovery material, wrong-network paths, and extended private keys are rejected. Manual entry remains available. PSBT signing also supports bounded `crypto-psbt` UR v2 animation/camera through a bundled local QR decoder, with file/text fallback.
 - Virtual device: deterministic browser/CI fixture only; it must be visibly identified as a test device.
 
 Selecting a draft or saved cosigner opens public device details. For USB/virtual sources, **Run health check** enumerates devices through `WalletPort` and passes only when a connected device has the saved fingerprint. QR/file/manual sources can only validate that the saved public fingerprint, account path, and xpub record are complete; the result explicitly says physical presence was not checked. The latest result, timestamp, and bounded recent log are presentation state for the current app session, not a durable certification record.
@@ -78,6 +78,8 @@ Opening the USB picker performs two bounded enumeration passes separated by a sh
 When a Trezor reports both PIN and passphrase requirements, Satchel must resolve them in that order: PIN matrix, fresh enumeration/fingerprint, then explicit standard-wallet selection if applicable. Both multisig and external single-key setup implement the same sequence. A later hardware passphrase does not mutate an imported standard wallet; it derives an independent hidden wallet with a different fingerprint, xpub, descriptors, and addresses, which can be added as a separate Satchel wallet.
 
 The default recipe is 2-of-3; 3-of-5 is the larger-group recipe. Advanced mode permits 2 ≤ M ≤ N with 3 ≤ N ≤ 7. 1-of-N is excluded because it has no multisig theft protection. Duplicate fingerprints/xpubs, invalid origins, invalid test-network keys, private descriptors, and unsafe thresholds block review. Creation stores checksummed public descriptors, public cosigner metadata, a watch-only BDK database, and an encrypted app-PIN marker.
+
+Coldcard cosigners are marked during USB import. Before creation, Satchel exports the public BIP-380 wallet policy and requires acknowledgment that it was imported from **Settings → Multisig Wallets → Import** and that the name, threshold, and fingerprints matched on-device. This registration lets Coldcard verify change instead of signing an unknown multisig wallet. Devices that do not require policy registration do not receive this gate.
 
 The guided recovery and inheritance recipes require exactly four independent keys. Keys 1–3 are the immediate 2-of-3 primary set; key 4 is recovery-only and is never counted in the immediate branch. The creation UI labels these roles before review, while Rust rejects any recovery template whose delayed signer overlaps the immediate signer set. The V2 policy lab cannot retrofit a recovery-only key onto a three-key wallet; it blocks compilation and directs the user to create a new four-key recovery wallet.
 
@@ -92,6 +94,8 @@ This flow is implemented for regtest; see `docs/implementation-status.md` for ce
 `payment details → persisted unsigned PSBT → review → collect any k signatures → Miniscript satisfaction/finalization → broadcast`
 
 Each cosigner is `ready`, `awaiting`, `signing`, `signed`, `rejected`, or `unavailable`. USB, bounded `crypto-psbt` UR v2 QR, and file signatures converge on one Rust PSBT merge function. Imported data must match the proposal's unsigned transaction and descriptor identity. The app PIN unlocks coordinator data; it never substitutes for a hardware signature.
+
+The hardware-signing modal always offers an in-place rescan. A signer outside the wallet quorum, an unavailable fingerprint, or a rejected signing request remains as a durable inline modal error; the page behind the overlay is never the sole error surface. Existing wallets with a Coldcard cosigner can export the same public registration descriptor directly from this modal, so an unknown-wallet failure is recoverable without rebuilding the coordinator.
 
 ## Descriptor backup and recovery scan
 
@@ -113,7 +117,7 @@ Editing is draft-only until authenticated save. Height `0` is safest; a birthday
 
 The confirmation explains only the practical effect: frozen coins cannot be selected for automatic or manual spending until unfrozen. It never shows the technical outpoint unless the user separately opens coin details.
 
-Address reuse never blocks selection or spending. Every affected row inherits its immutable receive label and carries a compact amber reuse marker. Expanding that coin's details reveals its compact address/outpoint and explains the public link. Unknown or unavailable addresses are never treated as a reuse match.
+Address reuse never blocks selection or spending. Every affected row inherits its immutable receive label and carries a compact amber reuse marker. Expanding that coin's details reveals its compact address/outpoint, explains the public link, and identifies the other linked coins by amount and shortened outpoint. Unknown or unavailable addresses are never treated as a reuse match.
 
 ## Notifications
 
@@ -142,3 +146,9 @@ Passport Core uses QR or microSD. Trezor Model One host passphrase entry is unav
 2. Choose this machine (loopback), a trusted direct HTTPS endpoint, or an HTTP `.onion` endpoint through an explicit loopback SOCKS5 proxy.
 3. Use the local regtest cookie or protected username/password fields; credentials in URLs are rejected.
 4. Enter the selected wallet's app credential, then **Save & test**. Configuration and credentials are isolated per wallet.
+
+## Sort coins
+
+`Coins → compact sort control → newest/oldest, largest/smallest, or label A–Z/Z–A`
+
+Newest source transaction is the default. Sorting is presentation-only and never changes selection, freeze state, labels, or spend eligibility. Date sorting leaves coins without a known source-transaction timestamp after dated coins.

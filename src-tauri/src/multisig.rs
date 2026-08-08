@@ -32,6 +32,8 @@ pub struct CosignerInput {
     pub xpub: String,
     pub derivation_path: String,
     pub source: CosignerSource,
+    #[serde(default)]
+    pub device_type: Option<String>,
 }
 
 impl CosignerInput {
@@ -401,6 +403,7 @@ mod tests {
             xpub: key.account_xpub.to_string(),
             derivation_path: MULTISIG_ACCOUNT_PATH.to_owned(),
             source: key.source,
+            device_type: None,
         };
         assert!(valid.parse_for_validation().is_ok());
         for invalid in [
@@ -474,6 +477,7 @@ mod tests {
                     xpub: key.account_xpub.to_string(),
                     derivation_path: MULTISIG_ACCOUNT_PATH.into(),
                     source: key.source,
+                    device_type: None,
                 })
                 .collect(),
         };

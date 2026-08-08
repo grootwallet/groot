@@ -17,11 +17,17 @@
   }
 
   $effect(() => {
-    frames; intervalMs;
+    const frameCount = frames.length;
+    const delay = intervalMs;
     index = 0;
     clearInterval(timer);
+    if (frameCount > 1) timer = setInterval(() => { index = (index + 1) % frameCount; }, delay);
+    return () => clearInterval(timer);
+  });
+  $effect(() => {
+    frames;
+    index;
     void render();
-    if (frames.length > 1) timer = setInterval(() => { index = (index + 1) % frames.length; void render(); }, intervalMs);
   });
   onDestroy(() => clearInterval(timer));
 </script>
@@ -32,5 +38,5 @@
 </div>
 
 <style>
-  .ur-qr{display:grid;justify-items:center;gap:.75rem}.ur-qr img,.placeholder{width:min(420px,78vw);aspect-ratio:1;border-radius:1rem;background:#fff;padding:.75rem}.placeholder{display:grid;place-items:center;color:#111}.ur-qr small{color:var(--muted-foreground)}
+  .ur-qr{display:grid;justify-items:center;gap:.75rem}.ur-qr img,.placeholder{width:min(420px,78vw);aspect-ratio:1;border-radius:1rem;background:#fff;padding:.75rem}.placeholder{display:grid;place-items:center;color:#111}.ur-qr small{color:var(--muted)}
 </style>

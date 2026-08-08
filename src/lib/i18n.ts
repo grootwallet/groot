@@ -44,17 +44,17 @@ const messages = {
   en: {
     wallets: 'Wallets', wallet: 'wallet', overview: 'Overview', activity: 'Activity', coins: 'Coins', policy: 'Policy', settings: 'Settings',
     addWallet: 'Add wallet', receive: 'Receive', send: 'Send', language: 'Language', appAppearance: 'App appearance',
-    languageDescription: 'Used throughout Satchel and remembered on this device.', unconfirmed: 'Unconfirmed', confirmed: 'Confirmed', awaitingConfirmation: 'Awaiting confirmation'
+    languageDescription: 'Used throughout Satchel and remembered on this device.', unconfirmed: 'Unconfirmed', confirmed: 'Confirmed', awaitingConfirmation: 'Awaiting confirmation', sortCoins: 'Sort coins', newestFirst: 'Newest first', oldestFirst: 'Oldest first', largestFirst: 'Largest first', smallestFirst: 'Smallest first', labelAscending: 'Label A–Z', labelDescending: 'Label Z–A'
   },
   fr: {
     wallets: 'Portefeuilles', wallet: 'portefeuille', overview: 'Aperçu', activity: 'Activité', coins: 'Pièces', policy: 'Politique', settings: 'Réglages',
     addWallet: 'Ajouter un portefeuille', receive: 'Recevoir', send: 'Envoyer', language: 'Langue', appAppearance: 'Apparence',
-    languageDescription: 'Utilisée dans Satchel et mémorisée sur cet appareil.', unconfirmed: 'Non confirmée', confirmed: 'Confirmée', awaitingConfirmation: 'En attente de confirmation'
+    languageDescription: 'Utilisée dans Satchel et mémorisée sur cet appareil.', unconfirmed: 'Non confirmée', confirmed: 'Confirmée', awaitingConfirmation: 'En attente de confirmation', sortCoins: 'Trier les pièces', newestFirst: 'Plus récentes', oldestFirst: 'Plus anciennes', largestFirst: 'Plus grandes', smallestFirst: 'Plus petites', labelAscending: 'Libellé A–Z', labelDescending: 'Libellé Z–A'
   },
   es: {
     wallets: 'Carteras', wallet: 'cartera', overview: 'Resumen', activity: 'Actividad', coins: 'Monedas', policy: 'Política', settings: 'Ajustes',
     addWallet: 'Añadir cartera', receive: 'Recibir', send: 'Enviar', language: 'Idioma', appAppearance: 'Apariencia',
-    languageDescription: 'Se usa en Satchel y se recuerda en este dispositivo.', unconfirmed: 'Sin confirmar', confirmed: 'Confirmada', awaitingConfirmation: 'Pendiente de confirmación'
+    languageDescription: 'Se usa en Satchel y se recuerda en este dispositivo.', unconfirmed: 'Sin confirmar', confirmed: 'Confirmada', awaitingConfirmation: 'Pendiente de confirmación', sortCoins: 'Ordenar monedas', newestFirst: 'Más recientes', oldestFirst: 'Más antiguas', largestFirst: 'Más grandes', smallestFirst: 'Más pequeñas', labelAscending: 'Etiqueta A–Z', labelDescending: 'Etiqueta Z–A'
   }
 } as const;
 

@@ -22,7 +22,7 @@
 </script>
 
 <div class="page">
-  <header class="page-header"><div><p class="eyebrow">HISTORY</p><h1>Activity</h1><p class="subtitle">Every transaction in this wallet.</p></div><div class="segmented"><button class:active={filter === 'all'} onclick={() => filter = 'all'}>All</button><button class:active={filter === 'received'} onclick={() => filter = 'received'}>Received</button><button class:active={filter === 'sent'} onclick={() => filter = 'sent'}>Sent</button></div></header>
+  <header class="page-header"><div><p class="eyebrow">HISTORY</p><h1>Activity</h1></div><div class="segmented"><button class:active={filter === 'all'} onclick={() => filter = 'all'}>All</button><button class:active={filter === 'received'} onclick={() => filter = 'received'}>Received</button><button class:active={filter === 'sent'} onclick={() => filter = 'sent'}>Sent</button></div></header>
   <section class="section-block">
     {#if visibleTransactions.length}
       <TxList items={visibleTransactions} onselect={(tx) => selected = tx} />

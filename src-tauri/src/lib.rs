@@ -72,6 +72,7 @@ pub fn run() {
             wallet::multisig_export_bsms,
             wallet::public_backup_save,
             wallet::public_backup_print,
+            wallet::psbt_file_save,
             wallet::multisig_bsms_inspect,
             wallet::multisig_recover_bsms,
             wallet::multisig_recovery_drill,

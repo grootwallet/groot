@@ -61,6 +61,7 @@
     "@lucide/svelte": "1.24.0",
     "@tauri-apps/api": "2.11.1",
     "@tauri-apps/plugin-clipboard-manager": "2.3.2",
+    "qr-scanner": "1.4.2",
     "qrcode": "1.5.4"
   }
 }

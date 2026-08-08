@@ -8,10 +8,11 @@ Virtual devices prove coordinator behavior, not vendor compatibility. Run this o
 | --- | --- | --- | --- | --- |
 | Blockstream Jade / Jade Plus | HWI USB when logged in | BIP84 xpub/descriptor QR text; file where exported | Select hidden wallet on Jade; never sent through the webview | Implemented, physical certification pending |
 | BitBox02 | HWI USB after BitBoxApp pairing cache; companion app must release USB | BitBoxApp descriptor/xpub file/text | Device password/pairing stays vendor-controlled | Implemented, physical certification pending |
+| BitBox02 Nova | USB candidate; exact HWI identity and pairing behavior must be captured first | Vendor descriptor/xpub export candidate | Device password remains vendor-controlled; Whisper/BLE is a separate mobile transport review | Not yet supported or certified |
 | Trezor Safe / Model T | HWI USB | Public descriptor/xpub text/file | Prefer on-device passphrase entry | Implemented, physical certification pending |
 | Trezor Model One | HWI USB + PIN matrix | Public descriptor/xpub text/file | Standard wallet requires explicit confirmation; host entry for hidden-wallet passphrases remains blocked | Limited for hidden wallets; standard wallet implemented |
 | Ledger | HWI USB with Bitcoin Test open on test chains; Bitcoin on mainnet | Public descriptor/xpub text/file | Select passphrase-attached PIN on Ledger before connecting | Implemented, physical certification pending |
-| Passport Core | No USB data | QR or microSD descriptor/xpub and PSBT | Passphrase remains on Passport | Offline path implemented; camera UR pending |
+| Passport Core | No USB data | QR or microSD descriptor/xpub and PSBT | Passphrase remains on Passport | Offline path implemented; physical camera interoperability pending |
 | Passport Prime | No cable claim without a documented compatible protocol | Descriptor/xpub and PSBT files/QR where exported | Passphrase remains on Prime | Offline parser implemented; protocol certification pending |
 
 “Implemented” means the Satchel/HWI or bounded-file path exists; it is not a physical certification claim. Record firmware, HWI version, OS, import fingerprint, first-address match, PSBT sign, broadcast, cancellation, and wrong-device rejection for every certified row.
@@ -56,7 +57,7 @@ Record only vendor/model, firmware, host OS, HWI version, date, and pass/fail/li
 2. Create a 2-of-3 vault and import its BIP48 public account key through HWI.
 3. Confirm the on-device fingerprint matches the locally saved record.
 4. Disconnect/reconnect and run the health check.
-5. Generate a labeled vault address and verify it on-device where supported.
+5. Generate a labeled receive address and verify it on-device where supported.
 6. Fund it on regtest and prepare a PSBT.
 7. Reject signing once; confirm Satchel remains retryable and records no signature.
 8. Sign the unchanged PSBT; confirm exactly that signer advances.
@@ -65,7 +66,7 @@ Record only vendor/model, firmware, host OS, HWI version, date, and pass/fail/li
 11. Complete the threshold with an independent signer, broadcast, mine, restart, and verify proposal/history state.
 12. Export the descriptor backup and reconstruct the same first receive address independently.
 
-Repeat for every model intended for release. The current implementation has explicit readiness handling for Coldcard, Trezor/KeepKey, Ledger, BitBox02, and Jade; this is code-path coverage, not physical compatibility evidence. Legacy Digital BitBox and any HWI model not listed here remain unsupported until they receive their own row and physical report. Vendor-specific policy-registration/address-display limitations must be visible in the UI and release notes; they must never be represented as successful verification.
+Repeat for every model intended for release. The current implementation has explicit readiness handling for Coldcard, Trezor/KeepKey, Ledger, BitBox02, and Jade; this is code-path coverage, not physical compatibility evidence. BitBox02 Nova must not be inferred from the original BitBox02 device type: capture its real HWI enumeration, pairing cache, xpub, display, multisig registration, and signing behavior first. Whisper/BLE requires a separate authenticated-transport and mobile lifecycle review. Legacy Digital BitBox and any HWI model not listed here remain unsupported until they receive their own row and physical report. Vendor-specific policy-registration/address-display limitations must be visible in the UI and release notes; they must never be represented as successful verification.
 
 ## Mounted SD-card public-key story
 
@@ -81,4 +82,4 @@ Satchel JSON (`fingerprint`, `accountXpub`, `derivationPath`, optional `label`) 
 
 Satchel now implements bounded Blockchain Commons UR v2 `crypto-psbt` animation and camera ingestion. Rust enforces payload, fragment, frame-size, frame-count, duplicate, and out-of-order constraints; Apple camera permission copy is packaged. This is **not yet platform-certified**. Each supported desktop/mobile target still needs camera permission, denial/retry, interruption, malicious frame, vendor-vector, and complete offline signing evidence. File/text fallback remains mandatory wherever the system webview cannot decode QR symbols.
 
-Use [`hardware-certification-template.md`](hardware-certification-template.md) for every device/model/firmware/host combination. Jade is a required pre-mainnet row alongside Coldcard, Trezor, Ledger, and BitBox02.
+Use [`hardware-certification-template.md`](hardware-certification-template.md) for every device/model/firmware/host combination. Jade is a required pre-mainnet row alongside Coldcard, Trezor, Ledger, and BitBox02. BitBox02 Nova becomes a release row only after its transport implementation lands; until then it remains an explicit roadmap item rather than an alias of BitBox02.

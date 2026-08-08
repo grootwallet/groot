@@ -67,6 +67,12 @@ describe('theme system', () => {
     }
   });
 
+  it('defines every design token referenced by the global stylesheet', () => {
+    const defined = new Set([...css.matchAll(/--([\w-]+)\s*:/g)].map((match) => match[1]));
+    const referenced = new Set([...css.matchAll(/var\(--([\w-]+)/g)].map((match) => match[1]));
+    expect([...referenced].filter((token) => !defined.has(token))).toEqual([]);
+  });
+
   it('applies the saved theme before paint without weakening the Tauri CSP', () => {
     expect(appHtml).toContain('<script src="/theme-init.js"></script>');
     expect(appHtml).not.toMatch(/<script>([\s\S]*?)<\/script>/);

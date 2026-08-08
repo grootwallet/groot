@@ -2,6 +2,7 @@
   import { AlertTriangle, ChevronDown, CircleDot, Copy, Lock, Snowflake, Unlock } from '@lucide/svelte';
   import Button from '$lib/components/Button.svelte';
   import CoinFreezeConfirmModal from '$lib/components/CoinFreezeConfirmModal.svelte';
+  import CoinSortMenu from '$lib/components/CoinSortMenu.svelte';
   import { compactAddress } from '$lib/address-display';
   import { copyText } from '$lib/clipboard';
   import { shortSats } from '$lib/data';
@@ -9,16 +10,20 @@
   import { walletService } from '$lib/wallet';
   import { toast } from '$lib/stores/toasts';
   import { onMount } from 'svelte';
-  import type { Utxo } from '$lib/types';
+  import type { Transaction, Utxo } from '$lib/types';
   import { formatConfirmationCount, locale, t } from '$lib/i18n';
+  import { sortCoins, type CoinSortOrder } from '$lib/wallet/presentation';
 
   let utxos = $state<Utxo[]>([]);
+  let transactions = $state<Transaction[]>([]);
+  let sortOrder = $state<CoinSortOrder>('newest');
   let selected = $state<string[]>([]);
   let expanded = $state<string[]>([]);
   let busy = $state(false);
   let multisig = $state(false);
   let freezeIntent = $state<{ outpoints: string[]; frozen: boolean } | null>(null);
   const selectedTotal = $derived(selectedCoinTotal(utxos, selected));
+  const sortedUtxos = $derived(sortCoins(utxos, transactions, sortOrder));
   const reuseInsights = $derived(addressReuseInsights(utxos));
   const freezeIntentCoins = $derived(freezeIntent ? utxos.filter((coin) => freezeIntent?.outpoints.includes(coin.outpoint)) : []);
   const sendHref = $derived(`${multisig ? '/multisig/send' : '/send'}?coins=${encodeURIComponent(selected.join(','))}`);
@@ -28,6 +33,7 @@
     if (event.type === 'wallet_updated') {
       multisig = event.walletKind === 'multisig';
       utxos = event.snapshot.utxos;
+      transactions = event.snapshot.transactions;
       selected = selected.filter((outpoint) => utxos.some((coin) => coin.outpoint === outpoint && !coin.frozen));
     }
   }));
@@ -36,7 +42,9 @@
     try {
       const registry = await walletService.profiles();
       multisig = registry.wallets.find((wallet) => wallet.id === registry.selectedWalletId)?.kind === 'multisig';
-      utxos = (multisig ? await walletService.multisigSnapshot() : await walletService.snapshot()).utxos;
+      const snapshot = multisig ? await walletService.multisigSnapshot() : await walletService.snapshot();
+      utxos = snapshot.utxos;
+      transactions = snapshot.transactions;
     } catch (cause) {
       toast({ title: 'Could not load coins', description: cause instanceof Error ? cause.message : undefined, tone: 'danger' });
     }
@@ -50,9 +58,18 @@
     expanded = expanded.includes(outpoint) ? expanded.filter((item) => item !== outpoint) : [...expanded, outpoint];
   }
 
-  function reuseFor(outpoint: string) {
-    return reuseInsights.find((insight) => insight.outpoints.includes(outpoint));
-  }
+	function reuseFor(outpoint: string) {
+		return reuseInsights.find((insight) => insight.outpoints.includes(outpoint));
+	}
+
+	function linkedCoinsFor(outpoint: string) {
+		const reuse = reuseFor(outpoint);
+		if (!reuse) return [];
+
+		return utxos.filter(
+			(coin) => coin.outpoint !== outpoint && reuse.outpoints.includes(coin.outpoint)
+		);
+	}
 
   async function copy(value: string, label: string) {
     try {
@@ -96,12 +113,13 @@
 
   <section class="coin-toolbar" aria-live="polite">
     <div><strong>{selected.length} selected</strong><span>{shortSats(selectedTotal)} sats selected</span></div>
-    <div>{#if selected.length}<Button variant="secondary" size="small" disabled={busy} onclick={() => requestFrozenState(selected, true)}><Snowflake size={15}/>Freeze selected</Button><Button size="small" href={sendHref}>Send selected coins</Button>{:else}<span class="auto-note"><CircleDot size={14}/>Automatic selection remains the default</span>{/if}</div>
+    <div class="coin-toolbar-actions">{#if selected.length}<Button variant="secondary" size="small" disabled={busy} onclick={() => requestFrozenState(selected, true)}><Snowflake size={15}/>Freeze selected</Button><Button size="small" href={sendHref}>Send selected coins</Button>{:else}<span class="auto-note"><CircleDot size={14}/>Automatic selection remains the default</span>{/if}<CoinSortMenu value={sortOrder} onchange={(next) => (sortOrder = next)}/></div>
   </section>
 
   <section class="coin-list selectable">
-    {#each utxos as utxo}
-      {@const reuse = reuseFor(utxo.outpoint)}
+		{#each sortedUtxos as utxo (utxo.outpoint)}
+			{@const reuse = reuseFor(utxo.outpoint)}
+			{@const linkedCoins = linkedCoinsFor(utxo.outpoint)}
       <article class="coin-row" class:frozen={utxo.frozen} class:reused={Boolean(reuse)}>
         <label class="coin-check"><input type="checkbox" aria-label="Select {utxo.label}" checked={selected.includes(utxo.outpoint)} disabled={utxo.frozen || busy} onchange={(event) => toggle(utxo.outpoint, event.currentTarget.checked)}/><span></span></label>
         <span class="coin-icon">{#if utxo.frozen}<Lock size={17}/>{:else}<CircleDot size={19}/>{/if}</span>
@@ -117,7 +135,27 @@
         {#if expanded.includes(utxo.outpoint)}
           <div class="coin-details">
             <dl><div><dt>Receive label</dt><dd>{utxo.label}</dd></div><div><dt>Address</dt><dd><code>{compactAddress(utxo.address)}</code><button aria-label="Copy address" onclick={() => copy(utxo.address, 'Address')}><Copy size={13}/></button></dd></div><div><dt>Outpoint</dt><dd><code>{compactAddress(utxo.outpoint, 18, 10)}</code><button aria-label="Copy outpoint" onclick={() => copy(utxo.outpoint, 'Outpoint')}><Copy size={13}/></button></dd></div></dl>
-            {#if reuse}<p><AlertTriangle size={14}/><span><strong>These {reuse.outpoints.length} coins share one address.</strong> Spending them separately cannot undo their public link. Use a fresh labeled address for future payments.</span></p>{/if}
+					{#if reuse}
+						<div class="coin-reuse-details">
+							<div class="coin-reuse-explanation">
+								<AlertTriangle size={14} />
+								<span>
+									<strong>{linkedCoins.length === 1 ? 'This coin shares its address with 1 other coin.' : `This coin shares its address with ${linkedCoins.length} other coins.`}</strong>
+									Spending them separately cannot undo their public link. Use a fresh labeled
+									address for future payments.
+								</span>
+							</div>
+							<ul aria-label="Coins linked by address reuse">
+								{#each linkedCoins as linkedCoin (linkedCoin.outpoint)}
+									<li>
+										<span>Linked coin</span>
+										<strong>{shortSats(linkedCoin.amount)} sats</strong>
+										<code>{compactAddress(linkedCoin.outpoint, 12, 8)}</code>
+									</li>
+								{/each}
+							</ul>
+						</div>
+					{/if}
           </div>
         {/if}
       </article>

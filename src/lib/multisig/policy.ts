@@ -11,6 +11,7 @@ export type CosignerDraft = {
   xpub: string;
   derivationPath: string;
   source: CosignerSource;
+  deviceType?: string | null;
 };
 
 export type PolicyDraft = {

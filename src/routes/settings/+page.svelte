@@ -124,7 +124,7 @@
 </script>
 
 <div class="page narrow-page">
-  <header class="page-header"><div><p class="eyebrow">WALLET SETTINGS</p><h1>{selectedProfile?.name ?? 'Settings'}</h1><p class="subtitle">Security and Bitcoin connection for this wallet. Appearance applies to Satchel.</p></div></header>
+  <header class="page-header"><div><p class="eyebrow">WALLET SETTINGS</p><h1>{selectedProfile?.name ?? 'Settings'}</h1><p class="subtitle">Wallet security and connection. Appearance is global.</p></div></header>
   <section class="settings-group immediate-security"><h2>Security</h2>
     <div class="settings-list">
       <button onclick={lockNow}><span class="setting-icon"><LockKeyhole size={18}/></span><span><strong>Lock {selectedProfile?.name ?? 'wallet'} now</strong><small>Lock only this wallet immediately.</small></span><ChevronRight size={16}/></button>

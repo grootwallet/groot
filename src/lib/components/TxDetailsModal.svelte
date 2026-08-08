@@ -3,7 +3,7 @@
   import Modal from './Modal.svelte';
   import Button from './Button.svelte';
   import { copyText } from '$lib/clipboard';
-  import { defaultConfig } from '$lib/config';
+  import { defaultConfig, transactionExplorerUrl } from '$lib/config';
   import { shortSats } from '$lib/data';
   import { toast } from '$lib/stores/toasts';
   import type { Transaction } from '$lib/types';
@@ -14,6 +14,7 @@
   let { transaction, multisig = false, onclose } = $props<{ transaction: Transaction | null; multisig?: boolean; onclose: () => void }>();
   let showAddress = $state(false);
   let addressCopied = $state(false);
+  let explorerUrl = $derived(transaction ? transactionExplorerUrl(defaultConfig.network, transaction.id) : null);
 
   async function copyTxid() {
     if (!transaction) return;
@@ -55,6 +56,13 @@
     {#if showAddress}<ReadableAddress address={transaction.address} copied={addressCopied} oncopy={copyAddress}/>{/if}
     <button class="hash-box" onclick={copyTxid}><span>Transaction ID</span><code>{transaction.id}</code><Copy size={16} /></button>
     {#if transaction.status === 'pending'}<div class="psbt-actions"><Button variant="secondary" href={`${multisig?'/multisig/send':'/send'}?accelerate=rbf&txid=${transaction.id}`}><ArrowUp size={15}/>Increase fee</Button><Button variant="secondary" href={`${multisig?'/multisig/send':'/send'}?accelerate=cpfp&txid=${transaction.id}`}><Layers size={15}/>Spend output (CPFP)</Button></div>{/if}
-    {#if defaultConfig.explorerUrl}<a class="explorer-link" href="{defaultConfig.explorerUrl}/tx/{transaction.id}" target="_blank" rel="noopener noreferrer">View on mempool.space <ExternalLink size={14} /></a>{/if}
+    {#if explorerUrl}
+      <div class="explorer-panel">
+        <a class="explorer-link" href={explorerUrl} target="_blank" rel="noopener noreferrer">View on mempool.space <ExternalLink size={14} /></a>
+        <p class="explorer-privacy">Opening this shares the transaction lookup with mempool.space.</p>
+      </div>
+    {:else if defaultConfig.network === 'regtest'}
+      <p class="explorer-unavailable">mempool.space cannot see local regtest transactions.</p>
+    {/if}
   {/if}
 </Modal>

@@ -459,6 +459,7 @@ mod tests {
             xpub: Xpub::from_priv(&secp, &account).to_string(),
             derivation_path: MULTISIG_ACCOUNT_PATH.to_owned(),
             source: CosignerSource::Virtual,
+            device_type: None,
         }
     }
 

@@ -88,7 +88,7 @@
     </div>
   </div>
   <section class="section-block">
-    <div class="section-heading"><div><h2>Recent activity</h2><p>Your latest wallet transactions</p></div><a href="/activity">View all</a></div>
+    <div class="section-heading"><div><h2>Recent activity</h2></div><a href="/activity">View all</a></div>
     <TxList items={recentTransactions} onselect={(transaction) => selected = transaction} />
   </section>
 </div>
