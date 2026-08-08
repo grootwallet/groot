@@ -29,6 +29,9 @@ export type PaymentProposal = {
   fee: Sats;
   feeRate: FeeRate;
   total: Sats;
+  change: Sats;
+  changeAddresses: string[];
+  outputCount: number;
   selectedOutpoints: string[];
 };
 
@@ -190,7 +193,9 @@ export type WalletErrorCode =
   | 'malformed_psbt'
   | 'psbt_too_large'
   | 'proposal_mismatch'
+  | 'address_gap_limit_reached'
   | 'unknown_signer'
+  | 'no_new_signatures'
   | 'unsupported_sighash'
   | 'premature_finalization'
   | 'insufficient_signatures'

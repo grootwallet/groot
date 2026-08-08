@@ -66,6 +66,9 @@ const ONBOARDING_SESSION_SECONDS: u64 = 15 * 60;
 const HARDWARE_PIN_CHALLENGE_TIMEOUT: Duration = Duration::from_secs(2 * 60);
 const MAX_HARDWARE_PIN_POSITIONS: usize = 50;
 const MAX_PUBLIC_BACKUP_BYTES: usize = 256 * 1024;
+const REGTEST_APP_DATA_OVERRIDE: &str = "SATCHEL_REGTEST_APP_DATA_DIR";
+const MIN_RECOVERY_GAP_LIMIT: u32 = 20;
+const MAX_RECOVERY_GAP_LIMIT: u32 = 1_000;
 
 fn validate_public_backup_filename(value: &str) -> ApiResult<&str> {
     let trimmed = value.trim();
@@ -362,6 +365,9 @@ impl WalletSessions {
 #[derive(Debug)]
 struct PendingProposal {
     psbt: Psbt,
+    recipient: String,
+    amount: u64,
+    fee: u64,
 }
 
 struct PendingMnemonic {
@@ -435,6 +441,7 @@ pub struct TransactionDto {
     address: Option<String>,
     label: String,
     block: Option<u32>,
+    replaced_by: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -493,6 +500,9 @@ pub struct PaymentProposalDto {
     fee: u64,
     fee_rate: f64,
     total: u64,
+    change: u64,
+    change_addresses: Vec<String>,
+    output_count: usize,
     selected_outpoints: Vec<String>,
 }
 
@@ -516,6 +526,15 @@ pub struct BroadcastResultDto {
 pub enum AccelerationMethod {
     Rbf,
     Cpfp,
+}
+
+impl AccelerationMethod {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Rbf => "rbf",
+            Self::Cpfp => "cpfp",
+        }
+    }
 }
 
 #[derive(Serialize)]
@@ -549,6 +568,9 @@ pub struct MultisigProposalDto {
     fee: u64,
     fee_rate: f64,
     total: u64,
+    change: u64,
+    change_addresses: Vec<String>,
+    output_count: usize,
     selected_outpoints: Vec<String>,
     psbt: String,
     signed: usize,
@@ -773,8 +795,43 @@ fn require_explicit_standard_wallet_selection(
     Ok(())
 }
 
+fn validate_regtest_app_data_override(path: PathBuf) -> ApiResult<PathBuf> {
+    if NETWORK != Network::Regtest || !path.is_absolute() {
+        return Err(internal("The regtest app-data override is unavailable."));
+    }
+    let filename = path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .ok_or_else(|| internal("The regtest app-data override is invalid."))?;
+    let parent = path
+        .parent()
+        .ok_or_else(|| internal("The regtest app-data override is invalid."))?
+        .canonicalize()
+        .map_err(internal)?;
+    #[cfg(unix)]
+    let temporary_root = Path::new("/tmp").canonicalize().map_err(internal)?;
+    #[cfg(not(unix))]
+    let temporary_root = std::env::temp_dir().canonicalize().map_err(internal)?;
+    if parent != temporary_root || !filename.starts_with("satchel-regtest-") {
+        return Err(internal(
+            "The regtest app-data override must be a satchel-regtest-* directory directly under the system temporary directory.",
+        ));
+    }
+    if let Ok(metadata) = fs::symlink_metadata(&path) {
+        if metadata.file_type().is_symlink() || !metadata.is_dir() {
+            return Err(internal(
+                "The regtest app-data override is not a regular directory.",
+            ));
+        }
+    }
+    Ok(path)
+}
+
 fn app_data_dir(app: &AppHandle) -> ApiResult<PathBuf> {
-    app.path().app_data_dir().map_err(internal)
+    match std::env::var_os(REGTEST_APP_DATA_OVERRIDE) {
+        Some(path) => validate_regtest_app_data_override(PathBuf::from(path)),
+        None => app.path().app_data_dir().map_err(internal),
+    }
 }
 
 fn registry_path(app: &AppHandle) -> ApiResult<PathBuf> {
@@ -1360,6 +1417,20 @@ fn init_app_schema(db: &Connection) -> ApiResult<()> {
             singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
             birthday_height INTEGER NOT NULL CHECK(birthday_height >= 0),
             gap_limit INTEGER NOT NULL CHECK(gap_limit BETWEEN 20 AND 1000)
+        );
+        CREATE TABLE IF NOT EXISTS satchel_accelerations (
+            proposal_id TEXT PRIMARY KEY REFERENCES satchel_proposals(proposal_id) ON DELETE CASCADE,
+            method TEXT NOT NULL CHECK(method IN ('rbf', 'cpfp')),
+            original_txid TEXT NOT NULL,
+            replacement_txid TEXT UNIQUE,
+            original_kind TEXT NOT NULL CHECK(original_kind IN ('payment', 'self_spend')),
+            original_direction TEXT NOT NULL CHECK(original_direction IN ('received', 'sent')),
+            original_amount INTEGER NOT NULL,
+            original_fee INTEGER,
+            original_date TEXT NOT NULL,
+            original_address TEXT,
+            original_label TEXT NOT NULL,
+            created_at INTEGER NOT NULL
         );",
     )
     .map_err(internal)?;
@@ -1531,9 +1602,135 @@ fn load_recovery_scan_settings(db: &Connection) -> ApiResult<RecoveryScanSetting
     .map(|settings| {
         settings.unwrap_or(RecoveryScanSettingsDto {
             birthday_height: 0,
-            gap_limit: 20,
+            gap_limit: MIN_RECOVERY_GAP_LIMIT,
         })
     })
+}
+
+/// Returns the minimum stop-gap needed to rediscover every address Satchel has
+/// revealed, including late payments to currently unused or discarded requests.
+/// A used address resets the unused run exactly as a descriptor scan would.
+fn required_recovery_gap(db: &Connection, prospective_index: Option<u32>) -> ApiResult<u32> {
+    let mut statement = db
+        .prepare("SELECT idx, observed FROM satchel_addresses ORDER BY idx")
+        .map_err(internal)?;
+    let rows = statement
+        .query_map([], |row| {
+            Ok((row.get::<_, u32>(0)?, row.get::<_, bool>(1)?))
+        })
+        .map_err(internal)?;
+    let mut previous_observed = None;
+    let mut required = 0_u32;
+    let mut highest = None;
+    for row in rows {
+        let (index, observed) = row.map_err(internal)?;
+        if highest.is_some_and(|value| index <= value) {
+            return Err(internal(
+                "Address derivation indexes are not strictly increasing.",
+            ));
+        }
+        highest = Some(index);
+        required = required.max(match previous_observed {
+            Some(previous) => index
+                .checked_sub(previous)
+                .ok_or_else(|| internal("Address derivation indexes are invalid."))?,
+            None => index
+                .checked_add(1)
+                .ok_or_else(|| internal("Address derivation index overflowed."))?,
+        });
+        if observed {
+            previous_observed = Some(index);
+        }
+    }
+    if let Some(index) = prospective_index {
+        if highest.is_some_and(|value| index <= value) {
+            return Err(internal(
+                "The next address derivation index did not advance.",
+            ));
+        }
+        required = required.max(match previous_observed {
+            Some(previous) => index
+                .checked_sub(previous)
+                .ok_or_else(|| internal("Address derivation indexes are invalid."))?,
+            None => index
+                .checked_add(1)
+                .ok_or_else(|| internal("Address derivation index overflowed."))?,
+        });
+    }
+    Ok(required)
+}
+
+fn enforce_recovery_gap(db: &Connection, prospective_index: u32) -> ApiResult<()> {
+    let configured = load_recovery_scan_settings(db)?.gap_limit;
+    let required = required_recovery_gap(db, Some(prospective_index))?;
+    if required > configured {
+        return Err(api_error(
+            "address_gap_limit_reached",
+            format!(
+                "Creating this address would exceed the configured recovery gap limit of {configured}. Increase the gap limit in Settings or wait for an existing address to receive bitcoin."
+            ),
+        ));
+    }
+    Ok(())
+}
+
+fn required_keychain_gap(
+    wallet: &Wallet,
+    keychain: KeychainKind,
+    prospective_index: u32,
+) -> ApiResult<u32> {
+    let mut observed = wallet
+        .list_output()
+        .filter(|output| output.keychain == keychain)
+        .map(|output| output.derivation_index)
+        .collect::<Vec<_>>();
+    observed.sort_unstable();
+    observed.dedup();
+    let mut previous = None;
+    let mut required = 0_u32;
+    for index in observed {
+        required = required.max(match previous {
+            Some(value) => index
+                .checked_sub(value)
+                .ok_or_else(|| internal("Change derivation indexes are invalid."))?,
+            None => index
+                .checked_add(1)
+                .ok_or_else(|| internal("Change derivation index overflowed."))?,
+        });
+        previous = Some(index);
+    }
+    required = required.max(match previous {
+        Some(value) if prospective_index > value => prospective_index - value,
+        Some(_) => 0,
+        None => prospective_index
+            .checked_add(1)
+            .ok_or_else(|| internal("Change derivation index overflowed."))?,
+    });
+    Ok(required)
+}
+
+fn enforce_change_recovery_gap(db: &Connection, wallet: &Wallet, psbt: &Psbt) -> ApiResult<()> {
+    let highest_internal = psbt
+        .unsigned_tx
+        .output
+        .iter()
+        .filter_map(|output| wallet.derivation_of_spk(output.script_pubkey.clone()))
+        .filter_map(|(keychain, index)| (keychain == KeychainKind::Internal).then_some(index))
+        .max();
+    let Some(index) = highest_internal else {
+        return Ok(());
+    };
+    let configured = load_recovery_scan_settings(db)?.gap_limit;
+    let required = required_keychain_gap(wallet, KeychainKind::Internal, index)?;
+    if required > configured {
+        return Err(api_error(
+            "address_gap_limit_reached",
+            format!(
+                "This transaction would use a change index beyond the configured recovery gap limit of {configured}. Increase the gap limit in Settings before preparing it."
+            ),
+        ));
+    }
+    Ok(())
 }
 
 fn root_key(mnemonic: &Mnemonic, credential: &str) -> ApiResult<Xpriv> {
@@ -1738,7 +1935,14 @@ fn reject_virtual_cosigners(cosigners: &[CosignerInput]) -> ApiResult<()> {
 }
 
 fn proposal_api_error(error: crate::proposal::ProposalError) -> ApiError {
-    api_error(error.code(), error)
+    if error == crate::proposal::ProposalError::NoNewSignatures {
+        api_error(
+            error.code(),
+            "This signer has already signed this proposal. No signatures were changed.",
+        )
+    } else {
+        api_error(error.code(), error)
+    }
 }
 
 fn recovery_api_error(error: RecoveryError) -> ApiError {
@@ -1972,13 +2176,16 @@ fn authorize_multisig_operation(
 
 fn proposal_dto(
     row: (String, String, String, u64, u64, f64, String, String, u64),
-    wallet: &MultisigWalletDto,
+    metadata: &MultisigWalletDto,
+    wallet: &Wallet,
 ) -> ApiResult<MultisigProposalDto> {
     let (proposal_id, recipient, label, amount, fee, fee_rate, encoded, status, created_at) = row;
     let psbt = decode_psbt(&encoded).map_err(proposal_api_error)?;
-    let fingerprints = multisig_fingerprints(wallet)?;
+    validate_proposal_fee(&psbt, fee)?;
+    let fingerprints = multisig_fingerprints(metadata)?;
     let progress =
-        signature_progress(&psbt, &fingerprints, wallet.threshold).map_err(proposal_api_error)?;
+        signature_progress(&psbt, &fingerprints, metadata.threshold).map_err(proposal_api_error)?;
+    let (change, change_addresses) = proposal_change_details(wallet, &psbt, &recipient, amount)?;
     Ok(MultisigProposalDto {
         proposal_id,
         recipient,
@@ -1986,7 +2193,10 @@ fn proposal_dto(
         amount,
         fee,
         fee_rate,
-        total: amount.saturating_add(fee),
+        total: checked_payment_total(amount, fee)?,
+        change,
+        change_addresses,
+        output_count: psbt.unsigned_tx.output.len(),
         selected_outpoints: psbt
             .unsigned_tx
             .input
@@ -2003,17 +2213,88 @@ fn proposal_dto(
     })
 }
 
+fn proposal_change_details(
+    wallet: &Wallet,
+    psbt: &Psbt,
+    recipient: &str,
+    amount: u64,
+) -> ApiResult<(u64, Vec<String>)> {
+    let recipient_script = Address::from_str(recipient)
+        .map_err(|_| internal("The stored proposal recipient is invalid."))?
+        .require_network(NETWORK)
+        .map_err(|_| internal("The stored proposal recipient is on the wrong network."))?
+        .script_pubkey();
+    let self_spend = amount == 0;
+    let mut recipient_matches = 0_usize;
+    let mut change = 0_u64;
+    let mut change_addresses = Vec::new();
+    for output in &psbt.unsigned_tx.output {
+        let matches_recipient = output.script_pubkey == recipient_script
+            && (self_spend || output.value.to_sat() == amount);
+        if matches_recipient {
+            recipient_matches += 1;
+        }
+        if self_spend || !matches_recipient {
+            if !wallet.is_mine(output.script_pubkey.clone()) {
+                return Err(api_error(
+                    "proposal_mismatch",
+                    "A non-recipient proposal output is not controlled by this wallet.",
+                ));
+            }
+            change = change
+                .checked_add(output.value.to_sat())
+                .ok_or_else(|| internal("The proposal output total overflowed."))?;
+            change_addresses.push(
+                Address::from_script(&output.script_pubkey, NETWORK)
+                    .map_err(|_| internal("A proposal change output has no displayable address."))?
+                    .to_string(),
+            );
+        }
+    }
+    if recipient_matches != 1 {
+        return Err(api_error(
+            "proposal_mismatch",
+            "The stored proposal recipient does not match exactly one transaction output.",
+        ));
+    }
+    Ok((change, change_addresses))
+}
+
+fn validate_proposal_fee(psbt: &Psbt, expected_fee: u64) -> ApiResult<()> {
+    let actual = psbt
+        .fee_amount()
+        .ok_or_else(|| internal("Unable to calculate the transaction fee."))?
+        .to_sat();
+    if actual != expected_fee {
+        return Err(api_error(
+            "proposal_mismatch",
+            "The stored proposal fee does not match the transaction.",
+        ));
+    }
+    Ok(())
+}
+
+fn checked_payment_total(amount: u64, fee: u64) -> ApiResult<u64> {
+    amount.checked_add(fee).ok_or_else(|| {
+        api_error(
+            "invalid_amount",
+            "The payment total exceeds the amount range.",
+        )
+    })
+}
+
 fn load_multisig_proposal(
-    db: &Connection,
-    wallet: &MultisigWalletDto,
+    db: &mut Connection,
+    metadata: &MultisigWalletDto,
     proposal_id: &str,
 ) -> ApiResult<MultisigProposalDto> {
+    let wallet = load_wallet(db)?;
     let row = db.query_row(
         "SELECT proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at FROM satchel_proposals WHERE proposal_id = ?1 AND status IN ('collecting','ready')",
         params![proposal_id],
         |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?, row.get(7)?, row.get(8)?)),
     ).map_err(|_| api_error("proposal_not_found", "Payment proposal was not found or is no longer active."))?;
-    proposal_dto(row, wallet)
+    proposal_dto(row, metadata, &wallet)
 }
 
 fn persist_single_proposal(
@@ -2038,12 +2319,105 @@ fn persist_single_proposal(
     .map_err(internal)
 }
 
+fn persist_acceleration(
+    db: &Connection,
+    proposal_id: &str,
+    method: AccelerationMethod,
+    original: &TransactionDto,
+) -> ApiResult<()> {
+    db.execute(
+        "INSERT INTO satchel_accelerations (
+            proposal_id, method, original_txid, original_kind, original_direction,
+            original_amount, original_fee, original_date, original_address, original_label, created_at
+         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+        params![
+            proposal_id,
+            method.as_str(),
+            original.id,
+            original.kind,
+            original.direction,
+            original.amount,
+            original.fee,
+            original.date,
+            original.address,
+            original.label,
+            now(),
+        ],
+    )
+    .map(|_| ())
+    .map_err(internal)
+}
+
+fn record_replacement(
+    db: &Connection,
+    proposal_id: &str,
+    replacement_txid: &Txid,
+) -> ApiResult<()> {
+    db.execute(
+        "UPDATE satchel_accelerations SET replacement_txid = ?1
+         WHERE proposal_id = ?2 AND method = 'rbf' AND replacement_txid IS NULL",
+        params![replacement_txid.to_string(), proposal_id],
+    )
+    .map(|_| ())
+    .map_err(internal)
+}
+
+fn apply_replacement_history(
+    db: &Connection,
+    transactions: &mut Vec<TransactionDto>,
+) -> ApiResult<()> {
+    let mut statement = db
+        .prepare(
+            "SELECT original_txid, replacement_txid, original_kind, original_direction,
+                    original_amount, original_fee, original_date, original_address, original_label
+             FROM satchel_accelerations
+             WHERE method = 'rbf' AND replacement_txid IS NOT NULL
+             ORDER BY created_at DESC",
+        )
+        .map_err(internal)?;
+    let replacements = statement
+        .query_map([], |row| {
+            Ok(TransactionDto {
+                id: row.get(0)?,
+                replaced_by: row.get(1)?,
+                kind: row.get(2)?,
+                direction: row.get(3)?,
+                amount: row.get(4)?,
+                fee: row.get(5)?,
+                status: "replaced".to_owned(),
+                confirmations: 0,
+                date: row.get(6)?,
+                address: row.get(7)?,
+                label: row.get(8)?,
+                block: None,
+            })
+        })
+        .map_err(internal)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(internal)?;
+
+    for replacement in replacements {
+        if let Some(existing) = transactions.iter_mut().find(|tx| tx.id == replacement.id) {
+            existing.status = "replaced".to_owned();
+            existing.confirmations = 0;
+            existing.block = None;
+            existing.replaced_by = replacement.replaced_by;
+        } else {
+            transactions.push(replacement);
+        }
+    }
+    transactions.sort_by_key(|transaction| {
+        std::cmp::Reverse(transaction.date.parse::<u64>().unwrap_or_default())
+    });
+    Ok(())
+}
+
 fn load_single_proposal(db: &Connection, proposal_id: &str) -> ApiResult<PendingProposal> {
-    let encoded = db
+    let (encoded, recipient, amount, fee) = db
         .query_row(
-            "SELECT psbt FROM satchel_proposals WHERE proposal_id = ?1 AND status = 'collecting'",
+            "SELECT psbt, recipient, amount, fee FROM satchel_proposals WHERE proposal_id = ?1 AND status = 'collecting'",
             params![proposal_id],
-            |row| row.get::<_, String>(0),
+            |row| Ok((row.get::<_, String>(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
         )
         .map_err(|_| {
             api_error(
@@ -2053,6 +2427,9 @@ fn load_single_proposal(db: &Connection, proposal_id: &str) -> ApiResult<Pending
         })?;
     Ok(PendingProposal {
         psbt: decode_psbt(&encoded).map_err(proposal_api_error)?,
+        recipient,
+        amount,
+        fee,
     })
 }
 
@@ -2447,8 +2824,10 @@ fn snapshot_from(
             address,
             label,
             block,
+            replaced_by: None,
         });
     }
+    apply_replacement_history(db, &mut transactions)?;
 
     let mut utxos = Vec::new();
     let frozen = {
@@ -2795,6 +3174,7 @@ pub fn address_create(
         .map_err(internal)?
         .ok_or_else(|| api_error("wallet_not_found", "Wallet database is empty."))?;
     let info = wallet.reveal_next_address(KeychainKind::External);
+    enforce_recovery_gap(&transaction, info.index)?;
     let created = now();
     transaction
         .execute(
@@ -2926,7 +3306,7 @@ pub fn recovery_scan_settings_save(
 ) -> ApiResult<RecoveryScanSettingsDto> {
     let _operation = operation_guard(&state)?;
     require_unlocked(&app, &state)?;
-    if !(20..=1_000).contains(&gap_limit) {
+    if !(MIN_RECOVERY_GAP_LIMIT..=MAX_RECOVERY_GAP_LIMIT).contains(&gap_limit) {
         return Err(api_error(
             "invalid_scan_settings",
             "Gap limit must be between 20 and 1,000 addresses.",
@@ -2945,10 +3325,26 @@ pub fn recovery_scan_settings_save(
     record_auth_result(&app, &state, &verified)?;
     verified?;
     let profile = selected_profile(&app)?;
-    let db = match profile.kind {
+    let mut db = match profile.kind {
         WalletKind::Multisig => open_multisig_db(&app)?,
         WalletKind::SingleKey | WalletKind::WatchOnly => open_db(&app)?,
     };
+    let external_required = required_recovery_gap(&db, None)?;
+    let wallet = load_wallet(&mut db)?;
+    let internal_required = wallet
+        .derivation_index(KeychainKind::Internal)
+        .map(|index| required_keychain_gap(&wallet, KeychainKind::Internal, index))
+        .transpose()?
+        .unwrap_or(0);
+    let required = external_required.max(internal_required);
+    if gap_limit < required {
+        return Err(api_error(
+            "invalid_scan_settings",
+            format!(
+                "This wallet has revealed addresses that require a gap limit of at least {required}."
+            ),
+        ));
+    }
     db.execute(
         "INSERT INTO satchel_recovery_settings (singleton, birthday_height, gap_limit) VALUES (1, ?1, ?2)
          ON CONFLICT(singleton) DO UPDATE SET birthday_height = excluded.birthday_height, gap_limit = excluded.gap_limit",
@@ -3100,6 +3496,15 @@ fn hardware_device_api_error(error: HardwareError, device_type: &str) -> ApiErro
         );
     }
     hardware_api_error(error)
+}
+
+fn missing_hardware_psbt(device_type: &str, code: Option<i64>, fallback: &str) -> ApiError {
+    match code {
+        Some(code) => {
+            hardware_device_api_error(HardwareError::CommandFailed(Some(code)), device_type)
+        }
+        None => missing_hwi_value(None, fallback),
+    }
 }
 
 fn hardware_xpub_api_error(
@@ -3549,11 +3954,14 @@ pub fn external_signer_wallet(
 fn external_proposal_dto(
     row: (String, String, String, u64, u64, f64, String, String, u64),
     fingerprint: &str,
+    wallet: &Wallet,
 ) -> ApiResult<MultisigProposalDto> {
     let (proposal_id, recipient, label, amount, fee, fee_rate, encoded, status, created_at) = row;
     let psbt = decode_psbt(&encoded).map_err(proposal_api_error)?;
+    validate_proposal_fee(&psbt, fee)?;
     let fingerprint = fingerprint.parse().map_err(internal)?;
     let progress = signature_progress(&psbt, &[fingerprint], 1).map_err(proposal_api_error)?;
+    let (change, change_addresses) = proposal_change_details(wallet, &psbt, &recipient, amount)?;
     Ok(MultisigProposalDto {
         proposal_id,
         recipient,
@@ -3561,7 +3969,10 @@ fn external_proposal_dto(
         amount,
         fee,
         fee_rate,
-        total: amount.saturating_add(fee),
+        total: checked_payment_total(amount, fee)?,
+        change,
+        change_addresses,
+        output_count: psbt.unsigned_tx.output.len(),
         selected_outpoints: psbt
             .unsigned_tx
             .input
@@ -3579,16 +3990,17 @@ fn external_proposal_dto(
 }
 
 fn load_external_proposal(
-    db: &Connection,
+    db: &mut Connection,
     metadata: &ExternalSignerWallet,
     proposal_id: &str,
 ) -> ApiResult<MultisigProposalDto> {
+    let wallet = load_wallet(db)?;
     let row = db.query_row(
         "SELECT proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at FROM satchel_proposals WHERE proposal_id = ?1 AND status IN ('collecting','ready')",
         params![proposal_id],
         |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?, row.get(7)?, row.get(8)?)),
     ).map_err(|_| api_error("proposal_not_found", "Payment proposal was not found or is no longer active."))?;
-    external_proposal_dto(row, &metadata.signer.fingerprint)
+    external_proposal_dto(row, &metadata.signer.fingerprint, &wallet)
 }
 
 #[tauri::command]
@@ -3599,7 +4011,8 @@ pub fn external_signer_proposals(
     let _operation = operation_guard(&state)?;
     require_unlocked(&app, &state)?;
     let metadata = read_external_signer_metadata(&app)?;
-    let db = open_db(&app)?;
+    let mut db = open_db(&app)?;
+    let wallet = load_wallet(&mut db)?;
     let mut statement = db.prepare(
         "SELECT proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at FROM satchel_proposals WHERE status IN ('collecting','ready') ORDER BY created_at DESC",
     ).map_err(internal)?;
@@ -3618,8 +4031,14 @@ pub fn external_signer_proposals(
             ))
         })
         .map_err(internal)?;
-    rows.map(|row| external_proposal_dto(row.map_err(internal)?, &metadata.signer.fingerprint))
-        .collect()
+    rows.map(|row| {
+        external_proposal_dto(
+            row.map_err(internal)?,
+            &metadata.signer.fingerprint,
+            &wallet,
+        )
+    })
+    .collect()
 }
 
 fn import_external_proposal(
@@ -3628,8 +4047,8 @@ fn import_external_proposal(
     signed_psbt: &str,
 ) -> ApiResult<MultisigProposalDto> {
     let metadata = read_external_signer_metadata(app)?;
-    let db = open_db(app)?;
-    let current = load_external_proposal(&db, &metadata, proposal_id)?;
+    let mut db = open_db(app)?;
+    let current = load_external_proposal(&mut db, &metadata, proposal_id)?;
     let original_encoded = current.psbt.clone();
     let mut original = decode_psbt(&original_encoded).map_err(proposal_api_error)?;
     let imported = decode_psbt(signed_psbt).map_err(proposal_api_error)?;
@@ -3665,7 +4084,7 @@ fn import_external_proposal(
             "The proposal changed while its signature was imported.",
         ));
     }
-    load_external_proposal(&db, &metadata, proposal_id)
+    load_external_proposal(&mut db, &metadata, proposal_id)
 }
 
 #[tauri::command]
@@ -3689,8 +4108,8 @@ pub async fn hardware_sign_external(
 ) -> ApiResult<MultisigProposalDto> {
     require_unlocked(&app, &state)?;
     let metadata = read_external_signer_metadata(&app)?;
-    let db = open_db(&app)?;
-    let proposal = load_external_proposal(&db, &metadata, &proposal_id)?;
+    let mut db = open_db(&app)?;
+    let proposal = load_external_proposal(&mut db, &metadata, &proposal_id)?;
     drop(db);
     let encoded = proposal.psbt;
     let expected = vec![metadata.signer.fingerprint];
@@ -3703,7 +4122,11 @@ pub async fn hardware_sign_external(
         let response: HwiPsbt = serde_json::from_slice(&output).map_err(internal)?;
         response.psbt.ok_or_else(|| {
             drop(response.error);
-            missing_hwi_value(response.code, "The device did not return a signed PSBT.")
+            missing_hardware_psbt(
+                &device_type,
+                response.code,
+                "The device did not return a signed PSBT.",
+            )
         })
     })
     .await
@@ -3727,7 +4150,7 @@ pub fn external_signer_proposal_broadcast(
     verified?;
     let metadata = read_external_signer_metadata(&app)?;
     let mut db = open_db(&app)?;
-    let proposal = load_external_proposal(&db, &metadata, &proposal_id)?;
+    let proposal = load_external_proposal(&mut db, &metadata, &proposal_id)?;
     if !proposal.can_finalize {
         return Err(api_error(
             "insufficient_signatures",
@@ -3749,12 +4172,6 @@ pub fn external_signer_proposal_broadcast(
     let txid = broadcast_transaction(&app, &state, &transaction)?;
     let mut wallet = load_wallet(&mut db)?;
     let sync_pending = sync_loaded_wallet(&app, &state, &mut wallet, &mut db).is_err();
-    let snapshot = snapshot_from(
-        &wallet,
-        &db,
-        (!sync_pending).then(|| now().to_string()),
-        false,
-    )?;
     let persisted = db.transaction().map_err(internal)?;
     let changed = persisted.execute(
         "UPDATE satchel_proposals SET status = 'broadcast', txid = ?1 WHERE proposal_id = ?2 AND status = 'ready'",
@@ -3766,6 +4183,13 @@ pub fn external_signer_proposal_broadcast(
             "The proposal changed while it was being broadcast.",
         ));
     }
+    record_replacement(&persisted, &proposal_id, &txid)?;
+    let snapshot = snapshot_from(
+        &wallet,
+        &persisted,
+        (!sync_pending).then(|| now().to_string()),
+        false,
+    )?;
     notifications::enqueue(
         &persisted,
         &WalletNotification::TransactionBroadcast {
@@ -4231,6 +4655,7 @@ pub fn multisig_address_create(
         .map_err(internal)?
         .ok_or_else(|| api_error("wallet_not_found", "Multisig wallet database is empty."))?;
     let info = wallet.reveal_next_address(KeychainKind::External);
+    enforce_recovery_gap(&transaction, info.index)?;
     let created = now();
     transaction
         .execute(
@@ -4354,6 +4779,7 @@ pub fn multisig_tx_prepare(
             internal(message)
         }
     })?;
+    enforce_change_recovery_gap(&db, &wallet, &psbt)?;
     wallet.persist(&mut db).map_err(internal)?;
     let fee = psbt
         .fee_amount()
@@ -4366,7 +4792,7 @@ pub fn multisig_tx_prepare(
         "INSERT INTO satchel_proposals (proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,'collecting',?8)",
         params![proposal_id, address.to_string(), label, amount, fee, applied_fee_rate, encoded, created_at],
     ).map_err(internal)?;
-    load_multisig_proposal(&db, &metadata, &proposal_id)
+    load_multisig_proposal(&mut db, &metadata, &proposal_id)
 }
 
 #[tauri::command]
@@ -4377,7 +4803,8 @@ pub fn multisig_proposals(
     let _operation = operation_guard(&state)?;
     require_unlocked(&app, &state)?;
     let metadata = read_multisig_metadata(&app)?;
-    let db = open_multisig_db(&app)?;
+    let mut db = open_multisig_db(&app)?;
+    let wallet = load_wallet(&mut db)?;
     let mut statement = db.prepare(
         "SELECT proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at FROM satchel_proposals WHERE status IN ('collecting','ready') ORDER BY created_at DESC",
     ).map_err(internal)?;
@@ -4398,7 +4825,7 @@ pub fn multisig_proposals(
         .map_err(internal)?;
     rows.map(|row| {
         row.map_err(internal)
-            .and_then(|row| proposal_dto(row, &metadata))
+            .and_then(|row| proposal_dto(row, &metadata, &wallet))
     })
     .collect()
 }
@@ -4410,7 +4837,7 @@ fn import_multisig_proposal(
 ) -> ApiResult<MultisigProposalDto> {
     let metadata = read_multisig_metadata(app)?;
     let mut db = open_multisig_db(app)?;
-    let current = load_multisig_proposal(&db, &metadata, proposal_id)?;
+    let current = load_multisig_proposal(&mut db, &metadata, proposal_id)?;
     let original_encoded = current.psbt.clone();
     let mut original = decode_psbt(&original_encoded).map_err(proposal_api_error)?;
     let imported = decode_psbt(signed_psbt).map_err(proposal_api_error)?;
@@ -4445,7 +4872,7 @@ fn import_multisig_proposal(
             "The proposal changed while signatures were being merged. Reload it and try again.",
         ));
     }
-    load_multisig_proposal(&db, &metadata, proposal_id)
+    load_multisig_proposal(&mut db, &metadata, proposal_id)
 }
 
 #[tauri::command]
@@ -4469,8 +4896,8 @@ pub async fn hardware_sign_multisig(
 ) -> ApiResult<MultisigProposalDto> {
     require_unlocked(&app, &state)?;
     let metadata = read_multisig_metadata(&app)?;
-    let db = open_multisig_db(&app)?;
-    let proposal = load_multisig_proposal(&db, &metadata, &proposal_id)?;
+    let mut db = open_multisig_db(&app)?;
+    let proposal = load_multisig_proposal(&mut db, &metadata, &proposal_id)?;
     drop(db);
     let encoded = proposal.psbt;
     let expected_fingerprints = metadata
@@ -4488,7 +4915,11 @@ pub async fn hardware_sign_multisig(
         let response: HwiPsbt = serde_json::from_slice(&output).map_err(internal)?;
         response.psbt.ok_or_else(|| {
             drop(response.error);
-            missing_hwi_value(response.code, "The device did not return a signed PSBT.")
+            missing_hardware_psbt(
+                &device_type,
+                response.code,
+                "The device did not return a signed PSBT.",
+            )
         })
     })
     .await
@@ -4512,7 +4943,7 @@ pub fn multisig_proposal_broadcast(
     credential_result?;
     let metadata = read_multisig_metadata(&app)?;
     let mut db = open_multisig_db(&app)?;
-    let proposal = load_multisig_proposal(&db, &metadata, &proposal_id)?;
+    let proposal = load_multisig_proposal(&mut db, &metadata, &proposal_id)?;
     if !proposal.can_finalize {
         return Err(api_error(
             "insufficient_signatures",
@@ -4534,12 +4965,6 @@ pub fn multisig_proposal_broadcast(
     let txid = broadcast_transaction(&app, &state, &transaction)?;
     let mut wallet = load_wallet(&mut db)?;
     let sync_pending = sync_loaded_wallet(&app, &state, &mut wallet, &mut db).is_err();
-    let snapshot = snapshot_from(
-        &wallet,
-        &db,
-        (!sync_pending).then(|| now().to_string()),
-        true,
-    )?;
     let persisted = db.transaction().map_err(internal)?;
     let changed = persisted
         .execute(
@@ -4553,6 +4978,13 @@ pub fn multisig_proposal_broadcast(
             "The proposal changed while it was being broadcast.",
         ));
     }
+    record_replacement(&persisted, &proposal_id, &txid)?;
+    let snapshot = snapshot_from(
+        &wallet,
+        &persisted,
+        (!sync_pending).then(|| now().to_string()),
+        true,
+    )?;
     notifications::enqueue(
         &persisted,
         &WalletNotification::TransactionBroadcast {
@@ -4798,11 +5230,14 @@ pub fn tx_prepare(
             internal(message)
         }
     })?;
+    enforce_change_recovery_gap(&db, &wallet, &psbt)?;
     wallet.persist(&mut db).map_err(internal)?;
     let fee = psbt
         .fee_amount()
         .ok_or_else(|| internal("Unable to calculate the transaction fee."))?
         .to_sat();
+    let (change, change_addresses) =
+        proposal_change_details(&wallet, &psbt, &address.to_string(), amount)?;
     let selected_outpoints = psbt
         .unsigned_tx
         .input
@@ -4817,15 +5252,22 @@ pub fn tx_prepare(
         amount,
         fee,
         fee_rate: applied_fee_rate,
-        total: amount.saturating_add(fee),
+        total: checked_payment_total(amount, fee)?,
+        change,
+        change_addresses,
+        output_count: psbt.unsigned_tx.output.len(),
         selected_outpoints,
     };
     persist_single_proposal(&db, &proposal, &psbt)?;
-    state
-        .proposals
-        .lock()
-        .map_err(internal)?
-        .insert(proposal_id.clone(), PendingProposal { psbt });
+    state.proposals.lock().map_err(internal)?.insert(
+        proposal_id.clone(),
+        PendingProposal {
+            psbt,
+            recipient: proposal.recipient.clone(),
+            amount: proposal.amount,
+            fee: proposal.fee,
+        },
+    );
     Ok(proposal)
 }
 
@@ -4906,6 +5348,7 @@ fn summarize_payment_psbt(
     psbt: &Psbt,
     applied_fee_rate: f64,
     allow_self_spend: bool,
+    label: String,
 ) -> ApiResult<PaymentProposalDto> {
     let external = psbt
         .unsigned_tx
@@ -4939,22 +5382,24 @@ fn summarize_payment_psbt(
         .fee_amount()
         .ok_or_else(|| internal("Unable to calculate the accelerated transaction fee."))?
         .to_sat();
+    let recipient = recipient.to_string();
+    let amount = if external.is_empty() {
+        0
+    } else {
+        output.value.to_sat()
+    };
+    let (change, change_addresses) = proposal_change_details(wallet, psbt, &recipient, amount)?;
     Ok(PaymentProposalDto {
         proposal_id: Uuid::new_v4().to_string(),
-        recipient: recipient.to_string(),
-        label: "Fee acceleration".to_owned(),
-        amount: if external.is_empty() {
-            0
-        } else {
-            output.value.to_sat()
-        },
+        recipient,
+        label,
+        amount,
         fee,
         fee_rate: applied_fee_rate,
-        total: if external.is_empty() {
-            fee
-        } else {
-            output.value.to_sat().saturating_add(fee)
-        },
+        total: checked_payment_total(amount, fee)?,
+        change,
+        change_addresses,
+        output_count: psbt.unsigned_tx.output.len(),
         selected_outpoints: psbt
             .unsigned_tx
             .input
@@ -4962,6 +5407,13 @@ fn summarize_payment_psbt(
             .map(|input| input.previous_output.to_string())
             .collect(),
     })
+}
+
+fn acceleration_label(method: AccelerationMethod, original: &TransactionDto) -> String {
+    match method {
+        AccelerationMethod::Rbf => original.label.clone(),
+        AccelerationMethod::Cpfp => "Fee acceleration".to_owned(),
+    }
 }
 
 fn build_cpfp(
@@ -5092,25 +5544,42 @@ pub fn tx_acceleration_prepare(
     let (applied, rate) = validate_acceleration_rate(fee_rate)?;
     let mut db = open_db(&app)?;
     let mut wallet = load_wallet(&mut db)?;
+    let original = snapshot_from(&wallet, &db, None, false)?
+        .transactions
+        .into_iter()
+        .find(|transaction| transaction.id == txid.to_string())
+        .ok_or_else(|| {
+            api_error(
+                "acceleration_unavailable",
+                "Transaction was not found in this wallet.",
+            )
+        })?;
     let parent_fee = if matches!(method, AccelerationMethod::Cpfp) {
         Some(cpfp_parent_fee(&app, &state, &wallet, txid)?)
     } else {
         None
     };
     let psbt = build_acceleration_psbt(&mut wallet, txid, method, parent_fee, rate)?;
+    enforce_change_recovery_gap(&db, &wallet, &psbt)?;
     let proposal = summarize_payment_psbt(
         &wallet,
         &psbt,
         applied,
         matches!(method, AccelerationMethod::Cpfp),
+        acceleration_label(method, &original),
     )?;
     persist_single_proposal(&db, &proposal, &psbt)?;
+    persist_acceleration(&db, &proposal.proposal_id, method, &original)?;
     wallet.persist(&mut db).map_err(internal)?;
-    state
-        .proposals
-        .lock()
-        .map_err(internal)?
-        .insert(proposal.proposal_id.clone(), PendingProposal { psbt });
+    state.proposals.lock().map_err(internal)?.insert(
+        proposal.proposal_id.clone(),
+        PendingProposal {
+            psbt,
+            recipient: proposal.recipient.clone(),
+            amount: proposal.amount,
+            fee: proposal.fee,
+        },
+    );
     Ok(proposal)
 }
 
@@ -5130,17 +5599,29 @@ pub fn multisig_acceleration_prepare(
     let metadata = read_multisig_metadata(&app)?;
     let mut db = open_multisig_db(&app)?;
     let mut wallet = load_wallet(&mut db)?;
+    let original = snapshot_from(&wallet, &db, None, true)?
+        .transactions
+        .into_iter()
+        .find(|transaction| transaction.id == txid.to_string())
+        .ok_or_else(|| {
+            api_error(
+                "acceleration_unavailable",
+                "Transaction was not found in this wallet.",
+            )
+        })?;
     let parent_fee = if matches!(method, AccelerationMethod::Cpfp) {
         Some(cpfp_parent_fee(&app, &state, &wallet, txid)?)
     } else {
         None
     };
     let psbt = build_acceleration_psbt(&mut wallet, txid, method, parent_fee, rate)?;
+    enforce_change_recovery_gap(&db, &wallet, &psbt)?;
     let proposal = summarize_payment_psbt(
         &wallet,
         &psbt,
         applied,
         matches!(method, AccelerationMethod::Cpfp),
+        acceleration_label(method, &original),
     )?;
     let encoded = encode_psbt(&psbt);
     db.execute(
@@ -5148,8 +5629,9 @@ pub fn multisig_acceleration_prepare(
         params![proposal.proposal_id, proposal.recipient, proposal.label, proposal.amount, proposal.fee, proposal.fee_rate, encoded, now()],
     )
     .map_err(internal)?;
+    persist_acceleration(&db, &proposal.proposal_id, method, &original)?;
     wallet.persist(&mut db).map_err(internal)?;
-    load_multisig_proposal(&db, &metadata, &proposal.proposal_id)
+    load_multisig_proposal(&mut db, &metadata, &proposal.proposal_id)
 }
 
 #[tauri::command]
@@ -5175,6 +5657,14 @@ pub fn tx_sign_and_broadcast(
         .remove(&proposal_id)
         .map(Ok)
         .unwrap_or_else(|| load_single_proposal(&db, &proposal_id))?;
+    let mut wallet = load_wallet(&mut db)?;
+    validate_proposal_fee(&proposal.psbt, proposal.fee)?;
+    proposal_change_details(
+        &wallet,
+        &proposal.psbt,
+        &proposal.recipient,
+        proposal.amount,
+    )?;
     let signing_wallet = Wallet::create(
         Bip84(master, KeychainKind::External),
         Bip84(master, KeychainKind::Internal),
@@ -5197,14 +5687,7 @@ pub fn tx_sign_and_broadcast(
     }
     let transaction = proposal.psbt.extract_tx().map_err(internal)?;
     let txid = broadcast_transaction(&app, &state, &transaction)?;
-    let mut wallet = load_wallet(&mut db)?;
     let sync_pending = sync_loaded_wallet(&app, &state, &mut wallet, &mut db).is_err();
-    let snapshot = snapshot_from(
-        &wallet,
-        &db,
-        (!sync_pending).then(|| now().to_string()),
-        false,
-    )?;
     let persisted = db.transaction().map_err(internal)?;
     let changed = persisted
         .execute(
@@ -5218,6 +5701,13 @@ pub fn tx_sign_and_broadcast(
             "The proposal changed while it was being broadcast.",
         ));
     }
+    record_replacement(&persisted, &proposal_id, &txid)?;
+    let snapshot = snapshot_from(
+        &wallet,
+        &persisted,
+        (!sync_pending).then(|| now().to_string()),
+        false,
+    )?;
     notifications::enqueue(
         &persisted,
         &WalletNotification::TransactionBroadcast {
@@ -5411,6 +5901,145 @@ mod tests {
                 [],
             )
             .is_err());
+    }
+
+    #[test]
+    fn revealed_addresses_cannot_cross_the_configured_recovery_gap() {
+        let db = Connection::open_in_memory().unwrap();
+        init_app_schema(&db).unwrap();
+        for index in 0..MIN_RECOVERY_GAP_LIMIT {
+            db.execute(
+                "INSERT INTO satchel_addresses (idx, address, label, created_at, state, observed)
+                 VALUES (?1, ?2, 'request', 1, 'awaiting', 0)",
+                params![index, format!("address-{index}")],
+            )
+            .unwrap();
+        }
+        assert_eq!(required_recovery_gap(&db, None).unwrap(), 20);
+        let error = enforce_recovery_gap(&db, 20).unwrap_err();
+        assert_eq!(error.code, "address_gap_limit_reached");
+
+        db.execute(
+            "UPDATE satchel_addresses SET observed = 1, state = 'used' WHERE idx = 5",
+            [],
+        )
+        .unwrap();
+        assert_eq!(required_recovery_gap(&db, Some(20)).unwrap(), 15);
+        enforce_recovery_gap(&db, 20).unwrap();
+    }
+
+    #[test]
+    fn transaction_change_cannot_cross_the_configured_recovery_gap() {
+        use bdk_wallet::bitcoin::{absolute::LockTime, transaction::Version, TxOut};
+
+        let db = Connection::open_in_memory().unwrap();
+        init_app_schema(&db).unwrap();
+        let mnemonic = Mnemonic::parse(WORDS).unwrap();
+        let master = root_key(&mnemonic, "change gap").unwrap();
+        let mut wallet = Wallet::create(
+            Bip84(master, KeychainKind::External),
+            Bip84(master, KeychainKind::Internal),
+        )
+        .network(Network::Regtest)
+        .create_wallet_no_persist()
+        .unwrap();
+        let change = (0..=MIN_RECOVERY_GAP_LIMIT)
+            .map(|_| wallet.reveal_next_address(KeychainKind::Internal).address)
+            .last()
+            .unwrap();
+        let psbt = Psbt::from_unsigned_tx(Transaction {
+            version: Version::TWO,
+            lock_time: LockTime::ZERO,
+            input: vec![],
+            output: vec![TxOut {
+                value: Amount::from_sat(1_000),
+                script_pubkey: change.script_pubkey(),
+            }],
+        })
+        .unwrap();
+
+        let error = enforce_change_recovery_gap(&db, &wallet, &psbt).unwrap_err();
+        assert_eq!(error.code, "address_gap_limit_reached");
+    }
+
+    #[test]
+    fn proposal_review_rejects_any_non_recipient_output_not_owned_by_the_wallet() {
+        use bdk_wallet::bitcoin::{
+            absolute::LockTime, hashes::Hash, transaction::Version, ScriptBuf, Sequence, TxIn,
+            TxOut, Witness,
+        };
+
+        fn test_wallet(words: &str, passphrase: &str) -> Wallet {
+            let mnemonic = Mnemonic::parse(words).unwrap();
+            let master = root_key(&mnemonic, passphrase).unwrap();
+            Wallet::create(
+                Bip84(master, KeychainKind::External),
+                Bip84(master, KeychainKind::Internal),
+            )
+            .network(Network::Regtest)
+            .create_wallet_no_persist()
+            .unwrap()
+        }
+
+        let mut wallet = test_wallet(WORDS, "review wallet");
+        let change = wallet.reveal_next_address(KeychainKind::Internal).address;
+        let mut recipient_wallet = test_wallet(WORDS, "recipient wallet");
+        let recipient = recipient_wallet
+            .reveal_next_address(KeychainKind::External)
+            .address;
+        let mut attacker_wallet = test_wallet(WORDS, "attacker wallet");
+        let attacker = attacker_wallet
+            .reveal_next_address(KeychainKind::External)
+            .address;
+        let transaction = Transaction {
+            version: Version::TWO,
+            lock_time: LockTime::ZERO,
+            input: vec![TxIn {
+                previous_output: OutPoint::new(Txid::from_byte_array([3; 32]), 0),
+                script_sig: ScriptBuf::new(),
+                sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
+                witness: Witness::new(),
+            }],
+            output: vec![
+                TxOut {
+                    value: Amount::from_sat(10_000),
+                    script_pubkey: recipient.script_pubkey(),
+                },
+                TxOut {
+                    value: Amount::from_sat(5_000),
+                    script_pubkey: change.script_pubkey(),
+                },
+            ],
+        };
+        let psbt = Psbt::from_unsigned_tx(transaction).unwrap();
+        let (change_total, addresses) =
+            proposal_change_details(&wallet, &psbt, &recipient.to_string(), 10_000).unwrap();
+        assert_eq!(change_total, 5_000);
+        assert_eq!(addresses, vec![change.to_string()]);
+
+        let mut redirected = psbt.clone();
+        redirected.unsigned_tx.output[1].script_pubkey = attacker.script_pubkey();
+        assert_eq!(
+            proposal_change_details(&wallet, &redirected, &recipient.to_string(), 10_000)
+                .unwrap_err()
+                .code,
+            "proposal_mismatch"
+        );
+
+        let mut duplicate_recipient = psbt;
+        duplicate_recipient.unsigned_tx.output[1] =
+            duplicate_recipient.unsigned_tx.output[0].clone();
+        assert_eq!(
+            proposal_change_details(
+                &wallet,
+                &duplicate_recipient,
+                &recipient.to_string(),
+                10_000,
+            )
+            .unwrap_err()
+            .code,
+            "proposal_mismatch"
+        );
     }
 
     #[test]
@@ -5660,6 +6289,16 @@ mod tests {
             assert!(error.message.contains(expected));
         }
         assert_eq!(missing_hwi_value(None, "fallback").message, "fallback");
+
+        let coldcard_policy = missing_hardware_psbt(
+            "coldcard",
+            Some(-7),
+            "The device did not return a signed PSBT.",
+        );
+        assert_eq!(coldcard_policy.code, "hardware_command_failed");
+        assert!(coldcard_policy
+            .message
+            .contains("does not recognize this multisig wallet"));
 
         let bitbox = hardware_device_api_error(HardwareError::CommandFailed(Some(-12)), "bitbox02");
         assert_eq!(bitbox.code, "hardware_command_failed");
@@ -6124,6 +6763,49 @@ mod tests {
     }
 
     #[test]
+    fn regtest_app_data_override_is_limited_to_named_temporary_directories() {
+        #[cfg(unix)]
+        let allowed = PathBuf::from("/tmp").join(format!("satchel-regtest-{}", Uuid::new_v4()));
+        #[cfg(not(unix))]
+        let allowed = std::env::temp_dir().join(format!("satchel-regtest-{}", Uuid::new_v4()));
+        assert_eq!(
+            validate_regtest_app_data_override(allowed.clone()).unwrap(),
+            allowed
+        );
+        assert_eq!(
+            validate_regtest_app_data_override(allowed.with_file_name("unscoped-wallet-data"))
+                .unwrap_err()
+                .code,
+            "internal_error"
+        );
+        assert_eq!(
+            validate_regtest_app_data_override(PathBuf::from("satchel-regtest-relative"))
+                .unwrap_err()
+                .code,
+            "internal_error"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn regtest_app_data_override_rejects_symlinks() {
+        use std::os::unix::fs::symlink;
+
+        let target = std::env::temp_dir().join(format!("satchel-target-{}", Uuid::new_v4()));
+        let link = std::env::temp_dir().join(format!("satchel-regtest-{}", Uuid::new_v4()));
+        fs::create_dir(&target).unwrap();
+        symlink(&target, &link).unwrap();
+        assert_eq!(
+            validate_regtest_app_data_override(link.clone())
+                .unwrap_err()
+                .code,
+            "internal_error"
+        );
+        fs::remove_file(link).unwrap();
+        fs::remove_dir(target).unwrap();
+    }
+
+    #[test]
     fn frozen_coin_schema_persists_and_corrupt_rows_fail_closed() {
         let db = Connection::open_in_memory().unwrap();
         init_app_schema(&db).unwrap();
@@ -6165,6 +6847,7 @@ mod tests {
             address: Some("bcrt1qnotificationfixture".to_owned()),
             label: "Test deposit".to_owned(),
             block: (confirmations > 0).then_some(1),
+            replaced_by: None,
         };
         let snapshot = WalletSnapshotDto {
             network: "regtest",
@@ -6205,6 +6888,69 @@ mod tests {
     }
 
     #[test]
+    fn replacement_history_marks_or_restores_the_original_without_affecting_the_replacement() {
+        let db = Connection::open_in_memory().unwrap();
+        init_app_schema(&db).unwrap();
+        let original_txid = "11".repeat(32);
+        let replacement_txid = "22".repeat(32);
+        db.execute(
+            "INSERT INTO satchel_proposals
+             (proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at, txid)
+             VALUES ('rbf-proposal', 'bcrt1qfixture', 'Miner fee increase', 100, 5, 2, 'fixture', 'broadcast', 2, ?1)",
+            params![replacement_txid],
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO satchel_accelerations
+             (proposal_id, method, original_txid, replacement_txid, original_kind,
+              original_direction, original_amount, original_fee, original_date,
+              original_address, original_label, created_at)
+             VALUES ('rbf-proposal', 'rbf', ?1, ?2, 'payment', 'sent', 100, 2, '1',
+                     'bcrt1qfixture', 'Original payment', 2)",
+            params![original_txid, replacement_txid],
+        )
+        .unwrap();
+        let mut transactions = vec![TransactionDto {
+            id: replacement_txid.clone(),
+            kind: "payment".to_owned(),
+            direction: "sent".to_owned(),
+            amount: 100,
+            fee: Some(5),
+            status: "confirmed".to_owned(),
+            confirmations: 1,
+            date: "2".to_owned(),
+            address: Some("bcrt1qfixture".to_owned()),
+            label: "Original payment".to_owned(),
+            block: Some(101),
+            replaced_by: None,
+        }];
+
+        apply_replacement_history(&db, &mut transactions).unwrap();
+
+        assert_eq!(transactions.len(), 2);
+        assert_eq!(transactions[0].id, replacement_txid);
+        let original = transactions
+            .iter()
+            .find(|transaction| transaction.id == original_txid)
+            .unwrap();
+        assert_eq!(original.status, "replaced");
+        assert_eq!(original.confirmations, 0);
+        assert_eq!(
+            original.replaced_by.as_deref(),
+            Some(transactions[0].id.as_str())
+        );
+        assert_eq!(transactions[0].status, "confirmed");
+        assert_eq!(
+            acceleration_label(AccelerationMethod::Rbf, original),
+            "Original payment"
+        );
+        assert_eq!(
+            acceleration_label(AccelerationMethod::Cpfp, original),
+            "Fee acceleration"
+        );
+    }
+
+    #[test]
     fn restart_restores_proposals_frozen_coins_and_acknowledged_notifications() {
         use bdk_wallet::bitcoin::{absolute::LockTime, transaction::Version, Transaction};
 
@@ -6238,6 +6984,9 @@ mod tests {
                     fee: 1,
                     fee_rate: 1.0,
                     total: 11,
+                    change: 0,
+                    change_addresses: vec![],
+                    output_count: 0,
                     selected_outpoints: vec![outpoint.clone()],
                 },
                 &psbt,

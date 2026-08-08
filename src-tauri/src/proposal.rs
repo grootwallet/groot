@@ -14,6 +14,7 @@ pub enum ProposalError {
     UnsupportedSighash,
     PrematureFinalization,
     NoInputs,
+    NoNewSignatures,
     MergeFailed,
 }
 
@@ -27,6 +28,7 @@ impl ProposalError {
             Self::UnsupportedSighash => "unsupported_sighash",
             Self::PrematureFinalization => "premature_finalization",
             Self::NoInputs => "no_inputs",
+            Self::NoNewSignatures => "no_new_signatures",
             Self::MergeFailed => "psbt_merge_failed",
         }
     }
@@ -155,10 +157,17 @@ pub fn merge_signed_psbt(
             }
         }
     }
-    original
+    let previous = signature_progress(original, allowed_fingerprints, required)?;
+    let mut combined = original.clone();
+    combined
         .combine(imported)
         .map_err(|_| ProposalError::MergeFailed)?;
-    signature_progress(original, allowed_fingerprints, required)
+    let progress = signature_progress(&combined, allowed_fingerprints, required)?;
+    if progress.signed <= previous.signed {
+        return Err(ProposalError::NoNewSignatures);
+    }
+    *original = combined;
+    Ok(progress)
 }
 
 #[cfg(test)]
@@ -281,6 +290,40 @@ mod tests {
                 .unwrap()
                 .can_finalize
         );
+    }
+
+    #[test]
+    fn rejects_duplicate_or_incomplete_signatures_without_mutating_the_proposal() {
+        let (mut original, signers) = proposal();
+        let allowed = signers.iter().map(|signer| signer.2).collect::<Vec<_>>();
+        let mut first = original.clone();
+        sign_all_inputs(&mut first, &signers[0]);
+        merge_signed_psbt(&mut original, first, &allowed, 2).unwrap();
+
+        let preserved = original.clone();
+        assert_eq!(
+            merge_signed_psbt(&mut original, preserved.clone(), &allowed, 2)
+                .unwrap_err()
+                .code(),
+            "no_new_signatures"
+        );
+        assert_eq!(original, preserved);
+
+        let mut incomplete = preserved.clone();
+        let secp = Secp256k1::new();
+        let signature = ecdsa::Signature::sighash_all(
+            secp.sign_ecdsa(&Message::from_digest([2; 32]), &signers[1].0),
+        );
+        incomplete.inputs[0]
+            .partial_sigs
+            .insert(signers[1].1, signature);
+        assert_eq!(
+            merge_signed_psbt(&mut original, incomplete, &allowed, 2)
+                .unwrap_err()
+                .code(),
+            "no_new_signatures"
+        );
+        assert_eq!(original, preserved);
     }
 
     #[test]

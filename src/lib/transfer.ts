@@ -5,6 +5,12 @@ export function safeTransferFilename(value: string): string {
   return normalized.slice(0, 64) || 'satchel-wallet';
 }
 
+export function coldcardPolicyFilename(walletName: string): string {
+  // Coldcard 5.0.7 derives descriptor-policy names from the filename and
+  // rejects non-ASCII names or basenames longer than 20 characters.
+  return `${safeTransferFilename(walletName).slice(0, 20)}.txt`;
+}
+
 export function validateTransferText(value: string): string {
   const normalized = value.trim();
   if (!normalized) throw new Error('The transfer file is empty.');

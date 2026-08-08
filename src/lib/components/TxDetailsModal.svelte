@@ -49,13 +49,14 @@
 <Modal open={!!transaction} title="Transaction details" preserveTop {onclose}>
   {#if transaction}
     <div class="detail-hero">
-      <span class:pending={transaction.status === 'pending'}>{transaction.status}</span>
+      <span class:pending={transaction.status === 'pending'} class:replaced={transaction.status === 'replaced'}>{transaction.status}</span>
       <strong class:positive={transaction.direction === 'received'}>{#if $discreetMode}••••••{:else}{transaction.direction === 'received' ? '+' : '−'}{shortSats(transaction.amount)}{/if} <small>sats</small></strong>
       <p>{isSelfSpend ? 'Self-spend · network fee' : transaction.label}</p>
     </div>
     <dl class="details-list">
       <div><dt>Date</dt><dd><LocalTimestamp value={transaction.date} /></dd></div>
       <div><dt>Confirmations</dt><dd>{transaction.confirmations}</dd></div>
+      {#if transaction.status === 'replaced' && transaction.replacedBy}<div><dt>Replaced by</dt><dd><code>{transaction.replacedBy}</code></dd></div>{/if}
       {#if transaction.block}<div><dt>Block</dt><dd>{transaction.block}</dd></div>{/if}
       {#if transaction.fee}<div><dt>Network fee</dt><dd>{$discreetMode ? '••••••' : shortSats(transaction.fee)} sats</dd></div>{/if}
       {#if transaction.address && !showAddress}<div><dt>{transaction.direction === 'received' ? 'Received at' : 'Sent to'}</dt><dd><button type="button" class="compact-address-button" aria-expanded="false" onclick={() => showAddress = true}>{compactAddress(transaction.address)}</button></dd></div>{/if}

@@ -1,6 +1,6 @@
 import { defaultConfig } from '$lib/config';
 import { receiveAddresses, transactions, utxos, wallet } from '$lib/data';
-import type { ReceiveAddress } from '$lib/types';
+import type { ReceiveAddress, Transaction } from '$lib/types';
 import { addressPrefixForNetwork, canDiscardAddress, hasAddressPrefixForNetwork, normalizePermanentLabel } from './policy';
 import { feeRate, sats, WalletError, type CoinSelection, type FeeEstimates, type PaymentProposal, type WalletEvent, type WalletPort, type WalletSnapshot } from './contracts';
 import type { CoreNodeConfig, ExternalSigner, ExternalSignerSource, ExternalSignerWallet, MultisigPreview, MultisigProposal, MultisigWallet, RecoveryPolicyAnalysis, RecoveryTemplate, WalletProfile } from './contracts';
@@ -35,6 +35,8 @@ export class DummyWalletAdapter implements WalletPort {
   #exists = typeof location === 'undefined' || !new URLSearchParams(location.search).has('fixture-empty');
   #listeners = new Set<(event: WalletEvent) => void>();
   #proposals = new Map<string, PaymentProposal>();
+  #accelerations = new Map<string, { originalTxid: string; method: 'rbf' | 'cpfp' }>();
+  #transactions = structuredClone(transactions);
   #multisig: MultisigWallet | null = this.#exists ? fixtureMultisigWallet() : null;
   #multisigCredential = this.#exists ? prototypeCredential : '';
   #multisigProfileId: string | null = this.#exists ? 'fixture-multisig' : null;
@@ -142,7 +144,7 @@ export class DummyWalletAdapter implements WalletPort {
     return {
       network: defaultConfig.network,
       balance: { confirmed: sats(Math.max(0, this.#balance - wallet.pending)), pending: sats(Math.min(wallet.pending, this.#balance)), trustedPending: sats(Math.min(wallet.pending, this.#balance)), total: sats(this.#balance) },
-      transactions: emptyActivity ? [] : structuredClone(transactions),
+      transactions: emptyActivity ? [] : structuredClone(this.#transactions),
       utxos: structuredClone(this.#coins),
       receiveAddresses: structuredClone(this.#addresses),
       syncedAt: new Date().toISOString()
@@ -189,20 +191,21 @@ export class DummyWalletAdapter implements WalletPort {
     const available = spendable.reduce((total, coin) => total + coin.amount, 0);
     if (Number(amount) + Number(fee) > available) throw new WalletError('insufficient_funds', 'Amount and fee exceed the selected, unfrozen balance.');
     const selectedOutpoints = coinSelection.mode === 'manual' ? spendable.map((coin) => coin.outpoint) : [];
-    const proposal: PaymentProposal = { proposalId: crypto.randomUUID(), recipient, label, amount, fee, feeRate: selectedRate, total: sats(Number(amount) + Number(fee)), selectedOutpoints };
+    const proposal: PaymentProposal = { proposalId: crypto.randomUUID(), recipient, label, amount, fee, feeRate: selectedRate, total: sats(Number(amount) + Number(fee)), change: sats(0), changeAddresses: [], outputCount: 1, selectedOutpoints };
     this.#proposals.set(proposal.proposalId, proposal);
     if (this.#profiles.find((profile) => profile.id === this.#selectedWalletId)?.kind === 'watch_only') {
-      this.#externalProposals.set(proposal.proposalId, { ...proposal, psbt: 'cHNidP8BAFICAAAA', signed: 0, required: 1, canFinalize: false, signedFingerprints: [], status: 'collecting', createdAt: new Date().toISOString() });
+      this.#externalProposals.set(proposal.proposalId, { ...proposal, change: sats(0), changeAddresses: [], outputCount: 1, psbt: 'cHNidP8BAFICAAAA', signed: 0, required: 1, canFinalize: false, signedFingerprints: [], status: 'collecting', createdAt: new Date().toISOString() });
     }
     return proposal;
   }
-  async prepareAcceleration(txid: string, method: import('./contracts').AccelerationMethod, selectedRate: ReturnType<typeof feeRate>) { const tx=transactions.find((item)=>item.id===txid); if(!tx||tx.status!=='pending'||!tx.address) throw new WalletError('internal_error','Only pending wallet payments can be accelerated.'); return this.preparePayment(fixtureAddressForNetwork(tx.address),tx.label,sats(Math.max(1,tx.amount)),selectedRate); }
+  async prepareAcceleration(txid: string, method: import('./contracts').AccelerationMethod, selectedRate: ReturnType<typeof feeRate>) { const tx=this.#transactions.find((item)=>item.id===txid); if(!tx||tx.status!=='pending'||!tx.address) throw new WalletError('internal_error','Only pending wallet payments can be accelerated.'); const proposal=await this.preparePayment(fixtureAddressForNetwork(tx.address),tx.label,sats(Math.max(1,tx.amount)),selectedRate);this.#accelerations.set(proposal.proposalId,{originalTxid:txid,method});return proposal; }
 
   async signAndBroadcast(proposalId: string, credential: string) {
     const proposal = this.#proposals.get(proposalId);
     if (!proposal) throw new WalletError('wallet_not_found', 'Payment proposal was not found or expired.');
     if (!this.#selectedWalletId || credential !== this.#credentials.get(this.#selectedWalletId)) throw new WalletError('invalid_credential', 'Incorrect passphrase / PIN.');
     const txid = '0a7bf3d7a98d8bc981975320eba8e9b8ac1aa92145dcf018e48c3c2f8c19e2aa';
+    this.#recordFixtureBroadcast(proposalId, proposal, txid);
     this.#balance = Math.max(0, this.#balance - Number(proposal.total));
     this.#emit({ type: 'transaction_broadcast', txid, balance: sats(this.#balance) });
     this.#proposals.delete(proposalId);
@@ -212,6 +215,7 @@ export class DummyWalletAdapter implements WalletPort {
   async listHardwareDevices() {
     return [
       { id: 'virtual-coldcard', label: 'Virtual Coldcard', model: 'Coldcard simulator', fingerprint: 'f00dbabe', connected: true, status: 'ready' as const, message: 'Ready to import the public account key.', action: 'import' as const },
+      { id: 'virtual-trezor-cosigner', label: 'Virtual Trezor cosigner', model: 'Trezor simulator', fingerprint: 'c0ffee01', connected: true, status: 'ready' as const, message: 'Ready to sign as a separate wallet cosigner.', action: 'import' as const },
       { id: 'virtual-ledger-outsider', label: 'Virtual Ledger outsider', model: 'Ledger simulator', fingerprint: '1ed9e001', connected: true, status: 'ready' as const, message: 'Connected, but not part of the demo wallet.', action: 'import' as const },
       this.#trezorPinUnlocked
         ? { id: 'virtual-trezor', label: 'Virtual Trezor One', model: 'Trezor simulator', fingerprint: 'c0ffee03', connected: true, status: 'needs_passphrase' as const, message: 'Unlocked. Choose the standard wallet with no passphrase, or select a hidden wallet on-device when supported.', action: 'confirm_empty_passphrase' as const }
@@ -431,10 +435,10 @@ export class DummyWalletAdapter implements WalletPort {
     const available = spendable.reduce((total, coin) => total + coin.amount, 0);
     if (Number(amount) + Number(fee) > available) throw new WalletError('insufficient_funds', 'Amount and fee exceed the selected, unfrozen balance.');
     const selectedOutpoints = coinSelection.mode === 'manual' ? spendable.map((coin) => coin.outpoint) : [];
-    const proposal: MultisigProposal = { proposalId: crypto.randomUUID(), recipient, label, amount, fee, feeRate:selectedRate, total:sats(Number(amount)+Number(fee)), selectedOutpoints, psbt:`cHNidP8BAF9kdW1teQ==${'A'.repeat(3120)}`, signed:0, required:this.#multisig.threshold, canFinalize:false, signedFingerprints:[], status:'collecting', createdAt:new Date().toISOString() };
+    const proposal: MultisigProposal = { proposalId: crypto.randomUUID(), recipient, label, amount, fee, feeRate:selectedRate, total:sats(Number(amount)+Number(fee)), selectedOutpoints, change:sats(0), changeAddresses:[], outputCount:1, psbt:`cHNidP8BAF9kdW1teQ==${'A'.repeat(3120)}`, signed:0, required:this.#multisig.threshold, canFinalize:false, signedFingerprints:[], status:'collecting', createdAt:new Date().toISOString() };
     this.#multisigProposals.set(proposal.proposalId, proposal); return structuredClone(proposal);
   }
-  async prepareMultisigAcceleration(txid: string, method: import('./contracts').AccelerationMethod, selectedRate: ReturnType<typeof feeRate>) { const base=await this.prepareAcceleration(txid,method,selectedRate); const proposal:MultisigProposal={...base,psbt:'cHNidP8BAFICAAAA',signed:0,required:this.#multisig?.threshold??2,canFinalize:false,signedFingerprints:[],status:'collecting',createdAt:new Date().toISOString()};this.#multisigProposals.set(proposal.proposalId,proposal);return structuredClone(proposal); }
+  async prepareMultisigAcceleration(txid: string, method: import('./contracts').AccelerationMethod, selectedRate: ReturnType<typeof feeRate>) { const base=await this.prepareAcceleration(txid,method,selectedRate); const proposal:MultisigProposal={...base,change:sats(0),changeAddresses:[],outputCount:1,psbt:'cHNidP8BAFICAAAA',signed:0,required:this.#multisig?.threshold??2,canFinalize:false,signedFingerprints:[],status:'collecting',createdAt:new Date().toISOString()};this.#multisigProposals.set(proposal.proposalId,proposal);return structuredClone(proposal); }
   async multisigProposals() { return [...this.#multisigProposals.values()].filter((item)=>item.status==='collecting'||item.status==='ready').map((item)=>structuredClone(item)); }
   async importMultisigProposal(proposalId:string, signedPsbt:string) {
     if (!signedPsbt.trim()) throw new WalletError('internal_error','Enter a signed PSBT.');
@@ -442,21 +446,52 @@ export class DummyWalletAdapter implements WalletPort {
   }
   async signMultisigWithHardware(proposalId:string, deviceId:string) {
     if (deviceId === 'virtual-ledger-outsider') throw new WalletError('unknown_signer','The connected device is not a cosigner in this wallet policy.');
-    return this.#addDummySignature(proposalId);
+    const fingerprint = deviceId === 'virtual-coldcard' ? 'f00dbabe' : deviceId === 'virtual-trezor-cosigner' ? 'c0ffee01' : null;
+    if (!fingerprint) throw new WalletError('unknown_signer','The connected device is not a cosigner in this wallet policy.');
+    return this.#addDummySignature(proposalId, fingerprint);
   }
   async broadcastMultisigProposal(proposalId:string, credential:string) {
     const proposal=this.#multisigProposals.get(proposalId); if(!proposal) throw new WalletError('proposal_not_found','Payment proposal was not found.');
     if(credential!==this.#multisigCredential) throw new WalletError('invalid_credential','Incorrect app PIN.');
     if(!proposal.canFinalize) throw new WalletError('internal_error','Collect the required signatures first.');
-    proposal.status='broadcast'; this.#balance=Math.max(0,this.#balance-Number(proposal.total)); const txid='7d4a2c7f9e317f9859d7a8566fe02d773afb09fcddb617dbda98bfba8f721234'; return {txid,snapshot:await this.snapshot(),syncPending:false};
+    proposal.status='broadcast'; this.#balance=Math.max(0,this.#balance-Number(proposal.total)); const txid='7d4a2c7f9e317f9859d7a8566fe02d773afb09fcddb617dbda98bfba8f721234'; this.#recordFixtureBroadcast(proposalId,proposal,txid); return {txid,snapshot:await this.snapshot(),syncPending:false};
   }
   async cancelMultisigProposal(proposalId:string) { const proposal=this.#multisigProposals.get(proposalId); if(!proposal) throw new WalletError('proposal_not_found','Payment proposal was not found.'); proposal.status='cancelled'; }
   async savePsbt(suggestedFilename:string,psbt:string){const {downloadText}=await import('$lib/transfer');downloadText(suggestedFilename,psbt);return true;}
 
-  #addDummySignature(proposalId:string) {
+  #addDummySignature(proposalId:string, fingerprint?:string) {
     const proposal=this.#multisigProposals.get(proposalId); if(!proposal||!this.#multisig) throw new WalletError('proposal_not_found','Payment proposal was not found.');
-    const next=this.#multisig.cosigners.find((key)=>!proposal.signedFingerprints.includes(key.fingerprint)); if(next) proposal.signedFingerprints.push(next.fingerprint);
+    const next=fingerprint ? this.#multisig.cosigners.find((key)=>key.fingerprint===fingerprint) : this.#multisig.cosigners.find((key)=>!proposal.signedFingerprints.includes(key.fingerprint));
+    if(!next) throw new WalletError('unknown_signer','The connected device is not a cosigner in this wallet policy.');
+    if(proposal.signedFingerprints.includes(next.fingerprint)) throw new WalletError('no_new_signatures','This signer has already signed this proposal. No signatures were changed.');
+    proposal.signedFingerprints.push(next.fingerprint);
     proposal.signed=proposal.signedFingerprints.length; proposal.canFinalize=proposal.signed>=proposal.required; proposal.status=proposal.canFinalize?'ready':'collecting'; return structuredClone(proposal);
+  }
+
+  #recordFixtureBroadcast(proposalId: string, proposal: PaymentProposal, txid: string) {
+    const acceleration = this.#accelerations.get(proposalId);
+    if (!acceleration) return;
+    const original = this.#transactions.find((transaction) => transaction.id === acceleration.originalTxid);
+    if (acceleration.method === 'rbf' && original) {
+      original.status = 'replaced';
+      original.confirmations = 0;
+      original.block = undefined;
+      original.replacedBy = txid;
+    }
+    const replacement: Transaction = {
+      id: txid,
+      kind: acceleration.method === 'cpfp' ? 'self_spend' : 'payment',
+      direction: 'sent',
+      amount: Number(proposal.amount),
+      fee: Number(proposal.fee),
+      status: 'pending',
+      confirmations: 0,
+      date: new Date().toISOString(),
+      address: proposal.recipient,
+      label: proposal.label
+    };
+    this.#transactions = [replacement, ...this.#transactions.filter((transaction) => transaction.id !== txid)];
+    this.#accelerations.delete(proposalId);
   }
 
   subscribe(listener: (event: WalletEvent) => void) {

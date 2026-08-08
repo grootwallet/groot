@@ -4,10 +4,21 @@
   import { copyText } from '$lib/clipboard';
   import { toast } from '$lib/stores/toasts';
 
-  let { address, label, open, onclose } = $props<{
+  let {
+    address,
+    label,
+    open,
+    title = 'Recipient address',
+    description = 'Verify the complete destination before signing.',
+    detail = 'Outgoing payment · permanent label',
+    onclose
+  } = $props<{
     address: string;
     label: string;
     open: boolean;
+    title?: string;
+    description?: string;
+    detail?: string;
     onclose: () => void;
   }>();
   let copied = $state(false);
@@ -24,9 +35,9 @@
   }
 </script>
 
-<Modal {open} title="Recipient address" description="Verify the complete destination before signing." {onclose}>
+<Modal {open} {title} {description} {onclose}>
   <div class="address-detail-view">
-    <div class="address-detail-status"><span class="status-dot"></span><span><strong>{label}</strong><small>Outgoing payment · permanent label</small></span></div>
+    <div class="address-detail-status"><span class="status-dot"></span><span><strong>{label}</strong><small>{detail}</small></span></div>
     <ReadableAddress {address} {copied} oncopy={copy}/>
     <p>The brighter first and last groups are the quickest comparison points. Spaces are visual only; copying uses the exact address.</p>
   </div>

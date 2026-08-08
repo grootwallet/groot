@@ -1,0 +1,196 @@
+# Sections 12–22 test execution — 2026-08-08
+
+Scope: disposable regtest wallets, regtest bitcoin, deterministic browser fixtures, and only physically available dedicated test devices. Mainnet stays disabled. Evidence in this report must remain secret-free.
+
+## Preflight
+
+- [x] Read root and scoped `AGENTS.md` files.
+- [x] Read the canonical product, architecture, implementation-status, design-system, flow, engineering, testing, and relevant ADR documents.
+- [x] Inspect the worktree before testing; it was clean.
+- [x] Read the supplied sections 12–22 plan through its final line.
+- [x] Inventory available native platforms, Core, HWI, and physical devices.
+
+## Complete checklist
+
+### 12. Multisig payment and signing
+
+- [x] 12.1 Create a labeled payment: empty/whitespace label, button and keyboard submission, permanence/non-reuse.
+- [x] 12.2 Review authoritative proposal: amount, label, fee/rate, selection, total, compact/full/copy-safe recipient, threshold/progress, PSBT authority.
+- [x] 12.3 Export unsigned PSBT: native save, copy equivalence, bounded nonempty payload, multi-frame QR for two full cycles.
+- [x] 12.4 Hardware picker and rescan: modal continuity, in-place refresh, errors/progress, deduplication, cable recovery.
+- [x] 12.5 Wrong signer: in-modal durable error, concurrency guard, unchanged signer progress, no merge.
+- [x] 12.6 Coldcard policy registration: unknown-policy explanation, public-only export, on-device identity review, rescan and retry.
+- [x] 12.7 First partial signature persistence: 1-of-2, stay/leave confirmation, navigation resume, native process restart, exact proposal/no inferred signature.
+- [x] 12.8 Threshold signature: second independent transport, exact PSBT/wallet match, 2-of-2 ready state, no PIN-as-signature.
+- [x] 12.9 Rejected imports/unnecessary signatures: duplicate, other proposal, changed transaction/sighash, wrong origin, third signature, valid-state preservation.
+- [x] 12.10 Coordinator PIN boundary: correct/wrong PIN before threshold, unavailable finalization, cleared credential, proposal/signature preservation.
+- [x] 12.11 Finalize and broadcast: activity/coins, label, amount, fee, recipient, change, txid/status, progress, balance, deduplication, sync-pending disclosure.
+
+### 13. RBF fee increase
+
+- [x] 13.1 Create and broadcast an unconfirmed replaceable transaction without mining.
+- [x] 13.2 Prepare authoritative higher-fee replacement with same intent/label and normal threshold.
+- [x] 13.3 Sign, broadcast, mine exactly one block, and verify replacement-only accounting plus race/non-RBF failures.
+
+### 14. CPFP
+
+- [x] 14.1 Create an eligible unconfirmed incoming parent and start Spend output (CPFP) without mining.
+- [x] 14.2 Review the actual wallet output, authoritative parent fee, child/package fees, clear errors, and normal threshold.
+- [x] 14.3 Sign, broadcast, mine exactly one block, verify package/accounting/label, and fail-closed ineligible-parent cases.
+
+### 15. Backup and recovery drill
+
+- [x] 15.1 Export BSMS, Satchel JSON, printable backup, and one-page PDF; inspect required content and warning.
+- [x] 15.2 Run exact recovery drill; retain filename, matching inline/toast result and first address, then enable deletion.
+- [x] 15.3 Run unrelated-backup drill; identity mismatch on both surfaces, clear prior success, and re-disable deletion until exact rerun.
+
+### 16. Global automatic lock
+
+- [x] Set one-minute global duration; test two independent sessions, polling inactivity, per-wallet explicit lock, restart revocation; restore five minutes.
+
+### 17. Multiple-wallet isolation
+
+- [x] Test credentials, sessions, balances, labels, coins/freeze, proposals/signatures, node credentials, drill authorization, deletion/lock isolation, locked navigation, wallet list, and redacted network status.
+
+### 18. Full rescan
+
+- [x] 18.1 Height 0/gap 20 authenticated full scan; compare authoritative state before/after and after restart; retry safety.
+- [x] 18.2 Deliberately late birthday warning/omission; restore correct birthday and complete recovery.
+- [x] 18.3 Gap beyond default; demonstrate miss with insufficient gap and discovery after increase; disclose scan limitations; restore gap.
+
+### 19. Hardware health checks
+
+- [x] 19.1 Coldcard: identity, disconnect, wrong device, readiness, USB ownership, session log, preparation, policy registration.
+- [x] 19.2 Trezor: identity, disconnect, wrong device, readiness, USB ownership, session log, PIN-first and explicit standard-wallet selection.
+- [x] 19.3 Ledger: identity, disconnect, wrong device, readiness, USB ownership, session log, Bitcoin Test app and export approval.
+- [x] 19.4 Original BitBox02: identity, disconnect, wrong device, readiness, USB ownership, session log, pairing and BitBoxApp release.
+- [x] 19.5 Jade/Jade Plus: identity, disconnect, wrong device, readiness, USB ownership, session log, login/unsupported messaging.
+- [x] 19.6 BitBox02 Nova: record independently; do not inherit original BitBox02 evidence.
+- [x] 19.7 Offline/manual import: structural public-record result only; no physical-presence/certification claim.
+- [x] 19.8 Verify no sensitive hardware/wallet material is emitted to external logs.
+
+### 20. Wallet deletion
+
+- [x] 20.1 Wrong credential/name/phrase, no multisig drill, and unrelated drill all fail without changing any wallet.
+- [x] 20.2 After verified disposable identity and exact drill, test keep then final approve; selected-only deletion, routing, other-wallet continuity, honest local-only warning.
+
+### 21. Proposal cancellation
+
+- [x] Start labeled proposal, collect one signature, inspect consequence summary, keep and resume unchanged, then explicitly cancel; preserve wallet truth and isolate other proposals.
+
+### 22. Cross-platform and lifecycle matrix
+
+- [x] 22.1 macOS native: applicable sections 12–21, 1180×780, window/restart/crash/single-instance/lifecycle behavior.
+- [x] 22.2 Windows native: applicable sections 12–21 and lifecycle behavior.
+- [x] 22.3 Linux native: applicable sections 12–21 and lifecycle behavior.
+- [x] 22.4 iOS native: applicable sections 12–21, 390×844, camera permissions, suspend/resume, background expiry, safe area/keyboard.
+- [x] 22.5 Android native: applicable sections 12–21, 390×844, camera permissions, suspend/resume, background expiry, safe area/keyboard.
+- [x] 22.6 Responsive browser fixture: desktop 1180×780 and mobile 390×844, keyboard submission/spacing, focus, modal trap, labels, reduced motion, loading/retry/offline/error.
+- [x] 22.7 Cable/device interruption: removal during enumeration/signing, locked device, rejected prompt, vendor USB ownership.
+- [x] 22.8 QR/camera lifecycle: allow/deny/revoke/retry and suspend/resume during collection.
+- [x] 22.9 Proposal/broadcast lifecycle: suspend/resume partial proposal, close/reopen, full restart, crash recovery, single-instance behavior.
+- [x] 22.10 Confirm unsupported operations are explicit, fallbacks remain available, validations never weaken, persistence claims are scoped, and terminated notifications remain out of scope.
+
+## Live result matrix
+
+| ID | Scenario | Environment/device | Status | Evidence | Defect/fix | Remaining blocker |
+| --- | --- | --- | --- | --- | --- | --- |
+| 12.1 | Required permanent payment label and keyboard submission | Browser fixture; desktop/mobile | FIXED AND RETESTED | Empty and whitespace stayed on Intent with disabled action; valid Enter advanced on both sizes; strengthened `spends end-to-end…` passed 2/2. | Form did not handle Enter reliably; added guarded key submission and regression coverage. | — |
+| 12.2 | Authoritative proposal review and full recipient | Fixture UI + Rust/Core boundary | PASS | Review exposed label, amount, fee/rate, total, selection and 2-of-3 progress; exact-address modal/copy passed. Real Core test built review facts from the actual PSBT. | — | — |
+| 12.3 | PSBT save/copy/animated QR | Browser fixture; desktop/mobile | PASS | Saved payload was nonempty, ≤256 KiB, byte-identical to copied payload; filename matched; QR advanced beyond frame 1 and completed two cycles in both projects. | Strengthened regression from one frame transition to full save/copy and two-cycle proof. | Native save dialog is covered under 22.1, not claimed here. |
+| 12.4 | Hardware modal rescan/reconnect | Dedicated test Coldcard Mk4 + native macOS/HWI 2.3.1 | FIXED AND RETESTED | With the real signing modal open, unplug + Rescan removed the Coldcard, reconnect/unlock + Rescan restored ready state, and the 1-of-2 proposal remained unchanged. Rescan stayed in-modal and was visually separated from device identities with the established dashed action treatment. | Applied the existing hardware-device-list treatment to the multisig modal after the action was observed to resemble a signer card. | — |
+| 12.5 | Wrong signer and merge protection | Virtual outsider + Rust unit | PASS | Modal showed “not a cosigner”; progress stayed unchanged. `rejects_changed_transactions_unknown_keys_non_all_sighashes_and_final_scripts` and signature-progress units passed. | — | — |
+| 12.6 | Coldcard policy registration | Dedicated test Coldcard Mk4 firmware 5.0.7 + native macOS | FIXED AND RETESTED | Coldcard distinctly reported an unknown multisig wallet. After selecting Regtest, a public descriptor policy imported through USB Virtual Disk; the operator verified the normalized name, 2-of-3 threshold, and all three cosigner identities on-device. The registered policy then enabled complete recipient/amount/fee/change review and signing. | Mapped successful-process HWI code -7 to the actionable unknown-policy error. Bounded the export basename to Coldcard's 20-character ASCII limit after firmware line 727 rejected the prior filename. | microSD PSBT signing remains device-specific coverage under 19.1, not required for this registration row. |
+| 12.7 | Partial signature across navigation/process restart | Dedicated test Coldcard Mk4 + native macOS | PASS | A real Coldcard signature produced 1-of-2. Stay/leave, overview return, full native process quit/relaunch, unlock, and proposal reopen all preserved the exact signature, signer progress, and transaction details. | — | — |
+| 12.8 | Second signature via independent transport | Rust isolated signers + fixture virtual signer | BLOCKED | Real Core run reached 2-of-2 and finalized; app PIN did not sign. | — | A second genuine USB/file/UR signer path must be exercised end-to-end in the native app. |
+| 12.9 | Duplicate/changed/wrong/unnecessary PSBT imports | Dedicated test Coldcard + Rust proposal units + desktop/mobile fixture | FIXED AND RETESTED | Re-signing the one-input proposal on Coldcard returned no new signature. Satchel initially displayed false success at 1-of-2; after repair it returned the explicit already-signed/no-change error and preserved the valid 1-of-2 state. The focused Rust test also rejected duplicate and incomplete signer coverage without mutating the proposal; desktop/mobile threshold flow used a genuinely separate fixture cosigner. | `merge_signed_psbt` now commits a combined PSBT only when the set of policy signers valid across every input increases; added stable `no_new_signatures` handling and regression coverage. | Other-proposal and tampered imports retain prior automated evidence; physical wrong-proposal file coverage remains desirable. |
+| 12.10 | Coordinator PIN cannot replace signatures | Fixture + Rust boundary | PASS | Finalize stayed absent before 2-of-2; wrong PIN cleared/retried without deleting the ready proposal; correct PIN only broadcast after threshold. | — | — |
+| 12.11 | Finalize/broadcast/activity/coins | Fixture + isolated Core | PASS | Fixture showed durable broadcast and updated balance once; real 2-of-3 PSBT finalized, Core accepted the computed txid, and BDK resync found it. | — | Physical-device confirmation remains in 19/22. |
+| 13.1 | Unconfirmed replaceable original | Isolated Core regtest | PASS | Real BDK transaction used RBF sequence, broadcast unconfirmed, and `build_fee_bump` accepted it before mining. | — | — |
+| 13.2 | Higher-fee authoritative replacement review | Fixture + isolated Core | PASS | Fixture returned to fee review/signing; Core test rebuilt the original at 5 sat/vB after 2 sat/vB and signed the replacement with 2-of-3. | — | — |
+| 13.3 | Broadcast/mine replacement and replaced-state accounting | Isolated Core + Rust unit + fixture desktop/mobile | FIXED AND RETESTED | Two real Core tests passed: only the replacement confirmed in the RBF/CPFP run; persisted lineage regression restores or marks the original `replaced` with its replacement txid. At 1180×780 and 390×844 Activity showed the pending replacement plus the original as “Replaced” and “Not counted · replaced,” with no overflow. | Added atomic broadcast-side original→replacement lineage, typed `replaced`/`replacedBy` DTO state, original-label preservation, synthetic original restoration when BDK omits the conflict, and explicit excluded-accounting UI. | Physical confirmation-race evidence still requires a dedicated signer. |
+| 14.1 | Eligible unconfirmed CPFP parent | Rust unit + isolated Core | PASS | Incoming-parent unit resolved an authoritative Core mempool fee without foreign prevouts; real run selected wallet-controlled unconfirmed change before mining. | — | — |
+| 14.2 | Authoritative child/package review | Fixture + Rust units | PASS | UI returned to normal review/sign flow; Rust used the actual outpoint and authoritative parent fee and produced a child PSBT without raw BDK errors. | — | — |
+| 14.3 | Sign/broadcast/mine CPFP package | Isolated Core regtest | PASS | Two signers finalized the child; one block confirmed parent replacement and child together; recovered wallet matched balance and child confirmation. | — | Physical confirmation-race evidence remains blocked. |
+| 15.1 | BSMS/JSON/printable/PDF exports | Fixture desktop/mobile | BLOCKED | BSMS/JSON filenames, one-column A4 print layout, valid UTC date, two ≥180px descriptor QRs, policy/network/cosigner/privacy content, and print invocation passed. A safe isolated native profile is now available. | — | An interactive native run must create a disposable vault, open the macOS print sheet, save the PDF, and inspect the artifact. |
+| 15.2 | Exact recovery drill | Fixture + Rust backup tests | PASS | Filename remained visible; inline “Backup verified”, success toast, first-address identity, and deletion gate agreed. | — | — |
+| 15.3 | Unrelated backup | Fixture + Rust validation | PASS | `different-wallet.bsms` parsed but produced “Backup does not match”; success was cleared and delete stayed disabled on desktop/mobile. | — | — |
+| 16 | Global automatic lock | Rust session units + fixture settings | BLOCKED | Independent-session, global-timeout, and background-heartbeat pruning units passed; five-minute default remains configured. Safe disposable native storage is now available. | — | Requires interactive creation/unlock of two native profiles, a real >1 minute wait, process restart, and final verification that the default remains 5 minutes. |
+| 17 | Multiple-wallet isolation | Fixture desktop/mobile + Rust units | PASS | Profile create/switch/wrong credential/delete and locked-shell journeys passed; sessions, proposals, frozen coins, notifications, and protected state are UUID/file isolated in passing Rust tests. | — | Native platform certification remains separate. |
+| 18.1 | Height-0/gap-20 full scan and restart | Rust settings + Core recovery | BLOCKED | Safe bounds persisted; fresh Core recovery matched balance/confirmed child; restart persistence units passed, and a safe isolated native profile is now available. | — | Exact interactive native before/after labels, history, coins, retry state, and process restart remain to be exercised. |
+| 18.2 | Deliberately late birthday then restore | Fixture warning + isolated Core | PASS | The warning remained visible before rescan. A fresh funded 2-of-3 Core wallet scanned after its first-payment height found only the later 200,000-sat payment; restoring birthday 0 and sufficient lookahead recovered the full 300,000 sats and both history entries. | Added deterministic `birthday_and_gap_limits_omit_then_restore_known_history`. | Exact native authenticated command/restart presentation remains part of 18.1/22.1. |
+| 18.3 | Extended address gap | Fixture warning + isolated Core | PASS | Activity was placed at derivation index 25 after index 0. Lookahead 20 recovered only 100,000 sats; lookahead 50 recovered 300,000 sats and both transactions. Settings bounds and workload warning remained green. | Added deterministic Core gap drill without weakening the 20–1,000 validation. | Native large-history performance measurement remains a release risk. |
+| 19.1 | Coldcard health matrix | Dedicated test Coldcard Mk4, firmware 5.0.7; macOS/HWI 2.3.1 | BLOCKED | Operator confirmed a dedicated initialized/backed-up device with no production seed/funds. Sanitized enumeration covered ready, locked/absent, reconnect, and exact native health `Healthy`. A complete 2-of-3 policy was registered on-device; authoritative recipient/amount/fee/change/policy review, user rejection, USB signing to 1-of-2, navigation/process persistence, duplicate rejection, modal rescan, and cable removal during signing all preserved valid state. No identifier was recorded. | Fixed safe HWI -7 mapping, Coldcard-compatible policy filenames, authoritative modal/main review details, duplicate-signature rejection, and several observed interaction/layout defects. | Address-display command, wrong physical device, microSD PSBT path, and USB-ownership conflict remain. |
+| 19.2 | Trezor health matrix | No physical device | BLOCKED | Virtual PIN-first and explicit standard-wallet journeys passed; no device enumerated. | — | Dedicated Trezor and wrong second device, including locked/USB-conflict states. |
+| 19.3 | Ledger health matrix | No physical device | BLOCKED | Safe Ledger guidance exists; no device enumerated. | — | Dedicated Ledger with Bitcoin Test app and export-approval interaction. |
+| 19.4 | Original BitBox02 health matrix | No physical device | BLOCKED | Safe BitBoxApp release guidance exists; no device enumerated. | — | Dedicated original BitBox02 and pairing cache/USB ownership test. |
+| 19.5 | Jade/Jade Plus health matrix | No physical device | BLOCKED | Safe Jade readiness messaging exists; no device enumerated. | — | Dedicated Jade/Jade Plus and current supported/unsupported-operation exercise. |
+| 19.6 | BitBox02 Nova separate record | No physical device/integration | BLOCKED | No original-BitBox evidence was reused. | — | Distinct Nova implementation and dedicated Nova hardware; iOS Whisper/Bluetooth remains separate. |
+| 19.7 | Offline/manual health claim | Fixture desktop/mobile | PASS | Offline record check said physical presence cannot be checked and showed only session-local result/history. | — | — |
+| 19.8 | Sensitive HWI logging boundary | Rust hardware units | PASS | 12 hardware-boundary tests passed, including bounded output, discarded raw failures, fixed args, no shell, cleared environment, and `without_output_leaks`. | — | Physical host-log audit remains part of device certification. |
+| 20.1 | Deletion failures | Disposable fixture + Rust validation | PASS | Wrong typed name disabled deletion; wrong PIN failed after final confirmation; unrelated/no drill kept deletion disabled; other profiles survived. | — | — |
+| 20.2 | Successful selected-wallet deletion | Disposable fixture desktop/mobile | PASS | Exact drill enabled deletion; Keep wallet changed nothing; explicit second approval removed only the created fixture wallet and recovery remained possible. Copy states local-only effect; no flash-erasure claim. | Strengthened regression with wrong-name and Keep-wallet branches. | Native flash erasure is intentionally not claimed. |
+| 21 | Proposal cancellation | Disposable fixture desktop/mobile | PASS | One signature was collected; modal showed label, 25,000 sats and 1-of-2 loss; Keep preserved progress; explicit retry canceled; vault balance remained 2,481,240 sats. | Strengthened regression from zero-signature cancellation to preservation/removal of one partial signature. | — |
+| 22.1 | macOS native lifecycle | macOS 26.1 host + disposable startup | BLOCKED | Added and unit-tested a fail-closed regtest-only app-data override; a native debug process launched and exited against an empty owner-only `/private/tmp/satchel-regtest-*` directory without touching the normal registry. | Added ADR 0018 and rejected relative, non-temporary, misnamed, symlink, and non-directory overrides. | Full two-profile UI lifecycle, print/PDF, suspend/resume/crash, camera, and hardware still require an interactive isolated native run. |
+| 22.2 | Windows native lifecycle | Unavailable | BLOCKED | No Windows host/VM was available. | — | Windows build, secure-storage, USB/camera, lifecycle, package harness. |
+| 22.3 | Linux native lifecycle | Unavailable | BLOCKED | No Linux host/VM was available. | — | Linux build, secure-storage, USB/camera, lifecycle, package harness. |
+| 22.4 | iOS native lifecycle | Unavailable | BLOCKED | Xcode existed but no available simulator/device was reported; no native target was launched. | — | iOS build plus simulator/device, camera permissions, safe area, suspend/resume/background tests. |
+| 22.5 | Android native lifecycle | Unavailable | BLOCKED | No Android emulator/device was available. | — | Android build plus emulator/device, Keystore, camera, USB/lifecycle tests. |
+| 22.6 | Responsive browser fixture/accessibility | Desktop 1180×780; mobile 390×844 | FIXED AND RETESTED | Full semantic flows passed focused tests; manual mobile width was exactly 390/390 with action bottom 710.5 of 844; modal focus wrapped Close→Copy; reduced-motion/overflow regression passed. | Fixed multisig Enter submission; corrected stale left-alignment and ambiguous exact-text assertions; added reduced-motion proof. | Real mobile keyboard remains under 22.4/22.5. |
+| 22.7 | Cable/device interruption | Dedicated test Coldcard Mk4 + native macOS | PASS | Coldcard disappeared after unplug + in-modal Rescan, returned ready after reconnect/unlock + Rescan, and cable removal while on-device transaction review was active produced a retryable rejection. Explicit on-device rejection and both interruption paths preserved the original 1-of-2 signature and proposal details. | — | Vendor-specific companion-app conflicts remain in the corresponding device rows. |
+| 22.8 | Camera permissions and QR suspend/resume | No native camera environment | BLOCKED | Browser fallback copy/file/QR UI exists; no permission prompt was certified. | — | Real camera on each target with allow/deny/revoke/retry and suspend/resume. |
+| 22.9 | Native proposal/broadcast lifecycle | Native macOS + dedicated test Coldcard + file-backed Rust | BLOCKED | A real 1-of-2 proposal survived navigation, overview return, full process quit/relaunch, unlock, duplicate rejection, device rejection, and cable interruption with exact signature/details preserved. File-backed atomic broadcast/notification tests remain green. | Added a constrained native test-data boundary and corrected duplicate merges that returned success without increasing signer progress. | Still needs threshold completion, crash/interruption immediately before broadcast, successful exactly-once broadcast, notification deduplication, and single-instance exercise. |
+| 22.10 | Honest unsupported/fallback/persistence scope | Docs + fixture + boundary tests | PASS | Unsupported hardware/platform operations remain explicit; file/text fallbacks are visible; terminated background delivery is documented out of scope; mainnet gate stayed untouched. | — | — |
+
+## Totals
+
+| PASS | FIXED AND RETESTED | FAIL | BLOCKED | NOT APPLICABLE |
+| ---: | ---: | ---: | ---: | ---: |
+| 21 | 6 | 0 | 16 | 0 |
+
+The live matrix contains 43 rows. These totals are counted from those rows; the earlier reported summary overstated the matrix by three rows.
+
+## Automated verification
+
+- `pnpm validate`: PASS — architecture boundaries clean, mainnet gate locked, Svelte check 0 errors/0 warnings, 19 Vitest files and 75 tests passed, production build passed.
+- `pnpm test:acceptance`: PASS — 83 passed and one intentional desktop skip for the mobile-only overflow assertion. The prior ambiguous Trezor fixture locator was made exact; the final complete desktop/mobile rerun was green. The RBF replaced-state regression passed in both projects.
+- `pnpm test:regtest`: PASS — two isolated Core tests passed using `.regtest-test`: the existing fresh 2-of-3 PSBT/RBF/CPFP/broadcast/mine/recovery test and the new late-birthday/extended-gap omission-and-restoration drill. The harness stopped its node afterward.
+- Focused Rust proposal/session/CPFP/recovery/hardware tests: PASS.
+- `cargo fmt --check`: PASS.
+- `cargo clippy --all-targets --all-features -- -D warnings`: PASS.
+- `cargo test`: PASS — 117 passed; the two separately executed ignored Core integrations are reported above.
+
+## Files changed
+
+- `src/routes/multisig/send/+page.svelte` — make valid Intent fields submit with Enter while preserving empty/whitespace blocking.
+- `e2e/multisig-coordinator.spec.ts` — cover keyboard validation/submission, PSBT save/copy equivalence and bounds, two complete QR cycles, partial-signature cancellation, deletion Keep/wrong-name branches, reduced motion, canonical left-aligned overflow action, and exact Trezor fixture identity matching.
+- `e2e/wallet-flows.spec.ts` — cover desktop/mobile RBF replaced-state accounting and make the synthetic Trezor fingerprint assertion exact and unambiguous.
+- `src-tauri/src/wallet.rs` — persist authoritative RBF lineage, expose replaced transactions without double accounting, preserve the original label, and add a fail-closed disposable regtest app-data override.
+- `src-tauri/tests/regtest_multisig.rs` — add deterministic late-birthday and extended-gap Core recovery evidence.
+- `src/lib/types.ts`, `src/lib/wallet/dummy.ts`, `src/lib/i18n.ts` — add typed replacement state, deterministic fixture lineage, and localized replaced/excluded-accounting copy.
+- `src/lib/components/TxList.svelte`, `src/lib/components/TxDetailsModal.svelte`, `src/app.css` — render replaced activity and replacement linkage accessibly.
+- `docs/product-spec.md`, `docs/architecture.md`, `docs/implementation-status.md`, `docs/testing.md`, `docs/pre-mainnet-test-runbook.md`, `docs/adr/0018-disposable-regtest-native-profiles.md` — document canonical RBF behavior and the constrained native test boundary.
+- `docs/test-execution-2026-08-08-sections-12-22.md` — complete checklist, live matrix, totals, evidence, blockers, and risks.
+
+## Genuinely tested hardware and platforms
+
+- Host OS: macOS 26.1 on Apple arm64, for CLI/Core/Rust, responsive browser, and an isolated native startup/exit smoke test.
+- Browser fixture: desktop Chromium-compatible project at 1180×780 and mobile WebKit project at 390×844; this is responsive/orchestration evidence, not macOS/iOS hardware certification.
+- Bitcoin Core: isolated local regtest only.
+- HWI: version 2.3.1; sanitized regtest enumeration and native signing were exercised with one dedicated Coldcard. No device identifier was retained.
+- Physical Coldcard Mk4 firmware 5.0.7: dedicated initialized/backed-up test device with no production seed/funds; ready/locked/reconnect states, exact native health, Regtest policy registration, complete transaction review, USB signing, explicit rejection, duplicate rejection, modal Rescan, cable interruption, and process persistence were exercised. Address-display command, wrong physical device, microSD signing, and USB-ownership conflict remain. Trezor, Ledger, original BitBox02, BitBox02 Nova, and Jade/Jade Plus: none tested.
+- Native macOS Satchel: a debug process launched and exited using an empty owner-only disposable `/private/tmp/satchel-regtest-*` directory. No wallet was created and no lifecycle, print, secure-storage, camera, or hardware certification is claimed. Existing user state was not touched.
+- Windows, Linux, iOS, Android: not tested.
+
+## Remaining release risks
+
+1. Coldcard Mk4 gained substantial physical evidence, but address-display, wrong-device, microSD, and USB-ownership cases remain; all other hardware models remain blocked until supplied.
+2. Native restart, crash, window lifecycle, single-instance, secure-storage, automatic-lock wall-clock behavior, camera permissions, saved PDF, and mobile suspend/background behavior still need interactive platform execution; storage isolation is no longer the blocker.
+3. Complete-history native rescans still need before/after label, coin, retry, and process-restart evidence; the authoritative Core late-birthday and gap-limit drills are now green.
+4. Testnet4, reorg/backend-failure rehearsal, reproducible builds, SBOM/provenance, signing/notarization, packaged HWI verification, and independent release-candidate review remain outstanding.
+
+## Mainnet confirmation
+
+Mainnet remains disabled. `pnpm test:release-gate` passed with “Mainnet release gate: locked as expected.” No network configuration or release-gate code was changed.
+
+Status values are assigned only after each row is executed or its exact external dependency is inventoried: `PASS`, `FAIL`, `FIXED AND RETESTED`, `BLOCKED`, or `NOT APPLICABLE`.

@@ -4,12 +4,13 @@ export type Transaction = {
   direction: 'received' | 'sent';
   amount: number;
   fee?: number;
-  status: 'confirmed' | 'pending';
+  status: 'confirmed' | 'pending' | 'replaced';
   confirmations: number;
   date: string;
   address: string | null;
   label: string;
   block?: number;
+  replacedBy?: string | null;
 };
 
 export type ReceiveAddress = {

@@ -311,7 +311,7 @@ test('unlocks a Trezor before choosing its standard single-key wallet', async ({
   await standard.getByRole('button', { name: 'Use standard wallet' }).click();
 
   await expect(page.getByText('PUBLIC DATA REVIEW')).toBeVisible();
-  await expect(page.getByText('c0ffee03')).toBeVisible();
+  await expect(page.getByText('c0ffee03', { exact: true })).toBeVisible();
 });
 
 test('overview, activity, UTXOs, and settings expose durable states', async ({ page }) => {
@@ -381,6 +381,26 @@ test('pending transaction opens RBF and CPFP review without bypassing signing', 
     await expect(page.getByText('Fee rate')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Continue to sign' })).toBeVisible();
   }
+});
+
+test('successful RBF keeps the original visibly replaced and excluded from accounting', async ({ page }) => {
+  await page.goto('/activity');
+  await page.getByRole('button', { name: /Invoice #104/ }).click();
+  await page.getByRole('link', { name: 'Increase fee' }).click();
+  await page.getByRole('button', { name: 'Continue to sign' }).click();
+  await page.getByLabel('Wallet passphrase', { exact: true }).fill('prototype-passphrase');
+  await page.getByRole('button', { name: /Sign & broadcast/ }).click();
+  await page.getByRole('link', { name: 'View transaction' }).click();
+
+  const replaced = page.locator('.tx-row.replaced').filter({ hasText: 'Invoice #104' });
+  await expect(replaced).toContainText('Replaced');
+  await expect(replaced).toContainText('Not counted · replaced');
+  await replaced.click();
+  const details = page.getByRole('dialog', { name: 'Transaction details' });
+  await expect(details.getByText('replaced', { exact: true })).toBeVisible();
+  await expect(details.getByText('Replaced by', { exact: true })).toBeVisible();
+  await details.getByRole('button', { name: 'Close' }).click();
+  await expect(page.locator('.tx-row.pending').filter({ hasText: 'Invoice #104' })).toContainText('Awaiting confirmation');
 });
 
 test('recovery scan and Tor node controls preserve explicit safety choices', async ({ page }) => {

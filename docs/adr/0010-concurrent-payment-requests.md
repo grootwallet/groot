@@ -14,3 +14,7 @@ Allow any number of unused external addresses to remain awaiting payment concurr
 ## Consequences
 
 The wallet snapshot exposes the full address collection rather than a privileged singular awaiting address. Address creation remains an atomic reveal-and-label operation. Discard remains an indexed state transition, and every retired address continues to be monitored for late payment.
+
+## Security clarification — 2026-08-09
+
+“Any number” means concurrent requests are not mutually exclusive; it does not authorize derivation beyond recoverability bounds. Address creation must fail before the next index would exceed the configured descriptor gap, and the setting cannot be lowered below the longest run needed to rediscover every address already revealed. This preserves concurrent requests without allowing an address that the configured recovery scan can silently miss.

@@ -1,6 +1,6 @@
 # Satchel security
 
-Last internal review: 2026-08-05
+Last internal review: 2026-08-09
 
 Satchel is security-sensitive wallet software under active development. The current native implementation is intended for disposable **regtest** testing. It has not completed an independent audit, physical hardware-wallet certification, or the mainnet release process. Do not use it with mainnet funds.
 
@@ -66,7 +66,7 @@ Reports should describe:
 - Descriptor parsing and policy compilation happen in Rust, preserve origins and network identity, reject private material, and require checksums on exported backups.
 - Multisig creation rejects duplicate fingerprints/xpubs, invalid origins, wrong-network keys, unsafe thresholds, and browser-only virtual signers at the native boundary.
 - Backup recovery recompiles policy and descriptors and rejects mismatched network, policy type, thresholds, recovery paths, private material, or noncanonical descriptors.
-- Transaction review facts come from the persisted unsigned PSBT rather than UI recomputation.
+- Transaction review facts come from the persisted unsigned PSBT rather than UI recomputation. Recipient amount and stored fee must match exactly, and every other output must be proven wallet-controlled before review, signing, or broadcast.
 - Imported signatures must match the stored unsigned transaction and expected descriptor identity. Changed inputs, outputs, amounts, recipients, origins, sighashes, or externally finalized scripts fail closed.
 - A proposal cannot become ready until the collected signatures satisfy BDK finalization.
 - Broadcast verifies the returned transaction ID, handles an already-known expected transaction idempotently, and atomically records accepted status with its durable notification.
@@ -74,7 +74,7 @@ Reports should describe:
 - Standard public BIP129/BSMS records are bounded, private-material rejected, canonical descriptor parsed, network checked, and first-address verified. Satchel does not claim BIP129 encrypted signer-round support.
 - Blockchain Commons UR v2 exchange accepts only bounded `crypto-psbt` payloads. Frame count, frame size, decoded size, canonical CBOR envelope, duplicate/out-of-order input, and PSBT magic are validated in Rust.
 - RBF and CPFP produce ordinary persisted PSBT proposals and therefore cannot bypass transaction review, signer identity, exact-PSBT merge validation, credential checks, or finalization.
-- Recovery scan birthday and gap limit are bounded and persisted. Full rescan is credential authenticated; the interface warns that a birthday set too late can omit history.
+- Recovery scan birthday and gap limit are bounded and persisted. Receive revelation and actual PSBT change output creation fail before exceeding that gap, including after canceled proposal churn, and the setting cannot be lowered below already-derived receive/change requirements. Full rescan is credential authenticated; the interface warns that a birthday set too late can omit history.
 
 ### Hardware-wallet transport
 
@@ -143,6 +143,21 @@ cargo test --locked --all-features
 ```
 
 Advisory scans require current registry access. CI must show both JavaScript and Rust advisory jobs green for release evidence.
+
+## 2026-08-09 internal audit
+
+This internal code audit traced address derivation, descriptor identity, proposal construction and persistence, PSBT import, change ownership, signing, broadcast, recovery scanning, session isolation, storage hardening, hardware process execution, and mainnet gates. It added bounded adversarial regression tests and fixed these confirmed gaps:
+
+- Receive-address creation could advance beyond the configured recoverable descriptor gap. It now fails atomically before reveal, and the gap cannot be lowered below already derived receive/change runs.
+- Repeated canceled proposals could consume internal indexes before a later broadcast used change. Every prepared transaction now proves its actual internal output remains within the configured recovery gap before wallet state is persisted.
+- Proposal review treated every non-recipient output as change without independently proving ownership. Single-key, external-signer, multisig, RBF, and CPFP paths now reject any such output not controlled by the selected wallet.
+- Single-key signing reloaded only a PSBT after restart. It now retains and revalidates the persisted recipient, amount, and fee immediately before signing.
+- Single-key review omitted authoritative change and output-count details. The Rust DTO and review UI now expose the verified change amount/address and transaction shape.
+- A browser fixture journey attempted to sign a newly created policy with virtual devices whose fingerprints were not members of that policy. The fixture now preserves exact device-to-policy identity instead of simulating signatures from unrelated devices.
+
+Local evidence for this audit includes 121 Rust tests under strict Clippy, 76 frontend unit tests, the full boundary/release/check/build gate, 81 previously green Playwright journeys plus the corrected desktop/mobile signer-identity regression, and direct desktop/mobile inspection of the single-key change review at 1180×780 and 390×844 with no horizontal overflow. Dependency advisory lookup could not complete in the restricted workspace because registry DNS was unavailable, and `cargo-audit` was not installed; current CI advisory jobs remain required release evidence.
+
+This is an internal code audit and bounded adversarial test pass, not an independent penetration test, cryptographic proof, physical-device certification, or authorization for mainnet release.
 
 ## Mainnet blockers
 

@@ -68,7 +68,7 @@ A persisted global discreet mode hides wallet amounts across Overview and activi
 1. User requests a new address.
 2. A non-empty label of at most 48 characters is mandatory.
 3. Address revelation and immutable label persistence are atomic.
-4. Multiple addresses may await payment concurrently. The receive view lists every active payment request and lets the user inspect each address independently.
+4. Multiple addresses may await payment concurrently, up to the configured recovery gap. Address revelation fails closed before it would create an index that a scan using that gap could miss; lowering the gap below the wallet's revealed receive/change requirement is rejected. The receive view lists every active payment request and lets the user inspect each address independently.
 5. Creating a new address never retires another awaiting address.
 6. Any awaiting address with no observed transaction may be discarded independently for privacy.
 7. A discarded address is retired from presentation but monitored forever.
@@ -80,10 +80,11 @@ A persisted global discreet mode hides wallet amounts across Overview and activi
 2. Choose economy, standard, priority, or validated custom sat/vB rate.
 3. Use automatic coin selection by default, excluding frozen coins. The user may instead select one or more unfrozen UTXOs explicitly.
 4. Prepare a real unsigned transaction in Rust and return its authoritative review summary, including the selected inputs.
-5. Review the permanent label, recipient, amount, fee rate, fee, total, inputs, and change policy. Long recipients use `prefix…suffix`; activating one opens the complete grouped, copy-safe address view.
+5. Review the permanent label, recipient, amount, fee rate, fee, total, inputs, output count, and change amount/address. Rust derives these facts from the persisted PSBT and rejects the proposal if any non-recipient output is not controlled by the selected wallet. Long recipient and change addresses use `prefix…suffix`; activating one opens the complete grouped, copy-safe address view.
 6. Enter the wallet-specific credential: **Wallet passphrase** for a software-key wallet, or **App PIN** for an external-hardware or multisig wallet. Rust verifies, signs or authorizes broadcast as appropriate, persists, and clears secrets.
 7. Show a durable success state plus a transaction-broadcast toast with updated balance.
 8. A pending transaction may be accelerated through RBF when it signals replacement, or through CPFP when it has a spendable wallet-controlled output. Both paths create a new authoritative PSBT and return to the same review and signing flow.
+9. After a successful RBF broadcast, Activity retains the original transaction as **Replaced**, links it to the replacement transaction ID, and explicitly excludes it from accounting. A rejected or raced replacement never changes the original status.
 
 The send surface includes a compact public signer summary throughout the flow. Software wallets identify Satchel on the current device as the signer. External-hardware and multisig wallets show imported signer labels/models and shortened master fingerprints plus the required threshold; a signer is marked signed only from authoritative proposal data. Imported identity never implies that a device is currently connected or healthy.
 

@@ -47,13 +47,15 @@ Deletion is device-local. It never implies that transaction history disappeared 
 
 ## Receive
 
-`no awaiting address → mandatory permanent label → atomic reveal+label → QR/copy`
+`recovery-gap check → mandatory permanent label → atomic reveal+label → QR/copy`
 
-Any number of unused addresses may await payment concurrently. Each may transition independently to `discarded` and remains monitored. Any observed payment transitions that address to `used`, after which discard is impossible.
+Multiple unused addresses may await payment concurrently within the configured recovery gap. The prospective index is checked in the same transaction as reveal and label persistence; exceeding the gap reveals nothing, and the setting cannot be lowered below the already-required run. Each request may transition independently to `discarded` and remains monitored. Any observed payment transitions that address to `used`, after which discard is impossible.
 
 ## Single-key send
 
 `Intent: permanent label+recipient → Amount & fee: amount+coins+fee rate → persist Rust PSBT+label → Review & sign: authoritative review+credential → sign+broadcast → durable labeled success`
+
+The review includes Rust-derived input/output counts and verified wallet-owned change. Review and signing fail closed if the recipient or fee differs from persisted intent or if any remaining output is not controlled by the selected wallet.
 
 Every stage is named in the same three-step progress indicator. A compact signer summary identifies Satchel on this device for software wallets, or the imported model/label and shortened public fingerprint for external hardware. The review is derived from the persisted PSBT, while Rust normalizes and persists the mandatory outgoing label alongside that proposal. The recipient is shown as `prefix…suffix` and opens a complete grouped, copy-safe detail modal. A wrong credential clears the field and leaves the reviewed proposal available for retry. Restart reloads the exact proposal; it does not rebuild transaction intent from UI fields. PSBT export opens the native file picker, validates a bounded PSBT at the Rust boundary, and reports a durable success or failure. Canceling first opens a destructive review of the payment and collected signatures; only the modal's confirmation calls the cancellation boundary. **Back to overview** opens a separate leave confirmation and preserves the proposal and signatures for later resumption. Broadcast emits a toast and returns an updated snapshot whose activity record uses the permanent outgoing label.
 
@@ -81,11 +83,19 @@ Before a USB scan, the UI says that the hardware signer must already be initiali
 
 Opening the USB picker performs two bounded enumeration passes separated by a short settling interval and merges device identities, which catches signers that become ready just after the first pass without starting an unbounded monitor. A visible **Scan again** action remains available after results appear. Closing or replacing the dialog invalidates pending presentation updates, and nested dialog transitions use reference-counted page scroll locking so the underlying page is always restored.
 
+During hardware signing, the modal keeps the authoritative recipient, amount, and fee visible while the native signer call is waiting for on-device approval. The recipient opens into the standard grouped full-address presentation. A collapsed **View transaction details** section provides optional insight into the exact change amount and address, input/output counts, and wallet threshold. These values come from the persisted, validated proposal PSBT so the signer can compare the host and hardware displays without closing or looking through a blurred backdrop.
+
+The main multisig proposal review uses the same hierarchy: amount, recipient, permanent label, and network fee remain primary; a collapsed details section contains the change amount and address, transaction shape, fee rate, total debit, and wallet policy. Recipient and change addresses both open into the grouped full-address presentation.
+
+During proposal collection on desktop, signer state sits in a separate side panel with one vertically stacked card per cosigner. The three-step progress indicator remains above the workspace and describes flow position only; signer cards describe threshold progress only. Narrow layouts return to one content column and keep the compact signer list separate from the step indicator.
+
+Importing or returning a PSBT must increase the set of policy signers that validly signed every input. A duplicate signature, unchanged PSBT, or signature covering only a subset of inputs is rejected as **no new signatures** without mutating the persisted proposal or its existing valid signatures.
+
 When a Trezor reports both PIN and passphrase requirements, Satchel must resolve them in that order: PIN matrix, fresh enumeration/fingerprint, then explicit standard-wallet selection if applicable. Both multisig and external single-key setup implement the same sequence. A later hardware passphrase does not mutate an imported standard wallet; it derives an independent hidden wallet with a different fingerprint, xpub, descriptors, and addresses, which can be added as a separate Satchel wallet.
 
 The default recipe is 2-of-3; 3-of-5 is the larger-group recipe. Advanced mode permits 2 ≤ M ≤ N with 3 ≤ N ≤ 7. 1-of-N is excluded because it has no multisig theft protection. Duplicate fingerprints/xpubs, invalid origins, invalid test-network keys, private descriptors, and unsafe thresholds block review. Creation stores checksummed public descriptors, public cosigner metadata, a watch-only BDK database, and an encrypted app-PIN marker.
 
-Coldcard cosigners are marked during USB import. Before creation, Satchel exports the public BIP-380 wallet policy and requires acknowledgment that it was imported from **Settings → Multisig Wallets → Import** and that the name, threshold, and fingerprints matched on-device. This registration lets Coldcard verify change instead of signing an unknown multisig wallet. Devices that do not require policy registration do not receive this gate.
+Coldcard cosigners are marked during USB import. Before creation, Satchel exports the public BIP-380 wallet policy with a normalized ASCII filename whose basename is at most 20 characters, because Coldcard firmware derives a descriptor policy's on-device name from that filename. Satchel requires acknowledgment that it was imported from **Settings → Multisig Wallets → Import** and that the normalized name, threshold, and fingerprints matched on-device. This registration lets Coldcard verify change instead of signing an unknown multisig wallet. Devices that do not require policy registration do not receive this gate.
 
 The guided recovery and inheritance recipes require exactly four independent keys. Keys 1–3 are the immediate 2-of-3 primary set; key 4 is recovery-only and is never counted in the immediate branch. The creation UI labels these roles before review, while Rust rejects any recovery template whose delayed signer overlaps the immediate signer set. The V2 policy lab cannot retrofit a recovery-only key onto a three-key wallet; it blocks compilation and directs the user to create a new four-key recovery wallet.
 

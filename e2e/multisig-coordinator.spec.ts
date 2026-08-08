@@ -15,6 +15,17 @@ test('routes receive address creation through the selected wallet kind', async (
 });
 
 test('spends end-to-end from the ready-made demo vault', async ({ page }) => {
+  test.setTimeout(60_000);
+  await page.addInitScript(() => {
+    let copied = '';
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: async (value: string) => { copied = value; },
+        readText: async () => copied
+      }
+    });
+  });
   await page.goto('/multisig');
   await expect(page.getByRole('heading', { name: 'Family vault' })).toBeVisible();
   await expect(page.getByText('Ready-to-test demo vault')).toBeVisible();
@@ -28,8 +39,13 @@ test('spends end-to-end from the ready-made demo vault', async ({ page }) => {
   await expect(signerSummary).toContainText('2 of 3');
   await expect(signerSummary).toContainText('Coldcard');
   await page.getByLabel('Bitcoin address').fill('bcrt1qdummy00085n8k2r7v4cx9s6jlawephgzuqf5t8ul');
+  await page.getByLabel('Bitcoin address').press('Enter');
+  await expect(page.getByRole('button', { name: 'Continue to amount' })).toBeDisabled();
+  await page.getByLabel('Payment label').fill('   ');
+  await page.getByLabel('Payment label').press('Enter');
+  await expect(page.getByRole('button', { name: 'Continue to amount' })).toBeDisabled();
   await page.getByLabel('Payment label').fill('Test purchase');
-  await page.getByRole('button', { name: 'Continue to amount' }).click();
+  await page.getByLabel('Payment label').press('Enter');
   await page.getByLabel('Amount', { exact: true }).fill('50000');
   await page.getByRole('button', { name: 'Review payment' }).click();
   await expect(page.getByText('Test purchase', { exact: true })).toBeVisible();
@@ -40,15 +56,37 @@ test('spends end-to-end from the ready-made demo vault', async ({ page }) => {
   await addressDialog.getByRole('button', { name: 'Close' }).click();
   const psbtDownload = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Save PSBT' }).click();
-  await expect((await psbtDownload).suggestedFilename()).toMatch(/^satchel-.+\.psbt$/);
+  const downloadedPsbt = await psbtDownload;
+  await expect(downloadedPsbt.suggestedFilename()).toMatch(/^satchel-.+\.psbt$/);
+  const savedChunks: Buffer[] = [];
+  for await (const chunk of await downloadedPsbt.createReadStream()) savedChunks.push(Buffer.from(chunk));
+  const savedPsbt = Buffer.concat(savedChunks).toString('utf8');
+  expect(Buffer.byteLength(savedPsbt)).toBeGreaterThan(0);
+  expect(Buffer.byteLength(savedPsbt)).toBeLessThanOrEqual(256 * 1024);
+  await page.getByRole('button', { name: 'Copy PSBT' }).click();
+  const copiedPsbt = await page.evaluate(() => navigator.clipboard.readText());
+  expect(copiedPsbt).toBe(savedPsbt);
   await expect(page.getByText('PSBT saved', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Show unsigned QR' }).click();
   const unsignedQrDialog = page.getByRole('dialog', { name: 'Unsigned PSBT' });
   const unsignedQrImage = unsignedQrDialog.getByRole('img', { name: /crypto-psbt QR frame/ });
   await expect(unsignedQrImage).toBeVisible();
   await expect(unsignedQrDialog.getByText(/Frame \d+ of (?:[2-9]|\d{2,})/)).toBeVisible();
-  const firstFrame = await unsignedQrImage.getAttribute('alt');
-  await expect.poll(() => unsignedQrImage.getAttribute('alt')).not.toBe(firstFrame);
+  let previousFrame = 0;
+  let completedCycles = 0;
+  let progressedBeyondFirst = false;
+  const frameCount = Number((await unsignedQrImage.getAttribute('alt'))?.match(/of (\d+)/i)?.[1] ?? 0);
+  const animationDeadline = Date.now() + frameCount * 250 * 2 + 3_000;
+  while (completedCycles < 2 && Date.now() < animationDeadline) {
+    const alt = await unsignedQrImage.getAttribute('alt');
+    const frame = Number(alt?.match(/frame (\d+) of/i)?.[1] ?? 0);
+    if (frame > 1) progressedBeyondFirst = true;
+    if (previousFrame > 1 && frame === 1) completedCycles += 1;
+    previousFrame = frame;
+    await page.waitForTimeout(100);
+  }
+  expect(progressedBeyondFirst).toBe(true);
+  expect(completedCycles).toBeGreaterThanOrEqual(2);
   await unsignedQrDialog.getByRole('button', { name: 'Close' }).click();
   await page.getByRole('button', { name: 'Sign with device' }).click();
   const hardwareDialog = page.getByRole('dialog', { name: 'Sign with hardware' });
@@ -56,11 +94,15 @@ test('spends end-to-end from the ready-made demo vault', async ({ page }) => {
   await expect(hardwareDialog.getByText('The connected device is not a cosigner in this wallet policy.')).toBeVisible();
   await expect(hardwareDialog.getByRole('button', { name: 'Rescan', exact: true })).toBeVisible();
   await hardwareDialog.getByRole('button', { name: 'Close' }).click();
-  for (const progress of ['1 of 2 collected', '2 of 2 collected']) {
-    await page.getByRole('button', { name: 'Sign with device' }).click();
-    await page.getByRole('button', { name: /Virtual Coldcard/ }).click();
-    await expect(signerSummary.getByText(progress)).toBeVisible();
-  }
+  await page.getByRole('button', { name: 'Sign with device' }).click();
+  await page.getByRole('button', { name: /Virtual Coldcard/ }).click();
+  await expect(signerSummary.getByText('1 of 2 collected')).toBeVisible();
+  await page.getByRole('button', { name: 'Sign with device' }).click();
+  await page.getByRole('button', { name: /Virtual Coldcard/ }).click();
+  await expect(page.getByRole('dialog', { name: 'Sign with hardware' }).getByText('This signer has already signed this proposal. No signatures were changed.')).toBeVisible();
+  await expect(signerSummary.getByText('1 of 2 collected')).toBeVisible();
+  await page.getByRole('button', { name: /Virtual Trezor cosigner/ }).click();
+  await expect(signerSummary.getByText('2 of 2 collected')).toBeVisible();
   await page.getByRole('button', { name: 'Back to overview' }).click();
   const leaveDialog = page.getByRole('dialog', { name: 'Leave signing?' });
   await expect(leaveDialog.getByText('Your proposal will stay saved.')).toBeVisible();
@@ -68,7 +110,7 @@ test('spends end-to-end from the ready-made demo vault', async ({ page }) => {
   await leaveDialog.getByRole('button', { name: 'Keep signing' }).click();
   await expect(page).toHaveURL(/\/multisig\/send$/);
   await expect(signerSummary.getByText('2 of 2 collected', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Cancel proposal' }).click();
+  await page.getByRole('button', { name: 'Cancel proposal' }).filter({ visible: true }).click();
   const cancelDialog = page.getByRole('dialog', { name: 'Cancel this proposal?' });
   await expect(cancelDialog.getByText('This cannot be undone.')).toBeVisible();
   await expect(cancelDialog.getByText('Test purchase', { exact: true })).toBeVisible();
@@ -89,15 +131,27 @@ test('requires explicit confirmation before discarding a multisig proposal', asy
   await page.getByRole('button', { name: 'Continue to amount' }).click();
   await page.getByLabel('Amount', { exact: true }).fill('25000');
   await page.getByRole('button', { name: 'Review payment' }).click();
+  const cancellationSigners = page.getByRole('region', { name: 'Payment signers' });
+  await page.getByRole('button', { name: 'Sign with device' }).click();
+  await page.getByRole('button', { name: /Virtual Coldcard/ }).click();
+  await expect(cancellationSigners.getByText('1 of 2 collected', { exact: true })).toBeVisible();
 
   await page.getByRole('button', { name: 'Cancel proposal' }).click();
   const dialog = page.getByRole('dialog', { name: 'Cancel this proposal?' });
   await expect(dialog.getByText('Cancel confirmation test', { exact: true })).toBeVisible();
   await expect(dialog.getByText('25,000 sats', { exact: true })).toBeVisible();
+  await expect(dialog.getByText('1 of 2 collected', { exact: true })).toBeVisible();
+  await dialog.getByRole('button', { name: 'Keep proposal' }).click();
+  await expect(dialog).toBeHidden();
+  await expect(cancellationSigners.getByText('1 of 2 collected', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Cancel proposal' }).first().click();
   await dialog.getByRole('button', { name: 'Cancel proposal' }).click();
 
   await expect(page.getByText('Proposal canceled', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Continue to amount' })).toBeVisible();
+  await page.goto('/multisig');
+  await expect(page.getByRole('heading', { name: 'Family vault' })).toBeVisible();
+  await expect(page.getByText('2,481,240 sats')).toBeVisible();
 });
 
 test('keeps advanced wallet actions compact and makes both descriptors inspectable', async ({ page }) => {
@@ -173,8 +227,8 @@ test('uses the same wallet navigation for a multisig policy', async ({ page }) =
     expect(Math.abs((receiveBox?.y ?? 0) - (sendBox?.y ?? 0))).toBeLessThan(2);
     expect(Math.abs((moreBox?.height ?? 0) - (receiveBox?.height ?? 0))).toBeLessThan(2);
     expect(Math.abs((receiveBox?.height ?? 0) - (sendBox?.height ?? 0))).toBeLessThan(2);
+    expect(moreBox?.x ?? 0).toBeLessThan(receiveBox?.x ?? 0);
     expect(receiveBox?.x ?? 0).toBeLessThan(sendBox?.x ?? 0);
-    expect(sendBox?.x ?? 0).toBeLessThan(moreBox?.x ?? 0);
   }
   await moreActions.click();
   const moreMenu = page.getByRole('menu', { name: 'More wallet actions' });
@@ -298,7 +352,7 @@ test('unlocks a detected Trezor with the bounded PIN-position flow', async ({ pa
   const standard = page.getByRole('dialog', { name: 'Use Trezor standard wallet?' });
   await standard.getByRole('button', { name: 'Use standard wallet' }).click();
   await expect(page.getByRole('button', { name: 'View Virtual Trezor One details' })).toBeVisible();
-  await expect(page.getByText('c0ffee03')).toBeVisible();
+  await expect(page.getByText('c0ffee03', { exact: true })).toBeVisible();
 });
 
 test('explicitly selects a Trezor standard wallet without changing hidden wallets', async ({ page }) => {
@@ -378,11 +432,16 @@ test('opens and checks an imported hardware cosigner during setup', async ({ pag
 });
 
 test('creates and verifies a simple 2-of-3 descriptor wallet', async ({ page }) => {
+  const hardwareKeys = [
+    { ...keys[0], fingerprint: 'f00dbabe' },
+    { ...keys[1], fingerprint: 'c0ffee01' },
+    keys[2]
+  ];
   await page.goto('/multisig/new');
   await expect(page.getByRole('heading', { name: 'Create a policy wallet' })).toBeVisible();
   await page.getByLabel('Wallet name').fill('Family vault');
 
-  for (const key of keys) {
+  for (const key of hardwareKeys) {
     await page.getByRole('button', { name: 'Add a cosigner' }).click();
     await page.getByRole('button', { name: 'Enter public key' }).click();
     await page.getByLabel('Cosigner label').fill(key.label);
@@ -425,9 +484,12 @@ test('creates and verifies a simple 2-of-3 descriptor wallet', async ({ page }) 
   await page.getByRole('button', { name: 'Review payment' }).click();
   const paymentSigners = page.getByRole('region', { name: 'Payment signers' });
   await expect(paymentSigners.getByText('0 of 2 collected')).toBeVisible();
-  for (const progress of ['1 of 2 collected', '2 of 2 collected']) {
+  for (const [progress, device] of [
+    ['1 of 2 collected', /Virtual Coldcard/],
+    ['2 of 2 collected', /Virtual Trezor cosigner/]
+  ] as const) {
     await page.getByRole('button', { name: 'Sign with device' }).click();
-    await page.getByRole('button', { name: /Virtual Coldcard/ }).click();
+    await page.getByRole('button', { name: device }).click();
     await expect(paymentSigners.getByText(progress)).toBeVisible();
   }
   await page.getByLabel('App PIN', { exact: true }).fill('wrong-pin');
@@ -477,10 +539,17 @@ test('creates and verifies a simple 2-of-3 descriptor wallet', async ({ page }) 
   await expect(page.locator('.file-action').getByText('family-vault-backup.json', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Run recovery drill' }).click();
   await expect(page.getByText('Backup verified')).toBeVisible();
+  await page.getByLabel('Wallet name confirmation').fill('Family vault typo');
+  await page.getByLabel('Delete wallet app PIN', { exact: true }).fill('coordinator-pin');
+  await expect(page.getByRole('button', { name: 'Delete wallet from this device' })).toBeDisabled();
   await page.getByLabel('Wallet name confirmation').fill('Family vault');
   await page.getByLabel('Delete wallet app PIN', { exact: true }).fill('wrong-pin');
   await page.getByRole('button', { name: 'Delete wallet from this device' }).click();
-  await page.getByRole('dialog', { name: 'Permanently delete this wallet?' }).getByRole('button', { name: 'Delete permanently' }).click();
+  const deleteDialog = page.getByRole('dialog', { name: 'Permanently delete this wallet?' });
+  await deleteDialog.getByRole('button', { name: 'Keep wallet' }).click();
+  await expect(page.getByRole('heading', { name: 'Export & verify' })).toBeVisible();
+  await page.getByRole('button', { name: 'Delete wallet from this device' }).click();
+  await deleteDialog.getByRole('button', { name: 'Delete permanently' }).click();
   await expect(page.locator('.danger-card').getByText('That app PIN does not match Family vault.')).toBeVisible();
   await page.getByLabel('Delete wallet app PIN', { exact: true }).fill('coordinator-pin');
   await page.getByRole('button', { name: 'Delete wallet from this device' }).click();
@@ -640,8 +709,15 @@ test('blocks a duplicate device before review', async ({ page }) => {
 
 test('coordinator has no horizontal overflow on mobile', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'mobile', 'mobile-only layout assertion');
+  await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto('/multisig/new');
   const sizes = await page.evaluate(() => ({ scrollWidth: document.documentElement.scrollWidth, clientWidth: document.documentElement.clientWidth }));
   expect(sizes.scrollWidth).toBeLessThanOrEqual(sizes.clientWidth);
   await expect(page.getByRole('button', { name: 'Add a cosigner' })).toBeVisible();
+  const motion = await page.locator('.form-card').first().evaluate((element) => ({
+    animationDuration: getComputedStyle(element).animationDuration,
+    transitionDuration: getComputedStyle(element).transitionDuration
+  }));
+  expect(parseFloat(motion.animationDuration || '0')).toBeLessThanOrEqual(0.001);
+  expect(parseFloat(motion.transitionDuration || '0')).toBeLessThanOrEqual(0.001);
 });

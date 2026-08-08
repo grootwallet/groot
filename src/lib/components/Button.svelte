@@ -29,11 +29,11 @@
 </script>
 
 {#if href}
-  <a {href} aria-label={ariaLabel} aria-disabled={unavailable} aria-busy={loading} onclick={handleLinkClick} class="button {variant} {size} {className}">
+  <a {href} aria-label={ariaLabel} aria-disabled={unavailable} aria-busy={loading} onclick={handleLinkClick} class="button {variant} {size === 'default' ? '' : size} {className}">
     {#if loading}<LoaderCircle class="spin" size={16}/><span>{loadingLabel}</span>{:else}{@render children?.()}{/if}
   </a>
 {:else}
-  <button {type} disabled={unavailable} aria-label={ariaLabel} aria-busy={loading} {onclick} class="button {variant} {size} {className}">
+  <button {type} disabled={unavailable} aria-label={ariaLabel} aria-busy={loading} {onclick} class="button {variant} {size === 'default' ? '' : size} {className}">
     {#if loading}<LoaderCircle class="spin" size={16}/><span>{loadingLabel}</span>{:else}{@render children?.()}{/if}
   </button>
 {/if}

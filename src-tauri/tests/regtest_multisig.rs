@@ -8,6 +8,7 @@ use bdk_wallet::{
         secp256k1::Secp256k1,
         Address, Amount, FeeRate, Network, NetworkKind,
     },
+    chain::{BlockId, CheckPoint},
     rusqlite::Connection,
     KeychainKind, PersistedWallet, SignOptions, Wallet,
 };
@@ -54,6 +55,36 @@ fn sync(wallet: &mut PersistedWallet<Connection>, db: &mut Connection) {
     wallet.apply_evicted_txs(mempool.evicted);
     wallet.apply_unconfirmed_txs(mempool.update);
     wallet.persist(db).expect("persist mempool");
+}
+
+fn rescan_from(
+    wallet: &mut PersistedWallet<Connection>,
+    db: &mut Connection,
+    birthday_height: u32,
+) {
+    let rpc = Arc::new(rpc());
+    let checkpoint = CheckPoint::new(BlockId {
+        height: 0,
+        hash: rpc.get_block_hash(0).expect("regtest genesis"),
+    });
+    let mut emitter = Emitter::new(
+        rpc,
+        checkpoint,
+        birthday_height,
+        wallet
+            .transactions()
+            .filter(|transaction| transaction.chain_position.is_unconfirmed()),
+    );
+    while let Some(block) = emitter.next_block().expect("next rescan block") {
+        wallet
+            .apply_block_connected_to(&block.block, block.block_height(), block.connected_to())
+            .expect("apply rescan block");
+        wallet.persist(db).expect("persist rescan block");
+    }
+    let mempool = emitter.mempool().expect("rescan mempool");
+    wallet.apply_evicted_txs(mempool.evicted);
+    wallet.apply_unconfirmed_txs(mempool.update);
+    wallet.persist(db).expect("persist rescan mempool");
 }
 
 struct TestKey {
@@ -290,4 +321,81 @@ fn funds_builds_signs_and_broadcasts_a_real_two_of_three_psbt() {
         .unwrap()
         .chain_position
         .is_confirmed());
+}
+
+#[test]
+#[ignore = "requires the isolated Bitcoin Core regtest harness"]
+fn birthday_and_gap_limits_omit_then_restore_known_history() {
+    assert!(std::env::var_os("SATCHEL_RUN_REGTEST").is_some());
+    let keys = keys();
+    let external = descriptor(&keys, 0, None);
+    let internal = descriptor(&keys, 1, None);
+    let mut source_db = Connection::open_in_memory().unwrap();
+    let mut source = Wallet::create(external.clone(), internal.clone())
+        .network(Network::Regtest)
+        .lookahead(50)
+        .create_wallet(&mut source_db)
+        .expect("source descriptor wallet");
+    let addresses = (0..=25)
+        .map(|_| source.reveal_next_address(KeychainKind::External).address)
+        .collect::<Vec<_>>();
+    source.persist(&mut source_db).unwrap();
+
+    let rpc = rpc();
+    let mining = rpc
+        .get_new_address(Some("satchel rescan mining"), None)
+        .unwrap()
+        .require_network(Network::Regtest)
+        .unwrap();
+    let _: bdk_wallet::bitcoin::Txid = rpc
+        .call(
+            "sendtoaddress",
+            &[
+                serde_json::json!(addresses[0].to_string()),
+                serde_json::json!(0.001),
+            ],
+        )
+        .expect("fund first address");
+    rpc.generate_to_address(1, &mining)
+        .expect("mine first payment");
+    let first_height = rpc.get_block_count().expect("first payment height") as u32;
+    let _: bdk_wallet::bitcoin::Txid = rpc
+        .call(
+            "sendtoaddress",
+            &[
+                serde_json::json!(addresses[25].to_string()),
+                serde_json::json!(0.002),
+            ],
+        )
+        .expect("fund address beyond default gap");
+    rpc.generate_to_address(1, &mining)
+        .expect("mine later payment");
+
+    let recover = |lookahead: u32, birthday: u32| {
+        let mut db = Connection::open_in_memory().unwrap();
+        let mut wallet = Wallet::create(external.clone(), internal.clone())
+            .network(Network::Regtest)
+            .lookahead(lookahead)
+            .create_wallet(&mut db)
+            .expect("recovery wallet");
+        rescan_from(&mut wallet, &mut db, birthday);
+        (
+            wallet.balance().total().to_sat(),
+            wallet.transactions().count(),
+        )
+    };
+
+    let late = recover(50, first_height.saturating_add(1));
+    assert_eq!(
+        late.0, 200_000,
+        "late birthday must omit the earlier payment"
+    );
+    let default_gap = recover(20, 0);
+    assert_eq!(default_gap.0, 100_000, "gap 20 must miss index 25 activity");
+    let restored = recover(50, 0);
+    assert_eq!(
+        restored.0, 300_000,
+        "restored birthday and gap recover all funds"
+    );
+    assert_eq!(restored.1, 2, "both payment history entries are restored");
 }

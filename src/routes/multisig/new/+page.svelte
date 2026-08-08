@@ -11,7 +11,7 @@
   import { walletService, WalletError, type CosignerHealthCheck, type HardwareDevice, type MultisigPreview, type RecoveryTemplate, type WalletErrorCode } from '$lib/wallet';
   import { MULTISIG_ACCOUNT_PATH, validatePolicyDraft, type CosignerDraft, type CosignerSource } from '$lib/multisig/policy';
   import { copyText } from '$lib/clipboard';
-  import { downloadText, readTransferFile, safeTransferFilename } from '$lib/transfer';
+  import { coldcardPolicyFilename, downloadText, readTransferFile, safeTransferFilename } from '$lib/transfer';
   import { parsePublicCosignerFile } from '$lib/multisig/cosigner-import';
   import { mergeHardwareDiscovery } from '$lib/hardware/discovery';
 
@@ -240,7 +240,7 @@
   function saveColdcardPolicy() {
     if (!preview) return;
     downloadText(
-      `${safeTransferFilename(preview.name)}-coldcard-policy.txt`,
+      coldcardPolicyFilename(preview.name),
       `# Satchel multisig policy for COLDCARD\n# Import from Settings > Multisig Wallets > Import\n${preview.externalDescriptor}\n`
     );
     toast({ title: 'Coldcard policy saved', description: 'Import it on every Coldcard cosigner, then verify the policy on-device.', tone: 'success' });

@@ -36,8 +36,11 @@ Terminal 2:
 
 ```sh
 cd /Users/thibm/Documents/Codex/2026-07-17/let
-SATCHEL_HWI_PATH=/opt/homebrew/bin/hwi pnpm tauri dev
+test_app_data="$(mktemp -d /tmp/satchel-regtest-native.XXXXXX)"
+SATCHEL_REGTEST_APP_DATA_DIR="$test_app_data" SATCHEL_HWI_PATH=/opt/homebrew/bin/hwi pnpm tauri dev
 ```
+
+Keep the generated path for the entire restart drill. Verify it begins with the canonical system temporary directory and `satchel-regtest-`; remove only that exact disposable directory after Satchel exits. Never point the override at an existing application-data directory.
 
 Run these stories in order:
 
