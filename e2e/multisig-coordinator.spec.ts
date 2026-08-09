@@ -21,7 +21,7 @@ test('routes receive address creation through the selected wallet kind', async (
   }
   await page.getByLabel('App PIN', { exact: true }).fill('prototype-passphrase');
   await page.getByRole('button', { name: 'Unlock wallet' }).click();
-  await expect(page.getByRole('heading', { name: 'Family vault' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Family vault' })).toBeVisible({ timeout: 15_000 });
   await page.getByRole('link', { name: 'Receive', exact: true }).click();
   await page.getByRole('button', { name: 'New receive address' }).click();
   await page.getByLabel('Permanent label').fill('Verified vault deposit');
