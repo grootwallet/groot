@@ -1,7 +1,24 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
   <title id="title">Flattened legacy application icon source</title>
-  <desc id="desc">A rounded Blue Ink enamel tile with the Warm Ivory brand mark centered optically.</desc>
-  <rect x="64" y="64" width="896" height="896" rx="200" fill="#102A4C"/>
+  <desc id="desc">A subtly dimensional rounded Blue Ink enamel tile with the Warm Ivory brand mark centered optically.</desc>
+  <defs>
+    <linearGradient id="enamel" x1="512" y1="64" x2="512" y2="960" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#153557"/>
+      <stop offset="0.48" stop-color="#102A4C"/>
+      <stop offset="1" stop-color="#0D2543"/>
+    </linearGradient>
+    <linearGradient id="edgeLight" x1="512" y1="64" x2="512" y2="960" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.16"/>
+      <stop offset="0.42" stop-color="#FFFFFF" stop-opacity="0.035"/>
+      <stop offset="1" stop-color="#061426" stop-opacity="0.18"/>
+    </linearGradient>
+    <filter id="tileShadow" x="0" y="0" width="1024" height="1024" filterUnits="userSpaceOnUse">
+      <feGaussianBlur stdDeviation="18"/>
+    </filter>
+  </defs>
+  <rect x="82" y="91" width="860" height="860" rx="190" fill="#061426" fill-opacity="0.32" filter="url(#tileShadow)"/>
+  <rect x="64" y="64" width="896" height="896" rx="200" fill="url(#enamel)"/>
+  <rect x="66" y="66" width="892" height="892" rx="198" fill="none" stroke="url(#edgeLight)" stroke-width="4"/>
   <g transform="translate(160 160) scale(5.5)" fill="#F7F3E9">
     <path d="M64 21A54 54 0 0 0 10 75V105Q10 107 12 107H48Q50 107 50 105V91Q50 89 48 89H30Q28 89 28 87V75A36 36 0 0 1 100 75V87Q100 89 98 89H80Q78 89 78 91V105Q78 107 80 107H116Q118 107 118 105V75A54 54 0 0 0 64 21Z"/>
   </g>

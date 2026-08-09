@@ -83,9 +83,9 @@ The default icon is **Ink enamel**: a Warm Ivory symbol on a Blue Ink field.
 
 - Keep the visible symbol near `60%` of tile width.
 - Center the symbol geometrically and verify its optical vertical position at final export size.
-- Modern Apple/platform source art is square and unmasked. Platform tooling owns masks, material, depth, and adaptive effects.
-- Flattened legacy/Tauri exports use the rounded source with transparent exterior corners.
-- Do not bake platform-specific shadows or highlights into the symbol.
+- Modern Apple/platform source art is square, unmasked, and separated into an opaque background plus crisp foreground artwork. Icon Composer owns masks, Liquid Glass material, adaptive depth, and appearance variants.
+- The current Tauri macOS bundle consumes a flattened ICNS rather than an Icon Composer file. Its rounded fallback therefore carries restrained enamel variation, an optical edge, and a bounded tile shadow so it retains material presence and the standard Dock footprint. These effects belong to the tile only; the symbol remains flat and unchanged.
+- Do not bake platform-specific shadows or highlights into the symbol or the modern layered source.
 
 Sources:
 
@@ -93,7 +93,7 @@ Sources:
 - [`assets/brand/app-icon-legacy-source.svg`](../assets/brand/app-icon-legacy-source.svg)
 - [`src-tauri/icons/macos-icon-source.svg`](../src-tauri/icons/macos-icon-source.svg)
 
-Regenerate Tauri exports from the approved legacy source:
+Regenerate cross-platform Tauri exports from the approved legacy source. For a macOS-only correction, generate into a temporary directory and replace only `icon.icns`, `32x32.png`, `64x64.png`, `128x128.png`, and `128x128@2x.png`:
 
 ```sh
 pnpm tauri icon assets/brand/app-icon-legacy-source.svg --ios-color '#102A4C'
