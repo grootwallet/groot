@@ -16,6 +16,7 @@ export type Transaction = {
 export type ReceiveAddress = {
   id: number;
   address: string;
+  testnetAlias?: string | null;
   label: string;
   created: string;
   status: 'awaiting' | 'used' | 'discarded';

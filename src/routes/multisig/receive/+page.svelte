@@ -15,7 +15,8 @@
   import { toast } from '$lib/stores/toasts';
   let label = $state(''); let current = $state<ReceiveAddress | null>(null); let addresses = $state<ReceiveAddress[]>([]);
   let qrDataUrl = $state(''); let busy = $state(false); let ready = $state(false); let generateError = $state(''); let showGenerate = $state(false); let showDiscard = $state(false); let showQr = $state(false); let showDetails = $state(false); let copied = $state(false); let discardTarget = $state<ReceiveAddress | null>(null); let detailAddress = $state<ReceiveAddress | null>(null);
-  let verifyOpen=$state(false),verifyBusy=$state(false),verifyError=$state(''),devices=$state<HardwareDevice[]>([]),verifiedAddressId=$state<number|null>(null);
+  let verifyOpen=$state(false),verifyBusy=$state(false),verifyError=$state(''),devices=$state<HardwareDevice[]>([]),verifiedAddressId=$state<number|null>(null),verificationDevice=$state<HardwareDevice|null>(null);
+  let ledgerVerification=$derived(Boolean(verificationDevice&&`${verificationDevice.label} ${verificationDevice.model}`.toLowerCase().includes('ledger')&&current?.testnetAlias));
   let awaiting = $derived(awaitingPaymentAddresses(addresses)); let history = $derived(addresses.filter((address)=>address.status!=='awaiting'));
   onMount(() => {
     let active = true;
@@ -48,11 +49,12 @@
   $effect(() => { const address = current?.address; qrDataUrl = ''; if (address) QRCode.toDataURL(`bitcoin:${address}`, {width:320,margin:2,errorCorrectionLevel:'M'}).then((value) => { if(current?.address===address) qrDataUrl = value; }); });
   async function generate() { if (busy || !ready || !label.trim()) return; busy = true; generateError=''; try { current = await walletService.createMultisigAddress(label); addresses = [current,...addresses]; label=''; showGenerate=false; toast({title:'Receive address ready',description:'The permanent label is stored with the wallet.',tone:'success'}); } catch(cause){generateError=cause instanceof Error?cause.message:'Could not generate the address.';toast({title:'Could not generate address',description:generateError,tone:'danger'});} finally{busy=false;} }
   async function copy(){if(!current)return;try{await copyText(current.address);copied=true;toast({title:'Address copied',tone:'success'});setTimeout(()=>copied=false,1500);}catch{toast({title:'Copy failed',tone:'danger'});}}
+  async function copyVerificationAddress(){if(!current)return;const address=ledgerVerification?current.testnetAlias!:current.address;try{await copyText(address);copied=true;toast({title:'Address copied',description:'The exact comparison address is on your clipboard.',tone:'success'});setTimeout(()=>copied=false,1500);}catch{toast({title:'Copy failed',description:'Select and copy the address manually.',tone:'danger'});}}
   async function discard(){if(!discardTarget)return;busy=true;try{const id=discardTarget.id;await walletService.discardMultisigAddress(id);addresses=addresses.map((item)=>item.id===id?{...item,status:'discarded'}:item);if(current?.id===id)current=awaitingPaymentAddresses(addresses)[0]??null;discardTarget=null;showDiscard=false;toast({title:'Address discarded'});}catch(cause){toast({title:'Could not discard address',description:cause instanceof Error?cause.message:undefined,tone:'danger'});}finally{busy=false;}}
   function applyAddresses(nextAddresses:ReceiveAddress[]){addresses=nextAddresses;const nextAwaiting=awaitingPaymentAddresses(nextAddresses);current=nextAwaiting.find((address)=>address.id===current?.id)??nextAwaiting[0]??null;}
   const requestDiscard=(address:ReceiveAddress)=>{discardTarget=address;showDiscard=true;};
-  async function scanVerification(){if(!current)return;verifyOpen=true;verifyBusy=true;verifyError='';try{devices=await walletService.listHardwareDevices();}catch(cause){devices=[];verifyError=cause instanceof Error?cause.message:'Could not scan hardware.';}finally{verifyBusy=false;}}
-  async function verifyAddress(device:HardwareDevice){if(!current)return;verifyBusy=true;verifyError='';try{await walletService.verifyMultisigAddress(device.id,current.id);verifiedAddressId=current.id;verifyOpen=false;toast({title:'Address verified on device',description:'The device returned this exact receive address.',tone:'success'});}catch(cause){verifyError=cause instanceof Error?cause.message:'The device could not verify this address.';}finally{verifyBusy=false;}}
+  async function scanVerification(){if(!current)return;verifyOpen=true;verifyBusy=true;verifyError='';verificationDevice=null;try{devices=await walletService.listHardwareDevices();}catch(cause){devices=[];verifyError=cause instanceof Error?cause.message:'Could not scan hardware.';}finally{verifyBusy=false;}}
+  async function verifyAddress(device:HardwareDevice){if(!current)return;verificationDevice=device;verifyBusy=true;verifyError='';try{await walletService.verifyMultisigAddress(device.id,current.id);verifiedAddressId=current.id;verifyOpen=false;toast({title:'Address verified on device',description:'The cosigner displayed the same Bitcoin output at this derivation path.',tone:'success'});}catch(cause){verifyError=cause instanceof Error?cause.message:'The device could not verify this address.';}finally{verifyBusy=false;}}
 </script>
 
 <div class="page narrow-page receive-page">
@@ -69,4 +71,20 @@
 <Modal open={showDiscard} title="Discard {discardTarget?.label??'this receive address'}?" description="It remains monitored but will never be offered again." onclose={()=>{showDiscard=false;discardTarget=null;}}><div class="modal-footer"><Button variant="secondary" onclick={()=>{showDiscard=false;discardTarget=null;}}>Keep address</Button><Button variant="danger" loading={busy} loadingLabel="Discarding…" onclick={discard}>Discard address</Button></div></Modal>
 <Modal open={showQr} title={current?.label??'Receive address'} description="Scan to pay this exact descriptor address." onclose={()=>showQr=false}>{#if current&&qrDataUrl}<div class="large-qr"><img src={qrDataUrl} alt="Large QR code for {current.address}"/><ReadableAddress address={current.address} {copied} oncopy={copy}/></div>{/if}</Modal>
 <AddressDetailsModal address={detailAddress} open={Boolean(detailAddress)} walletType="Descriptor · Native SegWit" onclose={()=>detailAddress=null}/>
-<Modal open={verifyOpen} title="Verify receive address" description="Choose a wallet cosigner, then compare the complete address on its trusted display." onclose={()=>{if(!verifyBusy)verifyOpen=false;}}>{#if verifyBusy}<div class="device-scan compact"><Cpu size={20}/><span>Communicating with hardware…</span></div>{:else}<div class="source-list hardware-device-list">{#each devices as device}<button disabled={device.status!=='ready'&&device.status!=='detected'} onclick={()=>verifyAddress(device)}><Cpu size={18}/><span><strong>{device.label}</strong><small>{device.fingerprint??device.message}</small></span></button>{:else}<p>No compatible device found. Unlock a wallet cosigner and scan again.</p>{/each}</div><Button variant="secondary" onclick={scanVerification}>Scan again</Button>{/if}{#if verifyError}<p class="form-error" role="alert">{verifyError}</p>{/if}</Modal>
+<Modal open={verifyOpen} preserveTop title="Verify receive address" description={ledgerVerification ? "Ledger Bitcoin Test displays the Regtest output with a testnet prefix. Compare the exact Ledger address below." : "Compare the exact address below with the complete address on the cosigner's trusted display."} onclose={()=>{if(!verifyBusy)verifyOpen=false;}}>
+  {#if current}
+    <section class="verification-address" aria-label="Address to compare">
+      <span>{ledgerVerification ? 'Address shown on Ledger' : 'Address to compare'}</span>
+      <ReadableAddress address={ledgerVerification ? current.testnetAlias! : current.address} {copied} oncopy={copyVerificationAddress}/>
+      {#if ledgerVerification}<p class="verification-network-note">Ledger shows <code>tb1</code> because Bitcoin Test has no Regtest address format. Satchel uses <code>bcrt1</code>. The prefix and six-character checksum differ; the decoded Bitcoin output is identical.</p>{/if}
+      <details class="hardware-review-details verification-details"><summary>View address details</summary><dl class="verification-derivation"><div><dt>Derivation</dt><dd><code>{current.derivationPath}</code></dd></div><div><dt>Address index</dt><dd><code>{current.id}</code></dd></div></dl></details>
+    </section>
+  {/if}
+  {#if verifyBusy}
+    <div class="device-scan compact"><Cpu size={20}/><span>Waiting for the hardware signer… Approve only if the complete address above matches its display.</span></div>
+  {:else}
+    <div class="source-list hardware-device-list">{#each devices as device}<button disabled={device.status!=='ready'&&device.status!=='detected'} onclick={()=>verifyAddress(device)}><Cpu size={18}/><span><strong>{device.label}</strong><small>{device.fingerprint??device.message}</small></span></button>{:else}<p>No compatible device found. Unlock a wallet cosigner and scan again.</p>{/each}</div>
+    <Button class="verification-rescan" variant="secondary" onclick={scanVerification}>Scan again</Button>
+  {/if}
+  {#if verifyError}<p class="form-error" role="alert">{verifyError}</p>{/if}
+</Modal>

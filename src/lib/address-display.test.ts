@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compactAddress, groupAddressForDisplay } from './address-display';
+import { compactAddress, compactIdentifier, groupAddressForDisplay, groupIdentifierForDisplay } from './address-display';
 
 describe('readable address display', () => {
   it.each([
@@ -26,5 +26,17 @@ describe('compactAddress', () => {
 
   it('does not alter short values', () => {
     expect(compactAddress('bcrt1qshort')).toBe('bcrt1qshort');
+  });
+});
+
+describe('generic identifier display', () => {
+  const xpub = 'tpubDDnbFYdt4fNTbjRSyzh4LrSiifvPD4tc7SW2C8nWjMurMjwXbfJA9CYhuexample';
+
+  it('preserves both identifying ends of an account public key', () => {
+    expect(compactIdentifier(xpub, 14, 10)).toBe(`${xpub.slice(0, 14)}…${xpub.slice(-10)}`);
+  });
+
+  it('groups without changing the underlying value', () => {
+    expect(groupIdentifierForDisplay(xpub).join('')).toBe(xpub);
   });
 });

@@ -3,15 +3,20 @@
   import { goto } from '$app/navigation';
   import { onDestroy } from 'svelte';
   import Button from '$lib/components/Button.svelte';
+  import IdentifierDetailsModal from '$lib/components/IdentifierDetailsModal.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import PasswordField from '$lib/components/PasswordField.svelte';
+  import SetupProgress from '$lib/components/SetupProgress.svelte';
   import TrezorPinModal from '$lib/components/TrezorPinModal.svelte';
   import { toast } from '$lib/stores/toasts';
   import { readTransferFile } from '$lib/transfer';
+  import { compactIdentifier } from '$lib/address-display';
   import { walletService, WalletError, type ExternalSigner, type ExternalSignerSource, type HardwareDevice, type WalletErrorCode } from '$lib/wallet';
 
+  const hardwareSteps = ['Connect signer', 'Review identity', 'Protect app'];
+
   let step = $state(1), busy = $state(false), scanOpen = $state(false), guideOpen = $state(false);
-  let name = $state('Hardware wallet'), label = $state('Primary signer'), encoded = $state(''), error = $state('');
+  let label = $state(''), encoded = $state(''), error = $state(''), errorCode = $state<WalletErrorCode | ''>('');
   let pin = $state(''), confirmation = $state(''), signer = $state<ExternalSigner|null>(null), devices = $state<HardwareDevice[]>([]);
   let importSource = $state<ExternalSignerSource>('file');
   let standardWalletOpen = $state(false), standardWalletDevice = $state<HardwareDevice|null>(null);
@@ -19,6 +24,8 @@
   let pinOpen = $state(false), pinBusy = $state(false), pinChallenge = $state(''), pinPositions = $state(''), pinError = $state('');
   let pinErrorCode = $state<WalletErrorCode | ''>('');
   let pinDevice = $state<HardwareDevice|null>(null);
+  let xpubOpen = $state(false);
+  let isLedger = $derived(Boolean(signer?.deviceType?.toLowerCase().includes('ledger')));
 
   onDestroy(() => { pin = ''; confirmation = ''; pinPositions = ''; pinChallenge = ''; });
 
@@ -37,7 +44,12 @@
     busy = true;
     hardwareProgress = device.model.startsWith('ledger') ? 'Reading the public account key from Ledger…' : `Reading the public key from ${device.label}…`;
     error = '';
-    try { signer = await walletService.importHardwareExternalSigner(device.id, label, allowEmptyPassphrase); scanOpen = false; standardWalletOpen = false; standardWalletDevice = null; step = 2; }
+    try {
+      const walletLabel = label.trim() || device.label;
+      signer = await walletService.importHardwareExternalSigner(device.id, walletLabel, allowEmptyPassphrase);
+      label = walletLabel;
+      scanOpen = false; standardWalletOpen = false; standardWalletDevice = null; step = 2;
+    }
     catch (cause) { error = cause instanceof Error ? cause.message : 'Could not import the public account key.'; }
     finally { busy = false; }
   }
@@ -85,24 +97,27 @@
   }
   async function create() {
     if (!signer || !pin || pin !== confirmation) return;
-    busy = true; error = '';
+    busy = true; error = ''; errorCode = '';
     try {
-      await walletService.createExternalSignerWallet(name, signer, pin);
+      await walletService.createExternalSignerWallet(signer.label, signer, pin);
       pin = ''; confirmation = '';
       toast({ title: 'Hardware wallet added', description: 'Only public descriptors are stored in Satchel.', tone: 'success' });
       await goto('/');
-    } catch (cause) { error = cause instanceof Error ? cause.message : 'Could not create the wallet.'; }
+    } catch (cause) {
+      errorCode = cause instanceof WalletError ? cause.code : 'internal_error';
+      error = cause instanceof Error ? cause.message : 'Could not create the wallet.';
+    }
     finally { pin = ''; confirmation = ''; busy = false; }
   }
 </script>
 
-<div class="page narrow-page">
+<div class="page narrow-page hardware-setup-page">
   <header class="page-header"><div><p class="eyebrow">EXTERNAL SIGNER</p><h1>Add hardware wallet</h1><p class="subtitle">One key. Signing stays on your hardware device.</p></div><Button variant="secondary" href="/welcome?add=1"><ArrowLeft size={16}/>Cancel</Button></header>
-  <div class="stepper"><span class:active={step>=1}>1</span><i class:active={step>=2}></i><span class:active={step>=2}>2</span><i class:active={step>=3}></i><span class:active={step>=3}>3</span></div>
+  <div class="hardware-setup-progress"><SetupProgress steps={hardwareSteps} current={step} label="Hardware wallet setup progress"/></div>
   {#if step === 1}
     <section class="form-card">
-      <div class="credential-warning"><ShieldCheck size={17}/><p><strong>Prepare the signer first.</strong><span>Initialize and unlock it. Select any hardware passphrase on-device before connecting. Satchel imports public data only.</span></p></div>
-      <label class="field"><span>Signer label</span><input bind:value={label} maxlength="48" placeholder="Primary signer"/></label>
+      <div class="credential-warning hardware-preparation-note"><ShieldCheck size={17}/><p><span>Before connecting, initialize and unlock the signer. Select any hardware passphrase on-device. Satchel imports public data only.</span></p></div>
+      <label class="field"><span>Wallet name</span><input bind:value={label} maxlength="48" placeholder="Defaults to the device model"/><small>This also identifies the signer inside Satchel.</small></label>
       <div class="source-list">
         <button onclick={scan}><Cable size={20}/><span><strong>Connect with cable</strong><small>Jade, BitBox02, Trezor, Ledger, and HWI-compatible devices</small></span><ArrowRight size={17}/></button>
         <label class="source-button"><FileUp size={20}/><span><strong>Import from SD card</strong><small>Passport, Coldcard, Jade, and descriptor exports</small></span><ArrowRight size={17}/><input aria-label="Import public key file" type="file" accept=".json,.txt,.bsms,.desc,application/json,text/plain" onchange={loadFile}/></label>
@@ -117,23 +132,37 @@
       {#if error}<p class="form-error">{error}</p>{/if}
     </section>
   {:else if step === 2 && signer}
-    <section class="form-card">
+    <section class="form-card hardware-review-card">
       <span class="setup-step">PUBLIC DATA REVIEW</span><h2>{signer.label}</h2>
-      <dl class="details-list"><div><dt>Fingerprint</dt><dd class="mono">{signer.fingerprint}</dd></div><div><dt>Account path</dt><dd class="mono">{signer.derivationPath}</dd></div><div><dt>Source</dt><dd>{signer.source}</dd></div><div><dt>Account xpub</dt><dd class="mono break-value">{signer.xpub}</dd></div></dl>
-      <div class="credential-warning"><ShieldCheck size={17}/><p><strong>Verify the fingerprint.</strong><span>Compare it with the value shown by the hardware wallet or its trusted export.</span></p></div>
-      <div class="split-actions"><Button variant="secondary" onclick={() => { signer=null; step=1; }}>Back</Button><Button onclick={() => step=3}>Fingerprint matches<ArrowRight size={17}/></Button></div>
+      <dl class="details-list"><div><dt>Fingerprint</dt><dd class="mono">{signer.fingerprint}</dd></div><div><dt>Account path</dt><dd class="mono">{signer.derivationPath}</dd></div><div><dt>Source</dt><dd>{signer.source}</dd></div><div><dt>Account xpub</dt><dd><button type="button" class="address-review-trigger mono" aria-label="View complete account public key" onclick={() => xpubOpen = true}>{compactIdentifier(signer.xpub, 14, 10)}</button></dd></div></dl>
+      {#if isLedger}
+        <div class="credential-warning"><ShieldCheck size={17}/><p><strong>This identifies the wallet currently open on Ledger.</strong><span>A different seed or passphrase produces a different fingerprint and completely different addresses. Nano S Plus does not display this fingerprint, so verify your first receive address on Ledger before using the wallet.</span></p></div>
+        <details class="ledger-passphrase-help"><summary>Want to use a Ledger passphrase?</summary><p>Set it directly on Ledger before importing: open device Settings → Security → Passphrase, then choose a temporary passphrase or attach one to a secondary PIN. Go back and import again after activating that wallet. Satchel never receives the passphrase.</p></details>
+      {:else}
+        <div class="credential-warning"><ShieldCheck size={17}/><p><strong>Verify the fingerprint.</strong><span>Compare it with the value shown by the hardware wallet or its trusted export. A different seed or passphrase produces a different wallet.</span></p></div>
+      {/if}
+      <div class="split-actions"><Button variant="secondary" onclick={() => { signer=null; step=1; }}>Back</Button><Button onclick={() => step=3}>{isLedger ? 'Use this Ledger wallet' : 'Fingerprint matches'}<ArrowRight size={17}/></Button></div>
     </section>
   {:else if signer}
-    <form class="form-card" onsubmit={(event) => { event.preventDefault(); create(); }}>
-      <span class="setup-step">LOCAL PROTECTION</span><h2>Protect this wallet</h2><p>The app PIN unlocks Satchel and authorizes broadcast. It is separate from any passphrase entered on your hardware device.</p>
-      <label class="field"><span>Wallet name</span><input bind:value={name} maxlength="48"/></label>
-      <PasswordField label="App PIN" bind:value={pin} autocomplete="new-password" hint="Each Satchel wallet can use a different PIN."/>
+    <form class="form-card hardware-protection-card" onsubmit={(event) => { event.preventDefault(); create(); }}>
+      <h2>Set an app PIN</h2><p>This unlocks this wallet in Satchel. Sending bitcoin still requires your hardware signer. It is separate from the PIN and passphrase on that device.</p>
+      <PasswordField label="App PIN" bind:value={pin} autocomplete="new-password" hint="It can be different for every wallet in Satchel."/>
       <PasswordField label="Confirm app PIN" bind:value={confirmation} autocomplete="new-password" error={confirmation && pin !== confirmation ? 'PINs do not match.' : ''}/>
-      {#if error}<p class="form-error">{error}</p>{/if}
-      <div class="split-actions"><Button variant="secondary" onclick={() => step=2}>Back</Button><Button type="submit" disabled={!name.trim()||!pin||pin!==confirmation} loading={busy} loadingLabel="Creating wallet…"><Check size={17}/>Create wallet</Button></div>
+      {#if error}
+        <div class="hardware-inline-error hardware-create-error" role="alert">
+          <AlertTriangle size={18}/>
+          <span>
+            <strong>{errorCode === 'wallet_already_exists' ? 'This hardware wallet is already in Satchel' : 'Could not create the wallet'}</strong>
+            <small>{errorCode === 'wallet_already_exists' ? 'Satchel matched the same public descriptor. No duplicate was created and nothing was changed. Open the existing wallet instead.' : error}</small>
+          </span>
+          {#if errorCode === 'wallet_already_exists'}<Button variant="secondary" size="small" onclick={() => goto('/')}>Open wallet</Button>{/if}
+        </div>
+      {/if}
+      <div class="split-actions"><Button variant="secondary" onclick={() => { error=''; errorCode=''; step=2; }}>Back</Button><Button type="submit" disabled={!pin||pin!==confirmation} loading={busy} loadingLabel="Creating wallet…"><Check size={17}/>Create wallet</Button></div>
     </form>
   {/if}
 </div>
+<IdentifierDetailsModal value={signer?.xpub ?? ''} open={xpubOpen && Boolean(signer)} title="Account public key" description="Complete watch-only key imported from this signer." label="Account xpub" onclose={() => xpubOpen=false}/>
 
 <Modal open={scanOpen} title="Connect hardware signer" description="Quit manufacturer wallet apps after unlocking; only one app can own the USB session." onclose={() => scanOpen=false}>
   {#if busy}<div class="device-scan"><Cpu size={20}/><strong>{hardwareProgress}</strong>{#if hardwareProgress.includes('Ledger')}<span>For Regtest, keep Bitcoin Test open—not Bitcoin. Confirm on Ledger only if its screen asks.</span>{/if}</div>{:else if !devices.length}<div class="device-scan"><strong>No device found</strong><span>HWI returned no device. For Coldcard, sign in first, enable its USB port, reconnect, then scan again. Other signers must be initialized, unlocked, and released by companion apps.</span><Button variant="secondary" onclick={scan}>Scan again</Button></div>{:else}<div class="source-list hardware-device-list">{#each devices as device}<button onclick={() => useDevice(device)} disabled={busy}><Cpu size={18}/><span><strong>{device.label}</strong><small>{device.fingerprint ? `Fingerprint ${device.fingerprint} · ${device.message}` : device.message}</small></span><em class:ready={device.status === 'ready'}>{device.status === 'ready' ? 'Ready' : device.status === 'detected' ? 'Detected' : device.action === 'confirm_empty_passphrase' ? 'Choose wallet' : 'Attention'}</em></button>{/each}</div>{/if}

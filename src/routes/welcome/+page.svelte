@@ -166,31 +166,31 @@
 
 <div class="onboarding-overlay">
   <header class="onboarding-brand"><span class="brand-mark"><BrandMark /></span><span>Satchel</span><small>{networkName(defaultConfig.network).toUpperCase()}</small>{#if hasExistingWallet}<button class="onboarding-exit" aria-label="Close wallet setup" onclick={returnToWallet}><X size={17}/></button>{/if}</header>
-  <main class="onboarding-card">
+  <main class="onboarding-card" class:wallet-choice-card={mode === 'choose'}>
     {#if mode === 'home'}
       <span class="hero-mark"><BrandMark size={34} /></span><h1>{hasExistingWallet ? 'Add a wallet' : 'Your bitcoin.\nSimply held.'}</h1><p>{hasExistingWallet ? 'Choose how this wallet will be secured.' : 'Create a new wallet or recover one you already own.'}</p><div class="onboarding-actions simple"><Button size="large" class="full" onclick={() => mode = 'choose'}>Create new wallet<ArrowRight size={17} /></Button><Button size="large" variant="secondary" class="full" onclick={() => mode = 'recover'}>Recover wallet</Button></div><div class="trust-line"><ShieldCheck size={15} />Non-custodial · Onchain only</div>
     {:else if mode === 'choose'}
       <button class="back-link" onclick={() => mode = 'home'}><ArrowLeft size={16} />Back</button>
       <span class="setup-step wallet-choice-step">NEW WALLET</span>
-      <h1>Choose wallet type</h1>
-      <p>How do you want to secure it?</p>
+      <h1>How should this wallet be protected?</h1>
+      <p>Choose the setup that fits you. You can add another wallet later.</p>
       <div class="wallet-type-grid">
         <button class="wallet-type-card recommended" onclick={() => mode = 'create'}>
           <span class="wallet-type-icon"><KeyRound size={20} /></span>
-          <span class="wallet-type-copy"><strong>Software wallet</strong><small>24 recovery words on this device</small></span>
-          <span class="wallet-type-meta">Simple</span>
+          <span class="wallet-type-copy"><strong>Use this device</strong><small>Satchel creates the wallet and its recovery words here.</small></span>
+          <span class="wallet-type-meta">Simplest</span>
           <ArrowRight class="wallet-type-arrow" size={17} />
         </button>
         <a class="wallet-type-card" href="/hardware/new">
           <span class="wallet-type-icon"><Cpu size={20} /></span>
-          <span class="wallet-type-copy"><strong>Hardware wallet</strong><small>One key stays on your signer</small></span>
-          <span class="wallet-type-meta">External key</span>
+          <span class="wallet-type-copy"><strong>Use a hardware wallet</strong><small>Approve payments on a separate signing device.</small></span>
+          <span class="wallet-type-meta">Separate device</span>
           <ArrowRight class="wallet-type-arrow" size={17} />
         </a>
         <a class="wallet-type-card" href="/multisig/new">
           <span class="wallet-type-icon"><Users size={20} /></span>
-          <span class="wallet-type-copy"><strong>Shared or recovery</strong><small>Multiple keys or a recovery path</small></span>
-          <span class="wallet-type-meta">Advanced</span>
+          <span class="wallet-type-copy"><strong>Use multiple keys</strong><small>Share control or build in a recovery path.</small></span>
+          <span class="wallet-type-meta">More control</span>
           <ArrowRight class="wallet-type-arrow" size={17} />
         </a>
       </div>

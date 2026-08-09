@@ -528,10 +528,46 @@ fn aggregate_pending_balance(trusted_pending: u64, untrusted_pending: u64) -> u6
 pub struct ReceiveAddressDto {
     id: u32,
     address: String,
+    testnet_alias: Option<String>,
     label: String,
     created: String,
     status: String,
     derivation_path: String,
+}
+
+fn regtest_testnet_address_alias(address: &str) -> Option<String> {
+    if NETWORK != Network::Regtest {
+        return None;
+    }
+    let address = Address::from_str(address)
+        .ok()?
+        .require_network(Network::Regtest)
+        .ok()?;
+    Address::from_script(&address.script_pubkey(), Network::Testnet)
+        .ok()
+        .map(|alias| alias.to_string())
+}
+
+fn hardware_display_matches_expected_address(expected: &str, actual: &str) -> bool {
+    if actual == expected {
+        return true;
+    }
+    if NETWORK != Network::Regtest {
+        return false;
+    }
+    let Some(expected) = Address::from_str(expected)
+        .ok()
+        .and_then(|address| address.require_network(Network::Regtest).ok())
+    else {
+        return false;
+    };
+    let Some(actual) = Address::from_str(actual)
+        .ok()
+        .and_then(|address| address.require_network(Network::Testnet).ok())
+    else {
+        return false;
+    };
+    expected.script_pubkey() == actual.script_pubkey()
 }
 
 #[derive(Serialize)]
@@ -3059,9 +3095,11 @@ fn address_rows(db: &Connection, multisig: bool) -> ApiResult<Vec<ReceiveAddress
         .map_err(internal)?;
     let rows = statement
         .query_map([], |row| {
+            let address: String = row.get(1)?;
             Ok(ReceiveAddressDto {
                 id: row.get(0)?,
-                address: row.get(1)?,
+                testnet_alias: regtest_testnet_address_alias(&address),
+                address,
                 label: row.get(2)?,
                 created: row.get::<_, u64>(3)?.to_string(),
                 status: row.get(4)?,
@@ -3545,6 +3583,7 @@ pub fn address_create(
     transaction.commit().map_err(internal)?;
     Ok(ReceiveAddressDto {
         id: info.index,
+        testnet_alias: regtest_testnet_address_alias(&info.address.to_string()),
         address: info.address.to_string(),
         label,
         created: created.to_string(),
@@ -4655,7 +4694,7 @@ pub async fn hardware_verify_multisig_address(
             "The device did not return the displayed address.",
         )
     })?;
-    if actual != expected {
+    if !hardware_display_matches_expected_address(&expected, &actual) {
         return Err(api_error(
             "hardware_address_mismatch",
             "The address returned by the device does not match this wallet.",
@@ -4730,7 +4769,7 @@ pub async fn hardware_verify_external_address(
             "The device did not return the displayed address.",
         )
     })?;
-    if actual != expected {
+    if !hardware_display_matches_expected_address(&expected, &actual) {
         return Err(api_error(
             "hardware_address_mismatch",
             "The address returned by the device does not match this wallet.",
@@ -5119,6 +5158,7 @@ pub fn multisig_address_create(
     transaction.commit().map_err(internal)?;
     Ok(ReceiveAddressDto {
         id: info.index,
+        testnet_alias: regtest_testnet_address_alias(&info.address.to_string()),
         address: info.address.to_string(),
         label,
         created: created.to_string(),
@@ -6330,6 +6370,23 @@ mod tests {
     fn pending_balance_includes_trusted_and_untrusted_outputs() {
         assert_eq!(aggregate_pending_balance(100_000, 249_000), 349_000);
         assert_eq!(aggregate_pending_balance(u64::MAX, 1), u64::MAX);
+    }
+
+    #[test]
+    fn regtest_ledger_alias_must_decode_to_the_identical_output_script() {
+        let regtest = "bcrt1qf6n3a54f4nqc5976hjl556ukfdas8xsnf8k9mz";
+        let ledger = regtest_testnet_address_alias(regtest).expect("valid Regtest address");
+        assert_eq!(ledger, "tb1qf6n3a54f4nqc5976hjl556ukfdas8xsntw0gvt");
+        assert!(hardware_display_matches_expected_address(regtest, &ledger));
+        assert!(hardware_display_matches_expected_address(regtest, regtest));
+
+        let other = regtest_testnet_address_alias("bcrt1q5spdlkwvajjz9t0nvsqygmeaagxts4sqxy3a7t")
+            .expect("valid different Regtest address");
+        assert!(!hardware_display_matches_expected_address(regtest, &other));
+        assert!(!hardware_display_matches_expected_address(
+            regtest,
+            "not-an-address"
+        ));
     }
 
     #[test]

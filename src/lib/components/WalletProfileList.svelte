@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Check, ChevronRight, KeyRound, ShieldCheck, WalletCards } from '@lucide/svelte';
+  import Tooltip from './Tooltip.svelte';
   import type { WalletProfile } from '$lib/wallet/contracts';
 
   let { profiles, selectedWalletId, onselect, compact = false } = $props<{
@@ -8,7 +9,6 @@
     onselect: (walletId: string) => void | Promise<void>;
     compact?: boolean;
   }>();
-
   function kindLabel(profile: WalletProfile) {
     return profile.kind === 'multisig' ? 'Multisig' : profile.kind === 'watch_only' ? 'Hardware signer' : 'Single-key';
   }
@@ -16,7 +16,7 @@
 
 <ul class:compact class="wallet-profile-list" aria-label="Wallets">
   {#each profiles as profile}
-    <li><button
+    <li><Tooltip text={profile.name} truncatedSelector=".wallet-profile-copy strong"><button
         type="button"
         class:active={profile.id === selectedWalletId}
         aria-current={profile.id === selectedWalletId ? 'true' : undefined}
@@ -30,6 +30,6 @@
         </span>
         <span class="wallet-profile-copy"><strong>{profile.name}</strong><small>{kindLabel(profile)}</small></span>
         {#if profile.id === selectedWalletId}<Check size={15}/>{:else}<ChevronRight size={15}/>{/if}
-      </button></li>
+      </button></Tooltip></li>
   {/each}
 </ul>
