@@ -23,6 +23,8 @@
   --surface-control: #111722;
   --surface-inset: #101620;
   --surface-icon: #202a39;
+  --brand-tile: #11110f;
+  --brand-mark: #f7f6f2;
   --surface-hover: #1b2534;
   --surface-active: #202b3d;
   --control-border: #354158;
@@ -91,7 +93,7 @@ code { font-family: "SFMono-Regular", Consolas, ui-monospace, monospace; }
 .unlock-wallet-picker { margin: -7px 0 18px; display: grid; gap: 8px; }
 .unlock-wallet-picker > span { color: var(--text-soft); font-size: 11px; font-weight: 600; }
 .brand { height: 42px; display: flex; align-items: center; gap: 10px; padding: 0 8px; font-weight: 650; letter-spacing: -.02em; }
-.brand-mark { width: 29px; height: 29px; border-radius: 7px; background: linear-gradient(90deg,var(--fr-blue) 0 33%,#f7f4ec 33% 66%,var(--fr-red) 66%); color: #111827; display: inline-flex; align-items: center; justify-content: center; font-weight: 750; }
+.brand-mark { width: 29px; height: 29px; flex: 0 0 auto; border-radius: 7px; background: var(--brand-tile); color: var(--brand-mark); display: inline-flex; align-items: center; justify-content: center; }
 .side-nav { margin-top: 34px; display: grid; gap: 4px; }
 .side-nav a, .sidebar-bottom > a { display: flex; align-items: center; gap: 11px; height: 40px; padding: 0 11px; border-radius: 7px; color: var(--muted); font-size: 14px; transition: color .16s ease, background-color .16s ease, box-shadow .16s ease; }
 .side-nav a:hover, .sidebar-bottom > a:hover { color: var(--text-soft); background: var(--surface-hover); }
@@ -470,7 +472,7 @@ code { font-family: "SFMono-Regular", Consolas, ui-monospace, monospace; }
 .onboarding-card { width: min(470px, calc(100% - 36px)); margin: auto; padding: 40px 42px; color: var(--text); background: var(--panel); border: 1px solid var(--border-strong); border-radius: 14px; box-shadow: 0 30px 100px rgba(0,0,0,.3); }
 .onboarding-card > h1 { color: var(--text); font-size: 31px; line-height: 1.16; letter-spacing: -.04em; margin: 20px 0 0; }
 .onboarding-card > p { color: var(--muted); font-size: 13px; line-height: 1.6; margin: 13px 0 28px; }
-.hero-mark { width: 46px; height: 46px; background: var(--accent); color: var(--accent-contrast); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 24px; }
+.hero-mark { width: 46px; height: 46px; background: var(--brand-tile); color: var(--brand-mark); border-radius: 12px; display: flex; align-items: center; justify-content: center; }
 .onboarding-actions { display: grid; gap: 9px; }
 .wallet-type-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .wallet-type-card { position: relative; min-width: 0; min-height: 168px; padding: 16px; display: flex; flex-direction: column; align-items: flex-start; gap: 14px; color: var(--text); background: var(--surface-control); border: 1px solid var(--control-border); border-radius: 11px; text-align: left; text-decoration: none; cursor: pointer; transition: transform .15s ease, border-color .15s ease, background .15s ease, box-shadow .15s ease; }

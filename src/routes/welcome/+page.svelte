@@ -1,6 +1,7 @@
 <script lang="ts">
   import { ArrowLeft, ArrowRight, Check, Cpu, Eye, EyeOff, KeyRound, ShieldCheck, Users, X } from '@lucide/svelte';
   import Button from '$lib/components/Button.svelte';
+  import BrandMark from '$lib/components/BrandMark.svelte';
   import PasswordField from '$lib/components/PasswordField.svelte';
   import SetupProgress from '$lib/components/SetupProgress.svelte';
   import { toast } from '$lib/stores/toasts';
@@ -164,10 +165,10 @@
 </script>
 
 <div class="onboarding-overlay">
-  <header class="onboarding-brand"><span class="brand-mark">₿</span><span>Satchel</span><small>{networkName(defaultConfig.network).toUpperCase()}</small>{#if hasExistingWallet}<button class="onboarding-exit" aria-label="Close wallet setup" onclick={returnToWallet}><X size={17}/></button>{/if}</header>
+  <header class="onboarding-brand"><span class="brand-mark"><BrandMark /></span><span>Satchel</span><small>{networkName(defaultConfig.network).toUpperCase()}</small>{#if hasExistingWallet}<button class="onboarding-exit" aria-label="Close wallet setup" onclick={returnToWallet}><X size={17}/></button>{/if}</header>
   <main class="onboarding-card">
     {#if mode === 'home'}
-      <span class="hero-mark">₿</span><h1>{hasExistingWallet ? 'Add a wallet' : 'Your bitcoin.\nSimply held.'}</h1><p>{hasExistingWallet ? 'Choose how this wallet will be secured.' : 'Create a new wallet or recover one you already own.'}</p><div class="onboarding-actions simple"><Button size="large" class="full" onclick={() => mode = 'choose'}>Create new wallet<ArrowRight size={17} /></Button><Button size="large" variant="secondary" class="full" onclick={() => mode = 'recover'}>Recover wallet</Button></div><div class="trust-line"><ShieldCheck size={15} />Non-custodial · Onchain only</div>
+      <span class="hero-mark"><BrandMark size={34} /></span><h1>{hasExistingWallet ? 'Add a wallet' : 'Your bitcoin.\nSimply held.'}</h1><p>{hasExistingWallet ? 'Choose how this wallet will be secured.' : 'Create a new wallet or recover one you already own.'}</p><div class="onboarding-actions simple"><Button size="large" class="full" onclick={() => mode = 'choose'}>Create new wallet<ArrowRight size={17} /></Button><Button size="large" variant="secondary" class="full" onclick={() => mode = 'recover'}>Recover wallet</Button></div><div class="trust-line"><ShieldCheck size={15} />Non-custodial · Onchain only</div>
     {:else if mode === 'choose'}
       <button class="back-link" onclick={() => mode = 'home'}><ArrowLeft size={16} />Back</button>
       <span class="setup-step wallet-choice-step">NEW WALLET</span>

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { page } from '$app/state';
-  import { Activity, ArrowDownToLine, ArrowUpFromLine, Bitcoin, CircleDot, LayoutGrid, Plus, Settings, ShieldCheck } from '@lucide/svelte';
+  import { Activity, ArrowDownToLine, ArrowUpFromLine, CircleDot, LayoutGrid, Plus, Settings, ShieldCheck } from '@lucide/svelte';
+  import BrandMark from './BrandMark.svelte';
   import ToastHost from './ToastHost.svelte';
   import WalletProfileList from './WalletProfileList.svelte';
   import NetworkStatus from './NetworkStatus.svelte';
@@ -124,7 +125,7 @@
 
 <div class="app-shell" class:onboarding-shell={onboardingRoute} class:mobile-actions-visible={showQuickActions}>
   <aside class="sidebar">
-    <a class="brand" href="/"><span class="brand-mark"><Bitcoin size={18} /></span><span>Satchel</span></a>
+    <a class="brand" href="/"><span class="brand-mark"><BrandMark /></span><span>Satchel</span></a>
     {#if profiles.length}
       <div class="wallet-switcher">
         <span class="wallet-switcher-label">{t('wallets', $locale)} <strong>{formatWalletCount(profiles.length, $locale)}</strong></span>
