@@ -125,16 +125,17 @@ export class TauriWalletAdapter implements WalletPort {
   createExternalSignerWallet(name: string, signer: ExternalSigner, credential: string) { return command<ExternalSignerWallet>('external_signer_create', { name, signer, credential }); }
   externalSignerWallet() { return command<ExternalSignerWallet>('external_signer_wallet'); }
   externalSignerProposals() { return command<MultisigProposal[]>('external_signer_proposals'); }
-  importExternalSignerProposal(proposalId: string, signedPsbt: string) { return command<MultisigProposal>('external_signer_proposal_import', { proposalId, signedPsbt }); }
-  signExternalWithHardware(proposalId: string, deviceId: string) { return command<MultisigProposal>('hardware_sign_external', { proposalId, deviceId }); }
-  async broadcastExternalSignerProposal(proposalId: string, credential: string) {
-    const result = await command<BroadcastResult>('external_signer_proposal_broadcast', { proposalId, credential });
+  importExternalSignerProposal(proposalId: string, reviewedPsbt: string, signedPsbt: string) { return command<MultisigProposal>('external_signer_proposal_import', { proposalId, reviewedPsbt, signedPsbt }); }
+  signExternalWithHardware(proposalId: string, deviceId: string, reviewedPsbt: string) { return command<MultisigProposal>('hardware_sign_external', { proposalId, deviceId, reviewedPsbt }); }
+  async broadcastExternalSignerProposal(proposalId: string, reviewedPsbt: string, credential: string) {
+    const result = await command<BroadcastResult>('external_signer_proposal_broadcast', { proposalId, reviewedPsbt, credential });
     result.snapshot = normalizeSnapshot(result.snapshot);
     this.#last = result.snapshot;
     await this.#drainNotifications(false);
     return result;
   }
   cancelExternalSignerProposal(proposalId: string) { return command<void>('external_signer_proposal_cancel', { proposalId }); }
+  verifyExternalAddress(deviceId: string, addressId: number) { return command<void>('hardware_verify_external_address', { deviceId, addressId }); }
   previewMultisig(policy: PolicyDraft) { return command<MultisigPreview>('multisig_preview', { policy }); }
   analyzeRecoveryPolicy(template: RecoveryTemplate, cosigners: PolicyDraft['cosigners']) { return command<RecoveryPolicyAnalysis>('recovery_policy_analyze', { template, cosigners }); }
   createMultisig(policy: PolicyDraft, credential: string) { return command<MultisigWallet>('multisig_create', { policy, credential }); }
@@ -153,13 +154,14 @@ export class TauriWalletAdapter implements WalletPort {
   async syncMultisig() { const snapshot = normalizeSnapshot(await command<WalletSnapshot>('multisig_sync')); this.#last = snapshot; await this.#drainNotifications(true); this.#emit({ type: 'wallet_updated', walletKind: 'multisig', snapshot }); return snapshot; }
   createMultisigAddress(label: string) { return command<ReceiveAddress>('multisig_address_create', { label }).then(normalizeAddress); }
   discardMultisigAddress(id: number) { return command<void>('multisig_address_discard', { id }); }
+  verifyMultisigAddress(deviceId: string, addressId: number) { return command<void>('hardware_verify_multisig_address', { deviceId, addressId }); }
   prepareMultisigPayment(recipient: string, label: string, amount: Sats, feeRate: FeeRate, coinSelection: CoinSelection = { mode: 'auto' }) { return command<MultisigProposal>('multisig_tx_prepare', { recipient, label, amount, feeRate, coinSelection }); }
   prepareMultisigAcceleration(txid: string, method: import('./contracts').AccelerationMethod, feeRate: FeeRate) { return command<MultisigProposal>('multisig_acceleration_prepare', { txid, method, feeRate }); }
   multisigProposals() { return command<MultisigProposal[]>('multisig_proposals'); }
-  importMultisigProposal(proposalId: string, signedPsbt: string) { return command<MultisigProposal>('multisig_proposal_import', { proposalId, signedPsbt }); }
-  signMultisigWithHardware(proposalId: string, deviceId: string) { return command<MultisigProposal>('hardware_sign_multisig', { proposalId, deviceId }); }
-  async broadcastMultisigProposal(proposalId: string, credential: string) {
-    const result = await command<BroadcastResult>('multisig_proposal_broadcast', { proposalId, credential });
+  importMultisigProposal(proposalId: string, reviewedPsbt: string, signedPsbt: string) { return command<MultisigProposal>('multisig_proposal_import', { proposalId, reviewedPsbt, signedPsbt }); }
+  signMultisigWithHardware(proposalId: string, deviceId: string, reviewedPsbt: string) { return command<MultisigProposal>('hardware_sign_multisig', { proposalId, deviceId, reviewedPsbt }); }
+  async broadcastMultisigProposal(proposalId: string, reviewedPsbt: string, credential: string) {
+    const result = await command<BroadcastResult>('multisig_proposal_broadcast', { proposalId, reviewedPsbt, credential });
     result.snapshot = normalizeSnapshot(result.snapshot);
     await this.#drainNotifications(true);
     return result;

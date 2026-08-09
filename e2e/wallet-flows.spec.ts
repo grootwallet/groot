@@ -284,6 +284,16 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   await page.getByRole('button', { name: 'Create wallet' }).click();
   await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible();
 
+  await page.getByRole('link', { name: 'Receive', exact: true }).click();
+  await page.getByRole('button', { name: 'New receive address' }).click();
+  await page.getByLabel('Permanent label').fill('Verified deposit');
+  await page.getByRole('button', { name: 'Generate address' }).click();
+  await expect(page.getByText('Not yet verified on hardware')).toBeVisible();
+  await page.getByRole('button', { name: 'Verify on device' }).click();
+  await page.getByRole('button', { name: /Virtual Coldcard/ }).click();
+  await expect(page.getByText('Verified on the saved hardware signer this session')).toBeVisible();
+
+  await page.getByRole('link', { name: 'Overview' }).click();
   await page.getByRole('link', { name: 'Send', exact: true }).click();
   await page.getByLabel('Bitcoin address').fill('bcrt1qreceiver0000000000000000000000000000000');
   await page.getByLabel('Payment label').fill('Hardware test payment');

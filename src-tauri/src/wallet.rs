@@ -611,6 +611,18 @@ pub struct PaymentProposalDto {
     change_addresses: Vec<String>,
     output_count: usize,
     selected_outpoints: Vec<String>,
+    inputs: Vec<ProposalInputDto>,
+    locktime: u32,
+    rbf: bool,
+    network: &'static str,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProposalInputDto {
+    outpoint: String,
+    amount: u64,
+    sequence: u32,
 }
 
 #[derive(Deserialize)]
@@ -679,6 +691,10 @@ pub struct MultisigProposalDto {
     change_addresses: Vec<String>,
     output_count: usize,
     selected_outpoints: Vec<String>,
+    inputs: Vec<ProposalInputDto>,
+    locktime: u32,
+    rbf: bool,
+    network: &'static str,
     psbt: String,
     signed: usize,
     required: usize,
@@ -703,7 +719,7 @@ pub struct RecoveryDrillDto {
     matches_current_wallet: bool,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 struct HwiDevice {
     #[serde(default)]
     fingerprint: Option<String>,
@@ -1667,8 +1683,9 @@ fn open_db(app: &AppHandle) -> ApiResult<Connection> {
             "No wallet exists on this device.",
         ));
     }
-    let db = open_wallet_database(&path)?;
+    let mut db = open_wallet_database(&path)?;
     init_app_schema(&db)?;
+    validate_selected_wallet_database_identity(app, &mut db, WalletKind::SingleKey)?;
     Ok(db)
 }
 
@@ -1680,9 +1697,77 @@ fn open_multisig_db(app: &AppHandle) -> ApiResult<Connection> {
             "No multisig wallet exists on this device.",
         ));
     }
-    let db = open_wallet_database(&path)?;
+    let mut db = open_wallet_database(&path)?;
     init_app_schema(&db)?;
+    validate_selected_wallet_database_identity(app, &mut db, WalletKind::Multisig)?;
     Ok(db)
+}
+
+fn validate_selected_wallet_database_identity(
+    app: &AppHandle,
+    db: &mut Connection,
+    ordinary_kind: WalletKind,
+) -> ApiResult<()> {
+    let profile = selected_profile(app)?;
+    let expected_kind = if ordinary_kind == WalletKind::SingleKey {
+        match profile.kind {
+            WalletKind::SingleKey | WalletKind::WatchOnly => profile.kind.clone(),
+            _ => ordinary_kind,
+        }
+    } else {
+        ordinary_kind
+    };
+    if profile.kind != expected_kind {
+        return Err(api_error(
+            "wrong_wallet_kind",
+            "The selected wallet does not support this operation.",
+        ));
+    }
+    let wallet = load_wallet(db)?;
+    let external = wallet.public_descriptor(KeychainKind::External).to_string();
+    let internal_descriptor = wallet.public_descriptor(KeychainKind::Internal).to_string();
+    let expected_descriptors = match profile.kind {
+        WalletKind::WatchOnly => {
+            let metadata = read_external_signer_metadata(app)?;
+            Some((metadata.external_descriptor, metadata.internal_descriptor))
+        }
+        WalletKind::Multisig => {
+            let metadata = read_multisig_metadata(app)?;
+            Some((metadata.external_descriptor, metadata.internal_descriptor))
+        }
+        WalletKind::SingleKey => None,
+    };
+    validate_loaded_descriptors(
+        &profile,
+        &external,
+        &internal_descriptor,
+        expected_descriptors
+            .as_ref()
+            .map(|(external, internal)| (external.as_str(), internal.as_str())),
+    )
+}
+
+fn validate_loaded_descriptors(
+    profile: &WalletProfile,
+    external: &str,
+    internal_descriptor: &str,
+    expected_descriptors: Option<(&str, &str)>,
+) -> ApiResult<()> {
+    if descriptor_checksum(external)? != profile.descriptor_checksum {
+        return Err(api_error(
+            "wallet_corrupt",
+            "The wallet database does not match the registered wallet identity.",
+        ));
+    }
+    if expected_descriptors.is_some_and(|(expected_external, expected_internal)| {
+        external != expected_external || internal_descriptor != expected_internal
+    }) {
+        return Err(api_error(
+            "wallet_corrupt",
+            "The wallet database descriptors do not match the authenticated wallet identity.",
+        ));
+    }
+    Ok(())
 }
 
 fn load_wallet(db: &mut Connection) -> ApiResult<PersistedWallet<Connection>> {
@@ -2288,13 +2373,14 @@ fn proposal_dto(
     metadata: &MultisigWalletDto,
     wallet: &Wallet,
 ) -> ApiResult<MultisigProposalDto> {
-    let (proposal_id, recipient, label, amount, fee, fee_rate, encoded, status, created_at) = row;
+    let (proposal_id, recipient, label, amount, fee, _fee_rate, encoded, status, created_at) = row;
     let psbt = decode_psbt(&encoded).map_err(proposal_api_error)?;
     validate_proposal_fee(&psbt, fee)?;
     let fingerprints = multisig_fingerprints(metadata)?;
     let progress =
         signature_progress(&psbt, &fingerprints, metadata.threshold).map_err(proposal_api_error)?;
     let (change, change_addresses) = proposal_change_details(wallet, &psbt, &recipient, amount)?;
+    let (inputs, fee_rate, locktime, rbf) = proposal_transaction_details(wallet, &psbt, fee)?;
     Ok(MultisigProposalDto {
         proposal_id,
         recipient,
@@ -2312,6 +2398,10 @@ fn proposal_dto(
             .iter()
             .map(|input| input.previous_output.to_string())
             .collect(),
+        inputs,
+        locktime,
+        rbf,
+        network: "regtest",
         psbt: encoded,
         signed: progress.signed,
         required: progress.required,
@@ -2370,10 +2460,7 @@ fn proposal_change_details(
 }
 
 fn validate_proposal_fee(psbt: &Psbt, expected_fee: u64) -> ApiResult<()> {
-    let actual = psbt
-        .fee_amount()
-        .ok_or_else(|| internal("Unable to calculate the transaction fee."))?
-        .to_sat();
+    let actual = proposal_fee_amount(psbt)?;
     if actual != expected_fee {
         return Err(api_error(
             "proposal_mismatch",
@@ -2381,6 +2468,113 @@ fn validate_proposal_fee(psbt: &Psbt, expected_fee: u64) -> ApiResult<()> {
         ));
     }
     Ok(())
+}
+
+fn proposal_fee_amount(psbt: &Psbt) -> ApiResult<u64> {
+    let mut input_total = 0_u64;
+    for index in 0..psbt.unsigned_tx.input.len() {
+        let value = psbt
+            .get_utxo_for(index)
+            .ok_or_else(|| {
+                api_error(
+                    "proposal_mismatch",
+                    "A proposal input is missing its authenticated previous output.",
+                )
+            })?
+            .value
+            .to_sat();
+        input_total = input_total.checked_add(value).ok_or_else(|| {
+            api_error("proposal_mismatch", "The proposal input total overflowed.")
+        })?;
+    }
+    let output_total = psbt
+        .unsigned_tx
+        .output
+        .iter()
+        .try_fold(0_u64, |total, output| {
+            total.checked_add(output.value.to_sat()).ok_or_else(|| {
+                api_error("proposal_mismatch", "The proposal output total overflowed.")
+            })
+        })?;
+    input_total.checked_sub(output_total).ok_or_else(|| {
+        api_error(
+            "proposal_mismatch",
+            "The proposal spends more than its authenticated inputs.",
+        )
+    })
+}
+
+fn proposal_transaction_details(
+    wallet: &Wallet,
+    psbt: &Psbt,
+    fee: u64,
+) -> ApiResult<(Vec<ProposalInputDto>, f64, u32, bool)> {
+    if psbt.unsigned_tx.input.is_empty() || psbt.inputs.len() != psbt.unsigned_tx.input.len() {
+        return Err(api_error(
+            "proposal_mismatch",
+            "The proposal has no complete input set.",
+        ));
+    }
+    let mut seen = std::collections::HashSet::new();
+    let mut satisfaction_weight = Weight::ZERO;
+    let mut inputs = Vec::with_capacity(psbt.unsigned_tx.input.len());
+    for (index, txin) in psbt.unsigned_tx.input.iter().enumerate() {
+        if !seen.insert(txin.previous_output) {
+            return Err(api_error(
+                "proposal_mismatch",
+                "The proposal contains a duplicate input.",
+            ));
+        }
+        let utxo = psbt.get_utxo_for(index).ok_or_else(|| {
+            api_error(
+                "proposal_mismatch",
+                "A proposal input is missing its authenticated previous output.",
+            )
+        })?;
+        let (keychain, _) = wallet
+            .derivation_of_spk(utxo.script_pubkey)
+            .ok_or_else(|| {
+                api_error(
+                    "proposal_mismatch",
+                    "A proposal input is not controlled by this wallet.",
+                )
+            })?;
+        satisfaction_weight = satisfaction_weight
+            .checked_add(
+                wallet
+                    .public_descriptor(keychain)
+                    .max_weight_to_satisfy()
+                    .map_err(internal)?,
+            )
+            .ok_or_else(|| internal("The proposal weight overflowed."))?;
+        inputs.push(ProposalInputDto {
+            outpoint: txin.previous_output.to_string(),
+            amount: utxo.value.to_sat(),
+            sequence: txin.sequence.to_consensus_u32(),
+        });
+    }
+    let signed_weight = psbt
+        .unsigned_tx
+        .weight()
+        .checked_add(satisfaction_weight)
+        .ok_or_else(|| internal("The proposal weight overflowed."))?;
+    let vbytes = signed_weight.to_vbytes_ceil();
+    if vbytes == 0 {
+        return Err(api_error(
+            "proposal_mismatch",
+            "The proposal has an invalid signed size.",
+        ));
+    }
+    let fee_rate = ((fee as f64 / vbytes as f64) * 100.0).round() / 100.0;
+    Ok((
+        inputs,
+        fee_rate,
+        psbt.unsigned_tx.lock_time.to_consensus_u32(),
+        psbt.unsigned_tx
+            .input
+            .iter()
+            .any(|input| input.sequence.is_rbf()),
+    ))
 }
 
 fn checked_payment_total(amount: u64, fee: u64) -> ApiResult<u64> {
@@ -3690,15 +3884,7 @@ fn verify_connected_hardware_identity(
 ) -> ApiResult<String> {
     let encoded = hwi.enumerate().map_err(hardware_api_error)?;
     let devices: Vec<HwiDevice> = serde_json::from_slice(&encoded).map_err(internal)?;
-    let device = devices
-        .into_iter()
-        .find(|device| device.path == device_id)
-        .ok_or_else(|| {
-            api_error(
-                "hardware_unavailable",
-                "The selected device is no longer connected.",
-            )
-        })?;
+    let device = select_unique_hardware_device(devices, device_id)?;
     let fingerprint = device.fingerprint.ok_or_else(|| {
         api_error(
             "hardware_unavailable",
@@ -3715,6 +3901,25 @@ fn verify_connected_hardware_identity(
         ));
     }
     Ok(device.device_type)
+}
+
+fn select_unique_hardware_device(devices: Vec<HwiDevice>, device_id: &str) -> ApiResult<HwiDevice> {
+    let mut matches = devices
+        .into_iter()
+        .filter(|device| device.path == device_id);
+    let device = matches.next().ok_or_else(|| {
+        api_error(
+            "hardware_unavailable",
+            "The selected device is no longer connected.",
+        )
+    })?;
+    if matches.next().is_some() {
+        return Err(api_error(
+            "hardware_ambiguous",
+            "More than one hardware record has the selected connection identity. Disconnect extra devices and rescan.",
+        ));
+    }
+    Ok(device)
 }
 
 #[tauri::command]
@@ -3739,15 +3944,7 @@ pub async fn hardware_prompt_pin(
     let pending = tauri::async_runtime::spawn_blocking(move || {
         let encoded = hwi.enumerate().map_err(hardware_api_error)?;
         let devices: Vec<HwiDevice> = serde_json::from_slice(&encoded).map_err(internal)?;
-        let device = devices
-            .into_iter()
-            .find(|device| device.path == device_id)
-            .ok_or_else(|| {
-                api_error(
-                    "hardware_unavailable",
-                    "The selected device is no longer connected.",
-                )
-            })?;
+        let device = select_unique_hardware_device(devices, &device_id)?;
         if !matches!(
             device.device_type.to_ascii_lowercase().as_str(),
             "trezor" | "keepkey"
@@ -3898,15 +4095,7 @@ pub async fn hardware_import_cosigner(
     tauri::async_runtime::spawn_blocking(move || {
         let enumerated = hwi.enumerate().map_err(hardware_api_error)?;
         let devices: Vec<HwiDevice> = serde_json::from_slice(&enumerated).map_err(internal)?;
-        let device = devices
-            .into_iter()
-            .find(|device| device.path == device_id)
-            .ok_or_else(|| {
-                api_error(
-                    "hardware_unavailable",
-                    "The selected device is no longer connected.",
-                )
-            })?;
+        let device = select_unique_hardware_device(devices, &device_id)?;
         require_explicit_standard_wallet_selection(
             &device,
             allow_empty_passphrase.unwrap_or(false),
@@ -3980,15 +4169,7 @@ pub async fn hardware_import_external_signer(
     tauri::async_runtime::spawn_blocking(move || {
         let enumerated = hwi.enumerate().map_err(hardware_api_error)?;
         let devices: Vec<HwiDevice> = serde_json::from_slice(&enumerated).map_err(internal)?;
-        let device = devices
-            .into_iter()
-            .find(|device| device.path == device_id)
-            .ok_or_else(|| {
-                api_error(
-                    "hardware_unavailable",
-                    "The selected device is no longer connected.",
-                )
-            })?;
+        let device = select_unique_hardware_device(devices, &device_id)?;
         require_explicit_standard_wallet_selection(
             &device,
             allow_empty_passphrase.unwrap_or(false),
@@ -4116,12 +4297,13 @@ fn external_proposal_dto(
     fingerprint: &str,
     wallet: &Wallet,
 ) -> ApiResult<MultisigProposalDto> {
-    let (proposal_id, recipient, label, amount, fee, fee_rate, encoded, status, created_at) = row;
+    let (proposal_id, recipient, label, amount, fee, _fee_rate, encoded, status, created_at) = row;
     let psbt = decode_psbt(&encoded).map_err(proposal_api_error)?;
     validate_proposal_fee(&psbt, fee)?;
     let fingerprint = fingerprint.parse().map_err(internal)?;
     let progress = signature_progress(&psbt, &[fingerprint], 1).map_err(proposal_api_error)?;
     let (change, change_addresses) = proposal_change_details(wallet, &psbt, &recipient, amount)?;
+    let (inputs, fee_rate, locktime, rbf) = proposal_transaction_details(wallet, &psbt, fee)?;
     Ok(MultisigProposalDto {
         proposal_id,
         recipient,
@@ -4139,6 +4321,10 @@ fn external_proposal_dto(
             .iter()
             .map(|input| input.previous_output.to_string())
             .collect(),
+        inputs,
+        locktime,
+        rbf,
+        network: "regtest",
         psbt: encoded,
         signed: progress.signed,
         required: 1,
@@ -4252,10 +4438,21 @@ pub fn external_signer_proposal_import(
     app: AppHandle,
     state: State<'_, AppState>,
     proposal_id: String,
+    reviewed_psbt: String,
     signed_psbt: String,
 ) -> ApiResult<MultisigProposalDto> {
     let _operation = operation_guard(&state)?;
     require_unlocked(&app, &state)?;
+    let metadata = read_external_signer_metadata(&app)?;
+    let mut db = open_db(&app)?;
+    let current = load_external_proposal(&mut db, &metadata, &proposal_id)?;
+    if current.psbt != reviewed_psbt {
+        return Err(api_error(
+            "proposal_mismatch",
+            "The proposal changed after review. Reload it before importing a signature.",
+        ));
+    }
+    drop(db);
     import_external_proposal(&app, &proposal_id, &signed_psbt)
 }
 
@@ -4265,11 +4462,18 @@ pub async fn hardware_sign_external(
     state: State<'_, AppState>,
     proposal_id: String,
     device_id: String,
+    reviewed_psbt: String,
 ) -> ApiResult<MultisigProposalDto> {
     require_unlocked(&app, &state)?;
     let metadata = read_external_signer_metadata(&app)?;
     let mut db = open_db(&app)?;
     let proposal = load_external_proposal(&mut db, &metadata, &proposal_id)?;
+    if proposal.psbt != reviewed_psbt {
+        return Err(api_error(
+            "proposal_mismatch",
+            "The proposal changed after review. Reload it before signing.",
+        ));
+    }
     drop(db);
     let encoded = proposal.psbt;
     let expected = vec![metadata.signer.fingerprint];
@@ -4299,6 +4503,7 @@ pub fn external_signer_proposal_broadcast(
     app: AppHandle,
     state: State<'_, AppState>,
     proposal_id: String,
+    reviewed_psbt: String,
     credential: String,
 ) -> ApiResult<BroadcastResultDto> {
     let _operation = operation_guard(&state)?;
@@ -4311,6 +4516,12 @@ pub fn external_signer_proposal_broadcast(
     let metadata = read_external_signer_metadata(&app)?;
     let mut db = open_db(&app)?;
     let proposal = load_external_proposal(&mut db, &metadata, &proposal_id)?;
+    if proposal.psbt != reviewed_psbt {
+        return Err(api_error(
+            "proposal_mismatch",
+            "The signed proposal changed after review. Reload it before broadcast.",
+        ));
+    }
     if !proposal.can_finalize {
         return Err(api_error(
             "insufficient_signatures",
@@ -4421,6 +4632,81 @@ pub async fn hardware_verify_multisig_address(
         .iter()
         .map(|cosigner| cosigner.fingerprint.clone())
         .collect::<Vec<_>>();
+    let hwi = hwi_cli(&app)?;
+    let displayed = tauri::async_runtime::spawn_blocking(move || {
+        let device_type =
+            verify_connected_hardware_identity(&hwi, &device_id, &expected_fingerprints)?;
+        hwi.display_descriptor_address(&device_type, &device_id, &descriptor)
+            .map_err(|error| hardware_device_api_error(error, &device_type))
+    })
+    .await
+    .map_err(internal)??;
+    let response: HwiAddress = serde_json::from_slice(&displayed).map_err(internal)?;
+    let actual = response.address.ok_or_else(|| {
+        drop(response.error);
+        missing_hwi_value(
+            response.code,
+            "The device did not return the displayed address.",
+        )
+    })?;
+    if actual != expected {
+        return Err(api_error(
+            "hardware_address_mismatch",
+            "The address returned by the device does not match this wallet.",
+        ));
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn hardware_verify_external_address(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    device_id: String,
+    address_id: u32,
+) -> ApiResult<()> {
+    require_unlocked(&app, &state)?;
+    let metadata = read_external_signer_metadata(&app)?;
+    let mut db = open_db(&app)?;
+    let wallet = load_wallet(&mut db)?;
+    let expected: String = db
+        .query_row(
+            "SELECT address FROM satchel_addresses WHERE idx = ?1 AND state != 'discarded'",
+            params![address_id],
+            |row| row.get(0),
+        )
+        .map_err(|_| api_error("address_not_found", "The receive address was not found."))?;
+    let (keychain, derived_index) = wallet
+        .derivation_of_spk(
+            Address::from_str(&expected)
+                .map_err(|_| api_error("wallet_corrupt", "The stored receive address is invalid."))?
+                .require_network(NETWORK)
+                .map_err(|_| {
+                    api_error(
+                        "wallet_corrupt",
+                        "The stored receive address is on the wrong network.",
+                    )
+                })?
+                .script_pubkey(),
+        )
+        .ok_or_else(|| {
+            api_error(
+                "wallet_corrupt",
+                "The stored receive address does not belong to this wallet database.",
+            )
+        })?;
+    if keychain != KeychainKind::External || derived_index != address_id {
+        return Err(api_error(
+            "wallet_corrupt",
+            "The stored receive address derivation does not match its wallet index.",
+        ));
+    }
+    let descriptor = Descriptor::<DescriptorPublicKey>::from_str(&metadata.external_descriptor)
+        .map_err(internal)?
+        .at_derivation_index(address_id)
+        .map_err(internal)?
+        .to_string();
+    let expected_fingerprints = vec![metadata.signer.fingerprint];
     let hwi = hwi_cli(&app)?;
     let displayed = tauri::async_runtime::spawn_blocking(move || {
         let device_type =
@@ -5040,10 +5326,21 @@ pub fn multisig_proposal_import(
     app: AppHandle,
     state: State<'_, AppState>,
     proposal_id: String,
+    reviewed_psbt: String,
     signed_psbt: String,
 ) -> ApiResult<MultisigProposalDto> {
     let _operation = operation_guard(&state)?;
     require_unlocked(&app, &state)?;
+    let metadata = read_multisig_metadata(&app)?;
+    let mut db = open_multisig_db(&app)?;
+    let current = load_multisig_proposal(&mut db, &metadata, &proposal_id)?;
+    if current.psbt != reviewed_psbt {
+        return Err(api_error(
+            "proposal_mismatch",
+            "The proposal changed after review. Reload it before importing a signature.",
+        ));
+    }
+    drop(db);
     import_multisig_proposal(&app, &proposal_id, &signed_psbt)
 }
 
@@ -5053,11 +5350,18 @@ pub async fn hardware_sign_multisig(
     state: State<'_, AppState>,
     proposal_id: String,
     device_id: String,
+    reviewed_psbt: String,
 ) -> ApiResult<MultisigProposalDto> {
     require_unlocked(&app, &state)?;
     let metadata = read_multisig_metadata(&app)?;
     let mut db = open_multisig_db(&app)?;
     let proposal = load_multisig_proposal(&mut db, &metadata, &proposal_id)?;
+    if proposal.psbt != reviewed_psbt {
+        return Err(api_error(
+            "proposal_mismatch",
+            "The proposal changed after review. Reload it before signing.",
+        ));
+    }
     drop(db);
     let encoded = proposal.psbt;
     let expected_fingerprints = metadata
@@ -5092,6 +5396,7 @@ pub fn multisig_proposal_broadcast(
     app: AppHandle,
     state: State<'_, AppState>,
     proposal_id: String,
+    reviewed_psbt: String,
     credential: String,
 ) -> ApiResult<BroadcastResultDto> {
     let _operation = operation_guard(&state)?;
@@ -5104,6 +5409,12 @@ pub fn multisig_proposal_broadcast(
     let metadata = read_multisig_metadata(&app)?;
     let mut db = open_multisig_db(&app)?;
     let proposal = load_multisig_proposal(&mut db, &metadata, &proposal_id)?;
+    if proposal.psbt != reviewed_psbt {
+        return Err(api_error(
+            "proposal_mismatch",
+            "The signed proposal changed after review. Reload it before broadcast.",
+        ));
+    }
     if !proposal.can_finalize {
         return Err(api_error(
             "insufficient_signatures",
@@ -5405,18 +5716,24 @@ pub fn tx_prepare(
         .map(|input| input.previous_output.to_string())
         .collect();
     let proposal_id = Uuid::new_v4().to_string();
+    let (inputs, actual_fee_rate, locktime, rbf) =
+        proposal_transaction_details(&wallet, &psbt, fee)?;
     let proposal = PaymentProposalDto {
         proposal_id: proposal_id.clone(),
         recipient: address.to_string(),
         label,
         amount,
         fee,
-        fee_rate: applied_fee_rate,
+        fee_rate: actual_fee_rate,
         total: checked_payment_total(amount, fee)?,
         change,
         change_addresses,
         output_count: psbt.unsigned_tx.output.len(),
         selected_outpoints,
+        inputs,
+        locktime,
+        rbf,
+        network: "regtest",
     };
     persist_single_proposal(&db, &proposal, &psbt)?;
     state.proposals.lock().map_err(internal)?.insert(
@@ -5506,7 +5823,7 @@ fn cpfp_parent_fee(
 fn summarize_payment_psbt(
     wallet: &Wallet,
     psbt: &Psbt,
-    applied_fee_rate: f64,
+    _applied_fee_rate: f64,
     allow_self_spend: bool,
     label: String,
 ) -> ApiResult<PaymentProposalDto> {
@@ -5549,13 +5866,14 @@ fn summarize_payment_psbt(
         output.value.to_sat()
     };
     let (change, change_addresses) = proposal_change_details(wallet, psbt, &recipient, amount)?;
+    let (inputs, actual_fee_rate, locktime, rbf) = proposal_transaction_details(wallet, psbt, fee)?;
     Ok(PaymentProposalDto {
         proposal_id: Uuid::new_v4().to_string(),
         recipient,
         label,
         amount,
         fee,
-        fee_rate: applied_fee_rate,
+        fee_rate: actual_fee_rate,
         total: checked_payment_total(amount, fee)?,
         change,
         change_addresses,
@@ -5566,6 +5884,10 @@ fn summarize_payment_psbt(
             .iter()
             .map(|input| input.previous_output.to_string())
             .collect(),
+        inputs,
+        locktime,
+        rbf,
+        network: "regtest",
     })
 }
 
@@ -6142,6 +6464,7 @@ mod tests {
         }
 
         let mut wallet = test_wallet(WORDS, "review wallet");
+        let funding = wallet.reveal_next_address(KeychainKind::External).address;
         let change = wallet.reveal_next_address(KeychainKind::Internal).address;
         let mut recipient_wallet = test_wallet(WORDS, "recipient wallet");
         let recipient = recipient_wallet
@@ -6171,11 +6494,47 @@ mod tests {
                 },
             ],
         };
-        let psbt = Psbt::from_unsigned_tx(transaction).unwrap();
+        let mut psbt = Psbt::from_unsigned_tx(transaction).unwrap();
+        psbt.inputs[0].witness_utxo = Some(TxOut {
+            value: Amount::from_sat(16_000),
+            script_pubkey: funding.script_pubkey(),
+        });
         let (change_total, addresses) =
             proposal_change_details(&wallet, &psbt, &recipient.to_string(), 10_000).unwrap();
         assert_eq!(change_total, 5_000);
         assert_eq!(addresses, vec![change.to_string()]);
+        let (inputs, actual_rate, locktime, rbf) =
+            proposal_transaction_details(&wallet, &psbt, 1_000).unwrap();
+        assert_eq!(inputs.len(), 1);
+        assert_eq!(inputs[0].amount, 16_000);
+        assert_eq!(
+            inputs[0].sequence,
+            Sequence::ENABLE_RBF_NO_LOCKTIME.to_consensus_u32()
+        );
+        assert!(actual_rate > 0.0);
+        assert_eq!(locktime, 0);
+        assert!(rbf);
+
+        let mut duplicate_input = psbt.clone();
+        duplicate_input
+            .unsigned_tx
+            .input
+            .push(duplicate_input.unsigned_tx.input[0].clone());
+        duplicate_input
+            .inputs
+            .push(duplicate_input.inputs[0].clone());
+        assert_eq!(
+            proposal_transaction_details(&wallet, &duplicate_input, 1_000)
+                .unwrap_err()
+                .code,
+            "proposal_mismatch"
+        );
+        let mut overspend = psbt.clone();
+        overspend.unsigned_tx.output[0].value = Amount::from_sat(20_000);
+        assert_eq!(
+            proposal_fee_amount(&overspend).unwrap_err().code,
+            "proposal_mismatch"
+        );
 
         let mut redirected = psbt.clone();
         redirected.unsigned_tx.output[1].script_pubkey = attacker.script_pubkey();
@@ -6427,6 +6786,64 @@ mod tests {
             }),
             "expanding"
         );
+    }
+
+    #[test]
+    fn loaded_hardware_wallet_descriptors_must_match_receive_and_change_identity() {
+        let external = "wpkh(key)#12345678";
+        let internal_descriptor = "wpkh(change)#87654321";
+        let profile = WalletProfile {
+            id: Uuid::new_v4(),
+            name: "Hardware wallet".to_owned(),
+            network: "regtest".to_owned(),
+            kind: WalletKind::WatchOnly,
+            descriptor_checksum: "12345678".to_owned(),
+            created_at: 1,
+            backup_verified: true,
+        };
+        assert!(validate_loaded_descriptors(
+            &profile,
+            external,
+            internal_descriptor,
+            Some((external, internal_descriptor)),
+        )
+        .is_ok());
+
+        let swapped_receive = validate_loaded_descriptors(
+            &profile,
+            "wpkh(other)#aaaaaaaa",
+            internal_descriptor,
+            Some((external, internal_descriptor)),
+        )
+        .unwrap_err();
+        assert_eq!(swapped_receive.code, "wallet_corrupt");
+
+        let swapped_change = validate_loaded_descriptors(
+            &profile,
+            external,
+            "wpkh(attacker-change)#bbbbbbbb",
+            Some((external, internal_descriptor)),
+        )
+        .unwrap_err();
+        assert_eq!(swapped_change.code, "wallet_corrupt");
+    }
+
+    #[test]
+    fn duplicate_hwi_connection_identity_is_rejected_as_ambiguous() {
+        let device = HwiDevice {
+            fingerprint: Some("d34db33f".to_owned()),
+            device_type: "trezor".to_owned(),
+            model: "trezor_safe_3".to_owned(),
+            path: "usb:1".to_owned(),
+            code: None,
+            needs_pin_sent: false,
+            needs_passphrase_sent: false,
+            warnings: Vec::new(),
+        };
+        let error =
+            select_unique_hardware_device(vec![device.clone(), device], "usb:1").unwrap_err();
+        assert_eq!(error.code, "hardware_ambiguous");
+        assert!(error.message.contains("Disconnect extra devices"));
     }
 
     #[test]
@@ -7245,6 +7662,10 @@ mod tests {
                     change_addresses: vec![],
                     output_count: 0,
                     selected_outpoints: vec![outpoint.clone()],
+                    inputs: vec![],
+                    locktime: 0,
+                    rbf: false,
+                    network: "regtest",
                 },
                 &psbt,
             )

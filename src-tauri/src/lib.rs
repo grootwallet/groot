@@ -64,6 +64,7 @@ pub fn run() {
             wallet::external_signer_proposal_broadcast,
             wallet::external_signer_proposal_cancel,
             wallet::hardware_verify_multisig_address,
+            wallet::hardware_verify_external_address,
             wallet::multisig_preview,
             wallet::recovery_policy_analyze,
             wallet::multisig_create,

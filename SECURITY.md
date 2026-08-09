@@ -71,7 +71,9 @@ Reports should describe:
 - Multisig creation rejects duplicate fingerprints/xpubs, invalid origins, wrong-network keys, unsafe thresholds, and browser-only virtual signers at the native boundary.
 - Backup recovery recompiles policy and descriptors and rejects mismatched network, policy type, thresholds, recovery paths, private material, or noncanonical descriptors.
 - Transaction review facts come from the persisted unsigned PSBT rather than UI recomputation. Recipient amount and stored fee must match exactly, and every other output must be proven wallet-controlled before review, signing, or broadcast.
-- Imported signatures must match the stored unsigned transaction and expected descriptor identity. Changed inputs, outputs, amounts, recipients, origins, sighashes, or externally finalized scripts fail closed.
+- Review includes authenticated input amounts/outpoints/sequences, network, locktime, RBF state, output count, and an effective signed-size fee rate derived in Rust. Missing, foreign, duplicate, overspending, or fee-inconsistent inputs fail closed.
+- Imported signatures must match the stored unsigned transaction and every non-signature PSBT field. Changed inputs, outputs, amounts, recipients, UTXO/script/key-origin metadata, proprietary fields, sighashes, or externally finalized scripts fail closed.
+- Hardware signing, signature import, and broadcast are bound to the exact PSBT revision returned for review. A proposal changed after review must be reloaded and reviewed again.
 - A proposal cannot become ready until the collected signatures satisfy BDK finalization.
 - Broadcast verifies the returned transaction ID, handles an already-known expected transaction idempotently, and atomically records accepted status with its durable notification.
 - Amounts are integer satoshis and fee rates are validated positive sat/vB values.
@@ -88,6 +90,8 @@ Reports should describe:
 - Detected-but-locked devices remain visible with safe typed readiness states. Trezor empty-passphrase warnings fail closed until the user explicitly selects the seed-only standard wallet; Rust independently enforces that consent before import.
 - Mounted public-key files are capped at 256 KiB and reject private/recovery material, extended private keys, wrong-network origins, malformed fingerprints, and non-tpub account keys before Rust descriptor validation.
 - Every operation carries an explicit test/main chain, freshly enumerated device type and path, and exact expected fingerprint matching.
+- Duplicate HWI records for one connection path are rejected as ambiguous. The persisted BDK external and internal descriptors are revalidated against authenticated hardware-wallet metadata on every database open.
+- External-signer and multisig receive screens distinguish session-scoped on-device verification from unverified Satchel derivation. Verification re-enumerates the device, matches a saved policy fingerprint, derives the exact descriptor index in Rust, invokes the device display command, and compares the returned address byte-for-byte.
 - User rejection, timeout, unavailable/busy hardware, missing xpubs, identity mismatch, malformed responses, and oversized output map to stable safe errors.
 - USB hardware support is integration-ready, not physically certified. Vendor/model/firmware/host combinations must complete [`docs/hardware-certification.md`](docs/hardware-certification.md).
 
@@ -158,8 +162,14 @@ This internal code audit traced address derivation, descriptor identity, proposa
 - Single-key signing reloaded only a PSBT after restart. It now retains and revalidates the persisted recipient, amount, and fee immediately before signing.
 - Single-key review omitted authoritative change and output-count details. The Rust DTO and review UI now expose the verified change amount/address and transaction shape.
 - A browser fixture journey attempted to sign a newly created policy with virtual devices whose fingerprints were not members of that policy. The fixture now preserves exact device-to-policy identity instead of simulating signatures from unrelated devices.
+- Hardware-wallet metadata and the registry were authenticated, but a loaded BDK database was not re-compared against both saved external and internal descriptors on every open. Database substitution or internal-descriptor corruption now returns `wallet_corrupt` before derivation, review, signing, or broadcast.
+- Signed-PSBT merge accepted the same unsigned transaction while permitting unrelated PSBT metadata additions. Imports now permit signature additions only and reject all other metadata mutations.
+- Hardware signing/import/broadcast could load a newer proposal revision than the renderer had reviewed. The exact reviewed PSBT revision is now required at each boundary and concurrent changes return `proposal_mismatch`.
+- Duplicate HWI records sharing one connection identity could be selected with first-match behavior. They now fail as `hardware_ambiguous` and require disconnect/rescan.
+- Hardware-backed receive addresses were described as verifiable but the command was not wired for external-signer wallets and the UI did not distinguish verification state. Both external-signer and multisig receive flows now provide explicit, session-scoped verified/unverified status and exact device-display comparison.
+- Review omitted authenticated input values/sequences, locktime, RBF state, and network, and displayed the requested fee target rather than a PSBT/descriptor-derived effective rate. Rust now returns those authoritative facts and rejects foreign/duplicate/missing inputs and impossible totals.
 
-Local evidence for this audit includes 125 Rust tests under strict Clippy, 76 frontend unit tests, the full boundary/release/check/build gate, 81 previously green Playwright journeys plus the corrected desktop/mobile signer-identity regression, and direct desktop/mobile inspection of the single-key change review at 1180×780 and 390×844 with no horizontal overflow. The pinned CI version of `cargo-audit` reports no vulnerabilities after removal of the legacy WebPKI branch; its 17 pre-existing allowed warnings remain release follow-up items. Current CI advisory jobs remain required release evidence.
+Local evidence for this audit includes 129 Rust tests under strict Clippy, 76 frontend unit tests, the full boundary/release/check/build gate, 87 passing Playwright journeys with one intentional project skip, and two isolated Bitcoin Core 31.1 regtest integrations covering bounded descriptor recovery and real 2-of-3 PSBT signing/finalization/broadcast. `pnpm audit --prod --audit-level high` reports no known vulnerabilities. The pinned CI version of `cargo-audit` reports no vulnerabilities; its 17 pre-existing allowed warnings remain release follow-up items. Current CI advisory jobs remain required release evidence.
 
 This is an internal code audit and bounded adversarial test pass, not an independent penetration test, cryptographic proof, physical-device certification, or authorization for mainnet release.
 

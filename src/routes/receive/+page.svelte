@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Check, ChevronDown, ChevronRight, Copy, Plus, QrCode, Trash2 } from '@lucide/svelte';
+  import { Check, ChevronDown, ChevronRight, Copy, Cpu, Plus, QrCode, ShieldCheck, Trash2 } from '@lucide/svelte';
   import QRCode from 'qrcode';
   import { onMount, tick } from 'svelte';
   import Button from '$lib/components/Button.svelte';
@@ -7,7 +7,8 @@
   import ReadableAddress from '$lib/components/ReadableAddress.svelte';
   import AddressDetailsModal from '$lib/components/AddressDetailsModal.svelte';
   import { compactAddress } from '$lib/address-display';
-  import { walletService } from '$lib/wallet';
+  import { walletService, type HardwareDevice } from '$lib/wallet';
+  import { useWalletShellContext } from '$lib/wallet/shell-context';
   import { awaitingPaymentAddresses } from '$lib/wallet/policy';
   import type { ReceiveAddress } from '$lib/types';
   import { copyText } from '$lib/clipboard';
@@ -26,6 +27,9 @@
   let discardTarget = $state<ReceiveAddress | null>(null);
   let detailAddress = $state<ReceiveAddress | null>(null);
   let receiveCard = $state<HTMLElement | null>(null);
+  const walletShell=useWalletShellContext();
+  let externalSigner=$derived(walletShell.profiles().find((profile)=>profile.id===walletShell.selectedWalletId())?.kind==='watch_only');
+  let verifyOpen=$state(false),verifyBusy=$state(false),verifyError=$state(''),devices=$state<HardwareDevice[]>([]),verifiedAddressId=$state<number|null>(null);
   let awaiting = $derived(awaitingPaymentAddresses(addresses));
   let history = $derived(addresses.filter((address) => address.status !== 'awaiting'));
   onMount(load);
@@ -42,7 +46,7 @@
       .catch((cause) => { if (generation === qrGeneration) toast({ title: 'Could not generate QR code', description: cause instanceof Error ? cause.message : undefined, tone: 'danger' }); });
   });
   async function load() {
-    try { const snapshot = await walletService.snapshot(); applyAddresses(snapshot.receiveAddresses); }
+    try { const snapshot=await walletService.snapshot(); applyAddresses(snapshot.receiveAddresses); }
     catch (cause) { toast({ title: 'Could not load addresses', description: cause instanceof Error ? cause.message : undefined, tone: 'danger' }); }
   }
   function applyAddresses(nextAddresses: ReceiveAddress[]) {
@@ -87,6 +91,8 @@
     finally { busy = false; }
   };
   const requestDiscard = (address: ReceiveAddress) => { discardTarget = address; showDiscard = true; };
+  async function scanVerification(){if(!current)return;verifyOpen=true;verifyBusy=true;verifyError='';try{devices=await walletService.listHardwareDevices();}catch(cause){devices=[];verifyError=cause instanceof Error?cause.message:'Could not scan hardware.';}finally{verifyBusy=false;}}
+  async function verifyAddress(device:HardwareDevice){if(!current)return;verifyBusy=true;verifyError='';try{await walletService.verifyExternalAddress(device.id,current.id);verifiedAddressId=current.id;verifyOpen=false;toast({title:'Address verified on device',description:'The saved signer returned this exact receive address.',tone:'success'});}catch(cause){verifyError=cause instanceof Error?cause.message:'The device could not verify this address.';}finally{verifyBusy=false;}}
 </script>
 
 <div class="page narrow-page receive-page">
@@ -94,12 +100,12 @@
   {#if current}
     <section class="receive-card" bind:this={receiveCard}>
       <button class="qr-placeholder qr-button" aria-label="Enlarge QR code" onclick={() => showQr = true}>{#if qrDataUrl}<img src={qrDataUrl} alt="QR code for {current.address}" />{:else}<QrCode size={154} strokeWidth={1.2} /><span>Generating QR…</span>{/if}</button>
-      <div class="address-label"><span>{current.label}</span><small>Awaiting payment</small></div>
+      <div class="address-label"><span>{current.label}</span><small>{externalSigner?(verifiedAddressId===current.id?'Verified on the saved hardware signer this session':'Not yet verified on hardware'):'Awaiting payment'}</small></div>
       <button class="address-box" onclick={copy}><code>{current.address}</code>{#if copied}<Check size={17} />{:else}<Copy size={17} />{/if}</button>
-      <div class="receive-actions"><Button variant="secondary" onclick={copy}><Copy size={16} />Copy address</Button><Button variant="ghost-danger" onclick={() => requestDiscard(current!)}><Trash2 size={16} />Discard</Button></div>
+      <div class="receive-actions"><Button variant="secondary" onclick={copy}><Copy size={16} />Copy address</Button>{#if externalSigner}<Button variant="secondary" onclick={scanVerification}>{#if verifiedAddressId===current.id}<ShieldCheck size={16}/>{:else}<Cpu size={16}/>{/if}{verifiedAddressId===current.id?'Verify again':'Verify on device'}</Button>{/if}<Button variant="ghost-danger" onclick={() => requestDiscard(current!)}><Trash2 size={16} />Discard</Button></div>
       <button class="insight-toggle" onclick={() => showDetails = !showDetails} aria-expanded={showDetails}>{showDetails ? 'Hide' : 'Show'} address details <ChevronDown size={14} class={showDetails ? 'rotated' : ''}/></button>
       {#if showDetails}<dl class="optional-details"><div><dt>Derivation</dt><dd><code>{current.derivationPath}</code></dd></div><div><dt>Type</dt><dd>Native SegWit · BIP84</dd></div></dl>{/if}
-      <p class="privacy-note">Only an unused address awaiting payment can be discarded. Used addresses remain in your history.</p>
+      <p class="privacy-note">{externalSigner?'Unverified means Satchel derived the address but the saved hardware display has not confirmed it in this session.':'Only an unused address awaiting payment can be discarded. Used addresses remain in your history.'}</p>
     </section>
   {:else}
     <section class="empty-state"><span class="empty-icon"><QrCode size={24} /></span><h2>No address awaiting payment</h2><p>Generate a new address and give it a permanent label.</p><Button onclick={() => showGenerate = true}><Plus size={17} />New address</Button></section>
@@ -138,3 +144,4 @@
   <div class="warning-box">Discarded addresses remain monitored.</div>
   <div class="modal-footer"><Button variant="secondary" onclick={() => { showDiscard = false; discardTarget = null; }}>Keep address</Button><Button variant="danger" loading={busy} loadingLabel="Discarding…" onclick={discard}>Discard address</Button></div>
 </Modal>
+<Modal open={verifyOpen} title="Verify receive address" description="Choose the saved signer, then compare the complete address on its trusted display." onclose={()=>{if(!verifyBusy)verifyOpen=false;}}>{#if verifyBusy}<div class="device-scan compact"><Cpu size={20}/><span>Communicating with hardware…</span></div>{:else}<div class="source-list hardware-device-list">{#each devices as device}<button disabled={device.status!=='ready'} onclick={()=>verifyAddress(device)}><Cpu size={18}/><span><strong>{device.label}</strong><small>{device.fingerprint??device.message}</small></span></button>{:else}<p>No ready saved signer found. Unlock it and scan again.</p>{/each}</div><Button variant="secondary" onclick={scanVerification}>Scan again</Button>{/if}{#if verifyError}<p class="form-error" role="alert">{verifyError}</p>{/if}</Modal>

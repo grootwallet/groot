@@ -33,6 +33,10 @@ export type PaymentProposal = {
   changeAddresses: string[];
   outputCount: number;
   selectedOutpoints: string[];
+  inputs: { outpoint: string; amount: Sats; sequence: number }[];
+  locktime: number;
+  rbf: boolean;
+  network: SupportedNetwork;
 };
 
 export type BroadcastResult = {
@@ -194,6 +198,8 @@ export type WalletErrorCode =
   | 'wrong_network'
   | 'invalid_node_config'
   | 'hardware_unavailable'
+  | 'hardware_ambiguous'
+  | 'hardware_address_mismatch'
   | 'invalid_hardware_request'
   | 'hardware_pin_rejected'
   | 'hardware_challenge_expired'
@@ -274,10 +280,11 @@ export interface WalletPort {
   createExternalSignerWallet(name: string, signer: ExternalSigner, credential: string): Promise<ExternalSignerWallet>;
   externalSignerWallet(): Promise<ExternalSignerWallet>;
   externalSignerProposals(): Promise<MultisigProposal[]>;
-  importExternalSignerProposal(proposalId: string, signedPsbt: string): Promise<MultisigProposal>;
-  signExternalWithHardware(proposalId: string, deviceId: string): Promise<MultisigProposal>;
-  broadcastExternalSignerProposal(proposalId: string, credential: string): Promise<BroadcastResult>;
+  importExternalSignerProposal(proposalId: string, reviewedPsbt: string, signedPsbt: string): Promise<MultisigProposal>;
+  signExternalWithHardware(proposalId: string, deviceId: string, reviewedPsbt: string): Promise<MultisigProposal>;
+  broadcastExternalSignerProposal(proposalId: string, reviewedPsbt: string, credential: string): Promise<BroadcastResult>;
   cancelExternalSignerProposal(proposalId: string): Promise<void>;
+  verifyExternalAddress(deviceId: string, addressId: number): Promise<void>;
   previewMultisig(policy: PolicyDraft): Promise<MultisigPreview>;
   analyzeRecoveryPolicy(template: RecoveryTemplate, cosigners: CosignerDraft[]): Promise<RecoveryPolicyAnalysis>;
   createMultisig(policy: PolicyDraft, credential: string): Promise<MultisigWallet>;
@@ -296,12 +303,13 @@ export interface WalletPort {
   syncMultisig(): Promise<WalletSnapshot>;
   createMultisigAddress(label: string): Promise<ReceiveAddress>;
   discardMultisigAddress(id: number): Promise<void>;
+  verifyMultisigAddress(deviceId: string, addressId: number): Promise<void>;
   prepareMultisigPayment(recipient: string, label: string, amount: Sats, feeRate: FeeRate, coinSelection?: CoinSelection): Promise<MultisigProposal>;
   prepareMultisigAcceleration(txid: string, method: AccelerationMethod, feeRate: FeeRate): Promise<MultisigProposal>;
   multisigProposals(): Promise<MultisigProposal[]>;
-  importMultisigProposal(proposalId: string, signedPsbt: string): Promise<MultisigProposal>;
-  signMultisigWithHardware(proposalId: string, deviceId: string): Promise<MultisigProposal>;
-  broadcastMultisigProposal(proposalId: string, credential: string): Promise<BroadcastResult>;
+  importMultisigProposal(proposalId: string, reviewedPsbt: string, signedPsbt: string): Promise<MultisigProposal>;
+  signMultisigWithHardware(proposalId: string, deviceId: string, reviewedPsbt: string): Promise<MultisigProposal>;
+  broadcastMultisigProposal(proposalId: string, reviewedPsbt: string, credential: string): Promise<BroadcastResult>;
   cancelMultisigProposal(proposalId: string): Promise<void>;
   savePsbt(suggestedFilename: string, psbt: string): Promise<boolean>;
   encodePsbtUr(psbt: string, fragmentBytes?: number): Promise<string[]>;

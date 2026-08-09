@@ -141,6 +141,17 @@ pub fn merge_signed_psbt(
     {
         return Err(ProposalError::PrematureFinalization);
     }
+    let mut original_metadata = original.clone();
+    let mut imported_metadata = imported.clone();
+    for input in &mut original_metadata.inputs {
+        input.partial_sigs.clear();
+    }
+    for input in &mut imported_metadata.inputs {
+        input.partial_sigs.clear();
+    }
+    if original_metadata != imported_metadata {
+        return Err(ProposalError::ProposalMismatch);
+    }
     let allowed = allowed_fingerprints.iter().copied().collect::<HashSet<_>>();
     for (index, imported_input) in imported.inputs.iter().enumerate() {
         let original_input = &original.inputs[index];
@@ -369,6 +380,40 @@ mod tests {
                 .unwrap_err()
                 .code(),
             "premature_finalization"
+        );
+    }
+
+    #[test]
+    fn rejects_every_non_signature_psbt_mutation() {
+        use bdk_wallet::bitcoin::psbt::raw;
+
+        let (mut original, signers) = proposal();
+        let allowed = signers.iter().map(|signer| signer.2).collect::<Vec<_>>();
+
+        let mut changed_origin = original.clone();
+        changed_origin.inputs[0]
+            .bip32_derivation
+            .get_mut(&signers[0].1.inner)
+            .unwrap()
+            .1 = DerivationPath::from_str("m/48'/1'/9'/2'/0/0").unwrap();
+        sign_all_inputs(&mut changed_origin, &signers[0]);
+        assert_eq!(
+            merge_signed_psbt(&mut original, changed_origin, &allowed, 2),
+            Err(ProposalError::ProposalMismatch)
+        );
+
+        let mut proprietary = original.clone();
+        proprietary.unknown.insert(
+            raw::Key {
+                type_value: 0xfc,
+                key: b"malicious-metadata".to_vec(),
+            },
+            b"unreviewed".to_vec(),
+        );
+        sign_all_inputs(&mut proprietary, &signers[0]);
+        assert_eq!(
+            merge_signed_psbt(&mut original, proprietary, &allowed, 2),
+            Err(ProposalError::ProposalMismatch)
         );
     }
 

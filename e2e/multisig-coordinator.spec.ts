@@ -12,6 +12,24 @@ test('routes receive address creation through the selected wallet kind', async (
   await expect(page).toHaveURL(/\/receive$/);
   await expect(page.getByRole('heading', { name: 'Receive bitcoin' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'New receive address' })).toBeVisible();
+  const isMobile = (page.viewportSize()?.width ?? 1180) <= 760;
+  if (isMobile) {
+    await page.getByRole('link', { name: 'Settings' }).click();
+    await page.locator('.wallet-manager').getByRole('button', { name: /Family vault/ }).click();
+  } else {
+    await page.getByRole('complementary').getByRole('button', { name: /Family vault/ }).click();
+  }
+  await page.getByLabel('App PIN', { exact: true }).fill('prototype-passphrase');
+  await page.getByRole('button', { name: 'Unlock wallet' }).click();
+  await expect(page.getByRole('heading', { name: 'Family vault' })).toBeVisible();
+  await page.getByRole('link', { name: 'Receive', exact: true }).click();
+  await page.getByRole('button', { name: 'New receive address' }).click();
+  await page.getByLabel('Permanent label').fill('Verified vault deposit');
+  await page.getByRole('button', { name: 'Generate address' }).click();
+  await expect(page.getByRole('button', { name: 'Verify on device' })).toBeVisible();
+  await page.getByRole('button', { name: 'Verify on device' }).click();
+  await page.getByRole('button', { name: /Virtual Coldcard/ }).click();
+  await expect(page.getByText('Verified on a hardware device this session')).toBeVisible();
 });
 
 test('spends end-to-end from the ready-made demo vault', async ({ page }) => {

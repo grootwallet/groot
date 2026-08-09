@@ -208,7 +208,7 @@ export class DummyWalletAdapter implements WalletPort {
     const available = spendable.reduce((total, coin) => total + coin.amount, 0);
     if (Number(amount) + Number(fee) > available) throw new WalletError('insufficient_funds', 'Amount and fee exceed the selected, unfrozen balance.');
     const selectedOutpoints = coinSelection.mode === 'manual' ? spendable.map((coin) => coin.outpoint) : [];
-    const proposal: PaymentProposal = { proposalId: crypto.randomUUID(), recipient, label, amount, fee, feeRate: selectedRate, total: sats(Number(amount) + Number(fee)), change: sats(0), changeAddresses: [], outputCount: 1, selectedOutpoints };
+    const proposal: PaymentProposal = { proposalId: crypto.randomUUID(), recipient, label, amount, fee, feeRate: selectedRate, total: sats(Number(amount) + Number(fee)), change: sats(0), changeAddresses: [], outputCount: 1, selectedOutpoints, inputs:selectedOutpoints.map((outpoint)=>({outpoint,amount:sats(available),sequence:0xfffffffd})), locktime:0, rbf:true, network:defaultConfig.network };
     this.#proposals.set(proposal.proposalId, proposal);
     if (this.#profiles.find((profile) => profile.id === this.#selectedWalletId)?.kind === 'watch_only') {
       this.#externalProposals.set(proposal.proposalId, { ...proposal, change: sats(0), changeAddresses: [], outputCount: 1, psbt: 'cHNidP8BAFICAAAA', signed: 0, required: 1, canFinalize: false, signedFingerprints: [], status: 'collecting', createdAt: new Date().toISOString() });
@@ -294,17 +294,25 @@ export class DummyWalletAdapter implements WalletPort {
     return structuredClone(this.#externalWallet);
   }
   async externalSignerProposals() { return structuredClone([...this.#externalProposals.values()]); }
-  async importExternalSignerProposal(proposalId: string, _signedPsbt: string) {
+  async importExternalSignerProposal(proposalId: string, reviewedPsbt: string, _signedPsbt: string) {
     const proposal = this.#externalProposals.get(proposalId); if (!proposal) throw new WalletError('proposal_not_found', 'Proposal not found.');
+    if (proposal.psbt !== reviewedPsbt) throw new WalletError('proposal_mismatch', 'The proposal changed after review.');
     proposal.signed = 1; proposal.canFinalize = true; proposal.status = 'ready'; proposal.signedFingerprints = [this.#externalWallet?.signer.fingerprint ?? 'f00dbabe']; return structuredClone(proposal);
   }
-  async signExternalWithHardware(proposalId: string, deviceId: string) { return this.importExternalSignerProposal(proposalId, deviceId); }
-  async broadcastExternalSignerProposal(proposalId: string, credential: string) {
+  async signExternalWithHardware(proposalId: string, _deviceId: string, reviewedPsbt: string) { return this.importExternalSignerProposal(proposalId, reviewedPsbt, reviewedPsbt); }
+  async broadcastExternalSignerProposal(proposalId: string, reviewedPsbt: string, credential: string) {
     if (!this.#selectedWalletId || credential !== this.#credentials.get(this.#selectedWalletId)) throw new WalletError('invalid_credential', 'Incorrect app PIN.');
     const proposal = this.#externalProposals.get(proposalId); if (!proposal?.canFinalize) throw new WalletError('insufficient_signatures', 'Sign first.');
+    if (proposal.psbt !== reviewedPsbt) throw new WalletError('proposal_mismatch', 'The signed proposal changed after review.');
     this.#externalProposals.delete(proposalId); return { txid: '0a7bf3d7a98d8bc981975320eba8e9b8ac1aa92145dcf018e48c3c2f8c19e2aa', snapshot: await this.snapshot(), syncPending: false };
   }
   async cancelExternalSignerProposal(proposalId: string) { this.#externalProposals.delete(proposalId); }
+  async verifyExternalAddress(deviceId: string, _addressId: number) {
+    const expected = this.#externalWallet?.signer.fingerprint.toLowerCase();
+    const device = (await this.listHardwareDevices()).find((item) => item.id === deviceId && item.status === 'ready');
+    if (!device) throw new WalletError('hardware_unavailable', 'Connect and unlock the expected signer.');
+    if (!expected || device.fingerprint?.toLowerCase() !== expected) throw new WalletError('unknown_signer', 'The connected device is not the saved signer for this wallet.');
+  }
 
   async previewMultisig(policy: PolicyDraft): Promise<MultisigPreview> {
     const errors = validatePolicyDraft(policy);
@@ -452,28 +460,32 @@ export class DummyWalletAdapter implements WalletPort {
     const available = spendable.reduce((total, coin) => total + coin.amount, 0);
     if (Number(amount) + Number(fee) > available) throw new WalletError('insufficient_funds', 'Amount and fee exceed the selected, unfrozen balance.');
     const selectedOutpoints = coinSelection.mode === 'manual' ? spendable.map((coin) => coin.outpoint) : [];
-    const proposal: MultisigProposal = { proposalId: crypto.randomUUID(), recipient, label, amount, fee, feeRate:selectedRate, total:sats(Number(amount)+Number(fee)), selectedOutpoints, change:sats(0), changeAddresses:[], outputCount:1, psbt:`cHNidP8BAF9kdW1teQ==${'A'.repeat(3120)}`, signed:0, required:this.#multisig.threshold, canFinalize:false, signedFingerprints:[], status:'collecting', createdAt:new Date().toISOString() };
+    const proposal: MultisigProposal = { proposalId: crypto.randomUUID(), recipient, label, amount, fee, feeRate:selectedRate, total:sats(Number(amount)+Number(fee)), selectedOutpoints, inputs:selectedOutpoints.map((outpoint)=>({outpoint,amount:sats(available),sequence:0xfffffffd})), locktime:0, rbf:true, network:defaultConfig.network, change:sats(0), changeAddresses:[], outputCount:1, psbt:`cHNidP8BAF9kdW1teQ==${'A'.repeat(3120)}`, signed:0, required:this.#multisig.threshold, canFinalize:false, signedFingerprints:[], status:'collecting', createdAt:new Date().toISOString() };
     this.#multisigProposals.set(proposal.proposalId, proposal); return structuredClone(proposal);
   }
   async prepareMultisigAcceleration(txid: string, method: import('./contracts').AccelerationMethod, selectedRate: ReturnType<typeof feeRate>) { const base=await this.prepareAcceleration(txid,method,selectedRate); const proposal:MultisigProposal={...base,change:sats(0),changeAddresses:[],outputCount:1,psbt:'cHNidP8BAFICAAAA',signed:0,required:this.#multisig?.threshold??2,canFinalize:false,signedFingerprints:[],status:'collecting',createdAt:new Date().toISOString()};this.#multisigProposals.set(proposal.proposalId,proposal);return structuredClone(proposal); }
   async multisigProposals() { return [...this.#multisigProposals.values()].filter((item)=>item.status==='collecting'||item.status==='ready').map((item)=>structuredClone(item)); }
-  async importMultisigProposal(proposalId:string, signedPsbt:string) {
+  async importMultisigProposal(proposalId:string, reviewedPsbt:string, signedPsbt:string) {
     if (!signedPsbt.trim()) throw new WalletError('internal_error','Enter a signed PSBT.');
+    const proposal=this.#multisigProposals.get(proposalId); if(proposal?.psbt!==reviewedPsbt) throw new WalletError('proposal_mismatch','The proposal changed after review.');
     return this.#addDummySignature(proposalId);
   }
-  async signMultisigWithHardware(proposalId:string, deviceId:string) {
+  async signMultisigWithHardware(proposalId:string, deviceId:string, reviewedPsbt:string) {
+    const proposal=this.#multisigProposals.get(proposalId); if(proposal?.psbt!==reviewedPsbt) throw new WalletError('proposal_mismatch','The proposal changed after review.');
     if (deviceId === 'virtual-ledger-outsider') throw new WalletError('unknown_signer','The connected device is not a cosigner in this wallet policy.');
     const fingerprint = deviceId === 'virtual-coldcard' ? 'f00dbabe' : deviceId === 'virtual-trezor-cosigner' ? 'c0ffee01' : null;
     if (!fingerprint) throw new WalletError('unknown_signer','The connected device is not a cosigner in this wallet policy.');
     return this.#addDummySignature(proposalId, fingerprint);
   }
-  async broadcastMultisigProposal(proposalId:string, credential:string) {
+  async broadcastMultisigProposal(proposalId:string, reviewedPsbt:string, credential:string) {
     const proposal=this.#multisigProposals.get(proposalId); if(!proposal) throw new WalletError('proposal_not_found','Payment proposal was not found.');
+    if(proposal.psbt!==reviewedPsbt) throw new WalletError('proposal_mismatch','The signed proposal changed after review.');
     if(credential!==this.#multisigCredential) throw new WalletError('invalid_credential','Incorrect app PIN.');
     if(!proposal.canFinalize) throw new WalletError('internal_error','Collect the required signatures first.');
     proposal.status='broadcast'; this.#balance=Math.max(0,this.#balance-Number(proposal.total)); const txid='7d4a2c7f9e317f9859d7a8566fe02d773afb09fcddb617dbda98bfba8f721234'; this.#recordFixtureBroadcast(proposalId,proposal,txid); return {txid,snapshot:await this.snapshot(),syncPending:false};
   }
   async cancelMultisigProposal(proposalId:string) { const proposal=this.#multisigProposals.get(proposalId); if(!proposal) throw new WalletError('proposal_not_found','Payment proposal was not found.'); proposal.status='cancelled'; }
+  async verifyMultisigAddress(deviceId:string,_addressId:number){const device=(await this.listHardwareDevices()).find((item)=>item.id===deviceId&&item.status==='ready');if(!device)throw new WalletError('hardware_unavailable','Connect and unlock a wallet cosigner.');if(!this.#multisig?.cosigners.some((cosigner)=>cosigner.fingerprint.toLowerCase()===device.fingerprint?.toLowerCase()))throw new WalletError('unknown_signer','The connected device is not a cosigner in this wallet policy.');}
   async savePsbt(suggestedFilename:string,psbt:string){const {downloadText}=await import('$lib/transfer');downloadText(suggestedFilename,psbt);return true;}
 
   #addDummySignature(proposalId:string, fingerprint?:string) {
