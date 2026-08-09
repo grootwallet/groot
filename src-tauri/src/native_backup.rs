@@ -3,10 +3,9 @@ use tauri::AppHandle;
 use zeroize::Zeroizing;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum BackupOutcome {
-    Cancelled,
-    Unverified,
-    Verified,
+pub struct BackupOutcome {
+    pub cancelled: bool,
+    pub verified: bool,
 }
 
 #[cfg(target_os = "macos")]
@@ -163,7 +162,10 @@ mod macos {
                     // Tauri owns this NSWindow for the application lifetime.
                     let parent = unsafe { &*(raw_window.cast::<NSWindow>()) };
                     if !confirm_private_reveal(parent, mtm) {
-                        let _ = sender.send(Ok(BackupOutcome::Cancelled));
+                        let _ = sender.send(Ok(BackupOutcome {
+                            cancelled: true,
+                            verified: false,
+                        }));
                         return;
                     }
                     let width = sheet_width(parent, 720.0);
@@ -267,16 +269,17 @@ mod macos {
                     let response = NSApplication::sharedApplication(mtm).runModalForWindow(&panel);
                     parent.endSheet_returnCode(&panel, response);
                     if response != NSModalResponseOK {
-                        let _ = sender.send(Ok(BackupOutcome::Cancelled));
+                        let _ = sender.send(Ok(BackupOutcome {
+                            cancelled: true,
+                            verified: false,
+                        }));
                         return;
                     }
                     let verified = verify_backup_order(parent, &words, mtm);
-                    let outcome = if verified {
-                        BackupOutcome::Verified
-                    } else {
-                        BackupOutcome::Unverified
-                    };
-                    let _ = sender.send(Ok(outcome));
+                    let _ = sender.send(Ok(BackupOutcome {
+                        cancelled: false,
+                        verified,
+                    }));
                 });
             })
             .map_err(|error| error.to_string())?;
@@ -705,7 +708,10 @@ pub fn present(app: &AppHandle, words: &str) -> Result<BackupOutcome, String> {
         ))
         .blocking_show();
     if !reveal {
-        return Ok(BackupOutcome::Cancelled);
+        return Ok(BackupOutcome {
+            cancelled: true,
+            verified: false,
+        });
     }
 
     let display = Zeroizing::new(format_words(words)?);
@@ -723,9 +729,15 @@ pub fn present(app: &AppHandle, words: &str) -> Result<BackupOutcome, String> {
         ))
         .blocking_show()
     {
-        BackupOutcome::Unverified
+        BackupOutcome {
+            cancelled: false,
+            verified: false,
+        }
     } else {
-        BackupOutcome::Cancelled
+        BackupOutcome {
+            cancelled: true,
+            verified: false,
+        }
     })
 }
 

@@ -3098,17 +3098,15 @@ pub fn wallet_generate_mnemonic(
         .transpose()?;
     let mnemonic = generate_software_mnemonic(supplemental_digest.as_deref())?;
     let words = Zeroizing::new(mnemonic.to_string());
-    let backup_verified = match native_backup::present(&app, words.as_str()).map_err(internal)? {
-        native_backup::BackupOutcome::Cancelled => {
-            state.pending_mnemonic.lock().map_err(internal)?.take();
-            return Err(api_error(
-                "onboarding_cancelled",
-                "Recovery-word backup was cancelled.",
-            ));
-        }
-        native_backup::BackupOutcome::Unverified => false,
-        native_backup::BackupOutcome::Verified => true,
-    };
+    let outcome = native_backup::present(&app, words.as_str()).map_err(internal)?;
+    if outcome.cancelled {
+        state.pending_mnemonic.lock().map_err(internal)?.take();
+        return Err(api_error(
+            "onboarding_cancelled",
+            "Recovery-word backup was cancelled.",
+        ));
+    }
+    let backup_verified = outcome.verified;
     *state.pending_mnemonic.lock().map_err(internal)? = Some(PendingMnemonic {
         words,
         created_at: now(),
