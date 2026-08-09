@@ -22,6 +22,7 @@
   let walletName = $state('My wallet');
   let hasExistingWallet = $state(false);
   let backupAcknowledged = $state(false);
+  let backupVerified = $state(false);
   let verificationWords = $state<RecoveryWord[]>([]);
   let selectedWords = $state<RecoveryWord[]>([]);
   let verificationError = $state('');
@@ -38,7 +39,7 @@
     hasExistingWallet = await walletService.exists();
     if (hasExistingWallet && page.url.searchParams.get('add') !== '1') await goto('/unlock');
   });
-  onDestroy(() => { void walletService.cancelOnboarding(); words = []; recovery = ''; passphrase = ''; confirmation = ''; supplementalOutcomes = ''; backupAcknowledged = false; });
+  onDestroy(() => { void walletService.cancelOnboarding(); words = []; recovery = ''; passphrase = ''; confirmation = ''; supplementalOutcomes = ''; backupAcknowledged = false; backupVerified = false; });
 
   function chooseSupplementalSource(source: 'none' | 'coin' | 'dice') {
     supplementalSource = source;
@@ -62,11 +63,13 @@
       const presentation = await walletService.generateMnemonic(supplementalEntropy);
       if (presentation.mode === 'fixture') {
         words = presentation.words;
+        backupVerified = false;
         verificationWords = shuffledRecoveryWords(words);
         selectedWords = [];
         mode = 'words';
       } else {
         words = [];
+        backupVerified = presentation.backupVerified;
         nativeBackup = true;
         revealed = true;
         mode = 'passphrase';
@@ -110,15 +113,33 @@
     }
     selectedWords = [];
     verificationWords = [];
+    backupVerified = true;
     mode = 'passphrase';
+  }
+
+  function verifyLater() {
+    selectedWords = [];
+    verificationWords = [];
+    backupVerified = false;
+    mode = 'passphrase';
+  }
+
+  function backFromPassphrase() {
+    if (nativeBackup) {
+      mode = 'create';
+      return;
+    }
+    verificationWords = shuffledRecoveryWords(words);
+    selectedWords = [];
+    mode = 'words';
   }
 
   async function finishCreate() {
     busy = true; error = '';
     try {
-      await walletService.createWallet(walletName, passphrase);
+      await walletService.createWallet(walletName, passphrase, backupVerified);
       words = []; passphrase = ''; confirmation = ''; backupAcknowledged = false;
-      toast({title:'Wallet created',description:'Your regtest wallet is ready.',tone:'success'});
+      toast({title:'Wallet created',description:backupVerified ? 'Your regtest wallet is ready.' : 'Your wallet is ready. Verify its recovery backup soon.',tone:'success'});
       await goto('/');
     } catch (cause) { error = cause instanceof WalletError ? cause.message : 'Could not create wallet.'; }
     finally { passphrase = ''; confirmation = ''; words = []; busy = false; }
@@ -268,11 +289,13 @@
       <p class="verification-hint">Tap a placed word to return it. You can also drag words between the pool and sequence.</p>
       {#if verificationError}<p class="form-error" role="alert">{verificationError}</p>{/if}
       <Button size="large" class="full" disabled={selectedWords.length !== words.length} onclick={confirmRecoveryOrder}>Confirm order<ArrowRight size={17}/></Button>
+      <Button size="large" variant="secondary" class="full" onclick={verifyLater}>Verify later</Button>
     {:else if mode === 'passphrase'}
-      <button class="back-link" onclick={() => mode = nativeBackup ? 'create' : 'words'}><ArrowLeft size={16} />Back</button>
+      <button class="back-link" onclick={backFromPassphrase}><ArrowLeft size={16} />Back</button>
       <SetupProgress steps={softwareSteps} current={3} label="Software wallet setup progress" context="SOFTWARE WALLET"/>
       <h1>Protect your wallet</h1>
       <p class="credential-intro">Choose the BIP39 wallet passphrase that completes this backup. The same passphrase unlocks Satchel.</p>
+      {#if !backupVerified}<div class="backup-unverified-note" role="status"><ShieldCheck size={17}/><span><strong>Backup not verified yet</strong><small>You can use the wallet now, but Satchel will keep reminding you to verify the written words.</small></span></div>{/if}
       <div class="credential-form">
         <label class="field">
           <span>Wallet name</span>

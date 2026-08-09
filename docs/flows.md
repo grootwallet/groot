@@ -4,9 +4,9 @@ This document describes user-visible state transitions. The product specificatio
 
 ## Single-key onboarding
 
-`welcome → Generate software wallet → private recovery-word reveal → reconstruct all 24 words in order → wallet passphrase → created → overview`
+`welcome → Generate software wallet → private recovery-word reveal → verify all 24 words now or defer → wallet passphrase → created → overview`
 
-The generated words remain hidden until the user confirms their surroundings are private. After writing them down, creation cannot continue until all 24 words have been reconstructed from a shuffled pool in the exact original order. The deterministic browser fixture supports tap/click and drag-and-drop. Production macOS performs the same challenge in a native sheet so recovery words never cross Tauri IPC or enter webview state.
+The generated words remain hidden until the user confirms their surroundings are private. After writing them down, the user is strongly encouraged to reconstruct all 24 from a shuffled pool in the exact original order, but may choose **Verify later** without blocking creation. The deterministic browser fixture supports tap/click and drag-and-drop. Production macOS performs the same challenge in a native sheet so recovery words never cross Tauri IPC or enter webview state. A deferred wallet carries a persistent **Recovery backup not verified** warning on Overview and in Settings.
 
 - The wallet-type chooser uses three equal decision cards: software, hardware, and shared/recovery. Each card keeps its icon, title, one consequence-focused subtitle, and complexity cue inside the same target; helper copy is not detached below the action.
 - Software onboarding keeps a persistent, labeled three-stage progress indicator visible on every step: **Generate → Back up → Protect**. Completed, current, and upcoming stages are distinct, so users can estimate what remains before beginning.
@@ -16,6 +16,7 @@ The generated words remain hidden until the user confirms their surroundings are
 - Generated words stay in a zeroized Rust pending session. A secret-free native privacy gate first requires confirmation that no person, camera, or screen sharing can observe the display; only then does the attached native sheet reveal the words. The three columns read vertically as 1–8, 9–16, and 17–24. Browser fixture words exist only for deterministic UI testing and follow the same concealed-first interaction.
 - Failure stays on the current step with an inline error. A successful operation clears credential/recovery input before navigation.
 - When any wallet already exists, every add-wallet step has a close action that returns to the selected wallet without consuming the pending onboarding session.
+- `unverified Overview/Settings CTA → wallet passphrase → native shuffled-word challenge → exact match → verified`. The later flow never re-reveals the ordered words. Cancellation and mismatch preserve the unverified marker and do not restrict receiving or spending in this milestone.
 
 ## Multiple wallets
 

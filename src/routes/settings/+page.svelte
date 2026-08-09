@@ -30,6 +30,7 @@
   let nodeOpen = $state(false), nodePassword = $state(''), walletCredential = $state(''), nodeError = $state('');
   let node = $state<CoreNodeConfig>({ backend: { type: 'local_core', url: 'http://127.0.0.1:18443' }, auth: 'cookie', username: null });
   let scanOpen = $state(false), scanCredential = $state(''), scanError = $state(''), scan = $state<RecoveryScanSettings>({ birthdayHeight: 0, gapLimit: 20 }), scanDraft = $state<RecoveryScanSettings>({ birthdayHeight: 0, gapLimit: 20 });
+  let verifyOpen = $state(false), verifyCredential = $state(''), verifyError = $state(''), verifying = $state(false);
   onMount(async () => {
     theme = document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
     const registry = await walletService.profiles();
@@ -42,7 +43,7 @@
   onDestroy(() => {
     deleteCredential = '';
     confirmText = '';
-    nodePassword = ''; walletCredential = ''; scanCredential = '';
+    nodePassword = ''; walletCredential = ''; scanCredential = ''; verifyCredential = '';
   });
   function setTheme(next: 'light' | 'dark') { theme = next; document.documentElement.dataset.theme = next; document.querySelector('meta[name="theme-color"]')?.setAttribute('content', next === 'light' ? '#f4f1e9' : '#0d1118'); localStorage.setItem('satchel-theme', next); }
   async function checkConnection() {
@@ -98,6 +99,17 @@
     } catch (cause) { toast({ title: 'Could not delete wallet', description: cause instanceof Error ? cause.message : undefined, tone: 'danger' }); }
     finally { deleteCredential = ''; busy = false; }
   }
+  async function verifyBackup() {
+    verifying=true;verifyError='';
+    try {
+      const verified=await walletService.verifyBackup(verifyCredential);
+      verifyCredential='';verifyOpen=false;
+      if(!verified){toast({title:'Backup still unverified',description:'Return when your written recovery words are available.'});return;}
+      profiles=profiles.map((profile)=>profile.id===selectedWalletId?{...profile,backupVerified:true}:profile);
+      toast({title:'Recovery backup verified',description:'Your written words matched this wallet.',tone:'success'});
+    } catch(cause){verifyError=cause instanceof Error?cause.message:'Could not verify this recovery backup.';}
+    finally{verifyCredential='';verifying=false;}
+  }
   async function selectWallet(profile: WalletProfile) {
     if (profile.id === selectedWalletId) return;
     try {
@@ -131,7 +143,7 @@
   </section>
   <section class="settings-group current-wallet-settings"><h2>Backup and recovery</h2>
     <div class="settings-list">
-      <div class="setting-row wallet-context-row"><span class="setting-icon">{#if selectedProfile?.kind === 'multisig'}<ShieldCheck size={18}/>{:else if selectedProfile?.kind === 'watch_only'}<Cpu size={18}/>{:else}<KeyRound size={18}/>{/if}</span><span><strong>{backupTitle}</strong><small>{backupDescription}</small></span><span class="info-badge">Backup required</span></div>
+      {#if isSoftwareWallet && !selectedProfile?.backupVerified}<button class="wallet-context-row backup-needs-verification" onclick={() => {verifyError='';verifyOpen=true;}}><span class="setting-icon"><KeyRound size={18}/></span><span><strong>Recovery words not verified</strong><small>Use your written backup to confirm all 24 words in exact order.</small></span><span class="info-badge attention">Verify now</span></button>{:else}<div class="setting-row wallet-context-row"><span class="setting-icon">{#if selectedProfile?.kind === 'multisig'}<ShieldCheck size={18}/>{:else if selectedProfile?.kind === 'watch_only'}<Cpu size={18}/>{:else}<KeyRound size={18}/>{/if}</span><span><strong>{backupTitle}</strong><small>{backupDescription}</small></span><span class="info-badge">{isSoftwareWallet ? 'Verified' : 'Backup required'}</span></div>{/if}
       <button onclick={() => {scanDraft={...scan};scanOpen=true;}}><span class="setting-icon"><History size={18}/></span><span><strong>Recovery scan</strong><small>Birthday block {scan.birthdayHeight} · gap limit {scan.gapLimit}</small></span><ChevronRight size={16}/></button>
       {#if selectedProfile?.kind === 'multisig'}<button onclick={() => goto('/multisig/backup')}><span class="setting-icon"><ShieldCheck size={18}/></span><span><strong>Export & verify public backup</strong><small>Save descriptors and prove the backup reconstructs this wallet.</small></span><ChevronRight size={16}/></button>{/if}
     </div>
@@ -166,6 +178,12 @@
   <PasswordField label={credentialLabel} bind:value={deleteCredential} autocomplete="current-password" />
   <label class="field"><span>Type DELETE to confirm</span><input bind:value={confirmText} placeholder="DELETE" /></label>
   <div class="modal-footer"><Button variant="secondary" onclick={() => { deleting = false; deleteCredential = ''; }}>Cancel</Button><Button variant="danger" disabled={confirmText !== 'DELETE' || !deleteCredential} loading={busy} loadingLabel="Deleting…" onclick={deleteWallet}>Delete wallet</Button></div>
+</Modal>
+<Modal open={verifyOpen} title="Verify recovery backup" description="Use your written 24 words to complete a private native challenge. Satchel will not reveal them again." onclose={() => {verifyOpen=false;verifyCredential='';verifyError='';}}>
+  <div class="warning-box"><strong>Have the written backup in front of you.</strong> Verification confirms its exact word order without sending the words into the webview.</div>
+  <PasswordField label="Wallet passphrase" bind:value={verifyCredential} autocomplete="current-password" hint="Required to decrypt the recovery words only inside trusted Rust code."/>
+  {#if verifyError}<p class="form-error" role="alert">{verifyError.replace('passphrase / PIN','wallet passphrase')}</p>{/if}
+  <div class="modal-footer"><Button variant="secondary" onclick={() => {verifyOpen=false;verifyCredential='';verifyError='';}}>Cancel</Button><Button disabled={!verifyCredential} loading={verifying} loadingLabel="Opening verification…" onclick={verifyBackup}>Continue</Button></div>
 </Modal>
 <Modal open={scanOpen} title="Full wallet rescan" description="Search from the earliest possible payment while deriving a bounded address gap." onclose={() => {scanOpen=false;scanCredential='';scanError='';scanDraft={...scan};}}>
   <div class="scan-form"><div class="warning-box"><strong>Earlier is safer; later is faster.</strong> A birthday after the wallet’s first payment can miss funds. A larger gap increases work and memory use.</div>

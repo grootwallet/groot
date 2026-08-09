@@ -15,6 +15,10 @@ pub const MAX_INACTIVITY_TIMEOUT_MINUTES: u16 = 60;
 fn default_inactivity_timeout_minutes() -> u16 {
     DEFAULT_INACTIVITY_TIMEOUT_MINUTES
 }
+
+fn legacy_backup_verified() -> bool {
+    true
+}
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum WalletKind {
@@ -31,6 +35,8 @@ pub struct WalletProfile {
     pub kind: WalletKind,
     pub descriptor_checksum: String,
     pub created_at: u64,
+    #[serde(default = "legacy_backup_verified")]
+    pub backup_verified: bool,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -218,6 +224,7 @@ mod tests {
             kind: WalletKind::SingleKey,
             descriptor_checksum: "abcd1234".into(),
             created_at: 1,
+            backup_verified: true,
         }
     }
     #[test]
@@ -296,6 +303,19 @@ mod tests {
             DEFAULT_INACTIVITY_TIMEOUT_MINUTES
         );
         decoded.validate().unwrap();
+    }
+
+    #[test]
+    fn legacy_wallet_profiles_remain_verified_while_new_state_round_trips() {
+        let legacy = r#"{"id":"00000000-0000-0000-0000-000000000000","name":"Wallet","network":"regtest","kind":"single_key","descriptorChecksum":"abcd1234","createdAt":1}"#;
+        let decoded: WalletProfile = serde_json::from_str(legacy).unwrap();
+        assert!(decoded.backup_verified);
+
+        let mut unverified = decoded;
+        unverified.backup_verified = false;
+        let encoded = serde_json::to_string(&unverified).unwrap();
+        let round_trip: WalletProfile = serde_json::from_str(&encoded).unwrap();
+        assert!(!round_trip.backup_verified);
     }
 
     fn test_dir() -> std::path::PathBuf {

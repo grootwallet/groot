@@ -121,7 +121,7 @@ export type RecoveryPolicyAnalysis = {
 };
 export type RecoveryDrill = { firstAddress: string; matchesCurrentWallet: boolean };
 export type MnemonicPresentation =
-  | { mode: 'native' }
+  | { mode: 'native'; backupVerified: boolean }
   | { mode: 'fixture'; words: string[] };
 export type WalletProfile = {
   id: string;
@@ -130,6 +130,7 @@ export type WalletProfile = {
   kind: 'single_key' | 'multisig' | 'watch_only';
   descriptorChecksum: string;
   createdAt: number;
+  backupVerified: boolean;
 };
 export type WalletRegistry = {
   version: number;
@@ -240,7 +241,8 @@ export interface WalletPort {
   selectWallet(walletId: string): Promise<WalletProfile>;
   generateMnemonic(supplementalEntropy?: SupplementalEntropyInput): Promise<MnemonicPresentation>;
   cancelOnboarding(): Promise<void>;
-  createWallet(name: string, credential: string): Promise<void>;
+  createWallet(name: string, credential: string, backupVerified: boolean): Promise<void>;
+  verifyBackup(credential: string): Promise<boolean>;
   recoverWallet(name: string, mnemonic: string, credential: string): Promise<void>;
   unlock(credential: string): Promise<void>;
   lock(): Promise<void>;

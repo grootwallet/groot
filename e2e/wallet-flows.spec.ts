@@ -97,6 +97,36 @@ test('creates a 24-word wallet and clears onboarding secrets', async ({ page }) 
   await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible();
 });
 
+test('can defer seed verification and complete it later from the wallet', async ({ page }) => {
+  await page.goto('/welcome?fixture-empty=1');
+  await page.getByRole('button', { name: 'Create new wallet' }).click();
+  await page.getByRole('button', { name: 'Software wallet' }).click();
+  await page.getByRole('button', { name: 'Generate 24 recovery words' }).click();
+  await page.getByRole('button', { name: /reveal words/i }).click();
+  await page.getByRole('button', { name: 'I wrote them down' }).click();
+  await page.getByRole('button', { name: 'Verify later' }).click();
+  await expect(page.getByText('Backup not verified yet')).toBeVisible();
+  await page.getByLabel('Wallet passphrase', { exact: true }).fill('deferred-backup-passphrase');
+  await page.getByLabel('Confirm wallet passphrase', { exact: true }).fill('deferred-backup-passphrase');
+  await page.getByLabel(/I understand this exact passphrase/).check();
+  await page.getByRole('button', { name: 'Create wallet' }).click();
+
+  const backupStatus = page.getByRole('region', { name: 'Recovery backup status' });
+  await expect(backupStatus.getByText('Recovery backup not verified')).toBeVisible();
+  await backupStatus.getByRole('button', { name: 'Verify now' }).click();
+  const verifyDialog = page.getByRole('dialog', { name: 'Verify recovery backup' });
+  await verifyDialog.getByLabel('Wallet passphrase', { exact: true }).fill('wrong-passphrase');
+  await verifyDialog.getByRole('button', { name: 'Continue' }).click();
+  await expect(verifyDialog.getByText('Incorrect wallet passphrase.')).toBeVisible();
+  await verifyDialog.getByLabel('Wallet passphrase', { exact: true }).fill('deferred-backup-passphrase');
+  await verifyDialog.getByRole('button', { name: 'Continue' }).click();
+  await expect(page.getByText('Recovery backup verified', { exact: true })).toBeVisible();
+  await expect(backupStatus).toHaveCount(0);
+
+  await page.getByRole('link', { name: 'Settings' }).click();
+  await expect(page.getByText('Verified', { exact: true })).toBeVisible();
+});
+
 test('optional physical entropy entry is bounded and cleared after generation', async ({ page }) => {
   await page.goto('/welcome?fixture-empty=1');
   await page.getByRole('button', { name: 'Create new wallet' }).click();

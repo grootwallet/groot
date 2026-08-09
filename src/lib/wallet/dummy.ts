@@ -45,8 +45,8 @@ export class DummyWalletAdapter implements WalletPort {
   #externalWallet: ExternalSignerWallet | null = null;
   #externalProposals = new Map<string, MultisigProposal>();
   #profiles: WalletProfile[] = this.#exists ? [
-    { id: 'fixture-single', name: 'Everyday wallet', network: defaultConfig.network, kind: 'single_key', descriptorChecksum: 'fixture01', createdAt: 1 },
-    { id: 'fixture-multisig', name: 'Family vault', network: defaultConfig.network, kind: 'multisig', descriptorChecksum: 'demo2of3', createdAt: 2 }
+    { id: 'fixture-single', name: 'Everyday wallet', network: defaultConfig.network, kind: 'single_key', descriptorChecksum: 'fixture01', createdAt: 1, backupVerified: true },
+    { id: 'fixture-multisig', name: 'Family vault', network: defaultConfig.network, kind: 'multisig', descriptorChecksum: 'demo2of3', createdAt: 2, backupVerified: true }
   ] : [];
   #selectedWalletId: string | null = this.#profiles[0]?.id ?? null;
   #inactivityTimeoutMinutes = 5;
@@ -88,16 +88,23 @@ export class DummyWalletAdapter implements WalletPort {
     return { mode: 'fixture' as const, words: 'adapt cactus lesson motor acoustic globe ribbon pluck vessel deputy crisp fossil harbor pencil drift copper museum twelve gentle oak fabric north silent width'.split(' ') };
   }
   async cancelOnboarding() {}
-  async createWallet(name: string, credential: string) {
+  async createWallet(name: string, credential: string, backupVerified: boolean) {
     if (!name.trim()) throw new WalletError('invalid_wallet_name', 'A wallet name is required.');
     if (!credential) throw new WalletError('invalid_credential', 'A passphrase / PIN is required.');
-    const profile = { id: crypto.randomUUID(), name: name.trim(), network: defaultConfig.network, kind: 'single_key' as const, descriptorChecksum: crypto.randomUUID().replaceAll('-', '').slice(0, 8), createdAt: Date.now() };
+    const profile = { id: crypto.randomUUID(), name: name.trim(), network: defaultConfig.network, kind: 'single_key' as const, descriptorChecksum: crypto.randomUUID().replaceAll('-', '').slice(0, 8), createdAt: Date.now(), backupVerified };
     this.#profiles.push(profile); this.#selectedWalletId = profile.id; this.#credentials.set(profile.id, credential); this.#unlockedWalletIds.add(profile.id);
     this.#exists = true;
   }
   async recoverWallet(name: string, mnemonic: string, credential: string) {
     if (mnemonic.trim().split(/\s+/).length !== 24) throw new WalletError('invalid_mnemonic', 'Satchel requires exactly 24 recovery words.');
-    return this.createWallet(name, credential);
+    return this.createWallet(name, credential, true);
+  }
+  async verifyBackup(credential: string) {
+    const profile = this.#profiles.find((wallet) => wallet.id === this.#selectedWalletId);
+    if (!profile || profile.kind !== 'single_key') throw new WalletError('wrong_wallet_kind', 'Select a software wallet first.');
+    if (this.#credentials.get(profile.id) !== credential) throw new WalletError('invalid_credential', 'Incorrect passphrase / PIN.');
+    profile.backupVerified = true;
+    return true;
   }
   async unlock(credential: string) {
     if (this.#secureStorageRetryPending) {
@@ -277,7 +284,7 @@ export class DummyWalletAdapter implements WalletPort {
     return { label: label.trim(), fingerprint: trezor ? trezorFingerprint : 'f00dbabe', xpub: trezor ? 'tpubD6NzVbkrYhZ4Y-fixture-trezor-standard-public-key' : 'tpubD6NzVbkrYhZ4Y-fixture-external-public-key', derivationPath: "m/84'/1'/0'", source: 'usb', deviceType: trezor ? 'trezor' : 'coldcard' };
   }
   async createExternalSignerWallet(name: string, signer: ExternalSigner, credential: string): Promise<ExternalSignerWallet> {
-    const profile: WalletProfile = { id: crypto.randomUUID(), name: name.trim(), network: defaultConfig.network, kind: 'watch_only', descriptorChecksum: 'extkey01', createdAt: Date.now() };
+    const profile: WalletProfile = { id: crypto.randomUUID(), name: name.trim(), network: defaultConfig.network, kind: 'watch_only', descriptorChecksum: 'extkey01', createdAt: Date.now(), backupVerified: true };
     this.#profiles.push(profile); this.#selectedWalletId = profile.id; this.#credentials.set(profile.id, credential); this.#unlockedWalletIds.add(profile.id); this.#exists = true;
     this.#externalWallet = { version: 1, name: profile.name, signer: { ...signer }, externalDescriptor: `wpkh([${signer.fingerprint}/84'/1'/0']${signer.xpub}/0/*)#fixture1`, internalDescriptor: `wpkh([${signer.fingerprint}/84'/1'/0']${signer.xpub}/1/*)#fixture2` };
     return structuredClone(this.#externalWallet);
@@ -337,7 +344,7 @@ export class DummyWalletAdapter implements WalletPort {
     this.#multisig = { ...preview, kind: 'multisig', createdAt: new Date().toISOString(), policyType: 'standard' };
     this.#multisigCredential = credential;
     if (this.#multisigProfileId) { this.#profiles = this.#profiles.filter((wallet) => wallet.id !== this.#multisigProfileId); this.#credentials.delete(this.#multisigProfileId); this.#unlockedWalletIds.delete(this.#multisigProfileId); }
-    const profile = { id: crypto.randomUUID(), name: this.#multisig.name, network: defaultConfig.network, kind: 'multisig' as const, descriptorChecksum: 'multisig', createdAt: Date.now() };
+    const profile = { id: crypto.randomUUID(), name: this.#multisig.name, network: defaultConfig.network, kind: 'multisig' as const, descriptorChecksum: 'multisig', createdAt: Date.now(), backupVerified: true };
     this.#profiles.push(profile); this.#multisigProfileId = profile.id; this.#selectedWalletId = profile.id; this.#credentials.set(profile.id, credential); this.#unlockedWalletIds.add(profile.id); this.#exists = true;
     return structuredClone(this.#multisig);
   }
@@ -349,7 +356,7 @@ export class DummyWalletAdapter implements WalletPort {
     this.#multisig = { kind: 'multisig', name: name.trim(), threshold: analysis.paths[0].threshold, cosigners, externalDescriptor: analysis.externalDescriptor, internalDescriptor: analysis.internalDescriptor, createdAt: new Date().toISOString(), policyType: 'recovery', recoveryTemplate: template, spendingPaths: analysis.paths };
     this.#multisigCredential = credential;
     if (this.#multisigProfileId) { this.#profiles = this.#profiles.filter((wallet) => wallet.id !== this.#multisigProfileId); this.#credentials.delete(this.#multisigProfileId); this.#unlockedWalletIds.delete(this.#multisigProfileId); }
-    const profile = { id: crypto.randomUUID(), name: this.#multisig.name, network: defaultConfig.network, kind: 'multisig' as const, descriptorChecksum: 'recovery', createdAt: Date.now() };
+    const profile = { id: crypto.randomUUID(), name: this.#multisig.name, network: defaultConfig.network, kind: 'multisig' as const, descriptorChecksum: 'recovery', createdAt: Date.now(), backupVerified: true };
     this.#profiles.push(profile); this.#multisigProfileId = profile.id; this.#selectedWalletId = profile.id; this.#credentials.set(profile.id, credential); this.#unlockedWalletIds.add(profile.id); this.#exists = true;
     return structuredClone(this.#multisig);
   }
@@ -391,7 +398,7 @@ export class DummyWalletAdapter implements WalletPort {
     recovered.createdAt = new Date().toISOString();
     this.#multisig = recovered;
     this.#multisigCredential = credential;
-    const profile = { id: crypto.randomUUID(), name: recovered.name, network: defaultConfig.network, kind: 'multisig' as const, descriptorChecksum: 'bsms-restored', createdAt: Date.now() };
+    const profile = { id: crypto.randomUUID(), name: recovered.name, network: defaultConfig.network, kind: 'multisig' as const, descriptorChecksum: 'bsms-restored', createdAt: Date.now(), backupVerified: true };
     this.#profiles.push(profile); this.#multisigProfileId = profile.id; this.#selectedWalletId = profile.id; this.#credentials.set(profile.id, credential); this.#exists = true;
     return structuredClone(recovered);
   }
@@ -401,7 +408,7 @@ export class DummyWalletAdapter implements WalletPort {
   }
   async recoverMultisig(encodedBackup: string, credential: string) {
     if (this.#multisig) throw new WalletError('wallet_already_exists', 'Delete the current multisig wallet before recovering another one.');
-    try { const parsed = JSON.parse(encodedBackup); if (parsed?.version !== 1 || parsed?.network !== defaultConfig.network || !parsed.wallet) throw new Error(); this.#recoveryVerified = false; this.#multisig = parsed.wallet; this.#multisigCredential = credential; const profile = { id: crypto.randomUUID(), name: this.#multisig!.name, network: defaultConfig.network, kind: 'multisig' as const, descriptorChecksum: 'restored', createdAt: Date.now() }; this.#profiles.push(profile); this.#multisigProfileId = profile.id; this.#selectedWalletId = profile.id; this.#credentials.set(profile.id, credential); this.#unlockedWalletIds.add(profile.id); this.#exists = true; return structuredClone(this.#multisig!); }
+    try { const parsed = JSON.parse(encodedBackup); if (parsed?.version !== 1 || parsed?.network !== defaultConfig.network || !parsed.wallet) throw new Error(); this.#recoveryVerified = false; this.#multisig = parsed.wallet; this.#multisigCredential = credential; const profile = { id: crypto.randomUUID(), name: this.#multisig!.name, network: defaultConfig.network, kind: 'multisig' as const, descriptorChecksum: 'restored', createdAt: Date.now(), backupVerified: true }; this.#profiles.push(profile); this.#multisigProfileId = profile.id; this.#selectedWalletId = profile.id; this.#credentials.set(profile.id, credential); this.#unlockedWalletIds.add(profile.id); this.#exists = true; return structuredClone(this.#multisig!); }
     catch { throw new WalletError('invalid_backup', 'Enter a valid Satchel descriptor backup.'); }
   }
   async deleteMultisig(credential: string, confirmation: string) {

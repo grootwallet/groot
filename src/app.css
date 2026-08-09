@@ -139,6 +139,10 @@ code { font-family: "SFMono-Regular", Consolas, ui-monospace, monospace; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 .balance-card { border: 1px solid var(--border); background: linear-gradient(140deg, var(--panel-2), var(--panel)); border-radius: 12px; padding: 26px 28px 23px; position: relative; overflow: hidden; }
+.backup-verification-banner { display: grid; grid-template-columns: 28px minmax(0,1fr) auto; align-items: center; gap: 11px; margin: -18px 0 16px; padding: 12px 14px; border: 1px solid color-mix(in srgb, var(--accent) 34%, var(--border)); border-radius: 9px; color: var(--accent); background: var(--accent-soft); }
+.backup-verification-banner > span { min-width: 0; display: grid; gap: 3px; }
+.backup-verification-banner strong { color: var(--text); font-size: 11px; }
+.backup-verification-banner small { color: var(--muted); font-size: 9px; line-height: 1.45; }
 .balance-card::after { content: ""; position: absolute; width: 260px; height: 260px; border-radius: 50%; background: radial-gradient(circle, rgba(242,169,0,.065), transparent 66%); top: -145px; right: -50px; }
 .balance-top { color: var(--muted); font-size: 13px; display: flex; align-items: center; gap: 6px; }
 .ghost-icon { border: 0; background: none; color: var(--muted-2); padding: 2px; display: inline-flex; cursor: pointer; }
@@ -422,6 +426,7 @@ code { font-family: "SFMono-Regular", Consolas, ui-monospace, monospace; }
 .settings-list > button > svg:last-child { color: var(--muted-2); }
 .wallet-context-row .setting-icon { color: var(--fr-red); background: color-mix(in srgb, var(--fr-red) 7%, var(--surface-icon)); }
 .info-badge { padding: 4px 8px; color: var(--warning-text); background: var(--accent-soft); border-radius: 999px; font-size: 8px; font-weight: 650; white-space: nowrap; }
+.info-badge.attention { color: var(--accent); outline: 1px solid color-mix(in srgb, var(--accent) 34%, transparent); }
 .info-badge.muted { color: var(--muted); background: var(--surface-icon); }
 .timeout-choice { min-width: 106px; height: 34px; padding: 0 28px 0 10px; color: var(--text); background-color: var(--panel-2); border: 1px solid var(--border-strong); border-radius: 8px; font: inherit; font-size: 10px; font-weight: 650; cursor: pointer; }
 .timeout-choice:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
@@ -550,6 +555,8 @@ code { font-family: "SFMono-Regular", Consolas, ui-monospace, monospace; }
 .credential-warning p { min-width: 0; margin: 0; display: grid; gap: 3px; }
 .credential-warning strong { color: var(--text-soft); font-size: 10px; }
 .credential-warning span { color: var(--muted); font-size: 9px; line-height: 1.45; }
+.backup-unverified-note { display: grid; grid-template-columns: 24px minmax(0,1fr); align-items: start; gap: 10px; padding: 12px; border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--border)); border-radius: 8px; color: var(--accent); background: var(--accent-soft); }
+.backup-unverified-note span { display: grid; gap: 4px; }.backup-unverified-note strong { color: var(--text); font-size: 10px; }.backup-unverified-note small { color: var(--muted); font-size: 9px; line-height: 1.45; }
 .onboarding-footer { text-align: center; color: var(--muted-2); font-size: 8px; padding: 26px; }
 .prototype-hint { width: fit-content; max-width: 100%; padding: 8px 10px; margin: 7px 0 0 !important; color: var(--muted) !important; background: var(--panel-2); border: 1px solid var(--border); border-radius: 7px; font-size: 10px !important; line-height: 1.4; overflow-wrap: anywhere; }
 .prototype-hint code { color: var(--text); }
@@ -798,6 +805,8 @@ code { font-family: "SFMono-Regular", Consolas, ui-monospace, monospace; }
   .page-header h1 { font-size: 25px; }
   .desktop-only { display: none; }
   .balance-card { padding: 22px 20px; }
+  .backup-verification-banner { grid-template-columns: 24px minmax(0,1fr); margin-top: -12px; }
+  .backup-verification-banner .button { grid-column: 2; justify-self: start; }
   .wallet-skeleton.balance { min-height: 201px; padding: 22px 20px; }
   .wallet-skeleton.balance .amount { width: 72%; height: 32px; }
   .balance-value { font-size: 35px; }

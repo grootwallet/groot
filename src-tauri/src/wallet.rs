@@ -380,6 +380,7 @@ struct PendingProposal {
 struct PendingMnemonic {
     words: Zeroizing<String>,
     created_at: u64,
+    backup_verified: bool,
 }
 
 struct PendingHardwarePin {
@@ -1100,6 +1101,7 @@ fn profile_from_directory(
         kind,
         descriptor_checksum: checksum,
         created_at: now(),
+        backup_verified: true,
     })
 }
 
@@ -1222,6 +1224,7 @@ fn commit_multisig_profile(app: &AppHandle, id: Uuid, wallet: &MultisigWalletDto
             kind: WalletKind::Multisig,
             descriptor_checksum: descriptor_checksum(&wallet.external_descriptor)?,
             created_at: now(),
+            backup_verified: true,
         },
     )
 }
@@ -2638,6 +2641,7 @@ fn create_from_mnemonic(
     name: String,
     mnemonic: Mnemonic,
     credential: &str,
+    backup_verified: bool,
 ) -> ApiResult<()> {
     let name = name.trim();
     if name.is_empty() || name.chars().count() > 48 {
@@ -2669,6 +2673,7 @@ fn create_from_mnemonic(
                     &wallet.public_descriptor(KeychainKind::External).to_string(),
                 )?,
                 created_at: now(),
+                backup_verified,
             },
         )
     })();
@@ -3086,26 +3091,30 @@ pub fn wallet_generate_mnemonic(
     app: AppHandle,
     state: State<'_, AppState>,
     supplemental_entropy: Option<SupplementalEntropyDto>,
-) -> ApiResult<()> {
+) -> ApiResult<bool> {
     let _operation = operation_guard(&state)?;
     let supplemental_digest = supplemental_entropy
         .map(supplemental_entropy_digest)
         .transpose()?;
     let mnemonic = generate_software_mnemonic(supplemental_digest.as_deref())?;
     let words = Zeroizing::new(mnemonic.to_string());
-    let confirmed = native_backup::present(&app, words.as_str()).map_err(internal)?;
-    if !confirmed {
-        state.pending_mnemonic.lock().map_err(internal)?.take();
-        return Err(api_error(
-            "onboarding_cancelled",
-            "Recovery-word backup was cancelled.",
-        ));
-    }
+    let backup_verified = match native_backup::present(&app, words.as_str()).map_err(internal)? {
+        native_backup::BackupOutcome::Cancelled => {
+            state.pending_mnemonic.lock().map_err(internal)?.take();
+            return Err(api_error(
+                "onboarding_cancelled",
+                "Recovery-word backup was cancelled.",
+            ));
+        }
+        native_backup::BackupOutcome::Unverified => false,
+        native_backup::BackupOutcome::Verified => true,
+    };
     *state.pending_mnemonic.lock().map_err(internal)? = Some(PendingMnemonic {
         words,
         created_at: now(),
+        backup_verified,
     });
-    Ok(())
+    Ok(backup_verified)
 }
 
 #[tauri::command]
@@ -3142,7 +3151,13 @@ pub fn wallet_create(
         ));
     }
     let mnemonic = Mnemonic::parse(pending.words.as_str()).map_err(internal)?;
-    if let Err(error) = create_from_mnemonic(&app, name, mnemonic, credential.as_str()) {
+    if let Err(error) = create_from_mnemonic(
+        &app,
+        name,
+        mnemonic,
+        credential.as_str(),
+        pending.backup_verified,
+    ) {
         *state.pending_mnemonic.lock().map_err(internal)? = Some(pending);
         return Err(error);
     }
@@ -3175,9 +3190,42 @@ pub fn wallet_recover(
             "Satchel requires exactly 24 recovery words.",
         ));
     }
-    create_from_mnemonic(&app, name, mnemonic, credential.as_str())?;
+    create_from_mnemonic(&app, name, mnemonic, credential.as_str(), true)?;
     unlock_selected(&app, &state)?;
     Ok(())
+}
+
+#[tauri::command]
+pub fn wallet_verify_backup(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    credential: String,
+) -> ApiResult<bool> {
+    let _operation = operation_guard(&state)?;
+    require_unlocked(&app, &state)?;
+    let profile = selected_profile_of_kind(&app, WalletKind::SingleKey)?;
+    if profile.backup_verified {
+        return Ok(true);
+    }
+    let credential = Zeroizing::new(credential);
+    check_auth_throttle(&app, &state)?;
+    let credential_result = decrypt_mnemonic(&app, credential.as_str());
+    record_auth_result(&app, &state, &credential_result)?;
+    let mnemonic = credential_result?;
+    let words = Zeroizing::new(mnemonic.to_string());
+    if !native_backup::verify(&app, words.as_str()).map_err(internal)? {
+        return Ok(false);
+    }
+
+    let mut registry = load_registry(&app)?;
+    let selected = registry
+        .wallets
+        .iter_mut()
+        .find(|wallet| wallet.id == profile.id)
+        .ok_or_else(|| registry_api_error(RegistryError::UnknownSelection))?;
+    selected.backup_verified = true;
+    save_registry(&app, &registry)?;
+    Ok(true)
 }
 
 #[tauri::command]
@@ -4043,6 +4091,7 @@ pub fn external_signer_create(
                     &wallet.public_descriptor(KeychainKind::External).to_string(),
                 )?,
                 created_at: now(),
+                backup_verified: true,
             },
         )
     })();

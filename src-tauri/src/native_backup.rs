@@ -2,13 +2,26 @@ use tauri::AppHandle;
 #[cfg(not(target_os = "macos"))]
 use zeroize::Zeroizing;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BackupOutcome {
+    Cancelled,
+    Unverified,
+    Verified,
+}
+
 #[cfg(target_os = "macos")]
-pub fn present(app: &AppHandle, words: &str) -> Result<bool, String> {
+pub fn present(app: &AppHandle, words: &str) -> Result<BackupOutcome, String> {
     macos::present(app, words)
 }
 
 #[cfg(target_os = "macos")]
+pub fn verify(app: &AppHandle, words: &str) -> Result<bool, String> {
+    macos::verify(app, words)
+}
+
+#[cfg(target_os = "macos")]
 mod macos {
+    use super::BackupOutcome;
     use objc2::{
         define_class, msg_send, rc::autoreleasepool, rc::Retained, sel, DefinedClass,
         MainThreadMarker,
@@ -118,7 +131,7 @@ mod macos {
         }
     );
 
-    pub(super) fn present(app: &AppHandle, words: &str) -> Result<bool, String> {
+    pub(super) fn present(app: &AppHandle, words: &str) -> Result<BackupOutcome, String> {
         let words = words
             .split_whitespace()
             .map(ToOwned::to_owned)
@@ -150,7 +163,7 @@ mod macos {
                     // Tauri owns this NSWindow for the application lifetime.
                     let parent = unsafe { &*(raw_window.cast::<NSWindow>()) };
                     if !confirm_private_reveal(parent, mtm) {
-                        let _ = sender.send(Ok(false));
+                        let _ = sender.send(Ok(BackupOutcome::Cancelled));
                         return;
                     }
                     let width = sheet_width(parent, 720.0);
@@ -254,11 +267,16 @@ mod macos {
                     let response = NSApplication::sharedApplication(mtm).runModalForWindow(&panel);
                     parent.endSheet_returnCode(&panel, response);
                     if response != NSModalResponseOK {
-                        let _ = sender.send(Ok(false));
+                        let _ = sender.send(Ok(BackupOutcome::Cancelled));
                         return;
                     }
                     let verified = verify_backup_order(parent, &words, mtm);
-                    let _ = sender.send(Ok(verified));
+                    let outcome = if verified {
+                        BackupOutcome::Verified
+                    } else {
+                        BackupOutcome::Unverified
+                    };
+                    let _ = sender.send(Ok(outcome));
                 });
             })
             .map_err(|error| error.to_string())?;
@@ -266,6 +284,47 @@ mod macos {
         receiver
             .recv()
             .map_err(|_| "Native recovery-word presentation closed unexpectedly.".to_owned())?
+    }
+
+    pub(super) fn verify(app: &AppHandle, words: &str) -> Result<bool, String> {
+        let words = words
+            .split_whitespace()
+            .map(ToOwned::to_owned)
+            .collect::<Vec<_>>();
+        if words.len() != 24 {
+            return Err("Native backup requires exactly 24 recovery words.".to_owned());
+        }
+        let words = Zeroizing::new(words);
+        let app = app.clone();
+        let (sender, receiver) = sync_channel(1);
+
+        app.clone()
+            .run_on_main_thread(move || {
+                autoreleasepool(|_| {
+                    let Some(mtm) = MainThreadMarker::new() else {
+                        let _ =
+                            sender.send(Err("Native backup must run on the main thread.".into()));
+                        return;
+                    };
+                    let Some(window) = app.get_webview_window("main") else {
+                        let _ = sender.send(Err("Satchel's main window is unavailable.".into()));
+                        return;
+                    };
+                    let Ok(raw_window) = window.ns_window() else {
+                        let _ = sender.send(Err("Satchel's native window is unavailable.".into()));
+                        return;
+                    };
+
+                    // Tauri owns this NSWindow for the application lifetime.
+                    let parent = unsafe { &*(raw_window.cast::<NSWindow>()) };
+                    let _ = sender.send(Ok(verify_backup_order(parent, &words, mtm)));
+                });
+            })
+            .map_err(|error| error.to_string())?;
+
+        receiver
+            .recv()
+            .map_err(|_| "Native recovery-word verification closed unexpectedly.".to_owned())?
     }
 
     fn confirm_private_reveal(parent: &NSWindow, mtm: MainThreadMarker) -> bool {
@@ -516,7 +575,7 @@ mod macos {
         );
         let cancel = unsafe {
             NSButton::buttonWithTitle_target_action(
-                &NSString::from_str("Cancel"),
+                &NSString::from_str("Verify later"),
                 Some(&root),
                 Some(sel!(cancelVerification:)),
                 mtm,
@@ -632,7 +691,7 @@ mod macos {
 }
 
 #[cfg(not(target_os = "macos"))]
-pub fn present(app: &AppHandle, words: &str) -> Result<bool, String> {
+pub fn present(app: &AppHandle, words: &str) -> Result<BackupOutcome, String> {
     use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 
     let reveal = app
@@ -646,11 +705,11 @@ pub fn present(app: &AppHandle, words: &str) -> Result<bool, String> {
         ))
         .blocking_show();
     if !reveal {
-        return Ok(false);
+        return Ok(BackupOutcome::Cancelled);
     }
 
     let display = Zeroizing::new(format_words(words)?);
-    Ok(app
+    Ok(if app
         .dialog()
         .message(format!(
             "Write these 24 words down in order. Keep them offline.\n\n{}\n\nSatchel cannot recover these words for you.",
@@ -662,7 +721,17 @@ pub fn present(app: &AppHandle, words: &str) -> Result<bool, String> {
             "I wrote them down".to_owned(),
             "Cancel".to_owned(),
         ))
-        .blocking_show())
+        .blocking_show()
+    {
+        BackupOutcome::Unverified
+    } else {
+        BackupOutcome::Cancelled
+    })
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn verify(_app: &AppHandle, _words: &str) -> Result<bool, String> {
+    Err("Recovery-word verification is not yet available on this platform.".to_owned())
 }
 
 #[cfg(any(not(target_os = "macos"), test))]

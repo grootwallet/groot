@@ -1,11 +1,13 @@
 <script lang="ts">
   import { Activity, ArrowDownToLine, ArrowUpFromLine, CircleDot, Eye, EyeOff, RefreshCw, ShieldCheck } from '@lucide/svelte';
   import Button from '$lib/components/Button.svelte';
+  import Modal from '$lib/components/Modal.svelte';
+  import PasswordField from '$lib/components/PasswordField.svelte';
   import TxList from '$lib/components/TxList.svelte';
   import TxDetailsModal from '$lib/components/TxDetailsModal.svelte';
   import { btc, shortSats } from '$lib/data';
   import { toast } from '$lib/stores/toasts';
-  import { walletService, WalletError, type WalletSnapshot } from '$lib/wallet';
+  import { walletService, WalletError, type WalletProfile, type WalletSnapshot } from '$lib/wallet';
   import { pendingBalance, sortTransactionsNewestFirst } from '$lib/wallet/presentation';
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
@@ -26,6 +28,11 @@
   let moreMenu = $state<HTMLDivElement | null>(null);
   let moreTrigger = $state<HTMLButtonElement | null>(null);
   let loadError = $state('');
+  let selectedProfile = $state<WalletProfile | null>(null);
+  let verifyOpen = $state(false);
+  let verifyCredential = $state('');
+  let verifyError = $state('');
+  let verifying = $state(false);
   const pendingSats = $derived(snapshot ? pendingBalance(snapshot.balance) : 0);
   const recentTransactions = $derived(sortTransactionsNewestFirst(snapshot?.transactions ?? []).slice(0, 3));
   onMount(loadSnapshot);
@@ -34,7 +41,8 @@
     try {
       if (!await walletService.exists()) { await goto('/welcome'); return; }
       const registry = await walletService.profiles();
-      multisig = registry.wallets.find((wallet) => wallet.id === registry.selectedWalletId)?.kind === 'multisig';
+      selectedProfile = registry.wallets.find((wallet) => wallet.id === registry.selectedWalletId) ?? null;
+      multisig = selectedProfile?.kind === 'multisig';
       snapshot = multisig ? await walletService.multisigSnapshot() : await walletService.snapshot();
     } catch (cause) {
       if (cause instanceof WalletError && cause.code === 'wallet_locked') { await goto('/unlock'); return; }
@@ -74,10 +82,33 @@
     catch (cause) { toast({ title: 'Sync failed', description: cause instanceof Error ? cause.message : undefined, tone: 'danger' }); }
     finally { syncing = false; }
   };
+  async function verifyBackup() {
+    verifying = true;
+    verifyError = '';
+    try {
+      const verified = await walletService.verifyBackup(verifyCredential);
+      verifyCredential = '';
+      verifyOpen = false;
+      if (!verified) {
+        toast({ title: 'Backup still unverified', description: 'You can return to verification whenever you are ready.' });
+        return;
+      }
+      if (selectedProfile) selectedProfile = { ...selectedProfile, backupVerified: true };
+      toast({ title: 'Recovery backup verified', description: 'Your written words matched this wallet.', tone: 'success' });
+    } catch (cause) {
+      verifyError = cause instanceof Error ? cause.message : 'Could not verify this recovery backup.';
+    } finally {
+      verifyCredential = '';
+      verifying = false;
+    }
+  }
 </script>
 
 <div class="page dashboard-page">
   <header class="page-header"><div><p class="eyebrow">WALLET</p><h1>Overview</h1></div><button class="sync-button" onclick={sync}><RefreshCw size={15} class={syncing ? 'spin' : ''} />{syncing ? 'Syncing' : 'Updated now'}</button></header>
+  {#if selectedProfile?.kind === 'single_key' && !selectedProfile.backupVerified}
+    <section class="backup-verification-banner" aria-label="Recovery backup status"><ShieldCheck size={18}/><span><strong>Recovery backup not verified</strong><small>Confirm your written words so you know this wallet can be recovered.</small></span><Button size="small" variant="secondary" onclick={() => { verifyError=''; verifyOpen=true; }}>Verify now</Button></section>
+  {/if}
   {#if loadError && !snapshot}
     <LoadFailure title="Wallet data is unavailable" description={loadError} onretry={loadSnapshot} />
   {:else if snapshot}
@@ -114,3 +145,9 @@
 </div>
 
 <TxDetailsModal transaction={selected} {multisig} onclose={() => selected = null} />
+<Modal open={verifyOpen} title="Verify recovery backup" description="Use your written 24 words to complete a private native challenge. Satchel will not reveal them again." onclose={() => { verifyOpen=false; verifyCredential=''; verifyError=''; }}>
+  <div class="warning-box"><strong>Have the written backup in front of you.</strong> Verification confirms its exact word order without sending the words into the webview.</div>
+  <PasswordField label="Wallet passphrase" bind:value={verifyCredential} autocomplete="current-password" hint="Required to decrypt the recovery words only inside trusted Rust code."/>
+  {#if verifyError}<p class="form-error" role="alert">{verifyError.replace('passphrase / PIN', 'wallet passphrase')}</p>{/if}
+  <div class="modal-footer"><Button variant="secondary" onclick={() => { verifyOpen=false; verifyCredential=''; verifyError=''; }}>Cancel</Button><Button disabled={!verifyCredential} loading={verifying} loadingLabel="Opening verification…" onclick={verifyBackup}>Continue</Button></div>
+</Modal>

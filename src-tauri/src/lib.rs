@@ -31,6 +31,7 @@ pub fn run() {
             wallet::wallet_generate_mnemonic,
             wallet::wallet_cancel_onboarding,
             wallet::wallet_create,
+            wallet::wallet_verify_backup,
             wallet::wallet_recover,
             wallet::wallet_unlock,
             wallet::wallet_snapshot,

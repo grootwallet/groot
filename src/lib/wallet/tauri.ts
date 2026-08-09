@@ -66,11 +66,12 @@ export class TauriWalletAdapter implements WalletPort {
   saveInactivityTimeout(minutes: number) { return command<WalletRegistry>('wallet_inactivity_timeout_save', { minutes }); }
   selectWallet(walletId: string) { return command<WalletProfile>('wallet_select', { walletId }); }
   async generateMnemonic(supplementalEntropy?: SupplementalEntropyInput): Promise<MnemonicPresentation> {
-    await command<void>('wallet_generate_mnemonic', { supplementalEntropy: supplementalEntropy ?? null });
-    return { mode: 'native' };
+    const backupVerified = await command<boolean>('wallet_generate_mnemonic', { supplementalEntropy: supplementalEntropy ?? null });
+    return { mode: 'native', backupVerified };
   }
   cancelOnboarding() { return command<void>('wallet_cancel_onboarding'); }
-  createWallet(name: string, credential: string) { return command<void>('wallet_create', { name, credential }); }
+  createWallet(name: string, credential: string, _backupVerified: boolean) { return command<void>('wallet_create', { name, credential }); }
+  verifyBackup(credential: string) { return command<boolean>('wallet_verify_backup', { credential }); }
   recoverWallet(name: string, mnemonic: string, credential: string) { return command<void>('wallet_recover', { name, mnemonic, credential }); }
   unlock(credential: string) { return command<void>('wallet_unlock', { credential }); }
   lock() { return command<void>('wallet_lock'); }
