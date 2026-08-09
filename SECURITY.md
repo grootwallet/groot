@@ -108,7 +108,7 @@ Reports should describe:
 ### Supply-chain and CI controls
 
 - Remote Bitcoin Core TLS activates `https-native` on the already-transitive, exactly pinned `minreq 2.14.1` transport. ADR 0020 removed its legacy Rustls 0.21/WebPKI 0.101.7 backend after three certificate-validation advisories; that vulnerable branch must remain absent from the lockfile. Platform TLS and trust-store differences remain part of remote-node certification.
-- Direct JavaScript dependency versions, Node `22.22.0`, and pnpm `11.13.1` are pinned. Cargo and pnpm lockfiles are committed and automation uses `--locked` or `--frozen-lockfile`.
+- Direct JavaScript dependency versions, Node `24.19.0`, and pnpm `11.13.1` are pinned. Cargo and pnpm lockfiles are committed and automation uses `--locked` or `--frozen-lockfile`.
 - Node package lifecycle scripts are disabled through the repository `.npmrc`; exact saves and pnpm store-integrity verification are enabled.
 - GitHub Actions are pinned to immutable commit SHAs, job permissions default to read-only, and checkout credentials are not persisted.
 - Pull-request CI does not publish wallet release artifacts.
