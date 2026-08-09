@@ -28,14 +28,18 @@ async function confirmGeneratedBackup(page: Page) {
   await page.getByRole('button', { name: 'Confirm order' }).click();
 }
 
+async function chooseSoftwareWallet(page: Page) {
+  await page.getByRole('button', { name: /Use this device/ }).click();
+}
+
 test('creates a 24-word wallet and clears onboarding secrets', async ({ page }) => {
   await page.goto('/welcome?fixture-empty=1');
   await page.getByRole('button', { name: 'Create new wallet' }).click();
   await expect(page.locator('.wallet-type-card')).toHaveCount(3);
-  await expect(page.getByText('24 recovery words on this device')).toBeVisible();
-  await expect(page.getByText('One key stays on your signer')).toBeVisible();
-  await expect(page.getByText('Multiple keys or a recovery path')).toBeVisible();
-  await page.getByRole('button', { name: 'Software wallet' }).click();
+  await expect(page.getByText('Satchel creates the wallet and its recovery words here.')).toBeVisible();
+  await expect(page.getByText('Approve payments on a separate signing device.')).toBeVisible();
+  await expect(page.getByText('Share control or build in a recovery path.')).toBeVisible();
+  await chooseSoftwareWallet(page);
   const setupProgress = page.getByRole('navigation', { name: 'Software wallet setup progress' });
   await expect(setupProgress).toContainText('Generate');
   await expect(setupProgress).toContainText('Back up');
@@ -100,7 +104,7 @@ test('creates a 24-word wallet and clears onboarding secrets', async ({ page }) 
 test('can defer seed verification and complete it later from the wallet', async ({ page }) => {
   await page.goto('/welcome?fixture-empty=1');
   await page.getByRole('button', { name: 'Create new wallet' }).click();
-  await page.getByRole('button', { name: 'Software wallet' }).click();
+  await chooseSoftwareWallet(page);
   await page.getByRole('button', { name: 'Generate 24 recovery words' }).click();
   await page.getByRole('button', { name: /reveal words/i }).click();
   await page.getByRole('button', { name: 'I wrote them down' }).click();
@@ -130,7 +134,7 @@ test('can defer seed verification and complete it later from the wallet', async 
 test('optional physical entropy entry is bounded and cleared after generation', async ({ page }) => {
   await page.goto('/welcome?fixture-empty=1');
   await page.getByRole('button', { name: 'Create new wallet' }).click();
-  await page.getByRole('button', { name: 'Software wallet' }).click();
+  await chooseSoftwareWallet(page);
   const generate = page.getByRole('button', { name: 'Generate 24 recovery words' });
   await expect(generate).toBeEnabled();
   await page.getByText('Advanced: add physical randomness').click();
@@ -205,7 +209,7 @@ test('existing wallet can exit add-wallet and cannot reopen the fresh-install ch
   await page.goto('/welcome?add=1');
   await expect(page.getByRole('button', { name: 'Close wallet setup' })).toBeVisible();
   await page.getByRole('button', { name: 'Create new wallet' }).click();
-  await page.getByRole('button', { name: 'Software wallet' }).click();
+  await chooseSoftwareWallet(page);
   await page.getByRole('button', { name: 'Close wallet setup' }).click();
   await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible();
 
@@ -226,7 +230,7 @@ test('creates, switches, unlocks, and deletes isolated wallet profiles', async (
     await page.getByRole('complementary').getByRole('link', { name: /Add wallet/ }).click();
   }
   await page.getByRole('button', { name: 'Create new wallet' }).click();
-  await page.getByRole('button', { name: 'Software wallet' }).click();
+  await chooseSoftwareWallet(page);
   await page.getByRole('button', { name: 'Generate 24 recovery words' }).click();
   await page.getByRole('button', { name: /reveal words/i }).click();
   await confirmGeneratedBackup(page);
@@ -271,14 +275,14 @@ test('creates, switches, unlocks, and deletes isolated wallet profiles', async (
 test('creates an external-signer wallet, signs by cable, and configures its isolated node', async ({ page }) => {
   await page.goto('/welcome?add=1');
   await page.getByRole('button', { name: 'Create new wallet' }).click();
-  await page.getByRole('link', { name: 'Hardware wallet' }).click();
+  await page.getByRole('link', { name: /Use a hardware wallet/ }).click();
   await expect(page.getByRole('heading', { name: 'Add hardware wallet' })).toBeVisible();
+  await page.getByLabel('Wallet name').fill('Hardware savings');
   await page.getByRole('button', { name: /Connect with cable/ }).click();
   await page.getByRole('button', { name: /Virtual Coldcard/ }).click();
   await expect(page.getByText('PUBLIC DATA REVIEW')).toBeVisible();
   await expect(page.getByText("m/84'/1'/0'")).toBeVisible();
   await page.getByRole('button', { name: 'Fingerprint matches' }).click();
-  await page.getByLabel('Wallet name').fill('Hardware savings');
   await page.getByLabel('App PIN', { exact: true }).fill('hardware-pin');
   await page.getByLabel('Confirm app PIN', { exact: true }).fill('hardware-pin');
   await page.getByRole('button', { name: 'Create wallet' }).click();
@@ -288,10 +292,13 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   await page.getByRole('button', { name: 'New receive address' }).click();
   await page.getByLabel('Permanent label').fill('Verified deposit');
   await page.getByRole('button', { name: 'Generate address' }).click();
-  await expect(page.getByText('Not yet verified on hardware')).toBeVisible();
+  await expect(page.locator('.address-label').getByText('Not verified', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Verify on device' }).click();
   await page.getByRole('button', { name: /Virtual Coldcard/ }).click();
-  await expect(page.getByText('Verified on the saved hardware signer this session')).toBeVisible();
+  await expect(page.locator('.address-label').getByText('Verified', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Show address details' }).click();
+  await expect(page.getByText('Hardware verified', { exact: true })).toBeVisible();
+  await expect(page.getByText('Signer fingerprint', { exact: true })).toBeVisible();
 
   await page.getByRole('link', { name: 'Overview' }).click();
   await page.getByRole('link', { name: 'Send', exact: true }).click();
@@ -669,7 +676,7 @@ test('recovery words remain readable in light and dark themes', async ({ page })
     await page.getByRole('button', { name: theme, exact: true }).click();
     await page.goto('/welcome?fixture-empty=1');
     await page.getByRole('button', { name: 'Create new wallet' }).click();
-    await page.getByRole('button', { name: 'Software wallet' }).click();
+    await chooseSoftwareWallet(page);
     await page.getByRole('button', { name: 'Generate 24 recovery words' }).click();
     await page.getByRole('button', { name: /reveal words/i }).click();
     await expect(page.locator('.mnemonic-grid > div')).toHaveCount(24);

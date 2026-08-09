@@ -558,7 +558,7 @@ test('creates and verifies a simple 2-of-3 descriptor wallet', async ({ page }) 
     await page.getByRole('complementary').getByRole('link', { name: /Add wallet/ }).click();
   }
   await page.getByRole('button', { name: 'Create new wallet' }).click();
-  await page.getByRole('link', { name: /Shared or recovery/ }).click();
+  await page.getByRole('link', { name: /Use multiple keys/ }).click();
   await page.getByRole('link', { name: /Recover from backup/ }).click();
   await page.getByLabel('Recovery descriptor backup').fill(descriptorBackup);
   await page.getByRole('button', { name: 'Validate backup' }).click();
