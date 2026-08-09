@@ -19,6 +19,7 @@ Dependencies point inward. Routes never select adapters. Rust commands translate
 - Reject boolean “success” responses when a stable typed result/error is needed.
 - Reject UI-recomputed transaction facts when the PSBT can provide them.
 - Reject new global state for credentials, signing material, proposals, or wallet truth.
+- Keep transient presentation history route-scoped. A global store requires multiple simultaneous consumers and an explicit lifetime/identity key; wallet-scoped records must never survive a wallet switch by accident.
 - Reject unbounded input/output, silent fallback, network ambiguity, log payloads, and destructive broad filesystem targets.
 - Reject a production claim supported only by dummy, simulator, snapshot, or mocked evidence.
 - Prefer a small pure function and exhaustive table tests over condition-heavy route or command code.
@@ -40,6 +41,8 @@ Dependencies point inward. Routes never select adapters. Rust commands translate
 - E2E: every user-visible flow, important failure/retry state, accessibility contract, and responsive layout.
 
 Coverage percentages are a floor, not evidence of correct assertions. Security-critical branches require explicit named tests even when line coverage is already complete.
+
+Every top-level Rust module is classified by `scripts/quality/check-rust-coverage.sh`. New modules fail coverage until reviewed into the deterministic-core or adapter/orchestration scope. The near-100% core result and the whole-library result are separate claims and both are CI gates.
 
 ## AI contribution contract
 

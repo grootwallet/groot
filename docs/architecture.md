@@ -32,6 +32,14 @@ Guided setup uses `recovery_policy_analyze` and `multisig_recovery_create` to co
 
 Commands return typed errors with stable codes. Svelte translates those into inline validation and toasts.
 
+Satchel has no REST application server. Native clients cross a typed Tauri IPC boundary through `WalletPort`; browser development swaps only the adapter at the composition root. Introducing HTTP application endpoints, hosted persistence, or a multi-tenant service changes the trust boundary and requires a dedicated ADR, authentication/authorization model, deny-by-default tenant isolation, and integration tests.
+
+## Frontend state and component boundaries
+
+Wallet truth remains in Rust and is exposed through `WalletPort` DTOs and typed events. `AppShell` owns selected-wallet navigation and the single foreground sync scheduler. Routes own form drafts, modal state, loading/error state, and other presentation state only for their mounted lifetime. The only process-wide Svelte store is the toast queue; durable success always also appears in wallet state. Reusable primitives own modal focus/scroll behavior, tooltips, buttons, readable identifiers/addresses, progress, timestamp rendering, wallet switching, and common error/empty surfaces.
+
+Routes and reusable components may not import concrete wallet adapters, invoke Tauri, perform network fetches, or add unreviewed console logging. `scripts/quality/check-boundaries.sh` enforces these dependency rules in CI. The multisig coordinator's hardware-health history is intentionally route-scoped so public records from one mounted wallet cannot appear as fresh state after navigation or wallet replacement.
+
 ## Persistence model
 
 - BDK changesets and chain state are persisted transactionally in per-wallet SQLite files. Connections enforce owner-only file permissions on Unix, a bounded busy timeout, foreign keys, untrusted schema mode, and SQLite defensive mode. The application has no hosted database or multi-tenant server today, so RLS is not an applicable control; introducing either requires a new trust-boundary ADR and tenant-isolation policy.

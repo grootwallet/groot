@@ -13,7 +13,7 @@
   import { copyText } from '$lib/clipboard';
   import { toast } from '$lib/stores/toasts';
   import { combineDescriptorBranches } from '$lib/descriptors';
-  import { cosignerHealthHistory, recordCosignerHealth } from '$lib/stores/cosigner-health';
+  type CosignerHealthLog = CosignerHealthCheck & { signerId: string };
   let wallet = $state<MultisigWallet | null>(null);
   let snapshot = $state<WalletSnapshot | null>(null);
   let selectedSigner = $state<CosignerDraft | null>(null);
@@ -22,6 +22,7 @@
   let moreRoot = $state<HTMLDivElement | null>(null);
   let moreTrigger = $state<HTMLButtonElement | null>(null);
   let checking = $state(false);
+  let healthHistory = $state<Record<string, CosignerHealthLog[]>>({});
   let combinedDescriptor = $derived(wallet ? combineDescriptorBranches(wallet.externalDescriptor, wallet.internalDescriptor) : null);
   onMount(async () => { wallet = await walletService.multisigWallet(); if (wallet) { try { snapshot = await walletService.syncMultisig(); } catch (cause) { toast({title:'Vault is offline',description:cause instanceof Error?cause.message:undefined,tone:'danger'}); } } });
   onMount(() => walletService.subscribe((event) => {
@@ -60,7 +61,13 @@
     if (check?.status === 'attention') return 'Attention';
     return 'Ready';
   }
-  function latestHealth(signer: CosignerDraft) { return $cosignerHealthHistory[signer.id]?.[0] ?? null; }
+  function latestHealth(signer: CosignerDraft) { return healthHistory[signer.id]?.[0] ?? null; }
+  function recordHealth(signerId: string, check: CosignerHealthCheck) {
+    healthHistory = {
+      ...healthHistory,
+      [signerId]: [{ ...check, signerId }, ...(healthHistory[signerId] ?? [])].slice(0, 20)
+    };
+  }
   async function copyPublicKey() {
     if (!selectedSigner) return;
     await copyText(selectedSigner.xpub);
@@ -71,11 +78,11 @@
     const signer = selectedSigner;
     checking = true;
     try {
-      recordCosignerHealth(signer.id, await walletService.checkHardwareCosigner(signer));
+      recordHealth(signer.id, await walletService.checkHardwareCosigner(signer));
       toast({ title: 'Health check passed', description: `${signer.label} is ready.`, tone: 'success' });
     } catch (cause) {
       const summary = cause instanceof Error ? cause.message : 'The device could not be verified.';
-      recordCosignerHealth(signer.id, { checkedAt: new Date().toISOString(), summary, status: 'attention' });
+      recordHealth(signer.id, { checkedAt: new Date().toISOString(), summary, status: 'attention' });
       toast({ title: 'Health check needs attention', description: summary, tone: 'danger' });
     } finally {
       checking = false;
@@ -96,7 +103,7 @@
   {/if}
 </div>
 
-<DeviceDetailsModal signer={selectedSigner} health={selectedSigner ? latestHealth(selectedSigner) : null} history={selectedSigner ? ($cosignerHealthHistory[selectedSigner.id] ?? []) : []} {checking} onclose={() => selectedSigner = null} oncheck={runHealthCheck} oncopy={copyPublicKey}/>
+<DeviceDetailsModal signer={selectedSigner} health={selectedSigner ? latestHealth(selectedSigner) : null} history={selectedSigner ? (healthHistory[selectedSigner.id] ?? []) : []} {checking} onclose={() => selectedSigner = null} oncheck={runHealthCheck} oncopy={copyPublicKey}/>
 <Modal open={showDescriptors} title="Wallet descriptors" description="Public watch-only logic for receiving and change. It cannot sign transactions, but it reveals wallet activity." onclose={() => showDescriptors=false}>
   {#if wallet}<div class="descriptor-viewer">{#if combinedDescriptor}<section class="descriptor-primary"><div><span>Portable wallet descriptor</span><small>Standard multipath form: branch 0 receives, branch 1 creates change.</small></div><code>{combinedDescriptor}</code><button onclick={() => copyDescriptor(combinedDescriptor!, 'Wallet')}><Copy size={15}/>Copy wallet descriptor</button></section><details><summary>View separate receive and change descriptors</summary><section><div><span>Receive descriptor</span><small>Generates addresses shared for incoming payments.</small></div><code>{wallet.externalDescriptor}</code><button onclick={() => copyDescriptor(wallet!.externalDescriptor, 'Receive')}><Copy size={15}/>Copy receive descriptor</button></section><section><div><span>Change descriptor</span><small>Generates private change addresses after spending.</small></div><code>{wallet.internalDescriptor}</code><button onclick={() => copyDescriptor(wallet!.internalDescriptor, 'Change')}><Copy size={15}/>Copy change descriptor</button></section></details>{:else}<section><div><span>Receive descriptor</span><small>Generates addresses shared for incoming payments.</small></div><code>{wallet.externalDescriptor}</code><button onclick={() => copyDescriptor(wallet!.externalDescriptor, 'Receive')}><Copy size={15}/>Copy receive descriptor</button></section><section><div><span>Change descriptor</span><small>Generates private change addresses after spending.</small></div><code>{wallet.internalDescriptor}</code><button onclick={() => copyDescriptor(wallet!.internalDescriptor, 'Change')}><Copy size={15}/>Copy change descriptor</button></section>{/if}<p><ShieldCheck size={14}/>Keep descriptors private even though they cannot spend. They reveal every address in this wallet.</p></div>{/if}
 </Modal>

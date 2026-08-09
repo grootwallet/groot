@@ -44,4 +44,9 @@ if search "console\.(log|debug|info|warn|error)" src src-tauri/src; then
   fail "wallet code must not add unreviewed console logging"
 fi
 
+unexpected_stores="$(find src/lib/stores -maxdepth 1 -type f -name '*.ts' ! -name 'toasts.ts' -print)"
+if [[ -n "$unexpected_stores" ]]; then
+  fail "process-wide Svelte stores require an explicit lifetime/identity decision; found: $unexpected_stores"
+fi
+
 echo "Architecture boundaries: clean."

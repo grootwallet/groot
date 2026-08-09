@@ -15,7 +15,7 @@ The suite follows Martin Fowler's [Practical Test Pyramid](https://martinfowler.
 
 Use for deterministic policy and hostile inputs. Each invariant gets the happy path, every rejection branch, and boundary values. `pnpm test:coverage` enforces 100% statements, branches, functions, and lines for `src/lib/wallet/policy.ts`, `src/lib/multisig/policy.ts`, and the standard descriptor-interchange helper in `src/lib/descriptors.ts`.
 
-Rust unit tests own cryptography-adjacent behavior: credential encryption failures, authentication cooldown, descriptor canonicalization, hardware-wallet receive/change database identity, derivation-gap recovery bounds, BIP129/BSMS records, public external-signer imports, canonical UR/CBOR transport, backup validation, notification persistence, Miniscript compilation, signature-only adversarial PSBT merge, foreign/duplicate input rejection, authoritative input/sequence/locktime/RBF review, hostile-output/change rules, atomic/bounded storage, registry corruption, backend URL policy, HWI process limits/connection ambiguity, and air-gap frame limits. `pnpm test:coverage:rust` enforces the deterministic security-core scope (`auth`, `bsms`, `external_signer`, `multisig`, `notifications`, `proposal`, `recovery`, and `ur_transport`) at 99% lines, 100% functions, and 97% regions. Platform-native UI and secure-store adapters still run in the Rust suite, but are excluded from this portable line threshold and require platform acceptance evidence.
+Rust unit tests own cryptography-adjacent behavior: credential encryption failures, authentication cooldown, descriptor canonicalization, hardware-wallet receive/change database identity, derivation-gap recovery bounds, BIP129/BSMS records, public external-signer imports, canonical UR/CBOR transport, backup validation, notification persistence, Miniscript compilation, signature-only adversarial PSBT merge, foreign/duplicate input rejection, authoritative input/sequence/locktime/RBF review, hostile-output/change rules, atomic/bounded storage, registry corruption, backend URL policy, HWI process limits/connection ambiguity, and air-gap frame limits. `pnpm test:coverage:rust` enforces the deterministic security-core scope (`auth`, `bsms`, `external_signer`, `multisig`, `notifications`, `proposal`, `recovery`, and `ur_transport`) at 99% lines, 100% functions, and 97% regions. The gate explicitly classifies every top-level Rust source module and fails when a new file has not been reviewed into either the deterministic core or adapter/orchestration scope. Platform-native UI and secure-store adapters still run in the Rust suite, but are excluded from the portable core percentage and require platform acceptance evidence.
 
 The restart layer uses file-backed SQLite: it persists a payment PSBT, frozen outpoint, authentication cooldown, and notification, drops every handle, reconstructs fresh state, and verifies exact recovery plus pending-until-acknowledged delivery. It then injects corrupt PSBT and frozen rows. Registry migration tests simulate an interrupted commit and require every directory to return to its original path.
 
@@ -23,7 +23,7 @@ Real native lifecycle acceptance uses `SATCHEL_REGTEST_APP_DATA_DIR` with a fres
 
 Secret-envelope units use an in-memory device-key provider to prove that the correct credential alone, correct device key alone, corrupt metadata, oversized metadata, and mismatched wrapped keys all fail. They also prove that a legacy regtest Keychain account is copied to its UUID account only after both the legacy device key and entered credential authenticate the existing envelope; a wrong credential leaves the new account empty. Browser E2E keeps a protected-storage denial locked, clears the submitted credential, and proves the field remains editable for an explicit retry. Platform adapters compile with the native app and are exercised in platform acceptance without returning test secrets to the webview.
 
-The whole Rust library is reported separately with `pnpm test:coverage:rust:all`. Environment adapters and Tauri `AppHandle` orchestration are not included in the enforced percentage; their behavior is covered through boundary units, regtest, and E2E. The scoped score must never be presented as whole-crate coverage.
+The whole Rust library is reported and regression-gated separately with `pnpm test:coverage:rust:all` at 55% lines, 51% functions, and 51% regions. Environment adapters and Tauri `AppHandle` orchestration are not included in the near-100% deterministic-core percentage; their behavior is covered through boundary units, restart/corruption tests, regtest, and E2E. The scoped score must never be presented as whole-crate coverage. The 2026-08-09 baseline is 99.58% lines / 100% functions / 97.20% regions for the deterministic core and 56.07% / 52.71% / 53.04% for the whole Rust library.
 
 ### Integration tests
 
@@ -90,7 +90,7 @@ pnpm test:boundaries   # architecture/import boundary enforcement
 pnpm test:release-gate # prove mainnet remains disabled until reviewed
 pnpm test:coverage     # enforced 100% pure-policy coverage
 pnpm test:coverage:rust # enforced ~100% Rust security-core coverage
-pnpm test:coverage:rust:all # whole Rust library report, explicitly unscoped
+pnpm test:coverage:rust:all # whole Rust library report and regression floor
 pnpm test:acceptance   # desktop + mobile semantic flows (pyramid top)
 pnpm regtest:start     # isolated local Bitcoin Core
 pnpm regtest:fund-demo -- <single-bcrt1> <vault-bcrt1> [more-bcrt1...] # two payments to first address, one to each remaining address, then mine
@@ -98,6 +98,7 @@ pnpm test:integration:regtest # start/reuse isolated Core, then real BDK/PSBT in
 cd src-tauri
 cargo fmt --check
 cargo clippy --all-targets --all-features -- -D warnings
+RUSTDOCFLAGS="-D warnings" cargo doc --locked --no-deps --all-features
 cargo test
 ```
 

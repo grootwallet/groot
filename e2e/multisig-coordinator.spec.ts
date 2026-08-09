@@ -184,6 +184,12 @@ test('shows cosigner details and runs honest health checks', async ({ page }) =>
   const backupDialog = page.getByRole('dialog', { name: 'Offline backup' });
   await backupDialog.getByRole('button', { name: 'Run health check' }).click();
   await expect(backupDialog.locator('.health-card').getByText(/Physical presence cannot be checked for an offline key/)).toBeVisible();
+  await backupDialog.getByRole('button', { name: 'Close' }).click();
+
+  await page.goto('/');
+  await page.goto('/multisig');
+  await page.getByRole('button', { name: 'View Coldcard details' }).click();
+  await expect(page.getByRole('dialog', { name: 'Coldcard' }).getByText('Not checked in this session')).toBeVisible();
 });
 
 test('uses the same wallet navigation for a multisig policy', async ({ page }) => {

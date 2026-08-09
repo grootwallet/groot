@@ -68,6 +68,8 @@ jobs:
           workspaces: src-tauri
       - run: cargo fmt --check
       - run: cargo clippy --locked --all-targets --all-features -- -D warnings
+      - name: Build Rust API documentation with warnings denied
+        run: RUSTDOCFLAGS="-D warnings" cargo doc --locked --no-deps --all-features
       - name: Rust unit and integration tests (pyramid base and middle)
         run: cargo test --locked --all-features
       - name: Install pinned Bitcoin Core 31.1 for isolated Regtest
@@ -86,7 +88,7 @@ jobs:
           cargo install cargo-audit --locked --version 0.22.2
           cargo install cargo-llvm-cov --locked --version 0.8.7
       - run: cargo audit --file Cargo.lock
-      - name: Enforce security-core coverage
-        run: cargo llvm-cov --locked --lib --summary-only --ignore-filename-regex 'src/(wallet|lib|hardware|network|registry|airgap|native_backup|secure_store)\.rs' --fail-under-lines 99 --fail-under-functions 100 --fail-under-regions 97
+      - name: Enforce explicitly classified deterministic-core coverage
+        run: bash ../scripts/quality/check-rust-coverage.sh
       - name: Prevent whole-library coverage regression
-        run: cargo llvm-cov --locked --lib --summary-only --fail-under-lines 55 --fail-under-functions 51
+        run: cargo llvm-cov --locked --lib --summary-only --fail-under-lines 55 --fail-under-functions 51 --fail-under-regions 51

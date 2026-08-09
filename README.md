@@ -94,6 +94,9 @@ Satchel wallet state is stored in the operating system app-data directory under 
 pnpm validate
 pnpm test:release-gate
 pnpm test:boundaries
+pnpm test:coverage
+pnpm test:coverage:rust
+pnpm test:coverage:rust:all
 pnpm test:e2e
 # or both:
 pnpm test:full
@@ -116,10 +119,11 @@ Before connecting a physical signer, run `pnpm hardware:preflight` and follow th
 - [Implementation status](docs/implementation-status.md)
 - [V1 and V2 roadmap](docs/roadmap.md)
 - [Testing strategy](docs/testing.md)
+- [Latest code-health audit](docs/code-health-audit-2026-08-09.md)
 - [Engineering and AI contribution standards](docs/engineering-standards.md)
 - [Hardware certification](docs/hardware-certification.md)
 - [Mainnet release checklist](docs/mainnet-release-checklist.md)
-- [Latest internal security review](docs/security-review-2026-08-04.md)
+- [Latest full internal security review](docs/security-review-2026-08-05.md)
 - [Manual regtest acceptance](docs/manual-regtest-test-plan.md)
 - [Architectural decisions](docs/adr/)
 
