@@ -5,7 +5,7 @@
   import SetupProgress from '$lib/components/SetupProgress.svelte';
   import { toast } from '$lib/stores/toasts';
   import { defaultConfig, networkName } from '$lib/config';
-  import { walletService, WalletError } from '$lib/wallet';
+  import { MAX_SUPPLEMENTAL_COIN_FLIPS, MAX_SUPPLEMENTAL_DICE_ROLLS, MIN_SUPPLEMENTAL_COIN_FLIPS, MIN_SUPPLEMENTAL_DICE_ROLLS, walletService, WalletError, type SupplementalEntropyInput } from '$lib/wallet';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { onDestroy, onMount } from 'svelte';
@@ -26,19 +26,40 @@
   let selectedWords = $state<RecoveryWord[]>([]);
   let verificationError = $state('');
   let draggedWord = $state<RecoveryWord | null>(null);
+  let supplementalSource = $state<'none' | 'coin' | 'dice'>('none');
+  let supplementalOutcomes = $state('');
   const softwareSteps = ['Generate', 'Back up', 'Protect'];
   let passphraseError = $derived(utf8ByteLength(passphrase) > MAX_WALLET_PASSPHRASE_BYTES ? 'The wallet passphrase is too long.' : '');
+  let supplementalMinimum = $derived(supplementalSource === 'coin' ? MIN_SUPPLEMENTAL_COIN_FLIPS : MIN_SUPPLEMENTAL_DICE_ROLLS);
+  let supplementalMaximum = $derived(supplementalSource === 'coin' ? MAX_SUPPLEMENTAL_COIN_FLIPS : MAX_SUPPLEMENTAL_DICE_ROLLS);
+  let supplementalReady = $derived(supplementalSource === 'none' || supplementalOutcomes.length >= supplementalMinimum);
 
   onMount(async () => {
     hasExistingWallet = await walletService.exists();
     if (hasExistingWallet && page.url.searchParams.get('add') !== '1') await goto('/unlock');
   });
-  onDestroy(() => { void walletService.cancelOnboarding(); words = []; recovery = ''; passphrase = ''; confirmation = ''; backupAcknowledged = false; });
+  onDestroy(() => { void walletService.cancelOnboarding(); words = []; recovery = ''; passphrase = ''; confirmation = ''; supplementalOutcomes = ''; backupAcknowledged = false; });
+
+  function chooseSupplementalSource(source: 'none' | 'coin' | 'dice') {
+    supplementalSource = source;
+    supplementalOutcomes = '';
+    error = '';
+  }
+
+  function recordSupplementalOutcome(outcome: string) {
+    if (supplementalSource === 'none' || supplementalOutcomes.length >= supplementalMaximum) return;
+    supplementalOutcomes += outcome;
+    error = '';
+  }
 
   async function generate() {
     busy = true; error = '';
+    const supplementalEntropy: SupplementalEntropyInput | undefined = supplementalSource === 'none'
+      ? undefined
+      : { source: supplementalSource, outcomes: supplementalOutcomes };
+    supplementalOutcomes = '';
     try {
-      const presentation = await walletService.generateMnemonic();
+      const presentation = await walletService.generateMnemonic(supplementalEntropy);
       if (presentation.mode === 'fixture') {
         words = presentation.words;
         verificationWords = shuffledRecoveryWords(words);
@@ -152,7 +173,49 @@
         </a>
       </div>
     {:else if mode === 'create'}
-      <button class="back-link" onclick={() => mode = 'choose'}><ArrowLeft size={16} />Back</button><SetupProgress steps={softwareSteps} current={1} label="Software wallet setup progress" context="SOFTWARE WALLET"/><h1>Generate wallet</h1><p>Satchel will generate 24 recovery words securely on this device. Write them down in order and keep them offline.</p><div class="setup-points"><div><ShieldCheck size={18}/><span><strong>You control the keys</strong><small>No account, email, or cloud backup.</small></span></div><div><KeyRound size={18}/><span><strong>Recovery words are the backup</strong><small>Anyone with them can spend your funds.</small></span></div></div><Button size="large" class="full" loading={busy} loadingLabel="Generating securely…" onclick={generate}>Generate 24 recovery words</Button>
+      <button class="back-link" onclick={() => { chooseSupplementalSource('none'); mode = 'choose'; }}><ArrowLeft size={16} />Back</button>
+      <SetupProgress steps={softwareSteps} current={1} label="Software wallet setup progress" context="SOFTWARE WALLET"/>
+      <h1>Generate wallet</h1>
+      <p>Satchel will generate 24 recovery words securely on this device. Write them down in order and keep them offline.</p>
+      <div class="setup-points"><div><ShieldCheck size={18}/><span><strong>You control the keys</strong><small>No account, email, or cloud backup.</small></span></div><div><KeyRound size={18}/><span><strong>Recovery words are the backup</strong><small>Anyone with them can spend your funds.</small></span></div></div>
+      <details class="supplemental-entropy">
+        <summary>Advanced: add physical randomness</summary>
+        <p>Optional. Satchel always requires 256-bit operating-system randomness. Physical results are mixed in only as an additional input.</p>
+        <div class="entropy-source-options" role="group" aria-label="Supplemental entropy source">
+          <button class:active={supplementalSource === 'none'} aria-pressed={supplementalSource === 'none'} onclick={() => chooseSupplementalSource('none')}>None</button>
+          <button class:active={supplementalSource === 'coin'} aria-pressed={supplementalSource === 'coin'} onclick={() => chooseSupplementalSource('coin')}>Coin flips</button>
+          <button class:active={supplementalSource === 'dice'} aria-pressed={supplementalSource === 'dice'} onclick={() => chooseSupplementalSource('dice')}>Six-sided die</button>
+        </div>
+        {#if supplementalSource !== 'none'}
+          <div class="entropy-entry">
+            <div class="entropy-progress">
+              <span>{supplementalSource === 'coin' ? 'Flip a physical coin and record each result.' : 'Roll a physical six-sided die and record each result.'}</span>
+              <strong>{supplementalOutcomes.length} / {supplementalMinimum} minimum</strong>
+            </div>
+            <div class="entropy-outcomes" aria-live="polite">
+              <code>{supplementalOutcomes.slice(-32) || 'No results recorded'}</code>
+              {#if supplementalOutcomes.length > 32}<small>Showing the latest 32</small>{/if}
+            </div>
+            <div class:coin={supplementalSource === 'coin'} class="entropy-result-buttons" role="group" aria-label="Record physical result">
+              {#if supplementalSource === 'coin'}
+                <button aria-label="Record heads" disabled={supplementalOutcomes.length >= supplementalMaximum} onclick={() => recordSupplementalOutcome('H')}>Heads</button>
+                <button aria-label="Record tails" disabled={supplementalOutcomes.length >= supplementalMaximum} onclick={() => recordSupplementalOutcome('T')}>Tails</button>
+              {:else}
+                {#each ['1', '2', '3', '4', '5', '6'] as result}
+                  <button aria-label={`Record die result ${result}`} disabled={supplementalOutcomes.length >= supplementalMaximum} onclick={() => recordSupplementalOutcome(result)}>{result}</button>
+                {/each}
+              {/if}
+            </div>
+            <div class="entropy-edit-actions">
+              <button disabled={!supplementalOutcomes} onclick={() => supplementalOutcomes = supplementalOutcomes.slice(0, -1)}>Undo last</button>
+              <button disabled={!supplementalOutcomes} onclick={() => supplementalOutcomes = ''}>Clear</button>
+            </div>
+            <p class="entropy-caution"><strong>Use real physical results.</strong> This cannot protect a wallet created on a compromised device, and the operating-system source never becomes optional.</p>
+          </div>
+        {/if}
+      </details>
+      {#if error}<p class="form-error" role="alert">{error}</p>{/if}
+      <Button size="large" class="full" disabled={!supplementalReady} loading={busy} loadingLabel="Generating securely…" onclick={generate}>Generate 24 recovery words</Button>
     {:else if mode === 'words'}
       <button class="back-link" onclick={() => mode = 'create'}><ArrowLeft size={16} />Back</button><SetupProgress steps={softwareSteps} current={2} label="Software wallet setup progress" context="SOFTWARE WALLET"/><h1>Recovery words</h1><p>Write these down in order. Never store them in a screenshot or password manager.</p>
       {#if revealed}

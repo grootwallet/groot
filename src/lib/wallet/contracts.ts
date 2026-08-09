@@ -145,6 +145,11 @@ export type CoreNodeConfig = {
 };
 export type NodeStatus = { connected: boolean; blocks: number; backend: CoreNodeConfig };
 export type RecoveryScanSettings = { birthdayHeight: number; gapLimit: number };
+export type SupplementalEntropyInput = { source: 'coin' | 'dice'; outcomes: string };
+export const MIN_SUPPLEMENTAL_COIN_FLIPS = 128;
+export const MAX_SUPPLEMENTAL_COIN_FLIPS = 256;
+export const MIN_SUPPLEMENTAL_DICE_ROLLS = 50;
+export const MAX_SUPPLEMENTAL_DICE_ROLLS = 100;
 
 export type WalletEvent =
   | { type: 'payment_received'; txid: string; amount: Sats; balance: Sats }
@@ -155,6 +160,7 @@ export type WalletEvent =
 export type WalletErrorCode =
   | 'invalid_credential'
   | 'entropy_unavailable'
+  | 'invalid_supplemental_entropy'
   | 'invalid_address'
   | 'invalid_amount'
   | 'insufficient_funds'
@@ -232,7 +238,7 @@ export interface WalletPort {
   profiles(): Promise<WalletRegistry>;
   saveInactivityTimeout(minutes: number): Promise<WalletRegistry>;
   selectWallet(walletId: string): Promise<WalletProfile>;
-  generateMnemonic(): Promise<MnemonicPresentation>;
+  generateMnemonic(supplementalEntropy?: SupplementalEntropyInput): Promise<MnemonicPresentation>;
   cancelOnboarding(): Promise<void>;
   createWallet(name: string, credential: string): Promise<void>;
   recoverWallet(name: string, mnemonic: string, credential: string): Promise<void>;

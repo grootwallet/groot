@@ -49,7 +49,7 @@ Virtual signer coverage is mandatory in CI. Physical certification is separate a
 
 | ID | Flow | Unit/security evidence | Integration evidence | Desktop/mobile E2E | Gate |
 | --- | --- | --- | --- | --- | --- |
-| F01 | Generate 24 words and create | Rust pending session + device/credential envelope; TS recovery count + theme contrast | Descriptor derivation tests | Fixture onboarding + 24-word light/dark contrast | Green on regtest; native platform certification remains |
+| F01 | Generate 24 words and create, optionally adding physical outcomes | Rust OS-entropy failure/size, supplemental alphabet/bounds/domain separation, pending session, and device/credential envelope; TS recovery count + theme contrast | Descriptor derivation tests | Fixture onboarding, optional dice entry/clearing, and 24-word light/dark contrast | Green on regtest; native platform certification and independent mixing review remain |
 | F02 | Recover 24 words + credential | Invalid length/credential | Descriptor backup round-trip | 23-word rejection then recovery | Green fixture; full Core rescan expansion pending |
 | F03 | Unlock/wrong PIN/rate limit | Persisted per-wallet auth cooldown + AEAD rejection + wallet-bound idle session + exact regtest-reset confirmation | Selected-profile routing and deletion | Wrong then correct credential; reveal control; exit/switch/explicit-lock routes; locked regtest deletion; light/dark contrast | Green |
 | F04 | Overview/balance/recent activity | Snapshot accounting helpers | Core-backed BDK sync | Overview visible | Green |

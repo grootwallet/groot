@@ -11,6 +11,7 @@ use bdk_bitcoind_rpc::{
 use bdk_wallet::{
     bitcoin::{
         bip32::{DerivationPath, Xpriv, Xpub},
+        hashes::{sha256, Hash as _, HashEngine},
         secp256k1::Secp256k1,
         Address, Amount, FeeRate, Network, NetworkKind, OutPoint, Psbt, Transaction, Txid, Weight,
     },
@@ -69,6 +70,12 @@ const MAX_PUBLIC_BACKUP_BYTES: usize = 256 * 1024;
 const REGTEST_APP_DATA_OVERRIDE: &str = "SATCHEL_REGTEST_APP_DATA_DIR";
 const MIN_RECOVERY_GAP_LIMIT: u32 = 20;
 const MAX_RECOVERY_GAP_LIMIT: u32 = 1_000;
+const MIN_SUPPLEMENTAL_COIN_FLIPS: usize = 128;
+const MAX_SUPPLEMENTAL_COIN_FLIPS: usize = 256;
+const MIN_SUPPLEMENTAL_DICE_ROLLS: usize = 50;
+const MAX_SUPPLEMENTAL_DICE_ROLLS: usize = 100;
+const SUPPLEMENTAL_TRANSCRIPT_DOMAIN: &[u8] = b"Satchel supplemental entropy transcript v1";
+const SUPPLEMENTAL_MIX_DOMAIN: &[u8] = b"Satchel BIP39 entropy mix v1";
 
 fn validate_public_backup_filename(value: &str) -> ApiResult<&str> {
     let trimmed = value.trim();
@@ -381,31 +388,117 @@ struct PendingHardwarePin {
     created_at: Instant,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SupplementalEntropyDto {
+    source: String,
+    outcomes: String,
+}
+
 fn onboarding_session_is_fresh(created_at: u64, current_time: u64) -> bool {
     current_time.saturating_sub(created_at) <= ONBOARDING_SESSION_SECONDS
 }
 
+fn supplemental_entropy_digest(
+    supplemental: SupplementalEntropyDto,
+) -> ApiResult<Zeroizing<[u8; 32]>> {
+    let outcomes = Zeroizing::new(supplemental.outcomes);
+    let (source_tag, minimum, maximum) = match supplemental.source.as_str() {
+        "coin" => (
+            b"coin".as_slice(),
+            MIN_SUPPLEMENTAL_COIN_FLIPS,
+            MAX_SUPPLEMENTAL_COIN_FLIPS,
+        ),
+        "dice" => (
+            b"dice".as_slice(),
+            MIN_SUPPLEMENTAL_DICE_ROLLS,
+            MAX_SUPPLEMENTAL_DICE_ROLLS,
+        ),
+        _ => {
+            return Err(api_error(
+                "invalid_supplemental_entropy",
+                "Choose coin flips or six-sided dice for supplemental entropy.",
+            ))
+        }
+    };
+    if outcomes.len() < minimum || outcomes.len() > maximum {
+        return Err(api_error(
+            "invalid_supplemental_entropy",
+            format!(
+                "Enter between {minimum} and {maximum} physical outcomes for this supplemental entropy source."
+            ),
+        ));
+    }
+    let valid = match supplemental.source.as_str() {
+        "coin" => outcomes
+            .bytes()
+            .all(|outcome| matches!(outcome, b'H' | b'T')),
+        "dice" => outcomes
+            .bytes()
+            .all(|outcome| matches!(outcome, b'1'..=b'6')),
+        _ => false,
+    };
+    if !valid {
+        return Err(api_error(
+            "invalid_supplemental_entropy",
+            "Supplemental entropy contains an invalid physical outcome.",
+        ));
+    }
+
+    let mut engine = sha256::Hash::engine();
+    engine.input(SUPPLEMENTAL_TRANSCRIPT_DOMAIN);
+    engine.input(&[source_tag.len() as u8]);
+    engine.input(source_tag);
+    engine.input(&(outcomes.len() as u32).to_be_bytes());
+    engine.input(outcomes.as_bytes());
+    Ok(Zeroizing::new(
+        sha256::Hash::from_engine(engine).to_byte_array(),
+    ))
+}
+
+fn mix_supplemental_entropy(
+    os_entropy: &[u8; 32],
+    supplemental_digest: &[u8; 32],
+) -> Zeroizing<[u8; 32]> {
+    let mut engine = sha256::Hash::engine();
+    engine.input(SUPPLEMENTAL_MIX_DOMAIN);
+    engine.input(&(os_entropy.len() as u32).to_be_bytes());
+    engine.input(os_entropy);
+    engine.input(&(supplemental_digest.len() as u32).to_be_bytes());
+    engine.input(supplemental_digest);
+    Zeroizing::new(sha256::Hash::from_engine(engine).to_byte_array())
+}
+
 fn generate_software_mnemonic_with(
     fill_entropy: impl FnOnce(&mut [u8]) -> ApiResult<()>,
+    supplemental_digest: Option<&[u8; 32]>,
 ) -> ApiResult<Mnemonic> {
     // BIP39 maps 256 bits of entropy to exactly 24 words. Zeroizing also covers
     // an entropy-source or mnemonic-construction error, including partial fills.
     let mut entropy = Zeroizing::new([0_u8; 32]);
     fill_entropy(&mut entropy[..])?;
-    Mnemonic::from_entropy(&entropy[..]).map_err(internal)
+    if let Some(supplemental_digest) = supplemental_digest {
+        let mixed = mix_supplemental_entropy(&entropy, supplemental_digest);
+        Mnemonic::from_entropy(&mixed[..]).map_err(internal)
+    } else {
+        Mnemonic::from_entropy(&entropy[..]).map_err(internal)
+    }
 }
 
-fn generate_software_mnemonic() -> ApiResult<Mnemonic> {
-    generate_software_mnemonic_with(|entropy| {
-        // OsRng delegates to the target operating system's CSPRNG. Never fall
-        // back to time, browser randomness, a user-space PRNG, or partial data.
-        OsRng.try_fill_bytes(entropy).map_err(|_| {
-            api_error(
-                "entropy_unavailable",
-                "Secure operating-system randomness is unavailable. Wallet creation stopped without generating key material.",
-            )
-        })
-    })
+fn generate_software_mnemonic(supplemental_digest: Option<&[u8; 32]>) -> ApiResult<Mnemonic> {
+    generate_software_mnemonic_with(
+        |entropy| {
+            // OsRng delegates to the target operating system's CSPRNG. Never fall
+            // back to time, browser randomness, a user-space PRNG, or partial data.
+            OsRng.try_fill_bytes(entropy).map_err(|_| {
+                api_error(
+                    "entropy_unavailable",
+                    "Secure operating-system randomness is unavailable. Wallet creation stopped without generating key material.",
+                )
+            })
+        },
+        supplemental_digest,
+    )
 }
 
 #[derive(Serialize, Deserialize)]
@@ -2989,9 +3082,16 @@ pub fn wallet_select(
 }
 
 #[tauri::command]
-pub fn wallet_generate_mnemonic(app: AppHandle, state: State<'_, AppState>) -> ApiResult<()> {
+pub fn wallet_generate_mnemonic(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    supplemental_entropy: Option<SupplementalEntropyDto>,
+) -> ApiResult<()> {
     let _operation = operation_guard(&state)?;
-    let mnemonic = generate_software_mnemonic()?;
+    let supplemental_digest = supplemental_entropy
+        .map(supplemental_entropy_digest)
+        .transpose()?;
+    let mnemonic = generate_software_mnemonic(supplemental_digest.as_deref())?;
     let words = Zeroizing::new(mnemonic.to_string());
     let confirmed = native_backup::present(&app, words.as_str()).map_err(internal)?;
     if !confirmed {
@@ -6549,7 +6649,7 @@ mod tests {
 
     #[test]
     fn software_wallet_generation_always_creates_a_valid_24_word_mnemonic() {
-        let mnemonic = generate_software_mnemonic().expect("OS-backed mnemonic generation");
+        let mnemonic = generate_software_mnemonic(None).expect("OS-backed mnemonic generation");
         assert_eq!(mnemonic.word_count(), 24);
         let encoded = Zeroizing::new(mnemonic.to_string());
         let reparsed = Mnemonic::parse(encoded.as_str()).expect("generated words remain valid");
@@ -6559,11 +6659,14 @@ mod tests {
     #[test]
     fn software_wallet_generation_requires_exactly_256_bits_of_entropy() {
         let mut requested = 0;
-        let mnemonic = generate_software_mnemonic_with(|entropy| {
-            requested = entropy.len();
-            entropy.copy_from_slice(&[0x5a; 32]);
-            Ok(())
-        })
+        let mnemonic = generate_software_mnemonic_with(
+            |entropy| {
+                requested = entropy.len();
+                entropy.copy_from_slice(&[0x5a; 32]);
+                Ok(())
+            },
+            None,
+        )
         .expect("valid 256-bit BIP39 entropy");
         assert_eq!(requested, 32);
         assert_eq!(mnemonic.word_count(), 24);
@@ -6571,15 +6674,83 @@ mod tests {
 
     #[test]
     fn software_wallet_generation_fails_closed_when_os_entropy_is_unavailable() {
-        let error = generate_software_mnemonic_with(|entropy| {
-            entropy[..8].copy_from_slice(&[0xa5; 8]);
-            Err(api_error(
-                "entropy_unavailable",
-                "Secure operating-system randomness is unavailable.",
-            ))
-        })
+        let error = generate_software_mnemonic_with(
+            |entropy| {
+                entropy[..8].copy_from_slice(&[0xa5; 8]);
+                Err(api_error(
+                    "entropy_unavailable",
+                    "Secure operating-system randomness is unavailable.",
+                ))
+            },
+            Some(&[0x33; 32]),
+        )
         .expect_err("partial entropy must never produce a mnemonic");
         assert_eq!(error.code, "entropy_unavailable");
+    }
+
+    #[test]
+    fn supplemental_entropy_validation_is_bounded_and_source_specific() {
+        for (source, outcomes) in [
+            ("coin", "H".repeat(MIN_SUPPLEMENTAL_COIN_FLIPS)),
+            ("coin", "T".repeat(MAX_SUPPLEMENTAL_COIN_FLIPS)),
+            ("dice", "1".repeat(MIN_SUPPLEMENTAL_DICE_ROLLS)),
+            ("dice", "6".repeat(MAX_SUPPLEMENTAL_DICE_ROLLS)),
+        ] {
+            assert!(supplemental_entropy_digest(SupplementalEntropyDto {
+                source: source.to_owned(),
+                outcomes,
+            })
+            .is_ok());
+        }
+
+        for (source, outcomes) in [
+            ("coin", "H".repeat(MIN_SUPPLEMENTAL_COIN_FLIPS - 1)),
+            ("coin", "H".repeat(MAX_SUPPLEMENTAL_COIN_FLIPS + 1)),
+            (
+                "coin",
+                format!("{}X", "H".repeat(MIN_SUPPLEMENTAL_COIN_FLIPS - 1)),
+            ),
+            ("dice", "1".repeat(MIN_SUPPLEMENTAL_DICE_ROLLS - 1)),
+            ("dice", "1".repeat(MAX_SUPPLEMENTAL_DICE_ROLLS + 1)),
+            (
+                "dice",
+                format!("{}0", "1".repeat(MIN_SUPPLEMENTAL_DICE_ROLLS - 1)),
+            ),
+            ("cursor", "1".repeat(MIN_SUPPLEMENTAL_DICE_ROLLS)),
+        ] {
+            let error = supplemental_entropy_digest(SupplementalEntropyDto {
+                source: source.to_owned(),
+                outcomes,
+            })
+            .expect_err("invalid supplemental transcript must fail closed");
+            assert_eq!(error.code, "invalid_supplemental_entropy");
+        }
+    }
+
+    #[test]
+    fn supplemental_entropy_is_additive_and_domain_separated() {
+        let coin_digest = supplemental_entropy_digest(SupplementalEntropyDto {
+            source: "coin".to_owned(),
+            outcomes: "HT".repeat(MIN_SUPPLEMENTAL_COIN_FLIPS / 2),
+        })
+        .expect("valid coin transcript");
+        let dice_digest = supplemental_entropy_digest(SupplementalEntropyDto {
+            source: "dice".to_owned(),
+            outcomes: "123456".repeat(9),
+        })
+        .expect("valid dice transcript");
+        let fill = |entropy: &mut [u8]| {
+            entropy.copy_from_slice(&[0x42; 32]);
+            Ok(())
+        };
+        let without = generate_software_mnemonic_with(fill, None).expect("OS-only mnemonic");
+        let with_coin = generate_software_mnemonic_with(fill, Some(&coin_digest))
+            .expect("coin-supplemented mnemonic");
+        let with_dice = generate_software_mnemonic_with(fill, Some(&dice_digest))
+            .expect("dice-supplemented mnemonic");
+        assert_ne!(without, with_coin);
+        assert_ne!(without, with_dice);
+        assert_ne!(with_coin, with_dice);
     }
 
     #[test]

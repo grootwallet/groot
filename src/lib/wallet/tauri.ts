@@ -12,7 +12,7 @@ import {
   type WalletPort,
   type WalletSnapshot
 } from './contracts';
-import type { MnemonicPresentation, WalletProfile, WalletRegistry } from './contracts';
+import type { MnemonicPresentation, SupplementalEntropyInput, WalletProfile, WalletRegistry } from './contracts';
 import type { CosignerHealthCheck, HardwareDevice, MultisigPreview, MultisigProposal, MultisigWallet } from './contracts';
 import type { RecoveryDrill, RecoveryPolicyAnalysis, RecoveryTemplate } from './contracts';
 import type { ExternalSigner, ExternalSignerSource, ExternalSignerWallet } from './contracts';
@@ -65,8 +65,8 @@ export class TauriWalletAdapter implements WalletPort {
   profiles() { return command<WalletRegistry>('wallet_profiles'); }
   saveInactivityTimeout(minutes: number) { return command<WalletRegistry>('wallet_inactivity_timeout_save', { minutes }); }
   selectWallet(walletId: string) { return command<WalletProfile>('wallet_select', { walletId }); }
-  async generateMnemonic(): Promise<MnemonicPresentation> {
-    await command<void>('wallet_generate_mnemonic');
+  async generateMnemonic(supplementalEntropy?: SupplementalEntropyInput): Promise<MnemonicPresentation> {
+    await command<void>('wallet_generate_mnemonic', { supplementalEntropy: supplementalEntropy ?? null });
     return { mode: 'native' };
   }
   cancelOnboarding() { return command<void>('wallet_cancel_onboarding'); }

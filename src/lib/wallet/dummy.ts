@@ -2,7 +2,7 @@ import { defaultConfig } from '$lib/config';
 import { receiveAddresses, transactions, utxos, wallet } from '$lib/data';
 import type { ReceiveAddress, Transaction } from '$lib/types';
 import { addressPrefixForNetwork, canDiscardAddress, hasAddressPrefixForNetwork, normalizePermanentLabel } from './policy';
-import { feeRate, sats, WalletError, type CoinSelection, type FeeEstimates, type PaymentProposal, type WalletEvent, type WalletPort, type WalletSnapshot } from './contracts';
+import { feeRate, MAX_SUPPLEMENTAL_COIN_FLIPS, MAX_SUPPLEMENTAL_DICE_ROLLS, MIN_SUPPLEMENTAL_COIN_FLIPS, MIN_SUPPLEMENTAL_DICE_ROLLS, sats, WalletError, type CoinSelection, type FeeEstimates, type PaymentProposal, type WalletEvent, type WalletPort, type WalletSnapshot } from './contracts';
 import type { CoreNodeConfig, ExternalSigner, ExternalSignerSource, ExternalSignerWallet, MultisigPreview, MultisigProposal, MultisigWallet, RecoveryPolicyAnalysis, RecoveryTemplate, WalletProfile } from './contracts';
 import type { PolicyDraft } from '$lib/multisig/policy';
 import { descriptorPreview, MULTISIG_ACCOUNT_PATH, normalizeCosigner, validatePolicyDraft } from '$lib/multisig/policy';
@@ -76,7 +76,17 @@ export class DummyWalletAdapter implements WalletPort {
     this.#selectedWalletId = walletId;
     return structuredClone(profile);
   }
-  async generateMnemonic() { return { mode: 'fixture' as const, words: 'adapt cactus lesson motor acoustic globe ribbon pluck vessel deputy crisp fossil harbor pencil drift copper museum twelve gentle oak fabric north silent width'.split(' ') }; }
+  async generateMnemonic(supplementalEntropy?: import('./contracts').SupplementalEntropyInput) {
+    if (supplementalEntropy) {
+      const { source, outcomes } = supplementalEntropy;
+      const valid = source === 'coin' ? /^[HT]+$/.test(outcomes) : /^[1-6]+$/.test(outcomes);
+      const withinBounds = source === 'coin'
+        ? outcomes.length >= MIN_SUPPLEMENTAL_COIN_FLIPS && outcomes.length <= MAX_SUPPLEMENTAL_COIN_FLIPS
+        : outcomes.length >= MIN_SUPPLEMENTAL_DICE_ROLLS && outcomes.length <= MAX_SUPPLEMENTAL_DICE_ROLLS;
+      if (!valid || !withinBounds) throw new WalletError('invalid_supplemental_entropy', 'Enter the required physical coin flips or dice rolls.');
+    }
+    return { mode: 'fixture' as const, words: 'adapt cactus lesson motor acoustic globe ribbon pluck vessel deputy crisp fossil harbor pencil drift copper museum twelve gentle oak fabric north silent width'.split(' ') };
+  }
   async cancelOnboarding() {}
   async createWallet(name: string, credential: string) {
     if (!name.trim()) throw new WalletError('invalid_wallet_name', 'A wallet name is required.');

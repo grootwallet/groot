@@ -97,6 +97,31 @@ test('creates a 24-word wallet and clears onboarding secrets', async ({ page }) 
   await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible();
 });
 
+test('optional physical entropy entry is bounded and cleared after generation', async ({ page }) => {
+  await page.goto('/welcome?fixture-empty=1');
+  await page.getByRole('button', { name: 'Create new wallet' }).click();
+  await page.getByRole('button', { name: 'Software wallet' }).click();
+  const generate = page.getByRole('button', { name: 'Generate 24 recovery words' });
+  await expect(generate).toBeEnabled();
+  await page.getByText('Advanced: add physical randomness').click();
+  await expect(page.getByText(/always requires 256-bit operating-system randomness/i)).toBeVisible();
+  await page.getByRole('button', { name: 'Six-sided die' }).click();
+  await expect(generate).toBeDisabled();
+  const one = page.getByRole('button', { name: 'Record die result 1' });
+  for (let roll = 0; roll < 50; roll += 1) await one.click();
+  await expect(page.getByText('50 / 50 minimum')).toBeVisible();
+  await expect(generate).toBeEnabled();
+  await page.getByRole('button', { name: 'Undo last' }).click();
+  await expect(generate).toBeDisabled();
+  await page.getByRole('button', { name: 'Record die result 6' }).click();
+  await generate.click();
+  await expect(page.getByRole('heading', { name: 'Recovery words' })).toBeVisible();
+  await page.getByRole('button', { name: 'Back' }).click();
+  await page.getByText('Advanced: add physical randomness').click();
+  await expect(page.getByText('0 / 50 minimum')).toBeVisible();
+  await expect(generate).toBeDisabled();
+});
+
 test('recovers exactly 24 words and unlock rejects the wrong credential', async ({ page }) => {
   await page.goto('/welcome?fixture-empty=1');
   await page.getByRole('button', { name: 'Recover wallet' }).click();
