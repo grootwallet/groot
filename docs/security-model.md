@@ -14,6 +14,8 @@ Rust/Tauri is trusted for key derivation, credential verification, descriptor pa
 
 ## Required controls
 
+- Software-wallet key material starts with exactly 32 bytes requested by trusted Rust from the native OS CSPRNG. Those bytes are used directly as 256-bit BIP39 entropy; Satchel does not generate entropy in JavaScript, stretch a smaller random value, mix in predictable application data, or fall back after failure. `try_fill_bytes` failure returns stable `entropy_unavailable` before any mnemonic or wallet is created. The fixed-size entropy buffer, BIP39 mnemonic object, and derived seed are zeroized on success and error. The OS may incorporate hardware random sources into its conditioned pool, but Satchel neither assumes nor claims that every supported device exposes an independently verifiable hardware TRNG.
+- Device wrapping keys, secret-envelope data keys, salts, and AEAD nonces use the same fallible OS CSPRNG boundary. Failure aborts secure storage with `secure_storage_unavailable`; it never reuses a value or substitutes application-generated randomness.
 - No generated mnemonic, seed, xprv, private descriptor, or decrypted signing material crosses into the webview. Deterministic browser fixtures contain no production secret.
 - Secret envelopes require both the credential-derived key and a device wrapping key. A copied wallet directory must not be sufficient to decrypt the wallet elsewhere.
 - Credentials are never logged, included in analytics, persisted in plaintext, or retained after use. Native credential inputs are bounded, and every credential-bearing Svelte route clears its field after success, failure, and component teardown.
@@ -44,3 +46,5 @@ Rust/Tauri is trusted for key derivation, credential verification, descriptor pa
 ## Review checklist
 
 For any wallet-boundary change, identify secret inputs, public outputs, persistence mutations, zeroization point, stable error code, offline behavior, malicious-data limits, and tests for wrong network/wrong credential/mismatched identity. Update an ADR when a trust boundary or settled policy changes.
+
+The complete attacker assumptions, attack-vector register, mitigations, detection/recovery controls, residual risks, and release evidence are maintained in [`mainnet-threat-model.md`](mainnet-threat-model.md). Any new coordinator feature must add or update its entries before implementation is considered release-ready.

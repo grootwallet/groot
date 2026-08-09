@@ -154,6 +154,7 @@ export type WalletEvent =
 
 export type WalletErrorCode =
   | 'invalid_credential'
+  | 'entropy_unavailable'
   | 'invalid_address'
   | 'invalid_amount'
   | 'insufficient_funds'

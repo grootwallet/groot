@@ -18,6 +18,7 @@ serde_json = "1"
 aes-gcm = "0.10"
 argon2 = "0.5"
 base64 = "0.22"
+bip39 = { version = "=2.2.2", features = ["zeroize"] }
 bdk_bitcoind_rpc = "0.22"
 bdk_wallet = { version = "3.1", features = ["compiler", "keys-bip39", "rusqlite"] }
 rand = "0.8"

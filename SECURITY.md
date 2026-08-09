@@ -4,7 +4,7 @@ Last internal review: 2026-08-09
 
 Satchel is security-sensitive wallet software under active development. The current native implementation is intended for disposable **regtest** testing. It has not completed an independent audit, physical hardware-wallet certification, or the mainnet release process. Do not use it with mainnet funds.
 
-This document summarizes the security posture and the hardening work present in this repository. The canonical threat model is [`docs/security-model.md`](docs/security-model.md), and release authorization remains controlled by [`docs/mainnet-release-checklist.md`](docs/mainnet-release-checklist.md) and ADR 0012.
+This document summarizes the security posture and the hardening work present in this repository. Canonical controls are in [`docs/security-model.md`](docs/security-model.md); the attacker model and attack-vector register are in [`docs/mainnet-threat-model.md`](docs/mainnet-threat-model.md). Release authorization remains controlled by [`docs/mainnet-release-checklist.md`](docs/mainnet-release-checklist.md) and ADR 0012.
 
 ## Reporting a vulnerability
 
@@ -33,6 +33,8 @@ Reports should describe:
 
 ### Secrets and credentials
 
+- Software-wallet creation obtains exactly 32 bytes from Rust `OsRng`, backed by the native operating-system CSPRNG, and maps them directly to 24 BIP39 words. The fallible API aborts with `entropy_unavailable` rather than panicking or falling back, and the entropy buffer, mnemonic object, and derived seed are zeroized on success and failure. No key-generation entropy comes from JavaScript, time, process state, user input, a seeded user-space generator, or a raw CPU instruction used alone.
+- Device wrapping keys, AES-256 data keys, Argon2id salts, and AES-GCM nonces use the same fallible OS source. Any failure aborts secure storage; no cryptographic random value is reused or synthesized by the application.
 - Generated 24-word BIP39 mnemonics remain in a bounded, zeroized Rust pending session and are presented by the native layer; they are not returned to the webview.
 - The wallet credential is both the BIP39 passphrase and app unlock/signing PIN. A wrong credential returns a stable `invalid_credential` failure instead of deriving and appearing to open another wallet.
 - Credentials, mnemonics, xprvs, private descriptors, decrypted signing material, and native command payloads are not logged or included in analytics.

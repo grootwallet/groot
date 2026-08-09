@@ -39,6 +39,12 @@ pub enum SecureStoreError {
     DeviceKeyNotFound,
 }
 
+fn fill_os_random(destination: &mut [u8]) -> Result<(), SecureStoreError> {
+    OsRng
+        .try_fill_bytes(destination)
+        .map_err(|_| SecureStoreError::Unavailable)
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Metadata {
@@ -155,7 +161,7 @@ impl DeviceKeyProvider for SystemDeviceKeyProvider {
             Err(error) => return Err(error),
         }
         let mut key = vec![0_u8; KEY_BYTES];
-        OsRng.fill_bytes(&mut key);
+        fill_os_random(&mut key)?;
         set_generic_password(KEYCHAIN_SERVICE, &account, &key)
             .map_err(|_| SecureStoreError::Unavailable)?;
         cache_device_key(&account, &key);
@@ -185,7 +191,7 @@ impl DeviceKeyProvider for SystemDeviceKeyProvider {
             return read_sandbox_key(&path);
         }
         let mut key = vec![0_u8; KEY_BYTES];
-        OsRng.fill_bytes(&mut key);
+        fill_os_random(&mut key)?;
         write_owner_only(&path, &key)?;
         Ok(key)
     }
@@ -245,7 +251,7 @@ fn derive_credential_key(
 
 fn encrypt(key: &[u8], plaintext: &[u8]) -> Result<(Vec<u8>, Vec<u8>), SecureStoreError> {
     let mut nonce = vec![0_u8; NONCE_BYTES];
-    OsRng.fill_bytes(&mut nonce);
+    fill_os_random(&mut nonce)?;
     let cipher = Aes256Gcm::new_from_slice(key).map_err(|_| SecureStoreError::Unavailable)?;
     let ciphertext = cipher
         .encrypt(Nonce::from_slice(&nonce), plaintext)
@@ -330,8 +336,8 @@ fn store_with_provider(
 ) -> Result<(), SecureStoreError> {
     let mut salt = Zeroizing::new(vec![0_u8; 16]);
     let mut data_key = Zeroizing::new(vec![0_u8; KEY_BYTES]);
-    OsRng.fill_bytes(&mut salt);
-    OsRng.fill_bytes(&mut data_key);
+    fill_os_random(&mut salt)?;
+    fill_os_random(&mut data_key)?;
     let credential_key = derive_credential_key(credential, &salt)?;
     let device_key = Zeroizing::new(provider.get_or_create(metadata_path)?);
     let (payload_nonce, payload) = encrypt(&data_key, secret)?;

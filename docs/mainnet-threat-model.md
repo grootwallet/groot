@@ -1,41 +1,147 @@
-# Mainnet threat model
+# Satchel wallet and coordinator threat model
 
-Status: pre-release review; unresolved items are release blockers.
+Status: living pre-release security model. Mainnet is blocked until every release-gated item has independent evidence and explicit approval.
 
-## Assets
+Last reviewed: 2026-08-09
 
-- Mnemonic, BIP39 passphrase/app PIN, decrypted signing keys, and device wrapping key.
-- Hardware-wallet authorization and registered multisig policy.
-- Descriptor backup, xpub/fingerprint privacy, address labels, UTXO graph, PSBTs, and transaction intent.
-- Correct network identity, backend chain data, fee data, transaction finality, and recoverability.
+## Scope
 
-## Adversaries and failures
+This model covers Satchel's software single-key wallet, public-only external-signer wallet, multisig coordinator, native/webview boundary, local persistence, Bitcoin Core connection, HWI process and USB boundary, PSBT/BSMS/UR/file interchange, build pipeline, and recovery lifecycle. It covers confidentiality, signing authorization, transaction integrity, recoverability, privacy, and availability from entropy generation through deletion.
 
-- Compromised webview, renderer dependency, clipboard, QR/file payload, or malicious website.
-- Malicious or compromised Bitcoin Core/Esplora endpoint returning stale, censored, fee-manipulated, or false chain data.
-- HWI binary replacement, hostile USB device, wrong hardware wallet, changed firmware, policy-registration mismatch, or user-approved wrong address.
-- Stolen device, brute-force unlock, filesystem rollback/corruption, interrupted atomic write, backup loss, or passphrase transcription error.
-- Supply-chain compromise in npm, Cargo, GitHub Actions, release signing, or update distribution.
-- Cross-network address, descriptor origin, xpub version, PSBT, explorer, or HWI-chain mismatch.
+Browser fixtures, virtual signers, regtest automation, and the static web demo are test surfaces, not production custody systems. Lightning, cloud backup, arbitrary Miniscript editing, payjoin, collaborative transaction protocols, hosted multi-tenant storage, and background push while terminated are outside the current product. Adding one requires a threat-model update before implementation.
 
-## Required controls
+## Security objectives
 
-- Rust owns secrets, descriptors, PSBT validation, signing, persistence, network checks, and broadcast.
-- HWI uses an absolute executable path, fixed argument arrays, null stdin, bounded concurrent output, timeout/kill, discarded stderr, exact fingerprint matching, and explicit chain selection. Mainnet packaging must additionally pin and verify the HWI artifact/version.
-- Mainnet requires a user-controlled Core backend initially, verified genesis hash, encrypted/authenticated RPC configuration, no credentials in URLs, and no silent backend fallback.
-- Review is derived from the persisted PSBT. Recipient, amount, fee, fee rate, inputs, change, network, policy, and signing path are verified before every signature.
-- Imported PSBTs must preserve the unsigned transaction, descriptor identity, known origins, allowed sighash, and absence of hostile finalization data.
-- Secrets are device-bound and credential-wrapped; wallet-scoped authentication throttling survives restarts; unlock sessions are wallet-bound and idle-expiring; deletion requires fresh credential verification and multisig recoverability is proven independently.
-- Reproducible locked builds, least-privilege CI, artifact hashes/signatures, dependency review, SBOM, and external security review are required.
+1. Only the intended signer set can authorize a transaction, and every signer sees facts derived from the exact transaction it signs.
+2. A generated software wallet starts from 256 bits requested from the OS CSPRNG and remains recoverable from its 24 words plus the exact BIP39 passphrase.
+3. Secret key material never crosses into the webview, logs, analytics, public backups, network services, or hardware-wallet coordinator data.
+4. Receive and change addresses always belong to the selected wallet, correct network, and recoverable derivation window.
+5. Persistence cannot silently turn corruption, rollback, partial writes, or wallet-profile confusion into loss of funds.
+6. Untrusted backends, signers, files, QR data, USB devices, and frontend code cannot change transaction intent without a fail-closed error or explicit review.
+7. Security failures are durable and understandable; ambiguous broadcast/sync state never encourages an unsafe duplicate payment.
 
-## Residual risks requiring explicit acceptance
+## Assets and impact
 
-- Users can still approve an incorrect address or malicious hardware screen.
-- A compromised host can deny service, observe public wallet metadata, or replace clipboard contents.
-- Full-node operators learn the client's network identity and timing; public indexers additionally learn queried wallet data.
-- Filesystem deletion cannot promise physical flash erasure.
-- Multisig availability depends on independent device backups, compatible policy support, and correct descriptor recovery.
+- **Critical:** mnemonic entropy, mnemonic, BIP39 passphrase, seed/xprv, decrypted signer, device wrapping key, authenticated signing authority.
+- **High:** exact PSBT intent, recipient/change ownership, fee, descriptor/policy identity, signer fingerprints, derivation indexes, network identity, recovery backup.
+- **Moderate:** xpubs, descriptors, addresses, labels, UTXO graph, balances, transaction history, backend credentials, notification state, device metadata.
+- **Availability:** ability to unlock, recover, rescan, coordinate signatures, broadcast once, and distinguish pending/confirmed/replaced transactions.
 
-## Current decision
+## Trust boundaries and assumptions
 
-Mainnet release is blocked. The canonical evidence and sign-off gates are in `docs/mainnet-release-checklist.md`.
+- Rust/Tauri is the trusted computing base for entropy, keys, credentials, descriptors, policy, PSBTs, persistence, sync, and broadcast. Svelte is an untrusted presentation/orchestration surface for security decisions.
+- The operating system kernel CSPRNG and platform secret store are trusted to meet their documented security contracts. Satchel cannot independently prove the physical entropy sources, firmware, hypervisor, or CPU implementation beneath them.
+- Bitcoin cryptography, BIP39, BDK, Miniscript, secp256k1, AEAD, Argon2id, and pinned dependencies are assumed correct within their reviewed use. Supply-chain compromise remains an explicit threat.
+- Bitcoin Core, remote services, the network, filesystem contents, clipboard, camera, QR/file/UR/BSMS/PSBT inputs, HWI output, and USB devices may be malicious.
+- Hardware wallets protect their own keys only to the extent of their firmware, hardware, backup, passphrase practice, and on-device verification. The host can deny service or lie about coordinator UI.
+- A fully compromised privileged OS can read process memory, alter native UI, replace binaries, or drive user input. Satchel reduces exposure and blast radius but cannot preserve a hot software key against an active privileged compromise.
+- Users may make mistakes. Safety-critical flows must make the complete address, amount, fee, policy, network, backup requirement, and irreversible action reviewable, but software cannot guarantee attentive review.
+
+## Entropy and key-generation decision
+
+Software-wallet creation requests exactly one 32-byte buffer from Rust `OsRng`. In the pinned dependency path, `OsRng` delegates to `getrandom`, which selects the native OS CSPRNG for supported targets: Darwin `getentropy`/Apple Security, Windows `BCryptGenRandom`, and Linux/Android kernel `getrandom`. BIP39 consumes those 256 bits directly and produces 24 words.
+
+Satchel uses the fallible `try_fill_bytes` path. Any error aborts with `entropy_unavailable`; partial data is never accepted and there is no fallback to a clock, process identifier, browser API, user interaction, deterministic seed, user-space PRNG, or raw CPU RNG. The fixed-size entropy buffer, BIP39 mnemonic object's internal word indices, and derived seed are zeroized on success and every error path. Production mnemonic generation is Rust-only; deterministic entropy exists only in test code and browser fixtures that have no production wallet backend.
+
+The OS pool may be seeded partly by hardware random generators, interrupt timing, device events, and other sources, depending on the platform. Directly requiring or trusting a CPU/hardware TRNG alone would be less portable and would add firmware, virtualization, health-test, and availability failure modes. Therefore the defensible guarantee is **256 bits requested from the native OS CSPRNG**, not “an independently verified 256 bits of physical entropy” or “impossible to crack.” Seed search is computationally infeasible when that trust assumption holds, but weak BIP39 passphrases, exposed backups, compromised hosts, implementation bugs, and coercion remain separate risks.
+
+## Attack-vector register
+
+Each control is detailed further in [`security-model.md`](security-model.md). “Blocked” means the vector prevents mainnet release even if regtest behavior is implemented.
+
+### Key material, credentials, and local host
+
+| ID | Attack or failure | Primary guards | Detection, recovery, residual risk | Status |
+|---|---|---|---|---|
+| K-01 | Weak, deterministic, reused, short, or partially filled mnemonic/envelope entropy | Exact OS CSPRNG requests in trusted Rust; fallible calls; no fallback; direct 32-byte BIP39 mapping; fresh device/data keys, salts, and nonces; zeroized secret buffers | Stable `entropy_unavailable` for mnemonic creation and `secure_storage_unavailable` for envelope creation; unit tests assert mnemonic size and fail-closed partial fill. OS/firmware compromise remains outside app visibility | Implemented; platform release evidence required |
+| K-02 | Mnemonic, seed, xprv, or private descriptor leaks through IPC, UI state, logs, crash data, analytics, backup, or import | Native mnemonic sheet; no secret DTO; Rust-only derivation/signing; bounded native inputs; redacted stable errors; public-only import/export; zeroizing containers | Boundary tests and source review. Native screenshots, accessibility services, process-memory compromise, and user photography remain | Implemented; native certification blocked |
+| K-03 | Wrong BIP39 passphrase silently opens a different valid wallet | Wallet-bound, salted Argon2id verifier authenticates before signer load or derivation | Stable `invalid_credential`, persistent wallet-scoped throttling; exact passphrase still required for recovery | Implemented |
+| K-04 | Offline guessing of a copied secret envelope or short credential | Argon2id credential wrapping plus independent random device wrapping key; authenticated encryption; device-bound storage | Copy alone is insufficient. Active device compromise or stolen unlocked session remains; short passphrases are unsafe with exposed words | Implemented; Android/Windows storage blocked |
+| K-05 | Secret remains in memory after use or error | `Zeroizing`/explicit zeroization for entropy, credentials, mnemonic strings, seeds, keys, PIN positions, RPC secrets; bounded sessions | Rust/process dumps and allocator copies require continued review; privileged malware remains capable | Implemented, residual risk accepted only with disclosure |
+| K-06 | Session crosses wallets, survives switch/lock too long, or background sync extends it | UUID-scoped unlock state, monotonic idle deadlines, switch/lock revocation, background activity excluded | Tests cover isolation/expiry; OS suspend/mobile lifecycle needs physical certification | Implemented; lifecycle evidence blocked |
+| K-07 | Brute force, verifier oracle, or denial through repeated authentication | Stable non-diagnostic credential errors; persisted per-wallet cooldown; bounded credential input | Local attacker can still deny access or observe timing at OS level; verifier parameters require periodic review | Implemented |
+| K-08 | Malicious clipboard, overlay, screen sharing, accessibility service, or compromised webview substitutes an address or captures secrets | Secrets never enter webview; CSP/capabilities deny remote code and clipboard read; complete addresses available for review; hardware screen verification expected | Host compromise can still alter public intent or UI. User must verify recipient on an independent channel/device when stakes warrant | Partly mitigated; residual risk |
+| K-09 | Filesystem deletion mistaken for secure erasure | Documentation never claims flash erasure; deletion is authenticated and scoped | Backups, snapshots, wear leveling, and forensic remnants may survive | Residual risk disclosed |
+
+### Address derivation, descriptors, and recovery
+
+| ID | Attack or failure | Primary guards | Detection, recovery, residual risk | Status |
+|---|---|---|---|---|
+| A-01 | Receive address is derived from wrong wallet, keychain, descriptor, or network | Selected UUID routes isolated database/descriptors; Rust/BDK derives external keychain; configured network validation | Address/descriptor round-trip tests; profile/DB corruption fails closed | Implemented |
+| A-02 | Change is sent to attacker or another wallet | Rust constructs PSBT from selected wallet; review proves every non-recipient output is wallet-owned; persisted proposal is rechecked before each signature and broadcast | `proposal_mismatch` on unknown output; authoritative change address/amount shown | Implemented and regression-tested |
+| A-03 | Address index advances beyond recovery gap through reveals, canceled proposals, or hidden change | External reveal and actual internal PSBT output are checked before persistence; gap cannot be lowered below already derived runs | Stable `address_gap_limit_reached`; full authenticated rescan supports bounded larger gap | Implemented and regression-tested |
+| A-04 | Discarded/reused label or address hides funds | Reveal+non-empty immutable label is atomic; discard only unused awaiting address; retired addresses remain monitored | History is never deleted for privacy; observed address cannot be discarded | Implemented |
+| A-05 | Malicious or malformed descriptor/xpub origin redirects derivation | Rust parsing, checksums, public-only keys, exact network/path/origin and first-address checks; duplicate fingerprint/xpub rejection | Import fails closed; backups support independent verification | Implemented |
+| A-06 | Late birthday or too-small recovery gap omits funds | Height/gap bounded; safest birthday is zero; explicit warning; gap lower bound includes current derivation requirements | Full credential-authenticated rescan; user-supplied incorrect recovery metadata remains a risk | Implemented, UX residual |
+| A-07 | Backup is incomplete, wrong-network, wrong-policy, or untested | Checksummed descriptor/BSMS validation, policy recompilation, first-address check, recovery drill before multisig deletion | Independent offline copies and funded rehearsal required | Implemented; physical recovery evidence blocked |
+
+### Transaction construction, signing, and broadcast
+
+| ID | Attack or failure | Primary guards | Detection, recovery, residual risk | Status |
+|---|---|---|---|---|
+| T-01 | UI shows benign transaction while signer receives different inputs/outputs | Review is derived from persisted PSBT; recipient, amount, fee, input set, output count, and owned change are revalidated before every signature/broadcast | Exact unsigned-transaction identity and proposal metadata mismatch fail closed | Implemented |
+| T-02 | Extra attacker output is mislabeled as change | Every non-recipient output must be proven controlled by the selected wallet | Unknown output rejects review/sign/broadcast | Implemented and regression-tested |
+| T-03 | Fee manipulation, floating-point error, overflow, dust, or silent fallback burns funds | Integer satoshis; positive sat/vB; BDK-derived fee; bounded custom rate; no silent fee fallback; exact stored fee recheck | Review shows fee/rate/total; stale/unavailable estimate is surfaced | Implemented; policy bounds remain reviewable |
+| T-04 | Frozen or unselected coin is spent | Coin selection is Rust-owned; frozen coins excluded; explicit outpoints revalidated | Changed/spent input invalidates preparation or later proposal check | Implemented |
+| T-05 | Hostile imported PSBT changes transaction, origins, sighash, or finalization | Bounded parse; same unsigned transaction and descriptor identity; known origins; allowed sighash; no premature external finalization | Stable typed rejection; merge is compare-and-swap persisted | Implemented |
+| T-06 | Signature counted from unknown/wrong device or policy | Exact master fingerprint, descriptor membership, network, device type/path, and returned signatures verified | `unknown_signer`/identity errors; signature progress derived from PSBT | Implemented; physical certification blocked |
+| T-07 | Coordinator finalizes without threshold or wrong branch | BDK/Miniscript finalization must succeed; collected signatures alone are insufficient; path/timelock policy compiled in Rust | Finalization failure is durable; delayed branches remain release-limited | Immediate path implemented; delayed branch blocked |
+| T-08 | Broadcast succeeds but response/sync fails, causing duplicate payment | Expected txid verified; already-known tx is idempotent success; accepted status+notification committed atomically; post-broadcast sync uncertainty reported as pending | Resync by txid/backend; never convert ambiguous accepted broadcast to ordinary failure | Implemented |
+| T-09 | RBF/CPFP bypasses ordinary review or misprices package | Both create persisted ordinary PSBT proposals with the same checks; authoritative parent fee required; no guessed foreign prevout fee | Replacement links and accounting exclude replaced original; raced rejection preserves original | Implemented; funded matrix evidence required |
+| T-10 | Replay, race, stale proposal, restart, or cross-wallet proposal signs wrong intent | Wallet-scoped persisted proposals; serialized commands; compare-and-swap signatures; metadata and PSBT reloaded/rechecked | Missing/stale/mismatched proposal fails closed | Implemented |
+
+### Coordinator, hardware, and interchange
+
+| ID | Attack or failure | Primary guards | Detection, recovery, residual risk | Status |
+|---|---|---|---|---|
+| C-01 | HWI binary replacement, shell injection, `PATH`/environment hijack, unbounded output, or hung process | Canonical absolute executable; no shell/PATH; regular and non-group/world-writable; cleared environment; fixed args; bounded concurrent output; timeout/kill; null stdin except bounded PIN | Stable errors discard raw stderr; packaged artifact hash/version still required | Implemented; packaging blocked |
+| C-02 | Hostile USB device impersonates a cosigner or device changes mid-flow | Fresh enumeration, exact type/path/fingerprint selection, descriptor membership, explicit chain | User verifies device screen; malicious firmware or compromised hardware remains | Implemented; physical matrix blocked |
+| C-03 | PIN/passphrase leaks in argv/logs or standard/hidden wallet is silently confused | PIN positions only via bounded stdin and zeroized; raw stderr discarded; Trezor standard-wallet choice requires explicit consent | Challenge single-use and expiring. Hardware passphrase entry behavior is vendor-dependent | Implemented; vendor evidence blocked |
+| C-04 | Duplicate/correlated cosigners defeat threshold independence | Duplicate fingerprint/xpub rejection; policy requires reachable thresholds and independent recovery signer | Coordinator cannot prove two devices/backups are operationally independent or share no seed | User ceremony + certification required |
+| C-05 | Lost signer, backup, passphrase, policy registration, or timelock misunderstanding makes funds unspendable | Checksummed descriptor backups, signer metadata, recovery drill, policy preview, hardware registration flow | Independent geographically separated backups and funded recovery rehearsal required | Release blocked pending evidence |
+| C-06 | Malformed/oversized QR, UR, BSMS, PSBT, descriptor, JSON, or mounted file causes parser exploit/resource exhaustion | Byte/frame/count/depth bounds, canonical CBOR/type/magic, private-material rejection, Rust parsing, no secret UR type | Fuzz/property testing and dependency review remain ongoing; memory-safe Rust reduces but does not remove logic risk | Implemented, ongoing testing |
+| C-07 | Exported public coordinator metadata harms privacy | Explicit public-only export; no private keys; user chooses file/QR transport | Descriptors/xpubs reveal wallet graph and all derived addresses to recipients; cannot be revoked | Residual risk disclosed |
+
+### Network, persistence, supply chain, and availability
+
+| ID | Attack or failure | Primary guards | Detection, recovery, residual risk | Status |
+|---|---|---|---|---|
+| N-01 | Backend lies about chain, fees, confirmations, mempool, or broadcasts; censors or fingerprints wallet | Explicit configured backend; no silent fallback; network/genesis validation required for mainnet; authoritative local data where possible; Tor option for onion RPC | Compare with independent node/explorer out of band; a single backend can still censor, delay, or observe queries | Mainnet backend evidence blocked |
+| N-02 | Wrong network/chain sends unusable transaction or address | Network carried through profiles, descriptors, address parsing, PSBTs, HWI, backend config; mainnet compile-time disabled | Cross-network inputs fail closed; release gate scans for mainnet enablement | Implemented for current networks |
+| N-03 | RPC credentials leak through URL, logs, proxy, cleartext transport, or wrong wallet session | No URL credentials; HTTPS remote Core; onion HTTP only through explicit loopback SOCKS; encrypted wallet-bound secret; cleared on lock/switch | Transport/config validation; endpoint operator still sees timing and wallet queries | Implemented; remote-node certification blocked |
+| P-01 | Symlink, non-regular file, traversal, permissive mode, partial write, corruption, rollback, or DB confusion loses state | Canonical scoped paths; symlink/non-regular rejection; bounded reads; owner-only dirs/files; atomic fsync writes; SQLite defensive mode/transactions; UUID isolation | Corruption returns `wallet_corrupt`; restore public state from descriptor/Core plus secret backup. Rollback detection is incomplete | Implemented; rollback residual/blocker |
+| P-02 | Crash between wallet state and notification/proposal update creates false status | State and markers committed atomically; notifications stay pending until acknowledgement; proposals persisted before review | Restart tests; backend resync reconciles public chain state | Implemented |
+| P-03 | Concurrent instances race registry/database | In-process operations serialized and SQLite handles DB locking | Cross-process registry locking/single-instance enforcement is not complete | Mainnet blocker |
+| S-01 | Malicious dependency, maintainer, build script, CI action, compiler, artifact, update, or HWI package steals keys | Exact/locked dependencies, lifecycle scripts disabled, immutable CI SHAs, read-only permissions, source review, advisory scans, no PR publishing | Reproducible builds, SBOM, provenance, signed updates, HWI hashes, independent review required | Mainnet blocker |
+| S-02 | Webview/XSS/remote content gains native capability | Static bundled app; deny-by-default CSP; no remote scripts/frames/objects; minimal Tauri capabilities; no generic shell/fs/http/clipboard-read | CSP and capability tests; dependency compromise or Tauri vulnerability remains | Implemented, independent review required |
+| D-01 | Malformed histories, huge gaps, backend stalls, USB hangs, disk-full, or attacker traffic denies service | Bounded inputs/timeouts/gaps, async blocking boundaries, SQLite busy timeout, retryable stable errors | Availability can be denied by host/backend; recovery from words+descriptor remains the ultimate control | Partly mitigated; scale testing blocked |
+
+## Abuse cases and required security tests
+
+Security tests must include: entropy-source failure and exact byte request; wrong credential and restart-persistent throttling; profile switching and session expiry; wrong-network and private descriptor imports; duplicate/correlated signer identities; receive/change gap boundaries including canceled proposal churn; PSBT extra output, changed recipient/amount/fee/input/sighash/origin/finalization; unknown hardware fingerprint; HWI timeout/oversize/malformed output; symlink/corrupt/truncated/rollback fixtures; Core wrong-chain/stale/broadcast ambiguity; UR/BSMS/PSBT fuzz corpus; crash points around proposal/signature/broadcast/notification commits; and recovery from clean storage at every supported policy boundary.
+
+Passing dummy, simulator, or unit tests is not physical-device, operating-system, backend, or release-artifact evidence. Funded tests use regtest, then Signet/Testnet4 rehearsal; mainnet funds are never a test mechanism.
+
+## Detection and incident response
+
+- Stop signing and broadcasting on any descriptor, network, signer identity, PSBT, fee, storage-authentication, or entropy error. Do not auto-repair secret state or rotate a missing wrapping key.
+- Preserve only non-secret diagnostics: application version/commit, platform, stable error code, backend type, and redacted reproduction using regtest. Never collect mnemonic, credential, descriptor/xpub, address, fingerprint, PSBT, RPC password, or wallet database by default.
+- If a released binary or dependency may be compromised, halt distribution, publish hashes and affected versions through the security channel, advise movement to a freshly generated wallet using independently verified software/hardware, and treat every key exposed to that build as potentially compromised.
+- If broadcast state is ambiguous, query the expected txid and conflicting inputs before constructing another payment. If local state is corrupt, recover from independently verified words/passphrase or descriptor backup into clean storage and rescan from a safe birthday/gap.
+
+## Residual risks requiring explicit user/release acceptance
+
+- No software can make key cracking literally impossible or prove that an opaque platform/hardware entropy chain is uncompromised. The claim is conditional computational infeasibility under standard cryptographic and OS-CSPRNG assumptions.
+- A privileged compromised host can capture a hot software key, substitute public transaction intent, manipulate native UI, or deny service. Hardware multisig across independently administered devices reduces key-extraction risk but does not make the coordinator display trustworthy.
+- Users can approve a wrong full address or malicious hardware display, lose or expose words/passphrases/descriptors, create correlated signer backups, or choose recovery scan parameters that omit history.
+- Backends and public metadata expose timing, balances, transaction graph, xpub/descriptor-derived addresses, and network identity. Tor reduces transport linkage but does not make wallet queries information-free.
+- Flash deletion, cloud/system backups, swap, crash dumps, cameras, and accessibility tooling may retain sensitive data beyond Satchel's control.
+- Complex recovery/timelock behavior, firmware differences, reorgs, large histories, and release/update infrastructure require independent and physical evidence; code review alone is insufficient.
+
+## Mainnet authorization gates
+
+Mainnet remains blocked until the exact candidate commit has: an independent security review with findings closed; reproducible signed packages and SBOM/provenance; reviewed update delivery; current dependency/advisory evidence; pinned and verified HWI packaging; physical model/firmware/OS certification; Apple/Android/Windows secure-storage lifecycle certification; verified chain identity and remote-backend privacy/authentication tests; cross-process locking; funded recovery/reorg/timelock rehearsals; large-history/gap tests; and explicit completion of [`mainnet-release-checklist.md`](mainnet-release-checklist.md). The implementer cannot self-approve these gates.
+
+## Change-control rule
+
+Every change that introduces an asset, trust boundary, parser, signer, backend, network protocol, recovery path, persistence format, platform permission, build/update path, or transaction type must update this document and the relevant ADR/checklist in the same change. A security control without a named failure test and release evidence is a design claim, not a completed mitigation.

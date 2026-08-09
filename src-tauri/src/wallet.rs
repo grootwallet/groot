@@ -9,7 +9,6 @@ use bdk_bitcoind_rpc::{
     Emitter,
 };
 use bdk_wallet::{
-    bip39::Mnemonic,
     bitcoin::{
         bip32::{DerivationPath, Xpriv, Xpub},
         secp256k1::Secp256k1,
@@ -22,6 +21,7 @@ use bdk_wallet::{
     template::{Bip84, Bip84Public},
     KeychainKind, PersistedWallet, SignOptions, Wallet,
 };
+use bip39::Mnemonic;
 use rand::{rngs::OsRng, RngCore};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -385,14 +385,27 @@ fn onboarding_session_is_fresh(created_at: u64, current_time: u64) -> bool {
     current_time.saturating_sub(created_at) <= ONBOARDING_SESSION_SECONDS
 }
 
+fn generate_software_mnemonic_with(
+    fill_entropy: impl FnOnce(&mut [u8]) -> ApiResult<()>,
+) -> ApiResult<Mnemonic> {
+    // BIP39 maps 256 bits of entropy to exactly 24 words. Zeroizing also covers
+    // an entropy-source or mnemonic-construction error, including partial fills.
+    let mut entropy = Zeroizing::new([0_u8; 32]);
+    fill_entropy(&mut entropy[..])?;
+    Mnemonic::from_entropy(&entropy[..]).map_err(internal)
+}
+
 fn generate_software_mnemonic() -> ApiResult<Mnemonic> {
-    // BIP39 maps 256 bits of entropy to exactly 24 words. Keep the entropy in a
-    // fixed-size buffer so it can be erased immediately after construction.
-    let mut entropy = [0_u8; 32];
-    OsRng.fill_bytes(&mut entropy);
-    let mnemonic = Mnemonic::from_entropy(&entropy).map_err(internal);
-    entropy.zeroize();
-    mnemonic
+    generate_software_mnemonic_with(|entropy| {
+        // OsRng delegates to the target operating system's CSPRNG. Never fall
+        // back to time, browser randomness, a user-space PRNG, or partial data.
+        OsRng.try_fill_bytes(entropy).map_err(|_| {
+            api_error(
+                "entropy_unavailable",
+                "Secure operating-system randomness is unavailable. Wallet creation stopped without generating key material.",
+            )
+        })
+    })
 }
 
 #[derive(Serialize, Deserialize)]
@@ -6541,6 +6554,32 @@ mod tests {
         let encoded = Zeroizing::new(mnemonic.to_string());
         let reparsed = Mnemonic::parse(encoded.as_str()).expect("generated words remain valid");
         assert_eq!(reparsed.word_count(), 24);
+    }
+
+    #[test]
+    fn software_wallet_generation_requires_exactly_256_bits_of_entropy() {
+        let mut requested = 0;
+        let mnemonic = generate_software_mnemonic_with(|entropy| {
+            requested = entropy.len();
+            entropy.copy_from_slice(&[0x5a; 32]);
+            Ok(())
+        })
+        .expect("valid 256-bit BIP39 entropy");
+        assert_eq!(requested, 32);
+        assert_eq!(mnemonic.word_count(), 24);
+    }
+
+    #[test]
+    fn software_wallet_generation_fails_closed_when_os_entropy_is_unavailable() {
+        let error = generate_software_mnemonic_with(|entropy| {
+            entropy[..8].copy_from_slice(&[0xa5; 8]);
+            Err(api_error(
+                "entropy_unavailable",
+                "Secure operating-system randomness is unavailable.",
+            ))
+        })
+        .expect_err("partial entropy must never produce a mnemonic");
+        assert_eq!(error.code, "entropy_unavailable");
     }
 
     #[test]
