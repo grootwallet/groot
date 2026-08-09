@@ -233,7 +233,6 @@ mod macos {
                             mtm,
                         )
                     };
-                    cancel.setFrame(rect(width - 268.0, 36.0, 110.0, 38.0));
                     cancel.setBezelStyle(NSBezelStyle::Push);
                     root.addSubview(&cancel);
 
@@ -245,10 +244,10 @@ mod macos {
                             mtm,
                         )
                     };
-                    confirm.setFrame(rect(width - 152.0, 36.0, 120.0, 38.0));
                     confirm.setBezelStyle(NSBezelStyle::Push);
                     confirm.setBezelColor(Some(&NSColor::systemBlueColor()));
                     confirm.setKeyEquivalent(&NSString::from_str("\r"));
+                    layout_trailing_actions(&cancel, &confirm, width, 36.0, 140.0);
                     root.addSubview(&confirm);
 
                     parent.beginSheet_completionHandler(&panel, None);
@@ -329,7 +328,6 @@ mod macos {
                 mtm,
             )
         };
-        cancel.setFrame(rect(width - 304.0, 40.0, 110.0, 38.0));
         cancel.setBezelStyle(NSBezelStyle::Push);
         root.addSubview(&cancel);
 
@@ -341,10 +339,10 @@ mod macos {
                 mtm,
             )
         };
-        reveal.setFrame(rect(width - 188.0, 40.0, 160.0, 38.0));
         reveal.setBezelStyle(NSBezelStyle::Push);
         reveal.setBezelColor(Some(&NSColor::systemBlueColor()));
         reveal.setKeyEquivalent(&NSString::from_str("\r"));
+        layout_trailing_actions(&cancel, &reveal, width, 40.0, 170.0);
         root.addSubview(&reveal);
 
         parent.beginSheet_completionHandler(&panel, None);
@@ -524,7 +522,6 @@ mod macos {
                 mtm,
             )
         };
-        cancel.setFrame(rect(width - 268.0, 28.0, 110.0, 38.0));
         cancel.setBezelStyle(NSBezelStyle::Push);
         root.addSubview(&cancel);
         let confirm = unsafe {
@@ -535,10 +532,10 @@ mod macos {
                 mtm,
             )
         };
-        confirm.setFrame(rect(width - 152.0, 28.0, 120.0, 38.0));
         confirm.setBezelStyle(NSBezelStyle::Push);
         confirm.setBezelColor(Some(&NSColor::systemBlueColor()));
         confirm.setEnabled(false);
+        layout_trailing_actions(&cancel, &confirm, width, 28.0, 130.0);
         root.addSubview(&confirm);
         {
             let mut state = root.ivars().state.borrow_mut();
@@ -582,6 +579,31 @@ mod macos {
 
     fn sheet_width(parent: &NSWindow, preferred: f64) -> f64 {
         (parent.frame().size.width - 32.0).clamp(340.0, preferred)
+    }
+
+    fn layout_trailing_actions(
+        cancel: &NSButton,
+        primary: &NSButton,
+        container_width: f64,
+        y: f64,
+        primary_min_width: f64,
+    ) {
+        const RIGHT_MARGIN: f64 = 24.0;
+        const GAP: f64 = 8.0;
+        const HEIGHT: f64 = 38.0;
+
+        cancel.sizeToFit();
+        primary.sizeToFit();
+        let cancel_width = (cancel.frame().size.width + 8.0).max(90.0);
+        let primary_width = (primary.frame().size.width + 8.0).max(primary_min_width);
+        let primary_x = container_width - RIGHT_MARGIN - primary_width;
+        primary.setFrame(rect(primary_x, y, primary_width, HEIGHT));
+        cancel.setFrame(rect(
+            primary_x - GAP - cancel_width,
+            y,
+            cancel_width,
+            HEIGHT,
+        ));
     }
 
     fn add_label(
