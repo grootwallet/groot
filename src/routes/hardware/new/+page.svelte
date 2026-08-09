@@ -33,7 +33,7 @@
     if (device.action === 'confirm_empty_passphrase' && !allowEmptyPassphrase) {
       standardWalletDevice = device; scanOpen = false; standardWalletOpen = true; return;
     }
-    if (device.status !== 'ready' && !allowEmptyPassphrase) { error = device.message; return; }
+    if (device.status !== 'ready' && device.status !== 'detected' && !allowEmptyPassphrase) { error = device.message; return; }
     busy = true;
     hardwareProgress = device.model.startsWith('ledger') ? 'Reading the public account key from Ledger…' : `Reading the public key from ${device.label}…`;
     error = '';
@@ -136,7 +136,7 @@
 </div>
 
 <Modal open={scanOpen} title="Connect hardware signer" description="Quit manufacturer wallet apps after unlocking; only one app can own the USB session." onclose={() => scanOpen=false}>
-  {#if busy}<div class="device-scan"><Cpu size={20}/><strong>{hardwareProgress}</strong>{#if hardwareProgress.includes('Ledger')}<span>For Regtest, keep Bitcoin Test open—not Bitcoin. Confirm on Ledger only if its screen asks.</span>{/if}</div>{:else if !devices.length}<div class="device-scan"><strong>No device found</strong><span>HWI returned no device. For Coldcard, sign in first, enable its USB port, reconnect, then scan again. Other signers must be initialized, unlocked, and released by companion apps.</span><Button variant="secondary" onclick={scan}>Scan again</Button></div>{:else}<div class="source-list hardware-device-list">{#each devices as device}<button onclick={() => useDevice(device)} disabled={busy}><Cpu size={18}/><span><strong>{device.label}</strong><small>{device.fingerprint ? `Fingerprint ${device.fingerprint} · ${device.message}` : device.message}</small></span><em class:ready={device.status === 'ready'}>{device.status === 'ready' ? 'Ready' : device.action === 'confirm_empty_passphrase' ? 'Choose wallet' : 'Attention'}</em></button>{/each}</div>{/if}
+  {#if busy}<div class="device-scan"><Cpu size={20}/><strong>{hardwareProgress}</strong>{#if hardwareProgress.includes('Ledger')}<span>For Regtest, keep Bitcoin Test open—not Bitcoin. Confirm on Ledger only if its screen asks.</span>{/if}</div>{:else if !devices.length}<div class="device-scan"><strong>No device found</strong><span>HWI returned no device. For Coldcard, sign in first, enable its USB port, reconnect, then scan again. Other signers must be initialized, unlocked, and released by companion apps.</span><Button variant="secondary" onclick={scan}>Scan again</Button></div>{:else}<div class="source-list hardware-device-list">{#each devices as device}<button onclick={() => useDevice(device)} disabled={busy}><Cpu size={18}/><span><strong>{device.label}</strong><small>{device.fingerprint ? `Fingerprint ${device.fingerprint} · ${device.message}` : device.message}</small></span><em class:ready={device.status === 'ready'}>{device.status === 'ready' ? 'Ready' : device.status === 'detected' ? 'Detected' : device.action === 'confirm_empty_passphrase' ? 'Choose wallet' : 'Attention'}</em></button>{/each}</div>{/if}
   {#if error}<div class="hardware-inline-error" role="alert"><AlertTriangle size={18}/><span><strong>Could not read the account key</strong><small>{error}</small></span><Button variant="secondary" size="small" onclick={scan}>Try again</Button></div>{/if}
 </Modal>
 <Modal open={standardWalletOpen} title="Use Trezor standard wallet?" description="This selects the seed-derived wallet with no hardware passphrase." onclose={() => { standardWalletOpen=false; standardWalletDevice=null; scanOpen=true; }}>

@@ -860,6 +860,12 @@ fn hardware_device_dto(device: HwiDevice) -> HardwareDeviceDto {
             "Passphrase protection is enabled. Choose the standard wallet with no passphrase, or select a hidden wallet on-device when supported.",
             "confirm_empty_passphrase",
         )
+    } else if device.fingerprint.is_some() && device_type == "ledger" {
+        (
+            "detected",
+            "Detected. Satchel verifies that Bitcoin Test is open when it reads the public account key.",
+            "import",
+        )
     } else if device.fingerprint.is_some() {
         ("ready", "Ready to import the public account key.", "import")
     } else if device_type == "bitbox02" {
@@ -6995,6 +7001,20 @@ mod tests {
         });
         assert_eq!(jade.status, "needs_device_unlock");
         assert!(jade.message.contains("QR PIN Unlock"));
+
+        let ledger = hardware_device_dto(HwiDevice {
+            fingerprint: Some("f00dbabe".to_owned()),
+            device_type: "ledger".to_owned(),
+            model: "ledger_nano_s_plus".to_owned(),
+            path: "ledger-path".to_owned(),
+            code: None,
+            needs_pin_sent: false,
+            needs_passphrase_sent: false,
+            warnings: vec![],
+        });
+        assert_eq!(ledger.status, "detected");
+        assert_eq!(ledger.action, "import");
+        assert!(ledger.message.contains("Bitcoin Test"));
 
         for (device_type, expected) in [
             ("ledger", "Bitcoin Test"),

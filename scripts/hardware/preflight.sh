@@ -47,6 +47,9 @@ process.stdin.on("end", () => {
       if (warnings.includes("passphrase") && warnings.includes("empty string")) {
         actionable += 1;
         console.log(`${model}: detected; choose the standard no-passphrase wallet explicitly in Satchel, or select a hidden wallet on-device when supported`);
+      } else if (device.type === "ledger" && device.fingerprint) {
+        actionable += 1;
+        console.log(`${model}: detected; for Regtest open Bitcoin Test—not Bitcoin; Satchel verifies the app when reading the public account key`);
       } else if (device.fingerprint) {
         actionable += 1;
         console.log(`${model}: ready`);
