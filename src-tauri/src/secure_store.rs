@@ -8,12 +8,15 @@ use rand::{rngs::OsRng, RngCore};
 use serde::{Deserialize, Serialize};
 #[cfg(not(any(target_os = "macos", target_os = "ios")))]
 use std::path::PathBuf;
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 use std::{
     collections::HashMap,
+    sync::{Mutex, OnceLock},
+};
+use std::{
     fs::{self, File, OpenOptions},
     io::{Read, Write},
     path::Path,
-    sync::{Mutex, OnceLock},
 };
 use uuid::Uuid;
 use zeroize::Zeroizing;
