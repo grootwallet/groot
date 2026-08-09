@@ -1,6 +1,6 @@
 # ADR 0016: Pre-mainnet interoperability and recovery controls
 
-- Status: Accepted for test networks; mainnet remains blocked
+- Status: Accepted for test networks; the TLS-backend portion is superseded by ADR 0020; mainnet remains blocked
 - Date: 2026-08-05
 
 ## Context

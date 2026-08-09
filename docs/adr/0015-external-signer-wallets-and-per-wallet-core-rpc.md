@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted for regtest; physical-device and remote-node certification remain release gates.
+Accepted for regtest; the TLS-backend portion is superseded by ADR 0020. Physical-device and remote-node certification remain release gates.
 
 ## Decision
 

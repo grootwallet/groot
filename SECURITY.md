@@ -102,7 +102,7 @@ Reports should describe:
 
 ### Supply-chain and CI controls
 
-- Remote Bitcoin Core TLS activates `https-rustls` on the already-transitive, exactly pinned `minreq 2.14.1` transport. The lockfile adds the rustls 0.21 closure (`ring`, `rustls-webpki`, `sct`, `untrusted`, `webpki-roots`, and platform `windows-sys`) with registry checksums. This exception has a narrow RPC-TLS purpose; advisory and license scans remain release evidence.
+- Remote Bitcoin Core TLS activates `https-native` on the already-transitive, exactly pinned `minreq 2.14.1` transport. ADR 0020 removed its legacy Rustls 0.21/WebPKI 0.101.7 backend after three certificate-validation advisories; that vulnerable branch must remain absent from the lockfile. Platform TLS and trust-store differences remain part of remote-node certification.
 - Direct JavaScript dependency versions, Node `22.22.0`, and pnpm `11.13.1` are pinned. Cargo and pnpm lockfiles are committed and automation uses `--locked` or `--frozen-lockfile`.
 - Node package lifecycle scripts are disabled through the repository `.npmrc`; exact saves and pnpm store-integrity verification are enabled.
 - GitHub Actions are pinned to immutable commit SHAs, job permissions default to read-only, and checkout credentials are not persisted.
@@ -110,7 +110,7 @@ Reports should describe:
 - CI runs npm and RustSec advisory checks. A green scanner is evidence, not release authorization.
 - Vendored Rust sources, lockfiles, CI workflows, package-manager settings, Tauri capabilities, and release scripts require explicit supply-chain review when changed.
 - Quality and mainnet shell gates use `rg` when present and a portable system `grep` fallback otherwise; validation does not require installing an extra workstation package.
-- The exact pinned `ur` 0.4.1 crate was source-reviewed before use; it forbids unsafe code and has no build script. The exact pinned `jsonrpc` 0.18.0 proxy feature and `socks` 0.3.4 source were reviewed. Direct RPC explicitly uses the rustls-backed minreq transport because the proxy feature changes the legacy simple transport globally; only an explicit onion configuration constructs SOCKS. SOCKS remains a narrow socket transport boundary and receives no wallet key material.
+- The exact pinned `ur` 0.4.1 crate was source-reviewed before use; it forbids unsafe code and has no build script. The exact pinned `jsonrpc` 0.18.0 proxy feature and `socks` 0.3.4 source were reviewed. Direct RPC explicitly uses the native-TLS-backed Minreq transport because the proxy feature changes the legacy simple transport globally; only an explicit onion configuration constructs SOCKS. SOCKS remains a narrow socket transport boundary and receives no wallet key material.
 
 ## Verification evidence
 
@@ -158,7 +158,7 @@ This internal code audit traced address derivation, descriptor identity, proposa
 - Single-key review omitted authoritative change and output-count details. The Rust DTO and review UI now expose the verified change amount/address and transaction shape.
 - A browser fixture journey attempted to sign a newly created policy with virtual devices whose fingerprints were not members of that policy. The fixture now preserves exact device-to-policy identity instead of simulating signatures from unrelated devices.
 
-Local evidence for this audit includes 121 Rust tests under strict Clippy, 76 frontend unit tests, the full boundary/release/check/build gate, 81 previously green Playwright journeys plus the corrected desktop/mobile signer-identity regression, and direct desktop/mobile inspection of the single-key change review at 1180×780 and 390×844 with no horizontal overflow. Dependency advisory lookup could not complete in the restricted workspace because registry DNS was unavailable, and `cargo-audit` was not installed; current CI advisory jobs remain required release evidence.
+Local evidence for this audit includes 125 Rust tests under strict Clippy, 76 frontend unit tests, the full boundary/release/check/build gate, 81 previously green Playwright journeys plus the corrected desktop/mobile signer-identity regression, and direct desktop/mobile inspection of the single-key change review at 1180×780 and 390×844 with no horizontal overflow. The pinned CI version of `cargo-audit` reports no vulnerabilities after removal of the legacy WebPKI branch; its 17 pre-existing allowed warnings remain release follow-up items. Current CI advisory jobs remain required release evidence.
 
 This is an internal code audit and bounded adversarial test pass, not an independent penetration test, cryptographic proof, physical-device certification, or authorization for mainnet release.
 
