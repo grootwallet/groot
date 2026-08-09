@@ -70,6 +70,17 @@ jobs:
       - run: cargo clippy --locked --all-targets --all-features -- -D warnings
       - name: Rust unit and integration tests (pyramid base and middle)
         run: cargo test --locked --all-features
+      - name: Install pinned Bitcoin Core 31.1 for isolated Regtest
+        run: |
+          archive=/tmp/bitcoin-31.1-x86_64-linux-gnu.tar.gz
+          curl --proto '=https' --tlsv1.2 --fail --location --silent --show-error \
+            --output "$archive" \
+            https://bitcoincore.org/bin/bitcoin-core-31.1/bitcoin-31.1-x86_64-linux-gnu.tar.gz
+          echo "b80d9c3e04da78fb6f0569685673418cf686fadba9042d926d13fb87ff503f9e  $archive" | sha256sum --check --strict
+          tar --extract --gzip --file "$archive" --directory /tmp
+          echo "/tmp/bitcoin-31.1/bin" >> "$GITHUB_PATH"
+      - name: Real Bitcoin Core Regtest multisig and recovery
+        run: bash ../scripts/regtest/test.sh
       - name: Install security and coverage tools
         run: |
           cargo install cargo-audit --locked --version 0.22.2
