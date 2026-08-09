@@ -244,6 +244,7 @@ code { font-family: "SFMono-Regular", Consolas, ui-monospace, monospace; }
 .address-label { margin-top: 21px; text-align: center; display: flex; flex-direction: column; gap: 5px; }
 .address-label span { font-size: 15px; font-weight: 600; }
 .address-label small { color: var(--accent); font-size: 11px; }
+.address-label small.verified { display: inline-flex; align-items: center; justify-content: center; gap: 5px; color: var(--success); }
 .address-box { margin-top: 17px; width: 100%; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-control); color: var(--text-soft); padding: 13px 14px; display: flex; gap: 12px; align-items: center; cursor: pointer; }
 .address-box code { font-size: 11px; text-align: left; flex: 1; word-break: break-all; }
 .receive-actions { display: flex; gap: 8px; margin-top: 17px; }

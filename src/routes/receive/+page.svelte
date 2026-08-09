@@ -1,11 +1,12 @@
 <script lang="ts">
-  import { Check, ChevronDown, ChevronRight, Copy, Cpu, Plus, QrCode, ShieldCheck, Trash2 } from '@lucide/svelte';
+  import { Check, CheckCircle2, ChevronDown, ChevronRight, Copy, Cpu, Plus, QrCode, ShieldCheck, Trash2 } from '@lucide/svelte';
   import QRCode from 'qrcode';
   import { onMount, tick } from 'svelte';
   import Button from '$lib/components/Button.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import ReadableAddress from '$lib/components/ReadableAddress.svelte';
   import AddressDetailsModal from '$lib/components/AddressDetailsModal.svelte';
+  import LocalTimestamp from '$lib/components/LocalTimestamp.svelte';
   import { compactAddress } from '$lib/address-display';
   import { walletService, type HardwareDevice } from '$lib/wallet';
   import { useWalletShellContext } from '$lib/wallet/shell-context';
@@ -30,7 +31,7 @@
   let savedSignerDeviceType = $state<string | null>(null);
   const walletShell=useWalletShellContext();
   let externalSigner=$derived(walletShell.profiles().find((profile)=>profile.id===walletShell.selectedWalletId())?.kind==='watch_only');
-  let verifyOpen=$state(false),verifyBusy=$state(false),verifyError=$state(''),devices=$state<HardwareDevice[]>([]),verifiedAddressId=$state<number|null>(null),verificationDevice=$state<HardwareDevice|null>(null);
+  let verifyOpen=$state(false),verifyBusy=$state(false),verifyError=$state(''),devices=$state<HardwareDevice[]>([]),verificationDevice=$state<HardwareDevice|null>(null);
   let ledgerVerification=$derived(Boolean(current?.testnetAlias&&(`${savedSignerDeviceType ?? ''} ${verificationDevice?.label ?? ''} ${verificationDevice?.model ?? ''}`).toLowerCase().includes('ledger')));
   let awaiting = $derived(awaitingPaymentAddresses(addresses));
   let history = $derived(addresses.filter((address) => address.status !== 'awaiting'));
@@ -104,7 +105,7 @@
   };
   const requestDiscard = (address: ReceiveAddress) => { discardTarget = address; showDiscard = true; };
   async function scanVerification(){if(!current)return;verifyOpen=true;verifyBusy=true;verifyError='';verificationDevice=null;try{devices=await walletService.listHardwareDevices();}catch(cause){devices=[];verifyError=cause instanceof Error?cause.message:'Could not scan hardware.';}finally{verifyBusy=false;}}
-  async function verifyAddress(device:HardwareDevice){if(!current)return;verificationDevice=device;verifyBusy=true;verifyError='';try{await walletService.verifyExternalAddress(device.id,current.id);verifiedAddressId=current.id;verifyOpen=false;toast({title:'Address verified on device',description:'The saved signer displayed the same Bitcoin output at this derivation path.',tone:'success'});}catch(cause){verifyError=cause instanceof Error?cause.message:'The device could not verify this address.';}finally{verifyBusy=false;}}
+  async function verifyAddress(device:HardwareDevice){if(!current)return;verificationDevice=device;verifyBusy=true;verifyError='';try{const verified=await walletService.verifyExternalAddress(device.id,current.id);addresses=addresses.map((address)=>address.id===verified.id?verified:address);current=verified;verifyOpen=false;toast({title:'Address verified',description:'The verification time was saved with this address.',tone:'success'});}catch(cause){verifyError=cause instanceof Error?cause.message:'The device could not verify this address.';}finally{verifyBusy=false;}}
 </script>
 
 <div class="page narrow-page receive-page">
@@ -112,12 +113,12 @@
   {#if current}
     <section class="receive-card" bind:this={receiveCard}>
       <button class="qr-placeholder qr-button" aria-label="Enlarge QR code" onclick={() => showQr = true}>{#if qrDataUrl}<img src={qrDataUrl} alt="QR code for {current.address}" />{:else}<QrCode size={154} strokeWidth={1.2} /><span>Generating QR…</span>{/if}</button>
-      <div class="address-label"><span>{current.label}</span><small>{externalSigner?(verifiedAddressId===current.id?'Verified on the saved hardware signer this session':'Not yet verified on hardware'):'Awaiting payment'}</small></div>
+      <div class="address-label"><span>{current.label}</span>{#if externalSigner}<small class:verified={Boolean(current.hardwareVerifiedAt)}>{#if current.hardwareVerifiedAt}<CheckCircle2 size={14}/>Verified{:else}Not verified{/if}</small>{:else}<small>Awaiting payment</small>{/if}</div>
       <button class="address-box" onclick={copy}><code>{current.address}</code>{#if copied}<Check size={17} />{:else}<Copy size={17} />{/if}</button>
-      <div class="receive-actions"><Button variant="secondary" onclick={copy}><Copy size={16} />Copy address</Button>{#if externalSigner}<Button variant="secondary" onclick={scanVerification}>{#if verifiedAddressId===current.id}<ShieldCheck size={16}/>{:else}<Cpu size={16}/>{/if}{verifiedAddressId===current.id?'Verify again':'Verify on device'}</Button>{/if}<Button variant="ghost-danger" onclick={() => requestDiscard(current!)}><Trash2 size={16} />Discard</Button></div>
+      <div class="receive-actions"><Button variant="secondary" onclick={copy}><Copy size={16} />Copy address</Button>{#if externalSigner}<Button variant="secondary" onclick={scanVerification}>{#if current.hardwareVerifiedAt}<ShieldCheck size={16}/>{:else}<Cpu size={16}/>{/if}{current.hardwareVerifiedAt?'Verify again':'Verify on device'}</Button>{/if}<Button variant="ghost-danger" onclick={() => requestDiscard(current!)}><Trash2 size={16} />Discard</Button></div>
       <button class="insight-toggle" onclick={() => showDetails = !showDetails} aria-expanded={showDetails}>{showDetails ? 'Hide' : 'Show'} address details <ChevronDown size={14} class={showDetails ? 'rotated' : ''}/></button>
-      {#if showDetails}<dl class="optional-details"><div><dt>Derivation</dt><dd><code>{current.derivationPath}</code></dd></div><div><dt>Type</dt><dd>Native SegWit · BIP84</dd></div></dl>{/if}
-      <p class="privacy-note">{externalSigner?'Unverified means Satchel derived the address but the saved hardware display has not confirmed it in this session.':'Only an unused address awaiting payment can be discarded. Used addresses remain in your history.'}</p>
+      {#if showDetails}<dl class="optional-details"><div><dt>Derivation</dt><dd><code>{current.derivationPath}</code></dd></div><div><dt>Type</dt><dd>Native SegWit · BIP84</dd></div>{#if current.hardwareVerifiedAt}<div><dt>Hardware verified</dt><dd><LocalTimestamp value={current.hardwareVerifiedAt}/></dd></div>{/if}{#if current.hardwareVerifiedBy}<div><dt>Signer fingerprint</dt><dd><code>{current.hardwareVerifiedBy}</code></dd></div>{/if}</dl>{/if}
+      {#if externalSigner && !current.hardwareVerifiedAt}<p class="privacy-note">Verify on the saved hardware signer before sharing this address.</p>{:else if !externalSigner}<p class="privacy-note">Only an unused address awaiting payment can be discarded. Used addresses remain in your history.</p>{/if}
     </section>
   {:else}
     <section class="empty-state"><span class="empty-icon"><QrCode size={24} /></span><h2>No address awaiting payment</h2><p>Generate a new address and give it a permanent label.</p><Button onclick={() => showGenerate = true}><Plus size={17} />New address</Button></section>

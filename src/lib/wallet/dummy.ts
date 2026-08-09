@@ -307,11 +307,16 @@ export class DummyWalletAdapter implements WalletPort {
     this.#externalProposals.delete(proposalId); return { txid: '0a7bf3d7a98d8bc981975320eba8e9b8ac1aa92145dcf018e48c3c2f8c19e2aa', snapshot: await this.snapshot(), syncPending: false };
   }
   async cancelExternalSignerProposal(proposalId: string) { this.#externalProposals.delete(proposalId); }
-  async verifyExternalAddress(deviceId: string, _addressId: number) {
+  async verifyExternalAddress(deviceId: string, addressId: number) {
     const expected = this.#externalWallet?.signer.fingerprint.toLowerCase();
     const device = (await this.listHardwareDevices()).find((item) => item.id === deviceId && item.status === 'ready');
     if (!device) throw new WalletError('hardware_unavailable', 'Connect and unlock the expected signer.');
     if (!expected || device.fingerprint?.toLowerCase() !== expected) throw new WalletError('unknown_signer', 'The connected device is not the saved signer for this wallet.');
+    const address = this.#addresses.find((item) => item.id === addressId);
+    if (!address) throw new WalletError('address_not_found', 'The receive address was not found.');
+    const verified = { ...address, hardwareVerifiedAt: new Date().toISOString(), hardwareVerifiedBy: device.fingerprint };
+    this.#addresses = this.#addresses.map((item) => item.id === addressId ? verified : item);
+    return structuredClone(verified);
   }
 
   async previewMultisig(policy: PolicyDraft): Promise<MultisigPreview> {
@@ -485,7 +490,7 @@ export class DummyWalletAdapter implements WalletPort {
     proposal.status='broadcast'; this.#balance=Math.max(0,this.#balance-Number(proposal.total)); const txid='7d4a2c7f9e317f9859d7a8566fe02d773afb09fcddb617dbda98bfba8f721234'; this.#recordFixtureBroadcast(proposalId,proposal,txid); return {txid,snapshot:await this.snapshot(),syncPending:false};
   }
   async cancelMultisigProposal(proposalId:string) { const proposal=this.#multisigProposals.get(proposalId); if(!proposal) throw new WalletError('proposal_not_found','Payment proposal was not found.'); proposal.status='cancelled'; }
-  async verifyMultisigAddress(deviceId:string,_addressId:number){const device=(await this.listHardwareDevices()).find((item)=>item.id===deviceId&&item.status==='ready');if(!device)throw new WalletError('hardware_unavailable','Connect and unlock a wallet cosigner.');if(!this.#multisig?.cosigners.some((cosigner)=>cosigner.fingerprint.toLowerCase()===device.fingerprint?.toLowerCase()))throw new WalletError('unknown_signer','The connected device is not a cosigner in this wallet policy.');}
+  async verifyMultisigAddress(deviceId:string,addressId:number){const device=(await this.listHardwareDevices()).find((item)=>item.id===deviceId&&item.status==='ready');if(!device)throw new WalletError('hardware_unavailable','Connect and unlock a wallet cosigner.');if(!this.#multisig?.cosigners.some((cosigner)=>cosigner.fingerprint.toLowerCase()===device.fingerprint?.toLowerCase()))throw new WalletError('unknown_signer','The connected device is not a cosigner in this wallet policy.');const address=this.#addresses.find((item)=>item.id===addressId);if(!address)throw new WalletError('address_not_found','The receive address was not found.');const verified={...address,hardwareVerifiedAt:new Date().toISOString(),hardwareVerifiedBy:device.fingerprint};this.#addresses=this.#addresses.map((item)=>item.id===addressId?verified:item);return structuredClone(verified);}
   async savePsbt(suggestedFilename:string,psbt:string){const {downloadText}=await import('$lib/transfer');downloadText(suggestedFilename,psbt);return true;}
 
   #addDummySignature(proposalId:string, fingerprint?:string) {

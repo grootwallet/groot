@@ -533,6 +533,8 @@ pub struct ReceiveAddressDto {
     created: String,
     status: String,
     derivation_path: String,
+    hardware_verified_at: Option<String>,
+    hardware_verified_by: Option<String>,
 }
 
 fn regtest_testnet_address_alias(address: &str) -> Option<String> {
@@ -1559,6 +1561,16 @@ fn init_app_schema(db: &Connection) -> ApiResult<()> {
             state TEXT NOT NULL CHECK(state IN ('awaiting', 'used', 'discarded')),
             observed INTEGER NOT NULL DEFAULT 0 CHECK(observed IN (0, 1))
         );
+        CREATE TABLE IF NOT EXISTS satchel_address_verifications (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            address_idx INTEGER NOT NULL REFERENCES satchel_addresses(idx),
+            signer_fingerprint TEXT NOT NULL CHECK(length(signer_fingerprint) = 8),
+            device_type TEXT NOT NULL,
+            displayed_address TEXT NOT NULL,
+            verified_at INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS satchel_address_verifications_address_time
+            ON satchel_address_verifications(address_idx, verified_at DESC, id DESC);
         CREATE TABLE IF NOT EXISTS satchel_proposals (
             proposal_id TEXT PRIMARY KEY,
             recipient TEXT NOT NULL,
@@ -3090,7 +3102,18 @@ fn transaction_kind(received: bool, has_external_value_output: bool) -> &'static
 fn address_rows(db: &Connection, multisig: bool) -> ApiResult<Vec<ReceiveAddressDto>> {
     let mut statement = db
         .prepare(
-            "SELECT idx, address, label, created_at, state FROM satchel_addresses ORDER BY idx DESC",
+            "SELECT a.idx, a.address, a.label, a.created_at, a.state,
+                    verification.verified_at, verification.signer_fingerprint
+             FROM satchel_addresses a
+             LEFT JOIN satchel_address_verifications verification
+               ON verification.id = (
+                 SELECT latest.id
+                 FROM satchel_address_verifications latest
+                 WHERE latest.address_idx = a.idx
+                 ORDER BY latest.verified_at DESC, latest.id DESC
+                 LIMIT 1
+               )
+             ORDER BY a.idx DESC",
         )
         .map_err(internal)?;
     let rows = statement
@@ -3108,10 +3131,42 @@ fn address_rows(db: &Connection, multisig: bool) -> ApiResult<Vec<ReceiveAddress
                 } else {
                     format!("m/84'/1'/0'/0/{}", row.get::<_, u32>(0)?)
                 },
+                hardware_verified_at: row.get::<_, Option<u64>>(5)?.map(|value| value.to_string()),
+                hardware_verified_by: row.get(6)?,
             })
         })
         .map_err(internal)?;
     rows.collect::<Result<Vec<_>, _>>().map_err(internal)
+}
+
+fn record_address_verification(
+    db: &mut Connection,
+    address_id: u32,
+    identity: &VerifiedHardwareIdentity,
+    displayed_address: &str,
+    multisig: bool,
+) -> ApiResult<ReceiveAddressDto> {
+    let verified_at = now();
+    let transaction = db.transaction().map_err(internal)?;
+    transaction
+        .execute(
+            "INSERT INTO satchel_address_verifications
+                (address_idx, signer_fingerprint, device_type, displayed_address, verified_at)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![
+                address_id,
+                identity.fingerprint.to_ascii_lowercase(),
+                identity.device_type.to_ascii_lowercase(),
+                displayed_address,
+                verified_at
+            ],
+        )
+        .map_err(internal)?;
+    transaction.commit().map_err(internal)?;
+    address_rows(db, multisig)?
+        .into_iter()
+        .find(|address| address.id == address_id)
+        .ok_or_else(|| internal("Verified address disappeared from wallet storage."))
 }
 
 fn snapshot_from(
@@ -3589,6 +3644,8 @@ pub fn address_create(
         created: created.to_string(),
         status: "awaiting".to_owned(),
         derivation_path: format!("m/84'/1'/0'/0/{}", info.index),
+        hardware_verified_at: None,
+        hardware_verified_by: None,
     })
 }
 
@@ -3922,11 +3979,16 @@ fn hardware_xpub_api_error(
     hardware_device_api_error(error, device_type)
 }
 
-fn verify_connected_hardware_identity(
+struct VerifiedHardwareIdentity {
+    device_type: String,
+    fingerprint: String,
+}
+
+fn connected_hardware_identity(
     hwi: &HwiCli,
     device_id: &str,
     expected_fingerprints: &[String],
-) -> ApiResult<String> {
+) -> ApiResult<VerifiedHardwareIdentity> {
     let encoded = hwi.enumerate().map_err(hardware_api_error)?;
     let devices: Vec<HwiDevice> = serde_json::from_slice(&encoded).map_err(internal)?;
     let device = select_unique_hardware_device(devices, device_id)?;
@@ -3945,7 +4007,18 @@ fn verify_connected_hardware_identity(
             "The connected device is not a cosigner in this wallet policy.",
         ));
     }
-    Ok(device.device_type)
+    Ok(VerifiedHardwareIdentity {
+        device_type: device.device_type,
+        fingerprint,
+    })
+}
+
+fn verify_connected_hardware_identity(
+    hwi: &HwiCli,
+    device_id: &str,
+    expected_fingerprints: &[String],
+) -> ApiResult<String> {
+    Ok(connected_hardware_identity(hwi, device_id, expected_fingerprints)?.device_type)
 }
 
 fn select_unique_hardware_device(devices: Vec<HwiDevice>, device_id: &str) -> ApiResult<HwiDevice> {
@@ -4656,10 +4729,10 @@ pub async fn hardware_verify_multisig_address(
     state: State<'_, AppState>,
     device_id: String,
     address_id: u32,
-) -> ApiResult<()> {
+) -> ApiResult<ReceiveAddressDto> {
     require_unlocked(&app, &state)?;
     let metadata = read_multisig_metadata(&app)?;
-    let db = open_multisig_db(&app)?;
+    let mut db = open_multisig_db(&app)?;
     let expected: String = db
         .query_row(
             "SELECT address FROM satchel_addresses WHERE idx = ?1 AND state != 'discarded'",
@@ -4678,11 +4751,12 @@ pub async fn hardware_verify_multisig_address(
         .map(|cosigner| cosigner.fingerprint.clone())
         .collect::<Vec<_>>();
     let hwi = hwi_cli(&app)?;
-    let displayed = tauri::async_runtime::spawn_blocking(move || {
-        let device_type =
-            verify_connected_hardware_identity(&hwi, &device_id, &expected_fingerprints)?;
-        hwi.display_descriptor_address(&device_type, &device_id, &descriptor)
-            .map_err(|error| hardware_device_api_error(error, &device_type))
+    let (displayed, identity) = tauri::async_runtime::spawn_blocking(move || {
+        let identity = connected_hardware_identity(&hwi, &device_id, &expected_fingerprints)?;
+        let displayed = hwi
+            .display_descriptor_address(&identity.device_type, &device_id, &descriptor)
+            .map_err(|error| hardware_device_api_error(error, &identity.device_type))?;
+        Ok::<_, ApiError>((displayed, identity))
     })
     .await
     .map_err(internal)??;
@@ -4700,7 +4774,7 @@ pub async fn hardware_verify_multisig_address(
             "The address returned by the device does not match this wallet.",
         ));
     }
-    Ok(())
+    record_address_verification(&mut db, address_id, &identity, &actual, true)
 }
 
 #[tauri::command]
@@ -4709,7 +4783,7 @@ pub async fn hardware_verify_external_address(
     state: State<'_, AppState>,
     device_id: String,
     address_id: u32,
-) -> ApiResult<()> {
+) -> ApiResult<ReceiveAddressDto> {
     require_unlocked(&app, &state)?;
     let metadata = read_external_signer_metadata(&app)?;
     let mut db = open_db(&app)?;
@@ -4753,11 +4827,12 @@ pub async fn hardware_verify_external_address(
         .to_string();
     let expected_fingerprints = vec![metadata.signer.fingerprint];
     let hwi = hwi_cli(&app)?;
-    let displayed = tauri::async_runtime::spawn_blocking(move || {
-        let device_type =
-            verify_connected_hardware_identity(&hwi, &device_id, &expected_fingerprints)?;
-        hwi.display_descriptor_address(&device_type, &device_id, &descriptor)
-            .map_err(|error| hardware_device_api_error(error, &device_type))
+    let (displayed, identity) = tauri::async_runtime::spawn_blocking(move || {
+        let identity = connected_hardware_identity(&hwi, &device_id, &expected_fingerprints)?;
+        let displayed = hwi
+            .display_descriptor_address(&identity.device_type, &device_id, &descriptor)
+            .map_err(|error| hardware_device_api_error(error, &identity.device_type))?;
+        Ok::<_, ApiError>((displayed, identity))
     })
     .await
     .map_err(internal)??;
@@ -4775,7 +4850,7 @@ pub async fn hardware_verify_external_address(
             "The address returned by the device does not match this wallet.",
         ));
     }
-    Ok(())
+    record_address_verification(&mut db, address_id, &identity, &actual, false)
 }
 
 #[tauri::command]
@@ -5164,6 +5239,8 @@ pub fn multisig_address_create(
         created: created.to_string(),
         status: "awaiting".to_owned(),
         derivation_path: format!("m/48'/1'/0'/2'/0/{}", info.index),
+        hardware_verified_at: None,
+        hardware_verified_by: None,
     })
 }
 
@@ -6387,6 +6464,56 @@ mod tests {
             regtest,
             "not-an-address"
         ));
+    }
+
+    #[test]
+    fn hardware_address_verifications_are_append_only_and_restore_the_latest_event() {
+        let mut db = Connection::open_in_memory().unwrap();
+        init_app_schema(&db).unwrap();
+        db.execute(
+            "INSERT INTO satchel_addresses (idx, address, label, created_at, state)
+             VALUES (0, 'bcrt1qf6n3a54f4nqc5976hjl556ukfdas8xsnf8k9mz', 'deposit', 1, 'awaiting')",
+            [],
+        )
+        .unwrap();
+
+        let ledger = VerifiedHardwareIdentity {
+            device_type: "ledger".to_owned(),
+            fingerprint: "f573a32b".to_owned(),
+        };
+        let first = record_address_verification(
+            &mut db,
+            0,
+            &ledger,
+            "tb1qf6n3a54f4nqc5976hjl556ukfdas8xsntw0gvt",
+            false,
+        )
+        .unwrap();
+        assert!(first.hardware_verified_at.is_some());
+        assert_eq!(first.hardware_verified_by.as_deref(), Some("f573a32b"));
+
+        let replacement = VerifiedHardwareIdentity {
+            device_type: "ledger".to_owned(),
+            fingerprint: "c0ffee01".to_owned(),
+        };
+        let latest = record_address_verification(
+            &mut db,
+            0,
+            &replacement,
+            "tb1qf6n3a54f4nqc5976hjl556ukfdas8xsntw0gvt",
+            false,
+        )
+        .unwrap();
+        assert_eq!(latest.hardware_verified_by.as_deref(), Some("c0ffee01"));
+        assert_eq!(
+            db.query_row(
+                "SELECT COUNT(*) FROM satchel_address_verifications WHERE address_idx = 0",
+                [],
+                |row| row.get::<_, u32>(0),
+            )
+            .unwrap(),
+            2
+        );
     }
 
     #[test]

@@ -170,6 +170,7 @@ export type WalletErrorCode =
   | 'invalid_amount'
   | 'insufficient_funds'
   | 'address_not_discardable'
+  | 'address_not_found'
   | 'network_unavailable'
   | 'wallet_locked'
   | 'invalid_inactivity_timeout'
@@ -284,7 +285,7 @@ export interface WalletPort {
   signExternalWithHardware(proposalId: string, deviceId: string, reviewedPsbt: string): Promise<MultisigProposal>;
   broadcastExternalSignerProposal(proposalId: string, reviewedPsbt: string, credential: string): Promise<BroadcastResult>;
   cancelExternalSignerProposal(proposalId: string): Promise<void>;
-  verifyExternalAddress(deviceId: string, addressId: number): Promise<void>;
+  verifyExternalAddress(deviceId: string, addressId: number): Promise<ReceiveAddress>;
   previewMultisig(policy: PolicyDraft): Promise<MultisigPreview>;
   analyzeRecoveryPolicy(template: RecoveryTemplate, cosigners: CosignerDraft[]): Promise<RecoveryPolicyAnalysis>;
   createMultisig(policy: PolicyDraft, credential: string): Promise<MultisigWallet>;
@@ -303,7 +304,7 @@ export interface WalletPort {
   syncMultisig(): Promise<WalletSnapshot>;
   createMultisigAddress(label: string): Promise<ReceiveAddress>;
   discardMultisigAddress(id: number): Promise<void>;
-  verifyMultisigAddress(deviceId: string, addressId: number): Promise<void>;
+  verifyMultisigAddress(deviceId: string, addressId: number): Promise<ReceiveAddress>;
   prepareMultisigPayment(recipient: string, label: string, amount: Sats, feeRate: FeeRate, coinSelection?: CoinSelection): Promise<MultisigProposal>;
   prepareMultisigAcceleration(txid: string, method: AccelerationMethod, feeRate: FeeRate): Promise<MultisigProposal>;
   multisigProposals(): Promise<MultisigProposal[]>;

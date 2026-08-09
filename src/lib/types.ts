@@ -21,6 +21,8 @@ export type ReceiveAddress = {
   created: string;
   status: 'awaiting' | 'used' | 'discarded';
   derivationPath: string;
+  hardwareVerifiedAt?: string | null;
+  hardwareVerifiedBy?: string | null;
 };
 
 export type Utxo = {
