@@ -2,9 +2,11 @@
 
 Status: canonical UI guidance for the current desktop/mobile application.
 
+The symbol, application icon, identity palette, and brand voice are canonical in [`brand-identity.md`](brand-identity.md). Naming and the wordmark remain provisional there. This document continues to own product layout, components, states, accessibility, and semantic color behavior.
+
 ## Direction
 
-Satchel combines Wasabi Wallet's calm, task-focused desktop density with the restraint of the Codex app and shadcn conventions. It should feel like a small native utility: quiet, fast, and explicit about security state. A restrained French blue/ivory/red signature gives it identity in both light and dark themes; Bitcoin amber is reserved for Bitcoin-specific or attention-worthy state.
+Satchel combines calm, task-focused desktop density with restrained native-utility conventions. It should feel quiet, fast, and explicit about security state. Blue Ink and Warm Ivory carry the identity, Action Blue directs interaction, and restrained Signal Red marks rare identity or high-consequence emphasis. Bitcoin amber is reserved for Bitcoin-specific or attention-worthy state.
 
 ## Principles
 

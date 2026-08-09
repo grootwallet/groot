@@ -7,18 +7,13 @@
   width={size}
   height={size}
   viewBox="0 0 128 128"
-  fill="none"
+  fill="currentColor"
   role={title ? 'img' : undefined}
   aria-hidden={title ? undefined : 'true'}
   focusable="false"
 >
   {#if title}<title>{title}</title>{/if}
   <path
-    d="M50 97H20V75A44 44 0 0 1 108 75V97H78"
-    stroke="currentColor"
-    stroke-width="20"
-    stroke-linecap="butt"
-    stroke-linejoin="miter"
-    stroke-miterlimit="2"
+    d="M64 21A54 54 0 0 0 10 75V105Q10 107 12 107H48Q50 107 50 105V91Q50 89 48 89H30Q28 89 28 87V75A36 36 0 0 1 100 75V87Q100 89 98 89H80Q78 89 78 91V105Q78 107 80 107H116Q118 107 118 105V75A54 54 0 0 0 64 21Z"
   />
 </svg>
