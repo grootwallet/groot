@@ -428,24 +428,44 @@ mod macos {
         card.setFillColor(&NSColor::controlBackgroundColor());
         card.setCornerRadius(7.0);
 
-        let number_label = add_label(
+        let number_label = add_centered_card_label(
             &card,
             &number.to_string(),
-            rect(8.0, 7.0, 22.0, 24.0),
+            rect(8.0, 0.0, 22.0, frame.size.height),
             &NSFont::monospacedSystemFontOfSize_weight(12.0, 0.0),
             &NSColor::secondaryLabelColor(),
             mtm,
         );
         number_label.setAlignment(NSTextAlignment(2));
-        add_label(
+        add_centered_card_label(
             &card,
             word,
-            rect(37.0, 7.0, frame.size.width - 45.0, 24.0),
+            rect(37.0, 0.0, frame.size.width - 45.0, frame.size.height),
             &NSFont::monospacedSystemFontOfSize_weight(12.0, 0.25),
             &NSColor::labelColor(),
             mtm,
         );
         root.addSubview(&card);
+    }
+
+    fn add_centered_card_label(
+        parent: &NSView,
+        text: &str,
+        frame: NSRect,
+        font: &NSFont,
+        color: &NSColor,
+        mtm: MainThreadMarker,
+    ) -> Retained<NSTextField> {
+        let label = add_label(parent, text, frame, font, color, mtm);
+        label.sizeToFit();
+        let label_height = label.frame().size.height.min(frame.size.height);
+        label.setFrame(rect(
+            frame.origin.x,
+            (frame.size.height - label_height) / 2.0,
+            frame.size.width,
+            label_height,
+        ));
+        label
     }
 
     fn verify_backup_order(parent: &NSWindow, words: &[String], mtm: MainThreadMarker) -> bool {
