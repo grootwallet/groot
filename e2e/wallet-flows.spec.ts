@@ -354,6 +354,10 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   const signatureTitle = await signaturePanel.locator('strong').boundingBox();
   const signatureDetail = await signaturePanel.locator('small').boundingBox();
   expect(Math.abs((signatureTitle?.x ?? 0) - (signatureDetail?.x ?? 0))).toBeLessThanOrEqual(1);
+  const finalizeButton = await page.getByRole('button', { name: 'Finalize & broadcast' }).boundingBox();
+  const backToReviewButton = await page.getByRole('button', { name: 'Back to review' }).boundingBox();
+  expect(backToReviewButton?.height).toBe(finalizeButton?.height);
+  expect((backToReviewButton?.y ?? 0) - ((finalizeButton?.y ?? 0) + (finalizeButton?.height ?? 0))).toBeGreaterThanOrEqual(8);
   await expect(page.getByRole('button', { name: 'Sign with cable' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Show unsigned QR' })).toHaveCount(0);
   await page.getByRole('link', { name: 'Overview' }).click();

@@ -377,6 +377,7 @@ code { font-family: "SFMono-Regular", Consolas, ui-monospace, monospace; }
 .sign-card .sign-icon { margin: 5px auto 18px; }
 .sign-card h2 { font-size: 18px; margin: 0; }
 .sign-card > p { color: var(--muted); font-size: 12px; line-height: 1.5; max-width: 380px; margin: 8px auto 24px; }
+.sign-card .sign-back-action { margin-top: 8px; }
 .sign-card .field { text-align: left; }
 .success-state { min-height: 390px; background: var(--panel); border-style: solid; }
 .txid-box { background: var(--surface-inset); border: 1px solid var(--border); border-radius: 7px; padding: 10px 14px; display: flex; flex-direction: column; gap: 5px; margin-bottom: 20px; }

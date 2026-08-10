@@ -201,14 +201,14 @@
         <div class="psbt-actions"><Button variant="secondary" onclick={scanHardware}><Cpu size={16}/>Sign with cable</Button><Button variant="secondary" onclick={showPsbtQr}><QrCode size={16}/>Show unsigned QR</Button><Button variant="secondary" onclick={() => {scannedFrames=[];qrScanOpen=true;}}><ScanLine size={16}/>Scan signed QR</Button><Button variant="secondary" onclick={() => importOpen=true}><FileUp size={16}/>Import signed PSBT</Button><Button variant="secondary" loading={savingPsbt} loadingLabel="Saving PSBT…" onclick={saveExternalPsbt}><Download size={16}/>Save unsigned PSBT</Button></div>
         {#if credentialError}<p class="form-error">{credentialError}</p>{/if}
       {/if}
-      <Button variant="ghost" class="full" onclick={() => step=2}>Back to review</Button>
+      <Button variant="ghost" size="large" class="full sign-back-action" onclick={() => step=2}>Back to review</Button>
     </section>
   {:else if step === 3 && proposal}
     <form class="form-card sign-card" onsubmit={(event) => { event.preventDefault(); broadcast(); }}>
       <span class="sign-icon"><LockKeyhole size={25} /></span><h2>Authorize payment</h2><p>Enter your wallet passphrase to unlock the signing keys. It never leaves this device.</p>
       <PasswordField label="Wallet passphrase" bind:value={passphrase} oninput={() => credentialError = ''} placeholder="Enter wallet passphrase" autocomplete="current-password" error={credentialError} hint="The BIP39 passphrase kept with this software wallet’s recovery words." />
       <Button type="submit" size="large" class="full" disabled={!passphrase} loading={broadcasting} loadingLabel="Signing & broadcasting…">Sign & broadcast {shortSats(proposal.amount)} sats</Button>
-      <Button variant="ghost" class="full" onclick={() => step = 2}>Back to review</Button>
+      <Button variant="ghost" size="large" class="full sign-back-action" onclick={() => step = 2}>Back to review</Button>
     </form>
   {:else}
     <section class="empty-state success-state"><span class="empty-icon success"><Check size={25} /></span><h2>Payment sent</h2><p>{shortSats(sentAmount)} sats was broadcast to the Bitcoin network.{#if balanceSyncPending} Balance refresh is pending; sync when the node is available.{/if}</p><div class="txid-box"><span>Transaction ID</span><code>{txid}</code></div><Button onclick={() => { step = 1; address=''; label=''; amount=''; passphrase=''; proposal=null; txid=''; sentAmount=0; balanceSyncPending=false; }}>Make another payment</Button><a href="/activity">View transaction</a></section>
