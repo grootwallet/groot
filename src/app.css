@@ -396,6 +396,10 @@ code { font-family: "SFMono-Regular", Consolas, ui-monospace, monospace; }
 .hash-box span { font-size: 9px; }
 .hash-box code { grid-column: 1; font-size: 9px; overflow: hidden; text-overflow: ellipsis; }
 .hash-box svg { grid-row: 1 / 3; grid-column: 2; align-self: center; }
+.transaction-more-details { margin-top: 12px; }
+.transaction-more-details > .details-list:empty { display: none; }
+.transaction-more-details .hash-box { margin: 12px 0 0; }
+.transaction-more-details .explorer-panel, .transaction-more-details .explorer-unavailable { margin-bottom: 12px; }
 .explorer-panel { display: grid; justify-items: center; gap: 5px; margin-top: 15px; }
 .explorer-link { color: var(--link); font-size: 10px; display: inline-flex; justify-content: center; align-items: center; gap: 6px; }
 .explorer-link:hover { color: var(--text); }

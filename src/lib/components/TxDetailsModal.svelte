@@ -14,6 +14,7 @@
 
   let { transaction, multisig = false, onclose } = $props<{ transaction: Transaction | null; multisig?: boolean; onclose: () => void }>();
   let showAddress = $state(false);
+  let showMore = $state(false);
   let addressCopied = $state(false);
   let explorerUrl = $derived(transaction ? transactionExplorerUrl(defaultConfig.network, transaction.id) : null);
   let isSelfSpend = $derived(transaction?.kind === 'self_spend');
@@ -21,6 +22,7 @@
   $effect(() => {
     transaction?.id;
     showAddress = false;
+    showMore = false;
   });
 
   async function copyTxid() {
@@ -56,22 +58,27 @@
     <dl class="details-list">
       <div><dt>Date</dt><dd><LocalTimestamp value={transaction.date} /></dd></div>
       <div><dt>Confirmations</dt><dd>{transaction.confirmations}</dd></div>
-      {#if transaction.status === 'replaced' && transaction.replacedBy}<div><dt>Replaced by</dt><dd><code>{transaction.replacedBy}</code></dd></div>{/if}
-      {#if transaction.block}<div><dt>Block</dt><dd>{transaction.block}</dd></div>{/if}
       {#if transaction.fee}<div><dt>Network fee</dt><dd>{$discreetMode ? '••••••' : shortSats(transaction.fee)} sats</dd></div>{/if}
       {#if transaction.address && !showAddress}<div><dt>{transaction.direction === 'received' ? 'Received at' : 'Sent to'}</dt><dd><button type="button" class="compact-address-button" aria-expanded="false" onclick={() => showAddress = true}>{compactAddress(transaction.address)}</button></dd></div>{/if}
-      {#if isSelfSpend}<div><dt>Transaction type</dt><dd>Self-spend</dd></div>{/if}
     </dl>
     {#if showAddress && transaction.address}<div class="expanded-transaction-address"><ReadableAddress address={transaction.address} copied={addressCopied} oncopy={copyAddress}/><button type="button" onclick={() => showAddress = false}>Show compact address</button></div>{/if}
-    <button class="hash-box" onclick={copyTxid}><span>Transaction ID</span><code>{transaction.id}</code><Copy size={16} /></button>
+    <details class="proposal-review-details transaction-more-details" bind:open={showMore}>
+      <summary>View more details</summary>
+      <dl class="details-list">
+        {#if transaction.status === 'replaced' && transaction.replacedBy}<div><dt>Replaced by</dt><dd><code>{transaction.replacedBy}</code></dd></div>{/if}
+        {#if transaction.block}<div><dt>Block</dt><dd>{transaction.block}</dd></div>{/if}
+        {#if isSelfSpend}<div><dt>Transaction type</dt><dd>Self-spend</dd></div>{/if}
+      </dl>
+      <button class="hash-box" onclick={copyTxid}><span>Transaction ID</span><code>{transaction.id}</code><Copy size={16} /></button>
+      {#if explorerUrl}
+        <div class="explorer-panel">
+          <a class="explorer-link" href={explorerUrl} target="_blank" rel="noopener noreferrer">View on mempool.space <ExternalLink size={14} /></a>
+          <p class="explorer-privacy">Opening this shares the transaction lookup with mempool.space.</p>
+        </div>
+      {:else if defaultConfig.network === 'regtest'}
+        <p class="explorer-unavailable">mempool.space cannot see local regtest transactions.</p>
+      {/if}
+    </details>
     {#if transaction.status === 'pending'}<div class="psbt-actions"><Button variant="secondary" href={`${multisig?'/multisig/send':'/send'}?accelerate=rbf&txid=${transaction.id}`}><ArrowUp size={15}/>Increase fee</Button><Button variant="secondary" href={`${multisig?'/multisig/send':'/send'}?accelerate=cpfp&txid=${transaction.id}`}><Layers size={15}/>Spend output (CPFP)</Button></div>{/if}
-    {#if explorerUrl}
-      <div class="explorer-panel">
-        <a class="explorer-link" href={explorerUrl} target="_blank" rel="noopener noreferrer">View on mempool.space <ExternalLink size={14} /></a>
-        <p class="explorer-privacy">Opening this shares the transaction lookup with mempool.space.</p>
-      </div>
-    {:else if defaultConfig.network === 'regtest'}
-      <p class="explorer-unavailable">mempool.space cannot see local regtest transactions.</p>
-    {/if}
   {/if}
 </Modal>

@@ -446,7 +446,10 @@ test('overview, activity, UTXOs, and settings expose durable states', async ({ p
   await expect(page.getByRole('heading', { name: 'Transaction details' })).toBeVisible();
   await expect(page.locator('.modal-layer')).not.toHaveAttribute('style', /opacity/);
   await expect(page.locator('.modal-layer')).toHaveCSS('opacity', '1');
-  await expect(page.getByText('Transaction ID', { exact: true })).toBeVisible();
+  const overviewDetails = page.getByRole('dialog', { name: 'Transaction details' });
+  await expect(overviewDetails.getByText('Transaction ID', { exact: true })).toBeHidden();
+  await overviewDetails.getByText('View more details', { exact: true }).click();
+  await expect(overviewDetails.getByText('Transaction ID', { exact: true })).toBeVisible();
   await expect(
     page.getByText('mempool.space cannot see local regtest transactions.')
   ).toBeVisible();
@@ -517,6 +520,8 @@ test('successful RBF keeps the original visibly replaced and excluded from accou
   await replaced.click();
   const details = page.getByRole('dialog', { name: 'Transaction details' });
   await expect(details.getByText('replaced', { exact: true })).toBeVisible();
+  await expect(details.getByText('Replaced by', { exact: true })).toBeHidden();
+  await details.getByText('View more details', { exact: true }).click();
   await expect(details.getByText('Replaced by', { exact: true })).toBeVisible();
   await details.getByRole('button', { name: 'Close' }).click();
   await expect(page.locator('.tx-row.pending').filter({ hasText: 'Invoice #104' })).toContainText('Awaiting confirmation');
