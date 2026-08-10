@@ -24,6 +24,7 @@ export type FeeEstimates = {
 export type PaymentProposal = {
   proposalId: string;
   recipient: string;
+  recipientTestnetAlias: string | null;
   label: string;
   amount: Sats;
   fee: Sats;
@@ -31,6 +32,7 @@ export type PaymentProposal = {
   total: Sats;
   change: Sats;
   changeAddresses: string[];
+  changeTestnetAliases: (string | null)[];
   outputCount: number;
   selectedOutpoints: string[];
   inputs: { outpoint: string; amount: Sats; sequence: number }[];

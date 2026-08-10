@@ -550,6 +550,19 @@ fn regtest_testnet_address_alias(address: &str) -> Option<String> {
         .map(|alias| alias.to_string())
 }
 
+fn proposal_testnet_aliases(
+    recipient: &str,
+    change_addresses: &[String],
+) -> (Option<String>, Vec<Option<String>>) {
+    (
+        regtest_testnet_address_alias(recipient),
+        change_addresses
+            .iter()
+            .map(|address| regtest_testnet_address_alias(address))
+            .collect(),
+    )
+}
+
 fn hardware_display_matches_expected_address(expected: &str, actual: &str) -> bool {
     if actual == expected {
         return true;
@@ -640,6 +653,7 @@ pub struct RecoveryScanSettingsDto {
 pub struct PaymentProposalDto {
     proposal_id: String,
     recipient: String,
+    recipient_testnet_alias: Option<String>,
     label: String,
     amount: u64,
     fee: u64,
@@ -647,6 +661,7 @@ pub struct PaymentProposalDto {
     total: u64,
     change: u64,
     change_addresses: Vec<String>,
+    change_testnet_aliases: Vec<Option<String>>,
     output_count: usize,
     selected_outpoints: Vec<String>,
     inputs: Vec<ProposalInputDto>,
@@ -720,6 +735,7 @@ pub struct CosignerHealthDto {
 pub struct MultisigProposalDto {
     proposal_id: String,
     recipient: String,
+    recipient_testnet_alias: Option<String>,
     label: String,
     amount: u64,
     fee: u64,
@@ -727,6 +743,7 @@ pub struct MultisigProposalDto {
     total: u64,
     change: u64,
     change_addresses: Vec<String>,
+    change_testnet_aliases: Vec<Option<String>>,
     output_count: usize,
     selected_outpoints: Vec<String>,
     inputs: Vec<ProposalInputDto>,
@@ -2434,10 +2451,13 @@ fn proposal_dto(
     let progress =
         signature_progress(&psbt, &fingerprints, metadata.threshold).map_err(proposal_api_error)?;
     let (change, change_addresses) = proposal_change_details(wallet, &psbt, &recipient, amount)?;
+    let (recipient_testnet_alias, change_testnet_aliases) =
+        proposal_testnet_aliases(&recipient, &change_addresses);
     let (inputs, fee_rate, locktime, rbf) = proposal_transaction_details(wallet, &psbt, fee)?;
     Ok(MultisigProposalDto {
         proposal_id,
         recipient,
+        recipient_testnet_alias,
         label,
         amount,
         fee,
@@ -2445,6 +2465,7 @@ fn proposal_dto(
         total: checked_payment_total(amount, fee)?,
         change,
         change_addresses,
+        change_testnet_aliases,
         output_count: psbt.unsigned_tx.output.len(),
         selected_outpoints: psbt
             .unsigned_tx
@@ -4421,10 +4442,13 @@ fn external_proposal_dto(
     let fingerprint = fingerprint.parse().map_err(internal)?;
     let progress = signature_progress(&psbt, &[fingerprint], 1).map_err(proposal_api_error)?;
     let (change, change_addresses) = proposal_change_details(wallet, &psbt, &recipient, amount)?;
+    let (recipient_testnet_alias, change_testnet_aliases) =
+        proposal_testnet_aliases(&recipient, &change_addresses);
     let (inputs, fee_rate, locktime, rbf) = proposal_transaction_details(wallet, &psbt, fee)?;
     Ok(MultisigProposalDto {
         proposal_id,
         recipient,
+        recipient_testnet_alias,
         label,
         amount,
         fee,
@@ -4432,6 +4456,7 @@ fn external_proposal_dto(
         total: checked_payment_total(amount, fee)?,
         change,
         change_addresses,
+        change_testnet_aliases,
         output_count: psbt.unsigned_tx.output.len(),
         selected_outpoints: psbt
             .unsigned_tx
@@ -5832,6 +5857,9 @@ pub fn tx_prepare(
         .to_sat();
     let (change, change_addresses) =
         proposal_change_details(&wallet, &psbt, &address.to_string(), amount)?;
+    let recipient = address.to_string();
+    let (recipient_testnet_alias, change_testnet_aliases) =
+        proposal_testnet_aliases(&recipient, &change_addresses);
     let selected_outpoints = psbt
         .unsigned_tx
         .input
@@ -5843,7 +5871,8 @@ pub fn tx_prepare(
         proposal_transaction_details(&wallet, &psbt, fee)?;
     let proposal = PaymentProposalDto {
         proposal_id: proposal_id.clone(),
-        recipient: address.to_string(),
+        recipient,
+        recipient_testnet_alias,
         label,
         amount,
         fee,
@@ -5851,6 +5880,7 @@ pub fn tx_prepare(
         total: checked_payment_total(amount, fee)?,
         change,
         change_addresses,
+        change_testnet_aliases,
         output_count: psbt.unsigned_tx.output.len(),
         selected_outpoints,
         inputs,
@@ -5989,10 +6019,13 @@ fn summarize_payment_psbt(
         output.value.to_sat()
     };
     let (change, change_addresses) = proposal_change_details(wallet, psbt, &recipient, amount)?;
+    let (recipient_testnet_alias, change_testnet_aliases) =
+        proposal_testnet_aliases(&recipient, &change_addresses);
     let (inputs, actual_fee_rate, locktime, rbf) = proposal_transaction_details(wallet, psbt, fee)?;
     Ok(PaymentProposalDto {
         proposal_id: Uuid::new_v4().to_string(),
         recipient,
+        recipient_testnet_alias,
         label,
         amount,
         fee,
@@ -6000,6 +6033,7 @@ fn summarize_payment_psbt(
         total: checked_payment_total(amount, fee)?,
         change,
         change_addresses,
+        change_testnet_aliases,
         output_count: psbt.unsigned_tx.output.len(),
         selected_outpoints: psbt
             .unsigned_tx
@@ -6463,6 +6497,16 @@ mod tests {
         assert!(!hardware_display_matches_expected_address(
             regtest,
             "not-an-address"
+        ));
+
+        let change = "bcrt1q5spdlkwvajjz9t0nvsqygmeaagxts4sqxy3a7t".to_owned();
+        let (recipient_alias, change_aliases) =
+            proposal_testnet_aliases(regtest, std::slice::from_ref(&change));
+        assert_eq!(recipient_alias.as_deref(), Some(ledger.as_str()));
+        assert_eq!(change_aliases.len(), 1);
+        assert!(hardware_display_matches_expected_address(
+            &change,
+            change_aliases[0].as_deref().expect("change alias")
         ));
     }
 
@@ -7857,6 +7901,7 @@ mod tests {
                 &PaymentProposalDto {
                     proposal_id: proposal_id.clone(),
                     recipient: "bcrt1qrestartfixture".into(),
+                    recipient_testnet_alias: None,
                     label: "Restart fixture".into(),
                     amount: 10,
                     fee: 1,
@@ -7864,6 +7909,7 @@ mod tests {
                     total: 11,
                     change: 0,
                     change_addresses: vec![],
+                    change_testnet_aliases: vec![],
                     output_count: 0,
                     selected_outpoints: vec![outpoint.clone()],
                     inputs: vec![],

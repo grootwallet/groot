@@ -6,11 +6,13 @@
   let {
     proposal,
     onChangeAddress,
+    changeAddressOverride = null,
     policy = '',
     compact = false
   }: {
     proposal: PaymentProposal | MultisigProposal;
     onChangeAddress: () => void;
+    changeAddressOverride?: string | null;
     policy?: string;
     compact?: boolean;
   } = $props();
@@ -24,17 +26,22 @@
     <div><dt>Fee rate</dt><dd>{proposal.feeRate} sat/vB</dd></div>
     <div><dt>Change</dt><dd>{shortSats(Number(proposal.change))} sats</dd></div>
     {#if proposal.changeAddresses[0]}
-      <div><dt>Change address</dt><dd><button type="button" class={compact ? 'compact-address-button' : 'address-review-trigger mono'} aria-label="View complete change address" onclick={onChangeAddress}>{compactAddress(proposal.changeAddresses[0])}</button></dd></div>
+      <div><dt>Change address</dt><dd><button type="button" class={compact ? 'compact-address-button' : 'address-review-trigger mono'} aria-label="View complete change address" onclick={onChangeAddress}>{compactAddress(changeAddressOverride ?? proposal.changeAddresses[0])}</button></dd></div>
     {/if}
     <div><dt>Locktime / RBF</dt><dd>{proposal.locktime} · {proposal.rbf ? 'Enabled' : 'Disabled'}</dd></div>
     {#if policy}<div><dt>Wallet policy</dt><dd>{policy}</dd></div>{/if}
   </dl>
-  <section class="proposal-input-details" aria-label="Input outpoints and sequences">
-    <strong>Input outpoints and sequences</strong>
-    <dl class:details-list={!compact}>
-      {#each proposal.inputs as input}
-        <div><dt><code>{input.outpoint}</code></dt><dd>{shortSats(input.amount)} sats · sequence {input.sequence}</dd></div>
-      {/each}
-    </dl>
+  <section class="proposal-input-details" aria-label="Transaction inputs">
+    <strong>Transaction inputs</strong>
+    {#each proposal.inputs as input, index}
+      <article>
+        <b>Input {index + 1}</b>
+        <dl class:details-list={!compact}>
+          <div><dt>Outpoint</dt><dd><code>{input.outpoint}</code></dd></div>
+          <div><dt>Amount</dt><dd>{shortSats(input.amount)} sats</dd></div>
+          <div><dt>Sequence</dt><dd><code>{input.sequence}</code></dd></div>
+        </dl>
+      </article>
+    {/each}
   </section>
 </details>

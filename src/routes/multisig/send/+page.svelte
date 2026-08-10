@@ -20,10 +20,11 @@
   import { defaultConfig, networkName } from '$lib/config';
   import { addressPrefixForNetwork, hasAddressPrefixForNetwork } from '$lib/wallet/policy';
   import { compactAddress } from '$lib/address-display';
+  import { addressForHardwareDisplay } from '$lib/wallet/hardware-display';
   import { fly } from 'svelte/transition';
   let wallet = $state<MultisigWallet|null>(null), proposal=$state<MultisigProposal|null>(null), estimates=$state<FeeEstimates|null>(null);
   let address=$state(''), label=$state(''), amount=$state(''), selectedRate=$state(2), pin=$state(''), imported=$state(''), txid=$state(''), error=$state(''), deviceError=$state(''), cancelError=$state('');
-  let busy=$state(false), savingPsbt=$state(false), deviceOpen=$state(false), addressOpen=$state(false), changeAddressOpen=$state(false), importOpen=$state(false), qrOpen=$state(false), qrScanOpen=$state(false), cancelOpen=$state(false), exitOpen=$state(false), devices=$state<HardwareDevice[]>([]), urFrames=$state<string[]>([]), scannedFrames=$state<string[]>([]);
+  let busy=$state(false), savingPsbt=$state(false), deviceOpen=$state(false), addressOpen=$state(false), changeAddressOpen=$state(false), hardwareAddressOpen=$state(false), hardwareChangeAddressOpen=$state(false), importOpen=$state(false), qrOpen=$state(false), qrScanOpen=$state(false), cancelOpen=$state(false), exitOpen=$state(false), devices=$state<HardwareDevice[]>([]), activeHardwareDevice=$state<HardwareDevice|null>(null), urFrames=$state<string[]>([]), scannedFrames=$state<string[]>([]);
   let hardwareAction=$state<'scan'|'sign'>('scan');
   let coins=$state<Utxo[]>([]), selectedCoins=$state<string[]>([]), showCoins=$state(false), available=$state(0);
   let draftStep=$state<1|2>(1);
@@ -33,6 +34,9 @@
   const intentValid=$derived(addressValid&&label.trim().length>0&&label.trim().length<=48);
   const progressStep=$derived<1|2|3>(proposal?3:draftStep);
   const signerItems=$derived((wallet?.cosigners??[]).map((signer)=>({label:signer.label,fingerprint:signer.fingerprint,detail:signer.deviceType??`${signer.source} signer`})));
+  const ledgerHardwareReview=$derived(Boolean(activeHardwareDevice&&`${activeHardwareDevice.label} ${activeHardwareDevice.model}`.toLowerCase().includes('ledger')&&proposal?.recipientTestnetAlias));
+  const hardwareRecipient=$derived(addressForHardwareDisplay(proposal?.recipient??'',proposal?.recipientTestnetAlias,ledgerHardwareReview?'ledger':'other'));
+  const hardwareChangeAddress=$derived(addressForHardwareDisplay(proposal?.changeAddresses[0]??'',proposal?.changeTestnetAliases[0],ledgerHardwareReview?'ledger':'other'));
   onDestroy(()=>{pin='';imported='';});
   onMount(async()=>{try{const snapshot=await walletService.multisigSnapshot();wallet=await walletService.multisigWallet();estimates=await walletService.estimateFees();selectedRate=Number(estimates.standard);coins=snapshot.utxos;const url=new URL(window.location.href),requested=url.searchParams.get('coins')?.split(',').filter(Boolean)??[],method=url.searchParams.get('accelerate'),txid=url.searchParams.get('txid');selectedCoins=requested.filter((outpoint)=>coins.some((coin)=>coin.outpoint===outpoint&&!coin.frozen));updateAvailable();if(txid&&(method==='rbf'||method==='cpfp'))proposal=await walletService.prepareMultisigAcceleration(txid,method,feeRate(Number(estimates.priority)));else proposal=(await walletService.multisigProposals())[0]??null;}catch(cause){error=cause instanceof Error?cause.message:'Could not load wallet.';}});
   function submitIntentOnEnter(event: KeyboardEvent){if(event.key!=='Enter')return;event.preventDefault();if(intentValid)draftStep=2;}
@@ -40,8 +44,8 @@
   function updateAvailable(){available=coins.filter((coin)=>!coin.frozen&&(!selectedCoins.length||selectedCoins.includes(coin.outpoint))).reduce((total,coin)=>total+coin.amount,0);}
   function toggleCoin(outpoint:string,checked:boolean){selectedCoins=checked?[...selectedCoins,outpoint]:selectedCoins.filter((item)=>item!==outpoint);updateAvailable();}
   function useAutomatic(){selectedCoins=[];showCoins=false;updateAvailable();}
-  async function scan(){deviceOpen=true;hardwareAction='scan';busy=true;deviceError='';try{devices=await walletService.listHardwareDevices();}catch(cause){devices=[];deviceError=cause instanceof Error?cause.message:'Could not find hardware.';}finally{busy=false;}}
-  async function sign(device:HardwareDevice){if(!proposal)return;hardwareAction='sign';busy=true;deviceError='';try{proposal=await walletService.signMultisigWithHardware(proposal.proposalId,device.id,proposal.psbt);deviceOpen=false;toast({title:'Signature added',description:`${proposal.signed} of ${proposal.required} signatures`,tone:'success'});}catch(cause){deviceError=cause instanceof Error?cause.message:'Device signing failed.';}finally{busy=false;}}
+  async function scan(){deviceOpen=true;activeHardwareDevice=null;hardwareAction='scan';busy=true;deviceError='';try{devices=await walletService.listHardwareDevices();}catch(cause){devices=[];deviceError=cause instanceof Error?cause.message:'Could not find hardware.';}finally{busy=false;}}
+  async function sign(device:HardwareDevice){if(!proposal)return;activeHardwareDevice=device;hardwareAction='sign';busy=true;deviceError='';try{proposal=await walletService.signMultisigWithHardware(proposal.proposalId,device.id,proposal.psbt);deviceOpen=false;toast({title:'Signature added',description:`${proposal.signed} of ${proposal.required} signatures`,tone:'success'});}catch(cause){deviceError=cause instanceof Error?cause.message:'Device signing failed.';}finally{busy=false;}}
   async function importPsbt(){if(!proposal||!imported.trim())return;busy=true;try{proposal=await walletService.importMultisigProposal(proposal.proposalId,proposal.psbt,imported);imported='';importOpen=false;toast({title:'Signed PSBT merged',description:`${proposal.signed} of ${proposal.required} signatures`,tone:'success'});}catch(cause){error=cause instanceof Error?cause.message:'PSBT import failed.';}finally{busy=false;}}
   async function broadcast(){if(!proposal||!pin)return;busy=true;error='';try{const result=await walletService.broadcastMultisigProposal(proposal.proposalId,proposal.psbt,pin);txid=result.txid;toast({title:'Vault transaction broadcast',description:result.syncPending?'Accepted by the node. Balance refresh is pending.':`Balance ${shortSats(result.snapshot.balance.total)} sats`,tone:'success'});}catch(cause){error=cause instanceof Error?cause.message:'Broadcast failed.';}finally{pin='';busy=false;}}
   async function confirmCancel(){if(!proposal||busy)return;busy=true;cancelError='';try{await walletService.cancelMultisigProposal(proposal.proposalId);proposal=null;address='';label='';amount='';pin='';draftStep=1;cancelOpen=false;toast({title:'Proposal canceled',description:'The unsigned transaction and any collected signatures were discarded.'});}catch(cause){cancelError=cause instanceof Error?cause.message:'The proposal could not be canceled.';}finally{busy=false;}}
@@ -73,7 +77,7 @@
   {#if error}<p class="form-error">{error}</p>{/if}
   <div class="split-actions"><Button variant="secondary" size="large" onclick={()=>draftStep=1}>Back</Button><Button type="submit" size="large" disabled={!valid} loading={busy} loadingLabel="Preparing payment…">Review payment</Button></div>
 </form>
-{:else}<div class="multisig-signing-layout"><section class="form-card">
+{:else}<div class="multisig-signing-layout"><section class="form-card" aria-label={proposal.canFinalize ? 'Signed transaction review' : 'Transaction review'}>
   <div class="review-amount"><span>You send</span><strong>{shortSats(Number(proposal.amount))} <small>sats</small></strong></div>
   <dl class="details-list proposal-review-primary">
     <div><dt>To</dt><dd><button class="address-review-trigger mono" aria-label="View complete recipient address" onclick={()=>addressOpen=true}>{compactAddress(proposal.recipient)}</button></dd></div>
@@ -83,7 +87,7 @@
     <div class="total"><dt>Total</dt><dd>{shortSats(Number(proposal.total))} sats</dd></div>
   </dl>
   <TransactionReviewDetails {proposal} policy={`${wallet?.threshold} of ${wallet?.cosigners.length}`} onChangeAddress={()=>changeAddressOpen=true}/>
-<div class="psbt-actions"><Button variant="secondary" onclick={scan}><Cpu size={16}/>Sign with device</Button><Button variant="secondary" onclick={showPsbtQr}><QrCode size={16}/>Show unsigned QR</Button><Button variant="secondary" onclick={()=>{scannedFrames=[];qrScanOpen=true;}}><ScanLine size={16}/>Scan signed QR</Button><Button variant="secondary" onclick={()=>importOpen=true}><FileUp size={16}/>Import signed PSBT</Button><Button variant="secondary" onclick={copyPsbt}><Copy size={16}/>Copy PSBT</Button><Button variant="secondary" loading={savingPsbt} loadingLabel="Saving PSBT…" onclick={saveProposalPsbt}><Download size={16}/>Save PSBT</Button></div>
+{#if !proposal.canFinalize}<div class="psbt-actions"><Button variant="secondary" onclick={scan}><Cpu size={16}/>Sign with device</Button><Button variant="secondary" onclick={showPsbtQr}><QrCode size={16}/>Show unsigned QR</Button><Button variant="secondary" onclick={()=>{scannedFrames=[];qrScanOpen=true;}}><ScanLine size={16}/>Scan signed QR</Button><Button variant="secondary" onclick={()=>importOpen=true}><FileUp size={16}/>Import signed PSBT</Button><Button variant="secondary" onclick={copyPsbt}><Copy size={16}/>Copy PSBT</Button><Button variant="secondary" loading={savingPsbt} loadingLabel="Saving PSBT…" onclick={saveProposalPsbt}><Download size={16}/>Save PSBT</Button></div>{/if}
 {#if proposal.canFinalize}<div class="ready-panel"><LockKeyhole size={18}/><div><strong>Ready to finalize</strong><small>Enter the coordinator app PIN. Hardware signatures are already inside the PSBT.</small></div></div><PasswordField label="App PIN" inputLabel="App PIN" bind:value={pin} autocomplete="current-password"/><Button size="large" class="full" disabled={!pin} loading={busy} loadingLabel="Finalizing & broadcasting…" onclick={broadcast}>Finalize & broadcast</Button>{/if}{#if error}<p class="form-error">{error}</p>{/if}<Button variant="ghost-danger" class="full proposal-cancel-action" disabled={busy} onclick={()=>{cancelError='';cancelOpen=true;}}><X size={15}/>Cancel proposal</Button></section>{#if wallet}<aside class="signer-side-panel"><SignerSummary signers={signerItems} required={wallet.threshold} signedFingerprints={proposal.signedFingerprints} collecting/></aside>{/if}</div>{/if}</div>
 
 <Modal open={deviceOpen} title="Sign with hardware" description="Compare every value below with the device before approving." onclose={()=>deviceOpen=false}>
@@ -91,14 +95,15 @@
     <section class="hardware-review" aria-label="Authoritative transaction details">
       <strong>Transaction to verify</strong>
       <dl class="hardware-review-primary">
-        <div><dt>Recipient</dt><dd><button type="button" class="compact-address-button" onclick={()=>addressOpen=true}>{compactAddress(proposal.recipient)}</button></dd></div>
+        <div><dt>Recipient</dt><dd><button type="button" class="compact-address-button" onclick={()=>hardwareAddressOpen=true}>{compactAddress(hardwareRecipient)}</button></dd></div>
         <div><dt>Label</dt><dd>{proposal.label}</dd></div>
         <div><dt>Amount</dt><dd>{shortSats(Number(proposal.amount))} sats</dd></div>
         <div><dt>Network</dt><dd>{proposal.network}</dd></div>
         <div><dt>Network fee</dt><dd>{shortSats(Number(proposal.fee))} sats</dd></div>
         <div><dt>Total</dt><dd>{shortSats(Number(proposal.total))} sats</dd></div>
       </dl>
-      <TransactionReviewDetails {proposal} compact policy={`${wallet?.threshold} of ${wallet?.cosigners.length}`} onChangeAddress={()=>changeAddressOpen=true}/>
+      {#if ledgerHardwareReview}<p class="verification-network-note">Ledger Bitcoin Test shows the Regtest output with a <code>tb1</code> prefix. Rust supplied this alias only after proving it decodes to the identical Bitcoin output script.</p>{/if}
+      <TransactionReviewDetails {proposal} compact policy={`${wallet?.threshold} of ${wallet?.cosigners.length}`} changeAddressOverride={hardwareChangeAddress} onChangeAddress={()=>hardwareChangeAddressOpen=true}/>
     </section>
   {/if}
   {#if busy}
@@ -118,3 +123,5 @@
 <Modal open={exitOpen} title="Leave signing?" description="Confirm before returning to the overview." onclose={()=>exitOpen=false}>{#if proposal}<div class="ready-panel"><Check size={18}/><div><strong>Your proposal will stay saved.</strong><small>You can return to signing without rebuilding the transaction or losing collected signatures.</small></div></div><dl class="details-list cancel-proposal-details"><div><dt>Payment</dt><dd>{proposal.label}</dd></div><div><dt>Amount</dt><dd>{shortSats(Number(proposal.amount))} sats</dd></div><div><dt>Signatures saved</dt><dd>{proposal.signed} of {proposal.required} collected</dd></div></dl><div class="modal-footer"><Button variant="secondary" onclick={()=>exitOpen=false}>Keep signing</Button><Button href="/">Leave to overview</Button></div>{/if}</Modal>
 <RecipientAddressModal open={addressOpen} address={proposal?.recipient??''} label={proposal?.label??''} onclose={()=>addressOpen=false}/>
 <RecipientAddressModal open={changeAddressOpen} address={proposal?.changeAddresses[0]??''} label="Wallet change" title="Change address" description="Compare this wallet-controlled output with the hardware device." detail="Internal wallet output · not the recipient" onclose={()=>changeAddressOpen=false}/>
+<RecipientAddressModal open={hardwareAddressOpen} address={hardwareRecipient} label={proposal?.label??''} title="Address shown on hardware" description="Compare this exact encoding with the hardware device." onclose={()=>hardwareAddressOpen=false}/>
+<RecipientAddressModal open={hardwareChangeAddressOpen} address={hardwareChangeAddress} label="Wallet change" title="Change shown on hardware" description="Compare this exact wallet-controlled output with the hardware device." detail="Internal wallet output · not the recipient" onclose={()=>hardwareChangeAddressOpen=false}/>
