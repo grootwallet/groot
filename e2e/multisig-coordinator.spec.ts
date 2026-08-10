@@ -115,12 +115,12 @@ test('spends end-to-end from the ready-made demo vault', async ({ page }) => {
   await leaveDialog.getByRole('button', { name: 'Keep signing' }).click();
   await expect(page).toHaveURL(/\/multisig\/send$/);
   await expect(signerSummary.getByText('2 of 2 collected', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Cancel proposal' }).filter({ visible: true }).click();
-  const cancelDialog = page.getByRole('dialog', { name: 'Cancel this proposal?' });
+  await page.getByRole('button', { name: 'Cancel payment' }).filter({ visible: true }).click();
+  const cancelDialog = page.getByRole('dialog', { name: 'Cancel this payment?' });
   await expect(cancelDialog.getByText('This cannot be undone.')).toBeVisible();
   await expect(cancelDialog.getByText('Test purchase', { exact: true })).toBeVisible();
   await expect(cancelDialog.getByText('2 of 2 collected', { exact: true })).toBeVisible();
-  await cancelDialog.getByRole('button', { name: 'Keep proposal' }).click();
+  await cancelDialog.getByRole('button', { name: 'Keep payment' }).click();
   await expect(signerSummary.getByText('2 of 2 collected', { exact: true })).toBeVisible();
   await page.getByLabel('App PIN', { exact: true }).fill('prototype-passphrase');
   await page.getByRole('button', { name: 'Finalize & broadcast' }).click();
@@ -141,18 +141,18 @@ test('requires explicit confirmation before discarding a multisig proposal', asy
   await page.getByRole('button', { name: /Virtual Coldcard/ }).click();
   await expect(cancellationSigners.getByText('1 of 2 collected', { exact: true })).toBeVisible();
 
-  await page.getByRole('button', { name: 'Cancel proposal' }).click();
-  const dialog = page.getByRole('dialog', { name: 'Cancel this proposal?' });
+  await page.getByRole('button', { name: 'Cancel payment' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Cancel this payment?' });
   await expect(dialog.getByText('Cancel confirmation test', { exact: true })).toBeVisible();
   await expect(dialog.getByText('25,000 sats', { exact: true })).toBeVisible();
   await expect(dialog.getByText('1 of 2 collected', { exact: true })).toBeVisible();
-  await dialog.getByRole('button', { name: 'Keep proposal' }).click();
+  await dialog.getByRole('button', { name: 'Keep payment' }).click();
   await expect(dialog).toBeHidden();
   await expect(cancellationSigners.getByText('1 of 2 collected', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Cancel proposal' }).first().click();
-  await dialog.getByRole('button', { name: 'Cancel proposal' }).click();
+  await page.getByRole('button', { name: 'Cancel payment' }).first().click();
+  await dialog.getByRole('button', { name: 'Cancel payment' }).click();
 
-  await expect(page.getByText('Proposal canceled', { exact: true })).toBeVisible();
+  await expect(page.getByText('Payment canceled', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Continue to amount' })).toBeVisible();
   await page.goto('/multisig');
   await expect(page.getByRole('heading', { name: 'Family vault' })).toBeVisible();
