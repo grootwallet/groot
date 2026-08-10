@@ -96,7 +96,7 @@ export class DummyWalletAdapter implements WalletPort {
     this.#exists = true;
   }
   async recoverWallet(name: string, mnemonic: string, credential: string) {
-    if (mnemonic.trim().split(/\s+/).length !== 24) throw new WalletError('invalid_mnemonic', 'Satchel requires exactly 24 recovery words.');
+    if (mnemonic.trim().split(/\s+/).length !== 24) throw new WalletError('invalid_mnemonic', 'Groot requires exactly 24 recovery words.');
     return this.createWallet(name, credential, true);
   }
   async verifyBackup(credential: string) {
@@ -111,7 +111,7 @@ export class DummyWalletAdapter implements WalletPort {
       this.#secureStorageRetryPending = false;
       throw new WalletError(
         'secure_storage_unavailable',
-        'macOS Keychain access is unavailable. Enter your PIN again and approve the Satchel system prompt. The wallet stayed locked.'
+        'macOS Keychain access is unavailable. Enter your PIN again and approve the Groot system prompt. The wallet stayed locked.'
       );
     }
     const expected = this.#selectedWalletId ? this.#credentials.get(this.#selectedWalletId) : undefined;
@@ -450,12 +450,12 @@ export class DummyWalletAdapter implements WalletPort {
   }
   async recoveryDrill(encodedBackup: string) {
     try { const parsed = JSON.parse(encodedBackup); const matchesCurrentWallet = parsed?.wallet?.externalDescriptor === this.#multisig?.externalDescriptor; this.#recoveryVerified = matchesCurrentWallet; return { firstAddress: `${addressPrefixForNetwork(defaultConfig.network)}qdummy5n8k2r7v4cx9s6jlawephgzuqf5t8ul`, matchesCurrentWallet }; }
-    catch { throw new WalletError('invalid_backup', 'Enter a valid Satchel descriptor backup.'); }
+    catch { throw new WalletError('invalid_backup', 'Enter a valid Groot descriptor backup.'); }
   }
   async recoverMultisig(encodedBackup: string, credential: string) {
     if (this.#multisig) throw new WalletError('wallet_already_exists', 'Delete the current multisig wallet before recovering another one.');
     try { const parsed = JSON.parse(encodedBackup); if (parsed?.version !== 1 || parsed?.network !== defaultConfig.network || !parsed.wallet) throw new Error(); this.#recoveryVerified = false; this.#multisig = parsed.wallet; this.#multisigCredential = credential; const profile = { id: crypto.randomUUID(), name: this.#multisig!.name, network: defaultConfig.network, kind: 'multisig' as const, descriptorChecksum: 'restored', createdAt: Date.now(), backupVerified: true }; this.#profiles.push(profile); this.#multisigProfileId = profile.id; this.#selectedWalletId = profile.id; this.#credentials.set(profile.id, credential); this.#unlockedWalletIds.add(profile.id); this.#exists = true; return structuredClone(this.#multisig!); }
-    catch { throw new WalletError('invalid_backup', 'Enter a valid Satchel descriptor backup.'); }
+    catch { throw new WalletError('invalid_backup', 'Enter a valid Groot descriptor backup.'); }
   }
   async deleteMultisig(credential: string, confirmation: string) {
     if (!this.#multisig) throw new WalletError('wallet_not_found', 'No multisig wallet exists.');

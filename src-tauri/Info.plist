@@ -3,6 +3,6 @@
 <plist version="1.0">
 <dict>
   <key>NSCameraUsageDescription</key>
-  <string>Satchel uses the camera only to scan public wallet data and Bitcoin PSBT signing messages.</string>
+  <string>Groot uses the camera only to scan public wallet data and Bitcoin PSBT signing messages.</string>
 </dict>
 </plist>

@@ -33,8 +33,7 @@
 </script>
 
 <svelte:head>
-  <title>Security model · Hold your own</title>
-  <meta name="description" content="The key, transaction, storage, hardware, and Bitcoin network boundaries behind the wallet." />
+  <meta name="description" content="The key, transaction, storage, hardware, and Bitcoin network boundaries behind Groot." />
   <meta name="theme-color" content="#F7F3E9" />
   <meta property="og:title" content="Security starts at the boundary" />
   <meta property="og:description" content="The concrete trust boundaries behind a Bitcoin self-custody wallet." />

@@ -55,7 +55,7 @@ mod macos {
 
     define_class!(
         #[unsafe(super(NSView))]
-        #[name = "SatchelRecoveryBackupView"]
+        #[name = "GrootRecoveryBackupView"]
         #[ivars = BackupViewIvars]
         struct BackupView;
 
@@ -82,7 +82,7 @@ mod macos {
 
     define_class!(
         #[unsafe(super(NSView))]
-        #[name = "SatchelRecoveryVerificationView"]
+        #[name = "GrootRecoveryVerificationView"]
         #[ivars = VerificationViewIvars]
         struct VerificationView;
 
@@ -151,11 +151,11 @@ mod macos {
                         return;
                     };
                     let Some(window) = app.get_webview_window("main") else {
-                        let _ = sender.send(Err("Satchel's main window is unavailable.".into()));
+                        let _ = sender.send(Err("Groot's main window is unavailable.".into()));
                         return;
                     };
                     let Ok(raw_window) = window.ns_window() else {
-                        let _ = sender.send(Err("Satchel's native window is unavailable.".into()));
+                        let _ = sender.send(Err("Groot's native window is unavailable.".into()));
                         return;
                     };
 
@@ -310,11 +310,11 @@ mod macos {
                         return;
                     };
                     let Some(window) = app.get_webview_window("main") else {
-                        let _ = sender.send(Err("Satchel's main window is unavailable.".into()));
+                        let _ = sender.send(Err("Groot's main window is unavailable.".into()));
                         return;
                     };
                     let Ok(raw_window) = window.ns_window() else {
-                        let _ = sender.send(Err("Satchel's native window is unavailable.".into()));
+                        let _ = sender.send(Err("Groot's native window is unavailable.".into()));
                         return;
                     };
 
@@ -738,10 +738,10 @@ pub fn present(app: &AppHandle, words: &str) -> Result<BackupOutcome, String> {
     Ok(if app
         .dialog()
         .message(format!(
-            "Write these 24 words down in order. Keep them offline.\n\n{}\n\nSatchel cannot recover these words for you.",
+            "Write these 24 words down in order. Keep them offline.\n\n{}\n\nGroot cannot recover these words for you.",
             display.as_str()
         ))
-        .title("Satchel recovery words")
+        .title("Groot recovery words")
         .kind(MessageDialogKind::Info)
         .buttons(MessageDialogButtons::OkCancelCustom(
             "I wrote them down".to_owned(),

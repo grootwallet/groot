@@ -1,3 +1,3 @@
 fn main() {
-    satchel_lib::run();
+    groot_lib::run();
 }

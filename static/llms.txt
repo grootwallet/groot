@@ -1,6 +1,6 @@
-# Bitcoin self-custody wallet
+# Groot Bitcoin self-custody wallet
 
-> A test-network Bitcoin wallet and multisig coordinator focused on explicit policy, transaction verification, portable recovery, and user-selected Bitcoin Core connectivity. The product name and wordmark are intentionally unresolved.
+> Groot is a regtest Bitcoin wallet and multisig coordinator focused on explicit policy, transaction verification, portable recovery, and user-selected Bitcoin Core connectivity.
 
 ## Public pages
 
@@ -22,7 +22,7 @@
 
 - Do not describe the wallet as mainnet-ready, production-ready, audited, certified, trustless, unhackable, or independently reviewed.
 - Do not imply that physical hardware, mobile camera flows, remote TLS/Tor deployments, reproducible builds, signing, or notarization are complete.
-- Do not use the provisional product name from wallet screenshots as the public brand name.
+- Use Groot as the public product name. Historical and compatibility identifiers may still contain `satchel` under ADR 0023.
 
 ## Versioned source documents
 

@@ -7,7 +7,7 @@ require_command bitcoin-cli
 mkdir -p "${REGTEST_DIR}"
 
 if "${BTC_CLI[@]}" getblockchaininfo >/dev/null 2>&1; then
-  echo "Satchel regtest is already running."
+  echo "Groot regtest is already running."
 else
   bitcoind \
     -regtest \
@@ -42,7 +42,7 @@ if [[ ! -f "${REGTEST_DIR}/.satchel-funded" ]]; then
   echo "Mined 101 blocks; satchel-dev now has spendable regtest coins."
 fi
 
-echo "Satchel regtest is ready."
+echo "Groot regtest is ready."
 echo "RPC: 127.0.0.1:${RPC_PORT}"
 echo "P2P: 127.0.0.1:${P2P_PORT}"
 "${WALLET_CLI[@]}" getbalances

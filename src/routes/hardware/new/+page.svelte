@@ -108,7 +108,7 @@
     try {
       await walletService.createExternalSignerWallet(signer.label, signer, pin);
       pin = ''; confirmation = '';
-      toast({ title: 'Hardware wallet added', description: 'Only public descriptors are stored in Satchel.', tone: 'success' });
+      toast({ title: 'Hardware wallet added', description: 'Only public descriptors are stored in Groot.', tone: 'success' });
       await goto('/');
     } catch (cause) {
       errorCode = cause instanceof WalletError ? cause.code : 'internal_error';
@@ -123,8 +123,8 @@
   <div class="hardware-setup-progress"><SetupProgress steps={hardwareSteps} current={step} label="Hardware wallet setup progress"/></div>
   {#if step === 1}
     <section class="form-card">
-      <div class="credential-warning hardware-preparation-note"><ShieldCheck size={17}/><p><span>Before connecting, initialize and unlock the signer. Select any hardware passphrase on-device. Satchel imports public data only.</span></p></div>
-      <label class="field"><span>Wallet name</span><input bind:value={label} maxlength="48" placeholder="Defaults to the device model"/><small>This also identifies the signer inside Satchel.</small></label>
+      <div class="credential-warning hardware-preparation-note"><ShieldCheck size={17}/><p><span>Before connecting, initialize and unlock the signer. Select any hardware passphrase on-device. Groot imports public data only.</span></p></div>
+      <label class="field"><span>Wallet name</span><input bind:value={label} maxlength="48" placeholder="Defaults to the device model"/><small>This also identifies the signer inside Groot.</small></label>
       <div class="source-list">
         <button onclick={scan}><Cable size={20}/><span><strong>Connect with cable</strong><small>Jade, BitBox02, Trezor, Ledger, and HWI-compatible devices</small></span><ArrowRight size={17}/></button>
         <label class="source-button"><FileUp size={20}/><span><strong>Import from SD card</strong><small>Passport, Coldcard, Jade, and descriptor exports</small></span><ArrowRight size={17}/><input aria-label="Import public key file" type="file" accept=".json,.txt,.bsms,.desc,application/json,text/plain" onchange={loadFile}/></label>
@@ -144,7 +144,7 @@
       <dl class="details-list"><div><dt>Fingerprint</dt><dd class="mono">{signer.fingerprint}</dd></div><div><dt>Account path</dt><dd class="mono">{signer.derivationPath}</dd></div><div><dt>Source</dt><dd>{signer.source}</dd></div><div><dt>Account xpub</dt><dd><button type="button" class="address-review-trigger mono" aria-label="View complete account public key" onclick={() => xpubOpen = true}>{compactIdentifier(signer.xpub, 14, 10)}</button></dd></div></dl>
       {#if isLedger}
         <div class="credential-warning"><ShieldCheck size={17}/><p><strong>This identifies the wallet currently open on Ledger.</strong><span>A different seed or passphrase produces a different fingerprint and completely different addresses. Nano S Plus does not display this fingerprint, so verify your first receive address on Ledger before using the wallet.</span></p></div>
-        <details class="ledger-passphrase-help"><summary>Want to use a Ledger passphrase?</summary><p>Set it directly on Ledger before importing: open device Settings → Security → Passphrase, then choose a temporary passphrase or attach one to a secondary PIN. Go back and import again after activating that wallet. Satchel never receives the passphrase.</p></details>
+        <details class="ledger-passphrase-help"><summary>Want to use a Ledger passphrase?</summary><p>Set it directly on Ledger before importing: open device Settings → Security → Passphrase, then choose a temporary passphrase or attach one to a secondary PIN. Go back and import again after activating that wallet. Groot never receives the passphrase.</p></details>
       {:else if isFileImport}
         <div class="credential-warning"><ShieldCheck size={17}/><p><strong>Review the public backup identity.</strong><span>Compare the fingerprint with the original wallet or a trusted record when available. After setup, verify the first receive address on the hardware wallet before accepting funds.</span></p></div>
       {:else}
@@ -154,15 +154,15 @@
     </section>
   {:else if signer}
     <form class="form-card hardware-protection-card" onsubmit={(event) => { event.preventDefault(); create(); }}>
-      <h2>Set an app PIN</h2><p>This unlocks this wallet in Satchel. Sending bitcoin still requires your hardware signer. It is separate from the PIN and passphrase on that device.</p>
-      <PasswordField label="App PIN" bind:value={pin} autocomplete="new-password" hint="It can be different for every wallet in Satchel."/>
+      <h2>Set an app PIN</h2><p>This unlocks this wallet in Groot. Sending bitcoin still requires your hardware signer. It is separate from the PIN and passphrase on that device.</p>
+      <PasswordField label="App PIN" bind:value={pin} autocomplete="new-password" hint="It can be different for every wallet in Groot."/>
       <PasswordField label="Confirm app PIN" bind:value={confirmation} autocomplete="new-password" error={confirmation && pin !== confirmation ? 'PINs do not match.' : ''}/>
       {#if error}
         <div class="hardware-inline-error hardware-create-error" role="alert">
           <AlertTriangle size={18}/>
           <span>
-            <strong>{errorCode === 'wallet_already_exists' ? 'This hardware wallet is already in Satchel' : 'Could not create the wallet'}</strong>
-            <small>{errorCode === 'wallet_already_exists' ? 'Satchel matched the same public descriptor. No duplicate was created and nothing was changed. Open the existing wallet instead.' : error}</small>
+            <strong>{errorCode === 'wallet_already_exists' ? 'This hardware wallet is already in Groot' : 'Could not create the wallet'}</strong>
+            <small>{errorCode === 'wallet_already_exists' ? 'Groot matched the same public descriptor. No duplicate was created and nothing was changed. Open the existing wallet instead.' : error}</small>
           </span>
           {#if errorCode === 'wallet_already_exists'}<Button variant="secondary" size="small" onclick={() => goto('/')}>Open wallet</Button>{/if}
         </div>
@@ -179,8 +179,8 @@
 </Modal>
 <Modal open={standardWalletOpen} title="Use Trezor standard wallet?" description="This selects the seed-derived wallet with no hardware passphrase." onclose={() => { standardWalletOpen=false; standardWalletDevice=null; scanOpen=true; }}>
   <div class="credential-warning"><ShieldCheck size={17}/><p><strong>Your hidden wallet is unchanged.</strong><span>The same Trezor can use a passphrase-derived wallet elsewhere and its standard wallet here. They have different fingerprints and addresses.</span></p></div>
-  <p>Verify the imported fingerprint in the next step. You can enable or choose a Trezor passphrase later, but that opens a different hidden wallet; add it to Satchel as a separate wallet while this standard wallet remains unchanged.</p>
-  {#if busy}<HardwareActionPrompt title="Importing the Trezor standard wallet" detail="Keep Trezor connected while Satchel reads its public account key." label="Hardware wallet import in progress"/>{:else}<div class="split-actions"><Button variant="secondary" onclick={() => { standardWalletOpen=false; standardWalletDevice=null; scanOpen=true; }}>Back</Button><Button disabled={!standardWalletDevice} onclick={() => { if(standardWalletDevice) useDevice(standardWalletDevice,true); }}>Use standard wallet</Button></div>{/if}
+  <p>Verify the imported fingerprint in the next step. You can enable or choose a Trezor passphrase later, but that opens a different hidden wallet; add it to Groot as a separate wallet while this standard wallet remains unchanged.</p>
+  {#if busy}<HardwareActionPrompt title="Importing the Trezor standard wallet" detail="Keep Trezor connected while Groot reads its public account key." label="Hardware wallet import in progress"/>{:else}<div class="split-actions"><Button variant="secondary" onclick={() => { standardWalletOpen=false; standardWalletDevice=null; scanOpen=true; }}>Back</Button><Button disabled={!standardWalletDevice} onclick={() => { if(standardWalletDevice) useDevice(standardWalletDevice,true); }}>Use standard wallet</Button></div>{/if}
 </Modal>
 <TrezorPinModal
   open={pinOpen}
@@ -198,5 +198,5 @@
   onclose={() => { pinOpen=false; pinPositions=''; pinChallenge=''; pinDevice=null; pinError=''; pinErrorCode=''; }}
 />
 <Modal open={guideOpen} title="Prepare your signer" description="Use the device’s own screen to confirm identity and passphrase wallet." onclose={() => guideOpen=false}>
-  <div class="guide-list"><p><strong>Jade</strong><span>Log in or use QR PIN unlock. Select the hidden wallet passphrase on Jade, then connect USB or export its BIP84 xpub by QR.</span></p><p><strong>BitBox02</strong><span>Open BitBoxApp and enter the device password. Wait until the wallet—not “See the BitBoxApp”—is visible. Then quit BitBoxApp completely so Satchel can use USB, reconnect if needed, and scan.</span></p><p><strong>Trezor</strong><span>Safe and Model T devices can confirm passphrases on-device. Model One host passphrase entry is intentionally unavailable until Satchel has native secure secret entry.</span></p><p><strong>Ledger</strong><span>For this Regtest build, quit Ledger Live, unlock the device, and open Bitcoin Test—not the main Bitcoin app. Approve the public-key export if Ledger asks. Select a passphrase-attached PIN before connecting if you use one.</span></p><p><strong>Passport</strong><span>Passport Core is air-gapped: export a BIP84 descriptor/xpub by microSD or QR. Cable is power-only. Prime cable support requires a documented compatible signing protocol.</span></p></div>
+  <div class="guide-list"><p><strong>Jade</strong><span>Log in or use QR PIN unlock. Select the hidden wallet passphrase on Jade, then connect USB or export its BIP84 xpub by QR.</span></p><p><strong>BitBox02</strong><span>Open BitBoxApp and enter the device password. Wait until the wallet—not “See the BitBoxApp”—is visible. Then quit BitBoxApp completely so Groot can use USB, reconnect if needed, and scan.</span></p><p><strong>Trezor</strong><span>Safe and Model T devices can confirm passphrases on-device. Model One host passphrase entry is intentionally unavailable until Groot has native secure secret entry.</span></p><p><strong>Ledger</strong><span>For this Regtest build, quit Ledger Live, unlock the device, and open Bitcoin Test—not the main Bitcoin app. Approve the public-key export if Ledger asks. Select a passphrase-attached PIN before connecting if you use one.</span></p><p><strong>Passport</strong><span>Passport Core is air-gapped: export a BIP84 descriptor/xpub by microSD or QR. Cable is power-only. Prime cable support requires a documented compatible signing protocol.</span></p></div>
 </Modal>

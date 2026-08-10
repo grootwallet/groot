@@ -22,8 +22,7 @@
 </script>
 
 <svelte:head>
-  <title>Development status · Hold your own</title>
-  <meta name="description" content="What works in the Bitcoin wallet today, what evidence exists, and what still blocks mainnet." />
+  <meta name="description" content="What works in Groot today, what evidence exists, and what still blocks mainnet." />
   <meta name="theme-color" content="#F7F3E9" />
   <meta property="og:title" content="Built on regtest. Not ready for mainnet." />
   <meta property="og:description" content="A plain development ledger for the Bitcoin self-custody wallet." />

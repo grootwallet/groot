@@ -37,7 +37,7 @@
       } catch (cause) {
         const name = cause instanceof DOMException ? cause.name : '';
         error = name === 'NotAllowedError'
-          ? 'Camera access was denied. Allow camera access for Satchel, then reopen this scanner.'
+          ? 'Camera access was denied. Allow camera access for Groot, then reopen this scanner.'
           : 'No usable camera is available. Connect a camera or import the signed PSBT file instead.';
       }
     })();

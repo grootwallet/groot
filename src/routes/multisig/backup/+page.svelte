@@ -24,7 +24,7 @@
   let exportError = $state('');
   let drillError = $state('');
   let deleteError = $state('');
-  let backupFormat = $state<'bsms' | 'satchel'>('bsms');
+  let backupFormat = $state<'bsms' | 'groot'>('bsms');
   let receiveQr = $state('');
   let changeQr = $state('');
   let deleteConfirmOpen = $state(false);
@@ -42,7 +42,7 @@
     void QRCode.toDataURL(current.internalDescriptor, { width: 520, margin: 2, errorCorrectionLevel: 'L' }).then((value) => { if (wallet?.internalDescriptor === current.internalDescriptor) changeQr = value; }).catch(() => undefined);
   });
 
-  const backupBaseName = $derived(safeTransferFilename(wallet?.name ?? 'satchel-wallet'));
+  const backupBaseName = $derived(safeTransferFilename(wallet?.name ?? 'groot-wallet'));
 
   function exportErrorMessage(cause: unknown) {
     if (cause instanceof WalletError && cause.code === 'invalid_credential') return `That app PIN does not match ${wallet?.name ?? 'this vault'}.`;
@@ -114,20 +114,20 @@
   {#if wallet}
     <section class="form-card backup-export-card"><div class="section-heading compact"><div><h2>1. Export backup</h2><p>Authorize a public, watch-only copy of this wallet.</p></div><FileKey size={19}/></div>
       {#if !backup}
-        <div class="backup-format-grid" role="radiogroup" aria-label="Backup format"><button class:active={backupFormat === 'bsms'} aria-pressed={backupFormat === 'bsms'} onclick={() => { backupFormat = 'bsms'; exportError = ''; }}><span><FileText size={18}/></span><strong>BSMS 1.0</strong><small>Most interoperable · recommended</small></button><button class:active={backupFormat === 'satchel'} aria-pressed={backupFormat === 'satchel'} onclick={() => { backupFormat = 'satchel'; exportError = ''; }}><span><Braces size={18}/></span><strong>Satchel JSON</strong><small>Descriptors plus Satchel metadata</small></button></div>
-        <p class="optional-insight">Backup formats <InsightTip label="About backup formats" text="BSMS is a portable public descriptor record supported by compatible coordinators. Satchel JSON also preserves Satchel-specific labels and metadata. Neither contains private keys."/></p>
+        <div class="backup-format-grid" role="radiogroup" aria-label="Backup format"><button class:active={backupFormat === 'bsms'} aria-pressed={backupFormat === 'bsms'} onclick={() => { backupFormat = 'bsms'; exportError = ''; }}><span><FileText size={18}/></span><strong>BSMS 1.0</strong><small>Most interoperable · recommended</small></button><button class:active={backupFormat === 'groot'} aria-pressed={backupFormat === 'groot'} onclick={() => { backupFormat = 'groot'; exportError = ''; }}><span><Braces size={18}/></span><strong>Groot JSON</strong><small>Descriptors plus Groot metadata</small></button></div>
+        <p class="optional-insight">Backup formats <InsightTip label="About backup formats" text="BSMS is a portable public descriptor record supported by compatible coordinators. Groot JSON also preserves Groot-specific labels and metadata. Neither contains private keys."/></p>
         <div class="backup-security-note"><ShieldCheck size={18}/><span><strong>Re-authenticate this export</strong><small>Use {wallet.name}’s app PIN. This protects access to private financial metadata even while the vault screen is open. The exported descriptor is not encrypted: it cannot spend, but it reveals addresses and should remain private.</small></span></div>
         <div class="backup-auth"><PasswordField label="App PIN" inputLabel="Backup app PIN" bind:value={pin} placeholder="Enter this vault’s app PIN" autocomplete="current-password"/><Button class="full" size="large" disabled={!pin} loading={busy} loadingLabel="Authorizing…" onclick={exportBackup}>Authorize & prepare backup</Button></div>
         {#if exportError}<p class="form-error" aria-live="polite">{exportError}</p>{/if}
       {:else}
-        <div class="backup-ready"><span><Check size={17}/></span><div><strong>Public backup ready</strong><small>{backupFormat === 'bsms' ? 'BSMS 1.0 descriptor record' : 'Satchel recovery metadata'}</small></div></div>
+        <div class="backup-ready"><span><Check size={17}/></span><div><strong>Public backup ready</strong><small>{backupFormat === 'bsms' ? 'BSMS 1.0 descriptor record' : 'Groot recovery metadata'}</small></div></div>
         <details class="backup-raw"><summary>View raw backup</summary><textarea aria-label="Descriptor backup" rows="9" readonly value={backup}></textarea></details>
         <div class="backup-actions"><Button variant="secondary" onclick={async()=>{await copyText(backup);toast({title:'Backup copied',tone:'success'});}}><Copy size={15}/>Copy backup</Button><Button variant="secondary" onclick={saveBackupFile}><Download size={15}/>Download {backupFormat === 'bsms' ? 'BSMS' : 'JSON'}</Button><Button variant="secondary" onclick={printBackup}><Printer size={15}/>Print / save PDF</Button></div>
         {#if exportError}<p class="form-error" aria-live="polite">{exportError}</p>{/if}
         <div class="descriptor-qr-preview"><div><span><QrCode size={16}/><strong>Receive descriptor QR</strong></span>{#if receiveQr}<img src={receiveQr} alt="QR code for the receive descriptor"/>{:else}<small>QR unavailable for this descriptor size. Use the downloaded file.</small>{/if}</div><div class="descriptor-copy-row"><code>{wallet.externalDescriptor}</code><button aria-label="Copy receive descriptor" onclick={() => copyDescriptor(wallet!.externalDescriptor, 'Receive')}><Copy size={15}/></button></div></div>
       {/if}
     </section>
-    <section class="form-card"><div class="section-heading compact"><div><h2>2. Recovery drill <InsightTip label="What is a recovery drill?" text="A safe, watch-only test: Satchel imports the backup in memory and proves it derives the same first address. It never signs or moves bitcoin."/></h2><p>Prove this backup can reconstruct the same wallet before relying on it.</p></div><ClipboardCheck size={19}/></div>
+    <section class="form-card"><div class="section-heading compact"><div><h2>2. Recovery drill <InsightTip label="What is a recovery drill?" text="A safe, watch-only test: Groot imports the backup in memory and proves it derives the same first address. It never signs or moves bitcoin."/></h2><p>Prove this backup can reconstruct the same wallet before relying on it.</p></div><ClipboardCheck size={19}/></div>
       {#if drill}<div class="drill-result" class:passed={drill.matchesCurrentWallet}>{#if drill.matchesCurrentWallet}<Check size={17}/>{:else}<X size={17}/>{/if}<span><strong>{drill.matchesCurrentWallet ? 'Backup verified' : 'Backup does not match'}</strong><code>{drill.firstAddress}</code></span></div>{/if}
       <label class="file-action" class:file-loaded={Boolean(loadedBackupName)}>
         <FileUp size={16}/>
@@ -146,7 +146,7 @@
       {#if deleteError}<p class="form-error" aria-live="polite">{deleteError}</p>{/if}
     </section>
     {#if backup}<article class="backup-print-sheet" aria-label="Printable wallet descriptor backup">
-      <header><p>Satchel · Public wallet backup</p><h1>{wallet.name}</h1><strong>Watch-only descriptors — cannot spend bitcoin</strong></header>
+      <header><p>Groot · Public wallet backup</p><h1>{wallet.name}</h1><strong>Watch-only descriptors — cannot spend bitcoin</strong></header>
       <dl><div><dt>Network</dt><dd>{networkName(defaultConfig.network)}</dd></div><div><dt>Policy</dt><dd>{wallet.threshold} of {wallet.cosigners.length} signatures</dd></div><div><dt>Script</dt><dd>Native SegWit · sortedmulti</dd></div><div><dt>Created</dt><dd>{formatWalletTimestamp(wallet.createdAt)}</dd></div></dl>
       <section><h2>Cosigners</h2><ol>{#each wallet.cosigners as signer}<li><strong>{signer.label}</strong><span>Fingerprint {signer.fingerprint.toLowerCase()} · {signer.source === 'usb' ? 'USB hardware' : signer.source}</span></li>{/each}</ol></section>
       <section class="print-descriptors"><div><h2>Receive descriptor</h2>{#if receiveQr}<img src={receiveQr} alt="Receive descriptor QR code"/>{/if}<code>{wallet.externalDescriptor}</code></div><div><h2>Change descriptor</h2>{#if changeQr}<img src={changeQr} alt="Change descriptor QR code"/>{/if}<code>{wallet.internalDescriptor}</code></div></section>

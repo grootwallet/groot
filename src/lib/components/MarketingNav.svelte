@@ -1,7 +1,7 @@
 <script lang="ts">
   import { page } from '$app/state';
   import { onMount } from 'svelte';
-  import BrandMark from './BrandMark.svelte';
+  import BrandLockup from './BrandLockup.svelte';
 
   let { reversed = false, overlay = false }: { reversed?: boolean; overlay?: boolean } = $props();
   let hidden = $state(false);
@@ -70,7 +70,7 @@
 {#if !overlay}<div class="nav-slot" aria-hidden="true"></div>{/if}
 <nav class:reversed class:scrolled class:hidden class="marketing-nav" aria-label="Primary navigation">
   <div class="nav-inner">
-    <a class="mark-link" href="/marketing" aria-label="Marketing home"><BrandMark size={38} /></a>
+    <a class="mark-link" href="/marketing" aria-label="Groot marketing home"><BrandLockup variant={reversed && !scrolled ? 'reversed' : 'ink'} /></a>
 
     <div class="desktop-links">
       <a class:active={active('product')} aria-current={active('product') ? 'page' : undefined} href="/marketing/#product">Product</a>
@@ -102,7 +102,7 @@
   .nav-inner { width: min(calc(100% - 48px), 1160px); min-height: 84px; margin-inline: auto; display: flex; align-items: center; justify-content: space-between; gap: 32px; }
   a { color: inherit; text-decoration: none; }
   a:focus-visible, summary:focus-visible { outline: 2px solid currentColor; outline-offset: 4px; }
-  .mark-link { min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; }
+  .mark-link { width: 116px; min-height: 44px; display: inline-flex; align-items: center; }
   .desktop-links { display: flex; align-items: center; gap: clamp(16px, 2.15vw, 28px); font-size: 14px; }
   .desktop-links a { position: relative; min-height: 44px; display: inline-flex; align-items: center; transition: opacity 180ms ease, color 180ms ease; }
   .desktop-links a:hover { opacity: 0.7; }

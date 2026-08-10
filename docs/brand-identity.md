@@ -1,6 +1,6 @@
 # Brand identity
 
-Status: canonical V1 guidance for the symbol, application icon, palette, and brand behavior. Naming and the wordmark are deliberately provisional.
+Status: canonical V1 guidance for the adopted **Groot + Control + Newsreader Medium** identity, application icon, palette, and brand behavior. The 2026-08-10 adoption accepts the documented naming risk; it is not a claim of professional trademark clearance.
 
 This document owns brand identity. [`design-system.md`](design-system.md) owns product-interface behavior. Brand work must not silently change wallet policy, information architecture, or security-state semantics.
 
@@ -130,6 +130,33 @@ The selected brand direction is **Unified Craft**:
 
 The wallet UI keeps its current system-sans and Iowan/Baskerville/Georgia stacks for V1 unless a later screen-by-screen audit demonstrates a clear improvement. The marketing route locally bundles the reviewed Source Sans 3 `3.052R` and Source Serif 4 `4.005R` files recorded in [`marketing-site.md`](marketing-site.md); it makes no runtime font request. This does not authorize Source-font adoption in the wallet, which still requires a separate screen-by-screen, payload, rendering, and cross-platform review. Network fonts are not permitted in the wallet.
 
+### Wordmark
+
+- **Name:** Groot.
+- **Wordmark:** Newsreader Medium (`500`), stored as outlined SVG paths.
+- **Symbol:** use the existing Control symbol in the horizontal lockup and application icon.
+- **G Return:** retain as an exploration asset only. It is more distinctive alone but repeats the initial beside Groot and makes the identity dependent on a G name.
+- **Operational study type:** Manrope may appear in the internal naming study for compact labels and metadata. It is not approved as a replacement for Source Sans 3 or the wallet UI stack.
+
+The symbol canvas aligns to the wordmark baseline, then moves down by its exact `21/128` bottom inset (`16.40625%`) so the visible filled path—not the invisible SVG canvas—meets the baseline. This construction rule must replace ad hoc per-size offsets.
+
+Study fonts remain locally bundled for the noindex archive at `/marketing/wordmark`. Product and marketing surfaces use the approved outlined lockup rather than live Newsreader text.
+
+### Groot decision gate
+
+Review date: 2026-08-10. This is a preliminary product screen, not legal advice or professional trademark clearance.
+
+| Gate | Result | Decision |
+| --- | --- | --- |
+| Symbol | Pass | Advance the existing Control symbol. It is stronger in the lockup than G Return and remains useful if the name changes. |
+| Wordmark | Pass, pending font QA | Advance Groot set in Newsreader Medium (`500`). Preserve the constructed visible-path baseline rule above. |
+| Small sizes | Pass | Control remains the primary mark from 16 px upward; use the existing optical-small master below 24 px. |
+| Domain | Pass, configuration pending | `usegroot.com`, `grootbitcoin.com`, and `grootwallet.com` were acquired. Use `usegroot.com` as the canonical public and email domain; redirect the other two after DNS is configured. |
+| Market confusion | Material risk | A current Android finance application uses **Groot Pay** and describes itself as a digital wallet. The product category overlap is direct even though its custody model and market differ. |
+| Trademark | Professional clearance required | Marvel has active US GROOT registrations and an active I AM GROOT registration covering downloadable media. Search exact and similar marks in the intended US, EU, UK, French, and Andorran markets and in software, financial, security, and SaaS classes before public adoption. |
+
+**Adoption decision:** accept the recorded naming risk and adopt **Groot + Control + Newsreader Medium**. The outlined assets are canonical. Domain ownership is not represented as trademark clearance; professional review remains future legal/commercial work.
+
 Typography does not compensate for weak hierarchy with extreme weight, tracking, or size. Headlines are concise. Required instructions remain comfortably readable.
 
 ## Composition and material
@@ -164,7 +191,12 @@ Every word must earn its place.
 | [`assets/brand/mark-optical-small.svg`](../assets/brand/mark-optical-small.svg) | Canonical 16–23 px optical master |
 | [`assets/brand/app-icon-layered-source.svg`](../assets/brand/app-icon-layered-source.svg) | Modern unmasked icon source |
 | [`assets/brand/app-icon-legacy-source.svg`](../assets/brand/app-icon-legacy-source.svg) | Flattened export source |
+| [`assets/brand/lockup-horizontal-ink.svg`](../assets/brand/lockup-horizontal-ink.svg) | Canonical positive Groot lockup |
+| [`assets/brand/lockup-horizontal-reversed.svg`](../assets/brand/lockup-horizontal-reversed.svg) | Canonical reversed Groot lockup |
+| [`assets/brand/wordmark-ink.svg`](../assets/brand/wordmark-ink.svg) | Canonical positive Groot wordmark |
+| [`assets/brand/wordmark-reversed.svg`](../assets/brand/wordmark-reversed.svg) | Canonical reversed Groot wordmark |
 | [`src/lib/components/BrandMark.svelte`](../src/lib/components/BrandMark.svelte) | Product component using the master path |
+| [`src/lib/components/BrandLockup.svelte`](../src/lib/components/BrandLockup.svelte) | Shared product and marketing wordmark component |
 
 ## Status and roadmap
 
@@ -174,20 +206,20 @@ Every word must earn its place.
 - Ink/ivory primary and reversed colorways.
 - No red inside the symbol.
 - Ink-enamel application-icon direction.
+- Groot name and Newsreader Medium outlined wordmark.
 - Core brand purpose, values, personality, and voice constraints.
 
-### Provisional
+### Separately gated
 
-- The product name **Satchel**.
-- Wordmark typography and lockups.
 - Bundled Source-font adoption inside the wallet UI. Marketing-only bundling is complete.
 - Marketing imagery and motion details.
 
 ### Next
 
-1. Naming and wordmark exploration as a separate decision.
-2. Marketing-site visual language and concise messaging.
-3. Optional wallet typography/color polish with layout held constant.
-4. Final asset, documentation, accessibility, licensing, and cross-platform audit.
+1. Professionally review the remaining Groot trademark and market-confusion risk in target jurisdictions and financial/software categories.
+2. Configure `usegroot.com` with registrar lock, hardware-key 2FA, automatic renewal, DNSSEC where supported, and privacy-preserving DNS; redirect `grootbitcoin.com` and `grootwallet.com` only after the canonical site is ready.
+3. Establish the social-handle strategy and reserve the highest-value handles.
+4. Optional wallet typography/color polish with layout held constant.
+5. Final asset, documentation, accessibility, licensing, and cross-platform audit.
 
 Superseding a final item requires updating this document and every affected canonical source/export in the same change.

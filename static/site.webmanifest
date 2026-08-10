@@ -1,7 +1,7 @@
 {
-  "name": "Bitcoin self-custody wallet",
-  "short_name": "Wallet",
-  "description": "Serious tools for disciplined Bitcoin self-custody.",
+  "name": "Groot Bitcoin Wallet",
+  "short_name": "Groot",
+  "description": "Bitcoin self-custody, with proof at every step.",
   "start_url": "/marketing",
   "display": "standalone",
   "background_color": "#F7F3E9",

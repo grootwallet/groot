@@ -93,8 +93,7 @@ code { font-family: "SFMono-Regular", Consolas, ui-monospace, monospace; }
 .ui-tooltip { position: fixed; z-index: 120; width: max-content; max-width: 260px; padding: 7px 9px; border: 1px solid var(--border-strong); border-radius: 7px; color: var(--text); background: var(--panel-2); box-shadow: 0 8px 24px rgba(0,0,0,.24); font-size: 10px; line-height: 1.4; overflow-wrap: anywhere; transform: translateY(-50%); pointer-events: none; }
 .unlock-wallet-picker { margin: -7px 0 18px; display: grid; gap: 8px; }
 .unlock-wallet-picker > span { color: var(--text-soft); font-size: 11px; font-weight: 600; }
-.brand { height: 42px; display: flex; align-items: center; gap: 10px; padding: 0 8px; font-weight: 650; letter-spacing: -.02em; }
-.brand-mark { width: 29px; height: 29px; flex: 0 0 auto; border-radius: 7px; background: var(--brand-tile); color: var(--brand-mark); display: inline-flex; align-items: center; justify-content: center; }
+.brand { width: 104px; min-height: 42px; display: flex; align-items: center; padding: 0 8px; }
 .side-nav { margin-top: 34px; display: grid; gap: 4px; }
 .side-nav a, .sidebar-bottom > a { display: flex; align-items: center; gap: 11px; height: 40px; padding: 0 11px; border-radius: 7px; color: var(--muted); font-size: 14px; transition: color .16s ease, background-color .16s ease, box-shadow .16s ease; }
 .side-nav a:hover, .sidebar-bottom > a:hover { color: var(--text-soft); background: var(--surface-hover); }
@@ -233,7 +232,7 @@ code { font-family: "SFMono-Regular", Consolas, ui-monospace, monospace; }
 .load-failure > div { min-width: 0; display: grid; gap: 4px; }
 .load-failure strong { font-size: 12px; }
 .load-failure small { color: var(--muted); font-size: 10px; line-height: 1.45; overflow-wrap: anywhere; }
-.mobile-nav, .mobile-actions { display: none; }
+.mobile-brand, .mobile-nav, .mobile-actions { display: none; }
 
 .receive-card { border: 1px solid var(--border); background: var(--panel); border-radius: 12px; padding: 28px; display: flex; flex-direction: column; align-items: center; }
 .qr-placeholder { width: 190px; height: 190px; border-radius: 9px; padding: 16px; background: #f5f5f5; color: #161616; position: relative; display: flex; align-items: center; justify-content: center; }
@@ -474,10 +473,12 @@ code { font-family: "SFMono-Regular", Consolas, ui-monospace, monospace; }
 
 .onboarding-overlay { position: fixed; inset: 0; z-index: 50; color: var(--text); background-color: var(--bg); background-image: radial-gradient(circle at 50% 35%, var(--panel-2) 0%, var(--bg) 52%); overflow: auto; display: flex; flex-direction: column; }
 .app-shell.onboarding-shell .sidebar,
+.app-shell.onboarding-shell .mobile-brand,
 .app-shell.onboarding-shell .mobile-nav,
 .app-shell.onboarding-shell .mobile-actions { display: none; }
 .app-shell.onboarding-shell .main { margin-left: 0; }
 .onboarding-brand { height: 72px; padding: 0 28px; display: flex; align-items: center; gap: 9px; color: var(--text); font-size: 14px; font-weight: 600; }
+.onboarding-brand .brand-lockup { width: 104px; }
 .onboarding-brand small { margin-left: auto; color: var(--muted-2); font-size: 8px; letter-spacing: .15em; }
 .onboarding-exit { width: 34px; height: 34px; margin-left: 7px; display: grid; place-items: center; border: 1px solid var(--border); border-radius: 8px; color: var(--muted); background: var(--panel); cursor: pointer; }
 .onboarding-exit:hover { color: var(--text); border-color: var(--border-strong); }
@@ -844,8 +845,11 @@ code { font-family: "SFMono-Regular", Consolas, ui-monospace, monospace; }
   .unlock-overlay { left: 0; z-index: 50; }
   .sidebar { display: none; }
   .main { margin-left: 0; }
+  .mobile-brand { position: absolute; z-index: 80; top: max(12px, env(safe-area-inset-top)); left: 18px; width: 96px; min-height: 36px; display: flex; align-items: center; }
+  .app-shell.prototype-shell .mobile-brand { top: max(56px, calc(env(safe-area-inset-top) + 44px)); }
   .demo-banner { align-items: flex-start; gap: 3px; flex-direction: column; padding-inline: 18px; }
-  .page { padding: max(28px, env(safe-area-inset-top)) 18px 160px; }
+  .page { padding: max(68px, calc(env(safe-area-inset-top) + 56px)) 18px 160px; }
+  .app-shell.prototype-shell .page { padding-top: max(120px, calc(env(safe-area-inset-top) + 108px)); }
   .app-shell:not(.mobile-actions-visible) .page { padding-bottom: calc(84px + env(safe-area-inset-bottom)); }
   .page-header { margin-bottom: 27px; }
   .page-header h1 { font-size: 25px; }

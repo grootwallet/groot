@@ -2,7 +2,7 @@ export const MAX_TRANSFER_BYTES = 256 * 1024;
 
 export function safeTransferFilename(value: string): string {
   const normalized = value.normalize('NFKD').replace(/\p{M}+/gu, '').replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase();
-  return normalized.slice(0, 64) || 'satchel-wallet';
+  return normalized.slice(0, 64) || 'groot-wallet';
 }
 
 export function coldcardPolicyFilename(walletName: string): string {

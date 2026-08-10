@@ -1,8 +1,8 @@
-# Satchel security
+# Groot security
 
 Last internal review: 2026-08-09
 
-Satchel is security-sensitive wallet software under active development. The current native implementation is intended for disposable **regtest** testing. It has not completed an independent audit, physical hardware-wallet certification, or the mainnet release process. Do not use it with mainnet funds.
+Groot is security-sensitive wallet software under active development. The current native implementation is intended for disposable **regtest** testing. It has not completed an independent audit, physical hardware-wallet certification, or the mainnet release process. Do not use it with mainnet funds.
 
 This document summarizes the security posture and the hardening work present in this repository. Canonical controls are in [`docs/security-model.md`](docs/security-model.md); the attacker model and attack-vector register are in [`docs/mainnet-threat-model.md`](docs/mainnet-threat-model.md). Release authorization remains controlled by [`docs/mainnet-release-checklist.md`](docs/mainnet-release-checklist.md) and ADR 0012.
 
@@ -25,7 +25,7 @@ Reports should describe:
 - Rust/Tauri owns mnemonics, key derivation, credential verification, signing material, descriptors, BDK state, PSBT validation/finalization, persistence, synchronization, and broadcast.
 - Svelte owns presentation and public-data orchestration through `WalletPort`; it is not wallet truth.
 - Bitcoin Core, Esplora responses, files, QR payloads, backups, descriptors, PSBTs, HWI output, and USB devices are treated as adversarial inputs.
-- Hardware wallets remain independent external signers. Satchel never requests their seed or private keys.
+- Hardware wallets remain independent external signers. Groot never requests their seed or private keys.
 - External-signer imports accept only bounded public BIP84 material and reject seed fields, xprvs/tprvs, mainnet keys, ambiguous paths, and non-canonical descriptors.
 - The Vercel application is a deterministic browser demonstration without a wallet backend, signing keys, authentication service, hosted database, or multi-tenant state.
 
@@ -77,7 +77,7 @@ Reports should describe:
 - A proposal cannot become ready until the collected signatures satisfy BDK finalization.
 - Broadcast verifies the returned transaction ID, handles an already-known expected transaction idempotently, and atomically records accepted status with its durable notification.
 - Amounts are integer satoshis and fee rates are validated positive sat/vB values.
-- Standard public BIP129/BSMS records are bounded, private-material rejected, canonical descriptor parsed, network checked, and first-address verified. Satchel does not claim BIP129 encrypted signer-round support.
+- Standard public BIP129/BSMS records are bounded, private-material rejected, canonical descriptor parsed, network checked, and first-address verified. Groot does not claim BIP129 encrypted signer-round support.
 - Blockchain Commons UR v2 exchange accepts only bounded `crypto-psbt` payloads. Frame count, frame size, decoded size, canonical CBOR envelope, duplicate/out-of-order input, and PSBT magic are validated in Rust.
 - RBF and CPFP produce ordinary persisted PSBT proposals and therefore cannot bypass transaction review, signer identity, exact-PSBT merge validation, credential checks, or finalization.
 - Recovery scan birthday and gap limit are bounded and persisted. Receive revelation and actual PSBT change output creation fail before exceeding that gap, including after canceled proposal churn, and the setting cannot be lowered below already-derived receive/change requirements. Full rescan is credential authenticated; the interface warns that a birthday set too late can omit history.
@@ -91,7 +91,7 @@ Reports should describe:
 - Mounted public-key files are capped at 256 KiB and reject private/recovery material, extended private keys, wrong-network origins, malformed fingerprints, and non-tpub account keys before Rust descriptor validation.
 - Every operation carries an explicit test/main chain, freshly enumerated device type and path, and exact expected fingerprint matching.
 - Duplicate HWI records for one connection path are rejected as ambiguous. The persisted BDK external and internal descriptors are revalidated against authenticated hardware-wallet metadata on every database open.
-- External-signer and multisig receive screens distinguish unverified Satchel derivation from durable, address-specific on-device verification evidence. Verification re-enumerates the device, matches the saved policy fingerprint, derives the exact descriptor index in Rust, invokes the trusted display, and appends an immutable timestamped event only after the returned address decodes to the identical output script. Text must match exactly on the same network; the sole cross-prefix exception is Ledger Bitcoin Test on Regtest, where `tb1` and `bcrt1` encodings are accepted only when Rust proves their decoded scriptPubKeys are identical.
+- External-signer and multisig receive screens distinguish unverified Groot derivation from durable, address-specific on-device verification evidence. Verification re-enumerates the device, matches the saved policy fingerprint, derives the exact descriptor index in Rust, invokes the trusted display, and appends an immutable timestamped event only after the returned address decodes to the identical output script. Text must match exactly on the same network; the sole cross-prefix exception is Ledger Bitcoin Test on Regtest, where `tb1` and `bcrt1` encodings are accepted only when Rust proves their decoded scriptPubKeys are identical.
 - User rejection, timeout, unavailable/busy hardware, missing xpubs, identity mismatch, malformed responses, and oversized output map to stable safe errors.
 - USB hardware support is integration-ready, not physically certified. Vendor/model/firmware/host combinations must complete [`docs/hardware-certification.md`](docs/hardware-certification.md).
 

@@ -1,5 +1,6 @@
 User-agent: *
 Allow: /marketing
+Disallow: /marketing/wordmark
 Allow: /llms.txt
 Allow: /llms-full.txt
 Allow: /favicon.svg

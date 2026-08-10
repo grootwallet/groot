@@ -12,6 +12,8 @@ test('marketing proof and public evidence routes stay honest and responsive', as
   const mobile = (page.viewportSize()?.width ?? 1180) <= 760;
 
   await page.goto('/marketing');
+  await expect(page).toHaveTitle('Groot · Hold your own');
+  await expect(page.getByRole('link', { name: 'Groot marketing home' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Hold your own.' })).toBeVisible();
   await expect(page.locator('.hero .marketing-nav')).toHaveCount(0);
   await expect(page.getByText('Test-network release. Mainnet is not enabled.').first()).toBeVisible();
@@ -79,10 +81,51 @@ test('marketing proof and public evidence routes stay honest and responsive', as
   await expect(page.locator('.marketing-nav a[aria-current="page"]').first()).toContainText('Documentation');
   await expectNoHorizontalOverflow(page);
 
+  await page.goto('/marketing/wordmark');
+  await expect(page.getByRole('heading', { name: 'Built to hold.' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'One skeleton. Three endings.' })).toBeVisible();
+  await expect(page.locator('.mark-card')).toHaveCount(3);
+  await expect(page.getByRole('heading', { name: 'Three serifs. One sans.' })).toBeVisible();
+  await expect(page.locator('.serif-card')).toHaveCount(4);
+  await expect(page.locator('.digital-card')).toHaveCount(4);
+  await expect(page.getByRole('heading', { name: 'Two names. Two marks.' })).toBeVisible();
+  await expect(page.locator('.finalist-card')).toHaveCount(4);
+  await expect(page.locator('.finalist-primary b').filter({ hasText: 'Groot' })).toHaveCount(2);
+  await expect(page.getByRole('heading', { name: 'One name. One mark.' })).toBeVisible();
+  await expect(page.locator('.decision-card')).toHaveCount(2);
+  await expect(page.locator('.system-option')).toHaveCount(3);
+  await expect(page.locator('.final-verdict')).toContainText('Advance Groot + Control.');
+  await expect(page.locator('.gate-board')).toContainText('Candidate approved internally.');
+  await expect(page.locator('.gate-board .gate-pass')).toHaveCount(3);
+  await expect(page.locator('.gate-board .gate-hold')).toHaveCount(2);
+  await expect(page.locator('.production-master img')).toHaveCount(5);
+  await expect(page.getByRole('heading', { name: 'Earlier Grove direction.' })).toBeVisible();
+  await expect(page.locator('.campaign-hero')).toBeVisible();
+  await expect(page.locator('.campaign-hero > img')).toHaveAttribute('src', '/marketing/hero-mountain-grove.jpg');
+  await expect(page.locator('.product-proof')).toBeVisible();
+  await expect(page.locator('.candidate')).toHaveCount(9);
+  await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'noindex,nofollow');
+  await expectNoHorizontalOverflow(page);
+
   const llms = await request.get('/llms.txt');
   expect(llms.ok()).toBe(true);
   expect(await llms.text()).toContain('Mainnet is compile-time disabled');
   const robots = await request.get('/robots.txt');
   expect(robots.ok()).toBe(true);
   expect(await robots.text()).toContain('Allow: /marketing');
+});
+
+test('outlined Groot candidate masters render without overflow', async ({ page }) => {
+  await page.goto('/marketing/wordmark');
+
+  const master = page.locator('.production-master');
+  await expect(master).toBeVisible();
+  await expect(master.getByText('The exact exported asset—not live browser type.')).toBeVisible();
+  await expect(master.locator('img')).toHaveCount(5);
+
+  const loaded = await master.locator('img').evaluateAll((images) =>
+    images.every((image) => image instanceof HTMLImageElement && image.complete && image.naturalWidth > 0)
+  );
+  expect(loaded).toBe(true);
+  await expectNoHorizontalOverflow(page);
 });

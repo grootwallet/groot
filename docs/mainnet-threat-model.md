@@ -1,4 +1,4 @@
-# Satchel wallet and coordinator threat model
+# Groot wallet and coordinator threat model
 
 Status: living pre-release security model. Mainnet is blocked until every release-gated item has independent evidence and explicit approval.
 
@@ -6,7 +6,7 @@ Last reviewed: 2026-08-09
 
 ## Scope
 
-This model covers Satchel's software single-key wallet, public-only external-signer wallet, multisig coordinator, native/webview boundary, local persistence, Bitcoin Core connection, HWI process and USB boundary, PSBT/BSMS/UR/file interchange, build pipeline, and recovery lifecycle. It covers confidentiality, signing authorization, transaction integrity, recoverability, privacy, and availability from entropy generation through deletion.
+This model covers Groot's software single-key wallet, public-only external-signer wallet, multisig coordinator, native/webview boundary, local persistence, Bitcoin Core connection, HWI process and USB boundary, PSBT/BSMS/UR/file interchange, build pipeline, and recovery lifecycle. It covers confidentiality, signing authorization, transaction integrity, recoverability, privacy, and availability from entropy generation through deletion.
 
 Browser fixtures, virtual signers, regtest automation, and the static web demo are test surfaces, not production custody systems. Lightning, cloud backup, arbitrary Miniscript editing, payjoin, collaborative transaction protocols, hosted multi-tenant storage, and background push while terminated are outside the current product. Adding one requires a threat-model update before implementation.
 
@@ -30,20 +30,20 @@ Browser fixtures, virtual signers, regtest automation, and the static web demo a
 ## Trust boundaries and assumptions
 
 - Rust/Tauri is the trusted computing base for entropy, keys, credentials, descriptors, policy, PSBTs, persistence, sync, and broadcast. Svelte is an untrusted presentation/orchestration surface for security decisions.
-- The operating system kernel CSPRNG and platform secret store are trusted to meet their documented security contracts. Satchel cannot independently prove the physical entropy sources, firmware, hypervisor, or CPU implementation beneath them.
+- The operating system kernel CSPRNG and platform secret store are trusted to meet their documented security contracts. Groot cannot independently prove the physical entropy sources, firmware, hypervisor, or CPU implementation beneath them.
 - Bitcoin cryptography, BIP39, BDK, Miniscript, secp256k1, AEAD, Argon2id, and pinned dependencies are assumed correct within their reviewed use. Supply-chain compromise remains an explicit threat.
 - Bitcoin Core, remote services, the network, filesystem contents, clipboard, camera, QR/file/UR/BSMS/PSBT inputs, HWI output, and USB devices may be malicious.
 - Hardware wallets protect their own keys only to the extent of their firmware, hardware, backup, passphrase practice, and on-device verification. The host can deny service or lie about coordinator UI.
-- A fully compromised privileged OS can read process memory, alter native UI, replace binaries, or drive user input. Satchel reduces exposure and blast radius but cannot preserve a hot software key against an active privileged compromise.
+- A fully compromised privileged OS can read process memory, alter native UI, replace binaries, or drive user input. Groot reduces exposure and blast radius but cannot preserve a hot software key against an active privileged compromise.
 - Users may make mistakes. Safety-critical flows must make the complete address, amount, fee, policy, network, backup requirement, and irreversible action reviewable, but software cannot guarantee attentive review.
 
 ## Entropy and key-generation decision
 
 Software-wallet creation requests exactly one 32-byte buffer from Rust `OsRng`. In the pinned dependency path, `OsRng` delegates to `getrandom`, which selects the native OS CSPRNG for supported targets: Darwin `getentropy`/Apple Security, Windows `BCryptGenRandom`, and Linux/Android kernel `getrandom`. Without optional supplemental input, BIP39 consumes those 256 bits directly and produces 24 words.
 
-Satchel uses the fallible `try_fill_bytes` path. Any error aborts with `entropy_unavailable`; partial data is never accepted and there is no fallback to a clock, process identifier, browser API, user interaction, deterministic seed, user-space PRNG, or raw CPU RNG. The fixed-size entropy buffer, BIP39 mnemonic object's internal word indices, and derived seed are zeroized on success and every error path. Production mnemonic generation is Rust-only; deterministic entropy exists only in test code and browser fixtures that have no production wallet backend.
+Groot uses the fallible `try_fill_bytes` path. Any error aborts with `entropy_unavailable`; partial data is never accepted and there is no fallback to a clock, process identifier, browser API, user interaction, deterministic seed, user-space PRNG, or raw CPU RNG. The fixed-size entropy buffer, BIP39 mnemonic object's internal word indices, and derived seed are zeroized on success and every error path. Production mnemonic generation is Rust-only; deterministic entropy exists only in test code and browser fixtures that have no production wallet backend.
 
-An advanced user may optionally enter 128–256 physical coin flips or 50–100 physical six-sided-die rolls. The renderer sees this transcript, so Rust treats it as adversarial and never as a substitute for OS entropy. Rust validates the source, alphabet, and length; hashes the source, count, and outcomes under `Satchel supplemental entropy transcript v1`; then hashes the 32 OS bytes and transcript digest with length framing under `Satchel BIP39 entropy mix v1`. Rust-side transcript, digest, OS, and mixed buffers use zeroizing storage; JavaScript strings cannot be reliably overwritten, so the UI only drops its transcript references immediately after the attempt starts. Fair independent physical outcomes may add uncertainty, but Satchel cannot measure their fairness, transcription accuracy, independence, or secrecy and makes no supplemental bit-strength guarantee.
+An advanced user may optionally enter 128–256 physical coin flips or 50–100 physical six-sided-die rolls. The renderer sees this transcript, so Rust treats it as adversarial and never as a substitute for OS entropy. Rust validates the source, alphabet, and length; hashes the source, count, and outcomes under `Groot supplemental entropy transcript v1`; then hashes the 32 OS bytes and transcript digest with length framing under `Groot BIP39 entropy mix v1`. Rust-side transcript, digest, OS, and mixed buffers use zeroizing storage; JavaScript strings cannot be reliably overwritten, so the UI only drops its transcript references immediately after the attempt starts. Fair independent physical outcomes may add uncertainty, but Groot cannot measure their fairness, transcription accuracy, independence, or secrecy and makes no supplemental bit-strength guarantee.
 
 The OS pool may be seeded partly by hardware random generators, interrupt timing, device events, and other sources, depending on the platform. Directly requiring or trusting a CPU/hardware TRNG alone would be less portable and would add firmware, virtualization, health-test, and availability failure modes. Therefore the defensible guarantee is **256 bits requested from the native OS CSPRNG**, not “an independently verified 256 bits of physical entropy” or “impossible to crack.” Seed search is computationally infeasible when that trust assumption holds, but weak BIP39 passphrases, exposed backups, compromised hosts, implementation bugs, and coercion remain separate risks.
 
@@ -139,7 +139,7 @@ Passing dummy, simulator, or unit tests is not physical-device, operating-system
 - A privileged compromised host can capture a hot software key, substitute public transaction intent, manipulate native UI, or deny service. Hardware multisig across independently administered devices reduces key-extraction risk but does not make the coordinator display trustworthy.
 - Users can approve a wrong full address or malicious hardware display, lose or expose words/passphrases/descriptors, create correlated signer backups, or choose recovery scan parameters that omit history.
 - Backends and public metadata expose timing, balances, transaction graph, xpub/descriptor-derived addresses, and network identity. Tor reduces transport linkage but does not make wallet queries information-free.
-- Flash deletion, cloud/system backups, swap, crash dumps, cameras, and accessibility tooling may retain sensitive data beyond Satchel's control.
+- Flash deletion, cloud/system backups, swap, crash dumps, cameras, and accessibility tooling may retain sensitive data beyond Groot's control.
 - Complex recovery/timelock behavior, firmware differences, reorgs, large histories, and release/update infrastructure require independent and physical evidence; code review alone is insufficient.
 
 ## Mainnet authorization gates

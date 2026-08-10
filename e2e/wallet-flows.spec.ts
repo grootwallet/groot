@@ -36,7 +36,7 @@ test('creates a 24-word wallet and clears onboarding secrets', async ({ page }) 
   await page.goto('/welcome?fixture-empty=1');
   await page.getByRole('button', { name: 'Create new wallet' }).click();
   await expect(page.locator('.wallet-type-card')).toHaveCount(3);
-  await expect(page.getByText('Satchel creates the wallet and its recovery words here.')).toBeVisible();
+  await expect(page.getByText('Groot creates the wallet and its recovery words here.')).toBeVisible();
   await expect(page.getByText('Approve payments on a separate signing device.')).toBeVisible();
   await expect(page.getByText('Share control or build in a recovery path.')).toBeVisible();
   await chooseSoftwareWallet(page);
@@ -325,7 +325,7 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   await expect(page.getByRole('heading', { name: 'Sign on your hardware' })).toBeVisible();
   const psbtDownload = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Save unsigned PSBT' }).click();
-  await expect((await psbtDownload).suggestedFilename()).toMatch(/^satchel-.+\.psbt$/);
+  await expect((await psbtDownload).suggestedFilename()).toMatch(/^groot-.+\.psbt$/);
   await expect(page.getByText('PSBT saved', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Show unsigned QR' }).click();
   const unsignedQrDialog = page.getByRole('dialog', { name: 'Unsigned PSBT' });
@@ -377,9 +377,11 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   await page.getByRole('link', { name: 'Settings' }).click();
   await page.getByRole('button', { name: /Export public descriptor/ }).click();
   const descriptorDialog = page.getByRole('dialog', { name: 'Export public descriptor' });
-  const warningBox = await descriptorDialog.locator('.warning-box').boundingBox();
-  const pinLabel = await descriptorDialog.locator('.password-field .field-label').boundingBox();
-  expect((pinLabel?.y ?? 0) - ((warningBox?.y ?? 0) + (warningBox?.height ?? 0))).toBeGreaterThanOrEqual(16);
+  await expect.poll(async () => {
+    const warningBox = await descriptorDialog.locator('.warning-box').boundingBox();
+    const pinLabel = await descriptorDialog.locator('.password-field .field-label').boundingBox();
+    return (pinLabel?.y ?? 0) - ((warningBox?.y ?? 0) + (warningBox?.height ?? 0));
+  }).toBeGreaterThanOrEqual(16);
   await descriptorDialog.getByLabel('App PIN', { exact: true }).fill('wrong-pin');
   await descriptorDialog.getByRole('button', { name: 'Prepare backup' }).click();
   await expect(descriptorDialog.getByRole('alert')).toHaveText('Incorrect app PIN.');
@@ -396,7 +398,7 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   await identifierDialog.getByRole('button', { name: 'Close' }).click();
   const descriptorDownload = page.waitForEvent('download');
   await descriptorDialog.getByRole('button', { name: 'Save descriptor' }).click();
-  await expect((await descriptorDownload).suggestedFilename()).toBe('satchel-hardware-wallet.json');
+  await expect((await descriptorDownload).suggestedFilename()).toBe('groot-hardware-wallet.json');
   await expect(page.getByText('Descriptor backup saved', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Close' }).click();
   await page.getByRole('button', { name: /Bitcoin Core node/ }).click();
@@ -413,7 +415,7 @@ test('imports a public hardware backup without requiring a wallet name first', a
   await page.goto('/hardware/new');
   await expect(page.getByLabel('Wallet name')).toHaveValue('');
   await page.getByLabel('Import public key file').setInputFiles({
-    name: 'satchel-hardware-wallet.json',
+    name: 'groot-hardware-wallet.json',
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify({
       version: 1,
@@ -422,7 +424,7 @@ test('imports a public hardware backup without requiring a wallet name first', a
     }))
   });
   await expect(page.getByText('PUBLIC DATA REVIEW')).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'satchel hardware wallet' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'groot hardware wallet' })).toBeVisible();
   await expect(page.getByText("m/84'/1'/0'")).toBeVisible();
   await expect(page.getByText('Review the public backup identity.')).toBeVisible();
   await expect(page.getByText(/verify the first receive address on the hardware wallet/)).toBeVisible();
@@ -469,7 +471,7 @@ test('unlocks a Trezor before choosing its standard single-key wallet', async ({
   await expect(unlocked.getByText('Choose wallet')).toBeVisible();
   await unlocked.click();
   const standard = page.getByRole('dialog', { name: 'Use Trezor standard wallet?' });
-  await expect(standard.getByText(/add it to Satchel as a separate wallet/)).toBeVisible();
+  await expect(standard.getByText(/add it to Groot as a separate wallet/)).toBeVisible();
   await standard.getByRole('button', { name: 'Use standard wallet' }).click();
 
   await expect(page.getByText('PUBLIC DATA REVIEW')).toBeVisible();
@@ -693,7 +695,7 @@ test('send reviews a proposal and rejects a wrong credential', async ({ page }) 
   await expect(paymentProgress).toContainText('Intent');
   await expect(paymentProgress).toContainText('Amount & fee');
   await expect(paymentProgress).toContainText('Review & sign');
-  await expect(page.getByRole('region', { name: 'Payment signers' })).toContainText('Satchel app');
+  await expect(page.getByRole('region', { name: 'Payment signers' })).toContainText('Groot app');
   await page.getByLabel('Bitcoin address').fill('bcrt1qreceiver0000000000000000000000000000000');
   await page.getByLabel('Payment label').fill('Test payment');
   await page.getByRole('button', { name: 'Continue to amount' }).click();

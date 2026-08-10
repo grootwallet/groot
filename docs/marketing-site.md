@@ -1,6 +1,6 @@
 # Marketing site
 
-Status: canonical V1 direction for marketing structure, claims, and product proof. The SvelteKit implementation lives at `/marketing`; the product name and wordmark remain unresolved. Until they are selected, compositions use the approved symbol without a temporary name.
+Status: canonical V1 direction for marketing structure, claims, and product proof. The SvelteKit implementation lives at `/marketing`; the public identity is Groot + Control using the approved outlined lockup.
 
 This document owns the public presentation layer. [`brand-identity.md`](brand-identity.md) owns identity, [`product-spec.md`](product-spec.md) owns product behavior, and [`implementation-status.md`](implementation-status.md) owns the evidence behind every capability claim.
 
@@ -25,7 +25,7 @@ Until the mainnet release gate is satisfied, every public product page carries t
 - Approved symbol at the canonical minimum size or larger.
 - Links: `Product`, `Principles`, `Security`, `Documentation`.
 - Primary action before mainnet: `View development status`.
-- Do not place a provisional name beside the symbol.
+- Use the canonical Groot lockup in persistent brand positions; use the symbol alone only where the minimum lockup width cannot be met.
 - The header is fixed, hides during deliberate downward reading, and returns immediately when the user scrolls upward. It remains visible near the top and while the mobile menu is open.
 - The active destination uses `aria-current="page"`, stronger weight, and a restrained underline or mobile accent. Product and Principles activate from their visible home-page sections.
 - Desktop navigation collapses to the complete mobile menu before labels become crowded; no destination disappears at intermediate widths.
@@ -231,7 +231,9 @@ Every changed capability claim must be checked against [`implementation-status.m
 
 ## Naming boundary
 
-The marketing system must work before a name is chosen. Do not use `Satchel` in new public marketing copy, create a temporary wordmark, or distort the symbol to suggest an initial.
+The marketing system uses **Groot** consistently. Do not retype the wordmark in a nearby serif or distort the canonical symbol to suggest an initial.
+
+The noindex `/marketing/wordmark` route remains an internal decision archive. It may render rejected names and experimental symbols, but it must remain excluded from indexing and must not be linked as a public product destination. The canonical production masters live in `assets/brand/`.
 
 Naming remains open. The current brief requires a familiar, memorable word or compact compound whose surface meaning relates closely to personal ownership, independence, disciplined freedom, or uncompromising standards. A historical reference that requires explanation is insufficient on its own.
 
@@ -243,4 +245,4 @@ Naming remains open. The current brief requires a familiar, memorable word or co
 4. **Implemented:** nameless favicon, manifest, and social preview using the canonical symbol.
 5. **Implemented locally; repeat on the production domain:** accessibility, responsive, claim, privacy, performance, and asset-provenance review.
 6. **Open:** canonical domain, production hosting/security headers, and final external-link verification after the repository visibility decision.
-7. **Deferred by decision:** product name and wordmark.
+7. **In clearance:** Groot + Control with Newsreader is the leading internal direction; public adoption, canonical exports, and domain selection remain deferred until clearance.

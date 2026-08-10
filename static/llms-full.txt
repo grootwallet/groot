@@ -1,8 +1,8 @@
-# Bitcoin self-custody wallet: expanded public brief
+# Groot Bitcoin self-custody wallet: expanded public brief
 
 ## Purpose
 
-The wallet exists to make serious Bitcoin self-custody understandable, verifiable, recoverable, and portable. Its central belief is that freedom becomes durable through discipline. The user remains the authority; every important security claim should name its mechanism and evidence.
+Groot exists to make serious Bitcoin self-custody understandable, verifiable, recoverable, and portable. Its central belief is that freedom becomes durable through discipline. The user remains the authority; every important security claim should name its mechanism and evidence.
 
 ## Current product
 

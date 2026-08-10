@@ -325,7 +325,7 @@ fn trusted_hwi_path() -> PathBuf {
     #[cfg(target_os = "linux")]
     return first_existing_absolute(&["/usr/bin/hwi", "/usr/local/bin/hwi"]);
     #[cfg(target_os = "windows")]
-    return PathBuf::from(r"C:\Program Files\Satchel\hwi.exe");
+    return PathBuf::from(r"C:\Program Files\Groot\hwi.exe");
     #[allow(unreachable_code)]
     PathBuf::from("/unsupported-platform/hwi")
 }

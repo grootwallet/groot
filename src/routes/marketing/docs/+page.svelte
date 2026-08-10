@@ -14,8 +14,7 @@
 </script>
 
 <svelte:head>
-  <title>Documentation · Hold your own</title>
-  <meta name="description" content="Canonical product, security, architecture, implementation, and release documentation for the Bitcoin wallet." />
+  <meta name="description" content="Canonical product, security, architecture, implementation, and release documentation for Groot." />
   <meta name="theme-color" content="#F7F3E9" />
   <meta property="og:title" content="Read the system" />
   <meta property="og:description" content="Product behavior, security boundaries, implementation evidence, and release blockers." />

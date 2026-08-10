@@ -100,14 +100,13 @@
 </script>
 
 <svelte:head>
-  <title>Hold your own</title>
-  <meta name="description" content="Serious tools for disciplined Bitcoin self-custody." />
+  <meta name="description" content="Groot is a Bitcoin self-custody wallet built for verifiable signing and portable recovery." />
   <meta name="theme-color" content="#102a4c" />
-  <meta property="og:title" content="Hold your own" />
+  <meta property="og:title" content="Groot · Hold your own" />
   <meta property="og:description" content="Bitcoin self-custody, with proof at every step." />
   <meta property="og:type" content="website" />
   <meta property="og:image" content="/marketing/social-card.png" />
-  <meta name="twitter:title" content="Hold your own" />
+  <meta name="twitter:title" content="Groot · Hold your own" />
   <meta name="twitter:description" content="Bitcoin self-custody, with proof at every step." />
   <meta name="twitter:image" content="/marketing/social-card.png" />
   <meta name="twitter:card" content="summary_large_image" />

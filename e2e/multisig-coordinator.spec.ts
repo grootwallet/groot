@@ -61,7 +61,7 @@ test('spends end-to-end from the ready-made demo vault', async ({ page }) => {
   const psbtDownload = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Save PSBT' }).click();
   const downloadedPsbt = await psbtDownload;
-  await expect(downloadedPsbt.suggestedFilename()).toMatch(/^satchel-.+\.psbt$/);
+  await expect(downloadedPsbt.suggestedFilename()).toMatch(/^groot-.+\.psbt$/);
   const savedChunks: Buffer[] = [];
   for await (const chunk of await downloadedPsbt.createReadStream()) savedChunks.push(Buffer.from(chunk));
   const savedPsbt = Buffer.concat(savedChunks).toString('utf8');
@@ -317,7 +317,7 @@ test('explains hardware readiness before scanning', async ({ page }) => {
   await help.getByRole('button', { name: 'Trezor' }).click();
   await expect(help.getByText(/quit Trezor Suite completely/)).toBeVisible();
   await expect(help.getByText(/locked Model One is expected/)).toBeVisible();
-  await expect(help.getByText(/Never enter a seed into Satchel/)).toBeVisible();
+  await expect(help.getByText(/Never enter a seed into Groot/)).toBeVisible();
   await help.getByRole('button', { name: 'Scan for devices' }).click();
   const scan = page.getByRole('dialog', { name: 'Connect hardware device' });
   await expect(scan.getByText('Unlock the signer, then release its USB connection')).toBeVisible();
@@ -517,7 +517,7 @@ test('creates and verifies a simple 2-of-3 descriptor wallet', async ({ page }) 
   await page.getByRole('link', { name: 'Return to vault' }).click();
   await page.getByRole('link', { name: 'Export & verify' }).click();
   const exportCard = page.locator('.backup-export-card');
-  await page.getByRole('button', { name: /Satchel JSON/ }).click();
+  await page.getByRole('button', { name: /Groot JSON/ }).click();
   await expect(exportCard.getByText('Re-authenticate this export')).toBeVisible();
   await expect(exportCard.getByText(/exported descriptor is not encrypted/)).toBeVisible();
   await page.getByLabel('Backup app PIN', { exact: true }).fill('wrong-pin');

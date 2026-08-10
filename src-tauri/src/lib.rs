@@ -99,5 +99,5 @@ pub fn run() {
             wallet::wallet_reset_regtest,
         ])
         .run(tauri::generate_context!())
-        .expect("error while running Satchel");
+        .expect("error while running Groot");
 }

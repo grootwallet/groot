@@ -1,10 +1,10 @@
-# Satchel agent guide
+# Groot agent guide
 
 This file is the entry point for humans and coding agents. Read it before changing the repository.
 
 ## Mission
 
-Satchel is a deliberately small, non-custodial, onchain Bitcoin wallet for desktop, iOS, and Android. Product simplicity must not weaken key isolation, transaction review, address privacy, or recoverability.
+Groot is a deliberately small, non-custodial, onchain Bitcoin wallet for desktop, iOS, and Android. Product simplicity must not weaken key isolation, transaction review, address privacy, or recoverability.
 
 ## Start here
 

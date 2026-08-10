@@ -13,14 +13,14 @@ describe('air-gapped transfer validation', () => {
 
   it('creates bounded portable filenames without path characters', () => {
     expect(safeTransferFilename(' Family / Vault: été ')).toBe('family-vault-ete');
-    expect(safeTransferFilename('///')).toBe('satchel-wallet');
+    expect(safeTransferFilename('///')).toBe('groot-wallet');
     expect(safeTransferFilename('x'.repeat(100))).toHaveLength(64);
   });
 
   it('creates a Coldcard-compatible descriptor policy filename', () => {
     expect(coldcardPolicyFilename('Family Vault')).toBe('family-vault.txt');
     expect(coldcardPolicyFilename('Tresorerie familiale ete')).toBe('tresorerie-familiale.txt');
-    expect(coldcardPolicyFilename('///')).toBe('satchel-wallet.txt');
+    expect(coldcardPolicyFilename('///')).toBe('groot-wallet.txt');
     expect(coldcardPolicyFilename('x'.repeat(100)).slice(0, -4)).toHaveLength(20);
   });
 });

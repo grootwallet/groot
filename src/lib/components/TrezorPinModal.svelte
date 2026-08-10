@@ -43,7 +43,7 @@
 <Modal
   {open}
   title="Unlock {brand}"
-  description="Use the shuffled matrix shown only on your device. Satchel receives positions, never your PIN digits."
+  description="Use the shuffled matrix shown only on your device. Groot receives positions, never your PIN digits."
   {onclose}
 >
   <div class="pin-matrix-flow">
@@ -51,7 +51,7 @@
       <LockKeyhole size={18}/>
       <span>
         <strong>Match locations, not numbers</strong>
-        <small>Find each PIN digit on the Trezor screen, then tap the blank Satchel cell in the same location. Never enter recovery words or a hardware passphrase here.</small>
+        <small>Find each PIN digit on the Trezor screen, then tap the blank Groot cell in the same location. Never enter recovery words or a hardware passphrase here.</small>
       </span>
     </div>
     {#if positions}

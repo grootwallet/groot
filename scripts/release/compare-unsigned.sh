@@ -6,9 +6,9 @@ if [[ $# -ne 2 ]]; then
   exit 2
 fi
 
-first="$1/satchel"
-second="$2/satchel"
-[[ -f "$first" && -f "$second" ]] || { echo "Both directories must contain a satchel binary." >&2; exit 1; }
+first="$1/groot"
+second="$2/groot"
+[[ -f "$first" && -f "$second" ]] || { echo "Both directories must contain a groot binary." >&2; exit 1; }
 
 first_hash="$(shasum -a 256 "$first" | awk '{print $1}')"
 second_hash="$(shasum -a 256 "$second" | awk '{print $1}')"

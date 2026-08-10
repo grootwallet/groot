@@ -2,6 +2,7 @@
   import { ArrowLeft, ArrowRight, Check, Cpu, Eye, EyeOff, KeyRound, ShieldCheck, Users, X } from '@lucide/svelte';
   import Button from '$lib/components/Button.svelte';
   import BrandMark from '$lib/components/BrandMark.svelte';
+  import BrandLockup from '$lib/components/BrandLockup.svelte';
   import PasswordField from '$lib/components/PasswordField.svelte';
   import SetupProgress from '$lib/components/SetupProgress.svelte';
   import { toast } from '$lib/stores/toasts';
@@ -165,7 +166,7 @@
 </script>
 
 <div class="onboarding-overlay">
-  <header class="onboarding-brand"><span class="brand-mark"><BrandMark /></span><span>Satchel</span><small>{networkName(defaultConfig.network).toUpperCase()}</small>{#if hasExistingWallet}<button class="onboarding-exit" aria-label="Close wallet setup" onclick={returnToWallet}><X size={17}/></button>{/if}</header>
+  <header class="onboarding-brand"><BrandLockup /><small>{networkName(defaultConfig.network).toUpperCase()}</small>{#if hasExistingWallet}<button class="onboarding-exit" aria-label="Close wallet setup" onclick={returnToWallet}><X size={17}/></button>{/if}</header>
   <main class="onboarding-card" class:wallet-choice-card={mode === 'choose'}>
     {#if mode === 'home'}
       <span class="hero-mark"><BrandMark size={34} /></span><h1>{hasExistingWallet ? 'Add a wallet' : 'Your bitcoin.\nSimply held.'}</h1><p>{hasExistingWallet ? 'Choose how this wallet will be secured.' : 'Create a new wallet or recover one you already own.'}</p><div class="onboarding-actions simple"><Button size="large" class="full" onclick={() => mode = 'choose'}>Create new wallet<ArrowRight size={17} /></Button><Button size="large" variant="secondary" class="full" onclick={() => mode = 'recover'}>Recover wallet</Button></div><div class="trust-line"><ShieldCheck size={15} />Non-custodial · Onchain only</div>
@@ -177,7 +178,7 @@
       <div class="wallet-type-grid">
         <button class="wallet-type-card recommended" onclick={() => mode = 'create'}>
           <span class="wallet-type-icon"><KeyRound size={20} /></span>
-          <span class="wallet-type-copy"><strong>Use this device</strong><small>Satchel creates the wallet and its recovery words here.</small></span>
+          <span class="wallet-type-copy"><strong>Use this device</strong><small>Groot creates the wallet and its recovery words here.</small></span>
           <span class="wallet-type-meta">Simplest</span>
           <ArrowRight class="wallet-type-arrow" size={17} />
         </button>
@@ -198,11 +199,11 @@
       <button class="back-link" onclick={() => { chooseSupplementalSource('none'); mode = 'choose'; }}><ArrowLeft size={16} />Back</button>
       <SetupProgress steps={softwareSteps} current={1} label="Software wallet setup progress" context="SOFTWARE WALLET"/>
       <h1>Generate wallet</h1>
-      <p>Satchel will generate 24 recovery words securely on this device. Write them down in order and keep them offline.</p>
+      <p>Groot will generate 24 recovery words securely on this device. Write them down in order and keep them offline.</p>
       <div class="setup-points"><div><ShieldCheck size={18}/><span><strong>You control the keys</strong><small>No account, email, or cloud backup.</small></span></div><div><KeyRound size={18}/><span><strong>Recovery words are the backup</strong><small>Anyone with them can spend your funds.</small></span></div></div>
       <details class="supplemental-entropy">
         <summary>Advanced: add physical randomness</summary>
-        <p>Optional. Satchel always requires 256-bit operating-system randomness. Physical results are mixed in only as an additional input.</p>
+        <p>Optional. Groot always requires 256-bit operating-system randomness. Physical results are mixed in only as an additional input.</p>
         <div class="entropy-source-options" role="group" aria-label="Supplemental entropy source">
           <button class:active={supplementalSource === 'none'} aria-pressed={supplementalSource === 'none'} onclick={() => chooseSupplementalSource('none')}>None</button>
           <button class:active={supplementalSource === 'coin'} aria-pressed={supplementalSource === 'coin'} onclick={() => chooseSupplementalSource('coin')}>Coin flips</button>
@@ -295,21 +296,21 @@
       <button class="back-link" onclick={backFromPassphrase}><ArrowLeft size={16} />Back</button>
       <SetupProgress steps={softwareSteps} current={3} label="Software wallet setup progress" context="SOFTWARE WALLET"/>
       <h1>Protect your wallet</h1>
-      <p class="credential-intro">Choose the BIP39 wallet passphrase that completes this backup. The same passphrase unlocks Satchel.</p>
-      {#if !backupVerified}<div class="backup-unverified-note" role="status"><ShieldCheck size={17}/><span><strong>Backup not verified yet</strong><small>You can use the wallet now, but Satchel will keep reminding you to verify the written words.</small></span></div>{/if}
+      <p class="credential-intro">Choose the BIP39 wallet passphrase that completes this backup. The same passphrase unlocks Groot.</p>
+      {#if !backupVerified}<div class="backup-unverified-note" role="status"><ShieldCheck size={17}/><span><strong>Backup not verified yet</strong><small>You can use the wallet now, but Groot will keep reminding you to verify the written words.</small></span></div>{/if}
       <div class="credential-form">
         <label class="field">
           <span>Wallet name</span>
           <input bind:value={walletName} maxlength="48" placeholder="My wallet" />
         </label>
-        <PasswordField label="Wallet passphrase" bind:value={passphrase} placeholder="Enter a strong passphrase" autocomplete="new-password" hint="Keep it with your recovery words. It also unlocks Satchel on this device." error={passphraseError}/>
+        <PasswordField label="Wallet passphrase" bind:value={passphrase} placeholder="Enter a strong passphrase" autocomplete="new-password" hint="Keep it with your recovery words. It also unlocks Groot on this device." error={passphraseError}/>
         <PasswordField label="Confirm wallet passphrase" bind:value={confirmation} placeholder="Enter it again" autocomplete="new-password" error={confirmation && passphrase !== confirmation ? 'Passphrases do not match.' : ''}/>
       </div>
       <label class="credential-warning credential-ack"><input type="checkbox" bind:checked={backupAcknowledged}/><ShieldCheck size={16}/><p><strong>Keep it with your backup.</strong><span>I understand this exact passphrase is required with my 24 words. It cannot be reset; a different passphrase opens a different wallet.</span></p></label>
       {#if error}<p class="form-error" role="alert">{error.replace('passphrase / PIN', 'wallet passphrase')}</p>{/if}
       <Button size="large" class="full" disabled={!walletName.trim() || !passphrase || !!passphraseError || passphrase !== confirmation || !backupAcknowledged} loading={busy} loadingLabel="Creating wallet…" onclick={finishCreate}><Check size={17}/>Create wallet</Button>
     {:else}
-      <button class="back-link" onclick={() => mode = 'home'}><ArrowLeft size={16} />Back</button><span class="setup-step">RECOVERY</span><h1>Recover wallet</h1><p>Enter your 24 recovery words in order, separated by spaces.</p><label class="field"><span>Wallet name</span><input bind:value={walletName} maxlength="48" placeholder="Recovered wallet" /></label><label class="field"><span>Recovery words</span><textarea bind:value={recovery} rows="5" placeholder="word1 word2 word3 …"></textarea><small>{recovery.trim() ? recovery.trim().split(/\s+/).length : 0} of 24 words</small></label><PasswordField label="Wallet passphrase" bind:value={passphrase} placeholder="Enter the original wallet passphrase" autocomplete="current-password" hint="This exact BIP39 passphrase is required with the recovery words and also unlocks Satchel." error={passphraseError}/>{#if error}<p class="form-error" role="alert">{error.replace('passphrase / PIN', 'wallet passphrase')}</p>{/if}<Button size="large" class="full" disabled={!walletName.trim() || recovery.trim().split(/\s+/).length !== 24 || !passphrase || !!passphraseError} loading={busy} loadingLabel="Recovering wallet…" onclick={recoverWallet}>Recover wallet<ArrowRight size={17}/></Button>
+      <button class="back-link" onclick={() => mode = 'home'}><ArrowLeft size={16} />Back</button><span class="setup-step">RECOVERY</span><h1>Recover wallet</h1><p>Enter your 24 recovery words in order, separated by spaces.</p><label class="field"><span>Wallet name</span><input bind:value={walletName} maxlength="48" placeholder="Recovered wallet" /></label><label class="field"><span>Recovery words</span><textarea bind:value={recovery} rows="5" placeholder="word1 word2 word3 …"></textarea><small>{recovery.trim() ? recovery.trim().split(/\s+/).length : 0} of 24 words</small></label><PasswordField label="Wallet passphrase" bind:value={passphrase} placeholder="Enter the original wallet passphrase" autocomplete="current-password" hint="This exact BIP39 passphrase is required with the recovery words and also unlocks Groot." error={passphraseError}/>{#if error}<p class="form-error" role="alert">{error.replace('passphrase / PIN', 'wallet passphrase')}</p>{/if}<Button size="large" class="full" disabled={!walletName.trim() || recovery.trim().split(/\s+/).length !== 24 || !passphrase || !!passphraseError} loading={busy} loadingLabel="Recovering wallet…" onclick={recoverWallet}>Recover wallet<ArrowRight size={17}/></Button>
     {/if}
   </main>
   <footer class="onboarding-footer">Keys stay on this device · Open source</footer>

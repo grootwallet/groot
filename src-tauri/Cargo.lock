@@ -1550,6 +1550,37 @@ dependencies = [
 ]
 
 [[package]]
+name = "groot"
+version = "0.1.0"
+dependencies = [
+ "aes-gcm",
+ "argon2",
+ "base64 0.22.1",
+ "bdk_bitcoind_rpc",
+ "bdk_wallet",
+ "bip39",
+ "block2",
+ "jsonrpc",
+ "minreq",
+ "objc2",
+ "objc2-app-kit",
+ "objc2-foundation",
+ "rand",
+ "security-framework 3.7.0",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-clipboard-manager",
+ "tauri-plugin-dialog",
+ "thiserror 2.0.18",
+ "ur",
+ "url",
+ "uuid",
+ "zeroize",
+]
+
+[[package]]
 name = "gtk"
 version = "0.18.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3319,37 +3350,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "93fc1dc3aaa9bfed95e02e6eadabb4baf7e3078b0bd1b4d7b6b0b68378900502"
 dependencies = [
  "winapi-util",
-]
-
-[[package]]
-name = "satchel"
-version = "0.1.0"
-dependencies = [
- "aes-gcm",
- "argon2",
- "base64 0.22.1",
- "bdk_bitcoind_rpc",
- "bdk_wallet",
- "bip39",
- "block2",
- "jsonrpc",
- "minreq",
- "objc2",
- "objc2-app-kit",
- "objc2-foundation",
- "rand",
- "security-framework 3.7.0",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-clipboard-manager",
- "tauri-plugin-dialog",
- "thiserror 2.0.18",
- "ur",
- "url",
- "uuid",
- "zeroize",
 ]
 
 [[package]]

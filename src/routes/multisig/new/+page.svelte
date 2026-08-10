@@ -19,10 +19,10 @@
   type HardwareGuideId = 'coldcard' | 'bitbox02' | 'ledger' | 'trezor' | 'jade';
   const hardwareGuides: Array<{ id: HardwareGuideId; name: string; steps: string[] }> = [
     { id: 'coldcard', name: 'Coldcard', steps: ['Finish device setup and make an offline seed backup.', 'Sign in and enable USB communication if it was disabled.', 'Leave the device unlocked and ready at its main menu.'] },
-    { id: 'bitbox02', name: 'BitBox02', steps: ['In BitBoxApp, enter the device password and confirm the same pairing code on both screens.', 'Wait until the wallet is visible, then quit BitBoxApp completely.', 'Reconnect and unlock BitBox02, then scan again in Satchel.'] },
-    { id: 'ledger', name: 'Ledger', steps: ['Finish device setup and make an offline recovery backup, then quit Ledger Live completely.', 'For Regtest, unlock the device and open Bitcoin Test—not the main Bitcoin app.', 'Start the import in Satchel, then approve the public-key export shown on Ledger.'] },
-    { id: 'trezor', name: 'Trezor', steps: ['Finish device setup and make an offline seed backup, then quit Trezor Suite completely. Closing its window is not enough.', 'Reconnect the device. A locked Model One is expected: select its Satchel card to open the position keypad while the device shows a scrambled PIN matrix.', 'Choose the standard no-passphrase wallet explicitly, or select a hidden wallet on-device when supported. Model One host passphrase entry is not yet supported.'] },
-    { id: 'jade', name: 'Jade', steps: ['Finish device setup and make an offline seed backup.', 'Log in on Jade with Recovery Phrase Login or QR PIN Unlock.', 'Keep Jade connected over USB while Satchel imports the public key.'] }
+    { id: 'bitbox02', name: 'BitBox02', steps: ['In BitBoxApp, enter the device password and confirm the same pairing code on both screens.', 'Wait until the wallet is visible, then quit BitBoxApp completely.', 'Reconnect and unlock BitBox02, then scan again in Groot.'] },
+    { id: 'ledger', name: 'Ledger', steps: ['Finish device setup and make an offline recovery backup, then quit Ledger Live completely.', 'For Regtest, unlock the device and open Bitcoin Test—not the main Bitcoin app.', 'Start the import in Groot, then approve the public-key export shown on Ledger.'] },
+    { id: 'trezor', name: 'Trezor', steps: ['Finish device setup and make an offline seed backup, then quit Trezor Suite completely. Closing its window is not enough.', 'Reconnect the device. A locked Model One is expected: select its Groot card to open the position keypad while the device shows a scrambled PIN matrix.', 'Choose the standard no-passphrase wallet explicitly, or select a hidden wallet on-device when supported. Model One host passphrase entry is not yet supported.'] },
+    { id: 'jade', name: 'Jade', steps: ['Finish device setup and make an offline seed backup.', 'Log in on Jade with Recovery Phrase Login or QR PIN Unlock.', 'Keep Jade connected over USB while Groot imports the public key.'] }
   ];
 
   let name = $state('');
@@ -242,7 +242,7 @@
     if (!preview) return;
     downloadText(
       coldcardPolicyFilename(preview.name),
-      `# Satchel multisig policy for COLDCARD\n# Import from Settings > Multisig Wallets > Import\n${preview.externalDescriptor}\n`
+      `# Groot multisig policy for COLDCARD\n# Import from Settings > Multisig Wallets > Import\n${preview.externalDescriptor}\n`
     );
     toast({ title: 'Coldcard policy saved', description: 'Import it on every Coldcard cosigner, then verify the policy on-device.', tone: 'success' });
   }
@@ -363,7 +363,7 @@
           {#if standardRecipe === 'custom'}<div class="threshold-row custom-threshold">
             <label class="field"><span>Signatures required (M)</span><select aria-label="Signatures required" value={threshold} onchange={(event) => threshold = Number(event.currentTarget.value)}>{#each Array(customCosignerCount - 1) as _, i}<option value={i + 2}>{i + 2}</option>{/each}</select></label>
             <label class="field"><span>Total cosigners (N)</span><select aria-label="Total cosigners" value={customCosignerCount} onchange={(event) => setCustomCosignerCount(Number(event.currentTarget.value))}>{#each Array(5) as _, i}<option value={i + 3}>{i + 3}</option>{/each}</select></label>
-          </div><p class="policy-guidance">Satchel starts at 2 signatures. A 1-of-N wallet has no multisig theft protection; use a single-key wallet instead.</p>
+          </div><p class="policy-guidance">Groot starts at 2 signatures. A 1-of-N wallet has no multisig theft protection; use a single-key wallet instead.</p>
           {:else}<div class="recipe-summary"><strong>{threshold} of {requiredKeys} signatures</strong><span>{standardRecipe === '2of3' ? 'Lose one key without losing access.' : 'Designed for a larger family or team.'}</span></div>{/if}
         {:else}<div class="path-visual"><span><b>NOW</b><strong>2 of 3 primary keys</strong></span><i></i><span><b>{templateKind === 'recovery' ? '~1 MONTH' : '~1 YEAR'}</b><strong>1 recovery key</strong></span></div><div class="recovery-separation"><ShieldCheck size={15}/><span><strong>Four independent keys required</strong><small>Key 4 is recovery-only. It is excluded from the immediate 2-of-3 branch and cannot be reused as a primary signer.</small></span></div>{/if}
         <div class="key-heading"><div><h2>Cosigners</h2><p>Use a different device or backup for every key.</p></div><Button variant="secondary" size="small" disabled={cosigners.length >= requiredKeys} onclick={() => pickerOpen = true}><Plus size={15}/>{cosigners.length >= requiredKeys ? 'All added' : 'Add a cosigner'}</Button></div>
@@ -394,7 +394,7 @@
         {#if error}<p class="form-error">{error}</p>{/if}
         <div class="coordinator-actions"><Button variant="secondary" href="/settings"><ArrowLeft size={16}/>Cancel</Button><Button loading={busy} loadingLabel="Building policy…" onclick={review}>Review wallet<ChevronRight size={16}/></Button></div>
       </section>
-      <aside class="safety-panel"><ShieldCheck size={22}/><h2>Before you continue</h2><p>Satchel stores public descriptors only. It cannot spend without enough signatures.</p><ul><li>Back up the wallet descriptor.</li><li>Verify each fingerprint on its device.</li><li>Keep devices in separate places.</li></ul><button class="hardware-help-card" onclick={() => openHardwareHelp()}><CircleHelp size={17}/><span><strong>Hardware setup help</strong><small>Coldcard, BitBox02, Ledger, Trezor, Jade</small></span><ChevronRight size={14}/></button><code>{MULTISIG_ACCOUNT_PATH}</code></aside>
+      <aside class="safety-panel"><ShieldCheck size={22}/><h2>Before you continue</h2><p>Groot stores public descriptors only. It cannot spend without enough signatures.</p><ul><li>Back up the wallet descriptor.</li><li>Verify each fingerprint on its device.</li><li>Keep devices in separate places.</li></ul><button class="hardware-help-card" onclick={() => openHardwareHelp()}><CircleHelp size={17}/><span><strong>Hardware setup help</strong><small>Coldcard, BitBox02, Ledger, Trezor, Jade</small></span><ChevronRight size={14}/></button><code>{MULTISIG_ACCOUNT_PATH}</code></aside>
     </div>
   {:else if preview}
     <section class="form-card review-policy">
@@ -425,7 +425,7 @@
 </Modal>
 
 <Modal open={hardwareOpen} title="Connect hardware device" description="Connect one initialized device over USB, then verify its fingerprint before adding it." onclose={closeHardwareScan}>
-  <div class="hardware-readiness"><Usb size={18}/><span><strong>Unlock the signer, then release its USB connection</strong><small>BitBox02: open the wallet in BitBoxApp first, then quit BitBoxApp completely before scanning. Quit Trezor Suite, Ledger Live, and other companion apps too. A locked Trezor Model One is supported from its Satchel card.</small></span><button onclick={() => openHardwareHelp(true)}>Device help</button></div>
+  <div class="hardware-readiness"><Usb size={18}/><span><strong>Unlock the signer, then release its USB connection</strong><small>BitBox02: open the wallet in BitBoxApp first, then quit BitBoxApp completely before scanning. Quit Trezor Suite, Ledger Live, and other companion apps too. A locked Trezor Model One is supported from its Groot card.</small></span><button onclick={() => openHardwareHelp(true)}>Device help</button></div>
   <label class="field"><span>Cosigner label</span><input bind:value={label} placeholder="Defaults to device model" maxlength="48"/></label>
   {#if hardwareBusy}<HardwareActionPrompt title={hardwareProgress} detail={hardwareProgress.includes('Ledger') ? 'Keep Bitcoin Test open for Regtest and confirm the export on the device screen.' : 'Keep the signer connected and unlocked. Follow any instructions shown on the device.'} label="Hardware cosigner setup in progress"/>
   {:else if hardware.length === 0}<div class="device-scan"><Cpu size={20}/><strong>{error ? 'Device needs attention' : 'No device found'}</strong><span>{error || 'HWI returned no device. For Coldcard, sign in first, enable its USB port, reconnect, then scan again. Other signers must be initialized, unlocked, and released by companion apps.'}</span><Button variant="secondary" size="small" onclick={scanHardware}>Scan again</Button></div>
@@ -436,7 +436,7 @@
 <Modal open={standardWalletOpen} title="Use Trezor standard wallet?" description="Passphrase protection can expose several independent wallets from the same device." onclose={() => { standardWalletOpen = false; standardWalletDevice = null; hardwareOpen = true; }}>
   <div class="credential-warning"><ShieldCheck size={17}/><p><strong>No hardware passphrase for this cosigner</strong><span>This imports the key derived from the device seed alone. It does not disable, change, or reveal any hidden passphrase wallet you may use elsewhere.</span></p></div>
   <p class="policy-guidance">Choose this only if you intentionally want the Trezor <strong>standard wallet</strong> in this multisig policy. Enabling or choosing a passphrase later opens a different hidden wallet; it does not change this cosigner. The imported fingerprint is permanently bound to this policy.</p>
-  {#if hardwareBusy}<HardwareActionPrompt title="Importing the Trezor standard wallet" detail="Keep Trezor connected while Satchel reads its public BIP48 account key." label="Hardware cosigner import in progress"/>{:else}<div class="modal-footer"><Button variant="secondary" onclick={() => { standardWalletOpen = false; standardWalletDevice = null; hardwareOpen = true; }}>Back</Button><Button disabled={!standardWalletDevice} onclick={() => { if (standardWalletDevice) importHardware(standardWalletDevice, true); }}>Use standard wallet</Button></div>{/if}
+  {#if hardwareBusy}<HardwareActionPrompt title="Importing the Trezor standard wallet" detail="Keep Trezor connected while Groot reads its public BIP48 account key." label="Hardware cosigner import in progress"/>{:else}<div class="modal-footer"><Button variant="secondary" onclick={() => { standardWalletOpen = false; standardWalletDevice = null; hardwareOpen = true; }}>Back</Button><Button disabled={!standardWalletDevice} onclick={() => { if (standardWalletDevice) importHardware(standardWalletDevice, true); }}>Use standard wallet</Button></div>{/if}
 </Modal>
 
 <TrezorPinModal
@@ -455,11 +455,11 @@
   onclose={() => { pinOpen = false; pinPositions = ''; pinChallenge = ''; pinDevice = null; pinError = ''; pinErrorCode = ''; }}
 />
 
-<Modal open={hardwareHelpOpen} title="Prepare your hardware signer" description="Satchel imports one public account key. Your seed and private keys never leave the device." onclose={closeHardwareHelp}>
+<Modal open={hardwareHelpOpen} title="Prepare your hardware signer" description="Groot imports one public account key. Your seed and private keys never leave the device." onclose={closeHardwareHelp}>
   <div class="hardware-guide">
     <div class="hardware-guide-tabs" aria-label="Hardware signer model">{#each hardwareGuides as guide}<button class:active={hardwareGuide === guide.id} onclick={() => hardwareGuide = guide.id}>{guide.name}</button>{/each}</div>
     <div class="hardware-guide-body"><span class="device-number"><Usb size={15}/></span><div><strong>{selectedHardwareGuide.name}</strong><ol>{#each selectedHardwareGuide.steps as step}<li>{step}</li>{/each}</ol></div></div>
-    <p><strong>Never enter a seed into Satchel.</strong> If a device asks you to restore or initialize it during this flow, cancel and complete that process using the device vendor’s trusted instructions first.</p>
+    <p><strong>Never enter a seed into Groot.</strong> If a device asks you to restore or initialize it during this flow, cancel and complete that process using the device vendor’s trusted instructions first.</p>
     <Button class="full" onclick={() => { hardwareHelpOpen = false; hardwareHelpReturnsToScan = false; scanHardware(); }}>Scan for devices</Button>
   </div>
 </Modal>

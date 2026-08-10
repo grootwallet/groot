@@ -26,7 +26,7 @@
   let isSoftwareWallet = $derived(selectedProfile?.kind === 'single_key');
   let credentialLabel = $derived(isSoftwareWallet ? 'Wallet passphrase' : 'App PIN');
   let backupTitle = $derived(selectedProfile?.kind === 'multisig' ? 'Public policy + signer backups' : selectedProfile?.kind === 'watch_only' ? 'Hardware signer backup' : 'Recovery words + wallet passphrase');
-  let backupDescription = $derived(selectedProfile?.kind === 'multisig' ? 'Keep the public descriptor and enough independent signer backups. The app PIN only protects local Satchel data.' : selectedProfile?.kind === 'watch_only' ? 'Recovery words remain on the signer. The app PIN only protects local Satchel data.' : 'Keep both together. Satchel cannot display or reset either one.');
+  let backupDescription = $derived(selectedProfile?.kind === 'multisig' ? 'Keep the public descriptor and enough independent signer backups. The app PIN only protects local Groot data.' : selectedProfile?.kind === 'watch_only' ? 'Recovery words remain on the signer. The app PIN only protects local Groot data.' : 'Keep both together. Groot cannot display or reset either one.');
   const timeoutOptions = [{ value: 1, label: '1 minute' }, { value: 5, label: '5 minutes' }, { value: 15, label: '15 minutes' }, { value: 30, label: '30 minutes' }, { value: 60, label: '1 hour' }];
   let nodeOpen = $state(false), nodePassword = $state(''), walletCredential = $state(''), nodeError = $state('');
   let node = $state<CoreNodeConfig>({ backend: { type: 'local_core', url: 'http://127.0.0.1:18443' }, auth: 'cookie', username: null });
@@ -128,7 +128,7 @@
   }
   async function saveHardwareBackup() {
     try {
-      const saved = await walletService.savePublicBackup('satchel-hardware-wallet.json', hardwareBackupContent);
+      const saved = await walletService.savePublicBackup('groot-hardware-wallet.json', hardwareBackupContent);
       if (saved) toast({ title: 'Descriptor backup saved', description: 'Use this file for the clean-profile recovery drill.', tone: 'success' });
     } catch (cause) {
       hardwareBackupError = cause instanceof Error ? cause.message : 'Could not save the descriptor backup.';
@@ -194,7 +194,7 @@
     </div>
   </section>
   {#if selectedProfile?.kind !== 'multisig'}<section class="settings-group danger-zone"><h2>Wallet deletion</h2><div><span><strong>Delete wallet</strong><small>Remove only {selectedProfile?.name ?? 'this wallet'} from this device.</small></span><Button variant="danger-outline" size="small" onclick={() => deleting = true}><Trash2 size={15} />Delete</Button></div></section>{:else}<section class="settings-group danger-zone"><h2>Wallet deletion</h2><div><span><strong>Delete policy wallet</strong><small>A successful recovery drill is required first.</small></span><Button variant="danger-outline" size="small" href="/multisig/backup"><Trash2 size={15}/>Review</Button></div></section>{/if}
-  <p class="version">Satchel 0.1.0 · BDK regtest</p>
+  <p class="version">Groot 0.1.0 · BDK regtest</p>
 </div>
 
 <Modal open={deleting} title="Delete this wallet?" description="This permanently removes wallet data from this device." onclose={() => deleting = false}>
@@ -203,7 +203,7 @@
   <label class="field"><span>Type DELETE to confirm</span><input bind:value={confirmText} placeholder="DELETE" /></label>
   <div class="modal-footer"><Button variant="secondary" onclick={() => { deleting = false; deleteCredential = ''; }}>Cancel</Button><Button variant="danger" disabled={confirmText !== 'DELETE' || !deleteCredential} loading={busy} loadingLabel="Deleting…" onclick={deleteWallet}>Delete wallet</Button></div>
 </Modal>
-<Modal open={verifyOpen} title="Verify recovery backup" description="Use your written 24 words to complete a private native challenge. Satchel will not reveal them again." onclose={() => {verifyOpen=false;verifyCredential='';verifyError='';}}>
+<Modal open={verifyOpen} title="Verify recovery backup" description="Use your written 24 words to complete a private native challenge. Groot will not reveal them again." onclose={() => {verifyOpen=false;verifyCredential='';verifyError='';}}>
   <div class="warning-box"><strong>Have the written backup in front of you.</strong> Verification confirms its exact word order without sending the words into the webview.</div>
   <PasswordField label="Wallet passphrase" bind:value={verifyCredential} autocomplete="current-password" hint="Required to decrypt the recovery words only inside trusted Rust code."/>
   {#if verifyError}<p class="form-error" role="alert">{verifyError.replace('passphrase / PIN','wallet passphrase')}</p>{/if}
@@ -218,7 +218,7 @@
     {#if hardwareBackupError}<p class="form-error" role="alert">{hardwareBackupError}</p>{/if}
     <div class="modal-footer"><Button variant="secondary" onclick={() => {hardwareBackupOpen=false;hardwareBackupPin='';}}>Cancel</Button><Button disabled={!hardwareBackupPin} loading={exportingHardwareBackup} loadingLabel="Preparing…" onclick={prepareHardwareBackup}>Prepare backup</Button></div>
   {:else}
-    <div class="ready-panel"><Check size={18}/><div><strong>Public descriptor ready</strong><small>Import this file in a clean disposable Satchel profile and confirm the first receive address matches.</small></div></div>
+    <div class="ready-panel"><Check size={18}/><div><strong>Public descriptor ready</strong><small>Import this file in a clean disposable Groot profile and confirm the first receive address matches.</small></div></div>
     {#if hardwareBackupError}<p class="form-error" role="alert">{hardwareBackupError}</p>{/if}
     <div class="modal-footer"><Button variant="secondary" onclick={() => {hardwareBackupOpen=false;descriptorDetailsOpen=true;}}><Eye size={15}/>View descriptor</Button><Button onclick={saveHardwareBackup}><Download size={15}/>Save descriptor</Button></div>
   {/if}
@@ -237,7 +237,7 @@
   <label class="field"><span>RPC URL</span><input bind:value={node.backend.url} placeholder={node.backend.type==='local_core'?'http://127.0.0.1:18443':node.torProxy?'http://your-node.onion:8332':'https://node.example.com:8332'}/><small>Credentials in URLs are rejected. TLS uses system trust roots; Tor accepts only .onion destinations.</small></label>
   {#if node.torProxy}<label class="field"><span>Local SOCKS5 proxy</span><input bind:value={node.torProxy} placeholder="127.0.0.1:9050"/><small>The proxy must listen on loopback. Remote proxies are rejected.</small></label>{/if}
   {#if node.backend.type === 'local_core'}
-    <div class="credential-warning"><ShieldCheck size={16}/><p><strong>Automatic cookie authentication</strong><span>Uses Satchel’s local regtest cookie. Switch to username/password only for a custom local node.</span></p></div>
+    <div class="credential-warning"><ShieldCheck size={16}/><p><strong>Automatic cookie authentication</strong><span>Uses Groot’s local regtest cookie. Switch to username/password only for a custom local node.</span></p></div>
     <label class="field"><span>Authentication</span><select bind:value={node.auth}><option value="cookie">Local cookie</option><option value="user_pass">Username and password</option></select></label>
   {/if}
   {#if node.auth === 'user_pass'}<label class="field"><span>RPC username</span><input value={node.username??''} oninput={(event) => node={...node,username:event.currentTarget.value}} autocomplete="off"/></label><PasswordField label="RPC password" bind:value={nodePassword} autocomplete="new-password" hint="Encrypted locally; never placed in the URL or public config."/>{/if}

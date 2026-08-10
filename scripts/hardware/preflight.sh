@@ -46,16 +46,16 @@ process.stdin.on("end", () => {
       const warnings = Array.isArray(device.warnings) ? device.warnings.flat().join(" ").toLowerCase() : "";
       if (warnings.includes("passphrase") && warnings.includes("empty string")) {
         actionable += 1;
-        console.log(`${model}: detected; choose the standard no-passphrase wallet explicitly in Satchel, or select a hidden wallet on-device when supported`);
+        console.log(`${model}: detected; choose the standard no-passphrase wallet explicitly in Groot, or select a hidden wallet on-device when supported`);
       } else if (device.type === "ledger" && device.fingerprint) {
         actionable += 1;
-        console.log(`${model}: detected; for Regtest open Bitcoin Test—not Bitcoin; Satchel verifies the app when reading the public account key`);
+        console.log(`${model}: detected; for Regtest open Bitcoin Test—not Bitcoin; Groot verifies the app when reading the public account key`);
       } else if (device.fingerprint) {
         actionable += 1;
         console.log(`${model}: ready`);
       } else if ((device.type === "trezor" || device.type === "keepkey") && (device.needs_pin_sent || device.code === -12)) {
         actionable += 1;
-        console.log(`${model}: detected; locked (use Satchel’s PIN matrix)`);
+        console.log(`${model}: detected; locked (use Groot’s PIN matrix)`);
       } else if (device.type === "bitbox02" && device.code === -12) {
         console.log(`${model}: detected; open and unlock the wallet in BitBoxApp, then quit BitBoxApp completely before rescanning`);
       } else if (device.type === "jade" && device.code === -12) {
@@ -78,7 +78,7 @@ process.stdin.on("end", () => {
 printf '%s\n' "${HWI_SUMMARY}"
 if [[ "${HWI_SUMMARY_STATUS:-0}" -eq 3 ]]; then
   echo
-  echo "No device can continue in Satchel yet. Follow the device-specific action above, then rescan." >&2
+  echo "No device can continue in Groot yet. Follow the device-specific action above, then rescan." >&2
   exit 1
 fi
 if [[ "${HWI_SUMMARY_STATUS:-0}" -ne 0 ]]; then

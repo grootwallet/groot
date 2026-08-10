@@ -1,11 +1,11 @@
 [package]
-name = "satchel"
+name = "groot"
 version = "0.1.0"
-description = "A minimal onchain Bitcoin wallet"
+description = "Groot, a minimal onchain Bitcoin wallet"
 edition = "2021"
 
 [lib]
-name = "satchel_lib"
+name = "groot_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

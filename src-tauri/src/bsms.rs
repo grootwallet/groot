@@ -1,6 +1,6 @@
 //! BIP129 (BSMS) descriptor-record interoperability.
 //!
-//! Satchel intentionally implements the public, four-line descriptor record here. The
+//! Groot intentionally implements the public, four-line descriptor record here. The
 //! encrypted coordinator/signer rounds from BIP129 are a separate protocol and must not be
 //! implied by accepting a `.bsms` file. Parsing is strict, bounded, and performed inside the
 //! trusted Rust boundary.
@@ -152,7 +152,7 @@ impl DescriptorRecord {
             && internal == strip_checksum(internal_descriptor))
     }
 
-    /// Extracts the public participants from Satchel's standard BIP48 sortedmulti policy.
+    /// Extracts the public participants from Groot's standard BIP48 sortedmulti policy.
     /// Arbitrary Miniscript remains importable as a watch-only descriptor elsewhere, but cannot
     /// be represented as editable standard-policy metadata by this method.
     pub fn standard_policy(&self) -> Result<(usize, Vec<StandardCosigner>), BsmsError> {

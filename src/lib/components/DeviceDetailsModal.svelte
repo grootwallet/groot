@@ -45,7 +45,7 @@
         {#if checking}
           <HardwareActionPrompt
             title={signer.source === 'usb' || signer.source === 'virtual' ? 'Checking signer identity' : 'Checking saved signer record'}
-            detail={signer.source === 'usb' || signer.source === 'virtual' ? 'Keep the signer connected and unlocked while Satchel matches its saved fingerprint.' : 'Satchel is validating the saved public record; physical device presence is not checked.'}
+            detail={signer.source === 'usb' || signer.source === 'virtual' ? 'Keep the signer connected and unlocked while Groot matches its saved fingerprint.' : 'Groot is validating the saved public record; physical device presence is not checked.'}
             label="Signer health check in progress"
           />
         {:else}

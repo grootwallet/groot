@@ -1,7 +1,7 @@
 <script lang="ts">
   import { page } from '$app/state';
   import { Activity, ArrowDownToLine, ArrowUpFromLine, CircleDot, LayoutGrid, Plus, Settings, ShieldCheck } from '@lucide/svelte';
-  import BrandMark from './BrandMark.svelte';
+  import BrandLockup from './BrandLockup.svelte';
   import ToastHost from './ToastHost.svelte';
   import WalletProfileList from './WalletProfileList.svelte';
   import NetworkStatus from './NetworkStatus.svelte';
@@ -123,9 +123,9 @@
   });
 </script>
 
-<div class="app-shell" class:onboarding-shell={onboardingRoute} class:mobile-actions-visible={showQuickActions}>
+<div class="app-shell" class:onboarding-shell={onboardingRoute} class:mobile-actions-visible={showQuickActions} class:prototype-shell={isPrototypeWallet}>
   <aside class="sidebar">
-    <a class="brand" href="/"><span class="brand-mark"><BrandMark /></span><span>Satchel</span></a>
+    <a class="brand" href="/" aria-label="Groot home"><BrandLockup /></a>
     {#if profiles.length}
       <div class="wallet-switcher">
         <span class="wallet-switcher-label">{t('wallets', $locale)} <strong>{formatWalletCount(profiles.length, $locale)}</strong></span>
@@ -146,6 +146,8 @@
       <NetworkStatus network={defaultConfig.network} locked={lockedRoute} />
     </div>
   </aside>
+
+  <a class="mobile-brand" href="/" aria-label="Groot home"><BrandLockup /></a>
 
   <main class="main">
     {#if isPrototypeWallet}<div class="demo-banner" role="status"><strong>Interactive prototype</strong><span>Dummy data only · Never use real funds or recovery words</span></div>{/if}

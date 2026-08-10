@@ -74,8 +74,8 @@ const MIN_SUPPLEMENTAL_COIN_FLIPS: usize = 128;
 const MAX_SUPPLEMENTAL_COIN_FLIPS: usize = 256;
 const MIN_SUPPLEMENTAL_DICE_ROLLS: usize = 50;
 const MAX_SUPPLEMENTAL_DICE_ROLLS: usize = 100;
-const SUPPLEMENTAL_TRANSCRIPT_DOMAIN: &[u8] = b"Satchel supplemental entropy transcript v1";
-const SUPPLEMENTAL_MIX_DOMAIN: &[u8] = b"Satchel BIP39 entropy mix v1";
+const SUPPLEMENTAL_TRANSCRIPT_DOMAIN: &[u8] = b"Groot supplemental entropy transcript v1";
+const SUPPLEMENTAL_MIX_DOMAIN: &[u8] = b"Groot BIP39 entropy mix v1";
 
 fn validate_public_backup_filename(value: &str) -> ApiResult<&str> {
     let trimmed = value.trim();
@@ -131,7 +131,7 @@ pub async fn public_backup_save(
             .dialog()
             .file()
             .set_file_name(&filename)
-            .add_filter("Satchel public backup", &[extension])
+            .add_filter("Groot public backup", &[extension])
             .blocking_save_file();
         let Some(selected) = selected else {
             return Ok(false);
@@ -271,7 +271,7 @@ fn require_unlocked_with_activity(
     }
     Err(api_error(
         "wallet_locked",
-        "Enter your passphrase / PIN to unlock Satchel.",
+        "Enter your passphrase / PIN to unlock Groot.",
     ))
 }
 
@@ -844,11 +844,11 @@ struct HwiAddress {
 
 fn missing_hwi_value(code: Option<i64>, value: &str) -> ApiError {
     let message = match code {
-        Some(-3 | -12) => "The device is locked or another wallet app owns its USB session. Quit Trezor Suite, BitBoxApp, Ledger Live, and other wallet apps completely; reconnect the device, then try again. A locked Trezor Model One can be unlocked from its Satchel device card.",
+        Some(-3 | -12) => "The device is locked or another wallet app owns its USB session. Quit Trezor Suite, BitBoxApp, Ledger Live, and other wallet apps completely; reconnect the device, then try again. A locked Trezor Model One can be unlocked from its Groot device card.",
         Some(-14) => "The action was cancelled on the hardware wallet.",
         Some(-15) => "The hardware wallet is busy. Finish the current action and try again.",
         Some(-8 | -9) => "This hardware wallet does not support the requested operation.",
-        Some(-1 | -2 | -4 | -7) => "Satchel could not select the enumerated hardware wallet.",
+        Some(-1 | -2 | -4 | -7) => "Groot could not select the enumerated hardware wallet.",
         _ => value,
     };
     api_error("hardware_unavailable", message)
@@ -887,11 +887,11 @@ fn missing_hardware_xpub(
         }
         "bitbox02" => api_error(
             "hardware_unavailable",
-            "BitBox02 did not export the account key. Open and unlock the wallet in BitBoxApp first, then quit BitBoxApp completely and try again in Satchel.",
+            "BitBox02 did not export the account key. Open and unlock the wallet in BitBoxApp first, then quit BitBoxApp completely and try again in Groot.",
         ),
         "trezor" | "keepkey" => api_error(
             "hardware_unavailable",
-            "Trezor did not export the account key. Complete the PIN or wallet selection shown by Satchel and the device, then try again.",
+            "Trezor did not export the account key. Complete the PIN or wallet selection shown by Groot and the device, then try again.",
         ),
         "jade" => api_error(
             "hardware_unavailable",
@@ -939,7 +939,7 @@ fn hardware_device_dto(device: HwiDevice) -> HardwareDeviceDto {
     } else if device.fingerprint.is_some() && device_type == "ledger" {
         (
             "detected",
-            "Detected. Satchel verifies that Bitcoin Test is open when it reads the public account key.",
+            "Detected. Groot verifies that Bitcoin Test is open when it reads the public account key.",
             "import",
         )
     } else if device.fingerprint.is_some() {
@@ -994,7 +994,7 @@ fn require_explicit_standard_wallet_selection(
     if hwi_warns_about_empty_passphrase(device) && !allow_empty_passphrase {
         return Err(api_error(
             "hardware_wallet_selection_required",
-            "Choose whether this cosigner uses the standard wallet with no passphrase. Satchel will not select it silently.",
+            "Choose whether this cosigner uses the standard wallet with no passphrase. Groot will not select it silently.",
         ));
     }
     Ok(())
@@ -1894,7 +1894,7 @@ fn load_recovery_scan_settings(db: &Connection) -> ApiResult<RecoveryScanSetting
     })
 }
 
-/// Returns the minimum stop-gap needed to rediscover every address Satchel has
+/// Returns the minimum stop-gap needed to rediscover every address Groot has
 /// revealed, including late payments to currently unused or discarded requests.
 /// A used address resets the unused run exactly as a descriptor scan would.
 fn required_recovery_gap(db: &Connection, prospective_index: Option<u32>) -> ApiResult<u32> {
@@ -2162,7 +2162,7 @@ fn ur_api_error(error: UrTransportError) -> ApiError {
     let message = match error {
         UrTransportError::Empty => "Scan at least one crypto-psbt UR frame.",
         UrTransportError::TooLarge | UrTransportError::TooManyFrames => {
-            "The animated QR payload exceeds Satchel's safety limit."
+            "The animated QR payload exceeds Groot's safety limit."
         }
         UrTransportError::WrongType => "Scan a crypto-psbt UR, not a different QR payload type.",
         UrTransportError::Incomplete => "Keep scanning. More animated QR frames are required.",
@@ -2188,7 +2188,7 @@ fn external_signer_api_error(error: ExternalSignerError) -> ApiError {
     let message = match error {
         ExternalSignerError::TooLarge => "Signer imports must be 256 KiB or smaller.",
         ExternalSignerError::PrivateMaterial => {
-            "Private keys, seeds, and recovery words must never be imported into Satchel."
+            "Private keys, seeds, and recovery words must never be imported into Groot."
         }
         ExternalSignerError::InvalidFormat => {
             "Use a BIP84 descriptor or a supported public-key JSON export."
@@ -2313,7 +2313,7 @@ fn validate_multisig_backup(encoded: &str) -> ApiResult<MultisigBackupDto> {
         ));
     }
     let mut backup: MultisigBackupDto = serde_json::from_str(encoded)
-        .map_err(|_| api_error("invalid_backup", "Enter a valid Satchel descriptor backup."))?;
+        .map_err(|_| api_error("invalid_backup", "Enter a valid Groot descriptor backup."))?;
     if backup.version != 1 || backup.network != "regtest" || backup.wallet.kind != "multisig" {
         return Err(api_error(
             "invalid_backup",
@@ -2998,7 +2998,7 @@ fn secure_store_error(error: SecureStoreError) -> ApiError {
         SecureStoreError::Unavailable => api_error(
             "secure_storage_unavailable",
             if cfg!(any(target_os = "macos", target_os = "ios")) {
-                "macOS Keychain access is unavailable. Enter your PIN again and approve the Satchel system prompt. The wallet stayed locked."
+                "macOS Keychain access is unavailable. Enter your PIN again and approve the Groot system prompt. The wallet stayed locked."
             } else {
                 "Protected device storage is unavailable. Enter your PIN again after restoring operating-system storage access. The wallet stayed locked."
             },
@@ -3664,7 +3664,7 @@ pub fn wallet_recover(
     if mnemonic.word_count() != 24 {
         return Err(api_error(
             "invalid_mnemonic",
-            "Satchel requires exactly 24 recovery words.",
+            "Groot requires exactly 24 recovery words.",
         ));
     }
     create_from_mnemonic(&app, name, mnemonic, credential.as_str(), true)?;
@@ -4105,7 +4105,7 @@ fn hardware_api_error(error: HardwareError) -> ApiError {
         HardwareError::TimedOut => "The hardware wallet did not respond in time.",
         HardwareError::OutputTooLarge => "The hardware wallet returned an oversized response.",
         HardwareError::CommandFailed(code) => match code {
-            Some(-3 | -12) => "The device is locked or another wallet app owns its USB session. Quit Trezor Suite, BitBoxApp, Ledger Live, and other wallet apps completely; reconnect the device, then scan again. A locked Trezor Model One can be unlocked from its Satchel device card.",
+            Some(-3 | -12) => "The device is locked or another wallet app owns its USB session. Quit Trezor Suite, BitBoxApp, Ledger Live, and other wallet apps completely; reconnect the device, then scan again. A locked Trezor Model One can be unlocked from its Groot device card.",
             Some(-14) => "The action was cancelled on the hardware wallet.",
             Some(-15) => "The hardware wallet is busy. Close its companion app and try again.",
             Some(-8 | -9) => "This hardware wallet does not support the requested operation.",
@@ -4122,7 +4122,7 @@ fn hardware_device_api_error(error: HardwareError, device_type: &str) -> ApiErro
     {
         return api_error(
             error.code(),
-            "Coldcard does not recognize this multisig wallet. Save the wallet policy in Satchel, import it from Settings → Multisig Wallets → Import on Coldcard, verify the threshold and fingerprints, then try again.",
+            "Coldcard does not recognize this multisig wallet. Save the wallet policy in Groot, import it from Settings → Multisig Wallets → Import on Coldcard, verify the threshold and fingerprints, then try again.",
         );
     }
     if device_type.eq_ignore_ascii_case("bitbox02")
@@ -4152,7 +4152,7 @@ fn missing_hardware_fingerprint(device_type: &str) -> ApiError {
         }
         "coldcard" => "Unlock Coldcard and enable USB communication, then scan again.",
         "trezor" | "keepkey" => {
-            "Unlock the device using Satchel's PIN-matrix flow, then scan again."
+            "Unlock the device using Groot's PIN-matrix flow, then scan again."
         }
         _ => "Unlock the hardware wallet and put it in its Bitcoin app, then scan again.",
     };
@@ -4277,7 +4277,7 @@ pub async fn hardware_prompt_pin(
         {
             return Err(api_error(
                 "invalid_hardware_request",
-                "This device does not need Satchel's PIN-matrix flow.",
+                "This device does not need Groot's PIN-matrix flow.",
             ));
         }
         let output = hwi
@@ -6198,7 +6198,7 @@ fn summarize_payment_psbt(
     if external.len() > 1 || (external.is_empty() && !allow_self_spend) {
         return Err(api_error(
             "acceleration_unavailable",
-            "Satchel can accelerate only transactions with one external recipient.",
+            "Groot can accelerate only transactions with one external recipient.",
         ));
     }
     let output = external

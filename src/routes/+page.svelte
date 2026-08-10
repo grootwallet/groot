@@ -145,7 +145,7 @@
 </div>
 
 <TxDetailsModal transaction={selected} {multisig} onclose={() => selected = null} />
-<Modal open={verifyOpen} title="Verify recovery backup" description="Use your written 24 words to complete a private native challenge. Satchel will not reveal them again." onclose={() => { verifyOpen=false; verifyCredential=''; verifyError=''; }}>
+<Modal open={verifyOpen} title="Verify recovery backup" description="Use your written 24 words to complete a private native challenge. Groot will not reveal them again." onclose={() => { verifyOpen=false; verifyCredential=''; verifyError=''; }}>
   <div class="warning-box"><strong>Have the written backup in front of you.</strong> Verification confirms its exact word order without sending the words into the webview.</div>
   <PasswordField label="Wallet passphrase" bind:value={verifyCredential} autocomplete="current-password" hint="Required to decrypt the recovery words only inside trusted Rust code."/>
   {#if verifyError}<p class="form-error" role="alert">{verifyError.replace('passphrase / PIN', 'wallet passphrase')}</p>{/if}

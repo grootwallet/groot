@@ -1,4 +1,4 @@
-# Satchel roadmap
+# Groot roadmap
 
 This roadmap is ordered by security dependency, not marketing priority. A phase is complete only when its unit, integration, regtest, responsive UI, backup, and failure-path checks pass.
 
@@ -134,7 +134,7 @@ V2 exposes reviewed templates, not an unrestricted script editor. Every template
 - Wallet health dashboard: backup age, descriptor verification, node status, signer firmware evidence, and recovery drill reminders.
 - Batch payments, payment URI/QR requests, address book, and watch-only wallet promotion only after intent-review and privacy design.
 - Payjoin, collaborative transactions, coin-control privacy scoring, and Stonewall-style transaction construction require separate protocol and denial-of-service threat models.
-- Compact-filter/P2P synchronization similar in privacy objective to Wasabi requires a separate backend architecture; do not route it through a central Satchel service.
-- Hardware initialization/device management only through audited vendor SDKs with an explicit seed-backup UX. It must never make Satchel a seed transport or silently install firmware.
+- Compact-filter/P2P synchronization similar in privacy objective to Wasabi requires a separate backend architecture; do not route it through a central Groot service.
+- Hardware initialization/device management only through audited vendor SDKs with an explicit seed-backup UX. It must never make Groot a seed transport or silently install firmware.
 - Desktop/mobile update delivery, rollback protection, release transparency, and long-term data migration compatibility.
 - Mainnet remains blocked on a dedicated threat model, external review, reproducible releases, physical-device certification, and end-to-end recovery checklist.

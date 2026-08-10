@@ -1,6 +1,6 @@
 # Testing and coverage methodology
 
-Satchel uses two independent release measures:
+Groot uses two independent release measures:
 
 1. **Flow coverage:** every documented user flow has executable evidence. The target is 100%; a flow without evidence blocks release.
 2. **Code coverage:** measured statements, branches, functions, and lines. Pure security/product policy is held at 100%. Stateful adapters and UI are judged primarily by behavior and branch-oriented scenarios because a high line score alone does not prove wallet safety.

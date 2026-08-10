@@ -6,7 +6,7 @@ REQUIRED_NODE_VERSION="$(tr -d '[:space:]' < "${REPOSITORY_ROOT}/.node-version")
 REQUIRED_PNPM_VERSION="11.13.1"
 
 if [[ ! "${REQUIRED_NODE_VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-  echo "Satchel's .node-version is not an exact semantic version." >&2
+  echo "Groot's .node-version is not an exact semantic version." >&2
   exit 1
 fi
 
@@ -29,7 +29,7 @@ if [[ "${current_node_version}" != "v${REQUIRED_NODE_VERSION}" ]]; then
   done
 
   if [[ -z "${pinned_node_bin}" ]]; then
-    echo "Satchel requires Node ${REQUIRED_NODE_VERSION}, but the current shell has ${current_node_version:-no Node}." >&2
+    echo "Groot requires Node ${REQUIRED_NODE_VERSION}, but the current shell has ${current_node_version:-no Node}." >&2
     echo "Install it with 'nvm install ${REQUIRED_NODE_VERSION}', then rerun this launcher." >&2
     exit 1
   fi
@@ -39,13 +39,13 @@ if [[ "${current_node_version}" != "v${REQUIRED_NODE_VERSION}" ]]; then
 fi
 
 if [[ "$(node --version)" != "v${REQUIRED_NODE_VERSION}" ]]; then
-  echo "Could not activate Satchel's pinned Node ${REQUIRED_NODE_VERSION} runtime." >&2
+  echo "Could not activate Groot's pinned Node ${REQUIRED_NODE_VERSION} runtime." >&2
   exit 1
 fi
 
 current_pnpm_version="$(pnpm --version 2>/dev/null || true)"
 if [[ "${current_pnpm_version}" != "${REQUIRED_PNPM_VERSION}" ]]; then
-  echo "Satchel requires pnpm ${REQUIRED_PNPM_VERSION}, but the active runtime has ${current_pnpm_version:-no pnpm}." >&2
+  echo "Groot requires pnpm ${REQUIRED_PNPM_VERSION}, but the active runtime has ${current_pnpm_version:-no pnpm}." >&2
   echo "Run 'corepack prepare pnpm@${REQUIRED_PNPM_VERSION} --activate', then rerun this launcher." >&2
   exit 1
 fi

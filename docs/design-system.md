@@ -1,4 +1,4 @@
-# Satchel design system
+# Groot design system
 
 Status: canonical UI guidance for the current desktop/mobile application.
 
@@ -6,7 +6,7 @@ The symbol, application icon, identity palette, and brand voice are canonical in
 
 ## Direction
 
-Satchel combines calm, task-focused desktop density with restrained native-utility conventions. It should feel quiet, fast, and explicit about security state. Blue Ink and Warm Ivory carry the identity, Action Blue directs interaction, and restrained Signal Red marks rare identity or high-consequence emphasis. Bitcoin amber is reserved for Bitcoin-specific or attention-worthy state.
+Groot combines calm, task-focused desktop density with restrained native-utility conventions. It should feel quiet, fast, and explicit about security state. Blue Ink and Warm Ivory carry the identity, Action Blue directs interaction, and restrained Signal Red marks rare identity or high-consequence emphasis. Bitcoin amber is reserved for Bitcoin-specific or attention-worthy state.
 
 ## Principles
 
@@ -17,7 +17,7 @@ Satchel combines calm, task-focused desktop density with restrained native-utili
 5. Use progressive disclosure for long addresses, xpubs, descriptors, and transaction IDs while preserving copy/export access.
 6. Empty, loading, offline, invalid, and retry states are designed states—not exceptions.
 
-Hardware operations use the shared animated hardware-action panel wherever Satchel is waiting on discovery, public-key import, device unlock, saved-identity health checks, address approval, or transaction signing. The panel names the current action, states what the user must do on the external device, exposes a polite live status to assistive technology, and respects reduced-motion preferences. Device- and network-specific instructions may refine its copy, but must not replace this common interaction pattern with a static icon or button-only spinner.
+Hardware operations use the shared animated hardware-action panel wherever Groot is waiting on discovery, public-key import, device unlock, saved-identity health checks, address approval, or transaction signing. The panel names the current action, states what the user must do on the external device, exposes a polite live status to assistive technology, and respects reduced-motion preferences. Device- and network-specific instructions may refine its copy, but must not replace this common interaction pattern with a static icon or button-only spinner.
 
 ## Foundations
 
@@ -60,7 +60,7 @@ Required review sizes are 1180×780 and 390×844. At mobile width, content must 
 - Human-facing timestamps use a concise, unambiguous long-month date and local hour/minute without repeating “local time.” The native system tooltip exposes seconds, the exact IANA timezone, and the UTC equivalent on hover.
 - Wallet-type choices use compact visual cards with an icon, a plain-language title, and one short consequence-focused subtitle. Do not detach explanatory lines below generic buttons.
 - Multi-step wallet creation keeps a persistent labeled progress indicator visible. It distinguishes completed, current, and upcoming stages so users can estimate the remaining work without reading body copy.
-- Every send flow uses the same labeled three-stage progress indicator: **Intent**, **Amount & fee**, and **Review & sign**. Intent leads with the permanent payment label before the recipient address. A compact signer strip remains visible below progress: software wallets identify Satchel on this device; external-hardware and multisig wallets show imported labels/models and shortened public fingerprints with the required threshold. Imported identity must not be styled as live device availability.
+- Every send flow uses the same labeled three-stage progress indicator: **Intent**, **Amount & fee**, and **Review & sign**. Intent leads with the permanent payment label before the recipient address. A compact signer strip remains visible below progress: software wallets identify Groot on this device; external-hardware and multisig wallets show imported labels/models and shortened public fingerprints with the required threshold. Imported identity must not be styled as live device availability.
 - Recovery words are concealed by default behind a private-place warning. Once explicitly revealed, their desktop grid reads down each column (1–8, 9–16, 17–24); fixed-width number and word columns keep every row aligned. Mobile uses the same column-first reading order in two columns.
 - Recovery backup confirmation uses an empty numbered sequence and a shuffled word pool. Tap/click is the primary interaction; drag-and-drop is an enhancement, never the only way to reorder. Exact order marks the backup verified. **Verify later** remains visually secondary and produces a compact, persistent amber Overview/Settings status with a direct verification CTA; it never looks like successful verification.
 - Long addresses, account public keys, and transaction identifiers preserve both identifying ends as `prefix…suffix` in compact rows. Activating an address or account public key reveals the full value in balanced visual groups with emphasized ends; copied data never contains display spacing.
@@ -72,7 +72,7 @@ Required review sizes are 1180×780 and 390×844. At mobile width, content must 
 
 ## Voice
 
-Use “bitcoin” for the asset and “Bitcoin” for the network/protocol. Prefer “2 of 3 signatures” to “quorum,” and “public account key” before “xpub.” Say **wallet passphrase** only for a Satchel-generated software wallet; it is part of the BIP39 backup and also unlocks Satchel. Say **app PIN** for multisig and external-hardware wallets; it protects local app data and is not a hardware passphrase or seed backup. Never imply that an app PIN can recover a hardware wallet or that a public descriptor can spend.
+Use “bitcoin” for the asset and “Bitcoin” for the network/protocol. Prefer “2 of 3 signatures” to “quorum,” and “public account key” before “xpub.” Say **wallet passphrase** only for a Groot-generated software wallet; it is part of the BIP39 backup and also unlocks Groot. Say **app PIN** for multisig and external-hardware wallets; it protects local app data and is not a hardware passphrase or seed backup. Never imply that an app PIN can recover a hardware wallet or that a public descriptor can spend.
 
 Headings and controls should carry the flow whenever possible. Do not repeat a heading with a subtitle that merely restates it. Keep permanent consequences and recovery instructions explicit, but move protocol detail behind optional insight.
 

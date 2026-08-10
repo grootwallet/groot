@@ -1,11 +1,11 @@
-# Satchel physical hardware certification record
+# Groot physical hardware certification record
 
 Store completed copies only in `hardware-certification.local/`. Never record a seed, address, xpub, PSBT, device path, RPC credential, or complete fingerprint.
 
 - Device family/model:
 - Firmware:
 - Host OS/version:
-- Satchel commit:
+- Groot commit:
 - HWI version:
 - Network: regtest / signet / testnet4
 - Date/reviewer:

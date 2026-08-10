@@ -29,4 +29,4 @@ Each finding must include severity, affected invariant, attacker prerequisites, 
 
 ## Exit rule
 
-All critical/high findings are closed. Medium findings are closed or explicitly accepted in a reviewed ADR. The reviewer confirms the final commit and evidence set. Satchel’s maintainer then reviews—but cannot replace—the independent conclusion and keeps mainnet disabled until every separate release checklist gate passes.
+All critical/high findings are closed. Medium findings are closed or explicitly accepted in a reviewed ADR. The reviewer confirms the final commit and evidence set. Groot’s maintainer then reviews—but cannot replace—the independent conclusion and keeps mainnet disabled until every separate release checklist gate passes.

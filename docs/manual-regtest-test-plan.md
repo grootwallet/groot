@@ -69,7 +69,7 @@ Open `http://127.0.0.1:5188`. Use `prototype-passphrase` anywhere the prototype 
 1. Open Vault. The pre-created wallet is `Family vault`, 2-of-3, with 2,481,240 fixture sats.
 2. Confirm Coldcard, Trezor, and Offline backup cosigners are visible.
 3. Select Coldcard, inspect its fingerprint/path/source, run its health check, and confirm the connected fingerprint matches.
-4. Select Offline backup, run its check, and confirm Satchel explicitly says physical presence was not checked.
+4. Select Offline backup, run its check, and confirm Groot explicitly says physical presence was not checked.
 5. Choose Send and enter any displayed `bcrt1…` Receive address plus `50000` sats.
 6. Review the authoritative amount, fee, and total.
 7. Choose Sign with device twice and select Virtual Coldcard each time. The deterministic transport adds the next independent fixture signature.
@@ -115,7 +115,7 @@ cd /Users/thibm/Documents/Codex/2026-07-17/let
 pnpm regtest:send -- bcrt1YOUR_SATCHEL_ADDRESS 1.25 --mine
 ```
 
-4. Sync Satchel. Confirm balance, received transaction, label, UTXO, and first-confirmation state.
+4. Sync Groot. Confirm balance, received transaction, label, UTXO, and first-confirmation state.
 
 ### Story H — real BDK send and Core acceptance
 
@@ -123,10 +123,10 @@ Create a Core-owned destination:
 
 ```sh
 cd /Users/thibm/Documents/Codex/2026-07-17/let
-bitcoin-cli -regtest -datadir="$PWD/.regtest" -rpcwallet=satchel-dev getnewaddress "Satchel send acceptance" bech32
+bitcoin-cli -regtest -datadir="$PWD/.regtest" -rpcwallet=satchel-dev getnewaddress "Groot send acceptance" bech32
 ```
 
-1. Paste the returned address into Satchel Send.
+1. Paste the returned address into Groot Send.
 2. Enter an amount in integer sats, choose a fee, and review.
 3. Try a wrong PIN and confirm the proposal remains retryable.
 4. Enter the correct PIN and broadcast.
@@ -148,7 +148,7 @@ pnpm regtest:mine
 
 ### Story I — restart, recovery, and deletion
 
-1. Close and reopen Satchel; unlock with the same passphrase/PIN.
+1. Close and reopen Groot; unlock with the same passphrase/PIN.
 2. Switch between any wallet profiles and confirm each requires its own credential.
 3. Recover a test wallet from exactly 24 words plus its original passphrase.
 4. Delete only the selected disposable wallet through Settings.
@@ -156,7 +156,7 @@ pnpm regtest:mine
 
 ## 3. Physical desktop HWI acceptance
 
-Check the external transport before opening Satchel:
+Check the external transport before opening Groot:
 
 ```sh
 cd /Users/thibm/Documents/Codex/2026-07-17/let
@@ -173,4 +173,4 @@ cd /Users/thibm/Documents/Codex/2026-07-17/let
 pnpm regtest:stop
 ```
 
-Regtest chain state remains under `.regtest/`. Satchel profiles remain in the operating-system app-data directory until deleted through the wallet UI.
+Regtest chain state remains under `.regtest/`. Groot profiles remain in the operating-system app-data directory until deleted through the wallet UI.

@@ -24,7 +24,7 @@ describe('Trezor PIN presentation', () => {
   it('turns stable PIN errors into actionable, non-technical guidance', () => {
     expect(trezorPinError('hardware_pin_rejected', 'raw')).toEqual({
       title: 'PIN not accepted',
-      detail: 'Check the attempts remaining on Trezor. Ask it for a fresh layout, then tap each blank Satchel cell by location—not by the digit printed on Trezor.'
+      detail: 'Check the attempts remaining on Trezor. Ask it for a fresh layout, then tap each blank Groot cell by location—not by the digit printed on Trezor.'
     });
     expect(trezorPinError('hardware_challenge_expired', 'raw').title).toBe('PIN matrix expired');
     expect(trezorPinError('internal_error', 'USB unavailable').detail).toBe('USB unavailable');

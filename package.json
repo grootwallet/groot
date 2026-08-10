@@ -1,5 +1,5 @@
 {
-  "name": "satchel-wallet",
+  "name": "groot-wallet",
   "private": true,
   "version": "0.1.0",
   "packageManager": "pnpm@11.13.1",
@@ -26,9 +26,10 @@
     "test:regtest": "pnpm test:integration:regtest",
     "test:release-gate": "bash scripts/release/check-mainnet-gate.sh",
     "test:boundaries": "bash scripts/quality/check-boundaries.sh",
+    "test:brand": "bash scripts/quality/check-brand-identity.sh",
     "test:full": "pnpm validate && pnpm test:coverage && pnpm test:coverage:rust && pnpm test:acceptance",
     "test:watch": "vitest",
-    "validate": "pnpm test:boundaries && pnpm test:release-gate && pnpm test:dev-runtime && pnpm check && pnpm test && pnpm build",
+    "validate": "pnpm test:boundaries && pnpm test:brand && pnpm test:release-gate && pnpm test:dev-runtime && pnpm check && pnpm test && pnpm build",
     "regtest:start": "bash scripts/regtest/start.sh",
     "regtest:status": "bash scripts/regtest/status.sh",
     "regtest:mine": "bash scripts/regtest/mine.sh",

@@ -27,8 +27,8 @@ pnpm validate
 cargo build --locked --release --manifest-path src-tauri/Cargo.toml
 pnpm tauri build --no-bundle
 
-install -m 0755 src-tauri/target/release/satchel "$release_out/satchel"
-shasum -a 256 "$release_out/satchel" > "$release_out/SHA256SUMS"
+install -m 0755 src-tauri/target/release/groot "$release_out/groot"
+shasum -a 256 "$release_out/groot" > "$release_out/SHA256SUMS"
 {
   echo "commit=$release_commit"
   echo "source_date_epoch=$SOURCE_DATE_EPOCH"
