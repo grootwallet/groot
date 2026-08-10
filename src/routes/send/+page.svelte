@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { AlertTriangle, ArrowRight, Check, CircleDot, Cpu, Download, FileUp, Gauge, LockKeyhole, QrCode, RefreshCw, ScanLine } from '@lucide/svelte';
+  import { AlertTriangle, ArrowRight, Check, CircleDot, Cpu, Download, FileUp, Gauge, LockKeyhole, QrCode, RefreshCw, ScanLine, X } from '@lucide/svelte';
   import { onDestroy, onMount } from 'svelte';
   import Button from '$lib/components/Button.svelte';
   import HardwareActionPrompt from '$lib/components/HardwareActionPrompt.svelte';
@@ -46,7 +46,7 @@
   let showCoins = $state(false);
   let externalWallet = $state<ExternalSignerWallet | null>(null);
   let signerSummaryReady = $state(false);
-  let externalSigner = $state(false), externalProposal = $state<MultisigProposal|null>(null), deviceOpen = $state(false), addressOpen = $state(false), changeAddressOpen = $state(false), hardwareAddressOpen = $state(false), hardwareChangeAddressOpen = $state(false), importOpen = $state(false), qrOpen = $state(false), qrScanOpen = $state(false), devices = $state<HardwareDevice[]>([]), deviceError = $state(''), imported = $state(''), urFrames = $state<string[]>([]), scannedFrames = $state<string[]>([]);
+  let externalSigner = $state(false), externalProposal = $state<MultisigProposal|null>(null), deviceOpen = $state(false), addressOpen = $state(false), changeAddressOpen = $state(false), hardwareAddressOpen = $state(false), hardwareChangeAddressOpen = $state(false), importOpen = $state(false), qrOpen = $state(false), qrScanOpen = $state(false), cancelOpen = $state(false), cancelError = $state(''), devices = $state<HardwareDevice[]>([]), deviceError = $state(''), imported = $state(''), urFrames = $state<string[]>([]), scannedFrames = $state<string[]>([]);
   let hardwareAction = $state<'scan' | 'sign'>('scan');
   const selection = $derived<CoinSelection>(selectedCoins.length ? { mode: 'manual', outpoints: selectedCoins } : { mode: 'auto' });
   const fees = $derived({ slow: Number(estimates?.economy ?? 1), medium: Number(estimates?.standard ?? 2), fast: Number(estimates?.priority ?? 5) });
@@ -149,6 +149,7 @@
   async function loadSignedFile(event:Event){const input=event.currentTarget as HTMLInputElement;const file=input.files?.[0];input.value='';if(!file)return;try{imported=await readTransferFile(file);}catch(cause){credentialError=cause instanceof Error?cause.message:'Could not read PSBT.';}}
   async function showPsbtQr(){if(!externalProposal)return;broadcasting=true;credentialError='';try{urFrames=await walletService.encodePsbtUr(externalProposal.psbt);qrOpen=true;}catch(cause){credentialError=cause instanceof Error?cause.message:'Could not encode the PSBT QR.';}finally{broadcasting=false;}}
   async function saveExternalPsbt(){if(!externalProposal||savingPsbt)return;savingPsbt=true;credentialError='';try{const saved=await walletService.savePsbt(`satchel-${externalProposal.proposalId}.psbt`,externalProposal.psbt);if(saved)toast({title:'PSBT saved',description:'The unsigned transaction was saved to the selected file.',tone:'success'});}catch(cause){credentialError=cause instanceof Error?cause.message:'Could not save the PSBT.';toast({title:'Could not save PSBT',description:credentialError,tone:'danger'});}finally{savingPsbt=false;}}
+  async function confirmCancelExternalProposal(){if(!proposal||!externalProposal||broadcasting)return;broadcasting=true;cancelError='';try{await walletService.cancelExternalSignerProposal(proposal.proposalId);proposal=null;externalProposal=null;address='';label='';amount='';passphrase='';step=1;draftStep=1;cancelOpen=false;toast({title:'Proposal canceled',description:'The transaction and any collected signatures were discarded.'});}catch(cause){cancelError=cause instanceof Error?cause.message:'The proposal could not be canceled.';}finally{broadcasting=false;}}
   async function receiveUrFrame(frame:string){if(scannedFrames.includes(frame))return;scannedFrames=[...scannedFrames,frame];try{imported=await walletService.decodePsbtUr(scannedFrames);qrScanOpen=false;await importSigned();}catch(cause){const message=cause instanceof Error?cause.message:'';if(!message.includes('Keep scanning'))credentialError=message||'The QR frame was rejected.';}}
 </script>
 
@@ -185,7 +186,7 @@
       <dl class="details-list"><div><dt>To</dt><dd><button class="address-review-trigger mono" aria-label="View complete recipient address" onclick={() => addressOpen = true}>{compactAddress(proposal.recipient)}</button></dd></div><div><dt>Label</dt><dd>{proposal.label}</dd></div><div><dt>Network</dt><dd>{proposal.network}</dd></div><div><dt>Network fee</dt><dd>{shortSats(proposal.fee)} sats</dd></div><div class="total"><dt>Total</dt><dd>{shortSats(proposal.total)} sats</dd></div></dl>
       <TransactionReviewDetails {proposal} onChangeAddress={() => changeAddressOpen = true}/>
       <div class="warning-box">Bitcoin transactions cannot be reversed. Verify the address and amount before signing.</div>
-      <div class="split-actions"><Button variant="secondary" size="large" onclick={() => { proposal = null; step = 1; draftStep = 2; }}>Back</Button><Button size="large" onclick={() => step = 3}>Continue to sign<ArrowRight size={17} /></Button></div>
+      <div class="split-actions">{#if externalSigner}<Button variant="danger-outline" size="large" onclick={() => {cancelError='';cancelOpen=true;}}>Cancel proposal</Button>{:else}<Button variant="secondary" size="large" onclick={() => { proposal = null; step = 1; draftStep = 2; }}>Back</Button>{/if}<Button size="large" onclick={() => step = 3}>Continue to sign<ArrowRight size={17} /></Button></div>
     </section>
   {:else if step === 3 && proposal && externalSigner}
     <section class="form-card sign-card">
@@ -202,6 +203,7 @@
         {#if credentialError}<p class="form-error">{credentialError}</p>{/if}
       {/if}
       <Button variant="ghost" size="large" class="full sign-back-action" onclick={() => step=2}>Back to review</Button>
+      <Button variant="ghost-danger" size="large" class="full proposal-cancel-action" disabled={broadcasting} onclick={() => {cancelError='';cancelOpen=true;}}><X size={15}/>Cancel proposal</Button>
     </section>
   {:else if step === 3 && proposal}
     <form class="form-card sign-card" onsubmit={(event) => { event.preventDefault(); broadcast(); }}>
@@ -219,6 +221,7 @@
 <Modal open={importOpen} title="Import signed PSBT" description="Only a valid signature from this wallet’s exact fingerprint is accepted." onclose={() => importOpen=false}><label class="file-action"><FileUp size={16}/>Choose signed PSBT<input aria-label="Choose signed PSBT file" type="file" accept=".psbt,text/plain" onchange={loadSignedFile}/></label><label class="field"><span>Signed PSBT</span><textarea rows="6" bind:value={imported} placeholder="cHNidP8…"></textarea></label><div class="modal-footer"><Button variant="secondary" onclick={() => importOpen=false}>Cancel</Button><Button disabled={!imported.trim()} loading={broadcasting} loadingLabel="Validating…" onclick={importSigned}>Validate signature</Button></div></Modal>
 <Modal open={qrOpen} title="Unsigned PSBT" description="Scan with an offline signer. No private key data is encoded." onclose={() => qrOpen=false}><AnimatedUrQr frames={urFrames}/></Modal>
 <Modal open={qrScanOpen} title="Scan signed PSBT" description="Satchel accepts only crypto-psbt UR frames and verifies the exact proposal before importing." onclose={() => qrScanOpen=false}><UrQrScanner onframe={receiveUrFrame}/></Modal>
+<Modal open={cancelOpen} title="Cancel this proposal?" description="Review what will be discarded before continuing." onclose={() => {if(!broadcasting){cancelOpen=false;cancelError='';}}}>{#if proposal && externalProposal}<div class="warning-box"><strong>This cannot be undone.</strong> You will need to prepare and sign this payment again.</div><dl class="details-list cancel-proposal-details"><div><dt>Payment</dt><dd>{proposal.label}</dd></div><div><dt>Amount</dt><dd>{shortSats(proposal.amount)} sats</dd></div><div><dt>Signatures lost</dt><dd>{externalProposal.signed} of {externalProposal.required} collected</dd></div></dl>{#if cancelError}<p class="form-error" role="alert">{cancelError}</p>{/if}<div class="modal-footer"><Button variant="secondary" disabled={broadcasting} onclick={() => {cancelOpen=false;cancelError='';}}>Keep proposal</Button><Button variant="danger" loading={broadcasting} loadingLabel="Canceling proposal…" onclick={confirmCancelExternalProposal}>Cancel proposal</Button></div>{/if}</Modal>
 <RecipientAddressModal open={addressOpen} address={proposal?.recipient ?? ''} label={proposal?.label ?? ''} onclose={() => addressOpen = false}/>
 <RecipientAddressModal open={changeAddressOpen} address={proposal?.changeAddresses[0] ?? ''} label="Wallet change" title="Change address" description="This output was verified by the Rust wallet as controlled by this wallet." detail="Internal wallet output · not the recipient" onclose={() => changeAddressOpen = false}/>
 <RecipientAddressModal open={hardwareAddressOpen} address={hardwareRecipient} label={proposal?.label ?? ''} title="Address shown on hardware" description="Compare this exact encoding with the hardware device." onclose={() => hardwareAddressOpen = false}/>

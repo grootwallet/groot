@@ -358,6 +358,11 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   const backToReviewButton = await page.getByRole('button', { name: 'Back to review' }).boundingBox();
   expect(backToReviewButton?.height).toBe(finalizeButton?.height);
   expect((backToReviewButton?.y ?? 0) - ((finalizeButton?.y ?? 0) + (finalizeButton?.height ?? 0))).toBeGreaterThanOrEqual(8);
+  await page.getByRole('button', { name: 'Cancel proposal' }).click();
+  const cancelProposalDialog = page.getByRole('dialog', { name: 'Cancel this proposal?' });
+  await expect(cancelProposalDialog.getByText('1 of 1 collected')).toBeVisible();
+  await cancelProposalDialog.getByRole('button', { name: 'Keep proposal' }).click();
+  await expect(page.getByText('Signature verified')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Sign with cable' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Show unsigned QR' })).toHaveCount(0);
   await page.getByRole('link', { name: 'Overview' }).click();
