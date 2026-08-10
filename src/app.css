@@ -288,7 +288,7 @@ code { font-family: "SFMono-Regular", Consolas, ui-monospace, monospace; }
 .icon-button { width: 30px; height: 30px; border: 0; border-radius: 6px; background: var(--surface-icon); color: var(--muted); display: flex; align-items: center; justify-content: center; cursor: pointer; }
 .modal-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 20px; }
 .modal-footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 22px; }
-.modal-form { display: grid; gap: 18px; }
+.modal-form { display: grid; gap: 20px; }
 .modal-form .field { margin: 0; }
 .field { display: flex; flex-direction: column; gap: 8px; margin-bottom: 19px; position: relative; }
 .field > span { font-size: 12px; font-weight: 550; }

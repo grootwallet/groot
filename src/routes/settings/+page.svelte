@@ -32,7 +32,7 @@
   let node = $state<CoreNodeConfig>({ backend: { type: 'local_core', url: 'http://127.0.0.1:18443' }, auth: 'cookie', username: null });
   let scanOpen = $state(false), scanCredential = $state(''), scanError = $state(''), scan = $state<RecoveryScanSettings>({ birthdayHeight: 0, gapLimit: 20 }), scanDraft = $state<RecoveryScanSettings>({ birthdayHeight: 0, gapLimit: 20 });
   let verifyOpen = $state(false), verifyCredential = $state(''), verifyError = $state(''), verifying = $state(false);
-  let hardwareBackupOpen = $state(false), descriptorDetailsOpen = $state(false), hardwareBackupPin = $state(''), hardwareBackupError = $state(''), hardwareBackup = $state(''), exportingHardwareBackup = $state(false);
+  let hardwareBackupOpen = $state(false), descriptorDetailsOpen = $state(false), hardwareBackupPin = $state(''), hardwareBackupError = $state(''), hardwareBackup = $state(''), hardwareBackupContent = $state(''), exportingHardwareBackup = $state(false);
   onMount(async () => {
     theme = document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
     const registry = await walletService.profiles();
@@ -45,7 +45,7 @@
   onDestroy(() => {
     deleteCredential = '';
     confirmText = '';
-    nodePassword = ''; walletCredential = ''; scanCredential = ''; verifyCredential = ''; hardwareBackupPin = ''; hardwareBackup = '';
+    nodePassword = ''; walletCredential = ''; scanCredential = ''; verifyCredential = ''; hardwareBackupPin = ''; hardwareBackup = ''; hardwareBackupContent = '';
   });
   function setTheme(next: 'light' | 'dark') { theme = next; document.documentElement.dataset.theme = next; document.querySelector('meta[name="theme-color"]')?.setAttribute('content', next === 'light' ? '#f4f1e9' : '#0d1118'); localStorage.setItem('satchel-theme', next); }
   async function checkConnection() {
@@ -115,7 +115,9 @@
   async function prepareHardwareBackup() {
     exportingHardwareBackup = true; hardwareBackupError = '';
     try {
-      hardwareBackup = await walletService.exportExternalSignerDescriptor(hardwareBackupPin);
+      const backup = await walletService.exportExternalSignerDescriptor(hardwareBackupPin);
+      hardwareBackup = backup.descriptor;
+      hardwareBackupContent = backup.content;
       hardwareBackupPin = '';
       toast({ title: 'Public descriptor ready', description: 'This watch-only backup cannot sign, but it reveals wallet activity.', tone: 'success' });
     } catch (cause) {
@@ -126,7 +128,7 @@
   }
   async function saveHardwareBackup() {
     try {
-      const saved = await walletService.savePublicBackup('satchel-hardware-wallet.desc', hardwareBackup);
+      const saved = await walletService.savePublicBackup('satchel-hardware-wallet.json', hardwareBackupContent);
       if (saved) toast({ title: 'Descriptor backup saved', description: 'Use this file for the clean-profile recovery drill.', tone: 'success' });
     } catch (cause) {
       hardwareBackupError = cause instanceof Error ? cause.message : 'Could not save the descriptor backup.';
@@ -167,7 +169,7 @@
     <div class="settings-list">
       {#if isSoftwareWallet && !selectedProfile?.backupVerified}<button class="wallet-context-row backup-needs-verification" onclick={() => {verifyError='';verifyOpen=true;}}><span class="setting-icon"><KeyRound size={18}/></span><span><strong>Recovery words not verified</strong><small>Use your written backup to confirm all 24 words in exact order.</small></span><span class="info-badge attention">Verify now</span></button>{:else}<div class="setting-row wallet-context-row"><span class="setting-icon">{#if selectedProfile?.kind === 'multisig'}<ShieldCheck size={18}/>{:else if selectedProfile?.kind === 'watch_only'}<Cpu size={18}/>{:else}<KeyRound size={18}/>{/if}</span><span><strong>{backupTitle}</strong><small>{backupDescription}</small></span><span class="info-badge">{isSoftwareWallet ? 'Verified' : 'Backup required'}</span></div>{/if}
       <button onclick={() => {scanDraft={...scan};scanOpen=true;}}><span class="setting-icon"><History size={18}/></span><span><strong>Recovery scan</strong><small>Birthday block {scan.birthdayHeight} · gap limit {scan.gapLimit}</small></span><ChevronRight size={16}/></button>
-      {#if selectedProfile?.kind === 'multisig'}<button onclick={() => goto('/multisig/backup')}><span class="setting-icon"><ShieldCheck size={18}/></span><span><strong>Export & verify public backup</strong><small>Save descriptors and prove the backup reconstructs this wallet.</small></span><ChevronRight size={16}/></button>{:else if selectedProfile?.kind === 'watch_only'}<button onclick={() => {hardwareBackupOpen=true;hardwareBackup='';hardwareBackupError='';}}><span class="setting-icon"><FileKey size={18}/></span><span><strong>Export public descriptor</strong><small>Save a watch-only backup for independent recovery.</small></span><ChevronRight size={16}/></button>{/if}
+      {#if selectedProfile?.kind === 'multisig'}<button onclick={() => goto('/multisig/backup')}><span class="setting-icon"><ShieldCheck size={18}/></span><span><strong>Export & verify public backup</strong><small>Save descriptors and prove the backup reconstructs this wallet.</small></span><ChevronRight size={16}/></button>{:else if selectedProfile?.kind === 'watch_only'}<button onclick={() => {hardwareBackupOpen=true;hardwareBackup='';hardwareBackupContent='';hardwareBackupError='';}}><span class="setting-icon"><FileKey size={18}/></span><span><strong>Export public descriptor</strong><small>Save a watch-only backup for independent recovery.</small></span><ChevronRight size={16}/></button>{/if}
     </div>
   </section>
   <section class="settings-group wallet-manager mobile-wallet-manager"><h2><span>Wallets</span><strong>{profiles.length} {profiles.length === 1 ? 'wallet' : 'wallets'}</strong></h2>
@@ -207,7 +209,7 @@
   {#if verifyError}<p class="form-error" role="alert">{verifyError.replace('passphrase / PIN','wallet passphrase')}</p>{/if}
   <div class="modal-footer"><Button variant="secondary" onclick={() => {verifyOpen=false;verifyCredential='';verifyError='';}}>Cancel</Button><Button disabled={!verifyCredential} loading={verifying} loadingLabel="Opening verification…" onclick={verifyBackup}>Continue</Button></div>
 </Modal>
-<Modal open={hardwareBackupOpen} title="Export public descriptor" description="Recover this watch-only wallet without exposing the Ledger seed." onclose={() => {hardwareBackupOpen=false;hardwareBackupPin='';hardwareBackupError='';hardwareBackup='';}}>
+<Modal open={hardwareBackupOpen} title="Export public descriptor" description="Recover this watch-only wallet without exposing the Ledger seed." onclose={() => {hardwareBackupOpen=false;hardwareBackupPin='';hardwareBackupError='';hardwareBackup='';hardwareBackupContent='';}}>
   {#if !hardwareBackup}
     <div class="modal-form">
       <div class="warning-box"><strong>Public, not harmless.</strong> This descriptor cannot spend bitcoin, but it reveals every wallet address and transaction. Store it privately.</div>

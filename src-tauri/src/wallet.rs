@@ -776,6 +776,20 @@ pub struct MultisigBackupDto {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ExternalSignerBackupDto {
+    descriptor: String,
+    content: String,
+}
+
+#[derive(Debug, Serialize)]
+struct ExternalSignerBackupRecord<'a> {
+    version: u8,
+    network: &'static str,
+    descriptor: &'a str,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RecoveryDrillDto {
     first_address: String,
     matches_current_wallet: bool,
@@ -4594,17 +4608,30 @@ pub fn external_signer_wallet(
     read_external_signer_metadata(&app)
 }
 
+fn external_signer_backup(descriptor: String) -> ApiResult<ExternalSignerBackupDto> {
+    let content = serde_json::to_string_pretty(&ExternalSignerBackupRecord {
+        version: 1,
+        network: "regtest",
+        descriptor: &descriptor,
+    })
+    .map_err(internal)?;
+    Ok(ExternalSignerBackupDto {
+        descriptor,
+        content,
+    })
+}
+
 #[tauri::command]
 pub fn external_signer_export_descriptor(
     app: AppHandle,
     state: State<'_, AppState>,
     credential: String,
-) -> ApiResult<String> {
+) -> ApiResult<ExternalSignerBackupDto> {
     let _operation = operation_guard(&state)?;
     require_unlocked(&app, &state)?;
     let credential = Zeroizing::new(credential);
     verify_external_signer_credential(&app, credential.as_str())?;
-    Ok(read_external_signer_metadata(&app)?.external_descriptor)
+    external_signer_backup(read_external_signer_metadata(&app)?.external_descriptor)
 }
 
 fn external_proposal_dto(
@@ -6662,6 +6689,7 @@ fn delete_registered_wallet(app: &AppHandle, id: Uuid, path: &Path) -> ApiResult
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::external_signer::{self, ExternalSignerInput, SignerSource, SINGLESIG_ACCOUNT_PATH};
     use crate::multisig::{CosignerInput, CosignerSource, MULTISIG_ACCOUNT_PATH};
     use crate::recovery::{SpendingPath, TimedSpendingPath};
 
@@ -8389,6 +8417,30 @@ mod tests {
                 .code,
             "invalid_backup"
         );
+    }
+
+    #[test]
+    fn external_signer_json_backup_is_directly_importable() {
+        let secp = Secp256k1::new();
+        let path = DerivationPath::from_str(SINGLESIG_ACCOUNT_PATH).unwrap();
+        let master = Xpriv::new_master(NetworkKind::Test, &[42_u8; 32]).unwrap();
+        let account = master.derive_priv(&secp, &path).unwrap();
+        let signer = ExternalSignerInput {
+            label: "Ledger".to_owned(),
+            fingerprint: master.fingerprint(&secp).to_string(),
+            xpub: Xpub::from_priv(&secp, &account).to_string(),
+            derivation_path: SINGLESIG_ACCOUNT_PATH.to_owned(),
+            source: SignerSource::Usb,
+            device_type: Some("ledger".to_owned()),
+        };
+        let expected = external_signer::descriptors(&signer).unwrap();
+        let backup = external_signer_backup(expected.0.clone()).unwrap();
+        let recovered =
+            external_signer::parse_import(&backup.content, "Recovered", SignerSource::File)
+                .unwrap();
+        assert_eq!(backup.descriptor, expected.0);
+        assert_eq!(external_signer::descriptors(&recovered).unwrap(), expected);
+        assert!(!backup.content.contains("prv"));
     }
 
     #[test]

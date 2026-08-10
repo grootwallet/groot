@@ -322,7 +322,8 @@ export class DummyWalletAdapter implements WalletPort {
   async exportExternalSignerDescriptor(credential: string) {
     if (!this.#selectedWalletId || credential !== this.#credentials.get(this.#selectedWalletId)) throw new WalletError('invalid_credential', 'Incorrect app PIN.');
     if (!this.#externalWallet) throw new WalletError('wallet_not_found', 'No external-signer wallet exists.');
-    return this.#externalWallet.externalDescriptor;
+    const descriptor = this.#externalWallet.externalDescriptor;
+    return { descriptor, content: JSON.stringify({ version: 1, network: defaultConfig.network, descriptor }, null, 2) };
   }
   async externalSignerProposals() { return structuredClone([...this.#externalProposals.values()]); }
   async importExternalSignerProposal(proposalId: string, reviewedPsbt: string, _signedPsbt: string) {

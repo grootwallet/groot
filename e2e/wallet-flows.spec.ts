@@ -396,7 +396,7 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   await identifierDialog.getByRole('button', { name: 'Close' }).click();
   const descriptorDownload = page.waitForEvent('download');
   await descriptorDialog.getByRole('button', { name: 'Save descriptor' }).click();
-  await expect((await descriptorDownload).suggestedFilename()).toBe('satchel-hardware-wallet.desc');
+  await expect((await descriptorDownload).suggestedFilename()).toBe('satchel-hardware-wallet.json');
   await expect(page.getByText('Descriptor backup saved', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Close' }).click();
   await page.getByRole('button', { name: /Bitcoin Core node/ }).click();

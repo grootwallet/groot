@@ -77,6 +77,7 @@ export type ExternalSignerWallet = {
   externalDescriptor: string;
   internalDescriptor: string;
 };
+export type ExternalSignerBackup = { descriptor: string; content: string };
 
 export type CosignerHealthCheck = {
   status: 'healthy' | 'record_valid' | 'attention';
@@ -282,7 +283,7 @@ export interface WalletPort {
   importHardwareExternalSigner(deviceId: string, label: string, allowEmptyPassphrase?: boolean): Promise<ExternalSigner>;
   createExternalSignerWallet(name: string, signer: ExternalSigner, credential: string): Promise<ExternalSignerWallet>;
   externalSignerWallet(): Promise<ExternalSignerWallet>;
-  exportExternalSignerDescriptor(credential: string): Promise<string>;
+  exportExternalSignerDescriptor(credential: string): Promise<ExternalSignerBackup>;
   externalSignerProposals(): Promise<MultisigProposal[]>;
   importExternalSignerProposal(proposalId: string, reviewedPsbt: string, signedPsbt: string): Promise<MultisigProposal>;
   signExternalWithHardware(proposalId: string, deviceId: string, reviewedPsbt: string): Promise<MultisigProposal>;
