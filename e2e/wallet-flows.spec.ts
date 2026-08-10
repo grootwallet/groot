@@ -320,7 +320,7 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   await expect(page.getByText('Fee rate', { exact: true })).toBeHidden();
   await page.getByText('View more details', { exact: true }).click();
   await expect(page.getByText('Fee rate', { exact: true })).toBeVisible();
-  await expect(page.getByText('Transaction inputs', { exact: true })).toBeVisible();
+  await expect(page.getByText('Transaction inputs', { exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Continue to sign' }).click();
   await expect(page.getByRole('heading', { name: 'Sign on your hardware' })).toBeVisible();
   const psbtDownload = page.waitForEvent('download');
@@ -342,11 +342,7 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   await expect(hardwareReview.getByText('Fee rate', { exact: true })).toBeHidden();
   await hardwareReview.getByText('View more details', { exact: true }).click();
   await expect(hardwareReview.getByText('Fee rate', { exact: true })).toBeVisible();
-  const hardwareInputs = hardwareReview.getByRole('region', { name: 'Transaction inputs' });
-  await expect(hardwareInputs.getByText('Outpoint', { exact: true })).toBeVisible();
-  await expect(hardwareInputs.getByText('Amount', { exact: true })).toBeVisible();
-  await expect(hardwareInputs.getByText('Sequence', { exact: true })).toBeVisible();
-  expect(await hardwareInputs.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+  await expect(hardwareReview.getByText('Transaction inputs', { exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: /Virtual Coldcard/ }).click();
   await expect(page.getByRole('status', { name: 'Waiting for hardware signature' })).toContainText('Review the recipient, amount, fee, and change');
   await expect(page.getByText('Signature verified')).toBeVisible();

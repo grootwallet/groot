@@ -31,17 +31,4 @@
     <div><dt>Locktime / RBF</dt><dd>{proposal.locktime} · {proposal.rbf ? 'Enabled' : 'Disabled'}</dd></div>
     {#if policy}<div><dt>Wallet policy</dt><dd>{policy}</dd></div>{/if}
   </dl>
-  <section class="proposal-input-details" aria-label="Transaction inputs">
-    <strong>Transaction inputs</strong>
-    {#each proposal.inputs as input, index}
-      <article>
-        <b>Input {index + 1}</b>
-        <dl class:details-list={!compact}>
-          <div><dt>Outpoint</dt><dd><code>{input.outpoint}</code></dd></div>
-          <div><dt>Amount</dt><dd>{shortSats(input.amount)} sats</dd></div>
-          <div><dt>Sequence</dt><dd><code>{input.sequence}</code></dd></div>
-        </dl>
-      </article>
-    {/each}
-  </section>
 </details>
