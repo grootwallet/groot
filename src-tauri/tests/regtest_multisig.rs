@@ -16,13 +16,13 @@ use rand::{rngs::OsRng, RngCore};
 use std::{path::PathBuf, str::FromStr, sync::Arc};
 
 fn regtest_dir() -> PathBuf {
-    std::env::var_os("SATCHEL_REGTEST_DIR")
+    std::env::var_os("GROOT_REGTEST_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.regtest"))
 }
 
 fn rpc() -> Client {
-    let port = std::env::var("SATCHEL_RPC_PORT").unwrap_or_else(|_| "18443".to_owned());
+    let port = std::env::var("GROOT_RPC_PORT").unwrap_or_else(|_| "18443".to_owned());
     let (username, password) = Auth::CookieFile(regtest_dir().join("regtest/.cookie"))
         .get_user_pass()
         .expect("read regtest cookie");
@@ -132,7 +132,7 @@ fn descriptor(keys: &[TestKey], branch: u8, private_index: Option<usize>) -> Str
 #[test]
 #[ignore = "requires the isolated Bitcoin Core regtest harness"]
 fn funds_builds_signs_and_broadcasts_a_real_two_of_three_psbt() {
-    assert!(std::env::var_os("SATCHEL_RUN_REGTEST").is_some());
+    assert!(std::env::var_os("GROOT_RUN_REGTEST").is_some());
     let keys = keys();
     let mut db = Connection::open_in_memory().unwrap();
     let mut coordinator = Wallet::create(descriptor(&keys, 0, None), descriptor(&keys, 1, None))
@@ -153,7 +153,7 @@ fn funds_builds_signs_and_broadcasts_a_real_two_of_three_psbt() {
         )
         .expect("fund descriptor address");
     let mining = rpc
-        .get_new_address(Some("satchel integration"), None)
+        .get_new_address(Some("groot integration"), None)
         .unwrap()
         .require_network(Network::Regtest)
         .unwrap();
@@ -163,7 +163,7 @@ fn funds_builds_signs_and_broadcasts_a_real_two_of_three_psbt() {
     assert_eq!(coordinator.balance().confirmed.to_sat(), 1_000_000);
 
     let destination: Address = rpc
-        .get_new_address(Some("satchel destination"), None)
+        .get_new_address(Some("groot destination"), None)
         .unwrap()
         .require_network(Network::Regtest)
         .unwrap();
@@ -326,7 +326,7 @@ fn funds_builds_signs_and_broadcasts_a_real_two_of_three_psbt() {
 #[test]
 #[ignore = "requires the isolated Bitcoin Core regtest harness"]
 fn birthday_and_gap_limits_omit_then_restore_known_history() {
-    assert!(std::env::var_os("SATCHEL_RUN_REGTEST").is_some());
+    assert!(std::env::var_os("GROOT_RUN_REGTEST").is_some());
     let keys = keys();
     let external = descriptor(&keys, 0, None);
     let internal = descriptor(&keys, 1, None);
@@ -343,7 +343,7 @@ fn birthday_and_gap_limits_omit_then_restore_known_history() {
 
     let rpc = rpc();
     let mining = rpc
-        .get_new_address(Some("satchel rescan mining"), None)
+        .get_new_address(Some("groot rescan mining"), None)
         .unwrap()
         .require_network(Network::Regtest)
         .unwrap();

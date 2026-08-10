@@ -47,7 +47,7 @@
     confirmText = '';
     nodePassword = ''; walletCredential = ''; scanCredential = ''; verifyCredential = ''; hardwareBackupPin = ''; hardwareBackup = ''; hardwareBackupContent = '';
   });
-  function setTheme(next: 'light' | 'dark') { theme = next; document.documentElement.dataset.theme = next; document.querySelector('meta[name="theme-color"]')?.setAttribute('content', next === 'light' ? '#f4f1e9' : '#0d1118'); localStorage.setItem('satchel-theme', next); }
+  function setTheme(next: 'light' | 'dark') { theme = next; document.documentElement.dataset.theme = next; document.querySelector('meta[name="theme-color"]')?.setAttribute('content', next === 'light' ? '#f4f1e9' : '#0d1118'); localStorage.setItem('groot-theme', next); }
   async function checkConnection() {
     checking = true;
     try { const result = await walletService.testNodeConnection(); connected = true; toast({ title: 'Bitcoin node connected', description: `${result.blocks} blocks`, tone: 'success' }); }

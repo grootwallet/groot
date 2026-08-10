@@ -319,7 +319,7 @@ mod tests {
     }
 
     fn test_dir() -> std::path::PathBuf {
-        std::env::temp_dir().join(format!("satchel-registry-test-{}", Uuid::new_v4()))
+        std::env::temp_dir().join(format!("groot-registry-test-{}", Uuid::new_v4()))
     }
 
     #[test]

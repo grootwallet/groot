@@ -26,7 +26,7 @@ const MAX_METADATA_BYTES: u64 = 256 * 1024;
 const KEY_BYTES: usize = 32;
 const NONCE_BYTES: usize = 12;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
-const KEYCHAIN_SERVICE: &str = "app.satchel.wallet.device-wrap.v1";
+const KEYCHAIN_SERVICE: &str = "app.groot.wallet.device-wrap.v1";
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 const ERR_SEC_ITEM_NOT_FOUND: i32 = -25_300;
 
@@ -515,7 +515,7 @@ mod tests {
     }
 
     fn directory() -> std::path::PathBuf {
-        std::env::temp_dir().join(format!("satchel-secure-store-{}", Uuid::new_v4()))
+        std::env::temp_dir().join(format!("groot-secure-store-{}", Uuid::new_v4()))
     }
 
     #[test]

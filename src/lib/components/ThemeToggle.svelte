@@ -12,7 +12,7 @@
     theme = next;
     document.documentElement.dataset.theme = next;
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', next === 'light' ? '#f4f1e9' : '#0d1118');
-    localStorage.setItem('satchel-theme', next);
+    localStorage.setItem('groot-theme', next);
   }
 </script>
 

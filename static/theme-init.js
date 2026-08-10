@@ -2,7 +2,7 @@
   if (location.pathname === '/marketing' || location.pathname.startsWith('/marketing/')) return;
   let theme = 'dark';
   try {
-    const saved = localStorage.getItem('satchel-theme');
+    const saved = localStorage.getItem('groot-theme');
     theme = saved === 'light' || saved === 'dark'
       ? saved
       : (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');

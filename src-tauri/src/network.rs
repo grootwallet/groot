@@ -210,7 +210,7 @@ mod tests {
                 url: "https://node.example".into()
             },
             auth: RpcAuthMode::UserPass,
-            username: Some("satchel".into()),
+            username: Some("groot".into()),
             tor_proxy: None,
         }
         .validate()
@@ -237,7 +237,7 @@ mod tests {
                     .into()
             },
             auth: RpcAuthMode::UserPass,
-            username: Some("satchel".into()),
+            username: Some("groot".into()),
             tor_proxy: Some("127.0.0.1:9050".into()),
         }
         .validate()
@@ -248,7 +248,7 @@ mod tests {
                     url: "http://example.com:8332".into()
                 },
                 auth: RpcAuthMode::UserPass,
-                username: Some("satchel".into()),
+                username: Some("groot".into()),
                 tor_proxy: Some("127.0.0.1:9050".into()),
             }
             .validate(),
@@ -268,7 +268,7 @@ mod tests {
                 CoreNodeConfig {
                     backend: ChainBackend::RemoteCore { url: url.into() },
                     auth: RpcAuthMode::UserPass,
-                    username: Some("satchel".into()),
+                    username: Some("groot".into()),
                     tor_proxy: proxy.map(str::to_owned)
                 }
                 .validate(),
@@ -283,7 +283,7 @@ mod tests {
                             .into()
                 },
                 auth: RpcAuthMode::UserPass,
-                username: Some("satchel".into()),
+                username: Some("groot".into()),
                 tor_proxy: Some("localhost:9050".into()),
             }
             .validate(),

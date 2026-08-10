@@ -1,6 +1,6 @@
 import { writable } from 'svelte/store';
 
-export const DISCREET_MODE_STORAGE_KEY = 'satchel-discreet-mode';
+export const DISCREET_MODE_STORAGE_KEY = 'groot-discreet-mode';
 export const discreetMode = writable(false);
 
 export function initDiscreetMode(

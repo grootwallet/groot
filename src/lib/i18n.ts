@@ -1,7 +1,7 @@
 import { writable } from 'svelte/store';
 
 export type Locale = 'en' | 'fr' | 'es';
-export const LOCALE_STORAGE_KEY = 'satchel-language';
+export const LOCALE_STORAGE_KEY = 'groot-language';
 
 export const localeOptions: ReadonlyArray<{ value: Locale; label: string; shortLabel: string }> = [
   { value: 'en', label: 'English', shortLabel: 'EN' },

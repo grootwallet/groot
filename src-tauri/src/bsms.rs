@@ -10,7 +10,7 @@ use bdk_wallet::descriptor::{Descriptor, DescriptorPublicKey};
 use std::{fmt, str::FromStr};
 
 pub const MAX_BSMS_BYTES: usize = 256 * 1024;
-pub const SATCHEL_PATH_RESTRICTIONS: &str = "/0/*,/1/*";
+pub const GROOT_PATH_RESTRICTIONS: &str = "/0/*,/1/*";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DescriptorRecord {
@@ -82,7 +82,7 @@ impl DescriptorRecord {
         if contains_private_material(lines[1]) {
             return Err(BsmsError::PrivateMaterial);
         }
-        if lines[2] != SATCHEL_PATH_RESTRICTIONS {
+        if lines[2] != GROOT_PATH_RESTRICTIONS {
             return Err(BsmsError::UnsupportedPaths);
         }
         let external = expand_template(lines[1], 0)?;
@@ -130,7 +130,7 @@ impl DescriptorRecord {
         }
         Ok(Self {
             descriptor_template,
-            path_restrictions: SATCHEL_PATH_RESTRICTIONS.to_owned(),
+            path_restrictions: GROOT_PATH_RESTRICTIONS.to_owned(),
             first_address: first_address.to_owned(),
         })
     }
@@ -257,7 +257,7 @@ mod tests {
     }
 
     #[test]
-    fn round_trips_a_standard_satchel_descriptor_pair() {
+    fn round_trips_a_standard_groot_descriptor_pair() {
         let (external, internal) = descriptors();
         let record = DescriptorRecord::from_descriptor_pair(
             &external,

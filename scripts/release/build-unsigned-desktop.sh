@@ -15,7 +15,7 @@ fi
 
 release_commit="$(git rev-parse HEAD)"
 export SOURCE_DATE_EPOCH="$(git show -s --format=%ct "$release_commit")"
-release_out="${SATCHEL_RELEASE_OUT:-$repo_root/release-artifacts/$release_commit}"
+release_out="${GROOT_RELEASE_OUT:-$repo_root/release-artifacts/$release_commit}"
 if [[ -e "$release_out" ]]; then
   echo "Release output already exists: $release_out" >&2
   exit 1

@@ -22,7 +22,7 @@
 
 - Do not describe the wallet as mainnet-ready, production-ready, audited, certified, trustless, unhackable, or independently reviewed.
 - Do not imply that physical hardware, mobile camera flows, remote TLS/Tor deployments, reproducible builds, signing, or notarization are complete.
-- Use Groot as the public product name. Historical and compatibility identifiers may still contain `satchel` under ADR 0023.
+- Use Groot as the public product name. Historical and compatibility identifiers may still contain `groot` under ADR 0023.
 
 ## Versioned source documents
 

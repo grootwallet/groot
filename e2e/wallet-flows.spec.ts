@@ -404,7 +404,7 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   await page.getByRole('button', { name: /Bitcoin Core node/ }).click();
   await page.getByRole('button', { name: 'Remote TLS' }).click();
   await page.getByLabel('RPC URL').fill('https://regtest-node.example:18443');
-  await page.getByLabel('RPC username').fill('satchel');
+  await page.getByLabel('RPC username').fill('groot');
   await page.getByLabel('RPC password', { exact: true }).fill('rpc-secret');
   await page.getByLabel('App PIN', { exact: true }).fill('hardware-pin');
   await page.getByRole('button', { name: 'Save & test' }).click();
@@ -605,8 +605,8 @@ test('recovery scan and Tor node controls preserve explicit safety choices', asy
   await page.getByRole('button', { name: /Bitcoin Core node/ }).click();
   await page.getByRole('button', { name: 'Tor onion' }).click();
   await expect(page.getByLabel('Local SOCKS5 proxy')).toHaveValue('127.0.0.1:9050');
-  await page.getByLabel('RPC URL').fill('http://satcheltestnode.onion:8332');
-  await page.getByLabel('RPC username').fill('satchel');
+  await page.getByLabel('RPC URL').fill('http://groottestnode.onion:8332');
+  await page.getByLabel('RPC username').fill('groot');
   await page.getByLabel('RPC password', { exact: true }).fill('rpc-secret');
   await page.getByLabel('Wallet passphrase', { exact: true }).fill('prototype-passphrase');
   await page.getByRole('button', { name: 'Save & test' }).click();

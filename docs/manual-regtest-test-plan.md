@@ -112,7 +112,7 @@ bash scripts/dev/tauri-regtest.sh
 
 ```sh
 cd /Users/thibm/Documents/Codex/2026-07-17/let
-pnpm regtest:send -- bcrt1YOUR_SATCHEL_ADDRESS 1.25 --mine
+pnpm regtest:send -- bcrt1YOUR_GROOT_ADDRESS 1.25 --mine
 ```
 
 4. Sync Groot. Confirm balance, received transaction, label, UTXO, and first-confirmation state.
@@ -123,7 +123,7 @@ Create a Core-owned destination:
 
 ```sh
 cd /Users/thibm/Documents/Codex/2026-07-17/let
-bitcoin-cli -regtest -datadir="$PWD/.regtest" -rpcwallet=satchel-dev getnewaddress "Groot send acceptance" bech32
+bitcoin-cli -regtest -datadir="$PWD/.regtest" -rpcwallet=groot-dev getnewaddress "Groot send acceptance" bech32
 ```
 
 1. Paste the returned address into Groot Send.

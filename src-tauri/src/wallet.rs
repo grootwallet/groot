@@ -67,7 +67,7 @@ const ONBOARDING_SESSION_SECONDS: u64 = 15 * 60;
 const HARDWARE_PIN_CHALLENGE_TIMEOUT: Duration = Duration::from_secs(2 * 60);
 const MAX_HARDWARE_PIN_POSITIONS: usize = 50;
 const MAX_PUBLIC_BACKUP_BYTES: usize = 256 * 1024;
-const REGTEST_APP_DATA_OVERRIDE: &str = "SATCHEL_REGTEST_APP_DATA_DIR";
+const REGTEST_APP_DATA_OVERRIDE: &str = "GROOT_REGTEST_APP_DATA_DIR";
 const MIN_RECOVERY_GAP_LIMIT: u32 = 20;
 const MAX_RECOVERY_GAP_LIMIT: u32 = 1_000;
 const MIN_SUPPLEMENTAL_COIN_FLIPS: usize = 128;
@@ -1017,9 +1017,9 @@ fn validate_regtest_app_data_override(path: PathBuf) -> ApiResult<PathBuf> {
     let temporary_root = Path::new("/tmp").canonicalize().map_err(internal)?;
     #[cfg(not(unix))]
     let temporary_root = std::env::temp_dir().canonicalize().map_err(internal)?;
-    if parent != temporary_root || !filename.starts_with("satchel-regtest-") {
+    if parent != temporary_root || !filename.starts_with("groot-regtest-") {
         return Err(internal(
-            "The regtest app-data override must be a satchel-regtest-* directory directly under the system temporary directory.",
+            "The regtest app-data override must be a groot-regtest-* directory directly under the system temporary directory.",
         ));
     }
     if let Ok(metadata) = fs::symlink_metadata(&path) {
@@ -1328,7 +1328,7 @@ fn commit_multisig_profile(app: &AppHandle, id: Uuid, wallet: &MultisigWalletDto
 }
 
 fn regtest_dir() -> PathBuf {
-    std::env::var_os("SATCHEL_REGTEST_DIR")
+    std::env::var_os("GROOT_REGTEST_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|| {
             Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -1591,7 +1591,7 @@ fn validate_wallet_passphrase(passphrase: &str) -> ApiResult<()> {
 
 fn init_app_schema(db: &Connection) -> ApiResult<()> {
     db.execute_batch(
-        "CREATE TABLE IF NOT EXISTS satchel_addresses (
+        "CREATE TABLE IF NOT EXISTS groot_addresses (
             idx INTEGER PRIMARY KEY,
             address TEXT NOT NULL UNIQUE,
             label TEXT NOT NULL,
@@ -1599,17 +1599,17 @@ fn init_app_schema(db: &Connection) -> ApiResult<()> {
             state TEXT NOT NULL CHECK(state IN ('awaiting', 'used', 'discarded')),
             observed INTEGER NOT NULL DEFAULT 0 CHECK(observed IN (0, 1))
         );
-        CREATE TABLE IF NOT EXISTS satchel_address_verifications (
+        CREATE TABLE IF NOT EXISTS groot_address_verifications (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            address_idx INTEGER NOT NULL REFERENCES satchel_addresses(idx),
+            address_idx INTEGER NOT NULL REFERENCES groot_addresses(idx),
             signer_fingerprint TEXT NOT NULL CHECK(length(signer_fingerprint) = 8),
             device_type TEXT NOT NULL,
             displayed_address TEXT NOT NULL,
             verified_at INTEGER NOT NULL
         );
-        CREATE INDEX IF NOT EXISTS satchel_address_verifications_address_time
-            ON satchel_address_verifications(address_idx, verified_at DESC, id DESC);
-        CREATE TABLE IF NOT EXISTS satchel_proposals (
+        CREATE INDEX IF NOT EXISTS groot_address_verifications_address_time
+            ON groot_address_verifications(address_idx, verified_at DESC, id DESC);
+        CREATE TABLE IF NOT EXISTS groot_proposals (
             proposal_id TEXT PRIMARY KEY,
             recipient TEXT NOT NULL,
             label TEXT NOT NULL DEFAULT 'Sent payment',
@@ -1621,22 +1621,22 @@ fn init_app_schema(db: &Connection) -> ApiResult<()> {
             created_at INTEGER NOT NULL,
             txid TEXT
         );
-        CREATE TABLE IF NOT EXISTS satchel_frozen_coins (
+        CREATE TABLE IF NOT EXISTS groot_frozen_coins (
             outpoint TEXT PRIMARY KEY,
             frozen_at INTEGER NOT NULL
         );
-        CREATE TABLE IF NOT EXISTS satchel_auth_throttle (
+        CREATE TABLE IF NOT EXISTS groot_auth_throttle (
             singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
             failures INTEGER NOT NULL CHECK(failures >= 0),
             retry_at INTEGER NOT NULL CHECK(retry_at >= 0)
         );
-        CREATE TABLE IF NOT EXISTS satchel_recovery_settings (
+        CREATE TABLE IF NOT EXISTS groot_recovery_settings (
             singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
             birthday_height INTEGER NOT NULL CHECK(birthday_height >= 0),
             gap_limit INTEGER NOT NULL CHECK(gap_limit BETWEEN 20 AND 1000)
         );
-        CREATE TABLE IF NOT EXISTS satchel_accelerations (
-            proposal_id TEXT PRIMARY KEY REFERENCES satchel_proposals(proposal_id) ON DELETE CASCADE,
+        CREATE TABLE IF NOT EXISTS groot_accelerations (
+            proposal_id TEXT PRIMARY KEY REFERENCES groot_proposals(proposal_id) ON DELETE CASCADE,
             method TEXT NOT NULL CHECK(method IN ('rbf', 'cpfp')),
             original_txid TEXT NOT NULL,
             replacement_txid TEXT UNIQUE,
@@ -1652,7 +1652,7 @@ fn init_app_schema(db: &Connection) -> ApiResult<()> {
     )
     .map_err(internal)?;
     let has_proposal_label = db
-        .prepare("PRAGMA table_info(satchel_proposals)")
+        .prepare("PRAGMA table_info(groot_proposals)")
         .map_err(internal)?
         .query_map([], |row| row.get::<_, String>(1))
         .map_err(internal)?
@@ -1662,7 +1662,7 @@ fn init_app_schema(db: &Connection) -> ApiResult<()> {
         .any(|column| column == "label");
     if !has_proposal_label {
         db.execute(
-            "ALTER TABLE satchel_proposals ADD COLUMN label TEXT NOT NULL DEFAULT 'Sent payment'",
+            "ALTER TABLE groot_proposals ADD COLUMN label TEXT NOT NULL DEFAULT 'Sent payment'",
             [],
         )
         .map_err(internal)?;
@@ -1673,7 +1673,7 @@ fn init_app_schema(db: &Connection) -> ApiResult<()> {
 
 fn frozen_outpoints(db: &Connection) -> ApiResult<Vec<OutPoint>> {
     let mut statement = db
-        .prepare("SELECT outpoint FROM satchel_frozen_coins")
+        .prepare("SELECT outpoint FROM groot_frozen_coins")
         .map_err(internal)?;
     let outpoints = statement
         .query_map([], |row| row.get::<_, String>(0))
@@ -1746,7 +1746,7 @@ fn open_auth_db(app: &AppHandle) -> ApiResult<Connection> {
 fn load_auth_throttle(db: &Connection) -> ApiResult<AuthThrottle> {
     let persisted = db
         .query_row(
-            "SELECT failures, retry_at FROM satchel_auth_throttle WHERE singleton = 1",
+            "SELECT failures, retry_at FROM groot_auth_throttle WHERE singleton = 1",
             [],
             |row| Ok((row.get::<_, u32>(0)?, row.get::<_, u64>(1)?)),
         )
@@ -1760,7 +1760,7 @@ fn load_auth_throttle(db: &Connection) -> ApiResult<AuthThrottle> {
 fn save_auth_throttle(db: &mut Connection, throttle: &AuthThrottle) -> ApiResult<()> {
     let (failures, retry_at) = throttle.snapshot();
     db.execute(
-        "INSERT INTO satchel_auth_throttle(singleton, failures, retry_at) VALUES(1, ?1, ?2)\
+        "INSERT INTO groot_auth_throttle(singleton, failures, retry_at) VALUES(1, ?1, ?2)\
          ON CONFLICT(singleton) DO UPDATE SET failures = excluded.failures, retry_at = excluded.retry_at",
         params![failures, retry_at],
     )
@@ -1875,7 +1875,7 @@ fn load_wallet(db: &mut Connection) -> ApiResult<PersistedWallet<Connection>> {
 
 fn load_recovery_scan_settings(db: &Connection) -> ApiResult<RecoveryScanSettingsDto> {
     db.query_row(
-        "SELECT birthday_height, gap_limit FROM satchel_recovery_settings WHERE singleton = 1",
+        "SELECT birthday_height, gap_limit FROM groot_recovery_settings WHERE singleton = 1",
         [],
         |row| {
             Ok(RecoveryScanSettingsDto {
@@ -1899,7 +1899,7 @@ fn load_recovery_scan_settings(db: &Connection) -> ApiResult<RecoveryScanSetting
 /// A used address resets the unused run exactly as a descriptor scan would.
 fn required_recovery_gap(db: &Connection, prospective_index: Option<u32>) -> ApiResult<u32> {
     let mut statement = db
-        .prepare("SELECT idx, observed FROM satchel_addresses ORDER BY idx")
+        .prepare("SELECT idx, observed FROM groot_addresses ORDER BY idx")
         .map_err(internal)?;
     let rows = statement
         .query_map([], |row| {
@@ -2287,7 +2287,7 @@ fn verify_external_signer_credential(app: &AppHandle, credential: &str) -> ApiRe
     let metadata = read_external_signer_metadata(app)?;
     let mut plaintext =
         secure_store::load(&secret_path(app)?, credential).map_err(secure_store_error)?;
-    let expected = format!("satchel-external-signer:{}", metadata.external_descriptor);
+    let expected = format!("groot-external-signer:{}", metadata.external_descriptor);
     let matches = plaintext.as_slice() == expected.as_bytes();
     plaintext.zeroize();
     if matches {
@@ -2436,7 +2436,7 @@ fn verify_multisig_credential(app: &AppHandle, credential: &str) -> ApiResult<()
         plaintext
     };
     let metadata = read_multisig_metadata(app)?;
-    let expected = format!("satchel-multisig:{}", metadata.external_descriptor);
+    let expected = format!("groot-multisig:{}", metadata.external_descriptor);
     let matches = plaintext.as_slice() == expected.as_bytes();
     plaintext.zeroize();
     if matches {
@@ -2690,7 +2690,7 @@ fn load_multisig_proposal(
 ) -> ApiResult<MultisigProposalDto> {
     let wallet = load_wallet(db)?;
     let row = db.query_row(
-        "SELECT proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at FROM satchel_proposals WHERE proposal_id = ?1 AND status IN ('collecting','ready')",
+        "SELECT proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at FROM groot_proposals WHERE proposal_id = ?1 AND status IN ('collecting','ready')",
         params![proposal_id],
         |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?, row.get(7)?, row.get(8)?)),
     ).map_err(|_| api_error("proposal_not_found", "Payment proposal was not found or is no longer active."))?;
@@ -2703,7 +2703,7 @@ fn persist_single_proposal(
     psbt: &Psbt,
 ) -> ApiResult<()> {
     db.execute(
-        "INSERT INTO satchel_proposals (proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,'collecting',?8)",
+        "INSERT INTO groot_proposals (proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,'collecting',?8)",
         params![
             proposal.proposal_id,
             proposal.recipient,
@@ -2726,7 +2726,7 @@ fn persist_acceleration(
     original: &TransactionDto,
 ) -> ApiResult<()> {
     db.execute(
-        "INSERT INTO satchel_accelerations (
+        "INSERT INTO groot_accelerations (
             proposal_id, method, original_txid, original_kind, original_direction,
             original_amount, original_fee, original_date, original_address, original_label, created_at
          ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
@@ -2750,22 +2750,22 @@ fn persist_acceleration(
 
 fn reconcile_active_acceleration_proposals(db: &Connection) -> ApiResult<()> {
     db.execute(
-        "UPDATE satchel_proposals
+        "UPDATE groot_proposals
          SET status = 'cancelled'
          WHERE status IN ('collecting', 'ready')
            AND proposal_id IN (
              SELECT acceleration.proposal_id
-             FROM satchel_accelerations acceleration
+             FROM groot_accelerations acceleration
              WHERE EXISTS (
                SELECT 1
-               FROM satchel_accelerations completed
+               FROM groot_accelerations completed
                WHERE completed.original_txid = acceleration.original_txid
                  AND completed.method = acceleration.method
                  AND completed.replacement_txid IS NOT NULL
              ) OR EXISTS (
                SELECT 1
-               FROM satchel_accelerations newer
-               JOIN satchel_proposals newer_proposal
+               FROM groot_accelerations newer
+               JOIN groot_proposals newer_proposal
                  ON newer_proposal.proposal_id = newer.proposal_id
                WHERE newer.original_txid = acceleration.original_txid
                  AND newer.method = acceleration.method
@@ -2786,8 +2786,8 @@ fn active_acceleration_proposal_id(
 ) -> ApiResult<Option<String>> {
     db.query_row(
         "SELECT acceleration.proposal_id
-         FROM satchel_accelerations acceleration
-         JOIN satchel_proposals proposal ON proposal.proposal_id = acceleration.proposal_id
+         FROM groot_accelerations acceleration
+         JOIN groot_proposals proposal ON proposal.proposal_id = acceleration.proposal_id
          WHERE acceleration.original_txid = ?1
            AND acceleration.method = ?2
            AND proposal.status IN ('collecting', 'ready')
@@ -2806,7 +2806,7 @@ fn record_replacement(
     replacement_txid: &Txid,
 ) -> ApiResult<()> {
     db.execute(
-        "UPDATE satchel_accelerations SET replacement_txid = ?1
+        "UPDATE groot_accelerations SET replacement_txid = ?1
          WHERE proposal_id = ?2 AND method = 'rbf' AND replacement_txid IS NULL",
         params![replacement_txid.to_string(), proposal_id],
     )
@@ -2822,7 +2822,7 @@ fn apply_replacement_history(
         .prepare(
             "SELECT original_txid, replacement_txid, original_kind, original_direction,
                     original_amount, original_fee, original_date, original_address, original_label
-             FROM satchel_accelerations
+             FROM groot_accelerations
              WHERE method = 'rbf' AND replacement_txid IS NOT NULL
              ORDER BY created_at DESC",
         )
@@ -2874,7 +2874,7 @@ fn apply_replacement_history(
 fn load_single_proposal(db: &Connection, proposal_id: &str) -> ApiResult<PendingProposal> {
     let (encoded, recipient, amount, fee) = db
         .query_row(
-            "SELECT psbt, recipient, amount, fee FROM satchel_proposals WHERE proposal_id = ?1 AND status = 'collecting'",
+            "SELECT psbt, recipient, amount, fee FROM groot_proposals WHERE proposal_id = ?1 AND status = 'collecting'",
             params![proposal_id],
             |row| Ok((row.get::<_, String>(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
         )
@@ -2900,7 +2900,7 @@ fn load_payment_proposal_dto(
     let (proposal_id, recipient, label, amount, fee, encoded) = db
         .query_row(
             "SELECT proposal_id, recipient, label, amount, fee, psbt
-             FROM satchel_proposals
+             FROM groot_proposals
              WHERE proposal_id = ?1 AND status IN ('collecting', 'ready')",
             params![proposal_id],
             |row| {
@@ -2961,7 +2961,7 @@ fn write_private_json(path: &Path, value: &impl Serialize) -> ApiResult<()> {
     if encoded.len() as u64 > MAX_PRIVATE_JSON_BYTES {
         return Err(internal("Private storage payload is too large."));
     }
-    let temp = parent.join(format!(".satchel-{}.tmp", Uuid::new_v4()));
+    let temp = parent.join(format!(".groot-{}.tmp", Uuid::new_v4()));
     let result = (|| {
         let mut options = OpenOptions::new();
         options.write(true).create_new(true);
@@ -3164,7 +3164,7 @@ fn mark_observed_addresses(wallet: &Wallet, db: &Connection) -> ApiResult<()> {
     for output in wallet.list_output() {
         if output.keychain == KeychainKind::External {
             db.execute(
-                "UPDATE satchel_addresses SET observed = 1, state = 'used' WHERE idx = ?1",
+                "UPDATE groot_addresses SET observed = 1, state = 'used' WHERE idx = ?1",
                 params![output.derivation_index],
             )
             .map_err(internal)?;
@@ -3191,7 +3191,7 @@ fn confirmations(
 
 fn address_metadata(db: &Connection, index: u32) -> Option<(String, String)> {
     db.query_row(
-        "SELECT address, label FROM satchel_addresses WHERE idx = ?1",
+        "SELECT address, label FROM groot_addresses WHERE idx = ?1",
         params![index],
         |row| Ok((row.get(0)?, row.get(1)?)),
     )
@@ -3208,7 +3208,7 @@ fn tx_counterparty(
     let outgoing_label = (!received)
         .then(|| {
             db.query_row(
-                "SELECT label FROM satchel_proposals WHERE txid = ?1 AND status = 'broadcast'",
+                "SELECT label FROM groot_proposals WHERE txid = ?1 AND status = 'broadcast'",
                 params![txid],
                 |row| row.get::<_, String>(0),
             )
@@ -3266,11 +3266,11 @@ fn address_rows(db: &Connection, multisig: bool) -> ApiResult<Vec<ReceiveAddress
         .prepare(
             "SELECT a.idx, a.address, a.label, a.created_at, a.state,
                     verification.verified_at, verification.signer_fingerprint
-             FROM satchel_addresses a
-             LEFT JOIN satchel_address_verifications verification
+             FROM groot_addresses a
+             LEFT JOIN groot_address_verifications verification
                ON verification.id = (
                  SELECT latest.id
-                 FROM satchel_address_verifications latest
+                 FROM groot_address_verifications latest
                  WHERE latest.address_idx = a.idx
                  ORDER BY latest.verified_at DESC, latest.id DESC
                  LIMIT 1
@@ -3312,7 +3312,7 @@ fn record_address_verification(
     let transaction = db.transaction().map_err(internal)?;
     transaction
         .execute(
-            "INSERT INTO satchel_address_verifications
+            "INSERT INTO groot_address_verifications
                 (address_idx, signer_fingerprint, device_type, displayed_address, verified_at)
              VALUES (?1, ?2, ?3, ?4, ?5)",
             params![
@@ -3416,7 +3416,7 @@ fn snapshot_from(
     let mut utxos = Vec::new();
     let frozen = {
         let mut statement = db
-            .prepare("SELECT outpoint FROM satchel_frozen_coins")
+            .prepare("SELECT outpoint FROM groot_frozen_coins")
             .map_err(internal)?;
         let values = statement
             .query_map([], |row| row.get::<_, String>(0))
@@ -3816,7 +3816,7 @@ pub fn address_create(
     let created = now();
     transaction
         .execute(
-            "INSERT INTO satchel_addresses (idx, address, label, created_at, state) VALUES (?1, ?2, ?3, ?4, 'awaiting')",
+            "INSERT INTO groot_addresses (idx, address, label, created_at, state) VALUES (?1, ?2, ?3, ?4, 'awaiting')",
             params![info.index, info.address.to_string(), label, created],
         )
         .map_err(internal)?;
@@ -3842,7 +3842,7 @@ pub fn address_discard(app: AppHandle, state: State<'_, AppState>, id: u32) -> A
     let db = open_db(&app)?;
     let changed = db
         .execute(
-            "UPDATE satchel_addresses SET state = 'discarded' WHERE idx = ?1 AND state = 'awaiting' AND observed = 0",
+            "UPDATE groot_addresses SET state = 'discarded' WHERE idx = ?1 AND state = 'awaiting' AND observed = 0",
             params![id],
         )
         .map_err(internal)?;
@@ -3880,13 +3880,13 @@ fn set_coin_frozen(db: &mut Connection, outpoint: &str, frozen: bool) -> ApiResu
     }
     if frozen {
         db.execute(
-            "INSERT OR REPLACE INTO satchel_frozen_coins (outpoint, frozen_at) VALUES (?1, ?2)",
+            "INSERT OR REPLACE INTO groot_frozen_coins (outpoint, frozen_at) VALUES (?1, ?2)",
             params![parsed.to_string(), now()],
         )
         .map_err(internal)?;
     } else {
         db.execute(
-            "DELETE FROM satchel_frozen_coins WHERE outpoint = ?1",
+            "DELETE FROM groot_frozen_coins WHERE outpoint = ?1",
             params![parsed.to_string()],
         )
         .map_err(internal)?;
@@ -3987,7 +3987,7 @@ pub fn recovery_scan_settings_save(
         ));
     }
     db.execute(
-        "INSERT INTO satchel_recovery_settings (singleton, birthday_height, gap_limit) VALUES (1, ?1, ?2)
+        "INSERT INTO groot_recovery_settings (singleton, birthday_height, gap_limit) VALUES (1, ?1, ?2)
          ON CONFLICT(singleton) DO UPDATE SET birthday_height = excluded.birthday_height, gap_limit = excluded.gap_limit",
         params![birthday_height, gap_limit],
     )
@@ -4575,7 +4575,7 @@ pub fn external_signer_create(
         .create_wallet(&mut db)
         .map_err(internal)?;
         write_private_json(&dir.join("wallet.json"), &metadata)?;
-        let marker = format!("satchel-external-signer:{}", metadata.external_descriptor);
+        let marker = format!("groot-external-signer:{}", metadata.external_descriptor);
         persist_secret_material(
             &dir.join("secret.json"),
             marker.as_bytes(),
@@ -4694,7 +4694,7 @@ fn load_external_proposal(
 ) -> ApiResult<MultisigProposalDto> {
     let wallet = load_wallet(db)?;
     let row = db.query_row(
-        "SELECT proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at FROM satchel_proposals WHERE proposal_id = ?1 AND status IN ('collecting','ready')",
+        "SELECT proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at FROM groot_proposals WHERE proposal_id = ?1 AND status IN ('collecting','ready')",
         params![proposal_id],
         |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?, row.get(7)?, row.get(8)?)),
     ).map_err(|_| api_error("proposal_not_found", "Payment proposal was not found or is no longer active."))?;
@@ -4712,7 +4712,7 @@ pub fn external_signer_proposals(
     let mut db = open_db(&app)?;
     let wallet = load_wallet(&mut db)?;
     let mut statement = db.prepare(
-        "SELECT proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at FROM satchel_proposals WHERE status IN ('collecting','ready') ORDER BY created_at DESC",
+        "SELECT proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at FROM groot_proposals WHERE status IN ('collecting','ready') ORDER BY created_at DESC",
     ).map_err(internal)?;
     let rows = statement
         .query_map([], |row| {
@@ -4773,7 +4773,7 @@ fn import_external_proposal(
         "collecting"
     };
     let changed = db.execute(
-        "UPDATE satchel_proposals SET psbt = ?1, status = ?2 WHERE proposal_id = ?3 AND status IN ('collecting','ready') AND psbt = ?4",
+        "UPDATE groot_proposals SET psbt = ?1, status = ?2 WHERE proposal_id = ?3 AND status IN ('collecting','ready') AND psbt = ?4",
         params![encode_psbt(&original), status, proposal_id, original_encoded],
     ).map_err(internal)?;
     if changed != 1 {
@@ -4897,7 +4897,7 @@ pub fn external_signer_proposal_broadcast(
     let sync_pending = sync_loaded_wallet(&app, &state, &mut wallet, &mut db).is_err();
     let persisted = db.transaction().map_err(internal)?;
     let changed = persisted.execute(
-        "UPDATE satchel_proposals SET status = 'broadcast', txid = ?1 WHERE proposal_id = ?2 AND status = 'ready'",
+        "UPDATE groot_proposals SET status = 'broadcast', txid = ?1 WHERE proposal_id = ?2 AND status = 'ready'",
         params![txid.to_string(), proposal_id],
     ).map_err(internal)?;
     if changed != 1 {
@@ -4940,7 +4940,7 @@ pub fn external_signer_proposal_cancel(
     require_unlocked(&app, &state)?;
     let db = open_db(&app)?;
     let changed = db.execute(
-        "UPDATE satchel_proposals SET status = 'cancelled' WHERE proposal_id = ?1 AND status IN ('collecting','ready')",
+        "UPDATE groot_proposals SET status = 'cancelled' WHERE proposal_id = ?1 AND status IN ('collecting','ready')",
         params![proposal_id],
     ).map_err(internal)?;
     if changed != 1 {
@@ -4969,7 +4969,7 @@ pub async fn hardware_verify_multisig_address(
     let mut db = open_multisig_db(&app)?;
     let expected: String = db
         .query_row(
-            "SELECT address FROM satchel_addresses WHERE idx = ?1 AND state != 'discarded'",
+            "SELECT address FROM groot_addresses WHERE idx = ?1 AND state != 'discarded'",
             params![address_id],
             |row| row.get(0),
         )
@@ -5024,7 +5024,7 @@ pub async fn hardware_verify_external_address(
     let wallet = load_wallet(&mut db)?;
     let expected: String = db
         .query_row(
-            "SELECT address FROM satchel_addresses WHERE idx = ?1 AND state != 'discarded'",
+            "SELECT address FROM groot_addresses WHERE idx = ?1 AND state != 'discarded'",
             params![address_id],
             |row| row.get(0),
         )
@@ -5281,7 +5281,7 @@ pub fn multisig_recover_bsms(
         .network(NETWORK)
         .create_wallet(&mut db)
         .map_err(internal)?;
-        let marker = format!("satchel-multisig:{}", wallet.external_descriptor);
+        let marker = format!("groot-multisig:{}", wallet.external_descriptor);
         secure_store::store(
             &dir.join("secret.json"),
             marker.as_bytes(),
@@ -5350,7 +5350,7 @@ pub fn multisig_recover(
         .network(NETWORK)
         .create_wallet(&mut db)
         .map_err(internal)?;
-        let marker = format!("satchel-multisig:{}", backup.wallet.external_descriptor);
+        let marker = format!("groot-multisig:{}", backup.wallet.external_descriptor);
         secure_store::store(
             &dir.join("secret.json"),
             marker.as_bytes(),
@@ -5459,7 +5459,7 @@ pub fn multisig_address_create(
     let created = now();
     transaction
         .execute(
-            "INSERT INTO satchel_addresses (idx, address, label, created_at, state) VALUES (?1, ?2, ?3, ?4, 'awaiting')",
+            "INSERT INTO groot_addresses (idx, address, label, created_at, state) VALUES (?1, ?2, ?3, ?4, 'awaiting')",
             params![info.index, info.address.to_string(), label, created],
         )
         .map_err(internal)?;
@@ -5489,7 +5489,7 @@ pub fn multisig_address_discard(
     let db = open_multisig_db(&app)?;
     let changed = db
         .execute(
-            "UPDATE satchel_addresses SET state = 'discarded' WHERE idx = ?1 AND state = 'awaiting' AND observed = 0",
+            "UPDATE groot_addresses SET state = 'discarded' WHERE idx = ?1 AND state = 'awaiting' AND observed = 0",
             params![id],
         )
         .map_err(internal)?;
@@ -5592,7 +5592,7 @@ pub fn multisig_tx_prepare(
     let encoded = encode_psbt(&psbt);
     let created_at = now();
     db.execute(
-        "INSERT INTO satchel_proposals (proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,'collecting',?8)",
+        "INSERT INTO groot_proposals (proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,'collecting',?8)",
         params![proposal_id, address.to_string(), label, amount, fee, applied_fee_rate, encoded, created_at],
     ).map_err(internal)?;
     load_multisig_proposal(&mut db, &metadata, &proposal_id)
@@ -5609,7 +5609,7 @@ pub fn multisig_proposals(
     let mut db = open_multisig_db(&app)?;
     let wallet = load_wallet(&mut db)?;
     let mut statement = db.prepare(
-        "SELECT proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at FROM satchel_proposals WHERE status IN ('collecting','ready') ORDER BY created_at DESC",
+        "SELECT proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at FROM groot_proposals WHERE status IN ('collecting','ready') ORDER BY created_at DESC",
     ).map_err(internal)?;
     let rows = statement
         .query_map([], |row| {
@@ -5666,7 +5666,7 @@ fn import_multisig_proposal(
         "collecting"
     };
     let changed = db.execute(
-        "UPDATE satchel_proposals SET psbt = ?1, status = ?2 WHERE proposal_id = ?3 AND status IN ('collecting','ready') AND psbt = ?4",
+        "UPDATE groot_proposals SET psbt = ?1, status = ?2 WHERE proposal_id = ?3 AND status IN ('collecting','ready') AND psbt = ?4",
         params![encode_psbt(&original), status, proposal_id, original_encoded],
     ).map_err(internal)?;
     if changed != 1 {
@@ -5796,7 +5796,7 @@ pub fn multisig_proposal_broadcast(
     let persisted = db.transaction().map_err(internal)?;
     let changed = persisted
         .execute(
-            "UPDATE satchel_proposals SET status = 'broadcast', txid = ?1 WHERE proposal_id = ?2 AND status IN ('collecting','ready')",
+            "UPDATE groot_proposals SET status = 'broadcast', txid = ?1 WHERE proposal_id = ?2 AND status IN ('collecting','ready')",
             params![txid.to_string(), proposal_id],
         )
         .map_err(internal)?;
@@ -5840,7 +5840,7 @@ pub fn multisig_proposal_cancel(
     require_unlocked(&app, &state)?;
     let db = open_multisig_db(&app)?;
     let changed = db.execute(
-        "UPDATE satchel_proposals SET status = 'cancelled' WHERE proposal_id = ?1 AND status IN ('collecting','ready')",
+        "UPDATE groot_proposals SET status = 'cancelled' WHERE proposal_id = ?1 AND status IN ('collecting','ready')",
         params![proposal_id],
     ).map_err(internal)?;
     if changed == 1 {
@@ -5877,7 +5877,7 @@ pub fn multisig_create(
         .create_wallet(&mut db)
         .map_err(internal)?;
 
-        let marker = format!("satchel-multisig:{}", preview.external_descriptor);
+        let marker = format!("groot-multisig:{}", preview.external_descriptor);
         secure_store::store(
             &dir.join("secret.json"),
             marker.as_bytes(),
@@ -5946,7 +5946,7 @@ pub fn multisig_recovery_create(
         .network(NETWORK)
         .create_wallet(&mut db)
         .map_err(internal)?;
-        let marker = format!("satchel-multisig:{}", analysis.external_descriptor);
+        let marker = format!("groot-multisig:{}", analysis.external_descriptor);
         secure_store::store(
             &dir.join("secret.json"),
             marker.as_bytes(),
@@ -6487,7 +6487,7 @@ pub fn multisig_acceleration_prepare(
     )?;
     let encoded = encode_psbt(&psbt);
     db.execute(
-        "INSERT INTO satchel_proposals (proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,'collecting',?8)",
+        "INSERT INTO groot_proposals (proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,'collecting',?8)",
         params![proposal.proposal_id, proposal.recipient, proposal.label, proposal.amount, proposal.fee, proposal.fee_rate, encoded, now()],
     )
     .map_err(internal)?;
@@ -6553,7 +6553,7 @@ pub fn tx_sign_and_broadcast(
     let persisted = db.transaction().map_err(internal)?;
     let changed = persisted
         .execute(
-            "UPDATE satchel_proposals SET status = 'broadcast', txid = ?1 WHERE proposal_id = ?2 AND status = 'collecting'",
+            "UPDATE groot_proposals SET status = 'broadcast', txid = ?1 WHERE proposal_id = ?2 AND status = 'collecting'",
             params![txid.to_string(), proposal_id],
         )
         .map_err(internal)?;
@@ -6661,7 +6661,7 @@ fn delete_wallet_directory(path: &Path) -> ApiResult<()> {
     let parent = path
         .parent()
         .ok_or_else(|| internal("Wallet storage path has no parent."))?;
-    let tombstone = parent.join(format!(".satchel-deleting-{}", Uuid::new_v4()));
+    let tombstone = parent.join(format!(".groot-deleting-{}", Uuid::new_v4()));
     fs::rename(path, &tombstone).map_err(internal)?;
     fs::remove_dir_all(tombstone).map_err(internal)
 }
@@ -6674,7 +6674,7 @@ fn delete_registered_wallet(app: &AppHandle, id: Uuid, path: &Path) -> ApiResult
     let parent = path
         .parent()
         .ok_or_else(|| internal("Wallet storage path has no parent."))?;
-    let tombstone = parent.join(format!(".satchel-deleting-{}", Uuid::new_v4()));
+    let tombstone = parent.join(format!(".groot-deleting-{}", Uuid::new_v4()));
     let original_registry = load_registry(app)?;
     let mut updated_registry = original_registry.clone();
     updated_registry.remove(id).map_err(registry_api_error)?;
@@ -6739,7 +6739,7 @@ mod tests {
         let mut db = Connection::open_in_memory().unwrap();
         init_app_schema(&db).unwrap();
         db.execute(
-            "INSERT INTO satchel_addresses (idx, address, label, created_at, state)
+            "INSERT INTO groot_addresses (idx, address, label, created_at, state)
              VALUES (0, 'bcrt1qf6n3a54f4nqc5976hjl556ukfdas8xsnf8k9mz', 'deposit', 1, 'awaiting')",
             [],
         )
@@ -6775,7 +6775,7 @@ mod tests {
         assert_eq!(latest.hardware_verified_by.as_deref(), Some("c0ffee01"));
         assert_eq!(
             db.query_row(
-                "SELECT COUNT(*) FROM satchel_address_verifications WHERE address_idx = 0",
+                "SELECT COUNT(*) FROM groot_address_verifications WHERE address_idx = 0",
                 [],
                 |row| row.get::<_, u32>(0),
             )
@@ -6818,7 +6818,7 @@ mod tests {
             }
         );
         db.execute(
-            "INSERT INTO satchel_recovery_settings (singleton, birthday_height, gap_limit) VALUES (1, 840000, 250)",
+            "INSERT INTO groot_recovery_settings (singleton, birthday_height, gap_limit) VALUES (1, 840000, 250)",
             [],
         )
         .unwrap();
@@ -6831,13 +6831,13 @@ mod tests {
         );
         assert!(db
             .execute(
-                "UPDATE satchel_recovery_settings SET gap_limit = 19 WHERE singleton = 1",
+                "UPDATE groot_recovery_settings SET gap_limit = 19 WHERE singleton = 1",
                 [],
             )
             .is_err());
         assert!(db
             .execute(
-                "UPDATE satchel_recovery_settings SET gap_limit = 1001 WHERE singleton = 1",
+                "UPDATE groot_recovery_settings SET gap_limit = 1001 WHERE singleton = 1",
                 [],
             )
             .is_err());
@@ -6849,7 +6849,7 @@ mod tests {
         init_app_schema(&db).unwrap();
         for index in 0..MIN_RECOVERY_GAP_LIMIT {
             db.execute(
-                "INSERT INTO satchel_addresses (idx, address, label, created_at, state, observed)
+                "INSERT INTO groot_addresses (idx, address, label, created_at, state, observed)
                  VALUES (?1, ?2, 'request', 1, 'awaiting', 0)",
                 params![index, format!("address-{index}")],
             )
@@ -6860,7 +6860,7 @@ mod tests {
         assert_eq!(error.code, "address_gap_limit_reached");
 
         db.execute(
-            "UPDATE satchel_addresses SET observed = 1, state = 'used' WHERE idx = 5",
+            "UPDATE groot_addresses SET observed = 1, state = 'used' WHERE idx = 5",
             [],
         )
         .unwrap();
@@ -7868,7 +7868,7 @@ mod tests {
 
     #[test]
     fn private_json_is_atomic_owner_only_and_bounded() {
-        let dir = std::env::temp_dir().join(format!("satchel-secret-test-{}", Uuid::new_v4()));
+        let dir = std::env::temp_dir().join(format!("groot-secret-test-{}", Uuid::new_v4()));
         let path = dir.join("secret.json");
         let secret = EncryptedSecret {
             version: 1,
@@ -7896,7 +7896,7 @@ mod tests {
 
     #[test]
     fn wallet_database_is_owner_only_and_uses_defensive_settings() {
-        let dir = std::env::temp_dir().join(format!("satchel-db-test-{}", Uuid::new_v4()));
+        let dir = std::env::temp_dir().join(format!("groot-db-test-{}", Uuid::new_v4()));
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join("wallet.sqlite");
         let db = open_wallet_database(&path).unwrap();
@@ -7923,7 +7923,7 @@ mod tests {
     fn wallet_database_rejects_symlink_storage() {
         use std::os::unix::fs::symlink;
 
-        let dir = std::env::temp_dir().join(format!("satchel-db-link-{}", Uuid::new_v4()));
+        let dir = std::env::temp_dir().join(format!("groot-db-link-{}", Uuid::new_v4()));
         fs::create_dir_all(&dir).unwrap();
         let target = dir.join("target.sqlite");
         Connection::open(&target).unwrap();
@@ -7939,9 +7939,9 @@ mod tests {
     #[test]
     fn regtest_app_data_override_is_limited_to_named_temporary_directories() {
         #[cfg(unix)]
-        let allowed = PathBuf::from("/tmp").join(format!("satchel-regtest-{}", Uuid::new_v4()));
+        let allowed = PathBuf::from("/tmp").join(format!("groot-regtest-{}", Uuid::new_v4()));
         #[cfg(not(unix))]
-        let allowed = std::env::temp_dir().join(format!("satchel-regtest-{}", Uuid::new_v4()));
+        let allowed = std::env::temp_dir().join(format!("groot-regtest-{}", Uuid::new_v4()));
         assert_eq!(
             validate_regtest_app_data_override(allowed.clone()).unwrap(),
             allowed
@@ -7953,7 +7953,7 @@ mod tests {
             "internal_error"
         );
         assert_eq!(
-            validate_regtest_app_data_override(PathBuf::from("satchel-regtest-relative"))
+            validate_regtest_app_data_override(PathBuf::from("groot-regtest-relative"))
                 .unwrap_err()
                 .code,
             "internal_error"
@@ -7965,8 +7965,8 @@ mod tests {
     fn regtest_app_data_override_rejects_symlinks() {
         use std::os::unix::fs::symlink;
 
-        let target = std::env::temp_dir().join(format!("satchel-target-{}", Uuid::new_v4()));
-        let link = std::env::temp_dir().join(format!("satchel-regtest-{}", Uuid::new_v4()));
+        let target = std::env::temp_dir().join(format!("groot-target-{}", Uuid::new_v4()));
+        let link = std::env::temp_dir().join(format!("groot-regtest-{}", Uuid::new_v4()));
         fs::create_dir(&target).unwrap();
         symlink(&target, &link).unwrap();
         assert_eq!(
@@ -7985,17 +7985,17 @@ mod tests {
         init_app_schema(&db).unwrap();
         let outpoint = format!("{}:0", "01".repeat(32));
         db.execute(
-            "INSERT INTO satchel_frozen_coins (outpoint, frozen_at) VALUES (?1, ?2)",
+            "INSERT INTO groot_frozen_coins (outpoint, frozen_at) VALUES (?1, ?2)",
             params![outpoint, 1_u64],
         )
         .unwrap();
         let stored: String = db
-            .query_row("SELECT outpoint FROM satchel_frozen_coins", [], |row| {
+            .query_row("SELECT outpoint FROM groot_frozen_coins", [], |row| {
                 row.get(0)
             })
             .unwrap();
         assert!(OutPoint::from_str(&stored).is_ok());
-        db.execute("UPDATE satchel_frozen_coins SET outpoint = 'corrupt'", [])
+        db.execute("UPDATE groot_frozen_coins SET outpoint = 'corrupt'", [])
             .unwrap();
         assert_eq!(frozen_outpoints(&db).unwrap_err().code, "internal_error");
     }
@@ -8114,14 +8114,14 @@ mod tests {
         let original_txid = "11".repeat(32);
         let replacement_txid = "22".repeat(32);
         db.execute(
-            "INSERT INTO satchel_proposals
+            "INSERT INTO groot_proposals
              (proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at, txid)
              VALUES ('rbf-proposal', 'bcrt1qfixture', 'Miner fee increase', 100, 5, 2, 'fixture', 'broadcast', 2, ?1)",
             params![replacement_txid],
         )
         .unwrap();
         db.execute(
-            "INSERT INTO satchel_accelerations
+            "INSERT INTO groot_accelerations
              (proposal_id, method, original_txid, replacement_txid, original_kind,
               original_direction, original_amount, original_fee, original_date,
               original_address, original_label, created_at)
@@ -8192,7 +8192,7 @@ mod tests {
             ("stale-after-broadcast", "collecting", 4),
         ] {
             db.execute(
-                "INSERT INTO satchel_proposals
+                "INSERT INTO groot_proposals
                  (proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at)
                  VALUES (?1, 'bcrt1qfixture', 'Acceleration', 100, 5, 2, 'fixture', ?2, ?3)",
                 params![proposal_id, status, created_at],
@@ -8211,7 +8211,7 @@ mod tests {
             ("stale-after-broadcast", completed_txid, None, 4),
         ] {
             db.execute(
-                "INSERT INTO satchel_accelerations
+                "INSERT INTO groot_accelerations
                  (proposal_id, method, original_txid, replacement_txid, original_kind,
                   original_direction, original_amount, original_fee, original_date,
                   original_address, original_label, created_at)
@@ -8231,7 +8231,7 @@ mod tests {
         reconcile_active_acceleration_proposals(&db).unwrap();
 
         let statuses = db
-            .prepare("SELECT proposal_id, status FROM satchel_proposals ORDER BY proposal_id")
+            .prepare("SELECT proposal_id, status FROM groot_proposals ORDER BY proposal_id")
             .unwrap()
             .query_map([], |row| {
                 Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
@@ -8257,7 +8257,7 @@ mod tests {
     fn restart_restores_proposals_frozen_coins_and_acknowledged_notifications() {
         use bdk_wallet::bitcoin::{absolute::LockTime, transaction::Version, Transaction};
 
-        let directory = std::env::temp_dir().join(format!("satchel-restart-{}", Uuid::new_v4()));
+        let directory = std::env::temp_dir().join(format!("groot-restart-{}", Uuid::new_v4()));
         fs::create_dir_all(&directory).unwrap();
         let path = directory.join("wallet.sqlite");
         let proposal_id = Uuid::new_v4().to_string();
@@ -8266,7 +8266,7 @@ mod tests {
             let db = Connection::open(&path).unwrap();
             init_app_schema(&db).unwrap();
             db.execute(
-                "INSERT INTO satchel_frozen_coins (outpoint, frozen_at) VALUES (?1, 1)",
+                "INSERT INTO groot_frozen_coins (outpoint, frozen_at) VALUES (?1, 1)",
                 params![outpoint],
             )
             .unwrap();
@@ -8337,7 +8337,7 @@ mod tests {
 
         restarted_db
             .execute(
-                "UPDATE satchel_proposals SET psbt = 'corrupt' WHERE proposal_id = ?1",
+                "UPDATE groot_proposals SET psbt = 'corrupt' WHERE proposal_id = ?1",
                 params![proposal_id],
             )
             .unwrap();
@@ -8352,7 +8352,7 @@ mod tests {
 
     #[test]
     fn legacy_directory_migration_commits_or_rolls_back_as_a_unit() {
-        let directory = std::env::temp_dir().join(format!("satchel-migration-{}", Uuid::new_v4()));
+        let directory = std::env::temp_dir().join(format!("groot-migration-{}", Uuid::new_v4()));
         let first = directory.join("regtest-wallet");
         let second = directory.join("regtest-multisig");
         let first_destination = directory.join("wallets/one");
@@ -8383,7 +8383,7 @@ mod tests {
 
     #[test]
     fn wallet_directory_deletion_is_idempotent_and_rejects_non_directories() {
-        let root = std::env::temp_dir().join(format!("satchel-delete-test-{}", Uuid::new_v4()));
+        let root = std::env::temp_dir().join(format!("groot-delete-test-{}", Uuid::new_v4()));
         let wallet = root.join("wallet");
         fs::create_dir_all(&wallet).unwrap();
         fs::write(wallet.join("secret.json"), b"encrypted").unwrap();

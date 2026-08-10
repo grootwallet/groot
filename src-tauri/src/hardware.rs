@@ -317,7 +317,7 @@ impl HardwareTransport for HwiCli {
 }
 
 fn trusted_hwi_path() -> PathBuf {
-    if let Some(configured) = option_env!("SATCHEL_HWI_PATH") {
+    if let Some(configured) = option_env!("GROOT_HWI_PATH") {
         return PathBuf::from(configured);
     }
     #[cfg(target_os = "macos")]
@@ -500,7 +500,7 @@ mod tests {
     fn rejects_group_or_world_writable_executables() {
         use std::os::unix::fs::PermissionsExt;
 
-        let path = std::env::temp_dir().join(format!("satchel-hwi-{}", std::process::id()));
+        let path = std::env::temp_dir().join(format!("groot-hwi-{}", std::process::id()));
         std::fs::write(&path, b"#!/bin/sh\nexit 0\n").unwrap();
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o777)).unwrap();
         assert_eq!(
@@ -514,16 +514,16 @@ mod tests {
     fn preserves_argument_boundaries_without_shell_interpolation() {
         let output = run_program(
             Path::new("/bin/echo"),
-            &["$(touch /tmp/satchel-must-not-exist)".to_owned()],
+            &["$(touch /tmp/groot-must-not-exist)".to_owned()],
             Duration::from_secs(1),
             None,
         )
         .expect("echo");
         assert_eq!(
             String::from_utf8(output).expect("utf8"),
-            "$(touch /tmp/satchel-must-not-exist)\n"
+            "$(touch /tmp/groot-must-not-exist)\n"
         );
-        assert!(!std::path::Path::new("/tmp/satchel-must-not-exist").exists());
+        assert!(!std::path::Path::new("/tmp/groot-must-not-exist").exists());
     }
 
     #[test]

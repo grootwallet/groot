@@ -1,43 +1,35 @@
 # Groot rename audit
 
-Status: complete for the 2026-08-10 adoption. ADR 0023 owns the lasting compatibility decision.
+Status: complete for the 2026-08-10 brand and pre-release technical-namespace adoption. ADR 0024 supersedes ADR 0023's temporary compatibility decision.
 
-## Rename to Groot
+## Renamed to Groot
 
-The public name is Groot across:
+The Groot name and approved Control icon identity now cover:
 
-- Tauri product metadata, native window and camera-permission copy, Rust package/build artifacts, and JavaScript package metadata;
-- wallet navigation, onboarding, unlock, settings, send/receive, hardware guidance, dialogs, notifications, accessibility labels, printable backups, and exported filenames;
-- desktop, iOS, Android, favicon, web-manifest, marketing navigation, SEO/Open Graph/Twitter metadata, machine-readable marketing summaries, and Playwright fixtures;
-- current canonical product, architecture, security, design, marketing, testing, release, and operator documentation.
+- visible product copy, navigation, onboarding, settings, dialogs, notifications, accessibility labels, exports, marketing, SEO metadata, manifests, and platform icon assets;
+- Tauri product metadata, window title, bundle/application identifier, application-data container, Apple secure-store service, Rust and JavaScript package metadata, installers, and build artifacts;
+- browser preference keys, developer and regtest environment variables, disposable profile paths, Bitcoin Core faucet fixtures, SQLite tables, authenticated verifier markers, temporary files, tests, and current operator documentation.
 
-The approved Control icon sources and outlined Groot/Newsreader lockups in `assets/brand/` are canonical. Generated platform raster assets derive from `app-icon-legacy-source.svg`; the modern unmasked source remains `app-icon-layered-source.svg`.
+The approved sources in `assets/brand/` remain canonical. Generated platform raster assets derive from `app-icon-legacy-source.svg`; the modern unmasked source remains `app-icon-layered-source.svg`.
 
-## Retain for compatibility and migration
+## Retained as stable, non-branded identifiers
 
-These values remain unchanged so an upgrade opens and unlocks the same wallets and preserves local preferences:
+These values are descriptive formats rather than legacy brand names and remain unchanged:
 
-| Identifier | Compatibility role |
+| Identifier | Role |
 | --- | --- |
-| `app.satchel.wallet` | Tauri bundle identifier and operating-system app-data container |
-| `app.satchel.wallet.device-wrap.v1` | Apple Keychain service |
-| `wallet:<uuid>` | Apple Keychain account |
-| `wallet-registry.json`, `wallets/<uuid>` | Registry and profile layout |
-| `regtest-wallet`, `regtest-multisig` | Legacy profile migration sources |
-| `wallet.sqlite`, `secret.json`, `node-secret.json`, `device.wrap` | Persisted wallet and secret paths |
-| `satchel_notifications`, `satchel_notification_state` | Existing SQLite tables |
-| `satchel-external-signer:*`, `satchel-multisig:*` | Existing authenticated verifier payloads |
-| `satchel-theme`, `satchel-language`, `satchel-discreet-mode` | Existing browser preference keys |
-| `SATCHEL_REGTEST_APP_DATA_DIR` and other `SATCHEL_*` variables | Established build, acceptance, hardware, and regtest interfaces |
-| `satchel-regtest-*`, `satchel-dev`, `.satchel-funded` | Disposable native-test and Bitcoin Core fixture names |
+| `wallet:<uuid>` | Apple secure-store account |
+| `wallet-registry.json`, `wallets/<uuid>` | Registry and isolated profile layout |
+| `regtest-wallet`, `regtest-multisig` | Generic pre-registry development profile locations |
+| `wallet.sqlite`, `secret.json`, `node-secret.json`, `device.wrap` | Wallet database and encrypted-secret paths |
+| Envelope versions, KDF parameters, DTO field names | Stable security and serialization formats |
 
-Envelope versions, KDF parameters, authenticated fields, wallet UUIDs, database locations, and secret-loading behavior are unchanged. No credential, seed, descriptor, address, fingerprint, xpub, PSBT, or device path is migrated or logged.
+No credential, seed, descriptor, address, fingerprint, xpub, PSBT, or device path is migrated, logged, or exposed. Pre-cutover development data is intentionally not loaded and may be removed manually by its owner.
 
-## Retain as historical or technical identity
+## Retained as history
 
-- Accepted ADRs before ADR 0023 retain the product name used when the decision was recorded; ADRs are append-only.
-- Dated security reviews, execution evidence, and audits retain their original wording so evidence is not rewritten after the fact.
-- Internal test temporary filenames and database table names may retain `satchel` when they are non-user-facing and changing them adds no product value.
-- The old name may appear in current documentation only while explaining one of the compatibility identifiers above.
+- ADR 0023 records why compatibility was initially preserved and is marked superseded by ADR 0024.
+- Earlier accepted ADRs and dated security or execution evidence retain the product name and identifiers used when they were written; ADRs and evidence are not rewritten after the fact.
+- Current source, configuration, tests, marketing, and canonical/operator documentation contain no Satchel-derived identifier.
 
-The automated `pnpm test:brand` gate rejects `Satchel` from current UI, E2E, static marketing, and platform-metadata surfaces while asserting that the bundle and Keychain identifiers remain unchanged.
+The automated `pnpm test:brand` gate asserts the Groot product, bundle, secure-store, package, and webview identities and rejects the former public name from current UI and platform-metadata surfaces.

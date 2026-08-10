@@ -2,10 +2,10 @@
 set -euo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-REGTEST_DIR="${SATCHEL_REGTEST_DIR:-${PROJECT_ROOT}/.regtest}"
-REGTEST_WALLET="${SATCHEL_REGTEST_WALLET:-satchel-dev}"
-RPC_PORT="${SATCHEL_RPC_PORT:-18443}"
-P2P_PORT="${SATCHEL_P2P_PORT:-18444}"
+REGTEST_DIR="${GROOT_REGTEST_DIR:-${PROJECT_ROOT}/.regtest}"
+REGTEST_WALLET="${GROOT_REGTEST_WALLET:-groot-dev}"
+RPC_PORT="${GROOT_RPC_PORT:-18443}"
+P2P_PORT="${GROOT_P2P_PORT:-18444}"
 BTC_CLI=(bitcoin-cli -regtest -datadir="${REGTEST_DIR}" -rpcport="${RPC_PORT}")
 WALLET_CLI=(bitcoin-cli -regtest -datadir="${REGTEST_DIR}" -rpcport="${RPC_PORT}" -rpcwallet="${REGTEST_WALLET}")
 

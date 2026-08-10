@@ -3,7 +3,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/../.."
 
-HWI_EXECUTABLE="${SATCHEL_HWI_PATH:-}"
+HWI_EXECUTABLE="${GROOT_HWI_PATH:-}"
 if [[ -z "${HWI_EXECUTABLE}" ]]; then
   for candidate in /opt/homebrew/bin/hwi /usr/local/bin/hwi /usr/bin/hwi; do
     if [[ -x "${candidate}" ]]; then HWI_EXECUTABLE="${candidate}"; break; fi
@@ -11,7 +11,7 @@ if [[ -z "${HWI_EXECUTABLE}" ]]; then
 fi
 if [[ -z "${HWI_EXECUTABLE}" || "${HWI_EXECUTABLE}" != /* || ! -x "${HWI_EXECUTABLE}" ]]; then
   echo "Bitcoin Core HWI was not found at a trusted absolute path." >&2
-  echo "Install HWI or compile with an absolute SATCHEL_HWI_PATH, then rerun this preflight." >&2
+  echo "Install HWI or compile with an absolute GROOT_HWI_PATH, then rerun this preflight." >&2
   exit 1
 fi
 

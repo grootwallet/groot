@@ -2,7 +2,7 @@
 set -euo pipefail
 
 REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
-TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/satchel-runtime-launcher.XXXXXX")"
+TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/groot-runtime-launcher.XXXXXX")"
 trap 'rm -rf "${TEST_ROOT}"' EXIT
 
 STALE_BIN="${TEST_ROOT}/stale/bin"

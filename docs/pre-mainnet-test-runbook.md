@@ -36,13 +36,13 @@ Terminal 2:
 
 ```sh
 cd /Users/thibm/Documents/Codex/2026-07-17/let
-test_app_data="$(mktemp -d /tmp/satchel-regtest-native.XXXXXX)"
-SATCHEL_REGTEST_APP_DATA_DIR="$test_app_data" \
-SATCHEL_HWI_PATH=/opt/homebrew/bin/hwi \
+test_app_data="$(mktemp -d /tmp/groot-regtest-native.XXXXXX)"
+GROOT_REGTEST_APP_DATA_DIR="$test_app_data" \
+GROOT_HWI_PATH=/opt/homebrew/bin/hwi \
 bash scripts/dev/tauri-regtest.sh
 ```
 
-Keep the generated path for the entire restart drill. Verify it begins with the canonical system temporary directory and `satchel-regtest-`; remove only that exact disposable directory after Groot exits. Never point the override at an existing application-data directory.
+Keep the generated path for the entire restart drill. Verify it begins with the canonical system temporary directory and `groot-regtest-`; remove only that exact disposable directory after Groot exits. Never point the override at an existing application-data directory.
 
 Run these stories in order:
 
@@ -67,7 +67,7 @@ cp docs/hardware-certification-template.md hardware-certification.local/trezor.m
 cp docs/hardware-certification-template.md hardware-certification.local/ledger.md
 cp docs/hardware-certification-template.md hardware-certification.local/bitbox02.md
 cp docs/hardware-certification-template.md hardware-certification.local/jade.md
-SATCHEL_HWI_PATH=/opt/homebrew/bin/hwi pnpm hardware:preflight
+GROOT_HWI_PATH=/opt/homebrew/bin/hwi pnpm hardware:preflight
 ```
 
 Follow [`hardware-certification.md`](hardware-certification.md) for each model. Keep reports local because fingerprints and paths are sensitive. A model is supported for release only after all required rows pass on the exact firmware/OS/package combination.
@@ -78,12 +78,12 @@ Use a dedicated least-privilege RPC user, a valid hostname certificate, firewall
 
 ```sh
 cd /Users/thibm/Documents/Codex/2026-07-17/let
-export SATCHEL_RPC_URL='https://node.example.test:8332'
-export SATCHEL_RPC_USER='satchel-test'
-read -s 'SATCHEL_RPC_PASSWORD?RPC password: '
-export SATCHEL_RPC_PASSWORD
+export GROOT_RPC_URL='https://node.example.test:8332'
+export GROOT_RPC_USER='groot-test'
+read -s 'GROOT_RPC_PASSWORD?RPC password: '
+export GROOT_RPC_PASSWORD
 pnpm network:preflight
-unset SATCHEL_RPC_PASSWORD SATCHEL_RPC_USER SATCHEL_RPC_URL
+unset GROOT_RPC_PASSWORD GROOT_RPC_USER GROOT_RPC_URL
 ```
 
 Then save the same endpoint per wallet in Settings, unlock, sync, compare genesis/network/tip with an independent Core client, and repeat with an invalid certificate, wrong chain, wrong password, timeout, and unreachable host. Every failure must be explicit and must not fall back.
@@ -94,13 +94,13 @@ Start and independently verify a loopback Tor SOCKS5 listener, then:
 
 ```sh
 cd /Users/thibm/Documents/Codex/2026-07-17/let
-export SATCHEL_RPC_URL='http://examplehiddenservice.onion:8332'
-export SATCHEL_TOR_PROXY='127.0.0.1:9050'
-export SATCHEL_RPC_USER='satchel-test'
-read -s 'SATCHEL_RPC_PASSWORD?RPC password: '
-export SATCHEL_RPC_PASSWORD
+export GROOT_RPC_URL='http://examplehiddenservice.onion:8332'
+export GROOT_TOR_PROXY='127.0.0.1:9050'
+export GROOT_RPC_USER='groot-test'
+read -s 'GROOT_RPC_PASSWORD?RPC password: '
+export GROOT_RPC_PASSWORD
 pnpm network:preflight
-unset SATCHEL_RPC_PASSWORD SATCHEL_RPC_USER SATCHEL_RPC_URL SATCHEL_TOR_PROXY
+unset GROOT_RPC_PASSWORD GROOT_RPC_USER GROOT_RPC_URL GROOT_TOR_PROXY
 ```
 
 Capture only pass/fail evidence. Verify proxy loss, invalid onion, wrong chain, wrong credentials, timeout, and that no direct DNS/network request occurs.

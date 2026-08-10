@@ -1,6 +1,6 @@
 # Groot
 
-A minimal onchain Bitcoin wallet and descriptor multisig coordinator built with SvelteKit, Tauri v2, BDK, and Miniscript. The native app currently targets local regtest: BDK owns Groot's wallet databases, while Bitcoin Core's `satchel-dev` wallet is only the faucet and miner.
+A minimal onchain Bitcoin wallet and descriptor multisig coordinator built with SvelteKit, Tauri v2, BDK, and Miniscript. The native app currently targets local regtest: BDK owns Groot's wallet databases, while Bitcoin Core's `groot-dev` wallet is only the faucet and miner.
 
 ## Run the functional regtest wallet
 
@@ -21,7 +21,7 @@ pnpm regtest:send -- bcrt1q... 1.25 --mine
 Press **Sync** in Groot. To test an outgoing payment, create a destination owned by the Core faucet wallet:
 
 ```sh
-bitcoin-cli -regtest -datadir="$PWD/.regtest" -rpcwallet=satchel-dev getnewaddress "Groot send test" bech32
+bitcoin-cli -regtest -datadir="$PWD/.regtest" -rpcwallet=groot-dev getnewaddress "Groot send test" bech32
 ```
 
 Paste that `bcrt1…` address into Groot, enter an amount in sats, choose a fee, review, enter the wallet passphrase / PIN, and broadcast. Mine its first confirmation with `pnpm regtest:mine`, then sync again.
@@ -48,7 +48,7 @@ The static web demo is intentionally marked **Interactive prototype** on every s
 
 Open **Vault → Create multisig wallet**. V1 uses BIP48 test-network account keys at `m/48'/1'/0'/2'` and Rust builds canonical checksummed `wsh(sortedmulti(...))` receive/change descriptors. A 2-of-3 policy is recommended.
 
-Manual public-key entry works everywhere. Desktop hardware import additionally requires [Bitcoin Core HWI](https://github.com/bitcoin-core/HWI) at a trusted absolute installation path (`/opt/homebrew/bin/hwi`, `/usr/local/bin/hwi`, or `/usr/bin/hwi`), or an absolute `SATCHEL_HWI_PATH` supplied when compiling Groot. Groot never searches ambient `PATH`. Connect and unlock one supported device, open its Bitcoin app, then choose **Add a cosigner → Connect hardware device**. Seed words and private keys must never be entered into Groot's coordinator.
+Manual public-key entry works everywhere. Desktop hardware import additionally requires [Bitcoin Core HWI](https://github.com/bitcoin-core/HWI) at a trusted absolute installation path (`/opt/homebrew/bin/hwi`, `/usr/local/bin/hwi`, or `/usr/bin/hwi`), or an absolute `GROOT_HWI_PATH` supplied when compiling Groot. Groot never searches ambient `PATH`. Connect and unlock one supported device, open its Bitcoin app, then choose **Add a cosigner → Connect hardware device**. Seed words and private keys must never be entered into Groot's coordinator.
 
 The coordinator setup, policy validation, HWI xpub import, descriptor persistence, watch-only BDK database, PSBT signing, sync, balance, labeled receive, and immediate-path broadcast flows are implemented. Guided recovery and inheritance templates compile and persist real Miniscript descriptors; coordinator-assisted spending through the delayed path remains a V2 gate. Consult [implementation status](docs/implementation-status.md) before treating a UI surface as production-ready.
 
@@ -61,7 +61,7 @@ pnpm regtest:start
 pnpm regtest:status
 ```
 
-`regtest:start` uses only `./.regtest`, creates a descriptor wallet named `satchel-dev`, and mines 101 blocks so its first coinbase output is spendable.
+`regtest:start` uses only `./.regtest`, creates a descriptor wallet named `groot-dev`, and mines 101 blocks so its first coinbase output is spendable.
 
 Useful commands:
 
@@ -70,7 +70,7 @@ Useful commands:
 pnpm regtest:mine
 pnpm regtest:mine -- 10
 
-# Send BTC from satchel-dev to a regtest address
+# Send BTC from groot-dev to a regtest address
 pnpm regtest:send -- bcrt1q... 1.25
 
 # Send and immediately mine one confirmation
@@ -78,7 +78,7 @@ pnpm regtest:send -- bcrt1q... 1.25 --mine
 
 # Raw RPC access
 bitcoin-cli -regtest -datadir="$PWD/.regtest" getblockchaininfo
-bitcoin-cli -regtest -datadir="$PWD/.regtest" -rpcwallet=satchel-dev getbalances
+bitcoin-cli -regtest -datadir="$PWD/.regtest" -rpcwallet=groot-dev getbalances
 
 # Stop without deleting the chain or wallet
 pnpm regtest:stop
@@ -86,7 +86,7 @@ pnpm regtest:stop
 
 Regtest state persists in `./.regtest/` and is gitignored.
 
-Groot wallet state is stored in the operating system app-data directory under `app.satchel.wallet/wallets/<wallet-uuid>`, with `wallet-registry.json` selecting the active profile. Use **Settings → Delete wallet** to remove only the selected profile; deleting `.regtest/` does not delete Groot wallets.
+Groot wallet state is stored in the operating system app-data directory under `app.groot.wallet/wallets/<wallet-uuid>`, with `wallet-registry.json` selecting the active profile. Use **Settings → Delete wallet** to remove only the selected profile; deleting `.regtest/` does not delete Groot wallets.
 
 ## Validate
 

@@ -35,11 +35,11 @@ if ! "${WALLET_CLI[@]}" getwalletinfo >/dev/null 2>&1; then
   fi
 fi
 
-if [[ ! -f "${REGTEST_DIR}/.satchel-funded" ]]; then
+if [[ ! -f "${REGTEST_DIR}/.groot-funded" ]]; then
   MINING_ADDRESS="$("${WALLET_CLI[@]}" getnewaddress "initial regtest funds" bech32)"
   "${BTC_CLI[@]}" generatetoaddress 101 "${MINING_ADDRESS}" >/dev/null
-  touch "${REGTEST_DIR}/.satchel-funded"
-  echo "Mined 101 blocks; satchel-dev now has spendable regtest coins."
+  touch "${REGTEST_DIR}/.groot-funded"
+  echo "Mined 101 blocks; groot-dev now has spendable regtest coins."
 fi
 
 echo "Groot regtest is ready."

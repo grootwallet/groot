@@ -50,7 +50,7 @@ impl WalletNotification {
 
 pub fn init(db: &Connection) -> bdk_wallet::rusqlite::Result<()> {
     db.execute_batch(
-        "CREATE TABLE IF NOT EXISTS satchel_notifications (
+        "CREATE TABLE IF NOT EXISTS groot_notifications (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             kind TEXT NOT NULL CHECK(kind IN ('payment_received','first_confirmation','transaction_broadcast')),
             txid TEXT NOT NULL,
@@ -60,7 +60,7 @@ pub fn init(db: &Connection) -> bdk_wallet::rusqlite::Result<()> {
             delivered INTEGER NOT NULL DEFAULT 0 CHECK(delivered IN (0,1)),
             UNIQUE(kind, txid)
         );
-        CREATE TABLE IF NOT EXISTS satchel_notification_state (
+        CREATE TABLE IF NOT EXISTS groot_notification_state (
             singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
             history_initialized INTEGER NOT NULL CHECK(history_initialized IN (0,1))
         );",
@@ -69,7 +69,7 @@ pub fn init(db: &Connection) -> bdk_wallet::rusqlite::Result<()> {
 
 pub fn history_initialized(db: &Connection) -> bdk_wallet::rusqlite::Result<bool> {
     db.query_row(
-        "SELECT history_initialized FROM satchel_notification_state WHERE singleton = 1",
+        "SELECT history_initialized FROM groot_notification_state WHERE singleton = 1",
         [],
         |row| row.get::<_, bool>(0),
     )
@@ -86,12 +86,12 @@ pub fn seed_history(
     for event in events {
         let (txid, amount, balance) = event.values();
         transaction.execute(
-            "INSERT OR IGNORE INTO satchel_notifications (kind,txid,amount,balance,created_at,delivered) VALUES (?1,?2,?3,?4,?5,1)",
+            "INSERT OR IGNORE INTO groot_notifications (kind,txid,amount,balance,created_at,delivered) VALUES (?1,?2,?3,?4,?5,1)",
             params![event.kind(), txid, amount, balance, created_at],
         )?;
     }
     transaction.execute(
-        "INSERT INTO satchel_notification_state (singleton,history_initialized) VALUES (1,1)
+        "INSERT INTO groot_notification_state (singleton,history_initialized) VALUES (1,1)
          ON CONFLICT(singleton) DO UPDATE SET history_initialized=1",
         [],
     )?;
@@ -105,7 +105,7 @@ pub fn enqueue(
 ) -> bdk_wallet::rusqlite::Result<bool> {
     let (txid, amount, balance) = event.values();
     db.execute(
-        "INSERT OR IGNORE INTO satchel_notifications (kind,txid,amount,balance,created_at) VALUES (?1,?2,?3,?4,?5)",
+        "INSERT OR IGNORE INTO groot_notifications (kind,txid,amount,balance,created_at) VALUES (?1,?2,?3,?4,?5)",
         params![event.kind(), txid, amount, balance, created_at],
     )
     .map(|changed| changed == 1)
@@ -134,7 +134,7 @@ fn decode_row(
 
 pub fn pending(db: &Connection) -> bdk_wallet::rusqlite::Result<Vec<NotificationEnvelope>> {
     let mut statement = db.prepare(
-        "SELECT id,kind,txid,amount,balance FROM satchel_notifications WHERE delivered = 0 ORDER BY id",
+        "SELECT id,kind,txid,amount,balance FROM groot_notifications WHERE delivered = 0 ORDER BY id",
     )?;
     let rows = statement.query_map([], decode_row)?.collect();
     rows
@@ -149,7 +149,7 @@ pub fn acknowledge(db: &mut Connection, ids: &[i64]) -> bdk_wallet::rusqlite::Re
         .collect::<Vec<_>>()
         .join(",");
     let changed = transaction.execute(
-        &format!("UPDATE satchel_notifications SET delivered = 1 WHERE delivered = 0 AND id IN ({placeholders})"),
+        &format!("UPDATE groot_notifications SET delivered = 1 WHERE delivered = 0 AND id IN ({placeholders})"),
         params_from_iter(ids.iter()),
     )?;
     transaction.commit()?;
@@ -159,7 +159,7 @@ pub fn acknowledge(db: &mut Connection, ids: &[i64]) -> bdk_wallet::rusqlite::Re
 #[cfg(test)]
 fn was_enqueued(db: &Connection, kind: &str, txid: &str) -> bdk_wallet::rusqlite::Result<bool> {
     db.query_row(
-        "SELECT 1 FROM satchel_notifications WHERE kind=?1 AND txid=?2",
+        "SELECT 1 FROM groot_notifications WHERE kind=?1 AND txid=?2",
         params![kind, txid],
         |_| Ok(true),
     )
@@ -252,7 +252,7 @@ mod tests {
         let db = db();
         db.execute_batch("PRAGMA ignore_check_constraints=ON;")
             .unwrap();
-        db.execute("INSERT INTO satchel_notifications(kind,txid,amount,balance,created_at) VALUES('unknown','x',0,0,1)", []).unwrap();
+        db.execute("INSERT INTO groot_notifications(kind,txid,amount,balance,created_at) VALUES('unknown','x',0,0,1)", []).unwrap();
         assert!(pending(&db).is_err());
     }
 }

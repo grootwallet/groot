@@ -1,6 +1,6 @@
 # ADR 0023: Groot brand adoption with stable wallet identifiers
 
-- Status: accepted
+- Status: superseded by ADR 0024
 - Date: 2026-08-10
 
 ## Context
