@@ -41,6 +41,7 @@
   let txid = $state('');
   let sentAmount = $state(0);
   let balanceSyncPending = $state(false);
+  let accelerationMethod = $state<'rbf' | 'cpfp' | null>(null);
   let coins = $state<Utxo[]>([]);
   let selectedCoins = $state<string[]>([]);
   let showCoins = $state(false);
@@ -77,6 +78,7 @@
       const acceleration = url.searchParams.get('accelerate');
       const accelerationTxid = url.searchParams.get('txid');
       if (accelerationTxid && (acceleration === 'rbf' || acceleration === 'cpfp')) {
+        accelerationMethod = acceleration;
         proposal = await walletService.prepareAcceleration(accelerationTxid, acceleration, asFeeRate(Number(feeData.priority)));
         address = proposal.recipient; label = proposal.label; amount = String(proposal.amount); speed = 'fast';
         if (externalSigner) externalProposal = (await walletService.externalSignerProposals()).find((item) => item.proposalId === proposal?.proposalId) ?? null;
@@ -154,7 +156,7 @@
 </script>
 
 <div class="page narrow-page send-page">
-  <header class="page-header"><div><p class="eyebrow">SEND</p><h1>Send bitcoin</h1><p class="subtitle">{step === 1 && draftStep === 1 ? 'Name the payment and choose its recipient.' : step === 1 ? 'Choose the amount, coins, and network fee.' : step === 2 ? 'Review everything carefully.' : step === 3 ? 'Unlock, sign, and broadcast.' : 'Payment sent.'}</p></div></header>
+  <header class="page-header"><div><p class="eyebrow">SEND</p><h1>Send bitcoin</h1><p class="subtitle">{step === 1 && draftStep === 1 ? 'Name the payment and choose its recipient.' : step === 1 ? 'Choose the amount, coins, and network fee.' : step === 2 ? 'Review everything carefully.' : step === 3 ? 'Unlock, sign, and broadcast.' : accelerationMethod === 'cpfp' ? 'Fee acceleration broadcast.' : accelerationMethod === 'rbf' ? 'Replacement broadcast.' : 'Payment sent.'}</p></div></header>
   {#if step < 4}<SendProgress current={progressStep} />{/if}
   {#if step < 4 && signerSummaryReady}<SignerSummary signers={signerItems} signedFingerprints={externalProposal?.signedFingerprints ?? []} collecting={externalSigner && Boolean(proposal)} />{/if}
 
@@ -213,7 +215,7 @@
       <Button variant="ghost" size="large" class="full sign-back-action" onclick={() => step = 2}>Back to review</Button>
     </form>
   {:else}
-    <section class="empty-state success-state"><span class="empty-icon success"><Check size={25} /></span><h2>Payment sent</h2><p>{shortSats(sentAmount)} sats was broadcast to the Bitcoin network.{#if balanceSyncPending} Balance refresh is pending; sync when the node is available.{/if}</p><div class="txid-box"><span>Transaction ID</span><code>{txid}</code></div><Button onclick={() => { step = 1; address=''; label=''; amount=''; passphrase=''; proposal=null; txid=''; sentAmount=0; balanceSyncPending=false; }}>Make another payment</Button><a href="/activity">View transaction</a></section>
+    <section class="empty-state success-state"><span class="empty-icon success"><Check size={25} /></span><h2>{accelerationMethod === 'cpfp' ? 'Fee acceleration broadcast' : accelerationMethod === 'rbf' ? 'Replacement broadcast' : 'Payment sent'}</h2><p>{#if accelerationMethod === 'cpfp'}A fee-only child transaction with a {shortSats(Number(proposal?.fee ?? 0))}-sat network fee was broadcast.{:else if accelerationMethod === 'rbf'}The {shortSats(sentAmount)}-sat payment was rebroadcast with a higher fee.{:else}{shortSats(sentAmount)} sats was broadcast to the Bitcoin network.{/if}{#if balanceSyncPending} Balance refresh is pending; sync when the node is available.{/if}</p><div class="txid-box"><span>Transaction ID</span><code>{txid}</code></div><Button onclick={() => { step = 1; address=''; label=''; amount=''; passphrase=''; proposal=null; txid=''; sentAmount=0; balanceSyncPending=false; accelerationMethod=null; }}>Make another payment</Button><a href="/activity">View transaction</a></section>
   {/if}
 </div>
 

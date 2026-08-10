@@ -505,6 +505,19 @@ test('pending transaction opens RBF and CPFP review without bypassing signing', 
   }
 });
 
+test('CPFP success identifies the fee-only child instead of a zero-sat payment', async ({ page }) => {
+  await page.goto('/activity');
+  await page.getByRole('button', { name: /Invoice #104/ }).click();
+  await page.getByRole('link', { name: 'Spend output (CPFP)' }).click();
+  await page.getByRole('button', { name: 'Continue to sign' }).click();
+  await page.getByLabel('Wallet passphrase', { exact: true }).fill('prototype-passphrase');
+  await page.getByRole('button', { name: /Sign & broadcast/ }).click();
+
+  await expect(page.getByRole('heading', { name: 'Fee acceleration broadcast' })).toBeVisible();
+  await expect(page.getByText(/fee-only child transaction with a .*sat network fee was broadcast/)).toBeVisible();
+  await expect(page.getByText('0 sats was broadcast to the Bitcoin network.')).toHaveCount(0);
+});
+
 test('successful RBF keeps the original visibly replaced and excluded from accounting', async ({ page }) => {
   await page.goto('/activity');
   await page.getByRole('button', { name: /Invoice #104/ }).click();
