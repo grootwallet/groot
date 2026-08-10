@@ -18,8 +18,8 @@ These values are descriptive formats rather than legacy brand names and remain u
 
 | Identifier | Role |
 | --- | --- |
-| `groot`, `groot_lib`, `groot-wallet` | Lowercase Rust crate/library and npm package identifiers; the installed application, bundle, and main executable display as `Groot` |
-| `release-artifacts/<commit>/groot` | Raw reproducible-build evidence binary, distinct from the platform application bundle |
+| `groot`, `groot_lib`, `groot-wallet` | Lowercase Rust package/library and npm package identifiers; the Cargo executable, installed application, bundle, and process display as `Groot` |
+| `release-artifacts/<commit>/Groot` | Raw reproducible-build evidence binary, capitalized consistently with the platform application bundle |
 | `wallet:<uuid>` | Apple secure-store account |
 | `wallet-registry.json`, `wallets/<uuid>` | Registry and isolated profile layout |
 | `regtest-wallet`, `regtest-multisig` | Generic pre-registry development profile locations |

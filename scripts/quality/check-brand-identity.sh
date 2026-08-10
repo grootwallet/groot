@@ -17,6 +17,7 @@ contains_fixed '"identifier": "app.groot.wallet"' src-tauri/tauri.conf.json || f
 contains_fixed 'const KEYCHAIN_SERVICE: &str = "app.groot.wallet.device-wrap.v1";' src-tauri/src/secure_store.rs || fail "Keychain service is not Groot"
 contains_fixed '"name": "groot-wallet"' package.json || fail "package metadata is not Groot"
 contains_fixed 'name = "groot"' src-tauri/Cargo.toml || fail "Rust package metadata is not Groot"
+contains_fixed 'name = "Groot"' src-tauri/Cargo.toml || fail "Cargo development executable name is not Groot"
 contains_fixed ": 'Groot'" src/routes/+layout.svelte || fail "webview title is not Groot"
 
 contains_fixed 'M512 100C100 100 100 100 100 512C100 924 100 924 512 924C924 924 924 924 924 512C924 100 924 100 512 100Z' assets/brand/app-icon-legacy-source.svg || fail "legacy icon does not use the approved continuous-corner footprint"
