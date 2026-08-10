@@ -424,6 +424,10 @@ test('imports a public hardware backup without requiring a wallet name first', a
   await expect(page.getByText('PUBLIC DATA REVIEW')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'satchel hardware wallet' })).toBeVisible();
   await expect(page.getByText("m/84'/1'/0'")).toBeVisible();
+  await expect(page.getByText('Review the public backup identity.')).toBeVisible();
+  await expect(page.getByText(/verify the first receive address on the hardware wallet/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Use this public backup' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Fingerprint matches' })).toHaveCount(0);
 });
 
 test('unlocks a Trezor before choosing its standard single-key wallet', async ({ page }) => {

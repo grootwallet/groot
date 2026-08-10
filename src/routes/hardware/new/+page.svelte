@@ -27,6 +27,7 @@
   let pinDevice = $state<HardwareDevice|null>(null);
   let xpubOpen = $state(false);
   let isLedger = $derived(Boolean(signer?.deviceType?.toLowerCase().includes('ledger')));
+  let isFileImport = $derived(signer?.source === 'file');
 
   onDestroy(() => { pin = ''; confirmation = ''; pinPositions = ''; pinChallenge = ''; });
 
@@ -144,10 +145,12 @@
       {#if isLedger}
         <div class="credential-warning"><ShieldCheck size={17}/><p><strong>This identifies the wallet currently open on Ledger.</strong><span>A different seed or passphrase produces a different fingerprint and completely different addresses. Nano S Plus does not display this fingerprint, so verify your first receive address on Ledger before using the wallet.</span></p></div>
         <details class="ledger-passphrase-help"><summary>Want to use a Ledger passphrase?</summary><p>Set it directly on Ledger before importing: open device Settings → Security → Passphrase, then choose a temporary passphrase or attach one to a secondary PIN. Go back and import again after activating that wallet. Satchel never receives the passphrase.</p></details>
+      {:else if isFileImport}
+        <div class="credential-warning"><ShieldCheck size={17}/><p><strong>Review the public backup identity.</strong><span>Compare the fingerprint with the original wallet or a trusted record when available. After setup, verify the first receive address on the hardware wallet before accepting funds.</span></p></div>
       {:else}
         <div class="credential-warning"><ShieldCheck size={17}/><p><strong>Verify the fingerprint.</strong><span>Compare it with the value shown by the hardware wallet or its trusted export. A different seed or passphrase produces a different wallet.</span></p></div>
       {/if}
-      <div class="split-actions"><Button variant="secondary" onclick={() => { signer=null; step=1; }}>Back</Button><Button onclick={() => step=3}>{isLedger ? 'Use this Ledger wallet' : 'Fingerprint matches'}<ArrowRight size={17}/></Button></div>
+      <div class="split-actions"><Button variant="secondary" onclick={() => { signer=null; step=1; }}>Back</Button><Button onclick={() => step=3}>{isLedger ? 'Use this Ledger wallet' : isFileImport ? 'Use this public backup' : 'Fingerprint matches'}<ArrowRight size={17}/></Button></div>
     </section>
   {:else if signer}
     <form class="form-card hardware-protection-card" onsubmit={(event) => { event.preventDefault(); create(); }}>
