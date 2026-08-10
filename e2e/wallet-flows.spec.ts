@@ -279,7 +279,9 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   await expect(page.getByRole('heading', { name: 'Add hardware wallet' })).toBeVisible();
   await page.getByLabel('Wallet name').fill('Hardware savings');
   await page.getByRole('button', { name: /Connect with cable/ }).click();
+  await expect(page.getByRole('status', { name: 'Hardware wallet setup in progress' })).toContainText('Scanning');
   await page.getByRole('button', { name: /Virtual Coldcard/ }).click();
+  await expect(page.getByRole('status', { name: 'Hardware wallet setup in progress' })).toContainText('Reading the public key');
   await expect(page.getByText('PUBLIC DATA REVIEW')).toBeVisible();
   await expect(page.getByText("m/84'/1'/0'")).toBeVisible();
   await page.getByRole('button', { name: 'Fingerprint matches' }).click();
@@ -294,6 +296,7 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   await page.getByRole('button', { name: 'Generate address' }).click();
   await expect(page.locator('.address-label').getByText('Not verified', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Verify on device' }).click();
+  await expect(page.getByRole('status', { name: 'Hardware device scan in progress' })).toContainText('Looking for your saved signer');
   await page.getByRole('button', { name: /Virtual Coldcard/ }).click();
   const hardwareApproval = page.getByRole('status', { name: 'Waiting for hardware approval' });
   await expect(hardwareApproval).toContainText('Check your hardware device');
@@ -330,7 +333,9 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   await expect(page.getByText('QR scanning is not available in this WebView. Import the PSBT file instead.')).toHaveCount(0);
   await page.getByRole('button', { name: 'Close' }).click();
   await page.getByRole('button', { name: 'Sign with cable' }).click();
+  await expect(page.getByRole('status', { name: 'Hardware device scan in progress' })).toContainText('Looking for hardware devices');
   await page.getByRole('button', { name: /Virtual Coldcard/ }).click();
+  await expect(page.getByRole('status', { name: 'Waiting for hardware signature' })).toContainText('Review the recipient, amount, fee, and change');
   await expect(page.getByText('Signature verified')).toBeVisible();
   await page.getByLabel('App PIN', { exact: true }).fill('hardware-pin');
   await page.getByRole('button', { name: 'Finalize & broadcast' }).click();

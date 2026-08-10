@@ -3,6 +3,7 @@
   import type { CosignerDraft, CosignerSource } from '$lib/multisig/policy';
   import type { CosignerHealthCheck } from '$lib/wallet';
   import Button from './Button.svelte';
+  import HardwareActionPrompt from './HardwareActionPrompt.svelte';
   import LocalTimestamp from './LocalTimestamp.svelte';
   import Modal from './Modal.svelte';
 
@@ -41,8 +42,16 @@
       </dl>
       <section class="health-card" aria-live="polite">
         <div class="health-heading"><span class:checked={!!health && health.status !== 'attention'} class:attention={health?.status === 'attention'}><CheckCircle2 size={18}/></span><div><strong>Device health</strong><small>{#if health}Last checked <LocalTimestamp value={health.checkedAt}/>{:else}Not checked in this session{/if}</small></div></div>
-        <p>{health?.summary ?? 'Run a check to verify the saved identity and current connection where available.'}</p>
-        <Button variant="secondary" class="full" disabled={checking} onclick={oncheck}><RefreshCw size={15} class={checking ? 'spin' : ''}/>{checking ? 'Checking…' : 'Run health check'}</Button>
+        {#if checking}
+          <HardwareActionPrompt
+            title={signer.source === 'usb' || signer.source === 'virtual' ? 'Checking signer identity' : 'Checking saved signer record'}
+            detail={signer.source === 'usb' || signer.source === 'virtual' ? 'Keep the signer connected and unlocked while Satchel matches its saved fingerprint.' : 'Satchel is validating the saved public record; physical device presence is not checked.'}
+            label="Signer health check in progress"
+          />
+        {:else}
+          <p>{health?.summary ?? 'Run a check to verify the saved identity and current connection where available.'}</p>
+          <Button variant="secondary" class="full" onclick={oncheck}><RefreshCw size={15}/>Run health check</Button>
+        {/if}
       </section>
       {#if history.length}
         <section class="health-history" aria-label="Health check history">

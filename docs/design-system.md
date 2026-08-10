@@ -17,6 +17,8 @@ Satchel combines calm, task-focused desktop density with restrained native-utili
 5. Use progressive disclosure for long addresses, xpubs, descriptors, and transaction IDs while preserving copy/export access.
 6. Empty, loading, offline, invalid, and retry states are designed states—not exceptions.
 
+Hardware operations use the shared animated hardware-action panel wherever Satchel is waiting on discovery, public-key import, device unlock, saved-identity health checks, address approval, or transaction signing. The panel names the current action, states what the user must do on the external device, exposes a polite live status to assistive technology, and respects reduced-motion preferences. Device- and network-specific instructions may refine its copy, but must not replace this common interaction pattern with a static icon or button-only spinner.
+
 ## Foundations
 
 - Dark background `#0d1118`; panel `#131923`; raised panel `#182131`. Light mode uses warm paper `#f4f1e9` and ivory panels.

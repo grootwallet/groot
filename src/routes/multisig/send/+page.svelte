@@ -2,6 +2,7 @@
   import { AlertTriangle, Check, CircleDot, Copy, Cpu, Download, FileUp, LockKeyhole, QrCode, RefreshCw, ScanLine, X } from '@lucide/svelte';
   import { onDestroy, onMount } from 'svelte';
   import Button from '$lib/components/Button.svelte';
+  import HardwareActionPrompt from '$lib/components/HardwareActionPrompt.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import PasswordField from '$lib/components/PasswordField.svelte';
   import AnimatedUrQr from '$lib/components/AnimatedUrQr.svelte';
@@ -22,6 +23,7 @@
   let wallet = $state<MultisigWallet|null>(null), proposal=$state<MultisigProposal|null>(null), estimates=$state<FeeEstimates|null>(null);
   let address=$state(''), label=$state(''), amount=$state(''), selectedRate=$state(2), pin=$state(''), imported=$state(''), txid=$state(''), error=$state(''), deviceError=$state(''), cancelError=$state('');
   let busy=$state(false), savingPsbt=$state(false), deviceOpen=$state(false), addressOpen=$state(false), changeAddressOpen=$state(false), importOpen=$state(false), qrOpen=$state(false), qrScanOpen=$state(false), cancelOpen=$state(false), exitOpen=$state(false), devices=$state<HardwareDevice[]>([]), urFrames=$state<string[]>([]), scannedFrames=$state<string[]>([]);
+  let hardwareAction=$state<'scan'|'sign'>('scan');
   let coins=$state<Utxo[]>([]), selectedCoins=$state<string[]>([]), showCoins=$state(false), available=$state(0);
   let draftStep=$state<1|2>(1);
   const selection=$derived<CoinSelection>(selectedCoins.length?{mode:'manual',outpoints:selectedCoins}:{mode:'auto'});
@@ -37,8 +39,8 @@
   function updateAvailable(){available=coins.filter((coin)=>!coin.frozen&&(!selectedCoins.length||selectedCoins.includes(coin.outpoint))).reduce((total,coin)=>total+coin.amount,0);}
   function toggleCoin(outpoint:string,checked:boolean){selectedCoins=checked?[...selectedCoins,outpoint]:selectedCoins.filter((item)=>item!==outpoint);updateAvailable();}
   function useAutomatic(){selectedCoins=[];showCoins=false;updateAvailable();}
-  async function scan(){deviceOpen=true;busy=true;deviceError='';try{devices=await walletService.listHardwareDevices();}catch(cause){devices=[];deviceError=cause instanceof Error?cause.message:'Could not find hardware.';}finally{busy=false;}}
-  async function sign(device:HardwareDevice){if(!proposal)return;busy=true;deviceError='';try{proposal=await walletService.signMultisigWithHardware(proposal.proposalId,device.id,proposal.psbt);deviceOpen=false;toast({title:'Signature added',description:`${proposal.signed} of ${proposal.required} signatures`,tone:'success'});}catch(cause){deviceError=cause instanceof Error?cause.message:'Device signing failed.';}finally{busy=false;}}
+  async function scan(){deviceOpen=true;hardwareAction='scan';busy=true;deviceError='';try{devices=await walletService.listHardwareDevices();}catch(cause){devices=[];deviceError=cause instanceof Error?cause.message:'Could not find hardware.';}finally{busy=false;}}
+  async function sign(device:HardwareDevice){if(!proposal)return;hardwareAction='sign';busy=true;deviceError='';try{proposal=await walletService.signMultisigWithHardware(proposal.proposalId,device.id,proposal.psbt);deviceOpen=false;toast({title:'Signature added',description:`${proposal.signed} of ${proposal.required} signatures`,tone:'success'});}catch(cause){deviceError=cause instanceof Error?cause.message:'Device signing failed.';}finally{busy=false;}}
   async function importPsbt(){if(!proposal||!imported.trim())return;busy=true;try{proposal=await walletService.importMultisigProposal(proposal.proposalId,proposal.psbt,imported);imported='';importOpen=false;toast({title:'Signed PSBT merged',description:`${proposal.signed} of ${proposal.required} signatures`,tone:'success'});}catch(cause){error=cause instanceof Error?cause.message:'PSBT import failed.';}finally{busy=false;}}
   async function broadcast(){if(!proposal||!pin)return;busy=true;error='';try{const result=await walletService.broadcastMultisigProposal(proposal.proposalId,proposal.psbt,pin);txid=result.txid;toast({title:'Vault transaction broadcast',description:result.syncPending?'Accepted by the node. Balance refresh is pending.':`Balance ${shortSats(result.snapshot.balance.total)} sats`,tone:'success'});}catch(cause){error=cause instanceof Error?cause.message:'Broadcast failed.';}finally{pin='';busy=false;}}
   async function confirmCancel(){if(!proposal||busy)return;busy=true;cancelError='';try{await walletService.cancelMultisigProposal(proposal.proposalId);proposal=null;address='';label='';amount='';pin='';draftStep=1;cancelOpen=false;toast({title:'Proposal canceled',description:'The unsigned transaction and any collected signatures were discarded.'});}catch(cause){cancelError=cause instanceof Error?cause.message:'The proposal could not be canceled.';}finally{busy=false;}}
@@ -120,7 +122,7 @@
     </section>
   {/if}
   {#if busy}
-    <div class="device-scan compact"><Cpu size={20}/><span>Communicating with hardware…</span></div>
+    <HardwareActionPrompt title={hardwareAction === 'sign' ? 'Check your hardware device' : 'Looking for hardware devices'} detail={hardwareAction === 'sign' ? 'Review the recipient, amount, fee, change, and vault policy, then approve on the device.' : 'Keep each signer connected and unlocked. Follow any instructions shown on the device.'} label={hardwareAction === 'sign' ? 'Waiting for hardware signature' : 'Hardware device scan in progress'}/>
   {:else if devices.length===0}
     <div class="device-scan"><strong>No device found</strong><span>Connect an HWI-compatible device, or use signed PSBT import.</span><Button variant="secondary" onclick={scan}>Scan again</Button></div>
   {:else}

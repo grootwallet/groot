@@ -1,6 +1,7 @@
 <script lang="ts">
   import { AlertTriangle, Delete, LockKeyhole } from '@lucide/svelte';
   import Button from '$lib/components/Button.svelte';
+  import HardwareActionPrompt from '$lib/components/HardwareActionPrompt.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import { hardwareBrand, TREZOR_PIN_CELLS, TREZOR_PIN_MAX_POSITIONS, trezorPinError } from '$lib/hardware/trezor-pin';
   import type { HardwareDevice, WalletErrorCode } from '$lib/wallet/contracts';
@@ -80,12 +81,12 @@
         <span><strong>{errorPresentation.title}</strong><small>{errorPresentation.detail}</small></span>
       </div>
       <Button class="full" variant="secondary" onclick={onretry}>Ask Trezor for a fresh layout</Button>
+    {:else if busy}
+      <HardwareActionPrompt title="Waiting for Trezor" detail="Keep it connected while the device checks the selected PIN positions." label="Trezor unlock in progress"/>
     {:else}
       <Button
         class="full"
         disabled={!positions || !challengeReady}
-        loading={busy}
-        loadingLabel="Unlocking…"
         onclick={onsubmit}
       >Unlock {brand}</Button>
     {/if}

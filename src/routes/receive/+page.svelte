@@ -8,7 +8,7 @@
   import AddressDetailsModal from '$lib/components/AddressDetailsModal.svelte';
   import LocalTimestamp from '$lib/components/LocalTimestamp.svelte';
   import HardwareVerificationStatus from '$lib/components/HardwareVerificationStatus.svelte';
-  import HardwareApprovalPrompt from '$lib/components/HardwareApprovalPrompt.svelte';
+  import HardwareActionPrompt from '$lib/components/HardwareActionPrompt.svelte';
   import { compactAddress } from '$lib/address-display';
   import { walletService, type HardwareDevice } from '$lib/wallet';
   import { useWalletShellContext } from '$lib/wallet/shell-context';
@@ -34,6 +34,7 @@
   const walletShell=useWalletShellContext();
   let externalSigner=$derived(walletShell.profiles().find((profile)=>profile.id===walletShell.selectedWalletId())?.kind==='watch_only');
   let verifyOpen=$state(false),verifyBusy=$state(false),verifyError=$state(''),devices=$state<HardwareDevice[]>([]),verificationDevice=$state<HardwareDevice|null>(null);
+  let verificationAction=$state<'scan'|'approve'>('scan');
   let ledgerVerification=$derived(Boolean(current?.testnetAlias&&(`${savedSignerDeviceType ?? ''} ${verificationDevice?.label ?? ''} ${verificationDevice?.model ?? ''}`).toLowerCase().includes('ledger')));
   let awaiting = $derived(awaitingPaymentAddresses(addresses));
   let history = $derived(addresses.filter((address) => address.status !== 'awaiting'));
@@ -106,8 +107,8 @@
     finally { busy = false; }
   };
   const requestDiscard = (address: ReceiveAddress) => { discardTarget = address; showDiscard = true; };
-  async function scanVerification(){if(!current)return;verifyOpen=true;verifyBusy=true;verifyError='';verificationDevice=null;try{devices=await walletService.listHardwareDevices();}catch(cause){devices=[];verifyError=cause instanceof Error?cause.message:'Could not scan hardware.';}finally{verifyBusy=false;}}
-  async function verifyAddress(device:HardwareDevice){if(!current)return;verificationDevice=device;verifyBusy=true;verifyError='';try{const verified=await walletService.verifyExternalAddress(device.id,current.id);addresses=addresses.map((address)=>address.id===verified.id?verified:address);current=verified;verifyOpen=false;toast({title:'Address verified',description:'The verification time was saved with this address.',tone:'success'});}catch(cause){verifyError=cause instanceof Error?cause.message:'The device could not verify this address.';}finally{verifyBusy=false;}}
+  async function scanVerification(){if(!current)return;verifyOpen=true;verificationAction='scan';verifyBusy=true;verifyError='';verificationDevice=null;try{devices=await walletService.listHardwareDevices();}catch(cause){devices=[];verifyError=cause instanceof Error?cause.message:'Could not scan hardware.';}finally{verifyBusy=false;}}
+  async function verifyAddress(device:HardwareDevice){if(!current)return;verificationDevice=device;verificationAction='approve';verifyBusy=true;verifyError='';try{const verified=await walletService.verifyExternalAddress(device.id,current.id);addresses=addresses.map((address)=>address.id===verified.id?verified:address);current=verified;verifyOpen=false;toast({title:'Address verified',description:'The verification time was saved with this address.',tone:'success'});}catch(cause){verifyError=cause instanceof Error?cause.message:'The device could not verify this address.';}finally{verifyBusy=false;}}
 </script>
 
 <div class="page narrow-page receive-page">
@@ -168,7 +169,7 @@
     </section>
   {/if}
   {#if verifyBusy}
-    <HardwareApprovalPrompt/>
+    <HardwareActionPrompt title={verificationAction === 'approve' ? 'Check your hardware device' : 'Looking for your saved signer'} detail={verificationAction === 'approve' ? 'Compare the complete address above, then approve it on the device.' : 'Keep the signer connected and unlocked while Satchel matches its saved identity.'} label={verificationAction === 'approve' ? 'Waiting for hardware approval' : 'Hardware device scan in progress'}/>
   {:else}
     <div class="source-list hardware-device-list">{#each devices as device}<button disabled={device.status!=='ready'&&device.status!=='detected'} onclick={()=>verifyAddress(device)}><Cpu size={18}/><span><strong>{device.label}</strong><small>{device.fingerprint??device.message}</small></span></button>{:else}<p>No compatible saved signer found. Unlock it and scan again.</p>{/each}</div>
     <Button class="verification-rescan" variant="secondary" onclick={scanVerification}>Scan again</Button>

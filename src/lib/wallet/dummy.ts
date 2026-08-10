@@ -230,6 +230,7 @@ export class DummyWalletAdapter implements WalletPort {
   }
 
   async listHardwareDevices() {
+    await new Promise((resolve) => setTimeout(resolve, 200));
     return [
       { id: 'virtual-coldcard', label: 'Virtual Coldcard', model: 'Coldcard simulator', fingerprint: 'f00dbabe', connected: true, status: 'ready' as const, message: 'Ready to import the public account key.', action: 'import' as const },
       { id: 'virtual-trezor-cosigner', label: 'Virtual Trezor cosigner', model: 'Trezor simulator', fingerprint: 'c0ffee01', connected: true, status: 'ready' as const, message: 'Ready to sign as a separate wallet cosigner.', action: 'import' as const },
@@ -245,11 +246,13 @@ export class DummyWalletAdapter implements WalletPort {
     return 'fixture-pin-challenge';
   }
   async sendHardwarePin(challengeId: string, pinPositions: string) {
+    await new Promise((resolve) => setTimeout(resolve, 200));
     if (challengeId !== 'fixture-pin-challenge') throw new WalletError('hardware_challenge_expired', 'The PIN request expired.');
     if (!/^[1-9]{1,50}$/.test(pinPositions)) throw new WalletError('invalid_hardware_request', 'Enter only PIN-matrix positions 1 through 9.');
     this.#trezorPinUnlocked = true;
   }
   async checkHardwareCosigner(cosigner: PolicyDraft['cosigners'][number]) {
+    await new Promise((resolve) => setTimeout(resolve, 200));
     const checkedAt = new Date().toISOString();
     if (cosigner.source === 'usb' || cosigner.source === 'virtual') {
       const devices = await this.listHardwareDevices();
@@ -260,6 +263,7 @@ export class DummyWalletAdapter implements WalletPort {
     return { status: 'record_valid' as const, checkedAt, summary: 'Public key, fingerprint, and derivation path are complete. Physical presence cannot be checked for an offline key.' };
   }
   async importHardwareCosigner(deviceId: string, label: string, allowEmptyPassphrase = false) {
+    await new Promise((resolve) => setTimeout(resolve, 200));
     const trezor = deviceId === 'virtual-trezor-standard' || deviceId === 'virtual-trezor';
     if (trezor && !allowEmptyPassphrase) throw new WalletError('hardware_wallet_selection_required', 'Choose whether this cosigner uses the standard wallet with no passphrase.');
     if (deviceId === 'virtual-trezor' && !this.#trezorPinUnlocked) throw new WalletError('hardware_unavailable', 'Unlock this Trezor before selecting its wallet.');
@@ -277,6 +281,7 @@ export class DummyWalletAdapter implements WalletPort {
     return { label: label.trim(), fingerprint: fingerprint.toLowerCase(), xpub, derivationPath: "m/84'/1'/0'", source, deviceType: null };
   }
   async importHardwareExternalSigner(deviceId: string, label: string, allowEmptyPassphrase = false): Promise<ExternalSigner> {
+    await new Promise((resolve) => setTimeout(resolve, 200));
     const trezor = deviceId === 'virtual-trezor-standard' || deviceId === 'virtual-trezor';
     if (trezor && !allowEmptyPassphrase) throw new WalletError('hardware_wallet_selection_required', 'Choose whether this signer uses the standard wallet with no passphrase.');
     if (deviceId === 'virtual-trezor' && !this.#trezorPinUnlocked) throw new WalletError('hardware_unavailable', 'Unlock this Trezor before selecting its wallet.');
@@ -299,7 +304,7 @@ export class DummyWalletAdapter implements WalletPort {
     if (proposal.psbt !== reviewedPsbt) throw new WalletError('proposal_mismatch', 'The proposal changed after review.');
     proposal.signed = 1; proposal.canFinalize = true; proposal.status = 'ready'; proposal.signedFingerprints = [this.#externalWallet?.signer.fingerprint ?? 'f00dbabe']; return structuredClone(proposal);
   }
-  async signExternalWithHardware(proposalId: string, _deviceId: string, reviewedPsbt: string) { return this.importExternalSignerProposal(proposalId, reviewedPsbt, reviewedPsbt); }
+  async signExternalWithHardware(proposalId: string, _deviceId: string, reviewedPsbt: string) { await new Promise((resolve) => setTimeout(resolve, 250)); return this.importExternalSignerProposal(proposalId, reviewedPsbt, reviewedPsbt); }
   async broadcastExternalSignerProposal(proposalId: string, reviewedPsbt: string, credential: string) {
     if (!this.#selectedWalletId || credential !== this.#credentials.get(this.#selectedWalletId)) throw new WalletError('invalid_credential', 'Incorrect app PIN.');
     const proposal = this.#externalProposals.get(proposalId); if (!proposal?.canFinalize) throw new WalletError('insufficient_signatures', 'Sign first.');
@@ -477,6 +482,7 @@ export class DummyWalletAdapter implements WalletPort {
     return this.#addDummySignature(proposalId);
   }
   async signMultisigWithHardware(proposalId:string, deviceId:string, reviewedPsbt:string) {
+    await new Promise((resolve)=>setTimeout(resolve,250));
     const proposal=this.#multisigProposals.get(proposalId); if(proposal?.psbt!==reviewedPsbt) throw new WalletError('proposal_mismatch','The proposal changed after review.');
     if (deviceId === 'virtual-ledger-outsider') throw new WalletError('unknown_signer','The connected device is not a cosigner in this wallet policy.');
     const fingerprint = deviceId === 'virtual-coldcard' ? 'f00dbabe' : deviceId === 'virtual-trezor-cosigner' ? 'c0ffee01' : null;

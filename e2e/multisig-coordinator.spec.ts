@@ -175,6 +175,7 @@ test('shows cosigner details and runs honest health checks', async ({ page }) =>
   await expect(coldcardDialog.getByText("m/48'/1'/0'/2'", { exact: true })).toBeVisible();
   await expect(coldcardDialog.getByText('Not checked in this session')).toBeVisible();
   await coldcardDialog.getByRole('button', { name: 'Run health check' }).click();
+  await expect(coldcardDialog.getByRole('status', { name: 'Signer health check in progress' })).toContainText('Checking signer identity');
   await expect(coldcardDialog.locator('.health-card').getByText('Connected identity matches f00dbabe.')).toBeVisible();
   await expect(coldcardDialog.getByText(/Last checked/)).toBeVisible();
   await expect(coldcardDialog.getByText('Recent checks')).toBeVisible();
@@ -343,6 +344,7 @@ test('unlocks a detected Trezor with the bounded PIN-position flow', async ({ pa
   await pin.getByRole('button', { name: 'Top right position' }).click();
   await expect(pin.getByLabel('3 PIN positions selected')).toHaveText('•••');
   await pin.getByRole('button', { name: 'Unlock Trezor' }).click();
+  await expect(pin.getByRole('status', { name: 'Trezor unlock in progress' })).toContainText('Waiting for Trezor');
   await expect(page.getByText('Hardware wallet unlocked')).toBeVisible();
   const rescanned = page.getByRole('dialog', { name: 'Connect hardware device' });
   await expect(rescanned).toBeVisible();
@@ -367,6 +369,7 @@ test('explicitly selects a Trezor standard wallet without changing hidden wallet
   const choice = page.getByRole('dialog', { name: 'Use Trezor standard wallet?' });
   await expect(choice.getByText(/does not disable, change, or reveal any hidden passphrase wallet/)).toBeVisible();
   await choice.getByRole('button', { name: 'Use standard wallet' }).click();
+  await expect(choice.getByRole('status', { name: 'Hardware cosigner import in progress' })).toContainText('Importing the Trezor standard wallet');
   await expect(page.getByRole('button', { name: 'View Virtual Trezor Standard details' })).toBeVisible();
   await expect(page.getByText('c0ffee02')).toBeVisible();
 });

@@ -9,7 +9,7 @@
   import AddressDetailsModal from '$lib/components/AddressDetailsModal.svelte';
   import LocalTimestamp from '$lib/components/LocalTimestamp.svelte';
   import HardwareVerificationStatus from '$lib/components/HardwareVerificationStatus.svelte';
-  import HardwareApprovalPrompt from '$lib/components/HardwareApprovalPrompt.svelte';
+  import HardwareActionPrompt from '$lib/components/HardwareActionPrompt.svelte';
   import { compactAddress } from '$lib/address-display';
   import { walletService, WalletError, type HardwareDevice } from '$lib/wallet';
   import { awaitingPaymentAddresses } from '$lib/wallet/policy';
@@ -19,6 +19,7 @@
   let label = $state(''); let current = $state<ReceiveAddress | null>(null); let addresses = $state<ReceiveAddress[]>([]);
   let qrDataUrl = $state(''); let busy = $state(false); let ready = $state(false); let generateError = $state(''); let showGenerate = $state(false); let showDiscard = $state(false); let showQr = $state(false); let showDetails = $state(false); let copied = $state(false); let discardTarget = $state<ReceiveAddress | null>(null); let detailAddress = $state<ReceiveAddress | null>(null);
   let verifyOpen=$state(false),verifyBusy=$state(false),verifyError=$state(''),devices=$state<HardwareDevice[]>([]),verificationDevice=$state<HardwareDevice|null>(null);
+  let verificationAction=$state<'scan'|'approve'>('scan');
   let ledgerVerification=$derived(Boolean(verificationDevice&&`${verificationDevice.label} ${verificationDevice.model}`.toLowerCase().includes('ledger')&&current?.testnetAlias));
   let awaiting = $derived(awaitingPaymentAddresses(addresses)); let history = $derived(addresses.filter((address)=>address.status!=='awaiting'));
   onMount(() => {
@@ -56,8 +57,8 @@
   async function discard(){if(!discardTarget)return;busy=true;try{const id=discardTarget.id;await walletService.discardMultisigAddress(id);addresses=addresses.map((item)=>item.id===id?{...item,status:'discarded'}:item);if(current?.id===id)current=awaitingPaymentAddresses(addresses)[0]??null;discardTarget=null;showDiscard=false;toast({title:'Address discarded'});}catch(cause){toast({title:'Could not discard address',description:cause instanceof Error?cause.message:undefined,tone:'danger'});}finally{busy=false;}}
   function applyAddresses(nextAddresses:ReceiveAddress[]){addresses=nextAddresses;const nextAwaiting=awaitingPaymentAddresses(nextAddresses);current=nextAwaiting.find((address)=>address.id===current?.id)??nextAwaiting[0]??null;}
   const requestDiscard=(address:ReceiveAddress)=>{discardTarget=address;showDiscard=true;};
-  async function scanVerification(){if(!current)return;verifyOpen=true;verifyBusy=true;verifyError='';verificationDevice=null;try{devices=await walletService.listHardwareDevices();}catch(cause){devices=[];verifyError=cause instanceof Error?cause.message:'Could not scan hardware.';}finally{verifyBusy=false;}}
-  async function verifyAddress(device:HardwareDevice){if(!current)return;verificationDevice=device;verifyBusy=true;verifyError='';try{const verified=await walletService.verifyMultisigAddress(device.id,current.id);addresses=addresses.map((address)=>address.id===verified.id?verified:address);current=verified;verifyOpen=false;toast({title:'Address verified',description:'The verification time was saved with this address.',tone:'success'});}catch(cause){verifyError=cause instanceof Error?cause.message:'The device could not verify this address.';}finally{verifyBusy=false;}}
+  async function scanVerification(){if(!current)return;verifyOpen=true;verificationAction='scan';verifyBusy=true;verifyError='';verificationDevice=null;try{devices=await walletService.listHardwareDevices();}catch(cause){devices=[];verifyError=cause instanceof Error?cause.message:'Could not scan hardware.';}finally{verifyBusy=false;}}
+  async function verifyAddress(device:HardwareDevice){if(!current)return;verificationDevice=device;verificationAction='approve';verifyBusy=true;verifyError='';try{const verified=await walletService.verifyMultisigAddress(device.id,current.id);addresses=addresses.map((address)=>address.id===verified.id?verified:address);current=verified;verifyOpen=false;toast({title:'Address verified',description:'The verification time was saved with this address.',tone:'success'});}catch(cause){verifyError=cause instanceof Error?cause.message:'The device could not verify this address.';}finally{verifyBusy=false;}}
 </script>
 
 <div class="page narrow-page receive-page">
@@ -83,7 +84,7 @@
     </section>
   {/if}
   {#if verifyBusy}
-    <HardwareApprovalPrompt/>
+    <HardwareActionPrompt title={verificationAction === 'approve' ? 'Check your hardware device' : 'Looking for a wallet cosigner'} detail={verificationAction === 'approve' ? 'Compare the complete address above, then approve it on the device.' : 'Keep the signer connected and unlocked while Satchel matches it to this wallet policy.'} label={verificationAction === 'approve' ? 'Waiting for hardware approval' : 'Hardware device scan in progress'}/>
   {:else}
     <div class="source-list hardware-device-list">{#each devices as device}<button disabled={device.status!=='ready'&&device.status!=='detected'} onclick={()=>verifyAddress(device)}><Cpu size={18}/><span><strong>{device.label}</strong><small>{device.fingerprint??device.message}</small></span></button>{:else}<p>No compatible device found. Unlock a wallet cosigner and scan again.</p>{/each}</div>
     <Button class="verification-rescan" variant="secondary" onclick={scanVerification}>Scan again</Button>
