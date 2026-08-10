@@ -93,7 +93,12 @@
   async function loadFile(event: Event) {
     const input = event.currentTarget as HTMLInputElement; const file = input.files?.[0]; input.value = '';
     if (!file) return;
-    try { encoded = await readTransferFile(file); importSource = 'file'; await parseImport(); }
+    try {
+      if (!label.trim()) {
+        label = file.name.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ').trim() || 'Recovered hardware wallet';
+      }
+      encoded = await readTransferFile(file); importSource = 'file'; await parseImport();
+    }
     catch (cause) { error = cause instanceof Error ? cause.message : 'Could not read this file.'; }
   }
   async function create() {

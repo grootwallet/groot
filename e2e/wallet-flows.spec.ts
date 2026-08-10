@@ -409,6 +409,23 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   await expect(page.getByText('Trusted remote server')).toBeVisible();
 });
 
+test('imports a public hardware backup without requiring a wallet name first', async ({ page }) => {
+  await page.goto('/hardware/new');
+  await expect(page.getByLabel('Wallet name')).toHaveValue('');
+  await page.getByLabel('Import public key file').setInputFiles({
+    name: 'satchel-hardware-wallet.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify({
+      version: 1,
+      network: 'regtest',
+      descriptor: "wpkh([f00dbabe/84'/1'/0']tpub-fixture/<0;1>/*)"
+    }))
+  });
+  await expect(page.getByText('PUBLIC DATA REVIEW')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'satchel hardware wallet' })).toBeVisible();
+  await expect(page.getByText("m/84'/1'/0'")).toBeVisible();
+});
+
 test('unlocks a Trezor before choosing its standard single-key wallet', async ({ page }) => {
   await page.goto('/hardware/new');
   const setupGuides = page.getByRole('button', { name: 'Device setup guides' });
