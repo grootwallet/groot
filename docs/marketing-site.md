@@ -42,7 +42,7 @@ Headline:
 
 Body:
 
-> Hold bitcoin on your terms. Know exactly what you’re signing. Know you can recover without us.
+> Your bitcoin. Your keys. See what you’re signing, and keep a recovery path that does not depend on us.
 
 Actions:
 
@@ -57,7 +57,7 @@ The hero uses a full-bleed mountain photograph rather than a product capture. Th
 
 Supporting line near the lower rule:
 
-> Self-custody, with proof at every step.
+> Your keys. Your rules. Proof at every step.
 
 The first real Overview capture begins below the emotional opening. Do not recreate, simplify, beautify, or rearrange the interface for marketing.
 
@@ -69,7 +69,7 @@ Headline:
 
 Body:
 
-> Bitcoin lets you hold money without asking anyone’s permission. That freedom only works when the keys, spending rules, backups, and recovery plan are truly yours. This wallet makes each one visible, verifiable, and portable.
+> Bitcoin lets you hold money without permission. That is the promise. The work is making sure the keys, spending rules, backups, and recovery plan are actually yours. Groot keeps each one visible, verifiable, and portable.
 
 No supporting illustration is required. Let typography and negative space carry this section.
 
@@ -79,29 +79,29 @@ Use four proof sections. Each section contains one short claim, no more than two
 
 Lead:
 
-> Your Bitcoin wallet should show its work.
+> A wallet should show its work.
 
 #### 1. Protect bitcoin with multiple keys
 
-> Create a standard 2-of-3 multisig wallet across independent hardware vendors. Inspect every public key and export the descriptor needed to recover without this app.
+> Use a standard 2-of-3 multisig wallet across independent hardware vendors. Inspect each public key. Export the descriptor, so recovery does not depend on Groot.
 
 Proof visual: the current multisig Policy or setup-review surface. Any connected-device claim must be labeled with its actual evidence level; simulated devices may not appear as physically certified hardware.
 
 #### 2. Know before you sign
 
-> Before bitcoin moves, review the destination, amount, fee, selected coins, change, and signatures still required. The review comes from the actual unsigned transaction.
+> Before bitcoin moves, see the destination, amount, fee, selected coins, change, and signatures still needed. The review comes from the unsigned transaction itself.
 
 Proof visual: the current final Review & sign screen using disposable test-network data.
 
 #### 3. Recover anywhere
 
-> Export a standard public descriptor, verify that it rebuilds the same wallet, and rehearse recovery before you need it. Your backup is not tied to this app.
+> A backup matters only if it works when Groot does not. Export a standard public descriptor, verify that it rebuilds the same wallet, and rehearse recovery before you need it.
 
 Proof visual: the current backup verification, descriptor backup, or recovery-drill surface. Do not present delayed-branch coordinator spending as released while it remains a V2 gate.
 
 #### 4. Use your own Bitcoin node
 
-> Choose the Bitcoin Core node that provides wallet balances and transaction history. Remote access requires HTTPS or Tor, and the wallet never silently falls back to a public server.
+> Your node is how the wallet sees the Bitcoin network. Choose the Bitcoin Core node that provides balances and transaction history. Remote access requires HTTPS or Tor; there is no silent public fallback.
 
 Proof visual: the current network settings surface with all credentials, addresses, node locations, and identifying data replaced by disposable fixtures.
 
@@ -109,11 +109,15 @@ Proof visual: the current network settings surface with all credentials, address
 
 Use a quiet five-line list. These are commitments, not feature cards.
 
-> Your keys remain your authority.  
-> Every security claim comes with evidence.  
-> Recovery works beyond this app.  
-> Privacy protects your security.  
-> Every dependency has an exit.
+> Your keys are yours.
+>
+> Claims need evidence.
+>
+> A backup must work without us.
+>
+> Privacy is part of security.
+>
+> Every dependency needs an exit.
 
 ### Security architecture
 
@@ -123,14 +127,14 @@ Headline:
 
 Introduction:
 
-> Critical decisions stay in the native wallet core. The interface asks, displays, and confirms. It does not hold the keys or invent transaction truth.
+> The interface can ask, display, and confirm. It does not get to hold keys or invent transaction truth. Those decisions stay in the native wallet core.
 
 Keep this section compact and mechanism-led:
 
-1. **Keys stay out of the interface.** Mnemonic words, seeds, private descriptors, and decrypted signing material never enter the webview. Software-wallet secrets are created and used inside the native Rust boundary.
-2. **Every transaction is checked in Rust.** Review data comes from the persisted unsigned transaction. Inputs, fees, recipient, change, and wallet-owned outputs are validated again before signing or broadcast.
-3. **Recovery does not depend on this app.** Standard BIP84 and BIP48 descriptors, PSBTs, and BSMS records keep wallet policy portable across compatible Bitcoin tools.
-4. **Your node is the network boundary.** Each wallet connects to a Bitcoin Core node the user chooses. Local connections stay on loopback; remote connections require HTTPS or an explicit Tor proxy. There is no silent public fallback.
+1. **Keys never enter the interface.** Mnemonic words, seeds, private descriptors, and decrypted signing material never enter the webview. Software-wallet secrets are created and used inside the native Rust boundary.
+2. **Rust checks the transaction.** Review data comes from the persisted unsigned transaction. Inputs, fees, recipient, change, and wallet-owned outputs are validated again before signing or broadcast.
+3. **A backup should outlive the app.** Standard BIP84 and BIP48 descriptors, PSBTs, and BSMS records keep wallet policy portable across compatible Bitcoin tools.
+4. **You choose the network boundary.** Each wallet connects to a Bitcoin Core node the user chooses. Local connections stay on loopback; remote connections require HTTPS or an explicit Tor proxy. There is no silent public fallback.
 
 The implementation strip may name the current stack: SvelteKit, Tauri 2, Rust, BDK + Miniscript, SQLite, Bitcoin Core RPC, and HWI. It must carry the evidence qualifier:
 
@@ -150,11 +154,11 @@ The dedicated `/marketing/security` page expands this into the complete public t
 
 Headline:
 
-> Make self-custody the standard.
+> Self-custody should be normal.
 
 Body:
 
-> Hold bitcoin with keys you control, transactions you verify, and a recovery path that works without us.
+> Your keys. Transactions you can verify. A recovery path that still works if Groot is gone.
 
 Actions before mainnet:
 
@@ -193,7 +197,7 @@ Do not use wait-list scarcity, countdowns, user counts, asset totals, testimonia
 ### Current campaign asset provenance
 
 - Hero photograph: Luke Helgeson, [Unsplash source](https://unsplash.com/photos/M2DkvRbumM0), standard Unsplash License, downloaded 2026-08-09. Treatment: responsive crop plus a uniform dark overlay for text contrast; no generated fill or compositing.
-- Product proof captures: current Svelte wallet implementation at `1180 × 780` and `390 × 844`, disposable regtest/browser-fixture data, recaptured 2026-08-10. The policy and transaction-review captures use the active `Family vault` 2-of-3 fixture; backup uses its public BSMS export surface; node settings use the disposable `Everyday wallet` loopback endpoint. The built-in interactive-prototype warning remains visible. The marketing page selects the matching desktop or mobile capture and does not reconstruct the interface.
+- Product proof captures: current Svelte wallet implementation at `1180 × 780` and `390 × 844`, disposable regtest/browser-fixture data, recaptured 2026-08-10. Policy and transaction review use dark mode with the active `Family vault` 2-of-3 fixture; backup and node settings use light mode, with backup on the public BSMS export surface and node settings on the disposable `Everyday wallet` loopback endpoint. Captures are stored as true RGB PNGs and are downsampled from 2× browser captures to keep interface text and one-pixel rules crisp. The built-in interactive-prototype warning remains visible. The marketing page selects the matching desktop or mobile capture and does not reconstruct the interface.
 
 ### Typography provenance
 

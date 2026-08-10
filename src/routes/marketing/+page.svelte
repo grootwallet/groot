@@ -9,72 +9,72 @@
     {
       index: '01',
       title: 'Protect bitcoin with multiple keys.',
-      body: 'Create a standard 2-of-3 multisig wallet across independent hardware vendors. Inspect every public key and export the descriptor needed to recover without this app.',
+      body: 'Use a standard 2-of-3 multisig wallet across independent hardware vendors. Inspect each public key. Export the descriptor, so recovery does not depend on Groot.',
       image: '/marketing/wallet-policy.png',
       mobileImage: '/marketing/wallet-policy-mobile.png',
       alt: 'Current wallet policy screen showing a two-of-three multisignature setup',
-      detail: 'Current wallet UI · unchanged layout',
+      detail: 'Current wallet UI · dark mode',
       evidence: 'Browser fixture · virtual test devices'
     },
     {
       index: '02',
       title: 'Know before you sign.',
-      body: 'Before bitcoin moves, review the destination, amount, fee, selected coins, change, and signatures still required. The review comes from the actual unsigned transaction.',
+      body: 'Before bitcoin moves, see the destination, amount, fee, selected coins, change, and signatures still needed. The review comes from the unsigned transaction itself.',
       image: '/marketing/wallet-review.png',
       mobileImage: '/marketing/wallet-review-mobile.png',
       alt: 'Current wallet transaction review screen with disposable regtest data',
-      detail: 'Current wallet UI · disposable data',
+      detail: 'Current wallet UI · dark mode',
       evidence: 'Browser fixture · regtest transaction'
     },
     {
       index: '03',
       title: 'Recover anywhere.',
-      body: 'Export a standard public descriptor, verify that it rebuilds the same wallet, and rehearse recovery before you need it. Your backup is not tied to this app.',
+      body: 'A backup matters only if it works when Groot does not. Export a standard public descriptor, verify that it rebuilds the same wallet, and rehearse recovery before you need it.',
       image: '/marketing/wallet-backup.png',
       mobileImage: '/marketing/wallet-backup-mobile.png',
       alt: 'Current wallet backup and recovery drill screen',
-      detail: 'Current wallet UI · public descriptor workflow',
+      detail: 'Current wallet UI · light mode',
       evidence: 'Browser fixture'
     },
     {
       index: '04',
       title: 'Use your own Bitcoin node.',
-      body: 'Choose the Bitcoin Core node that provides wallet balances and transaction history. Remote access requires HTTPS or Tor, and the wallet never silently falls back to a public server.',
+      body: 'Your node is how the wallet sees the Bitcoin network. Choose the Bitcoin Core node that provides balances and transaction history. Remote access requires HTTPS or Tor; there is no silent public fallback.',
       image: '/marketing/wallet-settings.png',
       mobileImage: '/marketing/wallet-settings-mobile.png',
       alt: 'Current wallet settings screen showing Bitcoin Core connection controls',
-      detail: 'Current wallet UI · disposable endpoint',
+      detail: 'Current wallet UI · light mode',
       evidence: 'Browser fixture · regtest'
     }
   ];
 
   const principles = [
-    'Your keys remain your authority.',
-    'Every security claim comes with evidence.',
-    'Recovery works beyond this app.',
-    'Privacy protects your security.',
-    'Every dependency has an exit.'
+    'Your keys are yours.',
+    'Claims need evidence.',
+    'A backup must work without us.',
+    'Privacy is part of security.',
+    'Every dependency needs an exit.'
   ];
 
   const securityLayers = [
     {
       index: '01',
-      title: 'Keys stay out of the interface.',
+      title: 'Keys never enter the interface.',
       body: 'Mnemonic words, seeds, private descriptors, and decrypted signing material never enter the webview. Software-wallet secrets are created and used inside the native Rust boundary.'
     },
     {
       index: '02',
-      title: 'Every transaction is checked in Rust.',
+      title: 'Rust checks the transaction.',
       body: 'Review data comes from the persisted unsigned transaction. Inputs, fees, recipient, change, and wallet-owned outputs are validated again before signing or broadcast.'
     },
     {
       index: '03',
-      title: 'Recovery does not depend on this app.',
+      title: 'A backup should outlive the app.',
       body: 'Standard BIP84 and BIP48 descriptors, PSBTs, and BSMS records keep wallet policy portable across compatible Bitcoin tools.'
     },
     {
       index: '04',
-      title: 'Your node is the network boundary.',
+      title: 'You choose the network boundary.',
       body: 'Each wallet connects to a Bitcoin Core node you choose. Local connections stay on loopback; remote connections require HTTPS or an explicit Tor proxy. There is no silent public fallback.'
     }
   ];
@@ -103,11 +103,11 @@
   <meta name="description" content="Groot is a Bitcoin self-custody wallet built for verifiable signing and portable recovery." />
   <meta name="theme-color" content="#102a4c" />
   <meta property="og:title" content="Groot · Hold your own" />
-  <meta property="og:description" content="Bitcoin self-custody, with proof at every step." />
+  <meta property="og:description" content="Your bitcoin. Your keys. Proof at every step." />
   <meta property="og:type" content="website" />
   <meta property="og:image" content="/marketing/social-card.png" />
   <meta name="twitter:title" content="Groot · Hold your own" />
-  <meta name="twitter:description" content="Bitcoin self-custody, with proof at every step." />
+  <meta name="twitter:description" content="Your bitcoin. Your keys. Proof at every step." />
   <meta name="twitter:image" content="/marketing/social-card.png" />
   <meta name="twitter:card" content="summary_large_image" />
   <link rel="preload" as="image" href="/marketing/hero-mountain.jpg" fetchpriority="high" />
@@ -125,7 +125,7 @@
     <div class="hero-content shell" in:subtleReveal={{ distance: 18 }}>
       <p class="kicker"><span aria-hidden="true"></span>Bitcoin. In your hands.</p>
       <h1>Hold your own.</h1>
-      <p class="hero-copy">Hold bitcoin on your terms. Know exactly what you’re signing. Know you can recover without us.</p>
+      <p class="hero-copy">Your bitcoin. Your keys. See what you’re signing, and keep a recovery path that does not depend on us.</p>
       <div class="actions">
         <a class="button primary" href="#product">See the product</a>
         <a class="text-link" href="#security">Read the security model</a>
@@ -133,7 +133,7 @@
     </div>
 
     <div class="hero-footer shell">
-      <span>Self-custody, with proof at every step.</span>
+      <span>Your keys. Your rules. Proof at every step.</span>
       <span>Test-network release. Mainnet is not enabled.</span>
     </div>
   </header>
@@ -144,7 +144,7 @@
         <p class="kicker ink"><span aria-hidden="true"></span>The position</p>
         <div>
           <h2 id="position-heading">Freedom needs structure.</h2>
-          <p>Bitcoin lets you hold money without asking anyone’s permission. That freedom only works when the keys, spending rules, backups, and recovery plan are truly yours. This wallet makes each one visible, verifiable, and portable.</p>
+          <p>Bitcoin lets you hold money without permission. That is the promise. The work is making sure the keys, spending rules, backups, and recovery plan are actually yours. Groot keeps each one visible, verifiable, and portable.</p>
         </div>
       </div>
     </section>
@@ -152,7 +152,7 @@
     <section class="proofs" id="product" aria-labelledby="proof-heading">
       <div class="shell proof-intro" data-reveal>
         <p class="kicker ink"><span aria-hidden="true"></span>Product proof</p>
-        <h2 id="proof-heading">Your Bitcoin wallet should show its work.</h2>
+        <h2 id="proof-heading">A wallet should show its work.</h2>
       </div>
 
       {#each proofs as proof}
@@ -180,7 +180,7 @@
         <p class="kicker"><span aria-hidden="true"></span>Security architecture</p>
         <div>
           <h2 id="security-heading">Security starts at the boundary.</h2>
-          <p>Critical decisions stay in the native wallet core. The interface asks, displays, and confirms. It does not hold the keys or invent transaction truth.</p>
+          <p>The interface can ask, display, and confirm. It does not get to hold keys or invent transaction truth. Those decisions stay in the native wallet core.</p>
         </div>
       </div>
 
@@ -226,8 +226,8 @@
     <section class="closing" id="status" aria-labelledby="closing-heading">
       <div class="shell" data-reveal>
         <p class="kicker ink"><span aria-hidden="true"></span>The mission</p>
-        <h2 id="closing-heading">Make self-custody the standard.</h2>
-        <p>Hold bitcoin with keys you control, transactions you verify, and a recovery path that works without us.</p>
+        <h2 id="closing-heading">Self-custody should be normal.</h2>
+        <p>Your keys. Transactions you can verify. A recovery path that still works if Groot is gone.</p>
         <div class="actions">
           <a class="button dark" href="/marketing/status">Follow development</a>
           <a class="text-link" href="/marketing/docs">Review the documentation</a>
