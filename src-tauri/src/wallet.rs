@@ -3994,6 +3994,13 @@ fn missing_hardware_fingerprint(device_type: &str) -> ApiError {
     api_error("hardware_unavailable", message)
 }
 
+fn unknown_hardware_signer() -> ApiError {
+    api_error(
+        "unknown_signer",
+        "The connected device does not match any saved signer for this wallet.",
+    )
+}
+
 fn missing_hardware_psbt(device_type: &str, code: Option<i64>, fallback: &str) -> ApiError {
     match code {
         Some(code) => {
@@ -4040,10 +4047,7 @@ fn connected_hardware_identity(
         .iter()
         .any(|expected| expected.eq_ignore_ascii_case(&fingerprint))
     {
-        return Err(api_error(
-            "unknown_signer",
-            "The connected device is not a cosigner in this wallet policy.",
-        ));
+        return Err(unknown_hardware_signer());
     }
     Ok(VerifiedHardwareIdentity {
         device_type: device.device_type,
@@ -7201,6 +7205,15 @@ mod tests {
             assert!(error.message.contains(expected));
             assert!(!error.message.contains("fingerprint"));
         }
+
+        let wrong_signer = unknown_hardware_signer();
+        assert_eq!(wrong_signer.code, "unknown_signer");
+        assert_eq!(
+            wrong_signer.message,
+            "The connected device does not match any saved signer for this wallet."
+        );
+        assert!(!wrong_signer.message.contains("cosigner"));
+        assert!(!wrong_signer.message.contains("policy"));
     }
 
     #[test]

@@ -93,7 +93,7 @@ test('spends end-to-end from the ready-made demo vault', async ({ page }) => {
   await expect(hardwareDialog.getByText('Fee rate', { exact: true })).toBeVisible();
   await expect(hardwareDialog.getByText('Transaction inputs', { exact: true })).toHaveCount(0);
   await hardwareDialog.getByRole('button', { name: /Virtual Ledger outsider/ }).click();
-  await expect(hardwareDialog.getByText('The connected device is not a cosigner in this wallet policy.')).toBeVisible();
+  await expect(hardwareDialog.getByText('The connected device does not match any saved signer for this wallet.')).toBeVisible();
   await expect(hardwareDialog.getByRole('button', { name: 'Rescan', exact: true })).toBeVisible();
   await hardwareDialog.getByRole('button', { name: 'Close' }).click();
   await page.getByRole('button', { name: 'Sign with device' }).click();

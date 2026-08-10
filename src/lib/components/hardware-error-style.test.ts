@@ -9,8 +9,12 @@ function declaration(selector: string) {
 }
 
 describe('hardware signer error styling', () => {
-  it('uses one semantic danger color for the title and explanation', () => {
+  it('uses one semantic danger color throughout every inline error treatment', () => {
     expect(declaration('.hardware-inline-error strong')).toContain('color: var(--danger)');
     expect(declaration('.hardware-inline-error small')).toContain('color: var(--danger)');
+    expect(declaration('.pin-error-card')).toContain('color: var(--danger)');
+    expect(declaration('.pin-error-card small')).toContain('color: var(--danger)');
+    expect(declaration('.warning-box.danger')).toContain('color: var(--danger)');
+    expect(appCss).not.toContain('--danger-soft-text');
   });
 });
