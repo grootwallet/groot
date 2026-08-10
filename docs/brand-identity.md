@@ -84,19 +84,21 @@ The default icon is **Ink enamel**: a Warm Ivory symbol on a Blue Ink field.
 - Keep the visible symbol near `60%` of tile width.
 - Center the symbol geometrically and verify its optical vertical position at final export size.
 - Modern Apple/platform source art is square, unmasked, and separated into an opaque background plus crisp foreground artwork. Icon Composer owns masks, Liquid Glass material, adaptive depth, and appearance variants.
-- The current Tauri macOS bundle consumes a flattened ICNS rather than an Icon Composer file. Its rounded fallback therefore carries restrained enamel variation, an optical edge, and a bounded tile shadow so it retains material presence and the standard Dock footprint. These effects belong to the tile only; the symbol remains flat and unchanged.
+- The legacy macOS fallback uses an `824 × 824` continuous-corner body on the `1024 × 1024` export canvas. That optical footprint reserves the surrounding space Apple needs for selection, Dock treatment, and the icon's own bounded shadow. Do not expand the body to the canvas edge or substitute a generic rounded rectangle.
+- The current Tauri macOS bundle consumes a flattened ICNS rather than an Icon Composer file. Its fallback therefore carries restrained enamel variation, an optical rim, a bounded tile shadow, and a small separation shadow beneath the mark. The mark's canonical geometry remains unchanged; never add bevels, outlines, noise, or decorative texture to it.
 - Do not bake platform-specific shadows or highlights into the symbol or the modern layered source.
 
 Sources:
 
 - [`assets/brand/app-icon-layered-source.svg`](../assets/brand/app-icon-layered-source.svg)
 - [`assets/brand/app-icon-legacy-source.svg`](../assets/brand/app-icon-legacy-source.svg)
-- [`src-tauri/icons/macos-icon-source.svg`](../src-tauri/icons/macos-icon-source.svg)
+- [`assets/brand/app-icon-layers/`](../assets/brand/app-icon-layers/)
+- [`src-tauri/icons/macos-icon-source.svg`](../src-tauri/icons/macos-icon-source.svg) (generated mirror)
 
-Regenerate cross-platform Tauri exports from the approved legacy source. For a macOS-only correction, generate into a temporary directory and replace only `icon.icns`, `32x32.png`, `64x64.png`, `128x128.png`, and `128x128@2x.png`:
+Regenerate all Tauri exports through the checked-in pipeline. It uses the continuous-corner fallback for desktop formats, then replaces iOS assets with square unmasked renders so the operating system applies the mask exactly once:
 
 ```sh
-pnpm tauri icon assets/brand/app-icon-legacy-source.svg --ios-color '#102A4C'
+pnpm brand:icons
 ```
 
 Do not edit exported PNG, ICNS, or ICO files by hand.
@@ -190,6 +192,7 @@ Every word must earn its place.
 | [`assets/brand/mark-monochrome.svg`](../assets/brand/mark-monochrome.svg) | One-color reproduction master |
 | [`assets/brand/mark-optical-small.svg`](../assets/brand/mark-optical-small.svg) | Canonical 16–23 px optical master |
 | [`assets/brand/app-icon-layered-source.svg`](../assets/brand/app-icon-layered-source.svg) | Modern unmasked icon source |
+| [`assets/brand/app-icon-layers/`](../assets/brand/app-icon-layers/) | Apple background and foreground layers |
 | [`assets/brand/app-icon-legacy-source.svg`](../assets/brand/app-icon-legacy-source.svg) | Flattened export source |
 | [`assets/brand/lockup-horizontal-ink.svg`](../assets/brand/lockup-horizontal-ink.svg) | Canonical positive Groot lockup |
 | [`assets/brand/lockup-horizontal-reversed.svg`](../assets/brand/lockup-horizontal-reversed.svg) | Canonical reversed Groot lockup |

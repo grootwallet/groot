@@ -7,10 +7,10 @@ Status: complete for the 2026-08-10 brand and pre-release technical-namespace ad
 The Groot name and approved Control icon identity now cover:
 
 - visible product copy, navigation, onboarding, settings, dialogs, notifications, accessibility labels, exports, marketing, SEO metadata, manifests, and platform icon assets;
-- Tauri product metadata, window title, bundle/application identifier, application-data container, Apple secure-store service, Rust and JavaScript package metadata, installers, and build artifacts;
+- Tauri product metadata, native main-binary display name, window title, bundle/application identifier, application-data container, Apple secure-store service, installers, and platform application bundles;
 - browser preference keys, developer and regtest environment variables, disposable profile paths, Bitcoin Core faucet fixtures, SQLite tables, authenticated verifier markers, temporary files, tests, and current operator documentation.
 
-The approved sources in `assets/brand/` remain canonical. Generated platform raster assets derive from `app-icon-legacy-source.svg`; the modern unmasked source remains `app-icon-layered-source.svg`.
+The approved sources in `assets/brand/` remain canonical. Desktop raster assets derive from `app-icon-legacy-source.svg`; iOS raster assets derive from the unmasked `app-icon-layered-source.svg`, with separate Apple composition layers in `app-icon-layers/`.
 
 ## Retained as stable, non-branded identifiers
 
@@ -18,6 +18,8 @@ These values are descriptive formats rather than legacy brand names and remain u
 
 | Identifier | Role |
 | --- | --- |
+| `groot`, `groot_lib`, `groot-wallet` | Lowercase Rust crate/library and npm package identifiers; the installed application, bundle, and main executable display as `Groot` |
+| `release-artifacts/<commit>/groot` | Raw reproducible-build evidence binary, distinct from the platform application bundle |
 | `wallet:<uuid>` | Apple secure-store account |
 | `wallet-registry.json`, `wallets/<uuid>` | Registry and isolated profile layout |
 | `regtest-wallet`, `regtest-multisig` | Generic pre-registry development profile locations |
@@ -32,4 +34,4 @@ No credential, seed, descriptor, address, fingerprint, xpub, PSBT, or device pat
 - Earlier accepted ADRs and dated security or execution evidence retain the product name and identifiers used when they were written; ADRs and evidence are not rewritten after the fact.
 - Current source, configuration, tests, marketing, and canonical/operator documentation contain no Satchel-derived identifier.
 
-The automated `pnpm test:brand` gate asserts the Groot product, bundle, secure-store, package, and webview identities and rejects the former public name from current UI and platform-metadata surfaces.
+The automated `pnpm test:brand` gate asserts the `Groot` product, main executable, window, bundle, secure-store, package, icon-source, and webview identities and rejects the former public name from current UI and platform-metadata surfaces.

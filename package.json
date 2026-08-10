@@ -13,6 +13,7 @@
     "dev:regtest": "vite --mode regtest",
     "build": "vite build",
     "build:regtest": "vite build --mode regtest",
+    "brand:icons": "bash scripts/brand/generate_app_icons.sh",
     "preview": "vite preview",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "test": "vitest run",
