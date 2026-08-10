@@ -1,9 +1,10 @@
 <script lang="ts">
-  import { Check, ChevronRight, Clock3, Copy, Cpu, Download, FileKey, History, KeyRound, LockKeyhole, Moon, Network, Plus, RefreshCw, ShieldCheck, Sun, Trash2, WalletCards } from '@lucide/svelte';
+  import { Check, ChevronRight, Clock3, Cpu, Download, Eye, FileKey, History, KeyRound, LockKeyhole, Moon, Network, Plus, RefreshCw, ShieldCheck, Sun, Trash2, WalletCards } from '@lucide/svelte';
   import Button from '$lib/components/Button.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import PasswordField from '$lib/components/PasswordField.svelte';
   import LanguageToggle from '$lib/components/LanguageToggle.svelte';
+  import IdentifierDetailsModal from '$lib/components/IdentifierDetailsModal.svelte';
   import { toast } from '$lib/stores/toasts';
   import { defaultConfig, networkName } from '$lib/config';
   import { walletService, WalletError } from '$lib/wallet';
@@ -31,7 +32,7 @@
   let node = $state<CoreNodeConfig>({ backend: { type: 'local_core', url: 'http://127.0.0.1:18443' }, auth: 'cookie', username: null });
   let scanOpen = $state(false), scanCredential = $state(''), scanError = $state(''), scan = $state<RecoveryScanSettings>({ birthdayHeight: 0, gapLimit: 20 }), scanDraft = $state<RecoveryScanSettings>({ birthdayHeight: 0, gapLimit: 20 });
   let verifyOpen = $state(false), verifyCredential = $state(''), verifyError = $state(''), verifying = $state(false);
-  let hardwareBackupOpen = $state(false), hardwareBackupPin = $state(''), hardwareBackupError = $state(''), hardwareBackup = $state(''), exportingHardwareBackup = $state(false);
+  let hardwareBackupOpen = $state(false), descriptorDetailsOpen = $state(false), hardwareBackupPin = $state(''), hardwareBackupError = $state(''), hardwareBackup = $state(''), exportingHardwareBackup = $state(false);
   onMount(async () => {
     theme = document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
     const registry = await walletService.profiles();
@@ -122,10 +123,6 @@
     } finally {
       hardwareBackupPin = ''; exportingHardwareBackup = false;
     }
-  }
-  async function copyHardwareBackup() {
-    await navigator.clipboard.writeText(hardwareBackup);
-    toast({ title: 'Descriptor copied', description: 'Keep this public wallet backup private.', tone: 'success' });
   }
   async function saveHardwareBackup() {
     try {
@@ -219,14 +216,12 @@
     {#if hardwareBackupError}<p class="form-error" role="alert">{hardwareBackupError}</p>{/if}
     <div class="modal-footer"><Button variant="secondary" onclick={() => {hardwareBackupOpen=false;hardwareBackupPin='';}}>Cancel</Button><Button disabled={!hardwareBackupPin} loading={exportingHardwareBackup} loadingLabel="Preparing…" onclick={prepareHardwareBackup}>Prepare backup</Button></div>
   {:else}
-    <div class="modal-form">
-      <div class="warning-box success hardware-backup-ready"><strong>Public descriptor ready</strong><span>Import this file in a clean disposable Satchel profile and confirm the first receive address matches.</span></div>
-      <details><summary>View descriptor</summary><textarea aria-label="Public hardware wallet descriptor" rows="7" readonly value={hardwareBackup}></textarea></details>
-    </div>
+    <div class="ready-panel"><Check size={18}/><div><strong>Public descriptor ready</strong><small>Import this file in a clean disposable Satchel profile and confirm the first receive address matches.</small></div></div>
     {#if hardwareBackupError}<p class="form-error" role="alert">{hardwareBackupError}</p>{/if}
-    <div class="modal-footer"><Button variant="secondary" onclick={copyHardwareBackup}><Copy size={15}/>Copy</Button><Button onclick={saveHardwareBackup}><Download size={15}/>Save descriptor</Button></div>
+    <div class="modal-footer"><Button variant="secondary" onclick={() => {hardwareBackupOpen=false;descriptorDetailsOpen=true;}}><Eye size={15}/>View descriptor</Button><Button onclick={saveHardwareBackup}><Download size={15}/>Save descriptor</Button></div>
   {/if}
 </Modal>
+<IdentifierDetailsModal open={descriptorDetailsOpen} value={hardwareBackup} title="Public wallet descriptor" description="This watch-only descriptor cannot spend bitcoin, but it reveals the wallet’s complete activity." label="Descriptor" onclose={() => {descriptorDetailsOpen=false;hardwareBackupOpen=true;}}/>
 <Modal open={scanOpen} title="Full wallet rescan" description="Search from the earliest possible payment while deriving a bounded address gap." onclose={() => {scanOpen=false;scanCredential='';scanError='';scanDraft={...scan};}}>
   <div class="scan-form"><div class="warning-box"><strong>Earlier is safer; later is faster.</strong> A birthday after the wallet’s first payment can miss funds. A larger gap increases work and memory use.</div>
   <label class="field"><span>Wallet birthday block</span><input aria-label="Wallet birthday block" type="number" min="0" step="1" bind:value={scanDraft.birthdayHeight}/><small>Use 0 when uncertain. Regtest scans are intentionally cheap.</small></label>

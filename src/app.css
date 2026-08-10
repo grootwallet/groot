@@ -290,7 +290,6 @@ code { font-family: "SFMono-Regular", Consolas, ui-monospace, monospace; }
 .modal-footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 22px; }
 .modal-form { display: grid; gap: 18px; }
 .modal-form .field { margin: 0; }
-.hardware-backup-ready { display: flex; flex-direction: column; gap: 3px; }
 .field { display: flex; flex-direction: column; gap: 8px; margin-bottom: 19px; position: relative; }
 .field > span { font-size: 12px; font-weight: 550; }
 .field > small { font-size: 10px; color: var(--muted); }
