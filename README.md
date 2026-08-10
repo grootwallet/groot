@@ -7,7 +7,7 @@ A minimal onchain Bitcoin wallet and descriptor multisig coordinator built with 
 ```sh
 pnpm install
 pnpm regtest:start
-pnpm tauri dev
+bash scripts/dev/tauri-regtest.sh
 ```
 
 Create a wallet in the native window and keep the 24 words and passphrase / PIN. Generate a labeled receive address, then fund it from Bitcoin Core using the amount in BTC:
@@ -26,7 +26,7 @@ bitcoin-cli -regtest -datadir="$PWD/.regtest" -rpcwallet=satchel-dev getnewaddre
 
 Paste that `bcrt1…` address into Satchel, enter an amount in sats, choose a fee, review, enter the wallet passphrase / PIN, and broadcast. Mine its first confirmation with `pnpm regtest:mine`, then sync again.
 
-The browser-only command `pnpm dev:regtest` intentionally uses the dummy adapter because browser JavaScript cannot access the Rust key boundary. Use `pnpm tauri dev` for the functional wallet.
+The browser-only command `pnpm dev:regtest` intentionally uses the dummy adapter because browser JavaScript cannot access the Rust key boundary. Use `bash scripts/dev/tauri-regtest.sh` for the functional wallet. The launcher selects Satchel's pinned Node and pnpm runtime before starting Tauri, including its nested Vite process.
 
 ## Explore every UI flow immediately
 

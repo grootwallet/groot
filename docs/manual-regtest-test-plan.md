@@ -101,7 +101,7 @@ Start the native Tauri wallet in another terminal:
 
 ```sh
 cd /Users/thibm/Documents/Codex/2026-07-17/let
-pnpm tauri dev
+bash scripts/dev/tauri-regtest.sh
 ```
 
 ### Story G — create, fund, sync, and receive notification

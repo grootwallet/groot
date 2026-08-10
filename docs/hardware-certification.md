@@ -46,7 +46,7 @@ pnpm regtest:start
 
 ```sh
 cd /Users/thibm/Documents/Codex/2026-07-17/let
-pnpm tauri dev
+bash scripts/dev/tauri-regtest.sh
 ```
 
 ## Per-device acceptance story
