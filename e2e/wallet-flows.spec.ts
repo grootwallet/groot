@@ -386,6 +386,12 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   await descriptorDialog.getByLabel('App PIN', { exact: true }).fill('hardware-pin');
   await descriptorDialog.getByRole('button', { name: 'Prepare backup' }).click();
   await expect(descriptorDialog.getByText('Public descriptor ready', { exact: true })).toBeVisible();
+  const readyTitle = await descriptorDialog.getByText('Public descriptor ready', { exact: true }).boundingBox();
+  const readyDetail = await descriptorDialog.getByText(/Import this file in a clean disposable/).boundingBox();
+  const readyWarning = await descriptorDialog.locator('.hardware-backup-ready').boundingBox();
+  const descriptorSummary = await descriptorDialog.getByText('View descriptor', { exact: true }).boundingBox();
+  expect((readyDetail?.y ?? 0) - ((readyTitle?.y ?? 0) + (readyTitle?.height ?? 0))).toBeGreaterThanOrEqual(2);
+  expect((descriptorSummary?.y ?? 0) - ((readyWarning?.y ?? 0) + (readyWarning?.height ?? 0))).toBeGreaterThanOrEqual(16);
   await descriptorDialog.getByText('View descriptor', { exact: true }).click();
   await expect(descriptorDialog.getByLabel('Public hardware wallet descriptor')).toHaveValue(/^wpkh\(/);
   const descriptorDownload = page.waitForEvent('download');

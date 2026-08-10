@@ -219,8 +219,10 @@
     {#if hardwareBackupError}<p class="form-error" role="alert">{hardwareBackupError}</p>{/if}
     <div class="modal-footer"><Button variant="secondary" onclick={() => {hardwareBackupOpen=false;hardwareBackupPin='';}}>Cancel</Button><Button disabled={!hardwareBackupPin} loading={exportingHardwareBackup} loadingLabel="Preparing…" onclick={prepareHardwareBackup}>Prepare backup</Button></div>
   {:else}
-    <div class="warning-box success"><strong>Public descriptor ready</strong><span>Import this file in a clean disposable Satchel profile and confirm the first receive address matches.</span></div>
-    <details><summary>View descriptor</summary><textarea aria-label="Public hardware wallet descriptor" rows="7" readonly value={hardwareBackup}></textarea></details>
+    <div class="modal-form">
+      <div class="warning-box success hardware-backup-ready"><strong>Public descriptor ready</strong><span>Import this file in a clean disposable Satchel profile and confirm the first receive address matches.</span></div>
+      <details><summary>View descriptor</summary><textarea aria-label="Public hardware wallet descriptor" rows="7" readonly value={hardwareBackup}></textarea></details>
+    </div>
     {#if hardwareBackupError}<p class="form-error" role="alert">{hardwareBackupError}</p>{/if}
     <div class="modal-footer"><Button variant="secondary" onclick={copyHardwareBackup}><Copy size={15}/>Copy</Button><Button onclick={saveHardwareBackup}><Download size={15}/>Save descriptor</Button></div>
   {/if}
