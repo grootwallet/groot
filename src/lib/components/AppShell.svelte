@@ -87,7 +87,7 @@
     const unsubscribe = walletService.subscribe((event) => {
       if (event.type === 'payment_received') toast({ title: 'Bitcoin received', description: `Received ${shortSats(event.amount)} sats · Balance ${shortSats(event.balance)} sats`, tone: 'success' });
       if (event.type === 'first_confirmation') toast({ title: 'First confirmation', description: `Transaction confirmed · Balance ${shortSats(event.balance)} sats`, tone: 'success' });
-      if (event.type === 'transaction_broadcast') toast({ title: 'Transaction broadcast', description: `Balance ${shortSats(event.balance)} sats`, tone: 'success' });
+      if (event.type === 'transaction_broadcast') toast({ title: 'Transaction broadcast', description: `Remaining wallet balance: ${shortSats(event.balance)} sats`, tone: 'success' });
     });
     liveSync = createLiveSync(walletService, 10_000, (cause) => {
       if (cause instanceof WalletError && cause.code === 'wallet_locked') {

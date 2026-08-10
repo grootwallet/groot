@@ -216,7 +216,27 @@ export class DummyWalletAdapter implements WalletPort {
     }
     return proposal;
   }
-  async prepareAcceleration(txid: string, method: import('./contracts').AccelerationMethod, selectedRate: ReturnType<typeof feeRate>) { const tx=this.#transactions.find((item)=>item.id===txid); if(!tx||tx.status!=='pending'||!tx.address) throw new WalletError('internal_error','Only pending wallet payments can be accelerated.'); const proposal=await this.preparePayment(fixtureAddressForNetwork(tx.address),tx.label,sats(Math.max(1,tx.amount)),selectedRate);this.#accelerations.set(proposal.proposalId,{originalTxid:txid,method});return proposal; }
+  async prepareAcceleration(txid: string, method: import('./contracts').AccelerationMethod, selectedRate: ReturnType<typeof feeRate>) {
+    const existing = [...this.#accelerations].find(
+      ([, acceleration]) => acceleration.originalTxid === txid && acceleration.method === method
+    );
+    if (existing) {
+      const proposal = this.#proposals.get(existing[0]);
+      if (proposal) return structuredClone(proposal);
+    }
+    const tx = this.#transactions.find((item) => item.id === txid);
+    if (!tx || tx.status !== 'pending' || !tx.address) {
+      throw new WalletError('internal_error', 'Only pending wallet payments can be accelerated.');
+    }
+    const proposal = await this.preparePayment(
+      fixtureAddressForNetwork(tx.address),
+      tx.label,
+      sats(Math.max(1, tx.amount)),
+      selectedRate
+    );
+    this.#accelerations.set(proposal.proposalId, { originalTxid: txid, method });
+    return proposal;
+  }
 
   async signAndBroadcast(proposalId: string, credential: string) {
     const proposal = this.#proposals.get(proposalId);
@@ -476,7 +496,26 @@ export class DummyWalletAdapter implements WalletPort {
     const proposal: MultisigProposal = { proposalId: crypto.randomUUID(), recipient, recipientTestnetAlias:null, label, amount, fee, feeRate:selectedRate, total:sats(Number(amount)+Number(fee)), selectedOutpoints, inputs, locktime:0, rbf:true, network:defaultConfig.network, change:sats(0), changeAddresses:[], changeTestnetAliases:[], outputCount:1, psbt:`cHNidP8BAF9kdW1teQ==${'A'.repeat(3120)}`, signed:0, required:this.#multisig.threshold, canFinalize:false, signedFingerprints:[], status:'collecting', createdAt:new Date().toISOString() };
     this.#multisigProposals.set(proposal.proposalId, proposal); return structuredClone(proposal);
   }
-  async prepareMultisigAcceleration(txid: string, method: import('./contracts').AccelerationMethod, selectedRate: ReturnType<typeof feeRate>) { const base=await this.prepareAcceleration(txid,method,selectedRate); const proposal:MultisigProposal={...base,change:sats(0),changeAddresses:[],outputCount:1,psbt:'cHNidP8BAFICAAAA',signed:0,required:this.#multisig?.threshold??2,canFinalize:false,signedFingerprints:[],status:'collecting',createdAt:new Date().toISOString()};this.#multisigProposals.set(proposal.proposalId,proposal);return structuredClone(proposal); }
+  async prepareMultisigAcceleration(txid: string, method: import('./contracts').AccelerationMethod, selectedRate: ReturnType<typeof feeRate>) {
+    const base = await this.prepareAcceleration(txid, method, selectedRate);
+    const existing = this.#multisigProposals.get(base.proposalId);
+    if (existing) return structuredClone(existing);
+    const proposal: MultisigProposal = {
+      ...base,
+      change: sats(0),
+      changeAddresses: [],
+      outputCount: 1,
+      psbt: 'cHNidP8BAFICAAAA',
+      signed: 0,
+      required: this.#multisig?.threshold ?? 2,
+      canFinalize: false,
+      signedFingerprints: [],
+      status: 'collecting',
+      createdAt: new Date().toISOString()
+    };
+    this.#multisigProposals.set(proposal.proposalId, proposal);
+    return structuredClone(proposal);
+  }
   async multisigProposals() { return [...this.#multisigProposals.values()].filter((item)=>item.status==='collecting'||item.status==='ready').map((item)=>structuredClone(item)); }
   async importMultisigProposal(proposalId:string, reviewedPsbt:string, signedPsbt:string) {
     if (!signedPsbt.trim()) throw new WalletError('internal_error','Enter a signed PSBT.');

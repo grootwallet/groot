@@ -659,7 +659,7 @@ test('an address copied from Receive completes the browser send flow', async ({ 
   await page.getByLabel('Wallet passphrase', { exact: true }).fill('prototype-passphrase');
   await page.getByRole('button', { name: /Sign & broadcast/ }).click();
   await expect(page.getByRole('heading', { name: 'Payment sent' })).toBeVisible();
-  await expect(page.getByText('Balance 2,455,253 sats')).toBeVisible();
+  await expect(page.getByText('Remaining wallet balance: 2,455,253 sats')).toBeVisible();
 });
 
 test('custom fees validate and wallet deletion requires typed confirmation', async ({ page }) => {

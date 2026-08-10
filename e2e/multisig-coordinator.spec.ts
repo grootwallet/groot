@@ -125,7 +125,7 @@ test('spends end-to-end from the ready-made demo vault', async ({ page }) => {
   await page.getByLabel('App PIN', { exact: true }).fill('prototype-passphrase');
   await page.getByRole('button', { name: 'Finalize & broadcast' }).click();
   await expect(page.getByRole('heading', { name: 'Transaction broadcast' })).toBeVisible();
-  await expect(page.getByText('Balance 2,429,700 sats')).toBeVisible();
+  await expect(page.getByText('Remaining wallet balance: 2,429,700 sats')).toBeVisible();
 });
 
 test('requires explicit confirmation before discarding a multisig proposal', async ({ page }) => {

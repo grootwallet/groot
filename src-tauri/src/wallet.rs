@@ -1646,6 +1646,7 @@ fn init_app_schema(db: &Connection) -> ApiResult<()> {
         )
         .map_err(internal)?;
     }
+    reconcile_active_acceleration_proposals(db)?;
     notifications::init(db).map_err(internal)
 }
 
@@ -2726,6 +2727,58 @@ fn persist_acceleration(
     .map_err(internal)
 }
 
+fn reconcile_active_acceleration_proposals(db: &Connection) -> ApiResult<()> {
+    db.execute(
+        "UPDATE satchel_proposals
+         SET status = 'cancelled'
+         WHERE status IN ('collecting', 'ready')
+           AND proposal_id IN (
+             SELECT acceleration.proposal_id
+             FROM satchel_accelerations acceleration
+             WHERE EXISTS (
+               SELECT 1
+               FROM satchel_accelerations completed
+               WHERE completed.original_txid = acceleration.original_txid
+                 AND completed.method = acceleration.method
+                 AND completed.replacement_txid IS NOT NULL
+             ) OR EXISTS (
+               SELECT 1
+               FROM satchel_accelerations newer
+               JOIN satchel_proposals newer_proposal
+                 ON newer_proposal.proposal_id = newer.proposal_id
+               WHERE newer.original_txid = acceleration.original_txid
+                 AND newer.method = acceleration.method
+                 AND newer_proposal.status IN ('collecting', 'ready')
+                 AND newer.rowid > acceleration.rowid
+             )
+           )",
+        [],
+    )
+    .map(|_| ())
+    .map_err(internal)
+}
+
+fn active_acceleration_proposal_id(
+    db: &Connection,
+    original_txid: &Txid,
+    method: AccelerationMethod,
+) -> ApiResult<Option<String>> {
+    db.query_row(
+        "SELECT acceleration.proposal_id
+         FROM satchel_accelerations acceleration
+         JOIN satchel_proposals proposal ON proposal.proposal_id = acceleration.proposal_id
+         WHERE acceleration.original_txid = ?1
+           AND acceleration.method = ?2
+           AND proposal.status IN ('collecting', 'ready')
+         ORDER BY acceleration.rowid DESC
+         LIMIT 1",
+        params![original_txid.to_string(), method.as_str()],
+        |row| row.get(0),
+    )
+    .optional()
+    .map_err(internal)
+}
+
 fn record_replacement(
     db: &Connection,
     proposal_id: &str,
@@ -2808,6 +2861,66 @@ fn load_single_proposal(db: &Connection, proposal_id: &str) -> ApiResult<Pending
         recipient,
         amount,
         fee,
+    })
+}
+
+fn load_payment_proposal_dto(
+    db: &Connection,
+    wallet: &Wallet,
+    proposal_id: &str,
+) -> ApiResult<PaymentProposalDto> {
+    let (proposal_id, recipient, label, amount, fee, encoded) = db
+        .query_row(
+            "SELECT proposal_id, recipient, label, amount, fee, psbt
+             FROM satchel_proposals
+             WHERE proposal_id = ?1 AND status IN ('collecting', 'ready')",
+            params![proposal_id],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, u64>(3)?,
+                    row.get::<_, u64>(4)?,
+                    row.get::<_, String>(5)?,
+                ))
+            },
+        )
+        .map_err(|_| {
+            api_error(
+                "proposal_not_found",
+                "Payment proposal was not found or is no longer active.",
+            )
+        })?;
+    let psbt = decode_psbt(&encoded).map_err(proposal_api_error)?;
+    validate_proposal_fee(&psbt, fee)?;
+    let (change, change_addresses) = proposal_change_details(wallet, &psbt, &recipient, amount)?;
+    let (recipient_testnet_alias, change_testnet_aliases) =
+        proposal_testnet_aliases(&recipient, &change_addresses);
+    let (inputs, fee_rate, locktime, rbf) = proposal_transaction_details(wallet, &psbt, fee)?;
+    Ok(PaymentProposalDto {
+        proposal_id,
+        recipient,
+        recipient_testnet_alias,
+        label,
+        amount,
+        fee,
+        fee_rate,
+        total: checked_payment_total(amount, fee)?,
+        change,
+        change_addresses,
+        change_testnet_aliases,
+        output_count: psbt.unsigned_tx.output.len(),
+        selected_outpoints: psbt
+            .unsigned_tx
+            .input
+            .iter()
+            .map(|input| input.previous_output.to_string())
+            .collect(),
+        inputs,
+        locktime,
+        rbf,
+        network: "regtest",
     })
 }
 
@@ -6201,6 +6314,17 @@ pub fn tx_acceleration_prepare(
     let (applied, rate) = validate_acceleration_rate(fee_rate)?;
     let mut db = open_db(&app)?;
     let mut wallet = load_wallet(&mut db)?;
+    if let Some(proposal_id) = active_acceleration_proposal_id(&db, &txid, method)? {
+        let proposal = load_payment_proposal_dto(&db, &wallet, &proposal_id)?;
+        if let Ok(pending) = load_single_proposal(&db, &proposal_id) {
+            state
+                .proposals
+                .lock()
+                .map_err(internal)?
+                .insert(proposal_id, pending);
+        }
+        return Ok(proposal);
+    }
     let original = snapshot_from(&wallet, &db, None, false)?
         .transactions
         .into_iter()
@@ -6256,6 +6380,9 @@ pub fn multisig_acceleration_prepare(
     let metadata = read_multisig_metadata(&app)?;
     let mut db = open_multisig_db(&app)?;
     let mut wallet = load_wallet(&mut db)?;
+    if let Some(proposal_id) = active_acceleration_proposal_id(&db, &txid, method)? {
+        return load_multisig_proposal(&mut db, &metadata, &proposal_id);
+    }
     let original = snapshot_from(&wallet, &db, None, true)?
         .transactions
         .into_iter()
@@ -7915,6 +8042,82 @@ mod tests {
         assert_eq!(
             acceleration_label(AccelerationMethod::Cpfp, original),
             "Fee acceleration"
+        );
+    }
+
+    #[test]
+    fn acceleration_drafts_resume_once_and_legacy_duplicates_are_cancelled() {
+        let db = Connection::open_in_memory().unwrap();
+        init_app_schema(&db).unwrap();
+        let pending_txid = Txid::from_str(&"33".repeat(32)).unwrap();
+        let completed_txid = "44".repeat(32);
+        let replacement_txid = "55".repeat(32);
+
+        for (proposal_id, status, created_at) in [
+            ("older-active", "collecting", 1),
+            ("newer-active", "ready", 2),
+            ("completed", "broadcast", 3),
+            ("stale-after-broadcast", "collecting", 4),
+        ] {
+            db.execute(
+                "INSERT INTO satchel_proposals
+                 (proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at)
+                 VALUES (?1, 'bcrt1qfixture', 'Acceleration', 100, 5, 2, 'fixture', ?2, ?3)",
+                params![proposal_id, status, created_at],
+            )
+            .unwrap();
+        }
+        for (proposal_id, original_txid, replacement, created_at) in [
+            ("older-active", pending_txid.to_string(), None, 1),
+            ("newer-active", pending_txid.to_string(), None, 2),
+            (
+                "completed",
+                completed_txid.clone(),
+                Some(replacement_txid.as_str()),
+                3,
+            ),
+            ("stale-after-broadcast", completed_txid, None, 4),
+        ] {
+            db.execute(
+                "INSERT INTO satchel_accelerations
+                 (proposal_id, method, original_txid, replacement_txid, original_kind,
+                  original_direction, original_amount, original_fee, original_date,
+                  original_address, original_label, created_at)
+                 VALUES (?1, 'rbf', ?2, ?3, 'payment', 'sent', 100, 2, '1',
+                         'bcrt1qfixture', 'Original payment', ?4)",
+                params![proposal_id, original_txid, replacement, created_at],
+            )
+            .unwrap();
+        }
+
+        assert_eq!(
+            active_acceleration_proposal_id(&db, &pending_txid, AccelerationMethod::Rbf)
+                .unwrap()
+                .as_deref(),
+            Some("newer-active")
+        );
+        reconcile_active_acceleration_proposals(&db).unwrap();
+
+        let statuses = db
+            .prepare("SELECT proposal_id, status FROM satchel_proposals ORDER BY proposal_id")
+            .unwrap()
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        assert!(statuses.contains(&("older-active".to_owned(), "cancelled".to_owned())));
+        assert!(statuses.contains(&("newer-active".to_owned(), "ready".to_owned())));
+        assert!(statuses.contains(&("stale-after-broadcast".to_owned(), "cancelled".to_owned())));
+        assert_eq!(
+            active_acceleration_proposal_id(
+                &db,
+                &Txid::from_str(&"44".repeat(32)).unwrap(),
+                AccelerationMethod::Rbf
+            )
+            .unwrap(),
+            None
         );
     }
 
