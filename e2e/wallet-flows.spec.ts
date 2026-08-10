@@ -377,6 +377,9 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   await page.getByRole('link', { name: 'Settings' }).click();
   await page.getByRole('button', { name: /Export public descriptor/ }).click();
   const descriptorDialog = page.getByRole('dialog', { name: 'Export public descriptor' });
+  const warningBox = await descriptorDialog.locator('.warning-box').boundingBox();
+  const pinLabel = await descriptorDialog.locator('.password-field .field-label').boundingBox();
+  expect((pinLabel?.y ?? 0) - ((warningBox?.y ?? 0) + (warningBox?.height ?? 0))).toBeGreaterThanOrEqual(16);
   await descriptorDialog.getByLabel('App PIN', { exact: true }).fill('wrong-pin');
   await descriptorDialog.getByRole('button', { name: 'Prepare backup' }).click();
   await expect(descriptorDialog.getByRole('alert')).toHaveText('Incorrect app PIN.');

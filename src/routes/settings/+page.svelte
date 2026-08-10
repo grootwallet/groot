@@ -212,8 +212,10 @@
 </Modal>
 <Modal open={hardwareBackupOpen} title="Export public descriptor" description="Recover this watch-only wallet without exposing the Ledger seed." onclose={() => {hardwareBackupOpen=false;hardwareBackupPin='';hardwareBackupError='';hardwareBackup='';}}>
   {#if !hardwareBackup}
-    <div class="warning-box"><strong>Public, not harmless.</strong> This descriptor cannot spend bitcoin, but it reveals every wallet address and transaction. Store it privately.</div>
-    <PasswordField label="App PIN" bind:value={hardwareBackupPin} autocomplete="current-password" hint="Re-authenticate before exposing wallet metadata."/>
+    <div class="modal-form">
+      <div class="warning-box"><strong>Public, not harmless.</strong> This descriptor cannot spend bitcoin, but it reveals every wallet address and transaction. Store it privately.</div>
+      <PasswordField label="App PIN" bind:value={hardwareBackupPin} autocomplete="current-password" hint="Re-authenticate before exposing wallet metadata."/>
+    </div>
     {#if hardwareBackupError}<p class="form-error" role="alert">{hardwareBackupError}</p>{/if}
     <div class="modal-footer"><Button variant="secondary" onclick={() => {hardwareBackupOpen=false;hardwareBackupPin='';}}>Cancel</Button><Button disabled={!hardwareBackupPin} loading={exportingHardwareBackup} loadingLabel="Preparing…" onclick={prepareHardwareBackup}>Prepare backup</Button></div>
   {:else}
