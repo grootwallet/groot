@@ -3465,31 +3465,37 @@ fn snapshot_from(
     })
 }
 
-fn enqueue_snapshot_notifications(db: &Connection, snapshot: &WalletSnapshotDto) -> ApiResult<()> {
+fn snapshot_notifications(snapshot: &WalletSnapshotDto) -> Vec<WalletNotification> {
+    let mut events = Vec::new();
     for transaction in &snapshot.transactions {
         if transaction.direction == "received" {
-            notifications::enqueue(
-                db,
-                &WalletNotification::PaymentReceived {
-                    txid: transaction.id.clone(),
-                    amount: transaction.amount,
-                    balance: snapshot.balance.total,
-                },
-                now(),
-            )
-            .map_err(internal)?;
+            events.push(WalletNotification::PaymentReceived {
+                txid: transaction.id.clone(),
+                amount: transaction.amount,
+                balance: snapshot.balance.total,
+            });
         }
         if transaction.confirmations > 0 {
-            notifications::enqueue(
-                db,
-                &WalletNotification::FirstConfirmation {
-                    txid: transaction.id.clone(),
-                    balance: snapshot.balance.total,
-                },
-                now(),
-            )
-            .map_err(internal)?;
+            events.push(WalletNotification::FirstConfirmation {
+                txid: transaction.id.clone(),
+                balance: snapshot.balance.total,
+            });
         }
+    }
+    events
+}
+
+fn enqueue_snapshot_notifications(
+    db: &mut Connection,
+    snapshot: &WalletSnapshotDto,
+) -> ApiResult<()> {
+    let events = snapshot_notifications(snapshot);
+    if !notifications::history_initialized(db).map_err(internal)? {
+        notifications::seed_history(db, &events, now()).map_err(internal)?;
+        return Ok(());
+    }
+    for event in &events {
+        notifications::enqueue(db, event, now()).map_err(internal)?;
     }
     Ok(())
 }
@@ -3745,7 +3751,7 @@ pub fn wallet_sync(app: AppHandle, state: State<'_, AppState>) -> ApiResult<Wall
     let mut wallet = load_wallet(&mut db)?;
     sync_loaded_wallet(&app, &state, &mut wallet, &mut db)?;
     let snapshot = snapshot_from(&wallet, &db, Some(now().to_string()), false)?;
-    enqueue_snapshot_notifications(&db, &snapshot)?;
+    enqueue_snapshot_notifications(&mut db, &snapshot)?;
     Ok(snapshot)
 }
 
@@ -4014,7 +4020,7 @@ pub fn wallet_full_rescan(
     let mut wallet = load_wallet(&mut db)?;
     full_rescan_loaded_wallet(&app, &state, &mut wallet, &mut db, settings.birthday_height)?;
     let snapshot = snapshot_from(&wallet, &db, Some(now().to_string()), is_multisig)?;
-    enqueue_snapshot_notifications(&db, &snapshot)?;
+    enqueue_snapshot_notifications(&mut db, &snapshot)?;
     Ok(snapshot)
 }
 
@@ -5428,7 +5434,7 @@ pub fn multisig_sync(app: AppHandle, state: State<'_, AppState>) -> ApiResult<Wa
     let mut wallet = load_wallet(&mut db)?;
     sync_loaded_wallet(&app, &state, &mut wallet, &mut db)?;
     let snapshot = snapshot_from(&wallet, &db, Some(now().to_string()), true)?;
-    enqueue_snapshot_notifications(&db, &snapshot)?;
+    enqueue_snapshot_notifications(&mut db, &snapshot)?;
     Ok(snapshot)
 }
 
@@ -7996,7 +8002,7 @@ mod tests {
 
     #[test]
     fn synced_snapshots_enqueue_received_and_first_confirmation_events_once() {
-        let db = Connection::open_in_memory().unwrap();
+        let mut db = Connection::open_in_memory().unwrap();
         init_app_schema(&db).unwrap();
         let transaction = |id: &str, direction: &str, confirmations: u32| TransactionDto {
             id: id.repeat(64),
@@ -8024,7 +8030,7 @@ mod tests {
             locktime: Some(0),
             rbf: Some(false),
         };
-        let snapshot = WalletSnapshotDto {
+        let mut snapshot = WalletSnapshotDto {
             network: "regtest",
             balance: BalanceDto {
                 confirmed: 84,
@@ -8042,23 +8048,28 @@ mod tests {
             synced_at: Some("1".to_owned()),
         };
 
-        enqueue_snapshot_notifications(&db, &snapshot).unwrap();
-        enqueue_snapshot_notifications(&db, &snapshot).unwrap();
+        enqueue_snapshot_notifications(&mut db, &snapshot).unwrap();
+        assert!(notifications::pending(&db).unwrap().is_empty());
+
+        snapshot.transactions[0].confirmations = 1;
+        snapshot.transactions.push(transaction("d", "received", 0));
+        enqueue_snapshot_notifications(&mut db, &snapshot).unwrap();
+        enqueue_snapshot_notifications(&mut db, &snapshot).unwrap();
         let events = notifications::pending(&db).unwrap();
-        assert_eq!(events.len(), 4);
+        assert_eq!(events.len(), 2);
         assert_eq!(
             events
                 .iter()
                 .filter(|event| matches!(event.event, WalletNotification::PaymentReceived { .. }))
                 .count(),
-            2
+            1
         );
         assert_eq!(
             events
                 .iter()
                 .filter(|event| matches!(event.event, WalletNotification::FirstConfirmation { .. }))
                 .count(),
-            2
+            1
         );
     }
 

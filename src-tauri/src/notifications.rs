@@ -1,4 +1,3 @@
-#[cfg(test)]
 use bdk_wallet::rusqlite::OptionalExtension;
 use bdk_wallet::rusqlite::{params, params_from_iter, Connection};
 use serde::Serialize;
@@ -60,8 +59,43 @@ pub fn init(db: &Connection) -> bdk_wallet::rusqlite::Result<()> {
             created_at INTEGER NOT NULL,
             delivered INTEGER NOT NULL DEFAULT 0 CHECK(delivered IN (0,1)),
             UNIQUE(kind, txid)
+        );
+        CREATE TABLE IF NOT EXISTS satchel_notification_state (
+            singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
+            history_initialized INTEGER NOT NULL CHECK(history_initialized IN (0,1))
         );",
     )
+}
+
+pub fn history_initialized(db: &Connection) -> bdk_wallet::rusqlite::Result<bool> {
+    db.query_row(
+        "SELECT history_initialized FROM satchel_notification_state WHERE singleton = 1",
+        [],
+        |row| row.get::<_, bool>(0),
+    )
+    .optional()
+    .map(|value| value.unwrap_or(false))
+}
+
+pub fn seed_history(
+    db: &mut Connection,
+    events: &[WalletNotification],
+    created_at: u64,
+) -> bdk_wallet::rusqlite::Result<()> {
+    let transaction = db.transaction()?;
+    for event in events {
+        let (txid, amount, balance) = event.values();
+        transaction.execute(
+            "INSERT OR IGNORE INTO satchel_notifications (kind,txid,amount,balance,created_at,delivered) VALUES (?1,?2,?3,?4,?5,1)",
+            params![event.kind(), txid, amount, balance, created_at],
+        )?;
+    }
+    transaction.execute(
+        "INSERT INTO satchel_notification_state (singleton,history_initialized) VALUES (1,1)
+         ON CONFLICT(singleton) DO UPDATE SET history_initialized=1",
+        [],
+    )?;
+    transaction.commit()
 }
 
 pub fn enqueue(
@@ -176,6 +210,28 @@ mod tests {
             2
         );
         assert!(pending(&db).unwrap().is_empty());
+    }
+
+    #[test]
+    fn recovered_history_is_seeded_as_delivered_before_future_events() {
+        let mut db = db();
+        assert!(!history_initialized(&db).unwrap());
+        let historical = WalletNotification::PaymentReceived {
+            txid: "a".repeat(64),
+            amount: 42,
+            balance: 42,
+        };
+        seed_history(&mut db, std::slice::from_ref(&historical), 1).unwrap();
+        assert!(history_initialized(&db).unwrap());
+        assert!(pending(&db).unwrap().is_empty());
+        assert!(was_enqueued(&db, "payment_received", &"a".repeat(64)).unwrap());
+
+        let future = WalletNotification::FirstConfirmation {
+            txid: "a".repeat(64),
+            balance: 42,
+        };
+        assert!(enqueue(&db, &future, 2).unwrap());
+        assert_eq!(pending(&db).unwrap()[0].event, future);
     }
 
     #[test]

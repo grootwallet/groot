@@ -114,6 +114,8 @@ Durable in-app notification events are produced for:
 
 Later confirmations do not create events. Delivery is explicitly acknowledged and may repeat after a crash before acknowledgement; stable event IDs and persistent transaction state make handling idempotent. Persistent transaction state remains the source of truth.
 
+The first successful sync of a newly created or recovered local profile establishes a notification baseline. Existing transaction history is restored silently instead of replaying old receipt and confirmation toasts; only changes observed after that baseline produce new events.
+
 While the unlocked desktop app is running, one centralized foreground scheduler syncs the selected wallet every ten seconds and immediately when the app returns to the foreground. Sync commands never overlap: slow or offline nodes coalesce wake-ups instead of building a queue. A successful sync updates visible balance, activity, coins, and receive-address status without navigation or a manual refresh. Offline polling remains quiet; explicit user-requested sync continues to show a durable error. Fully terminated background delivery is out of scope.
 
 ## Delete wallet
