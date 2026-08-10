@@ -65,6 +65,10 @@
     <details class="proposal-review-details transaction-more-details" bind:open={showMore}>
       <summary>View more details</summary>
       <dl class="details-list">
+        {#if transaction.inputCount != null}<div><dt>Inputs</dt><dd>{transaction.inputCount}{#if transaction.walletInputAmount != null} · {shortSats(transaction.walletInputAmount)} sats from this wallet{/if}</dd></div>{/if}
+        {#if transaction.outputCount != null}<div><dt>Outputs</dt><dd>{transaction.outputCount}{#if transaction.walletOutputAmount != null} · {shortSats(transaction.walletOutputAmount)} sats to this wallet{/if}</dd></div>{/if}
+        {#if transaction.feeRate != null}<div><dt>Fee rate</dt><dd>{transaction.feeRate} sat/vB</dd></div>{/if}
+        {#if transaction.locktime != null && transaction.rbf != null}<div><dt>Locktime / RBF</dt><dd>{transaction.locktime} · {transaction.rbf ? 'Enabled' : 'Disabled'}</dd></div>{/if}
         {#if transaction.status === 'replaced' && transaction.replacedBy}<div><dt>Replaced by</dt><dd><code>{transaction.replacedBy}</code></dd></div>{/if}
         {#if transaction.block}<div><dt>Block</dt><dd>{transaction.block}</dd></div>{/if}
         {#if isSelfSpend}<div><dt>Transaction type</dt><dd>Self-spend</dd></div>{/if}

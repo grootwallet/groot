@@ -570,7 +570,14 @@ export class DummyWalletAdapter implements WalletPort {
       confirmations: 0,
       date: new Date().toISOString(),
       address: proposal.recipient,
-      label: proposal.label
+      label: proposal.label,
+      inputCount: proposal.inputs.length,
+      outputCount: proposal.outputCount,
+      feeRate: Number(proposal.feeRate),
+      walletInputAmount: proposal.inputs.reduce((sum, input) => sum + Number(input.amount), 0),
+      walletOutputAmount: Number(proposal.change),
+      locktime: proposal.locktime,
+      rbf: proposal.rbf
     };
     this.#transactions = [replacement, ...this.#transactions.filter((transaction) => transaction.id !== txid)];
     this.#accelerations.delete(proposalId);

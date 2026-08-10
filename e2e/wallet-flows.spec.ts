@@ -448,8 +448,12 @@ test('overview, activity, UTXOs, and settings expose durable states', async ({ p
   await expect(page.locator('.modal-layer')).toHaveCSS('opacity', '1');
   const overviewDetails = page.getByRole('dialog', { name: 'Transaction details' });
   await expect(overviewDetails.getByText('Transaction ID', { exact: true })).toBeHidden();
+  await expect(overviewDetails.getByText('Inputs', { exact: true })).toBeHidden();
   await overviewDetails.getByText('View more details', { exact: true }).click();
   await expect(overviewDetails.getByText('Transaction ID', { exact: true })).toBeVisible();
+  await expect(overviewDetails.getByText('Inputs', { exact: true })).toBeVisible();
+  await expect(overviewDetails.getByText('Outputs', { exact: true })).toBeVisible();
+  await expect(overviewDetails.getByText('Locktime / RBF', { exact: true })).toBeVisible();
   await expect(
     page.getByText('mempool.space cannot see local regtest transactions.')
   ).toBeVisible();

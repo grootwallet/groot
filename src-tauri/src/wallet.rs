@@ -600,6 +600,13 @@ pub struct TransactionDto {
     label: String,
     block: Option<u32>,
     replaced_by: Option<String>,
+    input_count: Option<usize>,
+    output_count: Option<usize>,
+    fee_rate: Option<f64>,
+    wallet_input_amount: Option<u64>,
+    wallet_output_amount: Option<u64>,
+    locktime: Option<u32>,
+    rbf: Option<bool>,
 }
 
 #[derive(Serialize)]
@@ -2821,6 +2828,13 @@ fn apply_replacement_history(
                 address: row.get(7)?,
                 label: row.get(8)?,
                 block: None,
+                input_count: None,
+                output_count: None,
+                fee_rate: None,
+                wallet_input_amount: None,
+                wallet_output_amount: None,
+                locktime: None,
+                rbf: None,
             })
         })
         .map_err(internal)?
@@ -3319,6 +3333,12 @@ fn snapshot_from(
         let (sent, received) = wallet.sent_and_received(transaction);
         let is_received = received > sent;
         let transaction_fee = wallet.calculate_fee(transaction).ok();
+        let transaction_vbytes = transaction.weight().to_vbytes_ceil();
+        let fee_rate = transaction_fee.and_then(|fee| {
+            (transaction_vbytes > 0).then(|| {
+                ((fee.to_sat() as f64 / transaction_vbytes as f64) * 100.0).round() / 100.0
+            })
+        });
         let has_external_value_output = transaction.output.iter().any(|output| {
             output.value > Amount::ZERO
                 && wallet
@@ -3363,6 +3383,18 @@ fn snapshot_from(
             label,
             block,
             replaced_by: None,
+            input_count: Some(transaction.input.len()),
+            output_count: Some(transaction.output.len()),
+            fee_rate,
+            wallet_input_amount: (sent > Amount::ZERO).then(|| sent.to_sat()),
+            wallet_output_amount: (received > Amount::ZERO).then(|| received.to_sat()),
+            locktime: Some(transaction.lock_time.to_consensus_u32()),
+            rbf: Some(
+                transaction
+                    .input
+                    .iter()
+                    .any(|input| input.sequence.is_rbf()),
+            ),
         });
     }
     apply_replacement_history(db, &mut transactions)?;
@@ -7943,6 +7975,13 @@ mod tests {
             label: "Test deposit".to_owned(),
             block: (confirmations > 0).then_some(1),
             replaced_by: None,
+            input_count: Some(1),
+            output_count: Some(1),
+            fee_rate: None,
+            wallet_input_amount: None,
+            wallet_output_amount: Some(42),
+            locktime: Some(0),
+            rbf: Some(false),
         };
         let snapshot = WalletSnapshotDto {
             network: "regtest",
@@ -7983,6 +8022,40 @@ mod tests {
     }
 
     #[test]
+    fn transaction_dto_serializes_authoritative_detail_fields() {
+        let value = serde_json::to_value(TransactionDto {
+            id: "11".repeat(32),
+            kind: "self_spend".to_owned(),
+            direction: "sent".to_owned(),
+            amount: 548,
+            fee: Some(548),
+            status: "pending".to_owned(),
+            confirmations: 0,
+            date: "1".to_owned(),
+            address: None,
+            label: "Self-spend".to_owned(),
+            block: None,
+            replaced_by: None,
+            input_count: Some(1),
+            output_count: Some(1),
+            fee_rate: Some(5.03),
+            wallet_input_amount: Some(64_016),
+            wallet_output_amount: Some(63_468),
+            locktime: Some(126),
+            rbf: Some(true),
+        })
+        .unwrap();
+
+        assert_eq!(value["inputCount"], 1);
+        assert_eq!(value["outputCount"], 1);
+        assert_eq!(value["feeRate"], 5.03);
+        assert_eq!(value["walletInputAmount"], 64_016);
+        assert_eq!(value["walletOutputAmount"], 63_468);
+        assert_eq!(value["locktime"], 126);
+        assert_eq!(value["rbf"], true);
+    }
+
+    #[test]
     fn replacement_history_marks_or_restores_the_original_without_affecting_the_replacement() {
         let db = Connection::open_in_memory().unwrap();
         init_app_schema(&db).unwrap();
@@ -8018,6 +8091,13 @@ mod tests {
             label: "Original payment".to_owned(),
             block: Some(101),
             replaced_by: None,
+            input_count: Some(1),
+            output_count: Some(2),
+            fee_rate: Some(2.5),
+            wallet_input_amount: Some(200),
+            wallet_output_amount: Some(95),
+            locktime: Some(100),
+            rbf: Some(true),
         }];
 
         apply_replacement_history(&db, &mut transactions).unwrap();

@@ -90,7 +90,7 @@ A persisted global discreet mode hides wallet amounts across Overview and activi
 
 The send surface includes a compact public signer summary throughout the flow. Software wallets identify Satchel on the current device as the signer. External-hardware and multisig wallets show imported signer labels/models and shortened master fingerprints plus the required threshold; a signer is marked signed only from authoritative proposal data. Imported identity never implies that a device is currently connected or healthy.
 
-Transaction history details use the same progressive-disclosure pattern as transaction review. Status, amount, label, date, confirmations, fee, and destination remain immediately visible; transaction IDs, block/replacement identifiers, self-spend classification, and explorer controls remain available under **View more details**.
+Transaction history details use the same progressive-disclosure pattern as transaction review. Status, amount, label, date, confirmations, fee, and destination remain immediately visible. Rust derives actual signed-transaction input/output counts, wallet-side input/output amounts, fee rate, locktime, and RBF state for **View more details**, alongside transaction IDs, block/replacement identifiers, self-spend classification, and explorer controls. Metadata unavailable for a legacy synthetic replacement is omitted rather than inferred in the webview.
 
 ## Activity and transaction details
 

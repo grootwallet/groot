@@ -11,6 +11,13 @@ export type Transaction = {
   label: string;
   block?: number;
   replacedBy?: string | null;
+  inputCount?: number | null;
+  outputCount?: number | null;
+  feeRate?: number | null;
+  walletInputAmount?: number | null;
+  walletOutputAmount?: number | null;
+  locktime?: number | null;
+  rbf?: boolean | null;
 };
 
 export type ReceiveAddress = {
