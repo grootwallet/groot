@@ -126,11 +126,11 @@ The wallet's existing semantic surface and status tokens remain canonical in [`s
 
 The selected brand direction is **Unified Craft**:
 
-- **Source Serif 4:** expressive brand and marketing headlines.
-- **Source Sans 3:** brand body copy, navigation, captions, and explanatory text.
+- **Source Serif 4:** expressive brand and marketing headlines in the separate `thibistaken/groot-site` repository.
+- **Source Sans 3:** brand body copy, navigation, captions, and explanatory text in `thibistaken/groot-site`.
 - **System monospace or IBM Plex Mono:** identifiers and technical notation only.
 
-The wallet UI keeps its current system-sans and Iowan/Baskerville/Georgia stacks for V1 unless a later screen-by-screen audit demonstrates a clear improvement. The marketing route locally bundles the reviewed Source Sans 3 `3.052R` and Source Serif 4 `4.005R` files recorded in [`marketing-site.md`](marketing-site.md); it makes no runtime font request. This does not authorize Source-font adoption in the wallet, which still requires a separate screen-by-screen, payload, rendering, and cross-platform review. Network fonts are not permitted in the wallet.
+The wallet UI keeps its current system-sans and Iowan/Baskerville/Georgia stacks for V1 unless a later screen-by-screen audit demonstrates a clear improvement. Marketing typography and runtime font files live only in [`thibistaken/groot-site`](https://github.com/thibistaken/groot-site). This does not authorize Source-font adoption in the wallet, which still requires a separate screen-by-screen, payload, rendering, and cross-platform review. Network fonts are not permitted in the wallet.
 
 ### Wordmark
 
@@ -142,7 +142,7 @@ The wallet UI keeps its current system-sans and Iowan/Baskerville/Georgia stacks
 
 The symbol canvas aligns to the wordmark baseline, then moves down by its exact `21/128` bottom inset (`16.40625%`) so the visible filled path—not the invisible SVG canvas—meets the baseline. This construction rule must replace ad hoc per-size offsets.
 
-Study fonts remain locally bundled for the noindex archive at `/marketing/wordmark`. Product and marketing surfaces use the approved outlined lockup rather than live Newsreader text.
+The wallet uses the approved outlined lockup rather than live Newsreader text. Marketing and historical presentation studies belong in `thibistaken/groot-site`, not in a wallet route.
 
 ### Groot decision gate
 
@@ -199,7 +199,7 @@ Every word must earn its place.
 | [`assets/brand/wordmark-ink.svg`](../assets/brand/wordmark-ink.svg) | Canonical positive Groot wordmark |
 | [`assets/brand/wordmark-reversed.svg`](../assets/brand/wordmark-reversed.svg) | Canonical reversed Groot wordmark |
 | [`src/lib/components/BrandMark.svelte`](../src/lib/components/BrandMark.svelte) | Product component using the master path |
-| [`src/lib/components/BrandLockup.svelte`](../src/lib/components/BrandLockup.svelte) | Shared product and marketing wordmark component |
+| [`src/lib/components/BrandLockup.svelte`](../src/lib/components/BrandLockup.svelte) | Wallet product wordmark component |
 
 ## Status and roadmap
 

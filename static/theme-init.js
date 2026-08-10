@@ -1,5 +1,4 @@
 (() => {
-  if (location.pathname === '/marketing' || location.pathname.startsWith('/marketing/')) return;
   let theme = 'dark';
   try {
     const saved = localStorage.getItem('groot-theme');

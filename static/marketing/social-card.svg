@@ -1,8 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
-  <rect width="1200" height="630" fill="#F7F3E9"/>
-  <path fill="#102A4C" transform="translate(70 66) scale(.9)" d="M64 21A54 54 0 0 0 10 75V105Q10 107 12 107H48Q50 107 50 105V91Q50 89 48 89H30Q28 89 28 87V75A36 36 0 0 1 100 75V87Q100 89 98 89H80Q78 89 78 91V105Q78 107 80 107H116Q118 107 118 105V75A54 54 0 0 0 64 21Z"/>
-  <rect x="72" y="230" width="40" height="5" fill="#D3293A"/>
-  <text x="72" y="385" fill="#102A4C" font-family="Georgia, serif" font-size="112" letter-spacing="-5">Hold your own.</text>
-  <text x="78" y="468" fill="#102A4C" font-family="Arial, sans-serif" font-size="31">Bitcoin self-custody, with proof at every step.</text>
-  <text x="78" y="548" fill="#66788f" font-family="Arial, sans-serif" font-size="22">Test-network release · Mainnet is not enabled</text>
-</svg>

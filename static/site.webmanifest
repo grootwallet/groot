@@ -1,10 +1,10 @@
 {
   "name": "Groot Bitcoin Wallet",
   "short_name": "Groot",
-  "description": "Bitcoin self-custody, with proof at every step.",
-  "start_url": "/marketing",
+  "description": "A test-network Bitcoin wallet and multisig coordinator.",
+  "start_url": "/",
   "display": "standalone",
-  "background_color": "#F7F3E9",
-  "theme_color": "#102A4C",
+  "background_color": "#0D1118",
+  "theme_color": "#0D1118",
   "icons": [{ "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
 }

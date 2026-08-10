@@ -6,6 +6,12 @@ This file is the entry point for humans and coding agents. Read it before changi
 
 Groot is a deliberately small, non-custodial, onchain Bitcoin wallet for desktop, iOS, and Android. Product simplicity must not weaken key isolation, transaction review, address privacy, or recoverability.
 
+## Repository boundary
+
+- [`thibistaken/groot`](https://github.com/thibistaken/groot) is the wallet application: the Tauri desktop/mobile application and its browser-based wallet prototype.
+- [`thibistaken/groot-site`](https://github.com/thibistaken/groot-site) is the only marketing website and the canonical source for public-site code, copy, screenshots, brand presentation, SEO, and deployment.
+- Do not add marketing routes, marketing-site assets, public-site metadata, or marketing deployment configuration to this repository. Product facts originate here; public presentation belongs in `groot-site`.
+
 ## Start here
 
 1. Read `docs/product-spec.md` for canonical behavior.
@@ -28,6 +34,7 @@ If code and documentation disagree, stop and resolve the mismatch in the same ch
 - `src/lib/wallet/index.ts` — composition root. Swap the adapter here.
 - `src-tauri/` — trusted Rust boundary; BDK, secrets, signing, persistence, sync, and broadcast belong here.
 - `docs/adr/` — append-only architectural decisions.
+- The marketing website is intentionally absent. Change it in `thibistaken/groot-site`, not under `src/routes/` or `static/` here.
 
 ## Non-negotiable invariants
 

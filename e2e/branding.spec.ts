@@ -23,15 +23,3 @@ test('Groot branding is visible across wallet themes', async ({ page }) => {
     await expectNoHorizontalOverflow(page);
   }
 });
-
-test('Groot branding and metadata are visible on marketing', async ({ page }) => {
-  await page.goto('/marketing');
-
-  await expect(page).toHaveTitle('Groot · Hold your own');
-  await expect(page.getByRole('link', { name: 'Groot marketing home' })).toBeVisible();
-  await expect(page.getByRole('img', { name: 'Groot' }).first()).toBeVisible();
-  await expect(page.locator('meta[name="application-name"]')).toHaveAttribute('content', 'Groot');
-  await expect(page.locator('meta[property="og:title"]')).toHaveAttribute('content', 'Groot · Hold your own');
-  await expect(page.locator('body')).not.toContainText('Satchel');
-  await expectNoHorizontalOverflow(page);
-});
