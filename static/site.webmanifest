@@ -1,0 +1,10 @@
+{
+  "name": "Bitcoin self-custody wallet",
+  "short_name": "Wallet",
+  "description": "Serious tools for disciplined Bitcoin self-custody.",
+  "start_url": "/marketing",
+  "display": "standalone",
+  "background_color": "#F7F3E9",
+  "theme_color": "#102A4C",
+  "icons": [{ "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

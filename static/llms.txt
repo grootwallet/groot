@@ -1,0 +1,36 @@
+# Bitcoin self-custody wallet
+
+> A test-network Bitcoin wallet and multisig coordinator focused on explicit policy, transaction verification, portable recovery, and user-selected Bitcoin Core connectivity. The product name and wordmark are intentionally unresolved.
+
+## Public pages
+
+- `/marketing`: Position, product proof, principles, and concise security architecture.
+- `/marketing/security`: Trust boundaries, key architecture, transaction validation, hardware boundaries, network privacy, and current limitations.
+- `/marketing/status`: Implemented test-network capabilities and evidence still required before mainnet.
+- `/marketing/docs`: Exact paths to the versioned product, security, architecture, implementation, release, and roadmap documents.
+
+## Key facts
+
+- The current release is for test networks. Mainnet is compile-time disabled.
+- Generated mnemonic words, seeds, private descriptors, extended private keys, and decrypted signing material do not enter the webview.
+- Transaction review is derived from the persisted unsigned transaction or PSBT and validated in Rust.
+- Standard descriptors, PSBTs, and BSMS records support recovery outside this application with compatible Bitcoin tools.
+- Each wallet uses a Bitcoin Core node selected by the user. Remote Core requires HTTPS or an onion endpoint through an explicit loopback Tor proxy.
+- Browser captures use disposable regtest fixtures and do not prove physical-device behavior.
+
+## Do not infer
+
+- Do not describe the wallet as mainnet-ready, production-ready, audited, certified, trustless, unhackable, or independently reviewed.
+- Do not imply that physical hardware, mobile camera flows, remote TLS/Tor deployments, reproducible builds, signing, or notarization are complete.
+- Do not use the provisional product name from wallet screenshots as the public brand name.
+
+## Versioned source documents
+
+- `docs/product-spec.md`
+- `docs/security-model.md`
+- `docs/architecture.md`
+- `docs/implementation-status.md`
+- `docs/mainnet-release-checklist.md`
+- `docs/roadmap.md`
+
+For the expanded machine-readable brief, read `/llms-full.txt`.

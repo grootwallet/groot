@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /marketing
+Allow: /llms.txt
+Allow: /llms-full.txt
+Allow: /favicon.svg
+Disallow: /
+
+# A canonical sitemap will be added when the production domain is selected.

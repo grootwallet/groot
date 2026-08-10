@@ -26,6 +26,9 @@ Until the mainnet release gate is satisfied, every public product page carries t
 - Links: `Product`, `Principles`, `Security`, `Documentation`.
 - Primary action before mainnet: `View development status`.
 - Do not place a provisional name beside the symbol.
+- The header is fixed, hides during deliberate downward reading, and returns immediately when the user scrolls upward. It remains visible near the top and while the mobile menu is open.
+- The active destination uses `aria-current="page"`, stronger weight, and a restrained underline or mobile accent. Product and Principles activate from their visible home-page sections.
+- Desktop navigation collapses to the complete mobile menu before labels become crowded; no destination disappears at intermediate widths.
 
 ### Hero
 
@@ -133,6 +136,16 @@ The implementation strip may name the current stack: SvelteKit, Tauri 2, Rust, B
 
 > Test-network implementation. Physical-device and reproducible-release certification remain open.
 
+The dedicated `/marketing/security` page expands this into the complete public trust map: Svelte presentation, typed `WalletPort`/Tauri IPC, the trusted Rust wallet core, and adversarial Bitcoin Core and hardware-signer boundaries. It must also list current certification and release limits plainly.
+
+### Development status
+
+`/marketing/status` is the public release ledger. It separates test-network implementation from evidence still required for mainnet. It may summarize the canonical implementation table, but it must identify [`implementation-status.md`](implementation-status.md) and [`mainnet-release-checklist.md`](mainnet-release-checklist.md) as the versioned sources of truth rather than becoming a competing ledger.
+
+### Documentation
+
+`/marketing/docs` is a short index into the versioned repository documentation. It names the exact repository paths for product behavior, the security model, architecture, implementation evidence, the mainnet checklist, and the security-ordered roadmap. Public repository links remain withheld until repository visibility is deliberately confirmed. The page does not reproduce those documents or hide their technical limits behind simplified marketing language.
+
 ### Closing
 
 Headline:
@@ -165,6 +178,7 @@ Do not use wait-list scarcity, countdowns, user counts, asset totals, testimonia
 - Avoid gradients, glass effects, coin imagery, padlocks, shields, server racks, anonymous hooded figures, rockets, candlesticks, circuit-board textures, and generic lifestyle photography.
 - Motion may reveal a product capture or move between verified states. The symbol remains still.
 - V1 motion is limited to short vertical content reveals, restrained image scale on hover, and direct interaction feedback. Respect `prefers-reduced-motion`; motion must never delay reading or obscure evidence labels.
+- Route heroes and navigation may enter once on component mount. Scroll-aware navigation uses one passive listener throttled through `requestAnimationFrame`; there is no continuous animation loop.
 
 ## Product-image rules
 
@@ -179,7 +193,27 @@ Do not use wait-list scarcity, countdowns, user counts, asset totals, testimonia
 ### Current campaign asset provenance
 
 - Hero photograph: Luke Helgeson, [Unsplash source](https://unsplash.com/photos/M2DkvRbumM0), standard Unsplash License, downloaded 2026-08-09. Treatment: responsive crop plus a uniform dark overlay for text contrast; no generated fill or compositing.
-- Product proof captures: temporary browser-prototype fixtures at `1180 × 780`, disposable regtest data, captured 2026-08-09. Their layout is known to trail the current product UI; replace the complete set before public release. The marketing page may scale or crop a capture but must not reconstruct its interface.
+- Product proof captures: current Svelte wallet implementation at `1180 × 780` and `390 × 844`, disposable regtest/browser-fixture data, recaptured 2026-08-10. The policy and transaction-review captures use the active `Family vault` 2-of-3 fixture; backup uses its public BSMS export surface; node settings use the disposable `Everyday wallet` loopback endpoint. The built-in interactive-prototype warning remains visible. The marketing page selects the matching desktop or mobile capture and does not reconstruct the interface.
+
+### Typography provenance
+
+The marketing route serves its fonts locally and makes no runtime font request:
+
+- Source Sans 3 `3.052R`, official Adobe release `WOFF2-source-sans-3.052R.zip`, `source-sans-3.052R.woff2`, SHA-256 `5f16566f7a40d39b339ad26be151fa5a1ab1f0c2574c7a2e619765584a1acbd8`.
+- Source Serif 4 `4.005R`, official Adobe release `source-serif-4.005_Desktop.zip`, `source-serif-4.005R.ttf`, SHA-256 `e5a4ee6a3d87bb9024796be390c6771e2a0eb1883dae25effaf57ca01668e24b`.
+- Both are distributed under the SIL Open Font License; the corresponding license files live beside the fonts in `static/fonts/`.
+
+The wallet UI continues to use its existing system stacks. This bundling decision applies only to the public marketing route.
+
+## Discovery, parsing, and privacy
+
+- Every public route has one description, one unique title, Open Graph and Twitter summary metadata, a 1200×630 nameless social card, and the approved favicon/manifest.
+- `/llms.txt` gives language models the concise public map, evidence boundaries, prohibited inferences, and canonical document paths. `/llms-full.txt` expands the architecture, recovery, interoperability, and release-blocker context.
+- `robots.txt` permits only the public marketing and machine-readable resources. The interactive wallet fixture remains excluded from indexing.
+- A production canonical URL and sitemap are intentionally deferred until the domain is selected; relative or invented canonical URLs are not acceptable substitutes.
+- Marketing fonts, photography, product captures, and social assets are local. The page makes no analytics, font-CDN, remote-image, or third-party script request.
+- Marketing routes do not initialize wallet locale, theme, or discreet-mode preferences and keep the document language explicitly English until a real localized marketing route exists.
+- Production headers deny framing and MIME sniffing, restrict referrers and browser capabilities, require same-origin isolation, allow the local manifest, and keep the default CSP at self-only. Any hosting change must preserve equivalent headers.
 
 ## Claim discipline
 
@@ -203,8 +237,10 @@ Naming remains open. The current brief requires a familiar, memorable word or co
 
 ## V1 deliverables
 
-1. Responsive marketing page using this structure and exact initial copy.
-2. Real desktop and mobile captures for the hero and four proof sections.
-3. Public security-model and development-status destinations.
-4. Metadata, social preview, favicon, and application links using canonical brand assets.
-5. Accessibility, responsive, claim, privacy, and asset-provenance review before publication.
+1. **Implemented:** responsive SvelteKit marketing page using this structure and evidence-bounded copy.
+2. **Implemented:** current desktop and mobile wallet captures for all four proof sections.
+3. **Implemented:** public security-model, development-status, and documentation destinations.
+4. **Implemented:** nameless favicon, manifest, and social preview using the canonical symbol.
+5. **Implemented locally; repeat on the production domain:** accessibility, responsive, claim, privacy, performance, and asset-provenance review.
+6. **Open:** canonical domain, production hosting/security headers, and final external-link verification after the repository visibility decision.
+7. **Deferred by decision:** product name and wordmark.

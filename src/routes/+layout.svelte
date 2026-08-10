@@ -8,10 +8,12 @@
   let { children } = $props();
   let marketingRoute = $derived(page.url.pathname === '/marketing' || page.url.pathname.startsWith('/marketing/'));
   onMount(() => {
-    initLocale();
-    initDiscreetMode();
-    const saved = localStorage.getItem('satchel-theme');
-    document.documentElement.dataset.theme = saved === 'light' || saved === 'dark' ? saved : (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+    if (!marketingRoute) {
+      initLocale();
+      initDiscreetMode();
+      const saved = localStorage.getItem('satchel-theme');
+      document.documentElement.dataset.theme = saved === 'light' || saved === 'dark' ? saved : (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+    }
   });
 </script>
 

@@ -128,7 +128,7 @@ The selected brand direction is **Unified Craft**:
 - **Source Sans 3:** brand body copy, navigation, captions, and explanatory text.
 - **System monospace or IBM Plex Mono:** identifiers and technical notation only.
 
-The wallet UI keeps its current system-sans and Iowan/Baskerville/Georgia stacks for V1 unless a later screen-by-screen audit demonstrates a clear improvement. Adopting bundled Source fonts requires a separate provenance, license, payload, rendering, and cross-platform review; network fonts are not permitted in the wallet.
+The wallet UI keeps its current system-sans and Iowan/Baskerville/Georgia stacks for V1 unless a later screen-by-screen audit demonstrates a clear improvement. The marketing route locally bundles the reviewed Source Sans 3 `3.052R` and Source Serif 4 `4.005R` files recorded in [`marketing-site.md`](marketing-site.md); it makes no runtime font request. This does not authorize Source-font adoption in the wallet, which still requires a separate screen-by-screen, payload, rendering, and cross-platform review. Network fonts are not permitted in the wallet.
 
 Typography does not compensate for weak hierarchy with extreme weight, tracking, or size. Headlines are concise. Required instructions remain comfortably readable.
 
@@ -180,7 +180,7 @@ Every word must earn its place.
 
 - The product name **Satchel**.
 - Wordmark typography and lockups.
-- Bundled brand-font adoption.
+- Bundled Source-font adoption inside the wallet UI. Marketing-only bundling is complete.
 - Marketing imagery and motion details.
 
 ### Next

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import BrandMark from '$lib/components/BrandMark.svelte';
+  import MarketingNav from '$lib/components/MarketingNav.svelte';
+  import { subtleReveal } from '$lib/marketing/motion';
 
   let pageElement: HTMLDivElement;
 
@@ -10,6 +11,7 @@
       title: 'Protect bitcoin with multiple keys.',
       body: 'Create a standard 2-of-3 multisig wallet across independent hardware vendors. Inspect every public key and export the descriptor needed to recover without this app.',
       image: '/marketing/wallet-policy.png',
+      mobileImage: '/marketing/wallet-policy-mobile.png',
       alt: 'Current wallet policy screen showing a two-of-three multisignature setup',
       detail: 'Current wallet UI · unchanged layout',
       evidence: 'Browser fixture · virtual test devices'
@@ -19,6 +21,7 @@
       title: 'Know before you sign.',
       body: 'Before bitcoin moves, review the destination, amount, fee, selected coins, change, and signatures still required. The review comes from the actual unsigned transaction.',
       image: '/marketing/wallet-review.png',
+      mobileImage: '/marketing/wallet-review-mobile.png',
       alt: 'Current wallet transaction review screen with disposable regtest data',
       detail: 'Current wallet UI · disposable data',
       evidence: 'Browser fixture · regtest transaction'
@@ -28,6 +31,7 @@
       title: 'Recover anywhere.',
       body: 'Export a standard public descriptor, verify that it rebuilds the same wallet, and rehearse recovery before you need it. Your backup is not tied to this app.',
       image: '/marketing/wallet-backup.png',
+      mobileImage: '/marketing/wallet-backup-mobile.png',
       alt: 'Current wallet backup and recovery drill screen',
       detail: 'Current wallet UI · public descriptor workflow',
       evidence: 'Browser fixture'
@@ -37,6 +41,7 @@
       title: 'Use your own Bitcoin node.',
       body: 'Choose the Bitcoin Core node that provides wallet balances and transaction history. Remote access requires HTTPS or Tor, and the wallet never silently falls back to a public server.',
       image: '/marketing/wallet-settings.png',
+      mobileImage: '/marketing/wallet-settings-mobile.png',
       alt: 'Current wallet settings screen showing Bitcoin Core connection controls',
       detail: 'Current wallet UI · disposable endpoint',
       evidence: 'Browser fixture · regtest'
@@ -98,24 +103,27 @@
   <title>Hold your own</title>
   <meta name="description" content="Serious tools for disciplined Bitcoin self-custody." />
   <meta name="theme-color" content="#102a4c" />
+  <meta property="og:title" content="Hold your own" />
+  <meta property="og:description" content="Bitcoin self-custody, with proof at every step." />
+  <meta property="og:type" content="website" />
+  <meta property="og:image" content="/marketing/social-card.png" />
+  <meta name="twitter:title" content="Hold your own" />
+  <meta name="twitter:description" content="Bitcoin self-custody, with proof at every step." />
+  <meta name="twitter:image" content="/marketing/social-card.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <link rel="preload" as="image" href="/marketing/hero-mountain.jpg" fetchpriority="high" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="manifest" href="/site.webmanifest" />
 </svelte:head>
 
 <div class="marketing-page" bind:this={pageElement}>
   <a class="skip-link" href="#content">Skip to content</a>
+  <MarketingNav reversed overlay />
 
   <header class="hero" id="top">
     <div class="hero-overlay" aria-hidden="true"></div>
-    <nav class="nav shell" aria-label="Primary navigation">
-      <a class="mark-link" href="/marketing" aria-label="Marketing home"><BrandMark size={38} /></a>
-      <div class="nav-links">
-        <a href="#product">Product</a>
-        <a href="#principles">Principles</a>
-        <a href="#security">Security</a>
-        <a class="nav-action" href="#status">View development status</a>
-      </div>
-    </nav>
 
-    <div class="hero-content shell">
+    <div class="hero-content shell" in:subtleReveal={{ distance: 18 }}>
       <p class="kicker"><span aria-hidden="true"></span>Bitcoin. In your hands.</p>
       <h1>Hold your own.</h1>
       <p class="hero-copy">Hold bitcoin on your terms. Know exactly what you’re signing. Know you can recover without us.</p>
@@ -157,7 +165,10 @@
               <p>{proof.body}</p>
             </div>
             <figure data-reveal>
-              <img src={proof.image} alt={proof.alt} width="1180" height="780" loading="lazy" />
+              <picture>
+                <source media="(max-width: 760px)" srcset={proof.mobileImage} />
+                <img src={proof.image} alt={proof.alt} width="1180" height="780" loading="lazy" />
+              </picture>
               <figcaption><span>{proof.detail}</span><span>{proof.evidence}</span></figcaption>
             </figure>
           </div>
@@ -219,12 +230,13 @@
         <h2 id="closing-heading">Make self-custody the standard.</h2>
         <p>Hold bitcoin with keys you control, transactions you verify, and a recovery path that works without us.</p>
         <div class="actions">
-          <a class="button dark" href="#status">Follow development</a>
-          <a class="text-link" href="#security">Review the documentation</a>
+          <a class="button dark" href="/marketing/status">Follow development</a>
+          <a class="text-link" href="/marketing/docs">Review the documentation</a>
         </div>
         <footer>
           <span>Test-network release. Mainnet is not enabled.</span>
           <span>
+            <a href="/marketing/security">Security</a> · <a href="/marketing/status">Status</a> · <a href="/marketing/docs">Documentation</a><br />
             Photograph by <a href="https://unsplash.com/@luke_helgeson">Luke Helgeson</a> on
             <a href="https://unsplash.com/photos/M2DkvRbumM0">Unsplash</a>
           </span>
@@ -235,8 +247,6 @@
 </div>
 
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;500&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500&display=swap');
-
   :global(html) { scroll-behavior: smooth; }
   :global(body) { background: #f7f3e9; }
 
@@ -278,13 +288,8 @@
     isolation: isolate;
   }
   .hero-overlay { position: absolute; z-index: -1; inset: 0; background: rgba(4, 16, 30, 0.48); pointer-events: none; }
-  .nav { min-height: 84px; display: flex; align-items: center; justify-content: space-between; gap: 32px; border-bottom: 1px solid rgba(247, 243, 233, 0.38); }
-  .mark-link { min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: flex-start; }
-  .nav-links { display: flex; align-items: center; gap: clamp(18px, 2.5vw, 32px); font-size: 14px; }
-  .nav-links a { min-height: 44px; display: inline-flex; align-items: center; }
-  .nav-links a, .text-link { transition: opacity 180ms ease; }
-  .nav-links a:hover, .text-link:hover { opacity: 0.72; }
-  .nav-action { border-bottom: 1px solid currentColor; }
+  .text-link { transition: opacity 180ms ease; }
+  .text-link:hover { opacity: 0.72; }
 
   .hero-content { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; padding-block: 96px 48px; }
   .kicker { display: flex; align-items: center; gap: 12px; font-size: 12px; line-height: 1.4; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 500; }
@@ -317,6 +322,7 @@
   .proof-copy > p:last-child { max-width: 520px; padding-top: 8px; font-size: 18px; line-height: 1.5; }
   figure { margin: 0; padding: clamp(14px, 3vw, 34px); border: 1px solid rgba(16, 42, 76, 0.13); background: var(--paper); }
   figure { overflow: hidden; }
+  figure picture { display: block; }
   figure img { width: 100%; height: auto; display: block; border: 1px solid rgba(16, 42, 76, 0.16); transition: transform 700ms cubic-bezier(0.22, 1, 0.36, 1); }
   figure:hover img { transform: scale(1.008); }
   figcaption { margin-top: 14px; display: flex; justify-content: space-between; gap: 24px; color: rgba(16, 42, 76, 0.7); font-size: 12px; line-height: 1.45; }
@@ -353,9 +359,6 @@
   @media (max-width: 760px) {
     .shell { width: min(calc(100% - 32px), 1160px); }
     .hero { min-height: 720px; background-position: 58% center; }
-    .nav { min-height: 68px; }
-    .nav-links a:not(.nav-action) { display: none; }
-    .nav-action { font-size: 13px; }
     .hero-content { padding-block: 104px 42px; }
     .hero h1 { font-size: clamp(58px, 19vw, 82px); }
     .hero-copy { font-size: clamp(21px, 7vw, 28px); }
@@ -377,7 +380,6 @@
   }
 
   @media (max-width: 390px) {
-    .nav-action { max-width: 170px; text-align: right; }
     .hero { min-height: 760px; }
     .actions { align-items: flex-start; flex-direction: column; gap: 12px; }
     .button { width: 100%; }
@@ -388,7 +390,7 @@
   @media (prefers-reduced-motion: reduce) {
     :global(html) { scroll-behavior: auto; }
     .marketing-page [data-reveal] { opacity: 1; transform: none; transition: none; }
-    .button, .nav-links a, .text-link, figure img { transition: none; }
+    .button, .text-link, figure img { transition: none; }
     .button:hover, figure:hover img { transform: none; }
   }
 </style>
