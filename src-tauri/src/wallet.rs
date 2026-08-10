@@ -3974,6 +3974,26 @@ fn hardware_device_api_error(error: HardwareError, device_type: &str) -> ApiErro
     hardware_api_error(error)
 }
 
+fn missing_hardware_fingerprint(device_type: &str) -> ApiError {
+    let message = match device_type.to_ascii_lowercase().as_str() {
+        "ledger" => {
+            "Unlock Ledger and open Bitcoin Test—not Bitcoin—for this Regtest wallet, then scan again."
+        }
+        "bitbox02" => {
+            "Finish pairing and unlock in BitBoxApp, quit BitBoxApp completely, reconnect, then scan again."
+        }
+        "jade" => {
+            "Log in on Jade using Recovery Phrase Login or QR PIN Unlock, then scan again."
+        }
+        "coldcard" => "Unlock Coldcard and enable USB communication, then scan again.",
+        "trezor" | "keepkey" => {
+            "Unlock the device using Satchel's PIN-matrix flow, then scan again."
+        }
+        _ => "Unlock the hardware wallet and put it in its Bitcoin app, then scan again.",
+    };
+    api_error("hardware_unavailable", message)
+}
+
 fn missing_hardware_psbt(device_type: &str, code: Option<i64>, fallback: &str) -> ApiError {
     match code {
         Some(code) => {
@@ -4013,12 +4033,9 @@ fn connected_hardware_identity(
     let encoded = hwi.enumerate().map_err(hardware_api_error)?;
     let devices: Vec<HwiDevice> = serde_json::from_slice(&encoded).map_err(internal)?;
     let device = select_unique_hardware_device(devices, device_id)?;
-    let fingerprint = device.fingerprint.ok_or_else(|| {
-        api_error(
-            "hardware_unavailable",
-            "The device did not return a master fingerprint.",
-        )
-    })?;
+    let fingerprint = device
+        .fingerprint
+        .ok_or_else(|| missing_hardware_fingerprint(&device.device_type))?;
     if !expected_fingerprints
         .iter()
         .any(|expected| expected.eq_ignore_ascii_case(&fingerprint))
@@ -4239,12 +4256,9 @@ pub async fn hardware_import_cosigner(
             &device,
             allow_empty_passphrase.unwrap_or(false),
         )?;
-        let fingerprint = device.fingerprint.ok_or_else(|| {
-            api_error(
-                "hardware_unavailable",
-                "The device did not return a master fingerprint.",
-            )
-        })?;
+        let fingerprint = device
+            .fingerprint
+            .ok_or_else(|| missing_hardware_fingerprint(&device.device_type))?;
         let output = hwi
             .account_xpub(
                 &device.device_type,
@@ -7168,6 +7182,25 @@ mod tests {
             "m/84'/0'/0'",
         );
         assert!(!mainnet_ledger_failure.message.contains("Bitcoin Test"));
+
+        let locked_ledger = missing_hardware_fingerprint("ledger");
+        assert_eq!(locked_ledger.code, "hardware_unavailable");
+        assert!(locked_ledger.message.contains("Unlock Ledger"));
+        assert!(locked_ledger.message.contains("Bitcoin Test—not Bitcoin"));
+        assert!(!locked_ledger.message.contains("fingerprint"));
+
+        for (device_type, expected) in [
+            ("bitbox02", "BitBoxApp"),
+            ("jade", "Log in on Jade"),
+            ("coldcard", "enable USB communication"),
+            ("trezor", "PIN-matrix"),
+            ("unknown", "Unlock the hardware wallet"),
+        ] {
+            let error = missing_hardware_fingerprint(device_type);
+            assert_eq!(error.code, "hardware_unavailable");
+            assert!(error.message.contains(expected));
+            assert!(!error.message.contains("fingerprint"));
+        }
     }
 
     #[test]
