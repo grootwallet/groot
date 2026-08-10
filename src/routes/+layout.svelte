@@ -1,10 +1,12 @@
 <script lang="ts">
   import '../app.css';
   import AppShell from '$lib/components/AppShell.svelte';
+  import { page } from '$app/state';
   import { initLocale } from '$lib/i18n';
   import { initDiscreetMode } from '$lib/privacy';
   import { onMount } from 'svelte';
   let { children } = $props();
+  let marketingRoute = $derived(page.url.pathname === '/marketing' || page.url.pathname.startsWith('/marketing/'));
   onMount(() => {
     initLocale();
     initDiscreetMode();
@@ -13,4 +15,8 @@
   });
 </script>
 
-<AppShell>{@render children()}</AppShell>
+{#if marketingRoute}
+  {@render children()}
+{:else}
+  <AppShell>{@render children()}</AppShell>
+{/if}
