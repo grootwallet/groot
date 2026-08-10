@@ -20,6 +20,7 @@
   import { addressPrefixForNetwork, hasAddressPrefixForNetwork } from '$lib/wallet/policy';
   import { compactAddress } from '$lib/address-display';
   import { addressForHardwareDisplay } from '$lib/wallet/hardware-display';
+  import { latestActiveProposal } from '$lib/wallet/proposal-resume';
   import { fly } from 'svelte/transition';
 
   let step = $state(1);
@@ -80,6 +81,16 @@
         address = proposal.recipient; label = proposal.label; amount = String(proposal.amount); speed = 'fast';
         if (externalSigner) externalProposal = (await walletService.externalSignerProposals()).find((item) => item.proposalId === proposal?.proposalId) ?? null;
         step = 2;
+      } else if (externalSigner) {
+        const activeProposal = latestActiveProposal(await walletService.externalSignerProposals());
+        if (activeProposal) {
+          externalProposal = activeProposal;
+          proposal = activeProposal;
+          address = activeProposal.recipient;
+          label = activeProposal.label;
+          amount = String(activeProposal.amount);
+          step = activeProposal.canFinalize ? 3 : 2;
+        }
       }
     } catch (cause) {
       signerSummaryReady = true;

@@ -353,6 +353,11 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   await expect(page.getByRole('region', { name: 'Signed transaction review' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Sign with cable' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Show unsigned QR' })).toHaveCount(0);
+  await page.getByRole('link', { name: 'Overview' }).click();
+  await page.getByRole('link', { name: 'Send', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Review signed transaction' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Signed transaction review' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Sign with cable' })).toHaveCount(0);
   await page.getByLabel('App PIN', { exact: true }).fill('hardware-pin');
   await page.getByRole('button', { name: 'Finalize & broadcast' }).click();
   await expect(page.getByRole('heading', { name: 'Payment sent' })).toBeVisible();
