@@ -319,6 +319,11 @@ export class DummyWalletAdapter implements WalletPort {
     if (!this.#externalWallet || this.#profiles.find((profile) => profile.id === this.#selectedWalletId)?.kind !== 'watch_only') throw new WalletError('wallet_not_found', 'No external-signer wallet exists.');
     return structuredClone(this.#externalWallet);
   }
+  async exportExternalSignerDescriptor(credential: string) {
+    if (!this.#selectedWalletId || credential !== this.#credentials.get(this.#selectedWalletId)) throw new WalletError('invalid_credential', 'Incorrect app PIN.');
+    if (!this.#externalWallet) throw new WalletError('wallet_not_found', 'No external-signer wallet exists.');
+    return this.#externalWallet.externalDescriptor;
+  }
   async externalSignerProposals() { return structuredClone([...this.#externalProposals.values()]); }
   async importExternalSignerProposal(proposalId: string, reviewedPsbt: string, _signedPsbt: string) {
     const proposal = this.#externalProposals.get(proposalId); if (!proposal) throw new WalletError('proposal_not_found', 'Proposal not found.');

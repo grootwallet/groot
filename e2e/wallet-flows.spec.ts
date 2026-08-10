@@ -375,6 +375,21 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   await expect(page.getByRole('heading', { name: 'Payment sent' })).toBeVisible();
 
   await page.getByRole('link', { name: 'Settings' }).click();
+  await page.getByRole('button', { name: /Export public descriptor/ }).click();
+  const descriptorDialog = page.getByRole('dialog', { name: 'Export public descriptor' });
+  await descriptorDialog.getByLabel('App PIN', { exact: true }).fill('wrong-pin');
+  await descriptorDialog.getByRole('button', { name: 'Prepare backup' }).click();
+  await expect(descriptorDialog.getByRole('alert')).toHaveText('Incorrect app PIN.');
+  await descriptorDialog.getByLabel('App PIN', { exact: true }).fill('hardware-pin');
+  await descriptorDialog.getByRole('button', { name: 'Prepare backup' }).click();
+  await expect(descriptorDialog.getByText('Public descriptor ready', { exact: true })).toBeVisible();
+  await descriptorDialog.getByText('View descriptor', { exact: true }).click();
+  await expect(descriptorDialog.getByLabel('Public hardware wallet descriptor')).toHaveValue(/^wpkh\(/);
+  const descriptorDownload = page.waitForEvent('download');
+  await descriptorDialog.getByRole('button', { name: 'Save descriptor' }).click();
+  await expect((await descriptorDownload).suggestedFilename()).toBe('satchel-hardware-wallet.desc');
+  await expect(page.getByText('Descriptor backup saved', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Close' }).click();
   await page.getByRole('button', { name: /Bitcoin Core node/ }).click();
   await page.getByRole('button', { name: 'Remote TLS' }).click();
   await page.getByLabel('RPC URL').fill('https://regtest-node.example:18443');

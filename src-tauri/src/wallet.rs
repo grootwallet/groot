@@ -4594,6 +4594,19 @@ pub fn external_signer_wallet(
     read_external_signer_metadata(&app)
 }
 
+#[tauri::command]
+pub fn external_signer_export_descriptor(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    credential: String,
+) -> ApiResult<String> {
+    let _operation = operation_guard(&state)?;
+    require_unlocked(&app, &state)?;
+    let credential = Zeroizing::new(credential);
+    verify_external_signer_credential(&app, credential.as_str())?;
+    Ok(read_external_signer_metadata(&app)?.external_descriptor)
+}
+
 fn external_proposal_dto(
     row: (String, String, String, u64, u64, f64, String, String, u64),
     fingerprint: &str,

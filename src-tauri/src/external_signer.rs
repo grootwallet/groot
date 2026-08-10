@@ -327,6 +327,21 @@ mod tests {
     }
 
     #[test]
+    fn exported_receive_descriptor_reconstructs_the_same_wallet() {
+        let input = ExternalSignerInput {
+            label: "Ledger".into(),
+            fingerprint: "d34db33f".into(),
+            xpub: test_xpub(),
+            derivation_path: SINGLESIG_ACCOUNT_PATH.into(),
+            source: SignerSource::Usb,
+            device_type: Some("ledger".into()),
+        };
+        let original = descriptors(&input).unwrap();
+        let recovered = parse_import(&original.0, "Recovered", SignerSource::File).unwrap();
+        assert_eq!(descriptors(&recovered).unwrap(), original);
+    }
+
+    #[test]
     fn every_error_code_and_validation_branch_is_stable() {
         let cases = [
             (ExternalSignerError::TooLarge, "import_too_large"),

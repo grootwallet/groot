@@ -128,6 +128,7 @@ export class TauriWalletAdapter implements WalletPort {
   importHardwareExternalSigner(deviceId: string, label: string, allowEmptyPassphrase = false) { return command<ExternalSigner>('hardware_import_external_signer', { deviceId, label, allowEmptyPassphrase }); }
   createExternalSignerWallet(name: string, signer: ExternalSigner, credential: string) { return command<ExternalSignerWallet>('external_signer_create', { name, signer, credential }); }
   externalSignerWallet() { return command<ExternalSignerWallet>('external_signer_wallet'); }
+  exportExternalSignerDescriptor(credential: string) { return command<string>('external_signer_export_descriptor', { credential }); }
   externalSignerProposals() { return command<MultisigProposal[]>('external_signer_proposals'); }
   importExternalSignerProposal(proposalId: string, reviewedPsbt: string, signedPsbt: string) { return command<MultisigProposal>('external_signer_proposal_import', { proposalId, reviewedPsbt, signedPsbt }); }
   signExternalWithHardware(proposalId: string, deviceId: string, reviewedPsbt: string) { return command<MultisigProposal>('hardware_sign_external', { proposalId, deviceId, reviewedPsbt }); }

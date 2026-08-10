@@ -58,6 +58,7 @@ pub fn run() {
             wallet::hardware_import_external_signer,
             wallet::external_signer_create,
             wallet::external_signer_wallet,
+            wallet::external_signer_export_descriptor,
             wallet::external_signer_proposals,
             wallet::external_signer_proposal_import,
             wallet::hardware_sign_external,
