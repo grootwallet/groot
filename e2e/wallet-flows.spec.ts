@@ -346,7 +346,14 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   await page.getByRole('button', { name: /Virtual Coldcard/ }).click();
   await expect(page.getByRole('status', { name: 'Waiting for hardware signature' })).toContainText('Review the recipient, amount, fee, and change');
   await expect(page.getByText('Signature verified')).toBeVisible();
-  await expect(page.getByRole('region', { name: 'Signed transaction review' })).toBeVisible();
+  const signedReview = page.getByRole('region', { name: 'Signed transaction review' });
+  await expect(signedReview).toBeVisible();
+  expect(await signedReview.locator(':scope > .details-list').evaluate((element) => getComputedStyle(element).borderTopWidth)).toBe('0px');
+  expect(await signedReview.locator('.proposal-review-details').evaluate((element) => getComputedStyle(element).borderBottomWidth)).toBe('0px');
+  const signaturePanel = page.locator('.ready-panel').filter({ hasText: 'Signature verified' });
+  const signatureTitle = await signaturePanel.locator('strong').boundingBox();
+  const signatureDetail = await signaturePanel.locator('small').boundingBox();
+  expect(Math.abs((signatureTitle?.x ?? 0) - (signatureDetail?.x ?? 0))).toBeLessThanOrEqual(1);
   await expect(page.getByRole('button', { name: 'Sign with cable' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Show unsigned QR' })).toHaveCount(0);
   await page.getByRole('link', { name: 'Overview' }).click();
