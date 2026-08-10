@@ -295,7 +295,11 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   await expect(page.locator('.address-label').getByText('Not verified', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Verify on device' }).click();
   await page.getByRole('button', { name: /Virtual Coldcard/ }).click();
-  await expect(page.locator('.address-label').getByText('Verified', { exact: true })).toBeVisible();
+  const hardwareVerification = page.getByRole('button', { name: /Verified on hardware/ });
+  await expect(hardwareVerification).toBeVisible();
+  await hardwareVerification.click();
+  await expect(page.getByRole('tooltip')).toHaveText('This exact address was shown on and matched by a saved hardware signer. The verification applies only to this address.');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.getByRole('button', { name: 'Show address details' }).click();
   await expect(page.getByText('Hardware verified', { exact: true })).toBeVisible();
   await expect(page.getByText('Signer fingerprint', { exact: true })).toBeVisible();

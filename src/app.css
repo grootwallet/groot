@@ -242,9 +242,12 @@ code { font-family: "SFMono-Regular", Consolas, ui-monospace, monospace; }
 .qr-placeholder img { width: 100%; height: 100%; display: block; image-rendering: pixelated; }
 .form-error { color: var(--danger, #b42318); font-size: 13px; margin: 0 0 14px; }
 .address-label { margin-top: 21px; text-align: center; display: flex; flex-direction: column; gap: 5px; }
-.address-label span { font-size: 15px; font-weight: 600; }
+.address-label > span:first-child { font-size: 15px; font-weight: 600; }
 .address-label small { color: var(--accent); font-size: 11px; }
-.address-label small.verified { display: inline-flex; align-items: center; justify-content: center; gap: 5px; color: var(--success); }
+.address-label .tooltip-anchor { align-self: center; }
+.hardware-verification-status { min-height: 28px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; padding: 2px 4px; border: 0; border-radius: 6px; color: var(--success); background: transparent; font-size: 11px; cursor: help; }
+.hardware-verification-status:hover { background: color-mix(in srgb, var(--success) 8%, transparent); }
+.hardware-verification-status:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .address-box { margin-top: 17px; width: 100%; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-control); color: var(--text-soft); padding: 13px 14px; display: flex; gap: 12px; align-items: center; cursor: pointer; }
 .address-box code { font-size: 11px; text-align: left; flex: 1; word-break: break-all; }
 .receive-actions { display: flex; gap: 8px; margin-top: 17px; }
@@ -815,6 +818,9 @@ code { font-family: "SFMono-Regular", Consolas, ui-monospace, monospace; }
 }
 
 @media (max-width: 760px) {
+  .hardware-verification-status { min-height: 44px; padding-inline: 8px; cursor: pointer; }
+  .receive-actions { width: 100%; flex-wrap: wrap; }
+  .receive-actions > .button { flex: 1 1 140px; }
   .mobile-wallet-manager { display: block; }
   .modal-layer { align-items: flex-end; padding: max(10px, env(safe-area-inset-top)) 10px max(10px, env(safe-area-inset-bottom)); }
   .modal { width: 100%; max-height: calc(100dvh - max(20px, env(safe-area-inset-top) + env(safe-area-inset-bottom))); border-radius: 14px; }

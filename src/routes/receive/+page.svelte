@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Check, CheckCircle2, ChevronDown, ChevronRight, Copy, Cpu, Plus, QrCode, ShieldCheck, Trash2 } from '@lucide/svelte';
+  import { Check, ChevronDown, ChevronRight, Copy, Cpu, Plus, QrCode, ShieldCheck, Trash2 } from '@lucide/svelte';
   import QRCode from 'qrcode';
   import { onMount, tick } from 'svelte';
   import Button from '$lib/components/Button.svelte';
@@ -7,6 +7,7 @@
   import ReadableAddress from '$lib/components/ReadableAddress.svelte';
   import AddressDetailsModal from '$lib/components/AddressDetailsModal.svelte';
   import LocalTimestamp from '$lib/components/LocalTimestamp.svelte';
+  import HardwareVerificationStatus from '$lib/components/HardwareVerificationStatus.svelte';
   import { compactAddress } from '$lib/address-display';
   import { walletService, type HardwareDevice } from '$lib/wallet';
   import { useWalletShellContext } from '$lib/wallet/shell-context';
@@ -113,7 +114,7 @@
   {#if current}
     <section class="receive-card" bind:this={receiveCard}>
       <button class="qr-placeholder qr-button" aria-label="Enlarge QR code" onclick={() => showQr = true}>{#if qrDataUrl}<img src={qrDataUrl} alt="QR code for {current.address}" />{:else}<QrCode size={154} strokeWidth={1.2} /><span>Generating QR…</span>{/if}</button>
-      <div class="address-label"><span>{current.label}</span>{#if externalSigner}<small class:verified={Boolean(current.hardwareVerifiedAt)}>{#if current.hardwareVerifiedAt}<CheckCircle2 size={14}/>Verified{:else}Not verified{/if}</small>{:else}<small>Awaiting payment</small>{/if}</div>
+      <div class="address-label"><span>{current.label}</span>{#if externalSigner}{#if current.hardwareVerifiedAt}<HardwareVerificationStatus/>{:else}<small>Not verified</small>{/if}{:else}<small>Awaiting payment</small>{/if}</div>
       <button class="address-box" onclick={copy}><code>{current.address}</code>{#if copied}<Check size={17} />{:else}<Copy size={17} />{/if}</button>
       <div class="receive-actions"><Button variant="secondary" onclick={copy}><Copy size={16} />Copy address</Button>{#if externalSigner}<Button variant="secondary" onclick={scanVerification}>{#if current.hardwareVerifiedAt}<ShieldCheck size={16}/>{:else}<Cpu size={16}/>{/if}{current.hardwareVerifiedAt?'Verify again':'Verify on device'}</Button>{/if}<Button variant="ghost-danger" onclick={() => requestDiscard(current!)}><Trash2 size={16} />Discard</Button></div>
       <button class="insight-toggle" onclick={() => showDetails = !showDetails} aria-expanded={showDetails}>{showDetails ? 'Hide' : 'Show'} address details <ChevronDown size={14} class={showDetails ? 'rotated' : ''}/></button>
