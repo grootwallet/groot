@@ -3,6 +3,7 @@
   import { onDestroy, onMount } from 'svelte';
   import Button from '$lib/components/Button.svelte';
   import HardwareActionPrompt from '$lib/components/HardwareActionPrompt.svelte';
+  import TransactionReviewDetails from '$lib/components/TransactionReviewDetails.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import PasswordField from '$lib/components/PasswordField.svelte';
   import AnimatedUrQr from '$lib/components/AnimatedUrQr.svelte';
@@ -77,23 +78,11 @@
   <dl class="details-list proposal-review-primary">
     <div><dt>To</dt><dd><button class="address-review-trigger mono" aria-label="View complete recipient address" onclick={()=>addressOpen=true}>{compactAddress(proposal.recipient)}</button></dd></div>
     <div><dt>Label</dt><dd>{proposal.label}</dd></div>
+    <div><dt>Network</dt><dd>{proposal.network}</dd></div>
     <div><dt>Network fee</dt><dd>{shortSats(Number(proposal.fee))} sats</dd></div>
+    <div class="total"><dt>Total</dt><dd>{shortSats(Number(proposal.total))} sats</dd></div>
   </dl>
-  <details class="proposal-review-details">
-    <summary>View transaction details</summary>
-    <dl class="details-list">
-      <div><dt>Change</dt><dd>{shortSats(Number(proposal.change))} sats</dd></div>
-      {#if proposal.changeAddresses[0]}<div><dt>Change address</dt><dd><button class="address-review-trigger mono" aria-label="View complete change address" onclick={()=>changeAddressOpen=true}>{compactAddress(proposal.changeAddresses[0])}</button></dd></div>{/if}
-      <div><dt>Transaction</dt><dd>{proposal.selectedOutpoints.length} input{proposal.selectedOutpoints.length===1?'':'s'} · {proposal.outputCount} output{proposal.outputCount===1?'':'s'}</dd></div>
-      <div><dt>Network</dt><dd>{proposal.network}</dd></div>
-      <div><dt>Input value</dt><dd>{shortSats(proposal.inputs.reduce((sum,input)=>sum+Number(input.amount),0))} sats</dd></div>
-      <div><dt>Locktime / RBF</dt><dd>{proposal.locktime} · {proposal.rbf?'Enabled':'Disabled'}</dd></div>
-      <div><dt>Fee rate</dt><dd>{proposal.feeRate} sat/vB</dd></div>
-      <div><dt>Total debit</dt><dd>{shortSats(Number(proposal.total))} sats</dd></div>
-      <div><dt>Wallet policy</dt><dd>{wallet?.threshold} of {wallet?.cosigners.length}</dd></div>
-    </dl>
-    <details class="proposal-review-inputs"><summary>Inspect input outpoints and sequences</summary><dl class="details-list">{#each proposal.inputs as input}<div><dt><code>{input.outpoint}</code></dt><dd>{shortSats(input.amount)} sats · sequence {input.sequence}</dd></div>{/each}</dl></details>
-  </details>
+  <TransactionReviewDetails {proposal} policy={`${wallet?.threshold} of ${wallet?.cosigners.length}`} onChangeAddress={()=>changeAddressOpen=true}/>
 <div class="psbt-actions"><Button variant="secondary" onclick={scan}><Cpu size={16}/>Sign with device</Button><Button variant="secondary" onclick={showPsbtQr}><QrCode size={16}/>Show unsigned QR</Button><Button variant="secondary" onclick={()=>{scannedFrames=[];qrScanOpen=true;}}><ScanLine size={16}/>Scan signed QR</Button><Button variant="secondary" onclick={()=>importOpen=true}><FileUp size={16}/>Import signed PSBT</Button><Button variant="secondary" onclick={copyPsbt}><Copy size={16}/>Copy PSBT</Button><Button variant="secondary" loading={savingPsbt} loadingLabel="Saving PSBT…" onclick={saveProposalPsbt}><Download size={16}/>Save PSBT</Button></div>
 {#if proposal.canFinalize}<div class="ready-panel"><LockKeyhole size={18}/><div><strong>Ready to finalize</strong><small>Enter the coordinator app PIN. Hardware signatures are already inside the PSBT.</small></div></div><PasswordField label="App PIN" inputLabel="App PIN" bind:value={pin} autocomplete="current-password"/><Button size="large" class="full" disabled={!pin} loading={busy} loadingLabel="Finalizing & broadcasting…" onclick={broadcast}>Finalize & broadcast</Button>{/if}{#if error}<p class="form-error">{error}</p>{/if}<Button variant="ghost-danger" class="full proposal-cancel-action" disabled={busy} onclick={()=>{cancelError='';cancelOpen=true;}}><X size={15}/>Cancel proposal</Button></section>{#if wallet}<aside class="signer-side-panel"><SignerSummary signers={signerItems} required={wallet.threshold} signedFingerprints={proposal.signedFingerprints} collecting/></aside>{/if}</div>{/if}</div>
 
@@ -103,22 +92,13 @@
       <strong>Transaction to verify</strong>
       <dl class="hardware-review-primary">
         <div><dt>Recipient</dt><dd><button type="button" class="compact-address-button" onclick={()=>addressOpen=true}>{compactAddress(proposal.recipient)}</button></dd></div>
+        <div><dt>Label</dt><dd>{proposal.label}</dd></div>
         <div><dt>Amount</dt><dd>{shortSats(Number(proposal.amount))} sats</dd></div>
+        <div><dt>Network</dt><dd>{proposal.network}</dd></div>
         <div><dt>Network fee</dt><dd>{shortSats(Number(proposal.fee))} sats</dd></div>
+        <div><dt>Total</dt><dd>{shortSats(Number(proposal.total))} sats</dd></div>
       </dl>
-      <details class="hardware-review-details">
-        <summary>View transaction details</summary>
-        <dl>
-          <div><dt>Change</dt><dd>{shortSats(Number(proposal.change))} sats</dd></div>
-          {#if proposal.changeAddresses[0]}<div><dt>Change address</dt><dd><button type="button" class="compact-address-button" onclick={()=>changeAddressOpen=true}>{compactAddress(proposal.changeAddresses[0])}</button></dd></div>{/if}
-          <div><dt>Transaction</dt><dd>{proposal.selectedOutpoints.length} input{proposal.selectedOutpoints.length===1?'':'s'} · {proposal.outputCount} output{proposal.outputCount===1?'':'s'}</dd></div>
-          <div><dt>Network</dt><dd>{proposal.network}</dd></div>
-          <div><dt>Input value</dt><dd>{shortSats(proposal.inputs.reduce((sum,input)=>sum+Number(input.amount),0))} sats</dd></div>
-          <div><dt>Locktime / RBF</dt><dd>{proposal.locktime} · {proposal.rbf?'Enabled':'Disabled'}</dd></div>
-          <div><dt>Wallet policy</dt><dd>{wallet?.threshold} of {wallet?.cosigners.length}</dd></div>
-        </dl>
-        <details class="proposal-review-inputs"><summary>Inspect input outpoints and sequences</summary><dl>{#each proposal.inputs as input}<div><dt><code>{input.outpoint}</code></dt><dd>{shortSats(input.amount)} sats · sequence {input.sequence}</dd></div>{/each}</dl></details>
-      </details>
+      <TransactionReviewDetails {proposal} compact policy={`${wallet?.threshold} of ${wallet?.cosigners.length}`} onChangeAddress={()=>changeAddressOpen=true}/>
     </section>
   {/if}
   {#if busy}

@@ -317,6 +317,10 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   await page.getByRole('button', { name: 'Continue to amount' }).click();
   await page.getByLabel('Amount', { exact: true }).fill('1200');
   await page.getByRole('button', { name: 'Review payment' }).click();
+  await expect(page.getByText('Fee rate', { exact: true })).toBeHidden();
+  await page.getByText('View more details', { exact: true }).click();
+  await expect(page.getByText('Fee rate', { exact: true })).toBeVisible();
+  await expect(page.getByText('Input outpoints and sequences', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Continue to sign' }).click();
   await expect(page.getByRole('heading', { name: 'Sign on your hardware' })).toBeVisible();
   const psbtDownload = page.waitForEvent('download');
@@ -334,6 +338,10 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   await page.getByRole('button', { name: 'Close' }).click();
   await page.getByRole('button', { name: 'Sign with cable' }).click();
   await expect(page.getByRole('status', { name: 'Hardware device scan in progress' })).toContainText('Looking for hardware devices');
+  const hardwareReview = page.getByRole('dialog', { name: 'Sign with hardware' });
+  await expect(hardwareReview.getByText('Fee rate', { exact: true })).toBeHidden();
+  await hardwareReview.getByText('View more details', { exact: true }).click();
+  await expect(hardwareReview.getByText('Fee rate', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: /Virtual Coldcard/ }).click();
   await expect(page.getByRole('status', { name: 'Waiting for hardware signature' })).toContainText('Review the recipient, amount, fee, and change');
   await expect(page.getByText('Signature verified')).toBeVisible();
@@ -462,7 +470,9 @@ test('pending transaction opens RBF and CPFP review without bypassing signing', 
     await page.getByRole('button', { name: /Invoice #104/ }).click();
     await page.getByRole('link', { name: action }).click();
     await expect(page).toHaveURL(action === 'Increase fee' ? /accelerate=rbf/ : /accelerate=cpfp/);
-    await expect(page.getByText('Fee rate')).toBeVisible();
+    await expect(page.getByText('Fee rate', { exact: true })).toBeHidden();
+    await page.getByText('View more details', { exact: true }).click();
+    await expect(page.getByText('Fee rate', { exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Continue to sign' })).toBeVisible();
   }
 });

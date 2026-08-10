@@ -49,6 +49,10 @@ test('spends end-to-end from the ready-made demo vault', async ({ page }) => {
   await page.getByLabel('Amount', { exact: true }).fill('50000');
   await page.getByRole('button', { name: 'Review payment' }).click();
   await expect(page.getByText('Test purchase', { exact: true })).toBeVisible();
+  await expect(page.getByText('Fee rate', { exact: true })).toBeHidden();
+  await page.getByText('View more details', { exact: true }).click();
+  await expect(page.getByText('Fee rate', { exact: true })).toBeVisible();
+  await expect(page.getByText('Input outpoints and sequences', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'View complete recipient address' }).click();
   const addressDialog = page.getByRole('dialog', { name: 'Recipient address' });
   await expect(addressDialog.getByRole('button', { name: 'Copy exact address' })).toBeVisible();
@@ -84,6 +88,9 @@ test('spends end-to-end from the ready-made demo vault', async ({ page }) => {
   await unsignedQrDialog.getByRole('button', { name: 'Close' }).click();
   await page.getByRole('button', { name: 'Sign with device' }).click();
   const hardwareDialog = page.getByRole('dialog', { name: 'Sign with hardware' });
+  await expect(hardwareDialog.getByText('Fee rate', { exact: true })).toBeHidden();
+  await hardwareDialog.getByText('View more details', { exact: true }).click();
+  await expect(hardwareDialog.getByText('Fee rate', { exact: true })).toBeVisible();
   await hardwareDialog.getByRole('button', { name: /Virtual Ledger outsider/ }).click();
   await expect(hardwareDialog.getByText('The connected device is not a cosigner in this wallet policy.')).toBeVisible();
   await expect(hardwareDialog.getByRole('button', { name: 'Rescan', exact: true })).toBeVisible();
