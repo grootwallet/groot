@@ -8,6 +8,7 @@
   import AddressDetailsModal from '$lib/components/AddressDetailsModal.svelte';
   import LocalTimestamp from '$lib/components/LocalTimestamp.svelte';
   import HardwareVerificationStatus from '$lib/components/HardwareVerificationStatus.svelte';
+  import HardwareApprovalPrompt from '$lib/components/HardwareApprovalPrompt.svelte';
   import { compactAddress } from '$lib/address-display';
   import { walletService, type HardwareDevice } from '$lib/wallet';
   import { useWalletShellContext } from '$lib/wallet/shell-context';
@@ -163,12 +164,11 @@
     <section class="verification-address" aria-label="Address to compare">
       <span>{ledgerVerification ? 'Address shown on Ledger' : 'Address to compare'}</span>
       <ReadableAddress address={ledgerVerification ? current.testnetAlias! : current.address} {copied} oncopy={copyVerificationAddress}/>
-      {#if ledgerVerification}<p class="verification-network-note">Ledger shows <code>tb1</code> because Bitcoin Test has no Regtest address format. Satchel uses <code>bcrt1</code>. The prefix and six-character checksum differ; the decoded Bitcoin output is identical.</p>{/if}
-      <details class="hardware-review-details verification-details"><summary>View address details</summary><dl class="verification-derivation"><div><dt>Derivation</dt><dd><code>{current.derivationPath}</code></dd></div><div><dt>Address index</dt><dd><code>{current.id}</code></dd></div></dl></details>
+      <details class="verification-details"><summary>Address details</summary>{#if ledgerVerification}<p class="verification-network-note">Ledger shows <code>tb1</code> because Bitcoin Test has no Regtest address format. Satchel uses <code>bcrt1</code>. The prefix and six-character checksum differ; the decoded Bitcoin output is identical.</p>{/if}<dl class="verification-derivation"><div><dt>Derivation</dt><dd><code>{current.derivationPath}</code></dd></div><div><dt>Address index</dt><dd><code>{current.id}</code></dd></div></dl></details>
     </section>
   {/if}
   {#if verifyBusy}
-    <div class="device-scan compact"><Cpu size={20}/><span>Waiting for the hardware signer… Approve only if the complete address above matches its display.</span></div>
+    <HardwareApprovalPrompt/>
   {:else}
     <div class="source-list hardware-device-list">{#each devices as device}<button disabled={device.status!=='ready'&&device.status!=='detected'} onclick={()=>verifyAddress(device)}><Cpu size={18}/><span><strong>{device.label}</strong><small>{device.fingerprint??device.message}</small></span></button>{:else}<p>No compatible saved signer found. Unlock it and scan again.</p>{/each}</div>
     <Button class="verification-rescan" variant="secondary" onclick={scanVerification}>Scan again</Button>
