@@ -20,20 +20,28 @@
     if (loading) return;
     loading = true;
     try {
-      const fees = await walletService.estimateFees();
-      priorityFee = Number(fees.priority);
+      try {
+        const fees = await walletService.estimateFees();
+        priorityFee = Number(fees.priority);
+      } catch {
+        priorityFee = null;
+      }
       if (locked) {
         nodeHeight = null;
         nodeConfig = null;
         nodeReachable = null;
       } else {
-        const [config, status] = await Promise.all([walletService.nodeConfig(), walletService.testNodeConnection()]);
-        nodeConfig = config;
-        nodeHeight = status.blocks;
-        nodeReachable = status.connected;
+        try {
+          const [config, status] = await Promise.all([walletService.nodeConfig(), walletService.testNodeConnection()]);
+          nodeConfig = config;
+          nodeHeight = status.blocks;
+          nodeReachable = status.connected;
+        } catch {
+          nodeHeight = null;
+          nodeConfig = null;
+          nodeReachable = false;
+        }
       }
-    } catch {
-      if (!locked) nodeReachable = false;
     } finally {
       checked = true;
       loading = false;

@@ -19,6 +19,21 @@ test('routes receive address creation through the selected wallet kind', async (
   await expect(page.getByRole('button', { name: 'New receive address' })).toBeVisible();
 });
 
+test('multisig acceleration requires an explicit rate when estimates are unavailable', async ({ page }) => {
+  await page.goto('/multisig/send?fixture-fee-estimates-unavailable=1&accelerate=rbf&txid=6a1b2c3d4e5f67890123456789abcdef6a1b2c3d4e5f67890123456789abcdef');
+
+  await expect(page.getByRole('heading', { name: 'Enter a custom fee rate' })).toBeVisible();
+  await expect(page.getByText(/will not invent one/)).toBeVisible();
+  const review = page.getByRole('button', { name: 'Review acceleration' });
+  await expect(review).toBeDisabled();
+  await page.getByLabel('Custom acceleration fee rate').fill('18');
+  await expect(review).toBeEnabled();
+  await review.click();
+  const transactionReview = page.getByRole('region', { name: 'Transaction review' });
+  await expect(transactionReview).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Payment signers' })).toContainText('2 of 3');
+});
+
 test('spends end-to-end from the ready-made demo vault', async ({ page }) => {
   test.setTimeout(60_000);
   await page.addInitScript(() => {

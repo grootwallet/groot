@@ -188,6 +188,7 @@ export type WalletErrorCode =
   | 'address_not_discardable'
   | 'address_not_found'
   | 'network_unavailable'
+  | 'fee_estimate_unavailable'
   | 'wallet_locked'
   | 'invalid_inactivity_timeout'
   | 'wallet_not_found'

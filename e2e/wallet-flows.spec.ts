@@ -841,6 +841,42 @@ test('custom fees validate and wallet deletion requires typed confirmation', asy
   await expect(page.getByText('Enter this wallet’s app PIN to continue.')).toBeVisible();
 });
 
+test('fee estimate failure never invents a send rate and preserves the custom path', async ({ page }) => {
+  await page.goto('/send?fixture-fee-estimates-unavailable=1');
+  await page.getByLabel('Bitcoin address').fill('bcrt1qreceiver0000000000000000000000000000000');
+  await page.getByLabel('Payment label').fill('Explicit fee test');
+  await page.getByRole('button', { name: 'Continue to amount' }).click();
+  await page.getByLabel('Amount', { exact: true }).fill('1000');
+
+  await expect(page.getByRole('alert')).toContainText('Bitcoin Core has no usable fee estimate');
+  for (const preset of ['Economy', 'Standard', 'Priority']) {
+    const button = page.getByRole('button', { name: new RegExp(`^${preset}`) });
+    await expect(button).toBeDisabled();
+    await expect(button).toContainText('Unavailable');
+  }
+  await expect(page.getByRole('button', { name: 'Review payment' })).toBeDisabled();
+  await page.getByLabel('Custom fee rate').fill('4.25');
+  await expect(page.getByRole('button', { name: 'Review payment' })).toBeEnabled();
+  await page.getByRole('button', { name: 'Review payment' }).click();
+  await expect(page.getByText('Explicit fee test', { exact: true })).toBeVisible();
+});
+
+test('fee estimate failure preserves explicit RBF and CPFP acceleration', async ({ page }) => {
+  for (const action of ['Increase fee', 'Spend output (CPFP)']) {
+    await page.goto('/activity?fixture-fee-estimates-unavailable=1');
+    await page.getByRole('button', { name: /Invoice #104/ }).click();
+    await page.getByRole('link', { name: action }).click();
+    await expect(page.getByRole('heading', { name: 'Enter a custom fee rate' })).toBeVisible();
+    await expect(page.getByText(/will not invent one/)).toBeVisible();
+    const review = page.getByRole('button', { name: 'Review acceleration' });
+    await expect(review).toBeDisabled();
+    await page.getByLabel('Custom acceleration fee rate').fill('15');
+    await expect(review).toBeEnabled();
+    await review.click();
+    await expect(page.getByRole('button', { name: 'Continue to sign' })).toBeVisible();
+  }
+});
+
 test('locked regtest wallet reset requires exact typed confirmation', async ({ page }) => {
   await page.goto('/unlock');
   await page.getByRole('button', { name: 'Delete this regtest wallet' }).click();

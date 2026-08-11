@@ -63,6 +63,8 @@ export class DummyWalletAdapter implements WalletPort {
     && new URLSearchParams(location.search).has('fixture-secure-storage-retry');
   #delayedWalletDataPending = typeof location !== 'undefined'
     && new URLSearchParams(location.search).has('fixture-delayed-wallet-data');
+  #feeEstimatesUnavailable = typeof location !== 'undefined'
+    && new URLSearchParams(location.search).has('fixture-fee-estimates-unavailable');
   #delayedWalletDataScheduled = false;
   #emptyActivitySyncScheduled = false;
 
@@ -270,6 +272,9 @@ export class DummyWalletAdapter implements WalletPort {
   }
 
   async estimateFees(): Promise<FeeEstimates> {
+    if (this.#feeEstimatesUnavailable) {
+      throw new WalletError('fee_estimate_unavailable', 'Bitcoin Core has no usable fee estimate. Enter a custom fee rate.');
+    }
     return { economy: feeRate(3), standard: feeRate(7), priority: feeRate(12), source: 'mempool.space' };
   }
 

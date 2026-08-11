@@ -38,7 +38,7 @@ pub fn validate_first_mainnet_backend(
     if observed_genesis != genesis_block(Network::Bitcoin).block_hash() {
         return Err(ReleasePolicyError::WrongGenesis);
     }
-    if !matches!(backend, ChainBackend::LocalCore { .. }) {
+    if !matches!(backend, ChainBackend::LocalCore { .. }) || backend.validate().is_err() {
         return Err(ReleasePolicyError::UnsupportedBackend);
     }
     Ok(())
@@ -105,6 +105,15 @@ mod tests {
             Err(ReleasePolicyError::WrongGenesis)
         );
         for backend in [
+            ChainBackend::LocalCore {
+                url: "https://remote.example:8332".into(),
+            },
+            ChainBackend::LocalCore {
+                url: "https://user:password@127.0.0.1:8332".into(),
+            },
+            ChainBackend::LocalCore {
+                url: "not-a-url".into(),
+            },
             ChainBackend::RemoteCore {
                 url: "https://node.example".into(),
             },

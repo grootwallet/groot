@@ -5,7 +5,7 @@ use aes_gcm::{
 use argon2::Argon2;
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use bdk_bitcoind_rpc::{
-    bitcoincore_rpc::{Auth, Client, RpcApi},
+    bitcoincore_rpc::{json::EstimateMode, Auth, Client, RpcApi},
     Emitter,
 };
 use bdk_wallet::{
@@ -4435,14 +4435,68 @@ pub fn multisig_coin_set_frozen(
     set_coin_frozen(&mut db, &outpoint, frozen)
 }
 
-#[tauri::command]
-pub fn fees_estimate() -> FeeEstimatesDto {
-    FeeEstimatesDto {
-        economy: 1.0,
-        standard: 2.0,
-        priority: 5.0,
-        source: "Regtest policy",
+fn core_fee_rate(fee_rate: Option<Amount>) -> ApiResult<f64> {
+    let sats_per_kvb = fee_rate
+        .map(Amount::to_sat)
+        .filter(|value| *value > 0)
+        .ok_or_else(|| {
+            api_error(
+                "fee_estimate_unavailable",
+                "Bitcoin Core does not have a fee estimate for this target yet. Enter a custom sat/vB rate or try again later.",
+            )
+        })?;
+    let sats_per_vbyte = sats_per_kvb.div_ceil(1_000);
+    if sats_per_vbyte > 10_000 {
+        return Err(api_error(
+            "fee_estimate_unavailable",
+            "Bitcoin Core returned a fee estimate outside Groot's safe range. Enter a custom sat/vB rate or try again later.",
+        ));
     }
+    Ok(sats_per_vbyte as f64)
+}
+
+fn estimate_core_fee(client: &Client, blocks: u16, mode: EstimateMode) -> ApiResult<f64> {
+    let estimate = client
+        .estimate_smart_fee(blocks, Some(mode))
+        .map_err(|_| {
+            api_error(
+                "fee_estimate_unavailable",
+                "Bitcoin Core fee estimates are unavailable. Enter a custom sat/vB rate or try again later.",
+            )
+        })?;
+    core_fee_rate(estimate.fee_rate)
+}
+
+fn ordered_fee_estimates(economy: f64, standard: f64, priority: f64) -> (f64, f64, f64) {
+    let standard = standard.max(economy);
+    let priority = priority.max(standard);
+    (economy, standard, priority)
+}
+
+#[tauri::command]
+pub fn fees_estimate(app: AppHandle, state: State<'_, AppState>) -> ApiResult<FeeEstimatesDto> {
+    if IS_REGTEST {
+        return Ok(FeeEstimatesDto {
+            economy: 1.0,
+            standard: 2.0,
+            priority: 5.0,
+            source: "Regtest policy",
+        });
+    }
+    require_unlocked(&app, &state)?;
+    let client = rpc_client(&app, &state)?;
+    checked_chain_identity(&client)?;
+    let (economy, standard, priority) = ordered_fee_estimates(
+        estimate_core_fee(&client, 144, EstimateMode::Economical)?,
+        estimate_core_fee(&client, 6, EstimateMode::Conservative)?,
+        estimate_core_fee(&client, 2, EstimateMode::Conservative)?,
+    );
+    Ok(FeeEstimatesDto {
+        economy,
+        standard,
+        priority,
+        source: "Bitcoin Core estimatesmartfee",
+    })
 }
 
 #[tauri::command]
@@ -7469,6 +7523,26 @@ mod tests {
         );
     }
 
+    #[test]
+    fn core_fee_rates_fail_closed_and_round_up_to_integer_sat_per_vbyte() {
+        assert_eq!(core_fee_rate(Some(Amount::from_sat(1_001))).unwrap(), 2.0);
+        assert_eq!(core_fee_rate(Some(Amount::from_sat(1_000))).unwrap(), 1.0);
+        for unavailable in [None, Some(Amount::ZERO)] {
+            assert_eq!(
+                core_fee_rate(unavailable).unwrap_err().code,
+                "fee_estimate_unavailable"
+            );
+        }
+        assert_eq!(
+            core_fee_rate(Some(Amount::from_sat(10_000_001)))
+                .unwrap_err()
+                .code,
+            "fee_estimate_unavailable"
+        );
+        assert_eq!(ordered_fee_estimates(5.0, 2.0, 1.0), (5.0, 5.0, 5.0));
+        assert_eq!(ordered_fee_estimates(1.0, 2.0, 5.0), (1.0, 2.0, 5.0));
+    }
+
     const WORDS: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art";
 
     fn serve_one_http_response(response: Option<&'static [u8]>) -> String {
@@ -7485,6 +7559,45 @@ mod tests {
             }
         });
         format!("http://{address}")
+    }
+
+    fn serve_one_json(body: &'static str) -> String {
+        let response = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        );
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request = [0_u8; 4096];
+            let _ = stream.read(&mut request);
+            stream.write_all(response.as_bytes()).unwrap();
+        });
+        format!("http://{address}")
+    }
+
+    #[test]
+    fn core_fee_estimator_uses_rpc_and_never_falls_back() {
+        let available = serve_one_json(
+            r#"{"result":{"feerate":0.00001001,"errors":[],"blocks":2},"error":null,"id":"groot"}"#,
+        );
+        let client = build_rpc_client(&available, Auth::None, None).unwrap();
+        assert_eq!(
+            estimate_core_fee(&client, 2, EstimateMode::Conservative).unwrap(),
+            2.0
+        );
+
+        let unavailable = serve_one_json(
+            r#"{"result":{"feerate":null,"errors":["Insufficient data"],"blocks":0},"error":null,"id":"groot"}"#,
+        );
+        let client = build_rpc_client(&unavailable, Auth::None, None).unwrap();
+        assert_eq!(
+            estimate_core_fee(&client, 2, EstimateMode::Conservative)
+                .unwrap_err()
+                .code,
+            "fee_estimate_unavailable"
+        );
     }
 
     #[test]

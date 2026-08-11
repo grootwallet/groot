@@ -37,11 +37,13 @@
   let preparing = $state(false);
   let available = $state(0);
   let estimates = $state<FeeEstimates | null>(null);
+  let feeEstimateError = $state('');
   let proposal = $state<PaymentProposal | null>(null);
   let txid = $state('');
   let sentAmount = $state(0);
   let balanceSyncPending = $state(false);
   let accelerationMethod = $state<'rbf' | 'cpfp' | null>(null);
+  let accelerationRequest = $state<{ txid: string; method: 'rbf' | 'cpfp' } | null>(null);
   let coins = $state<Utxo[]>([]);
   let selectedCoins = $state<string[]>([]);
   let showCoins = $state(false);
@@ -51,8 +53,9 @@
   let importError = $state('');
   let hardwareAction = $state<'scan' | 'sign'>('scan');
   const selection = $derived<CoinSelection>(selectedCoins.length ? { mode: 'manual', outpoints: selectedCoins } : { mode: 'auto' });
-  const fees = $derived({ slow: Number(estimates?.economy ?? 1), medium: Number(estimates?.standard ?? 2), fast: Number(estimates?.priority ?? 5) });
+  const fees = $derived({ slow: Number(estimates?.economy ?? 0), medium: Number(estimates?.standard ?? 0), fast: Number(estimates?.priority ?? 0) });
   const selectedFeeRate = $derived(speed === 'custom' ? Number(customFee || 0) : fees[speed as keyof typeof fees]);
+  const customFeeValid = $derived(Number.isFinite(Number(customFee)) && Number(customFee) > 0 && Number(customFee) <= 10_000);
   const fee = $derived(Number(proposal?.fee ?? Math.max(0, Math.round(selectedFeeRate * 141))));
   const amountSats = $derived(Number(amount || 0));
   const addressValid = $derived(hasAddressPrefixForNetwork(address, defaultConfig.network));
@@ -66,7 +69,7 @@
 
   onMount(async () => {
     try {
-      const [snapshot, feeData, registry] = await Promise.all([walletService.snapshot(), walletService.estimateFees(), walletService.profiles()]);
+      const [snapshot, registry] = await Promise.all([walletService.snapshot(), walletService.profiles()]);
       externalSigner = registry.wallets.find((profile) => profile.id === registry.selectedWalletId)?.kind === 'watch_only';
       try { externalWallet = await walletService.externalSignerWallet(); externalSigner = true; } catch { /* selected wallet is not externally signed */ }
       signerSummaryReady = true;
@@ -74,16 +77,26 @@
       const requested = new URL(window.location.href).searchParams.get('coins')?.split(',').filter(Boolean) ?? [];
       selectedCoins = requested.filter((outpoint) => snapshot.utxos.some((coin) => coin.outpoint === outpoint && !coin.frozen));
       available = snapshot.utxos.filter((coin) => !coin.frozen && (!selectedCoins.length || selectedCoins.includes(coin.outpoint))).reduce((total, coin) => total + coin.amount, 0);
-      estimates = feeData;
+      try {
+        estimates = await walletService.estimateFees();
+      } catch (cause) {
+        feeEstimateError = cause instanceof Error ? cause.message : 'Bitcoin Core fee estimates are unavailable.';
+        speed = 'custom';
+        toast({ title: 'Fee estimates unavailable', description: feeEstimateError, tone: 'danger' });
+      }
       const url = new URL(window.location.href);
       const acceleration = url.searchParams.get('accelerate');
       const accelerationTxid = url.searchParams.get('txid');
       if (accelerationTxid && (acceleration === 'rbf' || acceleration === 'cpfp')) {
         accelerationMethod = acceleration;
-        proposal = await walletService.prepareAcceleration(accelerationTxid, acceleration, asFeeRate(Number(feeData.priority)));
-        address = proposal.recipient; label = proposal.label; amount = String(proposal.amount); speed = 'fast';
-        if (externalSigner) externalProposal = (await walletService.externalSignerProposals()).find((item) => item.proposalId === proposal?.proposalId) ?? null;
-        step = 2;
+        accelerationRequest = { txid: accelerationTxid, method: acceleration };
+        if (estimates) {
+          proposal = await walletService.prepareAcceleration(accelerationTxid, acceleration, asFeeRate(Number(estimates.priority)));
+          address = proposal.recipient; label = proposal.label; amount = String(proposal.amount); speed = 'fast';
+          if (externalSigner) externalProposal = (await walletService.externalSignerProposals()).find((item) => item.proposalId === proposal?.proposalId) ?? null;
+          accelerationRequest = null;
+          step = 2;
+        }
       } else if (externalSigner) {
         const activeProposal = latestActiveProposal(await walletService.externalSignerProposals());
         if (activeProposal) {
@@ -115,6 +128,24 @@
     } catch (cause) {
       toast({ title: 'Could not prepare payment', description: cause instanceof Error ? cause.message : undefined, tone: 'danger' });
     } finally { preparing = false; }
+  }
+
+  async function prepareCustomAcceleration() {
+    if (!accelerationRequest || !customFeeValid) return;
+    preparing = true;
+    try {
+      proposal = await walletService.prepareAcceleration(accelerationRequest.txid, accelerationRequest.method, asFeeRate(Number(customFee)));
+      address = proposal.recipient;
+      label = proposal.label;
+      amount = String(proposal.amount);
+      if (externalSigner) externalProposal = (await walletService.externalSignerProposals()).find((item) => item.proposalId === proposal?.proposalId) ?? null;
+      accelerationRequest = null;
+      step = 2;
+    } catch (cause) {
+      feeEstimateError = cause instanceof Error ? cause.message : 'Could not prepare fee acceleration.';
+    } finally {
+      preparing = false;
+    }
   }
 
   function useAutomatic() {
@@ -162,7 +193,14 @@
   {#if step < 4}<SendProgress current={progressStep} />{/if}
   {#if step < 4 && signerSummaryReady}<SignerSummary signers={signerItems} signedFingerprints={externalProposal?.signedFingerprints ?? []} collecting={externalSigner && Boolean(proposal)} />{/if}
 
-  {#if step === 1 && draftStep === 1}
+  {#if step === 1 && accelerationRequest}
+    <form class="form-card send-stage-card" onsubmit={(event) => { event.preventDefault(); prepareCustomAcceleration(); }}>
+      <div class="send-stage-heading"><span>FEE ACCELERATION</span><h2>Enter a custom fee rate</h2><p>Bitcoin Core has no usable estimate. Groot will not invent one; choose the sat/vB rate you want to review.</p></div>
+      <label class="field"><span>Custom fee rate</span><div class="amount-input"><input aria-label="Custom acceleration fee rate" bind:value={customFee} inputmode="decimal" placeholder="0"/><b>sat/vB</b></div><small>Required · greater than 0 and at most 10,000 sat/vB</small></label>
+      {#if feeEstimateError}<p class="form-error" role="alert">{feeEstimateError}</p>{/if}
+      <Button type="submit" disabled={!customFeeValid} loading={preparing} loadingLabel="Preparing acceleration…" size="large" class="full">Review acceleration<ArrowRight size={17}/></Button>
+    </form>
+  {:else if step === 1 && draftStep === 1}
     <form class="form-card send-stage-card" onsubmit={(event) => { event.preventDefault(); if (intentValid) draftStep = 2; }} in:fly={{ x: 8, duration: 180 }}>
       <div class="send-stage-heading"><span>STEP 1</span><h2>What is this payment for?</h2><p>This permanent label helps you recognize the transaction later.</p></div>
       <label class="field"><span>Payment label</span><input aria-label="Payment label" bind:value={label} placeholder="e.g. Hardware purchase, Pay Alex, Test transaction" maxlength="48" /><small>Required · cannot be changed · {label.length}/48</small></label>
@@ -178,10 +216,10 @@
       </div>
       <div class="field"><span>Network fee</span><div class="fee-options">
         {#each [{id:'slow',name:'Economy',rate:fees.slow},{id:'medium',name:'Standard',rate:fees.medium},{id:'fast',name:'Priority',rate:fees.fast}] as option}
-          <button type="button" class:active={speed === option.id} onclick={() => speed = option.id}><span><strong>{option.name}</strong><small>Next block</small></span><b>{option.rate} sat/vB</b></button>
+          <button type="button" class:active={speed === option.id} disabled={!estimates} onclick={() => speed = option.id}><span><strong>{option.name}</strong><small>{estimates ? 'Bitcoin Core estimate' : 'Unavailable'}</small></span><b>{estimates ? `${option.rate} sat/vB` : '—'}</b></button>
         {/each}
         <button type="button" class:active={speed === 'custom'} onclick={() => speed = 'custom'}><span><strong>Custom</strong><small>Set rate</small></span>{#if speed === 'custom'}<input aria-label="Custom fee rate" bind:value={customFee} onclick={(event) => event.stopPropagation()} inputmode="decimal" placeholder="0" />{:else}<Gauge size={17} />{/if}</button>
-      </div><small>Fee estimates: {estimates?.source ?? 'loading…'} · Estimated fee {shortSats(fee)} sats</small></div>
+      </div><small>Fee estimates: {estimates?.source ?? 'Unavailable—enter a custom rate'} · Estimated fee {shortSats(fee)} sats</small>{#if feeEstimateError}<p class="form-error" role="alert">{feeEstimateError}</p>{/if}</div>
       <div class="split-actions"><Button variant="secondary" size="large" onclick={() => draftStep = 1}>Back</Button><Button type="submit" disabled={!valid} loading={preparing} loadingLabel="Preparing payment…" size="large">Review payment<ArrowRight size={17} /></Button></div>
     </form>
   {:else if step === 2 && proposal}
