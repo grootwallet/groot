@@ -187,7 +187,7 @@
 
   async function copyPublicKey() {
     if (!selectedSigner) return;
-    await copyText(selectedSigner.xpub);
+    await copyText(selectedSigner.xpub, 'public-wallet-data');
     toast({ title: 'Public key copied', description: `${selectedSigner.label} account key copied.`, tone: 'success' });
   }
 
@@ -233,7 +233,7 @@
   }
 
   async function copyDescriptor(value: string, branch: 'receive' | 'change') {
-    await copyText(value);
+    await copyText(value, 'public-wallet-data');
     toast({ title: `${branch === 'receive' ? 'Receive' : 'Change'} descriptor copied`, description: 'Public watch-only descriptor copied.', tone: 'success' });
   }
 

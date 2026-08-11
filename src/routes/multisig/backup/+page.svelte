@@ -83,7 +83,7 @@
   }
 
   async function copyDescriptor(value: string, label: string) {
-    await copyText(value);
+    await copyText(value, 'public-wallet-data');
     toast({ title: `${label} descriptor copied`, description: 'Public watch-only descriptor copied.', tone: 'success' });
   }
 
@@ -122,7 +122,7 @@
       {:else}
         <div class="backup-ready"><span><Check size={17}/></span><div><strong>Public backup ready</strong><small>{backupFormat === 'bsms' ? 'BSMS 1.0 descriptor record' : 'Groot recovery metadata'}</small></div></div>
         <details class="backup-raw"><summary>View raw backup</summary><textarea aria-label="Descriptor backup" rows="9" readonly value={backup}></textarea></details>
-        <div class="backup-actions"><Button variant="secondary" onclick={async()=>{await copyText(backup);toast({title:'Backup copied',tone:'success'});}}><Copy size={15}/>Copy backup</Button><Button variant="secondary" onclick={saveBackupFile}><Download size={15}/>Download {backupFormat === 'bsms' ? 'BSMS' : 'JSON'}</Button><Button variant="secondary" onclick={printBackup}><Printer size={15}/>Print / save PDF</Button></div>
+        <div class="backup-actions"><Button variant="secondary" onclick={async()=>{await copyText(backup, 'public-wallet-data');toast({title:'Backup copied',tone:'success'});}}><Copy size={15}/>Copy backup</Button><Button variant="secondary" onclick={saveBackupFile}><Download size={15}/>Download {backupFormat === 'bsms' ? 'BSMS' : 'JSON'}</Button><Button variant="secondary" onclick={printBackup}><Printer size={15}/>Print / save PDF</Button></div>
         {#if exportError}<p class="form-error" aria-live="polite">{exportError}</p>{/if}
         <div class="descriptor-qr-preview"><div><span><QrCode size={16}/><strong>Receive descriptor QR</strong></span>{#if receiveQr}<img src={receiveQr} alt="QR code for the receive descriptor"/>{:else}<small>QR unavailable for this descriptor size. Use the downloaded file.</small>{/if}</div><div class="descriptor-copy-row"><code>{wallet.externalDescriptor}</code><button aria-label="Copy receive descriptor" onclick={() => copyDescriptor(wallet!.externalDescriptor, 'Receive')}><Copy size={15}/></button></div></div>
       {/if}

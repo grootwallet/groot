@@ -39,6 +39,7 @@ Dependencies point inward. Routes never select adapters. Rust commands translate
 - Unit: every policy branch, boundary value, parser failure, state transition, and stable error mapping.
 - Integration: database transactions, restart/corruption, BDK descriptors/PSBTs, Core sync/broadcast, and HWI transport adapters.
 - E2E: every user-visible flow, important failure/retry state, accessibility contract, and responsive layout.
+- Secret surfaces: `pnpm test:secret-surfaces` must remain green; new logging, telemetry/crash reporting, clipboard access, CSP origins, or native capability requires an explicit security review and matching threat-model evidence.
 
 Coverage percentages are a floor, not evidence of correct assertions. Security-critical branches require explicit named tests even when line coverage is already complete.
 

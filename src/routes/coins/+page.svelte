@@ -88,9 +88,9 @@
 		);
 	}
 
-  async function copy(value: string, label: string) {
+  async function copy(value: string, label: string, content: 'bitcoin-address' | 'identifier') {
     try {
-      await copyText(value);
+      await copyText(value, content);
       toast({ title: `${label} copied`, tone: 'success' });
     } catch {
       toast({ title: 'Copy failed', description: 'Select and copy it manually.', tone: 'danger' });
@@ -161,7 +161,7 @@
         </div>
         {#if expanded.includes(utxo.outpoint)}
           <div class="coin-details" transition:slide={{ duration: 180 }}>
-            <dl><div><dt>Status</dt><dd>{utxo.confirmations ? formatConfirmationCount(utxo.confirmations, $locale) : `${t('unconfirmed', $locale)} · ${t('awaitingConfirmation', $locale)}`}</dd></div><div><dt>Receive label</dt><dd>{utxo.label}</dd></div><div><dt>Address</dt><dd><code>{compactAddress(utxo.address)}</code><button aria-label="Copy address" onclick={() => copy(utxo.address, 'Address')}><Copy size={13}/></button></dd></div><div><dt>Outpoint</dt><dd><code>{compactAddress(utxo.outpoint, 18, 10)}</code><button aria-label="Copy outpoint" onclick={() => copy(utxo.outpoint, 'Outpoint')}><Copy size={13}/></button></dd></div></dl>
+            <dl><div><dt>Status</dt><dd>{utxo.confirmations ? formatConfirmationCount(utxo.confirmations, $locale) : `${t('unconfirmed', $locale)} · ${t('awaitingConfirmation', $locale)}`}</dd></div><div><dt>Receive label</dt><dd>{utxo.label}</dd></div><div><dt>Address</dt><dd><code>{compactAddress(utxo.address)}</code><button aria-label="Copy address" onclick={() => copy(utxo.address, 'Address', 'bitcoin-address')}><Copy size={13}/></button></dd></div><div><dt>Outpoint</dt><dd><code>{compactAddress(utxo.outpoint, 18, 10)}</code><button aria-label="Copy outpoint" onclick={() => copy(utxo.outpoint, 'Outpoint', 'identifier')}><Copy size={13}/></button></dd></div></dl>
 					{#if reuse}
 						<div class="coin-reuse-details">
 							<div class="coin-reuse-explanation">

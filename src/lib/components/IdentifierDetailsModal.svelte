@@ -16,7 +16,7 @@
 
   async function copy() {
     try {
-      await copyText(value);
+      await copyText(value, 'identifier');
       copied = true;
       toast({ title: `${label} copied`, tone: 'success' });
       setTimeout(() => copied = false, 1_500);

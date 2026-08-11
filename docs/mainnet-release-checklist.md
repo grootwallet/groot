@@ -40,7 +40,7 @@ Candidate scope: first mainnet release is macOS desktop only, hardware-focused, 
 - [ ] iOS Keychain and lifecycle/background behavior are certified on physical devices before an iOS mainnet release.
 - [ ] Android hardware-backed Keystore replaces the sandbox fallback and is certified on physical devices before an Android mainnet release.
 - [ ] Windows Credential Manager replaces the sandbox fallback and is certified before a Windows mainnet release.
-- [ ] Logs, crash reports, accessibility trees, screenshots, clipboard, analytics, and IPC are audited for secrets.
+- [ ] Logs, crash reports, accessibility trees, screenshots, clipboard, analytics, and IPC are audited for secrets. Automated source/capability evidence now rejects production logging and telemetry dependencies, clipboard reads, unclassified or oversized clipboard exports, capability expansion, remote/eval CSP changes, and generated-mnemonic IPC regressions. Remaining: inspect the signed packaged app's OS crash artifacts, native accessibility tree, screen-capture behavior, and clipboard lifecycle.
 
 ## Build and review
 

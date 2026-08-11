@@ -73,7 +73,7 @@
       await tick();
       receiveCard?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       try {
-        await copyText(current.address);
+        await copyText(current.address, 'bitcoin-address');
         copied = true;
         setTimeout(() => copied = false, 1500);
         toast({ title: 'Address ready and copied', description: 'The permanent label is stored locally.', tone: 'success' });
@@ -85,13 +85,13 @@
   };
   const copy = async () => {
     if (!current) return;
-    try { await copyText(current.address); copied = true; toast({ title: 'Address copied', tone: 'success' }); setTimeout(() => copied = false, 1500); }
+    try { await copyText(current.address, 'bitcoin-address'); copied = true; toast({ title: 'Address copied', tone: 'success' }); setTimeout(() => copied = false, 1500); }
     catch { toast({ title: 'Copy failed', description: 'Select and copy the address manually.', tone: 'danger' }); }
   };
   const copyVerificationAddress = async () => {
     if (!current) return;
     const address = ledgerVerification ? current.testnetAlias! : current.address;
-    try { await copyText(address); copied = true; toast({ title: 'Address copied', description: 'The exact comparison address is on your clipboard.', tone: 'success' }); setTimeout(() => copied = false, 1500); }
+    try { await copyText(address, 'bitcoin-address'); copied = true; toast({ title: 'Address copied', description: 'The exact comparison address is on your clipboard.', tone: 'success' }); setTimeout(() => copied = false, 1500); }
     catch { toast({ title: 'Copy failed', description: 'Select and copy the address manually.', tone: 'danger' }); }
   };
   const discard = async () => {

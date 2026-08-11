@@ -19,7 +19,7 @@
   async function copy() {
     if (!address) return;
     try {
-      await copyText(address.address);
+      await copyText(address.address, 'bitcoin-address');
       copied = true;
       toast({ title: 'Address copied', tone: 'success' });
       setTimeout(() => copied = false, 1_500);

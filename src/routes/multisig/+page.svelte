@@ -45,7 +45,7 @@
     };
   });
   async function copyDescriptor(value: string, label: string) {
-    await copyText(value);
+    await copyText(value, 'public-wallet-data');
     toast({ title: `${label} descriptor copied`, description: 'Public watch-only descriptor copied.', tone: 'success' });
   }
   function sourceName(source: CosignerSource) {
@@ -70,7 +70,7 @@
   }
   async function copyPublicKey() {
     if (!selectedSigner) return;
-    await copyText(selectedSigner.xpub);
+    await copyText(selectedSigner.xpub, 'public-wallet-data');
     toast({ title: 'Public key copied', description: `${selectedSigner.label} account key copied.`, tone: 'success' });
   }
   async function runHealthCheck() {

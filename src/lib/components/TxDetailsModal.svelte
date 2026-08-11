@@ -28,7 +28,7 @@
   async function copyTxid() {
     if (!transaction) return;
     try {
-      await copyText(transaction.id);
+      await copyText(transaction.id, 'identifier');
       toast({ title: 'Transaction ID copied', tone: 'success' });
     } catch {
       toast({ title: 'Copy failed', tone: 'danger' });
@@ -38,7 +38,7 @@
   async function copyAddress() {
     if (!transaction?.address) return;
     try {
-      await copyText(transaction.address);
+      await copyText(transaction.address, 'bitcoin-address');
       addressCopied = true;
       toast({ title: 'Address copied', tone: 'success' });
       setTimeout(() => addressCopied = false, 1_500);
