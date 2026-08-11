@@ -1,5 +1,5 @@
 use bdk_bitcoind_rpc::{
-    bitcoincore_rpc::{Auth, Client, RpcApi},
+    bitcoincore_rpc::{json, Auth, Client, RpcApi},
     Emitter,
 };
 use bdk_wallet::{
@@ -45,17 +45,62 @@ fn regtest_dir() -> PathBuf {
 }
 
 fn rpc() -> Client {
+    rpc_for_wallet(None)
+}
+
+fn rpc_for_wallet(wallet: Option<&str>) -> Client {
     let port = std::env::var("GROOT_RPC_PORT").unwrap_or_else(|_| "18443".to_owned());
     let (username, password) = Auth::CookieFile(regtest_dir().join("regtest/.cookie"))
         .get_user_pass()
         .expect("read regtest cookie");
+    let wallet_path = wallet.map_or_else(String::new, |name| format!("/wallet/{name}"));
     let mut builder = jsonrpc::minreq_http::MinreqHttpTransport::builder()
-        .url(&format!("http://127.0.0.1:{port}"))
+        .url(&format!("http://127.0.0.1:{port}{wallet_path}"))
         .expect("regtest RPC URL");
     if let Some(username) = username {
         builder = builder.basic_auth(username, password);
     }
     Client::from_jsonrpc(jsonrpc::Client::with_transport(builder.build()))
+}
+
+struct TemporaryCoreWallet {
+    name: String,
+}
+
+impl TemporaryCoreWallet {
+    fn new() -> Self {
+        let mut suffix = [0_u8; 8];
+        OsRng.fill_bytes(&mut suffix);
+        let suffix = suffix
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>();
+        let name = format!("groot-core-interop-{suffix}");
+        let _: serde_json::Value = rpc()
+            .call(
+                "createwallet",
+                &[
+                    serde_json::json!(name),
+                    serde_json::json!(true),
+                    serde_json::json!(true),
+                    serde_json::json!(""),
+                    serde_json::json!(false),
+                    serde_json::json!(true),
+                ],
+            )
+            .expect("create isolated descriptor-only Core wallet");
+        Self { name }
+    }
+
+    fn client(&self) -> Client {
+        rpc_for_wallet(Some(&self.name))
+    }
+}
+
+impl Drop for TemporaryCoreWallet {
+    fn drop(&mut self) {
+        let _ = rpc().call::<serde_json::Value>("unloadwallet", &[serde_json::json!(self.name)]);
+    }
 }
 
 fn sync(wallet: &mut PersistedWallet<Connection>, db: &mut Connection) {
@@ -199,6 +244,124 @@ fn mine_empty_block(rpc: &Client, destination: &Address) -> BlockHash {
         .expect("generateblock hash")
         .parse()
         .expect("valid generated block hash")
+}
+
+#[test]
+#[ignore = "requires the isolated Bitcoin Core regtest harness"]
+fn bitcoin_core_imports_groot_descriptors_and_recovers_funded_history() {
+    assert!(std::env::var_os("GROOT_RUN_REGTEST").is_some());
+    let keys = keys();
+    let external = descriptor(&keys, 0, None);
+    let internal = descriptor(&keys, 1, None);
+    let coordinator = Wallet::create(external.clone(), internal.clone())
+        .network(Network::Regtest)
+        .create_wallet_no_persist()
+        .expect("Groot-compatible watch-only coordinator");
+    let first_receive = coordinator.peek_address(KeychainKind::External, 0).address;
+    let late_receive = coordinator.peek_address(KeychainKind::External, 37).address;
+    let first_change = coordinator.peek_address(KeychainKind::Internal, 0).address;
+
+    let chain_rpc = rpc();
+    let external_info = chain_rpc
+        .get_descriptor_info(&external)
+        .expect("Bitcoin Core accepts Groot external descriptor");
+    let internal_info = chain_rpc
+        .get_descriptor_info(&internal)
+        .expect("Bitcoin Core accepts Groot internal descriptor");
+    for info in [&external_info, &internal_info] {
+        assert!(info.is_range);
+        assert!(info.is_solvable);
+        assert!(!info.has_private_keys);
+        assert!(info.checksum.is_some());
+    }
+
+    let core_receive = chain_rpc
+        .derive_addresses(&external_info.descriptor, Some([0, 37]))
+        .expect("Bitcoin Core derives Groot receive range");
+    let core_change = chain_rpc
+        .derive_addresses(&internal_info.descriptor, Some([0, 0]))
+        .expect("Bitcoin Core derives Groot change address");
+    assert_eq!(
+        core_receive[0]
+            .clone()
+            .require_network(Network::Regtest)
+            .unwrap(),
+        first_receive
+    );
+    assert_eq!(
+        core_receive[37]
+            .clone()
+            .require_network(Network::Regtest)
+            .unwrap(),
+        late_receive
+    );
+    assert_eq!(
+        core_change[0]
+            .clone()
+            .require_network(Network::Regtest)
+            .unwrap(),
+        first_change
+    );
+
+    let core_wallet = TemporaryCoreWallet::new();
+    let descriptor_wallet = core_wallet.client();
+    for (descriptor, internal) in [
+        (external_info.descriptor, false),
+        (internal_info.descriptor, true),
+    ] {
+        let result = descriptor_wallet
+            .import_descriptors(json::ImportDescriptors {
+                descriptor,
+                timestamp: json::Timestamp::Now,
+                active: Some(true),
+                range: Some((0, 100)),
+                next_index: Some(0),
+                internal: Some(internal),
+                label: None,
+            })
+            .expect("Bitcoin Core imports Groot descriptor");
+        assert_eq!(result.len(), 1);
+        assert!(result[0].success, "Core import failed: {result:?}");
+    }
+
+    let funding_wallet = rpc_for_wallet(Some("groot-dev"));
+    let _: bdk_wallet::bitcoin::Txid = funding_wallet
+        .call(
+            "sendtoaddress",
+            &[
+                serde_json::json!(late_receive.to_string()),
+                serde_json::json!(0.01),
+            ],
+        )
+        .expect("fund the late Groot receive address");
+    let mining = funding_wallet
+        .get_new_address(Some("Core interoperability"), None)
+        .unwrap()
+        .require_network(Network::Regtest)
+        .unwrap();
+    chain_rpc
+        .generate_to_address(1, &mining)
+        .expect("confirm interoperability funding");
+    assert_eq!(
+        descriptor_wallet
+            .get_received_by_address(&late_receive, Some(1))
+            .expect("Core observes imported descriptor history"),
+        Amount::from_sat(1_000_000)
+    );
+
+    let _: serde_json::Value = chain_rpc
+        .call("unloadwallet", &[serde_json::json!(core_wallet.name)])
+        .expect("unload descriptor wallet");
+    let _: serde_json::Value = chain_rpc
+        .call("loadwallet", &[serde_json::json!(core_wallet.name)])
+        .expect("reload descriptor wallet");
+    assert_eq!(
+        core_wallet
+            .client()
+            .get_received_by_address(&late_receive, Some(1))
+            .expect("Core recovery survives wallet restart"),
+        Amount::from_sat(1_000_000)
+    );
 }
 
 #[test]
