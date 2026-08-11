@@ -3,6 +3,7 @@ use tauri::Manager as _;
 pub mod airgap;
 mod auth;
 pub mod bsms;
+mod direct_rpc;
 pub mod external_signer;
 mod hardware;
 mod multisig;
@@ -15,6 +16,7 @@ pub mod recovery;
 pub mod registry;
 mod secure_store;
 mod session;
+mod tor_rpc;
 pub mod ur_transport;
 mod wallet;
 

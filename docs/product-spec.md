@@ -18,7 +18,7 @@ Groot is an onchain-only Bitcoin wallet and multisig coordinator. It prioritizes
 - Regtest creates deterministic high-volume histories in automated tests.
 - Testnet4 is used for final public-network rehearsal before any mainnet work.
 - Mainnet is not a supported selectable network. It requires ADR 0012, the threat model, physical hardware certification, reproducible release evidence, and the release checklist to be independently approved first.
-- Fee estimates and Core RPC endpoints are configurable. Remote Core requires direct HTTPS or an explicit loopback Tor SOCKS5 proxy for an `.onion` endpoint; there is no silent fallback backend or fee.
+- Fee estimates and Core RPC endpoints are configurable. Remote Core requires non-redirecting direct HTTPS or an explicit numeric loopback Tor SOCKS5 proxy for a v3 `.onion` endpoint. RPC operations and responses are bounded; neither transport silently falls back to another endpoint, route, or fee.
 
 ## Onboarding
 

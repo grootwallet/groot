@@ -83,10 +83,11 @@ Use a dedicated least-privilege RPC user, a valid hostname certificate, firewall
 cd /Users/thibm/Documents/Codex/2026-07-17/let
 export GROOT_RPC_URL='https://node.example.test:8332'
 export GROOT_RPC_USER='groot-test'
+export GROOT_EXPECTED_CHAIN='regtest'
 read -s 'GROOT_RPC_PASSWORD?RPC password: '
 export GROOT_RPC_PASSWORD
 pnpm network:preflight
-unset GROOT_RPC_PASSWORD GROOT_RPC_USER GROOT_RPC_URL
+unset GROOT_RPC_PASSWORD GROOT_RPC_USER GROOT_RPC_URL GROOT_EXPECTED_CHAIN
 ```
 
 Then save the same endpoint per wallet in Settings, unlock, sync, compare genesis/network/tip with an independent Core client, and repeat with an invalid certificate, wrong chain, wrong password, timeout, and unreachable host. Every failure must be explicit and must not fall back.
@@ -100,13 +101,14 @@ cd /Users/thibm/Documents/Codex/2026-07-17/let
 export GROOT_RPC_URL='http://examplehiddenservice.onion:8332'
 export GROOT_TOR_PROXY='127.0.0.1:9050'
 export GROOT_RPC_USER='groot-test'
+export GROOT_EXPECTED_CHAIN='regtest'
 read -s 'GROOT_RPC_PASSWORD?RPC password: '
 export GROOT_RPC_PASSWORD
 pnpm network:preflight
-unset GROOT_RPC_PASSWORD GROOT_RPC_USER GROOT_RPC_URL GROOT_TOR_PROXY
+unset GROOT_RPC_PASSWORD GROOT_RPC_USER GROOT_RPC_URL GROOT_TOR_PROXY GROOT_EXPECTED_CHAIN
 ```
 
-Capture only pass/fail evidence. Verify proxy loss, invalid onion, wrong chain, wrong credentials, timeout, and that no direct DNS/network request occurs.
+The preflight places authentication in an owner-only temporary curl configuration rather than the process argument list, requires the expected chain explicitly, caps time and response size, and accepts only a numeric loopback proxy plus a 56-character v3 onion. Capture only pass/fail evidence. Verify proxy loss, invalid onion, wrong chain, wrong credentials, timeout, and that no direct DNS/network request occurs.
 
 ## 6. Reproducible unsigned desktop build
 

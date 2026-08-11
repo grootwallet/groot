@@ -19,6 +19,7 @@ core_modules=(
 
 adapter_modules=(
   airgap.rs
+  direct_rpc.rs
   hardware.rs
   lib.rs
   main.rs
@@ -27,6 +28,7 @@ adapter_modules=(
   process_lock.rs
   registry.rs
   secure_store.rs
+  tor_rpc.rs
   wallet.rs
 )
 
@@ -51,7 +53,7 @@ done < <(find src-tauri/src -maxdepth 1 -type f -name '*.rs' | sort)
 echo "Enforcing deterministic Rust core: ${core_modules[*]}"
 echo "Reporting adapters separately through whole-library coverage: ${adapter_modules[*]}"
 
-adapter_pattern="src/(airgap|hardware|lib|main|native_backup|network|process_lock|registry|secure_store|wallet)\\.rs$"
+adapter_pattern="src/(airgap|direct_rpc|hardware|lib|main|native_backup|network|process_lock|registry|secure_store|tor_rpc|wallet)\\.rs$"
 cargo llvm-cov \
   --locked \
   --manifest-path src-tauri/Cargo.toml \

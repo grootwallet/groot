@@ -43,7 +43,7 @@ impl CoreNodeConfig {
                 let proxy = proxy
                     .parse::<SocketAddr>()
                     .map_err(|_| NetworkConfigError::InvalidProxy)?;
-                let onion = url.host_str().is_some_and(|host| host.ends_with(".onion"));
+                let onion = url.host_str().is_some_and(crate::tor_rpc::is_v3_onion);
                 if !matches!(self.backend, ChainBackend::RemoteCore { .. })
                     || !proxy.ip().is_loopback()
                     || proxy.port() == 0
@@ -54,7 +54,7 @@ impl CoreNodeConfig {
                 }
             }
             None if matches!(self.backend, ChainBackend::RemoteCore { .. })
-                && url.host_str().is_some_and(|host| host.ends_with(".onion")) =>
+                && url.host_str().is_some_and(crate::tor_rpc::is_v3_onion) =>
             {
                 return Err(NetworkConfigError::InvalidProxy)
             }
@@ -63,10 +63,12 @@ impl CoreNodeConfig {
         match self.auth {
             RpcAuthMode::Cookie if self.username.is_some() => Err(NetworkConfigError::InvalidUrl),
             RpcAuthMode::UserPass
-                if self
-                    .username
-                    .as_deref()
-                    .is_none_or(|value| value.is_empty() || value.len() > 128) =>
+                if self.username.as_deref().is_none_or(|value| {
+                    value.is_empty()
+                        || value.len() > 128
+                        || value.contains(':')
+                        || value.chars().any(char::is_control)
+                }) =>
             {
                 Err(NetworkConfigError::InvalidUrl)
             }
@@ -113,7 +115,10 @@ impl ChainBackend {
         if local_only && !is_loopback(host) {
             return Err(NetworkConfigError::InsecureRemote);
         }
-        let onion = host.ends_with(".onion");
+        let onion = crate::tor_rpc::is_v3_onion(host);
+        if host.ends_with(".onion") && !onion {
+            return Err(NetworkConfigError::InvalidProxy);
+        }
         if remote && parsed.scheme() != "https" && !is_loopback(host) && !onion {
             return Err(NetworkConfigError::InsecureRemote);
         }
@@ -132,6 +137,7 @@ impl ChainBackend {
 #[cfg(test)]
 mod tests {
     use super::*;
+    const ONION: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.onion";
     #[test]
     fn accepts_local_and_pinned_public_backends() {
         assert!(ChainBackend::LocalCore {
@@ -154,6 +160,18 @@ mod tests {
             }
             .validate(),
             Err(NetworkConfigError::InsecureRemote)
+        );
+        assert_eq!(
+            CoreNodeConfig {
+                backend: ChainBackend::RemoteCore {
+                    url: "https://node.example".into()
+                },
+                auth: RpcAuthMode::UserPass,
+                username: Some("bad:name".into()),
+                tor_proxy: None,
+            }
+            .validate(),
+            Err(NetworkConfigError::InvalidUrl)
         );
         assert_eq!(
             ChainBackend::RemoteCore {
@@ -233,8 +251,7 @@ mod tests {
     fn tor_requires_a_loopback_socks_proxy_and_onion_http_endpoint() {
         assert!(CoreNodeConfig {
             backend: ChainBackend::RemoteCore {
-                url: "http://exampleexampleexampleexampleexampleexampleexampleexample.onion:8332"
-                    .into()
+                url: format!("http://{ONION}:8332")
             },
             auth: RpcAuthMode::UserPass,
             username: Some("groot".into()),
@@ -256,11 +273,11 @@ mod tests {
         );
         for (url, proxy) in [
             (
-                "http://exampleexampleexampleexampleexampleexampleexampleexample.onion:8332",
+                "http://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.onion:8332",
                 Some("192.168.1.2:9050"),
             ),
             (
-                "http://exampleexampleexampleexampleexampleexampleexampleexample.onion:8332",
+                "http://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.onion:8332",
                 None,
             ),
         ] {
@@ -278,13 +295,23 @@ mod tests {
         assert_eq!(
             CoreNodeConfig {
                 backend: ChainBackend::RemoteCore {
-                    url:
-                        "http://exampleexampleexampleexampleexampleexampleexampleexample.onion:8332"
-                            .into()
+                    url: format!("http://{ONION}:8332")
                 },
                 auth: RpcAuthMode::UserPass,
                 username: Some("groot".into()),
                 tor_proxy: Some("localhost:9050".into()),
+            }
+            .validate(),
+            Err(NetworkConfigError::InvalidProxy)
+        );
+        assert_eq!(
+            CoreNodeConfig {
+                backend: ChainBackend::RemoteCore {
+                    url: "http://short.onion:8332".into()
+                },
+                auth: RpcAuthMode::UserPass,
+                username: Some("groot".into()),
+                tor_proxy: Some("127.0.0.1:9050".into()),
             }
             .validate(),
             Err(NetworkConfigError::InvalidProxy)

@@ -35,4 +35,5 @@ cleanup() {
 trap cleanup EXIT
 bash "${PROJECT_DIR}/scripts/regtest/start.sh"
 GROOT_RUN_REGTEST=1 cargo test --locked --manifest-path "${PROJECT_DIR}/src-tauri/Cargo.toml" funded_rbf_and_cpfp_cross_groot_proposal_boundaries --lib -- --ignored --nocapture --test-threads=1
+GROOT_RUN_REGTEST=1 cargo test --locked --manifest-path "${PROJECT_DIR}/src-tauri/Cargo.toml" clean_storage_descriptor_recovery_restores_known_history_and_survives_reopen --lib -- --ignored --nocapture --test-threads=1
 GROOT_RUN_REGTEST=1 cargo test --locked --manifest-path "${PROJECT_DIR}/src-tauri/Cargo.toml" --test regtest_multisig -- --ignored --nocapture --test-threads=1

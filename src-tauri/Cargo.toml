@@ -38,10 +38,9 @@ minreq = { version = "=2.14.1", features = ["https-native"] }
 # Reviewed in ADR 0016: no build script, forbids unsafe code, MIT, and implements
 # the Blockchain Commons UR v2 fountain/Bytewords reference vectors.
 ur = "=0.4.1"
-# Enables the upstream rust-bitcoin JSON-RPC SOCKS5 transport for explicit Tor onion RPC.
-# `socks 0.3.4` was source-reviewed; no build script or process execution is present.
-# Direct RPC explicitly uses minreq because this feature changes simple_http globally.
-jsonrpc = { version = "=0.18.0", features = ["proxy"] }
+# Direct HTTPS wraps the pinned minreq transport with local bounds and no redirects.
+# Explicit Tor is local so .onion hostnames reach SOCKS5 without host DNS.
+jsonrpc = "=0.18.0"
 
 [target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
 security-framework = { path = "vendor/security-framework" }

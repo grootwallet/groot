@@ -5,7 +5,7 @@
 - Single-key mnemonic, seed, BIP39 passphrase, xprvs, and decrypted signing material.
 - Hardware-device secrets, which Groot must never request or receive.
 - External-signer imports are public-only, capped at 256 KiB, network/path checked, and normalized into canonical BIP84 descriptors. Seed fields and private extended keys fail closed.
-- Direct remote Bitcoin Core RPC is HTTPS-only. HTTP is allowed only for an `.onion` destination through an explicit loopback SOCKS5 proxy. Credentials are never accepted in URLs; passwords are device-bound encrypted per wallet, held only while that profile is unlocked, and zeroized on lock/switch.
+- Direct remote Bitcoin Core RPC is HTTPS-only, refuses redirects, and uses platform certificate validation. HTTP is allowed only for a syntactically valid v3 `.onion` destination encoded directly into SOCKS5 through an explicit numeric loopback proxy; local DNS and direct fallback are never attempted. Both transports bound headers, bodies, and I/O time. Credentials are never accepted in URLs; passwords are device-bound encrypted per wallet, held only while that profile is unlocked, and zeroized on lock/switch.
 - Coordinator PIN, unsigned/partially signed PSBTs, public descriptors, address labels, transaction metadata, and wallet identity.
 
 ## Trust boundaries

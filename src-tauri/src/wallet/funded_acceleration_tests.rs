@@ -202,6 +202,151 @@ fn proposal_status(db: &Connection, proposal_id: &str) -> (String, Option<String
 
 #[test]
 #[ignore = "requires the isolated Bitcoin Core regtest harness"]
+fn clean_storage_descriptor_recovery_restores_known_history_and_survives_reopen() {
+    assert!(std::env::var_os("GROOT_RUN_REGTEST").is_some());
+    let rpc = Arc::new(rpc());
+    let keys = test_keys();
+    let mut cosigners = metadata(&keys).cosigners;
+    for cosigner in &mut cosigners {
+        cosigner.source = CosignerSource::Manual;
+    }
+    let preview = PolicyInput {
+        name: "Clean storage recovery".to_owned(),
+        threshold: 2,
+        cosigners,
+    }
+    .preview()
+    .unwrap();
+    let recovered_metadata = MultisigWalletDto {
+        kind: "multisig".to_owned(),
+        name: preview.name,
+        threshold: preview.threshold,
+        cosigners: preview.cosigners,
+        external_descriptor: preview.external_descriptor,
+        internal_descriptor: preview.internal_descriptor,
+        created_at: "funded-regtest".to_owned(),
+        policy_type: "standard".to_owned(),
+        recovery_template: None,
+        spending_paths: vec![],
+    };
+    let encoded_backup = serde_json::to_string(&MultisigBackupDto {
+        version: 1,
+        network: "regtest".to_owned(),
+        wallet: recovered_metadata.clone(),
+    })
+    .unwrap();
+    let validated = validate_multisig_backup(&encoded_backup).unwrap();
+    let expected_first_address = first_multisig_address(&validated.wallet).unwrap();
+
+    let source_database = TemporaryDatabase::new();
+    let mut source_db = Connection::open(&source_database.0).unwrap();
+    init_app_schema(&source_db).unwrap();
+    let mut source = Wallet::create(
+        validated.wallet.external_descriptor.clone(),
+        validated.wallet.internal_descriptor.clone(),
+    )
+    .network(Network::Regtest)
+    .lookahead(50)
+    .create_wallet(&mut source_db)
+    .unwrap();
+    let addresses = (0..=25)
+        .map(|_| source.reveal_next_address(KeychainKind::External).address)
+        .collect::<Vec<_>>();
+    assert_eq!(addresses[0].to_string(), expected_first_address);
+    source.persist(&mut source_db).unwrap();
+    let mining = rpc
+        .get_new_address(Some("groot clean recovery"), None)
+        .unwrap()
+        .require_network(Network::Regtest)
+        .unwrap();
+    let first_txid = rpc
+        .call::<Txid>(
+            "sendtoaddress",
+            &[
+                serde_json::json!(addresses[0].to_string()),
+                serde_json::json!(0.0012),
+            ],
+        )
+        .unwrap();
+    rpc.generate_to_address(1, &mining).unwrap();
+    let extended_txid = rpc
+        .call::<Txid>(
+            "sendtoaddress",
+            &[
+                serde_json::json!(addresses[25].to_string()),
+                serde_json::json!(0.0023),
+            ],
+        )
+        .unwrap();
+    rpc.generate_to_address(1, &mining).unwrap();
+
+    let recovery_database = TemporaryDatabase::new();
+    assert!(!recovery_database.0.exists());
+    let mut recovery_db = Connection::open(&recovery_database.0).unwrap();
+    init_app_schema(&recovery_db).unwrap();
+    let settings = RecoveryScanSettingsDto {
+        birthday_height: 0,
+        gap_limit: 50,
+    };
+    recovery_db
+        .execute(
+            "INSERT INTO groot_recovery_settings (singleton, birthday_height, gap_limit)
+             VALUES (1, ?1, ?2)",
+            params![settings.birthday_height, settings.gap_limit],
+        )
+        .unwrap();
+    let mut recovered = Wallet::create(
+        validated.wallet.external_descriptor.clone(),
+        validated.wallet.internal_descriptor.clone(),
+    )
+    .network(Network::Regtest)
+    .lookahead(settings.gap_limit)
+    .create_wallet(&mut recovery_db)
+    .unwrap();
+    let cancel = AtomicBool::new(false);
+    full_rescan_loaded_wallet(
+        Arc::clone(&rpc),
+        &mut recovered,
+        &mut recovery_db,
+        &settings,
+        "clean-storage-run",
+        &cancel,
+    )
+    .unwrap();
+    finish_recovery_scan_record(&recovery_db, "clean-storage-run", "completed").unwrap();
+    let recovered_snapshot =
+        snapshot_from(&recovered, &recovery_db, Some(now().to_string()), true).unwrap();
+    assert_eq!(recovered_snapshot.balance.total, 350_000);
+    assert_eq!(recovered_snapshot.transactions.len(), 2);
+    assert!(recovered_snapshot
+        .transactions
+        .iter()
+        .any(|transaction| transaction.id == first_txid.to_string()));
+    assert!(recovered_snapshot
+        .transactions
+        .iter()
+        .any(|transaction| transaction.id == extended_txid.to_string()));
+
+    drop(recovered);
+    drop(recovery_db);
+    let mut reopened_db = Connection::open(&recovery_database.0).unwrap();
+    init_app_schema(&reopened_db).unwrap();
+    let reopened = load_wallet(&mut reopened_db).unwrap();
+    let reopened_snapshot = snapshot_from(&reopened, &reopened_db, None, true).unwrap();
+    assert_eq!(reopened_snapshot.balance.total, 350_000);
+    assert_eq!(reopened_snapshot.transactions.len(), 2);
+    assert_eq!(
+        load_recovery_scan_record(&reopened_db)
+            .unwrap()
+            .unwrap()
+            .status
+            .status,
+        "completed"
+    );
+}
+
+#[test]
+#[ignore = "requires the isolated Bitcoin Core regtest harness"]
 fn funded_rbf_and_cpfp_cross_groot_proposal_boundaries() {
     assert!(std::env::var_os("GROOT_RUN_REGTEST").is_some());
     let rpc = Arc::new(rpc());

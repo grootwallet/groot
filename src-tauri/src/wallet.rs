@@ -81,6 +81,7 @@ const MAX_SUPPLEMENTAL_DICE_ROLLS: usize = 100;
 const SUPPLEMENTAL_TRANSCRIPT_DOMAIN: &[u8] = b"Groot supplemental entropy transcript v1";
 const SUPPLEMENTAL_MIX_DOMAIN: &[u8] = b"Groot BIP39 entropy mix v1";
 const SAVED_FILE_REVEAL_TIMEOUT: Duration = Duration::from_secs(10 * 60);
+const RPC_TIMEOUT: Duration = Duration::from_secs(15);
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -1497,7 +1498,7 @@ fn network_config_api_error(error: NetworkConfigError) -> ApiError {
         NetworkConfigError::UnsupportedScheme => "This build supports Bitcoin Core RPC backends only.",
         NetworkConfigError::UnknownPreset => "The selected backend preset is not recognized.",
         NetworkConfigError::InvalidProxy => {
-            "Tor requires an HTTP .onion RPC URL and a loopback SOCKS5 proxy such as 127.0.0.1:9050."
+            "Tor requires an HTTP v3 .onion RPC URL and a loopback SOCKS5 proxy such as 127.0.0.1:9050."
         }
     };
     api_error("invalid_node_config", message)
@@ -1523,24 +1524,49 @@ fn verify_selected_credential(app: &AppHandle, credential: &str) -> ApiResult<()
 }
 
 fn build_rpc_client(url: &str, auth: Auth, tor_proxy: Option<&str>) -> ApiResult<Client> {
+    build_rpc_client_with_timeout(url, auth, tor_proxy, RPC_TIMEOUT)
+}
+
+fn build_rpc_client_with_timeout(
+    url: &str,
+    auth: Auth,
+    tor_proxy: Option<&str>,
+    timeout: Duration,
+) -> ApiResult<Client> {
     let (username, password) = auth
         .get_user_pass()
         .map_err(|error| api_error("network_unavailable", error))?;
     if let Some(proxy) = tor_proxy {
-        let client = jsonrpc::Client::http_proxy(url, username, password, proxy, None)
-            .map_err(|error| api_error("network_unavailable", error))?;
-        Ok(Client::from_jsonrpc(client))
-    } else {
-        let mut builder = jsonrpc::minreq_http::MinreqHttpTransport::builder()
-            .url(url)
-            .map_err(|error| api_error("network_unavailable", error))?;
-        if let Some(username) = username {
-            builder = builder.basic_auth(username, password);
-        }
+        let endpoint = url::Url::parse(url).map_err(network_config_api_error_from_url)?;
+        let proxy = proxy
+            .parse::<std::net::SocketAddr>()
+            .map_err(|_| network_config_api_error(NetworkConfigError::InvalidProxy))?;
+        let transport = crate::tor_rpc::TorRpcTransport::new(
+            &endpoint,
+            username.as_deref().unwrap_or_default(),
+            password.as_deref().unwrap_or_default(),
+            proxy,
+            timeout,
+        )
+        .map_err(|error| api_error("network_unavailable", error))?;
         Ok(Client::from_jsonrpc(jsonrpc::Client::with_transport(
-            builder.build(),
+            transport,
+        )))
+    } else {
+        let transport = crate::direct_rpc::DirectRpcTransport::new(
+            url,
+            username.as_deref(),
+            password.as_deref(),
+            timeout,
+        );
+        Ok(Client::from_jsonrpc(jsonrpc::Client::with_transport(
+            transport,
         )))
     }
+}
+
+fn network_config_api_error_from_url(_: url::ParseError) -> ApiError {
+    network_config_api_error(NetworkConfigError::InvalidUrl)
 }
 
 fn load_node_auth_session(
@@ -1636,13 +1662,19 @@ fn checked_block_height(client: &Client) -> ApiResult<u64> {
     let info = client
         .get_blockchain_info()
         .map_err(|error| api_error("network_unavailable", error))?;
-    if info.chain != NETWORK {
-        return Err(api_error(
+    ensure_expected_network(info.chain)?;
+    Ok(info.blocks)
+}
+
+fn ensure_expected_network(network: Network) -> ApiResult<()> {
+    if network == NETWORK {
+        Ok(())
+    } else {
+        Err(api_error(
             "wrong_network",
             "The Bitcoin Core node is not running regtest.",
-        ));
+        ))
     }
-    Ok(info.blocks)
 }
 
 fn broadcast_transaction(
@@ -7264,8 +7296,80 @@ mod tests {
     use crate::external_signer::{self, ExternalSignerInput, SignerSource, SINGLESIG_ACCOUNT_PATH};
     use crate::multisig::{CosignerInput, CosignerSource, MULTISIG_ACCOUNT_PATH};
     use crate::recovery::{SpendingPath, TimedSpendingPath};
+    use std::{net::TcpListener, thread};
 
     const WORDS: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art";
+
+    fn serve_one_http_response(response: Option<&'static [u8]>) -> String {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request = [0_u8; 4096];
+            let _ = stream.read(&mut request);
+            if let Some(response) = response {
+                stream.write_all(response).unwrap();
+            } else {
+                thread::sleep(Duration::from_millis(250));
+            }
+        });
+        format!("http://{address}")
+    }
+
+    #[test]
+    fn direct_rpc_auth_timeout_tls_and_chain_fail_closed() {
+        let unauthorized = serve_one_http_response(Some(
+            b"HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+        ));
+        let error = checked_block_height(
+            &build_rpc_client_with_timeout(
+                &unauthorized,
+                Auth::UserPass("groot".to_owned(), "wrong".to_owned()),
+                None,
+                Duration::from_millis(100),
+            )
+            .unwrap(),
+        )
+        .unwrap_err();
+        assert_eq!(error.code, "network_unavailable");
+
+        let stalled = serve_one_http_response(None);
+        let error = checked_block_height(
+            &build_rpc_client_with_timeout(
+                &stalled,
+                Auth::UserPass("groot".to_owned(), "secret".to_owned()),
+                None,
+                Duration::from_millis(50),
+            )
+            .unwrap(),
+        )
+        .unwrap_err();
+        assert_eq!(error.code, "network_unavailable");
+
+        let plaintext = serve_one_http_response(Some(
+            b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}",
+        ));
+        let tls_url = plaintext.replacen("http://", "https://", 1);
+        let error = checked_block_height(
+            &build_rpc_client_with_timeout(
+                &tls_url,
+                Auth::UserPass("groot".to_owned(), "secret".to_owned()),
+                None,
+                Duration::from_millis(100),
+            )
+            .unwrap(),
+        )
+        .unwrap_err();
+        assert_eq!(error.code, "network_unavailable");
+
+        for network in [Network::Bitcoin, Network::Testnet, Network::Signet] {
+            assert_eq!(
+                ensure_expected_network(network).unwrap_err().code,
+                "wrong_network"
+            );
+        }
+        ensure_expected_network(Network::Regtest).unwrap();
+    }
 
     #[test]
     fn saved_file_reveal_tokens_are_bounded_expiring_and_single_use() {
