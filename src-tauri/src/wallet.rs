@@ -11,9 +11,11 @@ use bdk_bitcoind_rpc::{
 use bdk_wallet::{
     bitcoin::{
         bip32::{DerivationPath, Xpriv, Xpub},
+        constants::genesis_block,
         hashes::{sha256, Hash as _, HashEngine},
         secp256k1::Secp256k1,
-        Address, Amount, FeeRate, Network, NetworkKind, OutPoint, Psbt, Transaction, Txid, Weight,
+        Address, Amount, BlockHash, FeeRate, Network, NetworkKind, OutPoint, Psbt, Transaction,
+        Txid, Weight,
     },
     chain::{BlockId, ChainPosition, CheckPoint, ConfirmationBlockTime},
     descriptor::{Descriptor, DescriptorPublicKey},
@@ -1662,12 +1664,23 @@ fn candidate_rpc_client(config: &CoreNodeConfig, password: &str) -> ApiResult<Cl
     build_rpc_client(&url, auth, config.tor_proxy.as_deref())
 }
 
-fn checked_block_height(client: &Client) -> ApiResult<u64> {
+fn checked_chain_identity(client: &Client) -> ApiResult<(u64, BlockHash)> {
     let info = client
         .get_blockchain_info()
         .map_err(|error| api_error("network_unavailable", error))?;
     ensure_expected_network(info.chain)?;
-    Ok(info.blocks)
+    let observed_genesis = client.get_block_hash(0).map_err(|error| {
+        api_error(
+            "network_unavailable",
+            format!("Bitcoin Core genesis verification failed: {error}"),
+        )
+    })?;
+    ensure_expected_genesis(NETWORK, observed_genesis)?;
+    Ok((info.blocks, observed_genesis))
+}
+
+fn checked_block_height(client: &Client) -> ApiResult<u64> {
+    checked_chain_identity(client).map(|(height, _)| height)
 }
 
 fn ensure_expected_network(network: Network) -> ApiResult<()> {
@@ -1677,6 +1690,17 @@ fn ensure_expected_network(network: Network) -> ApiResult<()> {
         Err(api_error(
             "wrong_network",
             "The Bitcoin Core node is not running regtest.",
+        ))
+    }
+}
+
+fn ensure_expected_genesis(network: Network, observed: BlockHash) -> ApiResult<()> {
+    if observed == genesis_block(network).block_hash() {
+        Ok(())
+    } else {
+        Err(api_error(
+            "wrong_network",
+            "The Bitcoin Core genesis block does not match the selected network.",
         ))
     }
 }
@@ -3560,7 +3584,7 @@ fn full_rescan_loaded_wallet(
     run_id: &str,
     cancel: &AtomicBool,
 ) -> ApiResult<()> {
-    let tip = checked_block_height(rpc.as_ref())?;
+    let (tip, genesis) = checked_chain_identity(rpc.as_ref())?;
     if u64::from(settings.birthday_height) > tip {
         return Err(api_error(
             "invalid_scan_settings",
@@ -3570,7 +3594,6 @@ fn full_rescan_loaded_wallet(
     let target_height = u32::try_from(tip)
         .map_err(|_| internal("The node height exceeds the supported recovery range."))?;
     start_recovery_scan_record(db, run_id, settings, target_height)?;
-    let genesis = rpc.get_block_hash(0).map_err(internal)?;
     let checkpoint = CheckPoint::new(BlockId {
         height: 0,
         hash: genesis,
@@ -7400,6 +7423,24 @@ mod tests {
             );
         }
         ensure_expected_network(Network::Regtest).unwrap();
+
+        for network in [
+            Network::Bitcoin,
+            Network::Testnet,
+            Network::Signet,
+            Network::Regtest,
+        ] {
+            ensure_expected_genesis(network, genesis_block(network).block_hash()).unwrap();
+        }
+        assert_eq!(
+            ensure_expected_genesis(
+                Network::Regtest,
+                genesis_block(Network::Bitcoin).block_hash()
+            )
+            .unwrap_err()
+            .code,
+            "wrong_network"
+        );
     }
 
     #[test]

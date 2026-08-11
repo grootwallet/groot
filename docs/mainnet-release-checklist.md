@@ -10,7 +10,7 @@ Candidate scope: first mainnet release is macOS desktop only, hardware-focused, 
 
 - [ ] Signet create/recover/sync/receive/send/restart/delete suite passes against the production backend adapter.
 - [ ] Testnet4 repeats the complete suite, including reorg, stale backend, fee failure, and cross-network rejection.
-- [ ] Mainnet genesis hash and backend network are verified before wallet/database opening. Dormant Rust policy already blocks any mainnet database open and separately enforces exact mainnet genesis plus local Core; enabling and live RPC evidence remain pending.
+- [ ] Mainnet genesis hash and backend network are verified before wallet/database opening. Every current production Core connection now verifies both Core's reported chain and the exact selected-network genesis before sync/test work; dormant Rust policy separately blocks any mainnet database open and requires exact mainnet genesis plus local Core. Pre-database mainnet wiring, enablement, and live mainnet RPC evidence remain pending.
 - [ ] Mainnet BIP84/BIP48 origins, xpub versions, addresses, descriptors, HWI chain, PSBT network, and explorer agree.
 - [ ] User-controlled Bitcoin Core is the only first-release mainnet backend; remote Core/Esplora have separate privacy review.
 - [ ] No fallback backend or fallback fee exists.
