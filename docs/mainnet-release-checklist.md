@@ -33,10 +33,10 @@ Candidate scope: first mainnet release is macOS desktop only, hardware-focused, 
 
 ## Secrets and platforms
 
-- [ ] macOS Keychain behavior is tested across create, upgrade, restart, backup restore, and deletion. A disposable real-Keychain create/restart/relocated-restore/deletion test is available via `pnpm release:test:keychain`; signed upgrade and complete packaged evidence remain pending.
+- [ ] macOS Keychain behavior is tested across create, upgrade, restart, backup restore, and deletion. A disposable real-Keychain encrypted-envelope create/restart/wrong-credential/relocated-restore/deletion test is reproducible via `pnpm release:test:keychain` and passes in the current unsigned development environment; signed upgrade and complete signed-package evidence remain pending.
 - [ ] macOS packaged-app lifecycle, inactivity lock, sleep/wake, crash/restart, accessibility, clipboard, screen capture, and multi-window behavior are certified.
 - [x] A second Groot process cannot concurrently mutate the same registry or wallet databases; stale-lock and crash recovery fail safely. Evidence: [`process_lock.rs`](../src-tauri/src/process_lock.rs), including real child-process contention and forced-termination recovery, reproducible with `cargo test --locked process_lock::tests --lib` from `src-tauri`.
-- [ ] The packaged macOS app presents an understandable second-launch failure and reopens normally after forced termination without manual lock-file cleanup.
+- [ ] The packaged macOS app presents an understandable second-launch failure and reopens normally after forced termination without manual lock-file cleanup. The reproducible harness passes against a locally built unsigned `.app`; Finder-visible presentation and rerun against the signed/notarized candidate remain pending.
 - [ ] iOS Keychain and lifecycle/background behavior are certified on physical devices before an iOS mainnet release.
 - [ ] Android hardware-backed Keystore replaces the sandbox fallback and is certified on physical devices before an Android mainnet release.
 - [ ] Windows Credential Manager replaces the sandbox fallback and is certified before a Windows mainnet release.

@@ -623,32 +623,61 @@ mod tests {
     #[test]
     #[ignore = "uses a disposable item in the logged-in macOS Keychain"]
     fn macos_keychain_create_restart_restore_and_delete_lifecycle() {
-        struct KeychainCleanup(std::path::PathBuf);
+        struct KeychainCleanup {
+            metadata: std::path::PathBuf,
+            directories: Vec<std::path::PathBuf>,
+        }
         impl Drop for KeychainCleanup {
             fn drop(&mut self) {
-                forget_device_key(&self.0);
+                forget_device_key(&self.metadata);
+                for directory in &self.directories {
+                    let _ = fs::remove_dir_all(directory);
+                }
             }
         }
 
         let wallet_id = Uuid::new_v4().to_string();
-        let original = directory().join(&wallet_id).join("secret.json");
-        let restored = directory().join(&wallet_id).join("secret.json");
-        let _cleanup = KeychainCleanup(original.clone());
+        let original_directory = directory();
+        let restored_directory = directory();
+        let original = original_directory.join(&wallet_id).join("secret.json");
+        let restored = restored_directory.join(&wallet_id).join("secret.json");
+        let _cleanup = KeychainCleanup {
+            metadata: original.clone(),
+            directories: vec![original_directory, restored_directory],
+        };
         let provider = SystemDeviceKeyProvider;
-        let key = vec![0x5a; KEY_BYTES];
+        let secret = b"disposable keychain lifecycle secret";
+        let credential = "disposable test credential";
 
-        provider.set(&original, &key).unwrap();
-        assert_eq!(provider.get(&original).unwrap(), key);
+        store_with_provider(&original, secret, credential, &provider).unwrap();
+        assert_eq!(
+            load_with_provider(&original, credential, &provider).unwrap(),
+            secret
+        );
+        assert_eq!(
+            load_with_provider(&original, "wrong credential", &provider),
+            Err(SecureStoreError::InvalidCredential)
+        );
 
         let item_account = account(&original).unwrap();
         remove_cached_device_key(&item_account);
-        assert_eq!(provider.get(&original).unwrap(), key);
-        assert_eq!(provider.get_or_create(&restored).unwrap(), key);
+        assert_eq!(
+            load_with_provider(&original, credential, &provider).unwrap(),
+            secret
+        );
+
+        fs::create_dir_all(restored.parent().unwrap()).unwrap();
+        fs::copy(&original, &restored).unwrap();
+        remove_cached_device_key(&item_account);
+        assert_eq!(
+            load_with_provider(&restored, credential, &provider).unwrap(),
+            secret
+        );
 
         forget_device_key(&restored);
         remove_cached_device_key(&item_account);
         assert_eq!(
-            provider.get(&original),
+            load_with_provider(&restored, credential, &provider),
             Err(SecureStoreError::DeviceKeyNotFound)
         );
     }
