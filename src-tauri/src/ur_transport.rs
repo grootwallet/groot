@@ -4,6 +4,7 @@
 //! type check, canonical CBOR byte-string envelope, resource bounds, and PSBT validation.
 
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
+use bdk_wallet::bitcoin::psbt::Psbt;
 use ur::{ur::Kind, Decoder, Encoder};
 
 pub const MAX_UR_PAYLOAD_BYTES: usize = 256 * 1024;
@@ -11,6 +12,7 @@ pub const MAX_UR_FRAMES: usize = 1_024;
 pub const MAX_UR_FRAME_BYTES: usize = 4_096;
 pub const MIN_FRAGMENT_BYTES: usize = 50;
 pub const MAX_FRAGMENT_BYTES: usize = 400;
+const MAX_BASE64_PSBT_BYTES: usize = MAX_UR_PAYLOAD_BYTES.div_ceil(3) * 4;
 const UR_TYPE: &str = "crypto-psbt";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -46,8 +48,12 @@ pub fn encode_psbt(
     if !(MIN_FRAGMENT_BYTES..=MAX_FRAGMENT_BYTES).contains(&fragment_bytes) {
         return Err(UrTransportError::InvalidFrame);
     }
+    let encoded = base64_psbt.trim();
+    if encoded.len() > MAX_BASE64_PSBT_BYTES {
+        return Err(UrTransportError::TooLarge);
+    }
     let raw = BASE64
-        .decode(base64_psbt.trim())
+        .decode(encoded)
         .map_err(|_| UrTransportError::InvalidPsbt)?;
     if raw.is_empty() {
         return Err(UrTransportError::Empty);
@@ -55,7 +61,7 @@ pub fn encode_psbt(
     if raw.len() > MAX_UR_PAYLOAD_BYTES {
         return Err(UrTransportError::TooLarge);
     }
-    validate_psbt_magic(&raw)?;
+    validate_psbt(&raw)?;
     let cbor = encode_cbor_bytes(&raw)?;
     let mut encoder =
         Encoder::new(&cbor, fragment_bytes, UR_TYPE).map_err(|_| UrTransportError::InvalidFrame)?;
@@ -93,12 +99,10 @@ pub fn decode_psbt(frames: &[String]) -> Result<String, UrTransportError> {
         }
     }
     let first = frames.first().ok_or(UrTransportError::Empty)?;
-    let (_, first_payload) =
-        ur::ur::decode(&first.to_ascii_lowercase()).map_err(|_| UrTransportError::InvalidFrame)?;
-    let cbor = if matches!(
-        ur::ur::decode(&first.to_ascii_lowercase()),
-        Ok((Kind::SinglePart, _))
-    ) {
+    let first = first.to_ascii_lowercase();
+    let (kind, first_payload) =
+        ur::ur::decode(&first).map_err(|_| UrTransportError::InvalidFrame)?;
+    let cbor = if matches!(kind, Kind::SinglePart) {
         first_payload
     } else {
         let mut decoder = Decoder::default();
@@ -119,16 +123,14 @@ pub fn decode_psbt(frames: &[String]) -> Result<String, UrTransportError> {
         return Err(UrTransportError::TooLarge);
     }
     let raw = decode_cbor_bytes(&cbor)?;
-    validate_psbt_magic(raw)?;
+    validate_psbt(raw)?;
     Ok(BASE64.encode(raw))
 }
 
-fn validate_psbt_magic(raw: &[u8]) -> Result<(), UrTransportError> {
-    if raw.starts_with(b"psbt\xff") {
-        Ok(())
-    } else {
-        Err(UrTransportError::InvalidPsbt)
-    }
+fn validate_psbt(raw: &[u8]) -> Result<(), UrTransportError> {
+    Psbt::deserialize(raw)
+        .map(|_| ())
+        .map_err(|_| UrTransportError::InvalidPsbt)
 }
 
 fn encode_cbor_bytes(payload: &[u8]) -> Result<Vec<u8>, UrTransportError> {
@@ -202,12 +204,41 @@ fn decode_cbor_bytes(encoded: &[u8]) -> Result<&[u8], UrTransportError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bdk_wallet::bitcoin::{
+        absolute::LockTime, hashes::Hash, psbt::raw, transaction::Version, Amount, OutPoint,
+        ScriptBuf, Sequence, Transaction, TxIn, TxOut, Txid, Witness,
+    };
     use ur::ur::Type;
 
-    fn fixture_psbt(length: usize) -> Vec<u8> {
-        let mut value = b"psbt\xff".to_vec();
-        value.resize(length.max(5), 7);
-        value
+    fn fixture_psbt(extra_bytes: usize) -> Vec<u8> {
+        let mut psbt = Psbt::from_unsigned_tx(Transaction {
+            version: Version::TWO,
+            lock_time: LockTime::ZERO,
+            input: vec![TxIn {
+                previous_output: OutPoint {
+                    txid: Txid::from_byte_array([1; 32]),
+                    vout: 0,
+                },
+                script_sig: ScriptBuf::new(),
+                sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
+                witness: Witness::new(),
+            }],
+            output: vec![TxOut {
+                value: Amount::from_sat(1_000),
+                script_pubkey: ScriptBuf::new(),
+            }],
+        })
+        .unwrap();
+        if extra_bytes > 0 {
+            psbt.unknown.insert(
+                raw::Key {
+                    type_value: 0x50,
+                    key: vec![1],
+                },
+                vec![7; extra_bytes],
+            );
+        }
+        psbt.serialize()
     }
 
     #[test]
@@ -221,7 +252,7 @@ mod tests {
     #[test]
     fn canonical_cbor_boundaries_round_trip() {
         for length in [5, 23, 24, 255, 256, 65_535, 65_536] {
-            let payload = fixture_psbt(length);
+            let payload = vec![7; length];
             let encoded = encode_cbor_bytes(&payload).unwrap();
             assert_eq!(decode_cbor_bytes(&encoded).unwrap(), payload);
         }
@@ -239,8 +270,20 @@ mod tests {
             Err(UrTransportError::InvalidPsbt)
         );
         assert_eq!(
-            encode_psbt(&BASE64.encode(fixture_psbt(10)), 1),
+            encode_psbt(&BASE64.encode(fixture_psbt(0)), 1),
             Err(UrTransportError::InvalidFrame)
+        );
+        assert_eq!(
+            encode_psbt(&BASE64.encode(b"psbt\xffnot-a-complete-psbt"), 100),
+            Err(UrTransportError::InvalidPsbt)
+        );
+        let malformed_ur = ur::ur::encode(
+            &encode_cbor_bytes(b"psbt\xffnot-a-complete-psbt").unwrap(),
+            &Type::Custom(UR_TYPE),
+        );
+        assert_eq!(
+            decode_psbt(&[malformed_ur]),
+            Err(UrTransportError::InvalidPsbt)
         );
         assert_eq!(
             decode_cbor_bytes(&[0x58, 0x01, 0]),
@@ -280,24 +323,18 @@ mod tests {
             Err(UrTransportError::Empty)
         );
         assert_eq!(
-            encode_psbt(
-                &BASE64.encode(fixture_psbt(MAX_UR_PAYLOAD_BYTES + 1)),
-                MIN_FRAGMENT_BYTES
-            ),
+            encode_psbt(&"A".repeat(MAX_BASE64_PSBT_BYTES + 1), MIN_FRAGMENT_BYTES),
             Err(UrTransportError::TooLarge)
         );
         assert_eq!(
-            encode_psbt(
-                &BASE64.encode(fixture_psbt(MAX_UR_PAYLOAD_BYTES)),
-                MIN_FRAGMENT_BYTES
-            ),
+            encode_psbt(&BASE64.encode(fixture_psbt(100_000)), MIN_FRAGMENT_BYTES),
             Err(UrTransportError::TooManyFrames)
         );
     }
 
     #[test]
     fn decodes_single_part_and_rejects_frame_resource_abuse() {
-        let raw = fixture_psbt(20);
+        let raw = fixture_psbt(0);
         let single = ur::ur::encode(&encode_cbor_bytes(&raw).unwrap(), &Type::Custom(UR_TYPE));
         assert_eq!(decode_psbt(&[single]).unwrap(), BASE64.encode(raw));
 

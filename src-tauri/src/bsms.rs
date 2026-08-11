@@ -5,7 +5,10 @@
 //! implied by accepting a `.bsms` file. Parsing is strict, bounded, and performed inside the
 //! trusted Rust boundary.
 
-use bdk_wallet::bitcoin::bip32::{Fingerprint, Xpub};
+use bdk_wallet::bitcoin::{
+    bip32::{Fingerprint, Xpub},
+    Address,
+};
 use bdk_wallet::descriptor::{Descriptor, DescriptorPublicKey};
 use std::{fmt, str::FromStr};
 
@@ -92,6 +95,7 @@ impl DescriptorRecord {
         if lines[3].trim() != lines[3] || lines[3].chars().any(char::is_whitespace) {
             return Err(BsmsError::InvalidEncoding);
         }
+        Address::from_str(lines[3]).map_err(|_| BsmsError::InvalidEncoding)?;
         Ok(Self {
             descriptor_template: lines[1].to_owned(),
             path_restrictions: lines[2].to_owned(),
@@ -128,6 +132,7 @@ impl DescriptorRecord {
         {
             return Err(BsmsError::InvalidEncoding);
         }
+        Address::from_str(first_address).map_err(|_| BsmsError::InvalidEncoding)?;
         Ok(Self {
             descriptor_template,
             path_restrictions: GROOT_PATH_RESTRICTIONS.to_owned(),
@@ -229,8 +234,9 @@ mod tests {
     use bdk_wallet::bitcoin::{
         bip32::{DerivationPath, Xpriv, Xpub},
         secp256k1::Secp256k1,
-        NetworkKind,
+        Network, NetworkKind,
     };
+    use bdk_wallet::{KeychainKind, Wallet};
 
     fn descriptors() -> (String, String) {
         let secp = Secp256k1::new();
@@ -256,15 +262,23 @@ mod tests {
         (make(0), make(1))
     }
 
+    fn first_address(external: &str, internal: &str) -> String {
+        let mut wallet = Wallet::create(external.to_owned(), internal.to_owned())
+            .network(Network::Regtest)
+            .create_wallet_no_persist()
+            .unwrap();
+        wallet
+            .reveal_next_address(KeychainKind::External)
+            .address
+            .to_string()
+    }
+
     #[test]
     fn round_trips_a_standard_groot_descriptor_pair() {
         let (external, internal) = descriptors();
-        let record = DescriptorRecord::from_descriptor_pair(
-            &external,
-            &internal,
-            "bcrt1qtestaddressforparseronly",
-        )
-        .unwrap();
+        let address = first_address(&external, &internal);
+        let record =
+            DescriptorRecord::from_descriptor_pair(&external, &internal, &address).unwrap();
         assert!(record.descriptor_template.contains("/**"));
         assert_eq!(record.path_restrictions, "/0/*,/1/*");
         let parsed = DescriptorRecord::parse(&record.encode()).unwrap();
@@ -279,8 +293,9 @@ mod tests {
     #[test]
     fn descriptor_identity_ignores_checksums_but_not_policy_changes() {
         let (external, internal) = descriptors();
+        let address = first_address(&external, &internal);
         let record =
-            DescriptorRecord::from_descriptor_pair(&external, &internal, "address").unwrap();
+            DescriptorRecord::from_descriptor_pair(&external, &internal, &address).unwrap();
         assert!(record
             .matches_descriptor_pair(&external, &internal)
             .unwrap());
@@ -292,7 +307,8 @@ mod tests {
     #[test]
     fn rejects_malformed_oversized_private_and_nonstandard_records() {
         let (external, internal) = descriptors();
-        let valid = DescriptorRecord::from_descriptor_pair(&external, &internal, "address")
+        let address = first_address(&external, &internal);
+        let valid = DescriptorRecord::from_descriptor_pair(&external, &internal, &address)
             .unwrap()
             .encode();
         assert_eq!(
@@ -323,9 +339,10 @@ mod tests {
 
     #[test]
     fn rejects_pairs_whose_internal_branch_does_not_match() {
-        let (external, _) = descriptors();
+        let (external, internal) = descriptors();
+        let address = first_address(&external, &internal);
         assert_eq!(
-            DescriptorRecord::from_descriptor_pair(&external, &external, "address"),
+            DescriptorRecord::from_descriptor_pair(&external, &external, &address),
             Err(BsmsError::DescriptorMismatch)
         );
     }
@@ -333,8 +350,9 @@ mod tests {
     #[test]
     fn extracts_standard_sortedmulti_policy_metadata() {
         let (external, internal) = descriptors();
+        let address = first_address(&external, &internal);
         let record =
-            DescriptorRecord::from_descriptor_pair(&external, &internal, "address").unwrap();
+            DescriptorRecord::from_descriptor_pair(&external, &internal, &address).unwrap();
         let (threshold, keys) = record.standard_policy().unwrap();
         assert_eq!(threshold, 2);
         assert_eq!(keys.len(), 3);
@@ -366,24 +384,25 @@ mod tests {
     #[test]
     fn rejects_invalid_pair_inputs_and_address_whitespace() {
         let (external, internal) = descriptors();
+        let address = first_address(&external, &internal);
         assert_eq!(
-            DescriptorRecord::from_descriptor_pair("tprv-secret", &internal, "address"),
+            DescriptorRecord::from_descriptor_pair("tprv-secret", &internal, &address),
             Err(BsmsError::PrivateMaterial)
         );
         assert_eq!(
-            DescriptorRecord::from_descriptor_pair(&internal, &internal, "address"),
+            DescriptorRecord::from_descriptor_pair(&internal, &internal, &address),
             Err(BsmsError::UnsupportedPaths)
         );
         assert_eq!(
-            DescriptorRecord::from_descriptor_pair(&external, &internal, " address"),
+            DescriptorRecord::from_descriptor_pair(&external, &internal, "not-an-address"),
             Err(BsmsError::InvalidEncoding)
         );
 
-        let valid = DescriptorRecord::from_descriptor_pair(&external, &internal, "address")
+        let valid = DescriptorRecord::from_descriptor_pair(&external, &internal, &address)
             .unwrap()
             .encode();
         assert_eq!(
-            DescriptorRecord::parse(&valid.replace("\naddress\n", "\naddress with-space\n")),
+            DescriptorRecord::parse(&valid.replace(&address, "address with-space")),
             Err(BsmsError::InvalidEncoding)
         );
     }
@@ -391,8 +410,9 @@ mod tests {
     #[test]
     fn rejects_invalid_standard_policy_metadata_and_templates() {
         let (external, internal) = descriptors();
+        let address = first_address(&external, &internal);
         let mut record =
-            DescriptorRecord::from_descriptor_pair(&external, &internal, "address").unwrap();
+            DescriptorRecord::from_descriptor_pair(&external, &internal, &address).unwrap();
         record.descriptor_template =
             record
                 .descriptor_template

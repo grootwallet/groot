@@ -8,11 +8,13 @@ cd "$(dirname "$0")/../.."
 core_modules=(
   auth.rs
   bsms.rs
+  build_network.rs
   external_signer.rs
   multisig.rs
   notifications.rs
   proposal.rs
   recovery.rs
+  release_policy.rs
   session.rs
   ur_transport.rs
 )
