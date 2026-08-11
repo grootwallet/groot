@@ -18,7 +18,9 @@ use bdk_wallet::{
     chain::{BlockId, ChainPosition, CheckPoint, ConfirmationBlockTime},
     descriptor::{Descriptor, DescriptorPublicKey},
     psbt::PsbtUtils,
-    rusqlite::{config::DbConfig, params, Connection, OptionalExtension},
+    rusqlite::{
+        config::DbConfig, params, Connection, OptionalExtension, Transaction as SqliteTransaction,
+    },
     template::{Bip84, Bip84Public},
     KeychainKind, PersistedWallet, SignOptions, Wallet,
 };
@@ -2062,6 +2064,18 @@ fn load_wallet(db: &mut Connection) -> ApiResult<PersistedWallet<Connection>> {
         .ok_or_else(|| api_error("wallet_not_found", "Wallet database is empty."))
 }
 
+fn load_wallet_transaction<'db>(
+    db: &mut SqliteTransaction<'db>,
+) -> ApiResult<PersistedWallet<SqliteTransaction<'db>>> {
+    let gap_limit = load_recovery_scan_settings(db)?.gap_limit;
+    Wallet::load()
+        .check_network(NETWORK)
+        .lookahead(gap_limit)
+        .load_wallet(db)
+        .map_err(internal)?
+        .ok_or_else(|| api_error("wallet_not_found", "Wallet database is empty."))
+}
+
 fn load_recovery_scan_settings(db: &Connection) -> ApiResult<RecoveryScanSettingsDto> {
     db.query_row(
         "SELECT birthday_height, gap_limit FROM groot_recovery_settings WHERE singleton = 1",
@@ -3066,33 +3080,7 @@ fn load_multisig_proposal(
     proposal_dto(row, metadata, &wallet)
 }
 
-fn persist_single_proposal(
-    db: &Connection,
-    proposal: &PaymentProposalDto,
-    psbt: &Psbt,
-) -> ApiResult<()> {
-    db.execute(
-        "INSERT INTO groot_proposals (proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,'collecting',?8)",
-        params![
-            proposal.proposal_id,
-            proposal.recipient,
-            proposal.label,
-            proposal.amount,
-            proposal.fee,
-            proposal.fee_rate,
-            encode_psbt(psbt),
-            now()
-        ],
-    )
-    .map(|_| ())
-    .map_err(internal)
-}
-
-fn persist_multisig_proposal(
-    db: &Connection,
-    proposal: &PaymentProposalDto,
-    psbt: &Psbt,
-) -> ApiResult<()> {
+fn persist_proposal(db: &Connection, proposal: &PaymentProposalDto, psbt: &Psbt) -> ApiResult<()> {
     db.execute(
         "INSERT INTO groot_proposals (proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,'collecting',?8)",
         params![
@@ -3137,6 +3125,21 @@ fn persist_acceleration(
     )
     .map(|_| ())
     .map_err(internal)
+}
+
+fn persist_prepared_state<'db>(
+    transaction: &mut SqliteTransaction<'db>,
+    wallet: &mut PersistedWallet<SqliteTransaction<'db>>,
+    proposal: &PaymentProposalDto,
+    psbt: &Psbt,
+    acceleration: Option<(AccelerationMethod, &TransactionDto)>,
+) -> ApiResult<()> {
+    persist_proposal(transaction, proposal, psbt)?;
+    if let Some((method, original)) = acceleration {
+        persist_acceleration(transaction, &proposal.proposal_id, method, original)?;
+    }
+    wallet.persist(transaction).map_err(internal)?;
+    Ok(())
 }
 
 fn reconcile_active_acceleration_proposals(db: &Connection) -> ApiResult<()> {
@@ -6132,12 +6135,13 @@ pub fn multisig_tx_prepare(
         .ok_or_else(|| api_error("invalid_amount", "Fee rate must be greater than zero."))?;
     let metadata = read_multisig_metadata(&app)?;
     let mut db = open_multisig_db(&app)?;
-    let mut wallet = load_wallet(&mut db)?;
+    let mut transaction = db.transaction().map_err(internal)?;
+    let mut wallet = load_wallet_transaction(&mut transaction)?;
     let mut builder = wallet.build_tx();
     builder
         .add_recipient(address.script_pubkey(), Amount::from_sat(amount))
         .fee_rate(rate);
-    let frozen = frozen_outpoints(&db)?;
+    let frozen = frozen_outpoints(&transaction)?;
     match coin_selection {
         CoinSelectionInput::Auto => {
             builder.unspendable(frozen);
@@ -6177,8 +6181,7 @@ pub fn multisig_tx_prepare(
             internal(message)
         }
     })?;
-    enforce_change_recovery_gap(&db, &wallet, &psbt)?;
-    wallet.persist(&mut db).map_err(internal)?;
+    enforce_change_recovery_gap(&transaction, &wallet, &psbt)?;
     let fee = psbt
         .fee_amount()
         .ok_or_else(|| internal("Unable to calculate the transaction fee."))?
@@ -6186,10 +6189,13 @@ pub fn multisig_tx_prepare(
     let proposal_id = Uuid::new_v4().to_string();
     let encoded = encode_psbt(&psbt);
     let created_at = now();
-    db.execute(
+    transaction.execute(
         "INSERT INTO groot_proposals (proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,'collecting',?8)",
         params![proposal_id, address.to_string(), label, amount, fee, applied_fee_rate, encoded, created_at],
     ).map_err(internal)?;
+    wallet.persist(&mut transaction).map_err(internal)?;
+    drop(wallet);
+    transaction.commit().map_err(internal)?;
     load_multisig_proposal(&mut db, &metadata, &proposal_id)
 }
 
@@ -6606,12 +6612,13 @@ pub fn tx_prepare(
     let rate = FeeRate::from_sat_per_vb(applied_fee_rate as u64)
         .ok_or_else(|| api_error("invalid_amount", "Fee rate must be greater than zero."))?;
     let mut db = open_db(&app)?;
-    let mut wallet = load_wallet(&mut db)?;
+    let mut transaction = db.transaction().map_err(internal)?;
+    let mut wallet = load_wallet_transaction(&mut transaction)?;
     let mut builder = wallet.build_tx();
     builder
         .add_recipient(address.script_pubkey(), Amount::from_sat(amount))
         .fee_rate(rate);
-    let frozen = frozen_outpoints(&db)?;
+    let frozen = frozen_outpoints(&transaction)?;
     match coin_selection {
         CoinSelectionInput::Auto => {
             builder.unspendable(frozen);
@@ -6651,8 +6658,7 @@ pub fn tx_prepare(
             internal(message)
         }
     })?;
-    enforce_change_recovery_gap(&db, &wallet, &psbt)?;
-    wallet.persist(&mut db).map_err(internal)?;
+    enforce_change_recovery_gap(&transaction, &wallet, &psbt)?;
     let fee = psbt
         .fee_amount()
         .ok_or_else(|| internal("Unable to calculate the transaction fee."))?
@@ -6690,7 +6696,9 @@ pub fn tx_prepare(
         rbf,
         network: "regtest",
     };
-    persist_single_proposal(&db, &proposal, &psbt)?;
+    persist_prepared_state(&mut transaction, &mut wallet, &proposal, &psbt, None)?;
+    drop(wallet);
+    transaction.commit().map_err(internal)?;
     state.proposals.lock().map_err(internal)?.insert(
         proposal_id.clone(),
         PendingProposal {
@@ -6858,7 +6866,7 @@ fn acceleration_label(method: AccelerationMethod, original: &TransactionDto) -> 
 }
 
 fn build_cpfp(
-    wallet: &mut PersistedWallet<Connection>,
+    wallet: &mut Wallet,
     parent_txid: Txid,
     parent_fee: Amount,
     rate: FeeRate,
@@ -6944,7 +6952,7 @@ fn build_cpfp(
 }
 
 fn build_acceleration_psbt(
-    wallet: &mut PersistedWallet<Connection>,
+    wallet: &mut Wallet,
     txid: Txid,
     method: AccelerationMethod,
     cpfp_parent_fee: Option<Amount>,
@@ -6979,11 +6987,12 @@ fn prepare_persisted_multisig_acceleration(
     applied_fee_rate: f64,
     fee_rate: FeeRate,
 ) -> ApiResult<MultisigProposalDto> {
-    let mut wallet = load_wallet(db)?;
     if let Some(proposal_id) = active_acceleration_proposal_id(db, &txid, method)? {
         return load_multisig_proposal(db, metadata, &proposal_id);
     }
-    let original = snapshot_from(&wallet, db, None, true)?
+    let mut transaction = db.transaction().map_err(internal)?;
+    let mut wallet = load_wallet_transaction(&mut transaction)?;
+    let original = snapshot_from(&wallet, &transaction, None, true)?
         .transactions
         .into_iter()
         .find(|transaction| transaction.id == txid.to_string())
@@ -6994,7 +7003,7 @@ fn prepare_persisted_multisig_acceleration(
             )
         })?;
     let psbt = build_acceleration_psbt(&mut wallet, txid, method, parent_fee, fee_rate)?;
-    enforce_change_recovery_gap(db, &wallet, &psbt)?;
+    enforce_change_recovery_gap(&transaction, &wallet, &psbt)?;
     let proposal = summarize_payment_psbt(
         &wallet,
         &psbt,
@@ -7002,9 +7011,15 @@ fn prepare_persisted_multisig_acceleration(
         matches!(method, AccelerationMethod::Cpfp),
         acceleration_label(method, &original),
     )?;
-    persist_multisig_proposal(db, &proposal, &psbt)?;
-    persist_acceleration(db, &proposal.proposal_id, method, &original)?;
-    wallet.persist(db).map_err(internal)?;
+    persist_prepared_state(
+        &mut transaction,
+        &mut wallet,
+        &proposal,
+        &psbt,
+        Some((method, &original)),
+    )?;
+    drop(wallet);
+    transaction.commit().map_err(internal)?;
     load_multisig_proposal(db, metadata, &proposal.proposal_id)
 }
 
@@ -7022,8 +7037,8 @@ pub fn tx_acceleration_prepare(
         .map_err(|_| api_error("acceleration_unavailable", "Enter a valid transaction ID."))?;
     let (applied, rate) = validate_acceleration_rate(fee_rate)?;
     let mut db = open_db(&app)?;
-    let mut wallet = load_wallet(&mut db)?;
     if let Some(proposal_id) = active_acceleration_proposal_id(&db, &txid, method)? {
+        let wallet = load_wallet(&mut db)?;
         let proposal = load_payment_proposal_dto(&db, &wallet, &proposal_id)?;
         if let Ok(pending) = load_single_proposal(&db, &proposal_id) {
             state
@@ -7034,6 +7049,7 @@ pub fn tx_acceleration_prepare(
         }
         return Ok(proposal);
     }
+    let wallet = load_wallet(&mut db)?;
     let original = snapshot_from(&wallet, &db, None, false)?
         .transactions
         .into_iter()
@@ -7049,8 +7065,11 @@ pub fn tx_acceleration_prepare(
     } else {
         None
     };
+    drop(wallet);
+    let mut transaction = db.transaction().map_err(internal)?;
+    let mut wallet = load_wallet_transaction(&mut transaction)?;
     let psbt = build_acceleration_psbt(&mut wallet, txid, method, parent_fee, rate)?;
-    enforce_change_recovery_gap(&db, &wallet, &psbt)?;
+    enforce_change_recovery_gap(&transaction, &wallet, &psbt)?;
     let proposal = summarize_payment_psbt(
         &wallet,
         &psbt,
@@ -7058,9 +7077,15 @@ pub fn tx_acceleration_prepare(
         matches!(method, AccelerationMethod::Cpfp),
         acceleration_label(method, &original),
     )?;
-    persist_single_proposal(&db, &proposal, &psbt)?;
-    persist_acceleration(&db, &proposal.proposal_id, method, &original)?;
-    wallet.persist(&mut db).map_err(internal)?;
+    persist_prepared_state(
+        &mut transaction,
+        &mut wallet,
+        &proposal,
+        &psbt,
+        Some((method, &original)),
+    )?;
+    drop(wallet);
+    transaction.commit().map_err(internal)?;
     state.proposals.lock().map_err(internal)?.insert(
         proposal.proposal_id.clone(),
         PendingProposal {
@@ -9140,7 +9165,7 @@ mod tests {
                 output: vec![],
             })
             .unwrap();
-            persist_single_proposal(
+            persist_proposal(
                 &db,
                 &PaymentProposalDto {
                     proposal_id: proposal_id.clone(),
@@ -9211,6 +9236,101 @@ mod tests {
             "malformed_psbt"
         );
         fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn prepared_wallet_proposal_and_acceleration_roll_back_as_one_unit() {
+        use bdk_wallet::bitcoin::{absolute::LockTime, transaction::Version, Transaction};
+
+        let mut db = Connection::open_in_memory().unwrap();
+        init_app_schema(&db).unwrap();
+        let mnemonic = Mnemonic::parse(WORDS).unwrap();
+        let (external, internal) = watch_templates(&mnemonic, "atomic prepare").unwrap();
+        Wallet::create(external, internal)
+            .network(NETWORK)
+            .create_wallet(&mut db)
+            .unwrap();
+
+        let psbt = Psbt::from_unsigned_tx(Transaction {
+            version: Version::TWO,
+            lock_time: LockTime::ZERO,
+            input: vec![],
+            output: vec![],
+        })
+        .unwrap();
+        let proposal = PaymentProposalDto {
+            proposal_id: "atomic-proposal".into(),
+            recipient: "bcrt1qatomicfixture".into(),
+            recipient_testnet_alias: None,
+            label: "Atomic fixture".into(),
+            amount: 10,
+            fee: 1,
+            fee_rate: 1.0,
+            total: 11,
+            change: 0,
+            change_addresses: vec![],
+            change_testnet_aliases: vec![],
+            output_count: 0,
+            selected_outpoints: vec![],
+            inputs: vec![],
+            locktime: 0,
+            rbf: false,
+            network: "regtest",
+        };
+        let original = TransactionDto {
+            id: "11".repeat(32),
+            kind: "payment".into(),
+            direction: "sent".into(),
+            amount: 10,
+            fee: Some(1),
+            status: "pending".into(),
+            confirmations: 0,
+            date: "1".into(),
+            address: Some("bcrt1qoriginalfixture".into()),
+            label: "Original".into(),
+            block: None,
+            replaced_by: None,
+            input_count: Some(1),
+            output_count: Some(2),
+            fee_rate: Some(1.0),
+            wallet_input_amount: Some(11),
+            wallet_output_amount: Some(1),
+            locktime: Some(0),
+            rbf: Some(true),
+        };
+
+        let mut transaction = db.transaction().unwrap();
+        let mut wallet = load_wallet_transaction(&mut transaction).unwrap();
+        assert_eq!(wallet.reveal_next_address(KeychainKind::Internal).index, 0);
+        persist_prepared_state(
+            &mut transaction,
+            &mut wallet,
+            &proposal,
+            &psbt,
+            Some((AccelerationMethod::Rbf, &original)),
+        )
+        .unwrap();
+        drop(wallet);
+        transaction.rollback().unwrap();
+
+        assert_eq!(
+            db.query_row("SELECT COUNT(*) FROM groot_proposals", [], |row| row
+                .get::<_, u64>(0))
+                .unwrap(),
+            0
+        );
+        assert_eq!(
+            db.query_row("SELECT COUNT(*) FROM groot_accelerations", [], |row| row
+                .get::<_, u64>(0))
+                .unwrap(),
+            0
+        );
+        let mut reloaded = load_wallet(&mut db).unwrap();
+        assert_eq!(
+            reloaded.reveal_next_address(KeychainKind::Internal).index,
+            0,
+            "rolled-back BDK changes must not consume a change address"
+        );
     }
 
     #[test]

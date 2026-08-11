@@ -62,6 +62,7 @@ Reports should describe:
 - SQLite database files are forced to owner-only mode on Unix.
 - Production SQLite connections enable a bounded busy timeout, foreign keys, `trusted_schema=OFF`, and `SQLITE_DBCONFIG_DEFENSIVE`.
 - State-changing native commands are serialized. Proposal signatures use compare-and-swap persistence to avoid lost updates.
+- Single-key and multisig transaction preparation atomically commits BDK change derivation, the reviewed proposal, and optional acceleration lineage. A rollback test proves interruption before commit leaves no proposal/lineage and does not consume a change address.
 - Registry fault injection proves partial writes and pre-rename failures preserve the prior authoritative file and remove temporary state. SQLite transaction-abort evidence proves multi-row changes roll back across reopen; registry identity validation remains linear for large profile sets.
 - Multisig metadata must match the descriptor checksum registered for the wallet.
 - Filesystem deletion is not described as secure erasure because flash filesystems and backups can retain deleted data.
