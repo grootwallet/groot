@@ -112,6 +112,14 @@ The preflight places authentication in an owner-only temporary curl configuratio
 
 ## 6. Reproducible unsigned desktop build
 
+Before building, verify the deterministic target dependency inventory:
+
+```bash
+pnpm test:sbom
+```
+
+The unsigned build emits `groot.cdx.json` and includes both the binary and SBOM in `SHA256SUMS`. The SBOM represents packages installed/resolved for that build target; packages locked only for other targets remain visible through the recorded lock count and appear when generated on those targets.
+
 Run on two clean machines with the pinned Node, pnpm, Rust toolchain, target, OS, Xcode/SDK and dependency lockfiles:
 
 ```sh

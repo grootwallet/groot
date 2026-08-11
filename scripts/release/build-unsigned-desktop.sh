@@ -28,7 +28,9 @@ cargo build --locked --release --manifest-path src-tauri/Cargo.toml
 pnpm tauri build --no-bundle
 
 install -m 0755 src-tauri/target/release/Groot "$release_out/Groot"
+node scripts/release/generate-sbom.mjs "$release_out/groot.cdx.json"
 shasum -a 256 "$release_out/Groot" > "$release_out/SHA256SUMS"
+shasum -a 256 "$release_out/groot.cdx.json" >> "$release_out/SHA256SUMS"
 {
   echo "commit=$release_commit"
   echo "source_date_epoch=$SOURCE_DATE_EPOCH"

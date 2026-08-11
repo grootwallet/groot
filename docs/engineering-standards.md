@@ -32,6 +32,8 @@ Dependencies point inward. Routes never select adapters. Rust commands translate
 - GitHub Actions use immutable commit SHAs, job permissions stay read-only by default, and checkout credentials are not persisted. CI must not publish release artifacts from pull-request jobs.
 - Vendored Rust code is reviewable source, not implicitly trusted source. Changes under `src-tauri/vendor/`, either lockfile, CI workflows, package-manager configuration, Tauri capabilities, or release scripts require an explicit supply-chain/security review.
 - Advisory scanners are one signal. A green scan does not replace provenance, license review, feature review, maintainer-risk review, reproducible builds, SBOMs, signed artifacts, or independent review.
+- `pnpm test:sbom` must deterministically regenerate a target-specific CycloneDX inventory from the locked, installed Node graph and Cargo metadata. Registry components require their lockfile integrity/checksum and every dependency requires declared license metadata. The application license is a release-owner decision and must not be inferred by tooling.
+- `pnpm test:supply-chain` enforces exact direct Node/Rust and toolchain versions, disabled lifecycle scripts, store-integrity settings, immutable GitHub Action SHAs, read-only CI permissions, and non-persisted checkout credentials.
 - Do not run a wallet release from an unreviewed CI artifact. Mainnet release provenance and signing remain blocked by the canonical checklist.
 
 ## Test pyramid

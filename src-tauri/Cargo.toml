@@ -13,25 +13,25 @@ name = "Groot"
 path = "src/main.rs"
 
 [build-dependencies]
-tauri-build = { version = "2", features = [] }
+tauri-build = { version = "=2.6.3", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-aes-gcm = "0.10"
-argon2 = "0.5"
-base64 = "0.22"
+tauri = { version = "=2.11.5", features = [] }
+serde = { version = "=1.0.228", features = ["derive"] }
+serde_json = "=1.0.150"
+aes-gcm = "=0.10.3"
+argon2 = "=0.5.3"
+base64 = "=0.22.1"
 bip39 = { version = "=2.2.2", features = ["zeroize"] }
-bdk_bitcoind_rpc = "0.22"
-bdk_wallet = { version = "3.1", features = ["compiler", "keys-bip39", "rusqlite"] }
-rand = "0.8"
-thiserror = "2"
-uuid = { version = "1", features = ["v4"] }
-zeroize = "1"
-tauri-plugin-clipboard-manager = "2"
-tauri-plugin-dialog = "2.7.2"
-url = "2"
+bdk_bitcoind_rpc = "=0.22.0"
+bdk_wallet = { version = "=3.1.0", features = ["compiler", "keys-bip39", "rusqlite"] }
+rand = "=0.8.7"
+thiserror = "=2.0.18"
+uuid = { version = "=1.24.0", features = ["v4"] }
+zeroize = "=1.9.0"
+tauri-plugin-clipboard-manager = "=2.3.2"
+tauri-plugin-dialog = "=2.7.2"
+url = "=2.5.8"
 # Enables the platform-native TLS verifier for the already-transitive, pinned
 # minreq transport. ADR 0020 records why the legacy rustls backend is forbidden.
 minreq = { version = "=2.14.1", features = ["https-native"] }
@@ -46,10 +46,10 @@ jsonrpc = "=0.18.0"
 security-framework = { path = "vendor/security-framework" }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-block2 = "0.6.2"
-objc2 = "0.6.4"
-objc2-app-kit = "0.3.2"
-objc2-foundation = "0.3.2"
+block2 = "=0.6.2"
+objc2 = "=0.6.4"
+objc2-app-kit = "=0.3.2"
+objc2-foundation = "=0.3.2"
 
 [patch.crates-io]
 security-framework-sys = { path = "vendor/security-framework-sys" }
