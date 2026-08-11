@@ -1,3 +1,4 @@
+use bdk_wallet::bitcoin::Network;
 use std::{
     io::{Read, Write},
     path::{Path, PathBuf},
@@ -141,7 +142,16 @@ pub enum HwiChain {
 }
 
 impl HwiChain {
-    fn as_hwi_argument(self) -> &'static str {
+    pub(crate) const fn for_network(network: Network) -> Self {
+        match network {
+            Network::Bitcoin => Self::Main,
+            Network::Testnet | Network::Testnet4 => Self::Test,
+            Network::Signet => Self::Signet,
+            Network::Regtest => Self::Regtest,
+        }
+    }
+
+    pub(crate) const fn as_hwi_argument(self) -> &'static str {
         match self {
             Self::Main => "main",
             Self::Test => "test",
@@ -636,6 +646,8 @@ mod tests {
 
     #[test]
     fn constructs_fixed_hwi_commands_for_every_supported_operation() {
+        use crate::build_network::parameters_for;
+
         let test = HwiCli::for_chain(HwiChain::Test);
         assert_eq!(
             test.device_command("coldcard", "usb:1", "getxpub", "m/48'/1'/0'/2'"),
@@ -663,6 +675,18 @@ mod tests {
         assert_eq!(HwiChain::Test.as_hwi_argument(), "test");
         assert_eq!(HwiChain::Regtest.as_hwi_argument(), "regtest");
         assert_eq!(HwiChain::Signet.as_hwi_argument(), "signet");
+        for network in [
+            Network::Bitcoin,
+            Network::Testnet,
+            Network::Testnet4,
+            Network::Signet,
+            Network::Regtest,
+        ] {
+            assert_eq!(
+                HwiChain::for_network(network).as_hwi_argument(),
+                parameters_for(network).hwi_chain
+            );
+        }
 
         assert_eq!(
             test.fingerprint_command("ledger", "f57a32b", "getxpub", "m/84'/1'/0'"),

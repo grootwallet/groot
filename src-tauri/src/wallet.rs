@@ -14,8 +14,7 @@ use bdk_wallet::{
         constants::genesis_block,
         hashes::{sha256, Hash as _, HashEngine},
         secp256k1::Secp256k1,
-        Address, Amount, BlockHash, FeeRate, Network, NetworkKind, OutPoint, Psbt, Transaction,
-        Txid, Weight,
+        Address, Amount, BlockHash, FeeRate, Network, OutPoint, Psbt, Transaction, Txid, Weight,
     },
     chain::{BlockId, ChainPosition, CheckPoint, ConfirmationBlockTime},
     descriptor::{Descriptor, DescriptorPublicKey},
@@ -48,7 +47,9 @@ use zeroize::{Zeroize, Zeroizing};
 
 use crate::auth::AuthThrottle;
 use crate::bsms::{BsmsError, DescriptorRecord};
-use crate::build_network::{DEFAULT_RPC_URL, IS_REGTEST, NAME as NETWORK_NAME, NETWORK};
+use crate::build_network::{
+    DEFAULT_RPC_URL, IS_REGTEST, NAME as NETWORK_NAME, NETWORK, PARAMETERS,
+};
 use crate::external_signer::{
     self, ExternalSignerError, ExternalSignerInput, ExternalSignerWallet, SignerSource,
     SINGLESIG_ACCOUNT_PATH,
@@ -56,6 +57,7 @@ use crate::external_signer::{
 use crate::hardware::{HardwareError, HardwareTransport, HwiChain, HwiCli};
 use crate::multisig::{
     CosignerInput, CosignerSource, MultisigPreviewDto, MultisigWalletDto, PolicyError, PolicyInput,
+    MULTISIG_ACCOUNT_PATH,
 };
 use crate::native_backup;
 use crate::network::{ChainBackend, CoreNodeConfig, NetworkConfigError, RpcAuthMode};
@@ -357,14 +359,9 @@ pub fn public_backup_print(window: WebviewWindow) -> ApiResult<()> {
 
 fn hwi_cli(app: &AppHandle) -> ApiResult<HwiCli> {
     let home = app.path().home_dir().map_err(internal)?;
-    HwiCli::for_chain(match NETWORK {
-        Network::Bitcoin => HwiChain::Main,
-        Network::Testnet | Network::Testnet4 => HwiChain::Test,
-        Network::Signet => HwiChain::Signet,
-        Network::Regtest => HwiChain::Regtest,
-    })
-    .with_home(home)
-    .map_err(hardware_api_error)
+    HwiCli::for_chain(HwiChain::for_network(NETWORK))
+        .with_home(home)
+        .map_err(hardware_api_error)
 }
 
 #[derive(Debug, Serialize)]
@@ -2449,7 +2446,7 @@ fn enforce_change_recovery_gap(db: &Connection, wallet: &Wallet, psbt: &Psbt) ->
 
 fn root_key(mnemonic: &Mnemonic, credential: &str) -> ApiResult<Xpriv> {
     let seed = Zeroizing::new(mnemonic.to_seed(credential));
-    Xpriv::new_master(NetworkKind::Test, seed.as_ref()).map_err(internal)
+    Xpriv::new_master(PARAMETERS.extended_key_network, seed.as_ref()).map_err(internal)
 }
 
 fn watch_templates(
@@ -2459,7 +2456,7 @@ fn watch_templates(
     let master = root_key(mnemonic, credential)?;
     let secp = Secp256k1::new();
     let fingerprint = master.fingerprint(&secp);
-    let account_path = DerivationPath::from_str("m/84'/1'/0'").map_err(internal)?;
+    let account_path = DerivationPath::from_str(SINGLESIG_ACCOUNT_PATH).map_err(internal)?;
     let account_private = master.derive_priv(&secp, &account_path).map_err(internal)?;
     let account_public = Xpub::from_priv(&secp, &account_private);
     Ok((
@@ -3803,9 +3800,9 @@ fn address_rows(db: &Connection, multisig: bool) -> ApiResult<Vec<ReceiveAddress
                 created: row.get::<_, u64>(3)?.to_string(),
                 status: row.get(4)?,
                 derivation_path: if multisig {
-                    format!("m/48'/1'/0'/2'/0/{}", row.get::<_, u32>(0)?)
+                    format!("{MULTISIG_ACCOUNT_PATH}/0/{}", row.get::<_, u32>(0)?)
                 } else {
-                    format!("m/84'/1'/0'/0/{}", row.get::<_, u32>(0)?)
+                    format!("{SINGLESIG_ACCOUNT_PATH}/0/{}", row.get::<_, u32>(0)?)
                 },
                 hardware_verified_at: row.get::<_, Option<u64>>(5)?.map(|value| value.to_string()),
                 hardware_verified_by: row.get(6)?,
@@ -4357,7 +4354,7 @@ pub fn address_create(
         label,
         created: created.to_string(),
         status: "awaiting".to_owned(),
-        derivation_path: format!("m/84'/1'/0'/0/{}", info.index),
+        derivation_path: format!("{SINGLESIG_ACCOUNT_PATH}/0/{}", info.index),
         hardware_verified_at: None,
         hardware_verified_by: None,
     })
@@ -6211,7 +6208,7 @@ pub fn multisig_address_create(
         label,
         created: created.to_string(),
         status: "awaiting".to_owned(),
-        derivation_path: format!("m/48'/1'/0'/2'/0/{}", info.index),
+        derivation_path: format!("{MULTISIG_ACCOUNT_PATH}/0/{}", info.index),
         hardware_verified_at: None,
         hardware_verified_by: None,
     })
@@ -7479,6 +7476,7 @@ mod tests {
     use crate::external_signer::{self, ExternalSignerInput, SignerSource, SINGLESIG_ACCOUNT_PATH};
     use crate::multisig::{CosignerInput, CosignerSource, MULTISIG_ACCOUNT_PATH};
     use crate::recovery::{SpendingPath, TimedSpendingPath};
+    use bdk_wallet::bitcoin::NetworkKind;
     use std::{net::TcpListener, thread};
 
     #[test]

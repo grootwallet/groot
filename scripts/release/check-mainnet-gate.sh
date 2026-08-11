@@ -30,7 +30,7 @@ contains_fixed "mainnet is not compiled into this release" src-tauri/build.rs \
   || fail "the native build no longer rejects mainnet explicitly"
 reject_fixed "pub const NETWORK: Network = Network::Bitcoin" src-tauri/src/build_network.rs \
   "the native build module can select Bitcoin mainnet"
-contains_fixed "use crate::build_network::{DEFAULT_RPC_URL, IS_REGTEST, NAME as NETWORK_NAME, NETWORK};" src-tauri/src/wallet.rs \
+contains_fixed "NAME as NETWORK_NAME, NETWORK, PARAMETERS," src-tauri/src/wallet.rs \
   || fail "the wallet no longer consumes the compile-time network identity"
 contains_fixed "const MAINNET_ENABLED: bool = false;" src-tauri/src/release_policy.rs \
   || fail "the trusted-boundary mainnet gate is no longer disabled"
@@ -56,6 +56,14 @@ contains_fixed '"identifier": "app.groot.wallet.testnet4"' src-tauri/tauri.testn
   || fail "the Testnet4 rehearsal no longer has isolated application storage"
 contains_fixed "Mainnet remains disabled" docs/adr/0012-mainnet-release-gate.md \
   || fail "the accepted mainnet decision is missing"
+contains_fixed "singlesig_account_path: \"m/84'/0'/0'\"" src-tauri/src/build_network.rs \
+  || fail "the dormant mainnet BIP84 account path is no longer explicit"
+contains_fixed "multisig_account_path: \"m/48'/0'/0'/2'\"" src-tauri/src/build_network.rs \
+  || fail "the dormant mainnet BIP48 account path is no longer explicit"
+contains_fixed 'hwi_chain: "main"' src-tauri/src/build_network.rs \
+  || fail "the dormant mainnet HWI chain is no longer explicit"
+contains_fixed 'address_hrp: "bc"' src-tauri/src/build_network.rs \
+  || fail "the dormant mainnet address family is no longer explicit"
 contains_fixed "Release decision: BLOCKED" docs/mainnet-release-checklist.md \
   || fail "the release checklist is not explicitly blocked"
 contains_fixed "Candidate scope: first mainnet release is macOS desktop only" docs/mainnet-release-checklist.md \

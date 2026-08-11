@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::str::FromStr;
 
-pub const SINGLESIG_ACCOUNT_PATH: &str = "m/84'/1'/0'";
+pub use crate::build_network::SINGLESIG_ACCOUNT_PATH;
 pub const MAX_IMPORT_BYTES: usize = 256 * 1024;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -91,7 +91,9 @@ pub fn descriptors(input: &ExternalSignerInput) -> Result<(String, String), Exte
     reject_private_material(&input.xpub)?;
     let fingerprint = input.fingerprint.trim().to_ascii_lowercase();
     let xpub = input.xpub.trim();
-    let origin = "84'/1'/0'";
+    let origin = SINGLESIG_ACCOUNT_PATH
+        .strip_prefix("m/")
+        .ok_or(ExternalSignerError::InvalidDerivation)?;
     let external = canonical_descriptor(&format!("wpkh([{fingerprint}/{origin}]{xpub}/0/*)"))?;
     let internal = canonical_descriptor(&format!("wpkh([{fingerprint}/{origin}]{xpub}/1/*)"))?;
     Ok((external, internal))

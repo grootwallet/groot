@@ -217,8 +217,10 @@ fn key_for_branch(
         return Err(RecoveryError::InvalidKey);
     }
     format!(
-        "[{}/48'/1'/0'/2']{}/{branch}/*",
-        cosigner.fingerprint, cosigner.xpub
+        "[{}/{}]{}/{branch}/*",
+        cosigner.fingerprint,
+        MULTISIG_ACCOUNT_PATH.trim_start_matches("m/"),
+        cosigner.xpub
     )
     .parse()
     .map_err(|_| RecoveryError::InvalidKey)

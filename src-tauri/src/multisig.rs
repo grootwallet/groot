@@ -1,15 +1,13 @@
 use crate::recovery::{RecoveryTemplate, TimedSpendingPath};
 use bdk_wallet::{
-    bitcoin::{
-        bip32::{Fingerprint, Xpub},
-        NetworkKind,
-    },
+    bitcoin::bip32::{Fingerprint, Xpub},
     descriptor::{Descriptor, DescriptorPublicKey},
 };
 use serde::{Deserialize, Serialize};
 use std::{collections::HashSet, fmt, str::FromStr};
 
-pub const MULTISIG_ACCOUNT_PATH: &str = "m/48'/1'/0'/2'";
+pub use crate::build_network::MULTISIG_ACCOUNT_PATH;
+use crate::build_network::PARAMETERS;
 const MIN_COSIGNERS: usize = 3;
 const MAX_COSIGNERS: usize = 7;
 
@@ -46,7 +44,7 @@ impl CosignerInput {
             || self.label.trim().is_empty()
             || self.label.chars().count() > 48
             || Fingerprint::from_str(self.fingerprint.trim()).is_err()
-            || account_xpub.network != NetworkKind::Test
+            || account_xpub.network != PARAMETERS.extended_key_network
         {
             return Err(PolicyError::InvalidDescriptor);
         }
@@ -263,8 +261,10 @@ impl MultisigPolicy {
             .iter()
             .map(|cosigner| {
                 format!(
-                    "[{}/48'/1'/0'/2']{}/{branch}/*",
-                    cosigner.fingerprint, cosigner.account_xpub
+                    "[{}/{}]{}/{branch}/*",
+                    cosigner.fingerprint,
+                    MULTISIG_ACCOUNT_PATH.trim_start_matches("m/"),
+                    cosigner.account_xpub
                 )
             })
             .collect::<Vec<_>>()
