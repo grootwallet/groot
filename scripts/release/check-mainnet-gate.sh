@@ -68,6 +68,8 @@ contains_fixed "Release decision: BLOCKED" docs/mainnet-release-checklist.md \
   || fail "the release checklist is not explicitly blocked"
 contains_fixed "Candidate scope: first mainnet release is macOS desktop only" docs/mainnet-release-checklist.md \
   || fail "the first-release platform scope is missing from the checklist"
+contains_fixed "- [x] User-controlled Bitcoin Core is the only first-release mainnet backend" docs/mainnet-release-checklist.md \
+  || fail "the evidence-backed first-mainnet backend scope is no longer locked"
 contains_fixed "The first production target is a **macOS desktop" docs/roadmap.md \
   || fail "the roadmap no longer matches the first-release platform scope"
 contains_fixed "A second Groot process cannot concurrently mutate" docs/mainnet-release-checklist.md \
