@@ -244,7 +244,9 @@ test('locked wallet can continue into hardware and multisig setup', async ({ pag
 });
 
 test('shows skeletons while a restored wallet loads its first synced data', async ({ page }) => {
-  await page.goto('/?fixture-delayed-wallet-data=1');
+  // Start observing after navigation commits rather than after every resource
+  // finishes, because the fixture intentionally makes this state transient.
+  await page.goto('/?fixture-delayed-wallet-data=1', { waitUntil: 'commit' });
   await expect(page.locator('.wallet-skeleton.balance')).toBeVisible();
   await expect(page.locator('.wallet-skeleton.transactions')).toBeVisible();
   await expect(page.getByText('Hardware order', { exact: true })).toBeVisible();

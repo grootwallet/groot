@@ -251,6 +251,24 @@ mod tests {
         }
     }
 
+    fn allowed_fingerprints(signers: &[(SecretKey, PublicKey, Fingerprint)]) -> Vec<Fingerprint> {
+        signers.iter().map(|signer| signer.2).collect()
+    }
+
+    fn assert_merge_rejected_without_mutation(
+        original: &mut Psbt,
+        imported: Psbt,
+        allowed: &[Fingerprint],
+        expected: ProposalError,
+    ) {
+        let preserved = original.clone();
+        assert_eq!(
+            merge_signed_psbt(original, imported, allowed, 2),
+            Err(expected)
+        );
+        assert_eq!(*original, preserved);
+    }
+
     #[test]
     fn psbt_base64_round_trips_and_rejects_malformed_or_oversized_payloads() {
         let (psbt, _) = proposal();
@@ -418,6 +436,286 @@ mod tests {
     }
 
     #[test]
+    fn rejects_transaction_version_mutation_without_mutating_original() {
+        let (mut original, signers) = proposal();
+        let allowed = allowed_fingerprints(&signers);
+        let mut imported = original.clone();
+        imported.unsigned_tx.version = transaction::Version::ONE;
+        sign_all_inputs(&mut imported, &signers[0]);
+
+        assert_merge_rejected_without_mutation(
+            &mut original,
+            imported,
+            &allowed,
+            ProposalError::ProposalMismatch,
+        );
+    }
+
+    #[test]
+    fn rejects_recipient_script_mutation_without_mutating_original() {
+        let (mut original, signers) = proposal();
+        let allowed = allowed_fingerprints(&signers);
+        let mut imported = original.clone();
+        imported.unsigned_tx.output[0].script_pubkey = ScriptBuf::from_bytes(vec![0x51]);
+        sign_all_inputs(&mut imported, &signers[0]);
+
+        assert_merge_rejected_without_mutation(
+            &mut original,
+            imported,
+            &allowed,
+            ProposalError::ProposalMismatch,
+        );
+    }
+
+    #[test]
+    fn rejects_output_amount_mutation_without_mutating_original() {
+        let (mut original, signers) = proposal();
+        let allowed = allowed_fingerprints(&signers);
+        let mut imported = original.clone();
+        imported.unsigned_tx.output[0].value = Amount::from_sat(9_999);
+        sign_all_inputs(&mut imported, &signers[0]);
+
+        assert_merge_rejected_without_mutation(
+            &mut original,
+            imported,
+            &allowed,
+            ProposalError::ProposalMismatch,
+        );
+    }
+
+    #[test]
+    fn rejects_output_set_mutation_without_mutating_original() {
+        let (mut original, signers) = proposal();
+        let allowed = allowed_fingerprints(&signers);
+        let mut imported = original.clone();
+        imported.unsigned_tx.output.push(TxOut {
+            value: Amount::from_sat(1),
+            script_pubkey: ScriptBuf::from_bytes(vec![0x51]),
+        });
+        sign_all_inputs(&mut imported, &signers[0]);
+
+        assert_merge_rejected_without_mutation(
+            &mut original,
+            imported,
+            &allowed,
+            ProposalError::ProposalMismatch,
+        );
+    }
+
+    #[test]
+    fn rejects_input_outpoint_mutation_without_mutating_original() {
+        let (mut original, signers) = proposal();
+        let allowed = allowed_fingerprints(&signers);
+        let mut imported = original.clone();
+        imported.unsigned_tx.input[0].previous_output.vout = 1;
+        sign_all_inputs(&mut imported, &signers[0]);
+
+        assert_merge_rejected_without_mutation(
+            &mut original,
+            imported,
+            &allowed,
+            ProposalError::ProposalMismatch,
+        );
+    }
+
+    #[test]
+    fn rejects_sequence_mutation_without_mutating_original() {
+        let (mut original, signers) = proposal();
+        let allowed = allowed_fingerprints(&signers);
+        let mut imported = original.clone();
+        imported.unsigned_tx.input[0].sequence = Sequence::MAX;
+        sign_all_inputs(&mut imported, &signers[0]);
+
+        assert_merge_rejected_without_mutation(
+            &mut original,
+            imported,
+            &allowed,
+            ProposalError::ProposalMismatch,
+        );
+    }
+
+    #[test]
+    fn rejects_locktime_mutation_without_mutating_original() {
+        let (mut original, signers) = proposal();
+        let allowed = allowed_fingerprints(&signers);
+        let mut imported = original.clone();
+        imported.unsigned_tx.lock_time = absolute::LockTime::from_consensus(1);
+        sign_all_inputs(&mut imported, &signers[0]);
+
+        assert_merge_rejected_without_mutation(
+            &mut original,
+            imported,
+            &allowed,
+            ProposalError::ProposalMismatch,
+        );
+    }
+
+    #[test]
+    fn rejects_fee_source_mutation_without_mutating_original() {
+        let (mut original, signers) = proposal();
+        let allowed = allowed_fingerprints(&signers);
+        original.inputs[0].witness_utxo = Some(TxOut {
+            value: Amount::from_sat(12_000),
+            script_pubkey: ScriptBuf::from_bytes(vec![0x51]),
+        });
+        let mut imported = original.clone();
+        imported.inputs[0].witness_utxo.as_mut().unwrap().value = Amount::from_sat(12_001);
+        sign_all_inputs(&mut imported, &signers[0]);
+
+        assert_merge_rejected_without_mutation(
+            &mut original,
+            imported,
+            &allowed,
+            ProposalError::ProposalMismatch,
+        );
+    }
+
+    #[test]
+    fn rejects_declared_sighash_mutation_without_mutating_original() {
+        let (mut original, signers) = proposal();
+        let allowed = allowed_fingerprints(&signers);
+        let mut imported = original.clone();
+        imported.inputs[0].sighash_type = Some(EcdsaSighashType::Single.into());
+        sign_all_inputs(&mut imported, &signers[0]);
+
+        assert_merge_rejected_without_mutation(
+            &mut original,
+            imported,
+            &allowed,
+            ProposalError::ProposalMismatch,
+        );
+    }
+
+    #[test]
+    fn rejects_key_origin_mutation_without_mutating_original() {
+        let (mut original, signers) = proposal();
+        let allowed = allowed_fingerprints(&signers);
+        let mut imported = original.clone();
+        imported.inputs[0]
+            .bip32_derivation
+            .get_mut(&signers[0].1.inner)
+            .unwrap()
+            .0 = Fingerprint::from([8; 4]);
+        sign_all_inputs(&mut imported, &signers[0]);
+
+        assert_merge_rejected_without_mutation(
+            &mut original,
+            imported,
+            &allowed,
+            ProposalError::ProposalMismatch,
+        );
+    }
+
+    #[test]
+    fn rejects_proprietary_metadata_mutations_at_every_scope() {
+        use bdk_wallet::bitcoin::psbt::raw::ProprietaryKey;
+
+        let (mut original, signers) = proposal();
+        let allowed = allowed_fingerprints(&signers);
+        let key = ProprietaryKey {
+            prefix: b"groot-test".to_vec(),
+            subtype: 1_u8,
+            key: b"unreviewed".to_vec(),
+        };
+
+        for scope in 0..3 {
+            let mut imported = original.clone();
+            match scope {
+                0 => {
+                    imported.proprietary.insert(key.clone(), vec![1]);
+                }
+                1 => {
+                    imported.inputs[0].proprietary.insert(key.clone(), vec![1]);
+                }
+                _ => {
+                    imported.outputs[0].proprietary.insert(key.clone(), vec![1]);
+                }
+            }
+            sign_all_inputs(&mut imported, &signers[0]);
+            assert_merge_rejected_without_mutation(
+                &mut original,
+                imported,
+                &allowed,
+                ProposalError::ProposalMismatch,
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_both_finalization_forms_without_mutating_original() {
+        let (mut original, signers) = proposal();
+        let allowed = allowed_fingerprints(&signers);
+
+        let mut script_sig = original.clone();
+        script_sig.inputs[0].final_script_sig = Some(ScriptBuf::from_bytes(vec![0x51]));
+        assert_merge_rejected_without_mutation(
+            &mut original,
+            script_sig,
+            &allowed,
+            ProposalError::PrematureFinalization,
+        );
+
+        let mut witness = original.clone();
+        witness.inputs[0].final_script_witness = Some(Witness::from_slice(&[b"untrusted"]));
+        assert_merge_rejected_without_mutation(
+            &mut original,
+            witness,
+            &allowed,
+            ProposalError::PrematureFinalization,
+        );
+    }
+
+    #[test]
+    fn rejects_injected_signer_origin_before_signature_acceptance() {
+        let (mut original, signers) = proposal();
+        let allowed = allowed_fingerprints(&signers);
+        let stranger = signer(9);
+        let mut imported = original.clone();
+        for input in &mut imported.inputs {
+            input.bip32_derivation.insert(
+                stranger.1.inner,
+                (
+                    stranger.2,
+                    DerivationPath::from_str("m/48'/1'/0'/2'/0/0").unwrap(),
+                ),
+            );
+        }
+        sign_all_inputs(&mut imported, &stranger);
+
+        assert_merge_rejected_without_mutation(
+            &mut original,
+            imported,
+            &allowed,
+            ProposalError::ProposalMismatch,
+        );
+    }
+
+    #[test]
+    fn rejects_signature_from_known_but_disallowed_origin_without_mutating_original() {
+        let (mut original, signers) = proposal();
+        let allowed = allowed_fingerprints(&signers);
+        let stranger = signer(9);
+        for input in &mut original.inputs {
+            input.bip32_derivation.insert(
+                stranger.1.inner,
+                (
+                    stranger.2,
+                    DerivationPath::from_str("m/48'/1'/0'/2'/0/0").unwrap(),
+                ),
+            );
+        }
+        let mut imported = original.clone();
+        sign_all_inputs(&mut imported, &stranger);
+
+        assert_merge_rejected_without_mutation(
+            &mut original,
+            imported,
+            &allowed,
+            ProposalError::UnknownSigner,
+        );
+    }
+
+    #[test]
     fn empty_psbt_progress_fails_closed() {
         let empty = Psbt::from_unsigned_tx(Transaction {
             version: transaction::Version::TWO,
@@ -445,6 +743,7 @@ mod tests {
                 "premature_finalization",
             ),
             (ProposalError::NoInputs, "no_inputs"),
+            (ProposalError::NoNewSignatures, "no_new_signatures"),
             (ProposalError::MergeFailed, "psbt_merge_failed"),
         ];
         for (error, code) in cases {

@@ -15,7 +15,7 @@ Candidate scope: first mainnet release is macOS desktop only, hardware-focused, 
 - [ ] User-controlled Bitcoin Core is the only first-release mainnet backend; remote Core/Esplora have separate privacy review.
 - [ ] No fallback backend or fallback fee exists.
 - [ ] First mainnet release has an explicit per-transaction amount cap and no batch spending.
-- [ ] RBF and CPFP pass funded replacement, package-fee, rejection, restart, and confirmation-race tests.
+- [ ] RBF and CPFP pass funded replacement, package-fee, rejection, restart, and confirmation-race tests through Groot's command, proposal-persistence, signing/import, and broadcast boundaries. Partial lower-level evidence: [`regtest_multisig.rs`](../src-tauri/tests/regtest_multisig.rs) proves the BDK/Core transaction and chain-state matrix with `pnpm test:integration:regtest`, but does not by itself close this application-boundary gate.
 - [ ] Birthday/gap-limit recovery restores an independently known wallet with old history and a deliberately extended gap.
 - [ ] Large-history and extended-gap scans expose bounded progress/cancellation, survive restart, and complete within the documented resource envelope.
 - [ ] Direct remote Core over TLS and `.onion` Core over a loopback Tor proxy pass chain-identity, authentication, timeout, certificate, DNS-leak, and fail-closed tests.
@@ -35,7 +35,8 @@ Candidate scope: first mainnet release is macOS desktop only, hardware-focused, 
 
 - [ ] macOS Keychain behavior is tested across create, upgrade, restart, backup restore, and deletion.
 - [ ] macOS packaged-app lifecycle, inactivity lock, sleep/wake, crash/restart, accessibility, clipboard, screen capture, and multi-window behavior are certified.
-- [ ] A second Groot process cannot concurrently mutate the same registry or wallet databases; stale-lock and crash recovery fail safely.
+- [x] A second Groot process cannot concurrently mutate the same registry or wallet databases; stale-lock and crash recovery fail safely. Evidence: [`process_lock.rs`](../src-tauri/src/process_lock.rs), including real child-process contention and forced-termination recovery, reproducible with `cargo test --locked process_lock::tests --lib` from `src-tauri`.
+- [ ] The packaged macOS app presents an understandable second-launch failure and reopens normally after forced termination without manual lock-file cleanup.
 - [ ] iOS Keychain and lifecycle/background behavior are certified on physical devices before an iOS mainnet release.
 - [ ] Android hardware-backed Keystore replaces the sandbox fallback and is certified on physical devices before an Android mainnet release.
 - [ ] Windows Credential Manager replaces the sandbox fallback and is certified before a Windows mainnet release.

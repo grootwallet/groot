@@ -1135,7 +1135,7 @@ fn validate_regtest_app_data_override(path: PathBuf) -> ApiResult<PathBuf> {
     Ok(path)
 }
 
-fn app_data_dir(app: &AppHandle) -> ApiResult<PathBuf> {
+pub(crate) fn app_data_dir(app: &AppHandle) -> ApiResult<PathBuf> {
     match std::env::var_os(REGTEST_APP_DATA_OVERRIDE) {
         Some(path) => validate_regtest_app_data_override(PathBuf::from(path)),
         None => app.path().app_data_dir().map_err(internal),

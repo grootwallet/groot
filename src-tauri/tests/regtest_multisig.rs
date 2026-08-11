@@ -6,14 +6,36 @@ use bdk_wallet::{
     bitcoin::{
         bip32::{DerivationPath, Xpriv, Xpub},
         secp256k1::Secp256k1,
-        Address, Amount, FeeRate, Network, NetworkKind,
+        Address, Amount, BlockHash, FeeRate, Network, NetworkKind, Psbt,
     },
     chain::{BlockId, CheckPoint},
     rusqlite::Connection,
     KeychainKind, PersistedWallet, SignOptions, Wallet,
 };
 use rand::{rngs::OsRng, RngCore};
-use std::{path::PathBuf, str::FromStr, sync::Arc};
+use std::{fs, path::PathBuf, str::FromStr, sync::Arc};
+
+struct TemporaryWalletDatabase(PathBuf);
+
+impl TemporaryWalletDatabase {
+    fn new() -> Self {
+        let mut suffix = [0_u8; 16];
+        OsRng.fill_bytes(&mut suffix);
+        let suffix = suffix
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>();
+        Self(std::env::temp_dir().join(format!("groot-regtest-wallet-{suffix}.sqlite")))
+    }
+}
+
+impl Drop for TemporaryWalletDatabase {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.0);
+        let _ = fs::remove_file(self.0.with_extension("sqlite-shm"));
+        let _ = fs::remove_file(self.0.with_extension("sqlite-wal"));
+    }
+}
 
 fn regtest_dir() -> PathBuf {
     std::env::var_os("GROOT_REGTEST_DIR")
@@ -129,16 +151,69 @@ fn descriptor(keys: &[TestKey], branch: u8, private_index: Option<usize>) -> Str
     format!("wsh(sortedmulti(2,{encoded}))")
 }
 
+fn partially_sign(keys: &[TestKey], expected_external_descriptor: &str, psbt: &mut Psbt) {
+    for signer in 0..2 {
+        let signing_wallet = Wallet::create(
+            descriptor(keys, 0, Some(signer)),
+            descriptor(keys, 1, Some(signer)),
+        )
+        .network(Network::Regtest)
+        .create_wallet_no_persist()
+        .expect("signer wallet");
+        assert_eq!(
+            signing_wallet
+                .public_descriptor(KeychainKind::External)
+                .to_string(),
+            expected_external_descriptor
+        );
+        let finalized = signing_wallet
+            .sign(
+                psbt,
+                SignOptions {
+                    trust_witness_utxo: true,
+                    try_finalize: false,
+                    ..SignOptions::default()
+                },
+            )
+            .expect("partial signature");
+        assert!(
+            !finalized,
+            "isolated signers must leave finalization to the coordinator"
+        );
+    }
+}
+
+fn mine_empty_block(rpc: &Client, destination: &Address) -> BlockHash {
+    let result: serde_json::Value = rpc
+        .call(
+            "generateblock",
+            &[
+                serde_json::json!(destination.to_string()),
+                serde_json::json!([]),
+            ],
+        )
+        .expect("mine empty competing block");
+    result["hash"]
+        .as_str()
+        .expect("generateblock hash")
+        .parse()
+        .expect("valid generated block hash")
+}
+
 #[test]
 #[ignore = "requires the isolated Bitcoin Core regtest harness"]
 fn funds_builds_signs_and_broadcasts_a_real_two_of_three_psbt() {
     assert!(std::env::var_os("GROOT_RUN_REGTEST").is_some());
     let keys = keys();
-    let mut db = Connection::open_in_memory().unwrap();
+    let database = TemporaryWalletDatabase::new();
+    let mut db = Connection::open(&database.0).expect("open persistent coordinator database");
     let mut coordinator = Wallet::create(descriptor(&keys, 0, None), descriptor(&keys, 1, None))
         .network(Network::Regtest)
         .create_wallet(&mut db)
         .expect("watch-only coordinator");
+    let expected_external_descriptor = coordinator
+        .public_descriptor(KeychainKind::External)
+        .to_string();
     let receive = coordinator.reveal_next_address(KeychainKind::External);
     coordinator.persist(&mut db).unwrap();
 
@@ -175,38 +250,7 @@ fn funds_builds_signs_and_broadcasts_a_real_two_of_three_psbt() {
     assert_eq!(psbt.inputs.len(), 1);
     assert!(!psbt.inputs[0].bip32_derivation.is_empty());
 
-    for signer in 0..2 {
-        let signing_wallet = Wallet::create(
-            descriptor(&keys, 0, Some(signer)),
-            descriptor(&keys, 1, Some(signer)),
-        )
-        .network(Network::Regtest)
-        .create_wallet_no_persist()
-        .expect("signer wallet");
-        assert_eq!(
-            signing_wallet
-                .public_descriptor(KeychainKind::External)
-                .to_string(),
-            coordinator
-                .public_descriptor(KeychainKind::External)
-                .to_string()
-        );
-        let finalized = signing_wallet
-            .sign(
-                &mut psbt,
-                SignOptions {
-                    trust_witness_utxo: true,
-                    try_finalize: false,
-                    ..SignOptions::default()
-                },
-            )
-            .expect("partial signature");
-        assert!(
-            !finalized,
-            "isolated signers must leave finalization to the coordinator"
-        );
-        assert_eq!(psbt.inputs[0].partial_sigs.len(), signer + 1);
-    }
+    partially_sign(&keys, &expected_external_descriptor, &mut psbt);
     assert_eq!(psbt.inputs[0].partial_sigs.len(), 2);
     assert!(coordinator
         .finalize_psbt(&mut psbt, SignOptions::default())
@@ -214,6 +258,21 @@ fn funds_builds_signs_and_broadcasts_a_real_two_of_three_psbt() {
     let transaction = psbt.extract_tx().expect("extract finalized transaction");
     let txid = rpc.send_raw_transaction(&transaction).expect("broadcast");
     assert_eq!(txid, transaction.compute_txid());
+    let original_entry = rpc
+        .get_mempool_entry(&txid)
+        .expect("original transaction enters the mempool");
+    assert!(original_entry.bip125_replaceable);
+
+    let mempool_before_rebroadcast = rpc.get_raw_mempool().expect("mempool before rebroadcast");
+    let rebroadcast = rpc.send_raw_transaction(&transaction);
+    if let Ok(rebroadcast_txid) = rebroadcast {
+        assert_eq!(rebroadcast_txid, txid);
+    }
+    assert_eq!(
+        rpc.get_raw_mempool().expect("mempool after rebroadcast"),
+        mempool_before_rebroadcast,
+        "rebroadcasting the same transaction must be idempotent"
+    );
     sync(&mut coordinator, &mut db);
     assert!(coordinator
         .transactions()
@@ -224,33 +283,67 @@ fn funds_builds_signs_and_broadcasts_a_real_two_of_three_psbt() {
         .expect("the original transaction signals RBF");
     replacement_builder.fee_rate(FeeRate::from_sat_per_vb(5).unwrap());
     let mut replacement = replacement_builder.finish().expect("replacement PSBT");
-    for signer in 0..2 {
-        Wallet::create(
-            descriptor(&keys, 0, Some(signer)),
-            descriptor(&keys, 1, Some(signer)),
-        )
-        .network(Network::Regtest)
-        .create_wallet_no_persist()
-        .unwrap()
-        .sign(
-            &mut replacement,
-            SignOptions {
-                trust_witness_utxo: true,
-                try_finalize: false,
-                ..SignOptions::default()
-            },
-        )
-        .expect("replacement partial signature");
-    }
+    partially_sign(&keys, &expected_external_descriptor, &mut replacement);
     assert!(coordinator
         .finalize_psbt(&mut replacement, SignOptions::default())
         .expect("finalize replacement"));
     let replacement_tx = replacement.extract_tx().expect("extract replacement");
+
+    let original_block = rpc
+        .generate_to_address(1, &mining)
+        .expect("confirm original during replacement race");
+    sync(&mut coordinator, &mut db);
+    assert!(coordinator
+        .get_tx(txid)
+        .unwrap()
+        .chain_position
+        .is_confirmed());
+    assert!(
+        rpc.send_raw_transaction(&replacement_tx).is_err(),
+        "a prepared replacement must be rejected after its original confirms"
+    );
+
+    rpc.invalidate_block(&original_block[0])
+        .expect("invalidate original confirmation");
+    mine_empty_block(&rpc, &mining);
+    sync(&mut coordinator, &mut db);
+    assert!(coordinator
+        .get_tx(txid)
+        .unwrap()
+        .chain_position
+        .is_unconfirmed());
+    assert!(
+        rpc.get_mempool_entry(&txid).is_ok(),
+        "the original returns to the mempool after its confirmation is reorged"
+    );
+
     let replacement_txid = rpc
         .send_raw_transaction(&replacement_tx)
         .expect("broadcast replacement");
     assert_ne!(replacement_txid, txid);
+    assert!(
+        rpc.get_mempool_entry(&txid).is_err(),
+        "accepted replacement must evict the original transaction"
+    );
+    assert!(rpc.get_mempool_entry(&replacement_txid).is_ok());
+    assert!(
+        rpc.send_raw_transaction(&transaction).is_err(),
+        "the lower-fee original must not replace its accepted replacement"
+    );
     sync(&mut coordinator, &mut db);
+
+    drop(coordinator);
+    drop(db);
+    let mut db = Connection::open(&database.0).expect("reopen coordinator database");
+    let mut coordinator = Wallet::load()
+        .check_network(Network::Regtest)
+        .load_wallet(&mut db)
+        .expect("load persisted coordinator")
+        .expect("persisted coordinator exists");
+    assert!(
+        coordinator.get_tx(replacement_txid).is_some(),
+        "the accepted replacement survives a database restart"
+    );
 
     let child_input = coordinator
         .list_unspent()
@@ -270,31 +363,66 @@ fn funds_builds_signs_and_broadcasts_a_real_two_of_three_psbt() {
         .drain_to(child_destination)
         .fee_rate(FeeRate::from_sat_per_vb(10).unwrap());
     let mut child = child_builder.finish().expect("CPFP PSBT");
-    for signer in 0..2 {
-        Wallet::create(
-            descriptor(&keys, 0, Some(signer)),
-            descriptor(&keys, 1, Some(signer)),
-        )
-        .network(Network::Regtest)
-        .create_wallet_no_persist()
-        .unwrap()
-        .sign(
-            &mut child,
-            SignOptions {
-                trust_witness_utxo: true,
-                try_finalize: false,
-                ..SignOptions::default()
-            },
-        )
-        .expect("CPFP partial signature");
-    }
+    partially_sign(&keys, &expected_external_descriptor, &mut child);
     assert!(coordinator
         .finalize_psbt(&mut child, SignOptions::default())
         .expect("finalize CPFP"));
     let child_tx = child.extract_tx().expect("extract CPFP");
     let child_txid = rpc.send_raw_transaction(&child_tx).expect("broadcast CPFP");
-    rpc.generate_to_address(1, &mining)
+    let parent_entry = rpc
+        .get_mempool_entry(&replacement_txid)
+        .expect("replacement parent mempool entry");
+    let child_entry = rpc
+        .get_mempool_entry(&child_txid)
+        .expect("CPFP child mempool entry");
+    assert_eq!(child_entry.depends, vec![replacement_txid]);
+    let package_fee = parent_entry.fees.base + child_entry.fees.base;
+    let package_vsize = parent_entry.vsize + child_entry.vsize;
+    assert!(
+        package_fee.to_sat() >= package_vsize.saturating_mul(7),
+        "the funded parent/child package must clear the asserted 7 sat/vB package rate"
+    );
+
+    let mined = rpc
+        .generate_to_address(1, &mining)
         .expect("mine replacement package");
+    sync(&mut coordinator, &mut db);
+    assert!(coordinator
+        .get_tx(replacement_txid)
+        .unwrap()
+        .chain_position
+        .is_confirmed());
+    assert!(coordinator
+        .get_tx(child_txid)
+        .unwrap()
+        .chain_position
+        .is_confirmed());
+
+    rpc.invalidate_block(&mined[0])
+        .expect("invalidate package block for reorg");
+    mine_empty_block(&rpc, &mining);
+    sync(&mut coordinator, &mut db);
+    assert!(
+        coordinator
+            .get_tx(replacement_txid)
+            .unwrap()
+            .chain_position
+            .is_unconfirmed(),
+        "the replacement returns to unconfirmed after a one-block reorg"
+    );
+    assert!(
+        coordinator
+            .get_tx(child_txid)
+            .unwrap()
+            .chain_position
+            .is_unconfirmed(),
+        "the CPFP child returns to unconfirmed after a one-block reorg"
+    );
+    assert!(rpc.get_mempool_entry(&replacement_txid).is_ok());
+    assert!(rpc.get_mempool_entry(&child_txid).is_ok());
+
+    rpc.generate_to_address(1, &mining)
+        .expect("reconfirm package after reorg");
     sync(&mut coordinator, &mut db);
     assert!(coordinator
         .get_tx(replacement_txid)

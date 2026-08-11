@@ -1,3 +1,5 @@
+use tauri::Manager as _;
+
 pub mod airgap;
 mod auth;
 pub mod bsms;
@@ -7,6 +9,7 @@ mod multisig;
 mod native_backup;
 pub mod network;
 mod notifications;
+mod process_lock;
 pub mod proposal;
 pub mod recovery;
 pub mod registry;
@@ -20,6 +23,11 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
+        .setup(|app| {
+            let lock = process_lock::ProcessLock::acquire_for_app(app.handle())?;
+            app.manage(lock);
+            Ok(())
+        })
         .manage(wallet::AppState::default())
         .invoke_handler(tauri::generate_handler![
             wallet::wallet_exists,
