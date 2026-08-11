@@ -62,7 +62,7 @@ Reports should describe:
 - SQLite database files are forced to owner-only mode on Unix.
 - Production SQLite connections enable a bounded busy timeout, foreign keys, `trusted_schema=OFF`, and `SQLITE_DBCONFIG_DEFENSIVE`.
 - State-changing native commands are serialized. Proposal signatures use compare-and-swap persistence to avoid lost updates.
-- Single-key and multisig transaction preparation atomically commits BDK change derivation, the reviewed proposal, and optional acceleration lineage. A rollback test proves interruption before commit leaves no proposal/lineage and does not consume a change address.
+- Single-key and multisig transaction preparation atomically commits BDK change derivation, the reviewed proposal, and optional acceleration lineage. Explicit rollback and real `SQLITE_FULL` tests prove interruption or exhausted storage leaves no proposal/lineage and does not consume a change address.
 - Registry fault injection proves partial writes and pre-rename failures preserve the prior authoritative file and remove temporary state. SQLite transaction-abort evidence proves multi-row changes roll back across reopen; registry identity validation remains linear for large profile sets.
 - Multisig metadata must match the descriptor checksum registered for the wallet.
 - Filesystem deletion is not described as secure erasure because flash filesystems and backups can retain deleted data.
@@ -81,6 +81,7 @@ Reports should describe:
 - Amounts are integer satoshis and fee rates are validated positive sat/vB values.
 - Standard public BIP129/BSMS records are bounded, private-material rejected, canonical descriptor parsed, network checked, and first-address verified. Groot does not claim BIP129 encrypted signer-round support.
 - Blockchain Commons UR v2 exchange accepts only bounded `crypto-psbt` payloads. Frame count, frame size, decoded size, canonical CBOR envelope, duplicate/out-of-order input, and PSBT magic are validated in Rust.
+- A deterministic dependency-free hostile-input corpus applies malformed ASCII, Unicode, nesting, duplicate-field, boundary-size, and fixed mutation cases across PSBT, BSMS, external-signer, UR, and multipart import boundaries in every Rust test run.
 - RBF and CPFP produce ordinary persisted PSBT proposals and therefore cannot bypass transaction review, signer identity, exact-PSBT merge validation, credential checks, or finalization.
 - Recovery scan birthday and gap limit are bounded and persisted. Receive revelation and actual PSBT change output creation fail before exceeding that gap, including after canceled proposal churn, and the setting cannot be lowered below already-derived receive/change requirements. Full rescan is credential authenticated; the interface warns that a birthday set too late can omit history.
 

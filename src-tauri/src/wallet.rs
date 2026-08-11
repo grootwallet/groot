@@ -9372,6 +9372,42 @@ mod tests {
             0,
             "rolled-back BDK changes must not consume a change address"
         );
+        drop(reloaded);
+
+        let page_count = db
+            .query_row("PRAGMA page_count", [], |row| row.get::<_, u64>(0))
+            .unwrap();
+        db.execute_batch(&format!("PRAGMA max_page_count = {page_count};"))
+            .unwrap();
+        let mut transaction = db.transaction().unwrap();
+        let mut wallet = load_wallet_transaction(&mut transaction).unwrap();
+        assert_eq!(wallet.reveal_next_address(KeychainKind::Internal).index, 0);
+        let mut disk_full_proposal = proposal;
+        disk_full_proposal.proposal_id = "disk-full-proposal".into();
+        disk_full_proposal.label = "x".repeat(2 * 1024 * 1024);
+        assert!(persist_prepared_state(
+            &mut transaction,
+            &mut wallet,
+            &disk_full_proposal,
+            &psbt,
+            None,
+        )
+        .is_err());
+        drop(wallet);
+        drop(transaction);
+
+        assert_eq!(
+            db.query_row("SELECT COUNT(*) FROM groot_proposals", [], |row| row
+                .get::<_, u64>(0))
+                .unwrap(),
+            0
+        );
+        let mut reloaded = load_wallet(&mut db).unwrap();
+        assert_eq!(
+            reloaded.reveal_next_address(KeychainKind::Internal).index,
+            0,
+            "SQLITE_FULL must not consume a change address"
+        );
     }
 
     #[test]

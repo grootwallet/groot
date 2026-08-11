@@ -33,6 +33,8 @@ The whole Rust library is reported and regression-gated separately with `pnpm te
 
 ### Integration tests
 
+`cargo test --locked --test adversarial_inputs` runs a deterministic shared hostile-input corpus across PSBT, BSMS, external-signer, UR, and multipart boundaries. It includes malformed ASCII, Unicode/control text, duplicate JSON fields, deep nesting, boundary sizes, and fixed xorshift mutations. The corpus is reproducible and dependency-free; it complements parser-specific semantic regressions and future external continuous fuzzing without adding code to the application binary.
+
 `pnpm test:regtest` talks to the isolated Bitcoin Core node. It creates fresh descriptor keys and addresses on every run, funds a real `wsh(sortedmulti())` wallet, syncs BDK, builds a real PSBT, signs it with two isolated signers, finalizes it in the coordinator, broadcasts it, and verifies that the transaction returns through sync. Fresh keys prevent prior regtest state from making tests order-dependent.
 
 The same command also runs a funded acceleration test through the production workflows called by Groot's multisig commands. It prepares and idempotently resumes a persisted RBF proposal, imports signatures on both sides of a database reopen, preserves authoritative ready state when the original confirms first, rejects an evicted lower-fee original, accepts only true mempool/active-chain duplicate broadcasts, commits replacement lineage atomically, and repeats proposal/import/finalize/broadcast persistence for a measured CPFP package. The separate lower-level test retains reorg, mempool-restoration, and reconfirmation coverage.
