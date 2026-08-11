@@ -381,7 +381,12 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   await expect(page.locator('.toast').filter({ hasText: 'Signed PSBT rejected' })).toBeVisible();
   await expect(page.getByText('0 of 1 collected', { exact: true })).toBeVisible();
   await rejectedImport.getByRole('button', { name: 'Cancel' }).click();
+  const durableImportError = page.locator('.signing-transport-error');
+  await expect(durableImportError).toContainText('Signed PSBT rejected');
+  await expect(durableImportError).toContainText('does not match the transaction you reviewed');
+  expect(await durableImportError.evaluate((element) => getComputedStyle(element).textAlign)).toBe('left');
   await page.getByRole('button', { name: 'Show unsigned QR' }).click();
+  await expect(durableImportError).toHaveCount(0);
   const unsignedQrDialog = page.getByRole('dialog', { name: 'Unsigned PSBT' });
   const unsignedQrImage = unsignedQrDialog.getByRole('img', { name: /crypto-psbt QR frame/ });
   await expect(unsignedQrImage).toBeVisible();

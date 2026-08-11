@@ -28,7 +28,7 @@
   let name = $state('');
   let threshold = $state(2);
   let cosigners = $state<CosignerDraft[]>([]);
-  let stage = $state<'keys' | 'review'>('keys');
+  let stage = $state<'policy' | 'keys' | 'review' | 'backup'>('policy');
   let pickerOpen = $state(false);
   let pickerError = $state('');
   let keyOpen = $state(false);
@@ -73,7 +73,7 @@
   const requiredKeys = $derived(templateKind === 'standard' ? standardCosignerCount : 4);
   const errors = $derived([...validatePolicyDraft(policy), ...(cosigners.length !== requiredKeys ? [`${templateKind === 'standard' ? 'This wallet' : 'This template'} needs exactly ${requiredKeys} cosigners.`] : [])]);
   const visibleErrors = $derived.by(() => {
-    if (cosigners.length === requiredKeys) return errors;
+    if (cosigners.length === requiredKeys) return errors.map(signerLanguage);
     const countErrors = new Set([
       'Add at least 3 cosigners.',
       'The threshold cannot exceed the number of cosigners.',
@@ -83,7 +83,7 @@
     const countGuidance = remaining > 0
       ? `Add ${remaining} more cosigner${remaining === 1 ? '' : 's'}.`
       : `Remove ${Math.abs(remaining)} cosigner${remaining === -1 ? '' : 's'}.`;
-    return [...errors.filter((item) => !countErrors.has(item)), countGuidance];
+    return [...errors.filter((item) => !countErrors.has(item)), countGuidance].map(signerLanguage);
   });
   const recoveryTemplate = $derived.by<RecoveryTemplate | null>(() => {
     if (templateKind === 'standard' || cosigners.length < 4) return null;
@@ -93,6 +93,10 @@
   const coldcardRegistrationRequired = $derived(cosigners.some((signer) => signer.deviceType?.toLowerCase() === 'coldcard'));
 
   onDestroy(() => { credential = ''; confirmation = ''; pinPositions = ''; pinChallenge = ''; hardwareScanGeneration += 1; });
+
+  function signerLanguage(value: string) {
+    return value.replaceAll('cosigners', 'signers').replaceAll('cosigner', 'signer');
+  }
 
   function chooseSource(next: CosignerSource) {
     source = next;
@@ -111,7 +115,7 @@
       const imported = parsePublicCosignerFile(await readTransferFile(file), fallbackLabel);
       cosigners = [...cosigners, { id: crypto.randomUUID(), ...imported, source: 'file' }];
       pickerOpen = false;
-      toast({ title: 'Public cosigner imported', description: `${imported.label} was loaded from a local file.`, tone: 'success' });
+      toast({ title: 'Public signer imported', description: `${imported.label} was loaded from a local file.`, tone: 'success' });
     } catch (cause) {
       pickerError = cause instanceof Error ? cause.message : 'Could not read the public-key file.';
     }
@@ -147,7 +151,7 @@
   function applyStandardRecipe(next: '2of3' | '3of5' | 'custom') {
     const nextCount = next === '2of3' ? 3 : next === '3of5' ? 5 : customCosignerCount;
     if (cosigners.length > nextCount) {
-      error = `Remove ${cosigners.length - nextCount} cosigner${cosigners.length - nextCount === 1 ? '' : 's'} before choosing this setup.`;
+      error = `Remove ${cosigners.length - nextCount} signer${cosigners.length - nextCount === 1 ? '' : 's'} before choosing this setup.`;
       return;
     }
     standardRecipe = next;
@@ -158,7 +162,7 @@
 
   function setCustomCosignerCount(next: number) {
     if (cosigners.length > next) {
-      error = `Remove ${cosigners.length - next} cosigner${cosigners.length - next === 1 ? '' : 's'} before reducing the key count.`;
+      error = `Remove ${cosigners.length - next} signer${cosigners.length - next === 1 ? '' : 's'} before reducing the key count.`;
       return;
     }
     customCosignerCount = next;
@@ -244,7 +248,7 @@
       coldcardPolicyFilename(preview.name),
       `# Groot multisig policy for COLDCARD\n# Import from Settings > Multisig Wallets > Import\n${preview.externalDescriptor}\n`
     );
-    toast({ title: 'Coldcard policy saved', description: 'Import it on every Coldcard cosigner, then verify the policy on-device.', tone: 'success' });
+    toast({ title: 'Coldcard policy saved', description: 'Import it on every Coldcard signer, then verify the policy on-device.', tone: 'success' });
   }
 
   async function importHardware(device: HardwareDevice, allowEmptyPassphrase = false) {
@@ -323,6 +327,15 @@
     finally { busy = false; }
   }
 
+  function continueToCosigners() {
+    error = '';
+    if (!name.trim()) {
+      error = 'A wallet name is required.';
+      return;
+    }
+    stage = 'keys';
+  }
+
   async function create() {
     if (!preview || !saved || (coldcardRegistrationRequired && !coldcardRegistered) || !credential || credential !== confirmation) return;
     busy = true; error = '';
@@ -341,10 +354,10 @@
     <div><p class="eyebrow">WALLET POLICY</p><h1>Create a policy wallet</h1><p class="subtitle">Choose a simple shared policy or add a separate delayed recovery key.</p></div>
     <div class="page-header-actions"><a class="secondary-link" href="/multisig/recover" aria-label="Recover from backup"><FileUp size={15}/>Recover</a><span class="network-chip">Regtest · Native SegWit</span></div>
   </header>
-  <nav class="creation-progress" aria-label="Wallet creation progress"><span class:active={stage === 'keys'}><b>1</b>Design</span><i class:active={stage === 'review'}></i><span class:active={stage === 'review'}><b>2</b>Verify</span><i></i><span><b>3</b>Back up</span></nav>
+  <nav class="creation-progress four-step-progress" aria-label="Wallet creation progress"><span class:active={stage === 'policy'}><b>1</b>Policy</span><i class:active={stage !== 'policy'}></i><span class:active={stage === 'keys'}><b>2</b>Signers</span><i class:active={stage === 'review' || stage === 'backup'}></i><span class:active={stage === 'review'}><b>3</b>Verify</span><i class:active={stage === 'backup'}></i><span class:active={stage === 'backup'}><b>4</b>Back up</span></nav>
 
-  {#if stage === 'keys'}
-    <div class="coordinator-grid">
+  {#if stage === 'policy'}
+    <div class="coordinator-grid policy-only-grid">
       <section class="form-card coordinator-main">
         <div class="template-grid" aria-label="Wallet templates">
           <button class:active={templateKind === 'standard'} onclick={() => chooseTemplate('standard')}><Users size={18}/><strong>Standard</strong><small>Flexible M of N · no timer</small></button>
@@ -362,11 +375,18 @@
           </div>
           {#if standardRecipe === 'custom'}<div class="threshold-row custom-threshold">
             <label class="field"><span>Signatures required (M)</span><select aria-label="Signatures required" value={threshold} onchange={(event) => threshold = Number(event.currentTarget.value)}>{#each Array(customCosignerCount - 1) as _, i}<option value={i + 2}>{i + 2}</option>{/each}</select></label>
-            <label class="field"><span>Total cosigners (N)</span><select aria-label="Total cosigners" value={customCosignerCount} onchange={(event) => setCustomCosignerCount(Number(event.currentTarget.value))}>{#each Array(5) as _, i}<option value={i + 3}>{i + 3}</option>{/each}</select></label>
+            <label class="field"><span>Total signers (N)</span><select aria-label="Total signers" value={customCosignerCount} onchange={(event) => setCustomCosignerCount(Number(event.currentTarget.value))}>{#each Array(5) as _, i}<option value={i + 3}>{i + 3}</option>{/each}</select></label>
           </div><p class="policy-guidance">Groot starts at 2 signatures. A 1-of-N wallet has no multisig theft protection; use a single-key wallet instead.</p>
           {:else}<div class="recipe-summary"><strong>{threshold} of {requiredKeys} signatures</strong><span>{standardRecipe === '2of3' ? 'Lose one key without losing access.' : 'Designed for a larger family or team.'}</span></div>{/if}
         {:else}<div class="path-visual"><span><b>NOW</b><strong>2 of 3 primary keys</strong></span><i></i><span><b>{templateKind === 'recovery' ? '~1 MONTH' : '~1 YEAR'}</b><strong>1 recovery key</strong></span></div><div class="recovery-separation"><ShieldCheck size={15}/><span><strong>Four independent keys required</strong><small>Key 4 is recovery-only. It is excluded from the immediate 2-of-3 branch and cannot be reused as a primary signer.</small></span></div>{/if}
-        <div class="key-heading"><div><h2>Cosigners</h2><p>Use a different device or backup for every key.</p></div><Button variant="secondary" size="small" disabled={cosigners.length >= requiredKeys} onclick={() => pickerOpen = true}><Plus size={15}/>{cosigners.length >= requiredKeys ? 'All added' : 'Add a cosigner'}</Button></div>
+        {#if error}<p class="form-error">{error}</p>{/if}
+        <div class="coordinator-actions"><Button variant="secondary" href="/settings"><ArrowLeft size={16}/>Cancel</Button><Button onclick={continueToCosigners}>Continue to signers<ChevronRight size={16}/></Button></div>
+      </section>
+    </div>
+  {:else if stage === 'keys'}
+    <div class="coordinator-grid">
+      <section class="form-card coordinator-main">
+        <div class="section-heading compact cosigner-step-heading"><div><span class="setup-step">SIGNERS</span><h2>Add {requiredKeys} independent keys</h2><p>{name.trim()} · {templateKind === 'standard' ? `${threshold} of ${requiredKeys}` : '2 of 3 + recovery'}</p></div><Button variant="secondary" size="small" disabled={cosigners.length >= requiredKeys} onclick={() => pickerOpen = true}><Plus size={15}/>{cosigners.length >= requiredKeys ? 'All added' : 'Add a signer'}</Button></div>
         <div class="cosigner-list">
           {#each cosigners as signer, i}
             <article class="cosigner-card">
@@ -383,20 +403,20 @@
                 </span>
                 <ChevronRight class="draft-row-chevron" size={16}/>
               </button>
-              <button class="remove-cosigner" aria-label="Remove {signer.label}" title="Remove cosigner" onclick={() => removeCosigner(signer.id)}><Trash2 size={16}/></button>
+              <button class="remove-cosigner" aria-label="Remove {signer.label}" title="Remove signer" onclick={() => removeCosigner(signer.id)}><Trash2 size={16}/></button>
             </article>
           {:else}
-            <div class="keys-empty"><FileKey size={22}/><strong>No cosigners yet</strong><span>Add {requiredKeys} independent keys for this template.</span></div>
+            <div class="keys-empty"><FileKey size={22}/><strong>No signers yet</strong><span>Add {requiredKeys} independent keys for this template.</span></div>
           {/each}
         </div>
-        {#if cosigners.length > 0}<p class="cosigner-progress" aria-live="polite">{cosigners.length} of {requiredKeys} cosigners added</p>{/if}
+        {#if cosigners.length > 0}<p class="cosigner-progress" aria-live="polite">{cosigners.length} of {requiredKeys} signers added</p>{/if}
         {#if reviewAttempted && visibleErrors.length}<div class="policy-errors" aria-live="polite">{#each visibleErrors as item}<p>{item}</p>{/each}</div>{/if}
         {#if error}<p class="form-error">{error}</p>{/if}
-        <div class="coordinator-actions"><Button variant="secondary" href="/settings"><ArrowLeft size={16}/>Cancel</Button><Button loading={busy} loadingLabel="Building policy…" onclick={review}>Review wallet<ChevronRight size={16}/></Button></div>
+        <div class="coordinator-actions"><Button variant="secondary" onclick={() => {error='';stage='policy';}}><ArrowLeft size={16}/>Back to policy</Button><Button loading={busy} loadingLabel="Building policy…" onclick={review}>Review wallet<ChevronRight size={16}/></Button></div>
       </section>
       <aside class="safety-panel"><ShieldCheck size={22}/><h2>Before you continue</h2><p>Groot stores public descriptors only. It cannot spend without enough signatures.</p><ul><li>Back up the wallet descriptor.</li><li>Verify each fingerprint on its device.</li><li>Keep devices in separate places.</li></ul><button class="hardware-help-card" onclick={() => openHardwareHelp()}><CircleHelp size={17}/><span><strong>Hardware setup help</strong><small>Coldcard, BitBox02, Ledger, Trezor, Jade</small></span><ChevronRight size={14}/></button><code>{MULTISIG_ACCOUNT_PATH}</code></aside>
     </div>
-  {:else if preview}
+  {:else if stage === 'review' && preview}
     <section class="form-card review-policy">
       <button class="back-link" onclick={() => stage = 'keys'}><ArrowLeft size={16}/>Edit keys</button>
       <span class="setup-step">FINAL REVIEW</span><h2>{preview.name}</h2><p class="review-intro">Confirm the policy and save the descriptor before creating this wallet.</p>
@@ -404,8 +424,16 @@
       <button class="descriptor-toggle" onclick={() => showDescriptor = !showDescriptor}>Descriptor logic <ChevronDown size={14} class={showDescriptor?'rotated':''}/></button>
       {#if showDescriptor}<div class="descriptor-block" data-testid="descriptor-preview"><span class="descriptor-label"><span>Receive descriptor</span><button aria-label="Copy receive descriptor" onclick={() => copyDescriptor(preview!.externalDescriptor, 'receive')}><Copy size={14}/></button></span><code>{preview.externalDescriptor}</code><span class="descriptor-label"><span>Change descriptor</span><button aria-label="Copy change descriptor" onclick={() => copyDescriptor(preview!.internalDescriptor, 'change')}><Copy size={14}/></button></span><code>{preview.internalDescriptor}</code>{#if recoveryTemplate?.type === 'recovery'}<span>Spend paths</span><code>2 of first 3 now · 1 recovery key after {recoveryTemplate.recovery.availableAfterBlocks.toLocaleString()} blocks</code>{/if}<button class="descriptor-download" onclick={saveDescriptorDraft}><Download size={14}/>Save public descriptor text</button></div>{/if}
       <div class="review-signers">{#each preview.cosigners as signer}<div><Check size={14}/><span><strong>{signer.label}</strong><small>{signer.fingerprint}</small></span></div>{/each}</div>
+      <div class="coordinator-actions"><Button variant="secondary" onclick={() => stage = 'keys'}><ArrowLeft size={16}/>Back to signers</Button><Button onclick={() => stage = 'backup'}>Continue to backup<ChevronRight size={16}/></Button></div>
+    </section>
+  {:else if stage === 'backup' && preview}
+    <section class="form-card review-policy">
+      <button class="back-link" onclick={() => stage = 'review'}><ArrowLeft size={16}/>Back to verification</button>
+      <span class="setup-step">BACK UP</span><h2>Protect {preview.name}</h2><p class="review-intro">Save the public descriptor, then protect this coordinator with a local app PIN.</p>
+      <div class="policy-summary"><strong>{threshold} of {cosigners.length} signatures</strong><span>wsh · sortedmulti · BIP48</span></div>
+      <Button variant="secondary" class="full" onclick={saveDescriptorDraft}><Download size={14}/>Save public descriptor text</Button>
       <label class="check-row"><input type="checkbox" bind:checked={saved}/><span><strong>I saved the wallet descriptor</strong><small>This public backup is required to recover addresses and coordinate signatures.</small></span></label>
-      {#if coldcardRegistrationRequired}<div class="hardware-policy-registration"><ShieldCheck size={18}/><div><strong>Register this wallet on Coldcard</strong><p>Coldcard must know the complete multisig policy before it can verify recipients and change. Save this BIP-380 descriptor, then import it from <b>Settings → Multisig Wallets → Import</b> on every Coldcard cosigner.</p><Button variant="secondary" size="small" onclick={saveColdcardPolicy}><Download size={14}/>Save Coldcard policy</Button></div></div><label class="check-row"><input type="checkbox" bind:checked={coldcardRegistered}/><span><strong>I imported and verified the policy on every Coldcard</strong><small>The name, signing threshold, and cosigner fingerprints matched on-device.</small></span></label>{/if}
+      {#if coldcardRegistrationRequired}<div class="hardware-policy-registration"><ShieldCheck size={18}/><div><strong>Register this wallet on Coldcard</strong><p>Coldcard must know the complete multisig policy before it can verify recipients and change. Save this BIP-380 descriptor, then import it from <b>Settings → Multisig Wallets → Import</b> on every Coldcard signer.</p><Button variant="secondary" size="small" onclick={saveColdcardPolicy}><Download size={14}/>Save Coldcard policy</Button></div></div><label class="check-row"><input type="checkbox" bind:checked={coldcardRegistered}/><span><strong>I imported and verified the policy on every Coldcard</strong><small>The name, signing threshold, and signer fingerprints matched on-device.</small></span></label>{/if}
       <div class="credential-grid"><PasswordField label="App PIN" inputLabel="App PIN" bind:value={credential} placeholder="Unlock this coordinator" autocomplete="new-password"/><PasswordField label="Confirm app PIN" inputLabel="Confirm app PIN" bind:value={confirmation} placeholder="Enter it again" autocomplete="new-password"/></div>
       <p class="credential-note">This PIN protects local coordinator data. Hardware devices keep their own signing credentials.</p>
       {#if credential && confirmation && credential !== confirmation}<p class="form-error">PINs do not match.</p>{/if}
@@ -415,10 +443,10 @@
   {/if}
 </div>
 
-<Modal open={pickerOpen} title="Add a cosigner" description="Choose how to import this device’s public account key." onclose={() => { pickerOpen = false; pickerError = ''; }}>
+<Modal open={pickerOpen} title="Add a signer" description="Choose how to import this signer’s public account key." onclose={() => { pickerOpen = false; pickerError = ''; }}>
   <div class="source-list">
     <button onclick={scanHardware}><Cpu size={18}/><span><strong>Connect hardware device</strong><small>Desktop · Bitcoin Core HWI</small></span><ChevronRight size={15}/></button>
-    <label class="source-button"><FileUp size={18}/><span><strong>Import public-key file</strong><small>Mounted SD card or local JSON · 256 KiB maximum</small></span><ChevronRight size={15}/><input aria-label="Public cosigner file" type="file" accept=".json,application/json" onchange={importCosignerFile}/></label>
+    <label class="source-button"><FileUp size={18}/><span><strong>Import public-key file</strong><small>Mounted SD card or local JSON · 256 KiB maximum</small></span><ChevronRight size={15}/><input aria-label="Public signer file" type="file" accept=".json,application/json" onchange={importCosignerFile}/></label>
     <button onclick={() => chooseSource('manual')}><FileKey size={18}/><span><strong>Enter public key</strong><small>Paste an account xpub and fingerprint</small></span><ChevronRight size={15}/></button>
   </div>
   {#if pickerError}<p class="form-error" aria-live="polite">{pickerError}</p>{/if}
@@ -426,17 +454,17 @@
 
 <Modal open={hardwareOpen} title="Connect hardware device" description="Connect one initialized device over USB, then verify its fingerprint before adding it." onclose={closeHardwareScan}>
   <div class="hardware-readiness"><Usb size={18}/><span><strong>Unlock the signer, then release its USB connection</strong><small>BitBox02: open the wallet in BitBoxApp first, then quit BitBoxApp completely before scanning. Quit Trezor Suite, Ledger Live, and other companion apps too. A locked Trezor Model One is supported from its Groot card.</small></span><button onclick={() => openHardwareHelp(true)}>Device help</button></div>
-  <label class="field"><span>Cosigner label</span><input bind:value={label} placeholder="Defaults to device model" maxlength="48"/></label>
-  {#if hardwareBusy}<HardwareActionPrompt title={hardwareProgress} detail={hardwareProgress.includes('Ledger') ? 'Keep Bitcoin Test open for Regtest and confirm the export on the device screen.' : 'Keep the signer connected and unlocked. Follow any instructions shown on the device.'} label="Hardware cosigner setup in progress"/>
+  <label class="field"><span>Signer label</span><input bind:value={label} placeholder="Defaults to device model" maxlength="48"/></label>
+  {#if hardwareBusy}<HardwareActionPrompt title={hardwareProgress} detail={hardwareProgress.includes('Ledger') ? 'Keep Bitcoin Test open for Regtest and confirm the export on the device screen.' : 'Keep the signer connected and unlocked. Follow any instructions shown on the device.'} label="Hardware signer setup in progress"/>
   {:else if hardware.length === 0}<div class="device-scan"><Cpu size={20}/><strong>{error ? 'Device needs attention' : 'No device found'}</strong><span>{error || 'HWI returned no device. For Coldcard, sign in first, enable its USB port, reconnect, then scan again. Other signers must be initialized, unlocked, and released by companion apps.'}</span><Button variant="secondary" size="small" onclick={scanHardware}>Scan again</Button></div>
   {:else}<div class="source-list hardware-device-list">{#each hardware as device}<button disabled={device.action === 'none'} onclick={() => handleHardware(device)}><Cpu size={18}/><span><strong>{device.label}</strong><small>{device.fingerprint ? `Fingerprint ${device.fingerprint} · ${device.message}` : device.message}</small><em class:ready={device.status === 'ready'}>{device.status === 'ready' ? 'Ready' : device.status === 'detected' ? 'Detected' : device.status === 'needs_pin' ? 'Unlock' : device.action === 'confirm_empty_passphrase' ? 'Choose wallet' : device.action === 'retry' ? 'Scan again' : 'Unavailable'}</em></span>{#if device.action !== 'none'}<ChevronRight size={15}/>{/if}</button>{/each}<button class="hardware-rescan" onclick={scanHardware}><RefreshCw size={16}/><span><strong>Scan again</strong><small>Refresh the list after unlocking or connecting another signer.</small></span><ChevronRight size={15}/></button></div>{/if}
   {#if error && hardware.length > 0}<div class="hardware-inline-error" role="alert"><AlertTriangle size={18}/><span><strong>Could not read the account key</strong><small>{error}</small></span><Button variant="secondary" size="small" onclick={scanHardware}>Try again</Button></div>{/if}
 </Modal>
 
 <Modal open={standardWalletOpen} title="Use Trezor standard wallet?" description="Passphrase protection can expose several independent wallets from the same device." onclose={() => { standardWalletOpen = false; standardWalletDevice = null; hardwareOpen = true; }}>
-  <div class="credential-warning"><ShieldCheck size={17}/><p><strong>No hardware passphrase for this cosigner</strong><span>This imports the key derived from the device seed alone. It does not disable, change, or reveal any hidden passphrase wallet you may use elsewhere.</span></p></div>
-  <p class="policy-guidance">Choose this only if you intentionally want the Trezor <strong>standard wallet</strong> in this multisig policy. Enabling or choosing a passphrase later opens a different hidden wallet; it does not change this cosigner. The imported fingerprint is permanently bound to this policy.</p>
-  {#if hardwareBusy}<HardwareActionPrompt title="Importing the Trezor standard wallet" detail="Keep Trezor connected while Groot reads its public BIP48 account key." label="Hardware cosigner import in progress"/>{:else}<div class="modal-footer"><Button variant="secondary" onclick={() => { standardWalletOpen = false; standardWalletDevice = null; hardwareOpen = true; }}>Back</Button><Button disabled={!standardWalletDevice} onclick={() => { if (standardWalletDevice) importHardware(standardWalletDevice, true); }}>Use standard wallet</Button></div>{/if}
+  <div class="credential-warning"><ShieldCheck size={17}/><p><strong>No hardware passphrase for this signer</strong><span>This imports the key derived from the device seed alone. It does not disable, change, or reveal any hidden passphrase wallet you may use elsewhere.</span></p></div>
+  <p class="policy-guidance">Choose this only if you intentionally want the Trezor <strong>standard wallet</strong> in this multisig policy. Enabling or choosing a passphrase later opens a different hidden wallet; it does not change this signer. The imported fingerprint is permanently bound to this policy.</p>
+  {#if hardwareBusy}<HardwareActionPrompt title="Importing the Trezor standard wallet" detail="Keep Trezor connected while Groot reads its public BIP48 account key." label="Hardware signer import in progress"/>{:else}<div class="modal-footer"><Button variant="secondary" onclick={() => { standardWalletOpen = false; standardWalletDevice = null; hardwareOpen = true; }}>Back</Button><Button disabled={!standardWalletDevice} onclick={() => { if (standardWalletDevice) importHardware(standardWalletDevice, true); }}>Use standard wallet</Button></div>{/if}
 </Modal>
 
 <TrezorPinModal
@@ -464,9 +492,9 @@
   </div>
 </Modal>
 
-<Modal open={keyOpen} title="Enter public cosigner key" description="No private key or seed should ever be entered here." onclose={() => keyOpen = false}>
+<Modal open={keyOpen} title="Enter public signer key" description="No private key or seed should ever be entered here." onclose={() => keyOpen = false}>
   <form onsubmit={(event) => { event.preventDefault(); addKey(); }}>
-    <label class="field"><span>Cosigner label</span><input aria-label="Cosigner label" bind:value={label} placeholder="e.g. Coldcard" maxlength="48"/></label>
+    <label class="field"><span>Signer label</span><input aria-label="Signer label" bind:value={label} placeholder="e.g. Coldcard" maxlength="48"/></label>
     <label class="field"><span>Master fingerprint</span><input aria-label="Master fingerprint" bind:value={fingerprint} placeholder="8 hex characters" maxlength="8"/></label>
     <label class="field"><span>Account xpub</span><textarea aria-label="Account xpub" bind:value={xpub} rows="3" placeholder="tpub…"></textarea><small>Derivation: {MULTISIG_ACCOUNT_PATH}</small></label>
     <div class="modal-footer"><Button variant="secondary" onclick={() => keyOpen = false}>Cancel</Button><Button type="submit" disabled={!label.trim() || !/^[0-9a-fA-F]{8}$/.test(fingerprint.trim()) || !xpub.trim()}>Add key</Button></div>

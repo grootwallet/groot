@@ -107,7 +107,7 @@ The guided recovery and inheritance recipes require exactly four independent key
 
 The V2 policy lab is analysis-only: compiling does not mutate, upgrade, or replace the selected wallet. Activating a compiled policy requires creating a distinct wallet, reviewing its complete descriptor, and backing it up.
 
-While the draft is incomplete, setup presents neutral progress such as “1 of 3 cosigners added.” Validation failures appear only after **Review wallet** is attempted, then update as the draft is corrected. Each imported cosigner card labels the device fingerprint and connection/import source explicitly and wraps the complete public account key without truncating it.
+Policy-wallet creation uses four focused stages: **Policy → Signers → Verify → Back up**. Policy selection and wallet naming happen before any device enrollment; moving backward preserves the draft. Hardware preparation help and device scanning appear only on the Signers step. While the signer draft is incomplete, setup presents neutral progress such as “1 of 3 signers added.” Validation failures appear only after **Review wallet** is attempted, then update as the draft is corrected. Each imported signer card labels the device fingerprint and connection/import source explicitly and wraps the complete public account key without truncating it.
 
 ## Multisig payment target flow
 
