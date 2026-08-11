@@ -673,7 +673,7 @@ test('successful RBF keeps the original visibly replaced and excluded from accou
 });
 
 test('recovery scan and Tor node controls preserve explicit safety choices', async ({ page }) => {
-  await page.goto('/settings');
+  await page.goto('/settings?fixture-hold-first-recovery-scan=1');
   await page.getByRole('button', { name: /Recovery scan/ }).click();
   const recoveryScan = page.getByRole('dialog', { name: 'Full wallet rescan' });
   await page.getByLabel('Wallet birthday block').fill('0');

@@ -58,6 +58,9 @@ export class DummyWalletAdapter implements WalletPort {
   #nodeConfig: CoreNodeConfig = { backend: { type: 'local_core', url: 'http://127.0.0.1:18443' }, auth: 'cookie', username: null };
   #scanSettings = { birthdayHeight: 0, gapLimit: 20 };
   #scanStatus: RecoveryScanStatus = { status: 'idle', birthdayHeight: 0, gapLimit: 20, currentHeight: 0, targetHeight: 0, processedBlocks: 0, totalBlocks: 0, startedAt: 0, updatedAt: 0 };
+  #holdFirstRecoveryScan = typeof location !== 'undefined'
+    && new URLSearchParams(location.search).has('fixture-hold-first-recovery-scan');
+  #recoveryScanAttempts = 0;
   #trezorPinUnlocked = false;
   #secureStorageRetryPending = typeof location !== 'undefined'
     && new URLSearchParams(location.search).has('fixture-secure-storage-retry');
@@ -180,6 +183,11 @@ export class DummyWalletAdapter implements WalletPort {
     const startedAt = Math.floor(Date.now() / 1000);
     const totalBlocks = 8;
     this.#scanStatus = { status: 'running', ...this.#scanSettings, currentHeight: this.#scanSettings.birthdayHeight, targetHeight: 301, processedBlocks: 0, totalBlocks, startedAt, updatedAt: startedAt };
+    const holdForCancellation = this.#holdFirstRecoveryScan && this.#recoveryScanAttempts === 0;
+    this.#recoveryScanAttempts += 1;
+    while (holdForCancellation && this.#scanStatus.status === 'running') {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
     for (let processedBlocks = 1; processedBlocks <= totalBlocks; processedBlocks += 1) {
       await new Promise((resolve) => setTimeout(resolve, 50));
       if (this.#scanStatus.status === 'cancelling') {
