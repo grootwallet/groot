@@ -675,18 +675,21 @@ test('successful RBF keeps the original visibly replaced and excluded from accou
 test('recovery scan and Tor node controls preserve explicit safety choices', async ({ page }) => {
   await page.goto('/settings');
   await page.getByRole('button', { name: /Recovery scan/ }).click();
+  const recoveryScan = page.getByRole('dialog', { name: 'Full wallet rescan' });
   await page.getByLabel('Wallet birthday block').fill('0');
   await page.getByLabel('Address gap limit').fill('19');
   await page.getByLabel('Wallet passphrase', { exact: true }).fill('prototype-passphrase');
-  await expect(page.getByRole('button', { name: 'Save & rescan' })).toBeDisabled();
+  await expect(recoveryScan.getByRole('button', { name: 'Save & rescan' })).toBeDisabled();
   await page.getByLabel('Address gap limit').fill('50');
-  await page.getByRole('button', { name: 'Save & rescan' }).click();
-  await expect(page.getByRole('progressbar', { name: 'Recovery scan progress' })).toBeVisible();
-  await page.getByRole('button', { name: 'Cancel scan' }).click();
-  await expect(page.getByText('Scan cancelled', { exact: true })).toBeVisible();
-  await expect(page.getByText(/Saved progress remains safe/)).toBeVisible();
+  await Promise.all([
+    recoveryScan.getByRole('button', { name: 'Cancel scan' }).click(),
+    recoveryScan.getByRole('button', { name: 'Save & rescan' }).click()
+  ]);
+  await expect(recoveryScan.getByRole('progressbar', { name: 'Recovery scan progress' })).toBeVisible();
+  await expect(recoveryScan.getByText('Scan cancelled', { exact: true })).toBeVisible();
+  await expect(recoveryScan.getByText(/Saved progress remains safe/)).toBeVisible();
   await page.getByLabel('Wallet passphrase', { exact: true }).fill('prototype-passphrase');
-  await page.getByRole('button', { name: 'Save & rescan' }).click();
+  await recoveryScan.getByRole('button', { name: 'Save & rescan' }).click();
   await expect(page.getByRole('button', { name: /Recovery scan.*gap limit 50/ })).toBeVisible();
 
   await page.getByRole('button', { name: /Bitcoin Core node/ }).click();
