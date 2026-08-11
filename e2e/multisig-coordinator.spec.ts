@@ -71,6 +71,9 @@ test('spends end-to-end from the ready-made demo vault', async ({ page }) => {
   const copiedPsbt = await page.evaluate(() => navigator.clipboard.readText());
   expect(copiedPsbt).toBe(savedPsbt);
   await expect(page.getByText('PSBT saved', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Show in Finder' })).toBeVisible();
+  await page.getByRole('button', { name: 'Show in Finder' }).click();
+  await expect(page.getByText('PSBT saved', { exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Show unsigned QR' }).click();
   const unsignedQrDialog = page.getByRole('dialog', { name: 'Unsigned PSBT' });
   const unsignedQrImage = unsignedQrDialog.getByRole('img', { name: /crypto-psbt QR frame/ });
@@ -222,6 +225,16 @@ test('uses the same wallet navigation for a multisig policy', async ({ page }) =
     await expect(mobileActions.getByRole('link', { name: 'Receive' })).toBeVisible();
     await expect(mobileActions.getByRole('link', { name: 'Send' })).toBeVisible();
     await expect(page.locator('.overview-inline-primary').first()).toBeHidden();
+    const walletTrigger = page.getByRole('button', { name: 'Switch wallet' });
+    await walletTrigger.click();
+    const walletMenu = page.getByRole('menu', { name: 'Wallets' });
+    const [walletTriggerBox, walletMenuBox] = await Promise.all([walletTrigger.boundingBox(), walletMenu.boundingBox()]);
+    expect(walletTriggerBox).not.toBeNull();
+    expect(walletMenuBox).not.toBeNull();
+    expect((walletMenuBox?.y ?? 0) - ((walletTriggerBox?.y ?? 0) + (walletTriggerBox?.height ?? 0))).toBeGreaterThanOrEqual(7);
+    expect((walletMenuBox?.y ?? 0) - ((walletTriggerBox?.y ?? 0) + (walletTriggerBox?.height ?? 0))).toBeLessThanOrEqual(9);
+    expect(Math.abs((walletMenuBox?.x ?? 0) - (walletTriggerBox?.x ?? 0))).toBeLessThanOrEqual(1);
+    await walletTrigger.click();
   } else {
     const receive = page.locator('.primary-actions .overview-inline-primary').filter({ hasText: 'Receive' });
     const send = page.locator('.primary-actions .overview-inline-primary').filter({ hasText: 'Send' });
@@ -245,6 +258,15 @@ test('uses the same wallet navigation for a multisig policy', async ({ page }) =
   await moreActions.click();
   const moreMenu = page.getByRole('menu', { name: 'More wallet actions' });
   await expect(moreMenu).toBeVisible();
+  if (isMobile) {
+    await page.waitForTimeout(180);
+    const [moreTriggerBox, moreMenuBox] = await Promise.all([moreActions.boundingBox(), moreMenu.boundingBox()]);
+    expect(moreTriggerBox).not.toBeNull();
+    expect(moreMenuBox).not.toBeNull();
+    expect((moreMenuBox?.y ?? 0) - ((moreTriggerBox?.y ?? 0) + (moreTriggerBox?.height ?? 0))).toBeGreaterThanOrEqual(7);
+    expect((moreMenuBox?.y ?? 0) - ((moreTriggerBox?.y ?? 0) + (moreTriggerBox?.height ?? 0))).toBeLessThanOrEqual(9);
+    expect(Math.abs(((moreMenuBox?.x ?? 0) + (moreMenuBox?.width ?? 0)) - ((moreTriggerBox?.x ?? 0) + (moreTriggerBox?.width ?? 0)))).toBeLessThanOrEqual(1);
+  }
   await page.locator('.balance-card').click({ position: { x: 20, y: 20 } });
   await expect(moreMenu).toBeHidden();
   await moreActions.click();
@@ -577,7 +599,7 @@ test('creates and verifies a simple 2-of-3 descriptor wallet', async ({ page }) 
   } else {
     await page.getByRole('complementary').getByRole('link', { name: /Add wallet/ }).click();
   }
-  await page.getByRole('button', { name: 'Create new wallet' }).click();
+  await page.getByRole('button', { name: 'Add wallet' }).click();
   await page.getByRole('link', { name: /Use multiple keys/ }).click();
   await page.getByRole('link', { name: /Recover from backup/ }).click();
   await page.getByLabel('Recovery descriptor backup').fill(descriptorBackup);

@@ -63,14 +63,17 @@ Prepare a local report per model:
 cd /Users/thibm/Documents/Codex/2026-07-17/let
 mkdir -p hardware-certification.local
 cp docs/hardware-certification-template.md hardware-certification.local/coldcard.md
-cp docs/hardware-certification-template.md hardware-certification.local/trezor.md
+cp docs/hardware-certification-template.md hardware-certification.local/trezor-model-one.md
 cp docs/hardware-certification-template.md hardware-certification.local/ledger.md
 cp docs/hardware-certification-template.md hardware-certification.local/bitbox02.md
+cp docs/hardware-certification-template.md hardware-certification.local/bitbox02-nova.md
 cp docs/hardware-certification-template.md hardware-certification.local/jade.md
 GROOT_HWI_PATH=/opt/homebrew/bin/hwi pnpm hardware:preflight
 ```
 
 Follow [`hardware-certification.md`](hardware-certification.md) for each model. Keep reports local because fingerprints and paths are sensitive. A model is supported for release only after all required rows pass on the exact firmware/OS/package combination.
+
+BitBox02 Nova begins as a discovery record, not a pass/fail alias for BitBox02. Record only sanitized capability outcomes until its real HWI identity and pairing behavior are implemented. For release review, create a separate summary from [`hardware-certification-summary-template.md`](hardware-certification-summary-template.md) without fingerprints, device paths, addresses, xpubs, or PSBTs; the sensitive local report remains gitignored.
 
 ## 4. Remote Bitcoin Core over TLS
 

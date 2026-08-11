@@ -169,10 +169,10 @@
   <header class="onboarding-brand"><span class="onboarding-brand-lockup"><BrandLockup /></span><small>{networkName(defaultConfig.network).toUpperCase()}</small>{#if hasExistingWallet}<button class="onboarding-exit" aria-label="Close wallet setup" onclick={returnToWallet}><X size={17}/></button>{/if}</header>
   <main class="onboarding-card" class:wallet-choice-card={mode === 'choose'}>
     {#if mode === 'home'}
-      <span class="hero-mark"><BrandMark size={34} /></span><h1>{hasExistingWallet ? 'Add a wallet' : 'Your bitcoin.\nSimply held.'}</h1><p>{hasExistingWallet ? 'Choose how this wallet will be secured.' : 'Create a new wallet or recover one you already own.'}</p><div class="onboarding-actions simple"><Button size="large" class="full" onclick={() => mode = 'choose'}>Create new wallet<ArrowRight size={17} /></Button><Button size="large" variant="secondary" class="full" onclick={() => mode = 'recover'}>Recover wallet</Button></div><div class="trust-line"><ShieldCheck size={15} />Non-custodial · Onchain only</div>
+      <span class="hero-mark"><BrandMark size={34} /></span><h1>{hasExistingWallet ? 'Add a wallet' : 'Your bitcoin.\nSimply held.'}</h1><p>Create in Groot, connect existing hardware, or recover a software wallet.</p><div class="onboarding-actions simple"><Button size="large" class="full" onclick={() => mode = 'choose'}>Add wallet<ArrowRight size={17} /></Button><Button size="large" variant="secondary" class="full" onclick={() => mode = 'recover'}>Recover software wallet</Button></div><div class="trust-line"><ShieldCheck size={15} />Non-custodial · Onchain only</div>
     {:else if mode === 'choose'}
       <button class="back-link" onclick={() => mode = 'home'}><ArrowLeft size={16} />Back</button>
-      <span class="setup-step wallet-choice-step">NEW WALLET</span>
+      <span class="setup-step wallet-choice-step">WALLET SETUP</span>
       <h1>How should this wallet be protected?</h1>
       <p>Choose the setup that fits you. You can add another wallet later.</p>
       <div class="wallet-type-grid">
@@ -184,7 +184,7 @@
         </button>
         <a class="wallet-type-card" href="/hardware/new">
           <span class="wallet-type-icon"><Cpu size={20} /></span>
-          <span class="wallet-type-copy"><strong>Use a hardware wallet</strong><small>Approve payments on a separate signing device.</small></span>
+          <span class="wallet-type-copy"><strong>Add a hardware wallet</strong><small>Connect or import an existing signing device.</small></span>
           <span class="wallet-type-meta">Separate device</span>
           <ArrowRight class="wallet-type-arrow" size={17} />
         </a>

@@ -11,6 +11,7 @@ pub mod proposal;
 pub mod recovery;
 pub mod registry;
 mod secure_store;
+mod session;
 pub mod ur_transport;
 mod wallet;
 
@@ -26,6 +27,7 @@ pub fn run() {
             wallet::ur_decode_psbt,
             wallet::wallet_lock,
             wallet::wallet_profiles,
+            wallet::wallet_rename,
             wallet::wallet_inactivity_timeout_save,
             wallet::wallet_select,
             wallet::wallet_generate_mnemonic,
@@ -58,6 +60,7 @@ pub fn run() {
             wallet::hardware_import_external_signer,
             wallet::external_signer_create,
             wallet::external_signer_wallet,
+            wallet::external_signer_rename,
             wallet::external_signer_export_descriptor,
             wallet::external_signer_proposals,
             wallet::external_signer_proposal_import,
@@ -76,6 +79,7 @@ pub fn run() {
             wallet::public_backup_save,
             wallet::public_backup_print,
             wallet::psbt_file_save,
+            wallet::psbt_file_reveal,
             wallet::multisig_bsms_inspect,
             wallet::multisig_recover_bsms,
             wallet::multisig_recovery_drill,

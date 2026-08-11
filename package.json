@@ -11,6 +11,7 @@
   "scripts": {
     "dev": "vite",
     "dev:regtest": "vite --mode regtest",
+    "dev:native:regtest": "bash scripts/dev/tauri-regtest.sh",
     "build": "vite build",
     "build:regtest": "vite build --mode regtest",
     "brand:icons": "bash scripts/brand/generate_app_icons.sh",

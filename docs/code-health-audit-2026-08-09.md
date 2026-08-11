@@ -9,12 +9,12 @@ This internal audit reviewed dependency direction, Rust/frontend separation, pre
 | Layer | Automated evidence | Current result |
 | --- | --- | --- |
 | Static architecture | adapter/import/network/log/state-lifetime boundary gate; mainnet release gate; Svelte diagnostics; strict Rust format, Clippy, and rustdoc | Green |
-| Frontend unit | policy, presentation, localization, address formatting, live sync, modal locking, recovery, descriptors, and fixture-session tests | 78 passing |
-| Rust unit/boundary | 131 named tests, including hostile parsers, entropy failure, descriptor identity, gap limits, PSBT mutation, storage, sessions, and HWI process controls | 131 passing |
-| Deterministic Rust core coverage | explicitly classified eight-module scope | 99.58% lines, 100% functions, 97.20% regions |
-| Whole Rust library coverage | all library modules, including native adapters and command orchestration | 56.07% lines, 52.71% functions, 53.04% regions |
+| Frontend unit | policy, presentation, localization, address formatting, live sync, modal locking, recovery, descriptors, and fixture-session tests | 82 passing |
+| Rust unit/boundary | 139 named tests, including hostile parsers, entropy failure, descriptor identity, gap limits, PSBT mutation, storage, sessions, and HWI process controls | 139 passing |
+| Deterministic Rust core coverage | explicitly classified nine-module scope | 99.62% lines, 100% functions, 97.36% regions |
+| Whole Rust library coverage | all library modules, including native adapters and command orchestration | 56.83% lines, 52.83% functions, 53.63% regions |
 | Real integration | isolated Bitcoin Core 31.1 descriptor recovery and real 2-of-3 PSBT sign/finalize/broadcast | 2 passing in CI |
-| Browser acceptance | semantic desktop Chromium and mobile WebKit journeys | 87 passing, 1 intentional project skip |
+| Browser acceptance | semantic desktop Chromium and mobile WebKit journeys | 99 passing, 1 intentional project skip |
 | Supply chain | frozen lockfiles, immutable Actions, disabled package lifecycle scripts, npm/RustSec advisory jobs | Green with the inherited warnings listed in `SECURITY.md` |
 
 ## Findings corrected
@@ -28,7 +28,7 @@ This internal audit reviewed dependency direction, Rust/frontend separation, pre
 
 The intended dependency direction is enforced: routes and reusable components depend on the `WalletPort` composition root; only the Tauri adapter invokes native commands; BDK, descriptors, signing, persistence, hardware processes, and network access remain in Rust. Reusable components own modal focus/scroll behavior, buttons, tooltips, readable addresses/identifiers, timestamps, progress, wallet switching, and common result surfaces. Routes retain orchestration and presentation state.
 
-The largest maintainability risk is `src-tauri/src/wallet.rs` at 8,135 lines. It combines command orchestration, persistence coordination, DTO translation, and extensive same-module test access. Its tests are valuable and the boundary is currently behaviorally strong, but the file should be decomposed incrementally by coherent ownership—not mechanically—while preserving stable commands and adversarial tests. Good first extraction candidates are address records/verification evidence, proposal persistence, and recovery-scan settings. This is a pre-mainnet maintainability item because a broad one-shot rewrite would create more wallet risk than it removes.
+The largest maintainability risk is `src-tauri/src/wallet.rs`, now roughly 8,700 lines after subsequent production-hardening work. It combines command orchestration, persistence coordination, DTO translation, and extensive same-module test access. Its tests are valuable and the boundary is currently behaviorally strong, but the file should be decomposed incrementally by coherent ownership—not mechanically—while preserving stable commands and adversarial tests. On 2026-08-11 the pure wallet-session lifetime state machine and its five tests became the first extraction in `session.rs`, with 100% line/function/region coverage. Good next candidates are address records/verification evidence, proposal persistence, and recovery-scan settings. This is a pre-mainnet maintainability item because a broad one-shot rewrite would create more wallet risk than it removes.
 
 Native adapter coverage is also uneven: deterministic domain modules are near-complete, while `wallet.rs`, native backup presentation, secure storage, and Tauri registration depend more heavily on environment-bound acceptance. The honest whole-library gate prevents regression, but raising it requires instrumented command/AppHandle harnesses and platform-native tests. Moving adapter code into the deterministic scope merely to raise a number is prohibited.
 

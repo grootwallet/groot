@@ -199,6 +199,25 @@ impl WalletRegistry {
         self.validate()
     }
 
+    pub fn rename_selected(&mut self, name: &str) -> Result<WalletProfile, RegistryError> {
+        let normalized = name.trim();
+        if normalized.is_empty() || normalized.chars().count() > 48 {
+            return Err(RegistryError::InvalidName);
+        }
+        let selected = self
+            .selected_wallet_id
+            .ok_or(RegistryError::UnknownSelection)?;
+        let wallet = self
+            .wallets
+            .iter_mut()
+            .find(|wallet| wallet.id == selected)
+            .ok_or(RegistryError::UnknownSelection)?;
+        wallet.name = normalized.to_owned();
+        let renamed = wallet.clone();
+        self.validate()?;
+        Ok(renamed)
+    }
+
     pub fn remove(&mut self, id: Uuid) -> Result<WalletProfile, RegistryError> {
         let index = self
             .wallets
@@ -258,6 +277,25 @@ mod tests {
         );
         registry.remove(first).unwrap();
         assert_eq!(registry.selected_wallet_id, None);
+    }
+    #[test]
+    fn renames_only_the_selected_profile_with_a_normalized_valid_name() {
+        let id = Uuid::nil();
+        let mut registry = WalletRegistry::default();
+        registry.add(p(id)).unwrap();
+
+        let renamed = registry.rename_selected("  Ledger savings  ").unwrap();
+        assert_eq!(renamed.name, "Ledger savings");
+        assert_eq!(registry.wallets[0].name, "Ledger savings");
+        assert_eq!(renamed.descriptor_checksum, "abcd1234");
+        assert_eq!(
+            registry.rename_selected("   "),
+            Err(RegistryError::InvalidName)
+        );
+        assert_eq!(
+            registry.rename_selected(&"x".repeat(49)),
+            Err(RegistryError::InvalidName)
+        );
     }
     #[test]
     fn rejects_every_identity_and_schema_failure() {

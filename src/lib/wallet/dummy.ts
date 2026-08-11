@@ -60,9 +60,28 @@ export class DummyWalletAdapter implements WalletPort {
   #trezorPinUnlocked = false;
   #secureStorageRetryPending = typeof location !== 'undefined'
     && new URLSearchParams(location.search).has('fixture-secure-storage-retry');
+  #delayedWalletDataPending = typeof location !== 'undefined'
+    && new URLSearchParams(location.search).has('fixture-delayed-wallet-data');
+  #delayedWalletDataScheduled = false;
+  #emptyActivitySyncScheduled = false;
 
   async exists() { return this.#exists; }
   async profiles() { return { version: 1, selectedWalletId: this.#selectedWalletId, wallets: structuredClone(this.#profiles), inactivityTimeoutMinutes: this.#inactivityTimeoutMinutes }; }
+  async renameWallet(name: string) {
+    if (!this.#selectedWalletId || !this.#unlockedWalletIds.has(this.#selectedWalletId)) {
+      throw new WalletError('wallet_locked', 'Unlock this wallet before renaming it.');
+    }
+    const normalized = name.trim();
+    if (!normalized || [...normalized].length > 48) {
+      throw new WalletError('invalid_wallet_name', 'Wallet names must contain 1 to 48 characters.');
+    }
+    const profile = this.#profiles.find((wallet) => wallet.id === this.#selectedWalletId);
+    if (!profile) throw new WalletError('wallet_not_found', 'The selected wallet does not exist.');
+    profile.name = normalized;
+    const renamed = structuredClone(profile);
+    this.#emit({ type: 'wallet_profile_updated', profile: renamed });
+    return renamed;
+  }
   async saveInactivityTimeout(minutes: number) {
     if (!Number.isInteger(minutes) || minutes < 1 || minutes > 60) {
       throw new WalletError('invalid_inactivity_timeout', 'Automatic lock must be between 1 and 60 minutes.');
@@ -158,13 +177,44 @@ export class DummyWalletAdapter implements WalletPort {
       throw new WalletError('wallet_locked', 'This wallet is locked.');
     }
     const emptyActivity = typeof location !== 'undefined' && new URLSearchParams(location.search).has('fixture-empty-activity');
-    return {
+    const snapshot: WalletSnapshot = {
       network: defaultConfig.network,
       balance: { confirmed: sats(Math.max(0, this.#balance - wallet.pending)), pending: sats(Math.min(wallet.pending, this.#balance)), trustedPending: sats(Math.min(wallet.pending, this.#balance)), total: sats(this.#balance) },
       transactions: emptyActivity ? [] : structuredClone(this.#transactions),
       utxos: structuredClone(this.#coins),
       receiveAddresses: structuredClone(this.#addresses),
       syncedAt: new Date().toISOString()
+    };
+    if (emptyActivity && !this.#emptyActivitySyncScheduled) {
+      this.#emptyActivitySyncScheduled = true;
+      setTimeout(() => {
+        const selected = this.#profiles.find((profile) => profile.id === this.#selectedWalletId);
+        for (const listener of this.#listeners) {
+          listener({
+            type: 'wallet_updated',
+            walletKind: selected?.kind ?? 'single_key',
+            snapshot: structuredClone(snapshot)
+          });
+        }
+      }, 50);
+    }
+    if (!this.#delayedWalletDataPending) return snapshot;
+    if (!this.#delayedWalletDataScheduled) {
+      this.#delayedWalletDataScheduled = true;
+      setTimeout(() => {
+        this.#delayedWalletDataPending = false;
+        const selected = this.#profiles.find((profile) => profile.id === this.#selectedWalletId);
+        for (const listener of this.#listeners) listener({ type: 'wallet_updated', walletKind: selected?.kind ?? 'single_key', snapshot });
+      }, 600);
+    }
+    return {
+      ...snapshot,
+      balance: { confirmed: sats(0), pending: sats(0), trustedPending: sats(0), total: sats(0) },
+      transactions: [],
+      utxos: [],
+      // A restored wallet can have a previous sync marker before its current
+      // process has loaded balance, history, and coins from the node.
+      syncedAt: snapshot.syncedAt
     };
   }
 
@@ -319,6 +369,20 @@ export class DummyWalletAdapter implements WalletPort {
     if (!this.#externalWallet || this.#profiles.find((profile) => profile.id === this.#selectedWalletId)?.kind !== 'watch_only') throw new WalletError('wallet_not_found', 'No external-signer wallet exists.');
     return structuredClone(this.#externalWallet);
   }
+  async renameExternalSigner(label: string) {
+    if (!this.#selectedWalletId || !this.#unlockedWalletIds.has(this.#selectedWalletId)) {
+      throw new WalletError('wallet_locked', 'Unlock this wallet before renaming its hardware signer.');
+    }
+    if (!this.#externalWallet || this.#profiles.find((profile) => profile.id === this.#selectedWalletId)?.kind !== 'watch_only') {
+      throw new WalletError('wallet_not_found', 'No external-signer wallet exists.');
+    }
+    const normalized = label.trim().replace(/\s+/g, ' ');
+    if (!normalized || [...normalized].length > 48) {
+      throw new WalletError('invalid_label', 'Hardware signer names must contain 1 to 48 characters.');
+    }
+    this.#externalWallet.signer.label = normalized;
+    return structuredClone(this.#externalWallet);
+  }
   async exportExternalSignerDescriptor(credential: string) {
     if (!this.#selectedWalletId || credential !== this.#credentials.get(this.#selectedWalletId)) throw new WalletError('invalid_credential', 'Incorrect app PIN.');
     if (!this.#externalWallet) throw new WalletError('wallet_not_found', 'No external-signer wallet exists.');
@@ -326,9 +390,10 @@ export class DummyWalletAdapter implements WalletPort {
     return { descriptor, content: JSON.stringify({ version: 1, network: defaultConfig.network, descriptor }, null, 2) };
   }
   async externalSignerProposals() { return structuredClone([...this.#externalProposals.values()]); }
-  async importExternalSignerProposal(proposalId: string, reviewedPsbt: string, _signedPsbt: string) {
+  async importExternalSignerProposal(proposalId: string, reviewedPsbt: string, signedPsbt: string) {
     const proposal = this.#externalProposals.get(proposalId); if (!proposal) throw new WalletError('proposal_not_found', 'Proposal not found.');
     if (proposal.psbt !== reviewedPsbt) throw new WalletError('proposal_mismatch', 'The proposal changed after review.');
+    if (signedPsbt === 'fixture-rejected-psbt') throw new WalletError('proposal_mismatch', 'The PSBT does not match the transaction you reviewed. No signatures were changed.');
     proposal.signed = 1; proposal.canFinalize = true; proposal.status = 'ready'; proposal.signedFingerprints = [this.#externalWallet?.signer.fingerprint ?? 'f00dbabe']; return structuredClone(proposal);
   }
   async signExternalWithHardware(proposalId: string, _deviceId: string, reviewedPsbt: string) { await new Promise((resolve) => setTimeout(resolve, 250)); return this.importExternalSignerProposal(proposalId, reviewedPsbt, reviewedPsbt); }
@@ -545,7 +610,8 @@ export class DummyWalletAdapter implements WalletPort {
   }
   async cancelMultisigProposal(proposalId:string) { const proposal=this.#multisigProposals.get(proposalId); if(!proposal) throw new WalletError('proposal_not_found','Payment proposal was not found.'); proposal.status='cancelled'; }
   async verifyMultisigAddress(deviceId:string,addressId:number){await new Promise((resolve)=>setTimeout(resolve,250));const device=(await this.listHardwareDevices()).find((item)=>item.id===deviceId&&item.status==='ready');if(!device)throw new WalletError('hardware_unavailable','Connect and unlock a wallet cosigner.');if(!this.#multisig?.cosigners.some((cosigner)=>cosigner.fingerprint.toLowerCase()===device.fingerprint?.toLowerCase()))throw new WalletError('unknown_signer','The connected device does not match any saved signer for this wallet.');const address=this.#addresses.find((item)=>item.id===addressId);if(!address)throw new WalletError('address_not_found','The receive address was not found.');const verified={...address,hardwareVerifiedAt:new Date().toISOString(),hardwareVerifiedBy:device.fingerprint};this.#addresses=this.#addresses.map((item)=>item.id===addressId?verified:item);return structuredClone(verified);}
-  async savePsbt(suggestedFilename:string,psbt:string){const {downloadText}=await import('$lib/transfer');downloadText(suggestedFilename,psbt);return true;}
+  async savePsbt(suggestedFilename:string,psbt:string){const {downloadText}=await import('$lib/transfer');downloadText(suggestedFilename,psbt);return {saved:true,revealToken:'00000000-0000-4000-8000-000000000001',revealLabel:'Show in Finder'};}
+  async revealSavedFile(_revealToken:string) {}
 
   #addDummySignature(proposalId:string, fingerprint?:string) {
     const proposal=this.#multisigProposals.get(proposalId); if(!proposal||!this.#multisig) throw new WalletError('proposal_not_found','Payment proposal was not found.');

@@ -4,6 +4,7 @@ set -euo pipefail
 REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 REQUIRED_NODE_VERSION="$(tr -d '[:space:]' < "${REPOSITORY_ROOT}/.node-version")"
 REQUIRED_PNPM_VERSION="11.13.1"
+CERTIFICATION_PROFILE_FILE="${REPOSITORY_ROOT}/hardware-certification.local/regtest-app-data-path"
 
 if [[ ! "${REQUIRED_NODE_VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   echo "Groot's .node-version is not an exact semantic version." >&2
@@ -58,6 +59,21 @@ fi
 if [[ "$#" -ne 0 ]]; then
   echo "Usage: bash scripts/dev/tauri-regtest.sh [--check-runtime]" >&2
   exit 1
+fi
+
+if [[ -z "${GROOT_REGTEST_APP_DATA_DIR:-}" && -f "${CERTIFICATION_PROFILE_FILE}" ]]; then
+  IFS= read -r saved_certification_profile < "${CERTIFICATION_PROFILE_FILE}"
+  if [[ -z "${saved_certification_profile}" || ! -d "${saved_certification_profile}" || -L "${saved_certification_profile}" ]]; then
+    echo "The saved Regtest certification profile is missing or unsafe. Groot was not started." >&2
+    echo "Remove hardware-certification.local/regtest-app-data-path or replace it with the current isolated profile." >&2
+    exit 1
+  fi
+  export GROOT_REGTEST_APP_DATA_DIR="${saved_certification_profile}"
+  echo "Reusing the saved isolated Regtest certification profile."
+elif [[ -n "${GROOT_REGTEST_APP_DATA_DIR:-}" ]]; then
+  echo "Using the explicitly selected isolated Regtest profile. Reuse the same override after restarting Groot."
+else
+  echo "Using Groot's persistent application data for Regtest development."
 fi
 
 cd "${REPOSITORY_ROOT}"

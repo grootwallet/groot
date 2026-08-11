@@ -13,6 +13,7 @@ core_modules=(
   notifications.rs
   proposal.rs
   recovery.rs
+  session.rs
   ur_transport.rs
 )
 

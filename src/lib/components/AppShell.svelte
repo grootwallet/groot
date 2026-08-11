@@ -24,6 +24,7 @@
     { href: '/coins', label: 'coins', icon: CircleDot },
     { href: '/multisig', label: 'policy', icon: ShieldCheck }
   ];
+  const walletSetupRoutes = new Set(['/welcome', '/hardware/new', '/multisig/new', '/multisig/recover']);
   const active = (href: string) => href === '/multisig' ? page.url.pathname === href || page.url.pathname.startsWith('/multisig/policy') || page.url.pathname.startsWith('/multisig/backup') : page.url.pathname === href;
   let profiles = $state<WalletProfile[]>([]);
   let selectedWalletId = $state<string | null>(null);
@@ -32,7 +33,7 @@
   let policyContext = $derived(selectedProfile?.kind === 'multisig' || page.url.pathname.startsWith('/multisig'));
   let visibleNav = $derived(policyContext ? nav : nav.slice(0, 3));
   let mobileItems = $derived(policyContext ? nav : nav.slice(0, 3));
-  let onboardingRoute = $derived(page.url.pathname === '/welcome');
+  let onboardingRoute = $derived(walletSetupRoutes.has(page.url.pathname));
   let lockedRoute = $derived(page.url.pathname === '/unlock');
   const showQuickActions = $derived(!lockedRoute && (page.url.pathname === '/' || page.url.pathname === '/coins'));
   const receiveHref = $derived(selectedProfile?.kind === 'multisig' ? '/multisig/receive' : '/receive');
@@ -88,6 +89,7 @@
       if (event.type === 'payment_received') toast({ title: 'Bitcoin received', description: `Received ${shortSats(event.amount)} sats · Balance ${shortSats(event.balance)} sats`, tone: 'success' });
       if (event.type === 'first_confirmation') toast({ title: 'First confirmation', description: `Transaction confirmed · Balance ${shortSats(event.balance)} sats`, tone: 'success' });
       if (event.type === 'transaction_broadcast') toast({ title: 'Transaction broadcast', description: `Remaining wallet balance: ${shortSats(event.balance)} sats`, tone: 'success' });
+      if (event.type === 'wallet_profile_updated') profiles = profiles.map((profile) => profile.id === event.profile.id ? event.profile : profile);
     });
     liveSync = createLiveSync(walletService, 10_000, (cause) => {
       if (cause instanceof WalletError && cause.code === 'wallet_locked') {
@@ -103,7 +105,7 @@
         const registry = await walletService.profiles();
         profiles = registry.wallets;
         selectedWalletId = registry.selectedWalletId;
-        if (page.url.pathname === '/welcome' || page.url.pathname === '/unlock') return;
+        if (onboardingRoute || lockedRoute) return;
         const selected = profiles.find((wallet) => wallet.id === selectedWalletId);
         if (selected?.kind === 'multisig') {
           await walletService.multisigSnapshot();

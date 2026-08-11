@@ -15,7 +15,7 @@ import {
 import type { MnemonicPresentation, SupplementalEntropyInput, WalletProfile, WalletRegistry } from './contracts';
 import type { CosignerHealthCheck, HardwareDevice, MultisigPreview, MultisigProposal, MultisigWallet } from './contracts';
 import type { RecoveryDrill, RecoveryPolicyAnalysis, RecoveryTemplate } from './contracts';
-import type { ExternalSigner, ExternalSignerBackup, ExternalSignerSource, ExternalSignerWallet } from './contracts';
+import type { ExternalSigner, ExternalSignerBackup, ExternalSignerSource, ExternalSignerWallet, SavedFileResult } from './contracts';
 import type { CoreNodeConfig, NodeStatus } from './contracts';
 import type { PolicyDraft } from '$lib/multisig/policy';
 
@@ -67,6 +67,11 @@ export class TauriWalletAdapter implements WalletPort {
 
   exists() { return command<boolean>('wallet_exists'); }
   profiles() { return command<WalletRegistry>('wallet_profiles'); }
+  async renameWallet(name: string) {
+    const profile = await command<WalletProfile>('wallet_rename', { name });
+    this.#emit({ type: 'wallet_profile_updated', profile });
+    return profile;
+  }
   saveInactivityTimeout(minutes: number) { return command<WalletRegistry>('wallet_inactivity_timeout_save', { minutes }); }
   selectWallet(walletId: string) { return command<WalletProfile>('wallet_select', { walletId }); }
   async generateMnemonic(supplementalEntropy?: SupplementalEntropyInput): Promise<MnemonicPresentation> {
@@ -128,6 +133,7 @@ export class TauriWalletAdapter implements WalletPort {
   importHardwareExternalSigner(deviceId: string, label: string, allowEmptyPassphrase = false) { return command<ExternalSigner>('hardware_import_external_signer', { deviceId, label, allowEmptyPassphrase }); }
   createExternalSignerWallet(name: string, signer: ExternalSigner, credential: string) { return command<ExternalSignerWallet>('external_signer_create', { name, signer, credential }); }
   externalSignerWallet() { return command<ExternalSignerWallet>('external_signer_wallet'); }
+  renameExternalSigner(label: string) { return command<ExternalSignerWallet>('external_signer_rename', { label }); }
   exportExternalSignerDescriptor(credential: string) { return command<ExternalSignerBackup>('external_signer_export_descriptor', { credential }); }
   externalSignerProposals() { return command<MultisigProposal[]>('external_signer_proposals'); }
   importExternalSignerProposal(proposalId: string, reviewedPsbt: string, signedPsbt: string) { return command<MultisigProposal>('external_signer_proposal_import', { proposalId, reviewedPsbt, signedPsbt }); }
@@ -172,7 +178,8 @@ export class TauriWalletAdapter implements WalletPort {
     return result;
   }
   cancelMultisigProposal(proposalId: string) { return command<void>('multisig_proposal_cancel', { proposalId }); }
-  savePsbt(suggestedFilename: string, psbt: string) { return command<boolean>('psbt_file_save', { suggestedFilename, psbt }); }
+  savePsbt(suggestedFilename: string, psbt: string) { return command<SavedFileResult>('psbt_file_save', { suggestedFilename, psbt }); }
+  revealSavedFile(revealToken: string) { return command<void>('psbt_file_reveal', { revealToken }); }
   encodePsbtUr(psbt: string, fragmentBytes = 180) { return command<string[]>('ur_encode_psbt', { psbt, fragmentBytes }); }
   decodePsbtUr(frames: string[]) { return command<string>('ur_decode_psbt', { frames }); }
   subscribe(listener: (event: WalletEvent) => void) {

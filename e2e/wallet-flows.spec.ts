@@ -34,10 +34,12 @@ async function chooseSoftwareWallet(page: Page) {
 
 test('creates a 24-word wallet and clears onboarding secrets', async ({ page }) => {
   await page.goto('/welcome?fixture-empty=1');
-  await page.getByRole('button', { name: 'Create new wallet' }).click();
+  await expect(page.getByText('Create in Groot, connect existing hardware, or recover a software wallet.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Recover software wallet' })).toBeVisible();
+  await page.getByRole('button', { name: 'Add wallet' }).click();
   await expect(page.locator('.wallet-type-card')).toHaveCount(3);
   await expect(page.getByText('Groot creates the wallet and its recovery words here.')).toBeVisible();
-  await expect(page.getByText('Approve payments on a separate signing device.')).toBeVisible();
+  await expect(page.getByText('Connect or import an existing signing device.')).toBeVisible();
   await expect(page.getByText('Share control or build in a recovery path.')).toBeVisible();
   await chooseSoftwareWallet(page);
   const setupProgress = page.getByRole('navigation', { name: 'Software wallet setup progress' });
@@ -103,7 +105,7 @@ test('creates a 24-word wallet and clears onboarding secrets', async ({ page }) 
 
 test('can defer seed verification and complete it later from the wallet', async ({ page }) => {
   await page.goto('/welcome?fixture-empty=1');
-  await page.getByRole('button', { name: 'Create new wallet' }).click();
+  await page.getByRole('button', { name: 'Add wallet' }).click();
   await chooseSoftwareWallet(page);
   await page.getByRole('button', { name: 'Generate 24 recovery words' }).click();
   await page.getByRole('button', { name: /reveal words/i }).click();
@@ -133,7 +135,7 @@ test('can defer seed verification and complete it later from the wallet', async 
 
 test('optional physical entropy entry is bounded and cleared after generation', async ({ page }) => {
   await page.goto('/welcome?fixture-empty=1');
-  await page.getByRole('button', { name: 'Create new wallet' }).click();
+  await page.getByRole('button', { name: 'Add wallet' }).click();
   await chooseSoftwareWallet(page);
   const generate = page.getByRole('button', { name: 'Generate 24 recovery words' });
   await expect(generate).toBeEnabled();
@@ -158,7 +160,7 @@ test('optional physical entropy entry is bounded and cleared after generation', 
 
 test('recovers exactly 24 words and unlock rejects the wrong credential', async ({ page }) => {
   await page.goto('/welcome?fixture-empty=1');
-  await page.getByRole('button', { name: 'Recover wallet' }).click();
+  await page.getByRole('button', { name: 'Recover software wallet' }).click();
   await page.getByLabel('Recovery words').fill(recoveryWords.split(' ').slice(0, 23).join(' '));
   await page.getByLabel('Wallet passphrase', { exact: true }).fill('prototype-passphrase');
   await expect(page.getByRole('button', { name: 'Recover wallet' })).toBeDisabled();
@@ -208,7 +210,7 @@ test('protected-storage denial stays locked and permits an explicit unlock retry
 test('existing wallet can exit add-wallet and cannot reopen the fresh-install chooser', async ({ page }) => {
   await page.goto('/welcome?add=1');
   await expect(page.getByRole('button', { name: 'Close wallet setup' })).toBeVisible();
-  await page.getByRole('button', { name: 'Create new wallet' }).click();
+  await page.getByRole('button', { name: 'Add wallet' }).click();
   await chooseSoftwareWallet(page);
   await page.getByRole('button', { name: 'Close wallet setup' }).click();
   await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible();
@@ -221,6 +223,34 @@ test('existing wallet can exit add-wallet and cannot reopen the fresh-install ch
   await expect(page.getByRole('button', { name: 'Create or recover another wallet' })).toHaveCount(0);
 });
 
+test('locked wallet can continue into hardware and multisig setup', async ({ page }) => {
+  await page.goto('/settings');
+  await page.getByRole('button', { name: /Lock Everyday wallet now/ }).click();
+  await expect(page).toHaveURL(/\/unlock$/);
+
+  await page.goto('/welcome?add=1');
+  await page.getByRole('button', { name: 'Add wallet' }).click();
+  await page.getByRole('link', { name: /Add a hardware wallet/ }).click();
+  await expect(page).toHaveURL(/\/hardware\/new$/);
+  await expect(page.getByRole('heading', { name: 'Add hardware wallet' })).toBeVisible();
+  await expect(page.locator('.app-shell')).toHaveClass(/onboarding-shell/);
+
+  await page.getByRole('link', { name: /Cancel/ }).click();
+  await page.getByRole('button', { name: 'Add wallet' }).click();
+  await page.getByRole('link', { name: /Use multiple keys/ }).click();
+  await expect(page).toHaveURL(/\/multisig\/new$/);
+  await expect(page.getByRole('heading', { name: 'Create a policy wallet' })).toBeVisible();
+  await expect(page.locator('.app-shell')).toHaveClass(/onboarding-shell/);
+});
+
+test('shows skeletons while a restored wallet loads its first synced data', async ({ page }) => {
+  await page.goto('/?fixture-delayed-wallet-data=1');
+  await expect(page.locator('.wallet-skeleton.balance')).toBeVisible();
+  await expect(page.locator('.wallet-skeleton.transactions')).toBeVisible();
+  await expect(page.getByText('Hardware order', { exact: true })).toBeVisible();
+  await expect(page.locator('.wallet-skeleton')).toHaveCount(0);
+});
+
 test('creates, switches, unlocks, and deletes isolated wallet profiles', async ({ page }) => {
   const isMobile = (page.viewportSize()?.width ?? 1180) <= 760;
   await page.goto('/settings');
@@ -229,7 +259,7 @@ test('creates, switches, unlocks, and deletes isolated wallet profiles', async (
   } else {
     await page.getByRole('complementary').getByRole('link', { name: /Add wallet/ }).click();
   }
-  await page.getByRole('button', { name: 'Create new wallet' }).click();
+  await page.getByRole('button', { name: 'Add wallet' }).click();
   await chooseSoftwareWallet(page);
   await page.getByRole('button', { name: 'Generate 24 recovery words' }).click();
   await page.getByRole('button', { name: /reveal words/i }).click();
@@ -273,9 +303,10 @@ test('creates, switches, unlocks, and deletes isolated wallet profiles', async (
 });
 
 test('creates an external-signer wallet, signs by cable, and configures its isolated node', async ({ page }) => {
+  test.setTimeout(60_000);
   await page.goto('/welcome?add=1');
-  await page.getByRole('button', { name: 'Create new wallet' }).click();
-  await page.getByRole('link', { name: /Use a hardware wallet/ }).click();
+  await page.getByRole('button', { name: 'Add wallet' }).click();
+  await page.getByRole('link', { name: /Add a hardware wallet/ }).click();
   await expect(page.getByRole('heading', { name: 'Add hardware wallet' })).toBeVisible();
   await page.getByLabel('Wallet name').fill('Hardware savings');
   await page.getByRole('button', { name: /Connect with cable/ }).click();
@@ -290,6 +321,16 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   await page.getByRole('button', { name: 'Create wallet' }).click();
   await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible();
 
+  await page.getByRole('link', { name: 'Settings' }).click();
+  await page.getByRole('button', { name: 'Rename hardware signer Hardware savings' }).click();
+  const signerNameDialog = page.getByRole('dialog', { name: 'Rename hardware signer' });
+  await expect(signerNameDialog.getByText(/does not change the device, fingerprint, public keys, descriptors/)).toBeVisible();
+  await signerNameDialog.getByLabel('New hardware signer name').fill('Travel signing key');
+  await signerNameDialog.getByRole('button', { name: 'Save signer name' }).click();
+  await expect(page.getByText('Hardware signer name updated')).toBeVisible();
+  await expect(page.getByText(/Travel signing key · Used on signing and verification screens/)).toBeVisible();
+
+  await page.getByRole('link', { name: 'Overview' }).click();
   await page.getByRole('link', { name: 'Receive', exact: true }).click();
   await page.getByRole('button', { name: 'New receive address' }).click();
   await page.getByLabel('Permanent label').fill('Verified deposit');
@@ -323,10 +364,23 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   await expect(page.getByText('Transaction inputs', { exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Continue to sign' }).click();
   await expect(page.getByRole('heading', { name: 'Sign on your hardware' })).toBeVisible();
+  await expect(page.locator('.send-signers').getByText('Travel signing key', { exact: true })).toBeVisible();
   const psbtDownload = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Save unsigned PSBT' }).click();
   await expect((await psbtDownload).suggestedFilename()).toMatch(/^groot-.+\.psbt$/);
   await expect(page.getByText('PSBT saved', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Show in Finder' })).toBeVisible();
+  await page.getByRole('button', { name: 'Show in Finder' }).click();
+  await expect(page.getByText('PSBT saved', { exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Import signed PSBT' }).click();
+  const rejectedImport = page.getByRole('dialog', { name: 'Import signed PSBT' });
+  await rejectedImport.getByRole('textbox', { name: 'Signed PSBT' }).fill('fixture-rejected-psbt');
+  await rejectedImport.getByRole('button', { name: 'Validate signature' }).click();
+  await expect(rejectedImport.getByRole('alert')).toContainText('Signed PSBT rejected');
+  await expect(rejectedImport.getByRole('alert')).toContainText('does not match the transaction you reviewed');
+  await expect(page.locator('.toast').filter({ hasText: 'Signed PSBT rejected' })).toBeVisible();
+  await expect(page.getByText('0 of 1 collected', { exact: true })).toBeVisible();
+  await rejectedImport.getByRole('button', { name: 'Cancel' }).click();
   await page.getByRole('button', { name: 'Show unsigned QR' }).click();
   const unsignedQrDialog = page.getByRole('dialog', { name: 'Unsigned PSBT' });
   const unsignedQrImage = unsignedQrDialog.getByRole('img', { name: /crypto-psbt QR frame/ });
@@ -414,7 +468,7 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
 test('imports a public hardware backup without requiring a wallet name first', async ({ page }) => {
   await page.goto('/hardware/new');
   await expect(page.getByLabel('Wallet name')).toHaveValue('');
-  await page.getByLabel('Import public key file').setInputFiles({
+  await page.getByLabel('Import public backup file').setInputFiles({
     name: 'groot-hardware-wallet.json',
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify({
@@ -428,6 +482,8 @@ test('imports a public hardware backup without requiring a wallet name first', a
   await expect(page.getByText("m/84'/1'/0'")).toBeVisible();
   await expect(page.getByText('Review the public backup identity.')).toBeVisible();
   await expect(page.getByText(/verify the first receive address on the hardware wallet/)).toBeVisible();
+  await page.getByLabel('Reviewed wallet name').fill('Ledger recovery wallet');
+  await expect(page.getByRole('heading', { name: 'Ledger recovery wallet' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Use this public backup' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Fingerprint matches' })).toHaveCount(0);
 });
@@ -501,6 +557,8 @@ test('overview, activity, UTXOs, and settings expose durable states', async ({ p
   await expect(overviewDetails.getByText('Inputs', { exact: true })).toBeVisible();
   await expect(overviewDetails.getByText('Outputs', { exact: true })).toBeVisible();
   await expect(overviewDetails.getByText('Locktime / RBF', { exact: true })).toBeVisible();
+  const technicalDetailValues = (await overviewDetails.locator('.transaction-more-details dd').allTextContents()).join('\n');
+  expect(technicalDetailValues).not.toMatch(/\S·|·\S/);
   await expect(
     page.getByText('mempool.space cannot see local regtest transactions.')
   ).toBeVisible();
@@ -541,6 +599,22 @@ test('overview, activity, UTXOs, and settings expose durable states', async ({ p
   await expect(reusedCoin.getByText('Linked coin', { exact: true })).toBeVisible();
   await page.getByRole('link', { name: 'Settings' }).click();
   await expect(page.getByText('Delete wallet', { exact: true })).toBeVisible();
+});
+
+test('renames the selected wallet from settings without changing its identity', async ({ page }) => {
+  await page.goto('/settings');
+  await page.getByRole('button', { name: 'Rename Everyday wallet' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Rename wallet' });
+  await expect(dialog.getByText(/does not change descriptors, signer identity, recovery data/)).toBeVisible();
+  await dialog.getByLabel('New wallet name').fill('Daily spending');
+  await dialog.getByRole('button', { name: 'Save name' }).click();
+
+  await expect(page.getByRole('heading', { name: 'Daily spending' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Rename Daily spending' })).toBeVisible();
+  await expect(page.getByText('Wallet name updated')).toBeVisible();
+  if ((page.viewportSize()?.width ?? 1180) > 760) {
+    await expect(page.getByRole('complementary').getByText('Daily spending', { exact: true })).toBeVisible();
+  }
 });
 
 test('pending transaction opens RBF and CPFP review without bypassing signing', async ({ page }) => {
@@ -791,7 +865,7 @@ test('recovery words remain readable in light and dark themes', async ({ page })
     await page.goto('/settings');
     await page.getByRole('button', { name: theme, exact: true }).click();
     await page.goto('/welcome?fixture-empty=1');
-    await page.getByRole('button', { name: 'Create new wallet' }).click();
+    await page.getByRole('button', { name: 'Add wallet' }).click();
     await chooseSoftwareWallet(page);
     await page.getByRole('button', { name: 'Generate 24 recovery words' }).click();
     await page.getByRole('button', { name: /reveal words/i }).click();

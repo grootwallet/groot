@@ -26,5 +26,23 @@ contains_fixed "Mainnet remains disabled" docs/adr/0012-mainnet-release-gate.md 
   || fail "the accepted mainnet decision is missing"
 contains_fixed "Release decision: BLOCKED" docs/mainnet-release-checklist.md \
   || fail "the release checklist is not explicitly blocked"
+contains_fixed "Candidate scope: first mainnet release is macOS desktop only" docs/mainnet-release-checklist.md \
+  || fail "the first-release platform scope is missing from the checklist"
+contains_fixed "The first production target is a **macOS desktop" docs/roadmap.md \
+  || fail "the roadmap no longer matches the first-release platform scope"
+contains_fixed "A second Groot process cannot concurrently mutate" docs/mainnet-release-checklist.md \
+  || fail "cross-process locking is missing from the mainnet blockers"
+contains_fixed "The packaged HWI binary/source" docs/mainnet-release-checklist.md \
+  || fail "packaged HWI verification is missing from the mainnet blockers"
+contains_fixed "Coldcard Mk4" docs/mainnet-release-checklist.md \
+  || fail "the Coldcard certification target is not model-specific"
+contains_fixed "Trezor Model One" docs/mainnet-release-checklist.md \
+  || fail "the Trezor certification target is not model-specific"
+contains_fixed "BitBox02 Nova" docs/mainnet-release-checklist.md \
+  || fail "the Nova support decision is missing from the hardware matrix"
+contains_fixed "Blockstream Jade" docs/mainnet-release-checklist.md \
+  || fail "the required Jade certification row is missing"
+contains_fixed "secure-storage and lifecycle certification for every platform included in that candidate" docs/mainnet-threat-model.md \
+  || fail "the threat model no longer scopes platform evidence to the candidate"
 
 echo "Mainnet release gate: locked as expected."

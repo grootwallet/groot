@@ -78,6 +78,7 @@ export type ExternalSignerWallet = {
   internalDescriptor: string;
 };
 export type ExternalSignerBackup = { descriptor: string; content: string };
+export type SavedFileResult = { saved: boolean; revealToken: string | null; revealLabel: string | null };
 
 export type CosignerHealthCheck = {
   status: 'healthy' | 'record_valid' | 'attention';
@@ -163,7 +164,8 @@ export type WalletEvent =
   | { type: 'payment_received'; txid: string; amount: Sats; balance: Sats }
   | { type: 'first_confirmation'; txid: string; balance: Sats }
   | { type: 'transaction_broadcast'; txid: string; balance: Sats }
-  | { type: 'wallet_updated'; walletKind: WalletProfile['kind']; snapshot: WalletSnapshot };
+  | { type: 'wallet_updated'; walletKind: WalletProfile['kind']; snapshot: WalletSnapshot }
+  | { type: 'wallet_profile_updated'; profile: WalletProfile };
 
 export type WalletErrorCode =
   | 'invalid_credential'
@@ -223,6 +225,7 @@ export type WalletErrorCode =
   | 'invalid_ur'
   | 'backup_too_large'
   | 'backup_mismatch'
+  | 'file_reveal_unavailable'
   | 'confirmation_mismatch'
   | 'invalid_timeline'
   | 'invalid_decay'
@@ -247,6 +250,7 @@ export class WalletError extends Error {
 export interface WalletPort {
   exists(): Promise<boolean>;
   profiles(): Promise<WalletRegistry>;
+  renameWallet(name: string): Promise<WalletProfile>;
   saveInactivityTimeout(minutes: number): Promise<WalletRegistry>;
   selectWallet(walletId: string): Promise<WalletProfile>;
   generateMnemonic(supplementalEntropy?: SupplementalEntropyInput): Promise<MnemonicPresentation>;
@@ -283,6 +287,7 @@ export interface WalletPort {
   importHardwareExternalSigner(deviceId: string, label: string, allowEmptyPassphrase?: boolean): Promise<ExternalSigner>;
   createExternalSignerWallet(name: string, signer: ExternalSigner, credential: string): Promise<ExternalSignerWallet>;
   externalSignerWallet(): Promise<ExternalSignerWallet>;
+  renameExternalSigner(label: string): Promise<ExternalSignerWallet>;
   exportExternalSignerDescriptor(credential: string): Promise<ExternalSignerBackup>;
   externalSignerProposals(): Promise<MultisigProposal[]>;
   importExternalSignerProposal(proposalId: string, reviewedPsbt: string, signedPsbt: string): Promise<MultisigProposal>;
@@ -316,7 +321,8 @@ export interface WalletPort {
   signMultisigWithHardware(proposalId: string, deviceId: string, reviewedPsbt: string): Promise<MultisigProposal>;
   broadcastMultisigProposal(proposalId: string, reviewedPsbt: string, credential: string): Promise<BroadcastResult>;
   cancelMultisigProposal(proposalId: string): Promise<void>;
-  savePsbt(suggestedFilename: string, psbt: string): Promise<boolean>;
+  savePsbt(suggestedFilename: string, psbt: string): Promise<SavedFileResult>;
+  revealSavedFile(revealToken: string): Promise<void>;
   encodePsbtUr(psbt: string, fragmentBytes?: number): Promise<string[]>;
   decodePsbtUr(frames: string[]): Promise<string>;
   subscribe(listener: (event: WalletEvent) => void): () => void;

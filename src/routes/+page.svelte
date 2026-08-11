@@ -9,7 +9,7 @@
   import { toast } from '$lib/stores/toasts';
   import { walletService, WalletError, type WalletProfile, type WalletSnapshot } from '$lib/wallet';
   import { pendingBalance, sortTransactionsNewestFirst } from '$lib/wallet/presentation';
-  import { onMount } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import type { Transaction } from '$lib/types';
   import { discreetMode, setDiscreetMode } from '$lib/privacy';
@@ -33,26 +33,34 @@
   let verifyCredential = $state('');
   let verifyError = $state('');
   let verifying = $state(false);
+  let initialDataLoading = $state(true);
+  let emptySnapshotTimer: ReturnType<typeof setTimeout> | undefined;
   const pendingSats = $derived(snapshot ? pendingBalance(snapshot.balance) : 0);
   const recentTransactions = $derived(sortTransactionsNewestFirst(snapshot?.transactions ?? []).slice(0, 3));
   onMount(loadSnapshot);
   async function loadSnapshot() {
     loadError = '';
+    initialDataLoading = true;
+    if (emptySnapshotTimer) clearTimeout(emptySnapshotTimer);
     try {
       if (!await walletService.exists()) { await goto('/welcome'); return; }
       const registry = await walletService.profiles();
       selectedProfile = registry.wallets.find((wallet) => wallet.id === registry.selectedWalletId) ?? null;
       multisig = selectedProfile?.kind === 'multisig';
       snapshot = multisig ? await walletService.multisigSnapshot() : await walletService.snapshot();
+      if (snapshot.transactions.length || snapshot.utxos.length || snapshot.balance.total > 0) initialDataLoading = false;
+      else emptySnapshotTimer = setTimeout(() => initialDataLoading = false, 10_000);
     } catch (cause) {
       if (cause instanceof WalletError && cause.code === 'wallet_locked') { await goto('/unlock'); return; }
       loadError = cause instanceof Error ? cause.message : 'The wallet data could not be read.';
+      initialDataLoading = false;
       toast({ title: 'Could not open wallet', description: loadError, tone: 'danger' });
     }
   }
   onMount(() => walletService.subscribe((event) => {
-    if (event.type === 'wallet_updated') { multisig = event.walletKind === 'multisig'; snapshot = event.snapshot; loadError = ''; }
+    if (event.type === 'wallet_updated') { if (emptySnapshotTimer) clearTimeout(emptySnapshotTimer); multisig = event.walletKind === 'multisig'; snapshot = event.snapshot; loadError = ''; initialDataLoading = false; }
   }));
+  onDestroy(() => { if (emptySnapshotTimer) clearTimeout(emptySnapshotTimer); });
   onMount(() => {
     const closeOnOutsidePointer = (event: PointerEvent) => {
       if (moreOpen && event.target instanceof Node && !moreMenu?.contains(event.target)) moreOpen = false;
@@ -111,7 +119,7 @@
   {/if}
   {#if loadError && !snapshot}
     <LoadFailure title="Wallet data is unavailable" description={loadError} onretry={loadSnapshot} />
-  {:else if snapshot}
+  {:else if snapshot && !initialDataLoading}
   <section class="balance-card content-reveal">
     <div class="balance-top"><span>Total balance</span><button class="ghost-icon" aria-label={$discreetMode ? 'Show wallet amounts' : 'Hide wallet amounts'} aria-pressed={$discreetMode} onclick={() => setDiscreetMode(!$discreetMode)}>{#if $discreetMode}<Eye size={17} />{:else}<EyeOff size={17} />{/if}</button></div>
     <div class="balance-value">{$discreetMode ? '••••••••' : shortSats(snapshot?.balance.total ?? 0)} <small>sats</small></div>
@@ -139,7 +147,7 @@
   </div>
   <section class="section-block">
     <div class="section-heading"><div><h2>Recent activity</h2></div><a href="/activity">View all</a></div>
-    <TxList items={recentTransactions} loading={!snapshot} onselect={(transaction) => selected = transaction} />
+    <TxList items={recentTransactions} loading={initialDataLoading} onselect={(transaction) => selected = transaction} />
   </section>
   {/if}
 </div>

@@ -56,6 +56,7 @@ use crate::proposal::{decode_psbt, encode_psbt, merge_signed_psbt, signature_pro
 use crate::recovery::{analyze_template, PolicyAnalysis, RecoveryError, RecoveryTemplate};
 use crate::registry::{self, RegistryError, WalletKind, WalletProfile, WalletRegistry};
 use crate::secure_store::{self, SecureStoreError};
+use crate::session::WalletSessions;
 use crate::ur_transport::{self, UrTransportError};
 
 const NETWORK: Network = Network::Regtest;
@@ -76,6 +77,15 @@ const MIN_SUPPLEMENTAL_DICE_ROLLS: usize = 50;
 const MAX_SUPPLEMENTAL_DICE_ROLLS: usize = 100;
 const SUPPLEMENTAL_TRANSCRIPT_DOMAIN: &[u8] = b"Groot supplemental entropy transcript v1";
 const SUPPLEMENTAL_MIX_DOMAIN: &[u8] = b"Groot BIP39 entropy mix v1";
+const SAVED_FILE_REVEAL_TIMEOUT: Duration = Duration::from_secs(10 * 60);
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SavedFileDto {
+    pub saved: bool,
+    pub reveal_token: Option<String>,
+    pub reveal_label: Option<String>,
+}
 
 fn validate_public_backup_filename(value: &str) -> ApiResult<&str> {
     let trimmed = value.trim();
@@ -161,13 +171,14 @@ pub async fn public_backup_save(
 #[tauri::command]
 pub async fn psbt_file_save(
     app: AppHandle,
+    state: State<'_, AppState>,
     suggested_filename: String,
     psbt: String,
-) -> ApiResult<bool> {
+) -> ApiResult<SavedFileDto> {
     let filename = validate_psbt_filename(&suggested_filename)?.to_owned();
     let content = psbt.trim().to_owned();
     decode_psbt(&content).map_err(proposal_api_error)?;
-    tauri::async_runtime::spawn_blocking(move || {
+    let saved_path = tauri::async_runtime::spawn_blocking(move || {
         let selected = app
             .dialog()
             .file()
@@ -175,7 +186,7 @@ pub async fn psbt_file_save(
             .add_filter("Partially signed Bitcoin transaction", &["psbt"])
             .blocking_save_file();
         let Some(selected) = selected else {
-            return Ok(false);
+            return Ok(None);
         };
         let path = selected.into_path().map_err(internal)?;
         let mut options = OpenOptions::new();
@@ -193,10 +204,143 @@ pub async fn psbt_file_save(
         }
         file.write_all(content.as_bytes()).map_err(internal)?;
         file.sync_all().map_err(internal)?;
-        Ok(true)
+        Ok(Some(path))
     })
     .await
-    .map_err(internal)?
+    .map_err(internal)??;
+    let Some(path) = saved_path else {
+        return Ok(SavedFileDto {
+            saved: false,
+            reveal_token: None,
+            reveal_label: None,
+        });
+    };
+
+    #[cfg(target_os = "macos")]
+    {
+        let token = Uuid::new_v4().to_string();
+        let now = Instant::now();
+        let mut saved_files = state.saved_files.lock().map_err(internal)?;
+        saved_files
+            .retain(|_, saved| now.duration_since(saved.saved_at) <= SAVED_FILE_REVEAL_TIMEOUT);
+        if saved_files.len() >= 16 {
+            saved_files.clear();
+        }
+        saved_files.insert(
+            token.clone(),
+            SavedFileReveal {
+                path,
+                saved_at: now,
+            },
+        );
+        Ok(SavedFileDto {
+            saved: true,
+            reveal_token: Some(token),
+            reveal_label: Some("Show in Finder".to_owned()),
+        })
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = state;
+        let _ = path;
+        Ok(SavedFileDto {
+            saved: true,
+            reveal_token: None,
+            reveal_label: None,
+        })
+    }
+}
+
+#[tauri::command]
+pub async fn psbt_file_reveal(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    reveal_token: String,
+) -> ApiResult<()> {
+    Uuid::parse_str(&reveal_token).map_err(|_| {
+        api_error(
+            "file_reveal_unavailable",
+            "This saved-file shortcut is no longer available.",
+        )
+    })?;
+    let saved = state
+        .saved_files
+        .lock()
+        .map_err(internal)
+        .and_then(|mut saved_files| {
+            consume_saved_file_token(&mut saved_files, &reveal_token, Instant::now()).ok_or_else(
+                || {
+                    api_error(
+                        "file_reveal_unavailable",
+                        "This saved-file shortcut expired. The PSBT remains saved.",
+                    )
+                },
+            )
+        })?;
+    if !saved.path.is_file() {
+        return Err(api_error(
+            "file_reveal_unavailable",
+            "The PSBT was moved or is no longer available at its saved location.",
+        ));
+    }
+    tauri::async_runtime::spawn_blocking(move || reveal_saved_file(&app, saved.path))
+        .await
+        .map_err(internal)?
+}
+
+fn consume_saved_file_token(
+    saved_files: &mut HashMap<String, SavedFileReveal>,
+    reveal_token: &str,
+    now: Instant,
+) -> Option<SavedFileReveal> {
+    if Uuid::parse_str(reveal_token).is_err() {
+        return None;
+    }
+    saved_files.retain(|_, saved| now.duration_since(saved.saved_at) <= SAVED_FILE_REVEAL_TIMEOUT);
+    saved_files.remove(reveal_token)
+}
+
+#[cfg(target_os = "macos")]
+fn reveal_saved_file(app: &AppHandle, path: PathBuf) -> ApiResult<()> {
+    use objc2::rc::autoreleasepool;
+    use objc2_app_kit::NSWorkspace;
+    use objc2_foundation::NSString;
+    use std::sync::mpsc::sync_channel;
+
+    let parent = path
+        .parent()
+        .ok_or_else(|| internal("The saved file has no parent directory."))?
+        .to_owned();
+    let full_path = path.to_string_lossy().into_owned();
+    let parent_path = parent.to_string_lossy().into_owned();
+    let (sender, receiver) = sync_channel(1);
+    app.run_on_main_thread(move || {
+        let revealed = autoreleasepool(|_| {
+            NSWorkspace::sharedWorkspace().selectFile_inFileViewerRootedAtPath(
+                Some(&NSString::from_str(&full_path)),
+                &NSString::from_str(&parent_path),
+            )
+        });
+        let _ = sender.send(revealed);
+    })
+    .map_err(internal)?;
+    if receiver.recv().map_err(internal)? {
+        Ok(())
+    } else {
+        Err(api_error(
+            "file_reveal_unavailable",
+            "Finder could not reveal the saved PSBT.",
+        ))
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn reveal_saved_file(_app: &AppHandle, _path: PathBuf) -> ApiResult<()> {
+    Err(api_error(
+        "file_reveal_unavailable",
+        "Showing saved files is not available on this platform yet.",
+    ))
 }
 
 #[tauri::command]
@@ -315,58 +459,17 @@ pub struct AppState {
     verified_recovery: Mutex<HashMap<Uuid, String>>,
     pending_hardware_pins: Mutex<HashMap<String, PendingHardwarePin>>,
     node_auth: Mutex<HashMap<Uuid, NodeAuthSession>>,
+    saved_files: Mutex<HashMap<String, SavedFileReveal>>,
+}
+
+struct SavedFileReveal {
+    path: PathBuf,
+    saved_at: Instant,
 }
 
 struct NodeAuthSession {
     username: String,
     password: Zeroizing<String>,
-}
-
-#[derive(Default)]
-struct WalletSessions {
-    last_activity: HashMap<Uuid, Instant>,
-}
-
-impl WalletSessions {
-    fn unlock(&mut self, wallet_id: Uuid) {
-        self.last_activity.insert(wallet_id, Instant::now());
-    }
-
-    fn authorize_at(
-        &mut self,
-        wallet_id: Uuid,
-        record_activity: bool,
-        now: Instant,
-        idle_timeout: Duration,
-    ) -> bool {
-        let Some(last_activity) = self.last_activity.get_mut(&wallet_id) else {
-            return false;
-        };
-        if now.duration_since(*last_activity) > idle_timeout {
-            self.last_activity.remove(&wallet_id);
-            return false;
-        }
-        if record_activity {
-            *last_activity = now;
-        }
-        true
-    }
-
-    fn prune_expired_at(&mut self, now: Instant, idle_timeout: Duration) -> Vec<Uuid> {
-        let mut expired = Vec::new();
-        self.last_activity.retain(|wallet_id, last_activity| {
-            let keep = now.duration_since(*last_activity) <= idle_timeout;
-            if !keep {
-                expired.push(*wallet_id);
-            }
-            keep
-        });
-        expired
-    }
-
-    fn lock(&mut self, wallet_id: Uuid) {
-        self.last_activity.remove(&wallet_id);
-    }
 }
 
 #[derive(Debug)]
@@ -2222,14 +2325,32 @@ fn reject_virtual_cosigners(cosigners: &[CosignerInput]) -> ApiResult<()> {
 }
 
 fn proposal_api_error(error: crate::proposal::ProposalError) -> ApiError {
-    if error == crate::proposal::ProposalError::NoNewSignatures {
-        api_error(
-            error.code(),
-            "This signer has already signed this proposal. No signatures were changed.",
-        )
-    } else {
-        api_error(error.code(), error)
-    }
+    use crate::proposal::ProposalError;
+
+    let message = match error {
+        ProposalError::MalformedPsbt => "The PSBT is malformed.",
+        ProposalError::PsbtTooLarge => "The PSBT exceeds Groot's size limit.",
+        ProposalError::ProposalMismatch => {
+            "The PSBT does not match the transaction you reviewed. No signatures were changed."
+        }
+        ProposalError::UnknownSigner => {
+            "The PSBT contains a signature from an unknown signer. No signatures were changed."
+        }
+        ProposalError::UnsupportedSighash => {
+            "The PSBT uses an unsupported signature type. Groot accepts only SIGHASH_ALL. No signatures were changed."
+        }
+        ProposalError::PrematureFinalization => {
+            "The PSBT was finalized outside Groot. Import a partially signed PSBT instead."
+        }
+        ProposalError::NoInputs => "The PSBT has no transaction inputs.",
+        ProposalError::NoNewSignatures => {
+            "This signer has already signed this proposal. No signatures were changed."
+        }
+        ProposalError::MergeFailed => {
+            "Groot could not safely merge the signed PSBT. No signatures were changed."
+        }
+    };
+    api_error(error.code(), message)
 }
 
 fn recovery_api_error(error: RecoveryError) -> ApiError {
@@ -3518,6 +3639,22 @@ pub fn wallet_profiles(app: AppHandle) -> ApiResult<WalletRegistry> {
 }
 
 #[tauri::command]
+pub fn wallet_rename(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    name: String,
+) -> ApiResult<WalletProfile> {
+    let _operation = operation_guard(&state)?;
+    require_unlocked(&app, &state)?;
+    let mut registry = load_registry(&app)?;
+    let renamed = registry
+        .rename_selected(&name)
+        .map_err(registry_api_error)?;
+    save_registry(&app, &registry)?;
+    Ok(renamed)
+}
+
+#[tauri::command]
 pub fn wallet_inactivity_timeout_save(
     app: AppHandle,
     state: State<'_, AppState>,
@@ -4612,6 +4749,35 @@ pub fn external_signer_wallet(
 ) -> ApiResult<ExternalSignerWallet> {
     require_unlocked(&app, &state)?;
     read_external_signer_metadata(&app)
+}
+
+fn normalize_external_signer_label(value: &str) -> ApiResult<String> {
+    let normalized = value.split_whitespace().collect::<Vec<_>>().join(" ");
+    if normalized.is_empty() || normalized.chars().count() > 48 {
+        return Err(api_error(
+            "invalid_label",
+            "Hardware signer names must contain 1 to 48 characters.",
+        ));
+    }
+    Ok(normalized)
+}
+
+#[tauri::command]
+pub fn external_signer_rename(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    label: String,
+) -> ApiResult<ExternalSignerWallet> {
+    let _operation = operation_guard(&state)?;
+    require_unlocked(&app, &state)?;
+    let mut metadata = read_external_signer_metadata(&app)?;
+    metadata.signer.label = normalize_external_signer_label(&label)?;
+    metadata
+        .signer
+        .validate()
+        .map_err(external_signer_api_error)?;
+    write_private_json(&external_signer_metadata_path(&app)?, &metadata)?;
+    Ok(metadata)
 }
 
 fn external_signer_backup(descriptor: String) -> ApiResult<ExternalSignerBackupDto> {
@@ -6702,6 +6868,57 @@ mod tests {
     const WORDS: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art";
 
     #[test]
+    fn saved_file_reveal_tokens_are_bounded_expiring_and_single_use() {
+        let now = Instant::now();
+        let valid_token = Uuid::new_v4().to_string();
+        let expired_token = Uuid::new_v4().to_string();
+        let mut saved_files = HashMap::from([
+            (
+                valid_token.clone(),
+                SavedFileReveal {
+                    path: PathBuf::from("saved.psbt"),
+                    saved_at: now,
+                },
+            ),
+            (
+                expired_token.clone(),
+                SavedFileReveal {
+                    path: PathBuf::from("expired.psbt"),
+                    saved_at: now - SAVED_FILE_REVEAL_TIMEOUT - Duration::from_secs(1),
+                },
+            ),
+        ]);
+
+        assert!(consume_saved_file_token(&mut saved_files, "not-a-token", now).is_none());
+        assert!(consume_saved_file_token(&mut saved_files, &expired_token, now).is_none());
+        assert_eq!(
+            consume_saved_file_token(&mut saved_files, &valid_token, now)
+                .unwrap()
+                .path,
+            PathBuf::from("saved.psbt")
+        );
+        assert!(consume_saved_file_token(&mut saved_files, &valid_token, now).is_none());
+    }
+
+    #[test]
+    fn external_signer_labels_are_normalized_and_bounded() {
+        assert_eq!(
+            normalize_external_signer_label("  Travel   signing\tkey  ").unwrap(),
+            "Travel signing key"
+        );
+        assert_eq!(
+            normalize_external_signer_label("").unwrap_err().code,
+            "invalid_label"
+        );
+        assert_eq!(
+            normalize_external_signer_label(&"x".repeat(49))
+                .unwrap_err()
+                .code,
+            "invalid_label"
+        );
+    }
+
+    #[test]
     fn pending_balance_includes_trusted_and_untrusted_outputs() {
         assert_eq!(aggregate_pending_balance(100_000, 249_000), 349_000);
         assert_eq!(aggregate_pending_balance(u64::MAX, 1), u64::MAX);
@@ -7206,6 +7423,60 @@ mod tests {
             secure_store_error(SecureStoreError::DeviceKeyNotFound).code,
             "wallet_corrupt"
         );
+
+        let proposal_cases = [
+            (
+                crate::proposal::ProposalError::MalformedPsbt,
+                "malformed_psbt",
+                "The PSBT is malformed.",
+            ),
+            (
+                crate::proposal::ProposalError::PsbtTooLarge,
+                "psbt_too_large",
+                "The PSBT exceeds Groot's size limit.",
+            ),
+            (
+                crate::proposal::ProposalError::ProposalMismatch,
+                "proposal_mismatch",
+                "The PSBT does not match the transaction you reviewed. No signatures were changed.",
+            ),
+            (
+                crate::proposal::ProposalError::UnknownSigner,
+                "unknown_signer",
+                "The PSBT contains a signature from an unknown signer. No signatures were changed.",
+            ),
+            (
+                crate::proposal::ProposalError::UnsupportedSighash,
+                "unsupported_sighash",
+                "The PSBT uses an unsupported signature type. Groot accepts only SIGHASH_ALL. No signatures were changed.",
+            ),
+            (
+                crate::proposal::ProposalError::PrematureFinalization,
+                "premature_finalization",
+                "The PSBT was finalized outside Groot. Import a partially signed PSBT instead.",
+            ),
+            (
+                crate::proposal::ProposalError::NoInputs,
+                "no_inputs",
+                "The PSBT has no transaction inputs.",
+            ),
+            (
+                crate::proposal::ProposalError::NoNewSignatures,
+                "no_new_signatures",
+                "This signer has already signed this proposal. No signatures were changed.",
+            ),
+            (
+                crate::proposal::ProposalError::MergeFailed,
+                "psbt_merge_failed",
+                "Groot could not safely merge the signed PSBT. No signatures were changed.",
+            ),
+        ];
+        for (error, code, message) in proposal_cases {
+            let translated = proposal_api_error(error);
+            assert_eq!(translated.code, code);
+            assert_eq!(translated.message, message);
+            assert_ne!(translated.message, translated.code);
+        }
     }
 
     #[test]
@@ -8478,109 +8749,5 @@ mod tests {
                 .code,
             "invalid_backup"
         );
-    }
-
-    #[test]
-    fn wallet_sessions_are_independent_across_wallet_switches() {
-        let first = Uuid::new_v4();
-        let second = Uuid::new_v4();
-        let idle_timeout = Duration::from_secs(5 * 60);
-        let mut sessions = WalletSessions::default();
-
-        sessions.unlock(first);
-        sessions.unlock(second);
-        let now = Instant::now();
-
-        assert!(sessions.authorize_at(first, true, now, idle_timeout));
-        assert!(sessions.authorize_at(second, true, now, idle_timeout));
-        sessions.lock(second);
-        assert!(sessions.authorize_at(first, false, now, idle_timeout));
-        assert!(!sessions.authorize_at(second, false, now, idle_timeout));
-    }
-
-    #[test]
-    fn background_sync_does_not_extend_the_idle_deadline() {
-        let wallet_id = Uuid::new_v4();
-        let started = Instant::now();
-        let idle_timeout = Duration::from_secs(5 * 60);
-        let mut sessions = WalletSessions::default();
-        sessions.last_activity.insert(wallet_id, started);
-
-        assert!(sessions.authorize_at(
-            wallet_id,
-            false,
-            started + idle_timeout - Duration::from_secs(1),
-            idle_timeout
-        ));
-        assert!(!sessions.authorize_at(
-            wallet_id,
-            false,
-            started + idle_timeout + Duration::from_secs(1),
-            idle_timeout
-        ));
-    }
-
-    #[test]
-    fn user_activity_refreshes_only_the_active_wallet_deadline() {
-        let active = Uuid::new_v4();
-        let inactive = Uuid::new_v4();
-        let started = Instant::now();
-        let idle_timeout = Duration::from_secs(5 * 60);
-        let refreshed = started + idle_timeout - Duration::from_secs(1);
-        let mut sessions = WalletSessions::default();
-        sessions.last_activity.insert(active, started);
-        sessions.last_activity.insert(inactive, started);
-
-        assert!(sessions.authorize_at(active, true, refreshed, idle_timeout));
-        assert!(sessions.authorize_at(
-            active,
-            false,
-            refreshed + Duration::from_secs(2),
-            idle_timeout
-        ));
-        assert!(!sessions.authorize_at(
-            inactive,
-            false,
-            refreshed + Duration::from_secs(2),
-            idle_timeout
-        ));
-    }
-
-    #[test]
-    fn background_heartbeat_prunes_every_expired_wallet_session() {
-        let selected = Uuid::new_v4();
-        let inactive = Uuid::new_v4();
-        let started = Instant::now();
-        let idle_timeout = Duration::from_secs(5 * 60);
-        let now = started + idle_timeout + Duration::from_secs(1);
-        let mut sessions = WalletSessions::default();
-        sessions.last_activity.insert(selected, now);
-        sessions.last_activity.insert(inactive, started);
-
-        assert_eq!(sessions.prune_expired_at(now, idle_timeout), vec![inactive]);
-        assert!(sessions.authorize_at(selected, false, now, idle_timeout));
-        assert!(!sessions.authorize_at(inactive, false, now, idle_timeout));
-    }
-
-    #[test]
-    fn wallet_sessions_honor_the_configured_global_timeout() {
-        let wallet_id = Uuid::new_v4();
-        let started = Instant::now();
-        let one_minute = Duration::from_secs(60);
-        let mut sessions = WalletSessions::default();
-        sessions.last_activity.insert(wallet_id, started);
-
-        assert!(sessions.authorize_at(
-            wallet_id,
-            false,
-            started + Duration::from_secs(59),
-            one_minute
-        ));
-        assert!(!sessions.authorize_at(
-            wallet_id,
-            false,
-            started + Duration::from_secs(61),
-            one_minute
-        ));
     }
 }

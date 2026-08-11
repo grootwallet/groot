@@ -103,10 +103,11 @@
     catch (cause) { error = cause instanceof Error ? cause.message : 'Could not read this file.'; }
   }
   async function create() {
-    if (!signer || !pin || pin !== confirmation) return;
+    const walletName = label.trim();
+    if (!signer || !walletName || !pin || pin !== confirmation) return;
     busy = true; error = ''; errorCode = '';
     try {
-      await walletService.createExternalSignerWallet(signer.label, signer, pin);
+      await walletService.createExternalSignerWallet(walletName, { ...signer, label: walletName }, pin);
       pin = ''; confirmation = '';
       toast({ title: 'Hardware wallet added', description: 'Only public descriptors are stored in Groot.', tone: 'success' });
       await goto('/');
@@ -127,7 +128,7 @@
       <label class="field"><span>Wallet name</span><input bind:value={label} maxlength="48" placeholder="Defaults to the device model"/><small>This also identifies the signer inside Groot.</small></label>
       <div class="source-list">
         <button onclick={scan}><Cable size={20}/><span><strong>Connect with cable</strong><small>Jade, BitBox02, Trezor, Ledger, and HWI-compatible devices</small></span><ArrowRight size={17}/></button>
-        <label class="source-button"><FileUp size={20}/><span><strong>Import from SD card</strong><small>Passport, Coldcard, Jade, and descriptor exports</small></span><ArrowRight size={17}/><input aria-label="Import public key file" type="file" accept=".json,.txt,.bsms,.desc,application/json,text/plain" onchange={loadFile}/></label>
+        <label class="source-button"><FileUp size={20}/><span><strong>Import public backup</strong><small>From this computer, an SD card, or a connected drive</small></span><ArrowRight size={17}/><input aria-label="Import public backup file" type="file" accept=".json,.txt,.bsms,.desc,application/json,text/plain" onchange={loadFile}/></label>
         <button onclick={() => { importSource='qr'; encoded=''; }}><QrCode size={20}/><span><strong>Paste QR payload</strong><small>Animated-QR scanners can be added without changing the parser</small></span><ArrowRight size={17}/></button>
       </div>
       {#if importSource === 'qr'}<label class="field"><span>Descriptor or public export</span><textarea bind:value={encoded} rows="5" placeholder="wpkh([fingerprint/84'/1'/0']tpub…/<0;1>/*)"></textarea></label><Button class="full" disabled={!encoded.trim()||!label.trim()} loading={busy} loadingLabel="Validating…" onclick={parseImport}>Validate public key</Button>{/if}
@@ -140,7 +141,8 @@
     </section>
   {:else if step === 2 && signer}
     <section class="form-card hardware-review-card">
-      <span class="setup-step">PUBLIC DATA REVIEW</span><h2>{signer.label}</h2>
+      <span class="setup-step">PUBLIC DATA REVIEW</span><h2>{label.trim() || signer.label}</h2>
+      <label class="field"><span>Wallet name</span><input aria-label="Reviewed wallet name" bind:value={label} maxlength="48"/><small>You can rename this local Groot wallet without changing its signer identity.</small></label>
       <dl class="details-list"><div><dt>Fingerprint</dt><dd class="mono">{signer.fingerprint}</dd></div><div><dt>Account path</dt><dd class="mono">{signer.derivationPath}</dd></div><div><dt>Source</dt><dd>{signer.source}</dd></div><div><dt>Account xpub</dt><dd><button type="button" class="address-review-trigger mono" aria-label="View complete account public key" onclick={() => xpubOpen = true}>{compactIdentifier(signer.xpub, 14, 10)}</button></dd></div></dl>
       {#if isLedger}
         <div class="credential-warning"><ShieldCheck size={17}/><p><strong>This identifies the wallet currently open on Ledger.</strong><span>A different seed or passphrase produces a different fingerprint and completely different addresses. Nano S Plus does not display this fingerprint, so verify your first receive address on Ledger before using the wallet.</span></p></div>
@@ -150,7 +152,7 @@
       {:else}
         <div class="credential-warning"><ShieldCheck size={17}/><p><strong>Verify the fingerprint.</strong><span>Compare it with the value shown by the hardware wallet or its trusted export. A different seed or passphrase produces a different wallet.</span></p></div>
       {/if}
-      <div class="split-actions"><Button variant="secondary" onclick={() => { signer=null; step=1; }}>Back</Button><Button onclick={() => step=3}>{isLedger ? 'Use this Ledger wallet' : isFileImport ? 'Use this public backup' : 'Fingerprint matches'}<ArrowRight size={17}/></Button></div>
+      <div class="split-actions"><Button variant="secondary" onclick={() => { signer=null; step=1; }}>Back</Button><Button disabled={!label.trim()} onclick={() => step=3}>{isLedger ? 'Use this Ledger wallet' : isFileImport ? 'Use this public backup' : 'Fingerprint matches'}<ArrowRight size={17}/></Button></div>
     </section>
   {:else if signer}
     <form class="form-card hardware-protection-card" onsubmit={(event) => { event.preventDefault(); create(); }}>

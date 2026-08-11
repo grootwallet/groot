@@ -9,7 +9,7 @@
   import { addressReuseInsights, selectedCoinTotal } from '$lib/wallet/policy';
   import { walletService } from '$lib/wallet';
   import { toast } from '$lib/stores/toasts';
-  import { onMount } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import type { Transaction, Utxo } from '$lib/types';
   import { formatConfirmationCount, locale, t } from '$lib/i18n';
   import { sortCoins, type CoinSortOrder } from '$lib/wallet/presentation';
@@ -27,6 +27,7 @@
   let freezeIntent = $state<{ outpoints: string[]; frozen: boolean } | null>(null);
   let loading = $state(true);
   let loadError = $state('');
+  let emptyCoinsTimer: ReturnType<typeof setTimeout> | undefined;
   const selectedTotal = $derived(selectedCoinTotal(utxos, selected));
   const sortedUtxos = $derived(sortCoins(utxos, transactions, sortOrder));
   const reuseInsights = $derived(addressReuseInsights(utxos));
@@ -36,6 +37,7 @@
   onMount(load);
   onMount(() => walletService.subscribe((event) => {
     if (event.type === 'wallet_updated') {
+      if (emptyCoinsTimer) clearTimeout(emptyCoinsTimer);
       multisig = event.walletKind === 'multisig';
       utxos = event.snapshot.utxos;
       transactions = event.snapshot.transactions;
@@ -48,19 +50,22 @@
   async function load() {
     loading = true;
     loadError = '';
+    if (emptyCoinsTimer) clearTimeout(emptyCoinsTimer);
     try {
       const registry = await walletService.profiles();
       multisig = registry.wallets.find((wallet) => wallet.id === registry.selectedWalletId)?.kind === 'multisig';
       const snapshot = multisig ? await walletService.multisigSnapshot() : await walletService.snapshot();
       utxos = snapshot.utxos;
       transactions = snapshot.transactions;
+      if (utxos.length) loading = false;
+      else emptyCoinsTimer = setTimeout(() => loading = false, 10_000);
     } catch (cause) {
       loadError = cause instanceof Error ? cause.message : 'Coin data could not be read.';
       toast({ title: 'Could not load coins', description: loadError, tone: 'danger' });
-    } finally {
-      loading = false;
-    }
+    } finally { if (loadError) loading = false; }
   }
+
+  onDestroy(() => { if (emptyCoinsTimer) clearTimeout(emptyCoinsTimer); });
 
   function toggle(outpoint: string, checked: boolean) {
     selected = checked ? [...selected, outpoint] : selected.filter((item) => item !== outpoint);

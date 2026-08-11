@@ -66,7 +66,7 @@
   .mobile-wallet-trigger span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .mobile-wallet-trigger:hover,.mobile-wallet-trigger:focus-visible,.mobile-wallet-trigger[aria-expanded='true'] { background: var(--surface-hover); outline: 0; }
   .mobile-wallet-trigger:focus-visible { box-shadow: 0 0 0 2px var(--focus); }
-  .mobile-wallet-menu { position: fixed; z-index: 90; left: 18px; right: 18px; bottom: calc(142px + env(safe-area-inset-bottom)); max-height: min(360px, calc(100dvh - 180px)); overflow-y: auto; padding: 6px; border: 1px solid var(--border-strong); border-radius: 11px; background: var(--panel-2); box-shadow: 0 18px 48px rgba(0,0,0,.3); }
+  .mobile-wallet-menu { position: absolute; z-index: 90; top: calc(100% + 8px); right: 0; left: 0; width: 100%; max-height: min(360px, calc(100dvh - 180px)); overflow-y: auto; padding: 6px; border: 1px solid var(--border-strong); border-radius: 11px; background: var(--panel-2); box-shadow: 0 18px 48px rgba(0,0,0,.3); }
   .mobile-wallet-menu button,.mobile-wallet-menu a { width: 100%; min-height: 50px; display: grid; grid-template-columns: 30px minmax(0,1fr); align-items: center; gap: 9px; padding: 8px 10px; border: 0; border-radius: 7px; color: var(--text); background: transparent; font: inherit; text-align: left; text-decoration: none; cursor: pointer; }
   .mobile-wallet-menu button:hover,.mobile-wallet-menu button:focus-visible,.mobile-wallet-menu a:hover,.mobile-wallet-menu a:focus-visible,.mobile-wallet-menu button.active { background: var(--surface-hover); outline: 0; }
   .mobile-wallet-menu-icon { width: 29px; height: 29px; display: grid; place-items: center; border-radius: 7px; color: var(--muted); background: var(--surface-icon); }

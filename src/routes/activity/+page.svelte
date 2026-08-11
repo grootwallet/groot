@@ -5,7 +5,7 @@
   import { toast } from '$lib/stores/toasts';
   import { walletService } from '$lib/wallet';
   import { sortTransactionsNewestFirst } from '$lib/wallet/presentation';
-  import { onMount } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import { Activity } from '@lucide/svelte';
   import LoadFailure from '$lib/components/LoadFailure.svelte';
   let selected = $state<Transaction | null>(null);
@@ -14,18 +14,21 @@
   let multisig = $state(false);
   let loading = $state(true);
   let loadError = $state('');
+  let emptyHistoryTimer: ReturnType<typeof setTimeout> | undefined;
   const visibleTransactions = $derived(sortTransactionsNewestFirst(filter === 'all' ? transactions : transactions.filter((transaction) => transaction.direction === filter)));
   onMount(load);
   async function load() {
     loading = true;
     loadError = '';
-    try { const registry=await walletService.profiles();multisig=registry.wallets.find((wallet)=>wallet.id===registry.selectedWalletId)?.kind==='multisig';const snapshot=multisig?await walletService.multisigSnapshot():await walletService.snapshot();transactions=snapshot.transactions; }
+    if (emptyHistoryTimer) clearTimeout(emptyHistoryTimer);
+    try { const registry=await walletService.profiles();multisig=registry.wallets.find((wallet)=>wallet.id===registry.selectedWalletId)?.kind==='multisig';const snapshot=multisig?await walletService.multisigSnapshot():await walletService.snapshot();transactions=snapshot.transactions;if(transactions.length)loading=false;else emptyHistoryTimer=setTimeout(()=>loading=false,10_000); }
     catch (cause) { loadError = cause instanceof Error ? cause.message : 'Transaction history could not be read.'; toast({ title: 'Could not load transactions', description: loadError, tone: 'danger' }); }
-    finally { loading = false; }
+    finally { if (loadError) loading = false; }
   }
   onMount(() => walletService.subscribe((event) => {
-    if (event.type === 'wallet_updated') { multisig = event.walletKind === 'multisig'; transactions = event.snapshot.transactions; loadError = ''; loading = false; }
+    if (event.type === 'wallet_updated') { if (emptyHistoryTimer) clearTimeout(emptyHistoryTimer); multisig = event.walletKind === 'multisig'; transactions = event.snapshot.transactions; loadError = ''; loading = false; }
   }));
+  onDestroy(() => { if (emptyHistoryTimer) clearTimeout(emptyHistoryTimer); });
 </script>
 
 <div class="page">

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Check, ChevronRight, Clock3, Cpu, Download, Eye, FileKey, History, KeyRound, LockKeyhole, Moon, Network, Plus, RefreshCw, ShieldCheck, Sun, Trash2, WalletCards } from '@lucide/svelte';
+  import { Check, ChevronRight, Clock3, Cpu, Download, Eye, FileKey, History, KeyRound, LockKeyhole, Moon, Network, Pencil, Plus, RefreshCw, ShieldCheck, Sun, Trash2, WalletCards } from '@lucide/svelte';
   import Button from '$lib/components/Button.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import PasswordField from '$lib/components/PasswordField.svelte';
@@ -10,7 +10,7 @@
   import { walletService, WalletError } from '$lib/wallet';
   import { goto } from '$app/navigation';
   import { onDestroy, onMount } from 'svelte';
-  import type { CoreNodeConfig, RecoveryScanSettings, WalletProfile } from '$lib/wallet/contracts';
+  import type { CoreNodeConfig, ExternalSignerWallet, RecoveryScanSettings, WalletProfile } from '$lib/wallet/contracts';
   let deleting = $state(false);
   let confirmText = $state('');
   let deleteCredential = $state('');
@@ -33,19 +33,24 @@
   let scanOpen = $state(false), scanCredential = $state(''), scanError = $state(''), scan = $state<RecoveryScanSettings>({ birthdayHeight: 0, gapLimit: 20 }), scanDraft = $state<RecoveryScanSettings>({ birthdayHeight: 0, gapLimit: 20 });
   let verifyOpen = $state(false), verifyCredential = $state(''), verifyError = $state(''), verifying = $state(false);
   let hardwareBackupOpen = $state(false), descriptorDetailsOpen = $state(false), hardwareBackupPin = $state(''), hardwareBackupError = $state(''), hardwareBackup = $state(''), hardwareBackupContent = $state(''), exportingHardwareBackup = $state(false);
+  let renameOpen = $state(false), renameDraft = $state(''), renameError = $state(''), renaming = $state(false);
+  let hardwareSignerWallet = $state<ExternalSignerWallet | null>(null);
+  let signerRenameOpen = $state(false), signerRenameDraft = $state(''), signerRenameError = $state(''), signerRenaming = $state(false);
   onMount(async () => {
     theme = document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
     const registry = await walletService.profiles();
     profiles = registry.wallets;
     selectedWalletId = registry.selectedWalletId;
     inactivityTimeoutMinutes = registry.inactivityTimeoutMinutes;
+    const activeProfile = registry.wallets.find((wallet) => wallet.id === registry.selectedWalletId);
+    if (activeProfile?.kind === 'watch_only') hardwareSignerWallet = await walletService.externalSignerWallet();
     node = await walletService.nodeConfig();
     scan = await walletService.recoveryScanSettings(); scanDraft = { ...scan };
   });
   onDestroy(() => {
     deleteCredential = '';
     confirmText = '';
-    nodePassword = ''; walletCredential = ''; scanCredential = ''; verifyCredential = ''; hardwareBackupPin = ''; hardwareBackup = ''; hardwareBackupContent = '';
+    nodePassword = ''; walletCredential = ''; scanCredential = ''; verifyCredential = ''; hardwareBackupPin = ''; hardwareBackup = ''; hardwareBackupContent = ''; signerRenameDraft = '';
   });
   function setTheme(next: 'light' | 'dark') { theme = next; document.documentElement.dataset.theme = next; document.querySelector('meta[name="theme-color"]')?.setAttribute('content', next === 'light' ? '#f4f1e9' : '#0d1118'); localStorage.setItem('groot-theme', next); }
   async function checkConnection() {
@@ -82,6 +87,45 @@
       toast({ title: 'Could not update automatic lock', description: cause instanceof Error ? cause.message : undefined, tone: 'danger' });
     } finally {
       savingInactivityTimeout = false;
+    }
+  }
+  function openRename() {
+    renameDraft = selectedProfile?.name ?? '';
+    renameError = '';
+    renameOpen = true;
+  }
+  async function renameWallet() {
+    renaming = true;
+    renameError = '';
+    try {
+      const renamed = await walletService.renameWallet(renameDraft);
+      profiles = profiles.map((profile) => profile.id === renamed.id ? renamed : profile);
+      renameDraft = '';
+      renameOpen = false;
+      toast({ title: 'Wallet name updated', description: `This wallet is now shown as ${renamed.name}.`, tone: 'success' });
+    } catch (cause) {
+      renameError = cause instanceof Error ? cause.message : 'Could not rename this wallet.';
+    } finally {
+      renaming = false;
+    }
+  }
+  function openSignerRename() {
+    signerRenameDraft = hardwareSignerWallet?.signer.label ?? '';
+    signerRenameError = '';
+    signerRenameOpen = true;
+  }
+  async function renameHardwareSigner() {
+    signerRenaming = true;
+    signerRenameError = '';
+    try {
+      hardwareSignerWallet = await walletService.renameExternalSigner(signerRenameDraft);
+      signerRenameDraft = '';
+      signerRenameOpen = false;
+      toast({ title: 'Hardware signer name updated', description: 'Signing and verification screens now use the new local name.', tone: 'success' });
+    } catch (cause) {
+      signerRenameError = cause instanceof Error ? cause.message : 'Could not rename this hardware signer.';
+    } finally {
+      signerRenaming = false;
     }
   }
   async function runFullRescan() {
@@ -159,6 +203,9 @@
 
 <div class="page narrow-page settings-page">
   <header class="page-header"><div><p class="eyebrow">WALLET SETTINGS</p><h1>{selectedProfile?.name ?? 'Settings'}</h1><p class="subtitle">Wallet security and connection. Appearance is global.</p></div></header>
+  <section class="settings-group wallet-details"><h2>Wallet details</h2>
+    <div class="settings-list"><button aria-label={`Rename ${selectedProfile?.name ?? 'wallet'}`} onclick={openRename}><span class="setting-icon"><Pencil size={18}/></span><span><strong>Wallet name</strong><small>{selectedProfile?.name ?? 'Unnamed wallet'} · Local display name only</small></span><ChevronRight size={16}/></button>{#if hardwareSignerWallet}<button aria-label={`Rename hardware signer ${hardwareSignerWallet.signer.label}`} onclick={openSignerRename}><span class="setting-icon"><Cpu size={18}/></span><span><strong>Hardware signer name</strong><small>{hardwareSignerWallet.signer.label} · Used on signing and verification screens</small></span><ChevronRight size={16}/></button>{/if}</div>
+  </section>
   <section class="settings-group immediate-security"><h2>Security</h2>
     <div class="settings-list">
       <button onclick={lockNow}><span class="setting-icon"><LockKeyhole size={18}/></span><span><strong>Lock {selectedProfile?.name ?? 'wallet'} now</strong><small>Lock only this wallet immediately.</small></span><ChevronRight size={16}/></button>
@@ -189,7 +236,7 @@
   </section>
   <section class="settings-group"><h2>Wallet node</h2>
     <div class="settings-list">
-      <button onclick={() => nodeOpen=true}><span class="setting-icon"><Network size={18} /></span><span><strong>Bitcoin Core node</strong><small>{networkName(defaultConfig.network)} · {node.backend.type === 'local_core' ? 'This Mac' : 'Trusted remote server'} · <span class="selectable-text">{node.backend.url}</span></small></span><ChevronRight size={16}/></button>
+      <button onclick={() => nodeOpen=true}><span class="setting-icon"><Network size={18} /></span><span><strong>Bitcoin Core node</strong><small>{networkName(defaultConfig.network)}{' · '}{node.backend.type === 'local_core' ? 'This Mac' : 'Trusted remote server'}{' · '}<span class="selectable-text">{node.backend.url}</span></small></span><ChevronRight size={16}/></button>
       <button disabled={checking} onclick={checkConnection}><span class="setting-icon"><Check size={18}/></span><span><strong>Test connection</strong><small>Verify RPC authentication and chain availability.</small></span><span class="badge" class:offline={connected === false}>{checking ? 'Checking…' : connected === true ? 'Connected' : connected === false ? 'Offline' : 'Check'}</span></button>
     </div>
   </section>
@@ -197,6 +244,16 @@
   <p class="version">Groot 0.1.0 · BDK regtest</p>
 </div>
 
+<Modal open={renameOpen} title="Rename wallet" description="Change how this wallet is identified inside Groot." onclose={() => {renameOpen=false;renameDraft='';renameError='';}}>
+  <label class="field"><span>Wallet name</span><input aria-label="New wallet name" maxlength="48" bind:value={renameDraft} autocomplete="off"/><small>This does not change descriptors, signer identity, recovery data, or saved public backups.</small></label>
+  {#if renameError}<p class="form-error" role="alert">{renameError}</p>{/if}
+  <div class="modal-footer"><Button variant="secondary" onclick={() => {renameOpen=false;renameDraft='';renameError='';}}>Cancel</Button><Button disabled={!renameDraft.trim() || renameDraft.trim() === selectedProfile?.name} loading={renaming} loadingLabel="Saving…" onclick={renameWallet}>Save name</Button></div>
+</Modal>
+<Modal open={signerRenameOpen} title="Rename hardware signer" description="Change the local name shown when this signing key is required." onclose={() => {signerRenameOpen=false;signerRenameDraft='';signerRenameError='';}}>
+  <label class="field"><span>Hardware signer name</span><input aria-label="New hardware signer name" maxlength="48" bind:value={signerRenameDraft} autocomplete="off"/><small>This does not change the device, fingerprint, public keys, descriptors, or saved public backups.</small></label>
+  {#if signerRenameError}<p class="form-error" role="alert">{signerRenameError}</p>{/if}
+  <div class="modal-footer"><Button variant="secondary" onclick={() => {signerRenameOpen=false;signerRenameDraft='';signerRenameError='';}}>Cancel</Button><Button disabled={!signerRenameDraft.trim() || signerRenameDraft.trim() === hardwareSignerWallet?.signer.label} loading={signerRenaming} loadingLabel="Saving…" onclick={renameHardwareSigner}>Save signer name</Button></div>
+</Modal>
 <Modal open={deleting} title="Delete this wallet?" description="This permanently removes wallet data from this device." onclose={() => deleting = false}>
   <div class="warning-box danger"><strong>Make sure your recovery phrase is backed up.</strong> Without it, your bitcoin cannot be recovered.</div>
   <PasswordField label={credentialLabel} bind:value={deleteCredential} autocomplete="current-password" />

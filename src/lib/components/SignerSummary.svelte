@@ -26,7 +26,7 @@
       {@const signed = Boolean(signer.fingerprint && signedFingerprints.includes(signer.fingerprint))}
       <article class:signed>
         <span class="send-signer-icon">{#if signed}<Check size={15} strokeWidth={2.5} />{:else if signer.software}<KeyRound size={15} />{:else}<Cpu size={15} />{/if}</span>
-        <div><strong>{signer.label}</strong><small>{signer.detail}{#if signer.fingerprint} · <code>{shortenedFingerprint(signer.fingerprint)}</code>{/if}</small></div>
+        <div><strong>{signer.label}</strong><small>{signer.detail}{#if signer.fingerprint}{' · '}<code>{shortenedFingerprint(signer.fingerprint)}</code>{/if}</small></div>
       </article>
     {/each}
   </div>
