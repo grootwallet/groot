@@ -1627,15 +1627,31 @@ fn broadcast_transaction(
     state: &State<'_, AppState>,
     transaction: &Transaction,
 ) -> ApiResult<Txid> {
-    let expected = transaction.compute_txid();
     let rpc = rpc_client(app, state)?;
+    broadcast_transaction_with_rpc(&rpc, transaction)
+}
+
+fn broadcast_transaction_with_rpc(rpc: &Client, transaction: &Transaction) -> ApiResult<Txid> {
+    let expected = transaction.compute_txid();
     match rpc.send_raw_transaction(transaction) {
         Ok(txid) if txid == expected => Ok(txid),
         Ok(_) => Err(internal(
             "Bitcoin Core returned a transaction ID that did not match the signed transaction.",
         )),
-        Err(_) if rpc.get_raw_transaction_info(&expected, None).is_ok() => Ok(expected),
-        Err(error) => Err(api_error("broadcast_failed", error)),
+        Err(error) => {
+            let in_mempool = rpc.get_mempool_entry(&expected).is_ok();
+            let confirmed_in_active_chain = rpc
+                .get_raw_transaction_info(&expected, None)
+                .is_ok_and(|transaction| {
+                    transaction.confirmations.unwrap_or_default() > 0
+                        && transaction.in_active_chain.unwrap_or(true)
+                });
+            if in_mempool || confirmed_in_active_chain {
+                Ok(expected)
+            } else {
+                Err(api_error("broadcast_failed", error))
+            }
+        }
     }
 }
 
@@ -2840,6 +2856,28 @@ fn persist_single_proposal(
     .map_err(internal)
 }
 
+fn persist_multisig_proposal(
+    db: &Connection,
+    proposal: &PaymentProposalDto,
+    psbt: &Psbt,
+) -> ApiResult<()> {
+    db.execute(
+        "INSERT INTO groot_proposals (proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,'collecting',?8)",
+        params![
+            proposal.proposal_id,
+            proposal.recipient,
+            proposal.label,
+            proposal.amount,
+            proposal.fee,
+            proposal.fee_rate,
+            encode_psbt(psbt),
+            now()
+        ],
+    )
+    .map(|_| ())
+    .map_err(internal)
+}
+
 fn persist_acceleration(
     db: &Connection,
     proposal_id: &str,
@@ -2933,6 +2971,41 @@ fn record_replacement(
     )
     .map(|_| ())
     .map_err(internal)
+}
+
+fn commit_multisig_broadcast(
+    db: &mut Connection,
+    wallet: &Wallet,
+    proposal_id: &str,
+    txid: &Txid,
+    synced_at: Option<String>,
+) -> ApiResult<WalletSnapshotDto> {
+    let persisted = db.transaction().map_err(internal)?;
+    let changed = persisted
+        .execute(
+            "UPDATE groot_proposals SET status = 'broadcast', txid = ?1 WHERE proposal_id = ?2 AND status IN ('collecting','ready')",
+            params![txid.to_string(), proposal_id],
+        )
+        .map_err(internal)?;
+    if changed != 1 {
+        return Err(api_error(
+            "proposal_mismatch",
+            "The proposal changed while it was being broadcast.",
+        ));
+    }
+    record_replacement(&persisted, proposal_id, txid)?;
+    let snapshot = snapshot_from(wallet, &persisted, synced_at, true)?;
+    notifications::enqueue(
+        &persisted,
+        &WalletNotification::TransactionBroadcast {
+            txid: txid.to_string(),
+            balance: snapshot.balance.total,
+        },
+        now(),
+    )
+    .map_err(internal)?;
+    persisted.commit().map_err(internal)?;
+    Ok(snapshot)
 }
 
 fn apply_replacement_history(
@@ -5806,15 +5879,24 @@ fn import_multisig_proposal(
 ) -> ApiResult<MultisigProposalDto> {
     let metadata = read_multisig_metadata(app)?;
     let mut db = open_multisig_db(app)?;
-    let current = load_multisig_proposal(&mut db, &metadata, proposal_id)?;
+    import_multisig_proposal_in_db(&mut db, &metadata, proposal_id, signed_psbt)
+}
+
+fn import_multisig_proposal_in_db(
+    db: &mut Connection,
+    metadata: &MultisigWalletDto,
+    proposal_id: &str,
+    signed_psbt: &str,
+) -> ApiResult<MultisigProposalDto> {
+    let current = load_multisig_proposal(db, metadata, proposal_id)?;
     let original_encoded = current.psbt.clone();
     let mut original = decode_psbt(&original_encoded).map_err(proposal_api_error)?;
     let imported = decode_psbt(signed_psbt).map_err(proposal_api_error)?;
-    let fingerprints = multisig_fingerprints(&metadata)?;
+    let fingerprints = multisig_fingerprints(metadata)?;
     let progress = merge_signed_psbt(&mut original, imported, &fingerprints, metadata.threshold)
         .map_err(proposal_api_error)?;
     if progress.can_finalize {
-        let wallet = load_wallet(&mut db)?;
+        let wallet = load_wallet(db)?;
         let mut validation = original.clone();
         if !wallet
             .finalize_psbt(&mut validation, SignOptions::default())
@@ -5841,7 +5923,40 @@ fn import_multisig_proposal(
             "The proposal changed while signatures were being merged. Reload it and try again.",
         ));
     }
-    load_multisig_proposal(&mut db, &metadata, proposal_id)
+    load_multisig_proposal(db, metadata, proposal_id)
+}
+
+fn finalized_multisig_proposal_transaction(
+    db: &mut Connection,
+    metadata: &MultisigWalletDto,
+    proposal_id: &str,
+    reviewed_psbt: &str,
+) -> ApiResult<Transaction> {
+    let proposal = load_multisig_proposal(db, metadata, proposal_id)?;
+    if proposal.psbt != reviewed_psbt {
+        return Err(api_error(
+            "proposal_mismatch",
+            "The signed proposal changed after review. Reload it before broadcast.",
+        ));
+    }
+    if !proposal.can_finalize {
+        return Err(api_error(
+            "insufficient_signatures",
+            "Collect the required signatures before broadcasting.",
+        ));
+    }
+    let mut psbt = decode_psbt(&proposal.psbt).map_err(proposal_api_error)?;
+    let wallet = load_wallet(db)?;
+    if !wallet
+        .finalize_psbt(&mut psbt, SignOptions::default())
+        .map_err(internal)?
+    {
+        return Err(api_error(
+            "finalization_failed",
+            "The signed transaction does not satisfy the wallet policy.",
+        ));
+    }
+    psbt.extract_tx().map_err(internal)
 }
 
 #[tauri::command]
@@ -5931,64 +6046,18 @@ pub fn multisig_proposal_broadcast(
     credential_result?;
     let metadata = read_multisig_metadata(&app)?;
     let mut db = open_multisig_db(&app)?;
-    let proposal = load_multisig_proposal(&mut db, &metadata, &proposal_id)?;
-    if proposal.psbt != reviewed_psbt {
-        return Err(api_error(
-            "proposal_mismatch",
-            "The signed proposal changed after review. Reload it before broadcast.",
-        ));
-    }
-    if !proposal.can_finalize {
-        return Err(api_error(
-            "insufficient_signatures",
-            "Collect the required signatures before broadcasting.",
-        ));
-    }
-    let mut psbt = decode_psbt(&proposal.psbt).map_err(proposal_api_error)?;
-    let wallet = load_wallet(&mut db)?;
-    if !wallet
-        .finalize_psbt(&mut psbt, SignOptions::default())
-        .map_err(internal)?
-    {
-        return Err(api_error(
-            "finalization_failed",
-            "The signed transaction does not satisfy the wallet policy.",
-        ));
-    }
-    let transaction = psbt.extract_tx().map_err(internal)?;
+    let transaction =
+        finalized_multisig_proposal_transaction(&mut db, &metadata, &proposal_id, &reviewed_psbt)?;
     let txid = broadcast_transaction(&app, &state, &transaction)?;
     let mut wallet = load_wallet(&mut db)?;
     let sync_pending = sync_loaded_wallet(&app, &state, &mut wallet, &mut db).is_err();
-    let persisted = db.transaction().map_err(internal)?;
-    let changed = persisted
-        .execute(
-            "UPDATE groot_proposals SET status = 'broadcast', txid = ?1 WHERE proposal_id = ?2 AND status IN ('collecting','ready')",
-            params![txid.to_string(), proposal_id],
-        )
-        .map_err(internal)?;
-    if changed != 1 {
-        return Err(api_error(
-            "proposal_mismatch",
-            "The proposal changed while it was being broadcast.",
-        ));
-    }
-    record_replacement(&persisted, &proposal_id, &txid)?;
-    let snapshot = snapshot_from(
+    let snapshot = commit_multisig_broadcast(
+        &mut db,
         &wallet,
-        &persisted,
+        &proposal_id,
+        &txid,
         (!sync_pending).then(|| now().to_string()),
-        true,
     )?;
-    notifications::enqueue(
-        &persisted,
-        &WalletNotification::TransactionBroadcast {
-            txid: txid.to_string(),
-            balance: snapshot.balance.total,
-        },
-        now(),
-    )
-    .map_err(internal)?;
-    persisted.commit().map_err(internal)?;
     Ok(BroadcastResultDto {
         txid: txid.to_string(),
         snapshot,
@@ -6543,6 +6612,44 @@ fn build_acceleration_psbt(
     }
 }
 
+fn prepare_persisted_multisig_acceleration(
+    db: &mut Connection,
+    metadata: &MultisigWalletDto,
+    txid: Txid,
+    method: AccelerationMethod,
+    parent_fee: Option<Amount>,
+    applied_fee_rate: f64,
+    fee_rate: FeeRate,
+) -> ApiResult<MultisigProposalDto> {
+    let mut wallet = load_wallet(db)?;
+    if let Some(proposal_id) = active_acceleration_proposal_id(db, &txid, method)? {
+        return load_multisig_proposal(db, metadata, &proposal_id);
+    }
+    let original = snapshot_from(&wallet, db, None, true)?
+        .transactions
+        .into_iter()
+        .find(|transaction| transaction.id == txid.to_string())
+        .ok_or_else(|| {
+            api_error(
+                "acceleration_unavailable",
+                "Transaction was not found in this wallet.",
+            )
+        })?;
+    let psbt = build_acceleration_psbt(&mut wallet, txid, method, parent_fee, fee_rate)?;
+    enforce_change_recovery_gap(db, &wallet, &psbt)?;
+    let proposal = summarize_payment_psbt(
+        &wallet,
+        &psbt,
+        applied_fee_rate,
+        matches!(method, AccelerationMethod::Cpfp),
+        acceleration_label(method, &original),
+    )?;
+    persist_multisig_proposal(db, &proposal, &psbt)?;
+    persist_acceleration(db, &proposal.proposal_id, method, &original)?;
+    wallet.persist(db).map_err(internal)?;
+    load_multisig_proposal(db, metadata, &proposal.proposal_id)
+}
+
 #[tauri::command]
 pub fn tx_acceleration_prepare(
     app: AppHandle,
@@ -6623,43 +6730,16 @@ pub fn multisig_acceleration_prepare(
     let (applied, rate) = validate_acceleration_rate(fee_rate)?;
     let metadata = read_multisig_metadata(&app)?;
     let mut db = open_multisig_db(&app)?;
-    let mut wallet = load_wallet(&mut db)?;
-    if let Some(proposal_id) = active_acceleration_proposal_id(&db, &txid, method)? {
-        return load_multisig_proposal(&mut db, &metadata, &proposal_id);
-    }
-    let original = snapshot_from(&wallet, &db, None, true)?
-        .transactions
-        .into_iter()
-        .find(|transaction| transaction.id == txid.to_string())
-        .ok_or_else(|| {
-            api_error(
-                "acceleration_unavailable",
-                "Transaction was not found in this wallet.",
-            )
-        })?;
+    let wallet = load_wallet(&mut db)?;
     let parent_fee = if matches!(method, AccelerationMethod::Cpfp) {
         Some(cpfp_parent_fee(&app, &state, &wallet, txid)?)
     } else {
         None
     };
-    let psbt = build_acceleration_psbt(&mut wallet, txid, method, parent_fee, rate)?;
-    enforce_change_recovery_gap(&db, &wallet, &psbt)?;
-    let proposal = summarize_payment_psbt(
-        &wallet,
-        &psbt,
-        applied,
-        matches!(method, AccelerationMethod::Cpfp),
-        acceleration_label(method, &original),
-    )?;
-    let encoded = encode_psbt(&psbt);
-    db.execute(
-        "INSERT INTO groot_proposals (proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,'collecting',?8)",
-        params![proposal.proposal_id, proposal.recipient, proposal.label, proposal.amount, proposal.fee, proposal.fee_rate, encoded, now()],
+    drop(wallet);
+    prepare_persisted_multisig_acceleration(
+        &mut db, &metadata, txid, method, parent_fee, applied, rate,
     )
-    .map_err(internal)?;
-    persist_acceleration(&db, &proposal.proposal_id, method, &original)?;
-    wallet.persist(&mut db).map_err(internal)?;
-    load_multisig_proposal(&mut db, &metadata, &proposal.proposal_id)
 }
 
 #[tauri::command]
@@ -8751,3 +8831,7 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "wallet/funded_acceleration_tests.rs"]
+mod funded_acceleration_tests;

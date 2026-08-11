@@ -29,6 +29,8 @@ The whole Rust library is reported and regression-gated separately with `pnpm te
 
 `pnpm test:regtest` talks to the isolated Bitcoin Core node. It creates fresh descriptor keys and addresses on every run, funds a real `wsh(sortedmulti())` wallet, syncs BDK, builds a real PSBT, signs it with two isolated signers, finalizes it in the coordinator, broadcasts it, and verifies that the transaction returns through sync. Fresh keys prevent prior regtest state from making tests order-dependent.
 
+The same command also runs a funded acceleration test through the production workflows called by Groot's multisig commands. It prepares and idempotently resumes a persisted RBF proposal, imports signatures on both sides of a database reopen, preserves authoritative ready state when the original confirms first, rejects an evicted lower-fee original, accepts only true mempool/active-chain duplicate broadcasts, commits replacement lineage atomically, and repeats proposal/import/finalize/broadcast persistence for a measured CPFP package. The separate lower-level test retains reorg, mempool-restoration, and reconfirmation coverage.
+
 Integration tests must assert state on both sides of a boundary: for example, BDK balance plus Core acceptance, persisted proposal plus reconstructed PSBT, or notification row plus pending/acknowledged state. Signet is a smoke/rehearsal layer after deterministic regtest is green; it is not used for exhaustive edge cases.
 
 ### End-to-end tests
@@ -76,7 +78,7 @@ Virtual signer coverage is mandatory in CI. Physical certification is separate a
 | F25 | Multiple wallet create/switch/delete/migrate | Registry identity, selection, rollback, corruption | Isolated BDK paths and restart reconstruction | Create, select, relock, unlock on desktop/mobile | Green on regtest |
 | F26 | Production/mainnet release boundary | Network constants and release documents checked in CI | — | Mainnet absent from selectable networks | Green guard; mainnet release remains blocked |
 | F27 | BSMS descriptor portability | Canonical/private/size/network/address Rust units | Export/recover adapter boundary | Desktop/mobile export, download and recovery drill | Physical interoperability pending |
-| F29 | RBF/CPFP | Rate/error/package policy units; persisted original→replacement lineage | Funded Core replacement/package tests | Pending transaction to normal review/sign flow; replaced original is visibly excluded from accounting | Testnet and hardware confirmation-race evidence pending |
+| F29 | RBF/CPFP | Rate/error/package policy units; persisted original→replacement lineage | Funded Groot production-workflow replacement/package/restart/race test plus independent Core/BDK reorg matrix | Pending transaction to normal review/sign flow; replaced original is visibly excluded from accounting | Regtest green; Testnet4 physical-signer confirmation-race evidence pending |
 | F30 | Recovery scanning | SQLite bounds/defaults units | Core birthday/gap full rescan | Invalid bound, authenticated save and durable result | Large-history progress/performance pending |
 | F31 | Remote Core TLS/Tor | URL/auth/proxy fail-closed units | Real endpoint preflight | Per-wallet settings and credential flow | Real VPS, certificate and DNS-leak evidence pending |
 

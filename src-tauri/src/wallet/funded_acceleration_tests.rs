@@ -1,0 +1,436 @@
+use super::*;
+use crate::multisig::{CosignerInput, CosignerSource, MULTISIG_ACCOUNT_PATH};
+use bdk_bitcoind_rpc::bitcoincore_rpc::jsonrpc;
+use bdk_wallet::bitcoin::{
+    bip32::{DerivationPath, Xpriv, Xpub},
+    secp256k1::Secp256k1,
+    BlockHash, NetworkKind,
+};
+
+struct TemporaryDatabase(PathBuf);
+
+impl TemporaryDatabase {
+    fn new() -> Self {
+        Self(std::env::temp_dir().join(format!(
+            "groot-funded-acceleration-{}.sqlite",
+            Uuid::new_v4()
+        )))
+    }
+}
+
+impl Drop for TemporaryDatabase {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.0);
+        let _ = fs::remove_file(self.0.with_extension("sqlite-shm"));
+        let _ = fs::remove_file(self.0.with_extension("sqlite-wal"));
+    }
+}
+
+struct TestKey {
+    fingerprint: String,
+    account_private: Xpriv,
+    account_public: Xpub,
+}
+
+fn test_keys() -> Vec<TestKey> {
+    let secp = Secp256k1::new();
+    let path = DerivationPath::from_str(MULTISIG_ACCOUNT_PATH).unwrap();
+    (1_u8..=3)
+        .map(|index| {
+            let mut seed = [0_u8; 32];
+            OsRng.fill_bytes(&mut seed);
+            seed[0] ^= index;
+            let master = Xpriv::new_master(NetworkKind::Test, &seed).unwrap();
+            let account_private = master.derive_priv(&secp, &path).unwrap();
+            TestKey {
+                fingerprint: master.fingerprint(&secp).to_string(),
+                account_public: Xpub::from_priv(&secp, &account_private),
+                account_private,
+            }
+        })
+        .collect()
+}
+
+fn descriptor(keys: &[TestKey], branch: u8, private_index: Option<usize>) -> String {
+    let keys = keys
+        .iter()
+        .enumerate()
+        .map(|(index, key)| {
+            let extended = if private_index == Some(index) {
+                key.account_private.to_string()
+            } else {
+                key.account_public.to_string()
+            };
+            format!("[{}/48'/1'/0'/2']{extended}/{branch}/*", key.fingerprint)
+        })
+        .collect::<Vec<_>>()
+        .join(",");
+    format!("wsh(sortedmulti(2,{keys}))")
+}
+
+fn metadata(keys: &[TestKey]) -> MultisigWalletDto {
+    MultisigWalletDto {
+        kind: "multisig".to_owned(),
+        name: "Funded acceleration boundary".to_owned(),
+        threshold: 2,
+        cosigners: keys
+            .iter()
+            .enumerate()
+            .map(|(index, key)| CosignerInput {
+                id: format!("signer-{index}"),
+                label: format!("Signer {}", index + 1),
+                fingerprint: key.fingerprint.clone(),
+                xpub: key.account_public.to_string(),
+                derivation_path: MULTISIG_ACCOUNT_PATH.to_owned(),
+                source: CosignerSource::Virtual,
+                device_type: None,
+            })
+            .collect(),
+        external_descriptor: descriptor(keys, 0, None),
+        internal_descriptor: descriptor(keys, 1, None),
+        created_at: "funded-regtest".to_owned(),
+        policy_type: "standard".to_owned(),
+        recovery_template: None,
+        spending_paths: vec![],
+    }
+}
+
+fn regtest_dir() -> PathBuf {
+    std::env::var_os("GROOT_REGTEST_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.regtest"))
+}
+
+fn rpc() -> Client {
+    let port = std::env::var("GROOT_RPC_PORT").unwrap_or_else(|_| "18443".to_owned());
+    let (username, password) = Auth::CookieFile(regtest_dir().join("regtest/.cookie"))
+        .get_user_pass()
+        .expect("read regtest cookie");
+    let mut builder = jsonrpc::minreq_http::MinreqHttpTransport::builder()
+        .url(&format!("http://127.0.0.1:{port}"))
+        .expect("regtest RPC URL");
+    if let Some(username) = username {
+        builder = builder.basic_auth(username, password);
+    }
+    Client::from_jsonrpc(jsonrpc::Client::with_transport(builder.build()))
+}
+
+fn sync(wallet: &mut PersistedWallet<Connection>, db: &mut Connection, rpc: Arc<Client>) {
+    let mut emitter = Emitter::new(
+        rpc,
+        wallet.latest_checkpoint(),
+        0,
+        wallet
+            .transactions()
+            .filter(|transaction| transaction.chain_position.is_unconfirmed()),
+    );
+    while let Some(block) = emitter.next_block().expect("next block") {
+        wallet
+            .apply_block_connected_to(&block.block, block.block_height(), block.connected_to())
+            .expect("connect block");
+        wallet.persist(db).expect("persist block");
+    }
+    let mempool = emitter.mempool().expect("mempool");
+    wallet.apply_evicted_txs(mempool.evicted);
+    wallet.apply_unconfirmed_txs(mempool.update);
+    wallet.persist(db).expect("persist mempool");
+}
+
+fn sign_with(keys: &[TestKey], signer: usize, encoded: &str) -> String {
+    let mut psbt = decode_psbt(encoded).unwrap();
+    let signer_wallet = Wallet::create(
+        descriptor(keys, 0, Some(signer)),
+        descriptor(keys, 1, Some(signer)),
+    )
+    .network(Network::Regtest)
+    .create_wallet_no_persist()
+    .unwrap();
+    assert!(!signer_wallet
+        .sign(
+            &mut psbt,
+            SignOptions {
+                trust_witness_utxo: true,
+                try_finalize: false,
+                ..SignOptions::default()
+            },
+        )
+        .unwrap());
+    encode_psbt(&psbt)
+}
+
+fn sign_original(keys: &[TestKey], psbt: &mut Psbt) {
+    for signer in 0..2 {
+        let signed = sign_with(keys, signer, &encode_psbt(psbt));
+        let imported = decode_psbt(&signed).unwrap();
+        merge_signed_psbt(
+            psbt,
+            imported,
+            &keys
+                .iter()
+                .map(|key| key.fingerprint.parse().unwrap())
+                .collect::<Vec<_>>(),
+            2,
+        )
+        .unwrap();
+    }
+}
+
+fn mine_empty_block(rpc: &Client, destination: &Address) -> BlockHash {
+    let result: serde_json::Value = rpc
+        .call(
+            "generateblock",
+            &[
+                serde_json::json!(destination.to_string()),
+                serde_json::json!([]),
+            ],
+        )
+        .expect("mine empty competing block");
+    result["hash"].as_str().unwrap().parse().unwrap()
+}
+
+fn proposal_status(db: &Connection, proposal_id: &str) -> (String, Option<String>) {
+    db.query_row(
+        "SELECT proposal.status, acceleration.replacement_txid
+         FROM groot_proposals proposal
+         JOIN groot_accelerations acceleration USING (proposal_id)
+         WHERE proposal.proposal_id = ?1",
+        params![proposal_id],
+        |row| Ok((row.get(0)?, row.get(1)?)),
+    )
+    .unwrap()
+}
+
+#[test]
+#[ignore = "requires the isolated Bitcoin Core regtest harness"]
+fn funded_rbf_and_cpfp_cross_groot_proposal_boundaries() {
+    assert!(std::env::var_os("GROOT_RUN_REGTEST").is_some());
+    let rpc = Arc::new(rpc());
+    let keys = test_keys();
+    let metadata = metadata(&keys);
+    let database = TemporaryDatabase::new();
+    let mut db = Connection::open(&database.0).unwrap();
+    init_app_schema(&db).unwrap();
+    let mut wallet = Wallet::create(
+        metadata.external_descriptor.clone(),
+        metadata.internal_descriptor.clone(),
+    )
+    .network(Network::Regtest)
+    .create_wallet(&mut db)
+    .unwrap();
+    let receive = wallet.reveal_next_address(KeychainKind::External);
+    wallet.persist(&mut db).unwrap();
+    rpc.call::<Txid>(
+        "sendtoaddress",
+        &[
+            serde_json::json!(receive.address.to_string()),
+            serde_json::json!(0.01),
+        ],
+    )
+    .unwrap();
+    let mining = rpc
+        .get_new_address(Some("groot boundary"), None)
+        .unwrap()
+        .require_network(Network::Regtest)
+        .unwrap();
+    rpc.generate_to_address(1, &mining).unwrap();
+    sync(&mut wallet, &mut db, Arc::clone(&rpc));
+
+    let destination = rpc
+        .get_new_address(Some("groot destination"), None)
+        .unwrap()
+        .require_network(Network::Regtest)
+        .unwrap();
+    let mut builder = wallet.build_tx();
+    builder
+        .add_recipient(destination.script_pubkey(), Amount::from_sat(250_000))
+        .fee_rate(FeeRate::from_sat_per_vb(2).unwrap());
+    let mut original = builder.finish().unwrap();
+    sign_original(&keys, &mut original);
+    assert!(wallet
+        .finalize_psbt(&mut original, SignOptions::default())
+        .unwrap());
+    let original_tx = original.extract_tx().unwrap();
+    let original_txid = broadcast_transaction_with_rpc(&rpc, &original_tx).unwrap();
+    sync(&mut wallet, &mut db, Arc::clone(&rpc));
+
+    let (applied, rate) = validate_acceleration_rate(5.0).unwrap();
+    let rbf = prepare_persisted_multisig_acceleration(
+        &mut db,
+        &metadata,
+        original_txid,
+        AccelerationMethod::Rbf,
+        None,
+        applied,
+        rate,
+    )
+    .unwrap();
+    let resumed = prepare_persisted_multisig_acceleration(
+        &mut db,
+        &metadata,
+        original_txid,
+        AccelerationMethod::Rbf,
+        None,
+        applied,
+        rate,
+    )
+    .unwrap();
+    assert_eq!(resumed.proposal_id, rbf.proposal_id);
+
+    let first = import_multisig_proposal_in_db(
+        &mut db,
+        &metadata,
+        &rbf.proposal_id,
+        &sign_with(&keys, 0, &rbf.psbt),
+    )
+    .unwrap();
+    assert_eq!(first.signed, 1);
+    assert_eq!(first.status, "collecting");
+
+    drop(wallet);
+    drop(db);
+    let mut db = Connection::open(&database.0).unwrap();
+    init_app_schema(&db).unwrap();
+    let mut wallet = load_wallet(&mut db).unwrap();
+    let restored = load_multisig_proposal(&mut db, &metadata, &rbf.proposal_id).unwrap();
+    assert_eq!(restored.signed, 1);
+    let ready = import_multisig_proposal_in_db(
+        &mut db,
+        &metadata,
+        &rbf.proposal_id,
+        &sign_with(&keys, 1, &restored.psbt),
+    )
+    .unwrap();
+    assert!(ready.can_finalize);
+    assert_eq!(ready.status, "ready");
+    let replacement_tx =
+        finalized_multisig_proposal_transaction(&mut db, &metadata, &rbf.proposal_id, &ready.psbt)
+            .unwrap();
+
+    let original_block = rpc.generate_to_address(1, &mining).unwrap();
+    sync(&mut wallet, &mut db, Arc::clone(&rpc));
+    assert_eq!(
+        broadcast_transaction_with_rpc(&rpc, &original_tx).unwrap(),
+        original_txid,
+        "an active-chain duplicate remains an idempotent success"
+    );
+    let race = broadcast_transaction_with_rpc(&rpc, &replacement_tx).unwrap_err();
+    assert_eq!(race.code, "broadcast_failed");
+    assert_eq!(
+        proposal_status(&db, &rbf.proposal_id),
+        ("ready".to_owned(), None)
+    );
+
+    rpc.invalidate_block(&original_block[0]).unwrap();
+    mine_empty_block(&rpc, &mining);
+    sync(&mut wallet, &mut db, Arc::clone(&rpc));
+    let replacement_txid = broadcast_transaction_with_rpc(&rpc, &replacement_tx).unwrap();
+    assert_eq!(
+        broadcast_transaction_with_rpc(&rpc, &replacement_tx).unwrap(),
+        replacement_txid,
+        "duplicate broadcast must be idempotent at Groot's broadcast boundary"
+    );
+    sync(&mut wallet, &mut db, Arc::clone(&rpc));
+    let snapshot = commit_multisig_broadcast(
+        &mut db,
+        &wallet,
+        &rbf.proposal_id,
+        &replacement_txid,
+        Some(now().to_string()),
+    )
+    .unwrap();
+    let replaced = snapshot
+        .transactions
+        .iter()
+        .find(|transaction| transaction.id == original_txid.to_string())
+        .unwrap();
+    assert_eq!(replaced.status, "replaced");
+    assert_eq!(
+        replaced.replaced_by.as_deref(),
+        Some(replacement_txid.to_string().as_str())
+    );
+    assert_eq!(
+        proposal_status(&db, &rbf.proposal_id),
+        ("broadcast".to_owned(), Some(replacement_txid.to_string()))
+    );
+    assert!(broadcast_transaction_with_rpc(&rpc, &original_tx).is_err());
+
+    drop(wallet);
+    drop(db);
+    let mut db = Connection::open(&database.0).unwrap();
+    init_app_schema(&db).unwrap();
+    let mut wallet = load_wallet(&mut db).unwrap();
+    assert_eq!(
+        proposal_status(&db, &rbf.proposal_id),
+        ("broadcast".to_owned(), Some(replacement_txid.to_string()))
+    );
+
+    let parent_fee = rpc.get_mempool_entry(&replacement_txid).unwrap().fees.base;
+    let (applied, rate) = validate_acceleration_rate(9.0).unwrap();
+    let cpfp = prepare_persisted_multisig_acceleration(
+        &mut db,
+        &metadata,
+        replacement_txid,
+        AccelerationMethod::Cpfp,
+        Some(parent_fee),
+        applied,
+        rate,
+    )
+    .unwrap();
+    let first = import_multisig_proposal_in_db(
+        &mut db,
+        &metadata,
+        &cpfp.proposal_id,
+        &sign_with(&keys, 0, &cpfp.psbt),
+    )
+    .unwrap();
+    let ready = import_multisig_proposal_in_db(
+        &mut db,
+        &metadata,
+        &cpfp.proposal_id,
+        &sign_with(&keys, 1, &first.psbt),
+    )
+    .unwrap();
+    let child_tx =
+        finalized_multisig_proposal_transaction(&mut db, &metadata, &cpfp.proposal_id, &ready.psbt)
+            .unwrap();
+    let child_txid = broadcast_transaction_with_rpc(&rpc, &child_tx).unwrap();
+    let parent_entry = rpc.get_mempool_entry(&replacement_txid).unwrap();
+    let child_entry = rpc.get_mempool_entry(&child_txid).unwrap();
+    assert_eq!(child_entry.depends, vec![replacement_txid]);
+    assert!(
+        (parent_entry.fees.base + child_entry.fees.base).to_sat()
+            >= (parent_entry.vsize + child_entry.vsize).saturating_mul(8)
+    );
+    sync(&mut wallet, &mut db, Arc::clone(&rpc));
+    commit_multisig_broadcast(
+        &mut db,
+        &wallet,
+        &cpfp.proposal_id,
+        &child_txid,
+        Some(now().to_string()),
+    )
+    .unwrap();
+    assert_eq!(
+        proposal_status(&db, &cpfp.proposal_id),
+        ("broadcast".to_owned(), None)
+    );
+
+    rpc.generate_to_address(1, &mining).unwrap();
+    sync(&mut wallet, &mut db, Arc::clone(&rpc));
+    drop(wallet);
+    drop(db);
+    let mut db = Connection::open(&database.0).unwrap();
+    init_app_schema(&db).unwrap();
+    let wallet = load_wallet(&mut db).unwrap();
+    assert!(wallet
+        .get_tx(replacement_txid)
+        .unwrap()
+        .chain_position
+        .is_confirmed());
+    assert!(wallet
+        .get_tx(child_txid)
+        .unwrap()
+        .chain_position
+        .is_confirmed());
+    assert_eq!(proposal_status(&db, &cpfp.proposal_id).0, "broadcast");
+}
