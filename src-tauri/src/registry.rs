@@ -110,6 +110,24 @@ pub fn load(path: &Path) -> Result<WalletRegistry, RegistryError> {
 }
 
 pub fn save_atomic(path: &Path, registry: &WalletRegistry) -> Result<(), RegistryError> {
+    save_atomic_with(
+        path,
+        registry,
+        |file, encoded| file.write_all(encoded).map_err(|_| RegistryError::Io),
+        || Ok(()),
+    )
+}
+
+fn save_atomic_with<W, B>(
+    path: &Path,
+    registry: &WalletRegistry,
+    write: W,
+    before_rename: B,
+) -> Result<(), RegistryError>
+where
+    W: FnOnce(&mut File, &[u8]) -> Result<(), RegistryError>,
+    B: FnOnce() -> Result<(), RegistryError>,
+{
     registry.validate()?;
     let parent = path.parent().ok_or(RegistryError::Io)?;
     fs::create_dir_all(parent).map_err(|_| RegistryError::Io)?;
@@ -124,8 +142,9 @@ pub fn save_atomic(path: &Path, registry: &WalletRegistry) -> Result<(), Registr
         }
         let mut file = options.open(&temporary).map_err(|_| RegistryError::Io)?;
         let encoded = serde_json::to_vec(registry).map_err(|_| RegistryError::Corrupt)?;
-        file.write_all(&encoded).map_err(|_| RegistryError::Io)?;
+        write(&mut file, &encoded)?;
         file.sync_all().map_err(|_| RegistryError::Io)?;
+        before_rename()?;
         fs::rename(&temporary, path).map_err(|_| RegistryError::Io)?;
         File::open(parent)
             .and_then(|directory| directory.sync_all())
@@ -373,6 +392,103 @@ mod tests {
         assert_eq!(load(&path).unwrap().wallets[0].name, "Renamed");
         assert_eq!(fs::read_dir(&dir).unwrap().count(), 1);
         fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn partial_write_and_pre_rename_failures_preserve_the_authoritative_registry() {
+        let dir = test_dir();
+        let path = dir.join("registry.json");
+        let original = WalletRegistry::default();
+        save_atomic(&path, &original).unwrap();
+
+        let mut replacement = original.clone();
+        replacement.add(p(Uuid::new_v4())).unwrap();
+        let partial = save_atomic_with(
+            &path,
+            &replacement,
+            |file, encoded| {
+                file.write_all(&encoded[..encoded.len() / 2])
+                    .map_err(|_| RegistryError::Io)?;
+                Err(RegistryError::Io)
+            },
+            || Ok(()),
+        );
+        assert_eq!(partial, Err(RegistryError::Io));
+        assert_eq!(load(&path).unwrap(), original);
+
+        let disk_full_before_commit = save_atomic_with(
+            &path,
+            &replacement,
+            |file, encoded| file.write_all(encoded).map_err(|_| RegistryError::Io),
+            || Err(RegistryError::Io),
+        );
+        assert_eq!(disk_full_before_commit, Err(RegistryError::Io));
+        assert_eq!(load(&path).unwrap(), original);
+        assert_eq!(fs::read_dir(&dir).unwrap().count(), 1);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn sqlite_abort_rolls_back_all_authoritative_rows_after_reopen() {
+        use bdk_wallet::rusqlite::{params, Connection};
+
+        let dir = test_dir();
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("wallet.sqlite");
+        {
+            let mut db = Connection::open(&path).unwrap();
+            db.execute_batch(
+                "CREATE TABLE state (id INTEGER PRIMARY KEY, value TEXT NOT NULL); \
+                 INSERT INTO state VALUES (1, 'before'); \
+                 CREATE TRIGGER fail_second BEFORE INSERT ON state \
+                 WHEN NEW.id = 3 BEGIN SELECT RAISE(ABORT, 'simulated disk full'); END;",
+            )
+            .unwrap();
+            let tx = db.transaction().unwrap();
+            tx.execute("UPDATE state SET value = 'after' WHERE id = 1", [])
+                .unwrap();
+            tx.execute("INSERT INTO state VALUES (2, 'new')", [])
+                .unwrap();
+            assert!(tx
+                .execute("INSERT INTO state VALUES (3, 'fail')", [])
+                .is_err());
+            tx.rollback().unwrap();
+        }
+        let db = Connection::open(&path).unwrap();
+        assert_eq!(
+            db.query_row("SELECT value FROM state WHERE id = 1", [], |row| row
+                .get::<_, String>(0))
+                .unwrap(),
+            "before"
+        );
+        assert_eq!(
+            db.query_row("SELECT COUNT(*) FROM state", params![], |row| row
+                .get::<_, u64>(0))
+                .unwrap(),
+            1
+        );
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn validation_remains_linear_for_large_wallet_registries() {
+        let wallets = (0..2_000_u64)
+            .map(|index| WalletProfile {
+                id: Uuid::new_v4(),
+                name: format!("Wallet {index}"),
+                network: "regtest".into(),
+                kind: WalletKind::WatchOnly,
+                descriptor_checksum: format!("{index:08x}"),
+                created_at: index,
+                backup_verified: true,
+            })
+            .collect::<Vec<_>>();
+        let registry = WalletRegistry {
+            selected_wallet_id: Some(wallets[1_999].id),
+            wallets,
+            ..Default::default()
+        };
+        registry.validate().unwrap();
     }
 
     #[test]

@@ -618,4 +618,38 @@ mod tests {
         assert!(!device_key.exists());
         fs::remove_dir_all(directory).unwrap();
     }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    #[ignore = "uses a disposable item in the logged-in macOS Keychain"]
+    fn macos_keychain_create_restart_restore_and_delete_lifecycle() {
+        struct KeychainCleanup(std::path::PathBuf);
+        impl Drop for KeychainCleanup {
+            fn drop(&mut self) {
+                forget_device_key(&self.0);
+            }
+        }
+
+        let wallet_id = Uuid::new_v4().to_string();
+        let original = directory().join(&wallet_id).join("secret.json");
+        let restored = directory().join(&wallet_id).join("secret.json");
+        let _cleanup = KeychainCleanup(original.clone());
+        let provider = SystemDeviceKeyProvider;
+        let key = vec![0x5a; KEY_BYTES];
+
+        provider.set(&original, &key).unwrap();
+        assert_eq!(provider.get(&original).unwrap(), key);
+
+        let item_account = account(&original).unwrap();
+        remove_cached_device_key(&item_account);
+        assert_eq!(provider.get(&original).unwrap(), key);
+        assert_eq!(provider.get_or_create(&restored).unwrap(), key);
+
+        forget_device_key(&restored);
+        remove_cached_device_key(&item_account);
+        assert_eq!(
+            provider.get(&original),
+            Err(SecureStoreError::DeviceKeyNotFound)
+        );
+    }
 }

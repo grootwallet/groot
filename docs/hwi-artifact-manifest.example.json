@@ -1,0 +1,18 @@
+{
+  "artifact": {
+    "filename": "hwi",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "license": {
+    "filename": "LICENSE",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "name": "Bitcoin Core HWI",
+  "schemaVersion": 1,
+  "source": {
+    "filename": "hwi-source.tar.gz",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "updatePolicy": "bundled-and-replaced-only-by-signed-groot-release",
+  "version": "0.0.0"
+}

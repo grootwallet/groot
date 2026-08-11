@@ -20,6 +20,10 @@ contains_fixed "export const SUPPORTED_NETWORKS = ['signet', 'testnet4', 'regtes
   || fail "the browser network allowlist changed"
 contains_fixed "const NETWORK: Network = Network::Regtest;" src-tauri/src/wallet.rs \
   || fail "the native wallet network is no longer pinned to regtest"
+contains_fixed "const MAINNET_ENABLED: bool = false;" src-tauri/src/release_policy.rs \
+  || fail "the trusted-boundary mainnet gate is no longer disabled"
+contains_fixed "ensure_runtime_network_enabled(NETWORK)" src-tauri/src/wallet.rs \
+  || fail "wallet databases are no longer guarded before opening"
 contains_fixed '"beforeBuildCommand": "pnpm build:regtest"' src-tauri/tauri.conf.json \
   || fail "the native build is no longer pinned to regtest mode"
 contains_fixed "Mainnet remains disabled" docs/adr/0012-mainnet-release-gate.md \

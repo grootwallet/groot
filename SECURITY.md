@@ -62,6 +62,7 @@ Reports should describe:
 - SQLite database files are forced to owner-only mode on Unix.
 - Production SQLite connections enable a bounded busy timeout, foreign keys, `trusted_schema=OFF`, and `SQLITE_DBCONFIG_DEFENSIVE`.
 - State-changing native commands are serialized. Proposal signatures use compare-and-swap persistence to avoid lost updates.
+- Registry fault injection proves partial writes and pre-rename failures preserve the prior authoritative file and remove temporary state. SQLite transaction-abort evidence proves multi-row changes roll back across reopen; registry identity validation remains linear for large profile sets.
 - Multisig metadata must match the descriptor checksum registered for the wallet.
 - Filesystem deletion is not described as secure erasure because flash filesystems and backups can retain deleted data.
 
@@ -97,7 +98,7 @@ Reports should describe:
 
 ### Network and webview policy
 
-- Native wallet code remains pinned to regtest. The release gate fails if mainnet is introduced without the approved ADR/checklist process.
+- Native wallet code remains pinned to regtest. Rust rejects mainnet before opening wallet SQLite, and the release gate fails if either lock is changed. Dormant candidate policy separately requires exact Bitcoin genesis, loopback Core, one recipient, and a 1,000,000-satoshi cap; none enables mainnet.
 - Local Bitcoin Core endpoints must be loopback. Remote endpoint policy rejects embedded credentials, cleartext non-loopback transport, forged presets, and network mismatches.
 - Tauri capabilities remain minimal: no shell, filesystem, generic HTTP, clipboard-read, or remote-origin capability is granted.
 - The Tauri CSP denies remote scripts, frames, objects, workers, and manifests. Camera media is limited to same-origin/blob capture for the explicit PSBT scanner and requires platform permission.
@@ -112,6 +113,7 @@ Reports should describe:
 - Node package lifecycle scripts are disabled through the repository `.npmrc`; exact saves and pnpm store-integrity verification are enabled.
 - GitHub Actions are pinned to immutable commit SHAs, job permissions default to read-only, and checkout credentials are not persisted.
 - Pull-request CI does not publish wallet release artifacts.
+- Offline release tooling streams artifact hashes and verifies an exact signed-update manifest. Separate bounded HWI provenance tooling binds the executable, source archive, license, version, and replacement policy; disposable mutation tests run in `pnpm validate` without adding an updater or network client to the binary.
 - CI runs npm and RustSec advisory checks. A green scanner is evidence, not release authorization.
 - Vendored Rust sources, lockfiles, CI workflows, package-manager settings, Tauri capabilities, and release scripts require explicit supply-chain review when changed.
 - Quality and mainnet shell gates use `rg` when present and a portable system `grep` fallback otherwise; validation does not require installing an extra workstation package.

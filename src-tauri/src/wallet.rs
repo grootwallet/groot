@@ -1411,6 +1411,8 @@ fn prepare_profile_directory(app: &AppHandle) -> ApiResult<(Uuid, PathBuf)> {
 }
 
 fn open_wallet_database(path: &Path) -> ApiResult<Connection> {
+    crate::release_policy::ensure_runtime_network_enabled(NETWORK)
+        .map_err(|_| internal("This build is not authorized to open a mainnet wallet database."))?;
     if let Ok(metadata) = fs::symlink_metadata(path) {
         if metadata.file_type().is_symlink() || !metadata.is_file() {
             return Err(internal("Wallet database storage is not a regular file."));
@@ -6105,6 +6107,8 @@ pub fn multisig_tx_prepare(
 ) -> ApiResult<MultisigProposalDto> {
     let _operation = operation_guard(&state)?;
     require_unlocked(&app, &state)?;
+    crate::release_policy::validate_spend(NETWORK, 1, amount)
+        .map_err(|_| api_error("invalid_amount", "This spend is blocked by release policy."))?;
     let label = normalize_label(&label)?;
     if amount == 0 {
         return Err(api_error(
@@ -6578,6 +6582,8 @@ pub fn tx_prepare(
 ) -> ApiResult<PaymentProposalDto> {
     let _operation = operation_guard(&state)?;
     require_unlocked(&app, &state)?;
+    crate::release_policy::validate_spend(NETWORK, 1, amount)
+        .map_err(|_| api_error("invalid_amount", "This spend is blocked by release policy."))?;
     let label = normalize_label(&label)?;
     if amount == 0 {
         return Err(api_error(

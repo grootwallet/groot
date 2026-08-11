@@ -14,6 +14,7 @@ mod process_lock;
 pub mod proposal;
 pub mod recovery;
 pub mod registry;
+mod release_policy;
 mod secure_store;
 mod session;
 mod tor_rpc;
