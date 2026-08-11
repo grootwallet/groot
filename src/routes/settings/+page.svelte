@@ -29,7 +29,9 @@
   let backupDescription = $derived(selectedProfile?.kind === 'multisig' ? 'Keep the public descriptor and enough independent signer backups. The app PIN only protects local Groot data.' : selectedProfile?.kind === 'watch_only' ? 'Recovery words remain on the signer. The app PIN only protects local Groot data.' : 'Keep both together. Groot cannot display or reset either one.');
   const timeoutOptions = [{ value: 1, label: '1 minute' }, { value: 5, label: '5 minutes' }, { value: 15, label: '15 minutes' }, { value: 30, label: '30 minutes' }, { value: 60, label: '1 hour' }];
   let nodeOpen = $state(false), nodePassword = $state(''), walletCredential = $state(''), nodeError = $state('');
-  let node = $state<CoreNodeConfig>({ backend: { type: 'local_core', url: 'http://127.0.0.1:18443' }, auth: 'cookie', username: null });
+  const localRpcUrl = defaultConfig.network === 'regtest' ? 'http://127.0.0.1:18443' : defaultConfig.network === 'signet' ? 'http://127.0.0.1:38332' : 'http://127.0.0.1:48332';
+  const localNodeConfig = (): CoreNodeConfig => ({ backend: { type: 'local_core', url: localRpcUrl }, auth: defaultConfig.network === 'regtest' ? 'cookie' : 'user_pass', username: null, torProxy: null });
+  let node = $state<CoreNodeConfig>(localNodeConfig());
   let scanOpen = $state(false), scanCredential = $state(''), scanError = $state(''), scan = $state<RecoveryScanSettings>({ birthdayHeight: 0, gapLimit: 20 }), scanDraft = $state<RecoveryScanSettings>({ birthdayHeight: 0, gapLimit: 20 });
   let scanStatus = $state<RecoveryScanStatus>({ status: 'idle', birthdayHeight: 0, gapLimit: 20, currentHeight: 0, targetHeight: 0, processedBlocks: 0, totalBlocks: 0, startedAt: 0, updatedAt: 0 });
   let scanning = $state(false), cancellingScan = $state(false), scanPoll: ReturnType<typeof setInterval> | undefined;
@@ -63,7 +65,7 @@
     catch (cause) { connected = false; toast({ title: 'Node unavailable', description: cause instanceof Error ? cause.message : undefined, tone: 'danger' }); }
     finally { checking = false; }
   }
-  function setNodeLocation(type: 'local_core'|'remote_core'|'tor') { node = type === 'local_core' ? { backend:{type:'local_core',url:'http://127.0.0.1:18443'},auth:'cookie',username:null,torProxy:null } : type === 'tor' ? { backend:{type:'remote_core',url:'http://example.onion:8332'},auth:'user_pass',username:'',torProxy:'127.0.0.1:9050' } : { backend:{type:'remote_core',url:'https://'},auth:'user_pass',username:'',torProxy:null }; nodePassword=''; nodeError=''; }
+  function setNodeLocation(type: 'local_core'|'remote_core'|'tor') { node = type === 'local_core' ? localNodeConfig() : type === 'tor' ? { backend:{type:'remote_core',url:'http://example.onion:8332'},auth:'user_pass',username:'',torProxy:'127.0.0.1:9050' } : { backend:{type:'remote_core',url:'https://'},auth:'user_pass',username:'',torProxy:null }; nodePassword=''; nodeError=''; }
   async function saveNode() {
     busy=true;nodeError='';
     try { const result=await walletService.saveNodeConfig(node,nodePassword,walletCredential);connected=true;nodeOpen=false;nodePassword='';walletCredential='';toast({title:'Node saved and verified',description:`Connected at block ${result.blocks}.`,tone:'success'}); }
@@ -312,11 +314,11 @@
 </Modal>
 <Modal open={nodeOpen} title="Connect Bitcoin Core" description="Each wallet keeps isolated, encrypted RPC credentials. Use direct TLS or a local Tor SOCKS proxy remotely." onclose={() => nodeOpen=false}>
   <div class="theme-choice node-location"><button class:active={node.backend.type==='local_core'} onclick={() => setNodeLocation('local_core')}>This Mac</button><button class:active={node.backend.type==='remote_core'&&!node.torProxy} onclick={() => setNodeLocation('remote_core')}>Remote TLS</button><button class:active={!!node.torProxy} onclick={() => setNodeLocation('tor')}>Tor onion</button></div>
-  <label class="field"><span>RPC URL</span><input bind:value={node.backend.url} placeholder={node.backend.type==='local_core'?'http://127.0.0.1:18443':node.torProxy?'http://your-node.onion:8332':'https://node.example.com:8332'}/><small>Credentials in URLs are rejected. TLS uses system trust roots; Tor accepts only .onion destinations.</small></label>
+  <label class="field"><span>RPC URL</span><input bind:value={node.backend.url} placeholder={node.backend.type==='local_core'?localRpcUrl:node.torProxy?'http://your-node.onion:8332':'https://node.example.com:8332'}/><small>Credentials in URLs are rejected. TLS uses system trust roots; Tor accepts only .onion destinations.</small></label>
   {#if node.torProxy}<label class="field"><span>Local SOCKS5 proxy</span><input bind:value={node.torProxy} placeholder="127.0.0.1:9050"/><small>The proxy must listen on loopback. Remote proxies are rejected.</small></label>{/if}
   {#if node.backend.type === 'local_core'}
-    <div class="credential-warning"><ShieldCheck size={16}/><p><strong>Automatic cookie authentication</strong><span>Uses Groot’s local regtest cookie. Switch to username/password only for a custom local node.</span></p></div>
-    <label class="field"><span>Authentication</span><select bind:value={node.auth}><option value="cookie">Local cookie</option><option value="user_pass">Username and password</option></select></label>
+    {#if defaultConfig.network === 'regtest'}<div class="credential-warning"><ShieldCheck size={16}/><p><strong>Automatic cookie authentication</strong><span>Uses Groot’s isolated local Regtest cookie. Switch to username/password only for a custom local node.</span></p></div>{/if}
+    <label class="field"><span>Authentication</span><select bind:value={node.auth}>{#if defaultConfig.network === 'regtest'}<option value="cookie">Local cookie</option>{/if}<option value="user_pass">Username and password</option></select></label>
   {/if}
   {#if node.auth === 'user_pass'}<label class="field"><span>RPC username</span><input value={node.username??''} oninput={(event) => node={...node,username:event.currentTarget.value}} autocomplete="off"/></label><PasswordField label="RPC password" bind:value={nodePassword} autocomplete="new-password" hint="Encrypted locally; never placed in the URL or public config."/>{/if}
   <PasswordField label={credentialLabel} bind:value={walletCredential} autocomplete="current-password" hint="Required once to protect this wallet’s RPC credentials."/>

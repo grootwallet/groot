@@ -1,0 +1,8 @@
+{
+  "productName": "Groot Testnet4",
+  "identifier": "app.groot.wallet.testnet4",
+  "build": {
+    "beforeDevCommand": "pnpm dev --mode testnet4",
+    "beforeBuildCommand": "pnpm build:testnet4"
+  }
+}

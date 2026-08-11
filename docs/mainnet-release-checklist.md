@@ -8,8 +8,8 @@ Candidate scope: first mainnet release is macOS desktop only, hardware-focused, 
 
 ## Network and transaction safety
 
-- [ ] Signet create/recover/sync/receive/send/restart/delete suite passes against the production backend adapter.
-- [ ] Testnet4 repeats the complete suite, including reorg, stale backend, fee failure, and cross-network rejection.
+- [ ] Signet create/recover/sync/receive/send/restart/delete suite passes against the production backend adapter. The native adapter now compiles with one allowlisted Signet identity across storage metadata, BDK, Core genesis checks, HWI, backups, and proposal DTOs; its frontend and application storage are isolated by a dedicated Tauri build. The live funded suite in [`public-network-rehearsal.md`](public-network-rehearsal.md) remains pending.
+- [ ] Testnet4 repeats the complete suite, including reorg, stale backend, fee failure, and cross-network rejection. The same compile-time and storage-isolation evidence exists for Testnet4, and CI compiles both public rehearsal targets plus Regtest; the live funded/reorg suite remains pending.
 - [ ] Mainnet genesis hash and backend network are verified before wallet/database opening. Every current production Core connection now verifies both Core's reported chain and the exact selected-network genesis before sync/test work; dormant Rust policy separately blocks any mainnet database open and requires exact mainnet genesis plus local Core. Pre-database mainnet wiring, enablement, and live mainnet RPC evidence remain pending.
 - [ ] Mainnet BIP84/BIP48 origins, xpub versions, addresses, descriptors, HWI chain, PSBT network, and explorer agree.
 - [ ] User-controlled Bitcoin Core is the only first-release mainnet backend; remote Core/Esplora have separate privacy review.

@@ -1,0 +1,8 @@
+{
+  "productName": "Groot Signet",
+  "identifier": "app.groot.wallet.signet",
+  "build": {
+    "beforeDevCommand": "pnpm dev --mode signet",
+    "beforeBuildCommand": "pnpm build:signet"
+  }
+}

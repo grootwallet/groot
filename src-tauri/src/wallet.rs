@@ -48,6 +48,7 @@ use zeroize::{Zeroize, Zeroizing};
 
 use crate::auth::AuthThrottle;
 use crate::bsms::{BsmsError, DescriptorRecord};
+use crate::build_network::{DEFAULT_RPC_URL, IS_REGTEST, NAME as NETWORK_NAME, NETWORK};
 use crate::external_signer::{
     self, ExternalSignerError, ExternalSignerInput, ExternalSignerWallet, SignerSource,
     SINGLESIG_ACCOUNT_PATH,
@@ -66,8 +67,6 @@ use crate::secure_store::{self, SecureStoreError};
 use crate::session::WalletSessions;
 use crate::ur_transport::{self, UrTransportError};
 
-const NETWORK: Network = Network::Regtest;
-const RPC_URL: &str = "http://127.0.0.1:18443";
 const MAX_PRIVATE_JSON_BYTES: u64 = 256 * 1024;
 const MAX_CREDENTIAL_BYTES: usize = 1_024;
 const MAX_MNEMONIC_INPUT_BYTES: usize = 4_096;
@@ -655,7 +654,7 @@ pub struct ReceiveAddressDto {
 }
 
 fn regtest_testnet_address_alias(address: &str) -> Option<String> {
-    if NETWORK != Network::Regtest {
+    if !IS_REGTEST {
         return None;
     }
     let address = Address::from_str(address)
@@ -684,7 +683,7 @@ fn hardware_display_matches_expected_address(expected: &str, actual: &str) -> bo
     if actual == expected {
         return true;
     }
-    if NETWORK != Network::Regtest {
+    if !IS_REGTEST {
         return false;
     }
     let Some(expected) = Address::from_str(expected)
@@ -1132,7 +1131,7 @@ fn require_explicit_standard_wallet_selection(
 }
 
 fn validate_regtest_app_data_override(path: PathBuf) -> ApiResult<PathBuf> {
-    if NETWORK != Network::Regtest || !path.is_absolute() {
+    if !IS_REGTEST || !path.is_absolute() {
         return Err(internal("The regtest app-data override is unavailable."));
     }
     let filename = path
@@ -1217,7 +1216,26 @@ fn descriptor_checksum(descriptor: &str) -> ApiResult<String> {
 
 fn load_registry(app: &AppHandle) -> ApiResult<WalletRegistry> {
     ensure_registry_migrated(app)?;
-    registry::load(&registry_path(app)?).map_err(registry_api_error)
+    let registry = registry::load(&registry_path(app)?).map_err(registry_api_error)?;
+    ensure_registry_network(&registry)?;
+    Ok(registry)
+}
+
+fn ensure_registry_network(registry: &WalletRegistry) -> ApiResult<()> {
+    if registry
+        .wallets
+        .iter()
+        .all(|wallet| wallet.network == NETWORK_NAME)
+    {
+        Ok(())
+    } else {
+        Err(api_error(
+            "wrong_network",
+            format!(
+                "This wallet registry does not belong to the compiled {NETWORK_NAME} network. No wallet was opened."
+            ),
+        ))
+    }
 }
 
 fn save_registry(app: &AppHandle, registry: &WalletRegistry) -> ApiResult<()> {
@@ -1326,7 +1344,7 @@ fn profile_from_directory(
     Ok(WalletProfile {
         id,
         name,
-        network: "regtest".to_owned(),
+        network: NETWORK_NAME.to_owned(),
         kind,
         descriptor_checksum: checksum,
         created_at: now(),
@@ -1340,8 +1358,12 @@ fn ensure_registry_migrated(app: &AppHandle) -> ApiResult<()> {
     ensure_private_directory(&wallets_root(app)?)?;
     let path = registry_path(app)?;
     if path.exists() {
-        registry::load(&path).map_err(registry_api_error)?;
+        let registry = registry::load(&path).map_err(registry_api_error)?;
+        ensure_registry_network(&registry)?;
         return Ok(());
+    }
+    if !IS_REGTEST {
+        return save_registry(app, &WalletRegistry::default());
     }
     let legacy = [
         (app_data.join("regtest-wallet"), WalletKind::SingleKey),
@@ -1451,7 +1473,7 @@ fn commit_multisig_profile(app: &AppHandle, id: Uuid, wallet: &MultisigWalletDto
         WalletProfile {
             id,
             name: wallet.name.clone(),
-            network: "regtest".to_owned(),
+            network: NETWORK_NAME.to_owned(),
             kind: WalletKind::Multisig,
             descriptor_checksum: descriptor_checksum(&wallet.external_descriptor)?,
             created_at: now(),
@@ -1484,9 +1506,13 @@ fn node_secret_path(app: &AppHandle) -> ApiResult<PathBuf> {
 fn default_node_config() -> CoreNodeConfig {
     CoreNodeConfig {
         backend: ChainBackend::LocalCore {
-            url: RPC_URL.to_owned(),
+            url: DEFAULT_RPC_URL.to_owned(),
         },
-        auth: RpcAuthMode::Cookie,
+        auth: if IS_REGTEST {
+            RpcAuthMode::Cookie
+        } else {
+            RpcAuthMode::UserPass
+        },
         username: None,
         tor_proxy: None,
     }
@@ -1616,6 +1642,12 @@ fn rpc_client(app: &AppHandle, state: &State<'_, AppState>) -> ApiResult<Client>
         .to_string();
     let auth = match config.auth {
         RpcAuthMode::Cookie => {
+            if !IS_REGTEST {
+                return Err(api_error(
+                    "invalid_node_config",
+                    "Automatic cookie discovery is available only in Regtest builds. Configure explicit protected RPC credentials for this public-network rehearsal.",
+                ));
+            }
             let cookie = regtest_dir().join("regtest").join(".cookie");
             if !cookie.exists() {
                 return Err(api_error(
@@ -1647,6 +1679,12 @@ fn candidate_rpc_client(config: &CoreNodeConfig, password: &str) -> ApiResult<Cl
         .to_string();
     let auth = match config.auth {
         RpcAuthMode::Cookie => {
+            if !IS_REGTEST {
+                return Err(api_error(
+                    "invalid_node_config",
+                    "Automatic cookie discovery is available only in Regtest builds. Configure explicit protected RPC credentials for this public-network rehearsal.",
+                ));
+            }
             let cookie = regtest_dir().join("regtest").join(".cookie");
             if !cookie.exists() {
                 return Err(api_error(
@@ -1689,7 +1727,7 @@ fn ensure_expected_network(network: Network) -> ApiResult<()> {
     } else {
         Err(api_error(
             "wrong_network",
-            "The Bitcoin Core node is not running regtest.",
+            format!("The Bitcoin Core node is not running {NETWORK_NAME}."),
         ))
     }
 }
@@ -2721,7 +2759,7 @@ fn validate_multisig_backup(encoded: &str) -> ApiResult<MultisigBackupDto> {
     }
     let mut backup: MultisigBackupDto = serde_json::from_str(encoded)
         .map_err(|_| api_error("invalid_backup", "Enter a valid Groot descriptor backup."))?;
-    if backup.version != 1 || backup.network != "regtest" || backup.wallet.kind != "multisig" {
+    if backup.version != 1 || backup.network != NETWORK_NAME || backup.wallet.kind != "multisig" {
         return Err(api_error(
             "invalid_backup",
             "This backup version or network is not supported.",
@@ -2905,7 +2943,7 @@ fn proposal_dto(
         inputs,
         locktime,
         rbf,
-        network: "regtest",
+        network: NETWORK_NAME,
         psbt: encoded,
         signed: progress.signed,
         required: progress.required,
@@ -3401,7 +3439,7 @@ fn load_payment_proposal_dto(
         inputs,
         locktime,
         rbf,
-        network: "regtest",
+        network: NETWORK_NAME,
     })
 }
 
@@ -3469,6 +3507,12 @@ fn load_legacy_regtest_secret(
     credential: &str,
     legacy_directory: &str,
 ) -> ApiResult<Vec<u8>> {
+    if !IS_REGTEST {
+        return Err(api_error(
+            "wallet_corrupt",
+            "A Regtest-only legacy secret cannot be opened by this public-network build.",
+        ));
+    }
     let legacy_path = app_data_dir(app)?
         .join(legacy_directory)
         .join("secret.json");
@@ -3530,7 +3574,7 @@ fn create_from_mnemonic(
             WalletProfile {
                 id,
                 name: name.to_owned(),
-                network: "regtest".to_owned(),
+                network: NETWORK_NAME.to_owned(),
                 kind: WalletKind::SingleKey,
                 descriptor_checksum: descriptor_checksum(
                     &wallet.public_descriptor(KeychainKind::External).to_string(),
@@ -3918,7 +3962,7 @@ fn snapshot_from(
     }
 
     Ok(WalletSnapshotDto {
-        network: "regtest",
+        network: NETWORK_NAME,
         balance: BalanceDto {
             confirmed: balance.confirmed.to_sat(),
             pending: aggregate_pending_balance(
@@ -3972,8 +4016,7 @@ fn enqueue_snapshot_notifications(
 
 #[tauri::command]
 pub fn wallet_exists(app: AppHandle) -> ApiResult<bool> {
-    ensure_registry_migrated(&app)?;
-    let registry = registry::load(&registry_path(&app)?).map_err(registry_api_error)?;
+    let registry = load_registry(&app)?;
     let Some(selected) = registry.selected_wallet_id else {
         return Ok(false);
     };
@@ -3983,8 +4026,7 @@ pub fn wallet_exists(app: AppHandle) -> ApiResult<bool> {
 
 #[tauri::command]
 pub fn wallet_profiles(app: AppHandle) -> ApiResult<WalletRegistry> {
-    ensure_registry_migrated(&app)?;
-    registry::load(&registry_path(&app)?).map_err(registry_api_error)
+    load_registry(&app)
 }
 
 #[tauri::command]
@@ -5066,7 +5108,32 @@ pub fn external_signer_parse_import(
     label: String,
     source: SignerSource,
 ) -> ApiResult<ExternalSignerInput> {
+    validate_external_signer_import_network(&encoded)?;
     external_signer::parse_import(&encoded, &label, source).map_err(external_signer_api_error)
+}
+
+fn validate_external_signer_import_network(encoded: &str) -> ApiResult<()> {
+    let trimmed = encoded.trim();
+    if !trimmed.starts_with('{') {
+        return Ok(());
+    }
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(trimmed) else {
+        return Ok(());
+    };
+    let is_groot_backup = value.get("version").and_then(|value| value.as_u64()) == Some(1)
+        && value.get("descriptor").is_some()
+        && value.get("network").is_some();
+    if !is_groot_backup {
+        return Ok(());
+    }
+    if value.get("network").and_then(|value| value.as_str()) == Some(NETWORK_NAME) {
+        Ok(())
+    } else {
+        Err(api_error(
+            "wrong_network",
+            "This Groot signer backup belongs to a different Bitcoin network.",
+        ))
+    }
 }
 
 #[tauri::command]
@@ -5176,7 +5243,7 @@ pub fn external_signer_create(
             WalletProfile {
                 id,
                 name: metadata.name.clone(),
-                network: "regtest".to_owned(),
+                network: NETWORK_NAME.to_owned(),
                 kind: WalletKind::WatchOnly,
                 descriptor_checksum: descriptor_checksum(
                     &wallet.public_descriptor(KeychainKind::External).to_string(),
@@ -5236,7 +5303,7 @@ pub fn external_signer_rename(
 fn external_signer_backup(descriptor: String) -> ApiResult<ExternalSignerBackupDto> {
     let content = serde_json::to_string_pretty(&ExternalSignerBackupRecord {
         version: 1,
-        network: "regtest",
+        network: NETWORK_NAME,
         descriptor: &descriptor,
     })
     .map_err(internal)?;
@@ -5295,7 +5362,7 @@ fn external_proposal_dto(
         inputs,
         locktime,
         rbf,
-        network: "regtest",
+        network: NETWORK_NAME,
         psbt: encoded,
         signed: progress.signed,
         required: 1,
@@ -5727,8 +5794,7 @@ pub fn multisig_wallet(
     state: State<'_, AppState>,
 ) -> ApiResult<Option<MultisigWalletDto>> {
     let _operation = operation_guard(&state)?;
-    ensure_registry_migrated(&app)?;
-    let registry = registry::load(&registry_path(&app)?).map_err(registry_api_error)?;
+    let registry = load_registry(&app)?;
     let Some(selected) = registry.selected_wallet_id else {
         return Ok(None);
     };
@@ -5757,7 +5823,7 @@ pub fn multisig_export(
     authorize_multisig_operation(&app, &state, credential.as_str())?;
     let backup = MultisigBackupDto {
         version: 1,
-        network: "regtest".to_owned(),
+        network: NETWORK_NAME.to_owned(),
         wallet: read_multisig_metadata(&app)?,
     };
     serde_json::to_string_pretty(&backup).map_err(internal)
@@ -6717,7 +6783,7 @@ pub fn tx_prepare(
         inputs,
         locktime,
         rbf,
-        network: "regtest",
+        network: NETWORK_NAME,
     };
     persist_prepared_state(&mut transaction, &mut wallet, &proposal, &psbt, None)?;
     drop(wallet);
@@ -6877,7 +6943,7 @@ fn summarize_payment_psbt(
         inputs,
         locktime,
         rbf,
-        network: "regtest",
+        network: NETWORK_NAME,
     })
 }
 
@@ -7290,7 +7356,16 @@ pub fn wallet_reset_regtest(
 }
 
 fn validate_regtest_reset_confirmation(confirmation: &str) -> ApiResult<()> {
-    if confirmation == "RESET REGTEST" {
+    validate_regtest_reset_confirmation_for(IS_REGTEST, confirmation)
+}
+
+fn validate_regtest_reset_confirmation_for(is_regtest: bool, confirmation: &str) -> ApiResult<()> {
+    if !is_regtest {
+        Err(api_error(
+            "wrong_network",
+            "Disposable wallet reset is available only in Regtest builds.",
+        ))
+    } else if confirmation == "RESET REGTEST" {
         Ok(())
     } else {
         Err(api_error(
@@ -7351,6 +7426,48 @@ mod tests {
     use crate::multisig::{CosignerInput, CosignerSource, MULTISIG_ACCOUNT_PATH};
     use crate::recovery::{SpendingPath, TimedSpendingPath};
     use std::{net::TcpListener, thread};
+
+    #[test]
+    fn compiled_network_rejects_foreign_registry_and_public_reset() {
+        let mut registry = WalletRegistry::default();
+        registry.wallets.push(WalletProfile {
+            id: Uuid::new_v4(),
+            name: "Foreign wallet".to_owned(),
+            network: if NETWORK_NAME == "signet" {
+                "testnet4"
+            } else {
+                "signet"
+            }
+            .to_owned(),
+            kind: WalletKind::SingleKey,
+            descriptor_checksum: "abcd1234".to_owned(),
+            created_at: 1,
+            backup_verified: true,
+        });
+        assert_eq!(
+            ensure_registry_network(&registry).unwrap_err().code,
+            "wrong_network"
+        );
+        assert!(ensure_registry_network(&WalletRegistry::default()).is_ok());
+        assert_eq!(
+            validate_regtest_reset_confirmation_for(false, "RESET REGTEST")
+                .unwrap_err()
+                .code,
+            "wrong_network"
+        );
+
+        let correct =
+            format!(r#"{{"version":1,"network":"{NETWORK_NAME}","descriptor":"wpkh(key)"}}"#);
+        assert!(validate_external_signer_import_network(&correct).is_ok());
+        assert_eq!(
+            validate_external_signer_import_network(
+                r#"{"version":1,"network":"bitcoin","descriptor":"wpkh(key)"}"#,
+            )
+            .unwrap_err()
+            .code,
+            "wrong_network"
+        );
+    }
 
     const WORDS: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art";
 

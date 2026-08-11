@@ -3,6 +3,7 @@ use tauri::Manager as _;
 pub mod airgap;
 mod auth;
 pub mod bsms;
+mod build_network;
 mod direct_rpc;
 pub mod external_signer;
 mod hardware;

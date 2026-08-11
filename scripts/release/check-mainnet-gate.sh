@@ -16,16 +16,32 @@ else
   fail "ripgrep or grep is required"
 fi
 
+reject_fixed() {
+  if contains_fixed "$1" "$2"; then
+    fail "$3"
+  fi
+}
+
 contains_fixed "export const SUPPORTED_NETWORKS = ['signet', 'testnet4', 'regtest'] as const;" src/lib/config.ts \
   || fail "the browser network allowlist changed"
-contains_fixed "const NETWORK: Network = Network::Regtest;" src-tauri/src/wallet.rs \
-  || fail "the native wallet network is no longer pinned to regtest"
+contains_fixed '"regtest" | "signet" | "testnet4" => {}' src-tauri/build.rs \
+  || fail "the native compile-time network allowlist changed"
+contains_fixed "mainnet is not compiled into this release" src-tauri/build.rs \
+  || fail "the native build no longer rejects mainnet explicitly"
+reject_fixed "pub const NETWORK: Network = Network::Bitcoin" src-tauri/src/build_network.rs \
+  "the native build module can select Bitcoin mainnet"
+contains_fixed "use crate::build_network::{DEFAULT_RPC_URL, IS_REGTEST, NAME as NETWORK_NAME, NETWORK};" src-tauri/src/wallet.rs \
+  || fail "the wallet no longer consumes the compile-time network identity"
 contains_fixed "const MAINNET_ENABLED: bool = false;" src-tauri/src/release_policy.rs \
   || fail "the trusted-boundary mainnet gate is no longer disabled"
 contains_fixed "ensure_runtime_network_enabled(NETWORK)" src-tauri/src/wallet.rs \
   || fail "wallet databases are no longer guarded before opening"
 contains_fixed '"beforeBuildCommand": "pnpm build:regtest"' src-tauri/tauri.conf.json \
   || fail "the native build is no longer pinned to regtest mode"
+contains_fixed '"identifier": "app.groot.wallet.signet"' src-tauri/tauri.signet.conf.json \
+  || fail "the Signet rehearsal no longer has isolated application storage"
+contains_fixed '"identifier": "app.groot.wallet.testnet4"' src-tauri/tauri.testnet4.conf.json \
+  || fail "the Testnet4 rehearsal no longer has isolated application storage"
 contains_fixed "Mainnet remains disabled" docs/adr/0012-mainnet-release-gate.md \
   || fail "the accepted mainnet decision is missing"
 contains_fixed "Release decision: BLOCKED" docs/mainnet-release-checklist.md \

@@ -70,6 +70,8 @@ jobs:
           workspaces: src-tauri
       - run: cargo fmt --check
       - run: cargo clippy --locked --all-targets --all-features -- -D warnings
+      - name: Compile every permitted native network
+        run: bash ../scripts/network/check-native-builds.sh
       - name: Build Rust API documentation with warnings denied
         run: RUSTDOCFLAGS="-D warnings" cargo doc --locked --no-deps --all-features
       - name: Rust unit and integration tests (pyramid base and middle)
