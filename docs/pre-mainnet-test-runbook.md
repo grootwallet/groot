@@ -118,7 +118,7 @@ Before building, verify the deterministic target dependency inventory:
 pnpm test:sbom
 ```
 
-The unsigned build emits `groot.cdx.json` and includes both the binary and SBOM in `SHA256SUMS`. The SBOM represents packages installed/resolved for that build target; packages locked only for other targets remain visible through the recorded lock count and appear when generated on those targets.
+The unsigned build emits `groot.cdx.json`, records the exact compiler, CLI, target, OS, SDK, network, commit, epoch, and lockfile identities in `BUILD-INFO`, and includes both the binary and SBOM in `SHA256SUMS`. The SBOM represents packages installed/resolved for that build target; packages locked only for other targets remain visible through the recorded lock count and appear when generated on those targets.
 
 Run on two clean machines with the pinned Node, pnpm, Rust toolchain, target, OS, Xcode/SDK and dependency lockfiles:
 
@@ -134,7 +134,7 @@ cd /Users/thibm/Documents/Codex/2026-07-17/let
 pnpm release:compare -- /absolute/path/to/build-a /absolute/path/to/build-b
 ```
 
-Resolve any mismatch before signing. Signing/notarization requires the release owner's Apple identity and protected credentials. Verify the resulting package with:
+The comparator rejects symlinks, unexpected or missing files, stale recorded digests, different build environments, different SBOMs, and different binaries. Resolve any mismatch before signing. `pnpm release:test:compare` exercises those fail-closed boundaries without producing a release. Signing/notarization requires the release owner's Apple identity and protected credentials. Verify the resulting package with:
 
 ```sh
 cd /Users/thibm/Documents/Codex/2026-07-17/let

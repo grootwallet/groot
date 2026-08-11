@@ -1479,15 +1479,14 @@ fn commit_multisig_profile(app: &AppHandle, id: Uuid, wallet: &MultisigWalletDto
     )
 }
 
-fn regtest_dir() -> PathBuf {
-    std::env::var_os("GROOT_REGTEST_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| {
-            Path::new(env!("CARGO_MANIFEST_DIR"))
-                .parent()
-                .expect("src-tauri must have a project parent")
-                .join(".regtest")
-        })
+fn regtest_dir() -> ApiResult<PathBuf> {
+    if let Some(path) = std::env::var_os("GROOT_REGTEST_DIR") {
+        return Ok(PathBuf::from(path));
+    }
+
+    std::env::current_dir()
+        .map(|path| path.join(".regtest"))
+        .map_err(internal)
 }
 
 fn node_config_path(app: &AppHandle) -> ApiResult<PathBuf> {
@@ -1645,7 +1644,7 @@ fn rpc_client(app: &AppHandle, state: &State<'_, AppState>) -> ApiResult<Client>
                     "Automatic cookie discovery is available only in Regtest builds. Configure explicit protected RPC credentials for this public-network rehearsal.",
                 ));
             }
-            let cookie = regtest_dir().join("regtest").join(".cookie");
+            let cookie = regtest_dir()?.join("regtest").join(".cookie");
             if !cookie.exists() {
                 return Err(api_error(
                     "network_unavailable",
@@ -1682,7 +1681,7 @@ fn candidate_rpc_client(config: &CoreNodeConfig, password: &str) -> ApiResult<Cl
                     "Automatic cookie discovery is available only in Regtest builds. Configure explicit protected RPC credentials for this public-network rehearsal.",
                 ));
             }
-            let cookie = regtest_dir().join("regtest").join(".cookie");
+            let cookie = regtest_dir()?.join("regtest").join(".cookie");
             if !cookie.exists() {
                 return Err(api_error(
                     "network_unavailable",

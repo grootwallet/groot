@@ -61,6 +61,10 @@ if [[ "$#" -ne 0 ]]; then
   exit 1
 fi
 
+if [[ -z "${GROOT_REGTEST_DIR:-}" ]]; then
+  export GROOT_REGTEST_DIR="${REPOSITORY_ROOT}/.regtest"
+fi
+
 if [[ -z "${GROOT_REGTEST_APP_DATA_DIR:-}" && -f "${CERTIFICATION_PROFILE_FILE}" ]]; then
   IFS= read -r saved_certification_profile < "${CERTIFICATION_PROFILE_FILE}"
   if [[ -z "${saved_certification_profile}" || ! -d "${saved_certification_profile}" || -L "${saved_certification_profile}" ]]; then

@@ -40,7 +40,7 @@
     "test:brand": "bash scripts/quality/check-brand-identity.sh",
     "test:full": "pnpm validate && pnpm test:coverage && pnpm test:coverage:rust && pnpm test:acceptance",
     "test:watch": "vitest",
-    "validate": "pnpm test:boundaries && pnpm test:secret-surfaces && pnpm test:supply-chain && pnpm test:brand && pnpm test:release-gate && pnpm release:test:update && pnpm release:test:hwi && pnpm test:dev-runtime && pnpm check && pnpm test && pnpm build",
+    "validate": "pnpm test:boundaries && pnpm test:secret-surfaces && pnpm test:supply-chain && pnpm test:brand && pnpm test:release-gate && pnpm release:test:update && pnpm release:test:hwi && pnpm release:test:compare && pnpm test:dev-runtime && pnpm check && pnpm test && pnpm build",
     "regtest:start": "bash scripts/regtest/start.sh",
     "regtest:status": "bash scripts/regtest/status.sh",
     "regtest:mine": "bash scripts/regtest/mine.sh",
@@ -60,6 +60,7 @@
     "release:test:macos-lifecycle": "bash scripts/release/test-macos-packaged-lifecycle.sh",
     "release:test:update": "node scripts/release/test-update-bundle.mjs",
     "release:test:hwi": "node scripts/release/test-hwi-artifact.mjs",
+    "release:test:compare": "bash scripts/release/test-compare-unsigned.sh",
     "tauri": "tauri"
   },
   "devDependencies": {
