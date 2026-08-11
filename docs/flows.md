@@ -125,9 +125,9 @@ The hardware-signing modal always offers an in-place rescan. A signer outside th
 
 BSMS is the interoperable public standard for a standard sortedmulti wallet. Groot JSON retains custom recovery-policy metadata and labels. Both are parsed and verified in Rust. The app PIN authorizes export but is not a file-encryption password: the exported watch-only record cannot spend, yet should stay private because it reveals address derivation and wallet activity. Explicit export re-authentication accepts the correct vault PIN even after an idle-session timeout, then refreshes that session. The printable view is a single A4 sheet with wallet name, a legible UTC creation date, policy, network, cosigner fingerprints, and vertically stacked receive/change descriptor QR codes; the native print sheet provides PDF saving without a separate PDF dependency. Loading a drill file visibly retains its filename. A recovery drill against the currently selected vault must compare descriptor identity, not merely validate syntax, and its inline state, toast, and deletion gate all use that one authoritative comparison. Export, recovery-drill, and deletion failures render inside their own sections so one action cannot appear to fail another.
 
-`Settings → birthday+gap draft → credential → persist → full Core rescan → durable balance/history`
+`Settings → birthday+gap draft → credential → persist → asynchronous Core rescan with block progress → complete or cancel safely → durable balance/history`
 
-Editing is draft-only until authenticated save. Height `0` is safest; a birthday after the first payment can omit history. Gap limits are bounded from 20 through 1,000.
+Editing is draft-only until authenticated save. Height `0` is safest; a birthday after the first payment can omit history. Gap limits are bounded from 20 through 1,000. While scanning, the modal cannot be dismissed or edited, reports processed and total blocks, and offers cancellation without waiting for the scan command to finish. Each applied block and its progress checkpoint are persisted. Cancellation, failure, or process interruption remains visible after the foreground task ends; retry reruns from the configured birthday rather than trusting a partial result.
 
 ## Coin privacy insight
 

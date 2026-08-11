@@ -11,6 +11,7 @@
     hint = '',
     error = '',
     tooltip = '',
+    disabled = false,
     oninput = () => {},
     onkeydown = undefined
   } = $props<{
@@ -22,6 +23,7 @@
     hint?: string;
     error?: string;
     tooltip?: string;
+    disabled?: boolean;
     oninput?: () => void;
     onkeydown?: (event: KeyboardEvent) => void;
   }>();
@@ -32,8 +34,8 @@
 <label class="field password-field">
   <span class="field-label">{label}{#if tooltip}<InsightTip text={tooltip}/>{/if}</span>
   <span class="password-control">
-    <input aria-label={inputLabel} type={revealed ? 'text' : 'password'} bind:value {placeholder} {autocomplete} oninput={() => oninput()} {onkeydown} />
-    <button type="button" aria-label={revealed ? `Hide ${inputLabel}` : `Show ${inputLabel}`} onclick={() => revealed = !revealed}>
+    <input aria-label={inputLabel} type={revealed ? 'text' : 'password'} bind:value {placeholder} {autocomplete} {disabled} oninput={() => oninput()} {onkeydown} />
+    <button type="button" aria-label={revealed ? `Hide ${inputLabel}` : `Show ${inputLabel}`} {disabled} onclick={() => revealed = !revealed}>
       {#if revealed}<EyeOff size={16}/>{:else}<Eye size={16}/>{/if}
     </button>
   </span>

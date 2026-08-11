@@ -170,7 +170,7 @@ code { font-family: "SFMono-Regular", Consolas, ui-monospace, monospace; }
 .button.secondary:hover { background: var(--surface-hover); }
 .button.ghost { background: transparent; color: var(--muted); }
 .button.ghost:hover { background: var(--surface-hover); color: var(--text); }
-.credential-warning.credential-ack { grid-template-columns: 18px 18px minmax(0, 1fr); cursor: pointer; align-items: flex-start; }.credential-ack input { width: 15px; height: 15px; margin: 1px 0 0; accent-color: var(--accent); }.credential-ack p { min-width: 0; margin: 0; }.scan-form { display: grid; gap: 18px; }.scan-form .field { margin: 0; }
+.credential-warning.credential-ack { grid-template-columns: 18px 18px minmax(0, 1fr); cursor: pointer; align-items: flex-start; }.credential-ack input { width: 15px; height: 15px; margin: 1px 0 0; accent-color: var(--accent); }.credential-ack p { min-width: 0; margin: 0; }.scan-form { display: grid; gap: 18px; }.scan-form .field { margin: 0; }.scan-progress{display:grid;gap:9px;padding:12px 14px;border:1px solid var(--border);border-radius:8px;background:var(--surface-control)}.scan-progress>div{display:flex;justify-content:space-between;gap:12px;align-items:baseline}.scan-progress strong{font-size:11px;color:var(--text-soft)}.scan-progress small{font-size:9px;color:var(--muted);text-align:right}.scan-progress progress{width:100%;height:6px;accent-color:var(--accent)}
 .button.ghost-danger { background: transparent; color: var(--danger); }
 .button.ghost-danger:hover { color: var(--danger); background: color-mix(in srgb,var(--danger) 9%,transparent); }
 .button.danger { background: var(--danger); color: var(--danger-fg); }

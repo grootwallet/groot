@@ -10,7 +10,7 @@
   import { walletService, WalletError } from '$lib/wallet';
   import { goto } from '$app/navigation';
   import { onDestroy, onMount } from 'svelte';
-  import type { CoreNodeConfig, ExternalSignerWallet, RecoveryScanSettings, WalletProfile } from '$lib/wallet/contracts';
+  import type { CoreNodeConfig, ExternalSignerWallet, RecoveryScanSettings, RecoveryScanStatus, WalletProfile } from '$lib/wallet/contracts';
   let deleting = $state(false);
   let confirmText = $state('');
   let deleteCredential = $state('');
@@ -31,6 +31,9 @@
   let nodeOpen = $state(false), nodePassword = $state(''), walletCredential = $state(''), nodeError = $state('');
   let node = $state<CoreNodeConfig>({ backend: { type: 'local_core', url: 'http://127.0.0.1:18443' }, auth: 'cookie', username: null });
   let scanOpen = $state(false), scanCredential = $state(''), scanError = $state(''), scan = $state<RecoveryScanSettings>({ birthdayHeight: 0, gapLimit: 20 }), scanDraft = $state<RecoveryScanSettings>({ birthdayHeight: 0, gapLimit: 20 });
+  let scanStatus = $state<RecoveryScanStatus>({ status: 'idle', birthdayHeight: 0, gapLimit: 20, currentHeight: 0, targetHeight: 0, processedBlocks: 0, totalBlocks: 0, startedAt: 0, updatedAt: 0 });
+  let scanning = $state(false), cancellingScan = $state(false), scanPoll: ReturnType<typeof setInterval> | undefined;
+  let scanPercent = $derived(scanStatus.totalBlocks > 0 ? Math.min(100, Math.round((scanStatus.processedBlocks / scanStatus.totalBlocks) * 100)) : 0);
   let verifyOpen = $state(false), verifyCredential = $state(''), verifyError = $state(''), verifying = $state(false);
   let hardwareBackupOpen = $state(false), descriptorDetailsOpen = $state(false), hardwareBackupPin = $state(''), hardwareBackupError = $state(''), hardwareBackup = $state(''), hardwareBackupContent = $state(''), exportingHardwareBackup = $state(false);
   let renameOpen = $state(false), renameDraft = $state(''), renameError = $state(''), renaming = $state(false);
@@ -45,12 +48,13 @@
     const activeProfile = registry.wallets.find((wallet) => wallet.id === registry.selectedWalletId);
     if (activeProfile?.kind === 'watch_only') hardwareSignerWallet = await walletService.externalSignerWallet();
     node = await walletService.nodeConfig();
-    scan = await walletService.recoveryScanSettings(); scanDraft = { ...scan };
+    scan = await walletService.recoveryScanSettings(); scanDraft = { ...scan }; scanStatus = await walletService.recoveryScanStatus();
   });
   onDestroy(() => {
     deleteCredential = '';
     confirmText = '';
     nodePassword = ''; walletCredential = ''; scanCredential = ''; verifyCredential = ''; hardwareBackupPin = ''; hardwareBackup = ''; hardwareBackupContent = ''; signerRenameDraft = '';
+    if (scanPoll) clearInterval(scanPoll);
   });
   function setTheme(next: 'light' | 'dark') { theme = next; document.documentElement.dataset.theme = next; document.querySelector('meta[name="theme-color"]')?.setAttribute('content', next === 'light' ? '#f4f1e9' : '#0d1118'); localStorage.setItem('groot-theme', next); }
   async function checkConnection() {
@@ -129,10 +133,21 @@
     }
   }
   async function runFullRescan() {
-    busy=true;scanError='';
-    try { scan=await walletService.saveRecoveryScanSettings(Number(scanDraft.birthdayHeight),Number(scanDraft.gapLimit),scanCredential); scanDraft={...scan}; const snapshot=await walletService.fullRescan(scanCredential); scanOpen=false;toast({title:'Full rescan complete',description:`Recovered balance: ${snapshot.balance.total.toLocaleString()} sats`,tone:'success'}); }
-    catch(cause){scanError=cause instanceof Error?cause.message:'The full rescan failed.';}
-    finally{scanCredential='';busy=false;}
+    scanning=true;scanError='';
+    try {
+      scan=await walletService.saveRecoveryScanSettings(Number(scanDraft.birthdayHeight),Number(scanDraft.gapLimit),scanCredential); scanDraft={...scan};
+      const rescan = walletService.fullRescan(scanCredential);
+      scanPoll = setInterval(async () => { try { scanStatus = await walletService.recoveryScanStatus(); } catch { /* The foreground result remains authoritative. */ } }, 100);
+      const snapshot=await rescan;
+      scanStatus=await walletService.recoveryScanStatus();scanOpen=false;toast({title:'Full rescan complete',description:`Recovered balance: ${snapshot.balance.total.toLocaleString()} sats`,tone:'success'});
+    }
+    catch(cause){scanError=cause instanceof Error?cause.message:'The full rescan failed.';try{scanStatus=await walletService.recoveryScanStatus();}catch{/* Keep the original failure. */}}
+    finally{if(scanPoll)clearInterval(scanPoll);scanPoll=undefined;scanCredential='';scanning=false;cancellingScan=false;}
+  }
+  async function cancelFullRescan() {
+    cancellingScan=true;scanError='';
+    try { scanStatus=await walletService.cancelFullRescan(); }
+    catch(cause){scanError=cause instanceof Error?cause.message:'The recovery scan could not be cancelled.';cancellingScan=false;}
   }
   async function deleteWallet() {
     busy = true;
@@ -281,13 +296,19 @@
   {/if}
 </Modal>
 <IdentifierDetailsModal open={descriptorDetailsOpen} value={hardwareBackup} title="Public wallet descriptor" description="This watch-only descriptor cannot spend bitcoin, but it reveals the wallet’s complete activity." label="Descriptor" onclose={() => {descriptorDetailsOpen=false;hardwareBackupOpen=true;}}/>
-<Modal open={scanOpen} title="Full wallet rescan" description="Search from the earliest possible payment while deriving a bounded address gap." onclose={() => {scanOpen=false;scanCredential='';scanError='';scanDraft={...scan};}}>
+<Modal open={scanOpen} title="Full wallet rescan" description="Search from the earliest possible payment while deriving a bounded address gap." onclose={() => {if(scanning)return;scanOpen=false;scanCredential='';scanError='';scanDraft={...scan};}}>
   <div class="scan-form"><div class="warning-box"><strong>Earlier is safer; later is faster.</strong> A birthday after the wallet’s first payment can miss funds. A larger gap increases work and memory use.</div>
-  <label class="field"><span>Wallet birthday block</span><input aria-label="Wallet birthday block" type="number" min="0" step="1" bind:value={scanDraft.birthdayHeight}/><small>Use 0 when uncertain. Regtest scans are intentionally cheap.</small></label>
-  <label class="field"><span>Address gap limit</span><input aria-label="Address gap limit" type="number" min="20" max="1000" step="1" bind:value={scanDraft.gapLimit}/><small>20 is standard. Increase only if the wallet revealed long unused runs.</small></label>
-  <PasswordField label={credentialLabel} bind:value={scanCredential} autocomplete="current-password"/></div>
+  <label class="field"><span>Wallet birthday block</span><input aria-label="Wallet birthday block" type="number" min="0" step="1" bind:value={scanDraft.birthdayHeight} disabled={scanning}/><small>Use 0 when uncertain. Regtest scans are intentionally cheap.</small></label>
+  <label class="field"><span>Address gap limit</span><input aria-label="Address gap limit" type="number" min="20" max="1000" step="1" bind:value={scanDraft.gapLimit} disabled={scanning}/><small>20 is standard. Increase only if the wallet revealed long unused runs.</small></label>
+  <PasswordField label={credentialLabel} bind:value={scanCredential} autocomplete="current-password" disabled={scanning}/>
+  {#if scanning || ['cancelling','cancelled','interrupted','failed'].includes(scanStatus.status)}
+    <div class="scan-progress" role="status" aria-live="polite">
+      <div><strong>{scanStatus.status === 'cancelling' ? 'Cancelling safely…' : scanStatus.status === 'interrupted' ? 'Previous scan interrupted' : scanStatus.status === 'cancelled' ? 'Scan cancelled' : scanStatus.status === 'failed' ? 'Previous scan failed' : `Scanning blocks · ${scanPercent}%`}</strong><small>{scanStatus.processedBlocks.toLocaleString()} of {scanStatus.totalBlocks.toLocaleString()} blocks processed{scanStatus.currentHeight ? ` · height ${scanStatus.currentHeight.toLocaleString()}` : ''}</small></div>
+      <progress max="100" value={scanPercent} aria-label="Recovery scan progress"></progress>
+    </div>
+  {/if}</div>
   {#if scanError}<p class="form-error" aria-live="polite">{scanError}</p>{/if}
-  <div class="modal-footer"><Button variant="secondary" onclick={() => {scanOpen=false;scanDraft={...scan};}}>Cancel</Button><Button disabled={!scanCredential||scanDraft.gapLimit<20||scanDraft.gapLimit>1000||scanDraft.birthdayHeight<0} loading={busy} loadingLabel="Scanning blocks…" onclick={runFullRescan}><RefreshCw size={15}/>Save & rescan</Button></div>
+  <div class="modal-footer">{#if scanning}<Button variant="secondary" disabled={cancellingScan||scanStatus.status==='cancelling'} loading={cancellingScan} loadingLabel="Requesting…" onclick={cancelFullRescan}>Cancel scan</Button>{:else}<Button variant="secondary" onclick={() => {scanOpen=false;scanDraft={...scan};}}>Close</Button>{/if}<Button disabled={scanning||!scanCredential||scanDraft.gapLimit<20||scanDraft.gapLimit>1000||scanDraft.birthdayHeight<0} loading={scanning} loadingLabel="Scanning blocks…" onclick={runFullRescan}><RefreshCw size={15}/>Save & rescan</Button></div>
 </Modal>
 <Modal open={nodeOpen} title="Connect Bitcoin Core" description="Each wallet keeps isolated, encrypted RPC credentials. Use direct TLS or a local Tor SOCKS proxy remotely." onclose={() => nodeOpen=false}>
   <div class="theme-choice node-location"><button class:active={node.backend.type==='local_core'} onclick={() => setNodeLocation('local_core')}>This Mac</button><button class:active={node.backend.type==='remote_core'&&!node.torProxy} onclick={() => setNodeLocation('remote_core')}>Remote TLS</button><button class:active={!!node.torProxy} onclick={() => setNodeLocation('tor')}>Tor onion</button></div>

@@ -3,7 +3,7 @@ import { receiveAddresses, transactions, utxos, wallet } from '$lib/data';
 import type { ReceiveAddress, Transaction } from '$lib/types';
 import { addressPrefixForNetwork, canDiscardAddress, hasAddressPrefixForNetwork, normalizePermanentLabel } from './policy';
 import { feeRate, MAX_SUPPLEMENTAL_COIN_FLIPS, MAX_SUPPLEMENTAL_DICE_ROLLS, MIN_SUPPLEMENTAL_COIN_FLIPS, MIN_SUPPLEMENTAL_DICE_ROLLS, sats, WalletError, type CoinSelection, type FeeEstimates, type PaymentProposal, type WalletEvent, type WalletPort, type WalletSnapshot } from './contracts';
-import type { CoreNodeConfig, ExternalSigner, ExternalSignerSource, ExternalSignerWallet, MultisigPreview, MultisigProposal, MultisigWallet, RecoveryPolicyAnalysis, RecoveryTemplate, WalletProfile } from './contracts';
+import type { CoreNodeConfig, ExternalSigner, ExternalSignerSource, ExternalSignerWallet, MultisigPreview, MultisigProposal, MultisigWallet, RecoveryPolicyAnalysis, RecoveryScanStatus, RecoveryTemplate, WalletProfile } from './contracts';
 import type { PolicyDraft } from '$lib/multisig/policy';
 import { descriptorPreview, MULTISIG_ACCOUNT_PATH, normalizeCosigner, validatePolicyDraft } from '$lib/multisig/policy';
 
@@ -57,6 +57,7 @@ export class DummyWalletAdapter implements WalletPort {
   #balance = wallet.balance;
   #nodeConfig: CoreNodeConfig = { backend: { type: 'local_core', url: 'http://127.0.0.1:18443' }, auth: 'cookie', username: null };
   #scanSettings = { birthdayHeight: 0, gapLimit: 20 };
+  #scanStatus: RecoveryScanStatus = { status: 'idle', birthdayHeight: 0, gapLimit: 20, currentHeight: 0, targetHeight: 0, processedBlocks: 0, totalBlocks: 0, startedAt: 0, updatedAt: 0 };
   #trezorPinUnlocked = false;
   #secureStorageRetryPending = typeof location !== 'undefined'
     && new URLSearchParams(location.search).has('fixture-secure-storage-retry');
@@ -170,7 +171,29 @@ export class DummyWalletAdapter implements WalletPort {
   async testNodeConnection() { return { connected: true, blocks: 301, backend: structuredClone(this.#nodeConfig) }; }
   async recoveryScanSettings() { return { ...this.#scanSettings }; }
   async saveRecoveryScanSettings(birthdayHeight: number, gapLimit: number, credential: string) { if (!this.#selectedWalletId || credential !== this.#credentials.get(this.#selectedWalletId)) throw new WalletError('invalid_credential', 'Incorrect app PIN.'); if (!Number.isInteger(birthdayHeight)||birthdayHeight<0||!Number.isInteger(gapLimit)||gapLimit<20||gapLimit>1000) throw new WalletError('internal_error','Invalid recovery scan settings.'); this.#scanSettings={birthdayHeight,gapLimit}; return {...this.#scanSettings}; }
-  async fullRescan(credential: string) { if (!this.#selectedWalletId || credential !== this.#credentials.get(this.#selectedWalletId)) throw new WalletError('invalid_credential', 'Incorrect app PIN.'); return this.snapshot(); }
+  async recoveryScanStatus() { return structuredClone(this.#scanStatus); }
+  async fullRescan(credential: string) {
+    if (!this.#selectedWalletId || credential !== this.#credentials.get(this.#selectedWalletId)) throw new WalletError('invalid_credential', 'Incorrect app PIN.');
+    if (this.#scanStatus.status === 'running' || this.#scanStatus.status === 'cancelling') throw new WalletError('scan_in_progress', 'A recovery scan is already running for this wallet.');
+    const startedAt = Math.floor(Date.now() / 1000);
+    const totalBlocks = 8;
+    this.#scanStatus = { status: 'running', ...this.#scanSettings, currentHeight: this.#scanSettings.birthdayHeight, targetHeight: 301, processedBlocks: 0, totalBlocks, startedAt, updatedAt: startedAt };
+    for (let processedBlocks = 1; processedBlocks <= totalBlocks; processedBlocks += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      if (this.#scanStatus.status === 'cancelling') {
+        this.#scanStatus = { ...this.#scanStatus, status: 'cancelled', updatedAt: Math.floor(Date.now() / 1000) };
+        throw new WalletError('scan_cancelled', 'Recovery scan cancelled. Saved progress remains safe; start it again to continue.');
+      }
+      this.#scanStatus = { ...this.#scanStatus, currentHeight: Math.floor((301 * processedBlocks) / totalBlocks), processedBlocks, updatedAt: Math.floor(Date.now() / 1000) };
+    }
+    this.#scanStatus = { ...this.#scanStatus, status: 'completed', currentHeight: 301, updatedAt: Math.floor(Date.now() / 1000) };
+    return this.snapshot();
+  }
+  async cancelFullRescan() {
+    if (this.#scanStatus.status !== 'running') throw new WalletError('scan_not_running', 'There is no active recovery scan to cancel.');
+    this.#scanStatus = { ...this.#scanStatus, status: 'cancelling', updatedAt: Math.floor(Date.now() / 1000) };
+    return structuredClone(this.#scanStatus);
+  }
 
   async snapshot(): Promise<WalletSnapshot> {
     if (!this.#selectedWalletId || !this.#unlockedWalletIds.has(this.#selectedWalletId)) {

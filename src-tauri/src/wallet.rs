@@ -31,7 +31,10 @@ use std::{
     io::{Read, Write},
     path::{Path, PathBuf},
     str::FromStr,
-    sync::{Arc, Mutex, MutexGuard},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex, MutexGuard,
+    },
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 use tauri::{AppHandle, Manager, State, WebviewWindow};
@@ -460,6 +463,12 @@ pub struct AppState {
     pending_hardware_pins: Mutex<HashMap<String, PendingHardwarePin>>,
     node_auth: Mutex<HashMap<Uuid, NodeAuthSession>>,
     saved_files: Mutex<HashMap<String, SavedFileReveal>>,
+    recovery_scans: Mutex<HashMap<Uuid, ActiveRecoveryScan>>,
+}
+
+struct ActiveRecoveryScan {
+    run_id: String,
+    cancel: Arc<AtomicBool>,
 }
 
 struct SavedFileReveal {
@@ -756,6 +765,20 @@ pub struct NodeStatusDto {
 pub struct RecoveryScanSettingsDto {
     birthday_height: u32,
     gap_limit: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecoveryScanStatusDto {
+    status: String,
+    birthday_height: u32,
+    gap_limit: u32,
+    current_height: u32,
+    target_height: u32,
+    processed_blocks: u32,
+    total_blocks: u32,
+    started_at: u64,
+    updated_at: u64,
 }
 
 #[derive(Serialize)]
@@ -1767,6 +1790,19 @@ fn init_app_schema(db: &Connection) -> ApiResult<()> {
             original_address TEXT,
             original_label TEXT NOT NULL,
             created_at INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS groot_recovery_scans (
+            singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
+            run_id TEXT NOT NULL,
+            status TEXT NOT NULL CHECK(status IN ('running', 'cancelling', 'cancelled', 'completed', 'interrupted', 'failed')),
+            birthday_height INTEGER NOT NULL CHECK(birthday_height >= 0),
+            gap_limit INTEGER NOT NULL CHECK(gap_limit BETWEEN 20 AND 1000),
+            current_height INTEGER NOT NULL CHECK(current_height >= 0),
+            target_height INTEGER NOT NULL CHECK(target_height >= 0),
+            processed_blocks INTEGER NOT NULL CHECK(processed_blocks >= 0),
+            total_blocks INTEGER NOT NULL CHECK(total_blocks >= 0),
+            started_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
         );",
     )
     .map_err(internal)?;
@@ -2011,6 +2047,168 @@ fn load_recovery_scan_settings(db: &Connection) -> ApiResult<RecoveryScanSetting
             gap_limit: MIN_RECOVERY_GAP_LIMIT,
         })
     })
+}
+
+struct RecoveryScanRecord {
+    run_id: String,
+    status: RecoveryScanStatusDto,
+}
+
+fn idle_recovery_scan_status(settings: &RecoveryScanSettingsDto) -> RecoveryScanStatusDto {
+    RecoveryScanStatusDto {
+        status: "idle".to_owned(),
+        birthday_height: settings.birthday_height,
+        gap_limit: settings.gap_limit,
+        current_height: 0,
+        target_height: 0,
+        processed_blocks: 0,
+        total_blocks: 0,
+        started_at: 0,
+        updated_at: 0,
+    }
+}
+
+fn load_recovery_scan_record(db: &Connection) -> ApiResult<Option<RecoveryScanRecord>> {
+    db.query_row(
+        "SELECT run_id, status, birthday_height, gap_limit, current_height, target_height,
+                processed_blocks, total_blocks, started_at, updated_at
+         FROM groot_recovery_scans WHERE singleton = 1",
+        [],
+        |row| {
+            Ok(RecoveryScanRecord {
+                run_id: row.get(0)?,
+                status: RecoveryScanStatusDto {
+                    status: row.get(1)?,
+                    birthday_height: row.get(2)?,
+                    gap_limit: row.get(3)?,
+                    current_height: row.get(4)?,
+                    target_height: row.get(5)?,
+                    processed_blocks: row.get(6)?,
+                    total_blocks: row.get(7)?,
+                    started_at: row.get(8)?,
+                    updated_at: row.get(9)?,
+                },
+            })
+        },
+    )
+    .optional()
+    .map_err(internal)
+}
+
+fn reconcile_recovery_scan_record(
+    db: &Connection,
+    active_run_id: Option<&str>,
+) -> ApiResult<Option<RecoveryScanRecord>> {
+    let Some(mut record) = load_recovery_scan_record(db)? else {
+        return Ok(None);
+    };
+    if matches!(record.status.status.as_str(), "running" | "cancelling")
+        && active_run_id != Some(record.run_id.as_str())
+    {
+        let updated_at = now();
+        let changed = db
+            .execute(
+                "UPDATE groot_recovery_scans SET status = 'interrupted', updated_at = ?1
+                 WHERE singleton = 1 AND run_id = ?2 AND status IN ('running', 'cancelling')",
+                params![updated_at, record.run_id],
+            )
+            .map_err(internal)?;
+        if changed == 1 {
+            record.status.status = "interrupted".to_owned();
+            record.status.updated_at = updated_at;
+        } else {
+            return load_recovery_scan_record(db);
+        }
+    }
+    Ok(Some(record))
+}
+
+fn start_recovery_scan_record(
+    db: &Connection,
+    run_id: &str,
+    settings: &RecoveryScanSettingsDto,
+    target_height: u32,
+) -> ApiResult<RecoveryScanStatusDto> {
+    let started_at = now();
+    let total_blocks = target_height
+        .saturating_sub(settings.birthday_height)
+        .saturating_add(1);
+    let status = RecoveryScanStatusDto {
+        status: "running".to_owned(),
+        birthday_height: settings.birthday_height,
+        gap_limit: settings.gap_limit,
+        current_height: settings.birthday_height.saturating_sub(1),
+        target_height,
+        processed_blocks: 0,
+        total_blocks,
+        started_at,
+        updated_at: started_at,
+    };
+    db.execute(
+        "INSERT INTO groot_recovery_scans
+         (singleton, run_id, status, birthday_height, gap_limit, current_height, target_height,
+          processed_blocks, total_blocks, started_at, updated_at)
+         VALUES (1, ?1, 'running', ?2, ?3, ?4, ?5, 0, ?6, ?7, ?7)
+         ON CONFLICT(singleton) DO UPDATE SET
+           run_id = excluded.run_id, status = excluded.status,
+           birthday_height = excluded.birthday_height, gap_limit = excluded.gap_limit,
+           current_height = excluded.current_height, target_height = excluded.target_height,
+           processed_blocks = excluded.processed_blocks, total_blocks = excluded.total_blocks,
+           started_at = excluded.started_at, updated_at = excluded.updated_at",
+        params![
+            run_id,
+            status.birthday_height,
+            status.gap_limit,
+            status.current_height,
+            status.target_height,
+            status.total_blocks,
+            status.started_at,
+        ],
+    )
+    .map_err(internal)?;
+    Ok(status)
+}
+
+fn update_recovery_scan_progress(
+    db: &Connection,
+    run_id: &str,
+    current_height: u32,
+    processed_blocks: u32,
+) -> ApiResult<()> {
+    let changed = db
+        .execute(
+            "UPDATE groot_recovery_scans
+             SET current_height = ?1, processed_blocks = ?2, updated_at = ?3
+             WHERE singleton = 1 AND run_id = ?4 AND status IN ('running', 'cancelling')",
+            params![current_height, processed_blocks, now(), run_id],
+        )
+        .map_err(internal)?;
+    if changed == 1 {
+        Ok(())
+    } else {
+        Err(api_error(
+            "scan_interrupted",
+            "Recovery scan state changed unexpectedly. Start the scan again.",
+        ))
+    }
+}
+
+fn finish_recovery_scan_record(db: &Connection, run_id: &str, status: &str) -> ApiResult<()> {
+    let changed = db
+        .execute(
+            "UPDATE groot_recovery_scans SET status = ?1, updated_at = ?2
+             WHERE singleton = 1 AND run_id = ?3 AND status IN ('running', 'cancelling')",
+            params![status, now(), run_id],
+        )
+        .map_err(internal)?;
+    if changed == 1 {
+        Ok(())
+    } else {
+        Err(api_error(
+            "scan_interrupted",
+            "Recovery scan state changed unexpectedly. Start the scan again.",
+        ))
+    }
 }
 
 /// Returns the minimum stop-gap needed to rediscover every address Groot has
@@ -3318,20 +3516,23 @@ fn sync_loaded_wallet(
 }
 
 fn full_rescan_loaded_wallet(
-    app: &AppHandle,
-    state: &State<'_, AppState>,
+    rpc: Arc<Client>,
     wallet: &mut PersistedWallet<Connection>,
     db: &mut Connection,
-    birthday_height: u32,
+    settings: &RecoveryScanSettingsDto,
+    run_id: &str,
+    cancel: &AtomicBool,
 ) -> ApiResult<()> {
-    let rpc = Arc::new(rpc_client(app, state)?);
     let tip = checked_block_height(rpc.as_ref())?;
-    if u64::from(birthday_height) > tip {
+    if u64::from(settings.birthday_height) > tip {
         return Err(api_error(
             "invalid_scan_settings",
             "Wallet birthday cannot be above the node's current block height.",
         ));
     }
+    let target_height = u32::try_from(tip)
+        .map_err(|_| internal("The node height exceeds the supported recovery range."))?;
+    start_recovery_scan_record(db, run_id, settings, target_height)?;
     let genesis = rpc.get_block_hash(0).map_err(internal)?;
     let checkpoint = CheckPoint::new(BlockId {
         height: 0,
@@ -3340,12 +3541,27 @@ fn full_rescan_loaded_wallet(
     let expected_mempool = wallet
         .transactions()
         .filter(|tx| tx.chain_position.is_unconfirmed());
-    let mut emitter = Emitter::new(rpc, checkpoint, birthday_height, expected_mempool);
+    let mut emitter = Emitter::new(rpc, checkpoint, settings.birthday_height, expected_mempool);
+    let mut processed_blocks = 0_u32;
     while let Some(block) = emitter.next_block().map_err(internal)? {
+        if cancel.load(Ordering::Acquire) {
+            return Err(api_error(
+                "scan_cancelled",
+                "Recovery scan cancelled. Saved progress remains safe; start it again to continue.",
+            ));
+        }
         wallet
             .apply_block_connected_to(&block.block, block.block_height(), block.connected_to())
             .map_err(internal)?;
         wallet.persist(db).map_err(internal)?;
+        processed_blocks = processed_blocks.saturating_add(1);
+        update_recovery_scan_progress(db, run_id, block.block_height(), processed_blocks)?;
+    }
+    if cancel.load(Ordering::Acquire) {
+        return Err(api_error(
+            "scan_cancelled",
+            "Recovery scan cancelled. Saved progress remains safe; start it again to continue.",
+        ));
     }
     let mempool = emitter.mempool().map_err(internal)?;
     wallet.apply_evicted_txs(mempool.evicted);
@@ -4209,29 +4425,133 @@ pub fn recovery_scan_settings_save(
 }
 
 #[tauri::command]
-pub fn wallet_full_rescan(
+pub fn recovery_scan_status(
     app: AppHandle,
     state: State<'_, AppState>,
-    credential: String,
-) -> ApiResult<WalletSnapshotDto> {
-    let _operation = operation_guard(&state)?;
+) -> ApiResult<RecoveryScanStatusDto> {
     require_unlocked(&app, &state)?;
-    let credential = Zeroizing::new(credential);
-    check_auth_throttle(&app, &state)?;
-    let verified = verify_selected_credential(&app, credential.as_str());
-    record_auth_result(&app, &state, &verified)?;
-    verified?;
     let profile = selected_profile(&app)?;
-    let (mut db, is_multisig) = match profile.kind {
-        WalletKind::Multisig => (open_multisig_db(&app)?, true),
-        WalletKind::SingleKey | WalletKind::WatchOnly => (open_db(&app)?, false),
+    let db = match profile.kind {
+        WalletKind::Multisig => open_multisig_db(&app)?,
+        WalletKind::SingleKey | WalletKind::WatchOnly => open_db(&app)?,
     };
     let settings = load_recovery_scan_settings(&db)?;
-    let mut wallet = load_wallet(&mut db)?;
-    full_rescan_loaded_wallet(&app, &state, &mut wallet, &mut db, settings.birthday_height)?;
-    let snapshot = snapshot_from(&wallet, &db, Some(now().to_string()), is_multisig)?;
-    enqueue_snapshot_notifications(&mut db, &snapshot)?;
-    Ok(snapshot)
+    let active_run_id = state
+        .recovery_scans
+        .lock()
+        .map_err(internal)?
+        .get(&profile.id)
+        .map(|active| active.run_id.clone());
+    let Some(record) = reconcile_recovery_scan_record(&db, active_run_id.as_deref())? else {
+        return Ok(idle_recovery_scan_status(&settings));
+    };
+    Ok(record.status)
+}
+
+#[tauri::command]
+pub fn wallet_full_rescan_cancel(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> ApiResult<RecoveryScanStatusDto> {
+    require_unlocked(&app, &state)?;
+    let profile = selected_profile(&app)?;
+    let (run_id, cancel) = {
+        let scans = state.recovery_scans.lock().map_err(internal)?;
+        let active = scans.get(&profile.id).ok_or_else(|| {
+            api_error(
+                "scan_not_running",
+                "There is no active recovery scan to cancel.",
+            )
+        })?;
+        (active.run_id.clone(), Arc::clone(&active.cancel))
+    };
+    cancel.store(true, Ordering::Release);
+    let db = match profile.kind {
+        WalletKind::Multisig => open_multisig_db(&app)?,
+        WalletKind::SingleKey | WalletKind::WatchOnly => open_db(&app)?,
+    };
+    db.execute(
+        "UPDATE groot_recovery_scans SET status = 'cancelling', updated_at = ?1
+         WHERE singleton = 1 AND run_id = ?2 AND status = 'running'",
+        params![now(), run_id],
+    )
+    .map_err(internal)?;
+    load_recovery_scan_record(&db)?
+        .map(|record| record.status)
+        .ok_or_else(|| internal("The recovery scan status is unavailable."))
+}
+
+#[tauri::command]
+pub async fn wallet_full_rescan(
+    app: AppHandle,
+    credential: String,
+) -> ApiResult<WalletSnapshotDto> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let _operation = operation_guard(&state)?;
+        require_unlocked(&app, &state)?;
+        let credential = Zeroizing::new(credential);
+        check_auth_throttle(&app, &state)?;
+        let verified = verify_selected_credential(&app, credential.as_str());
+        record_auth_result(&app, &state, &verified)?;
+        verified?;
+        let profile = selected_profile(&app)?;
+        let (mut db, is_multisig) = match profile.kind {
+            WalletKind::Multisig => (open_multisig_db(&app)?, true),
+            WalletKind::SingleKey | WalletKind::WatchOnly => (open_db(&app)?, false),
+        };
+        let settings = load_recovery_scan_settings(&db)?;
+        let run_id = Uuid::new_v4().to_string();
+        let cancel = Arc::new(AtomicBool::new(false));
+        {
+            let mut scans = state.recovery_scans.lock().map_err(internal)?;
+            if scans.contains_key(&profile.id) {
+                return Err(api_error(
+                    "scan_in_progress",
+                    "A recovery scan is already running for this wallet.",
+                ));
+            }
+            scans.insert(
+                profile.id,
+                ActiveRecoveryScan {
+                    run_id: run_id.clone(),
+                    cancel: Arc::clone(&cancel),
+                },
+            );
+        }
+        let scan_result: ApiResult<WalletSnapshotDto> = (|| {
+            let rpc = Arc::new(rpc_client(&app, &state)?);
+            let mut wallet = load_wallet(&mut db)?;
+            full_rescan_loaded_wallet(rpc, &mut wallet, &mut db, &settings, &run_id, &cancel)?;
+            let snapshot = snapshot_from(&wallet, &db, Some(now().to_string()), is_multisig)?;
+            enqueue_snapshot_notifications(&mut db, &snapshot)?;
+            Ok(snapshot)
+        })();
+        let terminal_status = match &scan_result {
+            Ok(_) => "completed",
+            Err(error) if error.code == "scan_cancelled" => "cancelled",
+            Err(_) => "failed",
+        };
+        let finish_result = load_recovery_scan_record(&db).and_then(|record| {
+            if record.is_some_and(|record| record.run_id == run_id) {
+                finish_recovery_scan_record(&db, &run_id, terminal_status)
+            } else {
+                Ok(())
+            }
+        });
+        state
+            .recovery_scans
+            .lock()
+            .map_err(internal)?
+            .remove(&profile.id);
+        match (scan_result, finish_result) {
+            (Ok(snapshot), Ok(())) => Ok(snapshot),
+            (Err(error), _) => Err(error),
+            (Ok(_), Err(error)) => Err(error),
+        }
+    })
+    .await
+    .map_err(internal)?
 }
 
 #[tauri::command]
@@ -7138,6 +7458,88 @@ mod tests {
                 [],
             )
             .is_err());
+    }
+
+    #[test]
+    fn recovery_scan_progress_is_persisted_and_terminal_transitions_are_guarded() {
+        let db = Connection::open_in_memory().unwrap();
+        init_app_schema(&db).unwrap();
+        let settings = RecoveryScanSettingsDto {
+            birthday_height: 10,
+            gap_limit: 250,
+        };
+        assert_eq!(
+            idle_recovery_scan_status(&settings).status,
+            "idle".to_owned()
+        );
+        let started = start_recovery_scan_record(&db, "run-one", &settings, 109).unwrap();
+        assert_eq!(started.total_blocks, 100);
+        assert_eq!(started.current_height, 9);
+        update_recovery_scan_progress(&db, "run-one", 34, 25).unwrap();
+        let progress = load_recovery_scan_record(&db).unwrap().unwrap();
+        assert_eq!(progress.run_id, "run-one");
+        assert_eq!(progress.status.status, "running");
+        assert_eq!(progress.status.current_height, 34);
+        assert_eq!(progress.status.processed_blocks, 25);
+
+        db.execute(
+            "UPDATE groot_recovery_scans SET status = 'cancelling' WHERE singleton = 1",
+            [],
+        )
+        .unwrap();
+        update_recovery_scan_progress(&db, "run-one", 35, 26).unwrap();
+        finish_recovery_scan_record(&db, "run-one", "cancelled").unwrap();
+        assert_eq!(
+            load_recovery_scan_record(&db)
+                .unwrap()
+                .unwrap()
+                .status
+                .status,
+            "cancelled"
+        );
+        assert_eq!(
+            update_recovery_scan_progress(&db, "run-one", 36, 27)
+                .unwrap_err()
+                .code,
+            "scan_interrupted"
+        );
+        assert_eq!(
+            finish_recovery_scan_record(&db, "wrong-run", "completed")
+                .unwrap_err()
+                .code,
+            "scan_interrupted"
+        );
+    }
+
+    #[test]
+    fn recovery_scan_restart_marks_persisted_work_interrupted() {
+        let directory = std::env::temp_dir().join(format!("groot-scan-restart-{}", Uuid::new_v4()));
+        fs::create_dir_all(&directory).unwrap();
+        let path = directory.join("wallet.sqlite");
+        {
+            let db = Connection::open(&path).unwrap();
+            init_app_schema(&db).unwrap();
+            let settings = RecoveryScanSettingsDto {
+                birthday_height: 100,
+                gap_limit: 80,
+            };
+            start_recovery_scan_record(&db, "persisted-run", &settings, 199).unwrap();
+            update_recovery_scan_progress(&db, "persisted-run", 124, 25).unwrap();
+            let active = reconcile_recovery_scan_record(&db, Some("persisted-run"))
+                .unwrap()
+                .unwrap();
+            assert_eq!(active.status.status, "running");
+        }
+        {
+            let db = Connection::open(&path).unwrap();
+            init_app_schema(&db).unwrap();
+            let interrupted = reconcile_recovery_scan_record(&db, None).unwrap().unwrap();
+            assert_eq!(interrupted.run_id, "persisted-run");
+            assert_eq!(interrupted.status.status, "interrupted");
+            assert_eq!(interrupted.status.current_height, 124);
+            assert_eq!(interrupted.status.processed_blocks, 25);
+        }
+        fs::remove_dir_all(directory).unwrap();
     }
 
     #[test]

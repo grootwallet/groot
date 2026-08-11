@@ -154,6 +154,17 @@ export type CoreNodeConfig = {
 };
 export type NodeStatus = { connected: boolean; blocks: number; backend: CoreNodeConfig };
 export type RecoveryScanSettings = { birthdayHeight: number; gapLimit: number };
+export type RecoveryScanStatus = {
+  status: 'idle' | 'running' | 'cancelling' | 'cancelled' | 'completed' | 'interrupted' | 'failed';
+  birthdayHeight: number;
+  gapLimit: number;
+  currentHeight: number;
+  targetHeight: number;
+  processedBlocks: number;
+  totalBlocks: number;
+  startedAt: number;
+  updatedAt: number;
+};
 export type SupplementalEntropyInput = { source: 'coin' | 'dice'; outcomes: string };
 export const MIN_SUPPLEMENTAL_COIN_FLIPS = 128;
 export const MAX_SUPPLEMENTAL_COIN_FLIPS = 256;
@@ -214,6 +225,10 @@ export type WalletErrorCode =
   | 'psbt_too_large'
   | 'proposal_mismatch'
   | 'address_gap_limit_reached'
+  | 'scan_in_progress'
+  | 'scan_not_running'
+  | 'scan_cancelled'
+  | 'scan_interrupted'
   | 'unknown_signer'
   | 'no_new_signatures'
   | 'unsupported_sighash'
@@ -267,7 +282,9 @@ export interface WalletPort {
   testNodeConnection(): Promise<NodeStatus>;
   recoveryScanSettings(): Promise<RecoveryScanSettings>;
   saveRecoveryScanSettings(birthdayHeight: number, gapLimit: number, credential: string): Promise<RecoveryScanSettings>;
+  recoveryScanStatus(): Promise<RecoveryScanStatus>;
   fullRescan(credential: string): Promise<WalletSnapshot>;
+  cancelFullRescan(): Promise<RecoveryScanStatus>;
   snapshot(): Promise<WalletSnapshot>;
   sync(): Promise<WalletSnapshot>;
   createAddress(label: string): Promise<ReceiveAddress>;

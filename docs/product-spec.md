@@ -49,7 +49,7 @@ Desktop navigation lists wallet profiles directly instead of hiding them in a na
 
 1. Accept exactly 24 valid BIP39 words and the original wallet passphrase.
 2. Restore descriptors and verify the expected wallet identity where local metadata exists.
-3. Full scan from a configurable birthday with a bounded descriptor gap limit. Height `0` is the safest default. A later birthday is an explicit performance/privacy tradeoff and can omit older history.
+3. Full scan from a configurable birthday with a bounded descriptor gap limit. Height `0` is the safest default. A later birthday is an explicit performance/privacy tradeoff and can omit older history. The scan runs outside the UI thread, reports persisted block progress, and can be cancelled between blocks. Cancellation or process interruption preserves already-committed wallet state and is presented as an explicit safe-to-retry terminal state; retry starts a fresh authoritative pass from the configured birthday.
 
 ### Unlock
 

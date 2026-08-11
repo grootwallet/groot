@@ -13,6 +13,7 @@ use bdk_wallet::{
     KeychainKind, PersistedWallet, SignOptions, Wallet,
 };
 use rand::{rngs::OsRng, RngCore};
+use std::time::{Duration, Instant};
 use std::{fs, path::PathBuf, str::FromStr, sync::Arc};
 
 struct TemporaryWalletDatabase(PathBuf);
@@ -526,4 +527,84 @@ fn birthday_and_gap_limits_omit_then_restore_known_history() {
         "restored birthday and gap recover all funds"
     );
     assert_eq!(restored.1, 2, "both payment history entries are restored");
+}
+
+#[test]
+#[ignore = "requires the isolated Bitcoin Core regtest harness"]
+fn extended_gap_large_history_recovers_within_the_ci_resource_envelope() {
+    assert!(std::env::var_os("GROOT_RUN_REGTEST").is_some());
+    let keys = keys();
+    let external = descriptor(&keys, 0, None);
+    let internal = descriptor(&keys, 1, None);
+    let mut source_db = Connection::open_in_memory().unwrap();
+    let mut source = Wallet::create(external.clone(), internal.clone())
+        .network(Network::Regtest)
+        .lookahead(150)
+        .create_wallet(&mut source_db)
+        .expect("source descriptor wallet");
+    let addresses = (0..=120)
+        .map(|_| source.reveal_next_address(KeychainKind::External).address)
+        .collect::<Vec<_>>();
+    source.persist(&mut source_db).unwrap();
+
+    let rpc = rpc();
+    let mining = rpc
+        .get_new_address(Some("groot history stress"), None)
+        .unwrap()
+        .require_network(Network::Regtest)
+        .unwrap();
+    for batch in addresses[..64].chunks(16) {
+        for address in batch {
+            let _: bdk_wallet::bitcoin::Txid = rpc
+                .call(
+                    "sendtoaddress",
+                    &[
+                        serde_json::json!(address.to_string()),
+                        serde_json::json!(0.0001),
+                    ],
+                )
+                .expect("fund sequential history address");
+        }
+        rpc.generate_to_address(1, &mining)
+            .expect("mine sequential history batch");
+    }
+    let _: bdk_wallet::bitcoin::Txid = rpc
+        .call(
+            "sendtoaddress",
+            &[
+                serde_json::json!(addresses[120].to_string()),
+                serde_json::json!(0.0002),
+            ],
+        )
+        .expect("fund address beyond a 56-address unused run");
+    rpc.generate_to_address(1, &mining)
+        .expect("mine extended-gap payment");
+
+    let recover = |lookahead: u32| {
+        let started = Instant::now();
+        let mut db = Connection::open_in_memory().unwrap();
+        let mut wallet = Wallet::create(external.clone(), internal.clone())
+            .network(Network::Regtest)
+            .lookahead(lookahead)
+            .create_wallet(&mut db)
+            .expect("large-history recovery wallet");
+        rescan_from(&mut wallet, &mut db, 0);
+        (
+            wallet.balance().total().to_sat(),
+            wallet.transactions().count(),
+            started.elapsed(),
+        )
+    };
+
+    let bounded_default = recover(20);
+    assert_eq!(bounded_default.0, 640_000);
+    assert_eq!(bounded_default.1, 64);
+    let extended = recover(80);
+    assert_eq!(extended.0, 660_000);
+    assert_eq!(extended.1, 65);
+    assert!(
+        extended.2 < Duration::from_secs(30),
+        "65 transactions across 121 derived addresses must recover within the 30-second CI envelope; took {:?}",
+        extended.2
+    );
 }

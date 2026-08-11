@@ -681,6 +681,12 @@ test('recovery scan and Tor node controls preserve explicit safety choices', asy
   await expect(page.getByRole('button', { name: 'Save & rescan' })).toBeDisabled();
   await page.getByLabel('Address gap limit').fill('50');
   await page.getByRole('button', { name: 'Save & rescan' }).click();
+  await expect(page.getByRole('progressbar', { name: 'Recovery scan progress' })).toBeVisible();
+  await page.getByRole('button', { name: 'Cancel scan' }).click();
+  await expect(page.getByText('Scan cancelled', { exact: true })).toBeVisible();
+  await expect(page.getByText(/Saved progress remains safe/)).toBeVisible();
+  await page.getByLabel('Wallet passphrase', { exact: true }).fill('prototype-passphrase');
+  await page.getByRole('button', { name: 'Save & rescan' }).click();
   await expect(page.getByRole('button', { name: /Recovery scan.*gap limit 50/ })).toBeVisible();
 
   await page.getByRole('button', { name: /Bitcoin Core node/ }).click();

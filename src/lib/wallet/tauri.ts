@@ -91,7 +91,9 @@ export class TauriWalletAdapter implements WalletPort {
   testNodeConnection() { return command<NodeStatus>('node_connection_test'); }
   recoveryScanSettings() { return command<import('./contracts').RecoveryScanSettings>('recovery_scan_settings'); }
   saveRecoveryScanSettings(birthdayHeight: number, gapLimit: number, credential: string) { return command<import('./contracts').RecoveryScanSettings>('recovery_scan_settings_save', { birthdayHeight, gapLimit, credential }); }
+  recoveryScanStatus() { return command<import('./contracts').RecoveryScanStatus>('recovery_scan_status'); }
   async fullRescan(credential: string) { const snapshot = normalizeSnapshot(await command<WalletSnapshot>('wallet_full_rescan', { credential })); this.#last = snapshot; return snapshot; }
+  cancelFullRescan() { return command<import('./contracts').RecoveryScanStatus>('wallet_full_rescan_cancel'); }
   async snapshot() {
     const snapshot = normalizeSnapshot(await command<WalletSnapshot>('wallet_snapshot'));
     this.#last = snapshot;
