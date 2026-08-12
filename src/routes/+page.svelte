@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Activity, ArrowDownToLine, ArrowUpFromLine, CircleDot, Eye, EyeOff, FileKey, RefreshCw, ShieldCheck } from '@lucide/svelte';
+  import { Activity, ArrowDownToLine, ArrowUpFromLine, ChevronRight, CircleDot, Clock3, Eye, EyeOff, FileKey, RefreshCw, ShieldCheck } from '@lucide/svelte';
   import Button from '$lib/components/Button.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import PasswordField from '$lib/components/PasswordField.svelte';
@@ -7,7 +7,8 @@
   import TxDetailsModal from '$lib/components/TxDetailsModal.svelte';
   import { btc, shortSats } from '$lib/data';
   import { toast } from '$lib/stores/toasts';
-  import { walletService, WalletError, type MultisigWallet, type WalletProfile, type WalletSnapshot } from '$lib/wallet';
+  import { walletService, WalletError, type MultisigProposal, type MultisigWallet, type WalletProfile, type WalletSnapshot } from '$lib/wallet';
+  import { latestActiveProposal } from '$lib/wallet/proposal-resume';
   import { pendingBalance, sortTransactionsNewestFirst } from '$lib/wallet/presentation';
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
@@ -25,6 +26,7 @@
   let syncing = $state(false);
   let snapshot = $state<WalletSnapshot | null>(null);
   let multisigWallet = $state<MultisigWallet | null>(null);
+  let activeProposal = $state<MultisigProposal | null>(null);
   let selected = $state<Transaction | null>(null);
   let multisig = $state(false);
   let moreOpen = $state(false);
@@ -40,6 +42,9 @@
   let initialDataLoading = $state(true);
   const pendingSats = $derived(snapshot ? pendingBalance(snapshot.balance) : 0);
   const recentTransactions = $derived(sortTransactionsNewestFirst(snapshot?.transactions ?? []).slice(0, 3));
+  const proposalHref = $derived(multisig ? '/multisig/send' : '/send');
+  const proposalTitle = $derived(activeProposal?.canFinalize ? 'Payment ready to broadcast' : 'Signing in progress');
+  const proposalProgress = $derived(activeProposal ? `${activeProposal.signed} of ${activeProposal.required} signatures collected` : '');
   onMount(loadSnapshot);
   async function loadSnapshot() {
     loadError = '';
@@ -50,10 +55,18 @@
       selectedProfile = registry.wallets.find((wallet) => wallet.id === registry.selectedWalletId) ?? null;
       multisig = selectedProfile?.kind === 'multisig';
       if (multisig) {
-        [snapshot, multisigWallet] = await Promise.all([walletService.multisigSnapshot(), walletService.multisigWallet()]);
+        const [nextSnapshot, nextWallet, proposals] = await Promise.all([walletService.multisigSnapshot(), walletService.multisigWallet(), walletService.multisigProposals()]);
+        snapshot = nextSnapshot;
+        multisigWallet = nextWallet;
+        activeProposal = latestActiveProposal(proposals);
       } else {
         multisigWallet = null;
-        snapshot = await walletService.snapshot();
+        const [nextSnapshot, proposals] = await Promise.all([
+          walletService.snapshot(),
+          selectedProfile?.kind === 'watch_only' ? walletService.externalSignerProposals() : Promise.resolve([])
+        ]);
+        snapshot = nextSnapshot;
+        activeProposal = latestActiveProposal(proposals);
       }
       initialDataLoading = false;
     } catch (cause) {
@@ -137,6 +150,13 @@
     <WalletSkeleton variant="balance" />
   {/if}
   {#if !loadError}
+  {#if activeProposal}
+    <a class="active-proposal-callout" class:ready={activeProposal.canFinalize} href={proposalHref} aria-label={`Resume payment, ${proposalProgress}`}>
+      <span class="active-proposal-icon"><Clock3 size={17}/></span>
+      <span class="active-proposal-copy"><strong>{proposalTitle}</strong><small>{proposalProgress}</small></span>
+      <span class="active-proposal-action">Resume <ChevronRight size={15}/></span>
+    </a>
+  {/if}
   <div class="primary-actions">
     <MobileWalletSwitcher profiles={walletShell.profiles()} selectedWalletId={walletShell.selectedWalletId()} onselect={walletShell.selectWallet} />
     <div class="overview-more" bind:this={moreMenu}>

@@ -266,6 +266,48 @@ test('requires explicit confirmation before discarding a multisig proposal', asy
   await expect(page.getByText('2,481,240 sats')).toBeVisible();
 });
 
+test('surfaces partial and fully signed proposals on Overview', async ({ page }) => {
+  await page.goto('/');
+  const isMobile = (page.viewportSize()?.width ?? 1180) <= 760;
+  if (isMobile) {
+    await page.getByRole('link', { name: 'Settings' }).click();
+    await page.locator('.wallet-manager').getByRole('button', { name: /Family wallet/ }).click();
+  } else {
+    await page.getByRole('complementary').getByRole('button', { name: /Family wallet/ }).click();
+  }
+  await page.getByLabel('App PIN', { exact: true }).fill('prototype-passphrase');
+  await page.getByRole('button', { name: 'Unlock wallet' }).click();
+  await page.getByRole('link', { name: 'Send', exact: true }).click();
+  await page.getByLabel('Bitcoin address').fill('bcrt1qdummy00085n8k2r7v4cx9s6jlawephgzuqf5t8ul');
+  await page.getByLabel('Payment label').fill('Overview resume test');
+  await page.getByRole('button', { name: 'Continue to amount' }).click();
+  await page.getByLabel('Amount', { exact: true }).fill('12000');
+  await page.getByRole('button', { name: 'Review payment' }).click();
+
+  await page.getByRole('button', { name: 'Sign with device' }).click();
+  await page.getByRole('button', { name: /Virtual Coldcard/ }).click();
+  await expect(page.getByRole('region', { name: 'Payment signers' }).getByText('1 of 2 collected')).toBeVisible();
+  await page.getByRole('button', { name: 'Back to overview' }).click();
+  await page.getByRole('dialog', { name: 'Leave signing?' }).getByRole('link', { name: 'Leave to overview' }).click();
+
+  const partialProposal = page.getByRole('link', { name: 'Resume payment, 1 of 2 signatures collected' });
+  await expect(partialProposal).toContainText('Signing in progress');
+  await expect(partialProposal).not.toContainText('Overview resume test');
+  await partialProposal.click();
+  await expect(page.getByRole('region', { name: 'Payment signers' }).getByText('1 of 2 collected')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Sign with device' }).click();
+  await page.getByRole('button', { name: /Virtual Trezor signer/ }).click();
+  await expect(page.getByRole('region', { name: 'Payment signers' }).getByText('2 of 2 collected')).toBeVisible();
+  await page.getByRole('button', { name: 'Back to overview' }).click();
+  await page.getByRole('dialog', { name: 'Leave signing?' }).getByRole('link', { name: 'Leave to overview' }).click();
+
+  const readyProposal = page.getByRole('link', { name: 'Resume payment, 2 of 2 signatures collected' });
+  await expect(readyProposal).toContainText('Payment ready to broadcast');
+  await readyProposal.click();
+  await expect(page.getByRole('button', { name: 'Finalize & broadcast' })).toBeVisible();
+});
+
 test('keeps advanced wallet actions compact and makes both descriptors inspectable', async ({ page }) => {
   await page.goto('/multisig');
   await page.getByRole('button', { name: 'More wallet actions' }).click();

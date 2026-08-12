@@ -63,7 +63,7 @@ Regtest builds expose a locked-screen deletion action for the selected disposabl
 
 ## Overview
 
-Show confirmed, pending, and total balance in satoshis; BTC and fiat are secondary display values only. Show sync recency and the latest three transactions. Receive and Send are the primary actions.
+Show confirmed, pending, and total balance in satoshis; BTC and fiat are secondary display values only. Show sync recency and the latest three transactions. Receive and Send are the primary actions. When the selected multisig or external-signer wallet has a persisted proposal that is still collecting signatures or is fully signed but not broadcast, show a compact status above those actions. It exposes only signature progress, distinguishes **Signing in progress** from **Payment ready to broadcast**, and resumes the exact proposal when opened.
 
 A persisted global discreet mode hides wallet amounts across Overview and activity surfaces. It remains available as a quick desktop-shell control and from the balance card; it does not alter wallet accounting or transaction data.
 
