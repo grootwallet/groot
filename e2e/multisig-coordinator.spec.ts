@@ -26,6 +26,52 @@ test('routes receive address creation through the selected wallet kind', async (
   await expect(page.getByRole('button', { name: 'New receive address' })).toBeVisible();
 });
 
+test('keeps multisig receive verification disclosure visibly expandable', async ({ page }) => {
+  await page.goto('/');
+  const isMobile = (page.viewportSize()?.width ?? 1180) <= 760;
+  if (isMobile) {
+    await page.getByRole('link', { name: 'Settings' }).click();
+    await page.locator('.wallet-manager').getByRole('button', { name: /Family wallet/ }).click();
+  } else {
+    await page.getByRole('complementary').getByRole('button', { name: /Family wallet/ }).click();
+  }
+  await page.getByLabel('App PIN', { exact: true }).fill('prototype-passphrase');
+  await page.getByRole('button', { name: 'Unlock wallet' }).click();
+  if (isMobile) await page.locator('a:visible').filter({ hasText: /^Receive$/ }).click();
+  else await page.getByRole('main').getByRole('link', { name: 'Receive' }).click();
+  await page.getByRole('button', { name: 'Verify on device' }).click();
+  await expect(page.getByRole('status', { name: 'Hardware device scan in progress' })).toBeVisible();
+
+  const dialog = page.getByRole('dialog', { name: 'Verify receive address' });
+  const details = dialog.locator('details.verification-details');
+  const summary = details.locator('summary');
+  const reviewedAddress = await dialog.locator('.readable-address-groups').textContent();
+  await expect(summary.getByText('Address details', { exact: true })).toBeVisible();
+  await expect(summary.locator('svg')).toBeVisible();
+  await expect(details).not.toHaveAttribute('open', '');
+  await summary.click();
+  await expect(details).toHaveAttribute('open', '');
+  await expect(dialog.getByText('Derivation', { exact: true })).toBeVisible();
+  await summary.click();
+  await expect(details).not.toHaveAttribute('open', '');
+  const lockedTrezor = dialog.getByRole('button', { name: /Virtual Trezor One/ });
+  await expect(lockedTrezor).toBeEnabled();
+  await expect(lockedTrezor).toContainText('Unlock');
+  await lockedTrezor.click();
+  const pinDialog = page.getByRole('dialog', { name: 'Unlock Trezor' });
+  await expect(pinDialog.getByText('Match locations, not numbers')).toBeVisible();
+  await pinDialog.getByRole('button', { name: 'Top left position' }).click();
+  await pinDialog.getByRole('button', { name: 'Bottom center position' }).click();
+  await pinDialog.getByRole('button', { name: 'Unlock Trezor' }).click();
+  await expect(dialog).toBeVisible();
+  await expect(dialog.locator('.readable-address-groups')).toHaveText(reviewedAddress ?? '');
+  await expect(dialog.getByRole('button', { name: /Virtual Trezor One/ })).toContainText('Standard wallet');
+  await dialog.getByRole('button', { name: /Virtual Trezor cosigner/ }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByRole('button', { name: /Verified on hardware/ })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
+
 test('multisig acceleration requires an explicit rate when estimates are unavailable', async ({ page }) => {
   await page.goto('/multisig/send?fixture-fee-estimates-unavailable=1&accelerate=rbf&txid=6a1b2c3d4e5f67890123456789abcdef6a1b2c3d4e5f67890123456789abcdef');
 
