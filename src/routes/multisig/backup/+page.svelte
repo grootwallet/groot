@@ -45,8 +45,8 @@
   const backupBaseName = $derived(safeTransferFilename(wallet?.name ?? 'groot-wallet'));
 
   function exportErrorMessage(cause: unknown) {
-    if (cause instanceof WalletError && cause.code === 'invalid_credential') return `That app PIN does not match ${wallet?.name ?? 'this vault'}.`;
-    if (cause instanceof WalletError && cause.code === 'wallet_locked') return 'Your previous session expired. Re-enter this vault’s app PIN to authorize the backup.';
+    if (cause instanceof WalletError && cause.code === 'invalid_credential') return `That app PIN does not match ${wallet?.name ?? 'this wallet'}.`;
+    if (cause instanceof WalletError && cause.code === 'wallet_locked') return 'Your previous session expired. Re-enter this wallet’s app PIN to authorize the backup.';
     return cause instanceof Error ? cause.message : 'Could not prepare the public backup.';
   }
 
@@ -68,7 +68,7 @@
     if (!wallet || !drill?.matchesCurrentWallet) return;
     busy = true; deleteError = '';
     try { await walletService.deleteMultisig(deletePin, confirmation); toast({ title: 'Wallet deleted', description: 'Local coordinator data was removed. Your descriptor backup remains recoverable.' }); await goto('/settings'); }
-    catch (cause) { deleteError = cause instanceof WalletError && cause.code === 'invalid_credential' ? `That app PIN does not match ${wallet.name}.` : cause instanceof Error ? cause.message : 'Could not delete the vault.'; }
+    catch (cause) { deleteError = cause instanceof WalletError && cause.code === 'invalid_credential' ? `That app PIN does not match ${wallet.name}.` : cause instanceof Error ? cause.message : 'Could not delete the wallet.'; }
     finally { deletePin = ''; busy = false; }
   }
 
@@ -91,7 +91,7 @@
     exportError = '';
     try {
       const saved = await walletService.savePublicBackup(backupFormat === 'bsms' ? `${backupBaseName}.bsms` : `${backupBaseName}-backup.json`, backup);
-      if (saved) toast({ title: 'Backup saved', description: 'The public wallet backup was written to the selected file.', tone: 'success' });
+      if (saved.saved) toast({ title: 'Backup saved', description: 'The public wallet backup was written to the selected file.', tone: 'success', action: saved.revealToken && saved.revealLabel ? { label: saved.revealLabel, run: async () => { try { await walletService.revealSavedFile(saved.revealToken!); } catch (cause) { toast({ title: 'Could not show saved backup', description: cause instanceof Error ? cause.message : undefined, tone: 'danger' }); } } } : undefined });
     } catch (cause) {
       exportError = cause instanceof Error ? cause.message : 'Could not save the public backup.';
       toast({ title: 'Backup not saved', description: exportError, tone: 'danger' });
@@ -116,8 +116,8 @@
       {#if !backup}
         <div class="backup-format-grid" role="radiogroup" aria-label="Backup format"><button class:active={backupFormat === 'bsms'} aria-pressed={backupFormat === 'bsms'} onclick={() => { backupFormat = 'bsms'; exportError = ''; }}><span><FileText size={18}/></span><strong>BSMS 1.0</strong><small>Most interoperable · recommended</small></button><button class:active={backupFormat === 'groot'} aria-pressed={backupFormat === 'groot'} onclick={() => { backupFormat = 'groot'; exportError = ''; }}><span><Braces size={18}/></span><strong>Groot JSON</strong><small>Descriptors plus Groot metadata</small></button></div>
         <p class="optional-insight">Backup formats <InsightTip label="About backup formats" text="BSMS is a portable public descriptor record supported by compatible coordinators. Groot JSON also preserves Groot-specific labels and metadata. Neither contains private keys."/></p>
-        <div class="backup-security-note"><ShieldCheck size={18}/><span><strong>Re-authenticate this export</strong><small>Use {wallet.name}’s app PIN. This protects access to private financial metadata even while the vault screen is open. The exported descriptor is not encrypted: it cannot spend, but it reveals addresses and should remain private.</small></span></div>
-        <div class="backup-auth"><PasswordField label="App PIN" inputLabel="Backup app PIN" bind:value={pin} placeholder="Enter this vault’s app PIN" autocomplete="current-password"/><Button class="full" size="large" disabled={!pin} loading={busy} loadingLabel="Authorizing…" onclick={exportBackup}>Authorize & prepare backup</Button></div>
+        <div class="backup-security-note"><ShieldCheck size={18}/><span><strong>Re-authenticate this export</strong><small>Use {wallet.name}’s app PIN. This protects access to private financial metadata even while the wallet screen is open. The exported descriptor is not encrypted: it cannot spend, but it reveals addresses and should remain private.</small></span></div>
+        <div class="backup-auth"><PasswordField label="App PIN" inputLabel="Backup app PIN" bind:value={pin} placeholder="Enter this wallet’s app PIN" autocomplete="current-password"/><Button class="full" size="large" disabled={!pin} loading={busy} loadingLabel="Authorizing…" onclick={exportBackup}>Authorize & prepare backup</Button></div>
         {#if exportError}<p class="form-error" aria-live="polite">{exportError}</p>{/if}
       {:else}
         <div class="backup-ready"><span><Check size={17}/></span><div><strong>Public backup ready</strong><small>{backupFormat === 'bsms' ? 'BSMS 1.0 descriptor record' : 'Groot recovery metadata'}</small></div></div>

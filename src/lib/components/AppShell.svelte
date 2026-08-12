@@ -63,17 +63,9 @@
       const profile = await walletService.selectWallet(walletId);
       selectedWalletId = profile.id;
       const destination = '/';
-      try {
-        if (profile.kind === 'multisig') await walletService.multisigSnapshot();
-        else await walletService.snapshot();
-        await goto(destination);
-        if (!isPrototypeWallet) liveSync?.start();
-      } catch (cause) {
-        if (cause instanceof WalletError && cause.code === 'wallet_locked') {
-          await goto(`/unlock?next=${destination}`);
-          return;
-        }
-        throw cause;
+      await goto(destination);
+      if (!isPrototypeWallet) {
+        liveSync?.restart();
       }
     } catch (cause) {
       toast({ title: 'Wallet not switched', description: cause instanceof Error ? cause.message : 'Could not select this wallet.', tone: 'danger' });
@@ -87,6 +79,7 @@
   onMount(() => {
     const unsubscribe = walletService.subscribe((event) => {
       if (event.type === 'payment_received') toast({ title: 'Bitcoin received', description: `Received ${shortSats(event.amount)} sats · Balance ${shortSats(event.balance)} sats`, tone: 'success' });
+      if (event.type === 'payment_received_confirmed') toast({ title: 'Bitcoin received', description: `Received ${shortSats(event.amount)} sats · First confirmation · Balance ${shortSats(event.balance)} sats`, tone: 'success' });
       if (event.type === 'first_confirmation') toast({ title: 'First confirmation', description: `Transaction confirmed · Balance ${shortSats(event.balance)} sats`, tone: 'success' });
       if (event.type === 'transaction_broadcast') toast({ title: 'Transaction broadcast', description: `Remaining wallet balance: ${shortSats(event.balance)} sats`, tone: 'success' });
       if (event.type === 'wallet_profile_updated') profiles = profiles.map((profile) => profile.id === event.profile.id ? event.profile : profile);
@@ -106,12 +99,6 @@
         profiles = registry.wallets;
         selectedWalletId = registry.selectedWalletId;
         if (onboardingRoute || lockedRoute) return;
-        const selected = profiles.find((wallet) => wallet.id === selectedWalletId);
-        if (selected?.kind === 'multisig') {
-          await walletService.multisigSnapshot();
-        } else {
-          await walletService.snapshot();
-        }
         if (!isPrototypeWallet) liveSync?.start();
       } catch (cause) {
         if (cause instanceof WalletError && cause.code === 'wallet_locked') await goto('/unlock');
@@ -153,7 +140,9 @@
 
   <main class="main">
     {#if isPrototypeWallet}<div class="demo-banner" role="status"><strong>Interactive prototype</strong><span>Dummy data only · Never use real funds or recovery words</span></div>{/if}
-    {@render children?.()}
+    {#key selectedWalletId}
+      {@render children?.()}
+    {/key}
   </main>
 
   {#if !lockedRoute}<nav class="mobile-nav" class:policy-nav={policyContext}>

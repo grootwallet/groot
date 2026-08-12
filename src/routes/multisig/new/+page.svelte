@@ -3,18 +3,25 @@
   import { goto } from '$app/navigation';
   import { onDestroy } from 'svelte';
   import Button from '$lib/components/Button.svelte';
+  import FieldCounter from '$lib/components/FieldCounter.svelte';
   import HardwareActionPrompt from '$lib/components/HardwareActionPrompt.svelte';
+  import InsightTip from '$lib/components/InsightTip.svelte';
   import DeviceDetailsModal from '$lib/components/DeviceDetailsModal.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import PasswordField from '$lib/components/PasswordField.svelte';
+  import SetupProgress from '$lib/components/SetupProgress.svelte';
+  import SetupTask from '$lib/components/SetupTask.svelte';
   import TrezorPinModal from '$lib/components/TrezorPinModal.svelte';
+  import SignerPolicyReview from '$lib/components/SignerPolicyReview.svelte';
   import { toast } from '$lib/stores/toasts';
-  import { walletService, WalletError, type CosignerHealthCheck, type HardwareDevice, type MultisigPreview, type RecoveryTemplate, type WalletErrorCode } from '$lib/wallet';
+  import { walletService, WalletError, type CosignerHealthCheck, type HardwareDevice, type MultisigPreview, type PolicyVerificationAddress, type RecoveryTemplate, type SavedFileResult, type SignerPolicyVerification, type WalletErrorCode } from '$lib/wallet';
   import { MULTISIG_ACCOUNT_PATH, validatePolicyDraft, type CosignerDraft, type CosignerSource } from '$lib/multisig/policy';
   import { copyText } from '$lib/clipboard';
-  import { coldcardPolicyFilename, downloadText, readTransferFile, safeTransferFilename } from '$lib/transfer';
+  import { combineDescriptorBranches } from '$lib/descriptors';
+  import { coldcardPolicyFilename, readTransferFile, safeTransferFilename } from '$lib/transfer';
   import { parsePublicCosignerFile } from '$lib/multisig/cosigner-import';
   import { mergeHardwareDiscovery } from '$lib/hardware/discovery';
+  import { matchingPolicyVerification, policyDeviceName, policyReadinessKind, policyRegistrationProfile, requiresInteractivePolicyVerification } from '$lib/hardware/policy-readiness';
 
   type HardwareGuideId = 'coldcard' | 'bitbox02' | 'ledger' | 'trezor' | 'jade';
   const hardwareGuides: Array<{ id: HardwareGuideId; name: string; steps: string[] }> = [
@@ -24,6 +31,7 @@
     { id: 'trezor', name: 'Trezor', steps: ['Finish device setup and make an offline seed backup, then quit Trezor Suite completely. Closing its window is not enough.', 'Reconnect the device. A locked Model One is expected: select its Groot card to open the position keypad while the device shows a scrambled PIN matrix.', 'Choose the standard no-passphrase wallet explicitly, or select a hidden wallet on-device when supported. Model One host passphrase entry is not yet supported.'] },
     { id: 'jade', name: 'Jade', steps: ['Finish device setup and make an offline seed backup.', 'Log in on Jade with Recovery Phrase Login or QR PIN Unlock.', 'Keep Jade connected over USB while Groot imports the public key.'] }
   ];
+  const creationSteps = ['Policy', 'Signers', 'Verify', 'Back up'];
 
   let name = $state('');
   let threshold = $state(2);
@@ -57,15 +65,26 @@
   let xpub = $state('');
   let saved = $state(false);
   let coldcardRegistered = $state(false);
+  let draftPolicyVerifications = $state<SignerPolicyVerification[]>([]);
+  let policyVerificationDeferred = $state(false);
+  let policySigner = $state<CosignerDraft | null>(null);
+  let policyDevice = $state<HardwareDevice | null>(null);
+  let policyReviewOpen = $state(false);
+  let policyReviewBusy = $state(false);
+  let policyReviewError = $state('');
   let credential = $state('');
   let confirmation = $state('');
   let preview = $state<MultisigPreview | null>(null);
+  let policyAddress = $state<PolicyVerificationAddress | null>(null);
   let busy = $state(false);
   let error = $state('');
   let templateKind = $state<'standard' | 'recovery' | 'inheritance'>('standard');
   let standardRecipe = $state<'2of3' | '3of5' | 'custom'>('2of3');
   let customCosignerCount = $state(3);
   let showDescriptor = $state(false);
+  let savingDescriptor = $state(false);
+  let backupError = $state('');
+  const creationStep = $derived(stage === 'policy' ? 1 : stage === 'keys' ? 2 : stage === 'review' ? 3 : 4);
   let reviewAttempted = $state(false);
   let hardwareScanGeneration = 0;
   const policy = $derived({ name, threshold, cosigners });
@@ -89,8 +108,18 @@
     if (templateKind === 'standard' || cosigners.length < 4) return null;
     return { type: 'recovery', immediate: { threshold: 2, signerIds: cosigners.slice(0, 3).map((key) => key.id) }, recovery: { threshold: 1, signerIds: [cosigners[3].id], availableAfterBlocks: templateKind === 'inheritance' ? 52_560 : 4_320 } };
   });
+  const combinedDescriptor = $derived(preview ? combineDescriptorBranches(preview.externalDescriptor, preview.internalDescriptor) : null);
   const selectedHardwareGuide = $derived(hardwareGuides.find((guide) => guide.id === hardwareGuide) ?? hardwareGuides[0]);
-  const coldcardRegistrationRequired = $derived(cosigners.some((signer) => signer.deviceType?.toLowerCase() === 'coldcard'));
+  const coldcardRegistrationRequired = $derived(cosigners.some((signer) => policyReadinessKind(signer) === 'coldcard'));
+  const interactivePolicySigners = $derived(templateKind === 'standard' ? cosigners.filter(requiresInteractivePolicyVerification) : []);
+  const interactivePoliciesComplete = $derived(interactivePolicySigners.every((signer) => !!matchingPolicyVerification(signer, draftPolicyVerifications)));
+  const policySetupComplete = $derived((!coldcardRegistrationRequired || coldcardRegistered) && interactivePoliciesComplete);
+  const hasOptionalPolicySetup = $derived(coldcardRegistrationRequired || interactivePolicySigners.length > 0);
+  const policyReadinessAcknowledged = $derived(!hasOptionalPolicySetup || policySetupComplete || policyVerificationDeferred);
+  const pinAvailable = $derived(saved && policyReadinessAcknowledged);
+  const coldcardStep = 2;
+  const interactivePolicyStep = $derived(coldcardRegistrationRequired ? 3 : 2);
+  const pinStep = $derived(1 + (coldcardRegistrationRequired ? 1 : 0) + (interactivePolicySigners.length ? 1 : 0) + 1);
 
   onDestroy(() => { credential = ''; confirmation = ''; pinPositions = ''; pinChallenge = ''; hardwareScanGeneration += 1; });
 
@@ -183,12 +212,7 @@
     if (selectedSigner?.id === id) selectedSigner = null;
     const { [id]: _removed, ...remainingChecks } = healthChecks;
     healthChecks = remainingChecks;
-  }
-
-  async function copyPublicKey() {
-    if (!selectedSigner) return;
-    await copyText(selectedSigner.xpub, 'public-wallet-data');
-    toast({ title: 'Public key copied', description: `${selectedSigner.label} account key copied.`, tone: 'success' });
+    draftPolicyVerifications = draftPolicyVerifications.filter((verification) => cosigners.some((signer) => signer.fingerprint.toLowerCase() === verification.signerFingerprint.toLowerCase()));
   }
 
   async function runDraftHealthCheck() {
@@ -232,26 +256,66 @@
     hardwareBusy = false;
   }
 
-  async function copyDescriptor(value: string, branch: 'receive' | 'change') {
+  async function copyDescriptor(value: string, label: 'Wallet' | 'Receive' | 'Change') {
     await copyText(value, 'public-wallet-data');
-    toast({ title: `${branch === 'receive' ? 'Receive' : 'Change'} descriptor copied`, description: 'Public watch-only descriptor copied.', tone: 'success' });
+    toast({ title: `${label} descriptor copied`, description: 'Public watch-only descriptor copied.', tone: 'success' });
   }
 
-  function saveDescriptorDraft() {
-    if (!preview) return;
-    downloadText(`${safeTransferFilename(preview.name)}-descriptors.txt`, `Wallet: ${preview.name}\nReceive descriptor:\n${preview.externalDescriptor}\n\nChange descriptor:\n${preview.internalDescriptor}\n`);
+  function savedFileAction(result: SavedFileResult) {
+    if (!result.revealToken || !result.revealLabel) return undefined;
+    return {
+      label: result.revealLabel,
+      run: async () => {
+        try { await walletService.revealSavedFile(result.revealToken!); }
+        catch (cause) { toast({ title: 'Could not show saved file', description: cause instanceof Error ? cause.message : undefined, tone: 'danger' }); }
+      }
+    };
   }
 
-  function saveColdcardPolicy() {
-    if (!preview) return;
-    downloadText(
-      coldcardPolicyFilename(preview.name),
-      `# Groot multisig policy for COLDCARD\n# Import from Settings > Multisig Wallets > Import\n${preview.externalDescriptor}\n`
-    );
-    toast({ title: 'Coldcard policy saved', description: 'Import it on every Coldcard signer, then verify the policy on-device.', tone: 'success' });
+  async function saveDescriptorDraft() {
+    if (!preview || savingDescriptor) return;
+    savingDescriptor = true;
+    backupError = '';
+    const portable = combineDescriptorBranches(preview.externalDescriptor, preview.internalDescriptor);
+    const content = `Wallet: ${preview.name}\n${portable ? `Portable wallet descriptor:\n${portable}\n\n` : ''}Receive descriptor:\n${preview.externalDescriptor}\n\nChange descriptor:\n${preview.internalDescriptor}\n`;
+    try {
+      const savedBackup = await walletService.savePublicBackup(`${safeTransferFilename(preview.name)}-descriptors.txt`, content);
+      if (savedBackup.saved) {
+        saved = true;
+        toast({ title: 'Descriptor backup saved', description: 'The public wallet descriptor was written to the selected file.', tone: 'success', action: savedFileAction(savedBackup) });
+      }
+    } catch (cause) {
+      backupError = cause instanceof Error ? cause.message : 'Could not save the descriptor backup.';
+      toast({ title: 'Descriptor backup not saved', description: backupError, tone: 'danger' });
+    } finally {
+      savingDescriptor = false;
+    }
+  }
+
+  async function saveColdcardPolicy() {
+    if (!preview || savingDescriptor) return;
+    savingDescriptor = true;
+    backupError = '';
+    try {
+      const savedPolicy = await walletService.savePublicBackup(
+        coldcardPolicyFilename(preview.name),
+        `# Groot multisig policy for COLDCARD\n# Import from Settings > Multisig Wallets > Import\n${preview.externalDescriptor}\n`
+      );
+      if (savedPolicy.saved) toast({ title: 'Coldcard policy saved', description: 'Import it on every Coldcard signer, then verify the policy on-device.', tone: 'success', action: savedFileAction(savedPolicy) });
+    } catch (cause) {
+      backupError = cause instanceof Error ? cause.message : 'Could not save the Coldcard policy.';
+      toast({ title: 'Coldcard policy not saved', description: backupError, tone: 'danger' });
+    } finally {
+      savingDescriptor = false;
+    }
   }
 
   async function importHardware(device: HardwareDevice, allowEmptyPassphrase = false) {
+    const profile = policyRegistrationProfile(device);
+    if (!profile.supported && profile.registration === 'unsupported') {
+      error = `${profile.name} is not supported by Groot's pinned HWI release and has not completed physical certification.`;
+      return;
+    }
     const deviceLabel = label.trim() || device.label;
     hardwareBusy = true;
     hardwareProgress = device.model.startsWith('ledger')
@@ -311,17 +375,50 @@
     } finally { positions = ''; pinBusy = false; }
   }
 
+  async function openDraftPolicyVerification(signer: CosignerDraft) {
+    policySigner = signer; policyDevice = null; policyReviewError = ''; policyReviewOpen = true; policyReviewBusy = true;
+    try {
+      const devices = await walletService.listHardwareDevices();
+      policyDevice = devices.find((device) => device.fingerprint?.toLowerCase() === signer.fingerprint.toLowerCase()) ?? null;
+      if (!policyDevice) policyReviewError = `Connect and unlock ${signer.label}, then scan again.`;
+    } catch (cause) { policyReviewError = cause instanceof Error ? cause.message : 'Could not scan hardware devices.'; }
+    finally { policyReviewBusy = false; }
+  }
+
+  async function verifyDraftPolicy() {
+    if (!policySigner || !policyDevice || policyReviewBusy) return;
+    policyReviewBusy = true; policyReviewError = '';
+    try {
+      const verification = await walletService.verifyMultisigDraftSignerPolicy(policy, policyDevice.id, policySigner.fingerprint);
+      draftPolicyVerifications = [verification, ...draftPolicyVerifications.filter((item) => item.signerFingerprint.toLowerCase() !== verification.signerFingerprint.toLowerCase())];
+      toast({ title: 'Wallet policy verified', description: `${policySigner.label} returned the correct first address.`, tone: 'success' });
+    } catch (cause) { policyReviewError = cause instanceof Error ? cause.message : 'The wallet policy could not be verified.'; }
+    finally { policyReviewBusy = false; }
+  }
+
   async function review() {
     reviewAttempted = true;
     error = '';
     if (errors.length > 0) return;
     busy = true;
     try {
+      const previousDescriptor = preview?.externalDescriptor;
       if (recoveryTemplate) {
         const analysis = await walletService.analyzeRecoveryPolicy(recoveryTemplate, cosigners);
         preview = { name: name.trim(), threshold: 2, cosigners, externalDescriptor: analysis.externalDescriptor, internalDescriptor: analysis.internalDescriptor };
-      } else preview = await walletService.previewMultisig(policy);
-      stage = 'review'; showDescriptor = false;
+      } else {
+        [preview, policyAddress] = await Promise.all([
+          walletService.previewMultisig(policy),
+          walletService.previewMultisigPolicyVerificationAddress(policy)
+        ]);
+      }
+      if (previousDescriptor && previousDescriptor !== preview.externalDescriptor) {
+        saved = false;
+        coldcardRegistered = false;
+        draftPolicyVerifications = [];
+        policyVerificationDeferred = false;
+      }
+      stage = 'review'; showDescriptor = false; backupError = '';
     }
     catch (cause) { error = cause instanceof Error ? cause.message : 'Could not build the descriptor.'; }
     finally { busy = false; }
@@ -337,11 +434,17 @@
   }
 
   async function create() {
-    if (!preview || !saved || (coldcardRegistrationRequired && !coldcardRegistered) || !credential || credential !== confirmation) return;
+    if (!preview || !saved || !policyReadinessAcknowledged || !credential || credential !== confirmation) return;
     busy = true; error = '';
     try {
       if (recoveryTemplate) await walletService.createRecoveryMultisig(name, recoveryTemplate, cosigners, credential);
       else await walletService.createMultisig(policy, credential);
+      if (coldcardRegistered) {
+        for (const signer of cosigners.filter((item) => policyReadinessKind(item) === 'coldcard')) {
+          try { await walletService.acknowledgeColdcardPolicy(signer.fingerprint); }
+          catch { toast({ title: 'Coldcard setup needs confirmation', description: 'The coordinator was created safely, but Groot could not save the policy-import acknowledgement. Confirm it again from Policy before signing.', tone: 'danger' }); }
+        }
+      }
       toast({ title: 'Multisig wallet created', description: `${threshold} signatures are required to spend.`, tone: 'success' });
       await goto('/multisig');
     } catch (cause) { error = cause instanceof Error ? cause.message : 'Could not create the wallet.'; }
@@ -352,9 +455,9 @@
 <div class="page coordinator-page">
   <header class="page-header">
     <div><p class="eyebrow">WALLET POLICY</p><h1>Create a policy wallet</h1><p class="subtitle">Choose a simple shared policy or add a separate delayed recovery key.</p></div>
-    <div class="page-header-actions"><a class="secondary-link" href="/multisig/recover" aria-label="Recover from backup"><FileUp size={15}/>Recover</a><span class="network-chip">Regtest · Native SegWit</span></div>
+    <div class="page-header-actions">{#if stage === 'policy'}<a class="secondary-link" href="/multisig/recover" aria-label="Recover from backup"><FileUp size={15}/>Recover</a>{/if}<span class="network-chip">Regtest · Native SegWit</span></div>
   </header>
-  <nav class="creation-progress four-step-progress" aria-label="Wallet creation progress"><span class:active={stage === 'policy'}><b>1</b>Policy</span><i class:active={stage !== 'policy'}></i><span class:active={stage === 'keys'}><b>2</b>Signers</span><i class:active={stage === 'review' || stage === 'backup'}></i><span class:active={stage === 'review'}><b>3</b>Verify</span><i class:active={stage === 'backup'}></i><span class:active={stage === 'backup'}><b>4</b>Back up</span></nav>
+  <SetupProgress steps={creationSteps} current={creationStep} label="Wallet creation progress"/>
 
   {#if stage === 'policy'}
     <div class="coordinator-grid policy-only-grid">
@@ -366,7 +469,7 @@
         </div>
         <div class="template-tradeoff"><strong>{templateKind === 'standard' ? 'Simplest and most interoperable' : templateKind === 'recovery' ? 'Survives loss of two primary keys' : 'A delayed key can recover without the primary set'}</strong><span>{templateKind === 'standard' ? 'Any two devices can always spend.' : 'The fourth key stays powerless until its delay matures.'}</span></div>
         <div class="section-heading compact"><div><h2>Wallet policy</h2><p>Public keys only. Signing stays on each device.</p></div><span class="policy-pill">{templateKind === 'standard' ? `${threshold} of ${requiredKeys}` : '2 of 3 + recovery'}</span></div>
-        <label class="field"><span>Wallet name</span><input bind:value={name} maxlength="48" placeholder="e.g. Family vault" /></label>
+        <label class="field"><span>Wallet name</span><input bind:value={name} maxlength="48" placeholder="e.g. Family wallet" /><FieldCounter value={name} max={48}/></label>
         {#if templateKind === 'standard'}
           <div class="policy-recipes" aria-label="Standard multisig recipes">
             <button class:active={standardRecipe === '2of3'} onclick={() => applyStandardRecipe('2of3')}><strong>2 of 3</strong><small>Recommended</small></button>
@@ -398,7 +501,7 @@
                     {#if templateKind !== 'standard'}<span><small>Policy role</small><span class="source-badge">{i === 3 ? 'Recovery-only signer' : 'Primary signer'}</span></span>{/if}
                     <span><small>Device fingerprint</small><code>{signer.fingerprint.toLowerCase()}</code></span>
                     <span><small>{sourceHeading(signer.source)}</small><span class="source-badge">{sourceLabel(signer.source)}</span></span>
-                    <span class="cosigner-public-key"><small>Public account key</small><code>{signer.xpub}</code></span>
+                    <span class="cosigner-public-key"><small>Public account key (xpub)</small><code>{signer.xpub}</code></span>
                   </span>
                 </span>
                 <ChevronRight class="draft-row-chevron" size={16}/>
@@ -421,24 +524,43 @@
       <button class="back-link" onclick={() => stage = 'keys'}><ArrowLeft size={16}/>Edit keys</button>
       <span class="setup-step">FINAL REVIEW</span><h2>{preview.name}</h2><p class="review-intro">Confirm the policy and save the descriptor before creating this wallet.</p>
       <div class="policy-summary"><strong>{threshold} of {cosigners.length} signatures</strong><span>wsh · sortedmulti · BIP48</span></div>
-      <button class="descriptor-toggle" onclick={() => showDescriptor = !showDescriptor}>Descriptor logic <ChevronDown size={14} class={showDescriptor?'rotated':''}/></button>
-      {#if showDescriptor}<div class="descriptor-block" data-testid="descriptor-preview"><span class="descriptor-label"><span>Receive descriptor</span><button aria-label="Copy receive descriptor" onclick={() => copyDescriptor(preview!.externalDescriptor, 'receive')}><Copy size={14}/></button></span><code>{preview.externalDescriptor}</code><span class="descriptor-label"><span>Change descriptor</span><button aria-label="Copy change descriptor" onclick={() => copyDescriptor(preview!.internalDescriptor, 'change')}><Copy size={14}/></button></span><code>{preview.internalDescriptor}</code>{#if recoveryTemplate?.type === 'recovery'}<span>Spend paths</span><code>2 of first 3 now · 1 recovery key after {recoveryTemplate.recovery.availableAfterBlocks.toLocaleString()} blocks</code>{/if}<button class="descriptor-download" onclick={saveDescriptorDraft}><Download size={14}/>Save public descriptor text</button></div>{/if}
+      <div class="descriptor-toggle-row"><button class="descriptor-toggle" aria-expanded={showDescriptor} onclick={() => showDescriptor = !showDescriptor}>Descriptor logic <ChevronDown size={14} class={showDescriptor?'rotated':''}/></button><InsightTip label="About wallet descriptors" text="A descriptor is a public, watch-only recipe that defines the signing policy and derives every receive and change address. It cannot spend bitcoin, but it reveals the wallet’s complete address history, so keep it private and back it up."/></div>
+      {#if showDescriptor}<div class="descriptor-block descriptor-viewer" data-testid="descriptor-preview">
+        {#if combinedDescriptor}<section class="descriptor-primary"><div><span>Portable wallet descriptor</span><small>Standard multipath form: branch 0 receives, branch 1 creates change.</small></div><code>{combinedDescriptor}</code><button aria-label="Copy wallet descriptor" onclick={() => copyDescriptor(combinedDescriptor!, 'Wallet')}><Copy size={14}/>Copy wallet descriptor</button></section><details><summary>View separate receive and change descriptors</summary><section><div><span>Receive descriptor</span><small>Generates addresses shared for incoming payments.</small></div><code>{preview.externalDescriptor}</code><button aria-label="Copy receive descriptor" onclick={() => copyDescriptor(preview!.externalDescriptor, 'Receive')}><Copy size={14}/>Copy receive descriptor</button></section><section><div><span>Change descriptor</span><small>Generates private change addresses after spending.</small></div><code>{preview.internalDescriptor}</code><button aria-label="Copy change descriptor" onclick={() => copyDescriptor(preview!.internalDescriptor, 'Change')}><Copy size={14}/>Copy change descriptor</button></section></details>
+        {:else}<section><div><span>Receive descriptor</span><small>Generates addresses shared for incoming payments.</small></div><code>{preview.externalDescriptor}</code><button aria-label="Copy receive descriptor" onclick={() => copyDescriptor(preview!.externalDescriptor, 'Receive')}><Copy size={14}/>Copy receive descriptor</button></section><section><div><span>Change descriptor</span><small>Generates private change addresses after spending.</small></div><code>{preview.internalDescriptor}</code><button aria-label="Copy change descriptor" onclick={() => copyDescriptor(preview!.internalDescriptor, 'Change')}><Copy size={14}/>Copy change descriptor</button></section>{/if}
+        {#if recoveryTemplate?.type === 'recovery'}<span>Spend paths</span><code>2 of first 3 now · 1 recovery key after {recoveryTemplate.recovery.availableAfterBlocks.toLocaleString()} blocks</code>{/if}<p><ShieldCheck size={14}/>Keep descriptors private even though they cannot spend. They reveal every address in this wallet.</p><button class="descriptor-download" disabled={savingDescriptor} onclick={saveDescriptorDraft}><Download size={14}/>{savingDescriptor ? 'Opening save dialog…' : 'Save public descriptor text'}</button>
+      </div>{/if}
+      {#if backupError}<p class="form-error" role="alert">{backupError}</p>{/if}
       <div class="review-signers">{#each preview.cosigners as signer}<div><Check size={14}/><span><strong>{signer.label}</strong><small>{signer.fingerprint}</small></span></div>{/each}</div>
       <div class="coordinator-actions"><Button variant="secondary" onclick={() => stage = 'keys'}><ArrowLeft size={16}/>Back to signers</Button><Button onclick={() => stage = 'backup'}>Continue to backup<ChevronRight size={16}/></Button></div>
     </section>
   {:else if stage === 'backup' && preview}
     <section class="form-card review-policy">
       <button class="back-link" onclick={() => stage = 'review'}><ArrowLeft size={16}/>Back to verification</button>
-      <span class="setup-step">BACK UP</span><h2>Protect {preview.name}</h2><p class="review-intro">Save the public descriptor, then protect this coordinator with a local app PIN.</p>
+      <span class="setup-step">BACK UP</span><h2>Protect {preview.name}</h2><p class="review-intro">Complete each section before creating this coordinator.</p>
       <div class="policy-summary"><strong>{threshold} of {cosigners.length} signatures</strong><span>wsh · sortedmulti · BIP48</span></div>
-      <Button variant="secondary" class="full" onclick={saveDescriptorDraft}><Download size={14}/>Save public descriptor text</Button>
-      <label class="check-row"><input type="checkbox" bind:checked={saved}/><span><strong>I saved the wallet descriptor</strong><small>This public backup is required to recover addresses and coordinate signatures.</small></span></label>
-      {#if coldcardRegistrationRequired}<div class="hardware-policy-registration"><ShieldCheck size={18}/><div><strong>Register this wallet on Coldcard</strong><p>Coldcard must know the complete multisig policy before it can verify recipients and change. Save this BIP-380 descriptor, then import it from <b>Settings → Multisig Wallets → Import</b> on every Coldcard signer.</p><Button variant="secondary" size="small" onclick={saveColdcardPolicy}><Download size={14}/>Save Coldcard policy</Button></div></div><label class="check-row"><input type="checkbox" bind:checked={coldcardRegistered}/><span><strong>I imported and verified the policy on every Coldcard</strong><small>The name, signing threshold, and signer fingerprints matched on-device.</small></span></label>{/if}
-      <div class="credential-grid"><PasswordField label="App PIN" inputLabel="App PIN" bind:value={credential} placeholder="Unlock this coordinator" autocomplete="new-password"/><PasswordField label="Confirm app PIN" inputLabel="Confirm app PIN" bind:value={confirmation} placeholder="Enter it again" autocomplete="new-password"/></div>
-      <p class="credential-note">This PIN protects local coordinator data. Hardware devices keep their own signing credentials.</p>
-      {#if credential && confirmation && credential !== confirmation}<p class="form-error">PINs do not match.</p>{/if}
-      {#if error}<p class="form-error">{error}</p>{/if}
-      <Button class="full" size="large" disabled={!saved || (coldcardRegistrationRequired && !coldcardRegistered) || !credential || credential !== confirmation} loading={busy} loadingLabel="Creating wallet…" onclick={create}>Create wallet</Button>
+      <div class="backup-setup-sections">
+        <SetupTask step={1} title="Save the wallet descriptor" description="This public backup recovers every wallet address and coordinates signatures. It cannot spend, but it reveals wallet activity." state={saved ? 'complete' : 'current'} status={saved ? 'Saved' : 'Current step'}>
+          <Button variant="secondary" class="full" disabled={savingDescriptor} loading={savingDescriptor} loadingLabel="Opening save dialog…" onclick={saveDescriptorDraft}><Download size={14}/>{saved ? 'Save another copy' : 'Save public descriptor text'}</Button>
+          {#if backupError}<p class="form-error" role="alert">{backupError}</p>{/if}
+        </SetupTask>
+        {#if coldcardRegistrationRequired}<SetupTask step={coldcardStep} title="Register the policy on Coldcard" description="Recommended now, but optional during coordinator creation. Coldcard must know the complete policy before it signs." state={coldcardRegistered ? 'complete' : policyVerificationDeferred ? 'deferred' : saved ? 'current' : 'upcoming'} status={coldcardRegistered ? 'Policy imported' : policyVerificationDeferred ? 'Required before signing' : saved ? 'Optional now' : 'Available after backup'}>
+          <ol><li>Save the Coldcard policy file.</li><li>On every Coldcard, import it from <b>Settings → Multisig Wallets → Import</b>.</li><li>Verify the wallet name, 2-of-3 threshold, and all signer fingerprints on-device.</li></ol>
+          <Button variant="secondary" class="full" disabled={!saved || savingDescriptor} loading={savingDescriptor} loadingLabel="Opening save dialog…" onclick={saveColdcardPolicy}><Download size={14}/>Save Coldcard policy</Button>
+          <label class="backup-confirmation"><input type="checkbox" disabled={!saved} bind:checked={coldcardRegistered}/><span><strong>Policy verified on every Coldcard</strong><small>I matched the wallet name, threshold, and signer fingerprints on each device.</small></span></label>
+          {#if !coldcardRegistered && !policyVerificationDeferred}<button class="defer-policy-verification" disabled={!saved} onclick={()=>policyVerificationDeferred=true}><Clock3 size={14}/><span><strong>Finish hardware setup before first signature</strong><small>Create the watch-only coordinator now. Groot will stop an unregistered Coldcard before transaction signing.</small></span></button>{/if}
+        </SetupTask>{/if}
+        {#if interactivePolicySigners.length}<SetupTask step={interactivePolicyStep} title="Verify hardware wallet policies" description="Recommended now, but optional during coordinator creation. Register the policy and prove its first receive address before first use." state={interactivePoliciesComplete ? 'complete' : policyVerificationDeferred ? 'deferred' : saved && (!coldcardRegistrationRequired || coldcardRegistered) ? 'current' : 'upcoming'} status={interactivePoliciesComplete ? 'Policy verified' : policyVerificationDeferred ? 'Required before signing' : saved && (!coldcardRegistrationRequired || coldcardRegistered) ? 'Optional now' : 'Available after Coldcard setup'}>
+          <div class="signer-readiness-list">{#each interactivePolicySigners as signer}{@const verification=matchingPolicyVerification(signer,draftPolicyVerifications)}<article class:complete={!!verification}><span><ShieldCheck size={17}/></span><div><strong>{signer.label}</strong><small>{verification?`Policy and first address verified on ${policyDeviceName(policyReadinessKind(signer))}`:policyRegistrationProfile(signer).creationCopy}</small></div><Button variant="secondary" size="small" disabled={!saved || (coldcardRegistrationRequired && !coldcardRegistered)} onclick={()=>openDraftPolicyVerification(signer)}>{verification?'Verify again':'Verify policy'}</Button></article>{/each}</div>
+          {#if !interactivePoliciesComplete && !policyVerificationDeferred && (!coldcardRegistrationRequired || coldcardRegistered)}<button class="defer-policy-verification" disabled={!saved} onclick={()=>policyVerificationDeferred=true}><Clock3 size={14}/><span><strong>Finish hardware setup before first signature</strong><small>Create the watch-only coordinator now. Groot will block each unverified signer before transaction signing.</small></span></button>{/if}
+        </SetupTask>{/if}
+        <SetupTask step={pinStep} title="Set the coordinator PIN" description="This PIN protects local Groot data. It is separate from every hardware-wallet credential." state={pinAvailable ? 'current' : 'upcoming'} status={pinAvailable ? 'Current step' : 'Available after earlier steps'}>
+          <div class="credential-grid"><PasswordField label="App PIN" inputLabel="App PIN" bind:value={credential} placeholder="Unlock this coordinator" autocomplete="new-password" disabled={!pinAvailable}/><PasswordField label="Confirm app PIN" inputLabel="Confirm app PIN" bind:value={confirmation} placeholder="Enter it again" autocomplete="new-password" disabled={!pinAvailable}/></div>
+          {#if credential && confirmation && credential !== confirmation}<p class="form-error">PINs do not match.</p>{/if}
+        </SetupTask>
+      </div>
+      {#if error}<p class="form-error hardware-create-error">{error}</p>{/if}
+      <Button class="full backup-create-action" size="large" disabled={!saved || !policyReadinessAcknowledged || !credential || credential !== confirmation} loading={busy} loadingLabel="Creating wallet…" onclick={create}>Create wallet</Button>
     </section>
   {/if}
 </div>
@@ -451,10 +573,15 @@
   </div>
   {#if pickerError}<p class="form-error" aria-live="polite">{pickerError}</p>{/if}
 </Modal>
+<Modal open={policyReviewOpen} preserveTop title="Verify signer wallet policy" description="Compare Groot's saved public policy with every value shown on the hardware device." onclose={()=>{if(!policyReviewBusy){policyReviewOpen=false;policySigner=null;policyDevice=null;policyReviewError='';}}}>
+  {#if policyReviewBusy && !policyDevice}<HardwareActionPrompt title="Looking for the saved signer" detail="Keep the device connected, unlocked, and in its Bitcoin app while Groot matches the saved fingerprint." label="Signer scan in progress"/>
+  {:else if policySigner && policyDevice && preview && policyAddress}<SignerPolicyReview wallet={{...preview,kind:'multisig',createdAt:'',policyType:'standard'}} signer={policySigner} {policyAddress} verification={matchingPolicyVerification(policySigner,draftPolicyVerifications)} busy={policyReviewBusy} error={policyReviewError} onverify={verifyDraftPolicy}/>
+  {:else if policySigner}<div class="device-scan"><Cpu size={20}/><strong>Saved signer not found</strong><span>{policyReviewError || `Connect and unlock ${policySigner.label}, then scan again.`}</span><Button variant="secondary" onclick={()=>openDraftPolicyVerification(policySigner!)}>Scan again</Button></div>{/if}
+</Modal>
 
 <Modal open={hardwareOpen} title="Connect hardware device" description="Connect one initialized device over USB, then verify its fingerprint before adding it." onclose={closeHardwareScan}>
   <div class="hardware-readiness"><Usb size={18}/><span><strong>Unlock the signer, then release its USB connection</strong><small>BitBox02: open the wallet in BitBoxApp first, then quit BitBoxApp completely before scanning. Quit Trezor Suite, Ledger Live, and other companion apps too. A locked Trezor Model One is supported from its Groot card.</small></span><button onclick={() => openHardwareHelp(true)}>Device help</button></div>
-  <label class="field"><span>Signer label</span><input bind:value={label} placeholder="Defaults to device model" maxlength="48"/></label>
+  <label class="field"><span>Signer label</span><input bind:value={label} placeholder="Defaults to device model" maxlength="48"/><FieldCounter value={label} max={48}/></label>
   {#if hardwareBusy}<HardwareActionPrompt title={hardwareProgress} detail={hardwareProgress.includes('Ledger') ? 'Keep Bitcoin Test open for Regtest and confirm the export on the device screen.' : 'Keep the signer connected and unlocked. Follow any instructions shown on the device.'} label="Hardware signer setup in progress"/>
   {:else if hardware.length === 0}<div class="device-scan"><Cpu size={20}/><strong>{error ? 'Device needs attention' : 'No device found'}</strong><span>{error || 'HWI returned no device. For Coldcard, sign in first, enable its USB port, reconnect, then scan again. Other signers must be initialized, unlocked, and released by companion apps.'}</span><Button variant="secondary" size="small" onclick={scanHardware}>Scan again</Button></div>
   {:else}<div class="source-list hardware-device-list">{#each hardware as device}<button disabled={device.action === 'none'} onclick={() => handleHardware(device)}><Cpu size={18}/><span><strong>{device.label}</strong><small>{device.fingerprint ? `Fingerprint ${device.fingerprint} · ${device.message}` : device.message}</small><em class:ready={device.status === 'ready'}>{device.status === 'ready' ? 'Ready' : device.status === 'detected' ? 'Detected' : device.status === 'needs_pin' ? 'Unlock' : device.action === 'confirm_empty_passphrase' ? 'Choose wallet' : device.action === 'retry' ? 'Scan again' : 'Unavailable'}</em></span>{#if device.action !== 'none'}<ChevronRight size={15}/>{/if}</button>{/each}<button class="hardware-rescan" onclick={scanHardware}><RefreshCw size={16}/><span><strong>Scan again</strong><small>Refresh the list after unlocking or connecting another signer.</small></span><ChevronRight size={15}/></button></div>{/if}
@@ -494,11 +621,11 @@
 
 <Modal open={keyOpen} title="Enter public signer key" description="No private key or seed should ever be entered here." onclose={() => keyOpen = false}>
   <form onsubmit={(event) => { event.preventDefault(); addKey(); }}>
-    <label class="field"><span>Signer label</span><input aria-label="Signer label" bind:value={label} placeholder="e.g. Coldcard" maxlength="48"/></label>
+    <label class="field"><span>Signer label</span><input aria-label="Signer label" bind:value={label} placeholder="e.g. Coldcard" maxlength="48"/><FieldCounter value={label} max={48}/></label>
     <label class="field"><span>Master fingerprint</span><input aria-label="Master fingerprint" bind:value={fingerprint} placeholder="8 hex characters" maxlength="8"/></label>
     <label class="field"><span>Account xpub</span><textarea aria-label="Account xpub" bind:value={xpub} rows="3" placeholder="tpub…"></textarea><small>Derivation: {MULTISIG_ACCOUNT_PATH}</small></label>
     <div class="modal-footer"><Button variant="secondary" onclick={() => keyOpen = false}>Cancel</Button><Button type="submit" disabled={!label.trim() || !/^[0-9a-fA-F]{8}$/.test(fingerprint.trim()) || !xpub.trim()}>Add key</Button></div>
   </form>
 </Modal>
 
-<DeviceDetailsModal signer={selectedSigner} health={selectedSigner ? healthChecks[selectedSigner.id] ?? null : null} checking={checkingSigner} onclose={() => selectedSigner = null} oncheck={runDraftHealthCheck} oncopy={copyPublicKey}/>
+<DeviceDetailsModal signer={selectedSigner} health={selectedSigner ? healthChecks[selectedSigner.id] ?? null : null} checking={checkingSigner} onclose={() => selectedSigner = null} oncheck={runDraftHealthCheck}/>

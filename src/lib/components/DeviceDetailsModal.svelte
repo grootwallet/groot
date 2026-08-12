@@ -1,21 +1,31 @@
 <script lang="ts">
-  import { CheckCircle2, Copy, KeyRound, RefreshCw } from '@lucide/svelte';
+  import { CheckCircle2, KeyRound, Maximize2, RefreshCw, ShieldCheck } from '@lucide/svelte';
+  import { compactIdentifier } from '$lib/address-display';
   import type { CosignerDraft, CosignerSource } from '$lib/multisig/policy';
   import type { CosignerHealthCheck } from '$lib/wallet';
   import Button from './Button.svelte';
   import HardwareActionPrompt from './HardwareActionPrompt.svelte';
+  import IdentifierDetailsModal from './IdentifierDetailsModal.svelte';
   import LocalTimestamp from './LocalTimestamp.svelte';
   import Modal from './Modal.svelte';
 
-  let { signer, health, checking, onclose, oncheck, oncopy, history = [] } = $props<{
+  let { signer, health, checking, onclose, oncheck, history = [], policyStatus = null, onpolicy } = $props<{
     signer: CosignerDraft | null;
     health: CosignerHealthCheck | null;
     checking: boolean;
     onclose: () => void;
     oncheck: () => void;
-    oncopy: () => void;
     history?: CosignerHealthCheck[];
+    policyStatus?: {
+      label: string;
+      description: string;
+      attention: boolean;
+      actionLabel?: string;
+      verifiedAt?: string;
+    } | null;
+    onpolicy?: () => void;
   }>();
+  let publicKeyOpen = $state(false);
 
   function sourceName(source: CosignerSource) {
     return ({ usb: 'USB hardware', qr: 'QR import', file: 'File import', manual: 'Manual backup', virtual: 'Virtual test device' })[source];
@@ -38,8 +48,22 @@
         <div><dt>Account path</dt><dd><code>{signer.derivationPath}</code></dd></div>
         <div><dt>Key source</dt><dd>{sourceName(signer.source)}</dd></div>
         <div><dt>Connection</dt><dd>{signer.source === 'usb' || signer.source === 'virtual' ? 'Available for verification' : 'Offline by design'}</dd></div>
-        <div class="public-key-detail"><dt>Public account key</dt><dd><code>{signer.xpub}</code><button aria-label="Copy public account key" onclick={oncopy}><Copy size={14}/></button></dd></div>
+        <div class="public-key-detail"><dt>Public account key (xpub)</dt><dd><button class="public-key-trigger" aria-label="View public account key (xpub)" onclick={() => publicKeyOpen = true}><code>{compactIdentifier(signer.xpub, 18, 12)}</code><Maximize2 size={14}/></button></dd></div>
       </dl>
+      {#if policyStatus}
+        <section class="device-policy-status" class:attention={policyStatus.attention}>
+          <span><ShieldCheck size={18}/></span>
+          <div>
+            <strong>Wallet policy</strong>
+            <small>{policyStatus.description}</small>
+            {#if policyStatus.verifiedAt}<small>Last verified <LocalTimestamp value={policyStatus.verifiedAt}/></small>{/if}
+          </div>
+          <em>{policyStatus.label}</em>
+          {#if policyStatus.actionLabel && onpolicy}
+            <Button variant="secondary" size="small" onclick={onpolicy}>{policyStatus.actionLabel}</Button>
+          {/if}
+        </section>
+      {/if}
       <section class="health-card" aria-live="polite">
         <div class="health-heading"><span class:checked={!!health && health.status !== 'attention'} class:attention={health?.status === 'attention'}><CheckCircle2 size={18}/></span><div><strong>Device health</strong><small>{#if health}Last checked <LocalTimestamp value={health.checkedAt}/>{:else}Not checked in this session{/if}</small></div></div>
         {#if checking}
@@ -62,3 +86,5 @@
     </div>
   {/if}
 </Modal>
+
+{#if signer}<IdentifierDetailsModal value={signer.xpub} open={publicKeyOpen} title={`${signer.label} public account key (xpub)`} description="Extended public key used to derive this signer’s wallet addresses. It cannot sign transactions." label="Public account key (xpub)" onclose={() => publicKeyOpen = false}/>{/if}

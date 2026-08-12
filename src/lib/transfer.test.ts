@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { coldcardPolicyFilename, MAX_TRANSFER_BYTES, safeTransferFilename, validateTransferText } from './transfer';
+import { coldcardPolicyFilename, MAX_TRANSFER_BYTES, psbtFilename, safeTransferFilename, validateTransferText } from './transfer';
 
 describe('air-gapped transfer validation', () => {
   it('normalizes a bounded non-empty payload', () => {
@@ -22,5 +22,12 @@ describe('air-gapped transfer validation', () => {
     expect(coldcardPolicyFilename('Tresorerie familiale ete')).toBe('tresorerie-familiale.txt');
     expect(coldcardPolicyFilename('///')).toBe('groot-wallet.txt');
     expect(coldcardPolicyFilename('x'.repeat(100)).slice(0, -4)).toHaveLength(20);
+  });
+
+  it('creates short hardware-wallet-compatible PSBT filenames', () => {
+    expect(psbtFilename('a3c0ee90-7351-4a51-923f-9eea7c86ddb7')).toBe('groot-a3c0ee90.psbt');
+    expect(psbtFilename('ABC-123')).toBe('groot-abc123.psbt');
+    expect(psbtFilename('---')).toBe('groot-payment.psbt');
+    expect(psbtFilename('a3c0ee90-7351-4a51-923f-9eea7c86ddb7').length).toBeLessThanOrEqual(20);
   });
 });

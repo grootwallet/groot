@@ -1,0 +1,29 @@
+# Hardware wallet policy readiness
+
+This matrix is the canonical product and implementation reference for multisig policy registration. It separates device connectivity from policy readiness: a connected and healthy signer may still require wallet-policy setup before it can safely sign.
+
+## Release matrix
+
+| Target | Pinned HWI behavior | Persistent device state | Groot creation flow | First signing flow | Readiness label |
+|---|---|---|---|---|---|
+| Ledger Nano S Plus | HWI constructs and registers the policy during address display and signing. The protocol returns a reusable HMAC, but Groot's process-per-command boundary does not retain it. | Not reusable by Groot today; authorization repeats per request. | Optional policy and first-address proof. Deferral is explicit. | Without evidence, run the full proof. For every signing request, keep the saved policy reference visible while Ledger authorizes it, then advance to the transaction reference without restarting. | **Setup required**, then **Policy verified**, with repeat-authorization copy. |
+| Coldcard MK4 | HWI signing requires a previously registered sortedmulti policy and has no host registration command. | Persists a policy imported from a BIP-380 descriptor file. | Optional file export/import and on-device acknowledgement. Deferral is explicit. | An unacknowledged Coldcard opens the mandatory file-import checklist before transaction review. | **Setup required** or **Policy imported**. |
+| BitBox02 | HWI checks for the multisig script configuration, registers it when absent, then displays the first address. | Persistent. | Optional policy and first-address proof. | Run the proof only when evidence is absent; later signing goes directly to transaction review. | **Setup required** or **Policy verified**. |
+| Trezor One | HWI supplies the complete multisig structure with every address/signing request. On Regtest, Trezor displays the script-equivalent testnet `tb1` encoding. | No wallet registration state is claimed. | No registration task. PIN unlock is a separate readiness step. | Unlock if needed, then compare Groot's exact `tb1` recipient and change references with each output shown on-device. | **No setup needed**. |
+| Blockstream Jade | HWI address display registers the multisig configuration; repeating the same registration is a no-op. | Persistent. | Optional policy and first-address proof. | Run the proof only when evidence is absent; later signing goes directly to transaction review. | **Setup required** or **Policy verified**. |
+| BitBox Nova | HWI 3.1.0 ignores non-BitBox02 platforms. Exact-model enumeration and physical multisig certification are incomplete. | Not claimed. | Import is blocked with an explicit unsupported message. | Not available. | **Not supported**. |
+
+## Shared state model
+
+Every hardware signer has two independent states:
+
+1. **Connection health** — whether the attached device fingerprint matches the saved signer.
+2. **Policy readiness** — whether device-specific preparation for this wallet is complete.
+
+Policy registration is optional while creating a watch-only coordinator. If any supported signer still needs setup, the user must explicitly choose **Finish hardware setup before first signature**. The signer remains visibly **Setup required** in Policy and in the signing picker.
+
+Interactive evidence for Ledger, BitBox02, and Jade is descriptor- and fingerprint-bound and includes the device-returned first address. Coldcard evidence is an explicit acknowledgement of a file import and is intentionally stored under a different scope; it must never be described as cryptographic address verification. Trezor is never described as registered because it has no persistent registration step.
+
+## Source boundary
+
+Behavior is pinned to Bitcoin Core HWI 3.1.0, not newer upstream behavior. Revisit this matrix whenever the bundled HWI artifact changes. A newer upstream library supporting a model does not constitute Groot support without exact-model enumeration, device-flow capture, threat review, and physical certification.

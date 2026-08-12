@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Check, ChevronRight, Clock3, Cpu, Download, Eye, FileKey, History, KeyRound, LockKeyhole, Moon, Network, Pencil, Plus, RefreshCw, ShieldCheck, Sun, Trash2, WalletCards } from '@lucide/svelte';
   import Button from '$lib/components/Button.svelte';
+  import FieldCounter from '$lib/components/FieldCounter.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import PasswordField from '$lib/components/PasswordField.svelte';
   import LanguageToggle from '$lib/components/LanguageToggle.svelte';
@@ -190,7 +191,7 @@
   async function saveHardwareBackup() {
     try {
       const saved = await walletService.savePublicBackup('groot-hardware-wallet.json', hardwareBackupContent);
-      if (saved) toast({ title: 'Descriptor backup saved', description: 'Use this file for the clean-profile recovery drill.', tone: 'success' });
+      if (saved.saved) toast({ title: 'Descriptor backup saved', description: 'Use this file for the clean-profile recovery drill.', tone: 'success', action: saved.revealToken && saved.revealLabel ? { label: saved.revealLabel, run: async () => { try { await walletService.revealSavedFile(saved.revealToken!); } catch (cause) { toast({ title: 'Could not show saved backup', description: cause instanceof Error ? cause.message : undefined, tone: 'danger' }); } } } : undefined });
     } catch (cause) {
       hardwareBackupError = cause instanceof Error ? cause.message : 'Could not save the descriptor backup.';
     }
@@ -262,12 +263,12 @@
 </div>
 
 <Modal open={renameOpen} title="Rename wallet" description="Change how this wallet is identified inside Groot." onclose={() => {renameOpen=false;renameDraft='';renameError='';}}>
-  <label class="field"><span>Wallet name</span><input aria-label="New wallet name" maxlength="48" bind:value={renameDraft} autocomplete="off"/><small>This does not change descriptors, signer identity, recovery data, or saved public backups.</small></label>
+  <label class="field"><span>Wallet name</span><input aria-label="New wallet name" maxlength="48" bind:value={renameDraft} autocomplete="off"/><FieldCounter value={renameDraft} max={48} hint="This does not change descriptors, signer identity, recovery data, or saved public backups"/></label>
   {#if renameError}<p class="form-error" role="alert">{renameError}</p>{/if}
   <div class="modal-footer"><Button variant="secondary" onclick={() => {renameOpen=false;renameDraft='';renameError='';}}>Cancel</Button><Button disabled={!renameDraft.trim() || renameDraft.trim() === selectedProfile?.name} loading={renaming} loadingLabel="Saving…" onclick={renameWallet}>Save name</Button></div>
 </Modal>
 <Modal open={signerRenameOpen} title="Rename hardware signer" description="Change the local name shown when this signing key is required." onclose={() => {signerRenameOpen=false;signerRenameDraft='';signerRenameError='';}}>
-  <label class="field"><span>Hardware signer name</span><input aria-label="New hardware signer name" maxlength="48" bind:value={signerRenameDraft} autocomplete="off"/><small>This does not change the device, fingerprint, public keys, descriptors, or saved public backups.</small></label>
+  <label class="field"><span>Hardware signer name</span><input aria-label="New hardware signer name" maxlength="48" bind:value={signerRenameDraft} autocomplete="off"/><FieldCounter value={signerRenameDraft} max={48} hint="This does not change the device, fingerprint, public keys, descriptors, or saved public backups"/></label>
   {#if signerRenameError}<p class="form-error" role="alert">{signerRenameError}</p>{/if}
   <div class="modal-footer"><Button variant="secondary" onclick={() => {signerRenameOpen=false;signerRenameDraft='';signerRenameError='';}}>Cancel</Button><Button disabled={!signerRenameDraft.trim() || signerRenameDraft.trim() === hardwareSignerWallet?.signer.label} loading={signerRenaming} loadingLabel="Saving…" onclick={renameHardwareSigner}>Save signer name</Button></div>
 </Modal>

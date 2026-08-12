@@ -72,4 +72,24 @@ describe('live wallet sync', () => {
     expect(wallet.sync).toHaveBeenCalledTimes(1);
     controller.stop();
   });
+
+  it('runs the newly selected wallet immediately after an active sync finishes', async () => {
+    let release!: () => void;
+    let markStarted!: () => void;
+    const blocked = new Promise<void>((resolve) => { release = resolve; });
+    const started = new Promise<void>((resolve) => { markStarted = resolve; });
+    const wallet = {
+      exists: vi.fn().mockResolvedValue(true),
+      profiles: vi.fn().mockResolvedValue(registry('single_key')),
+      sync: vi.fn().mockImplementationOnce(() => { markStarted(); return blocked; }).mockResolvedValue(undefined),
+      syncMultisig: vi.fn()
+    };
+    const controller = createLiveSync(wallet, 60_000);
+    controller.start();
+    await started;
+    controller.restart();
+    release();
+    await vi.waitFor(() => expect(wallet.sync).toHaveBeenCalledTimes(2));
+    controller.stop();
+  });
 });

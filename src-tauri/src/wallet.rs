@@ -10,7 +10,7 @@ use bdk_bitcoind_rpc::{
 };
 use bdk_wallet::{
     bitcoin::{
-        bip32::{DerivationPath, Xpriv, Xpub},
+        bip32::{DerivationPath, Fingerprint, Xpriv, Xpub},
         constants::genesis_block,
         hashes::{sha256, Hash as _, HashEngine},
         secp256k1::Secp256k1,
@@ -63,7 +63,9 @@ use crate::multisig::{
 use crate::native_backup;
 use crate::network::{ChainBackend, CoreNodeConfig, NetworkConfigError, RpcAuthMode};
 use crate::notifications::{self, WalletNotification};
-use crate::proposal::{decode_psbt, encode_psbt, merge_signed_psbt, signature_progress};
+use crate::proposal::{
+    decode_psbt, encode_psbt, hardware_signature_response, merge_signed_psbt, signature_progress,
+};
 use crate::recovery::{analyze_template, PolicyAnalysis, RecoveryError, RecoveryTemplate};
 use crate::registry::{self, RegistryError, WalletKind, WalletProfile, WalletRegistry};
 use crate::secure_store::{self, SecureStoreError};
@@ -99,7 +101,8 @@ pub struct SavedFileDto {
 
 fn validate_public_backup_filename(value: &str) -> ApiResult<&str> {
     let trimmed = value.trim();
-    let valid_extension = trimmed.ends_with(".bsms") || trimmed.ends_with(".json");
+    let valid_extension =
+        trimmed.ends_with(".bsms") || trimmed.ends_with(".json") || trimmed.ends_with(".txt");
     if trimmed.is_empty()
         || trimmed.len() > 128
         || trimmed.contains(['/', '\\', '\0'])
@@ -107,7 +110,7 @@ fn validate_public_backup_filename(value: &str) -> ApiResult<&str> {
     {
         return Err(api_error(
             "invalid_backup",
-            "Choose a valid .bsms or .json backup name.",
+            "Choose a valid .bsms, .json, or .txt backup name.",
         ));
     }
     Ok(trimmed)
@@ -131,9 +134,10 @@ fn validate_psbt_filename(value: &str) -> ApiResult<&str> {
 #[tauri::command]
 pub async fn public_backup_save(
     app: AppHandle,
+    state: State<'_, AppState>,
     suggested_filename: String,
     content: String,
-) -> ApiResult<bool> {
+) -> ApiResult<SavedFileDto> {
     let filename = validate_public_backup_filename(&suggested_filename)?.to_owned();
     if content.is_empty() || content.len() > MAX_PUBLIC_BACKUP_BYTES {
         return Err(api_error(
@@ -141,9 +145,11 @@ pub async fn public_backup_save(
             "The public backup has an invalid size.",
         ));
     }
-    tauri::async_runtime::spawn_blocking(move || {
+    let saved_path = tauri::async_runtime::spawn_blocking(move || {
         let extension = if filename.ends_with(".bsms") {
             "bsms"
+        } else if filename.ends_with(".txt") {
+            "txt"
         } else {
             "json"
         };
@@ -154,7 +160,7 @@ pub async fn public_backup_save(
             .add_filter("Groot public backup", &[extension])
             .blocking_save_file();
         let Some(selected) = selected else {
-            return Ok(false);
+            return Ok(None);
         };
         let path = selected.into_path().map_err(internal)?;
         let mut options = OpenOptions::new();
@@ -172,10 +178,11 @@ pub async fn public_backup_save(
         }
         file.write_all(content.as_bytes()).map_err(internal)?;
         file.sync_all().map_err(internal)?;
-        Ok(true)
+        Ok(Some(path))
     })
     .await
-    .map_err(internal)?
+    .map_err(internal)??;
+    saved_file_result(&state, saved_path)
 }
 
 #[tauri::command]
@@ -218,6 +225,10 @@ pub async fn psbt_file_save(
     })
     .await
     .map_err(internal)??;
+    saved_file_result(&state, saved_path)
+}
+
+fn saved_file_result(state: &AppState, saved_path: Option<PathBuf>) -> ApiResult<SavedFileDto> {
     let Some(path) = saved_path else {
         return Ok(SavedFileDto {
             saved: false,
@@ -283,7 +294,7 @@ pub async fn psbt_file_reveal(
                 || {
                     api_error(
                         "file_reveal_unavailable",
-                        "This saved-file shortcut expired. The PSBT remains saved.",
+                        "This saved-file shortcut expired. The file remains saved.",
                     )
                 },
             )
@@ -291,7 +302,7 @@ pub async fn psbt_file_reveal(
     if !saved.path.is_file() {
         return Err(api_error(
             "file_reveal_unavailable",
-            "The PSBT was moved or is no longer available at its saved location.",
+            "The file was moved or is no longer available at its saved location.",
         ));
     }
     tauri::async_runtime::spawn_blocking(move || reveal_saved_file(&app, saved.path))
@@ -340,7 +351,7 @@ fn reveal_saved_file(app: &AppHandle, path: PathBuf) -> ApiResult<()> {
     } else {
         Err(api_error(
             "file_reveal_unavailable",
-            "Finder could not reveal the saved PSBT.",
+            "Finder could not reveal the saved file.",
         ))
     }
 }
@@ -467,6 +478,7 @@ pub struct AppState {
     saved_files: Mutex<HashMap<String, SavedFileReveal>>,
     recovery_scans: Mutex<HashMap<Uuid, ActiveRecoveryScan>>,
     runtime_auth_retry_at: Mutex<HashMap<Uuid, Instant>>,
+    pending_policy_verifications: Mutex<HashMap<String, SignerPolicyVerificationDto>>,
 }
 
 struct ActiveRecoveryScan {
@@ -864,6 +876,23 @@ pub struct CosignerHealthDto {
     status: &'static str,
     checked_at: String,
     summary: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SignerPolicyVerificationDto {
+    signer_fingerprint: String,
+    device_type: String,
+    verified_at: String,
+    scope: &'static str,
+    displayed_address: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PolicyVerificationAddressDto {
+    canonical_address: String,
+    ledger_testnet_alias: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -1486,9 +1515,18 @@ fn regtest_dir() -> ApiResult<PathBuf> {
         return Ok(PathBuf::from(path));
     }
 
-    std::env::current_dir()
-        .map(|path| path.join(".regtest"))
-        .map_err(internal)
+    default_regtest_dir()
+}
+
+fn default_regtest_dir() -> ApiResult<PathBuf> {
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let repository_root = manifest_dir.parent().ok_or_else(|| {
+        api_error(
+            "internal_error",
+            "The Regtest repository directory could not be resolved.",
+        )
+    })?;
+    Ok(repository_root.join(".regtest"))
 }
 
 fn node_config_path(app: &AppHandle) -> ApiResult<PathBuf> {
@@ -1662,7 +1700,7 @@ fn rpc_client(app: &AppHandle, state: &State<'_, AppState>) -> ApiResult<Client>
             if !cookie.exists() {
                 return Err(api_error(
                     "network_unavailable",
-                    "Regtest is not running. Start it with `pnpm regtest:start`.",
+                    "Groot cannot find the Regtest authentication cookie. Confirm the configured Regtest data directory and that Bitcoin Core is running.",
                 ));
             }
             build_rpc_client(&url, Auth::CookieFile(cookie), config.tor_proxy.as_deref())
@@ -1704,7 +1742,7 @@ fn candidate_rpc_client(config: &CoreNodeConfig, password: &str) -> ApiResult<Cl
             if !cookie.exists() {
                 return Err(api_error(
                     "network_unavailable",
-                    "Regtest is not running. Start it with `pnpm regtest:start`.",
+                    "Groot cannot find the Regtest authentication cookie. Confirm the configured Regtest data directory and that Bitcoin Core is running.",
                 ));
             }
             build_rpc_client(&url, Auth::CookieFile(cookie), config.tor_proxy.as_deref())
@@ -1866,6 +1904,25 @@ fn init_app_schema(db: &Connection) -> ApiResult<()> {
         );
         CREATE INDEX IF NOT EXISTS groot_address_verifications_address_time
             ON groot_address_verifications(address_idx, verified_at DESC, id DESC);
+        CREATE TABLE IF NOT EXISTS groot_signer_policy_verifications (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            signer_fingerprint TEXT NOT NULL CHECK(length(signer_fingerprint) = 8),
+            device_type TEXT NOT NULL,
+            scope TEXT NOT NULL CHECK(scope = 'policy_and_address'),
+            displayed_address TEXT NOT NULL,
+            verified_at INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS groot_signer_policy_verifications_signer_time
+            ON groot_signer_policy_verifications(signer_fingerprint, verified_at DESC, id DESC);
+        CREATE TABLE IF NOT EXISTS groot_signer_policy_acknowledgements (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            signer_fingerprint TEXT NOT NULL CHECK(length(signer_fingerprint) = 8),
+            device_type TEXT NOT NULL CHECK(device_type = 'coldcard'),
+            scope TEXT NOT NULL CHECK(scope = 'policy_file_acknowledgement'),
+            acknowledged_at INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS groot_signer_policy_acknowledgements_signer_time
+            ON groot_signer_policy_acknowledgements(signer_fingerprint, acknowledged_at DESC, id DESC);
         CREATE TABLE IF NOT EXISTS groot_proposals (
             proposal_id TEXT PRIMARY KEY,
             recipient TEXT NOT NULL,
@@ -2918,6 +2975,28 @@ fn multisig_fingerprints(
         .collect()
 }
 
+fn add_multisig_global_xpubs(psbt: &mut Psbt, metadata: &MultisigWalletDto) -> ApiResult<()> {
+    for cosigner in &metadata.cosigners {
+        let xpub = Xpub::from_str(cosigner.xpub.trim()).map_err(internal)?;
+        let fingerprint = Fingerprint::from_str(cosigner.fingerprint.trim()).map_err(internal)?;
+        let derivation_path =
+            DerivationPath::from_str(cosigner.derivation_path.trim()).map_err(internal)?;
+        match psbt.xpub.get(&xpub) {
+            Some(existing) if existing != &(fingerprint, derivation_path.clone()) => {
+                return Err(api_error(
+                    "proposal_mismatch",
+                    "The PSBT global public-key origin conflicts with the saved wallet policy.",
+                ));
+            }
+            Some(_) => {}
+            None => {
+                psbt.xpub.insert(xpub, (fingerprint, derivation_path));
+            }
+        }
+    }
+    Ok(())
+}
+
 fn verify_multisig_credential(app: &AppHandle, credential: &str) -> ApiResult<()> {
     validate_credential(credential)?;
     let path = multisig_secret_path(app)?;
@@ -3923,6 +4002,216 @@ fn record_address_verification(
         .into_iter()
         .find(|address| address.id == address_id)
         .ok_or_else(|| internal("Verified address disappeared from wallet storage."))
+}
+
+fn records_interactive_policy_verification(device_type: &str) -> bool {
+    matches!(
+        device_type.to_ascii_lowercase().as_str(),
+        "ledger" | "bitbox02" | "jade"
+    )
+}
+
+fn require_matching_policy_device_type(
+    expected_device_type: Option<&str>,
+    actual_device_type: &str,
+) -> ApiResult<()> {
+    let Some(expected) = expected_device_type else {
+        return Ok(());
+    };
+    if records_interactive_policy_verification(expected)
+        && !expected.eq_ignore_ascii_case(actual_device_type)
+    {
+        return Err(api_error(
+            "unknown_signer",
+            "The connected hardware model does not match this saved signer.",
+        ));
+    }
+    Ok(())
+}
+
+fn record_signer_policy_verification(
+    db: &Connection,
+    identity: &VerifiedHardwareIdentity,
+    displayed_address: &str,
+) -> ApiResult<SignerPolicyVerificationDto> {
+    if !records_interactive_policy_verification(&identity.device_type) {
+        return Err(api_error(
+            "invalid_hardware_request",
+            "This signer does not use Groot's interactive wallet-policy verification flow.",
+        ));
+    }
+    let verified_at = now();
+    let signer_fingerprint = identity.fingerprint.to_ascii_lowercase();
+    let device_type = identity.device_type.to_ascii_lowercase();
+    db.execute(
+        "INSERT INTO groot_signer_policy_verifications
+            (signer_fingerprint, device_type, scope, displayed_address, verified_at)
+         VALUES (?1, ?2, 'policy_and_address', ?3, ?4)",
+        params![
+            signer_fingerprint,
+            device_type,
+            displayed_address,
+            verified_at
+        ],
+    )
+    .map_err(internal)?;
+    Ok(SignerPolicyVerificationDto {
+        signer_fingerprint,
+        device_type,
+        verified_at: verified_at.to_string(),
+        scope: "policy_and_address",
+        displayed_address: Some(displayed_address.to_owned()),
+    })
+}
+
+fn policy_verification_key(wallet: &MultisigWalletDto, fingerprint: &str) -> ApiResult<String> {
+    Ok(format!(
+        "{}:{}",
+        descriptor_checksum(&wallet.external_descriptor)?,
+        fingerprint.to_ascii_lowercase()
+    ))
+}
+
+fn signer_policy_verification_rows(db: &Connection) -> ApiResult<Vec<SignerPolicyVerificationDto>> {
+    let mut statement = db
+        .prepare(
+            "SELECT signer_fingerprint, device_type, verified_at, displayed_address
+             FROM groot_signer_policy_verifications verification
+             WHERE verification.id = (
+               SELECT latest.id
+               FROM groot_signer_policy_verifications latest
+               WHERE latest.signer_fingerprint = verification.signer_fingerprint
+               ORDER BY latest.verified_at DESC, latest.id DESC
+               LIMIT 1
+             )
+             ORDER BY signer_fingerprint ASC",
+        )
+        .map_err(internal)?;
+    let rows = statement
+        .query_map([], |row| {
+            Ok(SignerPolicyVerificationDto {
+                signer_fingerprint: row.get(0)?,
+                device_type: row.get(1)?,
+                verified_at: row.get::<_, u64>(2)?.to_string(),
+                scope: "policy_and_address",
+                displayed_address: Some(row.get(3)?),
+            })
+        })
+        .map_err(internal)?;
+    let mut verifications = rows.collect::<Result<Vec<_>, _>>().map_err(internal)?;
+    let mut acknowledgements = db
+        .prepare(
+            "SELECT signer_fingerprint, device_type, acknowledged_at
+             FROM groot_signer_policy_acknowledgements acknowledgement
+             WHERE acknowledgement.id = (
+               SELECT latest.id
+               FROM groot_signer_policy_acknowledgements latest
+               WHERE latest.signer_fingerprint = acknowledgement.signer_fingerprint
+               ORDER BY latest.acknowledged_at DESC, latest.id DESC
+               LIMIT 1
+             )
+             ORDER BY signer_fingerprint ASC",
+        )
+        .map_err(internal)?;
+    let rows = acknowledgements
+        .query_map([], |row| {
+            Ok(SignerPolicyVerificationDto {
+                signer_fingerprint: row.get(0)?,
+                device_type: row.get(1)?,
+                verified_at: row.get::<_, u64>(2)?.to_string(),
+                scope: "policy_file_acknowledgement",
+                displayed_address: None,
+            })
+        })
+        .map_err(internal)?;
+    verifications.extend(rows.collect::<Result<Vec<_>, _>>().map_err(internal)?);
+    Ok(verifications)
+}
+
+fn has_signer_policy_verification(
+    verifications: &[SignerPolicyVerificationDto],
+    identity: &VerifiedHardwareIdentity,
+) -> bool {
+    verifications.iter().any(|verification| {
+        verification.scope == "policy_and_address"
+            && verification
+                .signer_fingerprint
+                .eq_ignore_ascii_case(&identity.fingerprint)
+            && verification
+                .device_type
+                .eq_ignore_ascii_case(&identity.device_type)
+    })
+}
+
+fn has_coldcard_policy_acknowledgement(
+    verifications: &[SignerPolicyVerificationDto],
+    identity: &VerifiedHardwareIdentity,
+) -> bool {
+    identity.device_type.eq_ignore_ascii_case("coldcard")
+        && verifications.iter().any(|verification| {
+            verification.scope == "policy_file_acknowledgement"
+                && verification
+                    .signer_fingerprint
+                    .eq_ignore_ascii_case(&identity.fingerprint)
+                && verification.device_type.eq_ignore_ascii_case("coldcard")
+        })
+}
+
+#[tauri::command]
+pub fn multisig_acknowledge_coldcard_policy(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    signer_fingerprint: String,
+) -> ApiResult<SignerPolicyVerificationDto> {
+    require_unlocked(&app, &state)?;
+    let signer_fingerprint = signer_fingerprint.trim().to_ascii_lowercase();
+    if signer_fingerprint.len() != 8
+        || !signer_fingerprint
+            .chars()
+            .all(|character| character.is_ascii_hexdigit())
+    {
+        return Err(api_error(
+            "invalid_fingerprint",
+            "A signer fingerprint must contain exactly eight hexadecimal characters.",
+        ));
+    }
+    let metadata = read_multisig_metadata(&app)?;
+    let signer = metadata
+        .cosigners
+        .iter()
+        .find(|signer| signer.fingerprint.eq_ignore_ascii_case(&signer_fingerprint))
+        .ok_or_else(|| {
+            api_error(
+                "unknown_signer",
+                "This fingerprint is not part of the wallet.",
+            )
+        })?;
+    if !signer
+        .device_type
+        .as_deref()
+        .is_some_and(|device_type| device_type.eq_ignore_ascii_case("coldcard"))
+    {
+        return Err(api_error(
+            "invalid_hardware_request",
+            "Only a saved Coldcard signer can use the policy-file acknowledgement flow.",
+        ));
+    }
+    let acknowledged_at = now();
+    let db = open_multisig_db(&app)?;
+    db.execute(
+        "INSERT INTO groot_signer_policy_acknowledgements
+            (signer_fingerprint, device_type, scope, acknowledged_at)
+         VALUES (?1, 'coldcard', 'policy_file_acknowledgement', ?2)",
+        params![signer_fingerprint, acknowledged_at],
+    )
+    .map_err(internal)?;
+    Ok(SignerPolicyVerificationDto {
+        signer_fingerprint,
+        device_type: "coldcard".to_owned(),
+        verified_at: acknowledged_at.to_string(),
+        scope: "policy_file_acknowledgement",
+        displayed_address: None,
+    })
 }
 
 fn snapshot_from(
@@ -5834,6 +6123,217 @@ pub async fn hardware_verify_multisig_address(
 }
 
 #[tauri::command]
+pub fn multisig_signer_policy_verifications(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> ApiResult<Vec<SignerPolicyVerificationDto>> {
+    require_unlocked(&app, &state)?;
+    let metadata = read_multisig_metadata(&app)?;
+    let known = metadata
+        .cosigners
+        .iter()
+        .map(|cosigner| cosigner.fingerprint.to_ascii_lowercase())
+        .collect::<std::collections::HashSet<_>>();
+    let db = open_multisig_db(&app)?;
+    Ok(signer_policy_verification_rows(&db)?
+        .into_iter()
+        .filter(|verification| known.contains(&verification.signer_fingerprint))
+        .collect())
+}
+
+fn policy_verification_address(
+    wallet: &MultisigWalletDto,
+) -> ApiResult<PolicyVerificationAddressDto> {
+    let canonical_address = first_multisig_address(wallet)?;
+    Ok(PolicyVerificationAddressDto {
+        ledger_testnet_alias: regtest_testnet_address_alias(&canonical_address),
+        canonical_address,
+    })
+}
+
+#[tauri::command]
+pub fn multisig_policy_verification_address(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> ApiResult<PolicyVerificationAddressDto> {
+    require_unlocked(&app, &state)?;
+    policy_verification_address(&read_multisig_metadata(&app)?)
+}
+
+#[tauri::command]
+pub fn multisig_draft_policy_verification_address(
+    policy: PolicyInput,
+) -> ApiResult<PolicyVerificationAddressDto> {
+    reject_virtual_cosigners(&policy.cosigners)?;
+    let preview = policy.preview().map_err(policy_api_error)?;
+    policy_verification_address(&MultisigWalletDto {
+        kind: "multisig".to_owned(),
+        name: preview.name,
+        threshold: preview.threshold,
+        cosigners: preview.cosigners,
+        external_descriptor: preview.external_descriptor,
+        internal_descriptor: preview.internal_descriptor,
+        created_at: String::new(),
+        policy_type: "standard".to_owned(),
+        recovery_template: None,
+        spending_paths: Vec::new(),
+    })
+}
+
+#[tauri::command]
+pub async fn hardware_verify_multisig_policy(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    device_id: String,
+    signer_fingerprint: String,
+) -> ApiResult<SignerPolicyVerificationDto> {
+    require_unlocked(&app, &state)?;
+    let metadata = read_multisig_metadata(&app)?;
+    let signer = metadata
+        .cosigners
+        .iter()
+        .find(|cosigner| {
+            cosigner
+                .fingerprint
+                .eq_ignore_ascii_case(&signer_fingerprint)
+        })
+        .ok_or_else(unknown_hardware_signer)?;
+    let expected_fingerprint = signer.fingerprint.clone();
+    let expected_device_type = signer.device_type.clone();
+    let expected = first_multisig_address(&metadata)?;
+    let descriptor = Descriptor::<DescriptorPublicKey>::from_str(&metadata.external_descriptor)
+        .map_err(internal)?
+        .at_derivation_index(0)
+        .map_err(internal)?
+        .to_string();
+    let hwi = hwi_cli(&app)?;
+    let (displayed, identity) = tauri::async_runtime::spawn_blocking(move || {
+        let identity = connected_hardware_identity(&hwi, &device_id, &[expected_fingerprint])?;
+        if !records_interactive_policy_verification(&identity.device_type) {
+            return Err(api_error(
+                "invalid_hardware_request",
+                "This signer does not require Groot's interactive wallet-policy verification flow.",
+            ));
+        }
+        require_matching_policy_device_type(
+            expected_device_type.as_deref(),
+            &identity.device_type,
+        )?;
+        let displayed = hwi
+            .display_descriptor_address(&identity.device_type, &device_id, &descriptor)
+            .map_err(|error| hardware_device_api_error(error, &identity.device_type))?;
+        Ok::<_, ApiError>((displayed, identity))
+    })
+    .await
+    .map_err(internal)??;
+    let response: HwiAddress = serde_json::from_slice(&displayed).map_err(internal)?;
+    let actual = response.address.ok_or_else(|| {
+        drop(response.error);
+        missing_hwi_value(
+            response.code,
+            "The device did not return the policy verification address.",
+        )
+    })?;
+    if !hardware_display_matches_expected_address(&expected, &actual) {
+        return Err(api_error(
+            "hardware_address_mismatch",
+            "The first address returned by the device does not match this wallet policy.",
+        ));
+    }
+    let db = open_multisig_db(&app)?;
+    record_signer_policy_verification(&db, &identity, &actual)
+}
+
+#[tauri::command]
+pub async fn hardware_verify_multisig_draft_policy(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    policy: PolicyInput,
+    device_id: String,
+    signer_fingerprint: String,
+) -> ApiResult<SignerPolicyVerificationDto> {
+    reject_virtual_cosigners(&policy.cosigners)?;
+    let preview = policy.preview().map_err(policy_api_error)?;
+    let wallet = MultisigWalletDto {
+        kind: "multisig".to_owned(),
+        name: preview.name,
+        threshold: preview.threshold,
+        cosigners: preview.cosigners,
+        external_descriptor: preview.external_descriptor,
+        internal_descriptor: preview.internal_descriptor,
+        created_at: String::new(),
+        policy_type: "standard".to_owned(),
+        recovery_template: None,
+        spending_paths: Vec::new(),
+    };
+    let signer = wallet
+        .cosigners
+        .iter()
+        .find(|cosigner| {
+            cosigner
+                .fingerprint
+                .eq_ignore_ascii_case(&signer_fingerprint)
+        })
+        .ok_or_else(unknown_hardware_signer)?;
+    let expected_fingerprint = signer.fingerprint.clone();
+    let expected_device_type = signer.device_type.clone();
+    let expected = first_multisig_address(&wallet)?;
+    let descriptor = Descriptor::<DescriptorPublicKey>::from_str(&wallet.external_descriptor)
+        .map_err(internal)?
+        .at_derivation_index(0)
+        .map_err(internal)?
+        .to_string();
+    let hwi = hwi_cli(&app)?;
+    let (displayed, identity) = tauri::async_runtime::spawn_blocking(move || {
+        let identity = connected_hardware_identity(&hwi, &device_id, &[expected_fingerprint])?;
+        if !records_interactive_policy_verification(&identity.device_type) {
+            return Err(api_error(
+                "invalid_hardware_request",
+                "This signer does not require Groot's interactive wallet-policy verification flow.",
+            ));
+        }
+        require_matching_policy_device_type(
+            expected_device_type.as_deref(),
+            &identity.device_type,
+        )?;
+        let displayed = hwi
+            .display_descriptor_address(&identity.device_type, &device_id, &descriptor)
+            .map_err(|error| hardware_device_api_error(error, &identity.device_type))?;
+        Ok::<_, ApiError>((displayed, identity))
+    })
+    .await
+    .map_err(internal)??;
+    let response: HwiAddress = serde_json::from_slice(&displayed).map_err(internal)?;
+    let actual = response.address.ok_or_else(|| {
+        drop(response.error);
+        missing_hwi_value(
+            response.code,
+            "The device did not return the policy verification address.",
+        )
+    })?;
+    if !hardware_display_matches_expected_address(&expected, &actual) {
+        return Err(api_error(
+            "hardware_address_mismatch",
+            "The first address returned by the device does not match this wallet policy.",
+        ));
+    }
+    let verification = SignerPolicyVerificationDto {
+        signer_fingerprint: identity.fingerprint.to_ascii_lowercase(),
+        device_type: identity.device_type.to_ascii_lowercase(),
+        verified_at: now().to_string(),
+        scope: "policy_and_address",
+        displayed_address: Some(actual),
+    };
+    let key = policy_verification_key(&wallet, &verification.signer_fingerprint)?;
+    state
+        .pending_policy_verifications
+        .lock()
+        .map_err(internal)?
+        .insert(key, verification.clone());
+    Ok(verification)
+}
+
+#[tauri::command]
 pub async fn hardware_verify_external_address(
     app: AppHandle,
     state: State<'_, AppState>,
@@ -6103,6 +6603,7 @@ pub fn multisig_recover_bsms(
         .network(NETWORK)
         .create_wallet(&mut db)
         .map_err(internal)?;
+
         let marker = format!("groot-multisig:{}", wallet.external_descriptor);
         secure_store::store(
             &dir.join("secret.json"),
@@ -6386,7 +6887,8 @@ pub fn multisig_tx_prepare(
     let mut builder = wallet.build_tx();
     builder
         .add_recipient(address.script_pubkey(), Amount::from_sat(amount))
-        .fee_rate(rate);
+        .fee_rate(rate)
+        .add_global_xpubs();
     let frozen = frozen_outpoints(&transaction)?;
     match coin_selection {
         CoinSelectionInput::Auto => {
@@ -6601,33 +7103,80 @@ pub async fn hardware_sign_multisig(
             "The proposal changed after review. Reload it before signing.",
         ));
     }
+    let policy_verifications = signer_policy_verification_rows(&db)?;
     drop(db);
-    let encoded = proposal.psbt;
+    let reviewed_hardware_psbt = decode_psbt(&proposal.psbt).map_err(proposal_api_error)?;
+    let mut signing_psbt = reviewed_hardware_psbt.clone();
+    let reviewed_global_xpubs = signing_psbt.xpub.clone();
+    add_multisig_global_xpubs(&mut signing_psbt, &metadata)?;
+    let encoded = encode_psbt(&signing_psbt);
     let expected_fingerprints = metadata
         .cosigners
         .iter()
         .map(|cosigner| cosigner.fingerprint.clone())
         .collect::<Vec<_>>();
     let hwi = hwi_cli(&app)?;
-    let signed = tauri::async_runtime::spawn_blocking(move || {
-        let device_type =
-            verify_connected_hardware_identity(&hwi, &device_id, &expected_fingerprints)?;
+    let (signed, signing_identity) = tauri::async_runtime::spawn_blocking(move || {
+        let identity = connected_hardware_identity(&hwi, &device_id, &expected_fingerprints)?;
+        if records_interactive_policy_verification(&identity.device_type)
+            && !has_signer_policy_verification(&policy_verifications, &identity)
+        {
+            return Err(api_error(
+                "invalid_hardware_request",
+                "Verify this signer's wallet policy and first address before signing.",
+            ));
+        }
+        if identity.device_type.eq_ignore_ascii_case("coldcard")
+            && !has_coldcard_policy_acknowledgement(&policy_verifications, &identity)
+        {
+            return Err(api_error(
+                "invalid_hardware_request",
+                "Import and verify this wallet's policy file on Coldcard before signing.",
+            ));
+        }
         let output = hwi
-            .sign_psbt(&device_type, &device_id, &encoded)
-            .map_err(|error| hardware_device_api_error(error, &device_type))?;
+            .sign_psbt(&identity.device_type, &device_id, &encoded)
+            .map_err(|error| hardware_device_api_error(error, &identity.device_type))?;
         let response: HwiPsbt = serde_json::from_slice(&output).map_err(internal)?;
-        response.psbt.ok_or_else(|| {
+        let signed = response.psbt.ok_or_else(|| {
             drop(response.error);
             missing_hardware_psbt(
-                &device_type,
+                &identity.device_type,
                 response.code,
                 "The device did not return a signed PSBT.",
             )
-        })
+        })?;
+        Ok::<_, ApiError>((signed, identity))
     })
     .await
     .map_err(internal)??;
-    import_multisig_proposal(&app, &proposal_id, &signed)
+    let returned_psbt = decode_psbt(&signed).map_err(proposal_api_error)?;
+    let mut signed_psbt = hardware_signature_response(&reviewed_hardware_psbt, returned_psbt)
+        .map_err(proposal_api_error)?;
+    let returned_progress = signature_progress(
+        &signed_psbt,
+        &multisig_fingerprints(&metadata)?,
+        metadata.threshold,
+    )
+    .map_err(proposal_api_error)?;
+    let signer_was_already_present = proposal
+        .signed_fingerprints
+        .iter()
+        .any(|fingerprint| fingerprint.eq_ignore_ascii_case(&signing_identity.fingerprint));
+    let signer_is_present = returned_progress
+        .signed_fingerprints
+        .iter()
+        .any(|fingerprint| fingerprint.eq_ignore_ascii_case(&signing_identity.fingerprint));
+    if !signer_was_already_present && !signer_is_present {
+        let message = if signing_identity.device_type.eq_ignore_ascii_case("ledger") {
+            "Ledger returned the PSBT without adding its signature. Keep Bitcoin Test open and approve the wallet policy and transaction on-device, then try again. No signatures were changed."
+        } else {
+            "The hardware wallet returned the PSBT without adding its signature. Review any message on the device and try again. No signatures were changed."
+        };
+        return Err(api_error("hardware_signature_missing", message));
+    }
+    signed_psbt.xpub = reviewed_global_xpubs;
+    import_multisig_proposal(&app, &proposal_id, &encode_psbt(&signed_psbt))
 }
 
 #[tauri::command]
@@ -6701,6 +7250,7 @@ pub fn multisig_create(
     validate_credential(credential.as_str())?;
     reject_virtual_cosigners(&policy.cosigners)?;
     let preview = policy.preview().map_err(policy_api_error)?;
+    let preview_descriptor_checksum = descriptor_checksum(&preview.external_descriptor)?;
     let (id, dir) = prepare_profile_directory(&app)?;
     let result = (|| {
         let mut db = open_wallet_database(&dir.join("wallet.sqlite"))?;
@@ -6712,6 +7262,33 @@ pub fn multisig_create(
         .network(NETWORK)
         .create_wallet(&mut db)
         .map_err(internal)?;
+
+        let pending = state
+            .pending_policy_verifications
+            .lock()
+            .map_err(internal)?;
+        for cosigner in &preview.cosigners {
+            let key = format!(
+                "{}:{}",
+                preview_descriptor_checksum,
+                cosigner.fingerprint.to_ascii_lowercase()
+            );
+            if let Some(verification) = pending.get(&key) {
+                db.execute(
+                    "INSERT INTO groot_signer_policy_verifications
+                        (signer_fingerprint, device_type, scope, displayed_address, verified_at)
+                     VALUES (?1, ?2, 'policy_and_address', ?3, ?4)",
+                    params![
+                        verification.signer_fingerprint,
+                        verification.device_type,
+                        verification.displayed_address,
+                        verification.verified_at.parse::<u64>().map_err(internal)?
+                    ],
+                )
+                .map_err(internal)?;
+            }
+        }
+        drop(pending);
 
         let marker = format!("groot-multisig:{}", preview.external_descriptor);
         secure_store::store(
@@ -6740,6 +7317,11 @@ pub fn multisig_create(
         cleanup_failed_profile(&dir)?;
     }
     let wallet = result?;
+    state
+        .pending_policy_verifications
+        .lock()
+        .map_err(internal)?
+        .clear();
     unlock_selected(&app, &state)?;
     reset_auth_throttle(&app, &state)?;
     Ok(wallet)
@@ -7239,7 +7821,8 @@ fn prepare_persisted_multisig_acceleration(
                 "Transaction was not found in this wallet.",
             )
         })?;
-    let psbt = build_acceleration_psbt(&mut wallet, txid, method, parent_fee, fee_rate)?;
+    let mut psbt = build_acceleration_psbt(&mut wallet, txid, method, parent_fee, fee_rate)?;
+    add_multisig_global_xpubs(&mut psbt, metadata)?;
     enforce_change_recovery_gap(&transaction, &wallet, &psbt)?;
     let proposal = summarize_payment_psbt(
         &wallet,
@@ -7476,7 +8059,7 @@ pub fn wallet_delete(
         WalletKind::WatchOnly => verify_external_signer_credential(&app, credential.as_str()),
         WalletKind::Multisig => Err(api_error(
             "wrong_wallet_kind",
-            "Delete multisig wallets from the vault settings.",
+            "Delete multisig wallets from the wallet settings.",
         )),
     };
     record_auth_result(&app, &state, &verified)?;
@@ -7857,11 +8440,14 @@ mod tests {
     }
 
     #[test]
-    fn regtest_ledger_alias_must_decode_to_the_identical_output_script() {
+    fn regtest_hardware_alias_must_decode_to_the_identical_output_script() {
         let regtest = "bcrt1qf6n3a54f4nqc5976hjl556ukfdas8xsnf8k9mz";
-        let ledger = regtest_testnet_address_alias(regtest).expect("valid Regtest address");
-        assert_eq!(ledger, "tb1qf6n3a54f4nqc5976hjl556ukfdas8xsntw0gvt");
-        assert!(hardware_display_matches_expected_address(regtest, &ledger));
+        let hardware_alias = regtest_testnet_address_alias(regtest).expect("valid Regtest address");
+        assert_eq!(hardware_alias, "tb1qf6n3a54f4nqc5976hjl556ukfdas8xsntw0gvt");
+        assert!(hardware_display_matches_expected_address(
+            regtest,
+            &hardware_alias
+        ));
         assert!(hardware_display_matches_expected_address(regtest, regtest));
 
         let other = regtest_testnet_address_alias("bcrt1q5spdlkwvajjz9t0nvsqygmeaagxts4sqxy3a7t")
@@ -7875,7 +8461,7 @@ mod tests {
         let change = "bcrt1q5spdlkwvajjz9t0nvsqygmeaagxts4sqxy3a7t".to_owned();
         let (recipient_alias, change_aliases) =
             proposal_testnet_aliases(regtest, std::slice::from_ref(&change));
-        assert_eq!(recipient_alias.as_deref(), Some(ledger.as_str()));
+        assert_eq!(recipient_alias.as_deref(), Some(hardware_alias.as_str()));
         assert_eq!(change_aliases.len(), 1);
         assert!(hardware_display_matches_expected_address(
             &change,
@@ -9097,6 +9683,57 @@ mod tests {
     }
 
     #[test]
+    fn multisig_hardware_psbt_includes_policy_xpub_origins_without_rewriting_legacy_review() {
+        use bdk_wallet::bitcoin::{absolute::LockTime, transaction::Version};
+
+        let metadata = descriptor_backup().wallet;
+        let transaction = Transaction {
+            version: Version::TWO,
+            lock_time: LockTime::ZERO,
+            input: Vec::new(),
+            output: Vec::new(),
+        };
+        let mut psbt = Psbt::from_unsigned_tx(transaction).unwrap();
+        let reviewed_global_xpubs = psbt.xpub.clone();
+
+        add_multisig_global_xpubs(&mut psbt, &metadata).unwrap();
+        assert_eq!(psbt.xpub.len(), metadata.cosigners.len());
+        for cosigner in &metadata.cosigners {
+            let xpub = Xpub::from_str(&cosigner.xpub).unwrap();
+            let expected = (
+                Fingerprint::from_str(&cosigner.fingerprint).unwrap(),
+                DerivationPath::from_str(&cosigner.derivation_path).unwrap(),
+            );
+            assert_eq!(psbt.xpub.get(&xpub), Some(&expected));
+        }
+
+        psbt.xpub = reviewed_global_xpubs;
+        assert!(psbt.xpub.is_empty());
+    }
+
+    #[test]
+    fn multisig_hardware_psbt_rejects_conflicting_global_xpub_origin() {
+        use bdk_wallet::bitcoin::{absolute::LockTime, transaction::Version};
+
+        let metadata = descriptor_backup().wallet;
+        let cosigner = &metadata.cosigners[0];
+        let xpub = Xpub::from_str(&cosigner.xpub).unwrap();
+        let path = DerivationPath::from_str(&cosigner.derivation_path).unwrap();
+        let transaction = Transaction {
+            version: Version::TWO,
+            lock_time: LockTime::ZERO,
+            input: Vec::new(),
+            output: Vec::new(),
+        };
+        let mut psbt = Psbt::from_unsigned_tx(transaction).unwrap();
+        psbt.xpub
+            .insert(xpub, (Fingerprint::from_str("ffffffff").unwrap(), path));
+
+        let error = add_multisig_global_xpubs(&mut psbt, &metadata).unwrap_err();
+        assert_eq!(error.code, "proposal_mismatch");
+    }
+
+    #[test]
     fn descriptor_backup_round_trips_and_reconstructs_a_stable_address() {
         let backup = descriptor_backup();
         let encoded = serde_json::to_string(&backup).unwrap();
@@ -9259,6 +9896,15 @@ mod tests {
                 .unwrap_err()
                 .code,
             "internal_error"
+        );
+    }
+
+    #[test]
+    fn default_regtest_directory_is_independent_of_process_working_directory() {
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        assert_eq!(
+            default_regtest_dir().unwrap(),
+            manifest_dir.parent().unwrap().join(".regtest")
         );
     }
 
@@ -9843,9 +10489,13 @@ mod tests {
             validate_public_backup_filename("wallet.json").unwrap(),
             "wallet.json"
         );
+        assert_eq!(
+            validate_public_backup_filename("wallet.txt").unwrap(),
+            "wallet.txt"
+        );
         for invalid in [
             "",
-            "wallet.txt",
+            "wallet.pdf",
             "../wallet.json",
             "folder/wallet.bsms",
             "wallet.json\0extra",
@@ -9911,6 +10561,72 @@ mod tests {
                 .code,
             "invalid_backup"
         );
+    }
+
+    #[test]
+    fn policy_readiness_is_limited_to_devices_with_interactive_registration() {
+        for supported in ["ledger", "bitbox02", "jade"] {
+            assert!(records_interactive_policy_verification(supported));
+        }
+        for other in ["coldcard", "trezor", "keepkey", "passport"] {
+            assert!(!records_interactive_policy_verification(other));
+        }
+        assert!(require_matching_policy_device_type(Some("ledger"), "ledger").is_ok());
+        assert_eq!(
+            require_matching_policy_device_type(Some("ledger"), "bitbox02")
+                .unwrap_err()
+                .code,
+            "unknown_signer"
+        );
+        assert!(require_matching_policy_device_type(None, "jade").is_ok());
+    }
+
+    #[test]
+    fn signer_policy_verification_keeps_latest_evidence_per_fingerprint() {
+        let db = Connection::open_in_memory().unwrap();
+        init_app_schema(&db).unwrap();
+        let identity = VerifiedHardwareIdentity {
+            device_type: "ledger".to_owned(),
+            fingerprint: "a1b2c3d4".to_owned(),
+        };
+        record_signer_policy_verification(&db, &identity, "tb1qfirst").unwrap();
+        record_signer_policy_verification(&db, &identity, "tb1qlatest").unwrap();
+        let rows = signer_policy_verification_rows(&db).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].signer_fingerprint, "a1b2c3d4");
+        assert_eq!(rows[0].displayed_address.as_deref(), Some("tb1qlatest"));
+        assert_eq!(rows[0].scope, "policy_and_address");
+        assert!(has_signer_policy_verification(&rows, &identity));
+        assert!(!has_signer_policy_verification(
+            &rows,
+            &VerifiedHardwareIdentity {
+                device_type: "bitbox02".to_owned(),
+                fingerprint: identity.fingerprint,
+            }
+        ));
+    }
+
+    #[test]
+    fn coldcard_policy_acknowledgement_is_distinct_from_address_evidence() {
+        let db = Connection::open_in_memory().unwrap();
+        init_app_schema(&db).unwrap();
+        db.execute(
+            "INSERT INTO groot_signer_policy_acknowledgements
+                (signer_fingerprint, device_type, scope, acknowledged_at)
+             VALUES ('f00dbabe', 'coldcard', 'policy_file_acknowledgement', 42)",
+            [],
+        )
+        .unwrap();
+        let identity = VerifiedHardwareIdentity {
+            device_type: "coldcard".to_owned(),
+            fingerprint: "f00dbabe".to_owned(),
+        };
+        let rows = signer_policy_verification_rows(&db).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].scope, "policy_file_acknowledgement");
+        assert_eq!(rows[0].displayed_address, None);
+        assert!(has_coldcard_policy_acknowledgement(&rows, &identity));
+        assert!(!has_signer_policy_verification(&rows, &identity));
     }
 }
 
