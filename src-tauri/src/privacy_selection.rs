@@ -225,12 +225,6 @@ impl CoinSelectionAlgorithm for PrivacyAwareCoinSelection {
 
         let fee_amount = fee_rate * total_weight;
         let amount_needed = target_amount + fee_amount;
-        if selected_amount < amount_needed {
-            return Err(InsufficientFunds {
-                needed: amount_needed,
-                available: selected_amount,
-            });
-        }
         Ok(CoinSelectionResult {
             selected,
             fee_amount,
@@ -282,6 +276,84 @@ mod tests {
                 },
             }),
         }
+    }
+
+    #[test]
+    fn strategy_names_are_stable() {
+        assert_eq!(AutomaticSelectionStrategy::Balanced.as_str(), "balanced");
+        assert_eq!(AutomaticSelectionStrategy::Private.as_str(), "private");
+        assert_eq!(AutomaticSelectionStrategy::LowerFee.as_str(), "lower_fee");
+    }
+
+    #[test]
+    fn balanced_strategy_prefers_a_sufficient_known_coin() {
+        let sufficient = weighted(12_000, 0);
+        let insufficient = weighted(9_000, 1);
+        let mut privacy = HashMap::new();
+        for coin in [&sufficient, &insufficient] {
+            privacy.insert(
+                coin.utxo.outpoint().to_string(),
+                CoinPrivacy {
+                    label_ids: BTreeSet::from([format!("label-{}", coin.utxo.outpoint().vout)]),
+                    cluster_ids: BTreeSet::from([format!("cluster-{}", coin.utxo.outpoint().vout)]),
+                    ..CoinPrivacy::default()
+                },
+            );
+        }
+        let selector =
+            PrivacyAwareCoinSelection::new(AutomaticSelectionStrategy::Balanced, privacy);
+        let mut rng = StdRng::seed_from_u64(7);
+        let result = selector
+            .coin_select(
+                vec![],
+                vec![insufficient, sufficient],
+                FeeRate::ZERO,
+                Amount::from_sat(10_000),
+                Script::new(),
+                &mut rng,
+            )
+            .unwrap();
+        assert_eq!(result.selected[0].outpoint().vout, 0);
+    }
+
+    #[test]
+    fn required_coins_seed_privacy_and_weight_before_optional_selection() {
+        let required = weighted(6_000, 0);
+        let optional = weighted(6_000, 1);
+        let selector =
+            PrivacyAwareCoinSelection::new(AutomaticSelectionStrategy::Balanced, HashMap::new());
+        let mut rng = StdRng::seed_from_u64(7);
+        let result = selector
+            .coin_select(
+                vec![required],
+                vec![optional],
+                FeeRate::ZERO,
+                Amount::from_sat(10_000),
+                Script::new(),
+                &mut rng,
+            )
+            .unwrap();
+        assert_eq!(result.selected.len(), 2);
+        assert_eq!(result.selected[0].outpoint().vout, 0);
+    }
+
+    #[test]
+    fn reports_exact_shortfall_when_available_coins_are_insufficient() {
+        let selector =
+            PrivacyAwareCoinSelection::new(AutomaticSelectionStrategy::Balanced, HashMap::new());
+        let mut rng = StdRng::seed_from_u64(7);
+        let error = selector
+            .coin_select(
+                vec![],
+                vec![weighted(6_000, 0)],
+                FeeRate::ZERO,
+                Amount::from_sat(10_000),
+                Script::new(),
+                &mut rng,
+            )
+            .unwrap_err();
+        assert_eq!(error.needed, Amount::from_sat(10_000));
+        assert_eq!(error.available, Amount::from_sat(6_000));
     }
 
     #[test]
