@@ -7,10 +7,12 @@ mod build_network;
 mod direct_rpc;
 pub mod external_signer;
 mod hardware;
+mod label_provenance;
 mod multisig;
 mod native_backup;
 pub mod network;
 mod notifications;
+mod privacy_selection;
 mod process_lock;
 pub mod proposal;
 pub mod recovery;
@@ -110,6 +112,7 @@ pub fn run() {
             wallet::multisig_address_create,
             wallet::multisig_address_discard,
             wallet::multisig_tx_prepare,
+            wallet::multisig_coin_selection_preview,
             wallet::multisig_proposals,
             wallet::multisig_proposal_import,
             wallet::multisig_proposal_discard_signature,
@@ -117,6 +120,7 @@ pub fn run() {
             wallet::multisig_proposal_broadcast,
             wallet::multisig_proposal_cancel,
             wallet::tx_prepare,
+            wallet::coin_selection_preview,
             wallet::tx_acceleration_prepare,
             wallet::multisig_acceleration_prepare,
             wallet::tx_sign_and_broadcast,

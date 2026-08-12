@@ -15,13 +15,14 @@
   import { psbtFilename, readTransferFile } from '$lib/transfer';
   import { shortSats } from '$lib/data';
   import { toast } from '$lib/stores/toasts';
-  import { feeRate as asFeeRate, sats, walletService, type CoinSelection, type ExternalSignerWallet, type FeeEstimates, type HardwareDevice, type MultisigProposal, type PaymentProposal } from '$lib/wallet';
+  import { feeRate as asFeeRate, sats, walletService, type AutomaticSelectionStrategy, type CoinSelection, type CoinSelectionPreview, type ExternalSignerWallet, type FeeEstimates, type HardwareDevice, type MultisigProposal, type PaymentProposal } from '$lib/wallet';
   import type { Utxo } from '$lib/types';
   import { defaultConfig, networkName } from '$lib/config';
   import { addressPrefixForNetwork, hasAddressPrefixForNetwork } from '$lib/wallet/policy';
   import { compactAddress } from '$lib/address-display';
   import { addressForHardwareDisplay, testnetAddressDisplayName } from '$lib/wallet/hardware-display';
   import { latestActiveProposal } from '$lib/wallet/proposal-resume';
+  import { discreetMode } from '$lib/privacy';
   import { fly } from 'svelte/transition';
 
   let step = $state(1);
@@ -48,12 +49,17 @@
   let coins = $state<Utxo[]>([]);
   let selectedCoins = $state<string[]>([]);
   let showCoins = $state(false);
+  let automaticStrategy = $state<AutomaticSelectionStrategy>('balanced');
+  let selectionPreview = $state<CoinSelectionPreview | null>(null);
+  let selectionPreviewRevision = 0;
   let externalWallet = $state<ExternalSignerWallet | null>(null);
   let signerSummaryReady = $state(false);
   let externalSigner = $state(false), externalProposal = $state<MultisigProposal|null>(null), deviceOpen = $state(false), addressOpen = $state(false), changeAddressOpen = $state(false), hardwareAddressOpen = $state(false), hardwareChangeAddressOpen = $state(false), importOpen = $state(false), qrOpen = $state(false), qrScanOpen = $state(false), cancelOpen = $state(false), cancelError = $state(''), devices = $state<HardwareDevice[]>([]), deviceError = $state(''), imported = $state(''), urFrames = $state<string[]>([]), scannedFrames = $state<string[]>([]);
   let importError = $state('');
   let hardwareAction = $state<'scan' | 'sign'>('scan');
-  const selection = $derived<CoinSelection>(selectedCoins.length ? { mode: 'manual', outpoints: selectedCoins } : { mode: 'auto' });
+  const selection = $derived<CoinSelection>(selectedCoins.length ? { mode: 'manual', outpoints: selectedCoins } : { mode: 'auto', strategy: automaticStrategy });
+  const automaticStrategyLabel = $derived(automaticStrategy === 'private' ? 'More private' : automaticStrategy === 'lower_fee' ? 'Lower fee' : 'Balanced');
+  const proposalHasPrivacyWarning = $derived(Boolean(proposal && (proposal.selectionImpact.newClusterLinks > 0 || proposal.selectionImpact.hasUnknownProvenance || proposal.selectionImpact.hasAddressReuse)));
   const fees = $derived({ slow: Number(estimates?.economy ?? 0), medium: Number(estimates?.standard ?? 0), fast: Number(estimates?.priority ?? 0) });
   const selectedFeeRate = $derived(speed === 'custom' ? Number(customFee || 0) : fees[speed as keyof typeof fees]);
   const customFeeValid = $derived(Number.isFinite(Number(customFee)) && Number(customFee) > 0 && Number(customFee) <= 10_000);
@@ -68,6 +74,18 @@
   const hardwareTestnetAddressDevice = $derived(proposal?.recipientTestnetAlias ? testnetAddressDisplayName(hardwareSignerIdentity) : null);
   const hardwareRecipient = $derived(addressForHardwareDisplay(proposal?.recipient ?? '', proposal?.recipientTestnetAlias, hardwareSignerIdentity));
   const hardwareChangeAddress = $derived(addressForHardwareDisplay(proposal?.changeAddresses[0] ?? '', proposal?.changeTestnetAliases[0], hardwareSignerIdentity));
+
+  $effect(() => {
+    const outpoints = selectedCoins;
+    const target = Number.isSafeInteger(amountSats) && amountSats > 0 ? amountSats : 0;
+    const revision = ++selectionPreviewRevision;
+    if (!outpoints.length) { selectionPreview = null; return; }
+    void walletService.previewCoinSelection(outpoints, sats(target)).then((preview) => {
+      if (revision === selectionPreviewRevision) selectionPreview = preview;
+    }).catch(() => {
+      if (revision === selectionPreviewRevision) selectionPreview = null;
+    });
+  });
 
   onMount(async () => {
     try {
@@ -212,9 +230,10 @@
   {:else if step === 1}
     <form class="form-card send-stage-card" onsubmit={(event) => { event.preventDefault(); prepare(); }} in:fly={{ x: 8, duration: 180 }}>
       <div class="send-stage-heading"><span>STEP 2</span><h2>Fund the payment</h2><p>Set the amount, then keep automatic selection or choose specific coins.</p></div>
-      <label class="field"><span>Amount</span><div class="amount-input"><input aria-label="Amount" bind:value={amount} inputmode="numeric" placeholder="0" /><b>sats</b><button type="button" onclick={() => amount = String(Math.max(0, available - 1000))}>Max</button></div><small>Available: {shortSats(available)} sats</small></label>
-      <div class="coin-control-field"><span>Coin selection</span><button type="button" class="coin-mode" class:open={showCoins} aria-expanded={showCoins} onclick={() => showCoins = !showCoins}><CircleDot size={16}/><span><strong>{selectedCoins.length ? `Manual · ${selectedCoins.length} coin${selectedCoins.length === 1 ? '' : 's'}` : 'Automatic selection'}</strong><small>{selectedCoins.length ? `${shortSats(available)} sats available` : 'Frozen coins stay untouched'}</small></span><b>{showCoins ? 'Done' : 'Choose'}</b></button>
-        {#if showCoins}<div class="send-coin-picker">{#each coins as coin}<label class:frozen={coin.frozen}><input type="checkbox" checked={selectedCoins.includes(coin.outpoint)} disabled={coin.frozen} onchange={(event) => toggleCoin(coin.outpoint, event.currentTarget.checked)}/><span><strong>{coin.label}</strong><small>{shortSats(coin.amount)} sats{coin.frozen ? ' · Frozen' : ''}</small></span></label>{/each}<button type="button" onclick={useAutomatic}>Use automatic selection</button></div>{/if}
+      <label class="field"><span>Amount</span><div class="amount-input"><input aria-label="Amount" bind:value={amount} inputmode="numeric" placeholder="0" /><b>sats</b><button type="button" onclick={() => amount = String(Math.max(0, available - 1000))}>Max</button></div><small>Available: {$discreetMode ? '••••••' : shortSats(available)} sats</small></label>
+      <div class="coin-control-field"><span>Coin selection</span><button type="button" class="coin-mode" class:open={showCoins} aria-expanded={showCoins} onclick={() => showCoins = !showCoins}><CircleDot size={16}/><span><strong>{selectedCoins.length ? `Manual · ${selectedCoins.length} coin${selectedCoins.length === 1 ? '' : 's'}` : 'Automatic selection'}</strong><small>{selectedCoins.length ? `${$discreetMode ? '••••••' : shortSats(available)} sats available` : `${automaticStrategyLabel} · Frozen coins stay untouched`}</small></span><b>{showCoins ? 'Done' : 'Choose'}</b></button>
+        {#if showCoins}<div class="send-coin-picker"><fieldset class="automatic-strategies"><legend>Automatic strategy</legend>{#each [{id:'balanced',name:'Balanced',detail:'Limit privacy merges without excessive fees'},{id:'private',name:'More private',detail:'Avoid reused, unknown, and unrelated coins'},{id:'lower_fee',name:'Lower fee',detail:'Prefer fewer, larger inputs'}] as option}<button type="button" class:active={automaticStrategy === option.id && !selectedCoins.length} onclick={() => { automaticStrategy = option.id as AutomaticSelectionStrategy; selectedCoins = []; available = coins.filter((coin) => !coin.frozen).reduce((total, coin) => total + coin.amount, 0); }}><strong>{option.name}</strong><small>{option.detail}</small></button>{/each}</fieldset>{#each coins as coin}<label class:frozen={coin.frozen}><input type="checkbox" checked={selectedCoins.includes(coin.outpoint)} disabled={coin.frozen} onchange={(event) => toggleCoin(coin.outpoint, event.currentTarget.checked)}/><span><strong>{$discreetMode ? 'Label hidden' : coin.label}</strong><small>{$discreetMode ? '•••••• sats · Provenance hidden' : `${shortSats(coin.amount)} sats · ${coin.provenance.state === 'mixed' ? `${coin.provenance.labels.length} mixed labels` : coin.provenance.state === 'unknown' ? 'Source unknown' : 'Known source'}${coin.provenance.addressReused ? ' · Address reused' : ''}`}{coin.frozen ? ' · Frozen' : ''}</small></span></label>{/each}<button type="button" onclick={useAutomatic}>Use automatic selection</button></div>{/if}
+        {#if selectionPreview}<div class:warning={selectionPreview.newClusterLinks > 0 || selectionPreview.hasUnknownProvenance || selectionPreview.hasAddressReuse} class="selection-review manual-selection-preview"><strong>{selectionPreview.selectedInputCount} selected · {$discreetMode ? '••••••' : shortSats(selectionPreview.selectedAmount)} sats · {selectionPreview.estimatedInputWeight} WU</strong><span>{$discreetMode ? 'Funding provenance hidden in discreet mode.' : `${selectionPreview.fundingLabels.length || 'Unknown'} label group${selectionPreview.fundingLabels.length === 1 ? '' : 's'} · ${selectionPreview.newClusterLinks} new link${selectionPreview.newClusterLinks === 1 ? '' : 's'}. ${selectionPreview.oneExistingGroupCanFund ? 'One existing group can fund this amount.' : 'No single existing group can fund this amount.'}`}</span></div>{/if}
       </div>
       <div class="field"><span>Network fee</span><div class="fee-options">
         {#each [{id:'slow',name:'Economy',rate:fees.slow},{id:'medium',name:'Standard',rate:fees.medium},{id:'fast',name:'Priority',rate:fees.fast}] as option}
@@ -228,6 +247,7 @@
     <section class="form-card">
       <div class="review-amount"><span>You send</span><strong>{shortSats(proposal.amount)} <small>sats</small></strong></div>
       <dl class="details-list"><div><dt>To</dt><dd><button class="address-review-trigger mono" aria-label="View complete recipient address" onclick={() => addressOpen = true}>{compactAddress(proposal.recipient)}</button></dd></div><div><dt>Label</dt><dd>{proposal.label}</dd></div><div><dt>Network</dt><dd>{proposal.network}</dd></div><div><dt>Network fee</dt><dd>{shortSats(proposal.fee)} sats</dd></div><div class="total"><dt>Total</dt><dd>{shortSats(proposal.total)} sats</dd></div></dl>
+      <div class:warning={proposalHasPrivacyWarning} class="selection-review"><strong>{proposal.selectionImpact.selectedInputCount} funding coin{proposal.selectionImpact.selectedInputCount === 1 ? '' : 's'} · {proposal.selectionImpact.strategy.replace('_', ' ')}</strong><span>{proposalHasPrivacyWarning ? `Review: ${proposal.selectionImpact.newClusterLinks} new cluster link${proposal.selectionImpact.newClusterLinks === 1 ? '' : 's'}; unknown or reused sources are called out.` : 'No new cluster link, unknown provenance, or address-reuse warning.'}</span></div>
       <TransactionReviewDetails {proposal} onChangeAddress={() => changeAddressOpen = true}/>
       <div class="warning-box">Bitcoin transactions cannot be reversed. Verify the address and amount before signing.</div>
       <div class="split-actions">{#if externalSigner}<Button variant="danger-outline" size="large" onclick={() => {cancelError='';cancelOpen=true;}}>Cancel payment</Button>{:else}<Button variant="secondary" size="large" onclick={() => { proposal = null; step = 1; draftStep = 2; }}>Back</Button>{/if}<Button size="large" onclick={() => step = 3}>Continue to sign<ArrowRight size={17} /></Button></div>

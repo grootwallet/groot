@@ -51,7 +51,8 @@ describe('wallet invariants', () => {
   });
 
   it('keeps automatic selection as the safe default and rejects invalid manual selections', () => {
-    expect(normalizeCoinSelection(undefined)).toEqual({ mode: 'auto' });
+    expect(normalizeCoinSelection(undefined)).toEqual({ mode: 'auto', strategy: 'balanced' });
+    expect(normalizeCoinSelection({ mode: 'auto', strategy: 'private' })).toEqual({ mode: 'auto', strategy: 'private' });
     expect(normalizeCoinSelection({ mode: 'manual', outpoints: ['a:0', 'a:0', 'b:1'] })).toEqual({ mode: 'manual', outpoints: ['a:0', 'b:1'] });
     expect(() => normalizeCoinSelection({ mode: 'manual', outpoints: [] })).toThrow('Select at least one available coin');
   });

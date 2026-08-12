@@ -838,9 +838,14 @@ test('coin control selects, freezes, and carries coins into send', async ({ page
   await page.getByLabel('Bitcoin address').fill('bcrt1qreceiver0000000000000000000000000000000');
   await page.getByRole('button', { name: 'Continue to amount' }).click();
   await expect(page.getByText('Manual · 1 coin')).toBeVisible();
+  await expect(page.locator('.manual-selection-preview')).toContainText('1 selected · 1,250,000 sats · 500 WU');
+  await expect(page.locator('.manual-selection-preview')).toContainText('One existing group can fund this amount.');
   await page.getByRole('button', { name: /Manual · 1 coin/ }).click();
+  await expect(page.getByRole('button', { name: /Balanced/ })).toBeVisible();
+  await page.getByRole('button', { name: /More private/ }).click();
   await page.getByRole('button', { name: 'Use automatic selection' }).click();
   await expect(page.locator('.coin-mode').getByText('Automatic selection', { exact: true })).toBeVisible();
+  await expect(page.locator('.coin-mode')).toContainText('More private');
 });
 
 test('send reviews a proposal and rejects a wrong credential', async ({ page }) => {

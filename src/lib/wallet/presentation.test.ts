@@ -13,7 +13,9 @@ function transaction(id: string, date: string): Transaction {
     confirmations: 0,
     date,
     address: 'bcrt1qexample',
-    label: id
+    label: id,
+    intentLabel: null,
+    provenance: { state: 'unknown', context: 'received', labels: [], clusterCount: 0, addressReused: false }
   };
 }
 
@@ -24,7 +26,9 @@ function coin(outpoint: string, amount: number, label: string): Utxo {
 		confirmations: 0,
 		address: 'bcrt1qexample',
 		label,
-		frozen: false
+		frozen: false,
+		primaryLabel: null,
+		provenance: { state: 'unknown', context: 'received', labels: [], clusterCount: 0, addressReused: false }
 	};
 }
 

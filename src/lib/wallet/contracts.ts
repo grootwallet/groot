@@ -21,6 +21,32 @@ export type FeeEstimates = {
   source: string;
 };
 
+export type SelectionImpact = {
+  strategy: 'balanced' | 'private' | 'lower_fee' | 'manual' | 'acceleration';
+  selectedInputCount: number;
+  estimatedInputWeight: number;
+  fundingLabels: import('$lib/types').PermanentLabel[];
+  provenanceState: 'known' | 'mixed' | 'unknown';
+  existingClusterCount: number;
+  newClusterLinks: number;
+  hasUnknownProvenance: boolean;
+  hasAddressReuse: boolean;
+  feeDifferenceVsPrivate: number | null;
+};
+
+export type CoinSelectionPreview = {
+  selectedAmount: Sats;
+  selectedInputCount: number;
+  estimatedInputWeight: number;
+  fundingLabels: import('$lib/types').PermanentLabel[];
+  provenanceState: 'known' | 'mixed' | 'unknown';
+  existingClusterCount: number;
+  newClusterLinks: number;
+  hasUnknownProvenance: boolean;
+  hasAddressReuse: boolean;
+  oneExistingGroupCanFund: boolean;
+};
+
 export type PaymentProposal = {
   proposalId: string;
   recipient: string;
@@ -39,6 +65,7 @@ export type PaymentProposal = {
   locktime: number;
   rbf: boolean;
   network: SupportedNetwork;
+  selectionImpact: SelectionImpact;
 };
 
 export type BroadcastResult = {
@@ -47,7 +74,8 @@ export type BroadcastResult = {
   syncPending: boolean;
 };
 
-export type CoinSelection = { mode: 'auto' } | { mode: 'manual'; outpoints: string[] };
+export type AutomaticSelectionStrategy = 'balanced' | 'private' | 'lower_fee';
+export type CoinSelection = { mode: 'auto'; strategy?: AutomaticSelectionStrategy } | { mode: 'manual'; outpoints: string[] };
 export type AccelerationMethod = 'rbf' | 'cpfp';
 
 export type HardwareDevice = {
@@ -312,6 +340,8 @@ export interface WalletPort {
   estimateFees(): Promise<FeeEstimates>;
   setCoinFrozen(outpoint: string, frozen: boolean): Promise<void>;
   setMultisigCoinFrozen(outpoint: string, frozen: boolean): Promise<void>;
+  previewCoinSelection(outpoints: string[], amount: Sats): Promise<CoinSelectionPreview>;
+  previewMultisigCoinSelection(outpoints: string[], amount: Sats): Promise<CoinSelectionPreview>;
   preparePayment(recipient: string, label: string, amount: Sats, feeRate: FeeRate, coinSelection?: CoinSelection): Promise<PaymentProposal>;
   prepareAcceleration(txid: string, method: AccelerationMethod, feeRate: FeeRate): Promise<PaymentProposal>;
   signAndBroadcast(proposalId: string, credential: string): Promise<BroadcastResult>;

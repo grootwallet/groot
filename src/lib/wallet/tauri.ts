@@ -124,6 +124,8 @@ export class TauriWalletAdapter implements WalletPort {
   discardAddress(id: number) { return command<void>('address_discard', { id }); }
   setCoinFrozen(outpoint: string, frozen: boolean) { return command<void>('coin_set_frozen', { outpoint, frozen }); }
   setMultisigCoinFrozen(outpoint: string, frozen: boolean) { return command<void>('multisig_coin_set_frozen', { outpoint, frozen }); }
+  previewCoinSelection(outpoints: string[], amount: Sats) { return command<import('./contracts').CoinSelectionPreview>('coin_selection_preview', { outpoints, amount }); }
+  previewMultisigCoinSelection(outpoints: string[], amount: Sats) { return command<import('./contracts').CoinSelectionPreview>('multisig_coin_selection_preview', { outpoints, amount }); }
   estimateFees() { return command<FeeEstimates>('fees_estimate'); }
   preparePayment(recipient: string, label: string, amount: Sats, feeRate: FeeRate, coinSelection: CoinSelection = { mode: 'auto' }) {
     return command<PaymentProposal>('tx_prepare', { recipient, label, amount, feeRate, coinSelection });

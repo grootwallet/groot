@@ -14,7 +14,8 @@ use bdk_wallet::{
         constants::genesis_block,
         hashes::{sha256, Hash as _, HashEngine},
         secp256k1::Secp256k1,
-        Address, Amount, BlockHash, FeeRate, Network, OutPoint, Psbt, Transaction, Txid, Weight,
+        Address, Amount, BlockHash, FeeRate, Network, OutPoint, Psbt, Transaction, TxIn, Txid,
+        Weight,
     },
     chain::{BlockId, ChainPosition, CheckPoint, ConfirmationBlockTime},
     descriptor::{Descriptor, DescriptorPublicKey},
@@ -30,7 +31,7 @@ use bip39::Mnemonic;
 use rand::{rngs::OsRng, RngCore};
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fs::{self, File, OpenOptions},
     io::{Read, Write},
     path::{Path, PathBuf},
@@ -56,6 +57,9 @@ use crate::external_signer::{
     SINGLESIG_ACCOUNT_PATH,
 };
 use crate::hardware::{HardwareError, HardwareTransport, HwiChain, HwiCli};
+use crate::label_provenance::{
+    self, LabelOrigin, PermanentLabelDto, ProvenanceState, ProvenanceSummaryDto,
+};
 use crate::multisig::{
     CosignerInput, CosignerSource, MultisigPreviewDto, MultisigWalletDto, PolicyError, PolicyInput,
     MULTISIG_ACCOUNT_PATH,
@@ -63,6 +67,7 @@ use crate::multisig::{
 use crate::native_backup;
 use crate::network::{ChainBackend, CoreNodeConfig, NetworkConfigError, RpcAuthMode};
 use crate::notifications::{self, WalletNotification};
+use crate::privacy_selection::{AutomaticSelectionStrategy, PrivacyAwareCoinSelection};
 use crate::proposal::{
     decode_psbt, discard_signer_signature, encode_psbt, hardware_signature_response,
     merge_signed_psbt, signature_progress,
@@ -726,6 +731,8 @@ pub struct TransactionDto {
     date: String,
     address: Option<String>,
     label: String,
+    intent_label: Option<PermanentLabelDto>,
+    provenance: ProvenanceSummaryDto,
     block: Option<u32>,
     replaced_by: Option<String>,
     input_count: Option<usize>,
@@ -745,6 +752,8 @@ pub struct UtxoDto {
     confirmations: u32,
     address: String,
     label: String,
+    primary_label: Option<PermanentLabelDto>,
+    provenance: ProvenanceSummaryDto,
     frozen: bool,
 }
 
@@ -817,6 +826,37 @@ pub struct PaymentProposalDto {
     locktime: u32,
     rbf: bool,
     network: &'static str,
+    selection_impact: SelectionImpactDto,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SelectionImpactDto {
+    strategy: String,
+    selected_input_count: usize,
+    estimated_input_weight: u64,
+    funding_labels: Vec<PermanentLabelDto>,
+    provenance_state: ProvenanceState,
+    existing_cluster_count: usize,
+    new_cluster_links: usize,
+    has_unknown_provenance: bool,
+    has_address_reuse: bool,
+    fee_difference_vs_private: Option<i64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CoinSelectionPreviewDto {
+    selected_amount: u64,
+    selected_input_count: usize,
+    estimated_input_weight: u64,
+    funding_labels: Vec<PermanentLabelDto>,
+    provenance_state: ProvenanceState,
+    existing_cluster_count: usize,
+    new_cluster_links: usize,
+    has_unknown_provenance: bool,
+    has_address_reuse: bool,
+    one_existing_group_can_fund: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -830,8 +870,22 @@ pub struct ProposalInputDto {
 #[derive(Deserialize)]
 #[serde(tag = "mode", rename_all = "lowercase")]
 pub enum CoinSelectionInput {
-    Auto,
-    Manual { outpoints: Vec<String> },
+    Auto {
+        #[serde(default)]
+        strategy: AutomaticSelectionStrategy,
+    },
+    Manual {
+        outpoints: Vec<String>,
+    },
+}
+
+impl CoinSelectionInput {
+    fn strategy_name(&self) -> &'static str {
+        match self {
+            Self::Auto { strategy } => strategy.as_str(),
+            Self::Manual { .. } => "manual",
+        }
+    }
 }
 
 #[derive(Serialize)]
@@ -923,6 +977,7 @@ pub struct MultisigProposalDto {
     signed_fingerprints: Vec<String>,
     status: String,
     created_at: String,
+    selection_impact: SelectionImpactDto,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1934,7 +1989,8 @@ fn init_app_schema(db: &Connection) -> ApiResult<()> {
             psbt TEXT NOT NULL,
             status TEXT NOT NULL CHECK(status IN ('collecting', 'ready', 'broadcast', 'cancelled')),
             created_at INTEGER NOT NULL,
-            txid TEXT
+            txid TEXT,
+            selection_strategy TEXT NOT NULL DEFAULT 'balanced'
         );
         CREATE TABLE IF NOT EXISTS groot_frozen_coins (
             outpoint TEXT PRIMARY KEY,
@@ -1995,6 +2051,23 @@ fn init_app_schema(db: &Connection) -> ApiResult<()> {
         )
         .map_err(internal)?;
     }
+    let has_selection_strategy = db
+        .prepare("PRAGMA table_info(groot_proposals)")
+        .map_err(internal)?
+        .query_map([], |row| row.get::<_, String>(1))
+        .map_err(internal)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(internal)?
+        .iter()
+        .any(|column| column == "selection_strategy");
+    if !has_selection_strategy {
+        db.execute(
+            "ALTER TABLE groot_proposals ADD COLUMN selection_strategy TEXT NOT NULL DEFAULT 'balanced'",
+            [],
+        )
+        .map_err(internal)?;
+    }
+    label_provenance::init_schema(db).map_err(internal)?;
     reconcile_active_acceleration_proposals(db)?;
     notifications::init(db).map_err(internal)
 }
@@ -3050,11 +3123,34 @@ fn authorize_multisig_operation(
 }
 
 fn proposal_dto(
-    row: (String, String, String, u64, u64, f64, String, String, u64),
+    row: (
+        String,
+        String,
+        String,
+        u64,
+        u64,
+        f64,
+        String,
+        String,
+        u64,
+        String,
+    ),
     metadata: &MultisigWalletDto,
     wallet: &Wallet,
+    db: &Connection,
 ) -> ApiResult<MultisigProposalDto> {
-    let (proposal_id, recipient, label, amount, fee, _fee_rate, encoded, status, created_at) = row;
+    let (
+        proposal_id,
+        recipient,
+        label,
+        amount,
+        fee,
+        _fee_rate,
+        encoded,
+        status,
+        created_at,
+        strategy,
+    ) = row;
     let psbt = decode_psbt(&encoded).map_err(proposal_api_error)?;
     validate_proposal_fee(&psbt, fee)?;
     let fingerprints = multisig_fingerprints(metadata)?;
@@ -3064,6 +3160,7 @@ fn proposal_dto(
     let (recipient_testnet_alias, change_testnet_aliases) =
         proposal_testnet_aliases(&recipient, &change_addresses);
     let (inputs, fee_rate, locktime, rbf) = proposal_transaction_details(wallet, &psbt, fee)?;
+    let selection_impact = selection_impact(db, wallet, &psbt, &strategy, None)?;
     Ok(MultisigProposalDto {
         proposal_id,
         recipient,
@@ -3094,6 +3191,7 @@ fn proposal_dto(
         signed_fingerprints: progress.signed_fingerprints,
         status,
         created_at: created_at.to_string(),
+        selection_impact,
     })
 }
 
@@ -3271,6 +3369,117 @@ fn checked_payment_total(amount: u64, fee: u64) -> ApiResult<u64> {
     })
 }
 
+fn selection_impact(
+    db: &Connection,
+    wallet: &Wallet,
+    psbt: &Psbt,
+    strategy: &str,
+    fee_difference_vs_private: Option<i64>,
+) -> ApiResult<SelectionImpactDto> {
+    let outpoints = psbt
+        .unsigned_tx
+        .input
+        .iter()
+        .map(|input| input.previous_output.to_string())
+        .collect::<Vec<_>>();
+    let summary = label_provenance::funding_summary(db, &outpoints).map_err(internal)?;
+    let estimated_input_weight =
+        psbt.unsigned_tx
+            .input
+            .iter()
+            .try_fold(Weight::ZERO, |total, input| {
+                let output = wallet.get_utxo(input.previous_output).ok_or_else(|| {
+                    api_error(
+                        "coin_unavailable",
+                        "A proposal input is no longer available.",
+                    )
+                })?;
+                let satisfaction = wallet
+                    .public_descriptor(output.keychain)
+                    .max_weight_to_satisfy()
+                    .map_err(internal)?;
+                total
+                    .checked_add(TxIn::default().segwit_weight())
+                    .and_then(|weight| weight.checked_add(satisfaction))
+                    .ok_or_else(|| internal("Proposal input weight overflowed."))
+            })?;
+    Ok(SelectionImpactDto {
+        strategy: strategy.to_owned(),
+        selected_input_count: outpoints.len(),
+        estimated_input_weight: estimated_input_weight.to_wu(),
+        funding_labels: summary.labels,
+        provenance_state: summary.state,
+        existing_cluster_count: summary.cluster_count,
+        new_cluster_links: summary.cluster_count.saturating_sub(1),
+        has_unknown_provenance: matches!(summary.state, ProvenanceState::Unknown),
+        has_address_reuse: summary.address_reused,
+        fee_difference_vs_private,
+    })
+}
+
+fn manual_selection_preview(
+    db: &Connection,
+    wallet: &Wallet,
+    values: &[String],
+    amount: u64,
+) -> ApiResult<CoinSelectionPreviewDto> {
+    let frozen = frozen_outpoints(db)?;
+    let selected = validate_manual_outpoints(values, &frozen)?;
+    let mut selected_amount = 0_u64;
+    let mut estimated_input_weight = Weight::ZERO;
+    for outpoint in &selected {
+        let output = wallet.get_utxo(*outpoint).ok_or_else(|| {
+            api_error(
+                "coin_unavailable",
+                "A selected coin is not available in this wallet.",
+            )
+        })?;
+        selected_amount = selected_amount
+            .checked_add(output.txout.value.to_sat())
+            .ok_or_else(|| internal("Selected coin amount overflowed."))?;
+        let satisfaction = wallet
+            .public_descriptor(output.keychain)
+            .max_weight_to_satisfy()
+            .map_err(internal)?;
+        estimated_input_weight = estimated_input_weight
+            .checked_add(TxIn::default().segwit_weight())
+            .and_then(|weight| weight.checked_add(satisfaction))
+            .ok_or_else(|| internal("Selected input weight overflowed."))?;
+    }
+    let selected_strings = selected.iter().map(ToString::to_string).collect::<Vec<_>>();
+    let summary = label_provenance::funding_summary(db, &selected_strings).map_err(internal)?;
+    let privacy = label_provenance::coin_privacy_map(db).map_err(internal)?;
+    let frozen = frozen.into_iter().collect::<std::collections::HashSet<_>>();
+    let mut group_amounts = std::collections::HashMap::<String, u64>::new();
+    for output in wallet
+        .list_unspent()
+        .filter(|output| !frozen.contains(&output.outpoint))
+    {
+        let metadata = privacy.get(&output.outpoint.to_string());
+        if let Some(metadata) = metadata {
+            if metadata.cluster_ids.len() == 1 && !metadata.unknown {
+                let cluster = metadata.cluster_ids.iter().next().expect("one cluster");
+                let total = group_amounts.entry(cluster.clone()).or_default();
+                *total = total
+                    .checked_add(output.txout.value.to_sat())
+                    .ok_or_else(|| internal("Privacy group amount overflowed."))?;
+            }
+        }
+    }
+    Ok(CoinSelectionPreviewDto {
+        selected_amount,
+        selected_input_count: selected.len(),
+        estimated_input_weight: estimated_input_weight.to_wu(),
+        funding_labels: summary.labels,
+        provenance_state: summary.state,
+        existing_cluster_count: summary.cluster_count,
+        new_cluster_links: summary.cluster_count.saturating_sub(1),
+        has_unknown_provenance: matches!(summary.state, ProvenanceState::Unknown),
+        has_address_reuse: summary.address_reused,
+        one_existing_group_can_fund: group_amounts.values().any(|value| *value >= amount),
+    })
+}
+
 fn load_multisig_proposal(
     db: &mut Connection,
     metadata: &MultisigWalletDto,
@@ -3278,16 +3487,22 @@ fn load_multisig_proposal(
 ) -> ApiResult<MultisigProposalDto> {
     let wallet = load_wallet(db)?;
     let row = db.query_row(
-        "SELECT proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at FROM groot_proposals WHERE proposal_id = ?1 AND status IN ('collecting','ready')",
+        "SELECT proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at, selection_strategy FROM groot_proposals WHERE proposal_id = ?1 AND status IN ('collecting','ready')",
         params![proposal_id],
-        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?, row.get(7)?, row.get(8)?)),
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?, row.get(7)?, row.get(8)?, row.get(9)?)),
     ).map_err(|_| api_error("proposal_not_found", "Payment proposal was not found or is no longer active."))?;
-    proposal_dto(row, metadata, &wallet)
+    proposal_dto(row, metadata, &wallet, db)
 }
 
-fn persist_proposal(db: &Connection, proposal: &PaymentProposalDto, psbt: &Psbt) -> ApiResult<()> {
+fn persist_proposal(
+    db: &Connection,
+    proposal: &PaymentProposalDto,
+    psbt: &Psbt,
+    inherit_payment_intent: bool,
+) -> ApiResult<()> {
+    let created_at = now();
     db.execute(
-        "INSERT INTO groot_proposals (proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,'collecting',?8)",
+        "INSERT INTO groot_proposals (proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at, selection_strategy) VALUES (?1,?2,?3,?4,?5,?6,?7,'collecting',?8,?9)",
         params![
             proposal.proposal_id,
             proposal.recipient,
@@ -3296,11 +3511,29 @@ fn persist_proposal(db: &Connection, proposal: &PaymentProposalDto, psbt: &Psbt)
             proposal.fee,
             proposal.fee_rate,
             encode_psbt(psbt),
-            now()
+            created_at,
+            proposal.selection_impact.strategy
         ],
     )
+    .map_err(internal)?;
+    label_provenance::assign_payment_intent(
+        db,
+        &proposal.label,
+        &proposal.proposal_id,
+        created_at,
+        inherit_payment_intent,
+    )
     .map(|_| ())
-    .map_err(internal)
+    .map_err(|error| {
+        if error.sqlite_error_code() == Some(bdk_wallet::rusqlite::ErrorCode::ConstraintViolation) {
+            api_error(
+                "invalid_label",
+                "Permanent labels cannot be reused for a different payment.",
+            )
+        } else {
+            internal(error)
+        }
+    })
 }
 
 fn persist_acceleration(
@@ -3339,7 +3572,7 @@ fn persist_prepared_state<'db>(
     psbt: &Psbt,
     acceleration: Option<(AccelerationMethod, &TransactionDto)>,
 ) -> ApiResult<()> {
-    persist_proposal(transaction, proposal, psbt)?;
+    persist_proposal(transaction, proposal, psbt, acceleration.is_some())?;
     if let Some((method, original)) = acceleration {
         persist_acceleration(transaction, &proposal.proposal_id, method, original)?;
     }
@@ -3433,6 +3666,8 @@ fn commit_multisig_broadcast(
             "The proposal changed while it was being broadcast.",
         ));
     }
+    label_provenance::bind_broadcast_transaction(&persisted, proposal_id, &txid.to_string(), now())
+        .map_err(internal)?;
     record_replacement(&persisted, proposal_id, txid)?;
     let snapshot = snapshot_from(wallet, &persisted, synced_at, true)?;
     notifications::enqueue(
@@ -3475,6 +3710,8 @@ fn apply_replacement_history(
                 date: row.get(6)?,
                 address: row.get(7)?,
                 label: row.get(8)?,
+                intent_label: None,
+                provenance: ProvenanceSummaryDto::unknown("funding"),
                 block: None,
                 input_count: None,
                 output_count: None,
@@ -3489,7 +3726,11 @@ fn apply_replacement_history(
         .collect::<Result<Vec<_>, _>>()
         .map_err(internal)?;
 
-    for replacement in replacements {
+    for mut replacement in replacements {
+        replacement.intent_label =
+            label_provenance::payment_label_for_txid(db, &replacement.id).map_err(internal)?;
+        replacement.provenance =
+            label_provenance::transaction_funding_summary(db, &replacement.id).map_err(internal)?;
         if let Some(existing) = transactions.iter_mut().find(|tx| tx.id == replacement.id) {
             existing.status = "replaced".to_owned();
             existing.confirmations = 0;
@@ -3531,9 +3772,9 @@ fn load_payment_proposal_dto(
     wallet: &Wallet,
     proposal_id: &str,
 ) -> ApiResult<PaymentProposalDto> {
-    let (proposal_id, recipient, label, amount, fee, encoded) = db
+    let (proposal_id, recipient, label, amount, fee, encoded, strategy) = db
         .query_row(
-            "SELECT proposal_id, recipient, label, amount, fee, psbt
+            "SELECT proposal_id, recipient, label, amount, fee, psbt, selection_strategy
              FROM groot_proposals
              WHERE proposal_id = ?1 AND status IN ('collecting', 'ready')",
             params![proposal_id],
@@ -3545,6 +3786,7 @@ fn load_payment_proposal_dto(
                     row.get::<_, u64>(3)?,
                     row.get::<_, u64>(4)?,
                     row.get::<_, String>(5)?,
+                    row.get::<_, String>(6)?,
                 ))
             },
         )
@@ -3560,6 +3802,7 @@ fn load_payment_proposal_dto(
     let (recipient_testnet_alias, change_testnet_aliases) =
         proposal_testnet_aliases(&recipient, &change_addresses);
     let (inputs, fee_rate, locktime, rbf) = proposal_transaction_details(wallet, &psbt, fee)?;
+    let selection_impact = selection_impact(db, wallet, &psbt, &strategy, None)?;
     Ok(PaymentProposalDto {
         proposal_id,
         recipient,
@@ -3583,6 +3826,7 @@ fn load_payment_proposal_dto(
         locktime,
         rbf,
         network: NETWORK_NAME,
+        selection_impact,
     })
 }
 
@@ -4224,6 +4468,7 @@ fn snapshot_from(
     synced_at: Option<String>,
     multisig: bool,
 ) -> ApiResult<WalletSnapshotDto> {
+    label_provenance::reconcile_wallet_outputs(wallet, db, now()).map_err(internal)?;
     let balance = wallet.balance();
     let tip = wallet.latest_checkpoint().height();
     let addresses = address_rows(db, multisig)?;
@@ -4257,13 +4502,47 @@ fn snapshot_from(
                 .unwrap_or(Amount::ZERO)
         };
         let (confirmations, block, date) = confirmations(&tx.chain_position, tip);
-        let (address, label) = if kind == "self_spend" {
-            (None, "Self-spend".to_owned())
+        let txid = tx.tx_node.txid.to_string();
+        let intent_label = (!is_received)
+            .then(|| label_provenance::payment_label_for_txid(db, &txid).map_err(internal))
+            .transpose()?
+            .flatten();
+        let provenance_outpoints = if is_received {
+            transaction
+                .output
+                .iter()
+                .enumerate()
+                .filter(|(_, output)| {
+                    wallet
+                        .derivation_of_spk(output.script_pubkey.clone())
+                        .is_some()
+                })
+                .map(|(vout, _)| format!("{}:{vout}", tx.tx_node.txid))
+                .collect::<Vec<_>>()
         } else {
-            tx_counterparty(wallet, db, transaction, is_received)
+            transaction
+                .input
+                .iter()
+                .map(|input| input.previous_output.to_string())
+                .collect::<Vec<_>>()
+        };
+        let mut provenance =
+            label_provenance::funding_summary(db, &provenance_outpoints).map_err(internal)?;
+        provenance.context = if is_received { "received" } else { "funding" }.to_owned();
+        let (address, fallback_label) = tx_counterparty(wallet, db, transaction, is_received);
+        let label = if let Some(intent) = &intent_label {
+            intent.text.clone()
+        } else if is_received && provenance.labels.len() == 1 {
+            provenance.labels[0].text.clone()
+        } else if is_received && provenance.labels.len() > 1 {
+            format!("Received to {} labels", provenance.labels.len())
+        } else if kind == "self_spend" {
+            "Self-spend".to_owned()
+        } else {
+            fallback_label
         };
         transactions.push(TransactionDto {
-            id: tx.tx_node.txid.to_string(),
+            id: txid,
             kind: kind.to_owned(),
             direction: if is_received { "received" } else { "sent" }.to_owned(),
             amount: amount.to_sat(),
@@ -4282,6 +4561,8 @@ fn snapshot_from(
             date,
             address,
             label,
+            intent_label,
+            provenance,
             block,
             replaced_by: None,
             input_count: Some(transaction.input.len()),
@@ -4324,12 +4605,27 @@ fn snapshot_from(
         } else {
             "Change".to_owned()
         };
+        let provenance =
+            label_provenance::output_summary(db, &output.outpoint.to_string()).map_err(internal)?;
+        let primary_label = provenance.labels.first().cloned();
+        let label = primary_label
+            .as_ref()
+            .map(|label| label.text.clone())
+            .unwrap_or_else(|| match provenance.state {
+                ProvenanceState::Mixed => "Mixed change".to_owned(),
+                ProvenanceState::Unknown if output.keychain == KeychainKind::Internal => {
+                    "Change · source unknown".to_owned()
+                }
+                _ => label,
+            });
         utxos.push(UtxoDto {
             outpoint: output.outpoint.to_string(),
             amount: output.txout.value.to_sat(),
             confirmations: output_confirmations,
             address,
             label,
+            primary_label,
+            provenance,
             frozen: frozen.contains(&output.outpoint.to_string()),
         });
     }
@@ -4721,6 +5017,24 @@ pub fn address_create(
             params![info.index, info.address.to_string(), label, created],
         )
         .map_err(internal)?;
+    label_provenance::assign_new_label(
+        &transaction,
+        &label,
+        LabelOrigin::Receive,
+        "address",
+        &info.index.to_string(),
+        created,
+    )
+    .map_err(|error| {
+        if error.sqlite_error_code() == Some(bdk_wallet::rusqlite::ErrorCode::ConstraintViolation) {
+            api_error(
+                "invalid_label",
+                "Permanent labels cannot be reused. Choose a unique label.",
+            )
+        } else {
+            internal(error)
+        }
+    })?;
     wallet.persist(&mut transaction).map_err(internal)?;
     transaction.commit().map_err(internal)?;
     Ok(ReceiveAddressDto {
@@ -5756,11 +6070,34 @@ pub fn external_signer_export_descriptor(
 }
 
 fn external_proposal_dto(
-    row: (String, String, String, u64, u64, f64, String, String, u64),
+    row: (
+        String,
+        String,
+        String,
+        u64,
+        u64,
+        f64,
+        String,
+        String,
+        u64,
+        String,
+    ),
     fingerprint: &str,
     wallet: &Wallet,
+    db: &Connection,
 ) -> ApiResult<MultisigProposalDto> {
-    let (proposal_id, recipient, label, amount, fee, _fee_rate, encoded, status, created_at) = row;
+    let (
+        proposal_id,
+        recipient,
+        label,
+        amount,
+        fee,
+        _fee_rate,
+        encoded,
+        status,
+        created_at,
+        strategy,
+    ) = row;
     let psbt = decode_psbt(&encoded).map_err(proposal_api_error)?;
     validate_proposal_fee(&psbt, fee)?;
     let fingerprint = fingerprint.parse().map_err(internal)?;
@@ -5769,6 +6106,7 @@ fn external_proposal_dto(
     let (recipient_testnet_alias, change_testnet_aliases) =
         proposal_testnet_aliases(&recipient, &change_addresses);
     let (inputs, fee_rate, locktime, rbf) = proposal_transaction_details(wallet, &psbt, fee)?;
+    let selection_impact = selection_impact(db, wallet, &psbt, &strategy, None)?;
     Ok(MultisigProposalDto {
         proposal_id,
         recipient,
@@ -5799,6 +6137,7 @@ fn external_proposal_dto(
         signed_fingerprints: progress.signed_fingerprints,
         status,
         created_at: created_at.to_string(),
+        selection_impact,
     })
 }
 
@@ -5809,11 +6148,11 @@ fn load_external_proposal(
 ) -> ApiResult<MultisigProposalDto> {
     let wallet = load_wallet(db)?;
     let row = db.query_row(
-        "SELECT proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at FROM groot_proposals WHERE proposal_id = ?1 AND status IN ('collecting','ready')",
+        "SELECT proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at, selection_strategy FROM groot_proposals WHERE proposal_id = ?1 AND status IN ('collecting','ready')",
         params![proposal_id],
-        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?, row.get(7)?, row.get(8)?)),
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?, row.get(7)?, row.get(8)?, row.get(9)?)),
     ).map_err(|_| api_error("proposal_not_found", "Payment proposal was not found or is no longer active."))?;
-    external_proposal_dto(row, &metadata.signer.fingerprint, &wallet)
+    external_proposal_dto(row, &metadata.signer.fingerprint, &wallet, db)
 }
 
 #[tauri::command]
@@ -5827,7 +6166,7 @@ pub fn external_signer_proposals(
     let mut db = open_db(&app)?;
     let wallet = load_wallet(&mut db)?;
     let mut statement = db.prepare(
-        "SELECT proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at FROM groot_proposals WHERE status IN ('collecting','ready') ORDER BY created_at DESC",
+        "SELECT proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at, selection_strategy FROM groot_proposals WHERE status IN ('collecting','ready') ORDER BY created_at DESC",
     ).map_err(internal)?;
     let rows = statement
         .query_map([], |row| {
@@ -5841,6 +6180,7 @@ pub fn external_signer_proposals(
                 row.get(6)?,
                 row.get(7)?,
                 row.get(8)?,
+                row.get(9)?,
             ))
         })
         .map_err(internal)?;
@@ -5849,6 +6189,7 @@ pub fn external_signer_proposals(
             row.map_err(internal)?,
             &metadata.signer.fingerprint,
             &wallet,
+            &db,
         )
     })
     .collect()
@@ -6021,6 +6362,13 @@ pub fn external_signer_proposal_broadcast(
             "The proposal changed while it was being broadcast.",
         ));
     }
+    label_provenance::bind_broadcast_transaction(
+        &persisted,
+        &proposal_id,
+        &txid.to_string(),
+        now(),
+    )
+    .map_err(internal)?;
     record_replacement(&persisted, &proposal_id, &txid)?;
     let snapshot = snapshot_from(
         &wallet,
@@ -6790,6 +7138,24 @@ pub fn multisig_address_create(
             params![info.index, info.address.to_string(), label, created],
         )
         .map_err(internal)?;
+    label_provenance::assign_new_label(
+        &transaction,
+        &label,
+        LabelOrigin::Receive,
+        "address",
+        &info.index.to_string(),
+        created,
+    )
+    .map_err(|error| {
+        if error.sqlite_error_code() == Some(bdk_wallet::rusqlite::ErrorCode::ConstraintViolation) {
+            api_error(
+                "invalid_label",
+                "Permanent labels cannot be reused. Choose a unique label.",
+            )
+        } else {
+            internal(error)
+        }
+    })?;
     wallet.persist(&mut transaction).map_err(internal)?;
     transaction.commit().map_err(internal)?;
     Ok(ReceiveAddressDto {
@@ -6842,6 +7208,63 @@ fn create_tx_api_error(error: CreateTxError) -> ApiError {
     }
 }
 
+fn validate_manual_outpoints(values: &[String], frozen: &[OutPoint]) -> ApiResult<Vec<OutPoint>> {
+    if values.is_empty() {
+        return Err(api_error(
+            "invalid_coin",
+            "Select at least one available coin.",
+        ));
+    }
+    let selected = values
+        .iter()
+        .map(|value| {
+            OutPoint::from_str(value)
+                .map_err(|_| api_error("invalid_coin", "A selected coin outpoint is invalid."))
+        })
+        .collect::<ApiResult<Vec<_>>>()?;
+    if selected.iter().collect::<HashSet<_>>().len() != selected.len() {
+        return Err(api_error(
+            "invalid_coin",
+            "A coin cannot be selected more than once.",
+        ));
+    }
+    if selected.iter().any(|item| frozen.contains(item)) {
+        return Err(api_error(
+            "coin_unavailable",
+            "Unfreeze selected coins before spending them.",
+        ));
+    }
+    Ok(selected)
+}
+
+#[tauri::command]
+pub fn coin_selection_preview(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    outpoints: Vec<String>,
+    amount: u64,
+) -> ApiResult<CoinSelectionPreviewDto> {
+    let _operation = operation_guard(&state)?;
+    require_unlocked(&app, &state)?;
+    let mut db = open_db(&app)?;
+    let wallet = load_wallet(&mut db)?;
+    manual_selection_preview(&db, &wallet, &outpoints, amount)
+}
+
+#[tauri::command]
+pub fn multisig_coin_selection_preview(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    outpoints: Vec<String>,
+    amount: u64,
+) -> ApiResult<CoinSelectionPreviewDto> {
+    let _operation = operation_guard(&state)?;
+    require_unlocked(&app, &state)?;
+    let mut db = open_multisig_db(&app)?;
+    let wallet = load_wallet(&mut db)?;
+    manual_selection_preview(&db, &wallet, &outpoints, amount)
+}
+
 #[tauri::command]
 pub fn multisig_tx_prepare(
     app: AppHandle,
@@ -6888,44 +7311,41 @@ pub fn multisig_tx_prepare(
     let mut db = open_multisig_db(&app)?;
     let mut transaction = db.transaction().map_err(internal)?;
     let mut wallet = load_wallet_transaction(&mut transaction)?;
-    let mut builder = wallet.build_tx();
-    builder
-        .add_recipient(address.script_pubkey(), Amount::from_sat(amount))
-        .fee_rate(rate)
-        .add_global_xpubs();
+    let selection_strategy = coin_selection.strategy_name().to_owned();
     let frozen = frozen_outpoints(&transaction)?;
-    match coin_selection {
-        CoinSelectionInput::Auto => {
-            builder.unspendable(frozen);
+    let psbt = match coin_selection {
+        CoinSelectionInput::Auto { strategy } => {
+            label_provenance::reconcile_wallet_outputs(&wallet, &transaction, now())
+                .map_err(internal)?;
+            let privacy = label_provenance::coin_privacy_map(&transaction).map_err(internal)?;
+            let mut builder = wallet
+                .build_tx()
+                .coin_selection(PrivacyAwareCoinSelection::new(strategy, privacy));
+            builder
+                .add_recipient(address.script_pubkey(), Amount::from_sat(amount))
+                .fee_rate(rate)
+                .add_global_xpubs()
+                .unspendable(frozen);
+            builder.finish().map_err(create_tx_api_error)?
         }
         CoinSelectionInput::Manual { outpoints } => {
-            if outpoints.is_empty() {
-                return Err(api_error(
-                    "invalid_amount",
-                    "Select at least one available coin.",
-                ));
-            }
-            let selected = outpoints
-                .iter()
-                .map(|value| {
-                    OutPoint::from_str(value).map_err(|_| {
-                        api_error("invalid_coin", "A selected coin outpoint is invalid.")
-                    })
-                })
-                .collect::<ApiResult<Vec<_>>>()?;
-            if selected.iter().any(|item| frozen.contains(item)) {
-                return Err(api_error(
-                    "insufficient_funds",
-                    "Unfreeze selected coins before spending them.",
-                ));
-            }
+            let selected = validate_manual_outpoints(&outpoints, &frozen)?;
+            let mut builder = wallet.build_tx();
             builder
+                .add_recipient(address.script_pubkey(), Amount::from_sat(amount))
+                .fee_rate(rate)
+                .add_global_xpubs()
                 .add_utxos(&selected)
-                .map_err(internal)?
+                .map_err(|_| {
+                    api_error(
+                        "coin_unavailable",
+                        "A selected coin is not available in this wallet.",
+                    )
+                })?
                 .manually_selected_only();
+            builder.finish().map_err(create_tx_api_error)?
         }
-    }
-    let psbt = builder.finish().map_err(create_tx_api_error)?;
+    };
     enforce_change_recovery_gap(&transaction, &wallet, &psbt)?;
     let fee = psbt
         .fee_amount()
@@ -6935,9 +7355,22 @@ pub fn multisig_tx_prepare(
     let encoded = encode_psbt(&psbt);
     let created_at = now();
     transaction.execute(
-        "INSERT INTO groot_proposals (proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,'collecting',?8)",
-        params![proposal_id, address.to_string(), label, amount, fee, applied_fee_rate, encoded, created_at],
+        "INSERT INTO groot_proposals (proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at, selection_strategy) VALUES (?1,?2,?3,?4,?5,?6,?7,'collecting',?8,?9)",
+        params![proposal_id, address.to_string(), label, amount, fee, applied_fee_rate, encoded, created_at, selection_strategy],
     ).map_err(internal)?;
+    label_provenance::assign_payment_intent(&transaction, &label, &proposal_id, created_at, false)
+        .map_err(|error| {
+            if error.sqlite_error_code()
+                == Some(bdk_wallet::rusqlite::ErrorCode::ConstraintViolation)
+            {
+                api_error(
+                    "invalid_label",
+                    "Permanent labels cannot be reused for a different payment.",
+                )
+            } else {
+                internal(error)
+            }
+        })?;
     wallet.persist(&mut transaction).map_err(internal)?;
     drop(wallet);
     transaction.commit().map_err(internal)?;
@@ -6955,7 +7388,7 @@ pub fn multisig_proposals(
     let mut db = open_multisig_db(&app)?;
     let wallet = load_wallet(&mut db)?;
     let mut statement = db.prepare(
-        "SELECT proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at FROM groot_proposals WHERE status IN ('collecting','ready') ORDER BY created_at DESC",
+        "SELECT proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at, selection_strategy FROM groot_proposals WHERE status IN ('collecting','ready') ORDER BY created_at DESC",
     ).map_err(internal)?;
     let rows = statement
         .query_map([], |row| {
@@ -6969,12 +7402,13 @@ pub fn multisig_proposals(
                 row.get(6)?,
                 row.get(7)?,
                 row.get(8)?,
+                row.get(9)?,
             ))
         })
         .map_err(internal)?;
     rows.map(|row| {
         row.map_err(internal)
-            .and_then(|row| proposal_dto(row, &metadata, &wallet))
+            .and_then(|row| proposal_dto(row, &metadata, &wallet, &db))
     })
     .collect()
 }
@@ -7494,43 +7928,39 @@ pub fn tx_prepare(
     let mut db = open_db(&app)?;
     let mut transaction = db.transaction().map_err(internal)?;
     let mut wallet = load_wallet_transaction(&mut transaction)?;
-    let mut builder = wallet.build_tx();
-    builder
-        .add_recipient(address.script_pubkey(), Amount::from_sat(amount))
-        .fee_rate(rate);
+    let selection_strategy = coin_selection.strategy_name().to_owned();
     let frozen = frozen_outpoints(&transaction)?;
-    match coin_selection {
-        CoinSelectionInput::Auto => {
-            builder.unspendable(frozen);
+    let psbt = match coin_selection {
+        CoinSelectionInput::Auto { strategy } => {
+            label_provenance::reconcile_wallet_outputs(&wallet, &transaction, now())
+                .map_err(internal)?;
+            let privacy = label_provenance::coin_privacy_map(&transaction).map_err(internal)?;
+            let mut builder = wallet
+                .build_tx()
+                .coin_selection(PrivacyAwareCoinSelection::new(strategy, privacy));
+            builder
+                .add_recipient(address.script_pubkey(), Amount::from_sat(amount))
+                .fee_rate(rate)
+                .unspendable(frozen);
+            builder.finish().map_err(create_tx_api_error)?
         }
         CoinSelectionInput::Manual { outpoints } => {
-            if outpoints.is_empty() {
-                return Err(api_error(
-                    "invalid_amount",
-                    "Select at least one available coin.",
-                ));
-            }
-            let selected = outpoints
-                .iter()
-                .map(|value| {
-                    OutPoint::from_str(value).map_err(|_| {
-                        api_error("invalid_coin", "A selected coin outpoint is invalid.")
-                    })
-                })
-                .collect::<ApiResult<Vec<_>>>()?;
-            if selected.iter().any(|item| frozen.contains(item)) {
-                return Err(api_error(
-                    "insufficient_funds",
-                    "Unfreeze selected coins before spending them.",
-                ));
-            }
+            let selected = validate_manual_outpoints(&outpoints, &frozen)?;
+            let mut builder = wallet.build_tx();
             builder
+                .add_recipient(address.script_pubkey(), Amount::from_sat(amount))
+                .fee_rate(rate)
                 .add_utxos(&selected)
-                .map_err(internal)?
+                .map_err(|_| {
+                    api_error(
+                        "coin_unavailable",
+                        "A selected coin is not available in this wallet.",
+                    )
+                })?
                 .manually_selected_only();
+            builder.finish().map_err(create_tx_api_error)?
         }
-    }
-    let psbt = builder.finish().map_err(create_tx_api_error)?;
+    };
     enforce_change_recovery_gap(&transaction, &wallet, &psbt)?;
     let fee = psbt
         .fee_amount()
@@ -7550,6 +7980,8 @@ pub fn tx_prepare(
     let proposal_id = Uuid::new_v4().to_string();
     let (inputs, actual_fee_rate, locktime, rbf) =
         proposal_transaction_details(&wallet, &psbt, fee)?;
+    let selection_impact =
+        selection_impact(&transaction, &wallet, &psbt, &selection_strategy, None)?;
     let proposal = PaymentProposalDto {
         proposal_id: proposal_id.clone(),
         recipient,
@@ -7568,6 +8000,7 @@ pub fn tx_prepare(
         locktime,
         rbf,
         network: NETWORK_NAME,
+        selection_impact,
     };
     persist_prepared_state(&mut transaction, &mut wallet, &proposal, &psbt, None)?;
     drop(wallet);
@@ -7657,6 +8090,7 @@ fn cpfp_parent_fee(
 }
 
 fn summarize_payment_psbt(
+    db: &Connection,
     wallet: &Wallet,
     psbt: &Psbt,
     _applied_fee_rate: f64,
@@ -7705,6 +8139,7 @@ fn summarize_payment_psbt(
     let (recipient_testnet_alias, change_testnet_aliases) =
         proposal_testnet_aliases(&recipient, &change_addresses);
     let (inputs, actual_fee_rate, locktime, rbf) = proposal_transaction_details(wallet, psbt, fee)?;
+    let selection_impact = selection_impact(db, wallet, psbt, "acceleration", None)?;
     Ok(PaymentProposalDto {
         proposal_id: Uuid::new_v4().to_string(),
         recipient,
@@ -7728,6 +8163,7 @@ fn summarize_payment_psbt(
         locktime,
         rbf,
         network: NETWORK_NAME,
+        selection_impact,
     })
 }
 
@@ -7879,6 +8315,7 @@ fn prepare_persisted_multisig_acceleration(
     add_multisig_global_xpubs(&mut psbt, metadata)?;
     enforce_change_recovery_gap(&transaction, &wallet, &psbt)?;
     let proposal = summarize_payment_psbt(
+        &transaction,
         &wallet,
         &psbt,
         applied_fee_rate,
@@ -7945,6 +8382,7 @@ pub fn tx_acceleration_prepare(
     let psbt = build_acceleration_psbt(&mut wallet, txid, method, parent_fee, rate)?;
     enforce_change_recovery_gap(&transaction, &wallet, &psbt)?;
     let proposal = summarize_payment_psbt(
+        &transaction,
         &wallet,
         &psbt,
         applied,
@@ -8066,6 +8504,13 @@ pub fn tx_sign_and_broadcast(
             "The proposal changed while it was being broadcast.",
         ));
     }
+    label_provenance::bind_broadcast_transaction(
+        &persisted,
+        &proposal_id,
+        &txid.to_string(),
+        now(),
+    )
+    .map_err(internal)?;
     record_replacement(&persisted, &proposal_id, &txid)?;
     let snapshot = snapshot_from(
         &wallet,
@@ -10036,6 +10481,8 @@ mod tests {
             wallet_output_amount: Some(42),
             locktime: Some(0),
             rbf: Some(false),
+            intent_label: None,
+            provenance: ProvenanceSummaryDto::unknown("received"),
         };
         let mut snapshot = WalletSnapshotDto {
             network: "regtest",
@@ -10102,6 +10549,8 @@ mod tests {
             wallet_output_amount: Some(63_468),
             locktime: Some(126),
             rbf: Some(true),
+            intent_label: None,
+            provenance: ProvenanceSummaryDto::unknown("funding"),
         })
         .unwrap();
 
@@ -10157,6 +10606,8 @@ mod tests {
             wallet_output_amount: Some(95),
             locktime: Some(100),
             rbf: Some(true),
+            intent_label: None,
+            provenance: ProvenanceSummaryDto::unknown("funding"),
         }];
 
         apply_replacement_history(&db, &mut transactions).unwrap();
@@ -10304,8 +10755,21 @@ mod tests {
                     locktime: 0,
                     rbf: false,
                     network: "regtest",
+                    selection_impact: SelectionImpactDto {
+                        strategy: "balanced".into(),
+                        selected_input_count: 0,
+                        estimated_input_weight: 0,
+                        funding_labels: vec![],
+                        provenance_state: ProvenanceState::Unknown,
+                        existing_cluster_count: 0,
+                        new_cluster_links: 0,
+                        has_unknown_provenance: true,
+                        has_address_reuse: false,
+                        fee_difference_vs_private: None,
+                    },
                 },
                 &psbt,
+                false,
             )
             .unwrap();
             notifications::enqueue(
@@ -10395,6 +10859,18 @@ mod tests {
             locktime: 0,
             rbf: false,
             network: "regtest",
+            selection_impact: SelectionImpactDto {
+                strategy: "balanced".into(),
+                selected_input_count: 0,
+                estimated_input_weight: 0,
+                funding_labels: vec![],
+                provenance_state: ProvenanceState::Unknown,
+                existing_cluster_count: 0,
+                new_cluster_links: 0,
+                has_unknown_provenance: true,
+                has_address_reuse: false,
+                fee_difference_vs_private: None,
+            },
         };
         let original = TransactionDto {
             id: "11".repeat(32),
@@ -10416,6 +10892,8 @@ mod tests {
             wallet_output_amount: Some(1),
             locktime: Some(0),
             rbf: Some(true),
+            intent_label: None,
+            provenance: ProvenanceSummaryDto::unknown("funding"),
         };
 
         let mut transaction = db.transaction().unwrap();

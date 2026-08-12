@@ -53,7 +53,7 @@
     <div class="detail-hero">
       <span class:pending={transaction.status === 'pending'} class:replaced={transaction.status === 'replaced'}>{transaction.status}</span>
       <strong class:positive={transaction.direction === 'received'}>{#if $discreetMode}••••••{:else}{transaction.direction === 'received' ? '+' : '−'}{shortSats(transaction.amount)}{/if} <small>sats</small></strong>
-      <p>{isSelfSpend ? 'Self-spend · network fee' : transaction.label}</p>
+      <p>{$discreetMode ? 'Label hidden' : isSelfSpend ? 'Self-spend · network fee' : transaction.label}</p>
     </div>
     <dl class="details-list">
       <div><dt>Date</dt><dd><LocalTimestamp value={transaction.date} /></dd></div>
@@ -68,6 +68,8 @@
         {#if transaction.inputCount != null}<div><dt>Inputs</dt><dd>{transaction.inputCount}{#if transaction.walletInputAmount != null}{' · '}{shortSats(transaction.walletInputAmount)} sats from this wallet{/if}</dd></div>{/if}
         {#if transaction.outputCount != null}<div><dt>Outputs</dt><dd>{transaction.outputCount}{#if transaction.walletOutputAmount != null}{' · '}{shortSats(transaction.walletOutputAmount)} sats to this wallet{/if}</dd></div>{/if}
         {#if transaction.feeRate != null}<div><dt>Fee rate</dt><dd>{transaction.feeRate} sat/vB</dd></div>{/if}
+        <div><dt>{transaction.direction === 'sent' ? 'Payment intent' : 'Received provenance'}</dt><dd>{$discreetMode ? 'Hidden in discreet mode' : transaction.direction === 'sent' ? transaction.intentLabel?.text ?? transaction.label : transaction.provenance.state === 'unknown' ? 'Source unknown' : transaction.provenance.labels.map((label: { text: string }) => label.text).join(' + ') || transaction.label}</dd></div>
+        {#if transaction.provenance.state === 'mixed'}<div><dt>Privacy</dt><dd>{$discreetMode ? 'Hidden in discreet mode' : `${transaction.provenance.clusterCount} source clusters combined`}</dd></div>{/if}
         {#if transaction.locktime != null && transaction.rbf != null}<div><dt>Locktime / RBF</dt><dd>{transaction.locktime}{' · '}{transaction.rbf ? 'Enabled' : 'Disabled'}</dd></div>{/if}
         {#if transaction.status === 'replaced' && transaction.replacedBy}<div><dt>Replaced by</dt><dd><code>{transaction.replacedBy}</code></dd></div>{/if}
         {#if transaction.block}<div><dt>Block</dt><dd>{transaction.block}</dd></div>{/if}

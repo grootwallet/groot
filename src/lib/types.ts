@@ -1,3 +1,17 @@
+export type PermanentLabel = {
+  id: string;
+  text: string;
+  origin: 'receive' | 'payment' | 'imported';
+};
+
+export type ProvenanceSummary = {
+  state: 'known' | 'mixed' | 'unknown';
+  context: 'received' | 'change' | 'funding' | 'unknown';
+  labels: PermanentLabel[];
+  clusterCount: number;
+  addressReused: boolean;
+};
+
 export type Transaction = {
   id: string;
   kind: 'payment' | 'self_spend';
@@ -18,6 +32,8 @@ export type Transaction = {
   walletOutputAmount?: number | null;
   locktime?: number | null;
   rbf?: boolean | null;
+  intentLabel: PermanentLabel | null;
+  provenance: ProvenanceSummary;
 };
 
 export type ReceiveAddress = {
@@ -39,4 +55,6 @@ export type Utxo = {
   address: string;
   label: string;
   frozen: boolean;
+  primaryLabel: PermanentLabel | null;
+  provenance: ProvenanceSummary;
 };

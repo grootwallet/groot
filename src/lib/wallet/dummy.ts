@@ -2,7 +2,7 @@ import { defaultConfig } from '$lib/config';
 import { receiveAddresses, transactions, utxos, wallet } from '$lib/data';
 import type { ReceiveAddress, Transaction } from '$lib/types';
 import { addressPrefixForNetwork, canDiscardAddress, hasAddressPrefixForNetwork, normalizePermanentLabel } from './policy';
-import { feeRate, MAX_SUPPLEMENTAL_COIN_FLIPS, MAX_SUPPLEMENTAL_DICE_ROLLS, MIN_SUPPLEMENTAL_COIN_FLIPS, MIN_SUPPLEMENTAL_DICE_ROLLS, sats, WalletError, type CoinSelection, type FeeEstimates, type PaymentProposal, type WalletEvent, type WalletPort, type WalletSnapshot } from './contracts';
+import { feeRate, MAX_SUPPLEMENTAL_COIN_FLIPS, MAX_SUPPLEMENTAL_DICE_ROLLS, MIN_SUPPLEMENTAL_COIN_FLIPS, MIN_SUPPLEMENTAL_DICE_ROLLS, sats, WalletError, type CoinSelection, type CoinSelectionPreview, type FeeEstimates, type PaymentProposal, type WalletEvent, type WalletPort, type WalletSnapshot } from './contracts';
 import type { CoreNodeConfig, ExternalSigner, ExternalSignerSource, ExternalSignerWallet, MultisigPreview, MultisigProposal, MultisigWallet, RecoveryPolicyAnalysis, RecoveryScanStatus, RecoveryTemplate, WalletProfile } from './contracts';
 import type { PolicyDraft } from '$lib/multisig/policy';
 import { descriptorPreview, MULTISIG_ACCOUNT_PATH, normalizeCosigner, validatePolicyDraft } from '$lib/multisig/policy';
@@ -277,6 +277,24 @@ export class DummyWalletAdapter implements WalletPort {
   async setMultisigCoinFrozen(outpoint: string, frozen: boolean) {
     return this.setCoinFrozen(outpoint, frozen);
   }
+  async previewCoinSelection(outpoints: string[], amount: ReturnType<typeof sats>): Promise<CoinSelectionPreview> {
+    const selected = this.#coins.filter((coin) => outpoints.includes(coin.outpoint));
+    const labels = [...new Map(selected.flatMap((coin) => coin.provenance.labels).map((label) => [label.id, label])).values()];
+    const clusters = Math.max(0, ...selected.map((coin) => coin.provenance.clusterCount));
+    return {
+      selectedAmount: sats(selected.reduce((total, coin) => total + coin.amount, 0)),
+      selectedInputCount: selected.length,
+      estimatedInputWeight: selected.length * 500,
+      fundingLabels: labels,
+      provenanceState: selected.some((coin) => coin.provenance.state === 'unknown') ? 'unknown' : labels.length > 1 ? 'mixed' : 'known',
+      existingClusterCount: clusters,
+      newClusterLinks: Math.max(0, clusters - 1),
+      hasUnknownProvenance: selected.some((coin) => coin.provenance.state === 'unknown'),
+      hasAddressReuse: selected.some((coin) => coin.provenance.addressReused),
+      oneExistingGroupCanFund: this.#coins.some((coin) => !coin.frozen && coin.amount >= amount)
+    };
+  }
+  previewMultisigCoinSelection(outpoints: string[], amount: ReturnType<typeof sats>) { return this.previewCoinSelection(outpoints, amount); }
 
   async estimateFees(): Promise<FeeEstimates> {
     if (this.#feeEstimatesUnavailable) {
@@ -294,7 +312,7 @@ export class DummyWalletAdapter implements WalletPort {
     if (Number(amount) + Number(fee) > available) throw new WalletError('insufficient_funds', 'Amount and fee exceed the selected, unfrozen balance.');
     const selectedOutpoints = coinSelection.mode === 'manual' ? spendable.map((coin) => coin.outpoint) : [];
     const inputs = (selectedOutpoints.length ? selectedOutpoints : ['fixture-auto-input:0']).map((outpoint)=>({outpoint,amount:sats(available),sequence:0xfffffffd}));
-    const proposal: PaymentProposal = { proposalId: crypto.randomUUID(), recipient, recipientTestnetAlias:null, label, amount, fee, feeRate: selectedRate, total: sats(Number(amount) + Number(fee)), change: sats(0), changeAddresses: [], changeTestnetAliases:[], outputCount: 1, selectedOutpoints, inputs, locktime:0, rbf:true, network:defaultConfig.network };
+    const proposal: PaymentProposal = { proposalId: crypto.randomUUID(), recipient, recipientTestnetAlias:null, label, amount, fee, feeRate: selectedRate, total: sats(Number(amount) + Number(fee)), change: sats(0), changeAddresses: [], changeTestnetAliases:[], outputCount: 1, selectedOutpoints, inputs, locktime:0, rbf:true, network:defaultConfig.network, selectionImpact: { strategy: coinSelection.mode === 'auto' ? coinSelection.strategy ?? 'balanced' : 'manual', selectedInputCount: inputs.length, estimatedInputWeight: inputs.length * 500, fundingLabels: [], provenanceState: 'unknown', existingClusterCount: 0, newClusterLinks: 0, hasUnknownProvenance: true, hasAddressReuse: false, feeDifferenceVsPrivate: null } };
     this.#proposals.set(proposal.proposalId, proposal);
     if (this.#profiles.find((profile) => profile.id === this.#selectedWalletId)?.kind === 'watch_only') {
       this.#externalProposals.set(proposal.proposalId, { ...proposal, change: sats(0), changeAddresses: [], outputCount: 1, psbt: 'cHNidP8BAFICAAAA', signed: 0, required: 1, canFinalize: false, signedFingerprints: [], status: 'collecting', createdAt: new Date().toISOString() });
@@ -635,7 +653,7 @@ export class DummyWalletAdapter implements WalletPort {
     if (Number(amount) + Number(fee) > available) throw new WalletError('insufficient_funds', 'Amount and fee exceed the selected, unfrozen balance.');
     const selectedOutpoints = coinSelection.mode === 'manual' ? spendable.map((coin) => coin.outpoint) : [];
     const inputs=(selectedOutpoints.length?selectedOutpoints:['fixture-auto-input:0']).map((outpoint)=>({outpoint,amount:sats(available),sequence:0xfffffffd}));
-    const proposal: MultisigProposal = { proposalId: crypto.randomUUID(), recipient, recipientTestnetAlias:null, label, amount, fee, feeRate:selectedRate, total:sats(Number(amount)+Number(fee)), selectedOutpoints, inputs, locktime:0, rbf:true, network:defaultConfig.network, change:sats(0), changeAddresses:[], changeTestnetAliases:[], outputCount:1, psbt:`cHNidP8BAF9kdW1teQ==${'A'.repeat(3120)}`, signed:0, required:this.#multisig.threshold, canFinalize:false, signedFingerprints:[], status:'collecting', createdAt:new Date().toISOString() };
+    const proposal: MultisigProposal = { proposalId: crypto.randomUUID(), recipient, recipientTestnetAlias:null, label, amount, fee, feeRate:selectedRate, total:sats(Number(amount)+Number(fee)), selectedOutpoints, inputs, locktime:0, rbf:true, network:defaultConfig.network, change:sats(0), changeAddresses:[], changeTestnetAliases:[], outputCount:1, selectionImpact:{strategy:coinSelection.mode==='auto'?coinSelection.strategy??'balanced':'manual',selectedInputCount:inputs.length,estimatedInputWeight:inputs.length*500,fundingLabels:[],provenanceState:'unknown',existingClusterCount:0,newClusterLinks:0,hasUnknownProvenance:true,hasAddressReuse:false,feeDifferenceVsPrivate:null}, psbt:`cHNidP8BAF9kdW1teQ==${'A'.repeat(3120)}`, signed:0, required:this.#multisig.threshold, canFinalize:false, signedFingerprints:[], status:'collecting', createdAt:new Date().toISOString() };
     this.#multisigProposals.set(proposal.proposalId, proposal); return structuredClone(proposal);
   }
   async prepareMultisigAcceleration(txid: string, method: import('./contracts').AccelerationMethod, selectedRate: ReturnType<typeof feeRate>) {
@@ -732,7 +750,9 @@ export class DummyWalletAdapter implements WalletPort {
       walletInputAmount: proposal.inputs.reduce((sum, input) => sum + Number(input.amount), 0),
       walletOutputAmount: Number(proposal.change),
       locktime: proposal.locktime,
-      rbf: proposal.rbf
+      rbf: proposal.rbf,
+      intentLabel: original?.intentLabel ?? { id: `payment-${proposalId}`, text: proposal.label, origin: 'payment' },
+      provenance: original?.provenance ?? { state: 'unknown', context: 'funding', labels: [], clusterCount: 0, addressReused: false }
     };
     this.#transactions = [replacement, ...this.#transactions.filter((transaction) => transaction.id !== txid)];
     this.#accelerations.delete(proposalId);

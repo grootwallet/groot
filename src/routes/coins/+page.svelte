@@ -18,11 +18,14 @@
   import LoadFailure from '$lib/components/LoadFailure.svelte';
   import EmptyState from '$lib/components/EmptyState.svelte';
   import { useWalletShellContext } from '$lib/wallet/shell-context';
+  import { discreetMode } from '$lib/privacy';
 
   const walletShell = useWalletShellContext();
   let utxos = $state<Utxo[]>([]);
   let transactions = $state<Transaction[]>([]);
   let sortOrder = $state<CoinSortOrder>('newest');
+  let provenanceFilter = $state<'all' | 'known' | 'mixed' | 'unknown' | 'reused'>('all');
+  let labelFilter = $state('');
   let selected = $state<string[]>([]);
   let expanded = $state<string[]>([]);
   let busy = $state(false);
@@ -31,8 +34,15 @@
   let loading = $state(true);
   let loadError = $state('');
   const selectedTotal = $derived(selectedCoinTotal(utxos, selected));
-  const sortedUtxos = $derived(sortCoins(utxos, transactions, sortOrder));
+  const filteredUtxos = $derived(utxos.filter((coin) => {
+    const needle = labelFilter.trim().toLocaleLowerCase();
+    const labelMatches = !needle || coin.provenance.labels.some((label) => label.text.toLocaleLowerCase().includes(needle)) || coin.label.toLocaleLowerCase().includes(needle);
+    const provenanceMatches = provenanceFilter === 'all' || provenanceFilter === coin.provenance.state || (provenanceFilter === 'reused' && coin.provenance.addressReused);
+    return labelMatches && provenanceMatches;
+  }));
+  const sortedUtxos = $derived(sortCoins(filteredUtxos, transactions, sortOrder));
   const reuseInsights = $derived(addressReuseInsights(utxos));
+  const coinName = (utxo: Utxo) => $discreetMode ? 'Label hidden' : utxo.label;
   const freezeIntentCoins = $derived(freezeIntent ? utxos.filter((coin) => freezeIntent?.outpoints.includes(coin.outpoint)) : []);
   const sendHref = $derived(`${multisig ? '/multisig/send' : '/send'}?coins=${encodeURIComponent(selected.join(','))}`);
 
@@ -128,6 +138,7 @@
     <div><strong>{selected.length} selected</strong><span>{shortSats(selectedTotal)} sats selected</span></div>
     <div class="coin-toolbar-actions">{#if selected.length}<Button variant="secondary" size="small" disabled={busy} onclick={() => requestFrozenState(selected, true)}><Snowflake size={15}/>Freeze selected</Button><Button size="small" href={sendHref}>Send selected coins</Button>{:else}<span class="auto-note"><CircleDot size={14}/>Automatic selection remains the default</span>{/if}<CoinSortMenu value={sortOrder} onchange={(next) => (sortOrder = next)}/></div>
   </section>
+  <section class="coin-filters" aria-label="Filter coins by label and provenance"><label><span>Label</span><input bind:value={labelFilter} placeholder="Filter labels" disabled={$discreetMode}/></label><label><span>Provenance</span><select bind:value={provenanceFilter}><option value="all">All sources</option><option value="known">Known</option><option value="mixed">Mixed</option><option value="unknown">Unknown</option><option value="reused">Address reused</option></select></label></section>
 
   {#if loading}
     <WalletSkeleton variant="coins" count={4} />
@@ -139,25 +150,25 @@
 			{@const reuse = reuseFor(utxo.outpoint)}
 			{@const linkedCoins = linkedCoinsFor(utxo.outpoint)}
       <article class="coin-row" class:frozen={utxo.frozen} class:reused={Boolean(reuse)}>
-        <label class="coin-check"><input type="checkbox" aria-label="Select {utxo.label}" checked={selected.includes(utxo.outpoint)} disabled={utxo.frozen || busy} onchange={(event) => toggle(utxo.outpoint, event.currentTarget.checked)}/><span></span></label>
+        <label class="coin-check"><input type="checkbox" aria-label="Select {coinName(utxo)}" checked={selected.includes(utxo.outpoint)} disabled={utxo.frozen || busy} onchange={(event) => toggle(utxo.outpoint, event.currentTarget.checked)}/><span></span></label>
         <span class="coin-icon">{#if utxo.frozen}<Lock size={17}/>{:else}<CircleDot size={19}/>{/if}</span>
         <div class="coin-main">
-          <div class="coin-title"><strong>{utxo.label}</strong>{#if utxo.frozen}<span class="coin-status frozen">Frozen</span>{:else if reuse}<span class="coin-status reused">Address reused</span>{:else if !utxo.confirmations}<span class="coin-status pending">Unconfirmed</span>{/if}</div>
+          <div class="coin-title"><strong>{coinName(utxo)}</strong>{#if utxo.frozen}<span class="coin-status frozen">Frozen</span>{:else if utxo.provenance.state === 'mixed'}<span class="coin-status reused">Mixed provenance</span>{:else if utxo.provenance.state === 'unknown'}<span class="coin-status pending">Unknown source</span>{:else if reuse || utxo.provenance.addressReused}<span class="coin-status reused">Address reused</span>{:else if !utxo.confirmations}<span class="coin-status pending">Unconfirmed</span>{/if}</div>
           <span>{shortSats(utxo.amount)} sats</span>
         </div>
         <div class="coin-meta coin-actions-meta">
           <div class="coin-row-actions">
             {#if utxo.frozen}
-              <button class="coin-unfreeze-action" aria-label="Unfreeze {utxo.label}" disabled={busy} onclick={() => requestFrozenState([utxo.outpoint], false)}><Unlock size={14}/>Unfreeze</button>
+              <button class="coin-unfreeze-action" aria-label="Unfreeze {coinName(utxo)}" disabled={busy} onclick={() => requestFrozenState([utxo.outpoint], false)}><Unlock size={14}/>Unfreeze</button>
             {:else}
-              <button class="coin-freeze-action" aria-label="Freeze {utxo.label}" disabled={busy} onclick={() => requestFrozenState([utxo.outpoint], true)}><Snowflake size={14}/>Freeze</button>
+              <button class="coin-freeze-action" aria-label="Freeze {coinName(utxo)}" disabled={busy} onclick={() => requestFrozenState([utxo.outpoint], true)}><Snowflake size={14}/>Freeze</button>
             {/if}
-            <button class="coin-details-toggle" aria-expanded={expanded.includes(utxo.outpoint)} aria-label="{expanded.includes(utxo.outpoint) ? 'Hide' : 'Show'} details for {utxo.label}" onclick={() => toggleDetails(utxo.outpoint)}>Details <ChevronDown size={13} class={expanded.includes(utxo.outpoint) ? 'rotated' : ''}/></button>
+            <button class="coin-details-toggle" aria-expanded={expanded.includes(utxo.outpoint)} aria-label="{expanded.includes(utxo.outpoint) ? 'Hide' : 'Show'} details for {coinName(utxo)}" onclick={() => toggleDetails(utxo.outpoint)}>Details <ChevronDown size={13} class={expanded.includes(utxo.outpoint) ? 'rotated' : ''}/></button>
           </div>
         </div>
         {#if expanded.includes(utxo.outpoint)}
           <div class="coin-details" transition:slide={{ duration: 180 }}>
-            <dl><div><dt>Status</dt><dd>{utxo.confirmations ? formatConfirmationCount(utxo.confirmations, $locale) : `${t('unconfirmed', $locale)} · ${t('awaitingConfirmation', $locale)}`}</dd></div><div><dt>Receive label</dt><dd>{utxo.label}</dd></div><div><dt>Address</dt><dd><code>{compactAddress(utxo.address)}</code><button aria-label="Copy address" onclick={() => copy(utxo.address, 'Address', 'bitcoin-address')}><Copy size={13}/></button></dd></div><div><dt>Outpoint</dt><dd><code>{compactAddress(utxo.outpoint, 18, 10)}</code><button aria-label="Copy outpoint" onclick={() => copy(utxo.outpoint, 'Outpoint', 'identifier')}><Copy size={13}/></button></dd></div></dl>
+            <dl><div><dt>Status</dt><dd>{utxo.confirmations ? formatConfirmationCount(utxo.confirmations, $locale) : `${t('unconfirmed', $locale)} · ${t('awaitingConfirmation', $locale)}`}</dd></div><div><dt>Provenance</dt><dd>{$discreetMode ? 'Hidden in discreet mode' : utxo.provenance.state === 'unknown' ? 'Source unknown' : utxo.provenance.labels.map((label) => label.text).join(' + ') || utxo.label}{!$discreetMode && utxo.provenance.state === 'mixed' ? ' · Mixed' : ''}</dd></div><div><dt>Privacy clusters</dt><dd>{$discreetMode ? 'Hidden in discreet mode' : `${utxo.provenance.clusterCount || 'Unknown'}${utxo.provenance.addressReused ? ' · Address reused' : ''}`}</dd></div><div><dt>Address</dt><dd><code>{compactAddress(utxo.address)}</code><button aria-label="Copy address" onclick={() => copy(utxo.address, 'Address', 'bitcoin-address')}><Copy size={13}/></button></dd></div><div><dt>Outpoint</dt><dd><code>{compactAddress(utxo.outpoint, 18, 10)}</code><button aria-label="Copy outpoint" onclick={() => copy(utxo.outpoint, 'Outpoint', 'identifier')}><Copy size={13}/></button></dd></div></dl>
 					{#if reuse}
 						<div class="coin-reuse-details">
 							<div class="coin-reuse-explanation">

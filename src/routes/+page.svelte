@@ -45,6 +45,7 @@
   const proposalHref = $derived(multisig ? '/multisig/send' : '/send');
   const proposalTitle = $derived(activeProposal?.canFinalize ? 'Payment ready to broadcast' : 'Signing in progress');
   const proposalProgress = $derived(activeProposal ? `${activeProposal.signed} of ${activeProposal.required} signatures collected` : '');
+  const proposalLabel = $derived(activeProposal ? ($discreetMode ? 'Label hidden' : activeProposal.label) : '');
   onMount(loadSnapshot);
   async function loadSnapshot() {
     loadError = '';
@@ -151,9 +152,9 @@
   {/if}
   {#if !loadError}
   {#if activeProposal}
-    <a class="active-proposal-callout" class:ready={activeProposal.canFinalize} href={proposalHref} aria-label={`Resume payment, ${proposalProgress}`}>
+    <a class="active-proposal-callout" class:ready={activeProposal.canFinalize} href={proposalHref} aria-label={`Resume payment, ${proposalLabel}, ${proposalProgress}`}>
       <span class="active-proposal-icon"><Clock3 size={17}/></span>
-      <span class="active-proposal-copy"><strong>{proposalTitle}</strong><small>{proposalProgress}</small></span>
+      <span class="active-proposal-copy"><strong>{proposalTitle}</strong><small>{proposalLabel} · {proposalProgress}</small></span>
       <span class="active-proposal-action">Resume <ChevronRight size={15}/></span>
     </a>
   {/if}

@@ -33,13 +33,14 @@ export function recoveryWordCountIsValid(words: string): boolean {
 }
 
 export function normalizeCoinSelection(selection?: CoinSelection): CoinSelection {
-  if (!selection || selection.mode === 'auto') return { mode: 'auto' };
+  if (!selection) return { mode: 'auto', strategy: 'balanced' };
+  if (selection.mode === 'auto') return { mode: 'auto', strategy: selection.strategy ?? 'balanced' };
   const outpoints = [...new Set(selection.outpoints.map((item) => item.trim()).filter(Boolean))];
   if (outpoints.length === 0) throw new Error('Select at least one available coin.');
   return { mode: 'manual', outpoints };
 }
 
-export function selectedCoinTotal(coins: Utxo[], outpoints: string[]): number {
+export function selectedCoinTotal(coins: Pick<Utxo, 'outpoint' | 'amount' | 'frozen'>[], outpoints: string[]): number {
   const selected = new Set(outpoints);
   return coins.reduce((total, coin) => total + (selected.has(coin.outpoint) && !coin.frozen ? coin.amount : 0), 0);
 }
@@ -51,7 +52,7 @@ export type AddressReuseInsight = {
   totalAmount: number;
 };
 
-export function addressReuseInsights(coins: Utxo[]): AddressReuseInsight[] {
+export function addressReuseInsights(coins: Pick<Utxo, 'outpoint' | 'amount' | 'address' | 'label'>[]): AddressReuseInsight[] {
   const groups = new Map<string, AddressReuseInsight>();
 
   for (const coin of coins) {

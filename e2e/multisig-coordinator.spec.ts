@@ -504,9 +504,14 @@ test('selects and freezes multisig coins before entering the send flow', async (
   await page.getByLabel('Bitcoin address').fill('bcrt1qdummy00085n8k2r7v4cx9s6jlawephgzuqf5t8ul');
   await page.getByRole('button', { name: 'Continue to amount' }).click();
   await expect(page.getByText('Manual · 1 coin')).toBeVisible();
+  await expect(page.locator('.manual-selection-preview')).toContainText('1 selected · 1,250,000 sats · 500 WU');
+  await expect(page.locator('.manual-selection-preview')).toContainText('One existing group can fund this amount.');
   await page.getByRole('button', { name: /Manual · 1 coin/ }).click();
+  await expect(page.getByRole('button', { name: /Lower fee/ })).toBeVisible();
+  await page.getByRole('button', { name: /Lower fee/ }).click();
   await page.getByRole('button', { name: 'Use automatic selection' }).click();
   await expect(page.locator('.coin-mode').getByText('Automatic selection', { exact: true })).toBeVisible();
+  await expect(page.locator('.coin-mode')).toContainText('Lower fee');
 });
 
 test('offers safe recipes and advanced M-of-N control', async ({ page }) => {
