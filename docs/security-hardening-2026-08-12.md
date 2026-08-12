@@ -22,6 +22,7 @@ The supplied review was static and read-only. Each item below was rechecked agai
 
 - Address-validation copy uses the compiled network name instead of saying Regtest in Signet/Testnet4 builds.
 - Recipient dust failures map to `invalid_amount`; malformed or stale coin identifiers map to stable coin-specific errors instead of `internal_error`.
+- The frontend `WalletErrorCode` contract includes the backend's `invalid_coin`, `coin_unavailable`, and `invalid_signature` remediation codes, so renderer-side handling remains type-complete without changing the adapter's stable-code pass-through.
 - The Rust registry accepts exactly the documented inactivity timeout choices: 1, 5, 15, 30, and 60 minutes.
 - Documentation now distinguishes persisted single-key proposal integrity from current UI resumption: external-signer and multisig routes visibly reload active proposals; generic single-key send does not yet expose a post-restart resume selector.
 - ADR 0028 records the new enforcement boundaries and residual risks. `SECURITY.md`, the security model, threat model, architecture, product spec, implementation status, testing guide, and release checklist are updated in the same change.
@@ -51,3 +52,7 @@ The isolated remediation worktree passed the following on 2026-08-12 without sta
 - `pnpm validate`, including architecture, secret-surface, supply-chain, brand, mainnet-lock, signed-update/HWI-evidence mutation, unsigned-build-comparison, runtime-launcher, Svelte diagnostics, 84 frontend tests, and the production static build.
 
 The first sandboxed full Rust run denied five loopback socket binds. The identical suite was rerun with permission for disposable local RPC/Tor fixtures and passed; this was an execution-environment restriction, not a code failure. No live Core, Tor service, remote endpoint, hardware wallet, or physical camera was contacted.
+
+## Follow-up re-scan closure
+
+An independent static re-scan of the integrated remediation identified one type-contract omission: Rust emitted `invalid_coin`, `coin_unavailable`, and `invalid_signature`, but the frontend `WalletErrorCode` union did not represent those strings. Runtime behavior was unaffected because the Tauri adapter already preserved backend error codes. The isolated follow-up branch added the three union members and a focused contract regression test. The focused test and full `pnpm validate` gate passed with 107 frontend tests and zero Svelte diagnostics, without starting Groot or contacting hardware.
