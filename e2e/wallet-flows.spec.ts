@@ -860,8 +860,12 @@ test('send reviews a proposal and rejects a wrong credential', async ({ page }) 
   await page.getByRole('button', { name: 'Continue to amount' }).click();
   await expect(paymentProgress.getByText('Amount & fee')).toBeVisible();
   await page.getByLabel('Amount', { exact: true }).fill('25000');
+  await page.getByRole('button', { name: /Automatic selection/ }).click();
+  await page.getByRole('button', { name: /Lower fee/ }).click();
   await page.getByRole('button', { name: 'Review payment' }).click();
   await expect(page.getByText('25,000')).toBeVisible();
+  await expect(page.getByText('Exact strategy comparison')).toBeVisible();
+  await expect(page.getByText(/100 sats lower than the valid More private candidate/)).toBeVisible();
   await page.getByRole('button', { name: 'Continue to sign' }).click();
   await page.getByLabel('Wallet passphrase', { exact: true }).fill('wrong');
   await page.getByRole('button', { name: /Sign & broadcast/ }).click();

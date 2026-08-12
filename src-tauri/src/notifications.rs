@@ -77,25 +77,35 @@ pub fn history_initialized(db: &Connection) -> bdk_wallet::rusqlite::Result<bool
     .map(|value| value.unwrap_or(false))
 }
 
+#[cfg(test)]
 pub fn seed_history(
     db: &mut Connection,
     events: &[WalletNotification],
     created_at: u64,
 ) -> bdk_wallet::rusqlite::Result<()> {
     let transaction = db.transaction()?;
+    seed_history_in_transaction(&transaction, events, created_at)?;
+    transaction.commit()
+}
+
+pub fn seed_history_in_transaction(
+    db: &Connection,
+    events: &[WalletNotification],
+    created_at: u64,
+) -> bdk_wallet::rusqlite::Result<()> {
     for event in events {
         let (txid, amount, balance) = event.values();
-        transaction.execute(
+        db.execute(
             "INSERT OR IGNORE INTO groot_notifications (kind,txid,amount,balance,created_at,delivered) VALUES (?1,?2,?3,?4,?5,1)",
             params![event.kind(), txid, amount, balance, created_at],
         )?;
     }
-    transaction.execute(
+    db.execute(
         "INSERT INTO groot_notification_state (singleton,history_initialized) VALUES (1,1)
          ON CONFLICT(singleton) DO UPDATE SET history_initialized=1",
         [],
     )?;
-    transaction.commit()
+    Ok(())
 }
 
 pub fn enqueue(

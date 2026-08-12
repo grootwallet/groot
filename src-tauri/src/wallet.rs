@@ -1990,7 +1990,8 @@ fn init_app_schema(db: &Connection) -> ApiResult<()> {
             status TEXT NOT NULL CHECK(status IN ('collecting', 'ready', 'broadcast', 'cancelled')),
             created_at INTEGER NOT NULL,
             txid TEXT,
-            selection_strategy TEXT NOT NULL DEFAULT 'balanced'
+            selection_strategy TEXT NOT NULL DEFAULT 'balanced',
+            fee_difference_vs_private INTEGER
         );
         CREATE TABLE IF NOT EXISTS groot_frozen_coins (
             outpoint TEXT PRIMARY KEY,
@@ -2063,6 +2064,22 @@ fn init_app_schema(db: &Connection) -> ApiResult<()> {
     if !has_selection_strategy {
         db.execute(
             "ALTER TABLE groot_proposals ADD COLUMN selection_strategy TEXT NOT NULL DEFAULT 'balanced'",
+            [],
+        )
+        .map_err(internal)?;
+    }
+    let has_fee_difference_vs_private = db
+        .prepare("PRAGMA table_info(groot_proposals)")
+        .map_err(internal)?
+        .query_map([], |row| row.get::<_, String>(1))
+        .map_err(internal)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(internal)?
+        .iter()
+        .any(|column| column == "fee_difference_vs_private");
+    if !has_fee_difference_vs_private {
+        db.execute(
+            "ALTER TABLE groot_proposals ADD COLUMN fee_difference_vs_private INTEGER",
             [],
         )
         .map_err(internal)?;
@@ -3122,19 +3139,22 @@ fn authorize_multisig_operation(
     unlock_selected(app, state)
 }
 
+type StoredProposalRow = (
+    String,
+    String,
+    String,
+    u64,
+    u64,
+    f64,
+    String,
+    String,
+    u64,
+    String,
+    Option<i64>,
+);
+
 fn proposal_dto(
-    row: (
-        String,
-        String,
-        String,
-        u64,
-        u64,
-        f64,
-        String,
-        String,
-        u64,
-        String,
-    ),
+    row: StoredProposalRow,
     metadata: &MultisigWalletDto,
     wallet: &Wallet,
     db: &Connection,
@@ -3150,6 +3170,7 @@ fn proposal_dto(
         status,
         created_at,
         strategy,
+        fee_difference_vs_private,
     ) = row;
     let psbt = decode_psbt(&encoded).map_err(proposal_api_error)?;
     validate_proposal_fee(&psbt, fee)?;
@@ -3160,7 +3181,8 @@ fn proposal_dto(
     let (recipient_testnet_alias, change_testnet_aliases) =
         proposal_testnet_aliases(&recipient, &change_addresses);
     let (inputs, fee_rate, locktime, rbf) = proposal_transaction_details(wallet, &psbt, fee)?;
-    let selection_impact = selection_impact(db, wallet, &psbt, &strategy, None)?;
+    let selection_impact =
+        selection_impact(db, wallet, &psbt, &strategy, fee_difference_vs_private)?;
     Ok(MultisigProposalDto {
         proposal_id,
         recipient,
@@ -3487,9 +3509,9 @@ fn load_multisig_proposal(
 ) -> ApiResult<MultisigProposalDto> {
     let wallet = load_wallet(db)?;
     let row = db.query_row(
-        "SELECT proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at, selection_strategy FROM groot_proposals WHERE proposal_id = ?1 AND status IN ('collecting','ready')",
+        "SELECT proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at, selection_strategy, fee_difference_vs_private FROM groot_proposals WHERE proposal_id = ?1 AND status IN ('collecting','ready')",
         params![proposal_id],
-        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?, row.get(7)?, row.get(8)?, row.get(9)?)),
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?, row.get(7)?, row.get(8)?, row.get(9)?, row.get(10)?)),
     ).map_err(|_| api_error("proposal_not_found", "Payment proposal was not found or is no longer active."))?;
     proposal_dto(row, metadata, &wallet, db)
 }
@@ -3502,7 +3524,7 @@ fn persist_proposal(
 ) -> ApiResult<()> {
     let created_at = now();
     db.execute(
-        "INSERT INTO groot_proposals (proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at, selection_strategy) VALUES (?1,?2,?3,?4,?5,?6,?7,'collecting',?8,?9)",
+        "INSERT INTO groot_proposals (proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at, selection_strategy, fee_difference_vs_private) VALUES (?1,?2,?3,?4,?5,?6,?7,'collecting',?8,?9,?10)",
         params![
             proposal.proposal_id,
             proposal.recipient,
@@ -3512,7 +3534,8 @@ fn persist_proposal(
             proposal.fee_rate,
             encode_psbt(psbt),
             created_at,
-            proposal.selection_impact.strategy
+            proposal.selection_impact.strategy,
+            proposal.selection_impact.fee_difference_vs_private
         ],
     )
     .map_err(internal)?;
@@ -3772,9 +3795,9 @@ fn load_payment_proposal_dto(
     wallet: &Wallet,
     proposal_id: &str,
 ) -> ApiResult<PaymentProposalDto> {
-    let (proposal_id, recipient, label, amount, fee, encoded, strategy) = db
+    let (proposal_id, recipient, label, amount, fee, encoded, strategy, fee_difference_vs_private) = db
         .query_row(
-            "SELECT proposal_id, recipient, label, amount, fee, psbt, selection_strategy
+            "SELECT proposal_id, recipient, label, amount, fee, psbt, selection_strategy, fee_difference_vs_private
              FROM groot_proposals
              WHERE proposal_id = ?1 AND status IN ('collecting', 'ready')",
             params![proposal_id],
@@ -3787,6 +3810,7 @@ fn load_payment_proposal_dto(
                     row.get::<_, u64>(4)?,
                     row.get::<_, String>(5)?,
                     row.get::<_, String>(6)?,
+                    row.get::<_, Option<i64>>(7)?,
                 ))
             },
         )
@@ -3802,7 +3826,8 @@ fn load_payment_proposal_dto(
     let (recipient_testnet_alias, change_testnet_aliases) =
         proposal_testnet_aliases(&recipient, &change_addresses);
     let (inputs, fee_rate, locktime, rbf) = proposal_transaction_details(wallet, &psbt, fee)?;
-    let selection_impact = selection_impact(db, wallet, &psbt, &strategy, None)?;
+    let selection_impact =
+        selection_impact(db, wallet, &psbt, &strategy, fee_difference_vs_private)?;
     Ok(PaymentProposalDto {
         proposal_id,
         recipient,
@@ -3997,14 +4022,16 @@ fn create_from_mnemonic(
     result
 }
 
-fn sync_loaded_wallet(
+fn sync_wallet_atomically(
     app: &AppHandle,
     state: &State<'_, AppState>,
-    wallet: &mut PersistedWallet<Connection>,
     db: &mut Connection,
-) -> ApiResult<()> {
+    multisig: bool,
+) -> ApiResult<WalletSnapshotDto> {
     let rpc = Arc::new(rpc_client(app, state)?);
     checked_block_height(rpc.as_ref())?;
+    let mut transaction = db.transaction().map_err(internal)?;
+    let mut wallet = load_wallet_transaction(&mut transaction)?;
     let wallet_tip = wallet.latest_checkpoint();
     let mut emitter = Emitter::new(
         rpc,
@@ -4018,13 +4045,18 @@ fn sync_loaded_wallet(
         wallet
             .apply_block_connected_to(&block.block, block.block_height(), block.connected_to())
             .map_err(internal)?;
-        wallet.persist(db).map_err(internal)?;
     }
     let mempool = emitter.mempool().map_err(internal)?;
     wallet.apply_evicted_txs(mempool.evicted);
     wallet.apply_unconfirmed_txs(mempool.update);
-    wallet.persist(db).map_err(internal)?;
-    mark_observed_addresses(wallet, db)
+    mark_observed_addresses(&wallet, &transaction)?;
+    label_provenance::reconcile_wallet_outputs(&wallet, &transaction, now()).map_err(internal)?;
+    let snapshot = snapshot_from(&wallet, &transaction, Some(now().to_string()), multisig)?;
+    enqueue_snapshot_notifications(&transaction, &snapshot)?;
+    wallet.persist(&mut transaction).map_err(internal)?;
+    drop(wallet);
+    transaction.commit().map_err(internal)?;
+    Ok(snapshot)
 }
 
 fn full_rescan_loaded_wallet(
@@ -4668,13 +4700,10 @@ fn snapshot_notifications(snapshot: &WalletSnapshotDto) -> Vec<WalletNotificatio
     events
 }
 
-fn enqueue_snapshot_notifications(
-    db: &mut Connection,
-    snapshot: &WalletSnapshotDto,
-) -> ApiResult<()> {
+fn enqueue_snapshot_notifications(db: &Connection, snapshot: &WalletSnapshotDto) -> ApiResult<()> {
     let events = snapshot_notifications(snapshot);
     if !notifications::history_initialized(db).map_err(internal)? {
-        notifications::seed_history(db, &events, now()).map_err(internal)?;
+        notifications::seed_history_in_transaction(db, &events, now()).map_err(internal)?;
         return Ok(());
     }
     for event in &events {
@@ -4945,11 +4974,7 @@ pub fn wallet_sync(app: AppHandle, state: State<'_, AppState>) -> ApiResult<Wall
     let _operation = operation_guard(&state)?;
     require_unlocked_for_background_sync(&app, &state)?;
     let mut db = open_db(&app)?;
-    let mut wallet = load_wallet(&mut db)?;
-    sync_loaded_wallet(&app, &state, &mut wallet, &mut db)?;
-    let snapshot = snapshot_from(&wallet, &db, Some(now().to_string()), false)?;
-    enqueue_snapshot_notifications(&mut db, &snapshot)?;
-    Ok(snapshot)
+    sync_wallet_atomically(&app, &state, &mut db, false)
 }
 
 #[tauri::command]
@@ -5367,7 +5392,7 @@ pub async fn wallet_full_rescan(
             let mut wallet = load_wallet(&mut db)?;
             full_rescan_loaded_wallet(rpc, &mut wallet, &mut db, &settings, &run_id, &cancel)?;
             let snapshot = snapshot_from(&wallet, &db, Some(now().to_string()), is_multisig)?;
-            enqueue_snapshot_notifications(&mut db, &snapshot)?;
+            enqueue_snapshot_notifications(&db, &snapshot)?;
             Ok(snapshot)
         })();
         let terminal_status = match &scan_result {
@@ -6070,18 +6095,7 @@ pub fn external_signer_export_descriptor(
 }
 
 fn external_proposal_dto(
-    row: (
-        String,
-        String,
-        String,
-        u64,
-        u64,
-        f64,
-        String,
-        String,
-        u64,
-        String,
-    ),
+    row: StoredProposalRow,
     fingerprint: &str,
     wallet: &Wallet,
     db: &Connection,
@@ -6097,6 +6111,7 @@ fn external_proposal_dto(
         status,
         created_at,
         strategy,
+        fee_difference_vs_private,
     ) = row;
     let psbt = decode_psbt(&encoded).map_err(proposal_api_error)?;
     validate_proposal_fee(&psbt, fee)?;
@@ -6106,7 +6121,8 @@ fn external_proposal_dto(
     let (recipient_testnet_alias, change_testnet_aliases) =
         proposal_testnet_aliases(&recipient, &change_addresses);
     let (inputs, fee_rate, locktime, rbf) = proposal_transaction_details(wallet, &psbt, fee)?;
-    let selection_impact = selection_impact(db, wallet, &psbt, &strategy, None)?;
+    let selection_impact =
+        selection_impact(db, wallet, &psbt, &strategy, fee_difference_vs_private)?;
     Ok(MultisigProposalDto {
         proposal_id,
         recipient,
@@ -6148,9 +6164,9 @@ fn load_external_proposal(
 ) -> ApiResult<MultisigProposalDto> {
     let wallet = load_wallet(db)?;
     let row = db.query_row(
-        "SELECT proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at, selection_strategy FROM groot_proposals WHERE proposal_id = ?1 AND status IN ('collecting','ready')",
+        "SELECT proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at, selection_strategy, fee_difference_vs_private FROM groot_proposals WHERE proposal_id = ?1 AND status IN ('collecting','ready')",
         params![proposal_id],
-        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?, row.get(7)?, row.get(8)?, row.get(9)?)),
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?, row.get(7)?, row.get(8)?, row.get(9)?, row.get(10)?)),
     ).map_err(|_| api_error("proposal_not_found", "Payment proposal was not found or is no longer active."))?;
     external_proposal_dto(row, &metadata.signer.fingerprint, &wallet, db)
 }
@@ -6166,7 +6182,7 @@ pub fn external_signer_proposals(
     let mut db = open_db(&app)?;
     let wallet = load_wallet(&mut db)?;
     let mut statement = db.prepare(
-        "SELECT proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at, selection_strategy FROM groot_proposals WHERE status IN ('collecting','ready') ORDER BY created_at DESC",
+        "SELECT proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at, selection_strategy, fee_difference_vs_private FROM groot_proposals WHERE status IN ('collecting','ready') ORDER BY created_at DESC",
     ).map_err(internal)?;
     let rows = statement
         .query_map([], |row| {
@@ -6181,6 +6197,7 @@ pub fn external_signer_proposals(
                 row.get(7)?,
                 row.get(8)?,
                 row.get(9)?,
+                row.get(10)?,
             ))
         })
         .map_err(internal)?;
@@ -6349,8 +6366,7 @@ pub fn external_signer_proposal_broadcast(
     }
     let transaction = psbt.extract_tx().map_err(internal)?;
     let txid = broadcast_transaction(&app, &state, &transaction)?;
-    let mut wallet = load_wallet(&mut db)?;
-    let sync_pending = sync_loaded_wallet(&app, &state, &mut wallet, &mut db).is_err();
+    let wallet = load_wallet(&mut db)?;
     let persisted = db.transaction().map_err(internal)?;
     let changed = persisted.execute(
         "UPDATE groot_proposals SET status = 'broadcast', txid = ?1 WHERE proposal_id = ?2 AND status = 'ready'",
@@ -6370,12 +6386,7 @@ pub fn external_signer_proposal_broadcast(
     )
     .map_err(internal)?;
     record_replacement(&persisted, &proposal_id, &txid)?;
-    let snapshot = snapshot_from(
-        &wallet,
-        &persisted,
-        (!sync_pending).then(|| now().to_string()),
-        false,
-    )?;
+    let snapshot = snapshot_from(&wallet, &persisted, None, false)?;
     notifications::enqueue(
         &persisted,
         &WalletNotification::TransactionBroadcast {
@@ -6386,6 +6397,11 @@ pub fn external_signer_proposal_broadcast(
     )
     .map_err(internal)?;
     persisted.commit().map_err(internal)?;
+    drop(wallet);
+    let (snapshot, sync_pending) = match sync_wallet_atomically(&app, &state, &mut db, false) {
+        Ok(snapshot) => (snapshot, false),
+        Err(_) => (snapshot, true),
+    };
     Ok(BroadcastResultDto {
         txid: txid.to_string(),
         snapshot,
@@ -7106,11 +7122,7 @@ pub fn multisig_sync(app: AppHandle, state: State<'_, AppState>) -> ApiResult<Wa
     let _operation = operation_guard(&state)?;
     require_unlocked_for_background_sync(&app, &state)?;
     let mut db = open_multisig_db(&app)?;
-    let mut wallet = load_wallet(&mut db)?;
-    sync_loaded_wallet(&app, &state, &mut wallet, &mut db)?;
-    let snapshot = snapshot_from(&wallet, &db, Some(now().to_string()), true)?;
-    enqueue_snapshot_notifications(&mut db, &snapshot)?;
-    Ok(snapshot)
+    sync_wallet_atomically(&app, &state, &mut db, true)
 }
 
 #[tauri::command]
@@ -7237,6 +7249,54 @@ fn validate_manual_outpoints(values: &[String], frozen: &[OutPoint]) -> ApiResul
     Ok(selected)
 }
 
+struct AutomaticPaymentOptions<'a> {
+    recipient: &'a Address,
+    amount: u64,
+    rate: FeeRate,
+    frozen: Vec<OutPoint>,
+    strategy: AutomaticSelectionStrategy,
+    privacy: std::collections::HashMap<String, crate::privacy_selection::CoinPrivacy>,
+    global_xpubs: bool,
+}
+
+fn build_automatic_payment(
+    wallet: &mut Wallet,
+    options: AutomaticPaymentOptions<'_>,
+) -> ApiResult<Psbt> {
+    let AutomaticPaymentOptions {
+        recipient,
+        amount,
+        rate,
+        frozen,
+        strategy,
+        privacy,
+        global_xpubs,
+    } = options;
+    let mut builder = wallet
+        .build_tx()
+        .coin_selection(PrivacyAwareCoinSelection::new(strategy, privacy));
+    builder
+        .add_recipient(recipient.script_pubkey(), Amount::from_sat(amount))
+        .fee_rate(rate)
+        .unspendable(frozen);
+    if global_xpubs {
+        builder.add_global_xpubs();
+    }
+    builder.finish().map_err(create_tx_api_error)
+}
+
+fn fee_difference(fee: u64, private_fee: Option<u64>) -> ApiResult<Option<i64>> {
+    private_fee
+        .map(|private_fee| {
+            let fee = i64::try_from(fee).map_err(|_| internal("Fee exceeds comparison range."))?;
+            let private_fee = i64::try_from(private_fee)
+                .map_err(|_| internal("Private candidate fee exceeds comparison range."))?;
+            fee.checked_sub(private_fee)
+                .ok_or_else(|| internal("Fee comparison overflowed."))
+        })
+        .transpose()
+}
+
 #[tauri::command]
 pub fn coin_selection_preview(
     app: AppHandle,
@@ -7310,23 +7370,57 @@ pub fn multisig_tx_prepare(
     let metadata = read_multisig_metadata(&app)?;
     let mut db = open_multisig_db(&app)?;
     let mut transaction = db.transaction().map_err(internal)?;
-    let mut wallet = load_wallet_transaction(&mut transaction)?;
     let selection_strategy = coin_selection.strategy_name().to_owned();
     let frozen = frozen_outpoints(&transaction)?;
+    let private_fee = if matches!(
+        &coin_selection,
+        CoinSelectionInput::Auto {
+            strategy: AutomaticSelectionStrategy::LowerFee
+        }
+    ) {
+        let mut comparison_wallet = load_wallet_transaction(&mut transaction)?;
+        label_provenance::reconcile_wallet_outputs(&comparison_wallet, &transaction, now())
+            .map_err(internal)?;
+        let privacy = label_provenance::coin_privacy_map(&transaction).map_err(internal)?;
+        let private_psbt = build_automatic_payment(
+            &mut comparison_wallet,
+            AutomaticPaymentOptions {
+                recipient: &address,
+                amount,
+                rate,
+                frozen: frozen.clone(),
+                strategy: AutomaticSelectionStrategy::Private,
+                privacy,
+                global_xpubs: true,
+            },
+        )?;
+        let fee = private_psbt
+            .fee_amount()
+            .ok_or_else(|| internal("Unable to calculate the private candidate fee."))?
+            .to_sat();
+        drop(comparison_wallet);
+        Some(fee)
+    } else {
+        None
+    };
+    let mut wallet = load_wallet_transaction(&mut transaction)?;
     let psbt = match coin_selection {
         CoinSelectionInput::Auto { strategy } => {
             label_provenance::reconcile_wallet_outputs(&wallet, &transaction, now())
                 .map_err(internal)?;
             let privacy = label_provenance::coin_privacy_map(&transaction).map_err(internal)?;
-            let mut builder = wallet
-                .build_tx()
-                .coin_selection(PrivacyAwareCoinSelection::new(strategy, privacy));
-            builder
-                .add_recipient(address.script_pubkey(), Amount::from_sat(amount))
-                .fee_rate(rate)
-                .add_global_xpubs()
-                .unspendable(frozen);
-            builder.finish().map_err(create_tx_api_error)?
+            build_automatic_payment(
+                &mut wallet,
+                AutomaticPaymentOptions {
+                    recipient: &address,
+                    amount,
+                    rate,
+                    frozen,
+                    strategy,
+                    privacy,
+                    global_xpubs: true,
+                },
+            )?
         }
         CoinSelectionInput::Manual { outpoints } => {
             let selected = validate_manual_outpoints(&outpoints, &frozen)?;
@@ -7351,12 +7445,13 @@ pub fn multisig_tx_prepare(
         .fee_amount()
         .ok_or_else(|| internal("Unable to calculate the transaction fee."))?
         .to_sat();
+    let fee_difference_vs_private = fee_difference(fee, private_fee)?;
     let proposal_id = Uuid::new_v4().to_string();
     let encoded = encode_psbt(&psbt);
     let created_at = now();
     transaction.execute(
-        "INSERT INTO groot_proposals (proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at, selection_strategy) VALUES (?1,?2,?3,?4,?5,?6,?7,'collecting',?8,?9)",
-        params![proposal_id, address.to_string(), label, amount, fee, applied_fee_rate, encoded, created_at, selection_strategy],
+        "INSERT INTO groot_proposals (proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at, selection_strategy, fee_difference_vs_private) VALUES (?1,?2,?3,?4,?5,?6,?7,'collecting',?8,?9,?10)",
+        params![proposal_id, address.to_string(), label, amount, fee, applied_fee_rate, encoded, created_at, selection_strategy, fee_difference_vs_private],
     ).map_err(internal)?;
     label_provenance::assign_payment_intent(&transaction, &label, &proposal_id, created_at, false)
         .map_err(|error| {
@@ -7388,7 +7483,7 @@ pub fn multisig_proposals(
     let mut db = open_multisig_db(&app)?;
     let wallet = load_wallet(&mut db)?;
     let mut statement = db.prepare(
-        "SELECT proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at, selection_strategy FROM groot_proposals WHERE status IN ('collecting','ready') ORDER BY created_at DESC",
+        "SELECT proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at, selection_strategy, fee_difference_vs_private FROM groot_proposals WHERE status IN ('collecting','ready') ORDER BY created_at DESC",
     ).map_err(internal)?;
     let rows = statement
         .query_map([], |row| {
@@ -7403,6 +7498,7 @@ pub fn multisig_proposals(
                 row.get(7)?,
                 row.get(8)?,
                 row.get(9)?,
+                row.get(10)?,
             ))
         })
         .map_err(internal)?;
@@ -7687,15 +7783,13 @@ pub fn multisig_proposal_broadcast(
     let transaction =
         finalized_multisig_proposal_transaction(&mut db, &metadata, &proposal_id, &reviewed_psbt)?;
     let txid = broadcast_transaction(&app, &state, &transaction)?;
-    let mut wallet = load_wallet(&mut db)?;
-    let sync_pending = sync_loaded_wallet(&app, &state, &mut wallet, &mut db).is_err();
-    let snapshot = commit_multisig_broadcast(
-        &mut db,
-        &wallet,
-        &proposal_id,
-        &txid,
-        (!sync_pending).then(|| now().to_string()),
-    )?;
+    let wallet = load_wallet(&mut db)?;
+    let snapshot = commit_multisig_broadcast(&mut db, &wallet, &proposal_id, &txid, None)?;
+    drop(wallet);
+    let (snapshot, sync_pending) = match sync_wallet_atomically(&app, &state, &mut db, true) {
+        Ok(snapshot) => (snapshot, false),
+        Err(_) => (snapshot, true),
+    };
     Ok(BroadcastResultDto {
         txid: txid.to_string(),
         snapshot,
@@ -7927,22 +8021,57 @@ pub fn tx_prepare(
         .ok_or_else(|| api_error("invalid_amount", "Fee rate must be greater than zero."))?;
     let mut db = open_db(&app)?;
     let mut transaction = db.transaction().map_err(internal)?;
-    let mut wallet = load_wallet_transaction(&mut transaction)?;
     let selection_strategy = coin_selection.strategy_name().to_owned();
     let frozen = frozen_outpoints(&transaction)?;
+    let private_fee = if matches!(
+        &coin_selection,
+        CoinSelectionInput::Auto {
+            strategy: AutomaticSelectionStrategy::LowerFee
+        }
+    ) {
+        let mut comparison_wallet = load_wallet_transaction(&mut transaction)?;
+        label_provenance::reconcile_wallet_outputs(&comparison_wallet, &transaction, now())
+            .map_err(internal)?;
+        let privacy = label_provenance::coin_privacy_map(&transaction).map_err(internal)?;
+        let private_psbt = build_automatic_payment(
+            &mut comparison_wallet,
+            AutomaticPaymentOptions {
+                recipient: &address,
+                amount,
+                rate,
+                frozen: frozen.clone(),
+                strategy: AutomaticSelectionStrategy::Private,
+                privacy,
+                global_xpubs: false,
+            },
+        )?;
+        let fee = private_psbt
+            .fee_amount()
+            .ok_or_else(|| internal("Unable to calculate the private candidate fee."))?
+            .to_sat();
+        drop(comparison_wallet);
+        Some(fee)
+    } else {
+        None
+    };
+    let mut wallet = load_wallet_transaction(&mut transaction)?;
     let psbt = match coin_selection {
         CoinSelectionInput::Auto { strategy } => {
             label_provenance::reconcile_wallet_outputs(&wallet, &transaction, now())
                 .map_err(internal)?;
             let privacy = label_provenance::coin_privacy_map(&transaction).map_err(internal)?;
-            let mut builder = wallet
-                .build_tx()
-                .coin_selection(PrivacyAwareCoinSelection::new(strategy, privacy));
-            builder
-                .add_recipient(address.script_pubkey(), Amount::from_sat(amount))
-                .fee_rate(rate)
-                .unspendable(frozen);
-            builder.finish().map_err(create_tx_api_error)?
+            build_automatic_payment(
+                &mut wallet,
+                AutomaticPaymentOptions {
+                    recipient: &address,
+                    amount,
+                    rate,
+                    frozen,
+                    strategy,
+                    privacy,
+                    global_xpubs: false,
+                },
+            )?
         }
         CoinSelectionInput::Manual { outpoints } => {
             let selected = validate_manual_outpoints(&outpoints, &frozen)?;
@@ -7966,6 +8095,7 @@ pub fn tx_prepare(
         .fee_amount()
         .ok_or_else(|| internal("Unable to calculate the transaction fee."))?
         .to_sat();
+    let fee_difference_vs_private = fee_difference(fee, private_fee)?;
     let (change, change_addresses) =
         proposal_change_details(&wallet, &psbt, &address.to_string(), amount)?;
     let recipient = address.to_string();
@@ -7980,8 +8110,13 @@ pub fn tx_prepare(
     let proposal_id = Uuid::new_v4().to_string();
     let (inputs, actual_fee_rate, locktime, rbf) =
         proposal_transaction_details(&wallet, &psbt, fee)?;
-    let selection_impact =
-        selection_impact(&transaction, &wallet, &psbt, &selection_strategy, None)?;
+    let selection_impact = selection_impact(
+        &transaction,
+        &wallet,
+        &psbt,
+        &selection_strategy,
+        fee_difference_vs_private,
+    )?;
     let proposal = PaymentProposalDto {
         proposal_id: proposal_id.clone(),
         recipient,
@@ -8460,7 +8595,7 @@ pub fn tx_sign_and_broadcast(
         .remove(&proposal_id)
         .map(Ok)
         .unwrap_or_else(|| load_single_proposal(&db, &proposal_id))?;
-    let mut wallet = load_wallet(&mut db)?;
+    let wallet = load_wallet(&mut db)?;
     validate_proposal_fee(&proposal.psbt, proposal.fee)?;
     proposal_change_details(
         &wallet,
@@ -8490,7 +8625,6 @@ pub fn tx_sign_and_broadcast(
     }
     let transaction = proposal.psbt.extract_tx().map_err(internal)?;
     let txid = broadcast_transaction(&app, &state, &transaction)?;
-    let sync_pending = sync_loaded_wallet(&app, &state, &mut wallet, &mut db).is_err();
     let persisted = db.transaction().map_err(internal)?;
     let changed = persisted
         .execute(
@@ -8512,12 +8646,7 @@ pub fn tx_sign_and_broadcast(
     )
     .map_err(internal)?;
     record_replacement(&persisted, &proposal_id, &txid)?;
-    let snapshot = snapshot_from(
-        &wallet,
-        &persisted,
-        (!sync_pending).then(|| now().to_string()),
-        false,
-    )?;
+    let snapshot = snapshot_from(&wallet, &persisted, None, false)?;
     notifications::enqueue(
         &persisted,
         &WalletNotification::TransactionBroadcast {
@@ -8528,6 +8657,11 @@ pub fn tx_sign_and_broadcast(
     )
     .map_err(internal)?;
     persisted.commit().map_err(internal)?;
+    drop(wallet);
+    let (snapshot, sync_pending) = match sync_wallet_atomically(&app, &state, &mut db, false) {
+        Ok(snapshot) => (snapshot, false),
+        Err(_) => (snapshot, true),
+    };
     Ok(BroadcastResultDto {
         txid: txid.to_string(),
         snapshot,
@@ -9362,6 +9496,14 @@ mod tests {
             acceleration_error("unknown parent").code,
             "acceleration_unavailable"
         );
+    }
+
+    #[test]
+    fn fee_comparison_is_exact_signed_integer_arithmetic() {
+        assert_eq!(fee_difference(700, Some(900)).unwrap(), Some(-200));
+        assert_eq!(fee_difference(1_100, Some(900)).unwrap(), Some(200));
+        assert_eq!(fee_difference(900, Some(900)).unwrap(), Some(0));
+        assert_eq!(fee_difference(900, None).unwrap(), None);
     }
 
     #[test]
@@ -10454,7 +10596,7 @@ mod tests {
 
     #[test]
     fn synced_snapshots_enqueue_received_and_first_confirmation_events_once() {
-        let mut db = Connection::open_in_memory().unwrap();
+        let db = Connection::open_in_memory().unwrap();
         init_app_schema(&db).unwrap();
         let transaction = |id: &str, direction: &str, confirmations: u32| TransactionDto {
             id: id.repeat(64),
@@ -10502,13 +10644,13 @@ mod tests {
             synced_at: Some("1".to_owned()),
         };
 
-        enqueue_snapshot_notifications(&mut db, &snapshot).unwrap();
+        enqueue_snapshot_notifications(&db, &snapshot).unwrap();
         assert!(notifications::pending(&db).unwrap().is_empty());
 
         snapshot.transactions[0].confirmations = 1;
         snapshot.transactions.push(transaction("d", "received", 0));
-        enqueue_snapshot_notifications(&mut db, &snapshot).unwrap();
-        enqueue_snapshot_notifications(&mut db, &snapshot).unwrap();
+        enqueue_snapshot_notifications(&db, &snapshot).unwrap();
+        enqueue_snapshot_notifications(&db, &snapshot).unwrap();
         let events = notifications::pending(&db).unwrap();
         assert_eq!(events.len(), 2);
         assert_eq!(
