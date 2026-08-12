@@ -6,16 +6,19 @@ Virtual devices prove coordinator behavior, not vendor compatibility. Run this o
 
 | Signer | Cable account/sign | Offline public import | Hardware passphrase rule | Status |
 | --- | --- | --- | --- | --- |
+| Coldcard Mk4 | HWI USB after unlock and USB-wallet enablement; policy imported separately | BIP-380 policy and PSBT over Virtual Disk/microSD where supported | PIN/passphrase remains entirely on Coldcard | Core Regtest 2-of-3 cable flow physically verified; offline signed-PSBT interchange and remaining release rows pending |
 | Blockstream Jade / Jade Plus | HWI USB when logged in | BIP84 xpub/descriptor QR text; file where exported | Select hidden wallet on Jade; never sent through the webview | Implemented, physical certification pending |
 | BitBox02 | HWI USB after BitBoxApp pairing cache; companion app must release USB | BitBoxApp descriptor/xpub file/text | Device password/pairing stays vendor-controlled | Implemented, physical certification pending |
 | BitBox02 Nova | USB candidate; exact HWI identity and pairing behavior must be captured first | Vendor descriptor/xpub export candidate | Device password remains vendor-controlled; Whisper/BLE is a separate mobile transport review | Not yet supported or certified |
 | Trezor Safe / Model T | HWI USB | Public descriptor/xpub text/file | Prefer on-device passphrase entry | Implemented, physical certification pending |
-| Trezor Model One | HWI USB + PIN matrix | Public descriptor/xpub text/file | Standard wallet requires explicit confirmation; host entry for hidden-wallet passphrases remains blocked | Limited for hidden wallets; standard wallet implemented |
-| Ledger | HWI USB with Bitcoin Test open on test chains; Bitcoin on mainnet | Public descriptor/xpub text/file | Select passphrase-attached PIN on Ledger before connecting | Implemented, physical certification pending |
+| Trezor Model One | HWI USB + PIN matrix | Public descriptor/xpub text/file | Standard wallet requires explicit confirmation; host entry for hidden-wallet passphrases remains blocked | Core Regtest 2-of-3 standard-wallet review/sign/broadcast flow physically verified; hidden wallets blocked and remaining negative/recovery rows pending |
+| Ledger Nano S Plus | HWI USB with Bitcoin Test open on test chains; Bitcoin on mainnet | Public descriptor/xpub text/file | Select passphrase-attached PIN on Ledger before connecting | Regtest single-key cable flow and core 2-of-3 policy/review/sign/broadcast flow physically verified; unsupported/non-reproducible and remaining multisig rows explicitly limited |
 | Passport Core | No USB data | QR or microSD descriptor/xpub and PSBT | Passphrase remains on Passport | Offline path implemented; physical camera interoperability pending |
 | Passport Prime | No cable claim without a documented compatible protocol | Descriptor/xpub and PSBT files/QR where exported | Passphrase remains on Prime | Offline parser implemented; protocol certification pending |
 
 “Implemented” means the Groot/HWI or bounded-file path exists; it is not a physical certification claim. Record firmware, HWI version, OS, import fingerprint, first-address match, PSBT sign, broadcast, cancellation, and wrong-device rejection for every certified row.
+
+The current 2026-08-12 campaign supersedes the hardware-status statements in the dated 2026-08-08 execution snapshot. Sensitive row-level results remain in the gitignored `hardware-certification.local/` records. Completed physical checks must not be repeated unless a later code change directly affects that behavior and creates a named regression requirement.
 
 ## Local preflight
 
