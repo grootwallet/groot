@@ -18,6 +18,7 @@ import type { RecoveryDrill, RecoveryPolicyAnalysis, RecoveryTemplate } from './
 import type { ExternalSigner, ExternalSignerBackup, ExternalSignerSource, ExternalSignerWallet, SavedFileResult } from './contracts';
 import type { CoreNodeConfig, NodeStatus } from './contracts';
 import type { PolicyDraft } from '$lib/multisig/policy';
+import { coalesceNotificationEvents } from './notification-policy';
 
 type BackendError = { code?: string; message?: string };
 type NotificationEnvelope = { id: number; event: WalletEvent };
@@ -63,17 +64,26 @@ function normalizeSnapshot(snapshot: WalletSnapshot): WalletSnapshot {
 export class TauriWalletAdapter implements WalletPort {
   #listeners = new Set<(event: WalletEvent) => void>();
   #last: WalletSnapshot | null = null;
+  #selectedWalletId: string | null = null;
   #notificationDrains = new Map<boolean, Promise<void>>();
 
   exists() { return command<boolean>('wallet_exists'); }
-  profiles() { return command<WalletRegistry>('wallet_profiles'); }
+  async profiles() {
+    const registry = await command<WalletRegistry>('wallet_profiles');
+    this.#selectedWalletId = registry.selectedWalletId;
+    return registry;
+  }
   async renameWallet(name: string) {
     const profile = await command<WalletProfile>('wallet_rename', { name });
     this.#emit({ type: 'wallet_profile_updated', profile });
     return profile;
   }
   saveInactivityTimeout(minutes: number) { return command<WalletRegistry>('wallet_inactivity_timeout_save', { minutes }); }
-  selectWallet(walletId: string) { return command<WalletProfile>('wallet_select', { walletId }); }
+  async selectWallet(walletId: string) {
+    const profile = await command<WalletProfile>('wallet_select', { walletId });
+    this.#selectedWalletId = profile.id;
+    return profile;
+  }
   async generateMnemonic(supplementalEntropy?: SupplementalEntropyInput): Promise<MnemonicPresentation> {
     const backupVerified = await command<boolean>('wallet_generate_mnemonic', { supplementalEntropy: supplementalEntropy ?? null });
     return { mode: 'native', backupVerified };
@@ -101,10 +111,13 @@ export class TauriWalletAdapter implements WalletPort {
     return snapshot;
   }
   async sync() {
+    const walletId = this.#selectedWalletId;
     const snapshot = normalizeSnapshot(await command<WalletSnapshot>('wallet_sync'));
-    this.#last = snapshot;
-    await this.#drainNotifications(false);
-    this.#emit({ type: 'wallet_updated', walletKind: 'single_key', snapshot });
+    if (walletId && walletId === this.#selectedWalletId) {
+      this.#last = snapshot;
+      await this.#drainNotifications(false);
+      this.#emit({ type: 'wallet_updated', walletId, walletKind: 'single_key', snapshot });
+    }
     return snapshot;
   }
   createAddress(label: string) { return command<ReceiveAddress>('address_create', { label }).then(normalizeAddress); }
@@ -129,6 +142,24 @@ export class TauriWalletAdapter implements WalletPort {
   async checkHardwareCosigner(cosigner: PolicyDraft['cosigners'][number]) {
     const result = await command<CosignerHealthCheck>('hardware_check_cosigner', { cosigner });
     return { ...result, checkedAt: normalizeTimestamp(result.checkedAt) ?? result.checkedAt };
+  }
+  async multisigSignerPolicyVerifications() {
+    const results = await command<import('./contracts').SignerPolicyVerification[]>('multisig_signer_policy_verifications');
+    return results.map((result) => ({ ...result, verifiedAt: normalizeTimestamp(result.verifiedAt) ?? result.verifiedAt }));
+  }
+  multisigPolicyVerificationAddress() { return command<import('./contracts').PolicyVerificationAddress>('multisig_policy_verification_address'); }
+  previewMultisigPolicyVerificationAddress(policy: PolicyDraft) { return command<import('./contracts').PolicyVerificationAddress>('multisig_draft_policy_verification_address', { policy }); }
+  async verifyMultisigSignerPolicy(deviceId: string, signerFingerprint: string) {
+    const result = await command<import('./contracts').SignerPolicyVerification>('hardware_verify_multisig_policy', { deviceId, signerFingerprint });
+    return { ...result, verifiedAt: normalizeTimestamp(result.verifiedAt) ?? result.verifiedAt };
+  }
+  async verifyMultisigDraftSignerPolicy(policy: PolicyDraft, deviceId: string, signerFingerprint: string) {
+    const result = await command<import('./contracts').SignerPolicyVerification>('hardware_verify_multisig_draft_policy', { policy, deviceId, signerFingerprint });
+    return { ...result, verifiedAt: normalizeTimestamp(result.verifiedAt) ?? result.verifiedAt };
+  }
+  async acknowledgeColdcardPolicy(signerFingerprint: string) {
+    const result = await command<import('./contracts').SignerPolicyVerification>('multisig_acknowledge_coldcard_policy', { signerFingerprint });
+    return { ...result, verifiedAt: normalizeTimestamp(result.verifiedAt) ?? result.verifiedAt };
   }
   importHardwareCosigner(deviceId: string, label: string, allowEmptyPassphrase = false) { return command<import('$lib/multisig/policy').CosignerDraft>('hardware_import_cosigner', { deviceId, label, allowEmptyPassphrase }); }
   parseExternalSignerImport(encoded: string, label: string, source: ExternalSignerSource) { return command<ExternalSigner>('external_signer_parse_import', { encoded, label, source }); }
@@ -156,7 +187,7 @@ export class TauriWalletAdapter implements WalletPort {
   multisigWallet() { return command<MultisigWallet | null>('multisig_wallet'); }
   exportMultisig(credential: string) { return command<string>('multisig_export', { credential }); }
   exportMultisigBsms(credential: string) { return command<string>('multisig_export_bsms', { credential }); }
-  savePublicBackup(suggestedFilename: string, content: string) { return command<boolean>('public_backup_save', { suggestedFilename, content }); }
+  savePublicBackup(suggestedFilename: string, content: string) { return command<SavedFileResult>('public_backup_save', { suggestedFilename, content }); }
   printPublicBackup() { return command<void>('public_backup_print'); }
   inspectMultisigBsms(encodedBackup: string) { return command<RecoveryDrill>('multisig_bsms_inspect', { encodedBackup }); }
   recoverMultisigBsms(name: string, encodedBackup: string, credential: string) { return command<MultisigWallet>('multisig_recover_bsms', { name, encodedBackup, credential }); }
@@ -164,7 +195,16 @@ export class TauriWalletAdapter implements WalletPort {
   recoverMultisig(encodedBackup: string, credential: string) { return command<MultisigWallet>('multisig_recover', { encodedBackup, credential }); }
   deleteMultisig(credential: string, confirmation: string) { return command<void>('multisig_delete', { credential, confirmation }); }
   async multisigSnapshot() { const snapshot = normalizeSnapshot(await command<WalletSnapshot>('multisig_snapshot')); await this.#drainNotifications(true); return snapshot; }
-  async syncMultisig() { const snapshot = normalizeSnapshot(await command<WalletSnapshot>('multisig_sync')); this.#last = snapshot; await this.#drainNotifications(true); this.#emit({ type: 'wallet_updated', walletKind: 'multisig', snapshot }); return snapshot; }
+  async syncMultisig() {
+    const walletId = this.#selectedWalletId;
+    const snapshot = normalizeSnapshot(await command<WalletSnapshot>('multisig_sync'));
+    if (walletId && walletId === this.#selectedWalletId) {
+      this.#last = snapshot;
+      await this.#drainNotifications(true);
+      this.#emit({ type: 'wallet_updated', walletId, walletKind: 'multisig', snapshot });
+    }
+    return snapshot;
+  }
   createMultisigAddress(label: string) { return command<ReceiveAddress>('multisig_address_create', { label }).then(normalizeAddress); }
   discardMultisigAddress(id: number) { return command<void>('multisig_address_discard', { id }); }
   verifyMultisigAddress(deviceId: string, addressId: number) { return command<ReceiveAddress>('hardware_verify_multisig_address', { deviceId, addressId }).then(normalizeAddress); }
@@ -193,7 +233,7 @@ export class TauriWalletAdapter implements WalletPort {
     if (pendingDrain) return pendingDrain;
     const drain = (async () => {
       const envelopes = await command<NotificationEnvelope[]>('wallet_notifications', { multisig });
-      for (const envelope of envelopes) this.#emit(envelope.event);
+      for (const event of coalesceNotificationEvents(envelopes.map((envelope) => envelope.event))) this.#emit(event);
       if (envelopes.length) {
         await command<void>('wallet_notifications_ack', { multisig, ids: envelopes.map((envelope) => envelope.id) });
       }

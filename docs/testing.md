@@ -83,7 +83,7 @@ Virtual signer coverage is mandatory in CI. Physical certification is separate a
 | F14 | Hardware enumerate/xpub/sign/address display/health | Fixed args, timeout, output, injection, stable errors; native rejection of virtual sources | Virtual isolated signers | Device-details modal; connected fingerprint match; honest offline-record check; virtual HWI setup/sign; animated hardware-action state; address-specific verification explanation by hover/focus/mobile tap | Harness green; physical certification external |
 | F15 | Multisig receive/sync | Descriptor and label rules | Funded WSH address | Receive QR | Green |
 | F16 | Persist/merge/cancel multisig proposal | Adversarial PSBT suite | Real PSBT persistence/signing primitives | Prepare/resume/sign; cancellation UI | Green except command-level restart integration expansion |
-| F17 | Finalize/broadcast multisig | Threshold/finalization rejection | Real 2-of-3 Core broadcast | Pre-created funded vault, two virtual signatures, wrong PIN, updated-balance broadcast | Green on regtest |
+| F17 | Finalize/broadcast multisig | Threshold/finalization rejection | Real 2-of-3 Core broadcast | Pre-created funded wallet, two virtual signatures, wrong PIN, updated-balance broadcast | Green on regtest |
 | F18 | Export/drill/delete/recover multisig | Canonical/checksummed backup validation | Stable first-address reconstruction | Export, wrong PIN, drill, delete, recover | Green |
 | F19 | Timelocked recovery/inheritance template | Compiler, sanity, delay/unknown-key boundaries | BDK accepts compiled descriptor | Select template, compile, inspect descriptor, create | Creation green; funded delayed-path spends/reorgs block V2 release |
 | F20 | Decaying multisig | Timeline/strict decay/property cases | — | Warning and simulator | Preview green; funded boundary tests pending |
@@ -111,7 +111,7 @@ pnpm test:coverage:rust # enforced ~100% Rust security-core coverage
 pnpm test:coverage:rust:all # whole Rust library report and regression floor
 pnpm test:acceptance   # desktop + mobile semantic flows (pyramid top)
 pnpm regtest:start     # isolated local Bitcoin Core
-pnpm regtest:fund-demo -- <single-bcrt1> <vault-bcrt1> [more-bcrt1...] # two payments to first address, one to each remaining address, then mine
+pnpm regtest:fund-demo -- <single-bcrt1> <multisig-bcrt1> [more-bcrt1...] # two payments to first address, one to each remaining address, then mine
 pnpm test:integration:regtest # start/reuse isolated Core, then real BDK/PSBT integration
 cd src-tauri
 cargo fmt --check

@@ -253,6 +253,25 @@ test('shows skeletons while a restored wallet loads its first synced data', asyn
   await expect(page.locator('.wallet-skeleton')).toHaveCount(0);
 });
 
+test('switching wallets never renders data from the previously selected wallet', async ({ page }) => {
+  const isMobile = (page.viewportSize()?.width ?? 1180) <= 760;
+  await page.goto('/?fixture-delayed-wallet-switch=1');
+  await expect(page.getByText('Hardware order', { exact: true })).toBeVisible();
+
+  if (isMobile) {
+    await page.getByRole('button', { name: 'Switch wallet' }).click();
+    await page.getByRole('menuitemradio', { name: /Family wallet/ }).click();
+  } else {
+    await page.getByRole('complementary').getByRole('button', { name: /Family wallet/ }).click();
+  }
+
+  await expect(page.locator('.wallet-skeleton.balance')).toBeVisible();
+  await expect(page.getByText('Hardware order', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'No transactions yet' })).toBeVisible();
+  await expect(page.locator('.balance-value')).toContainText('0 sats');
+  await expect(page.locator('.wallet-skeleton')).toHaveCount(0);
+});
+
 test('creates, switches, unlocks, and deletes isolated wallet profiles', async ({ page }) => {
   const isMobile = (page.viewportSize()?.width ?? 1180) <= 760;
   await page.goto('/settings');
@@ -369,7 +388,7 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   await expect(page.locator('.send-signers').getByText('Travel signing key', { exact: true })).toBeVisible();
   const psbtDownload = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Save unsigned PSBT' }).click();
-  await expect((await psbtDownload).suggestedFilename()).toMatch(/^groot-.+\.psbt$/);
+  await expect((await psbtDownload).suggestedFilename()).toMatch(/^groot-[a-z0-9]{1,8}\.psbt$/);
   await expect(page.getByText('PSBT saved', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Show in Finder' })).toBeVisible();
   await page.getByRole('button', { name: 'Show in Finder' }).click();
@@ -709,6 +728,22 @@ test('activity explains its empty state', async ({ page }) => {
   await expect(page.getByText('Payments you send and receive will appear here.')).toBeVisible();
 });
 
+test('overview and coins resolve empty wallets without lingering skeletons', async ({ page }) => {
+  await page.goto('/?fixture-empty-wallet=1');
+  await expect(page.getByRole('heading', { name: 'No transactions yet' })).toBeVisible();
+  await expect(page.getByText('Received and sent transactions will appear here.')).toBeVisible();
+  await expect(page.locator('.wallet-skeleton')).toHaveCount(0);
+
+  await page.goto('/coins?fixture-empty-wallet=1');
+  await expect(page.getByRole('heading', { name: 'No coins yet' })).toBeVisible();
+  await expect(page.getByText('Received bitcoin will appear here after this wallet has synchronized.')).toBeVisible();
+  await expect(page.locator('.wallet-skeleton')).toHaveCount(0);
+  const toolbar = await page.locator('.coin-toolbar').boundingBox();
+  const empty = await page.locator('.empty-state').boundingBox();
+  expect(toolbar && empty).toBeTruthy();
+  expect(empty!.y - (toolbar!.y + toolbar!.height)).toBeGreaterThanOrEqual(13);
+});
+
 test('receive keeps multiple labeled payment requests and discards them independently', async ({ page }) => {
   await page.goto('/receive');
   await page.getByRole('button', { name: 'View details for Invoice #104' }).click();
@@ -840,7 +875,7 @@ test('custom fees validate and wallet deletion requires typed confirmation', asy
   await expect(page.getByRole('button', { name: 'Delete wallet' })).toBeDisabled();
   await page.getByLabel('Type DELETE to confirm').fill('DELETE');
   await page.getByRole('button', { name: 'Delete wallet' }).click();
-  await expect(page.getByRole('heading', { name: 'Family vault' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Family wallet' })).toBeVisible();
   await expect(page.getByText('Enter this wallet’s app PIN to continue.')).toBeVisible();
 });
 
@@ -890,9 +925,9 @@ test('locked regtest wallet reset requires exact typed confirmation', async ({ p
   await expect(reset).toBeDisabled();
   await page.getByLabel('Type RESET REGTEST to confirm').fill('RESET REGTEST');
   await reset.click();
-  await expect(page.getByRole('heading', { name: 'Family vault' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Family wallet' })).toBeVisible();
   if ((page.viewportSize()?.width ?? 1180) > 760) {
-    await expect(page.getByRole('complementary').getByRole('button', { name: /Family vault.*active wallet/ })).toBeVisible();
+    await expect(page.getByRole('complementary').getByRole('button', { name: /Family wallet.*active wallet/ })).toBeVisible();
   } else {
     await expect(page.getByText('Enter this wallet’s app PIN to continue.')).toBeVisible();
   }
@@ -904,7 +939,7 @@ test('locked profiles use recovery-safe credential terms', async ({ page }) => {
   await page.getByRole('button', { name: 'More information' }).click();
   await expect(page.getByText(/BIP39 passphrase is required with your 24 recovery words/)).toBeVisible();
   if ((page.viewportSize()?.width ?? 1180) > 760) {
-    await page.getByRole('complementary').getByRole('button', { name: /Family vault/ }).click();
+    await page.getByRole('complementary').getByRole('button', { name: /Family wallet/ }).click();
     await expect(page.getByLabel('App PIN', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'More information' }).click();
     await expect(page.getByText(/not a hardware-wallet passphrase/)).toBeVisible();

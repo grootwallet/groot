@@ -9,14 +9,17 @@
   import { addressReuseInsights, selectedCoinTotal } from '$lib/wallet/policy';
   import { walletService } from '$lib/wallet';
   import { toast } from '$lib/stores/toasts';
-  import { onDestroy, onMount } from 'svelte';
+  import { onMount } from 'svelte';
   import type { Transaction, Utxo } from '$lib/types';
   import { formatConfirmationCount, locale, t } from '$lib/i18n';
   import { sortCoins, type CoinSortOrder } from '$lib/wallet/presentation';
   import WalletSkeleton from '$lib/components/WalletSkeleton.svelte';
   import { slide } from 'svelte/transition';
   import LoadFailure from '$lib/components/LoadFailure.svelte';
+  import EmptyState from '$lib/components/EmptyState.svelte';
+  import { useWalletShellContext } from '$lib/wallet/shell-context';
 
+  const walletShell = useWalletShellContext();
   let utxos = $state<Utxo[]>([]);
   let transactions = $state<Transaction[]>([]);
   let sortOrder = $state<CoinSortOrder>('newest');
@@ -27,7 +30,6 @@
   let freezeIntent = $state<{ outpoints: string[]; frozen: boolean } | null>(null);
   let loading = $state(true);
   let loadError = $state('');
-  let emptyCoinsTimer: ReturnType<typeof setTimeout> | undefined;
   const selectedTotal = $derived(selectedCoinTotal(utxos, selected));
   const sortedUtxos = $derived(sortCoins(utxos, transactions, sortOrder));
   const reuseInsights = $derived(addressReuseInsights(utxos));
@@ -36,8 +38,7 @@
 
   onMount(load);
   onMount(() => walletService.subscribe((event) => {
-    if (event.type === 'wallet_updated') {
-      if (emptyCoinsTimer) clearTimeout(emptyCoinsTimer);
+    if (event.type === 'wallet_updated' && event.walletId === walletShell.selectedWalletId()) {
       multisig = event.walletKind === 'multisig';
       utxos = event.snapshot.utxos;
       transactions = event.snapshot.transactions;
@@ -50,22 +51,17 @@
   async function load() {
     loading = true;
     loadError = '';
-    if (emptyCoinsTimer) clearTimeout(emptyCoinsTimer);
     try {
       const registry = await walletService.profiles();
       multisig = registry.wallets.find((wallet) => wallet.id === registry.selectedWalletId)?.kind === 'multisig';
       const snapshot = multisig ? await walletService.multisigSnapshot() : await walletService.snapshot();
       utxos = snapshot.utxos;
       transactions = snapshot.transactions;
-      if (utxos.length) loading = false;
-      else emptyCoinsTimer = setTimeout(() => loading = false, 10_000);
     } catch (cause) {
       loadError = cause instanceof Error ? cause.message : 'Coin data could not be read.';
       toast({ title: 'Could not load coins', description: loadError, tone: 'danger' });
-    } finally { if (loadError) loading = false; }
+    } finally { loading = false; }
   }
-
-  onDestroy(() => { if (emptyCoinsTimer) clearTimeout(emptyCoinsTimer); });
 
   function toggle(outpoint: string, checked: boolean) {
     selected = checked ? [...selected, outpoint] : selected.filter((item) => item !== outpoint);
@@ -137,7 +133,7 @@
     <WalletSkeleton variant="coins" count={4} />
   {:else if loadError}
     <LoadFailure title="Coins are unavailable" description={loadError} onretry={load} />
-  {:else}
+  {:else if sortedUtxos.length}
   <section class="coin-list selectable">
 		{#each sortedUtxos as utxo (utxo.outpoint)}
 			{@const reuse = reuseFor(utxo.outpoint)}
@@ -188,8 +184,12 @@
       </article>
     {:else}
       <div class="coins-empty"><CircleDot size={22}/><strong>No spendable outputs yet</strong><span>Received bitcoin will appear here after sync.</span></div>
-    {/each}
+		{/each}
   </section>
+  {:else}
+    <EmptyState title="No coins yet" description="Received bitcoin will appear here after this wallet has synchronized.">
+      {#snippet icon()}<CircleDot size={24}/>{/snippet}
+    </EmptyState>
   {/if}
 </div>
 

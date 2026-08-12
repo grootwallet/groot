@@ -2,6 +2,7 @@ import type { WalletPort } from './contracts';
 
 export type LiveSyncController = {
   start(): void;
+  restart(): void;
   stop(): void;
   runNow(): Promise<void>;
 };
@@ -20,6 +21,7 @@ export function createLiveSync(
   let enabled = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let active: Promise<void> | undefined;
+  let rerunRequested = false;
 
   const clearTimer = () => {
     if (timer !== undefined) clearTimeout(timer);
@@ -54,7 +56,10 @@ export function createLiveSync(
     try { await pending; }
     finally {
       if (active === pending) active = undefined;
-      if (enabled) schedule();
+      if (enabled && rerunRequested) {
+        rerunRequested = false;
+        void runNow();
+      } else if (enabled) schedule();
     }
   };
 
@@ -64,8 +69,15 @@ export function createLiveSync(
       enabled = true;
       void runNow();
     },
+    restart() {
+      enabled = true;
+      clearTimer();
+      if (active) rerunRequested = true;
+      else void runNow();
+    },
     stop() {
       enabled = false;
+      rerunRequested = false;
       clearTimer();
     },
     runNow

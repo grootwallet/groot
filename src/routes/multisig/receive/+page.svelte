@@ -4,6 +4,7 @@
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
   import Button from '$lib/components/Button.svelte';
+  import FieldCounter from '$lib/components/FieldCounter.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import ReadableAddress from '$lib/components/ReadableAddress.svelte';
   import AddressDetailsModal from '$lib/components/AddressDetailsModal.svelte';
@@ -11,21 +12,25 @@
   import HardwareVerificationStatus from '$lib/components/HardwareVerificationStatus.svelte';
   import HardwareActionPrompt from '$lib/components/HardwareActionPrompt.svelte';
   import { compactAddress } from '$lib/address-display';
+  import { testnetAddressDisplayName } from '$lib/wallet/hardware-display';
   import { walletService, WalletError, type HardwareDevice } from '$lib/wallet';
   import { awaitingPaymentAddresses } from '$lib/wallet/policy';
   import type { ReceiveAddress } from '$lib/types';
   import { copyText } from '$lib/clipboard';
   import { toast } from '$lib/stores/toasts';
+  import { useWalletShellContext } from '$lib/wallet/shell-context';
+  const walletShell = useWalletShellContext();
   let label = $state(''); let current = $state<ReceiveAddress | null>(null); let addresses = $state<ReceiveAddress[]>([]);
   let qrDataUrl = $state(''); let busy = $state(false); let ready = $state(false); let generateError = $state(''); let showGenerate = $state(false); let showDiscard = $state(false); let showQr = $state(false); let showDetails = $state(false); let copied = $state(false); let discardTarget = $state<ReceiveAddress | null>(null); let detailAddress = $state<ReceiveAddress | null>(null);
   let verifyOpen=$state(false),verifyBusy=$state(false),verifyError=$state(''),devices=$state<HardwareDevice[]>([]),verificationDevice=$state<HardwareDevice|null>(null);
   let verificationAction=$state<'scan'|'approve'>('scan');
-  let ledgerVerification=$derived(Boolean(verificationDevice&&`${verificationDevice.label} ${verificationDevice.model}`.toLowerCase().includes('ledger')&&current?.testnetAlias));
+  let verificationDeviceIdentity=$derived(verificationDevice?`${verificationDevice.label} ${verificationDevice.model}`:'');
+  let testnetVerificationDevice=$derived(current?.testnetAlias?testnetAddressDisplayName(verificationDeviceIdentity):null);
   let awaiting = $derived(awaitingPaymentAddresses(addresses)); let history = $derived(addresses.filter((address)=>address.status!=='awaiting'));
   onMount(() => {
     let active = true;
     const unsubscribe = walletService.subscribe((event) => {
-      if (event.type === 'wallet_updated' && event.walletKind === 'multisig') applyAddresses(event.snapshot.receiveAddresses);
+      if (event.type === 'wallet_updated' && event.walletKind === 'multisig' && event.walletId === walletShell.selectedWalletId()) applyAddresses(event.snapshot.receiveAddresses);
     });
     void (async () => {
       try {
@@ -45,7 +50,7 @@
           await goto('/receive', { replaceState: true });
           return;
         }
-        toast({title:'Could not load vault',description:cause instanceof Error ? cause.message : undefined,tone:'danger'});
+        toast({title:'Could not load wallet',description:cause instanceof Error ? cause.message : undefined,tone:'danger'});
       }
     })();
     return () => { active = false; unsubscribe(); };
@@ -53,7 +58,7 @@
   $effect(() => { const address = current?.address; qrDataUrl = ''; if (address) QRCode.toDataURL(`bitcoin:${address}`, {width:320,margin:2,errorCorrectionLevel:'M'}).then((value) => { if(current?.address===address) qrDataUrl = value; }); });
   async function generate() { if (busy || !ready || !label.trim()) return; busy = true; generateError=''; try { current = await walletService.createMultisigAddress(label); addresses = [current,...addresses]; label=''; showGenerate=false; toast({title:'Receive address ready',description:'The permanent label is stored with the wallet.',tone:'success'}); } catch(cause){generateError=cause instanceof Error?cause.message:'Could not generate the address.';toast({title:'Could not generate address',description:generateError,tone:'danger'});} finally{busy=false;} }
   async function copy(){if(!current)return;try{await copyText(current.address, 'bitcoin-address');copied=true;toast({title:'Address copied',tone:'success'});setTimeout(()=>copied=false,1500);}catch{toast({title:'Copy failed',tone:'danger'});}}
-  async function copyVerificationAddress(){if(!current)return;const address=ledgerVerification?current.testnetAlias!:current.address;try{await copyText(address, 'bitcoin-address');copied=true;toast({title:'Address copied',description:'The exact comparison address is on your clipboard.',tone:'success'});setTimeout(()=>copied=false,1500);}catch{toast({title:'Copy failed',description:'Select and copy the address manually.',tone:'danger'});}}
+  async function copyVerificationAddress(){if(!current)return;const address=testnetVerificationDevice?current.testnetAlias!:current.address;try{await copyText(address, 'bitcoin-address');copied=true;toast({title:'Address copied',description:'The exact comparison address is on your clipboard.',tone:'success'});setTimeout(()=>copied=false,1500);}catch{toast({title:'Copy failed',description:'Select and copy the address manually.',tone:'danger'});}}
   async function discard(){if(!discardTarget)return;busy=true;try{const id=discardTarget.id;await walletService.discardMultisigAddress(id);addresses=addresses.map((item)=>item.id===id?{...item,status:'discarded'}:item);if(current?.id===id)current=awaitingPaymentAddresses(addresses)[0]??null;discardTarget=null;showDiscard=false;toast({title:'Address discarded'});}catch(cause){toast({title:'Could not discard address',description:cause instanceof Error?cause.message:undefined,tone:'danger'});}finally{busy=false;}}
   function applyAddresses(nextAddresses:ReceiveAddress[]){addresses=nextAddresses;const nextAwaiting=awaitingPaymentAddresses(nextAddresses);current=nextAwaiting.find((address)=>address.id===current?.id)??nextAwaiting[0]??null;}
   const requestDiscard=(address:ReceiveAddress)=>{discardTarget=address;showDiscard=true;};
@@ -71,16 +76,16 @@
   <div class="address-history">{#each history as address}<button class="address-history-row" aria-label="View details for {address.label}" onclick={()=>detailAddress=address}><span class="status-dot" class:used={address.status==='used'}></span><span><strong>{address.label}</strong><small>{compactAddress(address.address)}</small></span><span class="right-meta">{address.status}<small>{address.created}</small></span><ChevronRight size={15}/></button>{:else}<p class="list-empty">No past addresses yet.</p>{/each}</div>
 </div>
 
-<Modal open={showGenerate} title="New receive address" description="Labels cannot be changed." onclose={()=>{if(!busy){showGenerate=false;generateError='';}}}><form onsubmit={(e)=>{e.preventDefault();generate();}}><label class="field"><span>Permanent label</span><input bind:value={label} oninput={()=>generateError=''} maxlength="48" placeholder="e.g. Treasury deposit"/></label>{#if generateError}<p class="form-error" role="alert">{generateError}</p>{/if}<div class="modal-footer"><Button variant="secondary" disabled={busy} onclick={()=>{showGenerate=false;generateError='';}}>Cancel</Button><Button type="submit" disabled={!ready||busy||!label.trim()} loading={busy} loadingLabel="Generating address…">Generate address</Button></div></form></Modal>
+<Modal open={showGenerate} title="New receive address" description="Labels cannot be changed." onclose={()=>{if(!busy){showGenerate=false;generateError='';}}}><form onsubmit={(e)=>{e.preventDefault();generate();}}><label class="field"><span>Permanent label</span><input bind:value={label} oninput={()=>generateError=''} maxlength="48" placeholder="e.g. Treasury deposit"/><FieldCounter value={label} max={48}/></label>{#if generateError}<p class="form-error" role="alert">{generateError}</p>{/if}<div class="modal-footer"><Button variant="secondary" disabled={busy} onclick={()=>{showGenerate=false;generateError='';}}>Cancel</Button><Button type="submit" disabled={!ready||busy||!label.trim()} loading={busy} loadingLabel="Generating address…">Generate address</Button></div></form></Modal>
 <Modal open={showDiscard} title="Discard {discardTarget?.label??'this receive address'}?" description="It remains monitored but will never be offered again." onclose={()=>{showDiscard=false;discardTarget=null;}}><div class="modal-footer"><Button variant="secondary" onclick={()=>{showDiscard=false;discardTarget=null;}}>Keep address</Button><Button variant="danger" loading={busy} loadingLabel="Discarding…" onclick={discard}>Discard address</Button></div></Modal>
 <Modal open={showQr} title={current?.label??'Receive address'} description="Scan to pay this exact descriptor address." onclose={()=>showQr=false}>{#if current&&qrDataUrl}<div class="large-qr"><img src={qrDataUrl} alt="Large QR code for {current.address}"/><ReadableAddress address={current.address} {copied} oncopy={copy}/></div>{/if}</Modal>
 <AddressDetailsModal address={detailAddress} open={Boolean(detailAddress)} walletType="Descriptor · Native SegWit" onclose={()=>detailAddress=null}/>
-<Modal open={verifyOpen} preserveTop title="Verify receive address" description={ledgerVerification ? "Ledger Bitcoin Test displays the Regtest output with a testnet prefix. Compare the exact Ledger address below." : "Compare the exact address below with the complete address on the cosigner's trusted display."} onclose={()=>{if(!verifyBusy)verifyOpen=false;}}>
+<Modal open={verifyOpen} preserveTop title="Verify receive address" description={testnetVerificationDevice ? `${testnetVerificationDevice} displays the Regtest output with a testnet prefix. Compare the exact address below.` : "Compare the exact address below with the complete address on the cosigner's trusted display."} onclose={()=>{if(!verifyBusy)verifyOpen=false;}}>
   {#if current}
     <section class="verification-address" aria-label="Address to compare">
-      <span>{ledgerVerification ? 'Address shown on Ledger' : 'Address to compare'}</span>
-      <ReadableAddress address={ledgerVerification ? current.testnetAlias! : current.address} {copied} oncopy={copyVerificationAddress}/>
-      <details class="verification-details"><summary>Address details</summary>{#if ledgerVerification}<p class="verification-network-note">Ledger shows <code>tb1</code> because Bitcoin Test has no Regtest address format. Groot uses <code>bcrt1</code>. The prefix and six-character checksum differ; the decoded Bitcoin output is identical.</p>{/if}<dl class="verification-derivation"><div><dt>Derivation</dt><dd><code>{current.derivationPath}</code></dd></div><div><dt>Address index</dt><dd><code>{current.id}</code></dd></div></dl></details>
+      <span>{testnetVerificationDevice ? `Address shown on ${testnetVerificationDevice}` : 'Address to compare'}</span>
+      <ReadableAddress address={testnetVerificationDevice ? current.testnetAlias! : current.address} {copied} oncopy={copyVerificationAddress}/>
+      <details class="verification-details"><summary>Address details</summary>{#if testnetVerificationDevice}<p class="verification-network-note">{testnetVerificationDevice} shows <code>tb1</code> on Regtest while Groot normally uses <code>bcrt1</code>. The prefix and six-character checksum differ; Rust verified that both decode to the identical Bitcoin output script.</p>{/if}<dl class="verification-derivation"><div><dt>Derivation</dt><dd><code>{current.derivationPath}</code></dd></div><div><dt>Address index</dt><dd><code>{current.id}</code></dd></div></dl></details>
     </section>
   {/if}
   {#if verifyBusy}

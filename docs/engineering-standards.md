@@ -23,6 +23,7 @@ Dependencies point inward. Routes never select adapters. Rust commands translate
 - Reject unbounded input/output, silent fallback, network ambiguity, log payloads, and destructive broad filesystem targets.
 - Reject a production claim supported only by dummy, simulator, snapshot, or mocked evidence.
 - Prefer a small pure function and exhaustive table tests over condition-heavy route or command code.
+- Reuse design-system components for repeated interface structures. A flow may supply device-specific content or behavior, but must not introduce one-off cards, typography, badges, lists, confirmations, or identifier displays when an equivalent pattern exists. If a second flow needs the pattern, extract it into `src/lib/components/` in the same change and document its intended variants in `docs/design-system.md`.
 
 ## Supply-chain rules
 

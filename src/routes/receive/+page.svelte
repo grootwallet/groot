@@ -3,6 +3,7 @@
   import QRCode from 'qrcode';
   import { onMount, tick } from 'svelte';
   import Button from '$lib/components/Button.svelte';
+  import FieldCounter from '$lib/components/FieldCounter.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import ReadableAddress from '$lib/components/ReadableAddress.svelte';
   import AddressDetailsModal from '$lib/components/AddressDetailsModal.svelte';
@@ -10,6 +11,7 @@
   import HardwareVerificationStatus from '$lib/components/HardwareVerificationStatus.svelte';
   import HardwareActionPrompt from '$lib/components/HardwareActionPrompt.svelte';
   import { compactAddress } from '$lib/address-display';
+  import { testnetAddressDisplayName } from '$lib/wallet/hardware-display';
   import { walletService, type HardwareDevice } from '$lib/wallet';
   import { useWalletShellContext } from '$lib/wallet/shell-context';
   import { awaitingPaymentAddresses } from '$lib/wallet/policy';
@@ -35,12 +37,13 @@
   let externalSigner=$derived(walletShell.profiles().find((profile)=>profile.id===walletShell.selectedWalletId())?.kind==='watch_only');
   let verifyOpen=$state(false),verifyBusy=$state(false),verifyError=$state(''),devices=$state<HardwareDevice[]>([]),verificationDevice=$state<HardwareDevice|null>(null);
   let verificationAction=$state<'scan'|'approve'>('scan');
-  let ledgerVerification=$derived(Boolean(current?.testnetAlias&&(`${savedSignerDeviceType ?? ''} ${verificationDevice?.label ?? ''} ${verificationDevice?.model ?? ''}`).toLowerCase().includes('ledger')));
+  let verificationDeviceIdentity=$derived(`${savedSignerDeviceType ?? ''} ${verificationDevice?.label ?? ''} ${verificationDevice?.model ?? ''}`);
+  let testnetVerificationDevice=$derived(current?.testnetAlias?testnetAddressDisplayName(verificationDeviceIdentity):null);
   let awaiting = $derived(awaitingPaymentAddresses(addresses));
   let history = $derived(addresses.filter((address) => address.status !== 'awaiting'));
   onMount(load);
   onMount(() => walletService.subscribe((event) => {
-    if (event.type !== 'wallet_updated' || event.walletKind !== 'single_key') return;
+    if (event.type !== 'wallet_updated' || event.walletKind !== 'single_key' || event.walletId !== walletShell.selectedWalletId()) return;
     applyAddresses(event.snapshot.receiveAddresses);
   }));
   $effect(() => {
@@ -90,7 +93,7 @@
   };
   const copyVerificationAddress = async () => {
     if (!current) return;
-    const address = ledgerVerification ? current.testnetAlias! : current.address;
+    const address = testnetVerificationDevice ? current.testnetAlias! : current.address;
     try { await copyText(address, 'bitcoin-address'); copied = true; toast({ title: 'Address copied', description: 'The exact comparison address is on your clipboard.', tone: 'success' }); setTimeout(() => copied = false, 1500); }
     catch { toast({ title: 'Copy failed', description: 'Select and copy the address manually.', tone: 'danger' }); }
   };
@@ -148,7 +151,7 @@
 
 <Modal open={showGenerate} title="New receive address" description="Labels cannot be changed." onclose={() => showGenerate = false}>
   <form onsubmit={(e) => { e.preventDefault(); generate(); }}>
-    <label class="field"><span>Permanent label</span><input bind:value={label} placeholder="e.g. Invoice #105" maxlength="48" /><small>{label.length}/48</small></label>
+    <label class="field"><span>Permanent label</span><input bind:value={label} placeholder="e.g. Invoice #105" maxlength="48" /><FieldCounter value={label} max={48}/></label>
     <div class="modal-footer"><Button variant="secondary" onclick={() => showGenerate = false}>Cancel</Button><Button type="submit" disabled={!label.trim()} loading={busy} loadingLabel="Generating address…">Generate address</Button></div>
   </form>
 </Modal>
@@ -160,12 +163,12 @@
   <div class="warning-box">Discarded addresses remain monitored.</div>
   <div class="modal-footer"><Button variant="secondary" onclick={() => { showDiscard = false; discardTarget = null; }}>Keep address</Button><Button variant="danger" loading={busy} loadingLabel="Discarding…" onclick={discard}>Discard address</Button></div>
 </Modal>
-<Modal open={verifyOpen} preserveTop title="Verify receive address" description={ledgerVerification ? "Ledger Bitcoin Test displays the Regtest output with a testnet prefix. Compare the exact Ledger address below." : "Compare the exact address below with the complete address on your signer's trusted display."} onclose={()=>{if(!verifyBusy)verifyOpen=false;}}>
+<Modal open={verifyOpen} preserveTop title="Verify receive address" description={testnetVerificationDevice ? `${testnetVerificationDevice} displays the Regtest output with a testnet prefix. Compare the exact address below.` : "Compare the exact address below with the complete address on your signer's trusted display."} onclose={()=>{if(!verifyBusy)verifyOpen=false;}}>
   {#if current}
     <section class="verification-address" aria-label="Address to compare">
-      <span>{ledgerVerification ? 'Address shown on Ledger' : 'Address to compare'}</span>
-      <ReadableAddress address={ledgerVerification ? current.testnetAlias! : current.address} {copied} oncopy={copyVerificationAddress}/>
-      <details class="verification-details"><summary>Address details</summary>{#if ledgerVerification}<p class="verification-network-note">Ledger shows <code>tb1</code> because Bitcoin Test has no Regtest address format. Groot uses <code>bcrt1</code>. The prefix and six-character checksum differ; the decoded Bitcoin output is identical.</p>{/if}<dl class="verification-derivation"><div><dt>Derivation</dt><dd><code>{current.derivationPath}</code></dd></div><div><dt>Address index</dt><dd><code>{current.id}</code></dd></div></dl></details>
+      <span>{testnetVerificationDevice ? `Address shown on ${testnetVerificationDevice}` : 'Address to compare'}</span>
+      <ReadableAddress address={testnetVerificationDevice ? current.testnetAlias! : current.address} {copied} oncopy={copyVerificationAddress}/>
+      <details class="verification-details"><summary>Address details</summary>{#if testnetVerificationDevice}<p class="verification-network-note">{testnetVerificationDevice} shows <code>tb1</code> on Regtest while Groot normally uses <code>bcrt1</code>. The prefix and six-character checksum differ; Rust verified that both decode to the identical Bitcoin output script.</p>{/if}<dl class="verification-derivation"><div><dt>Derivation</dt><dd><code>{current.derivationPath}</code></dd></div><div><dt>Address index</dt><dd><code>{current.id}</code></dd></div></dl></details>
     </section>
   {/if}
   {#if verifyBusy}

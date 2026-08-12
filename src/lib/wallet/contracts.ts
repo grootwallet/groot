@@ -86,6 +86,19 @@ export type CosignerHealthCheck = {
   summary: string;
 };
 
+export type SignerPolicyVerification = {
+  signerFingerprint: string;
+  deviceType: string;
+  verifiedAt: string;
+  scope: 'policy_and_address' | 'policy_file_acknowledgement';
+  displayedAddress: string | null;
+};
+
+export type PolicyVerificationAddress = {
+  canonicalAddress: string;
+  ledgerTestnetAlias: string | null;
+};
+
 export type MultisigWallet = PolicyDraft & {
   kind: 'multisig';
   externalDescriptor: string;
@@ -173,9 +186,10 @@ export const MAX_SUPPLEMENTAL_DICE_ROLLS = 100;
 
 export type WalletEvent =
   | { type: 'payment_received'; txid: string; amount: Sats; balance: Sats }
+  | { type: 'payment_received_confirmed'; txid: string; amount: Sats; balance: Sats }
   | { type: 'first_confirmation'; txid: string; balance: Sats }
   | { type: 'transaction_broadcast'; txid: string; balance: Sats }
-  | { type: 'wallet_updated'; walletKind: WalletProfile['kind']; snapshot: WalletSnapshot }
+  | { type: 'wallet_updated'; walletId: string; walletKind: WalletProfile['kind']; snapshot: WalletSnapshot }
   | { type: 'wallet_profile_updated'; profile: WalletProfile };
 
 export type WalletErrorCode =
@@ -232,6 +246,7 @@ export type WalletErrorCode =
   | 'scan_interrupted'
   | 'unknown_signer'
   | 'no_new_signatures'
+  | 'hardware_signature_missing'
   | 'unsupported_sighash'
   | 'premature_finalization'
   | 'insufficient_signatures'
@@ -300,6 +315,12 @@ export interface WalletPort {
   promptHardwarePin(deviceId: string): Promise<string>;
   sendHardwarePin(challengeId: string, pinPositions: string): Promise<void>;
   checkHardwareCosigner(cosigner: CosignerDraft): Promise<CosignerHealthCheck>;
+  multisigSignerPolicyVerifications(): Promise<SignerPolicyVerification[]>;
+  multisigPolicyVerificationAddress(): Promise<PolicyVerificationAddress>;
+  previewMultisigPolicyVerificationAddress(policy: PolicyDraft): Promise<PolicyVerificationAddress>;
+  verifyMultisigSignerPolicy(deviceId: string, signerFingerprint: string): Promise<SignerPolicyVerification>;
+  verifyMultisigDraftSignerPolicy(policy: PolicyDraft, deviceId: string, signerFingerprint: string): Promise<SignerPolicyVerification>;
+  acknowledgeColdcardPolicy(signerFingerprint: string): Promise<SignerPolicyVerification>;
   importHardwareCosigner(deviceId: string, label: string, allowEmptyPassphrase?: boolean): Promise<CosignerDraft>;
   parseExternalSignerImport(encoded: string, label: string, source: ExternalSignerSource): Promise<ExternalSigner>;
   importHardwareExternalSigner(deviceId: string, label: string, allowEmptyPassphrase?: boolean): Promise<ExternalSigner>;
@@ -320,7 +341,7 @@ export interface WalletPort {
   multisigWallet(): Promise<MultisigWallet | null>;
   exportMultisig(credential: string): Promise<string>;
   exportMultisigBsms(credential: string): Promise<string>;
-  savePublicBackup(suggestedFilename: string, content: string): Promise<boolean>;
+  savePublicBackup(suggestedFilename: string, content: string): Promise<SavedFileResult>;
   printPublicBackup(): Promise<void>;
   inspectMultisigBsms(encodedBackup: string): Promise<RecoveryDrill>;
   recoverMultisigBsms(name: string, encodedBackup: string, credential: string): Promise<MultisigWallet>;

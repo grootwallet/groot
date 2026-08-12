@@ -11,6 +11,13 @@ export function coldcardPolicyFilename(walletName: string): string {
   return `${safeTransferFilename(walletName).slice(0, 20)}.txt`;
 }
 
+export function psbtFilename(proposalId: string): string {
+  // Short ASCII names are easier to identify on small hardware-wallet screens
+  // and stay compatible with conservative removable-media implementations.
+  const identifier = proposalId.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 8) || 'payment';
+  return `groot-${identifier}.psbt`;
+}
+
 export function validateTransferText(value: string): string {
   const normalized = value.trim();
   if (!normalized) throw new Error('The transfer file is empty.');

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { ArrowLeft, ArrowRight, Check, Cpu, Eye, EyeOff, KeyRound, ShieldCheck, Users, X } from '@lucide/svelte';
   import Button from '$lib/components/Button.svelte';
+  import FieldCounter from '$lib/components/FieldCounter.svelte';
   import BrandMark from '$lib/components/BrandMark.svelte';
   import BrandLockup from '$lib/components/BrandLockup.svelte';
   import PasswordField from '$lib/components/PasswordField.svelte';
@@ -302,6 +303,7 @@
         <label class="field">
           <span>Wallet name</span>
           <input bind:value={walletName} maxlength="48" placeholder="My wallet" />
+          <FieldCounter value={walletName} max={48}/>
         </label>
         <PasswordField label="Wallet passphrase" bind:value={passphrase} placeholder="Enter a strong passphrase" autocomplete="new-password" hint="Keep it with your recovery words. It also unlocks Groot on this device." error={passphraseError}/>
         <PasswordField label="Confirm wallet passphrase" bind:value={confirmation} placeholder="Enter it again" autocomplete="new-password" error={confirmation && passphrase !== confirmation ? 'Passphrases do not match.' : ''}/>
@@ -310,7 +312,7 @@
       {#if error}<p class="form-error" role="alert">{error.replace('passphrase / PIN', 'wallet passphrase')}</p>{/if}
       <Button size="large" class="full" disabled={!walletName.trim() || !passphrase || !!passphraseError || passphrase !== confirmation || !backupAcknowledged} loading={busy} loadingLabel="Creating wallet…" onclick={finishCreate}><Check size={17}/>Create wallet</Button>
     {:else}
-      <button class="back-link" onclick={() => mode = 'home'}><ArrowLeft size={16} />Back</button><span class="setup-step">RECOVERY</span><h1>Recover wallet</h1><p>Enter your 24 recovery words in order, separated by spaces.</p><label class="field"><span>Wallet name</span><input bind:value={walletName} maxlength="48" placeholder="Recovered wallet" /></label><label class="field"><span>Recovery words</span><textarea bind:value={recovery} rows="5" placeholder="word1 word2 word3 …"></textarea><small>{recovery.trim() ? recovery.trim().split(/\s+/).length : 0} of 24 words</small></label><PasswordField label="Wallet passphrase" bind:value={passphrase} placeholder="Enter the original wallet passphrase" autocomplete="current-password" hint="This exact BIP39 passphrase is required with the recovery words and also unlocks Groot." error={passphraseError}/>{#if error}<p class="form-error" role="alert">{error.replace('passphrase / PIN', 'wallet passphrase')}</p>{/if}<Button size="large" class="full" disabled={!walletName.trim() || recovery.trim().split(/\s+/).length !== 24 || !passphrase || !!passphraseError} loading={busy} loadingLabel="Recovering wallet…" onclick={recoverWallet}>Recover wallet<ArrowRight size={17}/></Button>
+      <button class="back-link" onclick={() => mode = 'home'}><ArrowLeft size={16} />Back</button><span class="setup-step">RECOVERY</span><h1>Recover wallet</h1><p>Enter your 24 recovery words in order, separated by spaces.</p><label class="field"><span>Wallet name</span><input bind:value={walletName} maxlength="48" placeholder="Recovered wallet" /><FieldCounter value={walletName} max={48}/></label><label class="field"><span>Recovery words</span><textarea bind:value={recovery} rows="5" placeholder="word1 word2 word3 …"></textarea><small>{recovery.trim() ? recovery.trim().split(/\s+/).length : 0} of 24 words</small></label><PasswordField label="Wallet passphrase" bind:value={passphrase} placeholder="Enter the original wallet passphrase" autocomplete="current-password" hint="This exact BIP39 passphrase is required with the recovery words and also unlocks Groot." error={passphraseError}/>{#if error}<p class="form-error" role="alert">{error.replace('passphrase / PIN', 'wallet passphrase')}</p>{/if}<Button size="large" class="full" disabled={!walletName.trim() || recovery.trim().split(/\s+/).length !== 24 || !passphrase || !!passphraseError} loading={busy} loadingLabel="Recovering wallet…" onclick={recoverWallet}>Recover wallet<ArrowRight size={17}/></Button>
     {/if}
   </main>
   <footer class="onboarding-footer">Keys stay on this device · Open source</footer>

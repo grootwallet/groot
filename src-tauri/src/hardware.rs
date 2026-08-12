@@ -12,6 +12,7 @@ const MAX_SECRET_INPUT_BYTES: usize = 128;
 const MAX_PIN_POSITIONS: usize = 50;
 const MAX_OUTPUT_BYTES: u64 = 384 * 1024;
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(90);
+const USER_REVIEW_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HardwareError {
@@ -246,7 +247,7 @@ impl HardwareTransport for HwiCli {
                 self.chain.as_hwi_argument().into(),
                 "enumerate".into(),
             ],
-            DEFAULT_TIMEOUT,
+            USER_REVIEW_TIMEOUT,
             self.home.as_deref(),
         )
     }
@@ -275,7 +276,7 @@ impl HardwareTransport for HwiCli {
         run_program(
             &self.program,
             &self.device_command(device_type, device_path, "signtx", psbt),
-            DEFAULT_TIMEOUT,
+            USER_REVIEW_TIMEOUT,
             self.home.as_deref(),
         )
     }
@@ -292,7 +293,7 @@ impl HardwareTransport for HwiCli {
         run_program(
             &self.program,
             &arguments,
-            DEFAULT_TIMEOUT,
+            USER_REVIEW_TIMEOUT,
             self.home.as_deref(),
         )
     }

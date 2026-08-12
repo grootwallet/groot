@@ -52,7 +52,7 @@ Run these stories in order:
 4. Send, reject a wrong PIN, sign with the correct PIN, broadcast, mine, restart, and inspect activity/details/notifications.
 5. Create an unconfirmed replaceable payment, use **Increase fee**, review the changed fee, sign/broadcast, mine, and confirm only the replacement wins.
 6. Create an unconfirmed payment with wallet change, use **Spend output (CPFP)**, review the child/package fee, sign/broadcast, mine, and confirm the package.
-7. Create a 2-of-3 vault, export BSMS and Groot JSON, reconstruct the same first address from each, and complete a two-signer file/UR PSBT round trip.
+7. Create a 2-of-3 wallet, export BSMS and Groot JSON, reconstruct the same first address from each, and complete a two-signer file/UR PSBT round trip.
 8. Set a known recovery birthday and gap, perform full rescan, restart, and verify history/balance/labels. Repeat with a deliberately too-late birthday and confirm the documented omission warning.
 
 ## 3. Physical hardware matrix

@@ -9,8 +9,8 @@ import { descriptorPreview, MULTISIG_ACCOUNT_PATH, normalizeCosigner, validatePo
 
 const prototypeCredential = 'prototype-passphrase';
 const fixtureCosigners: PolicyDraft['cosigners'] = [
-  { id: 'fixture-coldcard', label: 'Coldcard', fingerprint: 'f00dbabe', xpub: 'tpubD6NzVbkrYhZ4Y-fixture-coldcard-public-key', derivationPath: MULTISIG_ACCOUNT_PATH, source: 'virtual' },
-  { id: 'fixture-trezor', label: 'Trezor', fingerprint: 'c0ffee01', xpub: 'tpubD6NzVbkrYhZ4Y-fixture-trezor-public-key', derivationPath: MULTISIG_ACCOUNT_PATH, source: 'virtual' },
+  { id: 'fixture-coldcard', label: 'Coldcard', fingerprint: 'f00dbabe', xpub: 'tpubD6NzVbkrYhZ4Y-fixture-coldcard-public-key', derivationPath: MULTISIG_ACCOUNT_PATH, source: 'virtual', deviceType: 'coldcard' },
+  { id: 'fixture-trezor', label: 'Trezor', fingerprint: 'c0ffee01', xpub: 'tpubD6NzVbkrYhZ4Y-fixture-trezor-public-key', derivationPath: MULTISIG_ACCOUNT_PATH, source: 'virtual', deviceType: 'trezor' },
   { id: 'fixture-backup', label: 'Offline backup', fingerprint: 'deadbeef', xpub: 'tpubD6NzVbkrYhZ4Y-fixture-backup-public-key', derivationPath: MULTISIG_ACCOUNT_PATH, source: 'manual' }
 ];
 
@@ -21,7 +21,7 @@ function fixtureAddressForNetwork(address: string): string {
 function fixtureMultisigWallet(): MultisigWallet {
   return {
     kind: 'multisig',
-    name: 'Family vault',
+    name: 'Family wallet',
     threshold: 2,
     cosigners: structuredClone(fixtureCosigners),
     externalDescriptor: descriptorPreview(2, fixtureCosigners, 0),
@@ -46,12 +46,16 @@ export class DummyWalletAdapter implements WalletPort {
   #externalProposals = new Map<string, MultisigProposal>();
   #profiles: WalletProfile[] = this.#exists ? [
     { id: 'fixture-single', name: 'Everyday wallet', network: defaultConfig.network, kind: 'single_key', descriptorChecksum: 'fixture01', createdAt: 1, backupVerified: true },
-    { id: 'fixture-multisig', name: 'Family vault', network: defaultConfig.network, kind: 'multisig', descriptorChecksum: 'demo2of3', createdAt: 2, backupVerified: true }
+    { id: 'fixture-multisig', name: 'Family wallet', network: defaultConfig.network, kind: 'multisig', descriptorChecksum: 'demo2of3', createdAt: 2, backupVerified: true }
   ] : [];
   #selectedWalletId: string | null = this.#profiles[0]?.id ?? null;
   #inactivityTimeoutMinutes = 5;
   #credentials = new Map<string, string>(this.#profiles.map((profile) => [profile.id, prototypeCredential]));
-  #unlockedWalletIds = new Set<string>(this.#profiles[0] ? [this.#profiles[0].id] : []);
+  #unlockedWalletIds = new Set<string>(
+    typeof location !== 'undefined' && new URLSearchParams(location.search).has('fixture-delayed-wallet-switch')
+      ? this.#profiles.map((profile) => profile.id)
+      : this.#profiles[0] ? [this.#profiles[0].id] : []
+  );
   #coins = structuredClone(utxos).map((coin) => ({ ...coin, address: fixtureAddressForNetwork(coin.address) }));
   #addresses = structuredClone(receiveAddresses).map((address) => ({ ...address, address: fixtureAddressForNetwork(address.address) }));
   #balance = wallet.balance;
@@ -66,9 +70,10 @@ export class DummyWalletAdapter implements WalletPort {
     && new URLSearchParams(location.search).has('fixture-secure-storage-retry');
   #delayedWalletDataPending = typeof location !== 'undefined'
     && new URLSearchParams(location.search).has('fixture-delayed-wallet-data');
+  #delayedWalletSwitch = typeof location !== 'undefined'
+    && new URLSearchParams(location.search).has('fixture-delayed-wallet-switch');
   #feeEstimatesUnavailable = typeof location !== 'undefined'
     && new URLSearchParams(location.search).has('fixture-fee-estimates-unavailable');
-  #delayedWalletDataScheduled = false;
   #emptyActivitySyncScheduled = false;
 
   async exists() { return this.#exists; }
@@ -206,49 +211,43 @@ export class DummyWalletAdapter implements WalletPort {
   }
 
   async snapshot(): Promise<WalletSnapshot> {
-    if (!this.#selectedWalletId || !this.#unlockedWalletIds.has(this.#selectedWalletId)) {
+    const walletId = this.#selectedWalletId;
+    if (!walletId || !this.#unlockedWalletIds.has(walletId)) {
       throw new WalletError('wallet_locked', 'This wallet is locked.');
     }
     const emptyActivity = typeof location !== 'undefined' && new URLSearchParams(location.search).has('fixture-empty-activity');
+    const emptyWallet = (typeof location !== 'undefined' && new URLSearchParams(location.search).has('fixture-empty-wallet'))
+      || (this.#delayedWalletSwitch && walletId === this.#multisigProfileId);
     const snapshot: WalletSnapshot = {
       network: defaultConfig.network,
-      balance: { confirmed: sats(Math.max(0, this.#balance - wallet.pending)), pending: sats(Math.min(wallet.pending, this.#balance)), trustedPending: sats(Math.min(wallet.pending, this.#balance)), total: sats(this.#balance) },
-      transactions: emptyActivity ? [] : structuredClone(this.#transactions),
-      utxos: structuredClone(this.#coins),
+      balance: emptyWallet ? { confirmed: sats(0), pending: sats(0), trustedPending: sats(0), total: sats(0) } : { confirmed: sats(Math.max(0, this.#balance - wallet.pending)), pending: sats(Math.min(wallet.pending, this.#balance)), trustedPending: sats(Math.min(wallet.pending, this.#balance)), total: sats(this.#balance) },
+      transactions: emptyActivity || emptyWallet ? [] : structuredClone(this.#transactions),
+      utxos: emptyWallet ? [] : structuredClone(this.#coins),
       receiveAddresses: structuredClone(this.#addresses),
       syncedAt: new Date().toISOString()
     };
     if (emptyActivity && !this.#emptyActivitySyncScheduled) {
       this.#emptyActivitySyncScheduled = true;
       setTimeout(() => {
-        const selected = this.#profiles.find((profile) => profile.id === this.#selectedWalletId);
+        const selected = this.#profiles.find((profile) => profile.id === walletId);
         for (const listener of this.#listeners) {
           listener({
             type: 'wallet_updated',
+            walletId,
             walletKind: selected?.kind ?? 'single_key',
             snapshot: structuredClone(snapshot)
           });
         }
       }, 50);
     }
-    if (!this.#delayedWalletDataPending) return snapshot;
-    if (!this.#delayedWalletDataScheduled) {
-      this.#delayedWalletDataScheduled = true;
-      setTimeout(() => {
-        this.#delayedWalletDataPending = false;
-        const selected = this.#profiles.find((profile) => profile.id === this.#selectedWalletId);
-        for (const listener of this.#listeners) listener({ type: 'wallet_updated', walletKind: selected?.kind ?? 'single_key', snapshot });
-      }, 600);
+    if (this.#delayedWalletDataPending) {
+      await new Promise((resolve) => setTimeout(resolve, 600));
+      this.#delayedWalletDataPending = false;
     }
-    return {
-      ...snapshot,
-      balance: { confirmed: sats(0), pending: sats(0), trustedPending: sats(0), total: sats(0) },
-      transactions: [],
-      utxos: [],
-      // A restored wallet can have a previous sync marker before its current
-      // process has loaded balance, history, and coins from the node.
-      syncedAt: snapshot.syncedAt
-    };
+    if (this.#delayedWalletSwitch && walletId === this.#multisigProfileId) {
+      await new Promise((resolve) => setTimeout(resolve, 800));
+    }
+    return snapshot;
   }
 
   async sync(): Promise<WalletSnapshot> { return this.snapshot(); }
@@ -368,6 +367,42 @@ export class DummyWalletAdapter implements WalletPort {
       return { status: 'healthy' as const, checkedAt, summary: `Connected identity matches ${cosigner.fingerprint}.` };
     }
     return { status: 'record_valid' as const, checkedAt, summary: 'Public key, fingerprint, and derivation path are complete. Physical presence cannot be checked for an offline key.' };
+  }
+  async multisigSignerPolicyVerifications() {
+    return this.#multisig?.cosigners
+      .filter((signer) => signer.deviceType === 'coldcard')
+      .map((signer) => ({ signerFingerprint: signer.fingerprint.toLowerCase(), deviceType: 'coldcard', verifiedAt: new Date().toISOString(), scope: 'policy_file_acknowledgement' as const, displayedAddress: null })) ?? [];
+  }
+  async multisigPolicyVerificationAddress() {
+    return { canonicalAddress: 'bcrt1qfixturepolicyaddress', ledgerTestnetAlias: 'tb1qfixturepolicyaddress' };
+  }
+  async previewMultisigPolicyVerificationAddress(_policy: PolicyDraft) {
+    return this.multisigPolicyVerificationAddress();
+  }
+  async verifyMultisigSignerPolicy(deviceId: string, signerFingerprint: string) {
+    const device = (await this.listHardwareDevices()).find((candidate) => candidate.id === deviceId);
+    if (!device || device.fingerprint?.toLowerCase() !== signerFingerprint.toLowerCase()) {
+      throw new WalletError('unknown_signer', 'The connected device does not match this wallet signer.');
+    }
+    return {
+      signerFingerprint: signerFingerprint.toLowerCase(),
+      deviceType: device.model.toLowerCase(),
+      verifiedAt: new Date().toISOString(),
+      scope: 'policy_and_address' as const,
+      displayedAddress: 'bcrt1qfixturepolicyaddress'
+    };
+  }
+  async verifyMultisigDraftSignerPolicy(_policy: PolicyDraft, deviceId: string, signerFingerprint: string) {
+    return this.verifyMultisigSignerPolicy(deviceId, signerFingerprint);
+  }
+  async acknowledgeColdcardPolicy(signerFingerprint: string) {
+    return {
+      signerFingerprint: signerFingerprint.toLowerCase(),
+      deviceType: 'coldcard',
+      verifiedAt: new Date().toISOString(),
+      scope: 'policy_file_acknowledgement' as const,
+      displayedAddress: null
+    };
   }
   async importHardwareCosigner(deviceId: string, label: string, allowEmptyPassphrase = false) {
     await new Promise((resolve) => setTimeout(resolve, 200));
@@ -523,7 +558,7 @@ export class DummyWalletAdapter implements WalletPort {
   async savePublicBackup(suggestedFilename: string, content: string) {
     const { downloadText } = await import('$lib/transfer');
     downloadText(suggestedFilename, content);
-    return true;
+    return { saved: true, revealToken: '00000000-0000-4000-8000-000000000001', revealLabel: 'Show in Finder' };
   }
   async printPublicBackup() { window.print(); }
   async inspectMultisigBsms(encodedBackup: string) {
@@ -630,11 +665,10 @@ export class DummyWalletAdapter implements WalletPort {
     return this.#addDummySignature(proposalId);
   }
   async signMultisigWithHardware(proposalId:string, deviceId:string, reviewedPsbt:string) {
-    await new Promise((resolve)=>setTimeout(resolve,250));
+    await new Promise((resolve)=>setTimeout(resolve,deviceId === 'virtual-ledger-outsider' ? 1500 : 250));
     const proposal=this.#multisigProposals.get(proposalId); if(proposal?.psbt!==reviewedPsbt) throw new WalletError('proposal_mismatch','The proposal changed after review.');
-    if (deviceId === 'virtual-ledger-outsider') throw new WalletError('unknown_signer','The connected device does not match any saved signer for this wallet.');
-    const fingerprint = deviceId === 'virtual-coldcard' ? 'f00dbabe' : deviceId === 'virtual-trezor-cosigner' ? 'c0ffee01' : null;
-    if (!fingerprint) throw new WalletError('unknown_signer','The connected device does not match any saved signer for this wallet.');
+    const fingerprint = deviceId === 'virtual-coldcard' ? 'f00dbabe' : deviceId === 'virtual-trezor-cosigner' ? 'c0ffee01' : deviceId === 'virtual-ledger-outsider' ? '1ed9e001' : null;
+    if (!fingerprint || !this.#multisig?.cosigners.some((signer)=>signer.fingerprint.toLowerCase()===fingerprint)) throw new WalletError('unknown_signer','The connected device does not match any saved signer for this wallet.');
     return this.#addDummySignature(proposalId, fingerprint);
   }
   async broadcastMultisigProposal(proposalId:string, reviewedPsbt:string, credential:string) {
@@ -642,7 +676,7 @@ export class DummyWalletAdapter implements WalletPort {
     if(proposal.psbt!==reviewedPsbt) throw new WalletError('proposal_mismatch','The signed proposal changed after review.');
     if(credential!==this.#multisigCredential) throw new WalletError('invalid_credential','Incorrect app PIN.');
     if(!proposal.canFinalize) throw new WalletError('internal_error','Collect the required signatures first.');
-    proposal.status='broadcast'; this.#balance=Math.max(0,this.#balance-Number(proposal.total)); const txid='7d4a2c7f9e317f9859d7a8566fe02d773afb09fcddb617dbda98bfba8f721234'; this.#recordFixtureBroadcast(proposalId,proposal,txid); return {txid,snapshot:await this.snapshot(),syncPending:false};
+    proposal.status='broadcast'; this.#balance=Math.max(0,this.#balance-Number(proposal.total)); const txid='7d4a2c7f9e317f9859d7a8566fe02d773afb09fcddb617dbda98bfba8f721234'; this.#recordFixtureBroadcast(proposalId,proposal,txid); this.#emit({type:'transaction_broadcast',txid,balance:sats(this.#balance)}); return {txid,snapshot:await this.snapshot(),syncPending:false};
   }
   async cancelMultisigProposal(proposalId:string) { const proposal=this.#multisigProposals.get(proposalId); if(!proposal) throw new WalletError('proposal_not_found','Payment proposal was not found.'); proposal.status='cancelled'; }
   async verifyMultisigAddress(deviceId:string,addressId:number){await new Promise((resolve)=>setTimeout(resolve,250));const device=(await this.listHardwareDevices()).find((item)=>item.id===deviceId&&item.status==='ready');if(!device)throw new WalletError('hardware_unavailable','Connect and unlock a wallet cosigner.');if(!this.#multisig?.cosigners.some((cosigner)=>cosigner.fingerprint.toLowerCase()===device.fingerprint?.toLowerCase()))throw new WalletError('unknown_signer','The connected device does not match any saved signer for this wallet.');const address=this.#addresses.find((item)=>item.id===addressId);if(!address)throw new WalletError('address_not_found','The receive address was not found.');const verified={...address,hardwareVerifiedAt:new Date().toISOString(),hardwareVerifiedBy:device.fingerprint};this.#addresses=this.#addresses.map((item)=>item.id===addressId?verified:item);return structuredClone(verified);}

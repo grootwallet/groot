@@ -123,6 +123,31 @@ pub fn signature_progress(
     })
 }
 
+/// Reduce a response received directly from a fingerprint-matched hardware
+/// wallet to the only fields Groot asked the device to produce: partial
+/// signatures. Vendor software may normalize or omit public PSBT metadata,
+/// but none of that returned metadata is trusted or merged. The exact reviewed
+/// unsigned transaction remains authoritative.
+pub fn hardware_signature_response(reviewed: &Psbt, returned: Psbt) -> Result<Psbt, ProposalError> {
+    if reviewed.unsigned_tx != returned.unsigned_tx
+        || reviewed.inputs.len() != returned.inputs.len()
+    {
+        return Err(ProposalError::ProposalMismatch);
+    }
+    if returned
+        .inputs
+        .iter()
+        .any(|input| input.final_script_sig.is_some() || input.final_script_witness.is_some())
+    {
+        return Err(ProposalError::PrematureFinalization);
+    }
+    let mut signatures_only = reviewed.clone();
+    for (normalized, device_input) in signatures_only.inputs.iter_mut().zip(returned.inputs) {
+        normalized.partial_sigs = device_input.partial_sigs;
+    }
+    Ok(signatures_only)
+}
+
 pub fn merge_signed_psbt(
     original: &mut Psbt,
     imported: Psbt,
@@ -318,6 +343,55 @@ mod tests {
             merge_signed_psbt(&mut original, second, &allowed, 2)
                 .unwrap()
                 .can_finalize
+        );
+    }
+
+    #[test]
+    fn hardware_response_keeps_only_signatures_from_vendor_normalized_psbt() {
+        let (original, signers) = proposal();
+        let allowed = allowed_fingerprints(&signers);
+        let mut returned = original.clone();
+        sign_all_inputs(&mut returned, &signers[0]);
+        returned.xpub.clear();
+        for input in &mut returned.inputs {
+            input.bip32_derivation.clear();
+            input.witness_utxo = None;
+        }
+
+        let mut merged = original.clone();
+        let signatures_only = hardware_signature_response(&original, returned).unwrap();
+        assert_eq!(
+            merge_signed_psbt(&mut merged, signatures_only, &allowed, 2)
+                .unwrap()
+                .signed,
+            1
+        );
+        assert_eq!(merged.xpub, original.xpub);
+        assert_eq!(
+            merged.inputs[0].bip32_derivation,
+            original.inputs[0].bip32_derivation
+        );
+        assert_eq!(
+            merged.inputs[0].witness_utxo,
+            original.inputs[0].witness_utxo
+        );
+    }
+
+    #[test]
+    fn hardware_response_rejects_changed_transaction_and_finalization() {
+        let (original, _) = proposal();
+        let mut changed = original.clone();
+        changed.unsigned_tx.output[0].value = Amount::from_sat(9_999);
+        assert_eq!(
+            hardware_signature_response(&original, changed),
+            Err(ProposalError::ProposalMismatch)
+        );
+
+        let mut finalized = original.clone();
+        finalized.inputs[0].final_script_witness = Some(Witness::new());
+        assert_eq!(
+            hardware_signature_response(&original, finalized),
+            Err(ProposalError::PrematureFinalization)
         );
     }
 

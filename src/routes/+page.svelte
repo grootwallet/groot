@@ -9,7 +9,7 @@
   import { toast } from '$lib/stores/toasts';
   import { walletService, WalletError, type WalletProfile, type WalletSnapshot } from '$lib/wallet';
   import { pendingBalance, sortTransactionsNewestFirst } from '$lib/wallet/presentation';
-  import { onDestroy, onMount } from 'svelte';
+  import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import type { Transaction } from '$lib/types';
   import { discreetMode, setDiscreetMode } from '$lib/privacy';
@@ -17,6 +17,7 @@
   import OverflowMenuButton from '$lib/components/OverflowMenuButton.svelte';
   import WalletSkeleton from '$lib/components/WalletSkeleton.svelte';
   import LoadFailure from '$lib/components/LoadFailure.svelte';
+  import EmptyState from '$lib/components/EmptyState.svelte';
   import { useWalletShellContext } from '$lib/wallet/shell-context';
   import { fly } from 'svelte/transition';
   const walletShell = useWalletShellContext();
@@ -34,22 +35,19 @@
   let verifyError = $state('');
   let verifying = $state(false);
   let initialDataLoading = $state(true);
-  let emptySnapshotTimer: ReturnType<typeof setTimeout> | undefined;
   const pendingSats = $derived(snapshot ? pendingBalance(snapshot.balance) : 0);
   const recentTransactions = $derived(sortTransactionsNewestFirst(snapshot?.transactions ?? []).slice(0, 3));
   onMount(loadSnapshot);
   async function loadSnapshot() {
     loadError = '';
     initialDataLoading = true;
-    if (emptySnapshotTimer) clearTimeout(emptySnapshotTimer);
     try {
       if (!await walletService.exists()) { await goto('/welcome'); return; }
       const registry = await walletService.profiles();
       selectedProfile = registry.wallets.find((wallet) => wallet.id === registry.selectedWalletId) ?? null;
       multisig = selectedProfile?.kind === 'multisig';
       snapshot = multisig ? await walletService.multisigSnapshot() : await walletService.snapshot();
-      if (snapshot.transactions.length || snapshot.utxos.length || snapshot.balance.total > 0) initialDataLoading = false;
-      else emptySnapshotTimer = setTimeout(() => initialDataLoading = false, 10_000);
+      initialDataLoading = false;
     } catch (cause) {
       if (cause instanceof WalletError && cause.code === 'wallet_locked') { await goto('/unlock'); return; }
       loadError = cause instanceof Error ? cause.message : 'The wallet data could not be read.';
@@ -58,9 +56,10 @@
     }
   }
   onMount(() => walletService.subscribe((event) => {
-    if (event.type === 'wallet_updated') { if (emptySnapshotTimer) clearTimeout(emptySnapshotTimer); multisig = event.walletKind === 'multisig'; snapshot = event.snapshot; loadError = ''; initialDataLoading = false; }
+    if (event.type === 'wallet_updated' && event.walletId === walletShell.selectedWalletId()) {
+      multisig = event.walletKind === 'multisig'; snapshot = event.snapshot; loadError = ''; initialDataLoading = false;
+    }
   }));
-  onDestroy(() => { if (emptySnapshotTimer) clearTimeout(emptySnapshotTimer); });
   onMount(() => {
     const closeOnOutsidePointer = (event: PointerEvent) => {
       if (moreOpen && event.target instanceof Node && !moreMenu?.contains(event.target)) moreOpen = false;
@@ -147,7 +146,15 @@
   </div>
   <section class="section-block">
     <div class="section-heading"><div><h2>Recent activity</h2></div><a href="/activity">View all</a></div>
-    <TxList items={recentTransactions} loading={initialDataLoading} onselect={(transaction) => selected = transaction} />
+    {#if initialDataLoading}
+      <TxList items={[]} loading />
+    {:else if recentTransactions.length}
+      <TxList items={recentTransactions} onselect={(transaction) => selected = transaction} />
+    {:else}
+      <EmptyState compact title="No transactions yet" description="Received and sent transactions will appear here.">
+        {#snippet icon()}<Activity size={22}/>{/snippet}
+      </EmptyState>
+    {/if}
   </section>
   {/if}
 </div>
