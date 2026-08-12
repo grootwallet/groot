@@ -3409,15 +3409,24 @@ fn selection_impact(
         psbt.unsigned_tx
             .input
             .iter()
-            .try_fold(Weight::ZERO, |total, input| {
-                let output = wallet.get_utxo(input.previous_output).ok_or_else(|| {
+            .enumerate()
+            .try_fold(Weight::ZERO, |total, (index, _)| {
+                let output = psbt.get_utxo_for(index).ok_or_else(|| {
                     api_error(
-                        "coin_unavailable",
-                        "A proposal input is no longer available.",
+                        "proposal_mismatch",
+                        "A proposal input is missing its authenticated previous output.",
                     )
                 })?;
+                let (keychain, _) = wallet
+                    .derivation_of_spk(output.script_pubkey.clone())
+                    .ok_or_else(|| {
+                        api_error(
+                            "proposal_mismatch",
+                            "A proposal input is not controlled by this wallet.",
+                        )
+                    })?;
                 let satisfaction = wallet
-                    .public_descriptor(output.keychain)
+                    .public_descriptor(keychain)
                     .max_weight_to_satisfy()
                     .map_err(internal)?;
                 total
