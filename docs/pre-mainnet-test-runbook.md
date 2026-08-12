@@ -23,6 +23,28 @@ cargo clippy --locked --all-targets --all-features -- -D warnings
 cargo test --locked --all-features
 ```
 
+### 1A. Security-review remediation acceptance
+
+Run the locked Rust suite under every compiled test-network identity; none of these commands enables mainnet:
+
+```sh
+cd /absolute/path/to/groot/src-tauri
+cargo test --locked --all-features
+GROOT_BUILD_NETWORK=signet cargo test --locked --all-features
+GROOT_BUILD_NETWORK=testnet4 cargo test --locked --all-features
+```
+
+Then perform these failure-first checks with disposable profiles and sanitized pass/fail notes only:
+
+1. In both Signet and Testnet4 builds, create a v2 software wallet and a multisig wallet, restart, unlock with the correct credential, and confirm a wrong credential remains `invalid_credential`. A secure-store denial must fail closed and must never consult or create a Regtest legacy key.
+2. Repeatedly enter a wrong credential for external-signer descriptor export. Confirm the same per-wallet `rate_limited` behavior used by unlock/signing, including after restart. While one process remains open, moving the wall clock backward must not shorten the retry delay. Do not treat repeated restart plus clock manipulation as closed; ADR 0028 records that residual.
+3. Import a signed PSBT whose ECDSA signature byte has been altered without changing the unsigned transaction. Confirm `invalid_signature`, unchanged signature progress, and byte-identical persisted proposal state. Then import a valid signer PSBT and confirm normal progress/finalization.
+4. Lock a saved multisig wallet and request its saved descriptor/cosigner metadata through the normal UI/command harness. Confirm the data is unavailable until that exact wallet is unlocked.
+5. Inject a failure after each UUID device-key creation path (software, external signer, standard multisig, recovery, BSMS, and Miniscript recovery). Confirm neither the partial profile directory nor UUID-scoped secure-store item remains. Run the final lifecycle against the signed macOS candidate before release.
+6. Inspect direct and Tor RPC failure paths with a disposable password under a debugger or memory tool appropriate to the signed platform. Confirm Groot-owned credential/request buffers have bounded lifetimes and are cleared; record third-party HTTP/TLS buffer behavior as the ADR 0028 residual rather than claiming guaranteed process-wide erasure.
+
+The canonical finding-to-fix map is [`security-hardening-2026-08-12.md`](security-hardening-2026-08-12.md). Attach only sanitized command versions, pass/fail outcomes, exact commit identity, and reviewer sign-off to release evidence.
+
 ## 2. Local manual regtest
 
 Terminal 1:

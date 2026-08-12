@@ -1,8 +1,8 @@
 # Groot security
 
-Last internal review: 2026-08-09
+Last internal review: 2026-08-12
 
-Groot is security-sensitive wallet software under active development. The current native implementation is intended for disposable **regtest** testing. It has not completed an independent audit, physical hardware-wallet certification, or the mainnet release process. Do not use it with mainnet funds.
+Groot is security-sensitive wallet software under active development. The native implementation supports disposable Regtest testing and compile-time-isolated Signet/Testnet4 rehearsal builds. It has not completed an independent audit, physical hardware-wallet certification, funded public-network rehearsal, or the mainnet release process. Do not use it with mainnet funds.
 
 This document summarizes the security posture and the hardening work present in this repository. Canonical controls are in [`docs/security-model.md`](docs/security-model.md); the attacker model and attack-vector register are in [`docs/mainnet-threat-model.md`](docs/mainnet-threat-model.md). Release authorization remains controlled by [`docs/mainnet-release-checklist.md`](docs/mainnet-release-checklist.md) and ADR 0012.
 
@@ -49,7 +49,9 @@ Reports should describe:
 ### Authentication and wallet isolation
 
 - Unlock sessions are scoped to the selected wallet UUID, expire after five minutes of wallet inactivity, clear on wallet switch or explicit lock, and are never reused across profiles.
-- Authentication throttling persists per wallet across restarts.
+- Authentication throttling covers every credential-verification command, persists per wallet across restarts, and adds a process-monotonic retry floor. Durable cooldown still depends on operating-system wall time; ADR 0028 records the restart-plus-clock-control residual.
+- Current UUID-scoped device keys are always tried before the Regtest-only legacy envelope migration. Public-network builds fail closed instead of consulting a Regtest legacy account.
+- Failed wallet creation or recovery removes both the partial profile directory and its UUID-scoped device key.
 - Wallet profiles use isolated UUID-backed storage directories.
 - Per-wallet Core RPC URLs are public configuration; RPC passwords are encrypted with the wallet credential plus device wrapping key, loaded only for that wallet's unlocked session, and cleared on lock/switch. Direct remote RPC is HTTPS-only. `.onion` RPC may use HTTP only through an explicit loopback SOCKS5 proxy; credentials in URLs, non-loopback proxies, and onion endpoints without Tor are rejected.
 - Single-key deletion requires the wallet credential and exact confirmation. Multisig deletion additionally requires the exact wallet name and a successful recovery drill bound to the current descriptor.
@@ -74,7 +76,8 @@ Reports should describe:
 - Backup recovery recompiles policy and descriptors and rejects mismatched network, policy type, thresholds, recovery paths, private material, or noncanonical descriptors.
 - Transaction review facts come from the persisted unsigned PSBT rather than UI recomputation. Recipient amount and stored fee must match exactly, and every other output must be proven wallet-controlled before review, signing, or broadcast.
 - Review includes authenticated input amounts/outpoints/sequences, network, locktime, RBF state, output count, and an effective signed-size fee rate derived in Rust. Missing, foreign, duplicate, overspending, or fee-inconsistent inputs fail closed.
-- Imported signatures must match the stored unsigned transaction and every non-signature PSBT field. Changed inputs, outputs, amounts, recipients, UTXO/script/key-origin metadata, proprietary fields, sighashes, or externally finalized scripts fail closed.
+- Imported signatures must match the stored unsigned transaction and every non-signature PSBT field. Changed inputs, outputs, amounts, recipients, UTXO/script/key-origin metadata, proprietary fields, sighashes, or externally finalized scripts fail closed. Every ECDSA partial signature is also verified against the actual input sighash and public key before counting, merge, or persistence; invalid signatures return `invalid_signature` without mutation.
+- Saved multisig descriptors and cosigner xpub metadata are unavailable while the selected wallet is locked.
 - Hardware signing, signature import, and broadcast are bound to the exact PSBT revision returned for review. A proposal changed after review must be reloaded and reviewed again.
 - A proposal cannot become ready until the collected signatures satisfy BDK finalization.
 - Broadcast verifies the returned transaction ID, handles an already-known expected transaction idempotently, and atomically records accepted status with its durable notification.
@@ -100,7 +103,7 @@ Reports should describe:
 
 ### Network and webview policy
 
-- Native wallet code remains pinned to regtest. Rust rejects mainnet before opening wallet SQLite, and the release gate fails if either lock is changed. Dormant candidate policy separately requires exact Bitcoin genesis, loopback Core, one recipient, and a 1,000,000-satoshi cap; none enables mainnet.
+- Native wallet code is compile-time pinned to exactly one of Regtest, Signet, or Testnet4 with isolated application storage. Mainnet remains absent from the build allowlist and is rejected before opening wallet SQLite. Dormant candidate policy separately requires exact Bitcoin genesis, loopback Core, one recipient, and a 1,000,000-satoshi cap; none enables mainnet.
 - Local Bitcoin Core endpoints must be loopback. Remote endpoint policy rejects embedded credentials, cleartext non-loopback transport, forged presets, and network mismatches.
 - Tauri capabilities remain minimal: no shell, filesystem, generic HTTP, clipboard-read, or remote-origin capability is granted.
 - The Tauri CSP denies remote scripts, frames, objects, workers, and manifests. Camera media is limited to same-origin/blob capture for the explicit PSBT scanner and requires platform permission.
@@ -177,6 +180,12 @@ Local evidence for this audit includes 131 Rust tests under strict Clippy, 78 fr
 
 This is an internal code audit and bounded adversarial test pass, not an independent penetration test, cryptographic proof, physical-device certification, or authorization for mainnet release.
 
+## 2026-08-12 independent-review remediation
+
+The supplied Phase 1 review of exact commit `dc16efa5efdfee3391898dc7cc6996fd6a467c46` was revalidated finding by finding. The remediation closes the confirmed public-network envelope regression, missing external-signer export throttle, unverified imported-signature progress, locked multisig metadata disclosure, avoidable RPC credential copies, same-process wall-clock bypass, failed-creation device-key orphaning, and related error/policy/documentation inconsistencies.
+
+The implementation record, regression mapping, and remaining acceptance work are in [`docs/security-hardening-2026-08-12.md`](docs/security-hardening-2026-08-12.md); the settled boundaries and explicit residual risks are in [ADR 0028](docs/adr/0028-security-review-remediation-boundaries.md). This remediation is not reviewer closure: the exact final commit and validation evidence still require independent re-review, and the mainnet gate remains blocked.
+
 ## Mainnet blockers
 
 Mainnet remains intentionally unavailable. At minimum, release requires:
@@ -187,7 +196,7 @@ Mainnet remains intentionally unavailable. At minimum, release requires:
 4. Android Keystore and Windows credential-vault implementation and certification, plus Apple lifecycle/accessibility evidence;
 5. verified backend chain identity and reviewed mainnet Core/remote-backend privacy and authentication;
 6. funded recovery/timelock boundary and reorg testing;
-7. single-instance enforcement or an interprocess registry lock;
+7. signed-package second-launch, forced-termination, and cross-platform process-lock acceptance;
 8. large-history scanning, pagination, and performance validation;
 9. green, current dependency advisory checks and closure of applicable inherited dependency warnings;
 10. explicit approval of the canonical mainnet checklist.
