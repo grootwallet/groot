@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { parsePublicCosignerFile } from './cosigner-import';
 
-describe('public cosigner file import', () => {
+describe('public signer file import', () => {
   it('accepts bounded Groot and Coldcard-style test-chain exports', () => {
     expect(parsePublicCosignerFile(JSON.stringify({
       version: 1,

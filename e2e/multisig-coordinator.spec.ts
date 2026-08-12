@@ -26,6 +26,13 @@ test('routes receive address creation through the selected wallet kind', async (
   await expect(page.getByRole('button', { name: 'New receive address' })).toBeVisible();
 });
 
+test('uses signer terminology across multisig user flows', async ({ page }) => {
+  for (const route of ['/multisig', '/multisig/new', '/multisig/receive', '/multisig/backup', '/multisig/policy']) {
+    await page.goto(route);
+    await expect(page.locator('body')).not.toContainText(/cosigner/i);
+  }
+});
+
 test('keeps multisig receive verification disclosure visibly expandable', async ({ page }) => {
   await page.goto('/');
   const isMobile = (page.viewportSize()?.width ?? 1180) <= 760;
@@ -43,6 +50,7 @@ test('keeps multisig receive verification disclosure visibly expandable', async 
   await expect(page.getByRole('status', { name: 'Hardware device scan in progress' })).toBeVisible();
 
   const dialog = page.getByRole('dialog', { name: 'Verify receive address' });
+  await expect(dialog).not.toContainText(/cosigner/i);
   const details = dialog.locator('details.verification-details');
   const summary = details.locator('summary');
   const reviewedAddress = await dialog.locator('.readable-address-groups').textContent();
@@ -66,7 +74,7 @@ test('keeps multisig receive verification disclosure visibly expandable', async 
   await expect(dialog).toBeVisible();
   await expect(dialog.locator('.readable-address-groups')).toHaveText(reviewedAddress ?? '');
   await expect(dialog.getByRole('button', { name: /Virtual Trezor One/ })).toContainText('Standard wallet');
-  await dialog.getByRole('button', { name: /Virtual Trezor cosigner/ }).click();
+  await dialog.getByRole('button', { name: /Virtual Trezor signer/ }).click();
   await expect(dialog).toBeHidden();
   await expect(page.getByRole('button', { name: /Verified on hardware/ })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
@@ -191,7 +199,7 @@ test('spends end-to-end from the ready-made demo wallet', async ({ page }) => {
   await expect(signedColdcard).toContainText('Already signed');
   await expect(signedColdcard).toBeDisabled();
   await expect(signerSummary.getByText('1 of 2 collected')).toBeVisible();
-  await page.getByRole('button', { name: /Virtual Trezor cosigner/ }).click();
+  await page.getByRole('button', { name: /Virtual Trezor signer/ }).click();
   await expect(signerSummary.getByText('2 of 2 collected')).toBeVisible();
   await expect(page.getByRole('button', { name: /more signatures? required/ })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Finalize & broadcast' })).toBeVisible();
@@ -275,7 +283,7 @@ test('keeps advanced wallet actions compact and makes both descriptors inspectab
   await descriptors.getByRole('button', { name: 'Close' }).click();
 });
 
-test('shows cosigner details and runs honest health checks', async ({ page }) => {
+test('shows signer details and runs honest health checks', async ({ page }) => {
   await page.goto('/multisig');
 
   await expect(page.locator('.saved-cosigner-list article')).toHaveCount(3);
@@ -315,16 +323,26 @@ test('shows cosigner details and runs honest health checks', async ({ page }) =>
 });
 
 test('uses the same wallet navigation for a multisig policy', async ({ page }) => {
-  await page.goto('/multisig');
+  const isMobile = (page.viewportSize()?.width ?? 1180) <= 760;
+  await page.goto('/');
+  if (isMobile) {
+    await page.getByRole('link', { name: 'Settings' }).click();
+    await page.locator('.wallet-manager').getByRole('button', { name: /Family wallet/ }).click();
+  } else {
+    await page.getByRole('complementary').getByRole('button', { name: /Family wallet/ }).click();
+  }
+  await page.getByLabel('App PIN', { exact: true }).fill('prototype-passphrase');
+  await page.getByRole('button', { name: 'Unlock wallet' }).click();
   const navigation = (page.viewportSize()?.width ?? 1180) <= 760 ? page.locator('.mobile-nav') : page.getByRole('complementary');
   await expect(navigation.getByRole('link', { name: 'Overview' })).toBeVisible();
   await expect(navigation.getByRole('link', { name: 'Activity' })).toBeVisible();
   await expect(navigation.getByRole('link', { name: 'Coins' })).toBeVisible();
   await expect(navigation.getByRole('link', { name: 'Policy', exact: true })).toBeVisible();
+  await navigation.getByRole('link', { name: 'Policy', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Family wallet' })).toBeVisible();
   await navigation.getByRole('link', { name: 'Overview' }).click();
   await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible();
   await expect(page.getByText('2,481,240')).toBeVisible();
-  const isMobile = (page.viewportSize()?.width ?? 1180) <= 760;
   const moreActions = page.getByRole('button', { name: 'More wallet actions' });
   await expect(moreActions).toBeVisible();
   if (isMobile) {
@@ -365,6 +383,13 @@ test('uses the same wallet navigation for a multisig policy', async ({ page }) =
   await moreActions.click();
   const moreMenu = page.getByRole('menu', { name: 'More wallet actions' });
   await expect(moreMenu).toBeVisible();
+  await expect(moreMenu.getByRole('menuitem')).toHaveCount(5);
+  await expect(moreMenu.getByRole('menuitem', { name: /Activity/ })).toBeVisible();
+  await expect(moreMenu.getByRole('menuitem', { name: /Coins/ })).toBeVisible();
+  await expect(moreMenu.getByRole('menuitem', { name: /Policy/ })).toBeVisible();
+  await expect(moreMenu.getByRole('menuitem', { name: /Show descriptors/ })).toBeVisible();
+  await expect(moreMenu.getByRole('menuitem', { name: /Export & verify/ })).toHaveAttribute('href', '/multisig/backup');
+  await expect(moreMenu.getByRole('menuitem', { name: /Recovery policy lab/ })).toHaveCount(0);
   if (isMobile) {
     await page.waitForTimeout(180);
     const [moreTriggerBox, moreMenuBox] = await Promise.all([moreActions.boundingBox(), moreMenu.boundingBox()]);
@@ -374,7 +399,13 @@ test('uses the same wallet navigation for a multisig policy', async ({ page }) =
     expect((moreMenuBox?.y ?? 0) - ((moreTriggerBox?.y ?? 0) + (moreTriggerBox?.height ?? 0))).toBeLessThanOrEqual(9);
     expect(Math.abs(((moreMenuBox?.x ?? 0) + (moreMenuBox?.width ?? 0)) - ((moreTriggerBox?.x ?? 0) + (moreTriggerBox?.width ?? 0)))).toBeLessThanOrEqual(1);
   }
-  await page.locator('.balance-card').click({ position: { x: 20, y: 20 } });
+  await moreMenu.getByRole('menuitem', { name: /Show descriptors/ }).click();
+  const overviewDescriptors = page.getByRole('dialog', { name: 'Wallet descriptors' });
+  await expect(overviewDescriptors.getByText('Portable wallet descriptor', { exact: true })).toBeVisible();
+  await expect(overviewDescriptors.getByRole('button', { name: 'Copy wallet descriptor' })).toBeVisible();
+  await overviewDescriptors.getByRole('button', { name: 'Close' }).click();
+  await moreActions.click();
+  await page.getByRole('heading', { name: 'Overview' }).click();
   await expect(moreMenu).toBeHidden();
   await moreActions.click();
   await page.keyboard.press('Escape');
@@ -524,7 +555,7 @@ test('explicitly selects a Trezor standard wallet without changing hidden wallet
   await expect(page.getByText('c0ffee02')).toBeVisible();
 });
 
-test('imports a bounded public cosigner record from a mounted-file flow', async ({ page }) => {
+test('imports a bounded public signer record from a mounted-file flow', async ({ page }) => {
   await page.goto('/multisig/new');
   await continueToSigners(page, 'Offline import vault');
   await page.getByRole('button', { name: 'Add a signer' }).click();
@@ -545,7 +576,7 @@ test('imports a bounded public cosigner record from a mounted-file flow', async 
   await expect(page.getByRole('dialog', { name: 'SD signer' }).getByRole('definition').filter({ hasText: 'File import' })).toBeVisible();
 });
 
-test('opens and checks an imported hardware cosigner during setup', async ({ page }) => {
+test('opens and checks an imported hardware signer during setup', async ({ page }) => {
   await page.goto('/multisig/new');
   await continueToSigners(page, 'Coldcard policy vault');
   await page.getByRole('button', { name: 'Add a signer' }).click();
@@ -813,7 +844,7 @@ test('shows one authoritative failure when a BSMS record belongs to another wall
   await expect(page.getByRole('button', { name: 'Delete wallet from this device' })).toBeDisabled();
 });
 
-test('reveals draft errors only after review and keeps cosigner identity readable', async ({ page }) => {
+test('reveals draft errors only after review and keeps signer identity readable', async ({ page }) => {
   await page.goto('/multisig/new');
   await page.getByRole('button', { name: 'Continue to signers' }).click();
   await expect(page.getByText('A wallet name is required.')).toBeVisible();

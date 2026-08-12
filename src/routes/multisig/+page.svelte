@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ChevronRight, Copy, Cpu, Eye, FileKey, FlaskConical, Plus, ShieldCheck, Usb } from '@lucide/svelte';
+  import { ChevronRight, Cpu, Eye, FileKey, FlaskConical, Plus, ShieldCheck, Usb } from '@lucide/svelte';
   import { onMount } from 'svelte';
   import Button from '$lib/components/Button.svelte';
   import DeviceDetailsModal from '$lib/components/DeviceDetailsModal.svelte';
@@ -9,13 +9,12 @@
   import SignerPolicyReview from '$lib/components/SignerPolicyReview.svelte';
   import ColdcardPolicySetup from '$lib/components/ColdcardPolicySetup.svelte';
   import OverflowMenuButton from '$lib/components/OverflowMenuButton.svelte';
+  import MultisigDescriptorsModal from '$lib/components/MultisigDescriptorsModal.svelte';
   import { isPrototypeWallet, walletService, type CosignerHealthCheck, type HardwareDevice, type MultisigWallet, type PolicyVerificationAddress, type SignerPolicyVerification, type WalletSnapshot } from '$lib/wallet';
   import type { CosignerDraft, CosignerSource } from '$lib/multisig/policy';
   import { defaultConfig, networkName } from '$lib/config';
   import { shortSats } from '$lib/data';
-  import { copyText } from '$lib/clipboard';
   import { toast } from '$lib/stores/toasts';
-  import { combineDescriptorBranches } from '$lib/descriptors';
   import { coldcardPolicyFilename } from '$lib/transfer';
   import { useWalletShellContext } from '$lib/wallet/shell-context';
   import { matchingPolicyVerification, policyReadinessLabel, policyRegistrationProfile, requiresPolicySetup } from '$lib/hardware/policy-readiness';
@@ -36,7 +35,6 @@
   let policyDevice = $state<HardwareDevice | null>(null);
   let policyBusy = $state(false);
   let policyError = $state('');
-  let combinedDescriptor = $derived(wallet ? combineDescriptorBranches(wallet.externalDescriptor, wallet.internalDescriptor) : null);
   onMount(async () => {
     wallet = await walletService.multisigWallet();
     if (!wallet) return;
@@ -64,10 +62,6 @@
       document.removeEventListener('keydown', closeEscape);
     };
   });
-  async function copyDescriptor(value: string, label: string) {
-    await copyText(value, 'public-wallet-data');
-    toast({ title: `${label} descriptor copied`, description: 'Public watch-only descriptor copied.', tone: 'success' });
-  }
   function sourceName(source: CosignerSource) {
     return ({ usb: 'USB hardware', qr: 'QR import', file: 'File import', manual: 'Manual backup', virtual: 'Virtual test device' })[source];
   }
@@ -175,9 +169,7 @@
 </div>
 
 <DeviceDetailsModal signer={selectedSigner} health={selectedSigner ? latestHealth(selectedSigner) : null} history={selectedSigner ? (healthHistory[selectedSigner.id] ?? []) : []} policyStatus={selectedSigner ? signerPolicyStatus(selectedSigner) : null} {checking} onclose={() => selectedSigner = null} oncheck={runHealthCheck} onpolicy={() => selectedSigner && openPolicyVerification(selectedSigner)}/>
-<Modal open={showDescriptors} title="Wallet descriptors" description="Public watch-only logic for receiving and change. It cannot sign transactions, but it reveals wallet activity." onclose={() => showDescriptors=false}>
-  {#if wallet}<div class="descriptor-viewer">{#if combinedDescriptor}<section class="descriptor-primary"><div><span>Portable wallet descriptor</span><small>Standard multipath form: branch 0 receives, branch 1 creates change.</small></div><code>{combinedDescriptor}</code><button onclick={() => copyDescriptor(combinedDescriptor!, 'Wallet')}><Copy size={15}/>Copy wallet descriptor</button></section><details><summary>View separate receive and change descriptors</summary><section><div><span>Receive descriptor</span><small>Generates addresses shared for incoming payments.</small></div><code>{wallet.externalDescriptor}</code><button onclick={() => copyDescriptor(wallet!.externalDescriptor, 'Receive')}><Copy size={15}/>Copy receive descriptor</button></section><section><div><span>Change descriptor</span><small>Generates private change addresses after spending.</small></div><code>{wallet.internalDescriptor}</code><button onclick={() => copyDescriptor(wallet!.internalDescriptor, 'Change')}><Copy size={15}/>Copy change descriptor</button></section></details>{:else}<section><div><span>Receive descriptor</span><small>Generates addresses shared for incoming payments.</small></div><code>{wallet.externalDescriptor}</code><button onclick={() => copyDescriptor(wallet!.externalDescriptor, 'Receive')}><Copy size={15}/>Copy receive descriptor</button></section><section><div><span>Change descriptor</span><small>Generates private change addresses after spending.</small></div><code>{wallet.internalDescriptor}</code><button onclick={() => copyDescriptor(wallet!.internalDescriptor, 'Change')}><Copy size={15}/>Copy change descriptor</button></section>{/if}<p><ShieldCheck size={14}/>Keep descriptors private even though they cannot spend. They reveal every address in this wallet.</p></div>{/if}
-</Modal>
+<MultisigDescriptorsModal open={showDescriptors} {wallet} onclose={() => showDescriptors=false}/>
 <Modal open={!!policySigner} preserveTop title={policySigner && policyRegistrationProfile(policySigner).registration==='file_once'?'Prepare Coldcard for this wallet':'Verify signer wallet policy'} description={policySigner && policyRegistrationProfile(policySigner).registration==='file_once'?'Complete the one-time policy-file import before signing.':"Compare Groot's saved public policy with every value shown on the hardware device."} onclose={()=>{if(!policyBusy){policySigner=null;policyDevice=null;policyError='';}}}>
   {#if policySigner && wallet && policyRegistrationProfile(policySigner).registration==='file_once'}<ColdcardPolicySetup {wallet} signer={policySigner} busy={policyBusy} error={policyError} ondownload={saveColdcardPolicy} onconfirm={confirmColdcardPolicy}/>
   {:else if policyBusy && !policyDevice}<HardwareActionPrompt title="Looking for the saved signer" detail="Keep the device connected, unlocked, and in its Bitcoin app while Groot matches the saved fingerprint." label="Signer scan in progress"/>

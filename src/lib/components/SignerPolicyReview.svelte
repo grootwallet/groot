@@ -55,9 +55,9 @@
       {#if verification}<p class="policy-repeat-note">Groot's current Ledger connection must authorize this policy again for each signing request. Keep this reference open until Ledger reaches the transaction.</p>{/if}
     </div>
   {:else if kind === 'bitbox02'}
-    <div class="policy-device-expectation"><strong>BitBox will show</strong><p>The wallet name, {wallet.threshold}-of-{wallet.cosigners.length} threshold, every cosigner public key, and which key belongs to this BitBox. First-use address verification registers the policy.</p></div>
+    <div class="policy-device-expectation"><strong>BitBox will show</strong><p>The wallet name, {wallet.threshold}-of-{wallet.cosigners.length} threshold, every signer public key, and which key belongs to this BitBox. First-use address verification registers the policy.</p></div>
   {:else if kind === 'jade'}
-    <div class="policy-device-expectation"><strong>Jade will show</strong><p>The multisig registration details before it can verify receive and change addresses. Compare the threshold and every cosigner identity.</p></div>
+    <div class="policy-device-expectation"><strong>Jade will show</strong><p>The multisig registration details before it can verify receive and change addresses. Compare the threshold and every signer identity.</p></div>
   {/if}
 
   <section class="policy-address-check" aria-label="First address to verify">

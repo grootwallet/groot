@@ -148,7 +148,7 @@
     {#if backup}<article class="backup-print-sheet" aria-label="Printable wallet descriptor backup">
       <header><p>Groot · Public wallet backup</p><h1>{wallet.name}</h1><strong>Watch-only descriptors — cannot spend bitcoin</strong></header>
       <dl><div><dt>Network</dt><dd>{networkName(defaultConfig.network)}</dd></div><div><dt>Policy</dt><dd>{wallet.threshold} of {wallet.cosigners.length} signatures</dd></div><div><dt>Script</dt><dd>Native SegWit · sortedmulti</dd></div><div><dt>Created</dt><dd>{formatWalletTimestamp(wallet.createdAt)}</dd></div></dl>
-      <section><h2>Cosigners</h2><ol>{#each wallet.cosigners as signer}<li><strong>{signer.label}</strong><span>Fingerprint {signer.fingerprint.toLowerCase()} · {signer.source === 'usb' ? 'USB hardware' : signer.source}</span></li>{/each}</ol></section>
+      <section><h2>Signers</h2><ol>{#each wallet.cosigners as signer}<li><strong>{signer.label}</strong><span>Fingerprint {signer.fingerprint.toLowerCase()} · {signer.source === 'usb' ? 'USB hardware' : signer.source}</span></li>{/each}</ol></section>
       <section class="print-descriptors"><div><h2>Receive descriptor</h2>{#if receiveQr}<img src={receiveQr} alt="Receive descriptor QR code"/>{/if}<code>{wallet.externalDescriptor}</code></div><div><h2>Change descriptor</h2>{#if changeQr}<img src={changeQr} alt="Change descriptor QR code"/>{/if}<code>{wallet.internalDescriptor}</code></div></section>
       <footer><strong>Privacy note</strong><p>This public backup cannot sign transactions. Anyone who sees it can derive wallet addresses and observe wallet activity. Store it privately and separately from enough signing devices.</p></footer>
     </article>{/if}

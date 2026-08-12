@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Activity, ArrowDownToLine, ArrowUpFromLine, CircleDot, Eye, EyeOff, RefreshCw, ShieldCheck } from '@lucide/svelte';
+  import { Activity, ArrowDownToLine, ArrowUpFromLine, CircleDot, Eye, EyeOff, FileKey, RefreshCw, ShieldCheck } from '@lucide/svelte';
   import Button from '$lib/components/Button.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import PasswordField from '$lib/components/PasswordField.svelte';
@@ -7,7 +7,7 @@
   import TxDetailsModal from '$lib/components/TxDetailsModal.svelte';
   import { btc, shortSats } from '$lib/data';
   import { toast } from '$lib/stores/toasts';
-  import { walletService, WalletError, type WalletProfile, type WalletSnapshot } from '$lib/wallet';
+  import { walletService, WalletError, type MultisigWallet, type WalletProfile, type WalletSnapshot } from '$lib/wallet';
   import { pendingBalance, sortTransactionsNewestFirst } from '$lib/wallet/presentation';
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
@@ -18,16 +18,19 @@
   import WalletSkeleton from '$lib/components/WalletSkeleton.svelte';
   import LoadFailure from '$lib/components/LoadFailure.svelte';
   import EmptyState from '$lib/components/EmptyState.svelte';
+  import MultisigDescriptorsModal from '$lib/components/MultisigDescriptorsModal.svelte';
   import { useWalletShellContext } from '$lib/wallet/shell-context';
   import { fly } from 'svelte/transition';
   const walletShell = useWalletShellContext();
   let syncing = $state(false);
   let snapshot = $state<WalletSnapshot | null>(null);
+  let multisigWallet = $state<MultisigWallet | null>(null);
   let selected = $state<Transaction | null>(null);
   let multisig = $state(false);
   let moreOpen = $state(false);
   let moreMenu = $state<HTMLDivElement | null>(null);
   let moreTrigger = $state<HTMLButtonElement | null>(null);
+  let showDescriptors = $state(false);
   let loadError = $state('');
   let selectedProfile = $state<WalletProfile | null>(null);
   let verifyOpen = $state(false);
@@ -46,7 +49,12 @@
       const registry = await walletService.profiles();
       selectedProfile = registry.wallets.find((wallet) => wallet.id === registry.selectedWalletId) ?? null;
       multisig = selectedProfile?.kind === 'multisig';
-      snapshot = multisig ? await walletService.multisigSnapshot() : await walletService.snapshot();
+      if (multisig) {
+        [snapshot, multisigWallet] = await Promise.all([walletService.multisigSnapshot(), walletService.multisigWallet()]);
+      } else {
+        multisigWallet = null;
+        snapshot = await walletService.snapshot();
+      }
       initialDataLoading = false;
     } catch (cause) {
       if (cause instanceof WalletError && cause.code === 'wallet_locked') { await goto('/unlock'); return; }
@@ -137,7 +145,11 @@
         <div class="overview-more-menu" role="menu" aria-label="More wallet actions" transition:fly={{ y: 5, duration: 160 }}>
           <a href="/activity" role="menuitem" onclick={() => moreOpen = false}><Activity size={16} /><span><strong>Activity</strong><small>View all transactions</small></span></a>
           <a href="/coins" role="menuitem" onclick={() => moreOpen = false}><CircleDot size={16} /><span><strong>Coins</strong><small>Inspect and choose UTXOs</small></span></a>
-          {#if multisig}<a href="/multisig" role="menuitem" onclick={() => moreOpen = false}><ShieldCheck size={16} /><span><strong>Policy</strong><small>Keys, backups, and rules</small></span></a>{/if}
+          {#if multisig}
+            <a href="/multisig" role="menuitem" onclick={() => moreOpen = false}><ShieldCheck size={16} /><span><strong>Policy</strong><small>Keys, backups, and rules</small></span></a>
+            <button role="menuitem" onclick={() => { moreOpen = false; showDescriptors = true; }}><Eye size={16}/><span><strong>Show descriptors</strong><small>Inspect receive and change logic</small></span></button>
+            <a href="/multisig/backup" role="menuitem" onclick={() => moreOpen = false}><FileKey size={16}/><span><strong>Export & verify</strong><small>Save a public wallet backup</small></span></a>
+          {/if}
         </div>
       {/if}
     </div>
@@ -160,6 +172,7 @@
 </div>
 
 <TxDetailsModal transaction={selected} {multisig} onclose={() => selected = null} />
+<MultisigDescriptorsModal open={showDescriptors} wallet={multisigWallet} onclose={() => showDescriptors=false}/>
 <Modal open={verifyOpen} title="Verify recovery backup" description="Use your written 24 words to complete a private native challenge. Groot will not reveal them again." onclose={() => { verifyOpen=false; verifyCredential=''; verifyError=''; }}>
   <div class="warning-box"><strong>Have the written backup in front of you.</strong> Verification confirms its exact word order without sending the words into the webview.</div>
   <PasswordField label="Wallet passphrase" bind:value={verifyCredential} autocomplete="current-password" hint="Required to decrypt the recovery words only inside trusted Rust code."/>

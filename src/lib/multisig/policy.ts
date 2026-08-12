@@ -40,19 +40,19 @@ export function validatePolicyDraft(draft: PolicyDraft): string[] {
   const cosigners = draft.cosigners.map(normalizeCosigner);
   if (!draft.name.trim()) errors.push('A wallet name is required.');
   else if (draft.name.trim().length > 48) errors.push('The wallet name must be 48 characters or fewer.');
-  if (cosigners.length < MIN_COSIGNERS) errors.push('Add at least 3 cosigners.');
-  if (cosigners.length > MAX_COSIGNERS) errors.push('V1 supports at most 7 cosigners.');
+  if (cosigners.length < MIN_COSIGNERS) errors.push('Add at least 3 signers.');
+  if (cosigners.length > MAX_COSIGNERS) errors.push('V1 supports at most 7 signers.');
   if (!Number.isInteger(draft.threshold) || draft.threshold < 2) errors.push('At least 2 signatures are required.');
-  if (draft.threshold > cosigners.length) errors.push('The threshold cannot exceed the number of cosigners.');
-  if (cosigners.some((cosigner) => !cosigner.id.trim() || cosigner.id.length > 128)) errors.push('Every cosigner needs a bounded stable identifier.');
-  if (new Set(cosigners.map((cosigner) => cosigner.id.trim())).size !== cosigners.length) errors.push('Every cosigner must have a unique identifier.');
-  if (cosigners.some((cosigner) => !cosigner.label)) errors.push('Every cosigner needs a label.');
-  else if (cosigners.some((cosigner) => cosigner.label.length > 48)) errors.push('Cosigner labels must be 48 characters or fewer.');
+  if (draft.threshold > cosigners.length) errors.push('The threshold cannot exceed the number of signers.');
+  if (cosigners.some((cosigner) => !cosigner.id.trim() || cosigner.id.length > 128)) errors.push('Every signer needs a bounded stable identifier.');
+  if (new Set(cosigners.map((cosigner) => cosigner.id.trim())).size !== cosigners.length) errors.push('Every signer must have a unique identifier.');
+  if (cosigners.some((cosigner) => !cosigner.label)) errors.push('Every signer needs a label.');
+  else if (cosigners.some((cosigner) => cosigner.label.length > 48)) errors.push('Signer labels must be 48 characters or fewer.');
   if (cosigners.some((cosigner) => !/^[0-9a-f]{8}$/.test(cosigner.fingerprint))) errors.push('Every master fingerprint must contain 8 hexadecimal characters.');
   if (cosigners.some((cosigner) => cosigner.derivationPath !== MULTISIG_ACCOUNT_PATH)) errors.push(`Every v1 key must use ${MULTISIG_ACCOUNT_PATH}.`);
   if (cosigners.some((cosigner) => !/^(tpub|upub|vpub)/.test(cosigner.xpub))) errors.push('Every account key must use a test-network extended public key.');
-  if (new Set(cosigners.map((cosigner) => cosigner.fingerprint)).size !== cosigners.length) errors.push('Every cosigner must have a unique master fingerprint.');
-  if (new Set(cosigners.map((cosigner) => cosigner.xpub)).size !== cosigners.length) errors.push('Every cosigner must have a unique account xpub.');
+  if (new Set(cosigners.map((cosigner) => cosigner.fingerprint)).size !== cosigners.length) errors.push('Every signer must have a unique master fingerprint.');
+  if (new Set(cosigners.map((cosigner) => cosigner.xpub)).size !== cosigners.length) errors.push('Every signer must have a unique account xpub.');
   return errors;
 }
 

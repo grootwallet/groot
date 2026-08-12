@@ -33,4 +33,10 @@ describe('hardware receive verification UI', () => {
       expect(route).not.toMatch(/\{:else\}<p>No compatible/);
     }
   });
+
+  it('uses signer terminology throughout the multisig receive flow', () => {
+    expect(multisigReceive).toContain('No compatible signer found');
+    expect(multisigReceive).toContain('Connect and unlock a signer saved in this wallet policy');
+    expect(multisigReceive).not.toMatch(/cosigner/i);
+  });
 });

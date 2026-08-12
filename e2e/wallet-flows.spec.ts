@@ -593,6 +593,11 @@ test('overview, activity, UTXOs, and settings expose durable states', async ({ p
     ? page.locator('.primary-actions .overview-inline-primary').first()
     : page.locator('.mobile-actions .mobile-action').first();
   expect(actionHeight).toBe((await referenceAction.boundingBox())?.height);
+  await overviewMore.click();
+  const overviewMenu = page.getByRole('menu', { name: 'More wallet actions' });
+  await expect(overviewMenu.getByRole('menuitem')).toHaveCount(2);
+  await expect(overviewMenu.getByRole('menuitem', { name: /Show descriptors|Export & verify|Policy/ })).toHaveCount(0);
+  await page.keyboard.press('Escape');
   const overviewTransaction = page.locator('.tx-row').first();
   await expect(overviewTransaction).toBeVisible();
   await overviewTransaction.click();

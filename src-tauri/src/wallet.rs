@@ -1152,7 +1152,7 @@ fn require_explicit_standard_wallet_selection(
     if hwi_warns_about_empty_passphrase(device) && !allow_empty_passphrase {
         return Err(api_error(
             "hardware_wallet_selection_required",
-            "Choose whether this cosigner uses the standard wallet with no passphrase. Groot will not select it silently.",
+            "Choose whether this signer uses the standard wallet with no passphrase. Groot will not select it silently.",
         ));
     }
     Ok(())
@@ -2667,11 +2667,11 @@ fn parse_mnemonic_bytes(plaintext: Vec<u8>) -> ApiResult<Mnemonic> {
 
 fn policy_api_error(error: PolicyError) -> ApiError {
     let message = match error {
-        PolicyError::InvalidName => "Enter a wallet name and labels for every cosigner.",
-        PolicyError::InvalidCosignerCount => "V1 requires between 3 and 7 cosigners.",
-        PolicyError::UnsafeThreshold => "At least 2 signatures are required and the threshold cannot exceed the number of cosigners.",
-        PolicyError::DuplicateFingerprint => "Every cosigner must have a unique master fingerprint.",
-        PolicyError::DuplicateXpub => "Every cosigner must have a unique account xpub.",
+        PolicyError::InvalidName => "Enter a wallet name and labels for every signer.",
+        PolicyError::InvalidCosignerCount => "V1 requires between 3 and 7 signers.",
+        PolicyError::UnsafeThreshold => "At least 2 signatures are required and the threshold cannot exceed the number of signers.",
+        PolicyError::DuplicateFingerprint => "Every signer must have a unique master fingerprint.",
+        PolicyError::DuplicateXpub => "Every signer must have a unique account xpub.",
         PolicyError::InvalidDescriptor => "A key or descriptor is invalid. Use a regtest BIP48 account tpub.",
     };
     api_error(error.code(), message)
@@ -2754,7 +2754,7 @@ fn reject_virtual_cosigners(cosigners: &[CosignerInput]) -> ApiResult<()> {
     {
         return Err(api_error(
             "hardware_unavailable",
-            "Virtual cosigners are available only in the browser prototype.",
+            "Virtual signers are available only in the browser prototype.",
         ));
     }
     Ok(())
@@ -2910,7 +2910,7 @@ fn validate_multisig_backup(encoded: &str) -> ApiResult<MultisigBackupDto> {
     {
         return Err(api_error(
             "backup_mismatch",
-            "The descriptors do not match the included cosigner policy.",
+            "The descriptors do not match the included signer policy.",
         ));
     }
     let expected_threshold = expected_paths

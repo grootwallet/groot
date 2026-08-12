@@ -34,10 +34,10 @@ describe('multisig policy invariants', () => {
 
   it('rejects unsafe thresholds, too few keys, and oversized policies', () => {
     expect(validatePolicyDraft({ name: 'Vault', threshold: 1, cosigners: [cosigner(), cosigner({ fingerprint: 'b1b2c3d4' })] })).toContain('At least 2 signatures are required.');
-    expect(validatePolicyDraft({ name: 'Vault', threshold: 2, cosigners: [cosigner()] })).toContain('Add at least 3 cosigners.');
-    expect(validatePolicyDraft({ name: 'Vault', threshold: 8, cosigners: Array.from({ length: 8 }, (_, index) => cosigner({ id: String(index), fingerprint: index.toString(16).padStart(8, '0'), xpub: `tpub-key-${index}` })) })).toContain('V1 supports at most 7 cosigners.');
+    expect(validatePolicyDraft({ name: 'Vault', threshold: 2, cosigners: [cosigner()] })).toContain('Add at least 3 signers.');
+    expect(validatePolicyDraft({ name: 'Vault', threshold: 8, cosigners: Array.from({ length: 8 }, (_, index) => cosigner({ id: String(index), fingerprint: index.toString(16).padStart(8, '0'), xpub: `tpub-key-${index}` })) })).toContain('V1 supports at most 7 signers.');
     const enough = [cosigner(), cosigner({ fingerprint: 'b1b2c3d4', xpub: 'two' }), cosigner({ fingerprint: 'c1b2c3d4', xpub: 'three' })];
-    expect(validatePolicyDraft({ name: '', threshold: 4, cosigners: enough })).toEqual(expect.arrayContaining(['A wallet name is required.', 'The threshold cannot exceed the number of cosigners.']));
+    expect(validatePolicyDraft({ name: '', threshold: 4, cosigners: enough })).toEqual(expect.arrayContaining(['A wallet name is required.', 'The threshold cannot exceed the number of signers.']));
     expect(validatePolicyDraft({ name: 'Vault', threshold: 2.5, cosigners: enough })).toContain('At least 2 signatures are required.');
   });
 
@@ -48,7 +48,7 @@ describe('multisig policy invariants', () => {
       cosigner({ fingerprint: 'c1b2c3d4', xpub: 'three', derivationPath: "m/84'/1'/0'" })
     ] });
     expect(errors).toEqual(expect.arrayContaining([
-      'Every cosigner needs a label.',
+      'Every signer needs a label.',
       'Every master fingerprint must contain 8 hexadecimal characters.',
       `Every v1 key must use ${MULTISIG_ACCOUNT_PATH}.`
     ]));
@@ -59,11 +59,11 @@ describe('multisig policy invariants', () => {
     const duplicateFingerprint = cosigner({ id: 'two', label: 'Duplicate fingerprint', xpub: 'tpub-other-key' });
     const duplicateXpub = cosigner({ id: 'three', label: 'Duplicate xpub', fingerprint: 'ffffffff' });
     const errors = validatePolicyDraft({ name: 'Vault', threshold: 2, cosigners: [first, duplicateFingerprint, duplicateXpub] });
-    expect(errors).toContain('Every cosigner must have a unique master fingerprint.');
-    expect(errors).toContain('Every cosigner must have a unique account xpub.');
+    expect(errors).toContain('Every signer must have a unique master fingerprint.');
+    expect(errors).toContain('Every signer must have a unique account xpub.');
   });
 
-  it('bounds wallet names, stable identifiers, and cosigner labels', () => {
+  it('bounds wallet names, stable identifiers, and signer labels', () => {
     const base = [
       cosigner({ id: '', label: 'A' }),
       cosigner({ id: 'x'.repeat(129), label: 'B', fingerprint: 'b1b2c3d4', xpub: 'tpub-key-2' }),
@@ -71,7 +71,7 @@ describe('multisig policy invariants', () => {
     ];
     expect(validatePolicyDraft({ name: 'x'.repeat(49), threshold: 2, cosigners: base })).toEqual(expect.arrayContaining([
       'The wallet name must be 48 characters or fewer.',
-      'Every cosigner needs a bounded stable identifier.'
+      'Every signer needs a bounded stable identifier.'
     ]));
 
     const duplicateIds = [
@@ -80,8 +80,8 @@ describe('multisig policy invariants', () => {
       cosigner({ id: 'three', label: 'C', fingerprint: 'c1b2c3d4', xpub: 'tpub-key-3' })
     ];
     expect(validatePolicyDraft({ name: 'Vault', threshold: 2, cosigners: duplicateIds })).toEqual(expect.arrayContaining([
-      'Every cosigner must have a unique identifier.',
-      'Cosigner labels must be 48 characters or fewer.'
+      'Every signer must have a unique identifier.',
+      'Signer labels must be 48 characters or fewer.'
     ]));
   });
 

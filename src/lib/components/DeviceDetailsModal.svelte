@@ -39,7 +39,7 @@
   }
 </script>
 
-<Modal open={!!signer} title={signer?.label ?? 'Cosigner details'} description="Public identity and coordinator health. No private key is stored here." {onclose}>
+<Modal open={!!signer} title={signer?.label ?? 'Signer details'} description="Public identity and coordinator health. No private key is stored here." {onclose}>
   {#if signer}
     <div class="device-details">
       <div class="device-identity"><span><KeyRound size={20}/></span><div><strong>{sourceName(signer.source)}</strong><small>{signer.source === 'usb' || signer.source === 'virtual' ? 'Connection can be verified now' : 'Offline public-key record'}</small></div><span class="ready-badge" class:attention={health?.status === 'attention'}>{healthLabel()}</span></div>

@@ -90,18 +90,18 @@
   const policy = $derived({ name, threshold, cosigners });
   const standardCosignerCount = $derived(standardRecipe === '2of3' ? 3 : standardRecipe === '3of5' ? 5 : customCosignerCount);
   const requiredKeys = $derived(templateKind === 'standard' ? standardCosignerCount : 4);
-  const errors = $derived([...validatePolicyDraft(policy), ...(cosigners.length !== requiredKeys ? [`${templateKind === 'standard' ? 'This wallet' : 'This template'} needs exactly ${requiredKeys} cosigners.`] : [])]);
+  const errors = $derived([...validatePolicyDraft(policy), ...(cosigners.length !== requiredKeys ? [`${templateKind === 'standard' ? 'This wallet' : 'This template'} needs exactly ${requiredKeys} signers.`] : [])]);
   const visibleErrors = $derived.by(() => {
     if (cosigners.length === requiredKeys) return errors.map(signerLanguage);
     const countErrors = new Set([
-      'Add at least 3 cosigners.',
-      'The threshold cannot exceed the number of cosigners.',
-      `${templateKind === 'standard' ? 'This wallet' : 'This template'} needs exactly ${requiredKeys} cosigners.`
+      'Add at least 3 signers.',
+      'The threshold cannot exceed the number of signers.',
+      `${templateKind === 'standard' ? 'This wallet' : 'This template'} needs exactly ${requiredKeys} signers.`
     ]);
     const remaining = requiredKeys - cosigners.length;
     const countGuidance = remaining > 0
-      ? `Add ${remaining} more cosigner${remaining === 1 ? '' : 's'}.`
-      : `Remove ${Math.abs(remaining)} cosigner${remaining === -1 ? '' : 's'}.`;
+      ? `Add ${remaining} more signer${remaining === 1 ? '' : 's'}.`
+      : `Remove ${Math.abs(remaining)} signer${remaining === -1 ? '' : 's'}.`;
     return [...errors.filter((item) => !countErrors.has(item)), countGuidance].map(signerLanguage);
   });
   const recoveryTemplate = $derived.by<RecoveryTemplate | null>(() => {
