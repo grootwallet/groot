@@ -1,5 +1,7 @@
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
-use bdk_wallet::bitcoin::{bip32::Fingerprint, psbt::Psbt, EcdsaSighashType};
+use bdk_wallet::bitcoin::{
+    bip32::Fingerprint, psbt::Psbt, secp256k1::Secp256k1, sighash::SighashCache, EcdsaSighashType,
+};
 use serde::Serialize;
 use std::{collections::HashSet, fmt};
 
@@ -12,6 +14,7 @@ pub enum ProposalError {
     ProposalMismatch,
     UnknownSigner,
     UnsupportedSighash,
+    InvalidSignature,
     PrematureFinalization,
     NoInputs,
     NoNewSignatures,
@@ -26,6 +29,7 @@ impl ProposalError {
             Self::ProposalMismatch => "proposal_mismatch",
             Self::UnknownSigner => "unknown_signer",
             Self::UnsupportedSighash => "unsupported_sighash",
+            Self::InvalidSignature => "invalid_signature",
             Self::PrematureFinalization => "premature_finalization",
             Self::NoInputs => "no_inputs",
             Self::NoNewSignatures => "no_new_signatures",
@@ -95,6 +99,29 @@ fn signed_on_input(
     Ok(signed)
 }
 
+fn verify_partial_signatures(psbt: &Psbt) -> Result<(), ProposalError> {
+    let secp = Secp256k1::verification_only();
+    let mut cache = SighashCache::new(&psbt.unsigned_tx);
+    for (input_index, input) in psbt.inputs.iter().enumerate() {
+        if input.partial_sigs.is_empty() {
+            continue;
+        }
+        let (message, sighash_type) = psbt
+            .sighash_ecdsa(input_index, &mut cache)
+            .map_err(|_| ProposalError::InvalidSignature)?;
+        for (public_key, signature) in &input.partial_sigs {
+            if signature.sighash_type != EcdsaSighashType::All
+                || signature.sighash_type != sighash_type
+            {
+                return Err(ProposalError::UnsupportedSighash);
+            }
+            secp.verify_ecdsa(&message, &signature.signature, &public_key.inner)
+                .map_err(|_| ProposalError::InvalidSignature)?;
+        }
+    }
+    Ok(())
+}
+
 pub fn signature_progress(
     psbt: &Psbt,
     allowed_fingerprints: &[Fingerprint],
@@ -103,6 +130,7 @@ pub fn signature_progress(
     if psbt.inputs.is_empty() {
         return Err(ProposalError::NoInputs);
     }
+    verify_partial_signatures(psbt)?;
     let allowed = allowed_fingerprints.iter().copied().collect::<HashSet<_>>();
     let mut common = signed_on_input(psbt, 0, &allowed)?;
     for index in 1..psbt.inputs.len() {
@@ -152,6 +180,7 @@ pub fn merge_signed_psbt(
     if original_metadata != imported_metadata {
         return Err(ProposalError::ProposalMismatch);
     }
+    verify_partial_signatures(&imported)?;
     let allowed = allowed_fingerprints.iter().copied().collect::<HashSet<_>>();
     for (index, imported_input) in imported.inputs.iter().enumerate() {
         let original_input = &original.inputs[index];
@@ -189,7 +218,10 @@ mod tests {
         bip32::DerivationPath,
         ecdsa,
         hashes::Hash,
+        opcodes::all::OP_CHECKMULTISIG,
+        script::Builder,
         secp256k1::{Message, Secp256k1, SecretKey},
+        sighash::SighashCache,
         transaction, Amount, OutPoint, PublicKey, ScriptBuf, Sequence, Transaction, TxIn, TxOut,
         Txid, Witness,
     };
@@ -228,7 +260,20 @@ mod tests {
     fn proposal() -> (Psbt, Vec<(SecretKey, PublicKey, Fingerprint)>) {
         let mut psbt = Psbt::from_unsigned_tx(unsigned_tx(1)).unwrap();
         let signers = vec![signer(1), signer(2), signer(3)];
+        let witness_script = Builder::new()
+            .push_int(2)
+            .push_key(&signers[0].1)
+            .push_key(&signers[1].1)
+            .push_key(&signers[2].1)
+            .push_int(3)
+            .push_opcode(OP_CHECKMULTISIG)
+            .into_script();
         for input in &mut psbt.inputs {
+            input.witness_utxo = Some(TxOut {
+                value: Amount::from_sat(20_000),
+                script_pubkey: ScriptBuf::new_p2wsh(&witness_script.wscript_hash()),
+            });
+            input.witness_script = Some(witness_script.clone());
             for (_, public, fingerprint) in &signers {
                 input.bip32_derivation.insert(
                     public.inner,
@@ -244,11 +289,38 @@ mod tests {
 
     fn sign_all_inputs(psbt: &mut Psbt, signer: &(SecretKey, PublicKey, Fingerprint)) {
         let secp = Secp256k1::new();
-        let message = Message::from_digest([signer.2.as_bytes()[0]; 32]);
-        let signature = ecdsa::Signature::sighash_all(secp.sign_ecdsa(&message, &signer.0));
-        for input in &mut psbt.inputs {
+        let signatures = {
+            let mut cache = SighashCache::new(&psbt.unsigned_tx);
+            (0..psbt.inputs.len())
+                .map(|index| {
+                    let (message, sighash_type) = psbt.sighash_ecdsa(index, &mut cache).unwrap();
+                    ecdsa::Signature {
+                        signature: secp.sign_ecdsa(&message, &signer.0),
+                        sighash_type,
+                    }
+                })
+                .collect::<Vec<_>>()
+        };
+        for (input, signature) in psbt.inputs.iter_mut().zip(signatures) {
             input.partial_sigs.insert(signer.1, signature);
         }
+    }
+
+    fn sign_input(
+        psbt: &mut Psbt,
+        input_index: usize,
+        signer: &(SecretKey, PublicKey, Fingerprint),
+    ) {
+        let secp = Secp256k1::new();
+        let mut cache = SighashCache::new(&psbt.unsigned_tx);
+        let (message, sighash_type) = psbt.sighash_ecdsa(input_index, &mut cache).unwrap();
+        psbt.inputs[input_index].partial_sigs.insert(
+            signer.1,
+            ecdsa::Signature {
+                signature: secp.sign_ecdsa(&message, &signer.0),
+                sighash_type,
+            },
+        );
     }
 
     fn allowed_fingerprints(signers: &[(SecretKey, PublicKey, Fingerprint)]) -> Vec<Fingerprint> {
@@ -289,11 +361,7 @@ mod tests {
     fn counts_only_signers_that_signed_every_input() {
         let (mut psbt, signers) = proposal();
         sign_all_inputs(&mut psbt, &signers[0]);
-        let secp = Secp256k1::new();
-        let signature = ecdsa::Signature::sighash_all(
-            secp.sign_ecdsa(&Message::from_digest([2; 32]), &signers[1].0),
-        );
-        psbt.inputs[0].partial_sigs.insert(signers[1].1, signature);
+        sign_input(&mut psbt, 0, &signers[1]);
         let allowed = signers.iter().map(|signer| signer.2).collect::<Vec<_>>();
         let progress = signature_progress(&psbt, &allowed, 2).unwrap();
         assert_eq!(progress.signed, 1);
@@ -339,13 +407,7 @@ mod tests {
         assert_eq!(original, preserved);
 
         let mut incomplete = preserved.clone();
-        let secp = Secp256k1::new();
-        let signature = ecdsa::Signature::sighash_all(
-            secp.sign_ecdsa(&Message::from_digest([2; 32]), &signers[1].0),
-        );
-        incomplete.inputs[0]
-            .partial_sigs
-            .insert(signers[1].1, signature);
+        sign_input(&mut incomplete, 0, &signers[1]);
         assert_eq!(
             merge_signed_psbt(&mut original, incomplete, &allowed, 2)
                 .unwrap_err()
@@ -398,6 +460,31 @@ mod tests {
                 .unwrap_err()
                 .code(),
             "premature_finalization"
+        );
+    }
+
+    #[test]
+    fn rejects_invalid_partial_signatures_without_mutating_or_counting_them() {
+        let (mut original, signers) = proposal();
+        let allowed = allowed_fingerprints(&signers);
+        let mut imported = original.clone();
+        let secp = Secp256k1::new();
+        let invalid = ecdsa::Signature::sighash_all(
+            secp.sign_ecdsa(&Message::from_digest([9; 32]), &signers[0].0),
+        );
+        for input in &mut imported.inputs {
+            input.partial_sigs.insert(signers[0].1, invalid);
+        }
+
+        assert_merge_rejected_without_mutation(
+            &mut original,
+            imported.clone(),
+            &allowed,
+            ProposalError::InvalidSignature,
+        );
+        assert_eq!(
+            signature_progress(&imported, &allowed, 2),
+            Err(ProposalError::InvalidSignature)
         );
     }
 
@@ -738,6 +825,7 @@ mod tests {
             (ProposalError::ProposalMismatch, "proposal_mismatch"),
             (ProposalError::UnknownSigner, "unknown_signer"),
             (ProposalError::UnsupportedSighash, "unsupported_sighash"),
+            (ProposalError::InvalidSignature, "invalid_signature"),
             (
                 ProposalError::PrematureFinalization,
                 "premature_finalization",

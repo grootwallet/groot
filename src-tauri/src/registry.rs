@@ -9,8 +9,7 @@ use uuid::Uuid;
 
 pub const REGISTRY_VERSION: u8 = 1;
 pub const DEFAULT_INACTIVITY_TIMEOUT_MINUTES: u16 = 5;
-pub const MIN_INACTIVITY_TIMEOUT_MINUTES: u16 = 1;
-pub const MAX_INACTIVITY_TIMEOUT_MINUTES: u16 = 60;
+pub const INACTIVITY_TIMEOUT_CHOICES: [u16; 5] = [1, 5, 15, 30, 60];
 
 fn default_inactivity_timeout_minutes() -> u16 {
     DEFAULT_INACTIVITY_TIMEOUT_MINUTES
@@ -161,9 +160,7 @@ impl WalletRegistry {
         if self.version != REGISTRY_VERSION {
             return Err(RegistryError::UnsupportedVersion);
         }
-        if !(MIN_INACTIVITY_TIMEOUT_MINUTES..=MAX_INACTIVITY_TIMEOUT_MINUTES)
-            .contains(&self.inactivity_timeout_minutes)
-        {
+        if !INACTIVITY_TIMEOUT_CHOICES.contains(&self.inactivity_timeout_minutes) {
             return Err(RegistryError::InvalidInactivityTimeout);
         }
         let mut ids = HashSet::new();
@@ -327,6 +324,8 @@ mod tests {
         r.version = 1;
         r.inactivity_timeout_minutes = 0;
         assert_eq!(r.validate(), Err(RegistryError::InvalidInactivityTimeout));
+        r.inactivity_timeout_minutes = 2;
+        assert_eq!(r.validate(), Err(RegistryError::InvalidInactivityTimeout));
         r.inactivity_timeout_minutes = DEFAULT_INACTIVITY_TIMEOUT_MINUTES;
         let mut x = p(id);
         x.name = "".into();
@@ -349,6 +348,17 @@ mod tests {
         r.wallets = vec![p(id)];
         r.selected_wallet_id = Some(Uuid::new_v4());
         assert_eq!(r.validate(), Err(RegistryError::UnknownSelection));
+    }
+
+    #[test]
+    fn accepts_only_the_documented_inactivity_timeout_choices() {
+        for minutes in INACTIVITY_TIMEOUT_CHOICES {
+            let registry = WalletRegistry {
+                inactivity_timeout_minutes: minutes,
+                ..Default::default()
+            };
+            registry.validate().unwrap();
+        }
     }
 
     #[test]

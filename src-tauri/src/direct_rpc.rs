@@ -35,7 +35,13 @@ impl DirectRpcTransport {
         timeout: Duration,
     ) -> Self {
         let authorization = username.map(|username| {
-            Zeroizing::new(BASE64.encode(format!("{username}:{}", password.unwrap_or_default())))
+            let mut credentials = Zeroizing::new(String::with_capacity(
+                username.len() + password.map_or(1, |value| value.len() + 1),
+            ));
+            credentials.push_str(username);
+            credentials.push(':');
+            credentials.push_str(password.unwrap_or_default());
+            Zeroizing::new(BASE64.encode(credentials.as_bytes()))
         });
         Self {
             endpoint: endpoint.to_owned(),
@@ -57,7 +63,8 @@ impl DirectRpcTransport {
             .with_header("Content-Type", "application/json")
             .with_body(body);
         if let Some(authorization) = self.authorization.as_deref() {
-            request = request.with_header("Authorization", format!("Basic {authorization}"));
+            let header = Zeroizing::new(format!("Basic {authorization}"));
+            request = request.with_header("Authorization", header.as_str());
         }
         let mut response = request
             .send_lazy()

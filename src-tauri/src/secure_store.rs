@@ -470,19 +470,27 @@ pub fn load_with_legacy_device_key(
     )
 }
 
-pub fn forget_device_key(metadata_path: &Path) {
+pub fn forget_device_key(metadata_path: &Path) -> Result<(), SecureStoreError> {
     #[cfg(any(target_os = "macos", target_os = "ios"))]
     {
         use security_framework::passwords::delete_generic_password;
-        if let Ok(account) = account(metadata_path) {
-            remove_cached_device_key(&account);
-            let _ = delete_generic_password(KEYCHAIN_SERVICE, &account);
+        let account = account(metadata_path)?;
+        remove_cached_device_key(&account);
+        match delete_generic_password(KEYCHAIN_SERVICE, &account) {
+            Ok(()) => Ok(()),
+            Err(error) if error.code() == ERR_SEC_ITEM_NOT_FOUND => Ok(()),
+            Err(_) => Err(SecureStoreError::Unavailable),
         }
     }
 
     #[cfg(not(any(target_os = "macos", target_os = "ios")))]
-    if let Ok(path) = sandbox_key_path(metadata_path) {
-        let _ = fs::remove_file(path);
+    {
+        let path = sandbox_key_path(metadata_path)?;
+        match fs::remove_file(path) {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(_) => Err(SecureStoreError::Unavailable),
+        }
     }
 }
 
@@ -613,7 +621,7 @@ mod tests {
         let device_key = sandbox_key_path(&metadata).unwrap();
         fs::write(&device_key, vec![7_u8; KEY_BYTES]).unwrap();
 
-        forget_device_key(&metadata);
+        forget_device_key(&metadata).unwrap();
 
         assert!(!device_key.exists());
         fs::remove_dir_all(directory).unwrap();
@@ -629,7 +637,7 @@ mod tests {
         }
         impl Drop for KeychainCleanup {
             fn drop(&mut self) {
-                forget_device_key(&self.metadata);
+                let _ = forget_device_key(&self.metadata);
                 for directory in &self.directories {
                     let _ = fs::remove_dir_all(directory);
                 }
@@ -674,7 +682,7 @@ mod tests {
             secret
         );
 
-        forget_device_key(&restored);
+        forget_device_key(&restored).unwrap();
         remove_cached_device_key(&item_account);
         assert_eq!(
             load_with_provider(&restored, credential, &provider),

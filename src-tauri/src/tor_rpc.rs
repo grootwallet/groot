@@ -71,7 +71,12 @@ impl TorRpcTransport {
             request_path.push('?');
             request_path.push_str(query);
         }
-        let authorization = Zeroizing::new(BASE64.encode(format!("{username}:{password}")));
+        let mut credentials =
+            Zeroizing::new(String::with_capacity(username.len() + password.len() + 1));
+        credentials.push_str(username);
+        credentials.push(':');
+        credentials.push_str(password);
+        let authorization = Zeroizing::new(BASE64.encode(credentials.as_bytes()));
         Ok(Self {
             onion_host: onion_host.to_owned(),
             onion_port,
@@ -88,14 +93,14 @@ impl TorRpcTransport {
             return Err(transport_error(TorRpcError::RequestTooLarge));
         }
         let mut stream = self.connect()?;
-        let request = format!(
+        let request = Zeroizing::new(format!(
             "POST {} HTTP/1.1\r\nHost: {}:{}\r\nAuthorization: Basic {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
             self.request_path,
             self.onion_host,
             self.onion_port,
             self.authorization.as_str(),
             body.len()
-        );
+        ));
         write_all(&mut stream, request.as_bytes())?;
         write_all(&mut stream, &body)?;
         stream.shutdown(Shutdown::Write).map_err(map_stream_error)?;

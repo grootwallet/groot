@@ -18,6 +18,7 @@ use bdk_wallet::{
     },
     chain::{BlockId, ChainPosition, CheckPoint, ConfirmationBlockTime},
     descriptor::{Descriptor, DescriptorPublicKey},
+    error::CreateTxError,
     psbt::PsbtUtils,
     rusqlite::{
         config::DbConfig, params, Connection, OptionalExtension, Transaction as SqliteTransaction,
@@ -465,6 +466,7 @@ pub struct AppState {
     node_auth: Mutex<HashMap<Uuid, NodeAuthSession>>,
     saved_files: Mutex<HashMap<String, SavedFileReveal>>,
     recovery_scans: Mutex<HashMap<Uuid, ActiveRecoveryScan>>,
+    runtime_auth_retry_at: Mutex<HashMap<Uuid, Instant>>,
 }
 
 struct ActiveRecoveryScan {
@@ -1186,7 +1188,7 @@ fn registry_api_error(error: RegistryError) -> ApiError {
         ),
         RegistryError::InvalidInactivityTimeout => api_error(
             "invalid_inactivity_timeout",
-            "Automatic lock must be between 1 and 60 minutes.",
+            "Automatic lock must be 1, 5, 15, 30, or 60 minutes.",
         ),
         RegistryError::DuplicateIdentity => api_error(
             "wallet_already_exists",
@@ -1564,6 +1566,22 @@ fn build_rpc_client_with_timeout(
     let (username, password) = auth
         .get_user_pass()
         .map_err(|error| api_error("network_unavailable", error))?;
+    build_rpc_client_with_credentials(
+        url,
+        username.as_deref(),
+        password.as_deref(),
+        tor_proxy,
+        timeout,
+    )
+}
+
+fn build_rpc_client_with_credentials(
+    url: &str,
+    username: Option<&str>,
+    password: Option<&str>,
+    tor_proxy: Option<&str>,
+    timeout: Duration,
+) -> ApiResult<Client> {
     if let Some(proxy) = tor_proxy {
         let endpoint = url::Url::parse(url).map_err(network_config_api_error_from_url)?;
         let proxy = proxy
@@ -1571,8 +1589,8 @@ fn build_rpc_client_with_timeout(
             .map_err(|_| network_config_api_error(NetworkConfigError::InvalidProxy))?;
         let transport = crate::tor_rpc::TorRpcTransport::new(
             &endpoint,
-            username.as_deref().unwrap_or_default(),
-            password.as_deref().unwrap_or_default(),
+            username.unwrap_or_default(),
+            password.unwrap_or_default(),
             proxy,
             timeout,
         )
@@ -1581,12 +1599,8 @@ fn build_rpc_client_with_timeout(
             transport,
         )))
     } else {
-        let transport = crate::direct_rpc::DirectRpcTransport::new(
-            url,
-            username.as_deref(),
-            password.as_deref(),
-            timeout,
-        );
+        let transport =
+            crate::direct_rpc::DirectRpcTransport::new(url, username, password, timeout);
         Ok(Client::from_jsonrpc(jsonrpc::Client::with_transport(
             transport,
         )))
@@ -1636,7 +1650,7 @@ fn rpc_client(app: &AppHandle, state: &State<'_, AppState>) -> ApiResult<Client>
         .validate()
         .map_err(network_config_api_error)?
         .to_string();
-    let auth = match config.auth {
+    match config.auth {
         RpcAuthMode::Cookie => {
             if !IS_REGTEST {
                 return Err(api_error(
@@ -1651,7 +1665,7 @@ fn rpc_client(app: &AppHandle, state: &State<'_, AppState>) -> ApiResult<Client>
                     "Regtest is not running. Start it with `pnpm regtest:start`.",
                 ));
             }
-            Auth::CookieFile(cookie)
+            build_rpc_client(&url, Auth::CookieFile(cookie), config.tor_proxy.as_deref())
         }
         RpcAuthMode::UserPass => {
             let selected = selected_profile(app)?.id;
@@ -1662,10 +1676,15 @@ fn rpc_client(app: &AppHandle, state: &State<'_, AppState>) -> ApiResult<Client>
                     "Unlock the wallet again to load its protected RPC credentials.",
                 )
             })?;
-            Auth::UserPass(session.username.clone(), session.password.to_string())
+            build_rpc_client_with_credentials(
+                &url,
+                Some(&session.username),
+                Some(session.password.as_str()),
+                config.tor_proxy.as_deref(),
+                RPC_TIMEOUT,
+            )
         }
-    };
-    build_rpc_client(&url, auth, config.tor_proxy.as_deref())
+    }
 }
 
 fn candidate_rpc_client(config: &CoreNodeConfig, password: &str) -> ApiResult<Client> {
@@ -1673,7 +1692,7 @@ fn candidate_rpc_client(config: &CoreNodeConfig, password: &str) -> ApiResult<Cl
         .validate()
         .map_err(network_config_api_error)?
         .to_string();
-    let auth = match config.auth {
+    match config.auth {
         RpcAuthMode::Cookie => {
             if !IS_REGTEST {
                 return Err(api_error(
@@ -1688,14 +1707,16 @@ fn candidate_rpc_client(config: &CoreNodeConfig, password: &str) -> ApiResult<Cl
                     "Regtest is not running. Start it with `pnpm regtest:start`.",
                 ));
             }
-            Auth::CookieFile(cookie)
+            build_rpc_client(&url, Auth::CookieFile(cookie), config.tor_proxy.as_deref())
         }
-        RpcAuthMode::UserPass => Auth::UserPass(
-            config.username.clone().unwrap_or_default(),
-            password.to_owned(),
+        RpcAuthMode::UserPass => build_rpc_client_with_credentials(
+            &url,
+            config.username.as_deref(),
+            Some(password),
+            config.tor_proxy.as_deref(),
+            RPC_TIMEOUT,
         ),
-    };
-    build_rpc_client(&url, auth, config.tor_proxy.as_deref())
+    }
 }
 
 fn checked_chain_identity(client: &Client) -> ApiResult<(u64, BlockHash)> {
@@ -1937,7 +1958,20 @@ fn frozen_outpoints(db: &Connection) -> ApiResult<Vec<OutPoint>> {
 }
 
 fn check_auth_throttle(app: &AppHandle, state: &State<'_, AppState>) -> ApiResult<()> {
-    let _ = state;
+    let selected = selected_profile(app)?.id;
+    let monotonic_now = Instant::now();
+    let mut runtime = state.runtime_auth_retry_at.lock().map_err(internal)?;
+    if let Some(retry_at) = runtime.get(&selected).copied() {
+        if monotonic_now < retry_at {
+            let remaining = retry_at.duration_since(monotonic_now).as_secs().max(1);
+            return Err(api_error(
+                "rate_limited",
+                format!("Too many incorrect attempts. Try again in {remaining} seconds."),
+            ));
+        }
+        runtime.remove(&selected);
+    }
+    drop(runtime);
     let db = open_auth_db(app)?;
     let throttle = load_auth_throttle(&db)?;
     if let Err(remaining) = throttle.check(now()) {
@@ -1957,13 +1991,29 @@ fn record_auth_result<T>(
     state: &State<'_, AppState>,
     result: &ApiResult<T>,
 ) -> ApiResult<()> {
-    let _ = state;
+    let selected = selected_profile(app)?.id;
     let mut db = open_auth_db(app)?;
     let mut throttle = load_auth_throttle(&db)?;
     match result {
-        Ok(_) => throttle.succeeded(),
+        Ok(_) => {
+            throttle.succeeded();
+            state
+                .runtime_auth_retry_at
+                .lock()
+                .map_err(internal)?
+                .remove(&selected);
+        }
         Err(error) if error.code == "invalid_credential" => {
-            throttle.failed(now());
+            let delay = throttle.failed(now());
+            if !delay.is_zero() {
+                if let Some(retry_at) = Instant::now().checked_add(delay) {
+                    state
+                        .runtime_auth_retry_at
+                        .lock()
+                        .map_err(internal)?
+                        .insert(selected, retry_at);
+                }
+            }
         }
         Err(_) => {}
     }
@@ -1971,11 +2021,17 @@ fn record_auth_result<T>(
 }
 
 fn reset_auth_throttle(app: &AppHandle, state: &State<'_, AppState>) -> ApiResult<()> {
-    let _ = state;
+    let selected = selected_profile(app)?.id;
     let mut db = open_auth_db(app)?;
     let mut throttle = AuthThrottle::default();
     throttle.succeeded();
-    save_auth_throttle(&mut db, &throttle)
+    save_auth_throttle(&mut db, &throttle)?;
+    state
+        .runtime_auth_retry_at
+        .lock()
+        .map_err(internal)?
+        .remove(&selected);
+    Ok(())
 }
 
 fn open_auth_db(app: &AppHandle) -> ApiResult<Connection> {
@@ -2528,7 +2584,10 @@ fn decrypt_mnemonic(app: &AppHandle, credential: &str) -> ApiResult<Mnemonic> {
         .ok()
         .and_then(|value| value.get("version").and_then(|version| version.as_u64()));
     if version == Some(2) {
-        let plaintext = load_legacy_regtest_secret(app, &path, credential, "regtest-wallet")?;
+        let plaintext =
+            load_current_or_legacy_regtest_secret(secure_store::load(&path, credential), || {
+                load_legacy_regtest_secret(app, &path, credential, "regtest-wallet")
+            })?;
         return parse_mnemonic_bytes(plaintext);
     }
     let secret: EncryptedSecret = serde_json::from_str(&encoded).map_err(internal)?;
@@ -2658,6 +2717,9 @@ fn proposal_api_error(error: crate::proposal::ProposalError) -> ApiError {
         }
         ProposalError::UnsupportedSighash => {
             "The PSBT uses an unsupported signature type. Groot accepts only SIGHASH_ALL. No signatures were changed."
+        }
+        ProposalError::InvalidSignature => {
+            "The PSBT contains an invalid signature. No signatures were changed."
         }
         ProposalError::PrematureFinalization => {
             "The PSBT was finalized outside Groot. Import a partially signed PSBT instead."
@@ -2869,7 +2931,9 @@ fn verify_multisig_credential(app: &AppHandle, credential: &str) -> ApiResult<()
         .ok()
         .and_then(|value| value.get("version").and_then(|version| version.as_u64()));
     let mut plaintext = if version == Some(2) {
-        load_legacy_regtest_secret(app, &path, credential, "regtest-multisig")?
+        load_current_or_legacy_regtest_secret(secure_store::load(&path, credential), || {
+            load_legacy_regtest_secret(app, &path, credential, "regtest-multisig")
+        })?
     } else {
         let secret: EncryptedSecret = serde_json::from_str(&encoded).map_err(internal)?;
         let plaintext = decrypt_payload(secret, credential)?;
@@ -3516,8 +3580,28 @@ fn load_legacy_regtest_secret(
         .map_err(secure_store_error)
 }
 
+fn load_current_or_legacy_regtest_secret(
+    current: Result<Vec<u8>, SecureStoreError>,
+    legacy: impl FnOnce() -> ApiResult<Vec<u8>>,
+) -> ApiResult<Vec<u8>> {
+    match current {
+        Ok(plaintext) => Ok(plaintext),
+        Err(SecureStoreError::DeviceKeyNotFound) if IS_REGTEST => legacy(),
+        Err(error) => Err(secure_store_error(error)),
+    }
+}
+
 fn persist_secret_material(path: &Path, material: &[u8], credential: &str) -> ApiResult<()> {
     secure_store::store(path, material, credential).map_err(secure_store_error)
+}
+
+fn cleanup_failed_profile(dir: &Path) -> ApiResult<()> {
+    secure_store::forget_device_key(&dir.join("secret.json")).map_err(secure_store_error)?;
+    match fs::remove_dir_all(dir) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(internal(error)),
+    }
 }
 
 fn read_private_text(path: &Path) -> ApiResult<String> {
@@ -3581,7 +3665,7 @@ fn create_from_mnemonic(
         )
     })();
     if result.is_err() {
-        let _ = fs::remove_dir_all(&dir);
+        cleanup_failed_profile(&dir)?;
     }
     result
 }
@@ -4394,11 +4478,11 @@ pub fn coin_set_frozen(
 
 fn set_coin_frozen(db: &mut Connection, outpoint: &str, frozen: bool) -> ApiResult<()> {
     let parsed = OutPoint::from_str(outpoint.trim())
-        .map_err(|_| api_error("internal_error", "The selected coin outpoint is invalid."))?;
+        .map_err(|_| api_error("invalid_coin", "The selected coin outpoint is invalid."))?;
     let wallet = load_wallet(db)?;
     if !wallet.list_unspent().any(|coin| coin.outpoint == parsed) {
         return Err(api_error(
-            "internal_error",
+            "coin_unavailable",
             "The selected coin is no longer available.",
         ));
     }
@@ -5304,8 +5388,7 @@ pub fn external_signer_create(
         )
     })();
     if result.is_err() {
-        secure_store::forget_device_key(&dir.join("secret.json"));
-        let _ = fs::remove_dir_all(&dir);
+        cleanup_failed_profile(&dir)?;
     }
     result?;
     unlock_selected(&app, &state)?;
@@ -5372,7 +5455,10 @@ pub fn external_signer_export_descriptor(
     let _operation = operation_guard(&state)?;
     require_unlocked(&app, &state)?;
     let credential = Zeroizing::new(credential);
-    verify_external_signer_credential(&app, credential.as_str())?;
+    check_auth_throttle(&app, &state)?;
+    let verified = verify_external_signer_credential(&app, credential.as_str());
+    record_auth_result(&app, &state, &verified)?;
+    verified?;
     external_signer_backup(read_external_signer_metadata(&app)?.external_descriptor)
 }
 
@@ -5854,6 +5940,7 @@ pub fn multisig_wallet(
     if profile.kind != WalletKind::Multisig {
         return Ok(None);
     }
+    require_unlocked(&app, &state)?;
     let path = multisig_metadata_path(&app)?;
     if !path.exists() {
         return Ok(None);
@@ -6028,12 +6115,12 @@ pub fn multisig_recover_bsms(
         Ok(wallet)
     })();
     if result.is_err() {
-        let _ = fs::remove_dir_all(&dir);
-    } else {
-        unlock_selected(&app, &state)?;
-        reset_auth_throttle(&app, &state)?;
+        cleanup_failed_profile(&dir)?;
     }
-    result
+    let wallet = result?;
+    unlock_selected(&app, &state)?;
+    reset_auth_throttle(&app, &state)?;
+    Ok(wallet)
 }
 
 #[tauri::command]
@@ -6097,11 +6184,11 @@ pub fn multisig_recover(
         Ok(backup.wallet)
     })();
     if result.is_err() {
-        let _ = fs::remove_dir_all(&dir);
-    } else {
-        unlock_selected(&app, &state)?;
+        cleanup_failed_profile(&dir)?;
     }
-    result
+    let wallet = result?;
+    unlock_selected(&app, &state)?;
+    Ok(wallet)
 }
 
 #[tauri::command]
@@ -6237,6 +6324,19 @@ pub fn multisig_address_discard(
     Ok(())
 }
 
+fn create_tx_api_error(error: CreateTxError) -> ApiError {
+    match error {
+        CreateTxError::OutputBelowDustLimit(_) => api_error(
+            "invalid_amount",
+            "The recipient amount is below Bitcoin's dust limit.",
+        ),
+        CreateTxError::CoinSelection(_)
+        | CreateTxError::NoUtxosSelected
+        | CreateTxError::UnknownUtxo => api_error("insufficient_funds", error),
+        error => internal(error),
+    }
+}
+
 #[tauri::command]
 pub fn multisig_tx_prepare(
     app: AppHandle,
@@ -6264,11 +6364,18 @@ pub fn multisig_tx_prepare(
             "Fee rate must be between 0 and 10,000 sat/vB.",
         ));
     }
-    let unchecked = Address::from_str(recipient.trim())
-        .map_err(|_| api_error("invalid_address", "Enter a valid regtest Bitcoin address."))?;
-    let address = unchecked
-        .require_network(NETWORK)
-        .map_err(|_| api_error("invalid_address", "The address is not for regtest."))?;
+    let unchecked = Address::from_str(recipient.trim()).map_err(|_| {
+        api_error(
+            "invalid_address",
+            format!("Enter a valid {NETWORK_NAME} Bitcoin address."),
+        )
+    })?;
+    let address = unchecked.require_network(NETWORK).map_err(|_| {
+        api_error(
+            "invalid_address",
+            format!("The address is not for {NETWORK_NAME}."),
+        )
+    })?;
     let applied_fee_rate = fee_rate.ceil();
     let rate = FeeRate::from_sat_per_vb(applied_fee_rate as u64)
         .ok_or_else(|| api_error("invalid_amount", "Fee rate must be greater than zero."))?;
@@ -6296,7 +6403,7 @@ pub fn multisig_tx_prepare(
                 .iter()
                 .map(|value| {
                     OutPoint::from_str(value).map_err(|_| {
-                        api_error("internal_error", "A selected coin outpoint is invalid.")
+                        api_error("invalid_coin", "A selected coin outpoint is invalid.")
                     })
                 })
                 .collect::<ApiResult<Vec<_>>>()?;
@@ -6312,14 +6419,7 @@ pub fn multisig_tx_prepare(
                 .manually_selected_only();
         }
     }
-    let psbt = builder.finish().map_err(|error| {
-        let message = error.to_string();
-        if message.to_lowercase().contains("insufficient") {
-            api_error("insufficient_funds", message)
-        } else {
-            internal(message)
-        }
-    })?;
+    let psbt = builder.finish().map_err(create_tx_api_error)?;
     enforce_change_recovery_gap(&transaction, &wallet, &psbt)?;
     let fee = psbt
         .fee_amount()
@@ -6637,13 +6737,12 @@ pub fn multisig_create(
         Ok(wallet)
     })();
     if result.is_err() {
-        let _ = fs::remove_dir_all(&dir);
+        cleanup_failed_profile(&dir)?;
     }
-    if result.is_ok() {
-        unlock_selected(&app, &state)?;
-        reset_auth_throttle(&app, &state)?;
-    }
-    result
+    let wallet = result?;
+    unlock_selected(&app, &state)?;
+    reset_auth_throttle(&app, &state)?;
+    Ok(wallet)
 }
 
 #[tauri::command]
@@ -6706,13 +6805,12 @@ pub fn multisig_recovery_create(
         Ok(wallet)
     })();
     if result.is_err() {
-        let _ = fs::remove_dir_all(&dir);
+        cleanup_failed_profile(&dir)?;
     }
-    if result.is_ok() {
-        unlock_selected(&app, &state)?;
-        reset_auth_throttle(&app, &state)?;
-    }
-    result
+    let wallet = result?;
+    unlock_selected(&app, &state)?;
+    reset_auth_throttle(&app, &state)?;
+    Ok(wallet)
 }
 
 #[tauri::command]
@@ -6742,11 +6840,18 @@ pub fn tx_prepare(
             "Fee rate must be between 0 and 10,000 sat/vB.",
         ));
     }
-    let unchecked = Address::from_str(recipient.trim())
-        .map_err(|_| api_error("invalid_address", "Enter a valid regtest Bitcoin address."))?;
-    let address = unchecked
-        .require_network(NETWORK)
-        .map_err(|_| api_error("invalid_address", "The address is not for regtest."))?;
+    let unchecked = Address::from_str(recipient.trim()).map_err(|_| {
+        api_error(
+            "invalid_address",
+            format!("Enter a valid {NETWORK_NAME} Bitcoin address."),
+        )
+    })?;
+    let address = unchecked.require_network(NETWORK).map_err(|_| {
+        api_error(
+            "invalid_address",
+            format!("The address is not for {NETWORK_NAME}."),
+        )
+    })?;
     let applied_fee_rate = fee_rate.ceil();
     let rate = FeeRate::from_sat_per_vb(applied_fee_rate as u64)
         .ok_or_else(|| api_error("invalid_amount", "Fee rate must be greater than zero."))?;
@@ -6773,7 +6878,7 @@ pub fn tx_prepare(
                 .iter()
                 .map(|value| {
                     OutPoint::from_str(value).map_err(|_| {
-                        api_error("internal_error", "A selected coin outpoint is invalid.")
+                        api_error("invalid_coin", "A selected coin outpoint is invalid.")
                     })
                 })
                 .collect::<ApiResult<Vec<_>>>()?;
@@ -6789,14 +6894,7 @@ pub fn tx_prepare(
                 .manually_selected_only();
         }
     }
-    let psbt = builder.finish().map_err(|error| {
-        let message = error.to_string();
-        if message.to_lowercase().contains("insufficient") {
-            api_error("insufficient_funds", message)
-        } else {
-            internal(message)
-        }
-    })?;
+    let psbt = builder.finish().map_err(create_tx_api_error)?;
     enforce_change_recovery_gap(&transaction, &wallet, &psbt)?;
     let fee = psbt
         .fee_amount()
@@ -6954,7 +7052,7 @@ fn summarize_payment_psbt(
     let recipient = Address::from_script(&output.script_pubkey, NETWORK).map_err(|_| {
         api_error(
             "invalid_address",
-            "The transaction recipient is not a standard regtest address.",
+            format!("The transaction recipient is not a standard {NETWORK_NAME} address."),
         )
     })?;
     let fee = psbt
@@ -7465,7 +7563,7 @@ fn delete_registered_wallet(app: &AppHandle, id: Uuid, path: &Path) -> ApiResult
         let _ = fs::rename(&tombstone, path);
         return Err(internal(error));
     }
-    secure_store::forget_device_key(&path.join("secret.json"));
+    secure_store::forget_device_key(&path.join("secret.json")).map_err(secure_store_error)?;
     Ok(())
 }
 
@@ -7518,6 +7616,37 @@ mod tests {
             .code,
             "wrong_network"
         );
+    }
+
+    #[test]
+    fn v2_secret_envelopes_prefer_the_current_device_key_on_every_network() {
+        let plaintext = load_current_or_legacy_regtest_secret(Ok(vec![1, 2, 3]), || {
+            panic!("a readable current envelope must not enter legacy migration")
+        })
+        .unwrap();
+        assert_eq!(plaintext, vec![1, 2, 3]);
+    }
+
+    #[cfg(not(groot_network = "regtest"))]
+    #[test]
+    fn public_network_builds_fail_closed_instead_of_attempting_regtest_migration() {
+        let error =
+            load_current_or_legacy_regtest_secret(Err(SecureStoreError::DeviceKeyNotFound), || {
+                panic!("public-network builds must not enter Regtest migration")
+            })
+            .unwrap_err();
+        assert_eq!(error.code, "wallet_corrupt");
+    }
+
+    #[cfg(groot_network = "regtest")]
+    #[test]
+    fn regtest_can_migrate_only_when_the_current_device_key_is_missing() {
+        let plaintext =
+            load_current_or_legacy_regtest_secret(Err(SecureStoreError::DeviceKeyNotFound), || {
+                Ok(vec![4, 5, 6])
+            })
+            .unwrap();
+        assert_eq!(plaintext, vec![4, 5, 6]);
     }
 
     #[test]
@@ -8336,6 +8465,11 @@ mod tests {
                 "The PSBT uses an unsupported signature type. Groot accepts only SIGHASH_ALL. No signatures were changed.",
             ),
             (
+                crate::proposal::ProposalError::InvalidSignature,
+                "invalid_signature",
+                "The PSBT contains an invalid signature. No signatures were changed.",
+            ),
+            (
                 crate::proposal::ProposalError::PrematureFinalization,
                 "premature_finalization",
                 "The PSBT was finalized outside Groot. Import a partially signed PSBT instead.",
@@ -8362,6 +8496,18 @@ mod tests {
             assert_eq!(translated.message, message);
             assert_ne!(translated.message, translated.code);
         }
+    }
+
+    #[test]
+    fn transaction_builder_errors_preserve_actionable_api_codes() {
+        assert_eq!(
+            create_tx_api_error(CreateTxError::OutputBelowDustLimit(0)).code,
+            "invalid_amount"
+        );
+        assert_eq!(
+            create_tx_api_error(CreateTxError::NoUtxosSelected).code,
+            "insufficient_funds"
+        );
     }
 
     #[test]
