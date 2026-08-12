@@ -249,6 +249,7 @@ export type WalletErrorCode =
   | 'scan_interrupted'
   | 'unknown_signer'
   | 'no_new_signatures'
+  | 'signature_not_found'
   | 'hardware_signature_missing'
   | 'unsupported_sighash'
   | 'premature_finalization'
@@ -360,6 +361,7 @@ export interface WalletPort {
   prepareMultisigAcceleration(txid: string, method: AccelerationMethod, feeRate: FeeRate): Promise<MultisigProposal>;
   multisigProposals(): Promise<MultisigProposal[]>;
   importMultisigProposal(proposalId: string, reviewedPsbt: string, signedPsbt: string): Promise<MultisigProposal>;
+  discardMultisigSignature(proposalId: string, reviewedPsbt: string, signerFingerprint: string): Promise<MultisigProposal>;
   signMultisigWithHardware(proposalId: string, deviceId: string, reviewedPsbt: string): Promise<MultisigProposal>;
   broadcastMultisigProposal(proposalId: string, reviewedPsbt: string, credential: string): Promise<BroadcastResult>;
   cancelMultisigProposal(proposalId: string): Promise<void>;

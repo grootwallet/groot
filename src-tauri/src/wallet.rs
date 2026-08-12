@@ -64,7 +64,8 @@ use crate::native_backup;
 use crate::network::{ChainBackend, CoreNodeConfig, NetworkConfigError, RpcAuthMode};
 use crate::notifications::{self, WalletNotification};
 use crate::proposal::{
-    decode_psbt, encode_psbt, hardware_signature_response, merge_signed_psbt, signature_progress,
+    decode_psbt, discard_signer_signature, encode_psbt, hardware_signature_response,
+    merge_signed_psbt, signature_progress,
 };
 use crate::recovery::{analyze_template, PolicyAnalysis, RecoveryError, RecoveryTemplate};
 use crate::registry::{self, RegistryError, WalletKind, WalletProfile, WalletRegistry};
@@ -2784,6 +2785,9 @@ fn proposal_api_error(error: crate::proposal::ProposalError) -> ApiError {
         ProposalError::NoInputs => "The PSBT has no transaction inputs.",
         ProposalError::NoNewSignatures => {
             "This signer has already signed this proposal. No signatures were changed."
+        }
+        ProposalError::SignatureNotFound => {
+            "This signer has no complete signature in the current proposal. No signatures were changed."
         }
         ProposalError::MergeFailed => {
             "Groot could not safely merge the signed PSBT. No signatures were changed."
@@ -7086,6 +7090,56 @@ pub fn multisig_proposal_import(
 }
 
 #[tauri::command]
+pub fn multisig_proposal_discard_signature(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    proposal_id: String,
+    reviewed_psbt: String,
+    signer_fingerprint: String,
+) -> ApiResult<MultisigProposalDto> {
+    let _operation = operation_guard(&state)?;
+    require_unlocked(&app, &state)?;
+    let metadata = read_multisig_metadata(&app)?;
+    let mut db = open_multisig_db(&app)?;
+    let current = load_multisig_proposal(&mut db, &metadata, &proposal_id)?;
+    if current.psbt != reviewed_psbt {
+        return Err(api_error(
+            "proposal_mismatch",
+            "The proposal changed after review. Reload it before discarding a signature.",
+        ));
+    }
+
+    let signer = Fingerprint::from_str(signer_fingerprint.trim()).map_err(|_| {
+        api_error(
+            "unknown_signer",
+            "The selected signer does not belong to this wallet. No signatures were changed.",
+        )
+    })?;
+    let fingerprints = multisig_fingerprints(&metadata)?;
+    let mut psbt = decode_psbt(&current.psbt).map_err(proposal_api_error)?;
+    let progress = discard_signer_signature(&mut psbt, signer, &fingerprints, metadata.threshold)
+        .map_err(proposal_api_error)?;
+    let status = if progress.can_finalize {
+        "ready"
+    } else {
+        "collecting"
+    };
+    let changed = db
+        .execute(
+            "UPDATE groot_proposals SET psbt = ?1, status = ?2 WHERE proposal_id = ?3 AND status IN ('collecting','ready') AND psbt = ?4",
+            params![encode_psbt(&psbt), status, proposal_id, reviewed_psbt],
+        )
+        .map_err(internal)?;
+    if changed != 1 {
+        return Err(api_error(
+            "proposal_mismatch",
+            "The proposal changed while the signature was being discarded. Reload it and try again.",
+        ));
+    }
+    load_multisig_proposal(&mut db, &metadata, &proposal_id)
+}
+
+#[tauri::command]
 pub async fn hardware_sign_multisig(
     app: AppHandle,
     state: State<'_, AppState>,
@@ -9069,6 +9123,11 @@ mod tests {
                 crate::proposal::ProposalError::NoNewSignatures,
                 "no_new_signatures",
                 "This signer has already signed this proposal. No signatures were changed.",
+            ),
+            (
+                crate::proposal::ProposalError::SignatureNotFound,
+                "signature_not_found",
+                "This signer has no complete signature in the current proposal. No signatures were changed.",
             ),
             (
                 crate::proposal::ProposalError::MergeFailed,

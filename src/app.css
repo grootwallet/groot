@@ -336,7 +336,8 @@ code { font-family: "SFMono-Regular", Consolas, ui-monospace, monospace; }
 .send-signers > header span,.send-signers > header small { color: var(--muted); font-size: 9px; }
 .send-signers > header strong { font-size: 10px; }
 .send-signer-list { display: grid; grid-template-columns: repeat(auto-fit,minmax(140px,1fr)); gap: 6px; }
-.send-signer-list article { min-width: 0; padding: 7px 8px; display: grid; grid-template-columns: 28px minmax(0,1fr); align-items: center; gap: 8px; border: 1px solid var(--border); border-radius: 7px; background: var(--panel); }
+.send-signer-list article { position: relative; min-width: 0; padding: 7px 8px; display: grid; grid-template-columns: 28px minmax(0,1fr); align-items: center; gap: 8px; border: 1px solid var(--border); border-radius: 7px; background: var(--panel); }
+.send-signer-list article.discardable { grid-template-columns: 28px minmax(0,1fr) 28px; }
 .send-signer-list article.signed { border-color: color-mix(in srgb,var(--success) 28%,var(--border)); background: color-mix(in srgb,var(--success) 5%,var(--panel)); }
 .send-signer-icon { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 7px; color: var(--muted); background: var(--surface-icon); }
 .send-signer-list article.signed .send-signer-icon { color: var(--success); background: color-mix(in srgb,var(--success) 11%,var(--surface-icon)); }
@@ -344,6 +345,8 @@ code { font-family: "SFMono-Regular", Consolas, ui-monospace, monospace; }
 .send-signer-list article strong { overflow: hidden; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
 .send-signer-list article small { overflow: hidden; color: var(--muted); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
 .send-signer-list code { color: var(--text-soft); font-size: inherit; }
+.discard-signer-signature { width: 28px; height: 28px; display: grid; place-items: center; border: 1px solid transparent; border-radius: 7px; color: var(--muted); background: transparent; cursor: pointer; opacity: .64; transition: opacity .15s ease,border-color .15s ease,color .15s ease,background .15s ease; }
+.discard-signer-signature:hover,.discard-signer-signature:focus-visible { opacity: 1; color: var(--danger); border-color: color-mix(in srgb,var(--danger) 25%,var(--border)); background: color-mix(in srgb,var(--danger) 7%,var(--panel)); outline: none; }
 .send-page.signing-page { max-width: 1080px; }.multisig-signing-layout { display: grid; grid-template-columns: minmax(0,1fr) 250px; align-items: start; gap: 16px; }.signer-side-panel { min-width: 0; }.signer-side-panel .send-signers { position: sticky; top: 20px; margin: 0; }.signer-side-panel .send-signers > header { display: grid; align-items: start; gap: 5px; }.signer-side-panel .send-signers > header div { justify-content: space-between; }.signer-side-panel .send-signer-list { grid-template-columns: 1fr; }.signer-side-panel .send-signer-list article { min-height: 50px; }
 .proposal-cancel-action { margin-top: 14px; }
 .signature-requirement-action { margin-top: 18px; }
