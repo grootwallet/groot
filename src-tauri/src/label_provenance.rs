@@ -881,6 +881,13 @@ pub fn connected_cluster_count(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bdk_wallet::{
+        bitcoin::{
+            absolute::LockTime, bip32::Xpriv, hashes::Hash, transaction::Version, Amount, Network,
+            OutPoint, ScriptBuf, Sequence, Transaction, TxIn, TxOut, Txid, Witness,
+        },
+        KeychainKind, Wallet,
+    };
 
     fn database() -> Connection {
         let db = Connection::open_in_memory().unwrap();
@@ -891,6 +898,100 @@ mod tests {
         )
         .unwrap();
         db
+    }
+
+    #[test]
+    fn reconciles_exact_multi_output_receives_and_mixed_change_from_a_real_wallet_graph() {
+        let db = database();
+        init_schema(&db).unwrap();
+        let master = Xpriv::new_master(Network::Regtest, &[7; 32]).unwrap();
+        let mut wallet =
+            Wallet::create(format!("wpkh({master}/0/*)"), format!("wpkh({master}/1/*)"))
+                .network(Network::Regtest)
+                .create_wallet_no_persist()
+                .unwrap();
+        let consulting = wallet.reveal_next_address(KeychainKind::External);
+        let gift = wallet.reveal_next_address(KeychainKind::External);
+        let change = wallet.reveal_next_address(KeychainKind::Internal);
+        for (index, label) in [(consulting.index, "Consulting"), (gift.index, "Gift")] {
+            db.execute(
+                "INSERT INTO groot_addresses(idx, label, created_at) VALUES(?1, ?2, 1)",
+                params![index, label],
+            )
+            .unwrap();
+            assign_new_label(
+                &db,
+                label,
+                LabelOrigin::Receive,
+                "address",
+                &index.to_string(),
+                1,
+            )
+            .unwrap();
+        }
+        let funding = Transaction {
+            version: Version::TWO,
+            lock_time: LockTime::ZERO,
+            input: vec![TxIn {
+                previous_output: OutPoint::new(Txid::from_byte_array([3; 32]), 0),
+                script_sig: ScriptBuf::new(),
+                sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
+                witness: Witness::new(),
+            }],
+            output: vec![
+                TxOut {
+                    value: Amount::from_sat(30_000),
+                    script_pubkey: consulting.address.script_pubkey(),
+                },
+                TxOut {
+                    value: Amount::from_sat(40_000),
+                    script_pubkey: gift.address.script_pubkey(),
+                },
+            ],
+        };
+        let funding_txid = funding.compute_txid();
+        let spend = Transaction {
+            version: Version::TWO,
+            lock_time: LockTime::ZERO,
+            input: vec![
+                TxIn {
+                    previous_output: OutPoint::new(funding_txid, 0),
+                    script_sig: ScriptBuf::new(),
+                    sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
+                    witness: Witness::new(),
+                },
+                TxIn {
+                    previous_output: OutPoint::new(funding_txid, 1),
+                    script_sig: ScriptBuf::new(),
+                    sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
+                    witness: Witness::new(),
+                },
+            ],
+            output: vec![TxOut {
+                value: Amount::from_sat(69_000),
+                script_pubkey: change.address.script_pubkey(),
+            }],
+        };
+        let spend_txid = spend.compute_txid();
+        wallet.apply_unconfirmed_txs([(funding, 1), (spend, 2)]);
+
+        reconcile_wallet_outputs(&wallet, &db, 3).unwrap();
+
+        let first = output_summary(&db, &format!("{funding_txid}:0")).unwrap();
+        let second = output_summary(&db, &format!("{funding_txid}:1")).unwrap();
+        let mixed = output_summary(&db, &format!("{spend_txid}:0")).unwrap();
+        assert_eq!(first.labels[0].text, "Consulting");
+        assert_eq!(second.labels[0].text, "Gift");
+        assert_eq!(mixed.context, "change");
+        assert_eq!(mixed.state, ProvenanceState::Mixed);
+        assert_eq!(
+            mixed
+                .labels
+                .iter()
+                .map(|label| label.text.as_str())
+                .collect::<BTreeSet<_>>(),
+            BTreeSet::from(["Consulting", "Gift"])
+        );
     }
 
     #[test]
