@@ -316,8 +316,7 @@ test('shows signer details and runs honest health checks', async ({ page }) => {
   await expect(backupDialog.locator('.health-card').getByText(/Physical presence cannot be checked for an offline key/)).toBeVisible();
   await backupDialog.getByRole('button', { name: 'Close' }).click();
 
-  await page.goto('/');
-  await page.goto('/multisig');
+  await page.reload();
   await page.getByRole('button', { name: 'View Coldcard details' }).click();
   await expect(page.getByRole('dialog', { name: 'Coldcard' }).getByText('Not checked in this session')).toBeVisible();
 });
