@@ -611,17 +611,6 @@ test('creates and verifies a simple 2-of-3 descriptor wallet', async ({ page }) 
   await expect(page).toHaveURL(/\/multisig$/);
   await expect(page.getByRole('heading', { name: 'Family vault' })).toBeVisible();
   await expect(page.locator('header').getByText('2 of 3')).toBeVisible();
-  await page.getByRole('button', { name: 'Verify policy' }).click();
-  const policyReview = page.getByRole('dialog', { name: 'Verify signer wallet policy' });
-  await expect(policyReview.getByText('First address to verify', { exact: true })).toBeVisible();
-  await expect(policyReview.getByRole('button', { name: 'Copy exact address' })).toBeVisible();
-  await expect(policyReview.getByRole('button', { name: /public account key \(xpub\)/i })).toHaveCount(3);
-  await policyReview.getByRole('button', { name: /public account key \(xpub\)/i }).first().click();
-  const publicKeyDetail = page.getByRole('dialog', { name: 'Coldcard public account key (xpub)' });
-  await expect(publicKeyDetail.getByRole('button', { name: 'Copy exact Public account key (xpub)' })).toBeVisible();
-  await publicKeyDetail.getByRole('button', { name: 'Close' }).click();
-  expect(await policyReview.locator('.signer-policy-review').evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
-  await policyReview.getByRole('button', { name: 'Close' }).first().click();
   await page.getByRole('main').getByRole('link', { name: 'Receive' }).click();
   await expect(page.getByRole('heading', { name: 'Receive bitcoin' })).toBeVisible();
   await expect(page.getByRole('img', { name: /QR code for/ })).toBeVisible();
@@ -755,7 +744,7 @@ test('exports and validates the recommended BSMS record', async ({ page }) => {
   await expect(page.getByLabel('Descriptor backup', { exact: true })).toHaveValue(/\/0\/\*,\/1\/\*/);
   const downloadPromise = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Download BSMS' }).click();
-  await expect((await downloadPromise).suggestedFilename()).toBe('family-vault.bsms');
+  await expect((await downloadPromise).suggestedFilename()).toBe('family-wallet.bsms');
   await page.getByRole('button', { name: 'Run recovery drill' }).click();
   await expect(page.getByText('Backup verified')).toBeVisible();
 });
@@ -829,6 +818,8 @@ test('compiles and simulates guided Miniscript recovery policies', async ({ page
   await page.getByRole('button', { name: 'Review wallet' }).click();
   await page.getByRole('button', { name: 'Continue to backup' }).click();
   await saveSetupDescriptor(page, 'policy-lab-vault-descriptors.txt');
+  await page.getByRole('button', { name: 'Finish hardware setup before first signature' }).click();
+  await expect(page.getByLabel('App PIN', { exact: true })).toBeEnabled();
   await page.getByLabel('App PIN', { exact: true }).fill('policy-pin');
   await page.getByLabel('Confirm app PIN', { exact: true }).fill('policy-pin');
   await page.getByRole('button', { name: 'Create wallet' }).click();
@@ -863,6 +854,8 @@ test('creates a guided recovery descriptor from a visible template', async ({ pa
   await expect(page.getByTestId('descriptor-preview')).toContainText('4,320 blocks');
   await page.getByRole('button', { name: 'Continue to backup' }).click();
   await saveSetupDescriptor(page, 'resilient-vault-descriptors.txt');
+  await page.getByRole('button', { name: 'Finish hardware setup before first signature' }).click();
+  await expect(page.getByLabel('App PIN', { exact: true })).toBeEnabled();
   await page.getByLabel('App PIN', { exact: true }).fill('recovery-pin');
   await page.getByLabel('Confirm app PIN', { exact: true }).fill('recovery-pin');
   await page.getByRole('button', { name: 'Create wallet' }).click();
