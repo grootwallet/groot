@@ -53,6 +53,9 @@ pub struct ProvenanceSummaryDto {
     pub labels: Vec<PermanentLabelDto>,
     pub cluster_count: usize,
     pub address_reused: bool,
+    pub source_transaction_id: Option<String>,
+    pub source_intent_label: Option<PermanentLabelDto>,
+    pub source_outpoints: Vec<String>,
 }
 
 impl ProvenanceSummaryDto {
@@ -63,6 +66,9 @@ impl ProvenanceSummaryDto {
             labels: Vec::new(),
             cluster_count: 0,
             address_reused: false,
+            source_transaction_id: None,
+            source_intent_label: None,
+            source_outpoints: Vec::new(),
         }
     }
 }
@@ -446,7 +452,7 @@ fn source_provenance(
     let Some(state) = state else {
         return Ok(SourceProvenance::unknown());
     };
-    let labels = {
+    let labels: BTreeSet<String> = {
         let mut statement = db.prepare(
             "SELECT label_id FROM groot_output_provenance WHERE outpoint = ?1 ORDER BY label_id",
         )?;
@@ -455,7 +461,7 @@ fn source_provenance(
             .collect::<Result<Vec<_>, _>>()?;
         values.into_iter().collect()
     };
-    let clusters = {
+    let clusters: BTreeSet<String> = {
         let mut statement = db.prepare(
             "SELECT cluster_id FROM groot_output_clusters WHERE outpoint = ?1 ORDER BY cluster_id",
         )?;
@@ -464,6 +470,9 @@ fn source_provenance(
             .collect::<Result<Vec<_>, _>>()?;
         values.into_iter().collect()
     };
+    if clusters.is_empty() || (state != "unknown" && labels.is_empty()) {
+        return Err(bdk_wallet::rusqlite::Error::InvalidQuery);
+    }
     Ok(SourceProvenance {
         labels,
         clusters,
@@ -689,6 +698,11 @@ pub fn output_summary(
     let Some((context, state, address_reused)) = lineage else {
         return Ok(ProvenanceSummaryDto::unknown("unknown"));
     };
+    let source_transaction_id = db.query_row(
+        "SELECT source_txid FROM groot_output_lineage WHERE outpoint = ?1",
+        params![outpoint],
+        |row| row.get::<_, String>(0),
+    )?;
     let labels = {
         let mut statement = db.prepare(
             "SELECT label.label_id, label.text, label.origin
@@ -708,6 +722,18 @@ pub fn output_summary(
         labels
     };
     let clusters = source_provenance(db, outpoint)?.clusters;
+    let source_intent_label = payment_label_for_txid(db, &source_transaction_id)?;
+    let source_outpoints = {
+        let mut statement = db.prepare(
+            "SELECT outpoint FROM groot_transaction_inputs WHERE txid = ?1 ORDER BY outpoint",
+        )?;
+        let rows = statement
+            .query_map(params![source_transaction_id], |row| {
+                row.get::<_, String>(0)
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        rows
+    };
     Ok(ProvenanceSummaryDto {
         state: match state.as_str() {
             "known" => ProvenanceState::Known,
@@ -718,6 +744,9 @@ pub fn output_summary(
         labels,
         cluster_count: connected_cluster_count(&clusters, &cluster_links(db)?),
         address_reused,
+        source_transaction_id: Some(source_transaction_id),
+        source_intent_label,
+        source_outpoints,
     })
 }
 
@@ -762,6 +791,9 @@ pub fn funding_summary(
             )
             .unwrap_or(false)
         }),
+        source_transaction_id: None,
+        source_intent_label: None,
+        source_outpoints: Vec::new(),
     })
 }
 
@@ -894,7 +926,7 @@ mod tests {
         db.execute_batch(
             "PRAGMA foreign_keys = ON;
              CREATE TABLE groot_addresses(idx INTEGER PRIMARY KEY, label TEXT NOT NULL, created_at INTEGER NOT NULL);
-             CREATE TABLE groot_proposals(proposal_id TEXT PRIMARY KEY, label TEXT NOT NULL, created_at INTEGER NOT NULL);",
+             CREATE TABLE groot_proposals(proposal_id TEXT PRIMARY KEY, label TEXT NOT NULL, created_at INTEGER NOT NULL, txid TEXT, status TEXT);",
         )
         .unwrap();
         db
@@ -973,6 +1005,15 @@ mod tests {
             }],
         };
         let spend_txid = spend.compute_txid();
+        assign_new_label(
+            &db,
+            "Supplier payment",
+            LabelOrigin::Payment,
+            "transaction",
+            &spend_txid.to_string(),
+            2,
+        )
+        .unwrap();
         wallet.apply_unconfirmed_txs([(funding, 1), (spend, 2)]);
 
         reconcile_wallet_outputs(&wallet, &db, 3).unwrap();
@@ -984,6 +1025,9 @@ mod tests {
         assert_eq!(second.labels[0].text, "Gift");
         assert_eq!(mixed.context, "change");
         assert_eq!(mixed.state, ProvenanceState::Mixed);
+        assert_eq!(mixed.source_transaction_id, Some(spend_txid.to_string()));
+        assert_eq!(mixed.source_intent_label.unwrap().text, "Supplier payment");
+        assert_eq!(mixed.source_outpoints.len(), 2);
         assert_eq!(
             mixed
                 .labels
@@ -992,6 +1036,39 @@ mod tests {
                 .collect::<BTreeSet<_>>(),
             BTreeSet::from(["Consulting", "Gift"])
         );
+    }
+
+    #[test]
+    fn corrupted_materialized_mapping_fails_instead_of_claiming_known_provenance() {
+        let db = database();
+        init_schema(&db).unwrap();
+        let label =
+            assign_new_label(&db, "Consulting", LabelOrigin::Receive, "address", "0", 1).unwrap();
+        let provenance = DerivedProvenance {
+            labels: BTreeSet::from([label]),
+            clusters: BTreeSet::new(),
+            state: ProvenanceState::Known,
+        };
+        materialize_output(
+            &db,
+            OutputMaterialization {
+                outpoint: "fixture:0",
+                txid: "fixture",
+                context: "received",
+                address_idx: Some(0),
+                provenance: &provenance,
+                clusters: &BTreeSet::from(["cluster-address-0".to_owned()]),
+                created_at: 1,
+            },
+        )
+        .unwrap();
+        db.execute(
+            "DELETE FROM groot_output_provenance WHERE outpoint = 'fixture:0'",
+            [],
+        )
+        .unwrap();
+
+        assert!(output_summary(&db, "fixture:0").is_err());
     }
 
     #[test]

@@ -66,6 +66,7 @@ impl PrivacyAwareCoinSelection {
         selected_labels: &BTreeSet<String>,
         selected_clusters: &BTreeSet<String>,
         needed: Amount,
+        fee_rate: FeeRate,
         rand: &mut R,
     ) -> usize {
         optional
@@ -76,15 +77,23 @@ impl PrivacyAwareCoinSelection {
                 let new_labels = privacy.label_ids.difference(selected_labels).count();
                 let new_clusters = privacy.cluster_ids.difference(selected_clusters).count();
                 let value = candidate.utxo.txout().value.to_sat();
-                let enough = candidate.utxo.txout().value >= needed;
+                let input_weight = TxIn::default()
+                    .segwit_weight()
+                    .checked_add(candidate.satisfaction_weight)
+                    .expect("input weight addition cannot overflow");
+                let input_fee = (fee_rate * input_weight).to_sat();
+                let effective_value = value.saturating_sub(input_fee);
+                let enough = effective_value >= needed.to_sat();
                 let excess = if enough {
-                    value - needed.to_sat()
+                    effective_value - needed.to_sat()
                 } else {
-                    u64::MAX - value
+                    u64::MAX - effective_value
                 };
                 let tie = rand.next_u64();
                 let score = match self.strategy {
-                    AutomaticSelectionStrategy::LowerFee => (0, 0, 0, 0, u64::MAX - value, tie),
+                    AutomaticSelectionStrategy::LowerFee => {
+                        (0, 0, 0, 0, u64::MAX - effective_value, tie)
+                    }
                     AutomaticSelectionStrategy::Private => (
                         usize::from(privacy.address_reused),
                         usize::from(privacy.unknown),
@@ -200,7 +209,8 @@ impl CoinSelectionAlgorithm for PrivacyAwareCoinSelection {
                 });
             }
             let needed = target_amount + fee_rate * total_weight - selected_amount;
-            let index = self.choose_next(&optional_utxos, &labels, &clusters, needed, rand);
+            let index =
+                self.choose_next(&optional_utxos, &labels, &clusters, needed, fee_rate, rand);
             let weighted = optional_utxos.swap_remove(index);
             let privacy = self.metadata(&weighted);
             labels.extend(privacy.label_ids);
@@ -242,6 +252,10 @@ mod tests {
     use rand::{rngs::StdRng, SeedableRng};
 
     fn weighted(value: u64, vout: u32) -> WeightedUtxo {
+        weighted_with_satisfaction(value, vout, 68)
+    }
+
+    fn weighted_with_satisfaction(value: u64, vout: u32, satisfaction_weight: u64) -> WeightedUtxo {
         let tx = Transaction {
             version: Version::TWO,
             lock_time: LockTime::ZERO,
@@ -249,7 +263,7 @@ mod tests {
             output: vec![],
         };
         WeightedUtxo {
-            satisfaction_weight: Weight::from_wu(68),
+            satisfaction_weight: Weight::from_wu(satisfaction_weight),
             utxo: Utxo::Local(LocalOutput {
                 outpoint: OutPoint {
                     txid: tx.compute_txid(),
@@ -318,6 +332,26 @@ mod tests {
                 vec![],
                 vec![weighted(20_000, 0), weighted(30_000, 1)],
                 FeeRate::ZERO,
+                Amount::from_sat(10_000),
+                Script::new(),
+                &mut rng,
+            )
+            .unwrap();
+        assert_eq!(result.selected[0].outpoint().vout, 1);
+    }
+
+    #[test]
+    fn lower_fee_strategy_ranks_effective_value_after_actual_input_weight() {
+        let selector =
+            PrivacyAwareCoinSelection::new(AutomaticSelectionStrategy::LowerFee, HashMap::new());
+        let expensive = weighted_with_satisfaction(30_000, 0, 8_000);
+        let efficient = weighted_with_satisfaction(29_000, 1, 68);
+        let mut rng = StdRng::seed_from_u64(7);
+        let result = selector
+            .coin_select(
+                vec![],
+                vec![expensive, efficient],
+                FeeRate::from_sat_per_vb(10).unwrap(),
                 Amount::from_sat(10_000),
                 Script::new(),
                 &mut rng,

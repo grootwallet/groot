@@ -290,9 +290,9 @@ test('surfaces partial and fully signed proposals on Overview', async ({ page })
   await page.getByRole('button', { name: 'Back to overview' }).click();
   await page.getByRole('dialog', { name: 'Leave signing?' }).getByRole('link', { name: 'Leave to overview' }).click();
 
-  const partialProposal = page.getByRole('link', { name: 'Resume payment, 1 of 2 signatures collected' });
+  const partialProposal = page.getByRole('link', { name: 'Resume payment, Overview resume test, 1 of 2 signatures collected' });
   await expect(partialProposal).toContainText('Signing in progress');
-  await expect(partialProposal).not.toContainText('Overview resume test');
+  await expect(partialProposal).toContainText('Overview resume test');
   await partialProposal.click();
   await expect(page.getByRole('region', { name: 'Payment signers' }).getByText('1 of 2 collected')).toBeVisible();
 
@@ -302,7 +302,7 @@ test('surfaces partial and fully signed proposals on Overview', async ({ page })
   await page.getByRole('button', { name: 'Back to overview' }).click();
   await page.getByRole('dialog', { name: 'Leave signing?' }).getByRole('link', { name: 'Leave to overview' }).click();
 
-  const readyProposal = page.getByRole('link', { name: 'Resume payment, 2 of 2 signatures collected' });
+  const readyProposal = page.getByRole('link', { name: 'Resume payment, Overview resume test, 2 of 2 signatures collected' });
   await expect(readyProposal).toContainText('Payment ready to broadcast');
   await readyProposal.click();
   await expect(page.getByRole('button', { name: 'Finalize & broadcast' })).toBeVisible();
@@ -323,7 +323,7 @@ test('surfaces partial and fully signed proposals on Overview', async ({ page })
   await expect(page.getByRole('button', { name: 'Finalize & broadcast' })).toHaveCount(0);
   await page.getByRole('button', { name: 'Back to overview' }).click();
   await page.getByRole('dialog', { name: 'Leave signing?' }).getByRole('link', { name: 'Leave to overview' }).click();
-  await expect(page.getByRole('link', { name: 'Resume payment, 1 of 2 signatures collected' })).toContainText('Signing in progress');
+  await expect(page.getByRole('link', { name: 'Resume payment, Overview resume test, 1 of 2 signatures collected' })).toContainText('Signing in progress');
 });
 
 test('keeps advanced wallet actions compact and makes both descriptors inspectable', async ({ page }) => {

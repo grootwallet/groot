@@ -16,7 +16,7 @@ export function hasAddressPrefixForNetwork(address: string, network: SupportedNe
 export function normalizePermanentLabel(label: string): string {
   const normalized = label.trim().replace(/\s+/g, ' ');
   if (!normalized) throw new Error('A permanent address label is required.');
-  if (normalized.length > 48) throw new Error('Address labels cannot exceed 48 characters.');
+  if (Array.from(normalized).length > 48) throw new Error('Address labels cannot exceed 48 characters.');
   return normalized;
 }
 

@@ -14,7 +14,7 @@ Rust owns a normalized, versioned label schema with immutable labels, exact subj
 
 An exact incoming wallet output inherits its receive-address label. Change inherits the union of its wallet-input provenance. Multiple sources are `mixed`; unavailable source data remains explicitly `unknown`. Payment intent is assigned independently to proposals and bound to the actual txid atomically with broadcast. RBF and CPFP proposals inherit that intent, while their change still follows input lineage.
 
-Automatic selection is executed inside the Rust/BDK transaction builder. Balanced is the default compromise, More private gives first priority to avoiding reused/unknown/unrelated sources, and Lower fee prefers larger inputs. Frozen coins remain unspendable in every automatic strategy, and manual selection remains exact. BDK remains authoritative for input weight, fee, dust, and change calculations. Random tie-breaking uses the RNG injected through BDK's selector boundary and is deterministic under a seeded test RNG.
+Automatic selection is executed inside the Rust/BDK transaction builder. Balanced is the default compromise, More private gives first priority to avoiding reused/unknown/unrelated sources, and Lower fee ranks effective value after each descriptor-derived input weight. Frozen coins remain unspendable in every automatic strategy, and manual selection remains exact. BDK remains authoritative for input weight, fee, dust, and change calculations. Random tie-breaking uses the RNG injected through BDK's selector boundary and is deterministic under a seeded test RNG.
 
 The webview receives typed label/provenance summaries and renders them without reconstructing lineage. Discreet and locked surfaces do not expose permanent-label text.
 
@@ -27,4 +27,4 @@ The webview receives typed label/provenance summaries and renders them without r
 
 ## Tracking
 
-Implements [issue #9](https://github.com/thibistaken/groot/issues/9).
+Closes [issue #9](https://github.com/thibistaken/groot/issues/9).

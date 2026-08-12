@@ -652,6 +652,13 @@ test('overview, activity, UTXOs, and settings expose durable states', async ({ p
   await expect(reusedCoin.getByText('Outpoint', { exact: true })).toBeVisible();
     await expect(reusedCoin.getByText(/This coin shares its address with \d+ other coin/)).toBeVisible();
   await expect(reusedCoin.getByText('Linked coin', { exact: true })).toBeVisible();
+  const changeCoin = page.locator('.coin-row').filter({ hasText: 'Refund' });
+  await changeCoin.getByRole('button', { name: 'Show details for Refund' }).click();
+  await expect(changeCoin.getByText('Source transaction', { exact: true })).toBeVisible();
+  await expect(changeCoin.getByText('Source payment intent', { exact: true })).toBeVisible();
+  await expect(changeCoin.getByText('Hardware order', { exact: true })).toBeVisible();
+  await expect(changeCoin.getByText('Change lineage', { exact: true })).toBeVisible();
+  await expect(changeCoin.getByText('1 wallet input', { exact: true })).toBeVisible();
   await page.getByRole('link', { name: 'Settings' }).click();
   await expect(page.getByText('Delete wallet', { exact: true })).toBeVisible();
 });
@@ -846,6 +853,18 @@ test('coin control selects, freezes, and carries coins into send', async ({ page
   await page.getByRole('button', { name: 'Use automatic selection' }).click();
   await expect(page.locator('.coin-mode').getByText('Automatic selection', { exact: true })).toBeVisible();
   await expect(page.locator('.coin-mode')).toContainText('More private');
+});
+
+test('discreet mode hides coin labels and amounts without leaking them through controls', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Hide wallet amounts' }).first().click();
+  await page.getByRole('link', { name: 'Coins' }).click();
+  const coinPage = page.locator('.page');
+  await expect(coinPage).toContainText('Label hidden');
+  await expect(coinPage).not.toContainText('Savings');
+  await expect(coinPage).not.toContainText('1,250,000');
+  await expect(page.getByRole('checkbox', { name: 'Select Label hidden', exact: true }).first()).toBeVisible();
+  await expect(page.getByPlaceholder('Filter labels')).toBeDisabled();
 });
 
 test('send reviews a proposal and rejects a wrong credential', async ({ page }) => {

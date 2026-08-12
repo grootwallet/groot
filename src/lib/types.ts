@@ -10,6 +10,9 @@ export type ProvenanceSummary = {
   labels: PermanentLabel[];
   clusterCount: number;
   addressReused: boolean;
+  sourceTransactionId?: string | null;
+  sourceIntentLabel?: PermanentLabel | null;
+  sourceOutpoints?: string[];
 };
 
 export type Transaction = {

@@ -16,8 +16,11 @@ describe('wallet invariants', () => {
 
   it('requires and freezes a normalized address label at creation', () => {
     expect(normalizePermanentLabel('  Invoice   104 ')).toBe('Invoice 104');
+    expect(normalizePermanentLabel('Café 🌱')).toBe('Café 🌱');
+    expect(normalizePermanentLabel('🌱'.repeat(48))).toBe('🌱'.repeat(48));
     expect(() => normalizePermanentLabel('   ')).toThrow('required');
     expect(() => normalizePermanentLabel('x'.repeat(49))).toThrow('48');
+    expect(() => normalizePermanentLabel('🌱'.repeat(49))).toThrow('48');
   });
 
   it('allows discarding only an awaiting address with no observed payment', () => {

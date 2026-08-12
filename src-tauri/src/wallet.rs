@@ -10287,10 +10287,44 @@ mod tests {
     #[test]
     fn labels_are_mandatory_and_bounded() {
         assert_eq!(normalize_label("  Invoice 42  ").unwrap(), "Invoice 42");
+        assert_eq!(normalize_label("Café 🌱").unwrap(), "Café 🌱");
+        assert_eq!(normalize_label(&"🌱".repeat(48)).unwrap(), "🌱".repeat(48));
         assert_eq!(normalize_label("   ").unwrap_err().code, "invalid_label");
         assert_eq!(
             normalize_label(&"x".repeat(49)).unwrap_err().code,
             "invalid_label"
+        );
+        assert_eq!(
+            normalize_label(&"🌱".repeat(49)).unwrap_err().code,
+            "invalid_label"
+        );
+    }
+
+    #[test]
+    fn manual_selection_rejects_empty_malformed_duplicate_and_frozen_outpoints() {
+        let outpoint = format!("{}:0", "00".repeat(32));
+        let parsed = OutPoint::from_str(&outpoint).unwrap();
+        assert_eq!(
+            validate_manual_outpoints(&[], &[]).unwrap_err().code,
+            "invalid_coin"
+        );
+        assert_eq!(
+            validate_manual_outpoints(&["not-an-outpoint".to_owned()], &[])
+                .unwrap_err()
+                .code,
+            "invalid_coin"
+        );
+        assert_eq!(
+            validate_manual_outpoints(&[outpoint.clone(), outpoint.clone()], &[])
+                .unwrap_err()
+                .code,
+            "invalid_coin"
+        );
+        assert_eq!(
+            validate_manual_outpoints(&[outpoint], &[parsed])
+                .unwrap_err()
+                .code,
+            "coin_unavailable"
         );
     }
 

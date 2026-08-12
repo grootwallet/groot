@@ -31,7 +31,21 @@ export let receiveAddresses: ReceiveAddress[] = [
 
 const savings = receiveProvenance('receive-savings', 'Savings', true);
 const savingsTopUp = receiveProvenance('receive-savings-top-up', 'Savings top-up', true);
-const refund = receiveProvenance('receive-refund', 'Refund');
+const refundLabel = { id: 'receive-refund', text: 'Refund', origin: 'receive' as const };
+const refundIntent = { id: 'payment-hardware-order', text: 'Hardware order', origin: 'payment' as const };
+const refund = {
+  label: refundLabel,
+  summary: {
+    state: 'known' as const,
+    context: 'change' as const,
+    labels: [refundLabel],
+    clusterCount: 1,
+    addressReused: false,
+    sourceTransactionId: transactions[1].id,
+    sourceIntentLabel: refundIntent,
+    sourceOutpoints: ['f7c42c16...a1ec:0']
+  }
+};
 export const utxos: Utxo[] = [
   { outpoint: 'f7c42c16...a1ec:0', amount: 1_250_000, confirmations: 286, address: 'tb1q2la...p29a', label: 'Savings', frozen: false, primaryLabel: savings.label, provenance: savings.summary },
   { outpoint: 'c807a142...52ad:1', amount: 842_150, confirmations: 94, address: 'tb1q2la...p29a', label: 'Savings top-up', frozen: false, primaryLabel: savingsTopUp.label, provenance: savingsTopUp.summary },

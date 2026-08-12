@@ -46,6 +46,10 @@
   const freezeIntentCoins = $derived(freezeIntent ? utxos.filter((coin) => freezeIntent?.outpoints.includes(coin.outpoint)) : []);
   const sendHref = $derived(`${multisig ? '/multisig/send' : '/send'}?coins=${encodeURIComponent(selected.join(','))}`);
 
+  $effect(() => {
+    if ($discreetMode) labelFilter = '';
+  });
+
   onMount(load);
   onMount(() => walletService.subscribe((event) => {
     if (event.type === 'wallet_updated' && event.walletId === walletShell.selectedWalletId()) {
@@ -132,10 +136,10 @@
 </script>
 
 <div class="page">
-  <header class="page-header"><div><p class="eyebrow">COINS</p><h1>Coins</h1><p class="subtitle">Choose exactly what a payment may spend.</p></div><div class="stat-pill"><span>{utxos.length} coins</span><strong>{shortSats(utxos.reduce((a, u) => a + u.amount, 0))} sats</strong></div></header>
+  <header class="page-header"><div><p class="eyebrow">COINS</p><h1>Coins</h1><p class="subtitle">Choose exactly what a payment may spend.</p></div><div class="stat-pill"><span>{utxos.length} coins</span><strong>{$discreetMode ? '••••••' : shortSats(utxos.reduce((a, u) => a + u.amount, 0))} sats</strong></div></header>
 
   <section class="coin-toolbar" aria-live="polite">
-    <div><strong>{selected.length} selected</strong><span>{shortSats(selectedTotal)} sats selected</span></div>
+    <div><strong>{selected.length} selected</strong><span>{$discreetMode ? '••••••' : shortSats(selectedTotal)} sats selected</span></div>
     <div class="coin-toolbar-actions">{#if selected.length}<Button variant="secondary" size="small" disabled={busy} onclick={() => requestFrozenState(selected, true)}><Snowflake size={15}/>Freeze selected</Button><Button size="small" href={sendHref}>Send selected coins</Button>{:else}<span class="auto-note"><CircleDot size={14}/>Automatic selection remains the default</span>{/if}<CoinSortMenu value={sortOrder} onchange={(next) => (sortOrder = next)}/></div>
   </section>
   <section class="coin-filters" aria-label="Filter coins by label and provenance"><label><span>Label</span><input bind:value={labelFilter} placeholder="Filter labels" disabled={$discreetMode}/></label><label><span>Provenance</span><select bind:value={provenanceFilter}><option value="all">All sources</option><option value="known">Known</option><option value="mixed">Mixed</option><option value="unknown">Unknown</option><option value="reused">Address reused</option></select></label></section>
@@ -154,7 +158,7 @@
         <span class="coin-icon">{#if utxo.frozen}<Lock size={17}/>{:else}<CircleDot size={19}/>{/if}</span>
         <div class="coin-main">
           <div class="coin-title"><strong>{coinName(utxo)}</strong>{#if utxo.frozen}<span class="coin-status frozen">Frozen</span>{:else if utxo.provenance.state === 'mixed'}<span class="coin-status reused">Mixed provenance</span>{:else if utxo.provenance.state === 'unknown'}<span class="coin-status pending">Unknown source</span>{:else if reuse || utxo.provenance.addressReused}<span class="coin-status reused">Address reused</span>{:else if !utxo.confirmations}<span class="coin-status pending">Unconfirmed</span>{/if}</div>
-          <span>{shortSats(utxo.amount)} sats</span>
+          <span>{$discreetMode ? '••••••' : shortSats(utxo.amount)} sats</span>
         </div>
         <div class="coin-meta coin-actions-meta">
           <div class="coin-row-actions">
@@ -168,7 +172,7 @@
         </div>
         {#if expanded.includes(utxo.outpoint)}
           <div class="coin-details" transition:slide={{ duration: 180 }}>
-            <dl><div><dt>Status</dt><dd>{utxo.confirmations ? formatConfirmationCount(utxo.confirmations, $locale) : `${t('unconfirmed', $locale)} · ${t('awaitingConfirmation', $locale)}`}</dd></div><div><dt>Provenance</dt><dd>{$discreetMode ? 'Hidden in discreet mode' : utxo.provenance.state === 'unknown' ? 'Source unknown' : utxo.provenance.labels.map((label) => label.text).join(' + ') || utxo.label}{!$discreetMode && utxo.provenance.state === 'mixed' ? ' · Mixed' : ''}</dd></div><div><dt>Privacy clusters</dt><dd>{$discreetMode ? 'Hidden in discreet mode' : `${utxo.provenance.clusterCount || 'Unknown'}${utxo.provenance.addressReused ? ' · Address reused' : ''}`}</dd></div><div><dt>Address</dt><dd><code>{compactAddress(utxo.address)}</code><button aria-label="Copy address" onclick={() => copy(utxo.address, 'Address', 'bitcoin-address')}><Copy size={13}/></button></dd></div><div><dt>Outpoint</dt><dd><code>{compactAddress(utxo.outpoint, 18, 10)}</code><button aria-label="Copy outpoint" onclick={() => copy(utxo.outpoint, 'Outpoint', 'identifier')}><Copy size={13}/></button></dd></div></dl>
+            <dl><div><dt>Status</dt><dd>{utxo.confirmations ? formatConfirmationCount(utxo.confirmations, $locale) : `${t('unconfirmed', $locale)} · ${t('awaitingConfirmation', $locale)}`}</dd></div><div><dt>Provenance</dt><dd>{$discreetMode ? 'Hidden in discreet mode' : utxo.provenance.state === 'unknown' ? 'Source unknown' : utxo.provenance.labels.map((label) => label.text).join(' + ') || utxo.label}{!$discreetMode && utxo.provenance.state === 'mixed' ? ' · Mixed' : ''}</dd></div><div><dt>Privacy clusters</dt><dd>{$discreetMode ? 'Hidden in discreet mode' : `${utxo.provenance.clusterCount || 'Unknown'}${utxo.provenance.addressReused ? ' · Address reused' : ''}`}</dd></div>{#if !$discreetMode && utxo.provenance.sourceTransactionId}<div><dt>Source transaction</dt><dd><code>{compactAddress(utxo.provenance.sourceTransactionId, 18, 10)}</code></dd></div>{/if}{#if !$discreetMode && utxo.provenance.sourceIntentLabel}<div><dt>Source payment intent</dt><dd>{utxo.provenance.sourceIntentLabel.text}</dd></div>{/if}{#if !$discreetMode && utxo.provenance.context === 'change'}<div><dt>Change lineage</dt><dd>{utxo.provenance.sourceOutpoints?.length ?? 0} wallet input{(utxo.provenance.sourceOutpoints?.length ?? 0) === 1 ? '' : 's'}</dd></div>{/if}<div><dt>Address</dt><dd><code>{compactAddress(utxo.address)}</code><button aria-label="Copy address" onclick={() => copy(utxo.address, 'Address', 'bitcoin-address')}><Copy size={13}/></button></dd></div><div><dt>Outpoint</dt><dd><code>{compactAddress(utxo.outpoint, 18, 10)}</code><button aria-label="Copy outpoint" onclick={() => copy(utxo.outpoint, 'Outpoint', 'identifier')}><Copy size={13}/></button></dd></div></dl>
 					{#if reuse}
 						<div class="coin-reuse-details">
 							<div class="coin-reuse-explanation">
@@ -183,7 +187,7 @@
 								{#each linkedCoins as linkedCoin (linkedCoin.outpoint)}
 									<li>
 										<span>Linked coin</span>
-										<strong>{shortSats(linkedCoin.amount)} sats</strong>
+										<strong>{$discreetMode ? '••••••' : shortSats(linkedCoin.amount)} sats</strong>
 										<code>{compactAddress(linkedCoin.outpoint, 12, 8)}</code>
 									</li>
 								{/each}
