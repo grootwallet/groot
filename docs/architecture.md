@@ -36,6 +36,8 @@ Ledger/BitBox/Jade policy preflight uses the same exact-fingerprint and decoded-
 
 Direct hardware responses have a narrower merge boundary than imported PSBTs. After the native layer has matched the connected device to an authenticated wallet fingerprint, it requires the exact reviewed unsigned transaction, rejects externally finalized inputs, and projects only returned partial signatures onto the untouched reviewed PSBT. Vendor-normalized or omitted public metadata is discarded rather than trusted or persisted. File, text, and QR imports continue to require exact non-signature metadata equality.
 
+Local signature discard is a distinct Rust-only mutation of the canonical multisig proposal. It verifies the current PSBT, removes one authenticated wallet signer's valid partial signatures from every input, preserves the unsigned transaction, metadata, and other signatures, then atomically returns `ready` to `collecting` when the threshold is no longer met. The command binds to the exact reviewed PSBT revision. It cannot revoke signatures in exported or shared PSBT copies.
+
 Guided setup uses `recovery_policy_analyze` and `multisig_recovery_create` to compile and persist canonical WSH descriptors and timed paths. Funding and immediate-path spending are available; coordinator-assisted delayed-path satisfaction remains blocked until the funded timelock gates in ADR 0006 pass. Decaying and expanding templates remain preview-only.
 
 Commands return typed errors with stable codes. Svelte translates those into inline validation and toasts.

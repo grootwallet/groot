@@ -212,6 +212,7 @@ export class TauriWalletAdapter implements WalletPort {
   prepareMultisigAcceleration(txid: string, method: import('./contracts').AccelerationMethod, feeRate: FeeRate) { return command<MultisigProposal>('multisig_acceleration_prepare', { txid, method, feeRate }); }
   multisigProposals() { return command<MultisigProposal[]>('multisig_proposals'); }
   importMultisigProposal(proposalId: string, reviewedPsbt: string, signedPsbt: string) { return command<MultisigProposal>('multisig_proposal_import', { proposalId, reviewedPsbt, signedPsbt }); }
+  discardMultisigSignature(proposalId: string, reviewedPsbt: string, signerFingerprint: string) { return command<MultisigProposal>('multisig_proposal_discard_signature', { proposalId, reviewedPsbt, signerFingerprint }); }
   signMultisigWithHardware(proposalId: string, deviceId: string, reviewedPsbt: string) { return command<MultisigProposal>('hardware_sign_multisig', { proposalId, deviceId, reviewedPsbt }); }
   async broadcastMultisigProposal(proposalId: string, reviewedPsbt: string, credential: string) {
     const result = await command<BroadcastResult>('multisig_proposal_broadcast', { proposalId, reviewedPsbt, credential });

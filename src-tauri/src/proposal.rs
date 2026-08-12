@@ -18,6 +18,7 @@ pub enum ProposalError {
     PrematureFinalization,
     NoInputs,
     NoNewSignatures,
+    SignatureNotFound,
     MergeFailed,
 }
 
@@ -33,6 +34,7 @@ impl ProposalError {
             Self::PrematureFinalization => "premature_finalization",
             Self::NoInputs => "no_inputs",
             Self::NoNewSignatures => "no_new_signatures",
+            Self::SignatureNotFound => "signature_not_found",
             Self::MergeFailed => "psbt_merge_failed",
         }
     }
@@ -232,6 +234,67 @@ pub fn merge_signed_psbt(
         return Err(ProposalError::NoNewSignatures);
     }
     *original = combined;
+    Ok(progress)
+}
+
+/// Remove one saved signer's partial signatures from every input of Groot's
+/// canonical local PSBT. This changes only local proposal state: exported or
+/// shared copies remain valid and cannot be revoked here.
+pub fn discard_signer_signature(
+    original: &mut Psbt,
+    signer: Fingerprint,
+    allowed_fingerprints: &[Fingerprint],
+    required: usize,
+) -> Result<SignatureProgress, ProposalError> {
+    if original.inputs.is_empty() {
+        return Err(ProposalError::NoInputs);
+    }
+    if original
+        .inputs
+        .iter()
+        .any(|input| input.final_script_sig.is_some() || input.final_script_witness.is_some())
+    {
+        return Err(ProposalError::PrematureFinalization);
+    }
+    if !allowed_fingerprints.contains(&signer) {
+        return Err(ProposalError::UnknownSigner);
+    }
+
+    let previous = signature_progress(original, allowed_fingerprints, required)?;
+    if !previous
+        .signed_fingerprints
+        .iter()
+        .any(|fingerprint| fingerprint.eq_ignore_ascii_case(&signer.to_string()))
+    {
+        return Err(ProposalError::SignatureNotFound);
+    }
+
+    let mut updated = original.clone();
+    for input in &mut updated.inputs {
+        let signer_keys = input
+            .partial_sigs
+            .keys()
+            .filter(|public_key| {
+                input
+                    .bip32_derivation
+                    .get(&public_key.inner)
+                    .is_some_and(|(fingerprint, _)| *fingerprint == signer)
+            })
+            .copied()
+            .collect::<Vec<_>>();
+        if signer_keys.is_empty() {
+            return Err(ProposalError::SignatureNotFound);
+        }
+        for public_key in signer_keys {
+            input.partial_sigs.remove(&public_key);
+        }
+    }
+
+    let progress = signature_progress(&updated, allowed_fingerprints, required)?;
+    if progress.signed.checked_add(1) != Some(previous.signed) {
+        return Err(ProposalError::SignatureNotFound);
+    }
+    *original = updated;
     Ok(progress)
 }
 
@@ -489,6 +552,54 @@ mod tests {
             "no_new_signatures"
         );
         assert_eq!(original, preserved);
+    }
+
+    #[test]
+    fn discards_only_the_selected_signer_from_every_input() {
+        let (mut psbt, signers) = proposal();
+        let allowed = allowed_fingerprints(&signers);
+        sign_all_inputs(&mut psbt, &signers[0]);
+        sign_all_inputs(&mut psbt, &signers[1]);
+        let preserved_unsigned_tx = psbt.unsigned_tx.clone();
+        let preserved_metadata = psbt.inputs[0].bip32_derivation.clone();
+
+        let progress = discard_signer_signature(&mut psbt, signers[1].2, &allowed, 2).unwrap();
+
+        assert_eq!(progress.signed, 1);
+        assert!(!progress.can_finalize);
+        assert_eq!(psbt.unsigned_tx, preserved_unsigned_tx);
+        assert_eq!(psbt.inputs[0].bip32_derivation, preserved_metadata);
+        for input in &psbt.inputs {
+            assert!(input.partial_sigs.contains_key(&signers[0].1));
+            assert!(!input.partial_sigs.contains_key(&signers[1].1));
+        }
+    }
+
+    #[test]
+    fn rejects_unknown_absent_or_incomplete_signers_without_mutation() {
+        let (mut psbt, signers) = proposal();
+        let allowed = allowed_fingerprints(&signers);
+        sign_all_inputs(&mut psbt, &signers[0]);
+        let preserved = psbt.clone();
+
+        assert_eq!(
+            discard_signer_signature(&mut psbt, signer(9).2, &allowed, 2),
+            Err(ProposalError::UnknownSigner)
+        );
+        assert_eq!(psbt, preserved);
+        assert_eq!(
+            discard_signer_signature(&mut psbt, signers[1].2, &allowed, 2),
+            Err(ProposalError::SignatureNotFound)
+        );
+        assert_eq!(psbt, preserved);
+
+        sign_input(&mut psbt, 0, &signers[1]);
+        let incomplete = psbt.clone();
+        assert_eq!(
+            discard_signer_signature(&mut psbt, signers[1].2, &allowed, 2),
+            Err(ProposalError::SignatureNotFound)
+        );
+        assert_eq!(psbt, incomplete);
     }
 
     #[test]
@@ -906,6 +1017,7 @@ mod tests {
             ),
             (ProposalError::NoInputs, "no_inputs"),
             (ProposalError::NoNewSignatures, "no_new_signatures"),
+            (ProposalError::SignatureNotFound, "signature_not_found"),
             (ProposalError::MergeFailed, "psbt_merge_failed"),
         ];
         for (error, code) in cases {

@@ -678,6 +678,19 @@ export class DummyWalletAdapter implements WalletPort {
     if(!proposal.canFinalize) throw new WalletError('internal_error','Collect the required signatures first.');
     proposal.status='broadcast'; this.#balance=Math.max(0,this.#balance-Number(proposal.total)); const txid='7d4a2c7f9e317f9859d7a8566fe02d773afb09fcddb617dbda98bfba8f721234'; this.#recordFixtureBroadcast(proposalId,proposal,txid); this.#emit({type:'transaction_broadcast',txid,balance:sats(this.#balance)}); return {txid,snapshot:await this.snapshot(),syncPending:false};
   }
+  async discardMultisigSignature(proposalId:string,reviewedPsbt:string,signerFingerprint:string) {
+    const proposal=this.#multisigProposals.get(proposalId);
+    if(!proposal) throw new WalletError('proposal_not_found','Payment proposal was not found.');
+    if(proposal.psbt!==reviewedPsbt) throw new WalletError('proposal_mismatch','The proposal changed after review. Reload it before discarding a signature.');
+    const index=proposal.signedFingerprints.findIndex((fingerprint)=>fingerprint.toLowerCase()===signerFingerprint.toLowerCase());
+    if(index<0) throw new WalletError('signature_not_found','This signer has no complete signature in the current proposal. No signatures were changed.');
+    proposal.signedFingerprints.splice(index,1);
+    proposal.signed=proposal.signedFingerprints.length;
+    proposal.canFinalize=proposal.signed>=proposal.required;
+    proposal.status=proposal.canFinalize?'ready':'collecting';
+    proposal.psbt=`${proposal.psbt}:discarded-${signerFingerprint.toLowerCase()}`;
+    return structuredClone(proposal);
+  }
   async cancelMultisigProposal(proposalId:string) { const proposal=this.#multisigProposals.get(proposalId); if(!proposal) throw new WalletError('proposal_not_found','Payment proposal was not found.'); proposal.status='cancelled'; }
   async verifyMultisigAddress(deviceId:string,addressId:number){await new Promise((resolve)=>setTimeout(resolve,250));const device=(await this.listHardwareDevices()).find((item)=>item.id===deviceId&&item.status==='ready');if(!device)throw new WalletError('hardware_unavailable','Connect and unlock a wallet signer.');if(!this.#multisig?.cosigners.some((cosigner)=>cosigner.fingerprint.toLowerCase()===device.fingerprint?.toLowerCase()))throw new WalletError('unknown_signer','The connected device does not match any saved signer for this wallet.');const address=this.#addresses.find((item)=>item.id===addressId);if(!address)throw new WalletError('address_not_found','The receive address was not found.');const verified={...address,hardwareVerifiedAt:new Date().toISOString(),hardwareVerifiedBy:device.fingerprint};this.#addresses=this.#addresses.map((item)=>item.id===addressId?verified:item);return structuredClone(verified);}
   async savePsbt(suggestedFilename:string,psbt:string){const {downloadText}=await import('$lib/transfer');downloadText(suggestedFilename,psbt);return {saved:true,revealToken:'00000000-0000-4000-8000-000000000001',revealLabel:'Show in Finder'};}

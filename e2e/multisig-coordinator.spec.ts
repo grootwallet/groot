@@ -306,6 +306,24 @@ test('surfaces partial and fully signed proposals on Overview', async ({ page })
   await expect(readyProposal).toContainText('Payment ready to broadcast');
   await readyProposal.click();
   await expect(page.getByRole('button', { name: 'Finalize & broadcast' })).toBeVisible();
+
+  const discardButton = page.getByRole('button', { name: /Discard .* local signature/ }).first();
+  await discardButton.click();
+  const discardDialog = page.getByRole('dialog', { name: 'Discard local signature?' });
+  await expect(discardDialog.getByText('This does not revoke the signature.')).toBeVisible();
+  await expect(discardDialog.getByText('Any PSBT copy already exported or shared may still contain it')).toBeVisible();
+  await expect(discardDialog.getByText('2 of 2 → 1 of 2')).toBeVisible();
+  await discardDialog.getByRole('button', { name: 'Keep signature' }).click();
+  await expect(page.getByRole('button', { name: 'Finalize & broadcast' })).toBeVisible();
+
+  await discardButton.click();
+  await discardDialog.getByRole('button', { name: 'Discard local signature' }).click();
+  await expect(page.getByText('Local signature discarded', { exact: true })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Payment signers' }).getByText('1 of 2 collected')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Finalize & broadcast' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Back to overview' }).click();
+  await page.getByRole('dialog', { name: 'Leave signing?' }).getByRole('link', { name: 'Leave to overview' }).click();
+  await expect(page.getByRole('link', { name: 'Resume payment, 1 of 2 signatures collected' })).toContainText('Signing in progress');
 });
 
 test('keeps advanced wallet actions compact and makes both descriptors inspectable', async ({ page }) => {

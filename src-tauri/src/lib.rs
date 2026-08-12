@@ -112,6 +112,7 @@ pub fn run() {
             wallet::multisig_tx_prepare,
             wallet::multisig_proposals,
             wallet::multisig_proposal_import,
+            wallet::multisig_proposal_discard_signature,
             wallet::hardware_sign_multisig,
             wallet::multisig_proposal_broadcast,
             wallet::multisig_proposal_cancel,
