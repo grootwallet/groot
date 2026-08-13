@@ -138,6 +138,13 @@ code { font-family: "SFMono-Regular", Consolas, ui-monospace, monospace; }
 .eyebrow { color: var(--muted-2); font-size: 10px; font-weight: 600; letter-spacing: .14em; margin: 0; }
 .subtitle { color: var(--muted); font-size: 14px; margin: 8px 0 0; }
 .sync-button { border: 0; background: transparent; color: var(--muted); display: flex; align-items: center; gap: 7px; padding: 9px; font-size: 12px; cursor: pointer; }
+.sync-button:disabled { cursor: wait; opacity: .78; }
+.compact-filter-progress { display: grid; gap: 9px; margin: -18px 0 16px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 9px; background: var(--panel); }
+.compact-filter-progress > div { display: grid; gap: 3px; }
+.compact-filter-progress strong { color: var(--text); font-size: 11px; }
+.compact-filter-progress small { color: var(--muted); font-size: 9px; line-height: 1.45; }
+.compact-filter-progress progress { width: 100%; height: 5px; accent-color: var(--accent); }
+.compact-filter-progress.failed { border-color: color-mix(in srgb, var(--danger) 38%, var(--border)); }
 .spin { animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 

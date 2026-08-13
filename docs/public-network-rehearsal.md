@@ -34,4 +34,19 @@ Use fresh, non-sensitive test wallets and record only sanitized results:
 4. Exercise wrong-network recipient, wrong-chain Core, stale/unreachable Core, invalid credentials, fee-estimation failure, and rejected broadcast. Each must fail closed without mutating the persisted proposal.
 5. On Testnet4, additionally record RBF replacement, CPFP package confirmation, a one-block reorg, mempool restoration, and reconfirmation.
 
+## Compact-filter Issue #7 suite
+
+Run this section only after choosing the peer set and, for the adversarial cases, the Kyoto strategy recorded in [`compact-filter-deferred-work.md`](compact-filter-deferred-work.md). Compact filters remain confirmed-only; keep the separately configured Core service visible for fees, recovery, mempool-dependent operations, and broadcast.
+
+1. On Signet, select at least two independently administered peers in distinct netgroups. Record sanitized peer diversity, start/end heights, elapsed time, transferred bytes, peak memory, and local disk delta. Do not commit peer addresses.
+2. Start from a durable wallet checkpoint, restart Groot, and confirm the UI discloses and completes the pinned engine's public-filter redownload while retaining the prior verified snapshot until atomic application.
+3. Receive and confirm a payment, broadcast an outgoing transaction through Core, immediately confirm its locally persisted pending state, restart before confirmation, then confirm it and verify exact accounting.
+4. Remove one peer, stall the proxy, interrupt the app, and change networks during sync. Each failure must be bounded, retain the last verified height, and avoid direct, DNS-seed, Core, or alternate-peer fallback in manual/Tor mode.
+5. With a real loopback Tor daemon and host/network capture, prove numeric manual peers create no local DNS lookup and proxy rejection/loss creates no direct connection. Record stream-isolation behavior without identifiers.
+6. Repeat on Testnet4 and include a shallow reorg with retained transaction history and one exact re-anchor.
+7. Exercise packaged macOS suspend/resume, low-storage, retry, and restart behavior. Repeat separately on physical iOS/Android before claiming those platforms.
+8. Run the Core service matrix independently: local archival, local pruned, and authenticated remote archival. Record prune height versus wallet checkpoint, IBD, disk use, and filter-index state. Do not imply that Groot's Core RPC scan needs `blockfilterindex`.
+
+Use the Issue #7 completion gate in [`compact-filter-deferred-work.md`](compact-filter-deferred-work.md) for sign-off. A successful public smoke test does not substitute for the blocked deterministic post-handshake adversarial cases.
+
 The checklist remains blocked until the complete live suites are recorded. Successful compilation or Regtest tests are supporting evidence only, not substitutes for public-chain execution.

@@ -54,6 +54,7 @@ pub fn run() {
             wallet::wallet_unlock,
             wallet::wallet_snapshot,
             wallet::wallet_sync,
+            wallet::wallet_sync_status,
             wallet::wallet_notifications,
             wallet::wallet_notifications_ack,
             wallet::address_create,

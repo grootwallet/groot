@@ -25,7 +25,7 @@ use bdk_wallet::{
         config::DbConfig, params, Connection, OptionalExtension, Transaction as SqliteTransaction,
     },
     template::{Bip84, Bip84Public},
-    KeychainKind, PersistedWallet, SignOptions, Wallet,
+    KeychainKind, PersistedWallet, SignOptions, Update, Wallet,
 };
 use bip39::Mnemonic;
 use rand::{rngs::OsRng, RngCore};
@@ -487,6 +487,113 @@ pub struct AppState {
     recovery_scans: Mutex<HashMap<Uuid, ActiveRecoveryScan>>,
     runtime_auth_retry_at: Mutex<HashMap<Uuid, Instant>>,
     pending_policy_verifications: Mutex<HashMap<String, SignerPolicyVerificationDto>>,
+    sync_status: Arc<Mutex<Option<WalletSyncStatusDto>>>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WalletSyncStatusDto {
+    wallet_id: String,
+    source: &'static str,
+    state: &'static str,
+    progress_percent: Option<u8>,
+    chain_height: Option<u32>,
+    last_verified_height: u32,
+    connected_peers: Option<usize>,
+    required_peers: Option<usize>,
+    updated_at: u64,
+}
+
+fn set_sync_status(
+    state: &State<'_, AppState>,
+    wallet_id: Uuid,
+    source: &'static str,
+    stage: &'static str,
+    last_verified_height: u32,
+) -> ApiResult<()> {
+    *state.sync_status.lock().map_err(internal)? = Some(WalletSyncStatusDto {
+        wallet_id: wallet_id.to_string(),
+        source,
+        state: stage,
+        progress_percent: None,
+        chain_height: None,
+        last_verified_height,
+        connected_peers: None,
+        required_peers: None,
+        updated_at: now(),
+    });
+    Ok(())
+}
+
+fn update_compact_filter_sync_status(
+    status: &Arc<Mutex<Option<WalletSyncStatusDto>>>,
+    progress: crate::compact_filters::SyncProgress,
+) {
+    let Ok(mut status) = status.lock() else {
+        return;
+    };
+    let Some(current) = status.as_mut() else {
+        return;
+    };
+    if current.source != "compact_filters"
+        || !matches!(current.state, "connecting" | "syncing" | "checking_matches")
+    {
+        return;
+    }
+    current.updated_at = now();
+    match progress {
+        crate::compact_filters::SyncProgress::Connecting {
+            connected,
+            required,
+        } => {
+            current.state = "connecting";
+            current.connected_peers = Some(connected);
+            current.required_peers = Some(required);
+        }
+        crate::compact_filters::SyncProgress::Connected => {
+            current.state = "syncing";
+            current.connected_peers = None;
+            current.required_peers = None;
+        }
+        crate::compact_filters::SyncProgress::Scanning {
+            percent,
+            chain_height,
+        } => {
+            current.state = "syncing";
+            current.progress_percent = Some(percent.round().clamp(0.0, 100.0) as u8);
+            current.chain_height = Some(chain_height);
+        }
+        crate::compact_filters::SyncProgress::CheckingMatch => {
+            current.state = "checking_matches";
+        }
+        crate::compact_filters::SyncProgress::Degraded => {
+            current.state = "connecting";
+        }
+    }
+}
+
+fn finish_sync_status(
+    state: &State<'_, AppState>,
+    wallet_id: Uuid,
+    result: &ApiResult<WalletSnapshotDto>,
+    verified_height: u32,
+) {
+    let Ok(mut status) = state.sync_status.lock() else {
+        return;
+    };
+    let Some(current) = status.as_mut() else {
+        return;
+    };
+    if current.wallet_id != wallet_id.to_string() {
+        return;
+    }
+    current.state = if result.is_ok() {
+        "completed"
+    } else {
+        "failed"
+    };
+    current.last_verified_height = verified_height;
+    current.updated_at = now();
 }
 
 struct ActiveRecoveryScan {
@@ -785,6 +892,11 @@ pub struct NodeStatusDto {
     connected: bool,
     blocks: u64,
     backend: CoreNodeConfig,
+    pruned: bool,
+    prune_height: Option<u64>,
+    initial_block_download: bool,
+    size_on_disk: u64,
+    block_filter_index: &'static str,
 }
 
 #[tauri::command]
@@ -1871,6 +1983,42 @@ fn checked_chain_identity(client: &Client) -> ApiResult<(u64, BlockHash)> {
 
 fn checked_block_height(client: &Client) -> ApiResult<u64> {
     checked_chain_identity(client).map(|(height, _)| height)
+}
+
+fn checked_node_status(client: &Client, backend: CoreNodeConfig) -> ApiResult<NodeStatusDto> {
+    let info = client
+        .get_blockchain_info()
+        .map_err(|error| api_error("network_unavailable", error))?;
+    ensure_expected_network(info.chain)?;
+    let observed_genesis = client
+        .get_block_hash(0)
+        .map_err(|error| api_error("network_unavailable", error))?;
+    ensure_expected_genesis(NETWORK, observed_genesis)?;
+    let block_filter_index = match client.get_index_info() {
+        Ok(indexes) => indexes
+            .basic_block_filter_index
+            .map_or(
+                "disabled",
+                |index| {
+                    if index.synced {
+                        "synced"
+                    } else {
+                        "building"
+                    }
+                },
+            ),
+        Err(_) => "unknown",
+    };
+    Ok(NodeStatusDto {
+        connected: true,
+        blocks: info.blocks,
+        backend,
+        pruned: info.pruned,
+        prune_height: info.prune_height,
+        initial_block_download: info.initial_block_download,
+        size_on_disk: info.size_on_disk,
+        block_filter_index,
+    })
 }
 
 fn ensure_expected_network(network: Network) -> ApiResult<()> {
@@ -3739,14 +3887,20 @@ fn record_replacement(
     .map_err(internal)
 }
 
+fn apply_locally_broadcast_transaction(wallet: &mut Wallet, transaction: &Transaction) {
+    wallet.apply_unconfirmed_txs([(transaction.clone(), now())]);
+}
+
 fn commit_multisig_broadcast(
     db: &mut Connection,
-    wallet: &Wallet,
+    transaction: &Transaction,
     proposal_id: &str,
     txid: &Txid,
     synced_at: Option<String>,
 ) -> ApiResult<WalletSnapshotDto> {
-    let persisted = db.transaction().map_err(internal)?;
+    let mut persisted = db.transaction().map_err(internal)?;
+    let mut wallet = load_wallet_transaction(&mut persisted)?;
+    apply_locally_broadcast_transaction(&mut wallet, transaction);
     let changed = persisted
         .execute(
             "UPDATE groot_proposals SET status = 'broadcast', txid = ?1 WHERE proposal_id = ?2 AND status IN ('collecting','ready')",
@@ -3762,7 +3916,7 @@ fn commit_multisig_broadcast(
     label_provenance::bind_broadcast_transaction(&persisted, proposal_id, &txid.to_string(), now())
         .map_err(internal)?;
     record_replacement(&persisted, proposal_id, txid)?;
-    let snapshot = snapshot_from(wallet, &persisted, synced_at, true)?;
+    let snapshot = snapshot_from(&wallet, &persisted, synced_at, true)?;
     notifications::enqueue(
         &persisted,
         &WalletNotification::TransactionBroadcast {
@@ -3772,6 +3926,8 @@ fn commit_multisig_broadcast(
         now(),
     )
     .map_err(internal)?;
+    wallet.persist(&mut persisted).map_err(internal)?;
+    drop(wallet);
     persisted.commit().map_err(internal)?;
     Ok(snapshot)
 }
@@ -4101,9 +4257,41 @@ fn sync_wallet_atomically(
     match read_sync_source(app)? {
         WalletSyncSource::BitcoinCore => sync_wallet_with_core(app, state, db, multisig),
         source @ WalletSyncSource::CompactFilters { .. } => {
-            sync_wallet_with_compact_filters(app, db, multisig, &source)
+            sync_wallet_with_compact_filters(app, state, db, multisig, &source)
         }
     }
+}
+
+fn sync_wallet_with_status(
+    app: &AppHandle,
+    state: &State<'_, AppState>,
+    db: &mut Connection,
+    multisig: bool,
+    wallet_id: Uuid,
+) -> ApiResult<WalletSnapshotDto> {
+    let source = read_sync_source(app)?;
+    let last_verified_height = load_wallet(db)?.latest_checkpoint().height();
+    let (source_name, initial_state) = match source {
+        WalletSyncSource::BitcoinCore => ("bitcoin_core", "syncing"),
+        WalletSyncSource::CompactFilters { .. } => ("compact_filters", "connecting"),
+    };
+    set_sync_status(
+        state,
+        wallet_id,
+        source_name,
+        initial_state,
+        last_verified_height,
+    )?;
+    let result = sync_wallet_atomically(app, state, db, multisig);
+    let verified_height = if result.is_ok() {
+        load_wallet(db)
+            .map(|wallet| wallet.latest_checkpoint().height())
+            .unwrap_or(last_verified_height)
+    } else {
+        last_verified_height
+    };
+    finish_sync_status(state, wallet_id, &result, verified_height);
+    result
 }
 
 fn sync_wallet_with_core(
@@ -4145,6 +4333,7 @@ fn sync_wallet_with_core(
 
 fn sync_wallet_with_compact_filters(
     app: &AppHandle,
+    state: &State<'_, AppState>,
     db: &mut Connection,
     multisig: bool,
     source: &WalletSyncSource,
@@ -4154,16 +4343,68 @@ fn sync_wallet_with_compact_filters(
         .map_err(network_config_api_error)?
         .ok_or_else(|| internal("The compact-filter sync source was not selected."))?;
     let cache_dir = compact_filter_cache_dir(app)?;
+    let wallet = load_wallet(db)?;
+    let status = Arc::clone(&state.sync_status);
+    let update = crate::compact_filters::sync_with_progress(
+        &wallet,
+        NETWORK,
+        &cache_dir,
+        &config,
+        move |progress| update_compact_filter_sync_status(&status, progress),
+    )
+    .map_err(|error| api_error("network_unavailable", error))?;
+    drop(wallet);
+    if let Ok(mut status) = state.sync_status.lock() {
+        if let Some(current) = status.as_mut() {
+            current.state = "applying";
+            current.progress_percent = Some(100);
+            current.updated_at = now();
+        }
+    }
+    apply_compact_filter_update(db, multisig, update)
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum CompactFilterCommitStage {
+    UpdateApplied,
+    AddressesMarked,
+    ProvenanceReconciled,
+    SnapshotBuilt,
+    NotificationsEnqueued,
+    WalletPersisted,
+}
+
+fn apply_compact_filter_update(
+    db: &mut Connection,
+    multisig: bool,
+    update: Update,
+) -> ApiResult<WalletSnapshotDto> {
+    apply_compact_filter_update_with_hook(db, multisig, update, |_| Ok(()))
+}
+
+fn apply_compact_filter_update_with_hook<F>(
+    db: &mut Connection,
+    multisig: bool,
+    update: Update,
+    mut after_stage: F,
+) -> ApiResult<WalletSnapshotDto>
+where
+    F: FnMut(CompactFilterCommitStage) -> ApiResult<()>,
+{
     let mut transaction = db.transaction().map_err(internal)?;
     let mut wallet = load_wallet_transaction(&mut transaction)?;
-    let update = crate::compact_filters::sync(&wallet, NETWORK, &cache_dir, &config)
-        .map_err(|error| api_error("network_unavailable", error))?;
     wallet.apply_update(update).map_err(internal)?;
+    after_stage(CompactFilterCommitStage::UpdateApplied)?;
     mark_observed_addresses(&wallet, &transaction)?;
+    after_stage(CompactFilterCommitStage::AddressesMarked)?;
     label_provenance::reconcile_wallet_outputs(&wallet, &transaction, now()).map_err(internal)?;
+    after_stage(CompactFilterCommitStage::ProvenanceReconciled)?;
     let snapshot = snapshot_from(&wallet, &transaction, Some(now().to_string()), multisig)?;
+    after_stage(CompactFilterCommitStage::SnapshotBuilt)?;
     enqueue_snapshot_notifications(&transaction, &snapshot)?;
+    after_stage(CompactFilterCommitStage::NotificationsEnqueued)?;
     wallet.persist(&mut transaction).map_err(internal)?;
+    after_stage(CompactFilterCommitStage::WalletPersisted)?;
     drop(wallet);
     transaction.commit().map_err(internal)?;
     Ok(snapshot)
@@ -5082,9 +5323,22 @@ pub fn wallet_snapshot(app: AppHandle, state: State<'_, AppState>) -> ApiResult<
 #[tauri::command]
 pub fn wallet_sync(app: AppHandle, state: State<'_, AppState>) -> ApiResult<WalletSnapshotDto> {
     let _operation = operation_guard(&state)?;
-    require_unlocked_for_background_sync(&app, &state)?;
+    let wallet_id = require_unlocked_for_background_sync(&app, &state)?;
     let mut db = open_db(&app)?;
-    sync_wallet_atomically(&app, &state, &mut db, false)
+    sync_wallet_with_status(&app, &state, &mut db, false, wallet_id)
+}
+
+#[tauri::command]
+pub fn wallet_sync_status(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> ApiResult<Option<WalletSyncStatusDto>> {
+    let wallet_id = selected_profile(&app)?.id.to_string();
+    let status = state.sync_status.lock().map_err(internal)?;
+    Ok(status
+        .as_ref()
+        .filter(|status| status.wallet_id == wallet_id)
+        .cloned())
 }
 
 #[tauri::command]
@@ -5592,7 +5846,10 @@ pub fn node_config_save(
         }
         _ => {}
     }
-    let blocks = checked_block_height(&candidate_rpc_client(&config, password.as_str())?)?;
+    let status = checked_node_status(
+        &candidate_rpc_client(&config, password.as_str())?,
+        config.clone(),
+    )?;
     if config.auth == RpcAuthMode::UserPass {
         secure_store::store(
             &node_secret_path(&app)?,
@@ -5608,21 +5865,12 @@ pub fn node_config_save(
     }
     write_private_json(&node_config_path(&app)?, &config)?;
     load_node_auth_session(&app, &state, credential.as_str())?;
-    Ok(NodeStatusDto {
-        connected: true,
-        blocks,
-        backend: config,
-    })
+    Ok(status)
 }
 
 fn node_test(app: &AppHandle, state: &State<'_, AppState>) -> ApiResult<NodeStatusDto> {
     let config = read_node_config(app)?;
-    let blocks = checked_block_height(&rpc_client(app, state)?)?;
-    Ok(NodeStatusDto {
-        connected: true,
-        blocks,
-        backend: config,
-    })
+    checked_node_status(&rpc_client(app, state)?, config)
 }
 
 #[tauri::command]
@@ -6504,8 +6752,9 @@ pub fn external_signer_proposal_broadcast(
     }
     let transaction = psbt.extract_tx().map_err(internal)?;
     let txid = broadcast_transaction(&app, &state, &transaction)?;
-    let wallet = load_wallet(&mut db)?;
-    let persisted = db.transaction().map_err(internal)?;
+    let mut persisted = db.transaction().map_err(internal)?;
+    let mut wallet = load_wallet_transaction(&mut persisted)?;
+    apply_locally_broadcast_transaction(&mut wallet, &transaction);
     let changed = persisted.execute(
         "UPDATE groot_proposals SET status = 'broadcast', txid = ?1 WHERE proposal_id = ?2 AND status = 'ready'",
         params![txid.to_string(), proposal_id],
@@ -6534,8 +6783,9 @@ pub fn external_signer_proposal_broadcast(
         now(),
     )
     .map_err(internal)?;
-    persisted.commit().map_err(internal)?;
+    wallet.persist(&mut persisted).map_err(internal)?;
     drop(wallet);
+    persisted.commit().map_err(internal)?;
     let (snapshot, sync_pending) = match sync_wallet_atomically(&app, &state, &mut db, false) {
         Ok(snapshot) => (snapshot, false),
         Err(_) => (snapshot, true),
@@ -7287,9 +7537,9 @@ pub fn multisig_snapshot(
 #[tauri::command]
 pub fn multisig_sync(app: AppHandle, state: State<'_, AppState>) -> ApiResult<WalletSnapshotDto> {
     let _operation = operation_guard(&state)?;
-    require_unlocked_for_background_sync(&app, &state)?;
+    let wallet_id = require_unlocked_for_background_sync(&app, &state)?;
     let mut db = open_multisig_db(&app)?;
-    sync_wallet_atomically(&app, &state, &mut db, true)
+    sync_wallet_with_status(&app, &state, &mut db, true, wallet_id)
 }
 
 #[tauri::command]
@@ -7950,9 +8200,7 @@ pub fn multisig_proposal_broadcast(
     let transaction =
         finalized_multisig_proposal_transaction(&mut db, &metadata, &proposal_id, &reviewed_psbt)?;
     let txid = broadcast_transaction(&app, &state, &transaction)?;
-    let wallet = load_wallet(&mut db)?;
-    let snapshot = commit_multisig_broadcast(&mut db, &wallet, &proposal_id, &txid, None)?;
-    drop(wallet);
+    let snapshot = commit_multisig_broadcast(&mut db, &transaction, &proposal_id, &txid, None)?;
     let (snapshot, sync_pending) = match sync_wallet_atomically(&app, &state, &mut db, true) {
         Ok(snapshot) => (snapshot, false),
         Err(_) => (snapshot, true),
@@ -8792,7 +9040,10 @@ pub fn tx_sign_and_broadcast(
     }
     let transaction = proposal.psbt.extract_tx().map_err(internal)?;
     let txid = broadcast_transaction(&app, &state, &transaction)?;
-    let persisted = db.transaction().map_err(internal)?;
+    drop(wallet);
+    let mut persisted = db.transaction().map_err(internal)?;
+    let mut wallet = load_wallet_transaction(&mut persisted)?;
+    apply_locally_broadcast_transaction(&mut wallet, &transaction);
     let changed = persisted
         .execute(
             "UPDATE groot_proposals SET status = 'broadcast', txid = ?1 WHERE proposal_id = ?2 AND status = 'collecting'",
@@ -8823,8 +9074,9 @@ pub fn tx_sign_and_broadcast(
         now(),
     )
     .map_err(internal)?;
-    persisted.commit().map_err(internal)?;
+    wallet.persist(&mut persisted).map_err(internal)?;
     drop(wallet);
+    persisted.commit().map_err(internal)?;
     let (snapshot, sync_pending) = match sync_wallet_atomically(&app, &state, &mut db, false) {
         Ok(snapshot) => (snapshot, false),
         Err(_) => (snapshot, true),
@@ -10797,7 +11049,7 @@ mod tests {
 
     #[test]
     fn synced_snapshots_enqueue_received_and_first_confirmation_events_once() {
-        let db = Connection::open_in_memory().unwrap();
+        let mut db = Connection::open_in_memory().unwrap();
         init_app_schema(&db).unwrap();
         let transaction = |id: &str, direction: &str, confirmations: u32| TransactionDto {
             id: id.repeat(64),
@@ -10868,6 +11120,101 @@ mod tests {
                 .count(),
             1
         );
+
+        let ids = events.iter().map(|event| event.id).collect::<Vec<_>>();
+        notifications::acknowledge(&mut db, &ids).unwrap();
+        snapshot.transactions[0].confirmations = 0;
+        snapshot.transactions[0].status = "pending".to_owned();
+        enqueue_snapshot_notifications(&db, &snapshot).unwrap();
+        assert!(
+            notifications::pending(&db).unwrap().is_empty(),
+            "a reorg retains history without creating a new receipt notification"
+        );
+        snapshot.transactions[0].confirmations = 1;
+        snapshot.transactions[0].status = "confirmed".to_owned();
+        enqueue_snapshot_notifications(&db, &snapshot).unwrap();
+        assert!(
+            notifications::pending(&db).unwrap().is_empty(),
+            "re-anchoring a previously confirmed transaction does not duplicate its confirmation"
+        );
+        assert_eq!(
+            snapshot
+                .transactions
+                .iter()
+                .filter(|tx| tx.id == "a".repeat(64))
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn compact_filter_update_and_app_metadata_roll_back_at_every_commit_stage() {
+        let directory =
+            std::env::temp_dir().join(format!("groot-compact-filter-atomic-{}", Uuid::new_v4()));
+        fs::create_dir_all(&directory).unwrap();
+        let database = directory.join("wallet.sqlite");
+        let mut db = Connection::open(&database).unwrap();
+        init_app_schema(&db).unwrap();
+        let mnemonic = Mnemonic::parse(WORDS).unwrap();
+        let (external, internal) = watch_templates(&mnemonic, "atomic compact filters").unwrap();
+        let wallet = Wallet::create(external, internal)
+            .network(NETWORK)
+            .create_wallet(&mut db)
+            .unwrap();
+        let original_tip = wallet.latest_checkpoint();
+        let next_tip = original_tip
+            .clone()
+            .push(BlockId {
+                height: 1,
+                hash: BlockHash::from_byte_array([42_u8; 32]),
+            })
+            .unwrap();
+        let update = Update {
+            chain: Some(next_tip),
+            ..Update::default()
+        };
+        drop(wallet);
+
+        for failed_stage in [
+            CompactFilterCommitStage::UpdateApplied,
+            CompactFilterCommitStage::AddressesMarked,
+            CompactFilterCommitStage::ProvenanceReconciled,
+            CompactFilterCommitStage::SnapshotBuilt,
+            CompactFilterCommitStage::NotificationsEnqueued,
+            CompactFilterCommitStage::WalletPersisted,
+        ] {
+            let result =
+                apply_compact_filter_update_with_hook(&mut db, false, update.clone(), |stage| {
+                    if stage == failed_stage {
+                        Err(api_error("injected_failure", "commit fault injection"))
+                    } else {
+                        Ok(())
+                    }
+                });
+            let error = match result {
+                Err(error) => error,
+                Ok(_) => panic!("the selected commit stage must fail"),
+            };
+            assert_eq!(error.code, "injected_failure");
+            drop(db);
+            db = Connection::open(&database).unwrap();
+            init_app_schema(&db).unwrap();
+            let restarted = load_wallet(&mut db).unwrap();
+            assert_eq!(restarted.latest_checkpoint(), original_tip);
+            drop(restarted);
+            assert!(!notifications::history_initialized(&db).unwrap());
+        }
+
+        apply_compact_filter_update(&mut db, false, update).unwrap();
+        drop(db);
+        let mut restarted_db = Connection::open(&database).unwrap();
+        init_app_schema(&restarted_db).unwrap();
+        let restarted = load_wallet(&mut restarted_db).unwrap();
+        assert_eq!(restarted.latest_checkpoint().height(), 1);
+        drop(restarted);
+        assert!(notifications::history_initialized(&restarted_db).unwrap());
+        drop(restarted_db);
+        fs::remove_dir_all(directory).unwrap();
     }
 
     #[test]
@@ -11162,6 +11509,122 @@ mod tests {
             "malformed_psbt"
         );
         fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn locally_broadcast_transaction_is_pending_after_database_restart() {
+        use bdk_wallet::bitcoin::{
+            absolute::LockTime, hashes::Hash, transaction::Version, ScriptBuf, Sequence, TxOut,
+            Witness,
+        };
+
+        let directory =
+            std::env::temp_dir().join(format!("groot-local-broadcast-{}", Uuid::new_v4()));
+        fs::create_dir_all(&directory).unwrap();
+        let path = directory.join("wallet.sqlite");
+        let mnemonic = Mnemonic::parse(WORDS).unwrap();
+        let master = root_key(&mnemonic, "test passphrase").unwrap();
+        let mut db = Connection::open(&path).unwrap();
+        init_app_schema(&db).unwrap();
+        let mut wallet = Wallet::create(
+            Bip84(master, KeychainKind::External),
+            Bip84(master, KeychainKind::Internal),
+        )
+        .network(Network::Regtest)
+        .create_wallet(&mut db)
+        .unwrap();
+        let receive = wallet.reveal_next_address(KeychainKind::External);
+        let funding = Transaction {
+            version: Version::TWO,
+            lock_time: LockTime::ZERO,
+            input: vec![TxIn {
+                previous_output: OutPoint::new(Txid::from_byte_array([9; 32]), 0),
+                script_sig: ScriptBuf::new(),
+                sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
+                witness: Witness::new(),
+            }],
+            output: vec![TxOut {
+                value: Amount::from_sat(100_000),
+                script_pubkey: receive.address.script_pubkey(),
+            }],
+        };
+        let funding_txid = funding.compute_txid();
+        wallet.apply_unconfirmed_txs([(funding, 1)]);
+        wallet.persist(&mut db).unwrap();
+        drop(wallet);
+
+        let outgoing = Transaction {
+            version: Version::TWO,
+            lock_time: LockTime::ZERO,
+            input: vec![TxIn {
+                previous_output: OutPoint::new(funding_txid, 0),
+                script_sig: ScriptBuf::new(),
+                sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
+                witness: Witness::new(),
+            }],
+            output: vec![TxOut {
+                value: Amount::from_sat(99_000),
+                script_pubkey: ScriptBuf::new(),
+            }],
+        };
+        let outgoing_txid = outgoing.compute_txid();
+        let mut persisted = db.transaction().unwrap();
+        let mut wallet = load_wallet_transaction(&mut persisted).unwrap();
+        apply_locally_broadcast_transaction(&mut wallet, &outgoing);
+        wallet.persist(&mut persisted).unwrap();
+        drop(wallet);
+        persisted.commit().unwrap();
+        drop(db);
+
+        let mut restarted = Connection::open(&path).unwrap();
+        init_app_schema(&restarted).unwrap();
+        let wallet = load_wallet(&mut restarted).unwrap();
+        let outgoing = wallet.get_tx(outgoing_txid).expect("outgoing transaction");
+        assert!(outgoing.chain_position.is_unconfirmed());
+        assert_eq!(wallet.balance().total(), Amount::ZERO);
+        drop(wallet);
+        drop(restarted);
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn compact_filter_progress_dto_is_sanitized_and_bounded() {
+        let status = Arc::new(Mutex::new(Some(WalletSyncStatusDto {
+            wallet_id: Uuid::nil().to_string(),
+            source: "compact_filters",
+            state: "connecting",
+            progress_percent: None,
+            chain_height: None,
+            last_verified_height: 42,
+            connected_peers: None,
+            required_peers: None,
+            updated_at: 1,
+        })));
+        update_compact_filter_sync_status(
+            &status,
+            crate::compact_filters::SyncProgress::Connecting {
+                connected: 1,
+                required: 2,
+            },
+        );
+        update_compact_filter_sync_status(
+            &status,
+            crate::compact_filters::SyncProgress::Scanning {
+                percent: 150.0,
+                chain_height: 123,
+            },
+        );
+        let status = status.lock().unwrap().clone().unwrap();
+        assert_eq!(status.state, "syncing");
+        assert_eq!(status.progress_percent, Some(100));
+        assert_eq!(status.chain_height, Some(123));
+        assert_eq!(status.last_verified_height, 42);
+        let serialized = serde_json::to_value(status).unwrap();
+        let object = serialized.as_object().unwrap();
+        assert_eq!(object.len(), 9);
+        for forbidden in ["address", "hash", "script", "descriptor", "warning"] {
+            assert!(!object.keys().any(|key| key.contains(forbidden)));
+        }
     }
 
     #[test]
