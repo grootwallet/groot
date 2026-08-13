@@ -59,7 +59,9 @@ done < <(find src-tauri/src -maxdepth 1 -type f -name '*.rs' | sort)
 echo "Enforcing deterministic Rust core: ${core_modules[*]}"
 echo "Reporting adapters separately through whole-library coverage: ${adapter_modules[*]}"
 
-adapter_pattern="src/(airgap|compact_filters|direct_rpc|hardware|label_provenance|lib|main|native_backup|network|process_lock|registry|secure_store|tor_rpc|wallet)\\.rs$"
+# Nested files under `wallet/` and `native_backup/` are extracted pieces of
+# those already-classified orchestration/platform adapters, not new core scope.
+adapter_pattern="src/(airgap|compact_filters|direct_rpc|hardware|label_provenance|lib|main|native_backup|network|process_lock|registry|secure_store|tor_rpc|wallet)(\\.rs|/.*\\.rs)$"
 cargo llvm-cov \
   --locked \
   --manifest-path src-tauri/Cargo.toml \

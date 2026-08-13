@@ -1,3 +1,9 @@
+use super::multisig_proposal_commands::{
+    finalized_multisig_proposal_transaction, import_multisig_proposal_in_db,
+};
+use super::transaction_commands::{
+    prepare_persisted_multisig_acceleration, validate_acceleration_rate,
+};
 use super::*;
 use crate::multisig::{CosignerInput, CosignerSource, MULTISIG_ACCOUNT_PATH};
 use bdk_bitcoind_rpc::bitcoincore_rpc::jsonrpc;

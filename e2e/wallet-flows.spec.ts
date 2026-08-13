@@ -1,7 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
 
-const recoveryWords = 'adapt cactus lesson motor acoustic globe ribbon pluck vessel deputy crisp fossil harbor pencil drift copper museum twelve gentle oak fabric north silent width';
-
 async function confirmGeneratedBackup(page: Page) {
   const words = await page.locator('.mnemonic-grid strong').allTextContents();
   expect(words).toHaveLength(24);
@@ -158,15 +156,14 @@ test('optional physical entropy entry is bounded and cleared after generation', 
   await expect(generate).toBeDisabled();
 });
 
-test('recovers exactly 24 words and unlock rejects the wrong credential', async ({ page }) => {
+test('keeps recovery words out of the webview and unlock rejects the wrong credential', async ({ page }) => {
   await page.goto('/welcome?fixture-empty=1');
   await page.getByRole('button', { name: 'Recover software wallet' }).click();
-  await page.getByLabel('Recovery words').fill(recoveryWords.split(' ').slice(0, 23).join(' '));
+  await expect(page.getByLabel('Recovery words')).toHaveCount(0);
   await page.getByLabel('Wallet passphrase', { exact: true }).fill('prototype-passphrase');
-  await expect(page.getByRole('button', { name: 'Recover wallet' })).toBeDisabled();
-  await page.getByLabel('Recovery words').fill(recoveryWords);
-  await page.getByRole('button', { name: 'Recover wallet' }).click();
-  await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible();
+  await page.getByRole('button', { name: 'Enter recovery words securely' }).click();
+  await expect(page.getByText(/native recovery window/)).toBeVisible();
+  await expect(page.getByLabel('Wallet passphrase', { exact: true })).toHaveValue('');
 
   await page.goto('/unlock');
   await expect(page.getByRole('link', { name: 'Overview' })).toHaveCount(0);

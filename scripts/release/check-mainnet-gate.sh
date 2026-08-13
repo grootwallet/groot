@@ -38,9 +38,9 @@ contains_fixed "ensure_runtime_network_enabled(NETWORK)" src-tauri/src/wallet.rs
   || fail "wallet databases are no longer guarded before opening"
 contains_fixed "backend.validate().is_err()" src-tauri/src/release_policy.rs \
   || fail "the first-mainnet local-Core policy no longer revalidates its loopback endpoint"
-contains_fixed ".estimate_smart_fee(blocks, Some(mode))" src-tauri/src/wallet.rs \
+contains_fixed ".estimate_smart_fee(blocks, Some(mode))" src-tauri/src/wallet/profile_commands.rs \
   || fail "public-network fees no longer come from the configured Bitcoin Core node"
-contains_fixed "if IS_REGTEST" src-tauri/src/wallet.rs \
+contains_fixed "if IS_REGTEST" src-tauri/src/wallet/profile_commands.rs \
   || fail "the deterministic fee policy is no longer visibly confined to Regtest"
 reject_fixed "estimates?.economy ?? 1" src/routes/send/+page.svelte \
   "the send flow silently restored a fallback economy fee"

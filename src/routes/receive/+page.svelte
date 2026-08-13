@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { Check, ChevronDown, ChevronRight, Copy, Cpu, Plus, QrCode, ShieldCheck, Trash2 } from '@lucide/svelte';
+  import { Check, ChevronDown, ChevronRight, Copy, Plus, QrCode, Trash2 } from '@lucide/svelte';
   import QRCode from 'qrcode';
-  import { onDestroy, onMount, tick } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import Button from '$lib/components/Button.svelte';
   import FieldCounter from '$lib/components/FieldCounter.svelte';
   import Modal from '$lib/components/Modal.svelte';
@@ -9,13 +9,9 @@
   import AddressDetailsModal from '$lib/components/AddressDetailsModal.svelte';
   import LocalTimestamp from '$lib/components/LocalTimestamp.svelte';
   import HardwareVerificationStatus from '$lib/components/HardwareVerificationStatus.svelte';
-  import HardwareActionPrompt from '$lib/components/HardwareActionPrompt.svelte';
-  import HardwareAddressComparison from '$lib/components/HardwareAddressComparison.svelte';
-  import HardwareDeviceEmptyState from '$lib/components/HardwareDeviceEmptyState.svelte';
-  import TrezorPinModal from '$lib/components/TrezorPinModal.svelte';
+  import HardwareReceiveVerification from '$lib/components/HardwareReceiveVerification.svelte';
   import { compactAddress } from '$lib/address-display';
-  import { hardwareAddressComparison } from '$lib/wallet/hardware-display';
-  import { walletService, WalletError, type HardwareDevice, type WalletErrorCode } from '$lib/wallet';
+  import { walletService } from '$lib/wallet';
   import { useWalletShellContext } from '$lib/wallet/shell-context';
   import { awaitingPaymentAddresses } from '$lib/wallet/policy';
   import type { ReceiveAddress } from '$lib/types';
@@ -38,11 +34,6 @@
   let savedSignerDeviceType = $state<string | null>(null);
   const walletShell=useWalletShellContext();
   let externalSigner=$derived(walletShell.profiles().find((profile)=>profile.id===walletShell.selectedWalletId())?.kind==='watch_only');
-  let verifyOpen=$state(false),verifyBusy=$state(false),verifyError=$state(''),devices=$state<HardwareDevice[]>([]),verificationDevice=$state<HardwareDevice|null>(null);
-  let pinOpen=$state(false),pinBusy=$state(false),pinChallenge=$state(''),pinPositions=$state(''),pinError=$state(''),pinErrorCode=$state<WalletErrorCode|''>(''),pinDevice=$state<HardwareDevice|null>(null);
-  let verificationAction=$state<'scan'|'approve'>('scan');
-  let verificationDeviceIdentity=$derived(`${savedSignerDeviceType ?? ''} ${verificationDevice?.label ?? ''} ${verificationDevice?.model ?? ''}`);
-  let verificationComparison=$derived(current ? hardwareAddressComparison(current.address, current.testnetAlias, verificationDeviceIdentity) : null);
   let awaiting = $derived(awaitingPaymentAddresses(addresses));
   let history = $derived(addresses.filter((address) => address.status !== 'awaiting'));
   onMount(load);
@@ -50,7 +41,6 @@
     if (event.type !== 'wallet_updated' || event.walletKind !== 'single_key' || event.walletId !== walletShell.selectedWalletId()) return;
     applyAddresses(event.snapshot.receiveAddresses);
   }));
-  onDestroy(() => { pinPositions=''; pinChallenge=''; });
   $effect(() => {
     const address = current?.address;
     const generation = ++qrGeneration;
@@ -96,11 +86,6 @@
     try { await copyText(current.address, 'bitcoin-address'); copied = true; toast({ title: 'Address copied', tone: 'success' }); setTimeout(() => copied = false, 1500); }
     catch { toast({ title: 'Copy failed', description: 'Select and copy the address manually.', tone: 'danger' }); }
   };
-  const copyVerificationAddress = async () => {
-    if (!verificationComparison) return;
-    try { await copyText(verificationComparison.address, 'bitcoin-address'); copied = true; toast({ title: 'Address copied', description: 'The exact comparison address is on your clipboard.', tone: 'success' }); setTimeout(() => copied = false, 1500); }
-    catch { toast({ title: 'Copy failed', description: 'Select and copy the address manually.', tone: 'danger' }); }
-  };
   const discard = async () => {
     if (!discardTarget) return;
     busy = true;
@@ -114,11 +99,10 @@
     finally { busy = false; }
   };
   const requestDiscard = (address: ReceiveAddress) => { discardTarget = address; showDiscard = true; };
-  async function scanVerification(){if(!current)return;verifyOpen=true;verificationAction='scan';verifyBusy=true;verifyError='';verificationDevice=null;try{devices=await walletService.listHardwareDevices();}catch(cause){devices=[];verifyError=cause instanceof Error?cause.message:'Could not scan hardware.';}finally{verifyBusy=false;}}
-  async function handleVerificationDevice(device:HardwareDevice){if(device.action==='prompt_pin'){await startHardwarePin(device);return;}if(device.action==='retry'){await scanVerification();return;}if(device.action==='none'){verifyError=device.message;return;}await verifyAddress(device);}
-  async function startHardwarePin(device:HardwareDevice){const retrying=pinOpen;verifyBusy=true;pinBusy=retrying;verifyError='';pinError='';pinErrorCode='';pinPositions='';try{pinChallenge=await walletService.promptHardwarePin(device.id);pinDevice=device;verifyOpen=false;pinOpen=true;}catch(cause){const message=cause instanceof Error?cause.message:'Could not start the PIN matrix.';if(retrying){pinErrorCode=cause instanceof WalletError?cause.code:'internal_error';pinError=message;}else verifyError=message;}finally{verifyBusy=false;pinBusy=false;}}
-  async function submitHardwarePin(){if(!pinChallenge||!pinPositions||pinBusy)return;pinBusy=true;pinError='';pinErrorCode='';let positions=pinPositions;pinPositions='';try{await walletService.sendHardwarePin(pinChallenge,positions);pinChallenge='';pinOpen=false;pinDevice=null;toast({title:'Hardware wallet unlocked',description:'Scanning again so you can verify the unchanged address.',tone:'success'});await scanVerification();}catch(cause){pinChallenge='';pinErrorCode=cause instanceof WalletError?cause.code:'internal_error';pinError=cause instanceof Error?cause.message:'Trezor did not accept that matrix entry.';}finally{positions='';pinBusy=false;}}
-  async function verifyAddress(device:HardwareDevice){if(!current)return;verificationDevice=device;verificationAction='approve';verifyBusy=true;verifyError='';try{const verified=await walletService.verifyExternalAddress(device.id,current.id);addresses=addresses.map((address)=>address.id===verified.id?verified:address);current=verified;verifyOpen=false;toast({title:'Address verified',description:'The verification time was saved with this address.',tone:'success'});}catch(cause){verifyError=cause instanceof Error?cause.message:'The device could not verify this address.';}finally{verifyBusy=false;}}
+  function applyVerifiedAddress(verified: ReceiveAddress) {
+    addresses = addresses.map((address) => address.id === verified.id ? verified : address);
+    if (current?.id === verified.id) current = verified;
+  }
 </script>
 
 <div class="page narrow-page receive-page">
@@ -128,7 +112,7 @@
       <button class="qr-placeholder qr-button" aria-label="Enlarge QR code" onclick={() => showQr = true}>{#if qrDataUrl}<img src={qrDataUrl} alt="QR code for {current.address}" />{:else}<QrCode size={154} strokeWidth={1.2} /><span>Generating QR…</span>{/if}</button>
       <div class="address-label"><span>{current.label}</span>{#if externalSigner}{#if current.hardwareVerifiedAt}<HardwareVerificationStatus/>{:else}<small>Not verified</small>{/if}{:else}<small>Awaiting payment</small>{/if}</div>
       <button class="address-box" onclick={copy}><code>{current.address}</code>{#if copied}<Check size={17} />{:else}<Copy size={17} />{/if}</button>
-      <div class="receive-actions"><Button variant="secondary" onclick={copy}><Copy size={16} />Copy address</Button>{#if externalSigner}<Button variant="secondary" onclick={scanVerification}>{#if current.hardwareVerifiedAt}<ShieldCheck size={16}/>{:else}<Cpu size={16}/>{/if}{current.hardwareVerifiedAt?'Verify again':'Verify on device'}</Button>{/if}<Button variant="ghost-danger" onclick={() => requestDiscard(current!)}><Trash2 size={16} />Discard</Button></div>
+      <div class="receive-actions"><Button variant="secondary" onclick={copy}><Copy size={16} />Copy address</Button>{#if externalSigner}<HardwareReceiveVerification address={current} walletKind="single_key" savedDeviceIdentity={savedSignerDeviceType} onverified={applyVerifiedAddress}/>{/if}<Button variant="ghost-danger" onclick={() => requestDiscard(current!)}><Trash2 size={16} />Discard</Button></div>
       <button class="insight-toggle" onclick={() => showDetails = !showDetails} aria-expanded={showDetails}>{showDetails ? 'Hide' : 'Show'} address details <ChevronDown size={14} class={showDetails ? 'rotated' : ''}/></button>
       {#if showDetails}<dl class="optional-details"><div><dt>Derivation</dt><dd><code>{current.derivationPath}</code></dd></div><div><dt>Type</dt><dd>Native SegWit · BIP84</dd></div>{#if current.hardwareVerifiedAt}<div><dt>Hardware verified</dt><dd><LocalTimestamp value={current.hardwareVerifiedAt}/></dd></div>{/if}{#if current.hardwareVerifiedBy}<div><dt>Signer fingerprint</dt><dd><code>{current.hardwareVerifiedBy}</code></dd></div>{/if}</dl>{/if}
       {#if externalSigner && !current.hardwareVerifiedAt}<p class="privacy-note">Verify on the saved hardware signer before sharing this address.</p>{:else if !externalSigner}<p class="privacy-note">Only an unused address awaiting payment can be discarded. Used addresses remain in your history.</p>{/if}
@@ -170,32 +154,3 @@
   <div class="warning-box">Discarded addresses remain monitored.</div>
   <div class="modal-footer"><Button variant="secondary" onclick={() => { showDiscard = false; discardTarget = null; }}>Keep address</Button><Button variant="danger" loading={busy} loadingLabel="Discarding…" onclick={discard}>Discard address</Button></div>
 </Modal>
-<Modal open={verifyOpen} preserveTop title="Verify receive address" description={verificationComparison?.deviceName ? `${verificationComparison.deviceName} displays the Regtest output with a testnet prefix. Compare the exact address below.` : "Compare the exact address below with the complete address on your signer's trusted display."} onclose={()=>{if(!verifyBusy)verifyOpen=false;}}>
-  {#if current && verificationComparison}<HardwareAddressComparison comparison={verificationComparison} derivationPath={current.derivationPath} addressIndex={current.id} {copied} oncopy={copyVerificationAddress}/>{/if}
-  {#if verifyBusy}
-    <HardwareActionPrompt title={verificationAction === 'approve' ? 'Check your hardware device' : 'Looking for your saved signer'} detail={verificationAction === 'approve' ? 'Compare the complete address above, then approve it on the device.' : 'Keep the signer connected and unlocked while Groot matches its saved identity.'} label={verificationAction === 'approve' ? 'Waiting for hardware approval' : 'Hardware device scan in progress'}/>
-  {:else}
-    {#if devices.length}
-      <div class="source-list hardware-device-list">{#each devices as device}<button disabled={device.action==='none'} onclick={()=>handleVerificationDevice(device)}><Cpu size={18}/><span><strong>{device.label}</strong><small>{device.fingerprint??device.message}</small><em class:ready={device.status==='ready'||device.status==='detected'} class:attention={device.action==='prompt_pin'||device.action==='confirm_empty_passphrase'}>{device.action==='prompt_pin'?'Unlock':device.action==='confirm_empty_passphrase'?'Standard wallet':device.action==='retry'?'Scan again':device.status==='ready'||device.status==='detected'?'Ready':'Unavailable'}</em></span>{#if device.action!=='none'}<ChevronRight size={15}/>{/if}</button>{/each}</div>
-      <Button class="verification-rescan" variant="secondary" onclick={scanVerification}>Scan again</Button>
-    {:else}
-      <HardwareDeviceEmptyState title="Saved signer not found" description="Connect and unlock this wallet’s hardware signer, then scan again." onretry={scanVerification}/>
-    {/if}
-  {/if}
-  {#if verifyError}<p class="form-error" role="alert">{verifyError}</p>{/if}
-</Modal>
-<TrezorPinModal
-  open={pinOpen}
-  busy={pinBusy}
-  challengeReady={Boolean(pinChallenge)}
-  positions={pinPositions}
-  device={pinDevice}
-  errorCode={pinErrorCode}
-  error={pinError}
-  onappend={(position)=>pinPositions+=position}
-  ondelete={()=>pinPositions=pinPositions.slice(0,-1)}
-  onclear={()=>pinPositions=''}
-  onsubmit={submitHardwarePin}
-  onretry={()=>{if(pinDevice)startHardwarePin(pinDevice);}}
-  onclose={()=>{pinOpen=false;pinPositions='';pinChallenge='';pinDevice=null;pinError='';pinErrorCode='';verifyOpen=true;}}
-/>
