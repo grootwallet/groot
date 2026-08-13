@@ -185,6 +185,8 @@ Passport Core uses QR or microSD. Trezor Model One host passphrase entry is unav
 4. On wallet overview startup, compact-filter mode shows sanitized connection/scan/apply progress. Failure leaves the prior balance visible and names the last verified block height. In the pinned engine, public filters are memory-only and download again after app restart; wallet checkpoints and history remain in SQLite.
 5. Test Core authentication and availability separately. Groot reports full/pruned history, prune height, IBD, disk use, and filter-index state. Core RPC activity sync does not require `blockfilterindex`; a pruned node must retain all blocks needed after the wallet checkpoint. A compact-filter refresh fails visibly if its selected peers cannot reach a verified tip.
 
+The later recovery, durable-cache, direct-P2P-broadcast, adversarial-peer, public-network, and platform work is explicitly gated by [`compact-filter-deferred-work.md`](compact-filter-deferred-work.md). None is an implicit fallback from this flow.
+
 Payjoin V2 BIP21 requests are parsed and network-checked only inside Rust. Until ADR 0031's encrypted-session, transport, fresh-review, fallback-consent, and interoperability gates are met, Groot does not advertise or initiate Payjoin sessions.
 
 ## Sort coins

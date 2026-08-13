@@ -11,6 +11,7 @@ Assess whether the exact candidate commit is safe enough to enter a limited, har
 - HWI process isolation, device identity, address display, signature merging, cable/file/UR transports, and hostile-device behavior.
 - SQLite/filesystem atomicity, corruption, symlink, race, restart and migration behavior.
 - Bitcoin Core local/direct-TLS/Tor authentication, chain identity, timeout, fallback and privacy behavior.
+- The optional compact-filter boundary and its unresolved Kyoto, peer-conflict/eclipse, durable-cache, recovery, broadcast, Tor, public-network, and lifecycle gates in [`compact-filter-deferred-work.md`](compact-filter-deferred-work.md).
 - Svelte/Tauri IPC exposure, CSP/capabilities, clipboard/camera/file handling, accessibility and secret lifetime.
 - Locked dependencies, build scripts, CI permissions, unsigned reproducibility, signing/notarization and update design.
 
