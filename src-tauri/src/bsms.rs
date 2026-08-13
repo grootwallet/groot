@@ -434,6 +434,42 @@ mod tests {
     }
 
     #[test]
+    fn descriptor_text_rejects_malformed_bounded_and_ambiguous_inputs() {
+        let (external, _) = descriptors();
+        assert_eq!(
+            PublicDescriptorPair::parse("not a descriptor"),
+            Err(BsmsError::InvalidDescriptor)
+        );
+        assert_eq!(
+            PublicDescriptorPair::parse(&"x".repeat(MAX_BSMS_BYTES + 1)),
+            Err(BsmsError::TooLarge)
+        );
+        assert_eq!(
+            PublicDescriptorPair::parse("wsh(\u{0}invalid)"),
+            Err(BsmsError::InvalidEncoding)
+        );
+
+        let fixed_path = strip_checksum(&external).replace("/0/*", "/0/0");
+        let fixed_path = Descriptor::<DescriptorPublicKey>::from_str(&fixed_path)
+            .unwrap()
+            .to_string();
+        assert_eq!(
+            PublicDescriptorPair::parse(&fixed_path),
+            Err(BsmsError::UnsupportedPaths)
+        );
+
+        let conflicting = Descriptor::<DescriptorPublicKey>::from_str(
+            &strip_checksum(&external).replace("sortedmulti(2", "sortedmulti(3"),
+        )
+        .unwrap()
+        .to_string();
+        assert_eq!(
+            PublicDescriptorPair::parse(&format!("{external}\n{conflicting}\n")),
+            Err(BsmsError::DescriptorMismatch)
+        );
+    }
+
+    #[test]
     fn descriptor_identity_ignores_checksums_but_not_policy_changes() {
         let (external, internal) = descriptors();
         let address = first_address(&external, &internal);

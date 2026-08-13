@@ -537,6 +537,45 @@ mod tests {
     }
 
     #[test]
+    fn hardware_response_rejects_conflicting_review_metadata() {
+        let (original, _) = proposal();
+
+        let mut non_witness = original.clone();
+        non_witness.inputs[0].non_witness_utxo = Some(unsigned_tx(7));
+        let mut reviewed_non_witness = original.clone();
+        reviewed_non_witness.inputs[0].non_witness_utxo = Some(unsigned_tx(6));
+        assert_eq!(
+            hardware_signature_response(&reviewed_non_witness, non_witness),
+            Err(ProposalError::ProposalMismatch)
+        );
+
+        let mut sighash = original.clone();
+        sighash.inputs[0].sighash_type = Some(EcdsaSighashType::Single.into());
+        let mut reviewed_sighash = original.clone();
+        reviewed_sighash.inputs[0].sighash_type = Some(EcdsaSighashType::All.into());
+        assert_eq!(
+            hardware_signature_response(&reviewed_sighash, sighash),
+            Err(ProposalError::ProposalMismatch)
+        );
+
+        let mut redeem = original.clone();
+        redeem.inputs[0].redeem_script = Some(ScriptBuf::from_bytes(vec![0x52]));
+        let mut reviewed_redeem = original.clone();
+        reviewed_redeem.inputs[0].redeem_script = Some(ScriptBuf::from_bytes(vec![0x51]));
+        assert_eq!(
+            hardware_signature_response(&reviewed_redeem, redeem),
+            Err(ProposalError::ProposalMismatch)
+        );
+
+        let mut witness = original.clone();
+        witness.inputs[0].witness_script = Some(ScriptBuf::from_bytes(vec![0x51]));
+        assert_eq!(
+            hardware_signature_response(&original, witness),
+            Err(ProposalError::ProposalMismatch)
+        );
+    }
+
+    #[test]
     fn rejects_duplicate_or_incomplete_signatures_without_mutating_the_proposal() {
         let (mut original, signers) = proposal();
         let allowed = signers.iter().map(|signer| signer.2).collect::<Vec<_>>();
@@ -634,6 +673,20 @@ mod tests {
             "unknown_signer"
         );
 
+        let mut unknown_progress = original.clone();
+        for input in &mut unknown_progress.inputs {
+            input
+                .bip32_derivation
+                .get_mut(&signers[0].1.inner)
+                .unwrap()
+                .0 = signer(9).2;
+        }
+        sign_all_inputs(&mut unknown_progress, &signers[0]);
+        assert_eq!(
+            signature_progress(&unknown_progress, &allowed, 2),
+            Err(ProposalError::UnknownSigner)
+        );
+
         let mut unsupported = original.clone();
         sign_all_inputs(&mut unsupported, &signers[0]);
         unsupported.inputs[0]
@@ -646,6 +699,17 @@ mod tests {
                 .unwrap_err()
                 .code(),
             "unsupported_sighash"
+        );
+        let mut unsupported_progress = original.clone();
+        sign_all_inputs(&mut unsupported_progress, &signers[0]);
+        unsupported_progress.inputs[0]
+            .partial_sigs
+            .get_mut(&signers[0].1)
+            .unwrap()
+            .sighash_type = EcdsaSighashType::Single;
+        assert_eq!(
+            signature_progress(&unsupported_progress, &allowed, 2),
+            Err(ProposalError::UnsupportedSighash)
         );
 
         let mut finalized = original.clone();
@@ -1060,6 +1124,23 @@ mod tests {
         assert_eq!(
             signature_progress(&empty, &[], 1).unwrap_err().code(),
             "no_inputs"
+        );
+        let mut empty_for_discard = empty.clone();
+        assert_eq!(
+            discard_signer_signature(&mut empty_for_discard, signer(1).2, &[], 1),
+            Err(ProposalError::NoInputs)
+        );
+
+        let (mut finalized, signers) = proposal();
+        finalized.inputs[0].final_script_witness = Some(Witness::new());
+        assert_eq!(
+            discard_signer_signature(
+                &mut finalized,
+                signers[0].2,
+                &allowed_fingerprints(&signers),
+                2,
+            ),
+            Err(ProposalError::PrematureFinalization)
         );
     }
 
