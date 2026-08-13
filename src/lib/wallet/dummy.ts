@@ -15,6 +15,7 @@ import {
 } from './dummy-state';
 
 export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
+  private multisigSetupDraftValue: import('./contracts').MultisigSetupDraft | null = null;
   async exists() { return this._exists; }
   async profiles() { return { version: 1, selectedWalletId: this._selectedWalletId, wallets: structuredClone(this._profiles), inactivityTimeoutMinutes: this._inactivityTimeoutMinutes }; }
   async renameWallet(name: string) {
@@ -110,6 +111,12 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     }
     this._selectedWalletId = this._profiles[0]?.id ?? null; this._exists = this._profiles.length > 0; this._proposals.clear();
   }
+  async multisigSetupDraft() { return structuredClone(this.multisigSetupDraftValue); }
+  async saveMultisigSetupDraft(draft: import('./contracts').MultisigSetupDraft) {
+    this.multisigSetupDraftValue = structuredClone({ ...draft, version: 1, updatedAt: Math.floor(Date.now() / 1000) });
+    return structuredClone(this.multisigSetupDraftValue);
+  }
+  async discardMultisigSetupDraft() { this.multisigSetupDraftValue = null; }
   async nodeConfig() { return structuredClone(this._nodeConfig); }
   async saveNodeConfig(config: CoreNodeConfig, password: string, credential: string) {
     if (!this._selectedWalletId || credential !== this._credentials.get(this._selectedWalletId)) throw new WalletError('invalid_credential', 'Incorrect app PIN.');
@@ -494,6 +501,7 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     if (this._multisigProfileId) { this._profiles = this._profiles.filter((wallet) => wallet.id !== this._multisigProfileId); this._credentials.delete(this._multisigProfileId); this._unlockedWalletIds.delete(this._multisigProfileId); }
     const profile = { id: crypto.randomUUID(), name: this._multisig.name, network: defaultConfig.network, kind: 'multisig' as const, descriptorChecksum: 'multisig', createdAt: Date.now(), backupVerified: true };
     this._profiles.push(profile); this._multisigProfileId = profile.id; this._selectedWalletId = profile.id; this._credentials.set(profile.id, credential); this._unlockedWalletIds.add(profile.id); this._exists = true;
+    this.multisigSetupDraftValue = null;
     return structuredClone(this._multisig);
   }
 
@@ -506,6 +514,7 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     if (this._multisigProfileId) { this._profiles = this._profiles.filter((wallet) => wallet.id !== this._multisigProfileId); this._credentials.delete(this._multisigProfileId); this._unlockedWalletIds.delete(this._multisigProfileId); }
     const profile = { id: crypto.randomUUID(), name: this._multisig.name, network: defaultConfig.network, kind: 'multisig' as const, descriptorChecksum: 'recovery', createdAt: Date.now(), backupVerified: true };
     this._profiles.push(profile); this._multisigProfileId = profile.id; this._selectedWalletId = profile.id; this._credentials.set(profile.id, credential); this._unlockedWalletIds.add(profile.id); this._exists = true;
+    this.multisigSetupDraftValue = null;
     return structuredClone(this._multisig);
   }
 

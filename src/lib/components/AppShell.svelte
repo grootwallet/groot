@@ -7,6 +7,7 @@
   import NetworkStatus from './NetworkStatus.svelte';
   import ThemeToggle from './ThemeToggle.svelte';
   import DiscreetModeToggle from './DiscreetModeToggle.svelte';
+  import ResumeSetupNotice from './ResumeSetupNotice.svelte';
   import { defaultConfig } from '$lib/config';
   import { onMount } from 'svelte';
   import { afterNavigate, goto } from '$app/navigation';
@@ -14,9 +15,10 @@
   import { createLiveSync, type LiveSyncController } from '$lib/wallet/live-sync';
   import { toast } from '$lib/stores/toasts';
   import { shortSats } from '$lib/data';
-  import type { WalletProfile } from '$lib/wallet/contracts';
+  import type { MultisigSetupDraft, WalletProfile } from '$lib/wallet/contracts';
   import { formatWalletCount, locale, t, type MessageKey } from '$lib/i18n';
   import { provideWalletShellContext } from '$lib/wallet/shell-context';
+  import { multisigSetupSignerTarget, multisigSetupStageLabel } from '$lib/wallet/multisig-setup';
   let { children } = $props();
   const nav: Array<{ href: string; label: MessageKey; icon: typeof LayoutGrid }> = [
     { href: '/', label: 'overview', icon: LayoutGrid },
@@ -28,6 +30,7 @@
   const active = (href: string) => href === '/multisig' ? page.url.pathname === href || page.url.pathname.startsWith('/multisig/policy') || page.url.pathname.startsWith('/multisig/backup') : page.url.pathname === href;
   let profiles = $state<WalletProfile[]>([]);
   let selectedWalletId = $state<string | null>(null);
+  let multisigSetupDraft = $state<MultisigSetupDraft | null>(null);
   let liveSync: LiveSyncController | undefined;
   let selectedProfile = $derived(profiles.find((wallet) => wallet.id === selectedWalletId));
   let policyContext = $derived(selectedProfile?.kind === 'multisig' || page.url.pathname.startsWith('/multisig'));
@@ -38,6 +41,13 @@
   const showQuickActions = $derived(!lockedRoute && (page.url.pathname === '/' || page.url.pathname === '/coins'));
   const receiveHref = $derived(selectedProfile?.kind === 'multisig' ? '/multisig/receive' : '/receive');
   const sendHref = $derived(selectedProfile?.kind === 'multisig' ? '/multisig/send' : '/send');
+  const showSetupResume = $derived(Boolean(multisigSetupDraft) && !onboardingRoute && !lockedRoute);
+
+  async function refreshSetupDraft() {
+    try {
+      multisigSetupDraft = await walletService.multisigSetupDraft();
+    } catch { /* Keep the last known notice visible across transient read failures. */ }
+  }
 
   async function refreshProfiles() {
     try {
@@ -52,6 +62,7 @@
 
   afterNavigate(() => {
     void refreshProfiles();
+    void refreshSetupDraft();
     if (!liveSync || isPrototypeWallet) return;
     if (onboardingRoute || lockedRoute) liveSync.stop();
     else liveSync.start();
@@ -94,6 +105,7 @@
     document.addEventListener('visibilitychange', wakeWhenVisible);
     void (async () => {
       try {
+        await refreshSetupDraft();
         if (!await walletService.exists()) { await goto('/welcome'); return; }
         const registry = await walletService.profiles();
         profiles = registry.wallets;
@@ -140,6 +152,13 @@
 
   <main class="main">
     {#if isPrototypeWallet}<div class="demo-banner" role="status"><strong>Interactive prototype</strong><span>Dummy data only · Never use real funds or recovery words</span></div>{/if}
+    {#if showSetupResume && multisigSetupDraft}
+      <ResumeSetupNotice
+        title={multisigSetupDraft.name.trim() || 'Multisig wallet setup'}
+        detail={`${multisigSetupStageLabel(multisigSetupDraft.stage)} · ${multisigSetupDraft.cosigners.length} of ${multisigSetupSignerTarget(multisigSetupDraft)} signers added`}
+        href="/multisig/new"
+      />
+    {/if}
     {#key selectedWalletId}
       {@render children?.()}
     {/key}

@@ -47,6 +47,8 @@ Desktop navigation lists wallet profiles directly instead of hiding them in a na
 
 “Wallet” is the top-level user concept. A wallet can use one software key, one external hardware key, a shared threshold policy, or a reviewed recovery/inheritance policy. “Vault” is not a separate account container. Every selected wallet exposes the same Overview, Activity, and Coins information architecture; policy wallets additionally expose Policy for signing keys, backup, and spending-path controls.
 
+An unfinished multisig setup is one resumable local draft. Groot atomically persists only public policy material and progress: wallet name, template, threshold, signer labels/fingerprints/account xpubs, current step, descriptor-backup acknowledgement, and descriptor-bound hardware-policy evidence. App PINs, hardware credentials, device paths, PIN challenges, and transient modal state are never persisted. On startup, the unlocked app shell shows a durable unfinished-wallet notice with the saved step and a direct resume action. Reopening creation restores the last valid step and re-derives the authoritative descriptor preview in Rust. The user may move backward or forward without losing imported signers, or explicitly discard the draft after confirmation. Successful wallet creation clears it.
+
 ### Recover
 
 1. Accept exactly 24 valid BIP39 words and the original wallet passphrase.

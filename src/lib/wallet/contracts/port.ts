@@ -1,7 +1,7 @@
 import type { ReceiveAddress } from "$lib/types";
 import type { CosignerDraft, PolicyDraft } from "$lib/multisig/policy";
 import type { HardwareDevice, ExternalSigner, ExternalSignerBackup, ExternalSignerSource, ExternalSignerWallet, CosignerHealthCheck, PolicyVerificationAddress, SavedFileResult, SignerPolicyVerification } from "./hardware";
-import type { MultisigPreview, MultisigProposal, MultisigWallet, RecoveryDrill, RecoveryPolicyAnalysis, RecoveryTemplate } from "./multisig";
+import type { MultisigPreview, MultisigProposal, MultisigSetupDraft, MultisigWallet, RecoveryDrill, RecoveryPolicyAnalysis, RecoveryTemplate } from "./multisig";
 import type { CoreNodeConfig, MnemonicPresentation, NodeStatus, PayjoinUriInspection, RecoveryScanSettings, RecoveryScanStatus, SupplementalEntropyInput, WalletEvent, WalletProfile, WalletRegistry, WalletSyncSource, WalletSyncStatus } from "./runtime";
 import type { AccelerationMethod, BroadcastResult, CoinSelection, CoinSelectionPreview, FeeEstimates, FeeRate, PaymentProposal, Sats, WalletSnapshot } from "./transactions";
 
@@ -84,6 +84,9 @@ export interface WalletHardwarePort {
 }
 
 export interface WalletMultisigPort {
+  multisigSetupDraft(): Promise<MultisigSetupDraft | null>;
+  saveMultisigSetupDraft(draft: MultisigSetupDraft): Promise<MultisigSetupDraft>;
+  discardMultisigSetupDraft(): Promise<void>;
   previewMultisig(policy: PolicyDraft): Promise<MultisigPreview>;
   analyzeRecoveryPolicy(template: RecoveryTemplate, cosigners: CosignerDraft[]): Promise<RecoveryPolicyAnalysis>;
   createMultisig(policy: PolicyDraft, credential: string): Promise<MultisigWallet>;

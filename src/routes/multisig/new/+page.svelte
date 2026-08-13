@@ -1,7 +1,7 @@
 <script lang="ts">
   import { AlertTriangle, ArrowLeft, Check, ChevronDown, ChevronRight, CircleHelp, Clock3, Copy, Cpu, Download, FileKey, FileUp, Plus, RefreshCw, ShieldCheck, Trash2, Usb, Users } from '@lucide/svelte';
   import { goto } from '$app/navigation';
-  import { onDestroy } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import Button from '$lib/components/Button.svelte';
   import FieldCounter from '$lib/components/FieldCounter.svelte';
   import HardwareActionPrompt from '$lib/components/HardwareActionPrompt.svelte';
@@ -14,10 +14,11 @@
   import TrezorPinModal from '$lib/components/TrezorPinModal.svelte';
   import SignerPolicyReview from '$lib/components/SignerPolicyReview.svelte';
   import { toast } from '$lib/stores/toasts';
-  import { walletService, WalletError, type CosignerHealthCheck, type HardwareDevice, type MultisigPreview, type PolicyVerificationAddress, type RecoveryTemplate, type SavedFileResult, type SignerPolicyVerification, type WalletErrorCode } from '$lib/wallet';
+  import { walletService, WalletError, type CosignerHealthCheck, type HardwareDevice, type MultisigPreview, type MultisigSetupDraft, type PolicyVerificationAddress, type RecoveryTemplate, type SavedFileResult, type SignerPolicyVerification, type WalletErrorCode } from '$lib/wallet';
   import { MULTISIG_ACCOUNT_PATH, validatePolicyDraft, type CosignerDraft, type CosignerSource } from '$lib/multisig/policy';
   import { copyText } from '$lib/clipboard';
   import { combineDescriptorBranches } from '$lib/descriptors';
+  import { isMeaningfulMultisigSetupDraft, multisigSetupSignerTarget } from '$lib/wallet/multisig-setup';
   import { coldcardPolicyFilename, readTransferFile, safeTransferFilename } from '$lib/transfer';
   import { parsePublicCosignerFile } from '$lib/multisig/cosigner-import';
   import { mergeHardwareDiscovery } from '$lib/hardware/discovery';
@@ -86,7 +87,16 @@
   let backupError = $state('');
   const creationStep = $derived(stage === 'policy' ? 1 : stage === 'keys' ? 2 : stage === 'review' ? 3 : 4);
   let reviewAttempted = $state(false);
+  let draftReady = $state(false);
+  let hasDraft = $state(false);
+  let discardDraftOpen = $state(false);
+  let discardingDraft = $state(false);
+  let draftSaveError = $state('');
   let hardwareScanGeneration = 0;
+  let queuedDraft: MultisigSetupDraft | null = null;
+  let draftSaveRunning = false;
+  let draftRetryTimer: number | null = null;
+  let lastDraftFingerprint = '';
   const policy = $derived({ name, threshold, cosigners });
   const standardCosignerCount = $derived(standardRecipe === '2of3' ? 3 : standardRecipe === '3of5' ? 5 : customCosignerCount);
   const requiredKeys = $derived(templateKind === 'standard' ? standardCosignerCount : 4);
@@ -121,7 +131,174 @@
   const interactivePolicyStep = $derived(coldcardRegistrationRequired ? 3 : 2);
   const pinStep = $derived(1 + (coldcardRegistrationRequired ? 1 : 0) + (interactivePolicySigners.length ? 1 : 0) + 1);
 
-  onDestroy(() => { credential = ''; confirmation = ''; pinPositions = ''; pinChallenge = ''; hardwareScanGeneration += 1; });
+  function recipeForDraft(): MultisigSetupDraft['standardRecipe'] {
+    return standardRecipe === '2of3' ? 'two_of_three' : standardRecipe === '3of5' ? 'three_of_five' : 'custom';
+  }
+
+  function recipeFromDraft(value: MultisigSetupDraft['standardRecipe']): typeof standardRecipe {
+    return value === 'two_of_three' ? '2of3' : value === 'three_of_five' ? '3of5' : 'custom';
+  }
+
+  function currentSetupDraft(): MultisigSetupDraft {
+    return {
+      version: 1,
+      stage,
+      templateKind,
+      standardRecipe: recipeForDraft(),
+      customCosignerCount,
+      name,
+      threshold,
+      cosigners: cosigners.map((cosigner) => ({ ...cosigner })),
+      descriptorSaved: saved,
+      coldcardRegistered,
+      policyVerificationDeferred,
+      policyVerifications: draftPolicyVerifications.flatMap((verification) => verification.displayedAddress ? [{
+        signerFingerprint: verification.signerFingerprint,
+        deviceType: verification.deviceType,
+        verifiedAt: verification.verifiedAt,
+        displayedAddress: verification.displayedAddress
+      }] : []),
+      updatedAt: 0
+    };
+  }
+
+  async function drainDraftSaveQueue() {
+    if (draftSaveRunning) return;
+    draftSaveRunning = true;
+    while (queuedDraft) {
+      const next = queuedDraft;
+      queuedDraft = null;
+      try {
+        await walletService.saveMultisigSetupDraft(next);
+        if (draftRetryTimer) window.clearTimeout(draftRetryTimer);
+        draftRetryTimer = null;
+        hasDraft = true;
+        draftSaveError = '';
+      } catch (cause) {
+        draftSaveError = cause instanceof Error ? cause.message : 'Setup progress could not be saved.';
+        if (!queuedDraft && !discardingDraft) {
+          if (draftRetryTimer) window.clearTimeout(draftRetryTimer);
+          draftRetryTimer = window.setTimeout(() => {
+            draftRetryTimer = null;
+            queueDraftSave(next);
+          }, 3_000);
+        }
+      }
+    }
+    draftSaveRunning = false;
+  }
+
+  function queueDraftSave(draft: MultisigSetupDraft) {
+    if (draftRetryTimer) window.clearTimeout(draftRetryTimer);
+    draftRetryTimer = null;
+    queuedDraft = draft;
+    void drainDraftSaveQueue();
+  }
+
+  async function previewRestoredDraft(draft: MultisigSetupDraft) {
+    if (draft.cosigners.length !== multisigSetupSignerTarget(draft)) return;
+    if (draft.templateKind === 'standard') {
+      [preview, policyAddress] = await Promise.all([
+        walletService.previewMultisig({ name: draft.name, threshold: draft.threshold, cosigners: draft.cosigners }),
+        walletService.previewMultisigPolicyVerificationAddress({ name: draft.name, threshold: draft.threshold, cosigners: draft.cosigners })
+      ]);
+      return;
+    }
+    const restoredTemplate: RecoveryTemplate = {
+      type: 'recovery',
+      immediate: { threshold: 2, signerIds: draft.cosigners.slice(0, 3).map((key) => key.id) },
+      recovery: { threshold: 1, signerIds: [draft.cosigners[3].id], availableAfterBlocks: draft.templateKind === 'inheritance' ? 52_560 : 4_320 }
+    };
+    const analysis = await walletService.analyzeRecoveryPolicy(restoredTemplate, draft.cosigners);
+    preview = { name: draft.name, threshold: 2, cosigners: draft.cosigners, externalDescriptor: analysis.externalDescriptor, internalDescriptor: analysis.internalDescriptor };
+  }
+
+  function applySetupDraft(draft: MultisigSetupDraft) {
+    name = draft.name;
+    threshold = draft.threshold;
+    cosigners = draft.cosigners.map((cosigner) => ({ ...cosigner }));
+    stage = draft.stage;
+    templateKind = draft.templateKind;
+    standardRecipe = recipeFromDraft(draft.standardRecipe);
+    customCosignerCount = draft.customCosignerCount;
+    saved = draft.descriptorSaved;
+    coldcardRegistered = draft.coldcardRegistered;
+    policyVerificationDeferred = draft.policyVerificationDeferred;
+    draftPolicyVerifications = draft.policyVerifications.map((verification) => ({
+      ...verification,
+      scope: 'policy_and_address',
+      displayedAddress: verification.displayedAddress
+    }));
+  }
+
+  function resetSetupState() {
+    name = '';
+    threshold = 2;
+    cosigners = [];
+    stage = 'policy';
+    templateKind = 'standard';
+    standardRecipe = '2of3';
+    customCosignerCount = 3;
+    saved = false;
+    coldcardRegistered = false;
+    draftPolicyVerifications = [];
+    policyVerificationDeferred = false;
+    preview = null;
+    policyAddress = null;
+    credential = '';
+    confirmation = '';
+    error = '';
+    draftSaveError = '';
+  }
+
+  async function discardSetupDraft() {
+    if (discardingDraft) return;
+    discardingDraft = true;
+    queuedDraft = null;
+    if (draftRetryTimer) window.clearTimeout(draftRetryTimer);
+    draftRetryTimer = null;
+    try {
+      await walletService.discardMultisigSetupDraft();
+      lastDraftFingerprint = '';
+      hasDraft = false;
+      discardDraftOpen = false;
+      resetSetupState();
+      toast({ title: 'Setup discarded', description: 'The saved public multisig draft was removed.', tone: 'success' });
+    } catch (cause) {
+      draftSaveError = cause instanceof Error ? cause.message : 'The saved setup could not be discarded.';
+    } finally {
+      discardingDraft = false;
+    }
+  }
+
+  onMount(async () => {
+    try {
+      const draft = await walletService.multisigSetupDraft();
+      if (draft) {
+        applySetupDraft(draft);
+        await previewRestoredDraft(draft);
+        hasDraft = true;
+        toast({ title: 'Multisig setup resumed', description: `Returned to ${draft.stage === 'keys' ? 'Signers' : draft.stage === 'review' ? 'Verify' : draft.stage === 'backup' ? 'Back up' : 'Policy'}.`, tone: 'success' });
+      }
+    } catch (cause) {
+      hasDraft = true;
+      draftSaveError = cause instanceof Error ? cause.message : 'Saved setup progress could not be loaded.';
+    } finally {
+      draftReady = true;
+    }
+  });
+
+  $effect(() => {
+    if (!draftReady || discardingDraft) return;
+    const draft = currentSetupDraft();
+    if (!isMeaningfulMultisigSetupDraft(draft)) return;
+    const fingerprint = JSON.stringify(draft);
+    if (fingerprint === lastDraftFingerprint) return;
+    lastDraftFingerprint = fingerprint;
+    queueDraftSave(draft);
+  });
+
+  onDestroy(() => { if (draftRetryTimer) window.clearTimeout(draftRetryTimer); credential = ''; confirmation = ''; pinPositions = ''; pinChallenge = ''; hardwareScanGeneration += 1; });
 
   function signerLanguage(value: string) {
     return value.replaceAll('cosigners', 'signers').replaceAll('cosigner', 'signer');
@@ -439,6 +616,8 @@
     try {
       if (recoveryTemplate) await walletService.createRecoveryMultisig(name, recoveryTemplate, cosigners, credential);
       else await walletService.createMultisig(policy, credential);
+      try { await walletService.discardMultisigSetupDraft(); hasDraft = false; }
+      catch { toast({ title: 'Setup reminder could not be cleared', description: 'The wallet was created safely. Discard the stale setup reminder before starting another multisig wallet.', tone: 'danger' }); }
       if (coldcardRegistered) {
         for (const signer of cosigners.filter((item) => policyReadinessKind(item) === 'coldcard')) {
           try { await walletService.acknowledgeColdcardPolicy(signer.fingerprint); }
@@ -455,11 +634,14 @@
 <div class="page coordinator-page">
   <header class="page-header">
     <div><p class="eyebrow">WALLET POLICY</p><h1>Create a policy wallet</h1><p class="subtitle">Choose a simple shared policy or add a separate delayed recovery key.</p></div>
-    <div class="page-header-actions">{#if stage === 'policy'}<a class="secondary-link" href="/multisig/recover" aria-label="Recover from backup"><FileUp size={15}/>Recover</a>{/if}<span class="network-chip">Regtest · Native SegWit</span></div>
+    <div class="page-header-actions">{#if hasDraft}<Button variant="ghost-danger" size="small" onclick={() => discardDraftOpen = true}><Trash2 size={14}/>Discard setup</Button>{/if}{#if stage === 'policy'}<a class="secondary-link" href="/multisig/recover" aria-label="Recover from backup"><FileUp size={15}/>Recover</a>{/if}<span class="network-chip">Regtest · Native SegWit</span></div>
   </header>
   <SetupProgress steps={creationSteps} current={creationStep} label="Wallet creation progress"/>
+  {#if draftSaveError}<div class="warning-box danger" role="alert"><AlertTriangle size={16}/><strong>Setup progress is not safely saved.</strong><span>{draftSaveError}</span></div>{/if}
 
-  {#if stage === 'policy'}
+  {#if !draftReady}
+    <section class="form-card"><HardwareActionPrompt title="Restoring multisig setup" detail="Checking for saved public policy progress…" label="Restoring multisig setup"/></section>
+  {:else if stage === 'policy'}
     <div class="coordinator-grid policy-only-grid">
       <section class="form-card coordinator-main">
         <div class="template-grid" aria-label="Wallet templates">
@@ -545,7 +727,7 @@
           {#if backupError}<p class="form-error" role="alert">{backupError}</p>{/if}
         </SetupTask>
         {#if coldcardRegistrationRequired}<SetupTask step={coldcardStep} title="Register the policy on Coldcard" description="Recommended now, but optional during coordinator creation. Coldcard must know the complete policy before it signs." state={coldcardRegistered ? 'complete' : policyVerificationDeferred ? 'deferred' : saved ? 'current' : 'upcoming'} status={coldcardRegistered ? 'Policy imported' : policyVerificationDeferred ? 'Required before signing' : saved ? 'Optional now' : 'Available after backup'}>
-          <ol><li>Save the Coldcard policy file.</li><li>On every Coldcard, import it from <b>Settings → Multisig Wallets → Import</b>.</li><li>Verify the wallet name, 2-of-3 threshold, and all signer fingerprints on-device.</li></ol>
+          <ol><li>Save the policy to microSD or Coldcard Virtual Disk.</li><li>On every Coldcard, import it from <b>Settings → Multisig Wallets → Import</b>.</li><li>Verify the wallet name, 2-of-3 threshold, and all signer fingerprints on-device.</li></ol>
           <Button variant="secondary" class="full" disabled={!saved || savingDescriptor} loading={savingDescriptor} loadingLabel="Opening save dialog…" onclick={saveColdcardPolicy}><Download size={14}/>Save Coldcard policy</Button>
           <label class="backup-confirmation"><input type="checkbox" disabled={!saved} bind:checked={coldcardRegistered}/><span><strong>Policy verified on every Coldcard</strong><small>I matched the wallet name, threshold, and signer fingerprints on each device.</small></span></label>
           {#if !coldcardRegistered && !policyVerificationDeferred}<button class="defer-policy-verification" disabled={!saved} onclick={()=>policyVerificationDeferred=true}><Clock3 size={14}/><span><strong>Finish hardware setup before first signature</strong><small>Create the watch-only coordinator now. Groot will stop an unregistered Coldcard before transaction signing.</small></span></button>{/if}
@@ -564,6 +746,11 @@
     </section>
   {/if}
 </div>
+
+<Modal open={discardDraftOpen} title="Discard multisig setup?" description="Remove this unfinished public policy draft from Groot." onclose={() => { if (!discardingDraft) discardDraftOpen = false; }}>
+  <div class="warning-box danger"><strong>You will need to add the signers again.</strong><span>No wallet, signer seed, or bitcoin is deleted.</span></div>
+  <div class="modal-footer"><Button variant="secondary" disabled={discardingDraft} onclick={() => discardDraftOpen = false}>Keep setup</Button><Button variant="danger" loading={discardingDraft} loadingLabel="Discarding…" onclick={discardSetupDraft}>Discard setup</Button></div>
+</Modal>
 
 <Modal open={pickerOpen} title="Add a signer" description="Choose how to import this signer’s public account key." onclose={() => { pickerOpen = false; pickerError = ''; }}>
   <div class="source-list">

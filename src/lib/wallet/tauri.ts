@@ -189,6 +189,9 @@ export class TauriWalletAdapter implements WalletPort {
   }
   cancelExternalSignerProposal(proposalId: string) { return command<void>('external_signer_proposal_cancel', { proposalId }); }
   verifyExternalAddress(deviceId: string, addressId: number) { return command<ReceiveAddress>('hardware_verify_external_address', { deviceId, addressId }).then(normalizeAddress); }
+  multisigSetupDraft() { return command<import('./contracts').MultisigSetupDraft | null>('multisig_setup_draft'); }
+  saveMultisigSetupDraft(draft: import('./contracts').MultisigSetupDraft) { return command<import('./contracts').MultisigSetupDraft>('multisig_setup_draft_save', { draft }); }
+  discardMultisigSetupDraft() { return command<void>('multisig_setup_draft_discard'); }
   previewMultisig(policy: PolicyDraft) { return command<MultisigPreview>('multisig_preview', { policy }); }
   analyzeRecoveryPolicy(template: RecoveryTemplate, cosigners: PolicyDraft['cosigners']) { return command<RecoveryPolicyAnalysis>('recovery_policy_analyze', { template, cosigners }); }
   createMultisig(policy: PolicyDraft, credential: string) { return command<MultisigWallet>('multisig_create', { policy, credential }); }

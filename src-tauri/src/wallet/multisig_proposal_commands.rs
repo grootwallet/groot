@@ -576,6 +576,7 @@ pub fn multisig_create(
         .lock()
         .map_err(internal)?
         .clear();
+    let _ = multisig_setup_commands::clear_multisig_setup_draft(&app);
     unlock_selected(&app, &state)?;
     reset_auth_throttle(&app, &state)?;
     Ok(wallet)
@@ -643,6 +644,7 @@ pub fn multisig_recovery_create(
         cleanup_failed_profile(&dir)?;
     }
     let wallet = result?;
+    let _ = multisig_setup_commands::clear_multisig_setup_draft(&app);
     unlock_selected(&app, &state)?;
     reset_auth_throttle(&app, &state)?;
     Ok(wallet)

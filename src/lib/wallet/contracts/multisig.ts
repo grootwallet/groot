@@ -43,3 +43,27 @@ export type RecoveryPolicyAnalysis = {
   maxSatisfactionWeight: number;
 };
 export type RecoveryDrill = { firstAddress: string; matchesCurrentWallet: boolean };
+
+export type MultisigSetupStage = 'policy' | 'keys' | 'review' | 'backup';
+export type MultisigSetupTemplate = 'standard' | 'recovery' | 'inheritance';
+export type MultisigSetupRecipe = 'two_of_three' | 'three_of_five' | 'custom';
+export type MultisigSetupDraft = {
+  version: 1;
+  stage: MultisigSetupStage;
+  templateKind: MultisigSetupTemplate;
+  standardRecipe: MultisigSetupRecipe;
+  customCosignerCount: number;
+  name: string;
+  threshold: number;
+  cosigners: CosignerDraft[];
+  descriptorSaved: boolean;
+  coldcardRegistered: boolean;
+  policyVerificationDeferred: boolean;
+  policyVerifications: Array<{
+    signerFingerprint: string;
+    deviceType: string;
+    verifiedAt: string;
+    displayedAddress: string;
+  }>;
+  updatedAt: number;
+};
