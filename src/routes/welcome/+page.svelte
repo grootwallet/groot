@@ -17,7 +17,6 @@
   let revealed = $state(false);
   let passphrase = $state('');
   let confirmation = $state('');
-  let recovery = $state('');
   let words = $state<string[]>([]);
   let nativeBackup = $state(false);
   let busy = $state(false);
@@ -42,7 +41,7 @@
     hasExistingWallet = await walletService.exists();
     if (hasExistingWallet && page.url.searchParams.get('add') !== '1') await goto('/unlock');
   });
-  onDestroy(() => { void walletService.cancelOnboarding(); words = []; recovery = ''; passphrase = ''; confirmation = ''; supplementalOutcomes = ''; backupAcknowledged = false; backupVerified = false; });
+  onDestroy(() => { void walletService.cancelOnboarding(); words = []; passphrase = ''; confirmation = ''; supplementalOutcomes = ''; backupAcknowledged = false; backupVerified = false; });
 
   function chooseSupplementalSource(source: 'none' | 'coin' | 'dice') {
     supplementalSource = source;
@@ -151,12 +150,12 @@
   async function recoverWallet() {
     busy = true; error = '';
     try {
-      await walletService.recoverWallet(walletName, recovery.trim().replace(/\s+/g, ' '), passphrase);
-      recovery = ''; passphrase = '';
+      await walletService.recoverWallet(walletName, passphrase);
+      passphrase = '';
       toast({title:'Wallet recovered',description:'Sync to restore transaction history.',tone:'success'});
       await goto('/');
     } catch (cause) { error = cause instanceof WalletError ? cause.message : 'Could not recover wallet.'; }
-    finally { recovery = ''; passphrase = ''; busy = false; }
+    finally { passphrase = ''; busy = false; }
   }
 
   async function returnToWallet() {
@@ -312,7 +311,7 @@
       {#if error}<p class="form-error" role="alert">{error.replace('passphrase / PIN', 'wallet passphrase')}</p>{/if}
       <Button size="large" class="full" disabled={!walletName.trim() || !passphrase || !!passphraseError || passphrase !== confirmation || !backupAcknowledged} loading={busy} loadingLabel="Creating wallet…" onclick={finishCreate}><Check size={17}/>Create wallet</Button>
     {:else}
-      <button class="back-link" onclick={() => mode = 'home'}><ArrowLeft size={16} />Back</button><span class="setup-step">RECOVERY</span><h1>Recover wallet</h1><p>Enter your 24 recovery words in order, separated by spaces.</p><label class="field"><span>Wallet name</span><input bind:value={walletName} maxlength="48" placeholder="Recovered wallet" /><FieldCounter value={walletName} max={48}/></label><label class="field"><span>Recovery words</span><textarea bind:value={recovery} rows="5" placeholder="word1 word2 word3 …"></textarea><small>{recovery.trim() ? recovery.trim().split(/\s+/).length : 0} of 24 words</small></label><PasswordField label="Wallet passphrase" bind:value={passphrase} placeholder="Enter the original wallet passphrase" autocomplete="current-password" hint="This exact BIP39 passphrase is required with the recovery words and also unlocks Groot." error={passphraseError}/>{#if error}<p class="form-error" role="alert">{error.replace('passphrase / PIN', 'wallet passphrase')}</p>{/if}<Button size="large" class="full" disabled={!walletName.trim() || recovery.trim().split(/\s+/).length !== 24 || !passphrase || !!passphraseError} loading={busy} loadingLabel="Recovering wallet…" onclick={recoverWallet}>Recover wallet<ArrowRight size={17}/></Button>
+      <button class="back-link" onclick={() => mode = 'home'}><ArrowLeft size={16} />Back</button><span class="setup-step">RECOVERY</span><h1>Recover wallet</h1><p>Your 24 recovery words are entered in a native system window so they never enter Groot’s web interface.</p><label class="field"><span>Wallet name</span><input bind:value={walletName} maxlength="48" placeholder="Recovered wallet" /><FieldCounter value={walletName} max={48}/></label><PasswordField label="Wallet passphrase" bind:value={passphrase} placeholder="Enter the original wallet passphrase" autocomplete="current-password" hint="This exact BIP39 passphrase is required with the recovery words and also unlocks Groot." error={passphraseError}/>{#if error}<p class="form-error" role="alert">{error.replace('passphrase / PIN', 'wallet passphrase')}</p>{/if}<Button size="large" class="full" disabled={!walletName.trim() || !passphrase || !!passphraseError} loading={busy} loadingLabel="Recovering wallet…" onclick={recoverWallet}>Enter recovery words securely<ArrowRight size={17}/></Button>
     {/if}
   </main>
   <footer class="onboarding-footer">Keys stay on this device · Open source</footer>

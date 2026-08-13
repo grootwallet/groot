@@ -91,7 +91,7 @@ export class TauriWalletAdapter implements WalletPort {
   cancelOnboarding() { return command<void>('wallet_cancel_onboarding'); }
   createWallet(name: string, credential: string, _backupVerified: boolean) { return command<void>('wallet_create', { name, credential }); }
   verifyBackup(credential: string) { return command<boolean>('wallet_verify_backup', { credential }); }
-  recoverWallet(name: string, mnemonic: string, credential: string) { return command<void>('wallet_recover', { name, mnemonic, credential }); }
+  recoverWallet(name: string, credential: string) { return command<void>('wallet_recover', { name, credential }); }
   unlock(credential: string) { return command<void>('wallet_unlock', { credential }); }
   lock() { return command<void>('wallet_lock'); }
   deleteWallet(credential: string, confirmation: string) { return command<void>('wallet_delete', { credential, confirmation }); }

@@ -124,7 +124,7 @@ export type SignerPolicyVerification = {
 
 export type PolicyVerificationAddress = {
   canonicalAddress: string;
-  ledgerTestnetAlias: string | null;
+  testnetAlias: string | null;
 };
 
 export type MultisigWallet = PolicyDraft & {
@@ -273,6 +273,8 @@ export type WalletErrorCode =
   | 'wallet_locked'
   | 'invalid_inactivity_timeout'
   | 'wallet_not_found'
+  | 'wallet_selection_changed'
+  | 'wallet_policy_changed'
   | 'invalid_mnemonic'
   | 'invalid_label'
   | 'wallet_already_exists'
@@ -358,7 +360,7 @@ export interface WalletPort {
   cancelOnboarding(): Promise<void>;
   createWallet(name: string, credential: string, backupVerified: boolean): Promise<void>;
   verifyBackup(credential: string): Promise<boolean>;
-  recoverWallet(name: string, mnemonic: string, credential: string): Promise<void>;
+  recoverWallet(name: string, credential: string): Promise<void>;
   unlock(credential: string): Promise<void>;
   lock(): Promise<void>;
   deleteWallet(credential: string, confirmation: string): Promise<void>;

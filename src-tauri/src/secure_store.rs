@@ -223,7 +223,46 @@ fn sandbox_key_path(metadata_path: &Path) -> Result<PathBuf, SecureStoreError> {
 
 #[cfg(not(any(target_os = "macos", target_os = "ios")))]
 fn read_sandbox_key(path: &Path) -> Result<Vec<u8>, SecureStoreError> {
-    let key = fs::read(path).map_err(|_| SecureStoreError::Unavailable)?;
+    let path_metadata = fs::symlink_metadata(path).map_err(|_| SecureStoreError::Unavailable)?;
+    if path_metadata.file_type().is_symlink()
+        || !path_metadata.is_file()
+        || path_metadata.len() != KEY_BYTES as u64
+    {
+        return Err(SecureStoreError::Corrupt);
+    }
+    let mut options = OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+        options.custom_flags(FILE_FLAG_OPEN_REPARSE_POINT);
+    }
+    let file = options
+        .open(path)
+        .map_err(|_| SecureStoreError::Unavailable)?;
+    let opened_metadata = file.metadata().map_err(|_| SecureStoreError::Unavailable)?;
+    if !opened_metadata.is_file() || opened_metadata.len() != KEY_BYTES as u64 {
+        return Err(SecureStoreError::Corrupt);
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        if path_metadata.dev() != opened_metadata.dev()
+            || path_metadata.ino() != opened_metadata.ino()
+        {
+            return Err(SecureStoreError::Corrupt);
+        }
+    }
+    let mut key = Vec::with_capacity(KEY_BYTES);
+    file.take((KEY_BYTES + 1) as u64)
+        .read_to_end(&mut key)
+        .map_err(|_| SecureStoreError::Corrupt)?;
     validate_device_key(key)
 }
 

@@ -3,14 +3,16 @@ import { readFileSync } from 'node:fs';
 
 const appCss = readFileSync(new URL('../../app.css', import.meta.url), 'utf8');
 const emptyState = readFileSync(new URL('./HardwareDeviceEmptyState.svelte', import.meta.url), 'utf8');
+const addressComparison = readFileSync(new URL('./HardwareAddressComparison.svelte', import.meta.url), 'utf8');
 const singleKeyReceive = readFileSync(new URL('../../routes/receive/+page.svelte', import.meta.url), 'utf8');
 const multisigReceive = readFileSync(new URL('../../routes/multisig/receive/+page.svelte', import.meta.url), 'utf8');
 
 describe('hardware receive verification UI', () => {
   it('keeps an explicit disclosure chevron in both receive flows', () => {
     for (const route of [singleKeyReceive, multisigReceive]) {
-      expect(route).toContain('<summary><span>Address details</span><ChevronDown size={14}/></summary>');
+      expect(route).toContain('<HardwareAddressComparison');
     }
+    expect(addressComparison).toContain('<summary><span>Address details</span><ChevronDown size={14}/></summary>');
     expect(appCss).toContain('.verification-details[open] summary svg { transform: rotate(180deg); }');
   });
 

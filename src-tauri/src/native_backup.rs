@@ -1,5 +1,4 @@
 use tauri::AppHandle;
-#[cfg(not(target_os = "macos"))]
 use zeroize::Zeroizing;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -16,6 +15,11 @@ pub fn present(app: &AppHandle, words: &str) -> Result<BackupOutcome, String> {
 #[cfg(target_os = "macos")]
 pub fn verify(app: &AppHandle, words: &str) -> Result<bool, String> {
     macos::verify(app, words)
+}
+
+#[cfg(target_os = "macos")]
+pub fn recover(app: &AppHandle) -> Result<Option<Zeroizing<String>>, String> {
+    macos::recover(app)
 }
 
 #[cfg(target_os = "macos")]
@@ -53,6 +57,11 @@ mod macos {
         state: RefCell<VerificationState>,
     }
 
+    struct RecoveryInputViewIvars {
+        field: RefCell<Option<Retained<NSTextField>>>,
+        error_label: RefCell<Option<Retained<NSTextField>>>,
+    }
+
     define_class!(
         #[unsafe(super(NSView))]
         #[name = "GrootRecoveryBackupView"]
@@ -76,6 +85,40 @@ mod macos {
             fn reveal_backup(&self, _sender: &NSButton) {
                 NSApplication::sharedApplication(MainThreadMarker::from(self))
                     .stopModalWithCode(NSModalResponseOK);
+            }
+        }
+    );
+
+    define_class!(
+        #[unsafe(super(NSView))]
+        #[name = "GrootRecoveryInputView"]
+        #[ivars = RecoveryInputViewIvars]
+        struct RecoveryInputView;
+
+        impl RecoveryInputView {
+            #[unsafe(method(confirmRecovery:))]
+            fn confirm_recovery(&self, _sender: &NSButton) {
+                let words = self
+                    .ivars()
+                    .field
+                    .borrow()
+                    .as_ref()
+                    .map(|field| field.stringValue().to_string())
+                    .unwrap_or_default();
+                if words.split_whitespace().count() == 24 {
+                    NSApplication::sharedApplication(MainThreadMarker::from(self))
+                        .stopModalWithCode(NSModalResponseOK);
+                } else if let Some(label) = self.ivars().error_label.borrow().as_ref() {
+                    label.setStringValue(&NSString::from_str(
+                        "Enter exactly 24 recovery words, separated by spaces.",
+                    ));
+                }
+            }
+
+            #[unsafe(method(cancelRecovery:))]
+            fn cancel_recovery(&self, _sender: &NSButton) {
+                NSApplication::sharedApplication(MainThreadMarker::from(self))
+                    .stopModalWithCode(NSModalResponseCancel);
             }
         }
     );
@@ -328,6 +371,135 @@ mod macos {
         receiver
             .recv()
             .map_err(|_| "Native recovery-word verification closed unexpectedly.".to_owned())?
+    }
+
+    pub(super) fn recover(app: &AppHandle) -> Result<Option<Zeroizing<String>>, String> {
+        let app = app.clone();
+        let (sender, receiver) = sync_channel(1);
+        app.clone()
+            .run_on_main_thread(move || {
+                autoreleasepool(|_| {
+                    let Some(mtm) = MainThreadMarker::new() else {
+                        let _ = sender.send(Err("Native recovery must run on the main thread.".into()));
+                        return;
+                    };
+                    let Some(window) = app.get_webview_window("main") else {
+                        let _ = sender.send(Err("Groot's main window is unavailable.".into()));
+                        return;
+                    };
+                    let Ok(raw_window) = window.ns_window() else {
+                        let _ = sender.send(Err("Groot's native window is unavailable.".into()));
+                        return;
+                    };
+                    let parent = unsafe { &*(raw_window.cast::<NSWindow>()) };
+                    let width = sheet_width(parent, 660.0);
+                    let height = 340.0;
+                    let panel = NSPanel::initWithContentRect_styleMask_backing_defer(
+                        mtm.alloc(),
+                        rect(0.0, 0.0, width, height),
+                        NSWindowStyleMask::Titled | NSWindowStyleMask::FullSizeContentView,
+                        NSBackingStoreType::Buffered,
+                        false,
+                    );
+                    panel.setTitlebarAppearsTransparent(true);
+                    panel.setBackgroundColor(Some(&NSColor::windowBackgroundColor()));
+                    panel.setHasShadow(true);
+
+                    let allocated = mtm.alloc().set_ivars(RecoveryInputViewIvars {
+                        field: RefCell::new(None),
+                        error_label: RefCell::new(None),
+                    });
+                    let root: Retained<RecoveryInputView> = unsafe {
+                        msg_send![super(allocated), initWithFrame: rect(0.0, 0.0, width, height)]
+                    };
+                    panel.setContentView(Some(&root));
+                    add_label(
+                        &root,
+                        "RECOVER SOFTWARE WALLET",
+                        rect(28.0, 278.0, width - 56.0, 18.0),
+                        &NSFont::systemFontOfSize_weight(11.0, 0.35),
+                        &brand_red(),
+                        mtm,
+                    );
+                    add_label(
+                        &root,
+                        "Enter your recovery words",
+                        rect(28.0, 234.0, width - 56.0, 34.0),
+                        &NSFont::systemFontOfSize_weight(24.0, 0.4),
+                        &NSColor::labelColor(),
+                        mtm,
+                    );
+                    add_label(
+                        &root,
+                        "The 24 words stay in this native window and never enter Groot's web interface.",
+                        rect(28.0, 204.0, width - 56.0, 22.0),
+                        &NSFont::systemFontOfSize_weight(12.0, 0.0),
+                        &NSColor::secondaryLabelColor(),
+                        mtm,
+                    );
+                    let field = NSTextField::textFieldWithString(&NSString::from_str(""), mtm);
+                    field.setFrame(rect(28.0, 121.0, width - 56.0, 68.0));
+                    field.setMaximumNumberOfLines(3);
+                    field.setPlaceholderString(Some(&NSString::from_str(
+                        "word1 word2 word3 … word24",
+                    )));
+                    root.addSubview(&field);
+                    let error = add_label(
+                        &root,
+                        "",
+                        rect(28.0, 88.0, width - 56.0, 22.0),
+                        &NSFont::systemFontOfSize_weight(11.0, 0.0),
+                        &NSColor::systemRedColor(),
+                        mtm,
+                    );
+                    *root.ivars().field.borrow_mut() = Some(field);
+                    *root.ivars().error_label.borrow_mut() = Some(error);
+
+                    let cancel = unsafe {
+                        NSButton::buttonWithTitle_target_action(
+                            &NSString::from_str("Cancel"),
+                            Some(&root),
+                            Some(sel!(cancelRecovery:)),
+                            mtm,
+                        )
+                    };
+                    cancel.setBezelStyle(NSBezelStyle::Push);
+                    root.addSubview(&cancel);
+                    let confirm = unsafe {
+                        NSButton::buttonWithTitle_target_action(
+                            &NSString::from_str("Use recovery words"),
+                            Some(&root),
+                            Some(sel!(confirmRecovery:)),
+                            mtm,
+                        )
+                    };
+                    confirm.setBezelStyle(NSBezelStyle::Push);
+                    confirm.setBezelColor(Some(&NSColor::systemBlueColor()));
+                    confirm.setKeyEquivalent(&NSString::from_str("\r"));
+                    layout_trailing_actions(&cancel, &confirm, width, 30.0, 155.0);
+                    root.addSubview(&confirm);
+
+                    parent.beginSheet_completionHandler(&panel, None);
+                    let response = NSApplication::sharedApplication(mtm).runModalForWindow(&panel);
+                    parent.endSheet_returnCode(&panel, response);
+                    if response != NSModalResponseOK {
+                        let _ = sender.send(Ok(None));
+                        return;
+                    }
+                    let words = root
+                        .ivars()
+                        .field
+                        .borrow()
+                        .as_ref()
+                        .map(|field| field.stringValue().to_string())
+                        .unwrap_or_default();
+                    let _ = sender.send(Ok(Some(Zeroizing::new(words))));
+                });
+            })
+            .map_err(|error| error.to_string())?;
+        receiver
+            .recv()
+            .map_err(|_| "Native recovery entry closed unexpectedly.".to_owned())?
     }
 
     fn confirm_private_reveal(parent: &NSWindow, mtm: MainThreadMarker) -> bool {
@@ -764,6 +936,11 @@ pub fn present(app: &AppHandle, words: &str) -> Result<BackupOutcome, String> {
 #[cfg(not(target_os = "macos"))]
 pub fn verify(_app: &AppHandle, _words: &str) -> Result<bool, String> {
     Err("Recovery-word verification is not yet available on this platform.".to_owned())
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn recover(_app: &AppHandle) -> Result<Option<Zeroizing<String>>, String> {
+    Err("Native recovery-word entry is not yet available on this platform.".to_owned())
 }
 
 #[cfg(any(not(target_os = "macos"), test))]

@@ -139,6 +139,35 @@ fn validate_psbt_filename(value: &str) -> ApiResult<&str> {
     Ok(trimmed)
 }
 
+fn write_public_export(path: &Path, content: &[u8]) -> ApiResult<()> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| internal("The selected export path has no parent directory."))?;
+    let temp = parent.join(format!(".groot-export-{}.tmp", Uuid::new_v4()));
+    let result = (|| {
+        let mut options = OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        let mut file = options.open(&temp).map_err(internal)?;
+        file.write_all(content).map_err(internal)?;
+        file.sync_all().map_err(internal)?;
+        fs::rename(&temp, path).map_err(internal)?;
+        #[cfg(unix)]
+        File::open(parent)
+            .and_then(|directory| directory.sync_all())
+            .map_err(internal)?;
+        Ok(())
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&temp);
+    }
+    result
+}
+
 #[tauri::command]
 pub async fn public_backup_save(
     app: AppHandle,
@@ -171,21 +200,7 @@ pub async fn public_backup_save(
             return Ok(None);
         };
         let path = selected.into_path().map_err(internal)?;
-        let mut options = OpenOptions::new();
-        options.create(true).truncate(true).write(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o600);
-        }
-        let mut file = options.open(&path).map_err(internal)?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).map_err(internal)?;
-        }
-        file.write_all(content.as_bytes()).map_err(internal)?;
-        file.sync_all().map_err(internal)?;
+        write_public_export(&path, content.as_bytes())?;
         Ok(Some(path))
     })
     .await
@@ -214,21 +229,7 @@ pub async fn psbt_file_save(
             return Ok(None);
         };
         let path = selected.into_path().map_err(internal)?;
-        let mut options = OpenOptions::new();
-        options.create(true).truncate(true).write(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o600);
-        }
-        let mut file = options.open(&path).map_err(internal)?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).map_err(internal)?;
-        }
-        file.write_all(content.as_bytes()).map_err(internal)?;
-        file.sync_all().map_err(internal)?;
+        write_public_export(&path, content.as_bytes())?;
         Ok(Some(path))
     })
     .await
@@ -427,11 +428,17 @@ fn require_unlocked_with_activity(
     };
     if !expired_wallets.is_empty() || !authorized {
         let mut node_auth = state.node_auth.lock().map_err(internal)?;
+        let mut authenticated_descriptors = state
+            .authenticated_software_descriptors
+            .lock()
+            .map_err(internal)?;
         for wallet_id in expired_wallets {
             node_auth.remove(&wallet_id);
+            authenticated_descriptors.remove(&wallet_id);
         }
         if !authorized {
             node_auth.remove(&selected);
+            authenticated_descriptors.remove(&selected);
         }
     }
     if authorized {
@@ -471,6 +478,11 @@ fn lock_wallet(state: &State<'_, AppState>, wallet_id: Uuid) -> ApiResult<()> {
         .map_err(internal)?
         .lock(wallet_id);
     state.node_auth.lock().map_err(internal)?.remove(&wallet_id);
+    state
+        .authenticated_software_descriptors
+        .lock()
+        .map_err(internal)?
+        .remove(&wallet_id);
     Ok(())
 }
 
@@ -483,6 +495,7 @@ pub struct AppState {
     verified_recovery: Mutex<HashMap<Uuid, String>>,
     pending_hardware_pins: Mutex<HashMap<String, PendingHardwarePin>>,
     node_auth: Mutex<HashMap<Uuid, NodeAuthSession>>,
+    authenticated_software_descriptors: Mutex<HashMap<Uuid, (String, String)>>,
     saved_files: Mutex<HashMap<String, SavedFileReveal>>,
     recovery_scans: Mutex<HashMap<Uuid, ActiveRecoveryScan>>,
     runtime_auth_retry_at: Mutex<HashMap<Uuid, Instant>>,
@@ -607,8 +620,43 @@ struct SavedFileReveal {
 }
 
 struct NodeAuthSession {
-    username: String,
+    config: CoreNodeConfig,
     password: Zeroizing<String>,
+}
+
+#[derive(Deserialize)]
+struct ProtectedNodeAuth {
+    version: u8,
+    config: CoreNodeConfig,
+    password: String,
+}
+
+#[derive(Serialize)]
+struct ProtectedNodeAuthRef<'a> {
+    version: u8,
+    config: &'a CoreNodeConfig,
+    password: &'a str,
+}
+
+const PROTECTED_NODE_AUTH_VERSION: u8 = 1;
+
+fn decode_protected_node_auth(
+    plaintext: &[u8],
+    current_config: &CoreNodeConfig,
+) -> ApiResult<Option<ProtectedNodeAuth>> {
+    let Ok(protected) = serde_json::from_slice::<ProtectedNodeAuth>(plaintext) else {
+        // Legacy secrets contained only the password. Never combine one with a
+        // mutable public endpoint; leave the wallet unlocked so it can be
+        // migrated by explicitly re-saving the node connection.
+        return Ok(None);
+    };
+    if protected.version != PROTECTED_NODE_AUTH_VERSION || protected.config != *current_config {
+        return Err(api_error(
+            "invalid_node_config",
+            "The Bitcoin Core connection no longer matches the protected RPC credentials. Review and save it again.",
+        ));
+    }
+    Ok(Some(protected))
 }
 
 #[derive(Debug)]
@@ -1069,7 +1117,7 @@ pub struct SignerPolicyVerificationDto {
 #[serde(rename_all = "camelCase")]
 pub struct PolicyVerificationAddressDto {
     canonical_address: String,
-    ledger_testnet_alias: Option<String>,
+    testnet_alias: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -1868,17 +1916,22 @@ fn load_node_auth_session(
     let session = if config.auth == RpcAuthMode::UserPass {
         let path = node_secret_path(app)?;
         let plaintext = secure_store::load(&path, credential).map_err(secure_store_error)?;
-        let password = Zeroizing::new(String::from_utf8(plaintext).map_err(internal)?);
+        let Some(protected) = decode_protected_node_auth(&plaintext, &config)? else {
+            state
+                .node_auth
+                .lock()
+                .map_err(internal)?
+                .remove(&profile.id);
+            return Ok(());
+        };
+        let password = Zeroizing::new(protected.password);
         if password.is_empty() || password.len() > 1024 {
             return Err(api_error(
                 "wallet_corrupt",
                 "Protected RPC credentials are invalid.",
             ));
         }
-        Some(NodeAuthSession {
-            username: config.username.unwrap_or_default(),
-            password,
-        })
+        Some(NodeAuthSession { config, password })
     } else {
         None
     };
@@ -1923,9 +1976,15 @@ fn rpc_client(app: &AppHandle, state: &State<'_, AppState>) -> ApiResult<Client>
                     "Unlock the wallet again to load its protected RPC credentials.",
                 )
             })?;
+            if session.config != config {
+                return Err(api_error(
+                    "invalid_node_config",
+                    "The Bitcoin Core connection changed after unlock. Review and save it again before connecting.",
+                ));
+            }
             build_rpc_client_with_credentials(
                 &url,
-                Some(&session.username),
+                session.config.username.as_deref(),
                 Some(session.password.as_str()),
                 config.tor_proxy.as_deref(),
                 RPC_TIMEOUT,
@@ -2049,6 +2108,7 @@ fn broadcast_transaction(
     transaction: &Transaction,
 ) -> ApiResult<Txid> {
     let rpc = rpc_client(app, state)?;
+    checked_chain_identity(&rpc)?;
     broadcast_transaction_with_rpc(&rpc, transaction)
 }
 
@@ -2472,12 +2532,28 @@ fn validate_selected_wallet_database_identity(
         }
         WalletKind::SingleKey => None,
     };
+    let authenticated_software_descriptors = if profile.kind == WalletKind::SingleKey {
+        let state = app.state::<AppState>();
+        let descriptors = state
+            .authenticated_software_descriptors
+            .lock()
+            .map_err(internal)?;
+        Some(descriptors.get(&profile.id).cloned().ok_or_else(|| {
+            api_error(
+                "wallet_locked",
+                "Unlock the wallet before opening its authenticated descriptors.",
+            )
+        })?)
+    } else {
+        None
+    };
     validate_loaded_descriptors(
         &profile,
         &external,
         &internal_descriptor,
-        expected_descriptors
+        authenticated_software_descriptors
             .as_ref()
+            .or(expected_descriptors.as_ref())
             .map(|(external, internal)| (external.as_str(), internal.as_str())),
     )
 }
@@ -2854,6 +2930,21 @@ fn watch_templates(
     Ok((
         Bip84Public(account_public, fingerprint, KeychainKind::External),
         Bip84Public(account_public, fingerprint, KeychainKind::Internal),
+    ))
+}
+
+fn software_wallet_descriptors(
+    mnemonic: &Mnemonic,
+    credential: &str,
+) -> ApiResult<(String, String)> {
+    let (external, internal_template) = watch_templates(mnemonic, credential)?;
+    let wallet = Wallet::create(external, internal_template)
+        .network(NETWORK)
+        .create_wallet_no_persist()
+        .map_err(internal)?;
+    Ok((
+        wallet.public_descriptor(KeychainKind::External).to_string(),
+        wallet.public_descriptor(KeychainKind::Internal).to_string(),
     ))
 }
 
@@ -5115,8 +5206,13 @@ pub fn wallet_inactivity_timeout_save(
         .prune_expired_at(Instant::now(), timeout);
     if !expired_wallets.is_empty() {
         let mut node_auth = state.node_auth.lock().map_err(internal)?;
+        let mut authenticated_descriptors = state
+            .authenticated_software_descriptors
+            .lock()
+            .map_err(internal)?;
         for wallet_id in expired_wallets {
             node_auth.remove(&wallet_id);
+            authenticated_descriptors.remove(&wallet_id);
         }
     }
     Ok(registry)
@@ -5205,6 +5301,7 @@ pub fn wallet_create(
         ));
     }
     let mnemonic = Mnemonic::parse(pending.words.as_str()).map_err(internal)?;
+    let authenticated_descriptors = software_wallet_descriptors(&mnemonic, credential.as_str())?;
     if let Err(error) = create_from_mnemonic(
         &app,
         name,
@@ -5215,6 +5312,12 @@ pub fn wallet_create(
         *state.pending_mnemonic.lock().map_err(internal)? = Some(pending);
         return Err(error);
     }
+    let selected = selected_profile_of_kind(&app, WalletKind::SingleKey)?.id;
+    state
+        .authenticated_software_descriptors
+        .lock()
+        .map_err(internal)?
+        .insert(selected, authenticated_descriptors);
     unlock_selected(&app, &state)?;
     Ok(())
 }
@@ -5224,11 +5327,12 @@ pub fn wallet_recover(
     app: AppHandle,
     state: State<'_, AppState>,
     name: String,
-    mnemonic: String,
     credential: String,
 ) -> ApiResult<()> {
     let _operation = operation_guard(&state)?;
-    let mnemonic_words = Zeroizing::new(mnemonic);
+    let mnemonic_words = native_backup::recover(&app)
+        .map_err(internal)?
+        .ok_or_else(|| api_error("onboarding_cancelled", "Wallet recovery was cancelled."))?;
     let credential = Zeroizing::new(credential);
     if mnemonic_words.len() > MAX_MNEMONIC_INPUT_BYTES {
         return Err(api_error(
@@ -5244,7 +5348,14 @@ pub fn wallet_recover(
             "Groot requires exactly 24 recovery words.",
         ));
     }
+    let authenticated_descriptors = software_wallet_descriptors(&mnemonic, credential.as_str())?;
     create_from_mnemonic(&app, name, mnemonic, credential.as_str(), true)?;
+    let selected = selected_profile_of_kind(&app, WalletKind::SingleKey)?.id;
+    state
+        .authenticated_software_descriptors
+        .lock()
+        .map_err(internal)?
+        .insert(selected, authenticated_descriptors);
     unlock_selected(&app, &state)?;
     Ok(())
 }
@@ -5292,13 +5403,27 @@ pub fn wallet_unlock(
     let credential = Zeroizing::new(credential);
     check_auth_throttle(&app, &state)?;
     let result = match selected_profile(&app)?.kind {
-        WalletKind::SingleKey => decrypt_mnemonic(&app, credential.as_str()).map(|_| ()),
-        WalletKind::Multisig => verify_multisig_credential(&app, credential.as_str()),
-        WalletKind::WatchOnly => verify_external_signer_credential(&app, credential.as_str()),
+        WalletKind::SingleKey => decrypt_mnemonic(&app, credential.as_str()).and_then(|mnemonic| {
+            software_wallet_descriptors(&mnemonic, credential.as_str()).map(Some)
+        }),
+        WalletKind::Multisig => {
+            verify_multisig_credential(&app, credential.as_str()).map(|()| None)
+        }
+        WalletKind::WatchOnly => {
+            verify_external_signer_credential(&app, credential.as_str()).map(|()| None)
+        }
     };
     record_auth_result(&app, &state, &result)?;
-    result?;
+    let authenticated_descriptors = result?;
     load_node_auth_session(&app, &state, credential.as_str())?;
+    if let Some(descriptors) = authenticated_descriptors {
+        let selected = selected_profile_of_kind(&app, WalletKind::SingleKey)?.id;
+        state
+            .authenticated_software_descriptors
+            .lock()
+            .map_err(internal)?
+            .insert(selected, descriptors);
+    }
     unlock_selected(&app, &state)?;
     Ok(())
 }
@@ -5851,9 +5976,17 @@ pub fn node_config_save(
         config.clone(),
     )?;
     if config.auth == RpcAuthMode::UserPass {
+        let protected = Zeroizing::new(
+            serde_json::to_vec(&ProtectedNodeAuthRef {
+                version: PROTECTED_NODE_AUTH_VERSION,
+                config: &config,
+                password: password.as_str(),
+            })
+            .map_err(internal)?,
+        );
         secure_store::store(
             &node_secret_path(&app)?,
-            password.as_bytes(),
+            protected.as_slice(),
             credential.as_str(),
         )
         .map_err(secure_store_error)?;
@@ -6260,6 +6393,11 @@ pub fn external_signer_parse_import(
     label: String,
     source: SignerSource,
 ) -> ApiResult<ExternalSignerInput> {
+    if encoded.len() > external_signer::MAX_IMPORT_BYTES {
+        return Err(external_signer_api_error(
+            external_signer::ExternalSignerError::TooLarge,
+        ));
+    }
     validate_external_signer_import_network(&encoded)?;
     external_signer::parse_import(&encoded, &label, source).map_err(external_signer_api_error)
 }
@@ -6902,7 +7040,7 @@ fn policy_verification_address(
 ) -> ApiResult<PolicyVerificationAddressDto> {
     let canonical_address = first_multisig_address(wallet)?;
     Ok(PolicyVerificationAddressDto {
-        ledger_testnet_alias: regtest_testnet_address_alias(&canonical_address),
+        testnet_alias: regtest_testnet_address_alias(&canonical_address),
         canonical_address,
     })
 }
@@ -6936,6 +7074,30 @@ pub fn multisig_draft_policy_verification_address(
     })
 }
 
+fn ensure_hardware_verification_context(
+    initiating_wallet_id: Uuid,
+    current_wallet_id: Uuid,
+    initiating_external_descriptor: &str,
+    initiating_internal_descriptor: &str,
+    current_metadata: &MultisigWalletDto,
+) -> ApiResult<()> {
+    if current_wallet_id != initiating_wallet_id {
+        return Err(api_error(
+            "wallet_selection_changed",
+            "The selected wallet changed during hardware verification. Select the original wallet and verify again.",
+        ));
+    }
+    if current_metadata.external_descriptor != initiating_external_descriptor
+        || current_metadata.internal_descriptor != initiating_internal_descriptor
+    {
+        return Err(api_error(
+            "wallet_policy_changed",
+            "The multisig policy changed during hardware verification. Verify the current policy again.",
+        ));
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn hardware_verify_multisig_policy(
     app: AppHandle,
@@ -6943,8 +7105,10 @@ pub async fn hardware_verify_multisig_policy(
     device_id: String,
     signer_fingerprint: String,
 ) -> ApiResult<SignerPolicyVerificationDto> {
-    require_unlocked(&app, &state)?;
+    let initiating_wallet_id = require_unlocked(&app, &state)?;
     let metadata = read_multisig_metadata(&app)?;
+    let initiating_external_descriptor = metadata.external_descriptor.clone();
+    let initiating_internal_descriptor = metadata.internal_descriptor.clone();
     let signer = metadata
         .cosigners
         .iter()
@@ -6996,6 +7160,16 @@ pub async fn hardware_verify_multisig_policy(
             "The first address returned by the device does not match this wallet policy.",
         ));
     }
+    let _operation = operation_guard(&state)?;
+    let current_wallet_id = require_unlocked(&app, &state)?;
+    let current_metadata = read_multisig_metadata(&app)?;
+    ensure_hardware_verification_context(
+        initiating_wallet_id,
+        current_wallet_id,
+        &initiating_external_descriptor,
+        &initiating_internal_descriptor,
+        &current_metadata,
+    )?;
     let db = open_multisig_db(&app)?;
     record_signer_policy_verification(&db, &identity, &actual)
 }
@@ -9002,6 +9176,13 @@ pub fn tx_sign_and_broadcast(
     record_auth_result(&app, &state, &credential_result)?;
     let mnemonic = credential_result?;
     let master = root_key(&mnemonic, credential.as_str())?;
+    let signing_wallet = Wallet::create(
+        Bip84(master, KeychainKind::External),
+        Bip84(master, KeychainKind::Internal),
+    )
+    .network(NETWORK)
+    .create_wallet_no_persist()
+    .map_err(internal)?;
     let mut db = open_db(&app)?;
     let mut proposal = state
         .proposals
@@ -9011,6 +9192,21 @@ pub fn tx_sign_and_broadcast(
         .map(Ok)
         .unwrap_or_else(|| load_single_proposal(&db, &proposal_id))?;
     let wallet = load_wallet(&mut db)?;
+    let profile = selected_profile_of_kind(&app, WalletKind::SingleKey)?;
+    let loaded_external = wallet.public_descriptor(KeychainKind::External).to_string();
+    let loaded_internal = wallet.public_descriptor(KeychainKind::Internal).to_string();
+    let signing_external = signing_wallet
+        .public_descriptor(KeychainKind::External)
+        .to_string();
+    let signing_internal = signing_wallet
+        .public_descriptor(KeychainKind::Internal)
+        .to_string();
+    validate_loaded_descriptors(
+        &profile,
+        &loaded_external,
+        &loaded_internal,
+        Some((&signing_external, &signing_internal)),
+    )?;
     validate_proposal_fee(&proposal.psbt, proposal.fee)?;
     proposal_change_details(
         &wallet,
@@ -9018,13 +9214,6 @@ pub fn tx_sign_and_broadcast(
         &proposal.recipient,
         proposal.amount,
     )?;
-    let signing_wallet = Wallet::create(
-        Bip84(master, KeychainKind::External),
-        Bip84(master, KeychainKind::Internal),
-    )
-    .network(NETWORK)
-    .create_wallet_no_persist()
-    .map_err(internal)?;
     let finalized = signing_wallet
         .sign(
             &mut proposal.psbt,
@@ -10695,6 +10884,22 @@ mod tests {
     }
 
     #[test]
+    fn software_descriptor_identity_is_stable_and_bound_to_the_wallet_passphrase() {
+        let mnemonic = Mnemonic::parse(
+            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+        )
+        .unwrap();
+        let first = software_wallet_descriptors(&mnemonic, "wallet passphrase").unwrap();
+        let repeated = software_wallet_descriptors(&mnemonic, "wallet passphrase").unwrap();
+        let alternate = software_wallet_descriptors(&mnemonic, "different passphrase").unwrap();
+
+        assert_eq!(first, repeated);
+        assert_ne!(first, alternate);
+        assert!(!first.0.contains("prv"));
+        assert!(!first.1.contains("prv"));
+    }
+
+    #[test]
     fn labels_are_mandatory_and_bounded() {
         assert_eq!(normalize_label("  Invoice 42  ").unwrap(), "Invoice 42");
         assert_eq!(normalize_label("Café 🌱").unwrap(), "Café 🌱");
@@ -10779,6 +10984,48 @@ mod tests {
                 spending_paths: Vec::new(),
             },
         }
+    }
+
+    #[test]
+    fn hardware_policy_evidence_is_bound_to_the_initiating_wallet_and_policy() {
+        let metadata = descriptor_backup().wallet;
+        let wallet_id = Uuid::new_v4();
+        ensure_hardware_verification_context(
+            wallet_id,
+            wallet_id,
+            &metadata.external_descriptor,
+            &metadata.internal_descriptor,
+            &metadata,
+        )
+        .unwrap();
+
+        assert_eq!(
+            ensure_hardware_verification_context(
+                wallet_id,
+                Uuid::new_v4(),
+                &metadata.external_descriptor,
+                &metadata.internal_descriptor,
+                &metadata,
+            )
+            .unwrap_err()
+            .code,
+            "wallet_selection_changed"
+        );
+
+        let mut changed = metadata.clone();
+        changed.internal_descriptor.push('x');
+        assert_eq!(
+            ensure_hardware_verification_context(
+                wallet_id,
+                wallet_id,
+                &metadata.external_descriptor,
+                &metadata.internal_descriptor,
+                &changed,
+            )
+            .unwrap_err()
+            .code,
+            "wallet_policy_changed"
+        );
     }
 
     #[test]
@@ -11856,6 +12103,27 @@ mod tests {
         );
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn public_exports_replace_symlinks_without_writing_through_them() {
+        let root = std::env::temp_dir().join(format!("groot-export-test-{}", Uuid::new_v4()));
+        fs::create_dir_all(&root).unwrap();
+        let target = root.join("target.txt");
+        let export = root.join("wallet.txt");
+        fs::write(&target, b"keep").unwrap();
+        std::os::unix::fs::symlink(&target, &export).unwrap();
+
+        write_public_export(&export, b"public backup").unwrap();
+
+        assert_eq!(fs::read(&target).unwrap(), b"keep");
+        assert_eq!(fs::read(&export).unwrap(), b"public backup");
+        assert!(!fs::symlink_metadata(&export)
+            .unwrap()
+            .file_type()
+            .is_symlink());
+        fs::remove_dir_all(root).unwrap();
+    }
+
     #[test]
     fn external_signer_json_backup_is_directly_importable() {
         let secp = Secp256k1::new();
@@ -11878,6 +12146,56 @@ mod tests {
         assert_eq!(backup.descriptor, expected.0);
         assert_eq!(external_signer::descriptors(&recovered).unwrap(), expected);
         assert!(!backup.content.contains("prv"));
+    }
+
+    #[test]
+    fn external_signer_command_rejects_oversized_json_before_network_parsing() {
+        let oversized = format!(
+            "{{\"version\":1,\"network\":\"{}\",\"descriptor\":\"{}\"}}",
+            NETWORK_NAME,
+            "x".repeat(external_signer::MAX_IMPORT_BYTES)
+        );
+        let error =
+            external_signer_parse_import(oversized, "Signer".to_owned(), SignerSource::File)
+                .unwrap_err();
+        assert_eq!(error.code, "import_too_large");
+    }
+
+    #[test]
+    fn protected_rpc_password_is_bound_to_the_complete_node_config() {
+        let config = CoreNodeConfig {
+            backend: ChainBackend::RemoteCore {
+                url: "https://node.example:8332".to_owned(),
+            },
+            auth: RpcAuthMode::UserPass,
+            username: Some("groot".to_owned()),
+            tor_proxy: None,
+        };
+        let encoded = serde_json::to_vec(&ProtectedNodeAuthRef {
+            version: PROTECTED_NODE_AUTH_VERSION,
+            config: &config,
+            password: "secret",
+        })
+        .unwrap();
+        let decoded = decode_protected_node_auth(&encoded, &config)
+            .unwrap()
+            .unwrap();
+        assert_eq!(decoded.password, "secret");
+
+        let mut tampered = config.clone();
+        tampered.backend = ChainBackend::RemoteCore {
+            url: "https://attacker.example:8332".to_owned(),
+        };
+        let error = match decode_protected_node_auth(&encoded, &tampered) {
+            Err(error) => error,
+            Ok(_) => panic!("tampered node config must be rejected"),
+        };
+        assert_eq!(error.code, "invalid_node_config");
+        assert!(
+            decode_protected_node_auth(b"legacy plaintext password", &config)
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[test]

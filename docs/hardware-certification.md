@@ -10,7 +10,8 @@ Virtual devices prove coordinator behavior, not vendor compatibility. Run this o
 | Blockstream Jade / Jade Plus | HWI USB when logged in | BIP84 xpub/descriptor QR text; file where exported | Select hidden wallet on Jade; never sent through the webview | Implemented, physical certification pending |
 | BitBox02 | HWI USB after BitBoxApp pairing cache; companion app must release USB | BitBoxApp descriptor/xpub file/text | Device password/pairing stays vendor-controlled | Implemented, physical certification pending |
 | BitBox02 Nova | USB candidate; exact HWI identity and pairing behavior must be captured first | Vendor descriptor/xpub export candidate | Device password remains vendor-controlled; Whisper/BLE is a separate mobile transport review | Not yet supported or certified |
-| Trezor Safe / Model T | HWI USB | Public descriptor/xpub text/file | Prefer on-device passphrase entry | Implemented, physical certification pending |
+| Trezor Safe 3 | HWI USB | Public descriptor/xpub text/file | Prefer on-device passphrase entry | Planned later as an independent certification target; no Model One evidence is inherited |
+| Other Trezor Safe models / Model T | HWI USB | Public descriptor/xpub text/file | Prefer on-device passphrase entry | Implemented, physical certification pending per exact model |
 | Trezor Model One | HWI USB + PIN matrix | Public descriptor/xpub text/file | Standard wallet requires explicit confirmation; host entry for hidden-wallet passphrases remains blocked | Core Regtest 2-of-3 unlock/review/reject/sign/restart/broadcast and shared recovery verified; same-family mismatch, file/QR signing, hidden wallets, and per-model acceleration explicitly limited |
 | Ledger Nano S Plus | HWI USB with Bitcoin Test open on test chains; Bitcoin on mainnet | Public descriptor/xpub text/file | Select passphrase-attached PIN on Ledger before connecting | Regtest single-key cable flow, core 2-of-3 policy/review/sign/broadcast, and shared clean-profile descriptor recovery verified; unsupported/non-reproducible rows explicitly limited |
 | Passport Core | No USB data | QR or microSD descriptor/xpub and PSBT | Passphrase remains on Passport | Offline path implemented; physical camera interoperability pending |
@@ -54,6 +55,10 @@ bash scripts/dev/tauri-regtest.sh
 
 ## Per-device acceptance story
 
+### Current resume checkpoint — BitBox02
+
+The original Bitcoin-only BitBox02 single-key BIP84 import and one trusted-display receive verification have physical Regtest evidence. Before continuing the matrix, repeat that receive verification once with the current UI and confirm the comparison modal says **Address shown on BitBox02**, displays the Rust-supplied `tb1` alias, and explains that it is script-equivalent to Groot's canonical `bcrt1` address. Then continue at step 2 below with an independent BIP48 2-of-3 wallet; multisig policy registration, rejection/retry, signing, wrong-device, persistence, broadcast, and descriptor recovery are still untested. Do not reuse or publish the prior address, fingerprint, xpub, or device path.
+
 Record only vendor/model, firmware, host OS, HWI version, date, and pass/fail/limitation. Keep the report under `hardware-certification.local/`, which is gitignored.
 
 1. Use a device that is already initialized with a seed and offline backup. Connect and unlock it; keep it ready over USB (and open its Bitcoin app when that vendor requires one). Groot must never initialize a signer or request its seed.
@@ -69,7 +74,7 @@ Record only vendor/model, firmware, host OS, HWI version, date, and pass/fail/li
 11. Complete the threshold with an independent signer, broadcast, mine, restart, and verify proposal/history state.
 12. Export the descriptor backup and reconstruct the same first receive address independently.
 
-Repeat for every model intended for release. The current implementation has explicit readiness handling for Coldcard, Trezor/KeepKey, Ledger, BitBox02, and Jade; this is code-path coverage, not physical compatibility evidence. The named first-release targets are Coldcard Mk4, Trezor Model One, Ledger, original BitBox02, and Jade/Jade Plus. BitBox02 Nova must not be inferred from the original BitBox02 device type: capture its real HWI enumeration, pairing cache, xpub, display, multisig registration, and signing behavior first. Whisper/BLE requires a separate authenticated-transport and mobile lifecycle review. Legacy Digital BitBox and any HWI model not listed here remain unsupported until they receive their own row and physical report. Vendor-specific policy-registration/address-display limitations must be visible in the UI and release notes; they must never be represented as successful verification.
+Repeat for every model intended for release. The current implementation has explicit readiness handling for Coldcard, Trezor/KeepKey, Ledger, BitBox02, and Jade; this is code-path coverage, not physical compatibility evidence. The named first-release targets are Coldcard Mk4, Trezor Model One, Ledger, original BitBox02, and Jade/Jade Plus. Trezor Safe 3 is a later independent certification target and must not inherit Model One results. BitBox02 Nova must not be inferred from the original BitBox02 device type: capture its real HWI enumeration, pairing cache, xpub, display, multisig registration, and signing behavior first. Whisper/BLE requires a separate authenticated-transport and mobile lifecycle review. Legacy Digital BitBox and any HWI model not listed here remain unsupported until they receive their own row and physical report. Vendor-specific policy-registration/address-display limitations must be visible in the UI and release notes; they must never be represented as successful verification.
 
 ## Mounted SD-card public-key story
 

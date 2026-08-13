@@ -10,10 +10,11 @@
   import LocalTimestamp from '$lib/components/LocalTimestamp.svelte';
   import HardwareVerificationStatus from '$lib/components/HardwareVerificationStatus.svelte';
   import HardwareActionPrompt from '$lib/components/HardwareActionPrompt.svelte';
+  import HardwareAddressComparison from '$lib/components/HardwareAddressComparison.svelte';
   import HardwareDeviceEmptyState from '$lib/components/HardwareDeviceEmptyState.svelte';
   import TrezorPinModal from '$lib/components/TrezorPinModal.svelte';
   import { compactAddress } from '$lib/address-display';
-  import { testnetAddressDisplayName } from '$lib/wallet/hardware-display';
+  import { hardwareAddressComparison } from '$lib/wallet/hardware-display';
   import { walletService, WalletError, type HardwareDevice, type WalletErrorCode } from '$lib/wallet';
   import { useWalletShellContext } from '$lib/wallet/shell-context';
   import { awaitingPaymentAddresses } from '$lib/wallet/policy';
@@ -41,7 +42,7 @@
   let pinOpen=$state(false),pinBusy=$state(false),pinChallenge=$state(''),pinPositions=$state(''),pinError=$state(''),pinErrorCode=$state<WalletErrorCode|''>(''),pinDevice=$state<HardwareDevice|null>(null);
   let verificationAction=$state<'scan'|'approve'>('scan');
   let verificationDeviceIdentity=$derived(`${savedSignerDeviceType ?? ''} ${verificationDevice?.label ?? ''} ${verificationDevice?.model ?? ''}`);
-  let testnetVerificationDevice=$derived(current?.testnetAlias?testnetAddressDisplayName(verificationDeviceIdentity):null);
+  let verificationComparison=$derived(current ? hardwareAddressComparison(current.address, current.testnetAlias, verificationDeviceIdentity) : null);
   let awaiting = $derived(awaitingPaymentAddresses(addresses));
   let history = $derived(addresses.filter((address) => address.status !== 'awaiting'));
   onMount(load);
@@ -96,9 +97,8 @@
     catch { toast({ title: 'Copy failed', description: 'Select and copy the address manually.', tone: 'danger' }); }
   };
   const copyVerificationAddress = async () => {
-    if (!current) return;
-    const address = testnetVerificationDevice ? current.testnetAlias! : current.address;
-    try { await copyText(address, 'bitcoin-address'); copied = true; toast({ title: 'Address copied', description: 'The exact comparison address is on your clipboard.', tone: 'success' }); setTimeout(() => copied = false, 1500); }
+    if (!verificationComparison) return;
+    try { await copyText(verificationComparison.address, 'bitcoin-address'); copied = true; toast({ title: 'Address copied', description: 'The exact comparison address is on your clipboard.', tone: 'success' }); setTimeout(() => copied = false, 1500); }
     catch { toast({ title: 'Copy failed', description: 'Select and copy the address manually.', tone: 'danger' }); }
   };
   const discard = async () => {
@@ -170,14 +170,8 @@
   <div class="warning-box">Discarded addresses remain monitored.</div>
   <div class="modal-footer"><Button variant="secondary" onclick={() => { showDiscard = false; discardTarget = null; }}>Keep address</Button><Button variant="danger" loading={busy} loadingLabel="Discarding…" onclick={discard}>Discard address</Button></div>
 </Modal>
-<Modal open={verifyOpen} preserveTop title="Verify receive address" description={testnetVerificationDevice ? `${testnetVerificationDevice} displays the Regtest output with a testnet prefix. Compare the exact address below.` : "Compare the exact address below with the complete address on your signer's trusted display."} onclose={()=>{if(!verifyBusy)verifyOpen=false;}}>
-  {#if current}
-    <section class="verification-address" aria-label="Address to compare">
-      <span>{testnetVerificationDevice ? `Address shown on ${testnetVerificationDevice}` : 'Address to compare'}</span>
-      <ReadableAddress address={testnetVerificationDevice ? current.testnetAlias! : current.address} {copied} oncopy={copyVerificationAddress}/>
-      <details class="verification-details"><summary><span>Address details</span><ChevronDown size={14}/></summary>{#if testnetVerificationDevice}<p class="verification-network-note">{testnetVerificationDevice} shows <code>tb1</code> on Regtest while Groot normally uses <code>bcrt1</code>. The prefix and six-character checksum differ; Rust verified that both decode to the identical Bitcoin output script.</p>{/if}<dl class="verification-derivation"><div><dt>Derivation</dt><dd><code>{current.derivationPath}</code></dd></div><div><dt>Address index</dt><dd><code>{current.id}</code></dd></div></dl></details>
-    </section>
-  {/if}
+<Modal open={verifyOpen} preserveTop title="Verify receive address" description={verificationComparison?.deviceName ? `${verificationComparison.deviceName} displays the Regtest output with a testnet prefix. Compare the exact address below.` : "Compare the exact address below with the complete address on your signer's trusted display."} onclose={()=>{if(!verifyBusy)verifyOpen=false;}}>
+  {#if current && verificationComparison}<HardwareAddressComparison comparison={verificationComparison} derivationPath={current.derivationPath} addressIndex={current.id} {copied} oncopy={copyVerificationAddress}/>{/if}
   {#if verifyBusy}
     <HardwareActionPrompt title={verificationAction === 'approve' ? 'Check your hardware device' : 'Looking for your saved signer'} detail={verificationAction === 'approve' ? 'Compare the complete address above, then approve it on the device.' : 'Keep the signer connected and unlocked while Groot matches its saved identity.'} label={verificationAction === 'approve' ? 'Waiting for hardware approval' : 'Hardware device scan in progress'}/>
   {:else}

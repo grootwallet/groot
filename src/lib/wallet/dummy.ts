@@ -126,9 +126,8 @@ export class DummyWalletAdapter implements WalletPort {
     this.#profiles.push(profile); this.#selectedWalletId = profile.id; this.#credentials.set(profile.id, credential); this.#unlockedWalletIds.add(profile.id);
     this.#exists = true;
   }
-  async recoverWallet(name: string, mnemonic: string, credential: string) {
-    if (mnemonic.trim().split(/\s+/).length !== 24) throw new WalletError('invalid_mnemonic', 'Groot requires exactly 24 recovery words.');
-    return this.createWallet(name, credential, true);
+  async recoverWallet(_name: string, _credential: string) {
+    throw new WalletError('secure_storage_unavailable', 'Recovery words must be entered in Groot desktop’s native recovery window.');
   }
   async verifyBackup(credential: string) {
     const profile = this.#profiles.find((wallet) => wallet.id === this.#selectedWalletId);
@@ -403,7 +402,7 @@ export class DummyWalletAdapter implements WalletPort {
       .map((signer) => ({ signerFingerprint: signer.fingerprint.toLowerCase(), deviceType: 'coldcard', verifiedAt: new Date().toISOString(), scope: 'policy_file_acknowledgement' as const, displayedAddress: null })) ?? [];
   }
   async multisigPolicyVerificationAddress() {
-    return { canonicalAddress: 'bcrt1qfixturepolicyaddress', ledgerTestnetAlias: 'tb1qfixturepolicyaddress' };
+    return { canonicalAddress: 'bcrt1qfixturepolicyaddress', testnetAlias: 'tb1qfixturepolicyaddress' };
   }
   async previewMultisigPolicyVerificationAddress(_policy: PolicyDraft) {
     return this.multisigPolicyVerificationAddress();

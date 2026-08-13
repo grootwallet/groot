@@ -3,6 +3,7 @@
   import type { CosignerDraft } from '$lib/multisig/policy';
   import type { MultisigWallet, PolicyVerificationAddress, SignerPolicyVerification } from '$lib/wallet';
   import { policyDeviceName, policyReadinessKind } from '$lib/hardware/policy-readiness';
+  import { addressForHardwareDisplay, testnetAddressDisplayName } from '$lib/wallet/hardware-display';
   import { copyText } from '$lib/clipboard';
   import { toast } from '$lib/stores/toasts';
   import Button from './Button.svelte';
@@ -28,7 +29,8 @@
   const kind = $derived(policyReadinessKind(signer));
   const deviceName = $derived(policyDeviceName(kind));
   const ledgerAccountName = $derived(`${wallet.threshold} of ${wallet.cosigners.length} Multisig`);
-  const displayedAddress = $derived(kind === 'ledger' && policyAddress.ledgerTestnetAlias ? policyAddress.ledgerTestnetAlias : policyAddress.canonicalAddress);
+  const testnetAddressDevice = $derived(policyAddress.testnetAlias ? testnetAddressDisplayName(kind) : null);
+  const displayedAddress = $derived(addressForHardwareDisplay(policyAddress.canonicalAddress, policyAddress.testnetAlias, kind));
 
   async function copyAddress() {
     await copyText(displayedAddress, 'public-wallet-data');
@@ -63,7 +65,7 @@
   <section class="policy-address-check" aria-label="First address to verify">
     <div><strong>First address to verify</strong><small>Approve only if the device shows this exact address.</small></div>
     <ReadableAddress address={displayedAddress} copied={addressCopied} oncopy={copyAddress}/>
-    {#if kind === 'ledger' && policyAddress.ledgerTestnetAlias}<small>Ledger Bitcoin Test displays the Regtest script with a <code>tb1</code> prefix.</small>{/if}
+    {#if testnetAddressDevice}<small>{testnetAddressDevice} displays the Regtest script with a <code>tb1</code> prefix. Rust verified that it decodes to the identical Bitcoin output script.</small>{/if}
   </section>
 
   <PolicySignerList signers={wallet.cosigners} currentFingerprint={signer.fingerprint}/>

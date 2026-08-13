@@ -1876,6 +1876,7 @@ dependencies = [
  "bip39",
  "block2",
  "jsonrpc",
+ "libc",
  "minreq",
  "objc2",
  "objc2-app-kit",
