@@ -477,7 +477,7 @@ fn funded_rbf_and_cpfp_cross_groot_proposal_boundaries() {
     sync(&mut wallet, &mut db, Arc::clone(&rpc));
     let snapshot = commit_multisig_broadcast(
         &mut db,
-        &wallet,
+        &replacement_tx,
         &rbf.proposal_id,
         &replacement_txid,
         Some(now().to_string()),
@@ -549,7 +549,7 @@ fn funded_rbf_and_cpfp_cross_groot_proposal_boundaries() {
     sync(&mut wallet, &mut db, Arc::clone(&rpc));
     commit_multisig_broadcast(
         &mut db,
-        &wallet,
+        &child_tx,
         &cpfp.proposal_id,
         &child_txid,
         Some(now().to_string()),

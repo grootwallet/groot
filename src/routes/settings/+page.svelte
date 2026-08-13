@@ -11,13 +11,14 @@
   import { walletService, WalletError } from '$lib/wallet';
   import { goto } from '$app/navigation';
   import { onDestroy, onMount } from 'svelte';
-  import type { CoreNodeConfig, ExternalSignerWallet, RecoveryScanSettings, RecoveryScanStatus, WalletProfile, WalletSyncSource } from '$lib/wallet/contracts';
+  import type { CoreNodeConfig, ExternalSignerWallet, NodeStatus, RecoveryScanSettings, RecoveryScanStatus, WalletProfile, WalletSyncSource } from '$lib/wallet/contracts';
   let deleting = $state(false);
   let confirmText = $state('');
   let deleteCredential = $state('');
   let busy = $state(false);
   let checking = $state(false);
   let connected = $state<boolean | null>(null);
+  let nodeStatus = $state<NodeStatus | null>(null);
   let theme = $state<'light' | 'dark'>('dark');
   let profiles = $state<WalletProfile[]>([]);
   let selectedWalletId = $state<string | null>(null);
@@ -65,16 +66,17 @@
     if (scanPoll) clearInterval(scanPoll);
   });
   function setTheme(next: 'light' | 'dark') { theme = next; document.documentElement.dataset.theme = next; document.querySelector('meta[name="theme-color"]')?.setAttribute('content', next === 'light' ? '#f4f1e9' : '#0d1118'); localStorage.setItem('groot-theme', next); }
+  function storageSize(bytes: number) { return bytes >= 1_000_000_000 ? `${(bytes / 1_000_000_000).toFixed(1)} GB` : `${Math.round(bytes / 1_000_000)} MB`; }
   async function checkConnection() {
     checking = true;
-    try { const result = await walletService.testNodeConnection(); connected = true; toast({ title: 'Bitcoin node connected', description: `${result.blocks} blocks`, tone: 'success' }); }
+    try { const result = await walletService.testNodeConnection(); connected = true; nodeStatus = result; toast({ title: 'Bitcoin node connected', description: `${result.blocks} blocks · ${result.pruned ? `pruned from ${result.pruneHeight ?? 'an unknown height'}` : 'full block history'}`, tone: 'success' }); }
     catch (cause) { connected = false; toast({ title: 'Node unavailable', description: cause instanceof Error ? cause.message : undefined, tone: 'danger' }); }
     finally { checking = false; }
   }
   function setNodeLocation(type: 'local_core'|'remote_core'|'tor') { node = type === 'local_core' ? localNodeConfig() : type === 'tor' ? { backend:{type:'remote_core',url:'http://example.onion:8332'},auth:'user_pass',username:'',torProxy:'127.0.0.1:9050' } : { backend:{type:'remote_core',url:'https://'},auth:'user_pass',username:'',torProxy:null }; nodePassword=''; nodeError=''; }
   async function saveNode() {
     busy=true;nodeError='';
-    try { const result=await walletService.saveNodeConfig(node,nodePassword,walletCredential);connected=true;nodeOpen=false;nodePassword='';walletCredential='';toast({title:'Node saved and verified',description:`Connected at block ${result.blocks}.`,tone:'success'}); }
+    try { const result=await walletService.saveNodeConfig(node,nodePassword,walletCredential);connected=true;nodeStatus=result;nodeOpen=false;nodePassword='';walletCredential='';toast({title:'Node saved and verified',description:`Connected at block ${result.blocks} · ${result.pruned?'pruned':'full history'}.`,tone:'success'}); }
     catch(cause){connected=false;nodeError=cause instanceof Error?cause.message:'Could not save this node.';}
     finally{nodePassword='';walletCredential='';busy=false;}
   }
@@ -301,7 +303,7 @@
     <div class="settings-list">
       <button onclick={openSyncSource}><span class="setting-icon"><RefreshCw size={18} /></span><span><strong>Wallet activity sync</strong><small>{syncSource.type === 'compact_filters' ? 'P2P compact filters · confirmed activity only' : 'Bitcoin Core RPC · confirmed and mempool activity'}</small></span><ChevronRight size={16}/></button>
       <button onclick={() => nodeOpen=true}><span class="setting-icon"><Network size={18} /></span><span><strong>Fee and broadcast node</strong><small>{networkName(defaultConfig.network)}{' · '}{node.backend.type === 'local_core' ? 'This Mac' : 'Trusted remote server'}{' · '}<span class="selectable-text">{node.backend.url}</span></small></span><ChevronRight size={16}/></button>
-      <button disabled={checking} onclick={checkConnection}><span class="setting-icon"><Check size={18}/></span><span><strong>Test connection</strong><small>Verify RPC authentication and chain availability.</small></span><span class="badge" class:offline={connected === false}>{checking ? 'Checking…' : connected === true ? 'Connected' : connected === false ? 'Offline' : 'Check'}</span></button>
+      <button disabled={checking} onclick={checkConnection}><span class="setting-icon"><Check size={18}/></span><span><strong>Test connection</strong><small>{nodeStatus ? `${nodeStatus.pruned ? `Pruned from block ${nodeStatus.pruneHeight ?? 'unknown'}` : 'Full block history'} · ${storageSize(nodeStatus.sizeOnDisk)} chain data · filter index ${nodeStatus.blockFilterIndex}${nodeStatus.initialBlockDownload ? ' · initial download active' : ''}` : 'Verify RPC authentication, retained block history, IBD, disk use, and filter-index status.'}</small></span><span class="badge" class:offline={connected === false}>{checking ? 'Checking…' : connected === true ? 'Connected' : connected === false ? 'Offline' : 'Check'}</span></button>
     </div>
   </section>
   {#if selectedProfile?.kind !== 'multisig'}<section class="settings-group danger-zone"><h2>Wallet deletion</h2><div><span><strong>Delete wallet</strong><small>Remove only {selectedProfile?.name ?? 'this wallet'} from this device.</small></span><Button variant="danger-outline" size="small" onclick={() => deleting = true}><Trash2 size={15} />Delete</Button></div></section>{:else}<section class="settings-group danger-zone"><h2>Wallet deletion</h2><div><span><strong>Delete policy wallet</strong><small>A successful recovery drill is required first.</small></span><Button variant="danger-outline" size="small" href="/multisig/backup"><Trash2 size={15}/>Review</Button></div></section>{/if}
@@ -348,13 +350,13 @@
 <Modal open={syncOpen} title="Wallet activity sync" description="Choose how this wallet discovers transactions. Fee estimation and broadcast continue to use the separately configured Bitcoin Core service." onclose={() => {if(syncSaving)return;syncOpen=false;syncCredential='';syncError='';}}>
   <div class="theme-choice node-location"><button class:active={syncSourceType==='bitcoin_core'} onclick={() => syncSourceType='bitcoin_core'}>Bitcoin Core</button><button class:active={syncSourceType==='compact_filters'} onclick={() => syncSourceType='compact_filters'}>Compact filters</button></div>
   {#if syncSourceType === 'compact_filters'}
-    <div class="warning-box"><strong>Confirmed activity only.</strong> BIP157/158 peers provide public filters and matching blocks. Groot validates them locally; pending incoming payments are not discoverable through this source.</div>
+    <div class="warning-box"><strong>Confirmed activity only.</strong> BIP157/158 peers provide public filters and matching blocks. Groot validates them locally; pending incoming payments are not discoverable through this source. This build keeps the public chain index in memory, so filters are downloaded again after an app restart; wallet history and checkpoints remain durable.</div>
     <label class="field"><span>Peer selection</span><select bind:value={syncDiscoverPeers} onchange={(event) => {syncDiscoverPeers=event.currentTarget.value==='true';if(syncDiscoverPeers)syncTorProxy='';}}><option value={true}>Public peer discovery</option><option value={false}>Manual peers only</option></select><small>Manual mode never falls back to DNS seeds or public peers.</small></label>
     <label class="field"><span>Required peers</span><input type="number" min={defaultConfig.network==='regtest'?1:2} max="15" step="1" bind:value={syncRequiredPeers}/><small>Public test networks require at least two independent peers. Regtest permits one local peer.</small></label>
     <label class="field"><span>Manual peers · one numeric IP:port per line</span><textarea rows="3" bind:value={syncPeers} placeholder={defaultConfig.network==='regtest'?'127.0.0.1:18444':'203.0.113.10:38333\n[2001:db8::10]:38333'}></textarea><small>Hostnames are rejected so proxy mode cannot leak DNS.</small></label>
     {#if !syncDiscoverPeers}<label class="field"><span>Optional local Tor SOCKS5 proxy</span><input bind:value={syncTorProxy} placeholder="127.0.0.1:9050"/><small>When set, every P2P connection uses this loopback proxy. There is no direct fallback.</small></label>{/if}
   {:else}
-    <div class="warning-box"><strong>Bitcoin Core activity sync.</strong> Groot uses the RPC node below for confirmed blocks and mempool changes.</div>
+    <div class="warning-box"><strong>Bitcoin Core activity sync.</strong> Groot uses the RPC node below for confirmed blocks and mempool changes. It does not require Core’s block-filter index. A pruned node can sync while it still retains every block newer than this wallet’s checkpoint; an older rescan needs an archival node or a reindex/re-download with enough history.</div>
   {/if}
   <PasswordField label={credentialLabel} bind:value={syncCredential} autocomplete="current-password" hint="Required to change this wallet’s network privacy boundary."/>
   {#if syncError}<p class="form-error" role="alert">{syncError}</p>{/if}

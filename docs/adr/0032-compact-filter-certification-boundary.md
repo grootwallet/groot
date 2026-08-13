@@ -10,7 +10,7 @@ Certification work for Issue #7 must distinguish Groot-owned behavior from behav
 
 The pinned `bip157` builder accepts a `data_dir`, but 0.6.3 currently discards that value when constructing its node. Header, filter-header, and filter state are therefore memory-only. Groot's shared network directory is a reserved, owner-only working directory, not a durable public-chain cache. Corrupt/truncated Kyoto cache repair and cache-growth claims are not applicable until upstream persists data.
 
-The pinned dependency also contains a debug-assertion-only macro that prints diagnostics directly to stdout. Those diagnostics can include peer endpoints and matching block hashes. Groot disables debug assertions specifically for the pinned `bip157` package in Cargo's development and test profiles; release builds already omit the path. Groot still drains Kyoto's structured info/warning channels without forwarding them to the webview.
+The pinned dependency also contains a debug-assertion-only macro that prints diagnostics directly to stdout. Those diagnostics can include peer endpoints and matching block hashes. Groot disables debug assertions specifically for the pinned `bip157` package in Cargo's development and test profiles; release builds already omit the path. Groot drains Kyoto's structured info/warning channels and maps only connection counts, weighted overall percentage, public chain height, and coarse lifecycle states into a sanitized status DTO. It never forwards peer addresses, raw warnings, block hashes, scripts, or descriptors to the webview.
 
 ## Decision
 
@@ -21,6 +21,7 @@ The pinned dependency also contains a debug-assertion-only macro that prints dia
 - Run funded Regtest certification through Bitcoin Core's real BIP157/BIP158 service. The test persists a confirmed transaction, reopens the wallet, builds a longer alternate chain without the transaction, proves retained unconfirmed history, and then proves one correct re-anchor without duplication.
 - Search a bounded disposable Regtest chain for a mathematically valid BIP158 false-positive against a large deterministic script set, verify the selected block contains none of those scripts, then let Kyoto fetch and validate it and prove BDK creates no transaction or balance.
 - Do not expose dependency diagnostics to the webview. Keep the package-specific debug-output suppression in development and test builds. Do not claim durable cache integrity, conflicting-peer coverage, or complete hostile-message certification from these tests.
+- Persist Groot's own successfully broadcast transaction as unconfirmed in the same SQLite transaction as proposal completion, intent/replacement metadata, and notification state. Compact-filter mode still makes no claim that it can discover unrelated incoming mempool transactions.
 
 ## Consequences
 

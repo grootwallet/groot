@@ -7,7 +7,7 @@
   import TxDetailsModal from '$lib/components/TxDetailsModal.svelte';
   import { btc, shortSats } from '$lib/data';
   import { toast } from '$lib/stores/toasts';
-  import { walletService, WalletError, type MultisigProposal, type MultisigWallet, type WalletProfile, type WalletSnapshot } from '$lib/wallet';
+  import { walletService, WalletError, type MultisigProposal, type MultisigWallet, type WalletProfile, type WalletSnapshot, type WalletSyncSource, type WalletSyncStatus } from '$lib/wallet';
   import { latestActiveProposal } from '$lib/wallet/proposal-resume';
   import { pendingBalance, sortTransactionsNewestFirst } from '$lib/wallet/presentation';
   import { onMount } from 'svelte';
@@ -40,6 +40,9 @@
   let verifyError = $state('');
   let verifying = $state(false);
   let initialDataLoading = $state(true);
+  let syncSource = $state<WalletSyncSource | null>(null);
+  let syncStatus = $state<WalletSyncStatus | null>(null);
+  let syncPollToken = 0;
   const pendingSats = $derived(snapshot ? pendingBalance(snapshot.balance) : 0);
   const recentTransactions = $derived(sortTransactionsNewestFirst(snapshot?.transactions ?? []).slice(0, 3));
   const proposalHref = $derived(multisig ? '/multisig/send' : '/send');
@@ -53,6 +56,7 @@
     try {
       if (!await walletService.exists()) { await goto('/welcome'); return; }
       const registry = await walletService.profiles();
+      syncSource = await walletService.syncSource();
       selectedProfile = registry.wallets.find((wallet) => wallet.id === registry.selectedWalletId) ?? null;
       multisig = selectedProfile?.kind === 'multisig';
       if (multisig) {
@@ -70,6 +74,7 @@
         activeProposal = latestActiveProposal(proposals);
       }
       initialDataLoading = false;
+      if (syncSource.type === 'compact_filters') void sync(false);
     } catch (cause) {
       if (cause instanceof WalletError && cause.code === 'wallet_locked') { await goto('/unlock'); return; }
       loadError = cause instanceof Error ? cause.message : 'The wallet data could not be read.';
@@ -98,18 +103,35 @@
       document.removeEventListener('keydown', closeOnEscape);
     };
   });
-  const sync = async () => {
+  async function refreshSyncStatus() {
+    try { syncStatus = await walletService.syncStatus(); } catch { /* The sync result remains authoritative. */ }
+  }
+  async function pollSyncStatus(token: number) {
+    while (syncing && token === syncPollToken) {
+      await refreshSyncStatus();
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+  }
+  const sync = async (showToast = true) => {
+    if (syncing) return;
     syncing = true;
+    const token = ++syncPollToken;
+    void pollSyncStatus(token);
     try {
       const [nextSnapshot] = await Promise.all([
         multisig ? walletService.syncMultisig() : walletService.sync(),
         new Promise((resolve) => setTimeout(resolve, 1_200))
       ]);
       snapshot = nextSnapshot;
-      toast({ title: 'Wallet is up to date', description: 'Balance and transactions refreshed.', tone: 'success' });
+      if (showToast) toast({ title: 'Wallet is up to date', description: 'Balance and transactions refreshed.', tone: 'success' });
     }
-    catch (cause) { toast({ title: 'Sync failed', description: cause instanceof Error ? cause.message : undefined, tone: 'danger' }); }
-    finally { syncing = false; }
+    catch (cause) {
+      if (showToast) toast({ title: 'Sync failed', description: cause instanceof Error ? cause.message : undefined, tone: 'danger' });
+    }
+    finally {
+      await refreshSyncStatus();
+      syncing = false;
+    }
   };
   async function verifyBackup() {
     verifying = true;
@@ -134,7 +156,13 @@
 </script>
 
 <div class="page dashboard-page">
-  <header class="page-header"><div><p class="eyebrow">WALLET</p><h1>Overview</h1></div><button class="sync-button" onclick={sync}><RefreshCw size={15} class={syncing ? 'spin' : ''} />{syncing ? 'Syncing' : 'Updated now'}</button></header>
+  <header class="page-header"><div><p class="eyebrow">WALLET</p><h1>Overview</h1></div><button class="sync-button" disabled={syncing} onclick={() => sync(true)}><RefreshCw size={15} class={syncing ? 'spin' : ''} />{syncing && syncStatus?.progressPercent !== null && syncStatus?.progressPercent !== undefined ? `${syncStatus.progressPercent}%` : syncing ? 'Syncing' : 'Updated now'}</button></header>
+  {#if syncSource?.type === 'compact_filters' && syncStatus && (syncing || syncStatus.state === 'failed')}
+    <section class:failed={syncStatus.state === 'failed'} class="compact-filter-progress" aria-live="polite">
+      <div><strong>{syncStatus.state === 'connecting' ? 'Connecting to filter peers' : syncStatus.state === 'checking_matches' ? 'Checking matching blocks' : syncStatus.state === 'applying' ? 'Saving verified wallet state' : syncStatus.state === 'failed' ? 'Compact-filter sync stopped' : 'Downloading and checking compact filters'}</strong><small>{syncStatus.state === 'failed' ? `Balance remains verified through block ${syncStatus.lastVerifiedHeight}. Retry when your connection is available.` : syncStatus.chainHeight !== null ? `Network height ${syncStatus.chainHeight.toLocaleString()} · verified wallet state stays unchanged until completion` : syncStatus.connectedPeers !== null && syncStatus.requiredPeers !== null ? `${syncStatus.connectedPeers} of ${syncStatus.requiredPeers} required peers connected` : 'Verified wallet state stays unchanged until the scan completes.'}</small></div>
+      {#if syncStatus.progressPercent !== null && syncStatus.state !== 'failed'}<progress max="100" value={syncStatus.progressPercent} aria-label="Compact-filter download progress">{syncStatus.progressPercent}%</progress>{/if}
+    </section>
+  {/if}
   {#if selectedProfile?.kind === 'single_key' && !selectedProfile.backupVerified}
     <section class="backup-verification-banner" aria-label="Recovery backup status"><ShieldCheck size={18}/><span><strong>Recovery backup not verified</strong><small>Confirm your written words so you know this wallet can be recovered.</small></span><Button size="small" variant="secondary" onclick={() => { verifyError=''; verifyOpen=true; }}>Verify now</Button></section>
   {/if}

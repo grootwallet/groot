@@ -1,16 +1,23 @@
 use bdk_kyoto::{
-    bip157::{tokio, TrustedPeer},
+    bip157::{tokio, Info, TrustedPeer, Warning},
     builder::{Builder, BuilderExt},
     ScanType, Update,
 };
 use bdk_wallet::{bitcoin::Network, Wallet};
-use std::{fs, path::Path, time::Duration};
+use std::{fs, path::Path, sync::Arc, time::Duration};
 
 use crate::network::ValidatedCompactFilterConfig;
 
 const SYNC_DEADLINE: Duration = Duration::from_secs(3 * 60);
 const PEER_RESPONSE_TIMEOUT: Duration = Duration::from_secs(15);
 const PEER_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(20);
+
+#[derive(Clone, Copy)]
+struct SyncTimeouts {
+    sync: Duration,
+    response: Duration,
+    handshake: Duration,
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum CompactFilterError {
@@ -24,6 +31,15 @@ pub enum CompactFilterError {
     Stopped(#[from] bdk_kyoto::UpdateError),
     #[error("compact-filter sync did not reach the network tip before the bounded deadline")]
     TimedOut,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum SyncProgress {
+    Connecting { connected: usize, required: usize },
+    Connected,
+    Scanning { percent: f32, chain_height: u32 },
+    CheckingMatch,
+    Degraded,
 }
 
 fn prepare_working_directory(path: &Path) -> Result<(), CompactFilterError> {
@@ -59,38 +75,57 @@ fn prepare_working_directory(path: &Path) -> Result<(), CompactFilterError> {
 /// Fetch one verified, confirmed-only wallet update. Dropping the dedicated
 /// runtime terminates the node and all of its peer tasks after the update or
 /// deadline, so mobile/desktop lifecycle work stays bounded.
-pub fn sync(
+#[cfg(test)]
+fn sync(
     wallet: &Wallet,
     network: Network,
     cache_dir: &Path,
     config: &ValidatedCompactFilterConfig,
 ) -> Result<Update, CompactFilterError> {
+    sync_with_progress(wallet, network, cache_dir, config, |_| {})
+}
+
+pub fn sync_with_progress<F>(
+    wallet: &Wallet,
+    network: Network,
+    cache_dir: &Path,
+    config: &ValidatedCompactFilterConfig,
+    on_progress: F,
+) -> Result<Update, CompactFilterError>
+where
+    F: Fn(SyncProgress) + Send + Sync + 'static,
+{
     sync_with_timeouts(
         wallet,
         network,
         cache_dir,
         config,
-        SYNC_DEADLINE,
-        PEER_RESPONSE_TIMEOUT,
-        PEER_HANDSHAKE_TIMEOUT,
+        SyncTimeouts {
+            sync: SYNC_DEADLINE,
+            response: PEER_RESPONSE_TIMEOUT,
+            handshake: PEER_HANDSHAKE_TIMEOUT,
+        },
+        on_progress,
     )
 }
 
-fn sync_with_timeouts(
+fn sync_with_timeouts<F>(
     wallet: &Wallet,
     network: Network,
     cache_dir: &Path,
     config: &ValidatedCompactFilterConfig,
-    sync_deadline: Duration,
-    response_timeout: Duration,
-    handshake_timeout: Duration,
-) -> Result<Update, CompactFilterError> {
+    timeouts: SyncTimeouts,
+    on_progress: F,
+) -> Result<Update, CompactFilterError>
+where
+    F: Fn(SyncProgress) + Send + Sync + 'static,
+{
     prepare_working_directory(cache_dir)?;
     let mut builder = Builder::new(network)
         .data_dir(cache_dir)
         .required_peers(config.required_peers)
-        .response_timeout(response_timeout)
-        .handshake_timeout(handshake_timeout);
+        .response_timeout(timeouts.response)
+        .handshake_timeout(timeouts.handshake);
     for peer in &config.peers {
         builder = builder.add_peer(TrustedPeer::from_socket_addr(*peer));
     }
@@ -108,11 +143,40 @@ fn sync_with_timeouts(
         .enable_all()
         .build()
         .map_err(CompactFilterError::Runtime)?;
+    let on_progress = Arc::new(on_progress);
     runtime.block_on(async move {
-        tokio::task::spawn(async move { while info_subscriber.recv().await.is_some() {} });
-        tokio::task::spawn(async move { while warning_subscriber.recv().await.is_some() {} });
+        let info_progress = Arc::clone(&on_progress);
+        tokio::task::spawn(async move {
+            while let Some(info) = info_subscriber.recv().await {
+                let progress = match info {
+                    Info::SuccessfulHandshake | Info::ConnectionsMet => SyncProgress::Connected,
+                    Info::Progress(progress) => SyncProgress::Scanning {
+                        percent: progress.percentage_complete().clamp(0.0, 100.0),
+                        chain_height: progress.chain_height(),
+                    },
+                    Info::BlockReceived(_) => SyncProgress::CheckingMatch,
+                };
+                info_progress(progress);
+            }
+        });
+        let warning_progress = Arc::clone(&on_progress);
+        tokio::task::spawn(async move {
+            while let Some(warning) = warning_subscriber.recv().await {
+                let progress = match warning {
+                    Warning::NeedConnections {
+                        connected,
+                        required,
+                    } => SyncProgress::Connecting {
+                        connected,
+                        required,
+                    },
+                    _ => SyncProgress::Degraded,
+                };
+                warning_progress(progress);
+            }
+        });
         let _active = client.start();
-        tokio::time::timeout(sync_deadline, updates.update())
+        tokio::time::timeout(timeouts.sync, updates.update())
             .await
             .map_err(|_| CompactFilterError::TimedOut)?
             .map_err(CompactFilterError::Stopped)
@@ -164,9 +228,12 @@ mod tests {
             Network::Regtest,
             cache,
             config,
-            Duration::from_millis(300),
-            Duration::from_millis(100),
-            Duration::from_millis(100),
+            SyncTimeouts {
+                sync: Duration::from_millis(300),
+                response: Duration::from_millis(100),
+                handshake: Duration::from_millis(100),
+            },
+            |_| {},
         )
     }
 
@@ -234,9 +301,12 @@ mod tests {
             Network::Signet,
             &cache,
             &config,
-            Duration::from_millis(100),
-            Duration::from_millis(50),
-            Duration::from_millis(50),
+            SyncTimeouts {
+                sync: Duration::from_millis(100),
+                response: Duration::from_millis(50),
+                handshake: Duration::from_millis(50),
+            },
+            |_| {},
         );
         assert!(matches!(result, Err(CompactFilterError::Build(_))));
         assert_eq!(wallet.latest_checkpoint(), checkpoint);

@@ -177,10 +177,11 @@ export class DummyWalletAdapter implements WalletPort {
   async saveNodeConfig(config: CoreNodeConfig, password: string, credential: string) {
     if (!this.#selectedWalletId || credential !== this.#credentials.get(this.#selectedWalletId)) throw new WalletError('invalid_credential', 'Incorrect app PIN.');
     if (config.auth === 'user_pass' && !password) throw new WalletError('internal_error', 'RPC password is required.');
-    this.#nodeConfig = { ...config, backend: { ...config.backend } }; return { connected: true, blocks: 301, backend: { ...config, backend: { ...config.backend } } };
+    this.#nodeConfig = { ...config, backend: { ...config.backend } }; return { connected: true, blocks: 301, backend: { ...config, backend: { ...config.backend } }, pruned: false, pruneHeight: null, initialBlockDownload: false, sizeOnDisk: 42_000_000, blockFilterIndex: 'disabled' as const };
   }
-  async testNodeConnection() { return { connected: true, blocks: 301, backend: structuredClone(this.#nodeConfig) }; }
+  async testNodeConnection() { return { connected: true, blocks: 301, backend: structuredClone(this.#nodeConfig), pruned: false, pruneHeight: null, initialBlockDownload: false, sizeOnDisk: 42_000_000, blockFilterIndex: 'disabled' as const }; }
   async syncSource() { return structuredClone(this.#syncSource); }
+  async syncStatus() { return null; }
   async saveSyncSource(source: WalletSyncSource, credential: string) {
     if (!this.#selectedWalletId || credential !== this.#credentials.get(this.#selectedWalletId)) throw new WalletError('invalid_credential', 'Incorrect app PIN.');
     this.#syncSource = structuredClone(source);

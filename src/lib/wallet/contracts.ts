@@ -193,7 +193,16 @@ export type CoreNodeConfig = {
   username: string | null;
   torProxy?: string | null;
 };
-export type NodeStatus = { connected: boolean; blocks: number; backend: CoreNodeConfig };
+export type NodeStatus = {
+  connected: boolean;
+  blocks: number;
+  backend: CoreNodeConfig;
+  pruned: boolean;
+  pruneHeight: number | null;
+  initialBlockDownload: boolean;
+  sizeOnDisk: number;
+  blockFilterIndex: 'synced' | 'building' | 'disabled' | 'unknown';
+};
 export type WalletSyncSource =
   | { type: 'bitcoin_core' }
   | {
@@ -203,6 +212,17 @@ export type WalletSyncSource =
       discoverPeers: boolean;
       torProxy?: string | null;
     };
+export type WalletSyncStatus = {
+  walletId: string;
+  source: 'bitcoin_core' | 'compact_filters';
+  state: 'connecting' | 'syncing' | 'checking_matches' | 'applying' | 'completed' | 'failed';
+  progressPercent: number | null;
+  chainHeight: number | null;
+  lastVerifiedHeight: number;
+  connectedPeers: number | null;
+  requiredPeers: number | null;
+  updatedAt: number;
+};
 export type PayjoinUriInspection = {
   address: string;
   amount: number | null;
@@ -347,6 +367,7 @@ export interface WalletPort {
   saveNodeConfig(config: CoreNodeConfig, password: string, credential: string): Promise<NodeStatus>;
   testNodeConnection(): Promise<NodeStatus>;
   syncSource(): Promise<WalletSyncSource>;
+  syncStatus(): Promise<WalletSyncStatus | null>;
   saveSyncSource(source: WalletSyncSource, credential: string): Promise<WalletSyncSource>;
   inspectPayjoinUri(value: string): Promise<PayjoinUriInspection>;
   recoveryScanSettings(): Promise<RecoveryScanSettings>;
