@@ -71,6 +71,11 @@ mod tests {
             .endpoint
             .to_ascii_lowercase()
             .starts_with("https://payjo.in/"));
+        let with_amount = V2_URI.replacen('?', "?amount=0.00050000&", 1);
+        assert_eq!(
+            inspect_uri(&with_amount, Network::Testnet).unwrap().amount,
+            Some(50_000)
+        );
     }
 
     #[test]
@@ -86,5 +91,26 @@ mod tests {
             inspect_uri(V2_URI, Network::Bitcoin),
             Err(PayjoinUriError::WrongNetwork)
         ));
+    }
+
+    #[test]
+    fn rejects_empty_oversized_and_malformed_requests_with_stable_errors() {
+        let cases = [
+            ("".to_owned(), PayjoinUriError::InvalidLength),
+            (
+                "x".repeat(MAX_PAYJOIN_URI_BYTES + 1),
+                PayjoinUriError::InvalidLength,
+            ),
+            ("bitcoin:%".to_owned(), PayjoinUriError::Invalid),
+        ];
+        for (input, expected) in cases {
+            let error = inspect_uri(&input, Network::Regtest).unwrap_err();
+            assert_eq!(
+                std::mem::discriminant(&error),
+                std::mem::discriminant(&expected)
+            );
+            assert!(!error.to_string().is_empty());
+            assert!(std::error::Error::source(&error).is_none());
+        }
     }
 }
