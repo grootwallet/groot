@@ -1,4 +1,6 @@
+use bdk_wallet::bitcoin::Network;
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::net::{IpAddr, SocketAddr};
 use url::Url;
 
@@ -25,6 +27,132 @@ pub struct CoreNodeConfig {
     pub username: Option<String>,
     #[serde(default)]
     pub tor_proxy: Option<String>,
+}
+
+/// Selects only the source used to discover confirmed wallet transactions.
+/// Fee estimation and transaction broadcast remain explicit Bitcoin Core
+/// services so switching discovery never creates a hidden network fallback.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum WalletSyncSource {
+    #[default]
+    BitcoinCore,
+    CompactFilters {
+        peers: Vec<String>,
+        required_peers: u8,
+        discover_peers: bool,
+        #[serde(default)]
+        tor_proxy: Option<String>,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ValidatedCompactFilterConfig {
+    pub peers: Vec<SocketAddr>,
+    pub required_peers: u8,
+    pub discover_peers: bool,
+    pub tor_proxy: Option<SocketAddr>,
+}
+
+impl WalletSyncSource {
+    pub fn validate(
+        &self,
+        network: Network,
+    ) -> Result<Option<ValidatedCompactFilterConfig>, NetworkConfigError> {
+        let Self::CompactFilters {
+            peers,
+            required_peers,
+            discover_peers,
+            tor_proxy,
+        } = self
+        else {
+            return Ok(None);
+        };
+        if peers.len() > 15 || *required_peers == 0 || *required_peers > 15 {
+            return Err(NetworkConfigError::InvalidPeerConfiguration);
+        }
+        let parsed_peers = peers
+            .iter()
+            .map(|peer| {
+                peer.parse::<SocketAddr>()
+                    .map_err(|_| NetworkConfigError::InvalidPeerConfiguration)
+                    .and_then(|address| {
+                        if address.port() == 0 || address.ip().is_unspecified() {
+                            Err(NetworkConfigError::InvalidPeerConfiguration)
+                        } else {
+                            Ok(address)
+                        }
+                    })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        if parsed_peers.iter().copied().collect::<HashSet<_>>().len() != parsed_peers.len() {
+            return Err(NetworkConfigError::InvalidPeerConfiguration);
+        }
+        if !*discover_peers && parsed_peers.len() < usize::from(*required_peers) {
+            return Err(NetworkConfigError::InvalidPeerConfiguration);
+        }
+        if network != Network::Regtest && *required_peers < 2 {
+            return Err(NetworkConfigError::InsufficientPeerDiversity);
+        }
+        // Whitelisted peers bypass discovery's netgroup selection. Require
+        // distinct /16 IPv4 or /64 IPv6 groups in manual public-network mode
+        // so repeated endpoints on one local/provider subnet cannot satisfy
+        // the configured peer-diversity threshold.
+        if network != Network::Regtest
+            && !*discover_peers
+            && parsed_peers
+                .iter()
+                .map(|peer| peer_netgroup(peer.ip()))
+                .collect::<HashSet<_>>()
+                .len()
+                < usize::from(*required_peers)
+        {
+            return Err(NetworkConfigError::InsufficientPeerDiversity);
+        }
+        let parsed_proxy = tor_proxy
+            .as_deref()
+            .map(|proxy| {
+                let proxy = proxy
+                    .parse::<SocketAddr>()
+                    .map_err(|_| NetworkConfigError::InvalidProxy)?;
+                if !proxy.ip().is_loopback() || proxy.port() == 0 {
+                    return Err(NetworkConfigError::InvalidProxy);
+                }
+                Ok(proxy)
+            })
+            .transpose()?;
+        // bip157 0.6 resolves DNS seeds and hostname peers locally. Until
+        // upstream supports proxy-side DNS, Tor is fail-closed with explicit
+        // numeric peers and public discovery disabled.
+        if parsed_proxy.is_some() && *discover_peers {
+            return Err(NetworkConfigError::ProxyDnsLeak);
+        }
+        Ok(Some(ValidatedCompactFilterConfig {
+            peers: parsed_peers,
+            required_peers: *required_peers,
+            discover_peers: *discover_peers,
+            tor_proxy: parsed_proxy,
+        }))
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum PeerNetgroup {
+    Ipv4(u8, u8),
+    Ipv6(u16, u16, u16, u16),
+}
+
+fn peer_netgroup(ip: IpAddr) -> PeerNetgroup {
+    match ip {
+        IpAddr::V4(ip) => {
+            let octets = ip.octets();
+            PeerNetgroup::Ipv4(octets[0], octets[1])
+        }
+        IpAddr::V6(ip) => {
+            let segments = ip.segments();
+            PeerNetgroup::Ipv6(segments[0], segments[1], segments[2], segments[3])
+        }
+    }
 }
 
 impl CoreNodeConfig {
@@ -85,6 +213,9 @@ pub enum NetworkConfigError {
     UnsupportedScheme,
     UnknownPreset,
     InvalidProxy,
+    InvalidPeerConfiguration,
+    InsufficientPeerDiversity,
+    ProxyDnsLeak,
 }
 
 pub const ESPLORA_PRESETS: &[(&str, &str)] = &[
@@ -316,5 +447,72 @@ mod tests {
             .validate(),
             Err(NetworkConfigError::InvalidProxy)
         );
+    }
+
+    #[test]
+    fn compact_filters_require_peer_diversity_on_public_test_networks() {
+        let source = WalletSyncSource::CompactFilters {
+            peers: vec!["127.0.0.1:38333".into()],
+            required_peers: 1,
+            discover_peers: false,
+            tor_proxy: None,
+        };
+        assert_eq!(
+            source.validate(Network::Signet),
+            Err(NetworkConfigError::InsufficientPeerDiversity)
+        );
+        assert!(source.validate(Network::Regtest).is_ok());
+    }
+
+    #[test]
+    fn compact_filter_tor_is_fail_closed_against_local_dns_discovery() {
+        let source = WalletSyncSource::CompactFilters {
+            peers: vec!["127.0.0.1:38333".into(), "127.0.0.2:38333".into()],
+            required_peers: 2,
+            discover_peers: true,
+            tor_proxy: Some("127.0.0.1:9050".into()),
+        };
+        assert_eq!(
+            source.validate(Network::Signet),
+            Err(NetworkConfigError::ProxyDnsLeak)
+        );
+    }
+
+    #[test]
+    fn compact_filter_manual_mode_requires_enough_explicit_socket_peers() {
+        let source = WalletSyncSource::CompactFilters {
+            peers: vec!["node.example:38333".into()],
+            required_peers: 2,
+            discover_peers: false,
+            tor_proxy: None,
+        };
+        assert_eq!(
+            source.validate(Network::Signet),
+            Err(NetworkConfigError::InvalidPeerConfiguration)
+        );
+    }
+
+    #[test]
+    fn compact_filter_manual_public_peers_require_distinct_netgroups() {
+        for peers in [
+            vec!["203.0.113.10:38333".into(), "203.0.113.10:38333".into()],
+            vec!["203.0.113.10:38333".into(), "203.0.113.11:38333".into()],
+        ] {
+            let source = WalletSyncSource::CompactFilters {
+                peers,
+                required_peers: 2,
+                discover_peers: false,
+                tor_proxy: None,
+            };
+            assert!(source.validate(Network::Signet).is_err());
+        }
+
+        let diverse = WalletSyncSource::CompactFilters {
+            peers: vec!["203.0.113.10:38333".into(), "198.51.100.11:38333".into()],
+            required_peers: 2,
+            discover_peers: false,
+            tor_proxy: None,
+        };
+        assert!(diverse.validate(Network::Signet).is_ok());
     }
 }

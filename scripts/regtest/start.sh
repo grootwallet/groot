@@ -15,6 +15,8 @@ else
     -datadir="${REGTEST_DIR}" \
     -server=1 \
     -txindex=1 \
+    -blockfilterindex=1 \
+    -peerblockfilters=1 \
     -fallbackfee=0.00001 \
     -rpcbind=127.0.0.1 \
     -rpcallowip=127.0.0.1 \

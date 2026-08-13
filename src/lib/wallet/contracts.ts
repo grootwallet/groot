@@ -194,6 +194,23 @@ export type CoreNodeConfig = {
   torProxy?: string | null;
 };
 export type NodeStatus = { connected: boolean; blocks: number; backend: CoreNodeConfig };
+export type WalletSyncSource =
+  | { type: 'bitcoin_core' }
+  | {
+      type: 'compact_filters';
+      peers: string[];
+      requiredPeers: number;
+      discoverPeers: boolean;
+      torProxy?: string | null;
+    };
+export type PayjoinUriInspection = {
+  address: string;
+  amount: number | null;
+  label: string | null;
+  message: string | null;
+  endpoint: string;
+  version: 'v2';
+};
 export type RecoveryScanSettings = { birthdayHeight: number; gapLimit: number };
 export type RecoveryScanStatus = {
   status: 'idle' | 'running' | 'cancelling' | 'cancelled' | 'completed' | 'interrupted' | 'failed';
@@ -259,6 +276,7 @@ export type WalletErrorCode =
   | 'invalid_derivation_path'
   | 'wrong_network'
   | 'invalid_node_config'
+  | 'invalid_payjoin_uri'
   | 'hardware_unavailable'
   | 'hardware_ambiguous'
   | 'hardware_address_mismatch'
@@ -328,6 +346,9 @@ export interface WalletPort {
   nodeConfig(): Promise<CoreNodeConfig>;
   saveNodeConfig(config: CoreNodeConfig, password: string, credential: string): Promise<NodeStatus>;
   testNodeConnection(): Promise<NodeStatus>;
+  syncSource(): Promise<WalletSyncSource>;
+  saveSyncSource(source: WalletSyncSource, credential: string): Promise<WalletSyncSource>;
+  inspectPayjoinUri(value: string): Promise<PayjoinUriInspection>;
   recoveryScanSettings(): Promise<RecoveryScanSettings>;
   saveRecoveryScanSettings(birthdayHeight: number, gapLimit: number, credential: string): Promise<RecoveryScanSettings>;
   recoveryScanStatus(): Promise<RecoveryScanStatus>;

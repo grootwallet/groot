@@ -65,7 +65,9 @@ use crate::multisig::{
     MULTISIG_ACCOUNT_PATH,
 };
 use crate::native_backup;
-use crate::network::{ChainBackend, CoreNodeConfig, NetworkConfigError, RpcAuthMode};
+use crate::network::{
+    ChainBackend, CoreNodeConfig, NetworkConfigError, RpcAuthMode, WalletSyncSource,
+};
 use crate::notifications::{self, WalletNotification};
 use crate::privacy_selection::{AutomaticSelectionStrategy, PrivacyAwareCoinSelection};
 use crate::proposal::{
@@ -783,6 +785,14 @@ pub struct NodeStatusDto {
     connected: bool,
     blocks: u64,
     backend: CoreNodeConfig,
+}
+
+#[tauri::command]
+pub fn payjoin_uri_inspect(
+    value: String,
+) -> ApiResult<crate::payjoin_support::PayjoinUriInspection> {
+    crate::payjoin_support::inspect_uri(&value, NETWORK)
+        .map_err(|error| api_error("invalid_payjoin_uri", error))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -1595,6 +1605,17 @@ fn node_secret_path(app: &AppHandle) -> ApiResult<PathBuf> {
     Ok(profile_directory(app, profile.id)?.join("node-secret.json"))
 }
 
+fn sync_source_path(app: &AppHandle) -> ApiResult<PathBuf> {
+    let profile = selected_profile(app)?;
+    Ok(profile_directory(app, profile.id)?.join("sync-source.json"))
+}
+
+fn compact_filter_cache_dir(app: &AppHandle) -> ApiResult<PathBuf> {
+    Ok(app_data_dir(app)?
+        .join("compact-filters")
+        .join(NETWORK_NAME))
+}
+
 fn default_node_config() -> CoreNodeConfig {
     CoreNodeConfig {
         backend: ChainBackend::LocalCore {
@@ -1624,6 +1645,15 @@ fn network_config_api_error(error: NetworkConfigError) -> ApiError {
         NetworkConfigError::InvalidProxy => {
             "Tor requires an HTTP v3 .onion RPC URL and a loopback SOCKS5 proxy such as 127.0.0.1:9050."
         }
+        NetworkConfigError::InvalidPeerConfiguration => {
+            "Enter valid numeric IP:port peers and require no more peers than manual mode provides."
+        }
+        NetworkConfigError::InsufficientPeerDiversity => {
+            "Public test networks require at least two compact-filter peers."
+        }
+        NetworkConfigError::ProxyDnsLeak => {
+            "Tor compact-filter sync requires manual numeric peers with public discovery disabled to prevent local DNS leaks."
+        }
     };
     api_error("invalid_node_config", message)
 }
@@ -1637,6 +1667,17 @@ fn read_node_config(app: &AppHandle) -> ApiResult<CoreNodeConfig> {
         serde_json::from_str(&read_private_text(&path)?).map_err(internal)?;
     config.validate().map_err(network_config_api_error)?;
     Ok(config)
+}
+
+fn read_sync_source(app: &AppHandle) -> ApiResult<WalletSyncSource> {
+    let path = sync_source_path(app)?;
+    if !path.exists() {
+        return Ok(WalletSyncSource::BitcoinCore);
+    }
+    let source: WalletSyncSource =
+        serde_json::from_str(&read_private_text(&path)?).map_err(internal)?;
+    source.validate(NETWORK).map_err(network_config_api_error)?;
+    Ok(source)
 }
 
 fn verify_selected_credential(app: &AppHandle, credential: &str) -> ApiResult<()> {
@@ -4037,6 +4078,20 @@ fn sync_wallet_atomically(
     db: &mut Connection,
     multisig: bool,
 ) -> ApiResult<WalletSnapshotDto> {
+    match read_sync_source(app)? {
+        WalletSyncSource::BitcoinCore => sync_wallet_with_core(app, state, db, multisig),
+        source @ WalletSyncSource::CompactFilters { .. } => {
+            sync_wallet_with_compact_filters(app, db, multisig, &source)
+        }
+    }
+}
+
+fn sync_wallet_with_core(
+    app: &AppHandle,
+    state: &State<'_, AppState>,
+    db: &mut Connection,
+    multisig: bool,
+) -> ApiResult<WalletSnapshotDto> {
     let rpc = Arc::new(rpc_client(app, state)?);
     checked_block_height(rpc.as_ref())?;
     let mut transaction = db.transaction().map_err(internal)?;
@@ -4058,6 +4113,32 @@ fn sync_wallet_atomically(
     let mempool = emitter.mempool().map_err(internal)?;
     wallet.apply_evicted_txs(mempool.evicted);
     wallet.apply_unconfirmed_txs(mempool.update);
+    mark_observed_addresses(&wallet, &transaction)?;
+    label_provenance::reconcile_wallet_outputs(&wallet, &transaction, now()).map_err(internal)?;
+    let snapshot = snapshot_from(&wallet, &transaction, Some(now().to_string()), multisig)?;
+    enqueue_snapshot_notifications(&transaction, &snapshot)?;
+    wallet.persist(&mut transaction).map_err(internal)?;
+    drop(wallet);
+    transaction.commit().map_err(internal)?;
+    Ok(snapshot)
+}
+
+fn sync_wallet_with_compact_filters(
+    app: &AppHandle,
+    db: &mut Connection,
+    multisig: bool,
+    source: &WalletSyncSource,
+) -> ApiResult<WalletSnapshotDto> {
+    let config = source
+        .validate(NETWORK)
+        .map_err(network_config_api_error)?
+        .ok_or_else(|| internal("The compact-filter sync source was not selected."))?;
+    let cache_dir = compact_filter_cache_dir(app)?;
+    let mut transaction = db.transaction().map_err(internal)?;
+    let mut wallet = load_wallet_transaction(&mut transaction)?;
+    let update = crate::compact_filters::sync(&wallet, NETWORK, &cache_dir, &config)
+        .map_err(|error| api_error("network_unavailable", error))?;
+    wallet.apply_update(update).map_err(internal)?;
     mark_observed_addresses(&wallet, &transaction)?;
     label_provenance::reconcile_wallet_outputs(&wallet, &transaction, now()).map_err(internal)?;
     let snapshot = snapshot_from(&wallet, &transaction, Some(now().to_string()), multisig)?;
@@ -5224,6 +5305,34 @@ pub fn fees_estimate(app: AppHandle, state: State<'_, AppState>) -> ApiResult<Fe
 pub fn node_config(app: AppHandle, state: State<'_, AppState>) -> ApiResult<CoreNodeConfig> {
     require_unlocked(&app, &state)?;
     read_node_config(&app)
+}
+
+#[tauri::command]
+pub fn wallet_sync_source(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> ApiResult<WalletSyncSource> {
+    require_unlocked(&app, &state)?;
+    read_sync_source(&app)
+}
+
+#[tauri::command]
+pub fn wallet_sync_source_save(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    source: WalletSyncSource,
+    credential: String,
+) -> ApiResult<WalletSyncSource> {
+    let _operation = operation_guard(&state)?;
+    require_unlocked(&app, &state)?;
+    source.validate(NETWORK).map_err(network_config_api_error)?;
+    let credential = Zeroizing::new(credential);
+    check_auth_throttle(&app, &state)?;
+    let verified = verify_selected_credential(&app, credential.as_str());
+    record_auth_result(&app, &state, &verified)?;
+    verified?;
+    write_private_json(&sync_source_path(&app)?, &source)?;
+    Ok(source)
 }
 
 #[tauri::command]

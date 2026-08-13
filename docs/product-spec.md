@@ -147,7 +147,7 @@ Standard multisig wallets export and recover the public four-line BIP129/BSMS 1.
 
 ## Out of scope
 
-Mainnet, Lightning, arbitrary custom Miniscript editing, editable labels, contacts, cloud sync, background push while fully terminated, and fiat purchase/sale. Delayed-branch coordinator spending, decaying multisig, expanding multisig, BIP129 encrypted signer rounds, and compact-filter/P2P privacy remain later work described in `docs/roadmap.md`.
+Mainnet, Lightning, arbitrary custom Miniscript editing, editable labels, contacts, cloud sync, background push while fully terminated, Payjoin sender/receiver sessions, and fiat purchase/sale. Delayed-branch coordinator spending, decaying multisig, expanding multisig, and BIP129 encrypted signer rounds remain later work described in `docs/roadmap.md`. Optional compact-filter/P2P sync is a confirmed-only test-network feature gated by ADR 0031; Payjoin V2 URI parsing is foundation only and sends no protocol traffic.
 
 ## Language and local preferences
 

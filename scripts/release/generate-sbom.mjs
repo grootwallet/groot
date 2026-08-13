@@ -2,7 +2,7 @@
 
 import { execFileSync } from 'node:child_process';
 import { readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repoRoot = resolve(fileURLToPath(new URL('../../', import.meta.url)));
@@ -36,9 +36,14 @@ for (const block of read('src-tauri/Cargo.lock').split('[[package]]').slice(1)) 
 
 const resolvedCargoIds = new Set(cargoMetadata.resolve.nodes.map((node) => node.id));
 
-function licenseEntry(expression) {
-  if (!expression) throw new Error('A dependency is missing license metadata.');
-  return [{ license: { name: expression } }];
+function licenseEntry(expression, licenseFile) {
+  if (expression) return [{ license: { name: expression } }];
+  if (!licenseFile) throw new Error('A dependency is missing license metadata.');
+  const text = readFileSync(licenseFile, 'utf8');
+  if (!text.trim() || Buffer.byteLength(text) > 128 * 1024) {
+    throw new Error(`A declared dependency license file is empty or oversized: ${licenseFile}`);
+  }
+  return [{ license: { name: `Declared license file: ${basename(licenseFile)}`, text: { content: text } } }];
 }
 
 const components = cargoMetadata.packages
@@ -56,7 +61,10 @@ const components = cargoMetadata.packages
       name: pkg.name,
       version: pkg.version,
       purl,
-      licenses: licenseEntry(pkg.license),
+      licenses: licenseEntry(
+        pkg.license,
+        pkg.license_file ? resolve(dirname(pkg.manifest_path), pkg.license_file) : null
+      ),
       ...(checksum ? { hashes: [{ alg: 'SHA-256', content: checksum }] } : {}),
       properties: [
         { name: 'groot:ecosystem', value: 'cargo' },

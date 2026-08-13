@@ -11,7 +11,7 @@
   import { walletService, WalletError } from '$lib/wallet';
   import { goto } from '$app/navigation';
   import { onDestroy, onMount } from 'svelte';
-  import type { CoreNodeConfig, ExternalSignerWallet, RecoveryScanSettings, RecoveryScanStatus, WalletProfile } from '$lib/wallet/contracts';
+  import type { CoreNodeConfig, ExternalSignerWallet, RecoveryScanSettings, RecoveryScanStatus, WalletProfile, WalletSyncSource } from '$lib/wallet/contracts';
   let deleting = $state(false);
   let confirmText = $state('');
   let deleteCredential = $state('');
@@ -33,6 +33,10 @@
   const localRpcUrl = defaultConfig.network === 'regtest' ? 'http://127.0.0.1:18443' : defaultConfig.network === 'signet' ? 'http://127.0.0.1:38332' : 'http://127.0.0.1:48332';
   const localNodeConfig = (): CoreNodeConfig => ({ backend: { type: 'local_core', url: localRpcUrl }, auth: defaultConfig.network === 'regtest' ? 'cookie' : 'user_pass', username: null, torProxy: null });
   let node = $state<CoreNodeConfig>(localNodeConfig());
+  let syncSource = $state<WalletSyncSource>({ type: 'bitcoin_core' });
+  let syncOpen = $state(false), syncSaving = $state(false), syncCredential = $state(''), syncError = $state('');
+  let syncSourceType = $state<'bitcoin_core' | 'compact_filters'>('bitcoin_core');
+  let syncDiscoverPeers = $state(true), syncPeers = $state(''), syncRequiredPeers = $state(2), syncTorProxy = $state('');
   let scanOpen = $state(false), scanCredential = $state(''), scanError = $state(''), scan = $state<RecoveryScanSettings>({ birthdayHeight: 0, gapLimit: 20 }), scanDraft = $state<RecoveryScanSettings>({ birthdayHeight: 0, gapLimit: 20 });
   let scanStatus = $state<RecoveryScanStatus>({ status: 'idle', birthdayHeight: 0, gapLimit: 20, currentHeight: 0, targetHeight: 0, processedBlocks: 0, totalBlocks: 0, startedAt: 0, updatedAt: 0 });
   let scanning = $state(false), cancellingScan = $state(false), scanPoll: ReturnType<typeof setInterval> | undefined;
@@ -51,12 +55,13 @@
     const activeProfile = registry.wallets.find((wallet) => wallet.id === registry.selectedWalletId);
     if (activeProfile?.kind === 'watch_only') hardwareSignerWallet = await walletService.externalSignerWallet();
     node = await walletService.nodeConfig();
+    syncSource = await walletService.syncSource();
     scan = await walletService.recoveryScanSettings(); scanDraft = { ...scan }; scanStatus = await walletService.recoveryScanStatus();
   });
   onDestroy(() => {
     deleteCredential = '';
     confirmText = '';
-    nodePassword = ''; walletCredential = ''; scanCredential = ''; verifyCredential = ''; hardwareBackupPin = ''; hardwareBackup = ''; hardwareBackupContent = ''; signerRenameDraft = '';
+    nodePassword = ''; walletCredential = ''; syncCredential = ''; scanCredential = ''; verifyCredential = ''; hardwareBackupPin = ''; hardwareBackup = ''; hardwareBackupContent = ''; signerRenameDraft = '';
     if (scanPoll) clearInterval(scanPoll);
   });
   function setTheme(next: 'light' | 'dark') { theme = next; document.documentElement.dataset.theme = next; document.querySelector('meta[name="theme-color"]')?.setAttribute('content', next === 'light' ? '#f4f1e9' : '#0d1118'); localStorage.setItem('groot-theme', next); }
@@ -72,6 +77,46 @@
     try { const result=await walletService.saveNodeConfig(node,nodePassword,walletCredential);connected=true;nodeOpen=false;nodePassword='';walletCredential='';toast({title:'Node saved and verified',description:`Connected at block ${result.blocks}.`,tone:'success'}); }
     catch(cause){connected=false;nodeError=cause instanceof Error?cause.message:'Could not save this node.';}
     finally{nodePassword='';walletCredential='';busy=false;}
+  }
+  function openSyncSource() {
+    syncSourceType = syncSource.type;
+    if (syncSource.type === 'compact_filters') {
+      syncDiscoverPeers = syncSource.discoverPeers;
+      syncPeers = syncSource.peers.join('\n');
+      syncRequiredPeers = syncSource.requiredPeers;
+      syncTorProxy = syncSource.torProxy ?? '';
+    } else {
+      syncDiscoverPeers = defaultConfig.network !== 'regtest';
+      syncPeers = defaultConfig.network === 'regtest' ? '127.0.0.1:18444' : '';
+      syncRequiredPeers = defaultConfig.network === 'regtest' ? 1 : 2;
+      syncTorProxy = '';
+    }
+    syncCredential = ''; syncError = ''; syncOpen = true;
+  }
+  async function saveSyncSource() {
+    syncSaving = true; syncError = '';
+    const source: WalletSyncSource = syncSourceType === 'bitcoin_core'
+      ? { type: 'bitcoin_core' }
+      : {
+          type: 'compact_filters',
+          peers: syncPeers.split(/\r?\n/).map((peer) => peer.trim()).filter(Boolean),
+          requiredPeers: Number(syncRequiredPeers),
+          discoverPeers: syncDiscoverPeers,
+          torProxy: syncTorProxy.trim() || null
+        };
+    try {
+      syncSource = await walletService.saveSyncSource(source, syncCredential);
+      syncCredential = ''; syncOpen = false;
+      toast({
+        title: 'Wallet sync source updated',
+        description: syncSource.type === 'compact_filters' ? 'The next refresh will discover confirmed activity through verified compact block filters.' : 'The next refresh will use the configured Bitcoin Core node.',
+        tone: 'success'
+      });
+    } catch (cause) {
+      syncError = cause instanceof Error ? cause.message : 'Could not save the wallet sync source.';
+    } finally {
+      syncCredential = ''; syncSaving = false;
+    }
   }
   async function lockNow() {
     await walletService.lock();
@@ -252,9 +297,10 @@
   <section class="settings-group"><h2>App appearance</h2>
     <div class="settings-list"><div class="setting-row"><span class="setting-icon">{#if theme === 'dark'}<Moon size={18}/>{:else}<Sun size={18}/>{/if}</span><span><strong>Theme</strong><small>Quiet contrast with a restrained French tricolor accent.</small></span><span class="theme-choice"><button class:active={theme === 'light'} onclick={() => setTheme('light')}>Light</button><button class:active={theme === 'dark'} onclick={() => setTheme('dark')}>Dark</button></span></div><div class="setting-row language-setting-row"><LanguageToggle labelled /></div></div>
   </section>
-  <section class="settings-group"><h2>Wallet node</h2>
+  <section class="settings-group"><h2>Network services</h2>
     <div class="settings-list">
-      <button onclick={() => nodeOpen=true}><span class="setting-icon"><Network size={18} /></span><span><strong>Bitcoin Core node</strong><small>{networkName(defaultConfig.network)}{' · '}{node.backend.type === 'local_core' ? 'This Mac' : 'Trusted remote server'}{' · '}<span class="selectable-text">{node.backend.url}</span></small></span><ChevronRight size={16}/></button>
+      <button onclick={openSyncSource}><span class="setting-icon"><RefreshCw size={18} /></span><span><strong>Wallet activity sync</strong><small>{syncSource.type === 'compact_filters' ? 'P2P compact filters · confirmed activity only' : 'Bitcoin Core RPC · confirmed and mempool activity'}</small></span><ChevronRight size={16}/></button>
+      <button onclick={() => nodeOpen=true}><span class="setting-icon"><Network size={18} /></span><span><strong>Fee and broadcast node</strong><small>{networkName(defaultConfig.network)}{' · '}{node.backend.type === 'local_core' ? 'This Mac' : 'Trusted remote server'}{' · '}<span class="selectable-text">{node.backend.url}</span></small></span><ChevronRight size={16}/></button>
       <button disabled={checking} onclick={checkConnection}><span class="setting-icon"><Check size={18}/></span><span><strong>Test connection</strong><small>Verify RPC authentication and chain availability.</small></span><span class="badge" class:offline={connected === false}>{checking ? 'Checking…' : connected === true ? 'Connected' : connected === false ? 'Offline' : 'Check'}</span></button>
     </div>
   </section>
@@ -299,6 +345,21 @@
   {/if}
 </Modal>
 <IdentifierDetailsModal open={descriptorDetailsOpen} value={hardwareBackup} title="Public wallet descriptor" description="This watch-only descriptor cannot spend bitcoin, but it reveals the wallet’s complete activity." label="Descriptor" onclose={() => {descriptorDetailsOpen=false;hardwareBackupOpen=true;}}/>
+<Modal open={syncOpen} title="Wallet activity sync" description="Choose how this wallet discovers transactions. Fee estimation and broadcast continue to use the separately configured Bitcoin Core service." onclose={() => {if(syncSaving)return;syncOpen=false;syncCredential='';syncError='';}}>
+  <div class="theme-choice node-location"><button class:active={syncSourceType==='bitcoin_core'} onclick={() => syncSourceType='bitcoin_core'}>Bitcoin Core</button><button class:active={syncSourceType==='compact_filters'} onclick={() => syncSourceType='compact_filters'}>Compact filters</button></div>
+  {#if syncSourceType === 'compact_filters'}
+    <div class="warning-box"><strong>Confirmed activity only.</strong> BIP157/158 peers provide public filters and matching blocks. Groot validates them locally; pending incoming payments are not discoverable through this source.</div>
+    <label class="field"><span>Peer selection</span><select bind:value={syncDiscoverPeers} onchange={(event) => {syncDiscoverPeers=event.currentTarget.value==='true';if(syncDiscoverPeers)syncTorProxy='';}}><option value={true}>Public peer discovery</option><option value={false}>Manual peers only</option></select><small>Manual mode never falls back to DNS seeds or public peers.</small></label>
+    <label class="field"><span>Required peers</span><input type="number" min={defaultConfig.network==='regtest'?1:2} max="15" step="1" bind:value={syncRequiredPeers}/><small>Public test networks require at least two independent peers. Regtest permits one local peer.</small></label>
+    <label class="field"><span>Manual peers · one numeric IP:port per line</span><textarea rows="3" bind:value={syncPeers} placeholder={defaultConfig.network==='regtest'?'127.0.0.1:18444':'203.0.113.10:38333\n[2001:db8::10]:38333'}></textarea><small>Hostnames are rejected so proxy mode cannot leak DNS.</small></label>
+    {#if !syncDiscoverPeers}<label class="field"><span>Optional local Tor SOCKS5 proxy</span><input bind:value={syncTorProxy} placeholder="127.0.0.1:9050"/><small>When set, every P2P connection uses this loopback proxy. There is no direct fallback.</small></label>{/if}
+  {:else}
+    <div class="warning-box"><strong>Bitcoin Core activity sync.</strong> Groot uses the RPC node below for confirmed blocks and mempool changes.</div>
+  {/if}
+  <PasswordField label={credentialLabel} bind:value={syncCredential} autocomplete="current-password" hint="Required to change this wallet’s network privacy boundary."/>
+  {#if syncError}<p class="form-error" role="alert">{syncError}</p>{/if}
+  <div class="modal-footer"><Button variant="secondary" onclick={() => {syncOpen=false;syncCredential='';}}>Cancel</Button><Button disabled={!syncCredential || (syncSourceType==='compact_filters' && (!Number.isInteger(Number(syncRequiredPeers)) || (!syncDiscoverPeers && !syncPeers.trim())))} loading={syncSaving} loadingLabel="Saving…" onclick={saveSyncSource}>Save source</Button></div>
+</Modal>
 <Modal open={scanOpen} title="Full wallet rescan" description="Search from the earliest possible payment while deriving a bounded address gap." onclose={() => {if(scanning)return;scanOpen=false;scanCredential='';scanError='';scanDraft={...scan};}}>
   <div class="scan-form"><div class="warning-box"><strong>Earlier is safer; later is faster.</strong> A birthday after the wallet’s first payment can miss funds. A larger gap increases work and memory use.</div>
   <label class="field"><span>Wallet birthday block</span><input aria-label="Wallet birthday block" type="number" min="0" step="1" bind:value={scanDraft.birthdayHeight} disabled={scanning}/><small>Use 0 when uncertain. Regtest scans are intentionally cheap.</small></label>

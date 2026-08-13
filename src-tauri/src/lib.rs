@@ -4,6 +4,7 @@ pub mod airgap;
 mod auth;
 pub mod bsms;
 mod build_network;
+mod compact_filters;
 mod direct_rpc;
 pub mod external_signer;
 mod hardware;
@@ -12,6 +13,7 @@ mod multisig;
 mod native_backup;
 pub mod network;
 mod notifications;
+mod payjoin_support;
 mod privacy_selection;
 mod process_lock;
 pub mod proposal;
@@ -62,6 +64,9 @@ pub fn run() {
             wallet::node_config,
             wallet::node_config_save,
             wallet::node_connection_test,
+            wallet::wallet_sync_source,
+            wallet::wallet_sync_source_save,
+            wallet::payjoin_uri_inspect,
             wallet::recovery_scan_settings,
             wallet::recovery_scan_settings_save,
             wallet::recovery_scan_status,

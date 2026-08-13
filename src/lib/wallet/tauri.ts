@@ -16,7 +16,7 @@ import type { MnemonicPresentation, SupplementalEntropyInput, WalletProfile, Wal
 import type { CosignerHealthCheck, HardwareDevice, MultisigPreview, MultisigProposal, MultisigWallet } from './contracts';
 import type { RecoveryDrill, RecoveryPolicyAnalysis, RecoveryTemplate } from './contracts';
 import type { ExternalSigner, ExternalSignerBackup, ExternalSignerSource, ExternalSignerWallet, SavedFileResult } from './contracts';
-import type { CoreNodeConfig, NodeStatus } from './contracts';
+import type { CoreNodeConfig, NodeStatus, PayjoinUriInspection, WalletSyncSource } from './contracts';
 import type { PolicyDraft } from '$lib/multisig/policy';
 import { coalesceNotificationEvents } from './notification-policy';
 
@@ -99,6 +99,9 @@ export class TauriWalletAdapter implements WalletPort {
   nodeConfig() { return command<CoreNodeConfig>('node_config'); }
   saveNodeConfig(config: CoreNodeConfig, password: string, credential: string) { return command<NodeStatus>('node_config_save', { config, password, credential }); }
   testNodeConnection() { return command<NodeStatus>('node_connection_test'); }
+  syncSource() { return command<WalletSyncSource>('wallet_sync_source'); }
+  saveSyncSource(source: WalletSyncSource, credential: string) { return command<WalletSyncSource>('wallet_sync_source_save', { source, credential }); }
+  inspectPayjoinUri(value: string) { return command<PayjoinUriInspection>('payjoin_uri_inspect', { value }); }
   recoveryScanSettings() { return command<import('./contracts').RecoveryScanSettings>('recovery_scan_settings'); }
   saveRecoveryScanSettings(birthdayHeight: number, gapLimit: number, credential: string) { return command<import('./contracts').RecoveryScanSettings>('recovery_scan_settings_save', { birthdayHeight, gapLimit, credential }); }
   recoveryScanStatus() { return command<import('./contracts').RecoveryScanStatus>('recovery_scan_status'); }

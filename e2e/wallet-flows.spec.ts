@@ -505,7 +505,7 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   await expect((await descriptorDownload).suggestedFilename()).toBe('groot-hardware-wallet.json');
   await expect(page.getByText('Descriptor backup saved', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Close' }).click();
-  await page.getByRole('button', { name: /Bitcoin Core node/ }).click();
+  await page.getByRole('button', { name: /Fee and broadcast node/ }).click();
   await page.getByRole('button', { name: 'Remote TLS' }).click();
   await page.getByLabel('RPC URL').fill('https://regtest-node.example:18443');
   await page.getByLabel('RPC username').fill('groot');
@@ -727,7 +727,7 @@ test('successful RBF keeps the original visibly replaced and excluded from accou
   await expect(page.locator('.tx-row.pending').filter({ hasText: 'Invoice #104' })).toContainText('Awaiting confirmation');
 });
 
-test('recovery scan and Tor node controls preserve explicit safety choices', async ({ page }) => {
+test('recovery scan and private network controls preserve explicit safety choices', async ({ page }) => {
   await page.goto('/settings?fixture-hold-first-recovery-scan=1');
   await page.getByRole('button', { name: /Recovery scan/ }).click();
   const recoveryScan = page.getByRole('dialog', { name: 'Full wallet rescan' });
@@ -747,7 +747,19 @@ test('recovery scan and Tor node controls preserve explicit safety choices', asy
   await recoveryScan.getByRole('button', { name: 'Save & rescan' }).click();
   await expect(page.getByRole('button', { name: /Recovery scan.*gap limit 50/ })).toBeVisible();
 
-  await page.getByRole('button', { name: /Bitcoin Core node/ }).click();
+  await page.getByRole('button', { name: /Wallet activity sync/ }).click();
+  const syncSource = page.getByRole('dialog', { name: 'Wallet activity sync' });
+  await syncSource.getByRole('button', { name: 'Compact filters' }).click();
+  await expect(syncSource.getByText('Confirmed activity only.')).toBeVisible();
+  await syncSource.getByLabel('Peer selection').selectOption({ label: 'Manual peers only' });
+  await expect(syncSource.getByText('Manual mode never falls back to DNS seeds or public peers.')).toBeVisible();
+  await syncSource.getByLabel('Manual peers · one numeric IP:port per line').fill('127.0.0.1:18444');
+  await syncSource.getByLabel('Optional local Tor SOCKS5 proxy').fill('127.0.0.1:9050');
+  await syncSource.getByLabel('Wallet passphrase', { exact: true }).fill('prototype-passphrase');
+  await syncSource.getByRole('button', { name: 'Save source' }).click();
+  await expect(page.getByRole('button', { name: /Wallet activity sync.*P2P compact filters.*confirmed activity only/ })).toBeVisible();
+
+  await page.getByRole('button', { name: /Fee and broadcast node/ }).click();
   await page.getByRole('button', { name: 'Tor onion' }).click();
   await expect(page.getByLabel('Local SOCKS5 proxy')).toHaveValue('127.0.0.1:9050');
   await page.getByLabel('RPC URL').fill('http://groottestnode.onion:8332');

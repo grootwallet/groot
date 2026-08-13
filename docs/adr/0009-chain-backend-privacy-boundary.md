@@ -1,6 +1,6 @@
 # ADR 0009: chain backend and privacy boundary
 
-- Status: accepted incrementally; only local Core is enabled
+- Status: accepted incrementally; compact-filter deferral superseded by ADR 0031
 - Date: 2026-08-03
 - Extends: ADR 0003
 

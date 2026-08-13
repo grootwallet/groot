@@ -3,7 +3,7 @@ import { receiveAddresses, transactions, utxos, wallet } from '$lib/data';
 import type { ReceiveAddress, Transaction } from '$lib/types';
 import { addressPrefixForNetwork, canDiscardAddress, hasAddressPrefixForNetwork, normalizePermanentLabel } from './policy';
 import { feeRate, MAX_SUPPLEMENTAL_COIN_FLIPS, MAX_SUPPLEMENTAL_DICE_ROLLS, MIN_SUPPLEMENTAL_COIN_FLIPS, MIN_SUPPLEMENTAL_DICE_ROLLS, sats, WalletError, type CoinSelection, type CoinSelectionPreview, type FeeEstimates, type PaymentProposal, type WalletEvent, type WalletPort, type WalletSnapshot } from './contracts';
-import type { CoreNodeConfig, ExternalSigner, ExternalSignerSource, ExternalSignerWallet, MultisigPreview, MultisigProposal, MultisigWallet, RecoveryPolicyAnalysis, RecoveryScanStatus, RecoveryTemplate, WalletProfile } from './contracts';
+import type { CoreNodeConfig, ExternalSigner, ExternalSignerSource, ExternalSignerWallet, MultisigPreview, MultisigProposal, MultisigWallet, RecoveryPolicyAnalysis, RecoveryScanStatus, RecoveryTemplate, WalletProfile, WalletSyncSource } from './contracts';
 import type { PolicyDraft } from '$lib/multisig/policy';
 import { descriptorPreview, MULTISIG_ACCOUNT_PATH, normalizeCosigner, validatePolicyDraft } from '$lib/multisig/policy';
 
@@ -60,6 +60,7 @@ export class DummyWalletAdapter implements WalletPort {
   #addresses = structuredClone(receiveAddresses).map((address) => ({ ...address, address: fixtureAddressForNetwork(address.address) }));
   #balance = wallet.balance;
   #nodeConfig: CoreNodeConfig = { backend: { type: 'local_core', url: 'http://127.0.0.1:18443' }, auth: 'cookie', username: null };
+  #syncSource: WalletSyncSource = { type: 'bitcoin_core' };
   #scanSettings = { birthdayHeight: 0, gapLimit: 20 };
   #scanStatus: RecoveryScanStatus = { status: 'idle', birthdayHeight: 0, gapLimit: 20, currentHeight: 0, targetHeight: 0, processedBlocks: 0, totalBlocks: 0, startedAt: 0, updatedAt: 0 };
   #holdFirstRecoveryScan = typeof location !== 'undefined'
@@ -179,6 +180,15 @@ export class DummyWalletAdapter implements WalletPort {
     this.#nodeConfig = { ...config, backend: { ...config.backend } }; return { connected: true, blocks: 301, backend: { ...config, backend: { ...config.backend } } };
   }
   async testNodeConnection() { return { connected: true, blocks: 301, backend: structuredClone(this.#nodeConfig) }; }
+  async syncSource() { return structuredClone(this.#syncSource); }
+  async saveSyncSource(source: WalletSyncSource, credential: string) {
+    if (!this.#selectedWalletId || credential !== this.#credentials.get(this.#selectedWalletId)) throw new WalletError('invalid_credential', 'Incorrect app PIN.');
+    this.#syncSource = structuredClone(source);
+    return structuredClone(this.#syncSource);
+  }
+  async inspectPayjoinUri(_value: string): Promise<import('./contracts').PayjoinUriInspection> {
+    throw new WalletError('invalid_payjoin_uri', 'The browser fixture does not run Payjoin protocol parsing.');
+  }
   async recoveryScanSettings() { return { ...this.#scanSettings }; }
   async saveRecoveryScanSettings(birthdayHeight: number, gapLimit: number, credential: string) { if (!this.#selectedWalletId || credential !== this.#credentials.get(this.#selectedWalletId)) throw new WalletError('invalid_credential', 'Incorrect app PIN.'); if (!Number.isInteger(birthdayHeight)||birthdayHeight<0||!Number.isInteger(gapLimit)||gapLimit<20||gapLimit>1000) throw new WalletError('internal_error','Invalid recovery scan settings.'); this.#scanSettings={birthdayHeight,gapLimit}; return {...this.#scanSettings}; }
   async recoveryScanStatus() { return structuredClone(this.#scanStatus); }

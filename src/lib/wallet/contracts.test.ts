@@ -4,7 +4,8 @@ import { WalletError, type WalletErrorCode } from './contracts';
 const remediationErrorCodes = [
   'invalid_coin',
   'coin_unavailable',
-  'invalid_signature'
+  'invalid_signature',
+  'invalid_payjoin_uri'
 ] as const satisfies readonly WalletErrorCode[];
 
 describe('wallet error contract', () => {

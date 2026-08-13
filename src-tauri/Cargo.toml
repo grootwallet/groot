@@ -25,6 +25,11 @@ base64 = "=0.22.1"
 bip39 = { version = "=2.2.2", features = ["zeroize"] }
 bdk_bitcoind_rpc = "=0.22.0"
 bdk_wallet = { version = "=3.1.0", features = ["compiler", "keys-bip39", "rusqlite"] }
+# Reviewed for Issues #7 and #10. Kyoto owns verified BIP157/BIP158 P2P
+# discovery; PDK owns BIP77 protocol state. Groot retains wallet, PSBT,
+# persistence, signing, fee, and broadcast authority.
+bdk_kyoto = "=0.17.0"
+payjoin = { version = "=1.0.0", default-features = false, features = ["v2"] }
 rand = "=0.8.7"
 thiserror = "=2.0.18"
 uuid = { version = "=1.24.0", features = ["v4"] }

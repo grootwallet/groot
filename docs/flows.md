@@ -177,12 +177,14 @@ While an unlocked desktop session is open, a single ten-second foreground loop s
 
 Passport Core uses QR or microSD. Trezor Model One host passphrase entry is unavailable; do not fall back to an empty passphrase.
 
-### Configure Bitcoin Core
+### Configure network services
 
-1. Open **Settings → Bitcoin Core node**.
-2. Choose this machine (loopback), a trusted non-redirecting direct HTTPS endpoint, or an HTTP v3 `.onion` endpoint through an explicit numeric loopback SOCKS5 proxy.
-3. Use the local regtest cookie or protected username/password fields; credentials in URLs are rejected.
-4. Enter the selected wallet's app credential, then **Save & test**. Groot requires the exact compiled network, bounds the attempt, refuses redirects and alternate routes, and persists the candidate only after the connection succeeds. Configuration and credentials are isolated per wallet.
+1. Open **Settings → Wallet activity sync** and explicitly choose Bitcoin Core or compact filters.
+2. Compact filters disclose confirmed-only behavior. Public discovery requires at least two peers. Manual mode accepts numeric `IP:port` peers and never falls back; adding a loopback Tor proxy also disables discovery so DNS cannot escape locally.
+3. Open **Settings → Fee and broadcast node** to configure Bitcoin Core independently. Choosing compact filters never changes this service and never silently uses it for wallet discovery.
+4. Test Core authentication and availability separately. A compact-filter refresh fails visibly if its selected peers cannot reach a verified tip.
+
+Payjoin V2 BIP21 requests are parsed and network-checked only inside Rust. Until ADR 0031's encrypted-session, transport, fresh-review, fallback-consent, and interoperability gates are met, Groot does not advertise or initiate Payjoin sessions.
 
 ## Sort coins
 
