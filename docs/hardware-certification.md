@@ -6,7 +6,7 @@ Virtual devices prove coordinator behavior, not vendor compatibility. Run this o
 
 | Signer | Cable account/sign | Offline public import | Hardware passphrase rule | Status |
 | --- | --- | --- | --- | --- |
-| Coldcard Mk4 | HWI USB after unlock and USB-wallet enablement; policy imported separately | BIP-380 policy and PSBT over Virtual Disk/microSD where supported | PIN/passphrase remains entirely on Coldcard | Core Regtest 2-of-3 cable flow physically verified; offline signed-PSBT interchange and remaining release rows pending |
+| Coldcard Mk4 | HWI USB after unlock and USB-wallet enablement; policy imported separately | BIP-380 policy and PSBT over Virtual Disk/microSD where supported | PIN/passphrase remains entirely on Coldcard | Core Regtest 2-of-3 cable and microSD signed-PSBT flows physically verified; adversarial-file and shared recovery rows remain |
 | Blockstream Jade / Jade Plus | HWI USB when logged in | BIP84 xpub/descriptor QR text; file where exported | Select hidden wallet on Jade; never sent through the webview | Implemented, physical certification pending |
 | BitBox02 | HWI USB after BitBoxApp pairing cache; companion app must release USB | BitBoxApp descriptor/xpub file/text | Device password/pairing stays vendor-controlled | Implemented, physical certification pending |
 | BitBox02 Nova | USB candidate; exact HWI identity and pairing behavior must be captured first | Vendor descriptor/xpub export candidate | Device password remains vendor-controlled; Whisper/BLE is a separate mobile transport review | Not yet supported or certified |

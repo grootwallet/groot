@@ -690,6 +690,7 @@ export class DummyWalletAdapter implements WalletPort {
   async importMultisigProposal(proposalId:string, reviewedPsbt:string, signedPsbt:string) {
     if (!signedPsbt.trim()) throw new WalletError('internal_error','Enter a signed PSBT.');
     const proposal=this.#multisigProposals.get(proposalId); if(proposal?.psbt!==reviewedPsbt) throw new WalletError('proposal_mismatch','The proposal changed after review.');
+    if(signedPsbt==='fixture-rejected-psbt') throw new WalletError('proposal_mismatch','The PSBT does not match the transaction you reviewed. No signatures were changed.');
     return this.#addDummySignature(proposalId);
   }
   async signMultisigWithHardware(proposalId:string, deviceId:string, reviewedPsbt:string) {
