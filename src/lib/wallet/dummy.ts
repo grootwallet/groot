@@ -591,13 +591,16 @@ export class DummyWalletAdapter implements WalletPort {
   async printPublicBackup() { window.print(); }
   async inspectMultisigBsms(encodedBackup: string) {
     const lines = encodedBackup.trimEnd().split('\n');
-    if (lines.length !== 4 || lines[0] !== 'BSMS 1.0' || lines[2] !== '/0/*,/1/*') {
-      throw new WalletError('invalid_backup', 'Enter a valid BSMS 1.0 descriptor record.');
-    }
+    const isBsms = lines.length === 4 && lines[0] === 'BSMS 1.0' && lines[2] === '/0/*,/1/*';
+    const publicDescriptor = lines.find((line) => line.trim().startsWith('wsh('));
+    if (!isBsms && !publicDescriptor) throw new WalletError('invalid_backup', 'Enter a valid BSMS, Groot JSON, or public descriptor backup.');
     const currentTemplate = this.#multisig?.externalDescriptor.split('#')[0].replaceAll('/0/*', '/**');
-    const matchesCurrentWallet = currentTemplate === lines[1];
+    const importedTemplate = isBsms
+      ? lines[1]
+      : publicDescriptor!.trim().split('#')[0].replaceAll('/<0;1>/*', '/**').replaceAll('/0/*', '/**');
+    const matchesCurrentWallet = currentTemplate === importedTemplate;
     this.#recoveryVerified = matchesCurrentWallet;
-    return { firstAddress: lines[3], matchesCurrentWallet };
+    return { firstAddress: isBsms ? lines[3] : `${addressPrefixForNetwork(defaultConfig.network)}qdummy5n8k2r7v4cx9s6jlawephgzuqf5t8ul`, matchesCurrentWallet };
   }
   async recoverMultisigBsms(name: string, encodedBackup: string, credential: string) {
     await this.inspectMultisigBsms(encodedBackup);
@@ -690,6 +693,7 @@ export class DummyWalletAdapter implements WalletPort {
   async importMultisigProposal(proposalId:string, reviewedPsbt:string, signedPsbt:string) {
     if (!signedPsbt.trim()) throw new WalletError('internal_error','Enter a signed PSBT.');
     const proposal=this.#multisigProposals.get(proposalId); if(proposal?.psbt!==reviewedPsbt) throw new WalletError('proposal_mismatch','The proposal changed after review.');
+    if(signedPsbt==='fixture-rejected-psbt') throw new WalletError('proposal_mismatch','The PSBT does not match the transaction you reviewed. No signatures were changed.');
     return this.#addDummySignature(proposalId);
   }
   async signMultisigWithHardware(proposalId:string, deviceId:string, reviewedPsbt:string) {

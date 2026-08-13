@@ -23,6 +23,12 @@ pub struct DescriptorRecord {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PublicDescriptorPair {
+    pub external_descriptor: String,
+    pub internal_descriptor: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StandardCosigner {
     pub fingerprint: Fingerprint,
     pub xpub: Xpub,
@@ -202,6 +208,98 @@ impl DescriptorRecord {
     }
 }
 
+impl PublicDescriptorPair {
+    /// Parses public descriptor text emitted by Groot and common hardware-wallet workflows.
+    /// Accepted text is deliberately narrow: a checksummed multipath descriptor, an explicit
+    /// receive/change pair, or a receive descriptor whose standard `/1/*` change branch can be
+    /// reconstructed without ambiguity. BIP129 records remain handled by `DescriptorRecord`.
+    pub fn parse(encoded: &str) -> Result<Self, BsmsError> {
+        validate_public_text(encoded)?;
+        let candidates = encoded
+            .lines()
+            .map(str::trim)
+            .filter(|line| line.starts_with("wsh("))
+            .collect::<Vec<_>>();
+        if candidates.is_empty() {
+            return Err(BsmsError::InvalidDescriptor);
+        }
+
+        let mut portable = None;
+        let mut external = None;
+        let mut internal = None;
+        for candidate in candidates {
+            parse_public_descriptor(candidate)?;
+            let descriptor = strip_checksum(candidate).to_owned();
+            if descriptor.contains("/<0;1>/*") {
+                set_consistent(&mut portable, descriptor)?;
+            } else if descriptor.contains("/0/*") && !descriptor.contains("/1/*") {
+                set_consistent(&mut external, descriptor)?;
+            } else if descriptor.contains("/1/*") && !descriptor.contains("/0/*") {
+                set_consistent(&mut internal, descriptor)?;
+            } else {
+                return Err(BsmsError::UnsupportedPaths);
+            }
+        }
+
+        if let Some(template) = portable {
+            let portable_external = template.replace("/<0;1>/*", "/0/*");
+            let portable_internal = template.replace("/<0;1>/*", "/1/*");
+            parse_public_descriptor(&portable_external)?;
+            parse_public_descriptor(&portable_internal)?;
+            ensure_same_if_present(external.as_deref(), &portable_external)?;
+            ensure_same_if_present(internal.as_deref(), &portable_internal)?;
+            return Ok(Self {
+                external_descriptor: portable_external,
+                internal_descriptor: portable_internal,
+            });
+        }
+
+        let external_descriptor = external.ok_or(BsmsError::UnsupportedPaths)?;
+        let derived_internal = external_descriptor.replace("/0/*", "/1/*");
+        if derived_internal == external_descriptor {
+            return Err(BsmsError::UnsupportedPaths);
+        }
+        parse_public_descriptor(&derived_internal)?;
+        ensure_same_if_present(internal.as_deref(), &derived_internal)?;
+        Ok(Self {
+            external_descriptor,
+            internal_descriptor: derived_internal,
+        })
+    }
+}
+
+fn validate_public_text(encoded: &str) -> Result<(), BsmsError> {
+    if encoded.len() > MAX_BSMS_BYTES {
+        return Err(BsmsError::TooLarge);
+    }
+    if encoded.contains('\r')
+        || encoded
+            .chars()
+            .any(|character| character.is_control() && character != '\n')
+    {
+        return Err(BsmsError::InvalidEncoding);
+    }
+    if contains_private_material(encoded) {
+        return Err(BsmsError::PrivateMaterial);
+    }
+    Ok(())
+}
+
+fn set_consistent(slot: &mut Option<String>, value: String) -> Result<(), BsmsError> {
+    if slot.as_ref().is_some_and(|current| current != &value) {
+        return Err(BsmsError::DescriptorMismatch);
+    }
+    *slot = Some(value);
+    Ok(())
+}
+
+fn ensure_same_if_present(value: Option<&str>, expected: &str) -> Result<(), BsmsError> {
+    if value.is_some_and(|value| value != expected) {
+        return Err(BsmsError::DescriptorMismatch);
+    }
+    Ok(())
+}
+
 fn expand_template(template: &str, branch: u8) -> Result<String, BsmsError> {
     if !template.contains("/**") || template.contains("/0/*") || template.contains("/1/*") {
         return Err(BsmsError::UnsupportedPaths);
@@ -288,6 +386,51 @@ mod tests {
         assert!(parsed
             .matches_descriptor_pair(&external, &internal)
             .unwrap());
+    }
+
+    #[test]
+    fn parses_groot_annotated_and_coldcard_descriptor_text() {
+        let (external, internal) = descriptors();
+        let portable = strip_checksum(&external).replace("/0/*", "/<0;1>/*");
+        let portable = Descriptor::<DescriptorPublicKey>::from_str(&portable)
+            .unwrap()
+            .to_string();
+        let annotated = format!(
+            "Wallet: Test policy\nPortable wallet descriptor:\n{portable}\n\nReceive descriptor:\n{external}\n\nChange descriptor:\n{internal}\n"
+        );
+        let parsed = PublicDescriptorPair::parse(&annotated).unwrap();
+        assert_eq!(parsed.external_descriptor, strip_checksum(&external));
+        assert_eq!(parsed.internal_descriptor, strip_checksum(&internal));
+
+        let coldcard = format!(
+            "# Public multisig policy for COLDCARD\n# Import through the device menu\n{external}\n"
+        );
+        let parsed = PublicDescriptorPair::parse(&coldcard).unwrap();
+        assert_eq!(parsed.external_descriptor, strip_checksum(&external));
+        assert_eq!(parsed.internal_descriptor, strip_checksum(&internal));
+    }
+
+    #[test]
+    fn descriptor_text_rejects_private_material_and_conflicting_branches() {
+        let (external, internal) = descriptors();
+        assert_eq!(
+            PublicDescriptorPair::parse(&external.replace("tpub", "tprv")),
+            Err(BsmsError::PrivateMaterial)
+        );
+        let portable = Descriptor::<DescriptorPublicKey>::from_str(
+            &strip_checksum(&external).replace("/0/*", "/<0;1>/*"),
+        )
+        .unwrap()
+        .to_string();
+        let wrong_internal = Descriptor::<DescriptorPublicKey>::from_str(
+            &strip_checksum(&internal).replace("sortedmulti(2", "sortedmulti(3"),
+        )
+        .unwrap()
+        .to_string();
+        assert_eq!(
+            PublicDescriptorPair::parse(&format!("{portable}\n{external}\n{wrong_internal}\n")),
+            Err(BsmsError::DescriptorMismatch)
+        );
     }
 
     #[test]

@@ -156,6 +156,16 @@ test('spends end-to-end from the ready-made demo wallet', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Show in Finder' })).toBeVisible();
   await page.getByRole('button', { name: 'Show in Finder' }).click();
   await expect(page.getByText('PSBT saved', { exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Import signed PSBT' }).click();
+  const rejectedImport = page.getByRole('dialog', { name: 'Import signed PSBT' });
+  await rejectedImport.getByRole('textbox', { name: 'Signed PSBT' }).fill('fixture-rejected-psbt');
+  await rejectedImport.getByRole('button', { name: 'Validate & merge' }).click();
+  await expect(rejectedImport.getByRole('alert')).toContainText('Signed PSBT rejected');
+  await expect(rejectedImport.getByRole('alert')).toContainText('does not match the transaction you reviewed');
+  await expect(page.locator('.toast').filter({ hasText: 'Signed PSBT rejected' })).toBeVisible();
+  await expect(signerSummary.getByText('0 of 2 collected')).toBeVisible();
+  await rejectedImport.getByRole('button', { name: 'Cancel' }).click();
+  await expect(page.getByRole('region', { name: 'Transaction review' }).getByText('The PSBT does not match the transaction you reviewed. No signatures were changed.')).toBeVisible();
   await page.getByRole('button', { name: 'Show unsigned QR' }).click();
   const unsignedQrDialog = page.getByRole('dialog', { name: 'Unsigned PSBT' });
   const unsignedQrImage = unsignedQrDialog.getByRole('img', { name: /crypto-psbt QR frame/ });
@@ -867,7 +877,25 @@ test('creates and verifies a simple 2-of-3 descriptor wallet', async ({ page }) 
   await page.getByRole('button', { name: 'Add wallet' }).click();
   await page.getByRole('link', { name: /Use multiple keys/ }).click();
   await page.getByRole('link', { name: /Recover from backup/ }).click();
-  await page.getByLabel('Recovery descriptor backup').fill(descriptorBackup);
+  const publicDescriptor = JSON.parse(descriptorBackup).wallet.externalDescriptor as string;
+  await page.getByLabel('Choose recovery backup file').setInputFiles({
+    name: 'coldcard-multisig.txt',
+    mimeType: 'text/plain',
+    buffer: Buffer.from(`# Public multisig policy\n${publicDescriptor}\n`),
+  });
+  await expect(page.getByLabel('Recovery descriptor backup')).toHaveValue(/Public multisig policy/);
+  await page.getByRole('button', { name: 'Validate backup' }).click();
+  await expect(page.getByText('Backup is valid')).toBeVisible();
+  await expect(page.getByLabel('Recovered wallet name')).toBeVisible();
+  await page.getByLabel('Choose recovery backup file').setInputFiles({
+    name: 'family-vault-backup.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(descriptorBackup),
+  });
+  const backupFilePicker = page.getByLabel('Choose recovery backup file').locator('..');
+  await expect(backupFilePicker.getByText('family-vault-backup.json', { exact: true })).toBeVisible();
+  await expect(backupFilePicker.getByText('Backup file ready', { exact: true })).toBeVisible();
+  await expect(page.getByLabel('Recovery descriptor backup')).toHaveValue(descriptorBackup);
   await page.getByRole('button', { name: 'Validate backup' }).click();
   await expect(page.getByText('Backup is valid')).toBeVisible();
   await page.getByLabel('I verified the first receive address').check();
