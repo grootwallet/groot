@@ -1,88 +1,104 @@
-export type WalletErrorCode =
-  | 'invalid_credential'
-  | 'entropy_unavailable'
-  | 'invalid_supplemental_entropy'
-  | 'invalid_address'
-  | 'invalid_amount'
-  | 'invalid_coin'
-  | 'coin_unavailable'
-  | 'insufficient_funds'
-  | 'address_not_discardable'
-  | 'address_not_found'
-  | 'network_unavailable'
-  | 'fee_estimate_unavailable'
-  | 'wallet_locked'
-  | 'invalid_inactivity_timeout'
-  | 'wallet_not_found'
-  | 'wallet_selection_changed'
-  | 'wallet_policy_changed'
-  | 'invalid_mnemonic'
-  | 'invalid_label'
-  | 'wallet_already_exists'
-  | 'wallet_corrupt'
-  | 'secure_storage_unavailable'
-  | 'onboarding_cancelled'
-  | 'onboarding_expired'
-  | 'wrong_wallet_kind'
-  | 'proposal_not_found'
-  | 'broadcast_failed'
-  | 'invalid_wallet_name'
-  | 'invalid_cosigner_count'
-  | 'unsafe_threshold'
-  | 'duplicate_fingerprint'
-  | 'duplicate_xpub'
-  | 'invalid_descriptor'
-  | 'invalid_signer_import'
-  | 'import_too_large'
-  | 'private_material_rejected'
-  | 'invalid_fingerprint'
-  | 'invalid_derivation_path'
-  | 'wrong_network'
-  | 'invalid_node_config'
-  | 'invalid_payjoin_uri'
-  | 'hardware_unavailable'
-  | 'hardware_ambiguous'
-  | 'hardware_address_mismatch'
-  | 'invalid_hardware_request'
-  | 'hardware_pin_rejected'
-  | 'hardware_challenge_expired'
-  | 'hardware_wallet_selection_required'
-  | 'malformed_psbt'
-  | 'psbt_too_large'
-  | 'proposal_mismatch'
-  | 'invalid_signature'
-  | 'address_gap_limit_reached'
-  | 'scan_in_progress'
-  | 'scan_not_running'
-  | 'scan_cancelled'
-  | 'scan_interrupted'
-  | 'unknown_signer'
-  | 'no_new_signatures'
-  | 'signature_not_found'
-  | 'hardware_signature_missing'
-  | 'unsupported_sighash'
-  | 'premature_finalization'
-  | 'insufficient_signatures'
-  | 'finalization_failed'
-  | 'rate_limited'
-  | 'invalid_backup'
-  | 'invalid_ur'
-  | 'backup_too_large'
-  | 'backup_mismatch'
-  | 'file_reveal_unavailable'
-  | 'confirmation_mismatch'
-  | 'invalid_timeline'
-  | 'invalid_decay'
-  | 'invalid_expansion'
-  | 'invalid_signer_count'
-  | 'unknown_signer'
-  | 'duplicate_signer'
-  | 'recovery_signer_reused'
-  | 'invalid_delay'
-  | 'invalid_key'
-  | 'policy_too_complex'
-  | 'policy_compilation_failed'
-  | 'internal_error';
+export const WALLET_ERROR_CODES = [
+  'invalid_credential',
+  'entropy_unavailable',
+  'invalid_supplemental_entropy',
+  'invalid_address',
+  'invalid_amount',
+  'invalid_coin',
+  'coin_unavailable',
+  'insufficient_funds',
+  'address_not_discardable',
+  'address_not_found',
+  'network_unavailable',
+  'fee_estimate_unavailable',
+  'wallet_locked',
+  'invalid_inactivity_timeout',
+  'wallet_not_found',
+  'wallet_selection_changed',
+  'wallet_policy_changed',
+  'invalid_mnemonic',
+  'invalid_label',
+  'wallet_already_exists',
+  'wallet_corrupt',
+  'secure_storage_unavailable',
+  'onboarding_cancelled',
+  'onboarding_expired',
+  'wrong_wallet_kind',
+  'proposal_not_found',
+  'broadcast_failed',
+  'invalid_wallet_name',
+  'invalid_cosigner_count',
+  'unsafe_threshold',
+  'duplicate_fingerprint',
+  'duplicate_xpub',
+  'invalid_descriptor',
+  'invalid_signer_import',
+  'import_too_large',
+  'private_material_rejected',
+  'invalid_fingerprint',
+  'invalid_derivation_path',
+  'wrong_network',
+  'invalid_node_config',
+  'invalid_scan_settings',
+  'invalid_payjoin_uri',
+  'hardware_unavailable',
+  'hardware_timeout',
+  'hardware_response_too_large',
+  'hardware_command_failed',
+  'hardware_io_error',
+  'hardware_ambiguous',
+  'hardware_address_mismatch',
+  'invalid_hardware_request',
+  'hardware_pin_rejected',
+  'hardware_challenge_expired',
+  'hardware_wallet_selection_required',
+  'malformed_psbt',
+  'psbt_too_large',
+  'proposal_mismatch',
+  'invalid_signature',
+  'address_gap_limit_reached',
+  'scan_in_progress',
+  'scan_not_running',
+  'scan_cancelled',
+  'scan_interrupted',
+  'unknown_signer',
+  'no_new_signatures',
+  'signature_not_found',
+  'hardware_signature_missing',
+  'unsupported_sighash',
+  'premature_finalization',
+  'insufficient_signatures',
+  'finalization_failed',
+  'rate_limited',
+  'invalid_backup',
+  'invalid_ur',
+  'backup_too_large',
+  'backup_mismatch',
+  'file_reveal_unavailable',
+  'confirmation_mismatch',
+  'invalid_timeline',
+  'invalid_decay',
+  'invalid_expansion',
+  'invalid_signer_count',
+  'duplicate_signer',
+  'recovery_signer_reused',
+  'unknown_spending_path',
+  'invalid_delay',
+  'invalid_key',
+  'policy_too_complex',
+  'policy_compilation_failed',
+  'internal_error'
+] as const;
+
+export type WalletErrorCode = (typeof WALLET_ERROR_CODES)[number];
+
+const walletErrorCodes = new Set<string>(WALLET_ERROR_CODES);
+
+export function walletErrorCode(value: unknown): WalletErrorCode {
+  return typeof value === 'string' && walletErrorCodes.has(value)
+    ? (value as WalletErrorCode)
+    : 'internal_error';
+}
 
 export class WalletError extends Error {
   constructor(public readonly code: WalletErrorCode, message: string) {

@@ -631,6 +631,12 @@ struct ProtectedNodeAuth {
     password: String,
 }
 
+impl Drop for ProtectedNodeAuth {
+    fn drop(&mut self) {
+        self.password.zeroize();
+    }
+}
+
 #[derive(Serialize)]
 struct ProtectedNodeAuthRef<'a> {
     version: u8,
@@ -1915,8 +1921,9 @@ fn load_node_auth_session(
     let profile = selected_profile(app)?;
     let session = if config.auth == RpcAuthMode::UserPass {
         let path = node_secret_path(app)?;
-        let plaintext = secure_store::load(&path, credential).map_err(secure_store_error)?;
-        let Some(protected) = decode_protected_node_auth(&plaintext, &config)? else {
+        let plaintext =
+            Zeroizing::new(secure_store::load(&path, credential).map_err(secure_store_error)?);
+        let Some(mut protected) = decode_protected_node_auth(&plaintext, &config)? else {
             state
                 .node_auth
                 .lock()
@@ -1924,7 +1931,7 @@ fn load_node_auth_session(
                 .remove(&profile.id);
             return Ok(());
         };
-        let password = Zeroizing::new(protected.password);
+        let password = Zeroizing::new(std::mem::take(&mut protected.password));
         if password.is_empty() || password.len() > 1024 {
             return Err(api_error(
                 "wallet_corrupt",
@@ -4943,6 +4950,7 @@ fn snapshot_from(
     multisig: bool,
 ) -> ApiResult<WalletSnapshotDto> {
     label_provenance::reconcile_wallet_outputs(wallet, db, now()).map_err(internal)?;
+    let provenance_context = label_provenance::summary_context(db).map_err(internal)?;
     let balance = wallet.balance();
     let tip = wallet.latest_checkpoint().height();
     let addresses = address_rows(db, multisig)?;
@@ -5000,8 +5008,12 @@ fn snapshot_from(
                 .map(|input| input.previous_output.to_string())
                 .collect::<Vec<_>>()
         };
-        let mut provenance =
-            label_provenance::funding_summary(db, &provenance_outpoints).map_err(internal)?;
+        let mut provenance = label_provenance::funding_summary_with_context(
+            db,
+            &provenance_outpoints,
+            &provenance_context,
+        )
+        .map_err(internal)?;
         provenance.context = if is_received { "received" } else { "funding" }.to_owned();
         let (address, fallback_label) = tx_counterparty(wallet, db, transaction, is_received);
         let label = if let Some(intent) = &intent_label {
@@ -5079,8 +5091,12 @@ fn snapshot_from(
         } else {
             "Change".to_owned()
         };
-        let provenance =
-            label_provenance::output_summary(db, &output.outpoint.to_string()).map_err(internal)?;
+        let provenance = label_provenance::output_summary_with_context(
+            db,
+            &output.outpoint.to_string(),
+            &provenance_context,
+        )
+        .map_err(internal)?;
         let primary_label = provenance.labels.first().cloned();
         let label = primary_label
             .as_ref()

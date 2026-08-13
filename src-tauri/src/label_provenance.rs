@@ -678,9 +678,28 @@ fn cluster_links(db: &Connection) -> Result<Vec<(String, String)>, bdk_wallet::r
     Ok(links)
 }
 
+pub struct SummaryContext {
+    cluster_links: Vec<(String, String)>,
+}
+
+pub fn summary_context(db: &Connection) -> Result<SummaryContext, bdk_wallet::rusqlite::Error> {
+    Ok(SummaryContext {
+        cluster_links: cluster_links(db)?,
+    })
+}
+
+#[cfg(test)]
 pub fn output_summary(
     db: &Connection,
     outpoint: &str,
+) -> Result<ProvenanceSummaryDto, bdk_wallet::rusqlite::Error> {
+    output_summary_with_context(db, outpoint, &summary_context(db)?)
+}
+
+pub fn output_summary_with_context(
+    db: &Connection,
+    outpoint: &str,
+    summary_context: &SummaryContext,
 ) -> Result<ProvenanceSummaryDto, bdk_wallet::rusqlite::Error> {
     let lineage = db
         .query_row(
@@ -742,7 +761,7 @@ pub fn output_summary(
         },
         context,
         labels,
-        cluster_count: connected_cluster_count(&clusters, &cluster_links(db)?),
+        cluster_count: connected_cluster_count(&clusters, &summary_context.cluster_links),
         address_reused,
         source_transaction_id: Some(source_transaction_id),
         source_intent_label,
@@ -753,6 +772,14 @@ pub fn output_summary(
 pub fn funding_summary(
     db: &Connection,
     outpoints: &[String],
+) -> Result<ProvenanceSummaryDto, bdk_wallet::rusqlite::Error> {
+    funding_summary_with_context(db, outpoints, &summary_context(db)?)
+}
+
+pub fn funding_summary_with_context(
+    db: &Connection,
+    outpoints: &[String],
+    context: &SummaryContext,
 ) -> Result<ProvenanceSummaryDto, bdk_wallet::rusqlite::Error> {
     let sources = outpoints
         .iter()
@@ -782,7 +809,7 @@ pub fn funding_summary(
         state: derived.state,
         context: "funding".to_owned(),
         labels,
-        cluster_count: connected_cluster_count(&derived.clusters, &cluster_links(db)?),
+        cluster_count: connected_cluster_count(&derived.clusters, &context.cluster_links),
         address_reused: outpoints.iter().any(|outpoint| {
             db.query_row(
                 "SELECT address_reused FROM groot_output_lineage WHERE outpoint = ?1",

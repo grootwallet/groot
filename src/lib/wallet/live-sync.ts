@@ -1,4 +1,4 @@
-import type { WalletPort } from './contracts';
+import type { WalletProfilesPort, WalletSnapshotPort } from './contracts';
 
 export type LiveSyncController = {
   start(): void;
@@ -7,7 +7,8 @@ export type LiveSyncController = {
   runNow(): Promise<void>;
 };
 
-type LiveSyncPort = Pick<WalletPort, 'exists' | 'profiles' | 'sync' | 'syncMultisig'>;
+type LiveSyncPort = Pick<WalletProfilesPort, 'exists' | 'profiles'> &
+  Pick<WalletSnapshotPort, 'sync' | 'syncMultisig'>;
 
 /**
  * Runs one bounded wallet sync at a time. Repeated wake-ups are coalesced so a

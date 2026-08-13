@@ -1,10 +1,11 @@
 <script lang="ts">
-  import { AlertTriangle, ArrowLeft, ArrowRight, Cable, Check, Cpu, FileUp, HelpCircle, QrCode, ShieldCheck } from '@lucide/svelte';
+  import { AlertTriangle, ArrowLeft, ArrowRight, Cable, Check, FileUp, HelpCircle, QrCode, ShieldCheck } from '@lucide/svelte';
   import { goto } from '$app/navigation';
   import { onDestroy } from 'svelte';
   import Button from '$lib/components/Button.svelte';
   import FieldCounter from '$lib/components/FieldCounter.svelte';
   import HardwareActionPrompt from '$lib/components/HardwareActionPrompt.svelte';
+  import HardwareDeviceList from '$lib/components/HardwareDeviceList.svelte';
   import IdentifierDetailsModal from '$lib/components/IdentifierDetailsModal.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import PasswordField from '$lib/components/PasswordField.svelte';
@@ -177,7 +178,7 @@
 <IdentifierDetailsModal value={signer?.xpub ?? ''} open={xpubOpen && Boolean(signer)} title="Account public key" description="Complete watch-only key imported from this signer." label="Account xpub" onclose={() => xpubOpen=false}/>
 
 <Modal open={scanOpen} title="Connect hardware signer" description="Quit manufacturer wallet apps after unlocking; only one app can own the USB session." onclose={() => scanOpen=false}>
-  {#if busy}<HardwareActionPrompt title={hardwareProgress} detail={hardwareProgress.includes('Ledger') ? 'Keep Bitcoin Test open for Regtest and follow any prompt on the Ledger screen.' : 'Keep the signer connected and unlocked. Follow any instructions shown on the device.'} label="Hardware wallet setup in progress"/>{:else if !devices.length}<div class="device-scan"><strong>No device found</strong><span>HWI returned no device. For Coldcard, sign in first, enable its USB port, reconnect, then scan again. Other signers must be initialized, unlocked, and released by companion apps.</span><Button variant="secondary" onclick={scan}>Scan again</Button></div>{:else}<div class="source-list hardware-device-list">{#each devices as device}<button onclick={() => useDevice(device)} disabled={busy}><Cpu size={18}/><span><strong>{device.label}</strong><small>{device.fingerprint ? `Fingerprint ${device.fingerprint} · ${device.message}` : device.message}</small></span><em class:ready={device.status === 'ready'}>{device.status === 'ready' ? 'Ready' : device.status === 'detected' ? 'Detected' : device.action === 'confirm_empty_passphrase' ? 'Choose wallet' : 'Attention'}</em></button>{/each}</div>{/if}
+  {#if busy}<HardwareActionPrompt title={hardwareProgress} detail={hardwareProgress.includes('Ledger') ? 'Keep Bitcoin Test open for Regtest and follow any prompt on the Ledger screen.' : 'Keep the signer connected and unlocked. Follow any instructions shown on the device.'} label="Hardware wallet setup in progress"/>{:else}<HardwareDeviceList {devices} emptyMessage="HWI returned no device. For Coldcard, sign in first, enable its USB port, reconnect, then scan again. Other signers must be initialized, unlocked, and released by companion apps." onselect={useDevice} onrescan={scan} disabled={busy} detailedStatus />{/if}
   {#if error}<div class="hardware-inline-error" role="alert"><AlertTriangle size={18}/><span><strong>Could not read the account key</strong><small>{error}</small></span><Button variant="secondary" size="small" onclick={scan}>Try again</Button></div>{/if}
 </Modal>
 <Modal open={standardWalletOpen} title="Use Trezor standard wallet?" description="This selects the seed-derived wallet with no hardware passphrase." onclose={() => { standardWalletOpen=false; standardWalletDevice=null; scanOpen=true; }}>

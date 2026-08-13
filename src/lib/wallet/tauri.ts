@@ -2,6 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 import type { ReceiveAddress } from '$lib/types';
 import {
   WalletError,
+  walletErrorCode,
   type FeeEstimates,
   type FeeRate,
   type CoinSelection,
@@ -22,6 +23,8 @@ import { coalesceNotificationEvents } from './notification-policy';
 
 type BackendError = { code?: string; message?: string };
 type NotificationEnvelope = { id: number; event: WalletEvent };
+const NOTIFICATION_BATCH_SIZE = 256;
+const MAX_NOTIFICATION_BATCHES_PER_DRAIN = 32;
 
 async function command<T>(name: string, args?: Record<string, unknown>): Promise<T> {
   try {
@@ -29,7 +32,7 @@ async function command<T>(name: string, args?: Record<string, unknown>): Promise
   } catch (error) {
     const backend = error as BackendError;
     throw new WalletError(
-      (backend?.code ?? 'internal_error') as ConstructorParameters<typeof WalletError>[0],
+      walletErrorCode(backend?.code),
       backend?.message ?? (typeof error === 'string' ? error : 'The wallet command failed.')
     );
   }
@@ -239,10 +242,12 @@ export class TauriWalletAdapter implements WalletPort {
     const pendingDrain = this.#notificationDrains.get(multisig);
     if (pendingDrain) return pendingDrain;
     const drain = (async () => {
-      const envelopes = await command<NotificationEnvelope[]>('wallet_notifications', { multisig });
-      for (const event of coalesceNotificationEvents(envelopes.map((envelope) => envelope.event))) this.#emit(event);
-      if (envelopes.length) {
+      for (let batch = 0; batch < MAX_NOTIFICATION_BATCHES_PER_DRAIN; batch += 1) {
+        const envelopes = await command<NotificationEnvelope[]>('wallet_notifications', { multisig });
+        for (const event of coalesceNotificationEvents(envelopes.map((envelope) => envelope.event))) this.#emit(event);
+        if (!envelopes.length) break;
         await command<void>('wallet_notifications_ack', { multisig, ids: envelopes.map((envelope) => envelope.id) });
+        if (envelopes.length < NOTIFICATION_BATCH_SIZE) break;
       }
     })();
     this.#notificationDrains.set(multisig, drain);

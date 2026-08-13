@@ -2,6 +2,8 @@ use bdk_wallet::rusqlite::OptionalExtension;
 use bdk_wallet::rusqlite::{params, params_from_iter, Connection};
 use serde::Serialize;
 
+pub const DELIVERY_BATCH_SIZE: usize = 256;
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum WalletNotification {
@@ -144,9 +146,11 @@ fn decode_row(
 
 pub fn pending(db: &Connection) -> bdk_wallet::rusqlite::Result<Vec<NotificationEnvelope>> {
     let mut statement = db.prepare(
-        "SELECT id,kind,txid,amount,balance FROM groot_notifications WHERE delivered = 0 ORDER BY id",
+        "SELECT id,kind,txid,amount,balance FROM groot_notifications WHERE delivered = 0 ORDER BY id LIMIT ?1",
     )?;
-    let rows = statement.query_map([], decode_row)?.collect();
+    let rows = statement
+        .query_map(params![DELIVERY_BATCH_SIZE as i64], decode_row)?
+        .collect();
     rows
 }
 
@@ -220,6 +224,31 @@ mod tests {
             2
         );
         assert!(pending(&db).unwrap().is_empty());
+    }
+
+    #[test]
+    fn pending_notifications_are_drained_in_bounded_batches() {
+        let mut db = db();
+        for index in 0..(DELIVERY_BATCH_SIZE + 3) {
+            enqueue(
+                &db,
+                &WalletNotification::PaymentReceived {
+                    txid: format!("{index:064x}"),
+                    amount: index as u64,
+                    balance: index as u64,
+                },
+                index as u64,
+            )
+            .unwrap();
+        }
+        let first = pending(&db).unwrap();
+        assert_eq!(first.len(), DELIVERY_BATCH_SIZE);
+        acknowledge(
+            &mut db,
+            &first.iter().map(|event| event.id).collect::<Vec<_>>(),
+        )
+        .unwrap();
+        assert_eq!(pending(&db).unwrap().len(), 3);
     }
 
     #[test]

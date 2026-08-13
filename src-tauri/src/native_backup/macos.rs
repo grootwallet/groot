@@ -1,19 +1,28 @@
 use super::BackupOutcome;
 use objc2::{
-    define_class, msg_send, rc::autoreleasepool, rc::Retained, sel, DefinedClass, MainThreadMarker,
+    define_class, msg_send, rc::autoreleasepool, rc::Retained, runtime::ProtocolObject, sel,
+    DefinedClass, MainThreadMarker,
 };
 use objc2_app_kit::{
-    NSApplication, NSBackingStoreType, NSBezelStyle, NSBox, NSBoxType, NSButton, NSColor, NSFont,
-    NSModalResponseCancel, NSModalResponseOK, NSPanel, NSTextAlignment, NSTextField,
-    NSTitlePosition, NSView, NSWindow, NSWindowStyleMask,
+    NSApplication, NSBackingStoreType, NSBezelStyle, NSBox, NSBoxType, NSButton, NSColor,
+    NSControlTextEditingDelegate, NSFont, NSModalResponseCancel, NSModalResponseOK, NSPanel,
+    NSTextAlignment, NSTextField, NSTextFieldDelegate, NSTitlePosition, NSView, NSWindow,
+    NSWindowStyleMask,
 };
-use objc2_foundation::{NSPoint, NSRect, NSSize, NSString};
+use objc2_foundation::{
+    NSNotification, NSObjectProtocol, NSPoint, NSRect, NSSize, NSString, NSUTF8StringEncoding,
+};
 use rand::seq::SliceRandom;
 use std::{cell::RefCell, sync::mpsc::sync_channel};
 use tauri::{AppHandle, Manager};
 use zeroize::Zeroizing;
 
 const HEIGHT: f64 = 670.0;
+const MAX_RECOVERY_INPUT_BYTES: usize = 4_096;
+
+const fn recovery_input_within_limit(bytes: usize) -> bool {
+    bytes <= MAX_RECOVERY_INPUT_BYTES
+}
 
 struct BackupViewIvars;
 
@@ -68,33 +77,93 @@ define_class!(
     #[ivars = RecoveryInputViewIvars]
     struct RecoveryInputView;
 
+    unsafe impl NSObjectProtocol for RecoveryInputView {}
+
     impl RecoveryInputView {
         #[unsafe(method(confirmRecovery:))]
         fn confirm_recovery(&self, _sender: &NSButton) {
-            let words = self
-                .ivars()
-                .field
-                .borrow()
-                .as_ref()
-                .map(|field| field.stringValue().to_string())
-                .unwrap_or_default();
+            let Some(words) = recovery_words(self) else {
+                show_recovery_error(self, "Recovery words must be 4 KiB or less.");
+                return;
+            };
             if words.split_whitespace().count() == 24 {
                 NSApplication::sharedApplication(MainThreadMarker::from(self))
                     .stopModalWithCode(NSModalResponseOK);
-            } else if let Some(label) = self.ivars().error_label.borrow().as_ref() {
-                label.setStringValue(&NSString::from_str(
+            } else {
+                show_recovery_error(
+                    self,
                     "Enter exactly 24 recovery words, separated by spaces.",
-                ));
+                );
             }
         }
 
         #[unsafe(method(cancelRecovery:))]
         fn cancel_recovery(&self, _sender: &NSButton) {
+            clear_recovery_field(self);
             NSApplication::sharedApplication(MainThreadMarker::from(self))
                 .stopModalWithCode(NSModalResponseCancel);
         }
     }
+
+    unsafe impl NSControlTextEditingDelegate for RecoveryInputView {
+        #[unsafe(method(controlTextDidChange:))]
+        #[allow(non_snake_case)]
+        fn controlTextDidChange(&self, _notification: &NSNotification) {
+            let oversized = self
+                .ivars()
+                .field
+                .borrow()
+                .as_ref()
+                .is_some_and(|field| !recovery_input_within_limit(recovery_input_bytes(field)));
+            if oversized {
+                clear_recovery_field(self);
+                show_recovery_error(self, "Recovery words must be 4 KiB or less.");
+            }
+        }
+    }
+
+    unsafe impl NSTextFieldDelegate for RecoveryInputView {}
 );
+
+fn recovery_input_bytes(field: &NSTextField) -> usize {
+    field
+        .stringValue()
+        .lengthOfBytesUsingEncoding(NSUTF8StringEncoding)
+}
+
+fn recovery_words(view: &RecoveryInputView) -> Option<Zeroizing<String>> {
+    let field = view.ivars().field.borrow();
+    let field = field.as_ref()?;
+    recovery_input_within_limit(recovery_input_bytes(field))
+        .then(|| Zeroizing::new(field.stringValue().to_string()))
+}
+
+fn clear_recovery_field(view: &RecoveryInputView) {
+    if let Some(field) = view.ivars().field.borrow().as_ref() {
+        let empty = NSString::from_str("");
+        if let Some(editor) = field.currentEditor() {
+            editor.setString(&empty);
+        }
+        field.setStringValue(&empty);
+    }
+}
+
+fn show_recovery_error(view: &RecoveryInputView, message: &str) {
+    if let Some(label) = view.ivars().error_label.borrow().as_ref() {
+        label.setStringValue(&NSString::from_str(message));
+    }
+}
+
+#[cfg(test)]
+mod recovery_input_tests {
+    use super::*;
+
+    #[test]
+    fn native_recovery_limit_is_inclusive_and_rejects_the_next_byte() {
+        assert!(recovery_input_within_limit(MAX_RECOVERY_INPUT_BYTES));
+        assert!(!recovery_input_within_limit(MAX_RECOVERY_INPUT_BYTES + 1));
+    }
+}
 
 define_class!(
     #[unsafe(super(NSView))]
@@ -414,6 +483,9 @@ pub(super) fn recover(app: &AppHandle) -> Result<Option<Zeroizing<String>>, Stri
                 field.setPlaceholderString(Some(&NSString::from_str(
                     "word1 word2 word3 … word24",
                 )));
+                unsafe {
+                    field.setDelegate(Some(ProtocolObject::from_ref(&*root)));
+                }
                 root.addSubview(&field);
                 let error = add_label(
                     &root,
@@ -454,17 +526,16 @@ pub(super) fn recover(app: &AppHandle) -> Result<Option<Zeroizing<String>>, Stri
                 let response = NSApplication::sharedApplication(mtm).runModalForWindow(&panel);
                 parent.endSheet_returnCode(&panel, response);
                 if response != NSModalResponseOK {
+                    clear_recovery_field(&root);
                     let _ = sender.send(Ok(None));
                     return;
                 }
-                let words = root
-                    .ivars()
-                    .field
-                    .borrow()
-                    .as_ref()
-                    .map(|field| field.stringValue().to_string())
-                    .unwrap_or_default();
-                let _ = sender.send(Ok(Some(Zeroizing::new(words))));
+                let words = recovery_words(&root);
+                clear_recovery_field(&root);
+                let _ = sender.send(words.map_or_else(
+                    || Err("Native recovery input exceeded its size limit.".to_owned()),
+                    |words| Ok(Some(words)),
+                ));
             });
         })
         .map_err(|error| error.to_string())?;

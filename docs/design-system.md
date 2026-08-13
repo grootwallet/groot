@@ -46,6 +46,7 @@ Required review sizes are 1180×780 and 390×844. At mobile width, content must 
 
 - Buttons: default, secondary, ghost, danger, and danger-outline. Disabled means unavailable for a visible reason—not a placeholder interaction.
 - Fields: visible label, optional short help, inline error. Credential fields clear after each use.
+- Hardware device discovery uses `HardwareDeviceList`; flows supply their selection action, empty-state guidance, and whether readiness or rescan presentation is needed.
 - Modals: one decision or compact data-entry task; Escape/backdrop close; destructive confirmation names the consequence.
 - Long modal bodies scroll independently while their headers remain visible. Nested or rapidly replaced dialogs must restore document scrolling after the last dialog closes.
 - A modal whose optional details change its height preserves its initial desktop top edge so expansion grows downward instead of making the whole dialog jump. On mobile, expandable modals begin at the safe top inset and retain that position.

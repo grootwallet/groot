@@ -26,9 +26,13 @@ describe('receive hardware-verification orchestration', () => {
 
   it('normalizes typed and unknown failures without exposing arbitrary values', () => {
     expect(receiveVerificationFailure(
-      { code: 'invalid_hardware_pin', message: 'Try again.' },
+      { code: 'hardware_pin_rejected', message: 'Try again.' },
       'Fallback'
-    )).toEqual({ code: 'invalid_hardware_pin', message: 'Try again.' });
+    )).toEqual({ code: 'hardware_pin_rejected', message: 'Try again.' });
+    expect(receiveVerificationFailure(
+      { code: 'attacker_controlled_code', message: 'Untrusted failure.' },
+      'Fallback'
+    )).toEqual({ code: 'internal_error', message: 'Untrusted failure.' });
     expect(receiveVerificationFailure('hostile value', 'Fallback')).toEqual({
       code: 'internal_error',
       message: 'Fallback'

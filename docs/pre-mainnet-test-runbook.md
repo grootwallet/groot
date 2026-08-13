@@ -93,6 +93,8 @@ cp docs/hardware-certification-template.md hardware-certification.local/jade.md
 GROOT_HWI_PATH=/opt/homebrew/bin/hwi pnpm hardware:preflight
 ```
 
+Regtest deliberately permits this explicit developer path while collecting physical evidence. A Signet/Testnet4 release build must also set `GROOT_HWI_SHA256` to the reviewed executable's exact 64-character SHA-256 value and install it under root-owned, non-group/world-writable path ancestry; otherwise HWI fails closed. Record that digest with the certification evidence. Windows remains fail-closed until Authenticode identity verification is implemented.
+
 Follow [`hardware-certification.md`](hardware-certification.md) for each model. Keep reports local because fingerprints and paths are sensitive. A model is supported for release only after all required rows pass on the exact firmware/OS/package combination.
 
 BitBox02 Nova begins as a discovery record, not a pass/fail alias for BitBox02. Record only sanitized capability outcomes until its real HWI identity and pairing behavior are implemented. For release review, create a separate summary from [`hardware-certification-summary-template.md`](hardware-certification-summary-template.md) without fingerprints, device paths, addresses, xpubs, or PSBTs; the sensitive local report remains gitignored.

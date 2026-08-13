@@ -92,7 +92,7 @@ Reports should describe:
 ### Hardware-wallet transport
 
 - HWI is executed directly without a shell and never searched through ambient `PATH`.
-- The HWI executable is selected from an absolute configured or known installation path, canonicalized, required to be a regular file, and rejected on Unix when group- or world-writable.
+- The HWI executable is selected from an absolute configured or known installation path, canonicalized, and required to be a regular file. Regtest permits the explicit developer installation used for certification. Public-network Unix builds additionally require the build-pinned `GROOT_HWI_SHA256`, root ownership, and non-writable ancestry; other production targets fail closed until equivalent platform-signature verification is implemented.
 - HWI subprocesses receive a cleared environment with only a Tauri-resolved canonical `HOME` restored for the BitBoxApp pairing cache, plus fixed argument arrays, bounded concurrent output reads, and a timeout/kill path. Stdin is null except for bounded Trezor/KeepKey PIN positions; those use a single-use expiring challenge, never appear in argv/logs, and are zeroized after use. Raw device stderr is discarded.
 - Detected-but-locked devices remain visible with safe typed readiness states. Trezor empty-passphrase warnings fail closed until the user explicitly selects the seed-only standard wallet; Rust independently enforces that consent before import.
 - Mounted public-key files are capped at 256 KiB and reject private/recovery material, extended private keys, wrong-network origins, malformed fingerprints, and non-tpub account keys before Rust descriptor validation.

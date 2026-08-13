@@ -1,4 +1,4 @@
-import type { HardwareDevice, WalletErrorCode } from '$lib/wallet/contracts';
+import { walletErrorCode, type HardwareDevice, type WalletErrorCode } from '$lib/wallet/contracts';
 
 export type ReceiveVerificationIntent = 'prompt_pin' | 'rescan' | 'unavailable' | 'verify';
 
@@ -21,7 +21,7 @@ export function receiveVerificationFailure(
   if (cause && typeof cause === 'object') {
     const error = cause as { code?: unknown; message?: unknown };
     return {
-      code: typeof error.code === 'string' ? error.code as WalletErrorCode : 'internal_error',
+      code: walletErrorCode(error.code),
       message: typeof error.message === 'string' ? error.message : fallback
     };
   }

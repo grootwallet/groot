@@ -7,6 +7,9 @@ const addressComparison = readFileSync(new URL('./HardwareAddressComparison.svel
 const verificationFlow = readFileSync(new URL('./HardwareReceiveVerification.svelte', import.meta.url), 'utf8');
 const singleKeyReceive = readFileSync(new URL('../../routes/receive/+page.svelte', import.meta.url), 'utf8');
 const multisigReceive = readFileSync(new URL('../../routes/multisig/receive/+page.svelte', import.meta.url), 'utf8');
+const hardwareDeviceList = readFileSync(new URL('./HardwareDeviceList.svelte', import.meta.url), 'utf8');
+const hardwareSetup = readFileSync(new URL('../../routes/hardware/new/+page.svelte', import.meta.url), 'utf8');
+const singleKeySend = readFileSync(new URL('../../routes/send/+page.svelte', import.meta.url), 'utf8');
 
 describe('hardware receive verification UI', () => {
   it('keeps one shared verification component in both receive flows', () => {
@@ -38,5 +41,13 @@ describe('hardware receive verification UI', () => {
     expect(verificationFlow).toContain('No compatible signer found');
     expect(verificationFlow).toContain('Connect and unlock a signer saved in this wallet policy');
     expect(`${verificationFlow}\n${multisigReceive}`).not.toMatch(/cosigner/i);
+  });
+
+  it('reuses one bounded hardware device list for setup and signing', () => {
+    expect(hardwareDeviceList).toContain('{#each devices as device (device.id)}');
+    expect(hardwareDeviceList).toContain('onclick={onrescan}');
+    for (const route of [hardwareSetup, singleKeySend]) {
+      expect(route).toContain('<HardwareDeviceList');
+    }
   });
 });

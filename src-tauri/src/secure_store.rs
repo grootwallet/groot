@@ -189,6 +189,7 @@ impl DeviceKeyProvider for SystemDeviceKeyProvider {
 #[cfg(not(any(target_os = "macos", target_os = "ios")))]
 impl DeviceKeyProvider for SystemDeviceKeyProvider {
     fn get_or_create(&self, metadata_path: &Path) -> Result<Vec<u8>, SecureStoreError> {
+        require_sandbox_device_key(crate::build_network::NETWORK)?;
         let path = sandbox_key_path(metadata_path)?;
         if path.exists() {
             return read_sandbox_key(&path);
@@ -200,6 +201,7 @@ impl DeviceKeyProvider for SystemDeviceKeyProvider {
     }
 
     fn get(&self, metadata_path: &Path) -> Result<Vec<u8>, SecureStoreError> {
+        require_sandbox_device_key(crate::build_network::NETWORK)?;
         let path = sandbox_key_path(metadata_path)?;
         if !path.exists() {
             return Err(SecureStoreError::DeviceKeyNotFound);
@@ -208,8 +210,24 @@ impl DeviceKeyProvider for SystemDeviceKeyProvider {
     }
 
     fn set(&self, metadata_path: &Path, key: &[u8]) -> Result<(), SecureStoreError> {
+        require_sandbox_device_key(crate::build_network::NETWORK)?;
         validate_device_key(key.to_vec())?;
         write_owner_only(&sandbox_key_path(metadata_path)?, key)
+    }
+}
+
+#[cfg(any(test, not(any(target_os = "macos", target_os = "ios"))))]
+fn require_sandbox_device_key(
+    network: bdk_wallet::bitcoin::Network,
+) -> Result<(), SecureStoreError> {
+    if network == bdk_wallet::bitcoin::Network::Regtest {
+        Ok(())
+    } else {
+        // The file-backed key exists only for disposable deterministic tests.
+        // Public-network builds fail closed until their platform provides a
+        // reviewed non-exportable device key (DPAPI/CNG, Android Keystore, or
+        // an approved Linux secret service).
+        Err(SecureStoreError::Unavailable)
     }
 }
 
@@ -649,6 +667,19 @@ mod tests {
             Err(SecureStoreError::Corrupt)
         ));
         fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn file_backed_device_keys_are_regtest_only() {
+        use bdk_wallet::bitcoin::Network;
+
+        assert_eq!(require_sandbox_device_key(Network::Regtest), Ok(()));
+        for network in [Network::Signet, Network::Testnet4, Network::Bitcoin] {
+            assert_eq!(
+                require_sandbox_device_key(network),
+                Err(SecureStoreError::Unavailable)
+            );
+        }
     }
 
     #[cfg(not(any(target_os = "macos", target_os = "ios")))]

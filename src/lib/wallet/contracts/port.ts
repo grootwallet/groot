@@ -5,7 +5,7 @@ import type { MultisigPreview, MultisigProposal, MultisigWallet, RecoveryDrill, 
 import type { CoreNodeConfig, MnemonicPresentation, NodeStatus, PayjoinUriInspection, RecoveryScanSettings, RecoveryScanStatus, SupplementalEntropyInput, WalletEvent, WalletProfile, WalletRegistry, WalletSyncSource, WalletSyncStatus } from "./runtime";
 import type { AccelerationMethod, BroadcastResult, CoinSelection, CoinSelectionPreview, FeeEstimates, FeeRate, PaymentProposal, Sats, WalletSnapshot } from "./transactions";
 
-export interface WalletPort {
+export interface WalletProfilesPort {
   exists(): Promise<boolean>;
   profiles(): Promise<WalletRegistry>;
   renameWallet(name: string): Promise<WalletProfile>;
@@ -20,6 +20,9 @@ export interface WalletPort {
   lock(): Promise<void>;
   deleteWallet(credential: string, confirmation: string): Promise<void>;
   resetRegtestWallet(confirmation: string): Promise<void>;
+}
+
+export interface WalletNetworkPort {
   nodeConfig(): Promise<CoreNodeConfig>;
   saveNodeConfig(config: CoreNodeConfig, password: string, credential: string): Promise<NodeStatus>;
   testNodeConnection(): Promise<NodeStatus>;
@@ -32,8 +35,16 @@ export interface WalletPort {
   recoveryScanStatus(): Promise<RecoveryScanStatus>;
   fullRescan(credential: string): Promise<WalletSnapshot>;
   cancelFullRescan(): Promise<RecoveryScanStatus>;
+}
+
+export interface WalletSnapshotPort {
   snapshot(): Promise<WalletSnapshot>;
   sync(): Promise<WalletSnapshot>;
+  multisigSnapshot(): Promise<WalletSnapshot>;
+  syncMultisig(): Promise<WalletSnapshot>;
+}
+
+export interface WalletTransactionsPort {
   createAddress(label: string): Promise<ReceiveAddress>;
   discardAddress(id: number): Promise<void>;
   estimateFees(): Promise<FeeEstimates>;
@@ -44,6 +55,9 @@ export interface WalletPort {
   preparePayment(recipient: string, label: string, amount: Sats, feeRate: FeeRate, coinSelection?: CoinSelection): Promise<PaymentProposal>;
   prepareAcceleration(txid: string, method: AccelerationMethod, feeRate: FeeRate): Promise<PaymentProposal>;
   signAndBroadcast(proposalId: string, credential: string): Promise<BroadcastResult>;
+}
+
+export interface WalletHardwarePort {
   listHardwareDevices(): Promise<HardwareDevice[]>;
   promptHardwarePin(deviceId: string): Promise<string>;
   sendHardwarePin(challengeId: string, pinPositions: string): Promise<void>;
@@ -67,6 +81,9 @@ export interface WalletPort {
   broadcastExternalSignerProposal(proposalId: string, reviewedPsbt: string, credential: string): Promise<BroadcastResult>;
   cancelExternalSignerProposal(proposalId: string): Promise<void>;
   verifyExternalAddress(deviceId: string, addressId: number): Promise<ReceiveAddress>;
+}
+
+export interface WalletMultisigPort {
   previewMultisig(policy: PolicyDraft): Promise<MultisigPreview>;
   analyzeRecoveryPolicy(template: RecoveryTemplate, cosigners: CosignerDraft[]): Promise<RecoveryPolicyAnalysis>;
   createMultisig(policy: PolicyDraft, credential: string): Promise<MultisigWallet>;
@@ -81,8 +98,6 @@ export interface WalletPort {
   recoveryDrill(encodedBackup: string): Promise<RecoveryDrill>;
   recoverMultisig(encodedBackup: string, credential: string): Promise<MultisigWallet>;
   deleteMultisig(credential: string, confirmation: string): Promise<void>;
-  multisigSnapshot(): Promise<WalletSnapshot>;
-  syncMultisig(): Promise<WalletSnapshot>;
   createMultisigAddress(label: string): Promise<ReceiveAddress>;
   discardMultisigAddress(id: number): Promise<void>;
   verifyMultisigAddress(deviceId: string, addressId: number): Promise<ReceiveAddress>;
@@ -94,9 +109,25 @@ export interface WalletPort {
   signMultisigWithHardware(proposalId: string, deviceId: string, reviewedPsbt: string): Promise<MultisigProposal>;
   broadcastMultisigProposal(proposalId: string, reviewedPsbt: string, credential: string): Promise<BroadcastResult>;
   cancelMultisigProposal(proposalId: string): Promise<void>;
+}
+
+export interface WalletFileTransportPort {
   savePsbt(suggestedFilename: string, psbt: string): Promise<SavedFileResult>;
   revealSavedFile(revealToken: string): Promise<void>;
   encodePsbtUr(psbt: string, fragmentBytes?: number): Promise<string[]>;
   decodePsbtUr(frames: string[]): Promise<string>;
+}
+
+export interface WalletEventsPort {
   subscribe(listener: (event: WalletEvent) => void): () => void;
 }
+
+export interface WalletPort
+  extends WalletProfilesPort,
+    WalletNetworkPort,
+    WalletSnapshotPort,
+    WalletTransactionsPort,
+    WalletHardwarePort,
+    WalletMultisigPort,
+    WalletFileTransportPort,
+    WalletEventsPort {}

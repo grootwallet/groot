@@ -1,5 +1,9 @@
-use bdk_wallet::bitcoin::Network;
+use bdk_wallet::bitcoin::{
+    hashes::{sha256, Hash as _, HashEngine as _},
+    Network,
+};
 use std::{
+    fs::File,
     io::{Read, Write},
     path::{Path, PathBuf},
     process::{Command, Stdio},
@@ -13,6 +17,7 @@ const MAX_PIN_POSITIONS: usize = 50;
 const MAX_OUTPUT_BYTES: u64 = 384 * 1024;
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(90);
 const USER_REVIEW_TIMEOUT: Duration = Duration::from_secs(5 * 60);
+const HWI_DIGEST_HEX_BYTES: usize = 64;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HardwareError {
@@ -461,7 +466,94 @@ fn trusted_executable(program: &Path) -> Result<PathBuf, HardwareError> {
             return Err(HardwareError::Unavailable);
         }
     }
+    if release_hwi_verification_required(crate::build_network::NETWORK) {
+        verify_release_hwi(&canonical, &metadata)?;
+    }
     Ok(canonical)
+}
+
+const fn release_hwi_verification_required(network: Network) -> bool {
+    !matches!(network, Network::Regtest)
+}
+
+fn configured_hwi_digest() -> Result<[u8; 32], HardwareError> {
+    let encoded = option_env!("GROOT_HWI_SHA256").ok_or(HardwareError::Unavailable)?;
+    if encoded.len() != HWI_DIGEST_HEX_BYTES {
+        return Err(HardwareError::Unavailable);
+    }
+    let mut digest = [0_u8; 32];
+    for (index, pair) in encoded.as_bytes().chunks_exact(2).enumerate() {
+        let high = hex_nibble(pair[0]).ok_or(HardwareError::Unavailable)?;
+        let low = hex_nibble(pair[1]).ok_or(HardwareError::Unavailable)?;
+        digest[index] = (high << 4) | low;
+    }
+    Ok(digest)
+}
+
+const fn hex_nibble(byte: u8) -> Option<u8> {
+    match byte {
+        b'0'..=b'9' => Some(byte - b'0'),
+        b'a'..=b'f' => Some(byte - b'a' + 10),
+        b'A'..=b'F' => Some(byte - b'A' + 10),
+        _ => None,
+    }
+}
+
+fn executable_digest(path: &Path) -> Result<[u8; 32], HardwareError> {
+    let mut file = File::open(path).map_err(|_| HardwareError::Unavailable)?;
+    let mut engine = sha256::Hash::engine();
+    let mut buffer = [0_u8; 64 * 1024];
+    loop {
+        let read = file
+            .read(&mut buffer)
+            .map_err(|_| HardwareError::Unavailable)?;
+        if read == 0 {
+            break;
+        }
+        engine.input(&buffer[..read]);
+    }
+    Ok(sha256::Hash::from_engine(engine).to_byte_array())
+}
+
+fn verify_executable_digest(path: &Path, expected: [u8; 32]) -> Result<(), HardwareError> {
+    if executable_digest(path)? == expected {
+        Ok(())
+    } else {
+        Err(HardwareError::Unavailable)
+    }
+}
+
+#[cfg(unix)]
+fn verify_release_hwi(canonical: &Path, metadata: &std::fs::Metadata) -> Result<(), HardwareError> {
+    use std::os::unix::fs::{MetadataExt as _, PermissionsExt as _};
+
+    // A pinned digest authenticates the artifact. Root-owned, non-writable
+    // ancestors make the pathname stable between this check and exec for the
+    // same-user attacker in Groot's desktop threat model.
+    if metadata.uid() != 0 || metadata.permissions().mode() & 0o022 != 0 {
+        return Err(HardwareError::Unavailable);
+    }
+    let mut ancestor = canonical.parent();
+    while let Some(path) = ancestor {
+        let metadata = path.metadata().map_err(|_| HardwareError::Unavailable)?;
+        if !metadata.is_dir() || metadata.uid() != 0 || metadata.permissions().mode() & 0o022 != 0 {
+            return Err(HardwareError::Unavailable);
+        }
+        ancestor = path.parent();
+    }
+    verify_executable_digest(canonical, configured_hwi_digest()?)
+}
+
+#[cfg(windows)]
+fn verify_release_hwi(_: &Path, _: &std::fs::Metadata) -> Result<(), HardwareError> {
+    // Windows production builds stay fail-closed until Authenticode identity
+    // validation is implemented and certified for the packaged HWI artifact.
+    Err(HardwareError::Unavailable)
+}
+
+#[cfg(not(any(unix, windows)))]
+fn verify_release_hwi(_: &Path, _: &std::fs::Metadata) -> Result<(), HardwareError> {
+    Err(HardwareError::Unavailable)
 }
 
 #[cfg(test)]
@@ -491,6 +583,33 @@ mod tests {
             validate_master_fingerprint("f57a3a2b00"),
             Err(HardwareError::InvalidArgument)
         );
+    }
+
+    #[test]
+    fn release_hwi_digest_parser_is_exact_and_case_insensitive() {
+        assert_eq!(hex_nibble(b'0'), Some(0));
+        assert_eq!(hex_nibble(b'a'), Some(10));
+        assert_eq!(hex_nibble(b'F'), Some(15));
+        assert_eq!(hex_nibble(b'g'), None);
+        assert_eq!(hex_nibble(b'/'), None);
+        assert!(!release_hwi_verification_required(Network::Regtest));
+        assert!(release_hwi_verification_required(Network::Signet));
+        assert!(release_hwi_verification_required(Network::Testnet4));
+        assert!(release_hwi_verification_required(Network::Bitcoin));
+    }
+
+    #[test]
+    fn executable_digest_rejects_substituted_bytes() {
+        let path = std::env::temp_dir().join(format!("groot-hwi-digest-{}", std::process::id()));
+        std::fs::write(&path, b"reviewed hwi artifact").unwrap();
+        let reviewed = executable_digest(&path).unwrap();
+        assert_eq!(verify_executable_digest(&path, reviewed), Ok(()));
+        std::fs::write(&path, b"substituted hwi artifact").unwrap();
+        assert_eq!(
+            verify_executable_digest(&path, reviewed),
+            Err(HardwareError::Unavailable)
+        );
+        std::fs::remove_file(path).unwrap();
     }
 
     #[test]
