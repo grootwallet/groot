@@ -25,7 +25,7 @@ use bdk_wallet::{
         config::DbConfig, params, Connection, OptionalExtension, Transaction as SqliteTransaction,
     },
     template::{Bip84, Bip84Public},
-    KeychainKind, PersistedWallet, SignOptions, Wallet,
+    KeychainKind, PersistedWallet, SignOptions, Update, Wallet,
 };
 use bip39::Mnemonic;
 use rand::{rngs::OsRng, RngCore};
@@ -4134,16 +4134,54 @@ fn sync_wallet_with_compact_filters(
         .map_err(network_config_api_error)?
         .ok_or_else(|| internal("The compact-filter sync source was not selected."))?;
     let cache_dir = compact_filter_cache_dir(app)?;
-    let mut transaction = db.transaction().map_err(internal)?;
-    let mut wallet = load_wallet_transaction(&mut transaction)?;
+    let wallet = load_wallet(db)?;
     let update = crate::compact_filters::sync(&wallet, NETWORK, &cache_dir, &config)
         .map_err(|error| api_error("network_unavailable", error))?;
+    drop(wallet);
+    apply_compact_filter_update(db, multisig, update)
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum CompactFilterCommitStage {
+    UpdateApplied,
+    AddressesMarked,
+    ProvenanceReconciled,
+    SnapshotBuilt,
+    NotificationsEnqueued,
+    WalletPersisted,
+}
+
+fn apply_compact_filter_update(
+    db: &mut Connection,
+    multisig: bool,
+    update: Update,
+) -> ApiResult<WalletSnapshotDto> {
+    apply_compact_filter_update_with_hook(db, multisig, update, |_| Ok(()))
+}
+
+fn apply_compact_filter_update_with_hook<F>(
+    db: &mut Connection,
+    multisig: bool,
+    update: Update,
+    mut after_stage: F,
+) -> ApiResult<WalletSnapshotDto>
+where
+    F: FnMut(CompactFilterCommitStage) -> ApiResult<()>,
+{
+    let mut transaction = db.transaction().map_err(internal)?;
+    let mut wallet = load_wallet_transaction(&mut transaction)?;
     wallet.apply_update(update).map_err(internal)?;
+    after_stage(CompactFilterCommitStage::UpdateApplied)?;
     mark_observed_addresses(&wallet, &transaction)?;
+    after_stage(CompactFilterCommitStage::AddressesMarked)?;
     label_provenance::reconcile_wallet_outputs(&wallet, &transaction, now()).map_err(internal)?;
+    after_stage(CompactFilterCommitStage::ProvenanceReconciled)?;
     let snapshot = snapshot_from(&wallet, &transaction, Some(now().to_string()), multisig)?;
+    after_stage(CompactFilterCommitStage::SnapshotBuilt)?;
     enqueue_snapshot_notifications(&transaction, &snapshot)?;
+    after_stage(CompactFilterCommitStage::NotificationsEnqueued)?;
     wallet.persist(&mut transaction).map_err(internal)?;
+    after_stage(CompactFilterCommitStage::WalletPersisted)?;
     drop(wallet);
     transaction.commit().map_err(internal)?;
     Ok(snapshot)
@@ -10844,6 +10882,76 @@ mod tests {
                 .count(),
             1
         );
+    }
+
+    #[test]
+    fn compact_filter_update_and_app_metadata_roll_back_at_every_commit_stage() {
+        let directory =
+            std::env::temp_dir().join(format!("groot-compact-filter-atomic-{}", Uuid::new_v4()));
+        fs::create_dir_all(&directory).unwrap();
+        let database = directory.join("wallet.sqlite");
+        let mut db = Connection::open(&database).unwrap();
+        init_app_schema(&db).unwrap();
+        let mnemonic = Mnemonic::parse(WORDS).unwrap();
+        let (external, internal) = watch_templates(&mnemonic, "atomic compact filters").unwrap();
+        let wallet = Wallet::create(external, internal)
+            .network(NETWORK)
+            .create_wallet(&mut db)
+            .unwrap();
+        let original_tip = wallet.latest_checkpoint();
+        let next_tip = original_tip
+            .clone()
+            .push(BlockId {
+                height: 1,
+                hash: BlockHash::from_byte_array([42_u8; 32]),
+            })
+            .unwrap();
+        let update = Update {
+            chain: Some(next_tip),
+            ..Update::default()
+        };
+        drop(wallet);
+
+        for failed_stage in [
+            CompactFilterCommitStage::UpdateApplied,
+            CompactFilterCommitStage::AddressesMarked,
+            CompactFilterCommitStage::ProvenanceReconciled,
+            CompactFilterCommitStage::SnapshotBuilt,
+            CompactFilterCommitStage::NotificationsEnqueued,
+            CompactFilterCommitStage::WalletPersisted,
+        ] {
+            let result =
+                apply_compact_filter_update_with_hook(&mut db, false, update.clone(), |stage| {
+                    if stage == failed_stage {
+                        Err(api_error("injected_failure", "commit fault injection"))
+                    } else {
+                        Ok(())
+                    }
+                });
+            let error = match result {
+                Err(error) => error,
+                Ok(_) => panic!("the selected commit stage must fail"),
+            };
+            assert_eq!(error.code, "injected_failure");
+            drop(db);
+            db = Connection::open(&database).unwrap();
+            init_app_schema(&db).unwrap();
+            let restarted = load_wallet(&mut db).unwrap();
+            assert_eq!(restarted.latest_checkpoint(), original_tip);
+            drop(restarted);
+            assert!(!notifications::history_initialized(&db).unwrap());
+        }
+
+        apply_compact_filter_update(&mut db, false, update).unwrap();
+        drop(db);
+        let mut restarted_db = Connection::open(&database).unwrap();
+        init_app_schema(&restarted_db).unwrap();
+        let restarted = load_wallet(&mut restarted_db).unwrap();
+        assert_eq!(restarted.latest_checkpoint().height(), 1);
+        drop(restarted);
+        assert!(notifications::history_initialized(&restarted_db).unwrap());
+        drop(restarted_db);
+        fs::remove_dir_all(directory).unwrap();
     }
 
     #[test]

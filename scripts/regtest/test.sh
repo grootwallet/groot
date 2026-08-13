@@ -29,7 +29,15 @@ fi
 cleanup() {
   bash "${PROJECT_DIR}/scripts/regtest/stop.sh" >/dev/null 2>&1 || true
   if [[ "${OWNS_REGTEST_DIR}" == 1 && "${GROOT_REGTEST_DIR}" == "${TEST_TMP_ROOT%/}"/groot-regtest-test.* ]]; then
-    rm -rf -- "${GROOT_REGTEST_DIR}"
+    for _ in {1..20}; do
+      rm -rf -- "${GROOT_REGTEST_DIR}" 2>/dev/null || true
+      [[ ! -e "${GROOT_REGTEST_DIR}" ]] && break
+      sleep 0.1
+    done
+    if [[ -e "${GROOT_REGTEST_DIR}" ]]; then
+      echo "Disposable Regtest directory remained after bounded cleanup." >&2
+      return 1
+    fi
   fi
 }
 trap cleanup EXIT

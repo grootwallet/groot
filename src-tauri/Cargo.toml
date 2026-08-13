@@ -58,3 +58,12 @@ objc2-foundation = "=0.3.2"
 
 [patch.crates-io]
 security-framework-sys = { path = "vendor/security-framework-sys" }
+
+# bip157 0.6.3's only debug-assertion-only behavior is an unconditional stdout
+# logging macro. Keep peer and matching-block metadata out of Groot's dev/test
+# process output while retaining the reviewed, pinned dependency unchanged.
+[profile.dev.package.bip157]
+debug-assertions = false
+
+[profile.test.package.bip157]
+debug-assertions = false

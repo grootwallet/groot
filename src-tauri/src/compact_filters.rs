@@ -321,6 +321,59 @@ mod tests {
     }
 
     #[test]
+    fn configured_tor_proxy_receives_the_peer_request_without_direct_fallback() {
+        let direct_listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let direct_peer = direct_listener.local_addr().unwrap();
+        direct_listener.set_nonblocking(true).unwrap();
+        let proxy_listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let proxy = proxy_listener.local_addr().unwrap();
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let proxy_server = thread::spawn(move || {
+            let (mut stream, _) = proxy_listener.accept().unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(1)))
+                .unwrap();
+            let mut greeting = [0_u8; 3];
+            stream.read_exact(&mut greeting).unwrap();
+            assert_eq!(greeting, [5, 1, 0]);
+            stream.write_all(&[5, 0]).unwrap();
+
+            let mut request = [0_u8; 10];
+            stream.read_exact(&mut request).unwrap();
+            assert_eq!(&request[..4], &[5, 1, 0, 1]);
+            let requested_ip =
+                std::net::Ipv4Addr::new(request[4], request[5], request[6], request[7]);
+            let requested_port = u16::from_be_bytes([request[8], request[9]]);
+            sender.send((requested_ip, requested_port)).unwrap();
+            stream.write_all(&[5, 5, 0, 1, 0, 0, 0, 0, 0, 0]).unwrap();
+        });
+        let config = ValidatedCompactFilterConfig {
+            peers: vec![direct_peer],
+            required_peers: 1,
+            discover_peers: false,
+            tor_proxy: Some(proxy),
+        };
+        let wallet = test_wallet();
+        let checkpoint = wallet.latest_checkpoint();
+        let balance = wallet.balance();
+        let cache = temporary_path("tor-no-fallback");
+
+        assert!(short_sync(&wallet, &cache, &config).is_err());
+        assert_eq!(
+            receiver.recv_timeout(Duration::from_secs(1)).unwrap(),
+            ("127.0.0.1".parse().unwrap(), direct_peer.port())
+        );
+        assert!(matches!(
+            direct_listener.accept(),
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock
+        ));
+        assert_eq!(wallet.latest_checkpoint(), checkpoint);
+        assert_eq!(wallet.balance(), balance);
+        proxy_server.join().unwrap();
+        fs::remove_dir_all(cache).unwrap();
+    }
+
+    #[test]
     #[ignore = "requires a Regtest peer with blockfilterindex and peerblockfilters enabled"]
     fn funded_regtest_reorg_restart_reanchor_and_false_positive_are_consistent() {
         let peer = std::env::var("GROOT_COMPACT_FILTER_TEST_PEER")
