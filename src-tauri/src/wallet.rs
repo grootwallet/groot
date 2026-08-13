@@ -10748,7 +10748,7 @@ mod tests {
 
     #[test]
     fn synced_snapshots_enqueue_received_and_first_confirmation_events_once() {
-        let db = Connection::open_in_memory().unwrap();
+        let mut db = Connection::open_in_memory().unwrap();
         init_app_schema(&db).unwrap();
         let transaction = |id: &str, direction: &str, confirmations: u32| TransactionDto {
             id: id.repeat(64),
@@ -10816,6 +10816,31 @@ mod tests {
             events
                 .iter()
                 .filter(|event| matches!(event.event, WalletNotification::FirstConfirmation { .. }))
+                .count(),
+            1
+        );
+
+        let ids = events.iter().map(|event| event.id).collect::<Vec<_>>();
+        notifications::acknowledge(&mut db, &ids).unwrap();
+        snapshot.transactions[0].confirmations = 0;
+        snapshot.transactions[0].status = "pending".to_owned();
+        enqueue_snapshot_notifications(&db, &snapshot).unwrap();
+        assert!(
+            notifications::pending(&db).unwrap().is_empty(),
+            "a reorg retains history without creating a new receipt notification"
+        );
+        snapshot.transactions[0].confirmations = 1;
+        snapshot.transactions[0].status = "confirmed".to_owned();
+        enqueue_snapshot_notifications(&db, &snapshot).unwrap();
+        assert!(
+            notifications::pending(&db).unwrap().is_empty(),
+            "re-anchoring a previously confirmed transaction does not duplicate its confirmation"
+        );
+        assert_eq!(
+            snapshot
+                .transactions
+                .iter()
+                .filter(|tx| tx.id == "a".repeat(64))
                 .count(),
             1
         );
