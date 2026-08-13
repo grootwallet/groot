@@ -877,7 +877,25 @@ test('creates and verifies a simple 2-of-3 descriptor wallet', async ({ page }) 
   await page.getByRole('button', { name: 'Add wallet' }).click();
   await page.getByRole('link', { name: /Use multiple keys/ }).click();
   await page.getByRole('link', { name: /Recover from backup/ }).click();
-  await page.getByLabel('Recovery descriptor backup').fill(descriptorBackup);
+  const publicDescriptor = JSON.parse(descriptorBackup).wallet.externalDescriptor as string;
+  await page.getByLabel('Choose recovery backup file').setInputFiles({
+    name: 'coldcard-multisig.txt',
+    mimeType: 'text/plain',
+    buffer: Buffer.from(`# Public multisig policy\n${publicDescriptor}\n`),
+  });
+  await expect(page.getByLabel('Recovery descriptor backup')).toHaveValue(/Public multisig policy/);
+  await page.getByRole('button', { name: 'Validate backup' }).click();
+  await expect(page.getByText('Backup is valid')).toBeVisible();
+  await expect(page.getByLabel('Recovered wallet name')).toBeVisible();
+  await page.getByLabel('Choose recovery backup file').setInputFiles({
+    name: 'family-vault-backup.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(descriptorBackup),
+  });
+  const backupFilePicker = page.getByLabel('Choose recovery backup file').locator('..');
+  await expect(backupFilePicker.getByText('family-vault-backup.json', { exact: true })).toBeVisible();
+  await expect(backupFilePicker.getByText('Backup file ready', { exact: true })).toBeVisible();
+  await expect(page.getByLabel('Recovery descriptor backup')).toHaveValue(descriptorBackup);
   await page.getByRole('button', { name: 'Validate backup' }).click();
   await expect(page.getByText('Backup is valid')).toBeVisible();
   await page.getByLabel('I verified the first receive address').check();

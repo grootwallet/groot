@@ -48,7 +48,7 @@ use uuid::Uuid;
 use zeroize::{Zeroize, Zeroizing};
 
 use crate::auth::AuthThrottle;
-use crate::bsms::{BsmsError, DescriptorRecord};
+use crate::bsms::{BsmsError, DescriptorRecord, PublicDescriptorPair};
 use crate::build_network::{
     DEFAULT_RPC_URL, IS_REGTEST, NAME as NETWORK_NAME, NETWORK, PARAMETERS,
 };
@@ -2824,6 +2824,26 @@ fn bsms_api_error(error: BsmsError) -> ApiError {
         }
         BsmsError::InvalidEncoding | BsmsError::InvalidDescriptor => {
             "Enter a valid public BSMS 1.0 descriptor record."
+        }
+    };
+    api_error(error.code(), message)
+}
+
+fn public_descriptor_api_error(error: BsmsError) -> ApiError {
+    let message = match error {
+        BsmsError::TooLarge => "Public descriptor backups must be 256 KiB or smaller.",
+        BsmsError::PrivateMaterial => {
+            "A public descriptor backup must never contain private key material."
+        }
+        BsmsError::UnsupportedVersion => "This descriptor backup version is not supported.",
+        BsmsError::UnsupportedPaths => {
+            "The backup must contain standard receive/change paths /0/* and /1/*."
+        }
+        BsmsError::DescriptorMismatch => {
+            "The receive and change descriptors do not describe the same wallet."
+        }
+        BsmsError::InvalidEncoding | BsmsError::InvalidDescriptor => {
+            "Enter a valid BSMS, Groot JSON, or public descriptor backup."
         }
     };
     api_error(error.code(), message)
@@ -6972,13 +6992,42 @@ pub fn multisig_export_bsms(
     .map_err(bsms_api_error)
 }
 
+fn parse_public_descriptor_record(encoded: &str) -> ApiResult<DescriptorRecord> {
+    if encoded.trim_start().starts_with("BSMS 1.0") {
+        return DescriptorRecord::parse(encoded).map_err(bsms_api_error);
+    }
+    let pair = PublicDescriptorPair::parse(encoded).map_err(public_descriptor_api_error)?;
+    let mut wallet = Wallet::create(
+        pair.external_descriptor.clone(),
+        pair.internal_descriptor.clone(),
+    )
+    .network(NETWORK)
+    .create_wallet_no_persist()
+    .map_err(|_| {
+        api_error(
+            "invalid_backup",
+            "The public descriptors are not valid for this Bitcoin network.",
+        )
+    })?;
+    let first_address = wallet
+        .reveal_next_address(KeychainKind::External)
+        .address
+        .to_string();
+    DescriptorRecord::from_descriptor_pair(
+        &pair.external_descriptor,
+        &pair.internal_descriptor,
+        &first_address,
+    )
+    .map_err(public_descriptor_api_error)
+}
+
 #[tauri::command]
 pub fn multisig_bsms_inspect(
     app: AppHandle,
     state: State<'_, AppState>,
     encoded_backup: String,
 ) -> ApiResult<RecoveryDrillDto> {
-    let record = DescriptorRecord::parse(&encoded_backup).map_err(bsms_api_error)?;
+    let record = parse_public_descriptor_record(&encoded_backup)?;
     let (external_descriptor, internal_descriptor) =
         record.descriptor_pair().map_err(bsms_api_error)?;
     let mut derived = Wallet::create(external_descriptor.clone(), internal_descriptor.clone())
@@ -6987,7 +7036,7 @@ pub fn multisig_bsms_inspect(
         .map_err(|_| {
             api_error(
                 "invalid_backup",
-                "The BSMS descriptors are not valid for this Bitcoin network.",
+                "The public descriptors are not valid for this Bitcoin network.",
             )
         })?;
     let derived_first = derived
@@ -6997,7 +7046,7 @@ pub fn multisig_bsms_inspect(
     if derived_first != record.first_address {
         return Err(api_error(
             "backup_mismatch",
-            "The BSMS first address does not match its descriptor.",
+            "The backup's first address does not match its descriptor.",
         ));
     }
     let current_wallet = read_multisig_metadata(&app).ok();
@@ -7038,7 +7087,7 @@ pub fn multisig_recover_bsms(
     let _operation = operation_guard(&state)?;
     let credential = Zeroizing::new(credential);
     validate_credential(credential.as_str())?;
-    let record = DescriptorRecord::parse(&encoded_backup).map_err(bsms_api_error)?;
+    let record = parse_public_descriptor_record(&encoded_backup)?;
     let (threshold, keys) = record.standard_policy().map_err(bsms_api_error)?;
     let cosigners = keys
         .into_iter()
@@ -7075,7 +7124,7 @@ pub fn multisig_recover_bsms(
     if first_multisig_address(&wallet)? != record.first_address {
         return Err(api_error(
             "backup_mismatch",
-            "The BSMS first address does not match its descriptor.",
+            "The backup's first address does not match its descriptor.",
         ));
     }
     let (id, dir) = prepare_profile_directory(&app)?;
