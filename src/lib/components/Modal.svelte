@@ -2,25 +2,8 @@
   import { X } from '@lucide/svelte';
   import { lockModalScroll } from './modal-scroll-lock';
   import { fly } from 'svelte/transition';
-  let { open, title, description = '', preserveTop = false, onclose, children } = $props();
+  let { open, title, description = '', onclose, children } = $props();
   let dialog = $state<HTMLDivElement>();
-
-  function anchorInitialTop(node: HTMLDivElement, enabled: boolean) {
-    if (!enabled) return;
-    const layer = node.parentElement;
-    if (!layer) return;
-    const paddingTop = Number.parseFloat(getComputedStyle(layer).paddingTop) || 0;
-    const centeredTop = Math.max(0, node.offsetTop - paddingTop);
-    const initialTop = window.innerWidth <= 760 ? 0 : centeredTop;
-    layer.style.alignItems = 'flex-start';
-    node.style.marginTop = `${initialTop}px`;
-    return {
-      destroy() {
-        layer.style.removeProperty('align-items');
-        node.style.removeProperty('margin-top');
-      }
-    };
-  }
 
   $effect(() => {
     if (!open || typeof document === 'undefined') return;
@@ -49,7 +32,7 @@
 
 {#if open}
   <div class="modal-layer" role="presentation" onclick={(e) => e.target === e.currentTarget && onclose()}>
-    <div bind:this={dialog} class="modal" role="dialog" aria-modal="true" aria-label={title} tabindex="-1" onkeydown={handleKeydown} use:anchorInitialTop={preserveTop} transition:fly={{ y: 8, duration: 180 }}>
+    <div bind:this={dialog} class="modal" role="dialog" aria-modal="true" aria-label={title} tabindex="-1" onkeydown={handleKeydown} transition:fly={{ y: 8, duration: 180 }}>
       <header class="modal-header">
         <div><h2>{title}</h2>{#if description}<p>{description}</p>{/if}</div>
         <button class="icon-button" aria-label="Close" onclick={onclose}><X size={18} /></button>

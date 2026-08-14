@@ -504,6 +504,8 @@ pub fn multisig_create(
     validate_credential(credential.as_str())?;
     reject_virtual_cosigners(&policy.cosigners)?;
     let preview = policy.preview().map_err(policy_api_error)?;
+    let coldcard_registered =
+        multisig_setup_commands::coldcard_registration_for_preview(&app, &preview)?;
     let preview_descriptor_checksum = descriptor_checksum(&preview.external_descriptor)?;
     let (id, dir) = prepare_profile_directory(&app)?;
     let result = (|| {
@@ -543,6 +545,25 @@ pub fn multisig_create(
             }
         }
         drop(pending);
+
+        if coldcard_registered {
+            let acknowledged_at = now();
+            for cosigner in &preview.cosigners {
+                if cosigner
+                    .device_type
+                    .as_deref()
+                    .is_some_and(|device_type| device_type.eq_ignore_ascii_case("coldcard"))
+                {
+                    db.execute(
+                        "INSERT INTO groot_signer_policy_acknowledgements
+                            (signer_fingerprint, device_type, scope, acknowledged_at)
+                         VALUES (?1, 'coldcard', 'policy_file_acknowledgement', ?2)",
+                        params![cosigner.fingerprint.to_ascii_lowercase(), acknowledged_at],
+                    )
+                    .map_err(internal)?;
+                }
+            }
+        }
 
         let marker = format!("groot-multisig:{}", preview.external_descriptor);
         secure_store::store(

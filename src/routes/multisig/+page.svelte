@@ -1,6 +1,6 @@
 <script lang="ts">
   import { ChevronRight, Cpu, Eye, FileKey, FlaskConical, Plus, ShieldCheck, Usb } from '@lucide/svelte';
-  import { onMount } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import Button from '$lib/components/Button.svelte';
   import DeviceDetailsModal from '$lib/components/DeviceDetailsModal.svelte';
   import LocalTimestamp from '$lib/components/LocalTimestamp.svelte';
@@ -10,7 +10,8 @@
   import ColdcardPolicySetup from '$lib/components/ColdcardPolicySetup.svelte';
   import OverflowMenuButton from '$lib/components/OverflowMenuButton.svelte';
   import MultisigDescriptorsModal from '$lib/components/MultisigDescriptorsModal.svelte';
-  import { isPrototypeWallet, walletService, type CosignerHealthCheck, type HardwareDevice, type MultisigWallet, type PolicyVerificationAddress, type SignerPolicyVerification, type WalletSnapshot } from '$lib/wallet';
+  import TrezorPinModal from '$lib/components/TrezorPinModal.svelte';
+  import { isPrototypeWallet, walletService, WalletError, type CosignerHealthCheck, type HardwareDevice, type MultisigWallet, type PolicyVerificationAddress, type SignerPolicyVerification, type WalletErrorCode, type WalletSnapshot } from '$lib/wallet';
   import type { CosignerDraft, CosignerSource } from '$lib/multisig/policy';
   import { defaultConfig, networkName } from '$lib/config';
   import { shortSats } from '$lib/data';
@@ -18,6 +19,7 @@
   import { coldcardPolicyFilename } from '$lib/transfer';
   import { useWalletShellContext } from '$lib/wallet/shell-context';
   import { matchingPolicyVerification, policyReadinessLabel, policyRegistrationProfile, requiresPolicySetup } from '$lib/hardware/policy-readiness';
+  import { lockedDeviceForHealthCheck } from '$lib/hardware/health-check';
   const walletShell = useWalletShellContext();
   type CosignerHealthLog = CosignerHealthCheck & { signerId: string };
   let wallet = $state<MultisigWallet | null>(null);
@@ -35,6 +37,17 @@
   let policyDevice = $state<HardwareDevice | null>(null);
   let policyBusy = $state(false);
   let policyError = $state('');
+  let healthPinOpen = $state(false);
+  let healthPinBusy = $state(false);
+  let healthPinChallenge = $state('');
+  let healthPinPositions = $state('');
+  let healthPinDevice = $state<HardwareDevice | null>(null);
+  let healthPinError = $state('');
+  let healthPinErrorCode = $state<WalletErrorCode | ''>('');
+  onDestroy(() => {
+    healthPinChallenge = '';
+    healthPinPositions = '';
+  });
   onMount(async () => {
     wallet = await walletService.multisigWallet();
     if (!wallet) return;
@@ -103,6 +116,14 @@
     const signer = selectedSigner;
     checking = true;
     try {
+      if (signer.source === 'usb' || signer.source === 'virtual') {
+        const lockedDevice = lockedDeviceForHealthCheck(signer, await walletService.listHardwareDevices());
+        if (lockedDevice) {
+          checking = false;
+          await startHealthPin(lockedDevice);
+          return;
+        }
+      }
       recordHealth(signer.id, await walletService.checkHardwareCosigner(signer));
       toast({ title: 'Health check passed', description: `${signer.label} is ready.`, tone: 'success' });
     } catch (cause) {
@@ -112,6 +133,39 @@
     } finally {
       checking = false;
     }
+  }
+  async function startHealthPin(device: HardwareDevice) {
+    const retrying = healthPinOpen;
+    healthPinBusy = true; healthPinError = ''; healthPinErrorCode = ''; healthPinPositions = '';
+    try {
+      healthPinChallenge = await walletService.promptHardwarePin(device.id);
+      healthPinDevice = device;
+      healthPinOpen = true;
+    } catch (cause) {
+      healthPinErrorCode = cause instanceof WalletError ? cause.code : 'internal_error';
+      healthPinError = cause instanceof Error ? cause.message : 'Could not start the Trezor PIN matrix.';
+      if (!retrying) toast({ title: 'Trezor unlock unavailable', description: healthPinError, tone: 'danger' });
+    } finally { healthPinBusy = false; }
+  }
+  async function submitHealthPin() {
+    if (!healthPinChallenge || !healthPinPositions || healthPinBusy) return;
+    healthPinBusy = true; healthPinError = ''; healthPinErrorCode = '';
+    const positions = healthPinPositions;
+    healthPinPositions = '';
+    try {
+      await walletService.sendHardwarePin(healthPinChallenge, positions);
+      healthPinChallenge = ''; healthPinOpen = false; healthPinDevice = null;
+      toast({ title: 'Trezor unlocked', description: 'Resuming the signer health check.', tone: 'success' });
+      await runHealthCheck();
+    } catch (cause) {
+      healthPinChallenge = '';
+      healthPinErrorCode = cause instanceof WalletError ? cause.code : 'internal_error';
+      healthPinError = cause instanceof Error ? cause.message : 'Trezor did not accept that matrix entry.';
+    } finally { healthPinBusy = false; }
+  }
+  function closeHealthPin() {
+    healthPinOpen = false; healthPinBusy = false; healthPinChallenge = ''; healthPinPositions = '';
+    healthPinDevice = null; healthPinError = ''; healthPinErrorCode = '';
   }
   async function openPolicyVerification(signer: CosignerDraft) {
     policySigner = signer; selectedSigner = null; policyDevice = null; policyError = ''; policyBusy = true;
@@ -125,11 +179,14 @@
   }
   async function verifySignerPolicy() {
     if (!policySigner || !policyDevice || policyBusy) return;
+    const signerLabel = policySigner.label;
     policyBusy = true; policyError = '';
     try {
       const verification = await walletService.verifyMultisigSignerPolicy(policyDevice.id, policySigner.fingerprint);
       policyVerifications = [verification, ...policyVerifications.filter((item) => item.signerFingerprint.toLowerCase() !== verification.signerFingerprint.toLowerCase())];
-      toast({ title: 'Wallet policy verified', description: `${policySigner.label} returned the correct first address.`, tone: 'success' });
+      policySigner = null;
+      policyDevice = null;
+      toast({ title: 'Wallet policy verified', description: `${signerLabel} registered the policy and verified its first address.`, tone: 'success' });
     } catch (cause) { policyError = cause instanceof Error ? cause.message : 'The wallet policy could not be verified.'; }
     finally { policyBusy = false; }
   }
@@ -168,9 +225,24 @@
   {/if}
 </div>
 
-<DeviceDetailsModal signer={selectedSigner} health={selectedSigner ? latestHealth(selectedSigner) : null} history={selectedSigner ? (healthHistory[selectedSigner.id] ?? []) : []} policyStatus={selectedSigner ? signerPolicyStatus(selectedSigner) : null} {checking} onclose={() => selectedSigner = null} oncheck={runHealthCheck} onpolicy={() => selectedSigner && openPolicyVerification(selectedSigner)}/>
+<DeviceDetailsModal signer={healthPinOpen ? null : selectedSigner} health={selectedSigner ? latestHealth(selectedSigner) : null} history={selectedSigner ? (healthHistory[selectedSigner.id] ?? []) : []} policyStatus={selectedSigner ? signerPolicyStatus(selectedSigner) : null} {checking} onclose={() => selectedSigner = null} oncheck={runHealthCheck} onpolicy={() => selectedSigner && openPolicyVerification(selectedSigner)}/>
+<TrezorPinModal
+  open={healthPinOpen}
+  busy={healthPinBusy}
+  challengeReady={Boolean(healthPinChallenge)}
+  positions={healthPinPositions}
+  device={healthPinDevice}
+  errorCode={healthPinErrorCode}
+  error={healthPinError}
+  onappend={(position) => healthPinPositions += position}
+  ondelete={() => healthPinPositions = healthPinPositions.slice(0, -1)}
+  onclear={() => healthPinPositions = ''}
+  onsubmit={submitHealthPin}
+  onretry={() => healthPinDevice && startHealthPin(healthPinDevice)}
+  onclose={closeHealthPin}
+/>
 <MultisigDescriptorsModal open={showDescriptors} {wallet} onclose={() => showDescriptors=false}/>
-<Modal open={!!policySigner} preserveTop title={policySigner && policyRegistrationProfile(policySigner).registration==='file_once'?'Prepare Coldcard for this wallet':'Verify signer wallet policy'} description={policySigner && policyRegistrationProfile(policySigner).registration==='file_once'?'Complete the one-time policy-file import before signing.':"Compare Groot's saved public policy with every value shown on the hardware device."} onclose={()=>{if(!policyBusy){policySigner=null;policyDevice=null;policyError='';}}}>
+<Modal open={!!policySigner} title={policySigner && policyRegistrationProfile(policySigner).registration==='file_once'?'Prepare Coldcard for this wallet':'Verify signer wallet policy'} description={policySigner && policyRegistrationProfile(policySigner).registration==='file_once'?'Complete the one-time policy-file import before signing.':"Compare Groot's saved public policy with every value shown on the hardware device."} onclose={()=>{if(!policyBusy){policySigner=null;policyDevice=null;policyError='';}}}>
   {#if policySigner && wallet && policyRegistrationProfile(policySigner).registration==='file_once'}<ColdcardPolicySetup {wallet} signer={policySigner} busy={policyBusy} error={policyError} ondownload={saveColdcardPolicy} onconfirm={confirmColdcardPolicy}/>
   {:else if policyBusy && !policyDevice}<HardwareActionPrompt title="Looking for the saved signer" detail="Keep the device connected, unlocked, and in its Bitcoin app while Groot matches the saved fingerprint." label="Signer scan in progress"/>
   {:else if policySigner && wallet && policyDevice && policyAddress}<SignerPolicyReview {wallet} signer={policySigner} {policyAddress} verification={matchingPolicyVerification(policySigner,policyVerifications)} busy={policyBusy} error={policyError} onverify={verifySignerPolicy}/>

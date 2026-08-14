@@ -5201,6 +5201,14 @@ fn hardware_device_api_error(error: HardwareError, device_type: &str) -> ApiErro
         );
     }
     if device_type.eq_ignore_ascii_case("bitbox02")
+        && matches!(error, HardwareError::CommandFailed(Some(-8 | -9)))
+    {
+        return api_error(
+            error.code(),
+            "BitBox02 did not finish wallet registration. Enter a short account name on the device, approve the multisig policy, then verify the first address.",
+        );
+    }
+    if device_type.eq_ignore_ascii_case("bitbox02")
         && matches!(
             error,
             HardwareError::CommandFailed(None | Some(-3 | -12 | -13 | -15))

@@ -60,9 +60,11 @@ export abstract class DummyWalletState {
   protected _inactivityTimeoutMinutes = 5;
   protected _credentials = new Map<string, string>(this._profiles.map((profile) => [profile.id, prototypeCredential]));
   protected _unlockedWalletIds = new Set<string>(
-    typeof location !== 'undefined' && new URLSearchParams(location.search).has('fixture-delayed-wallet-switch')
-      ? this._profiles.map((profile) => profile.id)
-      : this._profiles[0] ? [this._profiles[0].id] : []
+    typeof location !== 'undefined' && new URLSearchParams(location.search).has('fixture-locked-wallet-switch')
+      ? []
+      : typeof location !== 'undefined' && new URLSearchParams(location.search).has('fixture-delayed-wallet-switch')
+        ? this._profiles.map((profile) => profile.id)
+        : this._profiles[0] ? [this._profiles[0].id] : []
   );
   protected _coins = structuredClone(utxos).map((coin) => ({ ...coin, address: fixtureAddressForNetwork(coin.address) }));
   protected _addresses = structuredClone(receiveAddresses).map((address) => ({ ...address, address: fixtureAddressForNetwork(address.address) }));

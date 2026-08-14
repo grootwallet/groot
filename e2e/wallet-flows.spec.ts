@@ -269,6 +269,40 @@ test('switching wallets never renders data from the previously selected wallet',
   await expect(page.locator('.wallet-skeleton')).toHaveCount(0);
 });
 
+test('switching between locked wallets never renders an intermediate wallet screen', async ({ page }) => {
+  const isMobile = (page.viewportSize()?.width ?? 1180) <= 760;
+  test.skip(isMobile, 'The locked mobile shell does not expose wallet switching.');
+  await page.goto('/unlock?fixture-locked-wallet-switch=1');
+  await expect(page.getByRole('heading', { name: 'Everyday wallet' })).toBeVisible();
+
+  await page.evaluate(() => {
+    const renderedHeadings: string[] = [];
+    const recordHeadings = () => {
+      for (const heading of document.querySelectorAll('h1')) {
+        const text = heading.textContent?.trim();
+        if (text) renderedHeadings.push(text);
+      }
+    };
+    const observer = new MutationObserver(recordHeadings);
+    observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+    Object.assign(window, { __walletSwitchHeadings: renderedHeadings, __walletSwitchObserver: observer });
+  });
+
+  await page.getByRole('complementary').getByRole('button', { name: /Family wallet/ }).click();
+
+  await expect(page).toHaveURL(/\/unlock(?:\?|$)/);
+  await expect(page.getByRole('heading', { name: 'Family wallet' })).toBeVisible();
+  const renderedHeadings = await page.evaluate(() => {
+    const runtime = window as typeof window & {
+      __walletSwitchHeadings?: string[];
+      __walletSwitchObserver?: MutationObserver;
+    };
+    runtime.__walletSwitchObserver?.disconnect();
+    return runtime.__walletSwitchHeadings ?? [];
+  });
+  expect(renderedHeadings).not.toContain('Overview');
+});
+
 test('creates, switches, unlocks, and deletes isolated wallet profiles', async ({ page }) => {
   const isMobile = (page.viewportSize()?.width ?? 1180) <= 760;
   await page.goto('/settings');

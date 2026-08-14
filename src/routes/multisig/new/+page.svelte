@@ -16,7 +16,7 @@
   import SignerPolicyReview from '$lib/components/SignerPolicyReview.svelte';
   import { toast } from '$lib/stores/toasts';
   import { walletService, WalletError, type CosignerHealthCheck, type HardwareDevice, type MultisigPreview, type MultisigSetupDraft, type PolicyVerificationAddress, type RecoveryTemplate, type SavedFileResult, type SignerPolicyVerification, type WalletErrorCode } from '$lib/wallet';
-  import { MULTISIG_ACCOUNT_PATH, validatePolicyDraft, type CosignerDraft, type CosignerSource } from '$lib/multisig/policy';
+  import { findDuplicateCosigner, MULTISIG_ACCOUNT_PATH, validatePolicyDraft, type CosignerDraft, type CosignerSource } from '$lib/multisig/policy';
   import { copyText } from '$lib/clipboard';
   import { combineDescriptorBranches } from '$lib/descriptors';
   import { isMeaningfulMultisigSetupDraft, multisigSetupSignerTarget } from '$lib/wallet/multisig-setup';
@@ -42,6 +42,7 @@
   let pickerOpen = $state(false);
   let pickerError = $state('');
   let keyOpen = $state(false);
+  let keyError = $state('');
   let hardwareOpen = $state(false);
   let hardware = $state<HardwareDevice[]>([]);
   let hardwareBusy = $state(false);
@@ -59,6 +60,7 @@
   let hardwareHelpReturnsToScan = $state(false);
   let hardwareGuide = $state<HardwareGuideId>('coldcard');
   let selectedSigner = $state<CosignerDraft | null>(null);
+  let signerPendingRemoval = $state<CosignerDraft | null>(null);
   let checkingSigner = $state(false);
   let healthChecks = $state<Record<string, CosignerHealthCheck>>({});
   let source = $state<CosignerSource>('manual');
@@ -197,6 +199,14 @@
     void drainDraftSaveQueue();
   }
 
+  async function flushCurrentDraft() {
+    queueDraftSave(currentSetupDraft());
+    while (draftSaveRunning || queuedDraft) {
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 10));
+    }
+    if (draftSaveError) throw new Error(draftSaveError);
+  }
+
   async function previewRestoredDraft(draft: MultisigSetupDraft) {
     if (draft.cosigners.length !== multisigSetupSignerTarget(draft)) return;
     if (draft.templateKind === 'standard') {
@@ -268,6 +278,7 @@
       discardDraftError = '';
       resetSetupState();
       toast({ title: 'Setup discarded', description: 'The saved public multisig draft was removed.', tone: 'success' });
+      await goto('/');
     } catch (cause) {
       discardDraftError = cause instanceof Error ? cause.message : 'The saved setup could not be discarded.';
     } finally {
@@ -311,7 +322,31 @@
   function chooseSource(next: CosignerSource) {
     source = next;
     pickerOpen = false;
+    keyError = '';
     keyOpen = true;
+  }
+
+  function duplicateSignerMessage(candidate: CosignerDraft): string | null {
+    const duplicate = findDuplicateCosigner(cosigners, candidate);
+    if (!duplicate) return null;
+    if (duplicate.match === 'both') {
+      return `This signer is already added as “${duplicate.cosigner.label}” (fingerprint ${duplicate.cosigner.fingerprint.toLowerCase()}).`;
+    }
+    if (duplicate.match === 'fingerprint') {
+      return `Fingerprint ${candidate.fingerprint.trim().toLowerCase()} is already used by “${duplicate.cosigner.label}”.`;
+    }
+    return `This account xpub is already used by “${duplicate.cosigner.label}”.`;
+  }
+
+  function appendCosigner(candidate: CosignerDraft, showError: (message: string) => void): boolean {
+    const duplicate = duplicateSignerMessage(candidate);
+    if (duplicate) {
+      showError(duplicate);
+      toast({ title: 'Signer already added', description: duplicate, tone: 'danger' });
+      return false;
+    }
+    cosigners = [...cosigners, candidate];
+    return true;
   }
 
   async function importCosignerFile(event: Event) {
@@ -323,7 +358,8 @@
     try {
       const fallbackLabel = file.name.replace(/\.[^.]+$/, '').slice(0, 48);
       const imported = parsePublicCosignerFile(await readTransferFile(file), fallbackLabel);
-      cosigners = [...cosigners, { id: crypto.randomUUID(), ...imported, source: 'file' }];
+      const candidate = { id: crypto.randomUUID(), ...imported, source: 'file' as const };
+      if (!appendCosigner(candidate, (message) => pickerError = message)) return;
       pickerOpen = false;
       toast({ title: 'Public signer imported', description: `${imported.label} was loaded from a local file.`, tone: 'success' });
     } catch (cause) {
@@ -381,19 +417,30 @@
   }
 
   function addKey() {
-    cosigners = [...cosigners, {
+    const candidate: CosignerDraft = {
       id: crypto.randomUUID(), label, fingerprint, xpub,
       derivationPath: MULTISIG_ACCOUNT_PATH, source
-    }];
+    };
+    if (!appendCosigner(candidate, (message) => keyError = message)) return;
     label = ''; fingerprint = ''; xpub = ''; keyOpen = false;
   }
 
-  function removeCosigner(id: string) {
+  function addedSignerForDevice(device: HardwareDevice): CosignerDraft | null {
+    if (!device.fingerprint) return null;
+    const fingerprint = device.fingerprint.toLowerCase();
+    return cosigners.find((cosigner) => cosigner.fingerprint.trim().toLowerCase() === fingerprint) ?? null;
+  }
+
+  function confirmCosignerRemoval() {
+    if (!signerPendingRemoval) return;
+    const { id, label: removedLabel } = signerPendingRemoval;
     cosigners = cosigners.filter((item) => item.id !== id);
     if (selectedSigner?.id === id) selectedSigner = null;
     const { [id]: _removed, ...remainingChecks } = healthChecks;
     healthChecks = remainingChecks;
     draftPolicyVerifications = draftPolicyVerifications.filter((verification) => cosigners.some((signer) => signer.fingerprint.toLowerCase() === verification.signerFingerprint.toLowerCase()));
+    signerPendingRemoval = null;
+    toast({ title: 'Signer removed', description: `${removedLabel} was removed from this unfinished wallet.`, tone: 'success' });
   }
 
   async function runDraftHealthCheck() {
@@ -505,7 +552,11 @@
         ? 'Reading the public key from BitBox02…'
         : `Reading the public key from ${device.label}…`;
     error = '';
-    try { cosigners = [...cosigners, await walletService.importHardwareCosigner(device.id, deviceLabel, allowEmptyPassphrase)]; hardwareOpen = false; standardWalletOpen = false; standardWalletDevice = null; label = ''; }
+    try {
+      const candidate = await walletService.importHardwareCosigner(device.id, deviceLabel, allowEmptyPassphrase);
+      if (!appendCosigner(candidate, (message) => error = message)) return;
+      hardwareOpen = false; standardWalletOpen = false; standardWalletDevice = null; label = '';
+    }
     catch (cause) { error = cause instanceof Error ? cause.message : 'Could not read the public key.'; }
     finally { hardwareBusy = false; }
   }
@@ -568,11 +619,15 @@
 
   async function verifyDraftPolicy() {
     if (!policySigner || !policyDevice || policyReviewBusy) return;
+    const signerLabel = policySigner.label;
     policyReviewBusy = true; policyReviewError = '';
     try {
       const verification = await walletService.verifyMultisigDraftSignerPolicy(policy, policyDevice.id, policySigner.fingerprint);
       draftPolicyVerifications = [verification, ...draftPolicyVerifications.filter((item) => item.signerFingerprint.toLowerCase() !== verification.signerFingerprint.toLowerCase())];
-      toast({ title: 'Wallet policy verified', description: `${policySigner.label} returned the correct first address.`, tone: 'success' });
+      policyReviewOpen = false;
+      policySigner = null;
+      policyDevice = null;
+      toast({ title: 'Wallet policy verified', description: `${signerLabel} registered the policy and verified its first address.`, tone: 'success' });
     } catch (cause) { policyReviewError = cause instanceof Error ? cause.message : 'The wallet policy could not be verified.'; }
     finally { policyReviewBusy = false; }
   }
@@ -618,16 +673,10 @@
     if (!preview || !saved || !policyReadinessAcknowledged || !credential || credential !== confirmation) return;
     busy = true; error = '';
     try {
+      await flushCurrentDraft();
       if (recoveryTemplate) await walletService.createRecoveryMultisig(name, recoveryTemplate, cosigners, credential);
       else await walletService.createMultisig(policy, credential);
-      try { await walletService.discardMultisigSetupDraft(); hasDraft = false; }
-      catch { toast({ title: 'Setup reminder could not be cleared', description: 'The wallet was created safely. Discard the stale setup reminder before starting another multisig wallet.', tone: 'danger' }); }
-      if (coldcardRegistered) {
-        for (const signer of cosigners.filter((item) => policyReadinessKind(item) === 'coldcard')) {
-          try { await walletService.acknowledgeColdcardPolicy(signer.fingerprint); }
-          catch { toast({ title: 'Coldcard setup needs confirmation', description: 'The coordinator was created safely, but Groot could not save the policy-import acknowledgement. Confirm it again from Policy before signing.', tone: 'danger' }); }
-        }
-      }
+      hasDraft = false;
       toast({ title: 'Multisig wallet created', description: `${threshold} signatures are required to spend.`, tone: 'success' });
       await goto('/multisig');
     } catch (cause) { error = cause instanceof Error ? cause.message : 'Could not create the wallet.'; }
@@ -692,7 +741,7 @@
                 </span>
                 <ChevronRight class="draft-row-chevron" size={16}/>
               </button>
-              <button class="remove-cosigner" aria-label="Remove {signer.label}" title="Remove signer" onclick={() => removeCosigner(signer.id)}><Trash2 size={16}/></button>
+              <button class="remove-cosigner" aria-label="Remove {signer.label}" title="Remove signer" onclick={() => signerPendingRemoval = signer}><Trash2 size={16}/></button>
             </article>
           {:else}
             <div class="keys-empty"><FileKey size={22}/><strong>No signers yet</strong><span>Add {requiredKeys} independent keys for this template.</span></div>
@@ -753,6 +802,18 @@
 
 <DiscardMultisigSetupModal open={discardDraftOpen} busy={discardingDraft} error={discardDraftError} onclose={() => { discardDraftOpen = false; discardDraftError = ''; }} onconfirm={discardSetupDraft}/>
 
+<Modal
+  open={Boolean(signerPendingRemoval)}
+  title="Remove signer?"
+  description={signerPendingRemoval ? `Remove ${signerPendingRemoval.label} from this unfinished wallet?` : ''}
+  onclose={() => signerPendingRemoval = null}
+>
+  {#if signerPendingRemoval}
+    <div class="warning-box"><AlertTriangle size={17}/><strong>You will need to add this signer again.</strong><span>Its hardware wallet and seed are not changed.</span></div>
+    <div class="modal-footer"><Button variant="secondary" onclick={() => signerPendingRemoval = null}>Keep signer</Button><Button variant="danger" onclick={confirmCosignerRemoval}>Remove signer</Button></div>
+  {/if}
+</Modal>
+
 <Modal open={pickerOpen} title="Add a signer" description="Choose how to import this signer’s public account key." onclose={() => { pickerOpen = false; pickerError = ''; }}>
   <div class="source-list">
     <button onclick={scanHardware}><Cpu size={18}/><span><strong>Connect hardware device</strong><small>Desktop · Bitcoin Core HWI</small></span><ChevronRight size={15}/></button>
@@ -761,7 +822,7 @@
   </div>
   {#if pickerError}<p class="form-error" aria-live="polite">{pickerError}</p>{/if}
 </Modal>
-<Modal open={policyReviewOpen} preserveTop title="Verify signer wallet policy" description="Compare Groot's saved public policy with every value shown on the hardware device." onclose={()=>{if(!policyReviewBusy){policyReviewOpen=false;policySigner=null;policyDevice=null;policyReviewError='';}}}>
+<Modal open={policyReviewOpen} title="Verify signer wallet policy" description="Compare Groot's saved public policy with every value shown on the hardware device." onclose={()=>{if(!policyReviewBusy){policyReviewOpen=false;policySigner=null;policyDevice=null;policyReviewError='';}}}>
   {#if policyReviewBusy && !policyDevice}<HardwareActionPrompt title="Looking for the saved signer" detail="Keep the device connected, unlocked, and in its Bitcoin app while Groot matches the saved fingerprint." label="Signer scan in progress"/>
   {:else if policySigner && policyDevice && preview && policyAddress}<SignerPolicyReview wallet={{...preview,kind:'multisig',createdAt:'',policyType:'standard'}} signer={policySigner} {policyAddress} verification={matchingPolicyVerification(policySigner,draftPolicyVerifications)} busy={policyReviewBusy} error={policyReviewError} onverify={verifyDraftPolicy}/>
   {:else if policySigner}<div class="device-scan"><Cpu size={20}/><strong>Saved signer not found</strong><span>{policyReviewError || `Connect and unlock ${policySigner.label}, then scan again.`}</span><Button variant="secondary" onclick={()=>openDraftPolicyVerification(policySigner!)}>Scan again</Button></div>{/if}
@@ -772,7 +833,7 @@
   <label class="field"><span>Signer label</span><input bind:value={label} placeholder="Defaults to device model" maxlength="48"/><FieldCounter value={label} max={48}/></label>
   {#if hardwareBusy}<HardwareActionPrompt title={hardwareProgress} detail={hardwareProgress.includes('Ledger') ? 'Keep Bitcoin Test open for Regtest and confirm the export on the device screen.' : 'Keep the signer connected and unlocked. Follow any instructions shown on the device.'} label="Hardware signer setup in progress"/>
   {:else if hardware.length === 0}<div class="device-scan"><Cpu size={20}/><strong>{error ? 'Device needs attention' : 'No device found'}</strong><span>{error || 'HWI returned no device. For Coldcard, sign in first, enable its USB port, reconnect, then scan again. Other signers must be initialized, unlocked, and released by companion apps.'}</span><Button variant="secondary" size="small" onclick={scanHardware}>Scan again</Button></div>
-  {:else}<div class="source-list hardware-device-list">{#each hardware as device}<button disabled={device.action === 'none'} onclick={() => handleHardware(device)}><Cpu size={18}/><span><strong>{device.label}</strong><small>{device.fingerprint ? `Fingerprint ${device.fingerprint} · ${device.message}` : device.message}</small><em class:ready={device.status === 'ready'}>{device.status === 'ready' ? 'Ready' : device.status === 'detected' ? 'Detected' : device.status === 'needs_pin' ? 'Unlock' : device.action === 'confirm_empty_passphrase' ? 'Choose wallet' : device.action === 'retry' ? 'Scan again' : 'Unavailable'}</em></span>{#if device.action !== 'none'}<ChevronRight size={15}/>{/if}</button>{/each}<button class="hardware-rescan" onclick={scanHardware}><RefreshCw size={16}/><span><strong>Scan again</strong><small>Refresh the list after unlocking or connecting another signer.</small></span><ChevronRight size={15}/></button></div>{/if}
+  {:else}<div class="source-list hardware-device-list">{#each hardware as device}{@const addedSigner=addedSignerForDevice(device)}<button disabled={Boolean(addedSigner) || device.action === 'none'} onclick={() => handleHardware(device)}><Cpu size={18}/><span><strong>{device.label}</strong><small>{addedSigner ? `Fingerprint ${device.fingerprint} · Already added as ${addedSigner.label}.` : device.fingerprint ? `Fingerprint ${device.fingerprint} · ${device.message}` : device.message}</small><em class:ready={!addedSigner && device.status === 'ready'} class:signed={Boolean(addedSigner)}>{addedSigner ? 'Already added' : device.status === 'ready' ? 'Ready' : device.status === 'detected' ? 'Detected' : device.status === 'needs_pin' ? 'Unlock' : device.action === 'confirm_empty_passphrase' ? 'Choose wallet' : device.action === 'retry' ? 'Scan again' : 'Unavailable'}</em></span>{#if !addedSigner && device.action !== 'none'}<ChevronRight size={15}/>{/if}</button>{/each}<button class="hardware-rescan" onclick={scanHardware}><RefreshCw size={16}/><span><strong>Scan again</strong><small>Refresh the list after unlocking or connecting another signer.</small></span><ChevronRight size={15}/></button></div>{/if}
   {#if error && hardware.length > 0}<div class="hardware-inline-error" role="alert"><AlertTriangle size={18}/><span><strong>Could not read the account key</strong><small>{error}</small></span><Button variant="secondary" size="small" onclick={scanHardware}>Try again</Button></div>{/if}
 </Modal>
 
@@ -807,11 +868,12 @@
   </div>
 </Modal>
 
-<Modal open={keyOpen} title="Enter public signer key" description="No private key or seed should ever be entered here." onclose={() => keyOpen = false}>
+<Modal open={keyOpen} title="Enter public signer key" description="No private key or seed should ever be entered here." onclose={() => { keyOpen = false; keyError = ''; }}>
   <form onsubmit={(event) => { event.preventDefault(); addKey(); }}>
     <label class="field"><span>Signer label</span><input aria-label="Signer label" bind:value={label} placeholder="e.g. Coldcard" maxlength="48"/><FieldCounter value={label} max={48}/></label>
     <label class="field"><span>Master fingerprint</span><input aria-label="Master fingerprint" bind:value={fingerprint} placeholder="8 hex characters" maxlength="8"/></label>
     <label class="field"><span>Account xpub</span><textarea aria-label="Account xpub" bind:value={xpub} rows="3" placeholder="tpub…"></textarea><small>Derivation: {MULTISIG_ACCOUNT_PATH}</small></label>
+    {#if keyError}<p class="form-error" role="alert">{keyError}</p>{/if}
     <div class="modal-footer"><Button variant="secondary" onclick={() => keyOpen = false}>Cancel</Button><Button type="submit" disabled={!label.trim() || !/^[0-9a-fA-F]{8}$/.test(fingerprint.trim()) || !xpub.trim()}>Add key</Button></div>
   </form>
 </Modal>

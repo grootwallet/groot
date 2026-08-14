@@ -213,7 +213,6 @@
 
 <Modal
   open={verifyOpen}
-  preserveTop
   title="Verify receive address"
   description={comparison.deviceName
     ? `${comparison.deviceName} displays the Regtest output with a testnet prefix. Compare the exact address below.`

@@ -148,9 +148,26 @@ fn validate_multisig_setup_draft(
             "The saved multisig setup contains duplicate signers.",
         ));
     }
+    let expected_cosigners = expected_setup_cosigners(draft);
+    let fixed_threshold_is_valid = match (draft.template_kind, draft.standard_recipe) {
+        (MultisigSetupTemplate::Standard, MultisigSetupRecipe::TwoOfThree) => draft.threshold == 2,
+        (MultisigSetupTemplate::Standard, MultisigSetupRecipe::ThreeOfFive) => draft.threshold == 3,
+        (MultisigSetupTemplate::Standard, MultisigSetupRecipe::Custom) => true,
+        (MultisigSetupTemplate::Recovery | MultisigSetupTemplate::Inheritance, _) => {
+            draft.threshold == 2
+        }
+    };
+    if draft.threshold < 2 || draft.threshold > expected_cosigners || !fixed_threshold_is_valid {
+        return Err(api_error(
+            "wallet_corrupt",
+            "The saved multisig threshold is invalid.",
+        ));
+    }
     if draft.cosigners.is_empty() {
-        if !matches!(draft.stage, MultisigSetupStage::Policy)
-            || draft.descriptor_saved
+        if matches!(
+            draft.stage,
+            MultisigSetupStage::Review | MultisigSetupStage::Backup
+        ) || draft.descriptor_saved
             || draft.coldcard_registered
             || draft.policy_verification_deferred
             || !draft.policy_verifications.is_empty()
@@ -158,6 +175,12 @@ fn validate_multisig_setup_draft(
             return Err(api_error(
                 "wallet_corrupt",
                 "The saved multisig setup has an impossible step.",
+            ));
+        }
+        if matches!(draft.stage, MultisigSetupStage::Keys) && draft.name.trim().is_empty() {
+            return Err(api_error(
+                "wallet_corrupt",
+                "The saved multisig setup has no wallet name.",
             ));
         }
         return Ok(None);
@@ -168,27 +191,12 @@ fn validate_multisig_setup_draft(
             "The saved multisig setup has no wallet name.",
         ));
     }
-    if draft.threshold < 2 || draft.threshold > expected_setup_cosigners(draft) {
-        return Err(api_error(
-            "wallet_corrupt",
-            "The saved multisig threshold is invalid.",
-        ));
-    }
-    let complete = draft.cosigners.len() == expected_setup_cosigners(draft);
-    let fixed_threshold_is_valid = match (draft.template_kind, draft.standard_recipe) {
-        (MultisigSetupTemplate::Standard, MultisigSetupRecipe::TwoOfThree) => draft.threshold == 2,
-        (MultisigSetupTemplate::Standard, MultisigSetupRecipe::ThreeOfFive) => draft.threshold == 3,
-        (MultisigSetupTemplate::Standard, MultisigSetupRecipe::Custom) => true,
-        (MultisigSetupTemplate::Recovery | MultisigSetupTemplate::Inheritance, _) => {
-            draft.threshold == 2
-        }
-    };
-    if !fixed_threshold_is_valid
-        || ((draft.descriptor_saved
-            || draft.coldcard_registered
-            || draft.policy_verification_deferred
-            || !draft.policy_verifications.is_empty())
-            && !complete)
+    let complete = draft.cosigners.len() == expected_cosigners;
+    if ((draft.descriptor_saved
+        || draft.coldcard_registered
+        || draft.policy_verification_deferred
+        || !draft.policy_verifications.is_empty())
+        && !complete)
         || ((draft.coldcard_registered
             || draft.policy_verification_deferred
             || !draft.policy_verifications.is_empty())
@@ -230,10 +238,6 @@ fn validate_multisig_setup_draft(
         recovery_template: None,
         spending_paths: Vec::new(),
     })?;
-    let allowed_addresses = [
-        Some(address.canonical_address.as_str()),
-        address.testnet_alias.as_deref(),
-    ];
     let mut verified = HashSet::new();
     for verification in &draft.policy_verifications {
         let fingerprint = verification.signer_fingerprint.to_ascii_lowercase();
@@ -243,7 +247,10 @@ fn validate_multisig_setup_draft(
             || verification.device_type.len() > 64
             || verification.verified_at.len() > 20
             || verification.verified_at.parse::<u64>().is_err()
-            || !allowed_addresses.contains(&Some(verification.displayed_address.as_str()))
+            || !hardware_display_matches_expected_address(
+                &address.canonical_address,
+                &verification.displayed_address,
+            )
         {
             return Err(api_error(
                 "wallet_corrupt",
@@ -350,6 +357,34 @@ fn clear_multisig_setup_draft_path(path: &Path) -> ApiResult<()> {
 
 pub(crate) fn clear_multisig_setup_draft(app: &AppHandle) -> ApiResult<()> {
     clear_multisig_setup_draft_path(&multisig_setup_draft_path(app)?)
+}
+
+pub(crate) fn coldcard_registration_for_preview(
+    app: &AppHandle,
+    preview: &MultisigPreviewDto,
+) -> ApiResult<bool> {
+    let path = multisig_setup_draft_path(app)?;
+    if !path.exists() {
+        return Ok(false);
+    }
+    let encoded = read_private_text(&path)?;
+    let draft: MultisigSetupDraft = serde_json::from_str(&encoded).map_err(|_| {
+        api_error(
+            "wallet_corrupt",
+            "The saved multisig setup is corrupt. Discard it and start again.",
+        )
+    })?;
+    let saved_preview = validate_multisig_setup_draft(&draft)?
+        .ok_or_else(|| api_error("wallet_corrupt", "The saved multisig setup is incomplete."))?;
+    if saved_preview.external_descriptor != preview.external_descriptor
+        || saved_preview.internal_descriptor != preview.internal_descriptor
+    {
+        return Err(api_error(
+            "wallet_corrupt",
+            "The saved multisig setup does not match the wallet being created.",
+        ));
+    }
+    Ok(draft.coldcard_registered)
 }
 
 #[tauri::command]
@@ -473,6 +508,16 @@ mod setup_draft_tests {
     }
 
     #[test]
+    fn accepts_the_signer_step_before_the_first_signer_is_added() {
+        let mut draft = draft();
+        draft.stage = MultisigSetupStage::Keys;
+        draft.cosigners.clear();
+        draft.descriptor_saved = false;
+
+        assert!(validate_multisig_setup_draft(&draft).unwrap().is_none());
+    }
+
+    #[test]
     fn rejects_impossible_steps_and_duplicate_signers() {
         let mut incomplete = draft();
         incomplete.cosigners.pop();
@@ -532,7 +577,7 @@ mod setup_draft_tests {
         let preview = validate_multisig_setup_draft(&draft()).unwrap().unwrap();
         let checksum = descriptor_checksum(&preview.external_descriptor).unwrap();
         let fingerprint = preview.cosigners[0].fingerprint.to_ascii_lowercase();
-        let displayed_address =
+        let verification_address =
             hardware_commands::policy_verification_address(&MultisigWalletDto {
                 kind: "multisig".to_owned(),
                 name: preview.name.clone(),
@@ -545,8 +590,11 @@ mod setup_draft_tests {
                 recovery_template: None,
                 spending_paths: Vec::new(),
             })
-            .unwrap()
-            .canonical_address;
+            .unwrap();
+        let displayed_address = verification_address
+            .testnet_alias
+            .expect("regtest policy address has a testnet alias")
+            .to_ascii_uppercase();
         let evidence = DraftPolicyVerification {
             signer_fingerprint: fingerprint.clone(),
             device_type: "bitbox02".to_owned(),
@@ -866,6 +914,23 @@ pub fn multisig_recovery_drill(
         first_address,
         matches_current_wallet,
     })
+}
+
+#[tauri::command]
+pub fn multisig_recovery_drill_status(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> ApiResult<bool> {
+    let _operation = operation_guard(&state)?;
+    require_unlocked(&app, &state)?;
+    let wallet = read_multisig_metadata(&app)?;
+    let wallet_id = selected_profile_of_kind(&app, WalletKind::Multisig)?.id;
+    Ok(state
+        .verified_recovery
+        .lock()
+        .map_err(internal)?
+        .get(&wallet_id)
+        .is_some_and(|descriptor| descriptor == &wallet.external_descriptor))
 }
 
 #[tauri::command]

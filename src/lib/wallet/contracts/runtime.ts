@@ -19,6 +19,10 @@ export type WalletRegistry = {
   wallets: WalletProfile[];
   inactivityTimeoutMinutes: number;
 };
+export type WalletSelection = {
+  profile: WalletProfile;
+  unlocked: boolean;
+};
 export type CoreNodeConfig = {
   backend: { type: 'local_core' | 'remote_core'; url: string };
   auth: 'cookie' | 'user_pass';

@@ -114,6 +114,7 @@ pub fn run() {
             wallet::multisig_setup_commands::multisig_bsms_inspect,
             wallet::multisig_setup_commands::multisig_recover_bsms,
             wallet::multisig_setup_commands::multisig_recovery_drill,
+            wallet::multisig_setup_commands::multisig_recovery_drill_status,
             wallet::multisig_setup_commands::multisig_recover,
             wallet::multisig_setup_commands::multisig_delete,
             wallet::multisig_setup_commands::multisig_snapshot,

@@ -24,3 +24,7 @@ The timeout is enforced at the native boundary: the next trusted command removes
 ## Clarification: global duration, independent clocks
 
 The timeout duration is an application-wide security preference, not wallet metadata. This avoids wallets silently carrying different unattended-access policies. Session state remains keyed by wallet UUID: using wallet A does not keep wallet B alive, **Lock now** revokes only the selected wallet, and quitting the process revokes all wallets.
+
+## Implementation clarification — 2026-08-14
+
+The native profile-selection command performs the selected wallet's non-renewing session check and returns that boolean with the public profile. The renderer routes directly to Overview or unlock from this typed result; it must not mount a wallet-data route to discover lock state, because doing so exposes a transient intermediate screen during locked-wallet switching.

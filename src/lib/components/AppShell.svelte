@@ -96,11 +96,13 @@
   async function selectWallet(walletId: string) {
     if (!walletId || walletId === selectedWalletId) return;
     try {
-      const profile = await walletService.selectWallet(walletId);
-      selectedWalletId = profile.id;
-      await goto('/');
-      if (!isPrototypeWallet) {
+      const selection = await walletService.selectWallet(walletId);
+      selectedWalletId = selection.profile.id;
+      await goto(selection.unlocked ? '/' : '/unlock');
+      if (!isPrototypeWallet && selection.unlocked) {
         liveSync?.restart();
+      } else {
+        liveSync?.stop();
       }
     } catch (cause) {
       toast({ title: 'Wallet not switched', description: cause instanceof Error ? cause.message : 'Could not select this wallet.', tone: 'danger' });

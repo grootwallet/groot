@@ -1,5 +1,12 @@
 use super::*;
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WalletSelection {
+    profile: WalletProfile,
+    unlocked: bool,
+}
+
 #[tauri::command]
 pub fn wallet_exists(app: AppHandle) -> ApiResult<bool> {
     let registry = load_registry(&app)?;
@@ -69,7 +76,7 @@ pub fn wallet_select(
     app: AppHandle,
     state: State<'_, AppState>,
     wallet_id: String,
-) -> ApiResult<WalletProfile> {
+) -> ApiResult<WalletSelection> {
     let _operation = operation_guard(&state)?;
     let id = Uuid::parse_str(&wallet_id)
         .map_err(|_| api_error("wallet_not_found", "The selected wallet does not exist."))?;
@@ -77,11 +84,17 @@ pub fn wallet_select(
     registry.select(id).map_err(registry_api_error)?;
     save_registry(&app, &registry)?;
     state.proposals.lock().map_err(internal)?.clear();
-    registry
+    let profile = registry
         .wallets
         .into_iter()
         .find(|wallet| wallet.id == id)
-        .ok_or_else(|| registry_api_error(RegistryError::UnknownSelection))
+        .ok_or_else(|| registry_api_error(RegistryError::UnknownSelection))?;
+    let unlocked = match require_unlocked_for_background_sync(&app, &state) {
+        Ok(_) => true,
+        Err(error) if error.code == "wallet_locked" => false,
+        Err(error) => return Err(error),
+    };
+    Ok(WalletSelection { profile, unlocked })
 }
 
 #[tauri::command]

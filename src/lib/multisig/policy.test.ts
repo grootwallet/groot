@@ -3,6 +3,7 @@ import {
   MULTISIG_ACCOUNT_PATH,
   coordinatorProgress,
   descriptorPreview,
+  findDuplicateCosigner,
   normalizeCosigner,
   validatePolicyDraft,
   type CosignerDraft
@@ -61,6 +62,21 @@ describe('multisig policy invariants', () => {
     const errors = validatePolicyDraft({ name: 'Vault', threshold: 2, cosigners: [first, duplicateFingerprint, duplicateXpub] });
     expect(errors).toContain('Every signer must have a unique master fingerprint.');
     expect(errors).toContain('Every signer must have a unique account xpub.');
+  });
+
+  it('identifies an existing signer independently of labels and import methods', () => {
+    const existing = cosigner({ label: 'BitBox02', fingerprint: 'A1B2C3D4', source: 'usb' });
+    expect(findDuplicateCosigner([existing], cosigner({
+      label: 'bitbox02_btconly',
+      fingerprint: 'a1b2c3d4',
+      source: 'file'
+    }))).toMatchObject({ cosigner: existing, match: 'both' });
+    expect(findDuplicateCosigner([existing], cosigner({
+      label: 'Different label',
+      fingerprint: 'ffffffff',
+      xpub: existing.xpub,
+      source: 'manual'
+    }))).toMatchObject({ match: 'xpub' });
   });
 
   it('bounds wallet names, stable identifiers, and signer labels', () => {

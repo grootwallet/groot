@@ -13,7 +13,7 @@ import {
   type WalletPort,
   type WalletSnapshot
 } from './contracts';
-import type { MnemonicPresentation, SupplementalEntropyInput, WalletProfile, WalletRegistry } from './contracts';
+import type { MnemonicPresentation, SupplementalEntropyInput, WalletProfile, WalletRegistry, WalletSelection } from './contracts';
 import type { CosignerHealthCheck, HardwareDevice, MultisigPreview, MultisigProposal, MultisigWallet } from './contracts';
 import type { RecoveryDrill, RecoveryPolicyAnalysis, RecoveryTemplate } from './contracts';
 import type { ExternalSigner, ExternalSignerBackup, ExternalSignerSource, ExternalSignerWallet, SavedFileResult } from './contracts';
@@ -83,9 +83,9 @@ export class TauriWalletAdapter implements WalletPort {
   }
   saveInactivityTimeout(minutes: number) { return command<WalletRegistry>('wallet_inactivity_timeout_save', { minutes }); }
   async selectWallet(walletId: string) {
-    const profile = await command<WalletProfile>('wallet_select', { walletId });
-    this.#selectedWalletId = profile.id;
-    return profile;
+    const selection = await command<WalletSelection>('wallet_select', { walletId });
+    this.#selectedWalletId = selection.profile.id;
+    return selection;
   }
   async generateMnemonic(supplementalEntropy?: SupplementalEntropyInput): Promise<MnemonicPresentation> {
     const backupVerified = await command<boolean>('wallet_generate_mnemonic', { supplementalEntropy: supplementalEntropy ?? null });
@@ -204,6 +204,7 @@ export class TauriWalletAdapter implements WalletPort {
   inspectMultisigBsms(encodedBackup: string) { return command<RecoveryDrill>('multisig_bsms_inspect', { encodedBackup }); }
   recoverMultisigBsms(name: string, encodedBackup: string, credential: string) { return command<MultisigWallet>('multisig_recover_bsms', { name, encodedBackup, credential }); }
   recoveryDrill(encodedBackup: string) { return command<RecoveryDrill>('multisig_recovery_drill', { encodedBackup }); }
+  multisigRecoveryDrillStatus() { return command<boolean>('multisig_recovery_drill_status'); }
   recoverMultisig(encodedBackup: string, credential: string) { return command<MultisigWallet>('multisig_recover', { encodedBackup, credential }); }
   deleteMultisig(credential: string, confirmation: string) { return command<void>('multisig_delete', { credential, confirmation }); }
   async multisigSnapshot() { const snapshot = normalizeSnapshot(await command<WalletSnapshot>('multisig_snapshot')); await this.#drainNotifications(true); return snapshot; }

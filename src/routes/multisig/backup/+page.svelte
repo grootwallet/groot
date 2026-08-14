@@ -1,12 +1,10 @@
 <script lang="ts">
-  import { Braces, Check, ClipboardCheck, Copy, Download, FileKey, FileText, FileUp, Printer, QrCode, ShieldCheck, Trash2, X } from '@lucide/svelte';
+  import { Braces, Check, ClipboardCheck, Copy, Download, FileKey, FileText, FileUp, Printer, QrCode, ShieldCheck, X } from '@lucide/svelte';
   import QRCode from 'qrcode';
-  import { goto } from '$app/navigation';
   import { onDestroy } from 'svelte';
   import Button from '$lib/components/Button.svelte';
   import PasswordField from '$lib/components/PasswordField.svelte';
   import InsightTip from '$lib/components/InsightTip.svelte';
-  import Modal from '$lib/components/Modal.svelte';
   import { copyText } from '$lib/clipboard';
   import { formatWalletTimestamp, recoveryDrillNotice } from '$lib/backup-presentation';
   import { toast } from '$lib/stores/toasts';
@@ -18,19 +16,15 @@
   let pin = $state('');
   let backup = $state('');
   let drill = $state<RecoveryDrill | null>(null);
-  let confirmation = $state('');
-  let deletePin = $state('');
   let busy = $state(false);
   let exportError = $state('');
   let drillError = $state('');
-  let deleteError = $state('');
   let backupFormat = $state<'bsms' | 'groot'>('bsms');
   let receiveQr = $state('');
   let changeQr = $state('');
-  let deleteConfirmOpen = $state(false);
   let loadedBackupName = $state('');
 
-  onDestroy(() => { pin = ''; deletePin = ''; confirmation = ''; backup = ''; });
+  onDestroy(() => { pin = ''; backup = ''; });
 
   $effect(() => { void walletService.multisigWallet().then((value) => wallet = value); });
   $effect(() => {
@@ -62,14 +56,6 @@
     try { drill = backup.trimStart().startsWith('BSMS 1.0') ? await walletService.inspectMultisigBsms(backup) : await walletService.recoveryDrill(backup); toast(recoveryDrillNotice(drill)); }
     catch (cause) { drillError = cause instanceof Error ? cause.message : 'Recovery drill failed.'; }
     finally { busy = false; }
-  }
-
-  async function removeWallet() {
-    if (!wallet || !drill?.matchesCurrentWallet) return;
-    busy = true; deleteError = '';
-    try { await walletService.deleteMultisig(deletePin, confirmation); toast({ title: 'Wallet deleted', description: 'Local coordinator data was removed. Your descriptor backup remains recoverable.' }); await goto('/settings'); }
-    catch (cause) { deleteError = cause instanceof WalletError && cause.code === 'invalid_credential' ? `That app PIN does not match ${wallet.name}.` : cause instanceof Error ? cause.message : 'Could not delete the wallet.'; }
-    finally { deletePin = ''; busy = false; }
   }
 
   async function importBackup(event: Event) {
@@ -140,11 +126,7 @@
       <Button class="full" disabled={!backup} loading={busy} loadingLabel="Verifying backup…" onclick={verifyBackup}>Run recovery drill</Button>
       {#if drillError}<p class="form-error" aria-live="polite">{drillError}</p>{/if}
     </section>
-    <section class="form-card danger-card"><div class="section-heading compact"><div><h2>Delete local wallet</h2><p>Enabled only after a successful recovery drill.</p></div><Trash2 size={19}/></div>
-      <label class="field"><span>Type {wallet.name}</span><input aria-label="Wallet name confirmation" bind:value={confirmation}/></label><PasswordField label="App PIN" inputLabel="Delete wallet app PIN" bind:value={deletePin} autocomplete="current-password"/>
-      <Button variant="danger" class="full" disabled={!drill?.matchesCurrentWallet || confirmation !== wallet.name || !deletePin || busy} onclick={() => deleteConfirmOpen = true}>Delete wallet from this device</Button>
-      {#if deleteError}<p class="form-error" aria-live="polite">{deleteError}</p>{/if}
-    </section>
+    {#if drill?.matchesCurrentWallet}<section class="form-card"><div class="section-heading compact"><div><h2>Recovery confirmed</h2><p>This successful drill is available to the separate wallet-deletion flow for this app session.</p></div><ShieldCheck size={19}/></div><Button variant="danger-outline" class="full" href="/multisig/delete">Continue to wallet deletion</Button></section>{/if}
     {#if backup}<article class="backup-print-sheet" aria-label="Printable wallet descriptor backup">
       <header><p>Groot · Public wallet backup</p><h1>{wallet.name}</h1><strong>Watch-only descriptors — cannot spend bitcoin</strong></header>
       <dl><div><dt>Network</dt><dd>{networkName(defaultConfig.network)}</dd></div><div><dt>Policy</dt><dd>{wallet.threshold} of {wallet.cosigners.length} signatures</dd></div><div><dt>Script</dt><dd>Native SegWit · sortedmulti</dd></div><div><dt>Created</dt><dd>{formatWalletTimestamp(wallet.createdAt)}</dd></div></dl>
@@ -154,8 +136,3 @@
     </article>{/if}
   {:else}<section class="empty-state"><h2>No policy wallet selected</h2><Button href="/multisig">Return to policy</Button></section>{/if}
 </div>
-
-<Modal open={deleteConfirmOpen} title="Permanently delete this wallet?" description="This cannot be undone on this device." onclose={() => deleteConfirmOpen=false}>
-  <div class="warning-box danger"><strong>Final confirmation</strong>The local wallet record, labels, and coordinator metadata will be removed. Your hardware keys are unchanged. Recovery requires the descriptor backup you just verified.</div>
-  <div class="modal-footer"><Button variant="secondary" onclick={() => deleteConfirmOpen=false}>Keep wallet</Button><Button variant="danger" loading={busy} loadingLabel="Deleting…" onclick={async()=>{deleteConfirmOpen=false;await removeWallet();}}>Delete permanently</Button></div>
-</Modal>

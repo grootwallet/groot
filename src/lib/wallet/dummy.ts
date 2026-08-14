@@ -2,9 +2,10 @@ import { defaultConfig } from '$lib/config';
 import type { ReceiveAddress, Transaction } from '$lib/types';
 import { addressPrefixForNetwork, canDiscardAddress, hasAddressPrefixForNetwork, normalizePermanentLabel } from './policy';
 import { feeRate, MAX_SUPPLEMENTAL_COIN_FLIPS, MAX_SUPPLEMENTAL_DICE_ROLLS, MIN_SUPPLEMENTAL_COIN_FLIPS, MIN_SUPPLEMENTAL_DICE_ROLLS, sats, WalletError, type CoinSelection, type CoinSelectionPreview, type FeeEstimates, type PaymentProposal, type WalletEvent, type WalletPort, type WalletSnapshot } from './contracts';
-import type { CoreNodeConfig, ExternalSigner, ExternalSignerSource, ExternalSignerWallet, MultisigPreview, MultisigProposal, MultisigWallet, RecoveryPolicyAnalysis, RecoveryTemplate, WalletProfile, WalletSyncSource } from './contracts';
+import type { CoreNodeConfig, ExternalSigner, ExternalSignerSource, ExternalSignerWallet, MultisigPreview, MultisigProposal, MultisigWallet, RecoveryPolicyAnalysis, RecoveryTemplate, SignerPolicyVerification, WalletProfile, WalletSyncSource } from './contracts';
 import type { PolicyDraft } from '$lib/multisig/policy';
 import { descriptorPreview, MULTISIG_ACCOUNT_PATH, normalizeCosigner, validatePolicyDraft } from '$lib/multisig/policy';
+import { policyReadinessKind } from '$lib/hardware/policy-readiness';
 
 import {
   DummyWalletState,
@@ -16,6 +17,7 @@ import {
 
 export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
   private multisigSetupDraftValue: import('./contracts').MultisigSetupDraft | null = null;
+  private multisigPolicyVerificationRecords: SignerPolicyVerification[] = [];
   async exists() { return this._exists; }
   async profiles() { return { version: 1, selectedWalletId: this._selectedWalletId, wallets: structuredClone(this._profiles), inactivityTimeoutMinutes: this._inactivityTimeoutMinutes }; }
   async renameWallet(name: string) {
@@ -44,7 +46,10 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     const profile = this._profiles.find((wallet) => wallet.id === walletId);
     if (!profile) throw new WalletError('wallet_not_found', 'The selected wallet does not exist.');
     this._selectedWalletId = walletId;
-    return structuredClone(profile);
+    return {
+      profile: structuredClone(profile),
+      unlocked: this._unlockedWalletIds.has(walletId)
+    };
   }
   async generateMnemonic(supplementalEntropy?: import('./contracts').SupplementalEntropyInput) {
     if (supplementalEntropy) {
@@ -342,9 +347,7 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     return { status: 'record_valid' as const, checkedAt, summary: 'Public key, fingerprint, and derivation path are complete. Physical presence cannot be checked for an offline key.' };
   }
   async multisigSignerPolicyVerifications() {
-    return this._multisig?.cosigners
-      .filter((signer) => signer.deviceType === 'coldcard')
-      .map((signer) => ({ signerFingerprint: signer.fingerprint.toLowerCase(), deviceType: 'coldcard', verifiedAt: new Date().toISOString(), scope: 'policy_file_acknowledgement' as const, displayedAddress: null })) ?? [];
+    return structuredClone(this.multisigPolicyVerificationRecords);
   }
   async multisigPolicyVerificationAddress() {
     return { canonicalAddress: 'bcrt1qfixturepolicyaddress', testnetAlias: 'tb1qfixturepolicyaddress' };
@@ -495,12 +498,33 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
   async createMultisig(policy: PolicyDraft, credential: string): Promise<MultisigWallet> {
     if (!credential) throw new WalletError('invalid_credential', 'An app PIN is required.');
     const preview = await this.previewMultisig(policy);
+    const setupDraft = this.multisigSetupDraftValue;
     this._recoveryVerified = false;
     this._multisig = { ...preview, kind: 'multisig', createdAt: new Date().toISOString(), policyType: 'standard' };
     this._multisigCredential = credential;
     if (this._multisigProfileId) { this._profiles = this._profiles.filter((wallet) => wallet.id !== this._multisigProfileId); this._credentials.delete(this._multisigProfileId); this._unlockedWalletIds.delete(this._multisigProfileId); }
     const profile = { id: crypto.randomUUID(), name: this._multisig.name, network: defaultConfig.network, kind: 'multisig' as const, descriptorChecksum: 'multisig', createdAt: Date.now(), backupVerified: true };
     this._profiles.push(profile); this._multisigProfileId = profile.id; this._selectedWalletId = profile.id; this._credentials.set(profile.id, credential); this._unlockedWalletIds.add(profile.id); this._exists = true;
+    this.multisigPolicyVerificationRecords = [
+      ...(setupDraft?.policyVerifications.map((verification) => ({
+        signerFingerprint: verification.signerFingerprint.toLowerCase(),
+        deviceType: verification.deviceType,
+        verifiedAt: verification.verifiedAt,
+        scope: 'policy_and_address' as const,
+        displayedAddress: verification.displayedAddress
+      })) ?? []),
+      ...(setupDraft?.coldcardRegistered
+        ? preview.cosigners
+            .filter((signer) => policyReadinessKind(signer) === 'coldcard')
+            .map((signer) => ({
+              signerFingerprint: signer.fingerprint.toLowerCase(),
+              deviceType: 'coldcard',
+              verifiedAt: new Date().toISOString(),
+              scope: 'policy_file_acknowledgement' as const,
+              displayedAddress: null
+            }))
+        : [])
+    ];
     this.multisigSetupDraftValue = null;
     return structuredClone(this._multisig);
   }
@@ -566,6 +590,7 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     try { const parsed = JSON.parse(encodedBackup); const matchesCurrentWallet = parsed?.wallet?.externalDescriptor === this._multisig?.externalDescriptor; this._recoveryVerified = matchesCurrentWallet; return { firstAddress: `${addressPrefixForNetwork(defaultConfig.network)}qdummy5n8k2r7v4cx9s6jlawephgzuqf5t8ul`, matchesCurrentWallet }; }
     catch { throw new WalletError('invalid_backup', 'Enter a valid Groot descriptor backup.'); }
   }
+  async multisigRecoveryDrillStatus() { return this._recoveryVerified; }
   async recoverMultisig(encodedBackup: string, credential: string) {
     if (this._multisig) throw new WalletError('wallet_already_exists', 'Delete the current multisig wallet before recovering another one.');
     try { const parsed = JSON.parse(encodedBackup); if (parsed?.version !== 1 || parsed?.network !== defaultConfig.network || !parsed.wallet) throw new Error(); this._recoveryVerified = false; this._multisig = parsed.wallet; this._multisigCredential = credential; const profile = { id: crypto.randomUUID(), name: this._multisig!.name, network: defaultConfig.network, kind: 'multisig' as const, descriptorChecksum: 'restored', createdAt: Date.now(), backupVerified: true }; this._profiles.push(profile); this._multisigProfileId = profile.id; this._selectedWalletId = profile.id; this._credentials.set(profile.id, credential); this._unlockedWalletIds.add(profile.id); this._exists = true; return structuredClone(this._multisig!); }

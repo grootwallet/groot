@@ -1087,6 +1087,11 @@ fn hwi_response_codes_become_safe_actionable_errors() {
     assert!(bitbox.message.contains("Quit BitBoxApp completely"));
     assert!(bitbox.message.contains("paired once"));
 
+    let unnamed_account =
+        hardware_device_api_error(HardwareError::CommandFailed(Some(-9)), "bitbox02");
+    assert!(unnamed_account.message.contains("short account name"));
+    assert!(unnamed_account.message.contains("verify the first address"));
+
     let cancelled = hardware_device_api_error(HardwareError::CommandFailed(Some(-14)), "bitbox02");
     assert!(cancelled.message.contains("cancelled"));
 

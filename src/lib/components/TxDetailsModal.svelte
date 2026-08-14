@@ -48,7 +48,7 @@
   }
 </script>
 
-<Modal open={!!transaction} title="Transaction details" preserveTop {onclose}>
+<Modal open={!!transaction} title="Transaction details" {onclose}>
   {#if transaction}
     <div class="detail-hero">
       <span class:pending={transaction.status === 'pending'} class:replaced={transaction.status === 'replaced'}>{transaction.status}</span>

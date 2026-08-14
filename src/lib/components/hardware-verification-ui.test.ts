@@ -10,6 +10,7 @@ const multisigReceive = readFileSync(new URL('../../routes/multisig/receive/+pag
 const hardwareDeviceList = readFileSync(new URL('./HardwareDeviceList.svelte', import.meta.url), 'utf8');
 const hardwareSetup = readFileSync(new URL('../../routes/hardware/new/+page.svelte', import.meta.url), 'utf8');
 const singleKeySend = readFileSync(new URL('../../routes/send/+page.svelte', import.meta.url), 'utf8');
+const multisigPolicy = readFileSync(new URL('../../routes/multisig/+page.svelte', import.meta.url), 'utf8');
 
 describe('hardware receive verification UI', () => {
   it('keeps one shared verification component in both receive flows', () => {
@@ -27,6 +28,9 @@ describe('hardware receive verification UI', () => {
     expect(verificationFlow).toContain('walletService.sendHardwarePin(pinChallenge, positions)');
     expect(verificationFlow).toContain('<TrezorPinModal');
     expect(verificationFlow).toContain('Scanning again so you can verify the unchanged address.');
+    expect(multisigPolicy).toContain('lockedDeviceForHealthCheck');
+    expect(multisigPolicy).toContain('<TrezorPinModal');
+    expect(multisigPolicy).toContain('Resuming the signer health check.');
   });
 
   it('uses a deliberate retry status instead of an unstyled empty-list paragraph', () => {

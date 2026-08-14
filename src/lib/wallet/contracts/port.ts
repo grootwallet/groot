@@ -2,7 +2,7 @@ import type { ReceiveAddress } from "$lib/types";
 import type { CosignerDraft, PolicyDraft } from "$lib/multisig/policy";
 import type { HardwareDevice, ExternalSigner, ExternalSignerBackup, ExternalSignerSource, ExternalSignerWallet, CosignerHealthCheck, PolicyVerificationAddress, SavedFileResult, SignerPolicyVerification } from "./hardware";
 import type { MultisigPreview, MultisigProposal, MultisigSetupDraft, MultisigWallet, RecoveryDrill, RecoveryPolicyAnalysis, RecoveryTemplate } from "./multisig";
-import type { CoreNodeConfig, MnemonicPresentation, NodeStatus, PayjoinUriInspection, RecoveryScanSettings, RecoveryScanStatus, SupplementalEntropyInput, WalletEvent, WalletProfile, WalletRegistry, WalletSyncSource, WalletSyncStatus } from "./runtime";
+import type { CoreNodeConfig, MnemonicPresentation, NodeStatus, PayjoinUriInspection, RecoveryScanSettings, RecoveryScanStatus, SupplementalEntropyInput, WalletEvent, WalletProfile, WalletRegistry, WalletSelection, WalletSyncSource, WalletSyncStatus } from "./runtime";
 import type { AccelerationMethod, BroadcastResult, CoinSelection, CoinSelectionPreview, FeeEstimates, FeeRate, PaymentProposal, Sats, WalletSnapshot } from "./transactions";
 
 export interface WalletProfilesPort {
@@ -10,7 +10,7 @@ export interface WalletProfilesPort {
   profiles(): Promise<WalletRegistry>;
   renameWallet(name: string): Promise<WalletProfile>;
   saveInactivityTimeout(minutes: number): Promise<WalletRegistry>;
-  selectWallet(walletId: string): Promise<WalletProfile>;
+  selectWallet(walletId: string): Promise<WalletSelection>;
   generateMnemonic(supplementalEntropy?: SupplementalEntropyInput): Promise<MnemonicPresentation>;
   cancelOnboarding(): Promise<void>;
   createWallet(name: string, credential: string, backupVerified: boolean): Promise<void>;
@@ -99,6 +99,7 @@ export interface WalletMultisigPort {
   inspectMultisigBsms(encodedBackup: string): Promise<RecoveryDrill>;
   recoverMultisigBsms(name: string, encodedBackup: string, credential: string): Promise<MultisigWallet>;
   recoveryDrill(encodedBackup: string): Promise<RecoveryDrill>;
+  multisigRecoveryDrillStatus(): Promise<boolean>;
   recoverMultisig(encodedBackup: string, credential: string): Promise<MultisigWallet>;
   deleteMultisig(credential: string, confirmation: string): Promise<void>;
   createMultisigAddress(label: string): Promise<ReceiveAddress>;

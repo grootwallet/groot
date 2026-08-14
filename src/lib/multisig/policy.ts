@@ -35,6 +35,25 @@ export function normalizeCosigner(cosigner: CosignerDraft): CosignerDraft {
   };
 }
 
+export function findDuplicateCosigner(
+  existing: CosignerDraft[],
+  candidate: CosignerDraft
+): { cosigner: CosignerDraft; match: 'fingerprint' | 'xpub' | 'both' } | null {
+  const normalizedCandidate = normalizeCosigner(candidate);
+  for (const cosigner of existing) {
+    const normalizedExisting = normalizeCosigner(cosigner);
+    const fingerprintMatches = normalizedExisting.fingerprint === normalizedCandidate.fingerprint;
+    const xpubMatches = normalizedExisting.xpub === normalizedCandidate.xpub;
+    if (fingerprintMatches || xpubMatches) {
+      return {
+        cosigner,
+        match: fingerprintMatches && xpubMatches ? 'both' : fingerprintMatches ? 'fingerprint' : 'xpub'
+      };
+    }
+  }
+  return null;
+}
+
 export function validatePolicyDraft(draft: PolicyDraft): string[] {
   const errors: string[] = [];
   const cosigners = draft.cosigners.map(normalizeCosigner);

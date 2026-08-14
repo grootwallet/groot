@@ -246,20 +246,10 @@
   async function selectWallet(profile: WalletProfile) {
     if (profile.id === selectedWalletId) return;
     try {
-      await walletService.selectWallet(profile.id);
-      selectedWalletId = profile.id;
+      const selection = await walletService.selectWallet(profile.id);
+      selectedWalletId = selection.profile.id;
       const destination = '/';
-      try {
-        if (profile.kind === 'multisig') await walletService.multisigSnapshot();
-        else await walletService.snapshot();
-        await goto(destination);
-      } catch (cause) {
-        if (cause instanceof WalletError && cause.code === 'wallet_locked') {
-          await goto(`/unlock?next=${destination}`);
-          return;
-        }
-        throw cause;
-      }
+      await goto(selection.unlocked ? destination : `/unlock?next=${destination}`);
     } catch (cause) {
       toast({ title: 'Could not open wallet', description: cause instanceof Error ? cause.message : undefined, tone: 'danger' });
     }
@@ -306,7 +296,7 @@
       <button disabled={checking} onclick={checkConnection}><span class="setting-icon"><Check size={18}/></span><span><strong>Test connection</strong><small>{nodeStatus ? `${nodeStatus.pruned ? `Pruned from block ${nodeStatus.pruneHeight ?? 'unknown'}` : 'Full block history'} · ${storageSize(nodeStatus.sizeOnDisk)} chain data · filter index ${nodeStatus.blockFilterIndex}${nodeStatus.initialBlockDownload ? ' · initial download active' : ''}` : 'Verify RPC authentication, retained block history, IBD, disk use, and filter-index status.'}</small></span><span class="badge" class:offline={connected === false}>{checking ? 'Checking…' : connected === true ? 'Connected' : connected === false ? 'Offline' : 'Check'}</span></button>
     </div>
   </section>
-  {#if selectedProfile?.kind !== 'multisig'}<section class="settings-group danger-zone"><h2>Wallet deletion</h2><div><span><strong>Delete wallet</strong><small>Remove only {selectedProfile?.name ?? 'this wallet'} from this device.</small></span><Button variant="danger-outline" size="small" onclick={() => deleting = true}><Trash2 size={15} />Delete</Button></div></section>{:else}<section class="settings-group danger-zone"><h2>Wallet deletion</h2><div><span><strong>Delete policy wallet</strong><small>A successful recovery drill is required first.</small></span><Button variant="danger-outline" size="small" href="/multisig/backup"><Trash2 size={15}/>Review</Button></div></section>{/if}
+  {#if selectedProfile?.kind !== 'multisig'}<section class="settings-group danger-zone"><h2>Wallet deletion</h2><div><span><strong>Delete wallet</strong><small>Remove only {selectedProfile?.name ?? 'this wallet'} from this device.</small></span><Button variant="danger-outline" size="small" onclick={() => deleting = true}><Trash2 size={15} />Delete</Button></div></section>{:else}<section class="settings-group danger-zone"><h2>Wallet deletion</h2><div><span><strong>Delete policy wallet</strong><small>Verify recovery, then remove this coordinator from this device.</small></span><Button variant="danger-outline" size="small" href="/multisig/delete"><Trash2 size={15}/>Delete</Button></div></section>{/if}
   <p class="version">Groot 0.1.0 · BDK regtest</p>
 </div>
 

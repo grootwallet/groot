@@ -543,6 +543,20 @@ test('offers safe recipes and advanced M-of-N control', async ({ page }) => {
   await expect(page.getByLabel('Signatures required')).toHaveValue('3');
 });
 
+test('saves the empty signer step and exits after discarding setup', async ({ page }) => {
+  await page.goto('/multisig/new');
+  await continueToSigners(page, 'Fresh multisig setup');
+
+  await expect(page.getByText('No signers yet', { exact: true })).toBeVisible();
+  await expect(page.getByText('Setup progress is not safely saved.')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Discard setup' }).click();
+  await page.getByRole('dialog', { name: 'Discard multisig setup?' }).getByRole('button', { name: 'Discard setup' }).click();
+
+  await expect(page).toHaveURL('/');
+  await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Create a policy wallet' })).toHaveCount(0);
+});
+
 test('explains hardware readiness before scanning', async ({ page }) => {
   await page.goto('/multisig/new');
   await expect(page.getByRole('button', { name: 'Hardware setup help' })).toHaveCount(0);
@@ -650,6 +664,21 @@ test('imports a bounded public signer record from a mounted-file flow', async ({
   await expect(page.getByRole('dialog', { name: 'SD signer' }).getByRole('definition').filter({ hasText: 'File import' })).toBeVisible();
 });
 
+test('marks an already-added connected signer and prevents selecting it again', async ({ page }) => {
+  await page.goto('/multisig/new');
+  await continueToSigners(page, 'Connected duplicate test');
+  await page.getByRole('button', { name: 'Add a signer' }).click();
+  await page.getByRole('button', { name: 'Connect hardware device' }).click();
+  await page.getByRole('dialog', { name: 'Connect hardware device' }).getByRole('button', { name: /Virtual Coldcard/ }).click();
+
+  await page.getByRole('button', { name: 'Add a signer' }).click();
+  await page.getByRole('button', { name: 'Connect hardware device' }).click();
+  const alreadyAdded = page.getByRole('dialog', { name: 'Connect hardware device' }).getByRole('button', { name: /Virtual Coldcard/ });
+  await expect(alreadyAdded).toContainText('Already added');
+  await expect(alreadyAdded).toContainText('Already added as Virtual Coldcard');
+  await expect(alreadyAdded).toBeDisabled();
+});
+
 test('opens and checks an imported hardware signer during setup', async ({ page }) => {
   await page.goto('/multisig/new');
   await continueToSigners(page, 'Coldcard policy vault');
@@ -751,8 +780,30 @@ test('creates and verifies a simple 2-of-3 descriptor wallet', async ({ page }) 
   await expect(page.getByText('Saved', { exact: true })).toBeVisible();
   await expect(page.locator('.setup-task.complete')).toContainText('View completed step');
   await expect(page.locator('.setup-task.current')).toContainText('Register the policy on Coldcard');
-  await page.getByRole('button', { name: 'Finish hardware setup before first signature' }).click();
-  await expect(page.locator('.setup-task.deferred').filter({ hasText: 'Required before signing' })).toHaveCount(2);
+  await page.getByLabel('Policy verified on every Coldcard').check();
+  const verifyLedgerPolicy = page.locator('.signer-readiness-list article').filter({ hasText: 'Ledger' }).getByRole('button', { name: 'Verify policy' });
+  await verifyLedgerPolicy.click();
+  const policyDialog = page.getByRole('dialog', { name: 'Verify signer wallet policy' });
+  await expect(policyDialog.getByText('Verify this wallet policy on Ledger')).toBeVisible();
+  const policyDialogBounds = await policyDialog.boundingBox();
+  const viewport = page.viewportSize();
+  expect(policyDialogBounds && viewport).toBeTruthy();
+  expect(policyDialogBounds!.y).toBeGreaterThanOrEqual(0);
+  expect(policyDialogBounds!.y + policyDialogBounds!.height).toBeLessThanOrEqual(viewport!.height);
+  if (viewport!.width > 760) {
+    expect(Math.abs(policyDialogBounds!.y + policyDialogBounds!.height / 2 - viewport!.height / 2)).toBeLessThanOrEqual(2);
+  }
+  await policyDialog.getByText('Signer keys to compare', { exact: true }).click();
+  expect(await policyDialog.locator('.modal-body').evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
+  const signerComparisonConfirmation = policyDialog.getByLabel('I compared the threshold and every signer key');
+  await signerComparisonConfirmation.check();
+  await policyDialog.getByText('Signer keys to compare', { exact: true }).click();
+  await expect(signerComparisonConfirmation).toBeEnabled();
+  await expect(signerComparisonConfirmation).toBeChecked();
+  await expect(policyDialog.getByText('Review again', { exact: true })).toBeVisible();
+  await policyDialog.getByRole('button', { name: 'Verify policy & first address' }).click();
+  await expect(policyDialog).toBeHidden();
+  await expect(page.locator('.setup-task.complete').filter({ hasText: 'Verify hardware wallet policies' })).toContainText('Policy verified');
   await expect(page.locator('.setup-task.current')).toContainText('Set the coordinator PIN');
   await expect(page.getByRole('heading', { name: 'Set the coordinator PIN' })).toBeVisible();
   await page.getByLabel('App PIN', { exact: true }).fill('coordinator-pin');
@@ -784,9 +835,9 @@ test('creates and verifies a simple 2-of-3 descriptor wallet', async ({ page }) 
   await page.getByRole('button', { name: 'Sign with device' }).click();
   await page.getByRole('button', { name: /Virtual Ledger outsider/ }).click();
   const signingPolicyReview = page.getByRole('dialog', { name: 'Review signer wallet policy' });
-  await signingPolicyReview.getByLabel('I will compare every fingerprint, path, and public key').check();
-  await signingPolicyReview.getByRole('button', { name: 'Verify policy & first address' }).click();
   await expect(signingPolicyReview.getByText('Policy reference saved in Groot')).toBeVisible();
+  await signingPolicyReview.getByText('Signer keys to compare', { exact: true }).click();
+  await signingPolicyReview.getByLabel('I compared the threshold and every signer key').check();
   await signingPolicyReview.getByRole('button', { name: 'Start Ledger review & signing' }).click();
   await expect(signingPolicyReview).toBeVisible();
   await expect(signingPolicyReview.getByText(/must authorize this policy again/)).toBeVisible();
@@ -799,10 +850,7 @@ test('creates and verifies a simple 2-of-3 descriptor wallet', async ({ page }) 
   await expect(paymentSigners.getByText('1 of 2 collected')).toBeVisible();
   await page.getByRole('button', { name: 'Sign with device' }).click();
   await page.getByRole('button', { name: /Virtual Coldcard/ }).click();
-  const coldcardSetup = page.getByRole('dialog', { name: 'Prepare Coldcard for this wallet' });
-  await expect(coldcardSetup.getByText('Import once before signing', { exact: true })).toBeVisible();
-  await coldcardSetup.getByLabel(/I imported and verified this policy/).check();
-  await coldcardSetup.getByRole('button', { name: 'Continue to signing' }).click();
+  await expect(page.getByRole('dialog', { name: 'Prepare Coldcard for this wallet' })).toHaveCount(0);
   await expect(paymentSigners.getByText('2 of 2 collected')).toBeVisible();
   await page.getByLabel('App PIN', { exact: true }).fill('wrong-pin');
   await page.getByRole('button', { name: 'Finalize & broadcast' }).click();
@@ -820,7 +868,7 @@ test('creates and verifies a simple 2-of-3 descriptor wallet', async ({ page }) 
   await page.getByLabel('Backup app PIN', { exact: true }).fill('wrong-pin');
   await page.getByRole('button', { name: 'Authorize & prepare backup' }).click();
   await expect(exportCard.getByText('That app PIN does not match Family vault.')).toBeVisible();
-  await expect(page.locator('.danger-card')).not.toContainText('That app PIN does not match Family vault.');
+  await expect(page.getByText('That app PIN does not match Family vault.')).toHaveCount(1);
   await page.getByLabel('Backup app PIN', { exact: true }).fill('coordinator-pin');
   await page.getByRole('button', { name: 'Authorize & prepare backup' }).click();
   await expect(page.getByLabel('Descriptor backup', { exact: true })).toHaveValue(/"network": "regtest"/);
@@ -851,6 +899,11 @@ test('creates and verifies a simple 2-of-3 descriptor wallet', async ({ page }) 
   await expect(page.locator('.file-action').getByText('family-vault-backup.json', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Run recovery drill' }).click();
   await expect(page.getByText('Backup verified')).toBeVisible();
+  await page.getByRole('link', { name: 'Continue to wallet deletion' }).click();
+  await expect(page).toHaveURL(/\/multisig\/delete$/);
+  await expect(page.getByRole('heading', { name: 'Delete policy wallet' })).toBeVisible();
+  await expect(page.getByText('Recovery drill complete')).toBeVisible();
+  await expect(page.locator('label.field').filter({ has: page.getByLabel('Wallet name confirmation') })).toContainText('Type');
   await page.getByLabel('Wallet name confirmation').fill('Family vault typo');
   await page.getByLabel('Delete wallet app PIN', { exact: true }).fill('coordinator-pin');
   await expect(page.getByRole('button', { name: 'Delete wallet from this device' })).toBeDisabled();
@@ -933,6 +986,8 @@ test('shows one authoritative failure when a BSMS record belongs to another wall
   await page.getByRole('button', { name: 'Run recovery drill' }).click();
   await expect(page.locator('.drill-result').getByText('Backup does not match', { exact: true })).toBeVisible();
   await expect(page.getByText('Recovery drill passed', { exact: true })).toHaveCount(0);
+  await page.goto('/multisig/delete');
+  await expect(page.getByText('Recovery drill required', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Delete wallet from this device' })).toBeDisabled();
 });
 
@@ -1031,20 +1086,57 @@ test('creates a guided recovery descriptor from a visible template', async ({ pa
   await expect(page.getByRole('heading', { name: 'Resilient vault' })).toBeVisible();
 });
 
-test('blocks a duplicate device before review', async ({ page }) => {
+test('rejects duplicate signer identity before insertion', async ({ page }) => {
   await page.goto('/multisig/new');
   await continueToSigners(page, 'Duplicate test');
-  for (const key of [keys[0], { ...keys[1], fingerprint: keys[0].fingerprint }, keys[2]]) {
-    await page.getByRole('button', { name: 'Add a signer' }).click();
-    await page.getByRole('button', { name: 'Enter public key' }).click();
-    await page.getByLabel('Signer label').fill(key.label);
-    await page.getByLabel('Master fingerprint').fill(key.fingerprint);
-    await page.getByLabel('Account xpub').fill(key.xpub);
-    await page.getByRole('button', { name: 'Add key' }).click();
-  }
-  await expect(page.getByText('Every signer must have a unique master fingerprint.')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Review wallet' }).click();
-  await expect(page.getByText('Every signer must have a unique master fingerprint.')).toBeVisible();
+  await page.getByRole('button', { name: 'Add a signer' }).click();
+  await page.getByRole('button', { name: 'Enter public key' }).click();
+  await page.getByLabel('Signer label').fill(keys[0].label);
+  await page.getByLabel('Master fingerprint').fill(keys[0].fingerprint);
+  await page.getByLabel('Account xpub').fill(keys[0].xpub);
+  await page.getByRole('button', { name: 'Add key' }).click();
+
+  await page.getByRole('button', { name: 'Add a signer' }).click();
+  await page.getByRole('button', { name: 'Enter public key' }).click();
+  await page.getByLabel('Signer label').fill('Renamed duplicate');
+  await page.getByLabel('Master fingerprint').fill(keys[0].fingerprint.toUpperCase());
+  await page.getByLabel('Account xpub').fill('tpub-different-account-key');
+  await page.getByRole('button', { name: 'Add key' }).click();
+
+  const duplicateDialog = page.getByRole('dialog', { name: 'Enter public signer key' });
+  await expect(duplicateDialog.getByRole('alert')).toContainText(`Fingerprint ${keys[0].fingerprint} is already used by “${keys[0].label}”.`);
+  await expect(page.getByText('Signer already added', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: /View Renamed duplicate details/ })).toHaveCount(0);
+  await duplicateDialog.getByRole('button', { name: 'Cancel' }).click();
+  await expect(page.getByText('1 of 3 signers added')).toBeVisible();
+});
+
+test('confirms signer removal before changing the unfinished wallet', async ({ page }) => {
+  await page.goto('/multisig/new');
+  await continueToSigners(page, 'Removal confirmation test');
+  await page.getByRole('button', { name: 'Add a signer' }).click();
+  await page.getByRole('button', { name: 'Enter public key' }).click();
+  await page.getByLabel('Signer label').fill(keys[0].label);
+  await page.getByLabel('Master fingerprint').fill(keys[0].fingerprint);
+  await page.getByLabel('Account xpub').fill(keys[0].xpub);
+  await page.getByRole('button', { name: 'Add key' }).click();
+
+  const signerRow = page.getByRole('button', { name: `View ${keys[0].label} details` });
+  await page.getByRole('button', { name: `Remove ${keys[0].label}` }).click();
+  const dialog = page.getByRole('dialog', { name: 'Remove signer?' });
+  await expect(dialog).toContainText(`Remove ${keys[0].label} from this unfinished wallet?`);
+  await expect(dialog).toContainText('Its hardware wallet and seed are not changed.');
+  await expect(signerRow).toBeVisible();
+
+  await dialog.getByRole('button', { name: 'Keep signer' }).click();
+  await expect(signerRow).toBeVisible();
+  await expect(page.getByText('1 of 3 signers added')).toBeVisible();
+
+  await page.getByRole('button', { name: `Remove ${keys[0].label}` }).click();
+  await page.getByRole('dialog', { name: 'Remove signer?' }).getByRole('button', { name: 'Remove signer' }).click();
+  await expect(signerRow).toHaveCount(0);
+  await expect(page.getByText('No signers yet', { exact: true })).toBeVisible();
+  await expect(page.getByText('Signer removed', { exact: true })).toBeVisible();
 });
 
 test('coordinator has no horizontal overflow on mobile', async ({ page }, testInfo) => {
