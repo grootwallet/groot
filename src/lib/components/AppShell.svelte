@@ -2,6 +2,7 @@
   import { page } from '$app/state';
   import { Activity, ArrowDownToLine, ArrowUpFromLine, CircleDot, LayoutGrid, Plus, Settings, ShieldCheck } from '@lucide/svelte';
   import BrandLockup from './BrandLockup.svelte';
+  import DiscardMultisigSetupModal from './DiscardMultisigSetupModal.svelte';
   import ToastHost from './ToastHost.svelte';
   import WalletProfileList from './WalletProfileList.svelte';
   import NetworkStatus from './NetworkStatus.svelte';
@@ -31,6 +32,10 @@
   let profiles = $state<WalletProfile[]>([]);
   let selectedWalletId = $state<string | null>(null);
   let multisigSetupDraft = $state<MultisigSetupDraft | null>(null);
+  let discardSetupOpen = $state(false);
+  let discardingSetup = $state(false);
+  let discardSetupError = $state('');
+  let setupDraftReadGeneration = 0;
   let liveSync: LiveSyncController | undefined;
   let selectedProfile = $derived(profiles.find((wallet) => wallet.id === selectedWalletId));
   let policyContext = $derived(selectedProfile?.kind === 'multisig' || page.url.pathname.startsWith('/multisig'));
@@ -41,12 +46,32 @@
   const showQuickActions = $derived(!lockedRoute && (page.url.pathname === '/' || page.url.pathname === '/coins'));
   const receiveHref = $derived(selectedProfile?.kind === 'multisig' ? '/multisig/receive' : '/receive');
   const sendHref = $derived(selectedProfile?.kind === 'multisig' ? '/multisig/send' : '/send');
-  const showSetupResume = $derived(Boolean(multisigSetupDraft) && !onboardingRoute && !lockedRoute);
+  const showSetupResume = $derived(Boolean(multisigSetupDraft) && !onboardingRoute);
 
   async function refreshSetupDraft() {
+    const generation = ++setupDraftReadGeneration;
     try {
-      multisigSetupDraft = await walletService.multisigSetupDraft();
+      const draft = await walletService.multisigSetupDraft();
+      if (generation === setupDraftReadGeneration) multisigSetupDraft = draft;
     } catch { /* Keep the last known notice visible across transient read failures. */ }
+  }
+
+  async function discardSetupDraft() {
+    if (discardingSetup) return;
+    discardingSetup = true;
+    discardSetupError = '';
+    ++setupDraftReadGeneration;
+    try {
+      await walletService.discardMultisigSetupDraft();
+      ++setupDraftReadGeneration;
+      multisigSetupDraft = null;
+      discardSetupOpen = false;
+      toast({ title: 'Setup discarded', description: 'The unfinished multisig wallet setup was removed.', tone: 'success' });
+    } catch (cause) {
+      discardSetupError = cause instanceof Error ? cause.message : 'Could not discard the unfinished setup.';
+    } finally {
+      discardingSetup = false;
+    }
   }
 
   async function refreshProfiles() {
@@ -73,8 +98,7 @@
     try {
       const profile = await walletService.selectWallet(walletId);
       selectedWalletId = profile.id;
-      const destination = '/';
-      await goto(destination);
+      await goto('/');
       if (!isPrototypeWallet) {
         liveSync?.restart();
       }
@@ -124,7 +148,7 @@
   });
 </script>
 
-<div class="app-shell" class:onboarding-shell={onboardingRoute} class:mobile-actions-visible={showQuickActions} class:prototype-shell={isPrototypeWallet}>
+<div class="app-shell" class:onboarding-shell={onboardingRoute} class:mobile-actions-visible={showQuickActions} class:prototype-shell={isPrototypeWallet} class:locked-setup-visible={showSetupResume && lockedRoute}>
   <aside class="sidebar">
     <a class="brand" href="/" aria-label="Groot home"><BrandLockup /></a>
     {#if profiles.length}
@@ -154,9 +178,11 @@
     {#if isPrototypeWallet}<div class="demo-banner" role="status"><strong>Interactive prototype</strong><span>Dummy data only · Never use real funds or recovery words</span></div>{/if}
     {#if showSetupResume && multisigSetupDraft}
       <ResumeSetupNotice
-        title={multisigSetupDraft.name.trim() || 'Multisig wallet setup'}
-        detail={`${multisigSetupStageLabel(multisigSetupDraft.stage)} · ${multisigSetupDraft.cosigners.length} of ${multisigSetupSignerTarget(multisigSetupDraft)} signers added`}
+        title={lockedRoute ? 'Multisig wallet setup' : multisigSetupDraft.name.trim() || 'Multisig wallet setup'}
+        detail={lockedRoute ? 'Wallet creation in progress' : `${multisigSetupStageLabel(multisigSetupDraft.stage)} · ${multisigSetupDraft.cosigners.length} of ${multisigSetupSignerTarget(multisigSetupDraft)} signers added`}
         href="/multisig/new"
+        locked={lockedRoute}
+        ondiscard={() => { discardSetupError = ''; discardSetupOpen = true; }}
       />
     {/if}
     {#key selectedWalletId}
@@ -179,5 +205,6 @@
       <a class="mobile-action primary" href={sendHref}><ArrowUpFromLine size={18} />{t('send', $locale)}</a>
     </div>
   {/if}
+  <DiscardMultisigSetupModal open={discardSetupOpen} busy={discardingSetup} error={discardSetupError} onclose={() => { discardSetupOpen = false; discardSetupError = ''; }} onconfirm={discardSetupDraft}/>
   <ToastHost />
 </div>

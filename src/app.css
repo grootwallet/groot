@@ -74,7 +74,7 @@ code { font-family: "SFMono-Regular", Consolas, ui-monospace, monospace; }
 :where(button, a, input, textarea, select, summary, [tabindex]):focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .sr-only { width: 1px; height: 1px; padding: 0; position: absolute; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
 
-.app-shell { min-height: 100vh; }
+.app-shell { min-height: 100vh; --locked-setup-notice-top: 18px; --locked-setup-notice-right: 32px; --locked-setup-notice-left: 256px; }
 .sidebar { position: fixed; inset: 0 auto 0 0; width: 224px; border-right: 1px solid var(--border); background: var(--sidebar); padding: 22px 14px; display: flex; flex-direction: column; z-index: 10; }
 .wallet-switcher { margin: 19px 0 13px; padding: 9px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface-inset); display: grid; gap: 7px; }
 .wallet-switcher-label { padding: 0 2px; color: var(--muted-2); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; display: flex; align-items: center; justify-content: space-between; }
@@ -921,6 +921,8 @@ code { font-family: "SFMono-Regular", Consolas, ui-monospace, monospace; }
 }
 
 @media (max-width: 760px) {
+  .app-shell { --locked-setup-notice-top: max(64px, calc(env(safe-area-inset-top) + 56px)); --locked-setup-notice-right: 18px; --locked-setup-notice-left: 18px; }
+  .app-shell.prototype-shell { --locked-setup-notice-top: max(108px, calc(env(safe-area-inset-top) + 100px)); }
   .review-policy .coordinator-actions { display: grid; grid-template-columns: 1fr; gap: 8px; }
   .review-policy .coordinator-actions .button { width: 100%; }
   .backup-setup-section, .setup-task { padding: 14px; }
@@ -941,6 +943,8 @@ code { font-family: "SFMono-Regular", Consolas, ui-monospace, monospace; }
   .modal-header { padding: 17px 16px 13px; }
   .modal-body { padding: 16px; }
   .unlock-overlay { left: 0; z-index: 50; }
+  .app-shell.locked-setup-visible .unlock-overlay .onboarding-card { margin-top: 180px; margin-bottom: auto; }
+  .app-shell.prototype-shell.locked-setup-visible .unlock-overlay .onboarding-card { margin-top: 224px; }
   .sidebar { display: none; }
   .main { margin-left: 0; }
   .mobile-brand { position: absolute; z-index: 80; top: max(12px, env(safe-area-inset-top)); left: 18px; width: 96px; min-height: 36px; display: flex; align-items: center; }
@@ -1048,6 +1052,7 @@ code { font-family: "SFMono-Regular", Consolas, ui-monospace, monospace; }
 }
 
 @media (min-width: 761px) and (max-width: 1050px) {
+  .app-shell { --locked-setup-notice-left: 222px; }
   .sidebar { width: 190px; }
   .main { margin-left: 190px; }
   .page { padding-inline: 36px; }

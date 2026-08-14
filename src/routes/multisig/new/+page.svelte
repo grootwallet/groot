@@ -7,6 +7,7 @@
   import HardwareActionPrompt from '$lib/components/HardwareActionPrompt.svelte';
   import InsightTip from '$lib/components/InsightTip.svelte';
   import DeviceDetailsModal from '$lib/components/DeviceDetailsModal.svelte';
+  import DiscardMultisigSetupModal from '$lib/components/DiscardMultisigSetupModal.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import PasswordField from '$lib/components/PasswordField.svelte';
   import SetupProgress from '$lib/components/SetupProgress.svelte';
@@ -90,6 +91,7 @@
   let draftReady = $state(false);
   let hasDraft = $state(false);
   let discardDraftOpen = $state(false);
+  let discardDraftError = $state('');
   let discardingDraft = $state(false);
   let draftSaveError = $state('');
   let hardwareScanGeneration = 0;
@@ -249,6 +251,7 @@
     confirmation = '';
     error = '';
     draftSaveError = '';
+    discardDraftError = '';
   }
 
   async function discardSetupDraft() {
@@ -262,10 +265,11 @@
       lastDraftFingerprint = '';
       hasDraft = false;
       discardDraftOpen = false;
+      discardDraftError = '';
       resetSetupState();
       toast({ title: 'Setup discarded', description: 'The saved public multisig draft was removed.', tone: 'success' });
     } catch (cause) {
-      draftSaveError = cause instanceof Error ? cause.message : 'The saved setup could not be discarded.';
+      discardDraftError = cause instanceof Error ? cause.message : 'The saved setup could not be discarded.';
     } finally {
       discardingDraft = false;
     }
@@ -634,7 +638,7 @@
 <div class="page coordinator-page">
   <header class="page-header">
     <div><p class="eyebrow">WALLET POLICY</p><h1>Create a policy wallet</h1><p class="subtitle">Choose a simple shared policy or add a separate delayed recovery key.</p></div>
-    <div class="page-header-actions">{#if hasDraft}<Button variant="ghost-danger" size="small" onclick={() => discardDraftOpen = true}><Trash2 size={14}/>Discard setup</Button>{/if}{#if stage === 'policy'}<a class="secondary-link" href="/multisig/recover" aria-label="Recover from backup"><FileUp size={15}/>Recover</a>{/if}<span class="network-chip">Regtest · Native SegWit</span></div>
+    <div class="page-header-actions">{#if hasDraft}<Button variant="ghost-danger" size="small" onclick={() => { discardDraftError = ''; discardDraftOpen = true; }}><Trash2 size={14}/>Discard setup</Button>{/if}{#if stage === 'policy'}<a class="secondary-link" href="/multisig/recover" aria-label="Recover from backup"><FileUp size={15}/>Recover</a>{/if}<span class="network-chip">Regtest · Native SegWit</span></div>
   </header>
   <SetupProgress steps={creationSteps} current={creationStep} label="Wallet creation progress"/>
   {#if draftSaveError}<div class="warning-box danger" role="alert"><AlertTriangle size={16}/><strong>Setup progress is not safely saved.</strong><span>{draftSaveError}</span></div>{/if}
@@ -747,10 +751,7 @@
   {/if}
 </div>
 
-<Modal open={discardDraftOpen} title="Discard multisig setup?" description="Remove this unfinished public policy draft from Groot." onclose={() => { if (!discardingDraft) discardDraftOpen = false; }}>
-  <div class="warning-box danger"><strong>You will need to add the signers again.</strong><span>No wallet, signer seed, or bitcoin is deleted.</span></div>
-  <div class="modal-footer"><Button variant="secondary" disabled={discardingDraft} onclick={() => discardDraftOpen = false}>Keep setup</Button><Button variant="danger" loading={discardingDraft} loadingLabel="Discarding…" onclick={discardSetupDraft}>Discard setup</Button></div>
-</Modal>
+<DiscardMultisigSetupModal open={discardDraftOpen} busy={discardingDraft} error={discardDraftError} onclose={() => { discardDraftOpen = false; discardDraftError = ''; }} onconfirm={discardSetupDraft}/>
 
 <Modal open={pickerOpen} title="Add a signer" description="Choose how to import this signer’s public account key." onclose={() => { pickerOpen = false; pickerError = ''; }}>
   <div class="source-list">
