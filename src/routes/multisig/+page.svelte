@@ -19,7 +19,7 @@
   import { coldcardPolicyFilename } from '$lib/transfer';
   import { useWalletShellContext } from '$lib/wallet/shell-context';
   import { matchingPolicyVerification, policyReadinessLabel, policyRegistrationProfile, requiresPolicySetup } from '$lib/hardware/policy-readiness';
-  import { lockedDeviceForHealthCheck } from '$lib/hardware/health-check';
+  import { lockedDeviceForHealthCheck, matchingDeviceForHealthCheck } from '$lib/hardware/health-check';
   const walletShell = useWalletShellContext();
   type CosignerHealthLog = CosignerHealthCheck & { signerId: string };
   let wallet = $state<MultisigWallet | null>(null);
@@ -111,21 +111,30 @@
       [signerId]: [{ ...check, signerId }, ...(healthHistory[signerId] ?? [])].slice(0, 20)
     };
   }
+  async function renameSavedSigner(label: string) {
+    if (!selectedSigner) return;
+    const signerId = selectedSigner.id;
+    wallet = await walletService.renameMultisigSigner(signerId, label);
+    selectedSigner = wallet.cosigners.find((signer) => signer.id === signerId) ?? null;
+    toast({ title: 'Signer renamed', description: `This signer is now “${label}”.`, tone: 'success' });
+  }
   async function runHealthCheck() {
     if (!selectedSigner || checking) return;
     const signer = selectedSigner;
     checking = true;
     try {
-      if (signer.source === 'usb' || signer.source === 'virtual') {
-        const lockedDevice = lockedDeviceForHealthCheck(signer, await walletService.listHardwareDevices());
-        if (lockedDevice) {
-          checking = false;
-          await startHealthPin(lockedDevice);
-          return;
-        }
+      const devices = await walletService.listHardwareDevices();
+      const lockedDevice = lockedDeviceForHealthCheck(signer, devices);
+      if (lockedDevice) {
+        checking = false;
+        await startHealthPin(lockedDevice);
+        return;
       }
-      recordHealth(signer.id, await walletService.checkHardwareCosigner(signer));
-      toast({ title: 'Health check passed', description: `${signer.label} is ready.`, tone: 'success' });
+      const device = matchingDeviceForHealthCheck(signer, devices);
+      if (!device) throw new WalletError('hardware_unavailable', `Connect and unlock ${signer.label}, enable its USB connection, then try again.`);
+      const result = await walletService.checkHardwareCosigner(signer, device.id);
+      recordHealth(signer.id, result);
+      toast({ title: 'Health check passed', description: `${signer.label} holds the saved BIP48 account key.`, tone: 'success' });
     } catch (cause) {
       const summary = cause instanceof Error ? cause.message : 'The device could not be verified.';
       recordHealth(signer.id, { checkedAt: new Date().toISOString(), summary, status: 'attention' });
@@ -225,7 +234,7 @@
   {/if}
 </div>
 
-<DeviceDetailsModal signer={healthPinOpen ? null : selectedSigner} health={selectedSigner ? latestHealth(selectedSigner) : null} history={selectedSigner ? (healthHistory[selectedSigner.id] ?? []) : []} policyStatus={selectedSigner ? signerPolicyStatus(selectedSigner) : null} {checking} onclose={() => selectedSigner = null} oncheck={runHealthCheck} onpolicy={() => selectedSigner && openPolicyVerification(selectedSigner)}/>
+<DeviceDetailsModal signer={healthPinOpen ? null : selectedSigner} health={selectedSigner ? latestHealth(selectedSigner) : null} history={selectedSigner ? (healthHistory[selectedSigner.id] ?? []) : []} policyStatus={selectedSigner ? signerPolicyStatus(selectedSigner) : null} {checking} onclose={() => selectedSigner = null} oncheck={runHealthCheck} onpolicy={() => selectedSigner && openPolicyVerification(selectedSigner)} onrename={renameSavedSigner}/>
 <TrezorPinModal
   open={healthPinOpen}
   busy={healthPinBusy}

@@ -33,6 +33,19 @@ test('uses signer terminology across multisig user flows', async ({ page }) => {
   }
 });
 
+test('renames a saved signer from its reusable details modal', async ({ page }) => {
+  await page.goto('/multisig');
+  await page.getByRole('button', { name: 'View Coldcard details' }).click();
+  const details = page.getByRole('dialog', { name: 'Coldcard' });
+  await details.getByRole('button', { name: 'Edit name' }).click();
+  await details.getByLabel('Signer name').fill('Office Coldcard');
+  await details.getByRole('button', { name: 'Save name' }).click();
+  await expect(page.getByRole('dialog', { name: 'Office Coldcard' })).toBeVisible();
+  await expect(page.getByText('Signer renamed', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Close' }).click();
+  await expect(page.getByRole('button', { name: 'View Office Coldcard details' })).toBeVisible();
+});
+
 test('keeps multisig receive verification disclosure visibly expandable', async ({ page }) => {
   await page.goto('/');
   const isMobile = (page.viewportSize()?.width ?? 1180) <= 760;
@@ -256,6 +269,11 @@ test('requires explicit confirmation before discarding a multisig proposal', asy
   const cancellationSigners = page.getByRole('region', { name: 'Payment signers' });
   await page.getByRole('button', { name: 'Sign with device' }).click();
   await page.getByRole('button', { name: /Virtual Coldcard/ }).click();
+  const coldcardSetup = page.getByRole('dialog', { name: 'Prepare Coldcard for this wallet' });
+  if (await coldcardSetup.isVisible()) {
+    await coldcardSetup.getByRole('checkbox', { name: /I imported and verified this policy/ }).check();
+    await coldcardSetup.getByRole('button', { name: 'Continue to signing' }).click();
+  }
   await expect(cancellationSigners.getByText('1 of 2 collected', { exact: true })).toBeVisible();
 
   await page.getByRole('button', { name: 'Cancel payment' }).click();
@@ -270,7 +288,8 @@ test('requires explicit confirmation before discarding a multisig proposal', asy
   await dialog.getByRole('button', { name: 'Cancel payment' }).click();
 
   await expect(page.getByText('Payment canceled', { exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Continue to amount' })).toBeVisible();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible();
   await page.goto('/multisig');
   await expect(page.getByRole('heading', { name: 'Family wallet' })).toBeVisible();
   await expect(page.getByText('2,481,240 sats')).toBeVisible();
@@ -365,8 +384,7 @@ test('shows signer details and runs honest health checks', async ({ page }) => {
   await expect(coldcardDialog.getByText('f00dbabe', { exact: true })).toBeVisible();
   await expect(coldcardDialog.getByText("m/48'/1'/0'/2'", { exact: true })).toBeVisible();
   await expect(coldcardDialog.getByText('Wallet policy', { exact: true })).toBeVisible();
-  await expect(coldcardDialog.getByText('Policy imported', { exact: true })).toBeVisible();
-  await expect(coldcardDialog.getByText(/Last verified/)).toBeVisible();
+  await expect(coldcardDialog.getByText('Setup not recorded', { exact: true })).toBeVisible();
   await expect(coldcardDialog.getByRole('button', { name: 'Review setup' })).toBeVisible();
   await coldcardDialog.getByRole('button', { name: 'View public account key (xpub)' }).click();
   const xpubDialog = page.getByRole('dialog', { name: 'Coldcard public account key (xpub)' });
@@ -374,16 +392,18 @@ test('shows signer details and runs honest health checks', async ({ page }) => {
   await xpubDialog.getByRole('button', { name: 'Close' }).click();
   await expect(coldcardDialog.getByText('Not checked in this session')).toBeVisible();
   await coldcardDialog.getByRole('button', { name: 'Run health check' }).click();
-  await expect(coldcardDialog.getByRole('status', { name: 'Signer health check in progress' })).toContainText('Checking signer identity');
-  await expect(coldcardDialog.locator('.health-card').getByText('Connected identity matches f00dbabe.')).toBeVisible();
+  await expect(coldcardDialog.getByRole('status', { name: 'Signer health check in progress' })).toContainText('Checking signer key');
+  await expect(coldcardDialog.locator('.health-card').getByText(/matches fingerprint f00dbabe and the saved BIP48 account key/)).toBeVisible();
   await expect(coldcardDialog.getByText(/Last checked/)).toBeVisible();
   await expect(coldcardDialog.getByText('Recent checks')).toBeVisible();
   await coldcardDialog.getByRole('button', { name: 'Close' }).click();
 
   await page.getByRole('button', { name: 'View Offline backup details' }).click();
   const backupDialog = page.getByRole('dialog', { name: 'Offline backup' });
+  await expect(backupDialog.getByText('Device health', { exact: true })).toBeVisible();
   await backupDialog.getByRole('button', { name: 'Run health check' }).click();
-  await expect(backupDialog.locator('.health-card').getByText(/Physical presence cannot be checked for an offline key/)).toBeVisible();
+  await expect(backupDialog.locator('.health-card').getByText(/Connect and unlock Offline backup/)).toBeVisible();
+  await expect(backupDialog.getByText('Recent checks')).toBeVisible();
   await backupDialog.getByRole('button', { name: 'Close' }).click();
 
   await page.reload();
@@ -554,7 +574,7 @@ test('saves the empty signer step and exits after discarding setup', async ({ pa
 
   await expect(page).toHaveURL('/');
   await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Create a policy wallet' })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'Create a multisig wallet' })).toHaveCount(0);
 });
 
 test('explains hardware readiness before scanning', async ({ page }) => {
@@ -568,16 +588,16 @@ test('explains hardware readiness before scanning', async ({ page }) => {
   await help.getByRole('button', { name: 'Ledger' }).click();
   await expect(help.getByText(/open Bitcoin Test/)).toBeVisible();
   await help.getByRole('button', { name: 'BitBox02' }).click();
-  await expect(help.getByText(/confirm the same pairing code on both screens/)).toBeVisible();
-  await expect(help.getByText(/quit BitBoxApp completely/)).toBeVisible();
+  await expect(help.getByText(/Enter the device password when BitBox02 asks/)).toBeVisible();
+  await expect(help.getByText(/first-time pairing is required/)).toBeVisible();
   await help.getByRole('button', { name: 'Trezor' }).click();
   await expect(help.getByText(/quit Trezor Suite completely/)).toBeVisible();
   await expect(help.getByText(/locked Model One is expected/)).toBeVisible();
   await expect(help.getByText(/Never enter a seed into Groot/)).toBeVisible();
   await help.getByRole('button', { name: 'Scan for devices' }).click();
   const scan = page.getByRole('dialog', { name: 'Connect hardware device' });
-  await expect(scan.getByText('Unlock the signer, then release its USB connection')).toBeVisible();
-  await expect(scan.getByText(/open the wallet in BitBoxApp first/)).toBeVisible();
+  await expect(scan.getByText('Connect the signer and release any competing USB session')).toBeVisible();
+  await expect(scan.getByText(/BitBox02 can unlock directly from Groot/)).toBeVisible();
   await expect(scan.getByText(/locked Trezor Model One is supported/)).toBeVisible();
   expect(await scan.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
   expect(await scan.locator('.hardware-device-list').evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
@@ -647,21 +667,49 @@ test('imports a bounded public signer record from a mounted-file flow', async ({
   await page.goto('/multisig/new');
   await continueToSigners(page, 'Offline import vault');
   await page.getByRole('button', { name: 'Add a signer' }).click();
+
   await page.getByLabel('Public signer file').setInputFiles({
-    name: 'offline-signer.json',
+    name: 'coldcard-mainnet.json',
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify({
-      version: 1,
+      xfp: 'F00DBABE',
+      p2wsh: 'xpub-mainnet-account-key',
+      p2wsh_deriv: "m/48'/0'/0'/2'"
+    }))
+  });
+  const importWarning = page.getByRole('alert');
+  await expect(importWarning).toContainText('Could not import this signer');
+  await expect(importWarning).toContainText('This Coldcard export is for Bitcoin mainnet.');
+  await expect(importWarning).toContainText('Testnet Mode → Regtest');
+
+  await page.getByLabel('Public signer file').setInputFiles({
+    name: 'coldcard-regtest.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify({
       label: 'SD signer',
-      fingerprint: 'a1b2c3d4',
-      accountXpub: 'tpubD6NzVbkrYhZ4Y-e2e-public-key-from-sd',
-      derivationPath: "m/48'/1'/0'/2'"
+      xpub: 'xpub-generic-master-key-that-must-not-be-selected',
+      p2wsh: 'Vpub-slip132-key-that-must-not-be-selected',
+      p2wsh_deriv: "m/48h/1h/0h/2h",
+      p2wsh_desc: 'wsh(sortedmulti(M,[F00DBABE/48h/1h/0h/2h]tpubD6NzVbkrYhZ4Y-fixture-coldcard-public-key/0/*,...))'
     }))
   });
   await expect(page.getByText('Public signer imported')).toBeVisible();
   await expect(page.getByRole('button', { name: 'View SD signer details' })).toBeVisible();
   await page.getByRole('button', { name: 'View SD signer details' }).click();
-  await expect(page.getByRole('dialog', { name: 'SD signer' }).getByRole('definition').filter({ hasText: 'File import' })).toBeVisible();
+  const details = page.getByRole('dialog', { name: 'SD signer' });
+  await expect(details.getByRole('definition').filter({ hasText: 'File import' })).toBeVisible();
+  await details.getByRole('button', { name: 'Edit name' }).click();
+  await details.getByLabel('Signer name').fill('Air-gapped Coldcard');
+  await details.getByRole('button', { name: 'Save name' }).click();
+  const renamedDetails = page.getByRole('dialog', { name: 'Air-gapped Coldcard' });
+  await expect(renamedDetails).toBeVisible();
+  await expect(renamedDetails.getByText('Device health', { exact: true })).toBeVisible();
+  await expect(renamedDetails.getByText('Not checked in this session')).toBeVisible();
+  await renamedDetails.getByRole('button', { name: 'Run health check' }).click();
+  await expect(renamedDetails.getByText(/matches fingerprint f00dbabe and the saved BIP48 account key/)).toBeVisible();
+  await expect(page.getByText('holds the saved BIP48 account key.', { exact: false })).toBeVisible();
+  await page.getByRole('button', { name: 'Close' }).click();
+  await expect(page.getByRole('button', { name: 'View Air-gapped Coldcard details' })).toBeVisible();
 });
 
 test('marks an already-added connected signer and prevents selecting it again', async ({ page }) => {
@@ -701,7 +749,7 @@ test('opens and checks an imported hardware signer during setup', async ({ page 
   const details = page.getByRole('dialog', { name: 'Virtual Coldcard' });
   await expect(details.getByText('Not checked in this session')).toBeVisible();
   await details.getByRole('button', { name: 'Run health check' }).click();
-  await expect(details.locator('.health-card').getByText('Connected identity matches f00dbabe.')).toBeVisible();
+  await expect(details.locator('.health-card').getByText(/matches fingerprint f00dbabe and the saved BIP48 account key/)).toBeVisible();
   await expect(details.getByText(/Last checked/)).toBeVisible();
   await details.getByRole('button', { name: 'Close' }).click();
   for (const key of keys.slice(1)) {
@@ -742,7 +790,7 @@ test('creates and verifies a simple 2-of-3 descriptor wallet', async ({ page }) 
     { ...keys[2], fingerprint: 'c0ffee01' }
   ];
   await page.goto('/multisig/new');
-  await expect(page.getByRole('heading', { name: 'Create a policy wallet' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Create a multisig wallet' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Recover from backup' })).toBeVisible();
   await continueToSigners(page, 'Family vault');
 
@@ -897,12 +945,12 @@ test('creates and verifies a simple 2-of-3 descriptor wallet', async ({ page }) 
   });
   await expect(page.locator('.file-action.file-loaded')).toBeVisible();
   await expect(page.locator('.file-action').getByText('family-vault-backup.json', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Run recovery drill' }).click();
+  await page.getByRole('button', { name: 'Test recovery' }).click();
   await expect(page.getByText('Backup verified')).toBeVisible();
   await page.getByRole('link', { name: 'Continue to wallet deletion' }).click();
   await expect(page).toHaveURL(/\/multisig\/delete$/);
-  await expect(page.getByRole('heading', { name: 'Delete policy wallet' })).toBeVisible();
-  await expect(page.getByText('Recovery drill complete')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Delete multisig wallet' })).toBeVisible();
+  await expect(page.getByText('Recovery tested')).toBeVisible();
   await expect(page.locator('label.field').filter({ has: page.getByLabel('Wallet name confirmation') })).toContainText('Type');
   await page.getByLabel('Wallet name confirmation').fill('Family vault typo');
   await page.getByLabel('Delete wallet app PIN', { exact: true }).fill('coordinator-pin');
@@ -967,7 +1015,7 @@ test('exports and validates the recommended BSMS record', async ({ page }) => {
   const downloadPromise = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Download BSMS' }).click();
   await expect((await downloadPromise).suggestedFilename()).toBe('family-wallet.bsms');
-  await page.getByRole('button', { name: 'Run recovery drill' }).click();
+  await page.getByRole('button', { name: 'Test recovery' }).click();
   await expect(page.getByText('Backup verified')).toBeVisible();
 });
 
@@ -983,11 +1031,12 @@ test('shows one authoritative failure when a BSMS record belongs to another wall
     buffer: Buffer.from(mismatched),
   });
   await expect(page.locator('.file-action').getByText('different-wallet.bsms', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Run recovery drill' }).click();
+  await page.getByRole('button', { name: 'Test recovery' }).click();
   await expect(page.locator('.drill-result').getByText('Backup does not match', { exact: true })).toBeVisible();
-  await expect(page.getByText('Recovery drill passed', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('Recovery test passed', { exact: true })).toHaveCount(0);
   await page.goto('/multisig/delete');
-  await expect(page.getByText('Recovery drill required', { exact: true })).toBeVisible();
+  await expect(page.getByText('Recovery test required', { exact: true })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Export wallet backup' })).toHaveAttribute('href', '/multisig/backup');
   await expect(page.getByRole('button', { name: 'Delete wallet from this device' })).toBeDisabled();
 });
 
@@ -1013,7 +1062,7 @@ test('reveals draft errors only after review and keeps signer identity readable'
   await expect(details).toBeVisible();
   await expect(details.getByText('Not checked in this session')).toBeVisible();
   await details.getByRole('button', { name: 'Run health check' }).click();
-  await expect(details.getByText(/Physical presence cannot be checked for an offline key/)).toBeVisible();
+  await expect(details.getByText(/Connect and unlock Coldcard/)).toBeVisible();
   await details.getByRole('button', { name: 'Close' }).click();
 
   await page.getByRole('button', { name: 'Review wallet' }).click();

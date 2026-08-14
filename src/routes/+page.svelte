@@ -9,7 +9,7 @@
   import { toast } from '$lib/stores/toasts';
   import { walletService, WalletError, type MultisigProposal, type MultisigWallet, type WalletProfile, type WalletSnapshot, type WalletSyncSource, type WalletSyncStatus } from '$lib/wallet';
   import { latestActiveProposal } from '$lib/wallet/proposal-resume';
-  import { pendingBalance, sortTransactionsNewestFirst } from '$lib/wallet/presentation';
+  import { pendingBalanceBreakdown, sortTransactionsNewestFirst } from '$lib/wallet/presentation';
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import type { Transaction } from '$lib/types';
@@ -43,7 +43,12 @@
   let syncSource = $state<WalletSyncSource | null>(null);
   let syncStatus = $state<WalletSyncStatus | null>(null);
   let syncPollToken = 0;
-  const pendingSats = $derived(snapshot ? pendingBalance(snapshot.balance) : 0);
+  const pendingBreakdown = $derived(snapshot ? pendingBalanceBreakdown(snapshot) : { incoming: 0, change: 0, outgoing: 0 });
+  const pendingDescription = $derived([
+    pendingBreakdown.incoming ? `${shortSats(pendingBreakdown.incoming)} sats awaiting confirmation` : '',
+    pendingBreakdown.change ? `${shortSats(pendingBreakdown.change)} sats unconfirmed change` : '',
+    pendingBreakdown.outgoing ? `${shortSats(pendingBreakdown.outgoing)} sats outgoing` : ''
+  ].filter(Boolean).join(' · ') || '0 sats pending');
   const recentTransactions = $derived(sortTransactionsNewestFirst(snapshot?.transactions ?? []).slice(0, 3));
   const proposalHref = $derived(multisig ? '/multisig/send' : '/send');
   const proposalTitle = $derived(activeProposal?.canFinalize ? 'Payment ready to broadcast' : 'Signing in progress');
@@ -54,9 +59,18 @@
     loadError = '';
     initialDataLoading = true;
     try {
-      if (!await walletService.exists()) { await goto('/welcome'); return; }
-      const registry = await walletService.profiles();
-      syncSource = await walletService.syncSource();
+      const shellWallets = walletShell.profiles();
+      const shellSelectedWalletId = walletShell.selectedWalletId();
+      if (!shellWallets.length || !shellSelectedWalletId) {
+        if (!await walletService.exists()) { await goto('/welcome'); return; }
+      }
+      const [registry, nextSyncSource] = await Promise.all([
+        shellWallets.length && shellSelectedWalletId
+          ? Promise.resolve({ wallets: shellWallets, selectedWalletId: shellSelectedWalletId })
+          : walletService.profiles(),
+        walletService.syncSource()
+      ]);
+      syncSource = nextSyncSource;
       selectedProfile = registry.wallets.find((wallet) => wallet.id === registry.selectedWalletId) ?? null;
       multisig = selectedProfile?.kind === 'multisig';
       if (multisig) {
@@ -173,7 +187,7 @@
     <div class="balance-top"><span>Total balance</span><button class="ghost-icon" aria-label={$discreetMode ? 'Show wallet amounts' : 'Hide wallet amounts'} aria-pressed={$discreetMode} onclick={() => setDiscreetMode(!$discreetMode)}>{#if $discreetMode}<Eye size={17} />{:else}<EyeOff size={17} />{/if}</button></div>
     <div class="balance-value">{$discreetMode ? '••••••••' : shortSats(snapshot?.balance.total ?? 0)} <small>sats</small></div>
     <div class="balance-fiat">{$discreetMode ? '••••••' : `₿ ${btc(snapshot?.balance.total ?? 0)}`}</div>
-    <div class="pending-line"><i></i>{$discreetMode ? '••••••' : shortSats(pendingSats)} sats pending</div>
+    <div class="pending-line"><i></i>{$discreetMode ? 'Pending activity hidden' : pendingDescription}</div>
   </section>
   {:else}
     <WalletSkeleton variant="balance" />

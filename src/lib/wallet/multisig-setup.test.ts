@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { MultisigSetupDraft, MultisigSetupStage } from './contracts';
-import { isMeaningfulMultisigSetupDraft, multisigSetupSignerTarget, multisigSetupStageLabel } from './multisig-setup';
+import {
+  isMeaningfulMultisigSetupDraft,
+  multisigSetupSignerTarget,
+  multisigSetupStageLabel,
+  multisigVerificationTimestampForDisplay,
+  multisigVerificationTimestampForStorage
+} from './multisig-setup';
 
 const emptyDraft: MultisigSetupDraft = {
   version: 1,
@@ -37,5 +43,16 @@ describe('multisig setup presentation policy', () => {
     expect(isMeaningfulMultisigSetupDraft(emptyDraft)).toBe(false);
     expect(isMeaningfulMultisigSetupDraft({ ...emptyDraft, name: 'Family wallet' })).toBe(true);
     expect(isMeaningfulMultisigSetupDraft({ ...emptyDraft, stage: 'keys' })).toBe(true);
+  });
+
+  it('serializes verification timestamps for the strict native draft boundary', () => {
+    expect(multisigVerificationTimestampForStorage('2026-08-14T16:14:00.000Z')).toBe('1786724040');
+    expect(multisigVerificationTimestampForStorage('1786724040')).toBe('1786724040');
+    expect(multisigVerificationTimestampForStorage('not-a-time')).toBeNull();
+  });
+
+  it('normalizes persisted verification timestamps for presentation', () => {
+    expect(multisigVerificationTimestampForDisplay('1786724040')).toBe('2026-08-14T16:14:00.000Z');
+    expect(multisigVerificationTimestampForDisplay('2026-08-14T16:14:00.000Z')).toBe('2026-08-14T16:14:00.000Z');
   });
 });

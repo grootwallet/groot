@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { lockedDeviceForHealthCheck } from './health-check';
+import { lockedDeviceForHealthCheck, matchingDeviceForHealthCheck } from './health-check';
 import type { CosignerDraft } from '$lib/multisig/policy';
 import type { HardwareDevice } from '$lib/wallet';
 
@@ -35,5 +35,11 @@ describe('health-check hardware selection', () => {
 
   it('does not guess between multiple locked Trezors', () => {
     expect(lockedDeviceForHealthCheck(signer, [locked, { ...locked, id: 'other' }])).toBeNull();
+  });
+
+  it('selects a connected device only when its fingerprint matches the saved signer', () => {
+    const matching = { ...locked, id: 'ready', fingerprint: '3031C299', status: 'ready' as const, action: 'import' as const };
+    expect(matchingDeviceForHealthCheck(signer, [{ ...matching, fingerprint: 'deadbeef' }, matching])).toEqual(matching);
+    expect(matchingDeviceForHealthCheck(signer, [{ ...matching, connected: false }])).toBeNull();
   });
 });

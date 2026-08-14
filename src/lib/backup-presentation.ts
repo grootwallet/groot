@@ -33,7 +33,7 @@ export function formatWalletTimestamp(value: string): string {
 export function recoveryDrillNotice(drill: RecoveryDrill) {
   const matches = drill.matchesCurrentWallet;
   return {
-    title: matches ? 'Recovery drill passed' : 'Backup does not match',
+    title: matches ? 'Recovery test passed' : 'Backup does not match',
     description: compactAddress(drill.firstAddress, 16, 12),
     tone: matches ? 'success' as const : 'danger' as const
   };

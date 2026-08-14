@@ -236,7 +236,7 @@ test('locked wallet can continue into hardware and multisig setup', async ({ pag
   await page.getByRole('button', { name: 'Add wallet' }).click();
   await page.getByRole('link', { name: /Use multiple keys/ }).click();
   await expect(page).toHaveURL(/\/multisig\/new$/);
-  await expect(page.getByRole('heading', { name: 'Create a policy wallet' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Create a multisig wallet' })).toBeVisible();
   await expect(page.locator('.app-shell')).toHaveClass(/onboarding-shell/);
 });
 

@@ -25,10 +25,21 @@ export type SignerState = {
   status: 'ready' | 'signing' | 'signed' | 'rejected' | 'unavailable';
 };
 
+export function normalizeSignerLabel(label: string): string {
+  return label.trim().replace(/\s+/g, ' ');
+}
+
+export function signerLabelError(label: string): string | null {
+  const normalized = normalizeSignerLabel(label);
+  if (!normalized) return 'Enter a signer name.';
+  if (Array.from(normalized).length > 48) return 'Signer names must contain 48 characters or fewer.';
+  return null;
+}
+
 export function normalizeCosigner(cosigner: CosignerDraft): CosignerDraft {
   return {
     ...cosigner,
-    label: cosigner.label.trim().replace(/\s+/g, ' '),
+    label: normalizeSignerLabel(cosigner.label),
     fingerprint: cosigner.fingerprint.trim().toLowerCase(),
     xpub: cosigner.xpub.trim(),
     derivationPath: cosigner.derivationPath.trim()

@@ -52,7 +52,11 @@
   async function load() {
     try {
       const snapshot=await walletService.snapshot(); applyAddresses(snapshot.receiveAddresses);
-      const registry=await walletService.profiles();
+      const shellWallets = walletShell.profiles();
+      const shellSelectedWalletId = walletShell.selectedWalletId();
+      const registry = shellWallets.length && shellSelectedWalletId
+        ? { wallets: shellWallets, selectedWalletId: shellSelectedWalletId }
+        : await walletService.profiles();
       if(registry.wallets.find((profile)=>profile.id===registry.selectedWalletId)?.kind==='watch_only') savedSignerDeviceType=(await walletService.externalSignerWallet()).signer.deviceType;
     }
     catch (cause) { toast({ title: 'Could not load addresses', description: cause instanceof Error ? cause.message : undefined, tone: 'danger' }); }

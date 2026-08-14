@@ -124,6 +124,7 @@ pub fn tx_prepare(
     let recipient = address.to_string();
     let (recipient_testnet_alias, change_testnet_aliases) =
         proposal_testnet_aliases(&recipient, &change_addresses);
+    let change_derivation_paths = proposal_change_derivation_paths(&psbt, &change_addresses)?;
     let selected_outpoints = psbt
         .unsigned_tx
         .input
@@ -152,6 +153,7 @@ pub fn tx_prepare(
         change,
         change_addresses,
         change_testnet_aliases,
+        change_derivation_paths,
         output_count: psbt.unsigned_tx.output.len(),
         selected_outpoints,
         inputs,
@@ -296,6 +298,7 @@ pub(crate) fn summarize_payment_psbt(
     let (change, change_addresses) = proposal_change_details(wallet, psbt, &recipient, amount)?;
     let (recipient_testnet_alias, change_testnet_aliases) =
         proposal_testnet_aliases(&recipient, &change_addresses);
+    let change_derivation_paths = proposal_change_derivation_paths(psbt, &change_addresses)?;
     let (inputs, actual_fee_rate, locktime, rbf) = proposal_transaction_details(wallet, psbt, fee)?;
     let selection_impact = selection_impact(db, wallet, psbt, "acceleration", None)?;
     Ok(PaymentProposalDto {
@@ -310,6 +313,7 @@ pub(crate) fn summarize_payment_psbt(
         change,
         change_addresses,
         change_testnet_aliases,
+        change_derivation_paths,
         output_count: psbt.unsigned_tx.output.len(),
         selected_outpoints: psbt
             .unsigned_tx

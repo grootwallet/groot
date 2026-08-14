@@ -21,6 +21,30 @@ export function pendingBalance(balance: WalletSnapshot['balance']): Sats {
   return Math.max(0, Number(balance.total) - Number(balance.confirmed)) as Sats;
 }
 
+export type PendingBalanceBreakdown = {
+  incoming: Sats;
+  change: Sats;
+  outgoing: Sats;
+};
+
+/** Explain mempool state without presenting wallet-owned change as an incoming payment. */
+export function pendingBalanceBreakdown(snapshot: WalletSnapshot): PendingBalanceBreakdown {
+  const pending = Number(pendingBalance(snapshot.balance));
+  const trustedPending = Number(snapshot.balance.trustedPending);
+  const change = Number.isSafeInteger(trustedPending)
+    ? Math.min(pending, Math.max(0, trustedPending))
+    : 0;
+  const outgoing = snapshot.transactions
+    .filter((transaction) => transaction.status === 'pending' && transaction.direction === 'sent')
+    .reduce((total, transaction) => total + Number(transaction.amount) + Number(transaction.fee ?? 0), 0);
+
+  return {
+    incoming: Math.max(0, pending - change) as Sats,
+    change: change as Sats,
+    outgoing: Math.max(0, outgoing) as Sats
+  };
+}
+
 /** Keep transaction ordering deterministic even when several entries share a timestamp. */
 export function sortTransactionsNewestFirst(items: readonly Transaction[]): Transaction[] {
   return items

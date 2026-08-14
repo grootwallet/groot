@@ -27,8 +27,8 @@
   let selectedProfile = $derived(profiles.find((wallet) => wallet.id === selectedWalletId));
   let isSoftwareWallet = $derived(selectedProfile?.kind === 'single_key');
   let credentialLabel = $derived(isSoftwareWallet ? 'Wallet passphrase' : 'App PIN');
-  let backupTitle = $derived(selectedProfile?.kind === 'multisig' ? 'Public policy + signer backups' : selectedProfile?.kind === 'watch_only' ? 'Hardware signer backup' : 'Recovery words + wallet passphrase');
-  let backupDescription = $derived(selectedProfile?.kind === 'multisig' ? 'Keep the public descriptor and enough independent signer backups. The app PIN only protects local Groot data.' : selectedProfile?.kind === 'watch_only' ? 'Recovery words remain on the signer. The app PIN only protects local Groot data.' : 'Keep both together. Groot cannot display or reset either one.');
+  let backupTitle = $derived(selectedProfile?.kind === 'multisig' ? 'Policy and signer backups' : selectedProfile?.kind === 'watch_only' ? 'Hardware signer backup' : 'Recovery words + wallet passphrase');
+  let backupDescription = $derived(selectedProfile?.kind === 'multisig' ? 'Keep the public descriptor and enough signer backups to restore access.' : selectedProfile?.kind === 'watch_only' ? 'Recovery words remain on the signer. The app PIN only protects local Groot data.' : 'Keep both together. Groot cannot display or reset either one.');
   const timeoutOptions = [{ value: 1, label: '1 minute' }, { value: 5, label: '5 minutes' }, { value: 15, label: '15 minutes' }, { value: 30, label: '30 minutes' }, { value: 60, label: '1 hour' }];
   let nodeOpen = $state(false), nodePassword = $state(''), walletCredential = $state(''), nodeError = $state('');
   const localRpcUrl = defaultConfig.network === 'regtest' ? 'http://127.0.0.1:18443' : defaultConfig.network === 'signet' ? 'http://127.0.0.1:38332' : 'http://127.0.0.1:48332';
@@ -238,7 +238,7 @@
   async function saveHardwareBackup() {
     try {
       const saved = await walletService.savePublicBackup('groot-hardware-wallet.json', hardwareBackupContent);
-      if (saved.saved) toast({ title: 'Descriptor backup saved', description: 'Use this file for the clean-profile recovery drill.', tone: 'success', action: saved.revealToken && saved.revealLabel ? { label: saved.revealLabel, run: async () => { try { await walletService.revealSavedFile(saved.revealToken!); } catch (cause) { toast({ title: 'Could not show saved backup', description: cause instanceof Error ? cause.message : undefined, tone: 'danger' }); } } } : undefined });
+      if (saved.saved) toast({ title: 'Descriptor backup saved', description: 'Use this file for a clean-profile recovery test.', tone: 'success', action: saved.revealToken && saved.revealLabel ? { label: saved.revealLabel, run: async () => { try { await walletService.revealSavedFile(saved.revealToken!); } catch (cause) { toast({ title: 'Could not show saved backup', description: cause instanceof Error ? cause.message : undefined, tone: 'danger' }); } } } : undefined });
     } catch (cause) {
       hardwareBackupError = cause instanceof Error ? cause.message : 'Could not save the descriptor backup.';
     }
@@ -271,7 +271,7 @@
     <div class="settings-list">
       {#if isSoftwareWallet && !selectedProfile?.backupVerified}<button class="wallet-context-row backup-needs-verification" onclick={() => {verifyError='';verifyOpen=true;}}><span class="setting-icon"><KeyRound size={18}/></span><span><strong>Recovery words not verified</strong><small>Use your written backup to confirm all 24 words in exact order.</small></span><span class="info-badge attention">Verify now</span></button>{:else}<div class="setting-row wallet-context-row"><span class="setting-icon">{#if selectedProfile?.kind === 'multisig'}<ShieldCheck size={18}/>{:else if selectedProfile?.kind === 'watch_only'}<Cpu size={18}/>{:else}<KeyRound size={18}/>{/if}</span><span><strong>{backupTitle}</strong><small>{backupDescription}</small></span><span class="info-badge">{isSoftwareWallet ? 'Verified' : 'Backup required'}</span></div>{/if}
       <button onclick={() => {scanDraft={...scan};scanOpen=true;}}><span class="setting-icon"><History size={18}/></span><span><strong>Recovery scan</strong><small>Birthday block {scan.birthdayHeight} · gap limit {scan.gapLimit}</small></span><ChevronRight size={16}/></button>
-      {#if selectedProfile?.kind === 'multisig'}<button onclick={() => goto('/multisig/backup')}><span class="setting-icon"><ShieldCheck size={18}/></span><span><strong>Export & verify public backup</strong><small>Save descriptors and prove the backup reconstructs this wallet.</small></span><ChevronRight size={16}/></button>{:else if selectedProfile?.kind === 'watch_only'}<button onclick={() => {hardwareBackupOpen=true;hardwareBackup='';hardwareBackupContent='';hardwareBackupError='';}}><span class="setting-icon"><FileKey size={18}/></span><span><strong>Export public descriptor</strong><small>Save a watch-only backup for independent recovery.</small></span><ChevronRight size={16}/></button>{/if}
+      {#if selectedProfile?.kind === 'multisig'}<button onclick={() => goto('/multisig/backup')}><span class="setting-icon"><ShieldCheck size={18}/></span><span><strong>Export & test wallet backup</strong><small>Save the descriptors, then confirm the backup restores this wallet.</small></span><ChevronRight size={16}/></button>{:else if selectedProfile?.kind === 'watch_only'}<button onclick={() => {hardwareBackupOpen=true;hardwareBackup='';hardwareBackupContent='';hardwareBackupError='';}}><span class="setting-icon"><FileKey size={18}/></span><span><strong>Export public descriptor</strong><small>Save a watch-only backup for independent recovery.</small></span><ChevronRight size={16}/></button>{/if}
     </div>
   </section>
   <section class="settings-group wallet-manager mobile-wallet-manager"><h2><span>Wallets</span><strong>{profiles.length} {profiles.length === 1 ? 'wallet' : 'wallets'}</strong></h2>
@@ -279,7 +279,7 @@
       {#each profiles as profile}
         <button aria-label={`${profile.name}${profile.id === selectedWalletId ? ', active wallet' : ''}`} onclick={() => selectWallet(profile)}>
           <span class="setting-icon">{#if profile.kind === 'multisig'}<ShieldCheck size={18}/>{:else if profile.kind === 'watch_only'}<Cpu size={18}/>{:else}<WalletCards size={18}/>{/if}</span>
-          <span><strong>{profile.name}</strong><small>{profile.kind === 'multisig' ? 'Shared-key policy wallet' : profile.kind === 'watch_only' ? 'Hardware wallet' : 'Software wallet'}</small></span>
+          <span><strong>{profile.name}</strong><small>{profile.kind === 'multisig' ? 'Multisig wallet' : profile.kind === 'watch_only' ? 'Hardware wallet' : 'Software wallet'}</small></span>
           {#if profile.id === selectedWalletId}<Check size={16}/>{:else}<ChevronRight size={16}/>{/if}
         </button>
       {/each}
@@ -296,7 +296,7 @@
       <button disabled={checking} onclick={checkConnection}><span class="setting-icon"><Check size={18}/></span><span><strong>Test connection</strong><small>{nodeStatus ? `${nodeStatus.pruned ? `Pruned from block ${nodeStatus.pruneHeight ?? 'unknown'}` : 'Full block history'} · ${storageSize(nodeStatus.sizeOnDisk)} chain data · filter index ${nodeStatus.blockFilterIndex}${nodeStatus.initialBlockDownload ? ' · initial download active' : ''}` : 'Verify RPC authentication, retained block history, IBD, disk use, and filter-index status.'}</small></span><span class="badge" class:offline={connected === false}>{checking ? 'Checking…' : connected === true ? 'Connected' : connected === false ? 'Offline' : 'Check'}</span></button>
     </div>
   </section>
-  {#if selectedProfile?.kind !== 'multisig'}<section class="settings-group danger-zone"><h2>Wallet deletion</h2><div><span><strong>Delete wallet</strong><small>Remove only {selectedProfile?.name ?? 'this wallet'} from this device.</small></span><Button variant="danger-outline" size="small" onclick={() => deleting = true}><Trash2 size={15} />Delete</Button></div></section>{:else}<section class="settings-group danger-zone"><h2>Wallet deletion</h2><div><span><strong>Delete policy wallet</strong><small>Verify recovery, then remove this coordinator from this device.</small></span><Button variant="danger-outline" size="small" href="/multisig/delete"><Trash2 size={15}/>Delete</Button></div></section>{/if}
+  {#if selectedProfile?.kind !== 'multisig'}<section class="settings-group danger-zone"><h2>Wallet deletion</h2><div><span><strong>Delete wallet</strong><small>Remove only {selectedProfile?.name ?? 'this wallet'} from this device.</small></span><Button variant="danger-outline" size="small" onclick={() => deleting = true}><Trash2 size={15} />Delete</Button></div></section>{:else}<section class="settings-group danger-zone"><h2>Wallet deletion</h2><div><span><strong>Delete multisig wallet</strong><small>Test its backup, then remove this watch-only wallet from this device.</small></span><Button variant="danger-outline" size="small" href="/multisig/delete"><Trash2 size={15}/>Delete</Button></div></section>{/if}
   <p class="version">Groot 0.1.0 · BDK regtest</p>
 </div>
 

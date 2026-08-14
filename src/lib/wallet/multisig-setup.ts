@@ -1,5 +1,26 @@
 import type { MultisigSetupDraft, MultisigSetupStage } from './contracts';
 
+const UNIX_SECONDS_PATTERN = /^\d{1,20}$/;
+
+/** Convert the UI's display timestamp to the native draft's canonical Unix seconds. */
+export function multisigVerificationTimestampForStorage(value: string): string | null {
+  const timestamp = value.trim();
+  if (UNIX_SECONDS_PATTERN.test(timestamp)) return timestamp;
+
+  const milliseconds = Date.parse(timestamp);
+  if (!Number.isFinite(milliseconds) || milliseconds < 0) return null;
+  return Math.floor(milliseconds / 1_000).toString();
+}
+
+/** Normalize native draft timestamps before exposing them to presentation code. */
+export function multisigVerificationTimestampForDisplay(value: string): string {
+  const timestamp = value.trim();
+  if (!UNIX_SECONDS_PATTERN.test(timestamp)) return value;
+
+  const milliseconds = Number(timestamp) * 1_000;
+  return Number.isFinite(milliseconds) ? new Date(milliseconds).toISOString() : value;
+}
+
 export function multisigSetupSignerTarget(draft: MultisigSetupDraft): number {
   if (draft.templateKind !== 'standard') return 4;
   if (draft.standardRecipe === 'two_of_three') return 3;

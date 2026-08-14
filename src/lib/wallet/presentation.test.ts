@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Transaction, Utxo } from '$lib/types';
 import { sats } from './contracts';
-import { pendingBalance, sortCoins, sortTransactionsNewestFirst } from './presentation';
+import { pendingBalance, pendingBalanceBreakdown, sortCoins, sortTransactionsNewestFirst } from './presentation';
 
 function transaction(id: string, date: string): Transaction {
   return {
@@ -50,6 +50,22 @@ describe('pendingBalance', () => {
     } as unknown as Parameters<typeof pendingBalance>[0];
 
     expect(pendingBalance(legacy)).toBe(349_000);
+  });
+});
+
+describe('pendingBalanceBreakdown', () => {
+  it('distinguishes unconfirmed change from the outgoing payment and fee', () => {
+    const sent = transaction('sent', '2026-08-15T00:19:00Z');
+    sent.direction = 'sent';
+    sent.amount = 10_000;
+    sent.fee = 402;
+    const snapshot = {
+      network: 'regtest',
+      balance: { confirmed: sats(1_999_000), pending: sats(89_598), trustedPending: sats(89_598), total: sats(2_088_598) },
+      transactions: [sent], utxos: [], receiveAddresses: [], syncedAt: null
+    } satisfies import('./contracts').WalletSnapshot;
+
+    expect(pendingBalanceBreakdown(snapshot)).toEqual({ incoming: 0, change: 89_598, outgoing: 10_402 });
   });
 });
 

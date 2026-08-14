@@ -54,7 +54,7 @@
   async function verifyBackup() {
     busy = true; drillError = '';
     try { drill = backup.trimStart().startsWith('BSMS 1.0') ? await walletService.inspectMultisigBsms(backup) : await walletService.recoveryDrill(backup); toast(recoveryDrillNotice(drill)); }
-    catch (cause) { drillError = cause instanceof Error ? cause.message : 'Recovery drill failed.'; }
+    catch (cause) { drillError = cause instanceof Error ? cause.message : 'Recovery test failed.'; }
     finally { busy = false; }
   }
 
@@ -113,7 +113,7 @@
         <div class="descriptor-qr-preview"><div><span><QrCode size={16}/><strong>Receive descriptor QR</strong></span>{#if receiveQr}<img src={receiveQr} alt="QR code for the receive descriptor"/>{:else}<small>QR unavailable for this descriptor size. Use the downloaded file.</small>{/if}</div><div class="descriptor-copy-row"><code>{wallet.externalDescriptor}</code><button aria-label="Copy receive descriptor" onclick={() => copyDescriptor(wallet!.externalDescriptor, 'Receive')}><Copy size={15}/></button></div></div>
       {/if}
     </section>
-    <section class="form-card"><div class="section-heading compact"><div><h2>2. Recovery drill <InsightTip label="What is a recovery drill?" text="A safe, watch-only test: Groot imports the backup in memory and proves it derives the same first address. It never signs or moves bitcoin."/></h2><p>Prove this backup can reconstruct the same wallet before relying on it.</p></div><ClipboardCheck size={19}/></div>
+    <section class="form-card"><div class="section-heading compact"><div><h2>2. Test recovery <InsightTip label="What does this test do?" text="Groot safely imports the watch-only backup in memory and proves it derives the same first address. It never signs or moves bitcoin."/></h2><p>Confirm this backup reconstructs the same wallet before relying on it.</p></div><ClipboardCheck size={19}/></div>
       {#if drill}<div class="drill-result" class:passed={drill.matchesCurrentWallet}>{#if drill.matchesCurrentWallet}<Check size={17}/>{:else}<X size={17}/>{/if}<span><strong>{drill.matchesCurrentWallet ? 'Backup verified' : 'Backup does not match'}</strong><code>{drill.firstAddress}</code></span></div>{/if}
       <label class="file-action" class:file-loaded={Boolean(loadedBackupName)}>
         <FileUp size={16}/>
@@ -123,7 +123,7 @@
         </span>
         <input aria-label="Backup file import" type="file" accept=".bsms,.json,application/json,text/plain" onchange={importBackup}/>
       </label>
-      <Button class="full" disabled={!backup} loading={busy} loadingLabel="Verifying backup…" onclick={verifyBackup}>Run recovery drill</Button>
+      <Button class="full" disabled={!backup} loading={busy} loadingLabel="Testing recovery…" onclick={verifyBackup}>Test recovery</Button>
       {#if drillError}<p class="form-error" aria-live="polite">{drillError}</p>{/if}
     </section>
     {#if drill?.matchesCurrentWallet}<section class="form-card"><div class="section-heading compact"><div><h2>Recovery confirmed</h2><p>This successful drill is available to the separate wallet-deletion flow for this app session.</p></div><ShieldCheck size={19}/></div><Button variant="danger-outline" class="full" href="/multisig/delete">Continue to wallet deletion</Button></section>{/if}
@@ -134,5 +134,5 @@
       <section class="print-descriptors"><div><h2>Receive descriptor</h2>{#if receiveQr}<img src={receiveQr} alt="Receive descriptor QR code"/>{/if}<code>{wallet.externalDescriptor}</code></div><div><h2>Change descriptor</h2>{#if changeQr}<img src={changeQr} alt="Change descriptor QR code"/>{/if}<code>{wallet.internalDescriptor}</code></div></section>
       <footer><strong>Privacy note</strong><p>This public backup cannot sign transactions. Anyone who sees it can derive wallet addresses and observe wallet activity. Store it privately and separately from enough signing devices.</p></footer>
     </article>{/if}
-  {:else}<section class="empty-state"><h2>No policy wallet selected</h2><Button href="/multisig">Return to policy</Button></section>{/if}
+  {:else}<section class="empty-state"><h2>No multisig wallet selected</h2><Button href="/multisig">Return to wallet</Button></section>{/if}
 </div>

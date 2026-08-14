@@ -22,7 +22,16 @@
   async function load() {
     loading = true;
     loadError = '';
-    try { const registry=await walletService.profiles();multisig=registry.wallets.find((wallet)=>wallet.id===registry.selectedWalletId)?.kind==='multisig';const snapshot=multisig?await walletService.multisigSnapshot():await walletService.snapshot();transactions=snapshot.transactions; }
+    try {
+      const shellWallets = walletShell.profiles();
+      const shellSelectedWalletId = walletShell.selectedWalletId();
+      const registry = shellWallets.length && shellSelectedWalletId
+        ? { wallets: shellWallets, selectedWalletId: shellSelectedWalletId }
+        : await walletService.profiles();
+      multisig = registry.wallets.find((wallet)=>wallet.id===registry.selectedWalletId)?.kind==='multisig';
+      const snapshot=multisig?await walletService.multisigSnapshot():await walletService.snapshot();
+      transactions=snapshot.transactions;
+    }
     catch (cause) { loadError = cause instanceof Error ? cause.message : 'Transaction history could not be read.'; toast({ title: 'Could not load transactions', description: loadError, tone: 'danger' }); }
     finally { loading = false; }
   }

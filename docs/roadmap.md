@@ -16,8 +16,8 @@ Every stage is fail-closed: later work may proceed in parallel, but no stage is 
 | --- | --- | --- | --- | --- |
 | 0. Scope and evidence freeze | Keep ADR 0012 locked; maintain the threat model, checklist, flow matrix, supported-device matrix, and exact candidate scope | Release owner approves the candidate scope | CI release gate plus reviewed checklist diff | Active; mainnet remains compile-time disabled |
 | 1. Deterministic engineering closure | Keep frontend/Rust checks, adversarial PSBT tests, Core regtest, coverage floors, and browser acceptance green; incrementally decompose `wallet.rs`; add native command acceptance and cross-process single-instance locking | None | Clean CI on the exact commit; native restart/corruption/concurrent-launch evidence | Cross-process locking and adversarial PSBT expansion implemented; full CI and packaged native acceptance remain |
-| 2. Hardware certification | Maintain fail-closed HWI/file/UR boundaries, vendor fixtures, mutation corpus, and sanitized report tooling | Physical device, current firmware, and human trusted-display/rejection checks | One sanitized record per exact model/firmware/OS/HWI combination | Coldcard Mk4, Ledger Nano S Plus, and Trezor Model One core Regtest campaigns complete; original BitBox02 and Jade remain; BitBox02 Nova and Trezor Safe 3 are separate later targets |
-| 3. Interoperability and recovery | Automate BSMS/UR vectors, funded RBF/CPFP races, extended-gap recovery, restart, reorg, and corrupted-state cases | Two independent descriptor-aware wallets/signers and a human recovery drill | Two independent round trips; known-wallet recovery from clean storage; funded race/reorg logs | Funded acceleration, scale recovery, native Rust clean-database recovery/reopen, and independent Bitcoin Core descriptor import/derivation/funded-history reload are green; two external coordinator/signer round trips, the human clean-storage drill, and physical Testnet4 rehearsal remain |
+| 2. Hardware certification | Maintain fail-closed HWI/file/UR boundaries, vendor fixtures, mutation corpus, and sanitized report tooling | Physical device, current firmware, and human trusted-display/rejection checks | One sanitized record per exact model/firmware/OS/HWI combination | Coldcard Mk4, Ledger Nano S Plus, Trezor Model One, and original Bitcoin-only BitBox02 core Regtest campaigns complete; BitBox02 firmware metadata and Jade remain; BitBox02 Nova and Trezor Safe 3 are separate later targets |
+| 3. Interoperability and recovery | Automate BSMS/UR vectors, funded RBF/CPFP races, extended-gap recovery, restart, reorg, and corrupted-state cases | Two independent descriptor-aware wallets/signers and a human recovery test | Two independent round trips; known-wallet recovery from clean storage; funded race/reorg logs | Funded acceleration, scale recovery, native Rust clean-database recovery/reopen, and independent Bitcoin Core descriptor import/derivation/funded-history reload are green; two external coordinator/signer round trips, the human clean-storage test, and physical Testnet4 rehearsal remain |
 | 4. Backend and privacy rehearsal | Maintain explicit Signet/Testnet4 candidate plumbing while preserving the mainnet compile-time lock; exercise wrong-chain, stale-tip, fee-unavailable, compact-filter peer conflict/loss, TLS, Tor-proxy-loss, timeout, authentication, certificate, bandwidth/storage, and no-fallback paths | Dedicated Signet/Testnet4 Core/filter peers, selected Kyoto adversarial-test strategy, and network observation for DNS-leak evidence | Signet and Testnet4 runbooks plus sanitized compact-filter/direct-TLS/Tor reports | Automated Core and Groot-owned compact-filter boundaries are green; [`compact-filter-deferred-work.md`](compact-filter-deferred-work.md), real endpoint certificate/DNS evidence, and public-test-network execution remain |
 | 5. macOS platform and release candidate | Add packaged-app/native IPC acceptance, Keychain migration/deletion tests, SBOM, provenance, update/rollback verification, deterministic unsigned-build comparison, and release artifact checks | Two clean build machines; Apple signing/notarization identity; accessibility/lifecycle review | Matching unsigned hashes, signed/notarized package, SBOM/provenance, packaged acceptance report | Deterministic SBOM/license evidence, checkout-path-independent binaries, strict complete-evidence comparison, offline signed-update/HWI provenance verifiers, disposable Keychain lifecycle test, and packaged process/crash harness are implemented; independent-machine reproduction, actual artifacts, signed-Keychain run, notarization, and complete packaged acceptance remain pending |
 | 6. Independent security review | Prepare exact commit, threat model, ADRs, dependency locks, fuzz corpus, hardware summaries, backend evidence, and recovery evidence | Independent Bitcoin wallet/security reviewer | Findings ledger with fix commits, regression tests, and reviewer closure | Pending |
@@ -27,11 +27,11 @@ Every stage is fail-closed: later work may proceed in parallel, but no stage is 
 ### Hardware execution order
 
 1. Finish the current Ledger single-key record, then Ledger as a member of a real 2-of-3 Testnet4 spend.
-2. Certify the original BitBox02 over desktop USB, including the BitBoxApp pairing-cache handoff and companion-app USB release.
+2. Complete the original BitBox02 sanitized row by recording firmware; its desktop USB, direct Groot unlock, companion-app contention, wrong-device, interruption, foreign-PSBT, and recovery checks have passed.
 3. Treat BitBox02 Nova as a new implementation target: first capture its actual HWI identity, pairing behavior, xpub origin, policy registration, address display, and signing behavior; then certify desktop USB. Whisper/BLE is a later authenticated mobile-transport project, not inherited support.
 4. Preserve the completed Trezor Model One core Regtest evidence and finish its exact-candidate Testnet4 rehearsal. Certify Trezor Safe 3 later under its own model/firmware/OS/HWI row; never inherit Model One evidence. Other newer Trezor models likewise require independent rows if intended for release.
 5. Complete the required Blockstream Jade/Jade Plus row. It remains a first-release checklist item even though it was not in the immediate user-owned device sequence.
-6. Repeat at least one complete 2-of-3 Testnet4 spend and clean descriptor recovery drill using two independently administered physical signer families.
+6. Repeat at least one complete 2-of-3 Testnet4 spend and clean descriptor recovery test using two independently administered physical signer families.
 
 Coldcard certification must name the exact model. The current user-reported completed target is **Coldcard Mk4**; the local record remains the source until a sanitized reviewer summary is produced. Passport, legacy Digital BitBox, BitBox02 Nova Whisper/BLE, and unlisted signer models are not first-release claims unless the checklist and threat model are explicitly expanded.
 
@@ -60,6 +60,10 @@ Mainnet stays compile-time disabled until every checklist artifact is attached t
 - **Gate 7, mainnet release:** intentionally blocked by ADR 0012. CI proves no current frontend/native build can select mainnet. The threat model, physical-device matrix, reproducible packages, platform secure storage, remote backend, independent review, and recovery rehearsal remain required evidence.
 
 ## V1 — simple descriptor multisig coordinator
+
+### Reusable organization tags
+
+Add reusable, searchable local tags as metadata that is explicitly separate from permanent provenance labels. A payment or receive address keeps one immutable, unique audit label; users may attach multiple reusable tags such as `pizza`, `Bob`, or `expenses` across addresses, payment intents, transactions, and coins. The implementation requires a normalized many-to-many Rust persistence model, bounded tag names/counts, atomic migrations, WalletPort DTOs, add/remove controls, autocomplete and search/filter surfaces, discreet-mode redaction, and tests proving tags cannot rewrite provenance, privacy clusters, signed proposals, or transaction review data.
 
 ### 1. Existing wallet hardening
 
@@ -90,7 +94,7 @@ Mainnet stays compile-time disabled until every checklist artifact is attached t
 - Add cosigners through desktop USB, animated/static QR, file import, or manual origin+xpub entry.
 - Show device fingerprint, model, origin, connection state, and a short xpub checksum—not the full xpub by default.
 - Require unique device verification and descriptor-backup acknowledgment before wallet creation.
-- Offer a recovery drill that reconstructs the same first receive address from the exported descriptors.
+- Offer a recovery test that reconstructs the same first receive address from the exported descriptors.
 
 ### 5. PSBT signing coordinator
 
@@ -150,7 +154,7 @@ V2 exposes reviewed templates, not an unrestricted script editor. Every template
 - Satisfiability at creation and at each advertised timelock horizon.
 - Mixed height/time-lock rejection in the first V2 release.
 - Descriptor round-trip and checksum equality across export/import.
-- Recovery drill with virtual signers before the wallet may reveal a funding address.
+- Recovery test with virtual signers before the wallet may reveal a funding address.
 - Property tests over thresholds, signer sets, lock delays, branch ordering, and PSBT merge/finalization.
 - Regtest time-travel tests before, at, and after every recovery boundary, including reorgs.
 
@@ -160,7 +164,7 @@ V2 exposes reviewed templates, not an unrestricted script editor. Every template
 - Optional full-node and remote Esplora backends with identical descriptor semantics.
 - Collaborative wallet invitations only with authenticated descriptor exchange; no cloud custody.
 - BIP329 label import/export without weakening immutable-label rules.
-- Wallet health dashboard: backup age, descriptor verification, node status, signer firmware evidence, and recovery drill reminders.
+- Wallet health dashboard: backup age, descriptor verification, node status, signer firmware evidence, and recovery-test reminders.
 - Batch payments, payment URI/QR requests, address book, and watch-only wallet promotion only after intent-review and privacy design.
 - Payjoin V2 sender/receiver sessions remain gated by ADR 0031's durable-state, transport, proposal-review, fallback-consent, interoperability, and denial-of-service evidence. URI parsing alone is not protocol support.
 - Compact-filter/P2P synchronization is an optional confirmed-only backend under ADR 0031. Its locally complete foundation, architectural decisions, adversarial gaps, public-network measurements, and platform gates are tracked in [`compact-filter-deferred-work.md`](compact-filter-deferred-work.md); branch merge is not Issue #7 closure.

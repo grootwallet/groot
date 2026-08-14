@@ -116,48 +116,100 @@ pub async fn hardware_send_pin(
 pub async fn hardware_check_cosigner(
     app: AppHandle,
     cosigner: CosignerInput,
+    device_id: String,
 ) -> ApiResult<CosignerHealthDto> {
     cosigner.parse_for_validation().map_err(policy_api_error)?;
     let checked_at = now().to_string();
-    match cosigner.source {
-        CosignerSource::Usb => {
-            let hwi = hwi_cli(&app)?;
-            tauri::async_runtime::spawn_blocking(move || {
-                let encoded = hwi.enumerate().map_err(hardware_api_error)?;
-                let devices: Vec<HwiDevice> =
-                    serde_json::from_slice(&encoded).map_err(internal)?;
-                let matched = devices.into_iter().any(|device| {
-                    device.fingerprint.is_some_and(|fingerprint| {
-                        fingerprint.eq_ignore_ascii_case(&cosigner.fingerprint)
-                    })
-                });
-                if !matched {
-                    return Err(api_error(
-                        "hardware_unavailable",
-                        "Connect and unlock this device, then keep it ready over USB.",
-                    ));
-                }
-                Ok(CosignerHealthDto {
-                    status: "healthy",
-                    checked_at,
-                    summary: format!("Connected identity matches {}.", cosigner.fingerprint),
-                })
-            })
-            .await
-            .map_err(internal)?
-        }
-        CosignerSource::Virtual => Err(api_error(
-            "hardware_unavailable",
-            "Virtual devices are available only in the browser prototype.",
-        )),
-        CosignerSource::Qr | CosignerSource::File | CosignerSource::Manual => {
-            Ok(CosignerHealthDto {
-                status: "record_valid",
-                checked_at,
-                summary: "Public key, fingerprint, and derivation path are complete. Physical presence cannot be checked for an offline key.".to_owned(),
-            })
-        }
+    let hwi = hwi_cli(&app)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let connected = read_hardware_cosigner(&hwi, &device_id, &cosigner.label, true)?;
+        verify_cosigner_identity(&cosigner, &connected)?;
+        Ok(CosignerHealthDto {
+            status: "healthy",
+            checked_at,
+            summary: format!(
+                "Connected device matches fingerprint {} and the saved BIP48 account key.",
+                cosigner.fingerprint
+            ),
+        })
+    })
+    .await
+    .map_err(internal)?
+}
+
+fn verify_cosigner_identity(expected: &CosignerInput, connected: &CosignerInput) -> ApiResult<()> {
+    let invalid_xpub = |_| {
+        api_error(
+            "invalid_descriptor",
+            "The saved signer account key is invalid.",
+        )
+    };
+    let expected_xpub = Xpub::from_str(expected.xpub.trim()).map_err(invalid_xpub)?;
+    let connected_xpub = Xpub::from_str(connected.xpub.trim()).map_err(invalid_xpub)?;
+    if !expected
+        .fingerprint
+        .eq_ignore_ascii_case(&connected.fingerprint)
+        || expected.derivation_path != connected.derivation_path
+        || expected_xpub != connected_xpub
+    {
+        return Err(api_error(
+            "unknown_signer",
+            "The connected device does not hold this signer’s saved BIP48 account key.",
+        ));
     }
+    Ok(())
+}
+
+fn read_hardware_cosigner(
+    hwi: &HwiCli,
+    device_id: &str,
+    label: &str,
+    allow_empty_passphrase: bool,
+) -> ApiResult<crate::multisig::CosignerInput> {
+    let encoded = hwi.enumerate().map_err(hardware_api_error)?;
+    let devices: Vec<HwiDevice> = serde_json::from_slice(&encoded).map_err(internal)?;
+    let device = select_unique_hardware_device(devices, device_id)?;
+    require_explicit_standard_wallet_selection(&device, allow_empty_passphrase)?;
+    let fingerprint = device
+        .fingerprint
+        .ok_or_else(|| missing_hardware_fingerprint(&device.device_type))?;
+    let output = hwi
+        .account_xpub(
+            &device.device_type,
+            &fingerprint,
+            crate::multisig::MULTISIG_ACCOUNT_PATH,
+        )
+        .map_err(|error| {
+            hardware_xpub_api_error(
+                error,
+                &device.device_type,
+                crate::multisig::MULTISIG_ACCOUNT_PATH,
+            )
+        })?;
+    let response: HwiXpub = serde_json::from_slice(&output).map_err(internal)?;
+    let xpub = response
+        .xpub
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| {
+            missing_hardware_xpub(
+                &device.device_type,
+                crate::multisig::MULTISIG_ACCOUNT_PATH,
+                response.code,
+                response.error.as_deref(),
+                "The device did not return an account xpub.",
+            )
+        })?;
+    let input = crate::multisig::CosignerInput {
+        id: Uuid::new_v4().to_string(),
+        label: label.to_owned(),
+        fingerprint,
+        xpub,
+        derivation_path: crate::multisig::MULTISIG_ACCOUNT_PATH.to_owned(),
+        source: crate::multisig::CosignerSource::Usb,
+        device_type: Some(device.device_type),
+    };
+    input.parse_for_validation().map_err(policy_api_error)?;
+    Ok(input)
 }
 
 #[tauri::command]
@@ -170,53 +222,12 @@ pub async fn hardware_import_cosigner(
     let label = normalize_label(&label)?;
     let hwi = hwi_cli(&app)?;
     tauri::async_runtime::spawn_blocking(move || {
-        let enumerated = hwi.enumerate().map_err(hardware_api_error)?;
-        let devices: Vec<HwiDevice> = serde_json::from_slice(&enumerated).map_err(internal)?;
-        let device = select_unique_hardware_device(devices, &device_id)?;
-        require_explicit_standard_wallet_selection(
-            &device,
+        read_hardware_cosigner(
+            &hwi,
+            &device_id,
+            &label,
             allow_empty_passphrase.unwrap_or(false),
-        )?;
-        let fingerprint = device
-            .fingerprint
-            .ok_or_else(|| missing_hardware_fingerprint(&device.device_type))?;
-        let output = hwi
-            .account_xpub(
-                &device.device_type,
-                &fingerprint,
-                crate::multisig::MULTISIG_ACCOUNT_PATH,
-            )
-            .map_err(|error| {
-                hardware_xpub_api_error(
-                    error,
-                    &device.device_type,
-                    crate::multisig::MULTISIG_ACCOUNT_PATH,
-                )
-            })?;
-        let response: HwiXpub = serde_json::from_slice(&output).map_err(internal)?;
-        let xpub = response
-            .xpub
-            .filter(|value| !value.trim().is_empty())
-            .ok_or_else(|| {
-                missing_hardware_xpub(
-                    &device.device_type,
-                    crate::multisig::MULTISIG_ACCOUNT_PATH,
-                    response.code,
-                    response.error.as_deref(),
-                    "The device did not return an account xpub.",
-                )
-            })?;
-        let input = crate::multisig::CosignerInput {
-            id: Uuid::new_v4().to_string(),
-            label,
-            fingerprint,
-            xpub,
-            derivation_path: crate::multisig::MULTISIG_ACCOUNT_PATH.to_owned(),
-            source: crate::multisig::CosignerSource::Usb,
-            device_type: Some(device.device_type),
-        };
-        input.parse_for_validation().map_err(policy_api_error)?;
-        Ok(input)
+        )
     })
     .await
     .map_err(internal)?
@@ -479,6 +490,7 @@ pub(crate) fn external_proposal_dto(
     let (change, change_addresses) = proposal_change_details(wallet, &psbt, &recipient, amount)?;
     let (recipient_testnet_alias, change_testnet_aliases) =
         proposal_testnet_aliases(&recipient, &change_addresses);
+    let change_derivation_paths = proposal_change_derivation_paths(&psbt, &change_addresses)?;
     let (inputs, fee_rate, locktime, rbf) = proposal_transaction_details(wallet, &psbt, fee)?;
     let selection_impact =
         selection_impact(db, wallet, &psbt, &strategy, fee_difference_vs_private)?;
@@ -494,6 +506,7 @@ pub(crate) fn external_proposal_dto(
         change,
         change_addresses,
         change_testnet_aliases,
+        change_derivation_paths,
         output_count: psbt.unsigned_tx.output.len(),
         selected_outpoints: psbt
             .unsigned_tx
@@ -1172,4 +1185,42 @@ pub async fn hardware_verify_external_address(
         ));
     }
     record_address_verification(&mut db, address_id, &identity, &actual, false)
+}
+
+#[cfg(test)]
+mod health_check_tests {
+    use super::*;
+    use bdk_wallet::bitcoin::{
+        bip32::{DerivationPath, Xpriv},
+        secp256k1::Secp256k1,
+    };
+
+    fn signer_from_seed(seed_byte: u8) -> CosignerInput {
+        let secp = Secp256k1::new();
+        let master = Xpriv::new_master(PARAMETERS.network, &[seed_byte; 32]).unwrap();
+        let path = DerivationPath::from_str(MULTISIG_ACCOUNT_PATH).unwrap();
+        let account = master.derive_priv(&secp, &path).unwrap();
+        CosignerInput {
+            id: format!("signer-{seed_byte}"),
+            label: "Coldcard".to_owned(),
+            fingerprint: master.fingerprint(&secp).to_string(),
+            xpub: Xpub::from_priv(&secp, &account).to_string(),
+            derivation_path: MULTISIG_ACCOUNT_PATH.to_owned(),
+            source: CosignerSource::File,
+            device_type: Some("coldcard".to_owned()),
+        }
+    }
+
+    #[test]
+    fn health_check_requires_the_connected_bip48_account_key() {
+        let expected = signer_from_seed(1);
+        let mut connected = expected.clone();
+        connected.source = CosignerSource::Usb;
+        assert!(verify_cosigner_identity(&expected, &connected).is_ok());
+
+        connected.xpub = signer_from_seed(2).xpub;
+        let error = verify_cosigner_identity(&expected, &connected).unwrap_err();
+        assert_eq!(error.code, "unknown_signer");
+        assert!(error.message.contains("saved BIP48 account key"));
+    }
 }

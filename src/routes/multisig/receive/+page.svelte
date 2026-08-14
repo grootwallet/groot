@@ -29,7 +29,11 @@
     });
     void (async () => {
       try {
-        const registry = await walletService.profiles();
+        const shellWallets = walletShell.profiles();
+        const shellSelectedWalletId = walletShell.selectedWalletId();
+        const registry = shellWallets.length && shellSelectedWalletId
+          ? { wallets: shellWallets, selectedWalletId: shellSelectedWalletId }
+          : await walletService.profiles();
         const selected = registry.wallets.find((profile) => profile.id === registry.selectedWalletId);
         if (selected?.kind !== 'multisig') {
           await goto('/receive', { replaceState: true });

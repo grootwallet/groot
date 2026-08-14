@@ -59,9 +59,10 @@ export type PaymentProposal = {
   change: Sats;
   changeAddresses: string[];
   changeTestnetAliases: (string | null)[];
+  changeDerivationPaths?: string[][];
   outputCount: number;
   selectedOutpoints: string[];
-  inputs: { outpoint: string; amount: Sats; sequence: number }[];
+  inputs: { outpoint: string; amount: Sats; sequence: number; derivationPaths?: string[] }[];
   locktime: number;
   rbf: boolean;
   network: SupportedNetwork;

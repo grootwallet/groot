@@ -5,6 +5,8 @@ import {
   descriptorPreview,
   findDuplicateCosigner,
   normalizeCosigner,
+  normalizeSignerLabel,
+  signerLabelError,
   validatePolicyDraft,
   type CosignerDraft
 } from './policy';
@@ -20,6 +22,13 @@ const cosigner = (overrides: Partial<CosignerDraft> = {}): CosignerDraft => ({
 });
 
 describe('multisig policy invariants', () => {
+  it('normalizes and bounds editable signer names', () => {
+    expect(normalizeSignerLabel('  Office   Coldcard  ')).toBe('Office Coldcard');
+    expect(signerLabelError('   ')).toBe('Enter a signer name.');
+    expect(signerLabelError('x'.repeat(49))).toMatch(/48 characters/);
+    expect(signerLabelError('Coldcard MK4')).toBeNull();
+  });
+
   it('uses the standard native-SegWit multisig account path', () => {
     expect(MULTISIG_ACCOUNT_PATH).toBe("m/48'/1'/0'/2'");
   });

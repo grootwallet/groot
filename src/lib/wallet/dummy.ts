@@ -4,7 +4,7 @@ import { addressPrefixForNetwork, canDiscardAddress, hasAddressPrefixForNetwork,
 import { feeRate, MAX_SUPPLEMENTAL_COIN_FLIPS, MAX_SUPPLEMENTAL_DICE_ROLLS, MIN_SUPPLEMENTAL_COIN_FLIPS, MIN_SUPPLEMENTAL_DICE_ROLLS, sats, WalletError, type CoinSelection, type CoinSelectionPreview, type FeeEstimates, type PaymentProposal, type WalletEvent, type WalletPort, type WalletSnapshot } from './contracts';
 import type { CoreNodeConfig, ExternalSigner, ExternalSignerSource, ExternalSignerWallet, MultisigPreview, MultisigProposal, MultisigWallet, RecoveryPolicyAnalysis, RecoveryTemplate, SignerPolicyVerification, WalletProfile, WalletSyncSource } from './contracts';
 import type { PolicyDraft } from '$lib/multisig/policy';
-import { descriptorPreview, MULTISIG_ACCOUNT_PATH, normalizeCosigner, validatePolicyDraft } from '$lib/multisig/policy';
+import { descriptorPreview, MULTISIG_ACCOUNT_PATH, normalizeCosigner, normalizeSignerLabel, validatePolicyDraft } from '$lib/multisig/policy';
 import { policyReadinessKind } from '$lib/hardware/policy-readiness';
 
 import {
@@ -335,16 +335,15 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     if (!/^[1-9]{1,50}$/.test(pinPositions)) throw new WalletError('invalid_hardware_request', 'Enter only PIN-matrix positions 1 through 9.');
     this._trezorPinUnlocked = true;
   }
-  async checkHardwareCosigner(cosigner: PolicyDraft['cosigners'][number]) {
+  async checkHardwareCosigner(cosigner: PolicyDraft['cosigners'][number], deviceId: string) {
     await new Promise((resolve) => setTimeout(resolve, 200));
     const checkedAt = new Date().toISOString();
-    if (cosigner.source === 'usb' || cosigner.source === 'virtual') {
-      const devices = await this.listHardwareDevices();
-      const connected = devices.find((device) => device.connected && device.fingerprint?.toLowerCase() === cosigner.fingerprint.toLowerCase());
-      if (!connected) throw new WalletError('hardware_unavailable', 'Connect and unlock this device, then keep it ready over USB.');
-      return { status: 'healthy' as const, checkedAt, summary: `Connected identity matches ${cosigner.fingerprint}.` };
-    }
-    return { status: 'record_valid' as const, checkedAt, summary: 'Public key, fingerprint, and derivation path are complete. Physical presence cannot be checked for an offline key.' };
+    const connected = await this.importHardwareCosigner(deviceId, cosigner.label, true);
+    const identityMatches = connected.fingerprint.toLowerCase() === cosigner.fingerprint.toLowerCase()
+      && connected.derivationPath === cosigner.derivationPath
+      && connected.xpub === cosigner.xpub;
+    if (!identityMatches) throw new WalletError('unknown_signer', 'The connected device does not hold this signer’s saved BIP48 account key.');
+    return { status: 'healthy' as const, checkedAt, summary: `Connected device matches fingerprint ${cosigner.fingerprint} and the saved BIP48 account key.` };
   }
   async multisigSignerPolicyVerifications() {
     return structuredClone(this.multisigPolicyVerificationRecords);
@@ -387,7 +386,7 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     if (deviceId === 'virtual-trezor' && !this._trezorPinUnlocked) throw new WalletError('hardware_unavailable', 'Unlock this Trezor before selecting its wallet.');
     if (!['virtual-coldcard', 'virtual-trezor-standard', 'virtual-trezor'].includes(deviceId)) throw new WalletError('hardware_unavailable', 'The selected device is no longer connected.');
     const trezorFingerprint = deviceId === 'virtual-trezor' ? 'c0ffee03' : 'c0ffee02';
-    return { id: deviceId, label, fingerprint: trezor ? trezorFingerprint : 'f00dbabe', xpub: trezor ? 'tpubD6NzVbkrYhZ4Y-virtual-trezor-standard-public-key' : 'tpubD6NzVbkrYhZ4Y-virtual-hardware-public-key', derivationPath: MULTISIG_ACCOUNT_PATH, source: 'virtual' as const, deviceType: trezor ? 'trezor' : 'coldcard' };
+    return { id: deviceId, label, fingerprint: trezor ? trezorFingerprint : 'f00dbabe', xpub: trezor ? 'tpubD6NzVbkrYhZ4Y-virtual-trezor-standard-public-key' : 'tpubD6NzVbkrYhZ4Y-fixture-coldcard-public-key', derivationPath: MULTISIG_ACCOUNT_PATH, source: 'virtual' as const, deviceType: trezor ? 'trezor' : 'coldcard' };
   }
   async parseExternalSignerImport(encoded: string, label: string, source: ExternalSignerSource): Promise<ExternalSigner> {
     if (/xprv|tprv|seed|mnemonic/i.test(encoded)) throw new WalletError('private_material_rejected', 'Private material must stay on the signer.');
@@ -543,6 +542,19 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
   }
 
   async multisigWallet() { return this._multisig ? structuredClone(this._multisig) : null; }
+  async renameMultisigSigner(signerId: string, label: string) {
+    if (!this._multisig || !this._selectedWalletId || !this._unlockedWalletIds.has(this._selectedWalletId)) {
+      throw new WalletError('wallet_locked', 'Unlock this wallet before renaming a signer.');
+    }
+    const normalized = normalizeSignerLabel(label);
+    if (!normalized || Array.from(normalized).length > 48) {
+      throw new WalletError('invalid_label', 'Signer names must contain 1 to 48 characters.');
+    }
+    const signer = this._multisig.cosigners.find((candidate) => candidate.id === signerId);
+    if (!signer) throw new WalletError('unknown_signer', 'This signer is not part of the wallet.');
+    signer.label = normalized;
+    return structuredClone(this._multisig);
+  }
   async exportMultisig(credential: string) {
     if (!this._multisig) throw new WalletError('wallet_not_found', 'No multisig wallet exists.');
     if (credential !== this._multisigCredential) throw new WalletError('invalid_credential', 'Incorrect app PIN.');
@@ -598,7 +610,7 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
   }
   async deleteMultisig(credential: string, confirmation: string) {
     if (!this._multisig) throw new WalletError('wallet_not_found', 'No multisig wallet exists.');
-    if (!this._recoveryVerified) throw new WalletError('backup_mismatch', 'Run a successful recovery drill before deleting this coordinator.');
+    if (!this._recoveryVerified) throw new WalletError('backup_mismatch', 'Complete a successful recovery test before deleting this wallet.');
     if (confirmation !== this._multisig.name) throw new WalletError('confirmation_mismatch', 'Type the exact wallet name to delete this coordinator.');
     if (credential !== this._multisigCredential) throw new WalletError('invalid_credential', 'Incorrect app PIN.');
     if (this._multisigProfileId) { this._profiles = this._profiles.filter((wallet) => wallet.id !== this._multisigProfileId); this._credentials.delete(this._multisigProfileId); this._unlockedWalletIds.delete(this._multisigProfileId); }

@@ -24,7 +24,7 @@ This public/reviewable summary is derived from a completed local record. It is e
 | Wrong device and every required PSBT mutation fail closed |  |  |
 | File or `crypto-psbt` UR interchange |  |  |
 | RBF replacement and CPFP package |  |  |
-| Restart persistence and clean-profile recovery drill |  |  |
+| Restart persistence and clean-profile recovery test |  |  |
 | Real 2-of-3 Testnet4 participation |  |  |
 
 Known limitations and release-note wording:

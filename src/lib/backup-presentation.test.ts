@@ -19,6 +19,6 @@ describe('backup presentation', () => {
       description: 'bcrt1qfixtureadd…isibleending',
       tone: 'danger'
     });
-    expect(recoveryDrillNotice({ firstAddress: address, matchesCurrentWallet: true }).title).toBe('Recovery drill passed');
+    expect(recoveryDrillNotice({ firstAddress: address, matchesCurrentWallet: true }).title).toBe('Recovery test passed');
   });
 });

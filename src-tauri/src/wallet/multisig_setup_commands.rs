@@ -261,6 +261,26 @@ fn validate_multisig_setup_draft(
     Ok(Some(preview))
 }
 
+fn rename_cosigner_label(
+    cosigners: &mut [CosignerInput],
+    signer_id: &str,
+    label: &str,
+) -> ApiResult<()> {
+    let normalized = label.split_whitespace().collect::<Vec<_>>().join(" ");
+    if normalized.is_empty() || normalized.chars().count() > 48 {
+        return Err(api_error(
+            "invalid_label",
+            "Signer names must contain 1 to 48 characters.",
+        ));
+    }
+    let signer = cosigners
+        .iter_mut()
+        .find(|signer| signer.id == signer_id)
+        .ok_or_else(|| api_error("unknown_signer", "This signer is not part of the wallet."))?;
+    signer.label = normalized;
+    Ok(())
+}
+
 fn draft_verifications_match_pending(
     draft: &MultisigSetupDraft,
     preview: Option<&MultisigPreviewDto>,
@@ -518,6 +538,29 @@ mod setup_draft_tests {
     }
 
     #[test]
+    fn renames_only_public_signer_metadata_with_safe_bounds() {
+        let mut signers = cosigners(3);
+        let original_fingerprint = signers[0].fingerprint.clone();
+        let original_xpub = signers[0].xpub.clone();
+        rename_cosigner_label(&mut signers, "draft-1", "  Office   Coldcard  ").unwrap();
+        assert_eq!(signers[0].label, "Office Coldcard");
+        assert_eq!(signers[0].fingerprint, original_fingerprint);
+        assert_eq!(signers[0].xpub, original_xpub);
+        assert_eq!(
+            rename_cosigner_label(&mut signers, "draft-1", " ")
+                .unwrap_err()
+                .code,
+            "invalid_label"
+        );
+        assert_eq!(
+            rename_cosigner_label(&mut signers, "missing", "Signer")
+                .unwrap_err()
+                .code,
+            "unknown_signer"
+        );
+    }
+
+    #[test]
     fn rejects_impossible_steps_and_duplicate_signers() {
         let mut incomplete = draft();
         incomplete.cosigners.pop();
@@ -683,6 +726,21 @@ pub fn multisig_wallet(
     }
     let encoded = read_private_text(&path)?;
     serde_json::from_str(&encoded).map(Some).map_err(internal)
+}
+
+#[tauri::command]
+pub fn multisig_signer_rename(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    signer_id: String,
+    label: String,
+) -> ApiResult<MultisigWalletDto> {
+    let _operation = operation_guard(&state)?;
+    require_unlocked(&app, &state)?;
+    let mut wallet = read_multisig_metadata(&app)?;
+    rename_cosigner_label(&mut wallet.cosigners, &signer_id, &label)?;
+    write_private_json(&multisig_metadata_path(&app)?, &wallet)?;
+    Ok(wallet)
 }
 
 #[tauri::command]
@@ -995,7 +1053,7 @@ pub fn multisig_delete(
     if !drill_verified {
         return Err(api_error(
             "backup_mismatch",
-            "Run a successful recovery drill before deleting this coordinator.",
+            "Complete a successful recovery test before deleting this wallet.",
         ));
     }
     if confirmation != wallet.name {

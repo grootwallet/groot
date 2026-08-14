@@ -105,6 +105,7 @@ pub fn run() {
             wallet::multisig_proposal_commands::multisig_create,
             wallet::multisig_proposal_commands::multisig_recovery_create,
             wallet::multisig_setup_commands::multisig_wallet,
+            wallet::multisig_setup_commands::multisig_signer_rename,
             wallet::multisig_setup_commands::multisig_export,
             wallet::multisig_setup_commands::multisig_export_bsms,
             wallet::public_backup_save,

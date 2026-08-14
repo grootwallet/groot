@@ -630,6 +630,7 @@ fn proposal_review_rejects_any_non_recipient_output_not_owned_by_the_wallet() {
         proposal_transaction_details(&wallet, &psbt, 1_000).unwrap();
     assert_eq!(inputs.len(), 1);
     assert_eq!(inputs[0].amount, 16_000);
+    assert!(inputs[0].derivation_paths.is_empty());
     assert_eq!(
         inputs[0].sequence,
         Sequence::ENABLE_RBF_NO_LOCKTIME.to_consensus_u32()
@@ -637,6 +638,14 @@ fn proposal_review_rejects_any_non_recipient_output_not_owned_by_the_wallet() {
     assert!(actual_rate > 0.0);
     assert_eq!(locktime, 0);
     assert!(rbf);
+    assert_eq!(
+        unique_derivation_paths(
+            ["m/48'/1'/0'/2'/1/4", "m/48'/1'/0'/2'/1/4"]
+                .into_iter()
+                .map(str::to_owned)
+        ),
+        vec!["m/48'/1'/0'/2'/1/4"]
+    );
 
     let mut duplicate_input = psbt.clone();
     duplicate_input
@@ -1084,8 +1093,8 @@ fn hwi_response_codes_become_safe_actionable_errors() {
 
     let bitbox = hardware_device_api_error(HardwareError::CommandFailed(Some(-12)), "bitbox02");
     assert_eq!(bitbox.code, "hardware_command_failed");
-    assert!(bitbox.message.contains("Quit BitBoxApp completely"));
-    assert!(bitbox.message.contains("paired once"));
+    assert!(bitbox.message.contains("enter the device password"));
+    assert!(bitbox.message.contains("first-time pairing"));
 
     let unnamed_account =
         hardware_device_api_error(HardwareError::CommandFailed(Some(-9)), "bitbox02");
@@ -1102,9 +1111,7 @@ fn hwi_response_codes_become_safe_actionable_errors() {
 
     let bitbox_xpub =
         missing_hardware_xpub("bitbox02", "m/48'/1'/0'/2'", Some(-13), None, "fallback");
-    assert!(bitbox_xpub
-        .message
-        .contains("unlock the wallet in BitBoxApp"));
+    assert!(bitbox_xpub.message.contains("enter the device password"));
 
     let cancelled_xpub =
         missing_hardware_xpub("ledger", "m/84'/1'/0'", Some(-14), None, "fallback");
@@ -1151,7 +1158,7 @@ fn hwi_response_codes_become_safe_actionable_errors() {
     assert!(!locked_ledger.message.contains("fingerprint"));
 
     for (device_type, expected) in [
-        ("bitbox02", "BitBoxApp"),
+        ("bitbox02", "enter the device password"),
         ("jade", "Log in on Jade"),
         ("coldcard", "enable USB communication"),
         ("trezor", "PIN-matrix"),
@@ -2294,6 +2301,7 @@ fn restart_restores_proposals_frozen_coins_and_acknowledged_notifications() {
                 change: 0,
                 change_addresses: vec![],
                 change_testnet_aliases: vec![],
+                change_derivation_paths: vec![],
                 output_count: 0,
                 selected_outpoints: vec![outpoint.clone()],
                 inputs: vec![],
@@ -2512,6 +2520,7 @@ fn prepared_wallet_proposal_and_acceleration_roll_back_as_one_unit() {
         change: 0,
         change_addresses: vec![],
         change_testnet_aliases: vec![],
+        change_derivation_paths: vec![],
         output_count: 0,
         selected_outpoints: vec![],
         inputs: vec![],
@@ -2892,4 +2901,30 @@ fn coldcard_policy_acknowledgement_is_distinct_from_address_evidence() {
     assert_eq!(rows[0].displayed_address, None);
     assert!(has_coldcard_policy_acknowledgement(&rows, &identity));
     assert!(!has_signer_policy_verification(&rows, &identity));
+}
+
+#[test]
+fn coldcard_policy_acknowledgement_accepts_recognized_and_legacy_file_imports() {
+    let signer = |source, device_type: Option<&str>| CosignerInput {
+        id: "signer".to_owned(),
+        label: "Coldcard MK4".to_owned(),
+        fingerprint: "f00dbabe".to_owned(),
+        xpub: "tpub-public".to_owned(),
+        derivation_path: MULTISIG_ACCOUNT_PATH.to_owned(),
+        source,
+        device_type: device_type.map(str::to_owned),
+    };
+
+    assert!(supports_coldcard_policy_acknowledgement(&signer(
+        CosignerSource::File,
+        Some("coldcard")
+    )));
+    assert!(supports_coldcard_policy_acknowledgement(&signer(
+        CosignerSource::File,
+        None
+    )));
+    assert!(!supports_coldcard_policy_acknowledgement(&signer(
+        CosignerSource::Usb,
+        Some("ledger")
+    )));
 }

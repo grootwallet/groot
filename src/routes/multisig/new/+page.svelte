@@ -16,19 +16,20 @@
   import SignerPolicyReview from '$lib/components/SignerPolicyReview.svelte';
   import { toast } from '$lib/stores/toasts';
   import { walletService, WalletError, type CosignerHealthCheck, type HardwareDevice, type MultisigPreview, type MultisigSetupDraft, type PolicyVerificationAddress, type RecoveryTemplate, type SavedFileResult, type SignerPolicyVerification, type WalletErrorCode } from '$lib/wallet';
-  import { findDuplicateCosigner, MULTISIG_ACCOUNT_PATH, validatePolicyDraft, type CosignerDraft, type CosignerSource } from '$lib/multisig/policy';
+  import { findDuplicateCosigner, MULTISIG_ACCOUNT_PATH, normalizeSignerLabel, validatePolicyDraft, type CosignerDraft, type CosignerSource } from '$lib/multisig/policy';
   import { copyText } from '$lib/clipboard';
   import { combineDescriptorBranches } from '$lib/descriptors';
   import { isMeaningfulMultisigSetupDraft, multisigSetupSignerTarget } from '$lib/wallet/multisig-setup';
   import { coldcardPolicyFilename, readTransferFile, safeTransferFilename } from '$lib/transfer';
-  import { parsePublicCosignerFile } from '$lib/multisig/cosigner-import';
+  import { parsePublicCosignerFile, PublicCosignerImportError } from '$lib/multisig/cosigner-import';
   import { mergeHardwareDiscovery } from '$lib/hardware/discovery';
+  import { lockedDeviceForHealthCheck, matchingDeviceForHealthCheck } from '$lib/hardware/health-check';
   import { matchingPolicyVerification, policyDeviceName, policyReadinessKind, policyRegistrationProfile, requiresInteractivePolicyVerification } from '$lib/hardware/policy-readiness';
 
   type HardwareGuideId = 'coldcard' | 'bitbox02' | 'ledger' | 'trezor' | 'jade';
   const hardwareGuides: Array<{ id: HardwareGuideId; name: string; steps: string[] }> = [
     { id: 'coldcard', name: 'Coldcard', steps: ['Finish device setup and make an offline seed backup.', 'Sign in and enable USB communication if it was disabled.', 'Leave the device unlocked and ready at its main menu.'] },
-    { id: 'bitbox02', name: 'BitBox02', steps: ['In BitBoxApp, enter the device password and confirm the same pairing code on both screens.', 'Wait until the wallet is visible, then quit BitBoxApp completely.', 'Reconnect and unlock BitBox02, then scan again in Groot.'] },
+    { id: 'bitbox02', name: 'BitBox02', steps: ['Connect BitBox02, then scan in Groot.', 'Enter the device password when BitBox02 asks.', 'If BitBoxApp is open, quit it so Groot can use USB. Use it only if Groot reports that first-time pairing is required.'] },
     { id: 'ledger', name: 'Ledger', steps: ['Finish device setup and make an offline recovery backup, then quit Ledger Live completely.', 'For Regtest, unlock the device and open Bitcoin Test—not the main Bitcoin app.', 'Start the import in Groot, then approve the public-key export shown on Ledger.'] },
     { id: 'trezor', name: 'Trezor', steps: ['Finish device setup and make an offline seed backup, then quit Trezor Suite completely. Closing its window is not enough.', 'Reconnect the device. A locked Model One is expected: select its Groot card to open the position keypad while the device shows a scrambled PIN matrix.', 'Choose the standard no-passphrase wallet explicitly, or select a hidden wallet on-device when supported. Model One host passphrase entry is not yet supported.'] },
     { id: 'jade', name: 'Jade', steps: ['Finish device setup and make an offline seed backup.', 'Log in on Jade with Recovery Phrase Login or QR PIN Unlock.', 'Keep Jade connected over USB while Groot imports the public key.'] }
@@ -40,7 +41,9 @@
   let cosigners = $state<CosignerDraft[]>([]);
   let stage = $state<'policy' | 'keys' | 'review' | 'backup'>('policy');
   let pickerOpen = $state(false);
+  let pickerErrorTitle = $state('');
   let pickerError = $state('');
+  let pickerErrorGuidance = $state('');
   let keyOpen = $state(false);
   let keyError = $state('');
   let hardwareOpen = $state(false);
@@ -50,6 +53,7 @@
   let standardWalletOpen = $state(false);
   let standardWalletDevice = $state<HardwareDevice | null>(null);
   let pinOpen = $state(false);
+  let pinPurpose = $state<'import' | 'health'>('import');
   let pinBusy = $state(false);
   let pinChallenge = $state('');
   let pinPositions = $state('');
@@ -96,6 +100,7 @@
   let discardDraftError = $state('');
   let discardingDraft = $state(false);
   let draftSaveError = $state('');
+  let createErrorTitle = $state('');
   let hardwareScanGeneration = 0;
   let queuedDraft: MultisigSetupDraft | null = null;
   let draftSaveRunning = false;
@@ -166,6 +171,15 @@
     };
   }
 
+  function draftSaveMessage(cause: unknown): string {
+    if (cause instanceof WalletError && cause.code === 'wallet_corrupt') {
+      return 'A saved hardware-policy verification could not be validated. Verify that signer again; your signers and descriptor are unchanged.';
+    }
+    return cause instanceof Error
+      ? cause.message
+      : 'Groot could not save this setup. It will retry automatically.';
+  }
+
   async function drainDraftSaveQueue() {
     if (draftSaveRunning) return;
     draftSaveRunning = true;
@@ -179,7 +193,7 @@
         hasDraft = true;
         draftSaveError = '';
       } catch (cause) {
-        draftSaveError = cause instanceof Error ? cause.message : 'Setup progress could not be saved.';
+        draftSaveError = draftSaveMessage(cause);
         if (!queuedDraft && !discardingDraft) {
           if (draftRetryTimer) window.clearTimeout(draftRetryTimer);
           draftRetryTimer = window.setTimeout(() => {
@@ -260,6 +274,7 @@
     credential = '';
     confirmation = '';
     error = '';
+    createErrorTitle = '';
     draftSaveError = '';
     discardDraftError = '';
   }
@@ -354,7 +369,7 @@
     const file = input.files?.[0];
     input.value = '';
     if (!file) return;
-    pickerError = '';
+    pickerErrorTitle = ''; pickerError = ''; pickerErrorGuidance = '';
     try {
       const fallbackLabel = file.name.replace(/\.[^.]+$/, '').slice(0, 48);
       const imported = parsePublicCosignerFile(await readTransferFile(file), fallbackLabel);
@@ -363,8 +378,17 @@
       pickerOpen = false;
       toast({ title: 'Public signer imported', description: `${imported.label} was loaded from a local file.`, tone: 'success' });
     } catch (cause) {
-      pickerError = cause instanceof Error ? cause.message : 'Could not read the public-key file.';
+      pickerErrorTitle = cause instanceof PublicCosignerImportError ? 'Could not import this signer' : 'Could not read this file';
+      pickerError = cause instanceof Error ? cause.message : 'The public-key file could not be read.';
+      pickerErrorGuidance = cause instanceof PublicCosignerImportError ? cause.guidance : 'Choose a Coldcard XPUB JSON or Groot public-signer JSON file and try again.';
     }
+  }
+
+  function closeSignerPicker() {
+    pickerOpen = false;
+    pickerErrorTitle = '';
+    pickerError = '';
+    pickerErrorGuidance = '';
   }
 
   function openHardwareHelp(returnToScan = false) {
@@ -443,13 +467,34 @@
     toast({ title: 'Signer removed', description: `${removedLabel} was removed from this unfinished wallet.`, tone: 'success' });
   }
 
+  async function renameDraftSigner(nextLabel: string) {
+    if (!selectedSigner) return;
+    const signerId = selectedSigner.id;
+    const normalized = normalizeSignerLabel(nextLabel);
+    const renamed = { ...selectedSigner, label: normalized };
+    cosigners = cosigners.map((signer) => signer.id === signerId ? renamed : signer);
+    selectedSigner = renamed;
+    await flushCurrentDraft();
+    toast({ title: 'Signer renamed', description: `This signer is now “${normalized}”.`, tone: 'success' });
+  }
+
   async function runDraftHealthCheck() {
     if (!selectedSigner || checkingSigner) return;
     const signer = selectedSigner;
     checkingSigner = true;
     try {
-      healthChecks[signer.id] = await walletService.checkHardwareCosigner(signer);
-      toast({ title: 'Health check passed', description: `${signer.label} is ready.`, tone: 'success' });
+      const devices = await walletService.listHardwareDevices();
+      const lockedDevice = lockedDeviceForHealthCheck(signer, devices);
+      if (lockedDevice) {
+        checkingSigner = false;
+        await startHardwarePin(lockedDevice, 'health');
+        return;
+      }
+      const device = matchingDeviceForHealthCheck(signer, devices);
+      if (!device) throw new WalletError('hardware_unavailable', `Connect and unlock ${signer.label}, enable its USB connection, then try again.`);
+      const result = await walletService.checkHardwareCosigner(signer, device.id);
+      healthChecks[signer.id] = result;
+      toast({ title: 'Health check passed', description: `${signer.label} holds the saved BIP48 account key.`, tone: 'success' });
     } catch (cause) {
       const summary = cause instanceof Error ? cause.message : 'The device could not be verified.';
       healthChecks[signer.id] = { checkedAt: new Date().toISOString(), summary, status: 'attention' };
@@ -573,12 +618,13 @@
     if (device.action === 'retry') return scanHardware();
   }
 
-  async function startHardwarePin(device: HardwareDevice) {
+  async function startHardwarePin(device: HardwareDevice, purpose: 'import' | 'health' = 'import') {
     const retrying = pinOpen;
     hardwareBusy = true; pinBusy = retrying; error = ''; pinError = ''; pinErrorCode = ''; pinPositions = '';
     try {
       pinChallenge = await walletService.promptHardwarePin(device.id);
       pinDevice = device;
+      pinPurpose = purpose;
       hardwareOpen = false;
       pinOpen = true;
     } catch (cause) {
@@ -598,8 +644,14 @@
     try {
       await walletService.sendHardwarePin(pinChallenge, positions);
       pinChallenge = ''; pinOpen = false; pinDevice = null;
-      toast({ title: 'Hardware wallet unlocked', description: 'Scanning again for its public fingerprint.', tone: 'success' });
-      await scanHardware();
+      if (pinPurpose === 'health') {
+        pinPurpose = 'import';
+        toast({ title: 'Hardware wallet unlocked', description: 'Resuming the signer health check.', tone: 'success' });
+        await runDraftHealthCheck();
+      } else {
+        toast({ title: 'Hardware wallet unlocked', description: 'Scanning again for its public fingerprint.', tone: 'success' });
+        await scanHardware();
+      }
     } catch (cause) {
       pinChallenge = '';
       pinErrorCode = cause instanceof WalletError ? cause.code : 'internal_error';
@@ -671,7 +723,7 @@
 
   async function create() {
     if (!preview || !saved || !policyReadinessAcknowledged || !credential || credential !== confirmation) return;
-    busy = true; error = '';
+    busy = true; error = ''; createErrorTitle = '';
     try {
       await flushCurrentDraft();
       if (recoveryTemplate) await walletService.createRecoveryMultisig(name, recoveryTemplate, cosigners, credential);
@@ -679,18 +731,26 @@
       hasDraft = false;
       toast({ title: 'Multisig wallet created', description: `${threshold} signatures are required to spend.`, tone: 'success' });
       await goto('/multisig');
-    } catch (cause) { error = cause instanceof Error ? cause.message : 'Could not create the wallet.'; }
+    } catch (cause) {
+      if (cause instanceof WalletError && cause.code === 'wallet_corrupt') {
+        createErrorTitle = 'Hardware verification needs attention';
+        error = 'Groot could not safely restore the saved verification. Open “Verify hardware wallet policies” and verify the signer again.';
+      } else {
+        createErrorTitle = 'Wallet could not be created';
+        error = cause instanceof Error ? cause.message : 'Try again. Your hardware-wallet keys and saved descriptor are unchanged.';
+      }
+    }
     finally { credential = ''; confirmation = ''; busy = false; }
   }
 </script>
 
 <div class="page coordinator-page">
   <header class="page-header">
-    <div><p class="eyebrow">WALLET POLICY</p><h1>Create a policy wallet</h1><p class="subtitle">Choose a simple shared policy or add a separate delayed recovery key.</p></div>
+    <div><p class="eyebrow">MULTISIG WALLET</p><h1>Create a multisig wallet</h1><p class="subtitle">Choose a simple shared policy or add a separate delayed recovery key.</p></div>
     <div class="page-header-actions">{#if hasDraft}<Button variant="ghost-danger" size="small" onclick={() => { discardDraftError = ''; discardDraftOpen = true; }}><Trash2 size={14}/>Discard setup</Button>{/if}{#if stage === 'policy'}<a class="secondary-link" href="/multisig/recover" aria-label="Recover from backup"><FileUp size={15}/>Recover</a>{/if}<span class="network-chip">Regtest · Native SegWit</span></div>
   </header>
   <SetupProgress steps={creationSteps} current={creationStep} label="Wallet creation progress"/>
-  {#if draftSaveError}<div class="warning-box danger" role="alert"><AlertTriangle size={16}/><strong>Setup progress is not safely saved.</strong><span>{draftSaveError}</span></div>{/if}
+  {#if draftSaveError}<div class="warning-box danger" role="alert"><AlertTriangle size={16}/><strong>Setup progress could not be saved</strong><span>{draftSaveError}</span></div>{/if}
 
   {#if !draftReady}
     <section class="form-card"><HardwareActionPrompt title="Restoring multisig setup" detail="Checking for saved public policy progress…" label="Restoring multisig setup"/></section>
@@ -794,7 +854,7 @@
           {#if credential && confirmation && credential !== confirmation}<p class="form-error">PINs do not match.</p>{/if}
         </SetupTask>
       </div>
-      {#if error}<p class="form-error hardware-create-error">{error}</p>{/if}
+      {#if error}<div class="hardware-inline-error hardware-create-error" role="alert"><AlertTriangle size={18}/><span><strong>{createErrorTitle || 'Wallet could not be created'}</strong><small>{error}</small></span></div>{/if}
       <Button class="full backup-create-action" size="large" disabled={!saved || !policyReadinessAcknowledged || !credential || credential !== confirmation} loading={busy} loadingLabel="Creating wallet…" onclick={create}>Create wallet</Button>
     </section>
   {/if}
@@ -814,13 +874,13 @@
   {/if}
 </Modal>
 
-<Modal open={pickerOpen} title="Add a signer" description="Choose how to import this signer’s public account key." onclose={() => { pickerOpen = false; pickerError = ''; }}>
+<Modal open={pickerOpen} title="Add a signer" description="Choose how to import this signer’s public account key." onclose={closeSignerPicker}>
   <div class="source-list">
     <button onclick={scanHardware}><Cpu size={18}/><span><strong>Connect hardware device</strong><small>Desktop · Bitcoin Core HWI</small></span><ChevronRight size={15}/></button>
-    <label class="source-button"><FileUp size={18}/><span><strong>Import public-key file</strong><small>Mounted SD card or local JSON · 256 KiB maximum</small></span><ChevronRight size={15}/><input aria-label="Public signer file" type="file" accept=".json,application/json" onchange={importCosignerFile}/></label>
+    <label class="source-button"><FileUp size={18}/><span><strong>Import public-key file</strong><small>Coldcard XPUB JSON or Groot signer JSON · 256 KiB maximum</small></span><ChevronRight size={15}/><input aria-label="Public signer file" type="file" accept=".json,application/json" onchange={importCosignerFile}/></label>
     <button onclick={() => chooseSource('manual')}><FileKey size={18}/><span><strong>Enter public key</strong><small>Paste an account xpub and fingerprint</small></span><ChevronRight size={15}/></button>
   </div>
-  {#if pickerError}<p class="form-error" aria-live="polite">{pickerError}</p>{/if}
+  {#if pickerError}<div class="import-error" role="alert" aria-live="polite"><AlertTriangle size={18}/><span><strong>{pickerErrorTitle}</strong><b>{pickerError}</b><small>{pickerErrorGuidance}</small></span></div>{/if}
 </Modal>
 <Modal open={policyReviewOpen} title="Verify signer wallet policy" description="Compare Groot's saved public policy with every value shown on the hardware device." onclose={()=>{if(!policyReviewBusy){policyReviewOpen=false;policySigner=null;policyDevice=null;policyReviewError='';}}}>
   {#if policyReviewBusy && !policyDevice}<HardwareActionPrompt title="Looking for the saved signer" detail="Keep the device connected, unlocked, and in its Bitcoin app while Groot matches the saved fingerprint." label="Signer scan in progress"/>
@@ -829,7 +889,7 @@
 </Modal>
 
 <Modal open={hardwareOpen} title="Connect hardware device" description="Connect one initialized device over USB, then verify its fingerprint before adding it." onclose={closeHardwareScan}>
-  <div class="hardware-readiness"><Usb size={18}/><span><strong>Unlock the signer, then release its USB connection</strong><small>BitBox02: open the wallet in BitBoxApp first, then quit BitBoxApp completely before scanning. Quit Trezor Suite, Ledger Live, and other companion apps too. A locked Trezor Model One is supported from its Groot card.</small></span><button onclick={() => openHardwareHelp(true)}>Device help</button></div>
+  <div class="hardware-readiness"><Usb size={18}/><span><strong>Connect the signer and release any competing USB session</strong><small>BitBox02 can unlock directly from Groot when scanned. If a companion app is open, quit it first. A locked Trezor Model One is supported from its Groot card.</small></span><button onclick={() => openHardwareHelp(true)}>Device help</button></div>
   <label class="field"><span>Signer label</span><input bind:value={label} placeholder="Defaults to device model" maxlength="48"/><FieldCounter value={label} max={48}/></label>
   {#if hardwareBusy}<HardwareActionPrompt title={hardwareProgress} detail={hardwareProgress.includes('Ledger') ? 'Keep Bitcoin Test open for Regtest and confirm the export on the device screen.' : 'Keep the signer connected and unlocked. Follow any instructions shown on the device.'} label="Hardware signer setup in progress"/>
   {:else if hardware.length === 0}<div class="device-scan"><Cpu size={20}/><strong>{error ? 'Device needs attention' : 'No device found'}</strong><span>{error || 'HWI returned no device. For Coldcard, sign in first, enable its USB port, reconnect, then scan again. Other signers must be initialized, unlocked, and released by companion apps.'}</span><Button variant="secondary" size="small" onclick={scanHardware}>Scan again</Button></div>
@@ -856,7 +916,7 @@
   onclear={() => pinPositions = ''}
   onsubmit={submitHardwarePin}
   onretry={() => { if (pinDevice) startHardwarePin(pinDevice); }}
-  onclose={() => { pinOpen = false; pinPositions = ''; pinChallenge = ''; pinDevice = null; pinError = ''; pinErrorCode = ''; }}
+  onclose={() => { pinOpen = false; pinPurpose = 'import'; pinPositions = ''; pinChallenge = ''; pinDevice = null; pinError = ''; pinErrorCode = ''; }}
 />
 
 <Modal open={hardwareHelpOpen} title="Prepare your hardware signer" description="Groot imports one public account key. Your seed and private keys never leave the device." onclose={closeHardwareHelp}>
@@ -878,4 +938,4 @@
   </form>
 </Modal>
 
-<DeviceDetailsModal signer={selectedSigner} health={selectedSigner ? healthChecks[selectedSigner.id] ?? null : null} checking={checkingSigner} onclose={() => selectedSigner = null} oncheck={runDraftHealthCheck}/>
+<DeviceDetailsModal signer={selectedSigner} health={selectedSigner ? healthChecks[selectedSigner.id] ?? null : null} checking={checkingSigner} onclose={() => selectedSigner = null} oncheck={runDraftHealthCheck} onrename={renameDraftSigner}/>

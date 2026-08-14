@@ -85,9 +85,15 @@
     }
   }
 
-  afterNavigate(() => {
-    void refreshProfiles();
-    void refreshSetupDraft();
+  const profileMutatingRoutes = new Set(['/welcome', '/hardware/new', '/multisig/new', '/multisig/recover', '/multisig/delete']);
+
+  afterNavigate(({ from }) => {
+    const previousPath = from?.url.pathname;
+    // Routine navigation must not repeat registry and setup-draft reads that
+    // every destination performs independently. Refresh only after a flow that
+    // can actually mutate those shell-level records.
+    if (previousPath && profileMutatingRoutes.has(previousPath)) void refreshProfiles();
+    if (previousPath === '/multisig/new') void refreshSetupDraft();
     if (!liveSync || isPrototypeWallet) return;
     if (onboardingRoute || lockedRoute) liveSync.stop();
     else liveSync.start();
@@ -150,7 +156,7 @@
   });
 </script>
 
-<div class="app-shell" class:onboarding-shell={onboardingRoute} class:mobile-actions-visible={showQuickActions} class:prototype-shell={isPrototypeWallet} class:locked-setup-visible={showSetupResume && lockedRoute}>
+<div class="app-shell" data-sveltekit-preload-code="viewport" data-sveltekit-preload-data="hover" class:onboarding-shell={onboardingRoute} class:mobile-actions-visible={showQuickActions} class:prototype-shell={isPrototypeWallet} class:locked-setup-visible={showSetupResume && lockedRoute}>
   <aside class="sidebar">
     <a class="brand" href="/" aria-label="Groot home"><BrandLockup /></a>
     {#if profiles.length}

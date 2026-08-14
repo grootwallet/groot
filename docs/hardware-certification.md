@@ -8,7 +8,7 @@ Virtual devices prove coordinator behavior, not vendor compatibility. Run this o
 | --- | --- | --- | --- | --- |
 | Coldcard Mk4 | HWI USB after unlock and USB-wallet enablement; policy imported separately | BIP-380 policy and PSBT over Virtual Disk/microSD where supported | PIN/passphrase remains entirely on Coldcard | Core Regtest 2-of-3 cable and microSD signed-PSBT flows, genuine wrong-proposal rejection, and shared clean-profile descriptor recovery verified |
 | Blockstream Jade / Jade Plus | HWI USB when logged in | BIP84 xpub/descriptor QR text; file where exported | Select hidden wallet on Jade; never sent through the webview | Implemented, physical certification pending |
-| BitBox02 | HWI USB after BitBoxApp pairing cache; companion app must release USB | BitBoxApp descriptor/xpub file/text | Device password/pairing stays vendor-controlled | Implemented, physical certification pending |
+| BitBox02 | HWI USB; direct Groot password prompt when already paired, with BitBoxApp only for an explicitly required first pairing | BitBoxApp descriptor/xpub file/text | Device password/pairing stays vendor-controlled | Original Bitcoin-only model: Regtest BIP84 import/receive and complete BIP48 2-of-3 policy, address, rejection, interruption/retry, signing, restart, threshold, broadcast, wrong-device, foreign-PSBT, and descriptor-recovery checks passed; firmware metadata remains to complete the sanitized compatibility row |
 | BitBox02 Nova | USB candidate; exact HWI identity and pairing behavior must be captured first | Vendor descriptor/xpub export candidate | Device password remains vendor-controlled; Whisper/BLE is a separate mobile transport review | Not yet supported or certified |
 | Trezor Safe 3 | HWI USB | Public descriptor/xpub text/file | Prefer on-device passphrase entry | Planned later as an independent certification target; no Model One evidence is inherited |
 | Other Trezor Safe models / Model T | HWI USB | Public descriptor/xpub text/file | Prefer on-device passphrase entry | Implemented, physical certification pending per exact model |
@@ -34,12 +34,12 @@ Detected-but-not-ready devices are not equivalent to missing devices:
 
 - **Trezor Model One / KeepKey:** quit Trezor Suite or other companion software completely before scanning; an unlock session created by the companion app is not shared with Groot. Choose the locked device in Groot and start the scrambled PIN matrix. For every PIN digit visible in the shuffled device matrix, tap the blank Groot cell in the same spatial location; never enter the digit itself. If passphrase support is enabled, Groot may import the seed-only standard wallet only after the user explicitly confirms that choice. A hidden wallet requiring host passphrase entry remains blocked.
 - **Coldcard invisible while locked:** HWI may return no device before the Coldcard exposes its USB wallet interface. Groot cannot truthfully identify a device from an empty HWI result. Sign in on Coldcard, ensure its USB port is enabled, reconnect, and scan again.
-- **BitBox02:** finish the pairing and unlock story below.
+- **BitBox02:** connect and scan directly in Groot, then enter the device password when prompted. If BitBoxApp is open, quit it so Groot can use USB.
 - **Ledger:** quit Ledger Live, unlock the device, and open the app matching Groot's network: **Bitcoin Test** for Regtest, Signet, or testnet; **Bitcoin** for mainnet. HWI enumeration can expose a fingerprint from either Ledger app, so Groot labels that state **Detected**, not ready; only the subsequent account-key read verifies that the network-matching app is open. A BIP48 multisig key may request on-device public-key export approval; a standard BIP84 single-key read may complete without one. Groot reopens the exact enumerated signer by fingerprint, but every Ledger model/firmware combination still requires the physical import, reconnect, wrong-device, cancellation, address, and signing evidence below.
 - **Jade:** log in on-device with Recovery Phrase Login or QR PIN Unlock, then leave it connected.
 - **Coldcard:** unlock and enable USB communication.
 
-For BitBox02, first open BitBoxApp, enter the device password, compare and confirm the pairing code on both screens, and wait until the wallet itself is visible; “See the BitBoxApp” is not the ready state. Then quit BitBoxApp completely, reconnect if needed, and rerun the preflight. HWI-based apps cannot initiate this first pairing themselves.
+For an already-paired BitBox02, connect it and scan directly in Groot; enter the device password when prompted. Use BitBoxApp only when Groot explicitly reports that first-time pairing is required, then quit it and rescan after pairing.
 
 Start Bitcoin Core regtest and Groot in separate terminals:
 
@@ -57,14 +57,14 @@ bash scripts/dev/tauri-regtest.sh
 
 ### Current resume checkpoint — BitBox02
 
-The original Bitcoin-only BitBox02 single-key BIP84 import and one trusted-display receive verification have physical Regtest evidence. Before continuing the matrix, repeat that receive verification once with the current UI and confirm the comparison modal says **Address shown on BitBox02**, displays the Rust-supplied `tb1` alias, and explains that it is script-equivalent to Groot's canonical `bcrt1` address. Then continue at step 2 below with an independent BIP48 2-of-3 wallet; multisig policy registration, rejection/retry, signing, wrong-device, persistence, broadcast, and descriptor recovery are still untested. Do not reuse or publish the prior address, fingerprint, xpub, or device path.
+On 2026-08-15, the original Bitcoin-only BitBox02 passed the Regtest receive-address comparison and an independent BIP48 2-of-3 flow: account-key import, policy registration, first-address review, explicit signing rejection with a retryable unchanged proposal, successful retry, one-signature restart persistence, threshold completion with Trezor Model One, and broadcast. It then passed wrong-device rejection without collecting a signature, USB interruption during signing with a clean retry, rejection of a signed PSBT from another proposal without changing signatures, and an independent BSMS descriptor-recovery test reproducing the same first receive address. The sanitized host record is macOS 26.1 Tahoe with HWI 2.3.1, tested 2026-08-15 in Europe/Andorra (UTC+2). Firmware is still pending sanitized capture. This evidence applies only to the original Bitcoin-only BitBox02; it does not cover Nova. Do not publish addresses, fingerprints, xpubs, PSBTs, or device paths.
 
 Record only vendor/model, firmware, host OS, HWI version, date, and pass/fail/limitation. Keep the report under `hardware-certification.local/`, which is gitignored.
 
 1. Use a device that is already initialized with a seed and offline backup. Connect and unlock it; keep it ready over USB (and open its Bitcoin app when that vendor requires one). Groot must never initialize a signer or request its seed.
 2. Create a 2-of-3 wallet and import its BIP48 public account key through HWI.
 3. Confirm the on-device fingerprint matches the locally saved record.
-4. Disconnect/reconnect and run the health check.
+4. Disconnect/reconnect and run the health check. Confirm Groot reads the connected device's BIP48 account xpub and matches both the full key and fingerprint against the saved signer, including when that signer was originally imported by file, QR, or manual entry.
 5. Generate a labeled receive address and verify it on-device where supported.
 6. Fund it on regtest and prepare a PSBT.
 7. Reject signing once; confirm Groot remains retryable and records no signature.

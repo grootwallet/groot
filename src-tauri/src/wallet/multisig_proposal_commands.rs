@@ -549,11 +549,7 @@ pub fn multisig_create(
         if coldcard_registered {
             let acknowledged_at = now();
             for cosigner in &preview.cosigners {
-                if cosigner
-                    .device_type
-                    .as_deref()
-                    .is_some_and(|device_type| device_type.eq_ignore_ascii_case("coldcard"))
-                {
+                if supports_coldcard_policy_acknowledgement(cosigner) {
                     db.execute(
                         "INSERT INTO groot_signer_policy_acknowledgements
                             (signer_fingerprint, device_type, scope, acknowledged_at)

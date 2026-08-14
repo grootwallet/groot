@@ -50,4 +50,4 @@
   <label class="field"><span>Simulate UTXO age: {age.toLocaleString()} blocks</span><input aria-label="Simulated UTXO age" type="range" min="0" max={Math.max(delayTwo,delayOne)+1000} step="10" bind:value={age}/><small>Active path requires {activePath?.threshold} signature{activePath?.threshold===1?'':'s'}.</small></label>
   <div class="descriptor-block"><span>Receive descriptor</span><code>{analysis.externalDescriptor}</code></div><div class="descriptor-block"><span>Change descriptor</span><code>{analysis.internalDescriptor}</code></div>
 </section>{/if}
-{:else}<section class="empty-state"><h2>Create a policy wallet first</h2><p>Recovery analysis needs a shared wallet with independent signing keys.</p><Button href="/multisig/new">Create wallet</Button></section>{/if}</div>
+{:else}<section class="empty-state"><h2>Create a multisig wallet first</h2><p>Recovery analysis needs a shared wallet with independent signing keys.</p><Button href="/multisig/new">Create wallet</Button></section>{/if}</div>

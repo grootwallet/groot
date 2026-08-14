@@ -61,7 +61,7 @@ export interface WalletHardwarePort {
   listHardwareDevices(): Promise<HardwareDevice[]>;
   promptHardwarePin(deviceId: string): Promise<string>;
   sendHardwarePin(challengeId: string, pinPositions: string): Promise<void>;
-  checkHardwareCosigner(cosigner: CosignerDraft): Promise<CosignerHealthCheck>;
+  checkHardwareCosigner(cosigner: CosignerDraft, deviceId: string): Promise<CosignerHealthCheck>;
   multisigSignerPolicyVerifications(): Promise<SignerPolicyVerification[]>;
   multisigPolicyVerificationAddress(): Promise<PolicyVerificationAddress>;
   previewMultisigPolicyVerificationAddress(policy: PolicyDraft): Promise<PolicyVerificationAddress>;
@@ -92,6 +92,7 @@ export interface WalletMultisigPort {
   createMultisig(policy: PolicyDraft, credential: string): Promise<MultisigWallet>;
   createRecoveryMultisig(name: string, template: RecoveryTemplate, cosigners: CosignerDraft[], credential: string): Promise<MultisigWallet>;
   multisigWallet(): Promise<MultisigWallet | null>;
+  renameMultisigSigner(signerId: string, label: string): Promise<MultisigWallet>;
   exportMultisig(credential: string): Promise<string>;
   exportMultisigBsms(credential: string): Promise<string>;
   savePublicBackup(suggestedFilename: string, content: string): Promise<SavedFileResult>;

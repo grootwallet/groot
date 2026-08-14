@@ -20,6 +20,7 @@ import type { ExternalSigner, ExternalSignerBackup, ExternalSignerSource, Extern
 import type { CoreNodeConfig, NodeStatus, PayjoinUriInspection, WalletSyncSource, WalletSyncStatus } from './contracts';
 import type { PolicyDraft } from '$lib/multisig/policy';
 import { coalesceNotificationEvents } from './notification-policy';
+import { multisigVerificationTimestampForDisplay, multisigVerificationTimestampForStorage } from './multisig-setup';
 
 type BackendError = { code?: string; message?: string };
 type NotificationEnvelope = { id: number; event: WalletEvent };
@@ -61,6 +62,29 @@ function normalizeSnapshot(snapshot: WalletSnapshot): WalletSnapshot {
       ...transaction,
       date: normalizeTimestamp(transaction.date) ?? transaction.date
     }))
+  };
+}
+
+function normalizeMultisigSetupDraft(draft: import('./contracts').MultisigSetupDraft): import('./contracts').MultisigSetupDraft {
+  return {
+    ...draft,
+    policyVerifications: draft.policyVerifications.map((verification) => ({
+      ...verification,
+      verifiedAt: multisigVerificationTimestampForDisplay(verification.verifiedAt)
+    }))
+  };
+}
+
+function serializeMultisigSetupDraft(draft: import('./contracts').MultisigSetupDraft): import('./contracts').MultisigSetupDraft {
+  return {
+    ...draft,
+    policyVerifications: draft.policyVerifications.map((verification) => {
+      const verifiedAt = multisigVerificationTimestampForStorage(verification.verifiedAt);
+      if (!verifiedAt) {
+        throw new WalletError('wallet_corrupt', 'The hardware-policy verification time is invalid. Verify that signer policy again.');
+      }
+      return { ...verification, verifiedAt };
+    })
   };
 }
 
@@ -148,8 +172,8 @@ export class TauriWalletAdapter implements WalletPort {
   listHardwareDevices() { return command<HardwareDevice[]>('hardware_list'); }
   promptHardwarePin(deviceId: string) { return command<string>('hardware_prompt_pin', { deviceId }); }
   sendHardwarePin(challengeId: string, pinPositions: string) { return command<void>('hardware_send_pin', { challengeId, pinPositions }); }
-  async checkHardwareCosigner(cosigner: PolicyDraft['cosigners'][number]) {
-    const result = await command<CosignerHealthCheck>('hardware_check_cosigner', { cosigner });
+  async checkHardwareCosigner(cosigner: PolicyDraft['cosigners'][number], deviceId: string) {
+    const result = await command<CosignerHealthCheck>('hardware_check_cosigner', { cosigner, deviceId });
     return { ...result, checkedAt: normalizeTimestamp(result.checkedAt) ?? result.checkedAt };
   }
   async multisigSignerPolicyVerifications() {
@@ -189,14 +213,21 @@ export class TauriWalletAdapter implements WalletPort {
   }
   cancelExternalSignerProposal(proposalId: string) { return command<void>('external_signer_proposal_cancel', { proposalId }); }
   verifyExternalAddress(deviceId: string, addressId: number) { return command<ReceiveAddress>('hardware_verify_external_address', { deviceId, addressId }).then(normalizeAddress); }
-  multisigSetupDraft() { return command<import('./contracts').MultisigSetupDraft | null>('multisig_setup_draft'); }
-  saveMultisigSetupDraft(draft: import('./contracts').MultisigSetupDraft) { return command<import('./contracts').MultisigSetupDraft>('multisig_setup_draft_save', { draft }); }
+  async multisigSetupDraft() {
+    const draft = await command<import('./contracts').MultisigSetupDraft | null>('multisig_setup_draft');
+    return draft ? normalizeMultisigSetupDraft(draft) : null;
+  }
+  async saveMultisigSetupDraft(draft: import('./contracts').MultisigSetupDraft) {
+    const savedDraft = await command<import('./contracts').MultisigSetupDraft>('multisig_setup_draft_save', { draft: serializeMultisigSetupDraft(draft) });
+    return normalizeMultisigSetupDraft(savedDraft);
+  }
   discardMultisigSetupDraft() { return command<void>('multisig_setup_draft_discard'); }
   previewMultisig(policy: PolicyDraft) { return command<MultisigPreview>('multisig_preview', { policy }); }
   analyzeRecoveryPolicy(template: RecoveryTemplate, cosigners: PolicyDraft['cosigners']) { return command<RecoveryPolicyAnalysis>('recovery_policy_analyze', { template, cosigners }); }
   createMultisig(policy: PolicyDraft, credential: string) { return command<MultisigWallet>('multisig_create', { policy, credential }); }
   createRecoveryMultisig(name: string, template: RecoveryTemplate, cosigners: PolicyDraft['cosigners'], credential: string) { return command<MultisigWallet>('multisig_recovery_create', { name, template, cosigners, credential }); }
   multisigWallet() { return command<MultisigWallet | null>('multisig_wallet'); }
+  renameMultisigSigner(signerId: string, label: string) { return command<MultisigWallet>('multisig_signer_rename', { signerId, label }); }
   exportMultisig(credential: string) { return command<string>('multisig_export', { credential }); }
   exportMultisigBsms(credential: string) { return command<string>('multisig_export_bsms', { credential }); }
   savePublicBackup(suggestedFilename: string, content: string) { return command<SavedFileResult>('public_backup_save', { suggestedFilename, content }); }

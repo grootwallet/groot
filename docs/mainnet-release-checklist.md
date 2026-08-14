@@ -31,7 +31,7 @@ Candidate scope: first mainnet release is macOS desktop only, hardware-focused, 
 - [ ] BitBox02 Nova desktop-USB support is either implemented and separately certified or explicitly excluded from the first-release support matrix.
 - [ ] Blockstream Jade certification record complete.
 - [ ] Each record covers setup/import, reconnect, fingerprint, policy registration, address display, signing, user rejection, wrong device, changed PSBT, and firmware/HWI compatibility.
-- [ ] At least two independent devices complete a real 2-of-3 Testnet4 spend and descriptor recovery drill.
+- [ ] At least two independent devices complete a real 2-of-3 Testnet4 spend and descriptor recovery test.
 
 ## Secrets and platforms
 
@@ -53,6 +53,6 @@ Candidate scope: first mainnet release is macOS desktop only, hardware-focused, 
 - [ ] SBOM, dependency licenses/advisories, artifact provenance, macOS hardened-runtime signing/notarization, and update signature plus rollback verification are complete. Deterministic target-specific CycloneDX generation now covers every installed Node package and every Rust package resolved for the build target, fails on missing licenses or registry integrity/checksums, and is hashed beside the unsigned binary. Remaining: final-commit advisory evidence, provenance attestation, HWI component evidence, Apple signing/notarization, and signed update/rollback verification.
 - [ ] BIP129/BSMS export/import and `crypto-psbt` UR/file exchange interoperate with at least two independent descriptor-aware coordinators/signers. Groot's automated boundary rejects malformed first-address syntax and incomplete BIP174 payloads before either record reaches wallet reconstruction or the webview; a disposable Bitcoin Core descriptor wallet independently imports both Groot branches, derives matching index-0/index-37 addresses, observes funded history, and survives reload. Two external coordinator/signer round trips remain pending and no sensitive vector is committed.
 - [ ] External Bitcoin wallet/security review is complete and findings are resolved. The supplied Phase 1 review of commit `dc16efa5` has an implementation record and regression mapping in [`security-hardening-2026-08-12.md`](security-hardening-2026-08-12.md); independent re-review of the exact remediation commit and closure of every finding remain pending.
-- [ ] Recovery drill is independently performed from documented backups in another descriptor-aware wallet. Disposable Bitcoin Core import/reload is automated supporting evidence; the clean-machine human drill from the release backup remains pending.
+- [ ] Recovery is independently tested from documented backups in another descriptor-aware wallet. Disposable Bitcoin Core import/reload is automated supporting evidence; the clean-machine human test from the release backup remains pending.
 - [x] Incident response, vulnerability disclosure, rollback, and signed update procedures are published. Evidence: [`SECURITY.md`](../SECURITY.md), [`incident-response.md`](incident-response.md), [`release-update-rollback.md`](release-update-rollback.md), and the disposable signed/tampered bundle test `pnpm release:test:update`. Actual candidate signing and rollback drills remain separately blocked above.
 - [ ] ADR 0012 is superseded by an approved mainnet-enablement ADR.

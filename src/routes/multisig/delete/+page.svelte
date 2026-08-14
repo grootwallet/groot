@@ -59,7 +59,7 @@
       toast(recoveryDrillNotice(drill));
     } catch (cause) {
       drillVerified = false;
-      drillError = cause instanceof Error ? cause.message : 'Recovery drill failed.';
+      drillError = cause instanceof Error ? cause.message : 'Recovery test failed.';
     } finally { busy = false; }
   }
 
@@ -79,26 +79,27 @@
 </script>
 
 <div class="page narrow-page backup-page">
-  <header class="page-header"><div><p class="eyebrow">WALLET DELETION</p><h1>Delete policy wallet</h1><p class="subtitle">Remove this watch-only coordinator from this device.</p></div><Button variant="secondary" href="/settings">Back to settings</Button></header>
+  <header class="page-header"><div><p class="eyebrow">WALLET DELETION</p><h1>Delete multisig wallet</h1><p class="subtitle">Remove this watch-only wallet from Groot on this device.</p></div><Button variant="secondary" href="/settings">Back to settings</Button></header>
   {#if wallet}
     <section class="form-card">
-      <div class="section-heading compact"><div><h2>1. Confirm recovery</h2><p>Deletion requires a successful drill for this wallet’s exact public descriptor.</p></div><ShieldCheck size={19}/></div>
+      <div class="section-heading compact"><div><h2>1. Export and test recovery</h2><p>Save a public wallet backup, then prove it restores this exact wallet.</p></div><ShieldCheck size={19}/></div>
       {#if drillVerified}
-        <div class="drill-result passed"><Check size={17}/><span><strong>Recovery drill complete</strong><small>The verified backup reconstructs {wallet.name}.</small>{#if drill}<code>{drill.firstAddress}</code>{/if}</span></div>
+        <div class="drill-result passed"><Check size={17}/><span><strong>Recovery tested</strong><small>The verified backup reconstructs {wallet.name}.</small>{#if drill}<code>{drill.firstAddress}</code>{/if}</span></div>
       {:else}
         {#if drill}<div class="drill-result"><X size={17}/><span><strong>Backup does not match</strong><code>{drill.firstAddress}</code></span></div>{/if}
+        <div class="backup-required-action"><span><strong>Need a backup?</strong><small>Export the public descriptors before continuing.</small></span><Button variant="secondary" size="small" href="/multisig/backup">Export wallet backup</Button></div>
         <label class="file-action" class:file-loaded={Boolean(loadedBackupName)}>
           <FileUp size={16}/><span><strong>{loadedBackupName ? 'Backup ready' : 'Load wallet backup'}</strong>{#if loadedBackupName}<small title={loadedBackupName}>{loadedBackupName}</small>{/if}</span>
           <input aria-label="Deletion backup file" type="file" accept=".bsms,.json,application/json,text/plain" onchange={importBackup}/>
         </label>
-        <Button class="full" disabled={!backup} loading={busy} loadingLabel="Verifying backup…" onclick={verifyBackup}>Run recovery drill</Button>
+        <Button class="full" disabled={!backup} loading={busy} loadingLabel="Testing recovery…" onclick={verifyBackup}>Test recovery</Button>
       {/if}
       {#if drillError}<p class="form-error" aria-live="polite">{drillError}</p>{/if}
     </section>
 
     <section class="form-card danger-card">
       <div class="section-heading compact"><div><h2>2. Delete local wallet</h2><p>This removes local coordinator data only. Hardware-wallet keys are unchanged.</p></div><Trash2 size={19}/></div>
-      {#if !drillVerified}<div class="warning-box"><strong>Recovery drill required</strong>Complete step 1 before deletion can be authorized.</div>{/if}
+      {#if !drillVerified}<div class="warning-box delete-prerequisite"><strong>Recovery test required</strong><span>Complete step 1 before deletion can be authorized.</span></div>{/if}
       <label class="field"><span>Type <q>{wallet.name}</q> exactly</span><input aria-label="Wallet name confirmation" bind:value={confirmation} autocomplete="off"/></label>
       {#if confirmation && confirmation !== wallet.name}<p class="form-error" aria-live="polite">The wallet name does not match exactly.</p>{/if}
       <PasswordField label="App PIN" inputLabel="Delete wallet app PIN" bind:value={pin} autocomplete="current-password"/>
@@ -106,7 +107,7 @@
       {#if deleteError}<p class="form-error" aria-live="polite">{deleteError}</p>{/if}
     </section>
   {:else}
-    <section class="empty-state"><h2>No policy wallet selected</h2><Button href="/settings">Return to settings</Button></section>
+    <section class="empty-state"><h2>No multisig wallet selected</h2><Button href="/settings">Return to settings</Button></section>
   {/if}
 </div>
 

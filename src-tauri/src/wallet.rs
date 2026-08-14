@@ -996,6 +996,7 @@ pub struct PaymentProposalDto {
     change: u64,
     change_addresses: Vec<String>,
     change_testnet_aliases: Vec<Option<String>>,
+    change_derivation_paths: Vec<Vec<String>>,
     output_count: usize,
     selected_outpoints: Vec<String>,
     inputs: Vec<ProposalInputDto>,
@@ -1041,6 +1042,7 @@ pub struct ProposalInputDto {
     outpoint: String,
     amount: u64,
     sequence: u32,
+    derivation_paths: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -1140,6 +1142,7 @@ pub struct MultisigProposalDto {
     change: u64,
     change_addresses: Vec<String>,
     change_testnet_aliases: Vec<Option<String>>,
+    change_derivation_paths: Vec<Vec<String>>,
     output_count: usize,
     selected_outpoints: Vec<String>,
     inputs: Vec<ProposalInputDto>,
@@ -1234,7 +1237,7 @@ struct HwiAddress {
 
 fn missing_hwi_value(code: Option<i64>, value: &str) -> ApiError {
     let message = match code {
-        Some(-3 | -12) => "The device is locked or another wallet app owns its USB session. Quit Trezor Suite, BitBoxApp, Ledger Live, and other wallet apps completely; reconnect the device, then try again. A locked Trezor Model One can be unlocked from its Groot device card.",
+        Some(-3 | -12) => "The device is locked or another wallet app owns its USB session. Follow the unlock prompt shown by Groot or the device. If another wallet app is open, quit it, reconnect, then try again. A locked Trezor Model One can be unlocked from its Groot device card.",
         Some(-14) => "The action was cancelled on the hardware wallet.",
         Some(-15) => "The hardware wallet is busy. Finish the current action and try again.",
         Some(-8 | -9) => "This hardware wallet does not support the requested operation.",
@@ -1277,7 +1280,7 @@ fn missing_hardware_xpub(
         }
         "bitbox02" => api_error(
             "hardware_unavailable",
-            "BitBox02 did not export the account key. Open and unlock the wallet in BitBoxApp first, then quit BitBoxApp completely and try again in Groot.",
+            "BitBox02 did not export the account key. Reconnect it, scan again, and enter the device password when prompted. If BitBoxApp is open, quit it so Groot can use USB. Use BitBoxApp only if Groot reports that first-time pairing is required.",
         ),
         "trezor" | "keepkey" => api_error(
             "hardware_unavailable",
@@ -1337,7 +1340,7 @@ fn hardware_device_dto(device: HwiDevice) -> HardwareDeviceDto {
     } else if device_type == "bitbox02" {
         (
             "needs_companion",
-            "Finish pairing and unlock in BitBoxApp, quit BitBoxApp completely, reconnect, then scan again.",
+            "Reconnect BitBox02, scan again, and enter the device password when prompted. If Groot reports that first-time pairing is required, complete that pairing in BitBoxApp, quit it, then rescan.",
             "retry",
         )
     } else if device_type == "jade" {
@@ -3487,6 +3490,7 @@ fn proposal_dto(
     let (change, change_addresses) = proposal_change_details(wallet, &psbt, &recipient, amount)?;
     let (recipient_testnet_alias, change_testnet_aliases) =
         proposal_testnet_aliases(&recipient, &change_addresses);
+    let change_derivation_paths = proposal_change_derivation_paths(&psbt, &change_addresses)?;
     let (inputs, fee_rate, locktime, rbf) = proposal_transaction_details(wallet, &psbt, fee)?;
     let selection_impact =
         selection_impact(db, wallet, &psbt, &strategy, fee_difference_vs_private)?;
@@ -3502,6 +3506,7 @@ fn proposal_dto(
         change,
         change_addresses,
         change_testnet_aliases,
+        change_derivation_paths,
         output_count: psbt.unsigned_tx.output.len(),
         selected_outpoints: psbt
             .unsigned_tx
@@ -3569,6 +3574,47 @@ fn proposal_change_details(
         ));
     }
     Ok((change, change_addresses))
+}
+
+fn proposal_change_derivation_paths(
+    psbt: &Psbt,
+    change_addresses: &[String],
+) -> ApiResult<Vec<Vec<String>>> {
+    change_addresses
+        .iter()
+        .map(|address| {
+            let script = Address::from_str(address)
+                .map_err(|_| internal("A proposal change address is invalid."))?
+                .require_network(NETWORK)
+                .map_err(|_| internal("A proposal change address is on the wrong network."))?
+                .script_pubkey();
+            let output_index = psbt
+                .unsigned_tx
+                .output
+                .iter()
+                .position(|output| output.script_pubkey == script)
+                .ok_or_else(|| {
+                    internal("A proposal change address is missing from the transaction.")
+                })?;
+            let output = psbt
+                .outputs
+                .get(output_index)
+                .ok_or_else(|| internal("A proposal change output is missing PSBT metadata."))?;
+            Ok(unique_derivation_paths(
+                output
+                    .bip32_derivation
+                    .values()
+                    .map(|(_, path)| path.to_string()),
+            ))
+        })
+        .collect()
+}
+
+fn unique_derivation_paths(paths: impl Iterator<Item = String>) -> Vec<String> {
+    paths
+        .collect::<std::collections::BTreeSet<_>>()
+        .into_iter()
+        .collect()
 }
 
 fn validate_proposal_fee(psbt: &Psbt, expected_fee: u64) -> ApiResult<()> {
@@ -3663,6 +3709,12 @@ fn proposal_transaction_details(
             outpoint: txin.previous_output.to_string(),
             amount: utxo.value.to_sat(),
             sequence: txin.sequence.to_consensus_u32(),
+            derivation_paths: unique_derivation_paths(
+                psbt.inputs[index]
+                    .bip32_derivation
+                    .values()
+                    .map(|(_, path)| path.to_string()),
+            ),
         });
     }
     let signed_weight = psbt
@@ -4149,6 +4201,7 @@ fn load_payment_proposal_dto(
     let (change, change_addresses) = proposal_change_details(wallet, &psbt, &recipient, amount)?;
     let (recipient_testnet_alias, change_testnet_aliases) =
         proposal_testnet_aliases(&recipient, &change_addresses);
+    let change_derivation_paths = proposal_change_derivation_paths(&psbt, &change_addresses)?;
     let (inputs, fee_rate, locktime, rbf) = proposal_transaction_details(wallet, &psbt, fee)?;
     let selection_impact =
         selection_impact(db, wallet, &psbt, &strategy, fee_difference_vs_private)?;
@@ -4164,6 +4217,7 @@ fn load_payment_proposal_dto(
         change,
         change_addresses,
         change_testnet_aliases,
+        change_derivation_paths,
         output_count: psbt.unsigned_tx.output.len(),
         selected_outpoints: psbt
             .unsigned_tx
@@ -4886,6 +4940,14 @@ fn has_coldcard_policy_acknowledgement(
         })
 }
 
+fn supports_coldcard_policy_acknowledgement(signer: &CosignerInput) -> bool {
+    signer
+        .device_type
+        .as_deref()
+        .is_some_and(|device_type| device_type.eq_ignore_ascii_case("coldcard"))
+        || (signer.device_type.is_none() && signer.source == CosignerSource::File)
+}
+
 #[tauri::command]
 pub fn multisig_acknowledge_coldcard_policy(
     app: AppHandle,
@@ -4915,14 +4977,10 @@ pub fn multisig_acknowledge_coldcard_policy(
                 "This fingerprint is not part of the wallet.",
             )
         })?;
-    if !signer
-        .device_type
-        .as_deref()
-        .is_some_and(|device_type| device_type.eq_ignore_ascii_case("coldcard"))
-    {
+    if !supports_coldcard_policy_acknowledgement(signer) {
         return Err(api_error(
             "invalid_hardware_request",
-            "Only a saved Coldcard signer can use the policy-file acknowledgement flow.",
+            "This signer was saved as a different hardware type and cannot use Coldcard policy setup.",
         ));
     }
     let acknowledged_at = now();
@@ -5180,7 +5238,7 @@ fn hardware_api_error(error: HardwareError) -> ApiError {
         HardwareError::TimedOut => "The hardware wallet did not respond in time.",
         HardwareError::OutputTooLarge => "The hardware wallet returned an oversized response.",
         HardwareError::CommandFailed(code) => match code {
-            Some(-3 | -12) => "The device is locked or another wallet app owns its USB session. Quit Trezor Suite, BitBoxApp, Ledger Live, and other wallet apps completely; reconnect the device, then scan again. A locked Trezor Model One can be unlocked from its Groot device card.",
+            Some(-3 | -12) => "The device is locked or another wallet app owns its USB session. Follow the unlock prompt shown by Groot or the device. If another wallet app is open, quit it, reconnect, then scan again. A locked Trezor Model One can be unlocked from its Groot device card.",
             Some(-14) => "The action was cancelled on the hardware wallet.",
             Some(-15) => "The hardware wallet is busy. Close its companion app and try again.",
             Some(-8 | -9) => "This hardware wallet does not support the requested operation.",
@@ -5216,7 +5274,7 @@ fn hardware_device_api_error(error: HardwareError, device_type: &str) -> ApiErro
     {
         return api_error(
             error.code(),
-            "Quit BitBoxApp completely, reconnect and unlock BitBox02, then scan again. A new BitBox02 must first be paired once in BitBoxApp.",
+            "Reconnect BitBox02, scan again, and enter the device password when prompted. If BitBoxApp is open, quit it so Groot can use USB. Use BitBoxApp only if Groot reports that first-time pairing is required.",
         );
     }
     hardware_api_error(error)
@@ -5228,7 +5286,7 @@ fn missing_hardware_fingerprint(device_type: &str) -> ApiError {
             "Unlock Ledger and open Bitcoin Test—not Bitcoin—for this Regtest wallet, then scan again."
         }
         "bitbox02" => {
-            "Finish pairing and unlock in BitBoxApp, quit BitBoxApp completely, reconnect, then scan again."
+            "Reconnect BitBox02, scan again, and enter the device password when prompted. Use BitBoxApp only if Groot reports that first-time pairing is required."
         }
         "jade" => {
             "Log in on Jade using Recovery Phrase Login or QR PIN Unlock, then scan again."

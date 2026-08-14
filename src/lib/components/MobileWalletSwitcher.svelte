@@ -52,7 +52,7 @@
       {#each profiles as profile}
         <button type="button" role="menuitemradio" aria-checked={profile.id === selectedWalletId} class:active={profile.id === selectedWalletId} onclick={() => choose(profile.id)}>
           <span class="mobile-wallet-menu-icon">{#if profile.kind === 'multisig'}<ShieldCheck size={16}/>{:else if profile.kind === 'watch_only'}<Cpu size={16}/>{:else}<WalletCards size={16}/>{/if}</span>
-          <span><strong>{profile.name}</strong><small>{profile.kind === 'multisig' ? 'Policy wallet' : profile.kind === 'watch_only' ? 'Hardware wallet' : 'Software wallet'}</small></span>
+          <span><strong>{profile.name}</strong><small>{profile.kind === 'multisig' ? 'Multisig wallet' : profile.kind === 'watch_only' ? 'Hardware wallet' : 'Software wallet'}</small></span>
         </button>
       {/each}
       <a href="/welcome?add=1" role="menuitem" onclick={() => open = false}><span class="mobile-wallet-menu-icon"><Plus size={16}/></span><span><strong>Add wallet</strong><small>Create or recover another wallet</small></span></a>

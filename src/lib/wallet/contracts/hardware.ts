@@ -29,7 +29,7 @@ export type ExternalSignerBackup = { descriptor: string; content: string };
 export type SavedFileResult = { saved: boolean; revealToken: string | null; revealLabel: string | null };
 
 export type CosignerHealthCheck = {
-  status: 'healthy' | 'record_valid' | 'attention';
+  status: 'healthy' | 'attention';
   checkedAt: string;
   summary: string;
 };

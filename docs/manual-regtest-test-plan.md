@@ -68,7 +68,7 @@ Open `http://127.0.0.1:5188`. Use `prototype-passphrase` anywhere the prototype 
 
 1. Open Vault. The pre-created wallet is `Family vault`, 2-of-3, with 2,481,240 fixture sats.
 2. Confirm Coldcard, Trezor, and Offline backup cosigners are visible.
-3. Select Coldcard, inspect its fingerprint/path/source, run its health check, and confirm the connected fingerprint matches.
+3. Select Coldcard, inspect its fingerprint/path/source, run its health check, and confirm the connected device's fingerprint and full BIP48 account xpub match the saved signer.
 4. Select Offline backup, run its check, and confirm Groot explicitly says physical presence was not checked.
 5. Choose Send and enter any displayed `bcrt1…` Receive address plus `50000` sats.
 6. Review the authoritative amount, fee, and total.

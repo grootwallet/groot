@@ -15,3 +15,12 @@ export function lockedDeviceForHealthCheck(
   );
   return lockedTrezors.length === 1 ? lockedTrezors[0] : null;
 }
+
+export function matchingDeviceForHealthCheck(
+  signer: CosignerDraft,
+  devices: HardwareDevice[]
+): HardwareDevice | null {
+  return devices.find(
+    (device) => device.connected && device.fingerprint?.toLowerCase() === signer.fingerprint.toLowerCase()
+  ) ?? null;
+}

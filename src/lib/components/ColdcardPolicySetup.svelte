@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Check, Download, ShieldCheck } from '@lucide/svelte';
+  import { AlertTriangle, Check, Download, ShieldCheck } from '@lucide/svelte';
   import type { CosignerDraft } from '$lib/multisig/policy';
   import type { MultisigWallet } from '$lib/wallet';
   import Button from './Button.svelte';
@@ -39,7 +39,7 @@
   <PolicySignerList signers={wallet.cosigners} currentFingerprint={signer.fingerprint} detail="fingerprint"/>
 
   <label class="policy-review-confirmation"><input type="checkbox" bind:checked={acknowledged}/><span><strong>I imported and verified this policy on {signer.label}</strong><small>This records your on-device check for this wallet and signer fingerprint.</small></span></label>
-  {#if error}<p class="form-error" role="alert">{error}</p>{/if}
+  {#if error}<div class="hardware-inline-error" role="alert"><AlertTriangle size={18}/><span><strong>Coldcard setup was not recorded</strong><small>{error}</small></span></div>{/if}
   <div class="modal-footer policy-review-actions">
     {#if onback}<Button variant="secondary" disabled={busy} onclick={onback}>Back</Button>{/if}
     <Button disabled={!acknowledged} loading={busy} loadingLabel="Saving confirmation…" onclick={onconfirm}><Check size={15}/>Continue to signing</Button>
