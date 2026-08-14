@@ -86,6 +86,17 @@ describe('multisig policy invariants', () => {
       xpub: existing.xpub,
       source: 'manual'
     }))).toMatchObject({ match: 'xpub' });
+    expect(findDuplicateCosigner([existing], cosigner({
+      label: 'Same fingerprint only',
+      xpub: 'tpub-distinct-key',
+      source: 'qr'
+    }))).toMatchObject({ match: 'fingerprint' });
+    expect(findDuplicateCosigner([existing], cosigner({
+      label: 'Independent signer',
+      fingerprint: 'ffffffff',
+      xpub: 'tpub-independent-key',
+      source: 'file'
+    }))).toBeNull();
   });
 
   it('bounds wallet names, stable identifiers, and signer labels', () => {
