@@ -922,6 +922,39 @@ pub fn multisig_draft_policy_verification_address(
     })
 }
 
+pub(crate) fn bitbox_policy_address_error(
+    device_type: &str,
+    code: Option<i64>,
+    error: Option<&str>,
+) -> Option<ApiError> {
+    if !device_type.eq_ignore_ascii_case("bitbox02") || code != Some(-13) {
+        return None;
+    }
+    let normalized = error.unwrap_or_default().to_ascii_lowercase();
+    if normalized.contains("multisig account configuration with this name already exists") {
+        return Some(api_error(
+            "hardware_policy_name_conflict",
+            "That account name is already used by another multisig policy on BitBox02. Start the review again and enter a new unique name on the device, such as “Groot 2of3 B”.",
+        ));
+    }
+    Some(api_error(
+        "hardware_command_failed",
+        "BitBox02 did not finish wallet registration. Start the review again, enter a new unique account name on the device, approve the policy, then verify the first address.",
+    ))
+}
+
+fn missing_policy_address(device_type: &str, response: HwiAddress) -> ApiError {
+    let code = response.code;
+    if let Some(error) = bitbox_policy_address_error(device_type, code, response.error.as_deref()) {
+        return error;
+    }
+    drop(response.error);
+    missing_hwi_value(
+        code,
+        "The device did not return the policy verification address.",
+    )
+}
+
 pub(crate) fn ensure_hardware_verification_context(
     initiating_wallet_id: Uuid,
     current_wallet_id: Uuid,
@@ -995,13 +1028,10 @@ pub async fn hardware_verify_multisig_policy(
     .await
     .map_err(internal)??;
     let response: HwiAddress = serde_json::from_slice(&displayed).map_err(internal)?;
-    let actual = response.address.ok_or_else(|| {
-        drop(response.error);
-        missing_hwi_value(
-            response.code,
-            "The device did not return the policy verification address.",
-        )
-    })?;
+    let actual = response
+        .address
+        .clone()
+        .ok_or_else(|| missing_policy_address(&identity.device_type, response))?;
     if !hardware_display_matches_expected_address(&expected, &actual) {
         return Err(api_error(
             "hardware_address_mismatch",
@@ -1082,13 +1112,10 @@ pub async fn hardware_verify_multisig_draft_policy(
     .await
     .map_err(internal)??;
     let response: HwiAddress = serde_json::from_slice(&displayed).map_err(internal)?;
-    let actual = response.address.ok_or_else(|| {
-        drop(response.error);
-        missing_hwi_value(
-            response.code,
-            "The device did not return the policy verification address.",
-        )
-    })?;
+    let actual = response
+        .address
+        .clone()
+        .ok_or_else(|| missing_policy_address(&identity.device_type, response))?;
     if !hardware_display_matches_expected_address(&expected, &actual) {
         return Err(api_error(
             "hardware_address_mismatch",

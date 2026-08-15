@@ -16,12 +16,17 @@ or complete fingerprint is included here.
 
 ## Decision at this checkpoint
 
-**BIP84 USB PASS / COMPLETE JADE CERTIFICATION IN PROGRESS.** The exact original
-Jade passed the lifecycle, BIP84 public-account import, trusted receive-address
-display, funded rejection/retry/sign/broadcast, confirmation/accounting, and
-device-free restart-persistence scope below. This is not a complete model
-certification until the BIP48 2-of-3, negative/reliability, independent public
-descriptor recovery, and remaining release rows are executed.
+**LOCAL REGTEST USB CERTIFICATION PASS / RELEASE CERTIFICATION IN PROGRESS.**
+The exact original Jade passed the lifecycle, BIP84 public-account
+import, trusted receive-address display, funded rejection/retry/sign/broadcast,
+confirmation/accounting, and device-free restart-persistence scope below. It
+also passed BIP48 policy registration, first-address proof, an on-device signing
+rejection followed by a successful unchanged retry, partial-signature process
+restart, threshold completion with the independently certified BitBox02,
+broadcast, confirmation/accounting, signer-health, interruption/retry, hostile
+PSBT, wrong-device, and local descriptor-recovery checks. This completes the
+local Regtest USB campaign. Release certification still requires the independent
+clean-profile recovery and release-environment rows below.
 
 No result in this report applies to Jade Plus, QR, BLE, Mainnet, Testnet4,
 Signet, a packaged release, another firmware version, or another host OS.
@@ -44,6 +49,18 @@ Signet, a packaged release, another firmware version, or another host OS.
 | Retry signs for the expected signer | PASS | A fresh scan of the unchanged proposal returned exactly one verified Jade signature. Groot repeated the signed transaction review before accepting the separate Groot app PIN. |
 | Broadcast, confirmation, and accounting | PASS | Groot finalized only after the signature and app PIN, broadcast successfully, synced one confirmation, and distinguished the 25,000-sat outgoing payment, 281-sat fee, and 74,719-sat wallet-owned change. |
 | Full process restart without Jade | PASS | After a native app quit and relaunch with Jade disconnected, the Groot app PIN restored the hardware-wallet profile, balance, permanent labels, confirmations, receive-verification evidence, coin provenance/change lineage, and signer settings. |
+| BIP48 2-of-3 account import and policy proof | PASS | Groot imported Jade's public BIP48 account at `m/48'/1'/0'/2'`, registered the 2-of-3 policy, matched the first multisig address returned by Jade, and persisted descriptor-bound policy evidence. The independently certified BitBox02 cosigner completed the same policy proof after the reviewer supplied a new device-local account name. |
+| BIP48 funded receive and sync | PASS | The Jade-verified first multisig address received 100,000 disposable Regtest sats and synced with one confirmation and its permanent label. |
+| BIP48 Jade rejection and unchanged retry | PASS | The first Jade signature request was rejected on-device. Groot retained the exact 25,000-sat proposal at zero of two signatures and accepted Jade's signature only after a fresh approval of the unchanged transaction. |
+| BIP48 threshold completion | PASS | Groot verified one Jade signature and one BitBox02 signature for the same PSBT, reached the required two-of-three threshold, and retained the unused Trezor cosigner without requiring it. |
+| BIP48 broadcast and accounting | PASS | Bitcoin Core accepted the finalized transaction. A mined block confirmed exactly 25,000 sats to the intended recipient and 74,622 sats to the wallet-owned multisig change output, implying the reviewed 378-sat fee. |
+| Partial signature survives process restart | PASS | A separate proposal retained Jade's verified one-of-two signature across a full native app close, relaunch, wallet unlock, and exact-proposal resume. |
+| Cable interruption and retry | PASS | Interrupting Jade during the signing attempt produced no signature and left the proposal unchanged; reconnecting and approving a fresh attempt added the expected Jade signature. |
+| Duplicate signed PSBT is non-mutating | PASS | Re-importing a PSBT from the already-counted Jade signer returned the explicit no-new-signatures rejection and preserved one-of-two progress. |
+| Foreign proposal PSBT is non-mutating | PASS | A signed PSBT produced for a different reviewed proposal failed the unsigned-transaction binding check and left the active proposal at zero signatures. |
+| Wrong physical signer fails closed | PASS | A connected Coldcard whose fingerprint was not in this policy was rejected as not matching any saved signer and collected no signature. |
+| Saved-identity health check | PASS | Groot read the connected Jade's fingerprint and BIP48 account key and matched both against the saved signer identity. |
+| Public backup self-test | PASS | The exported public descriptor backup reproduced the same first receive address in Groot's recovery test. This proves the local artifact's descriptor binding, not yet an independent clean-profile balance/history restore. |
 
 ## Defects discovered and corrected during the campaign
 
@@ -73,6 +90,21 @@ Signet, a packaged release, another firmware version, or another host OS.
    unsigned signing surface. Single-key hardware signing now keeps the same
    transaction review visible while choosing a transport and after signature,
    matching the multisig flow's security posture.
+5. **BitBox02 account-name collision was presented as incomplete registration.**
+   BitBox02 requires each registered multisig policy to use a device-local account
+   name that is not already assigned to another policy. That name is separate from
+   the Groot wallet name. Groot now explains the rule before starting, recognizes
+   HWI's known collision response as a stable name-conflict error, and never
+   automatically repeats the device registration flow. A new unused name completed
+   the policy and first-address proof in the physical 2-of-3 setup.
+6. **Dismissed PSBT imports retained rejected text.** The file input reset while
+   the signed-PSBT textarea retained the previous artifact across modal reopen.
+   Every import entry and dismissal path now clears the transient file contents
+   and modal validation state in both single-signer and multisig flows; only the
+   sanitized rejection message remains durable on the transaction page.
+7. **Durable PSBT errors used cramped bare text.** Multisig transport failures
+   now use the same icon, title, detail, spacing, border, and accessible alert
+   treatment as hardware and modal errors instead of an unspaced form-error line.
 
 ## Automated verification attached to this checkpoint
 
@@ -88,15 +120,11 @@ Signet, a packaged release, another firmware version, or another host OS.
 
 - A fresh physical wallet-creation repetition for the repaired selection-refresh
   path.
-- BIP48 `m/48'/1'/0'/2'` import in a new 2-of-3 policy with two independently
-  certified signers.
-- Duplicate signer rejection, policy registration, first multisig address display,
-  descriptor/BSMS export, partial-signature restart, threshold completion, and
-  funded multisig broadcast.
-- Non-cosigner, cable-interruption, foreign/mutated PSBT, duplicate-signature,
-  missing/wrong-device, and saved-identity health checks in the Jade policy.
 - Independent clean-flow public-descriptor recovery reproducing the first address,
   balance, and history without deleting the certified wallet.
+- A deliberately malformed or same-proposal field-mutated PSBT fixture, distinct
+  from the physically exercised foreign-proposal rejection, if required by the
+  final release matrix.
 - Jade-specific RBF/CPFP if the eventual release scope requires per-model repeats.
 - Signet/Testnet4, packaged HWI, signed/notarized application, and independent
   reviewer evidence.

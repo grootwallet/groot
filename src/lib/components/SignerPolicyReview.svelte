@@ -59,7 +59,7 @@
       {#if verification}<p class="policy-repeat-note">Groot's current Ledger connection must authorize this policy again for each signing request. Keep this reference open until Ledger reaches the transaction.</p>{/if}
     </div>
   {:else if kind === 'bitbox02'}
-    <div class="instruction-card bitbox-policy-steps"><strong>On BitBox02</strong><ol><li><b>Name the account.</b> Any short label is fine, such as “Groot {wallet.threshold}-of-{wallet.cosigners.length}”.</li><li><b>Review the policy.</b> Confirm {wallet.threshold}-of-{wallet.cosigners.length} and compare every signer key.</li><li><b>Verify the address.</b> BitBox02 shows it after registration.</li></ol></div>
+    <div class="instruction-card bitbox-policy-steps"><strong>Before you start on BitBox02</strong><p><b>The BitBox account name must be unused on this device.</b> It is separate from the Groot wallet name. Do not reuse the name of any existing BitBox multisig account or policy.</p><ol><li><b>Enter a new device-local account name.</b> Try “Groot {wallet.threshold}of{wallet.cosigners.length} B”.</li><li><b>Review the policy.</b> Confirm {wallet.threshold}-of-{wallet.cosigners.length} and compare every signer key.</li><li><b>Verify the address.</b> BitBox02 shows it after registration.</li></ol></div>
   {:else if kind === 'jade'}
     <div class="policy-device-expectation"><strong>Jade will show</strong><p>The multisig registration details before it can verify receive and change addresses. Compare the threshold and every signer identity.</p></div>
   {/if}
@@ -79,7 +79,7 @@
   {#if error}<p class="form-error" role="alert">{error}</p>{/if}
   <div class="modal-footer policy-review-actions">
     {#if onback}<Button variant="secondary" disabled={busy} onclick={onback}>Back</Button>{/if}
-    {#if action === 'verify'}<Button disabled={!acknowledged} loading={busy} loadingLabel={`Follow ${deviceName}…`} onclick={onverify}><Check size={15}/>{kind === 'bitbox02' ? 'Start BitBox02 review' : 'Verify policy & first address'}</Button>
+    {#if action === 'verify'}<Button disabled={!acknowledged} loading={busy} loadingLabel={`Follow ${deviceName}…`} onclick={onverify}><Check size={15}/>{kind === 'bitbox02' ? 'Start review with a new name' : 'Verify policy & first address'}</Button>
     {:else if busy}<Button onclick={onshowtransaction}>{deviceName} policy approved — show transaction</Button>
     {:else}<Button disabled={!acknowledged} onclick={oncontinue}>Start {deviceName} review & signing</Button>{/if}
   </div>

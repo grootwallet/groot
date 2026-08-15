@@ -8,7 +8,11 @@ const keys = [
 const recoveryKey = { label: 'Recovery key', fingerprint: 'd1b2c3d4', xpub: 'tpubD6NzVbkrYhZ4Y-e2e-public-key-4' };
 
 async function continueToSigners(page: Page, name: string) {
-  await page.getByLabel('Wallet name').fill(name);
+  const configure = page.getByRole('button', { name: /^Configure / });
+  const walletName = page.getByLabel('Wallet name');
+  await configure.or(walletName).first().waitFor();
+  if (await configure.isVisible()) await configure.click();
+  await walletName.fill(name);
   await page.getByRole('button', { name: 'Continue to signers' }).click();
 }
 
@@ -178,7 +182,15 @@ test('spends end-to-end from the ready-made demo wallet', async ({ page }) => {
   await expect(page.locator('.toast').filter({ hasText: 'Signed PSBT rejected' })).toBeVisible();
   await expect(signerSummary.getByText('0 of 2 collected')).toBeVisible();
   await rejectedImport.getByRole('button', { name: 'Cancel' }).click();
-  await expect(page.getByRole('region', { name: 'Transaction review' }).getByText('The PSBT does not match the transaction you reviewed. No signatures were changed.')).toBeVisible();
+  const durableImportError = page.getByRole('region', { name: 'Transaction review' }).getByRole('alert');
+  await expect(durableImportError).toContainText('Payment action failed');
+  await expect(durableImportError).toContainText('The PSBT does not match the transaction you reviewed. No signatures were changed.');
+  expect(await durableImportError.evaluate((element) => getComputedStyle(element).textAlign)).toBe('left');
+  expect(await durableImportError.evaluate((element) => getComputedStyle(element).marginTop)).not.toBe('0px');
+  await page.getByRole('button', { name: 'Import signed PSBT' }).click();
+  await expect(rejectedImport.getByRole('textbox', { name: 'Signed PSBT' })).toHaveValue('');
+  await expect(rejectedImport.getByRole('alert')).toHaveCount(0);
+  await rejectedImport.getByRole('button', { name: 'Cancel' }).click();
   await page.getByRole('button', { name: 'Show unsigned QR' }).click();
   const unsignedQrDialog = page.getByRole('dialog', { name: 'Unsigned PSBT' });
   const unsignedQrImage = unsignedQrDialog.getByRole('img', { name: /crypto-psbt QR frame/ });
@@ -556,6 +568,11 @@ test('selects and freezes multisig coins before entering the send flow', async (
 
 test('offers safe recipes and advanced M-of-N control', async ({ page }) => {
   await page.goto('/multisig/new');
+  await expect(page.getByRole('heading', { name: 'Choose a spending policy' })).toBeVisible();
+  await expect(page.getByLabel('Wallet name')).toHaveCount(0);
+  await expect(page.getByText(/Recovery path and Inheritance use the same four-key structure/)).toBeVisible();
+  await page.getByRole('button', { name: 'Configure standard' }).click();
+  await expect(page.getByRole('heading', { name: 'Configure a standard wallet' })).toBeVisible();
   await expect(page.getByText('2 of 3', { exact: true }).first()).toBeVisible();
   await page.getByRole('button', { name: /3 of 5/ }).click();
   await expect(page.locator('.policy-pill')).toHaveText('3 of 5');
@@ -568,6 +585,7 @@ test('offers safe recipes and advanced M-of-N control', async ({ page }) => {
   await continueToSigners(page, 'Advanced policy vault');
   await expect(page.getByText('Advanced policy vault · 3 of 4')).toBeVisible();
   await page.getByRole('button', { name: 'Back to policy' }).click();
+  await expect(page.getByRole('heading', { name: 'Configure a standard wallet' })).toBeVisible();
   await expect(page.getByLabel('Wallet name')).toHaveValue('Advanced policy vault');
   await expect(page.getByLabel('Total signers')).toHaveValue('4');
   await expect(page.getByLabel('Signatures required')).toHaveValue('3');
@@ -1052,6 +1070,7 @@ test('shows one authoritative failure when a BSMS record belongs to another wall
 
 test('reveals draft errors only after review and keeps signer identity readable', async ({ page }) => {
   await page.goto('/multisig/new');
+  await page.getByRole('button', { name: 'Configure standard' }).click();
   await page.getByRole('button', { name: 'Continue to signers' }).click();
   await expect(page.getByText('A wallet name is required.')).toBeVisible();
   await continueToSigners(page, 'Incomplete vault');
@@ -1120,6 +1139,10 @@ test('compiles and simulates guided Miniscript recovery policies', async ({ page
 test('creates a guided recovery descriptor from a visible template', async ({ page }) => {
   await page.goto('/multisig/new');
   await page.getByRole('button', { name: /Recovery path/ }).click();
+  await expect(page.getByText('Shorter emergency fallback', { exact: true })).toBeVisible();
+  await expect(page.getByText(/4,320 blocks/)).toBeVisible();
+  await expect(page.getByLabel('Wallet name')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Configure recovery path' }).click();
   await expect(page.getByText('Four independent keys required')).toBeVisible();
   await continueToSigners(page, 'Resilient vault');
   for (const key of [...keys, recoveryKey]) {
@@ -1204,7 +1227,7 @@ test('coordinator has no horizontal overflow on mobile', async ({ page }, testIn
   await page.goto('/multisig/new');
   const sizes = await page.evaluate(() => ({ scrollWidth: document.documentElement.scrollWidth, clientWidth: document.documentElement.clientWidth }));
   expect(sizes.scrollWidth).toBeLessThanOrEqual(sizes.clientWidth);
-  await expect(page.getByRole('button', { name: 'Continue to signers' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Configure standard' })).toBeVisible();
   await continueToSigners(page, 'Mobile vault');
   await expect(page.getByRole('button', { name: 'Add a signer' })).toBeVisible();
   const motion = await page.locator('.form-card').first().evaluate((element) => ({

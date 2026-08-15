@@ -2856,6 +2856,30 @@ fn policy_readiness_is_limited_to_devices_with_interactive_registration() {
 }
 
 #[test]
+fn bitbox_policy_address_reports_a_safe_account_name_conflict() {
+    let conflict = hardware_commands::bitbox_policy_address_error(
+        "bitbox02",
+        Some(-13),
+        Some(
+            "A multisig account configuration with this name already exists.\nChoose another name.",
+        ),
+    )
+    .unwrap();
+    assert_eq!(conflict.code, "hardware_policy_name_conflict");
+    assert!(conflict.message.contains("new unique name"));
+    assert!(hardware_commands::bitbox_policy_address_error(
+        "bitbox02",
+        Some(-14),
+        Some("same text")
+    )
+    .is_none());
+    assert!(
+        hardware_commands::bitbox_policy_address_error("jade", Some(-13), Some("same text"))
+            .is_none()
+    );
+}
+
+#[test]
 fn signer_policy_verification_keeps_latest_evidence_per_fingerprint() {
     let db = Connection::open_in_memory().unwrap();
     init_app_schema(&db).unwrap();

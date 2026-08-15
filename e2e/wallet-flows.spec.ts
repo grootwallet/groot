@@ -461,6 +461,10 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   await expect(durableImportError).toContainText('Signed PSBT rejected');
   await expect(durableImportError).toContainText('does not match the transaction you reviewed');
   expect(await durableImportError.evaluate((element) => getComputedStyle(element).textAlign)).toBe('left');
+  await page.getByRole('button', { name: 'Import signed PSBT' }).click();
+  await expect(rejectedImport.getByRole('textbox', { name: 'Signed PSBT' })).toHaveValue('');
+  await expect(rejectedImport.getByRole('alert')).toHaveCount(0);
+  await rejectedImport.getByRole('button', { name: 'Cancel' }).click();
   await page.getByRole('button', { name: 'Show unsigned QR' }).click();
   await expect(durableImportError).toHaveCount(0);
   const unsignedQrDialog = page.getByRole('dialog', { name: 'Unsigned PSBT' });

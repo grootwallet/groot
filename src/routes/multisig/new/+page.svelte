@@ -87,6 +87,7 @@
   let busy = $state(false);
   let error = $state('');
   let templateKind = $state<'standard' | 'recovery' | 'inheritance'>('standard');
+  let policyStep = $state<'choose' | 'configure'>('choose');
   let standardRecipe = $state<'2of3' | '3of5' | 'custom'>('2of3');
   let customCosignerCount = $state(3);
   let showDescriptor = $state(false);
@@ -244,6 +245,7 @@
     threshold = draft.threshold;
     cosigners = draft.cosigners.map((cosigner) => ({ ...cosigner }));
     stage = draft.stage;
+    policyStep = draft.stage === 'policy' ? 'configure' : 'choose';
     templateKind = draft.templateKind;
     standardRecipe = recipeFromDraft(draft.standardRecipe);
     customCosignerCount = draft.customCosignerCount;
@@ -262,6 +264,7 @@
     threshold = 2;
     cosigners = [];
     stage = 'policy';
+    policyStep = 'choose';
     templateKind = 'standard';
     standardRecipe = '2of3';
     customCosignerCount = 3;
@@ -416,6 +419,16 @@
     if (next !== 'standard') threshold = 2;
     else applyStandardRecipe(standardRecipe);
     error = '';
+  }
+
+  function continueToPolicyConfiguration() {
+    error = '';
+    policyStep = 'configure';
+  }
+
+  function returnToPolicyChoice() {
+    error = '';
+    policyStep = 'choose';
   }
 
   function applyStandardRecipe(next: '2of3' | '3of5' | 'custom') {
@@ -746,7 +759,7 @@
 
 <div class="page coordinator-page">
   <header class="page-header">
-    <div><p class="eyebrow">MULTISIG WALLET</p><h1>Create a multisig wallet</h1><p class="subtitle">Choose a simple shared policy or add a separate delayed recovery key.</p></div>
+    <div><p class="eyebrow">MULTISIG WALLET</p><h1>Create a multisig wallet</h1><p class="subtitle">{stage === 'policy' && policyStep === 'choose' ? 'Choose how this wallet can be spent.' : stage === 'policy' ? 'Name and configure the policy before adding signers.' : 'Add independent signers, verify the policy, and back it up.'}</p></div>
     <div class="page-header-actions">{#if hasDraft}<Button variant="ghost-danger" size="small" onclick={() => { discardDraftError = ''; discardDraftOpen = true; }}><Trash2 size={14}/>Discard setup</Button>{/if}{#if stage === 'policy'}<a class="secondary-link" href="/multisig/recover" aria-label="Recover from backup"><FileUp size={15}/>Recover</a>{/if}<span class="network-chip">Regtest · Native SegWit</span></div>
   </header>
   <SetupProgress steps={creationSteps} current={creationStep} label="Wallet creation progress"/>
@@ -757,28 +770,38 @@
   {:else if stage === 'policy'}
     <div class="coordinator-grid policy-only-grid">
       <section class="form-card coordinator-main">
-        <div class="template-grid" aria-label="Wallet templates">
-          <button class:active={templateKind === 'standard'} onclick={() => chooseTemplate('standard')}><Users size={18}/><strong>Standard</strong><small>Flexible M of N · no timer</small></button>
-          <button class:active={templateKind === 'recovery'} onclick={() => chooseTemplate('recovery')}><ShieldCheck size={18}/><strong>Recovery path</strong><small>2 of 3 · backup after ~1 month</small></button>
-          <button class:active={templateKind === 'inheritance'} onclick={() => chooseTemplate('inheritance')}><Clock3 size={18}/><strong>Inheritance</strong><small>2 of 3 · heir after ~1 year</small></button>
-        </div>
-        <div class="template-tradeoff"><strong>{templateKind === 'standard' ? 'Simplest and most interoperable' : templateKind === 'recovery' ? 'Survives loss of two primary keys' : 'A delayed key can recover without the primary set'}</strong><span>{templateKind === 'standard' ? 'Any two devices can always spend.' : 'The fourth key stays powerless until its delay matures.'}</span></div>
-        <div class="section-heading compact"><div><h2>Wallet policy</h2><p>Public keys only. Signing stays on each device.</p></div><span class="policy-pill">{templateKind === 'standard' ? `${threshold} of ${requiredKeys}` : '2 of 3 + recovery'}</span></div>
-        <label class="field"><span>Wallet name</span><input bind:value={name} maxlength="48" placeholder="e.g. Family wallet" /><FieldCounter value={name} max={48}/></label>
-        {#if templateKind === 'standard'}
-          <div class="policy-recipes" aria-label="Standard multisig recipes">
-            <button class:active={standardRecipe === '2of3'} onclick={() => applyStandardRecipe('2of3')}><strong>2 of 3</strong><small>Recommended</small></button>
-            <button class:active={standardRecipe === '3of5'} onclick={() => applyStandardRecipe('3of5')}><strong>3 of 5</strong><small>Larger group</small></button>
-            <button class:active={standardRecipe === 'custom'} onclick={() => applyStandardRecipe('custom')}><strong>Custom</strong><small>Advanced</small></button>
+        {#if policyStep === 'choose'}
+          <div class="section-heading compact policy-choice-heading"><div><span class="setup-step">POLICY · 1 OF 2</span><h2>Choose a spending policy</h2><p>Start with who should be able to spend and whether a separate delayed key is needed.</p></div></div>
+          <div class="template-grid policy-template-grid" aria-label="Wallet policies">
+            <button class:active={templateKind === 'standard'} onclick={() => chooseTemplate('standard')}><Users size={18}/><strong>Standard</strong><small>A fixed group approves every payment. No timer.</small></button>
+            <button class:active={templateKind === 'recovery'} onclick={() => chooseTemplate('recovery')}><ShieldCheck size={18}/><strong>Recovery path</strong><small>2 of 3 now; an emergency key after about one month.</small></button>
+            <button class:active={templateKind === 'inheritance'} onclick={() => chooseTemplate('inheritance')}><Clock3 size={18}/><strong>Inheritance</strong><small>2 of 3 now; an heir key after about one year.</small></button>
           </div>
-          {#if standardRecipe === 'custom'}<div class="threshold-row custom-threshold">
-            <label class="field"><span>Signatures required (M)</span><select aria-label="Signatures required" value={threshold} onchange={(event) => threshold = Number(event.currentTarget.value)}>{#each Array(customCosignerCount - 1) as _, i}<option value={i + 2}>{i + 2}</option>{/each}</select></label>
-            <label class="field"><span>Total signers (N)</span><select aria-label="Total signers" value={customCosignerCount} onchange={(event) => setCustomCosignerCount(Number(event.currentTarget.value))}>{#each Array(5) as _, i}<option value={i + 3}>{i + 3}</option>{/each}</select></label>
-          </div><p class="policy-guidance">Groot starts at 2 signatures. A 1-of-N wallet has no multisig theft protection; use a single-key wallet instead.</p>
-          {:else}<div class="recipe-summary"><strong>{threshold} of {requiredKeys} signatures</strong><span>{standardRecipe === '2of3' ? 'Lose one key without losing access.' : 'Designed for a larger family or team.'}</span></div>{/if}
-        {:else}<div class="path-visual"><span><b>NOW</b><strong>2 of 3 primary keys</strong></span><i></i><span><b>{templateKind === 'recovery' ? '~1 MONTH' : '~1 YEAR'}</b><strong>1 recovery key</strong></span></div><div class="recovery-separation"><ShieldCheck size={15}/><span><strong>Four independent keys required</strong><small>Key 4 is recovery-only. It is excluded from the immediate 2-of-3 branch and cannot be reused as a primary signer.</small></span></div>{/if}
-        {#if error}<p class="form-error">{error}</p>{/if}
-        <div class="coordinator-actions"><Button variant="secondary" href="/settings"><ArrowLeft size={16}/>Cancel</Button><Button onclick={continueToCosigners}>Continue to signers<ChevronRight size={16}/></Button></div>
+          <div class="template-tradeoff policy-choice-explainer">
+            <strong>{templateKind === 'standard' ? 'Best for ordinary shared custody' : templateKind === 'recovery' ? 'Shorter emergency fallback' : 'Longer planned handoff'}</strong>
+            <span>{templateKind === 'standard' ? 'Every payment always needs the chosen number of signers.' : templateKind === 'recovery' ? 'A fourth independent key can spend after each coin has aged about 4,320 blocks.' : 'A fourth independent heir key can spend after each coin has aged about 52,560 blocks.'}</span>
+          </div>
+          <p class="policy-template-note">Recovery path and Inheritance use the same four-key structure. Their intended holder and delay are different; the delayed key cannot spend before its timer matures.</p>
+          <div class="coordinator-actions"><Button variant="secondary" href="/settings"><ArrowLeft size={16}/>Cancel</Button><Button onclick={continueToPolicyConfiguration}>Configure {templateKind === 'standard' ? 'standard' : templateKind === 'recovery' ? 'recovery path' : 'inheritance'}<ChevronRight size={16}/></Button></div>
+        {:else}
+          <button class="back-link" onclick={returnToPolicyChoice}><ArrowLeft size={16}/>Change policy type</button>
+          <div class="section-heading compact policy-configure-heading"><div><span class="setup-step">POLICY · 2 OF 2</span><h2>Configure {templateKind === 'standard' ? 'a standard wallet' : templateKind === 'recovery' ? 'the recovery path' : 'inheritance'}</h2><p>Choose a local name and confirm how many independent keys this policy needs.</p></div><span class="policy-pill">{templateKind === 'standard' ? `${threshold} of ${requiredKeys}` : '2 of 3 + delayed key'}</span></div>
+          <label class="field"><span>Wallet name</span><input bind:value={name} maxlength="48" placeholder="e.g. Family wallet" /><FieldCounter value={name} max={48}/></label>
+          {#if templateKind === 'standard'}
+            <div class="policy-recipes" aria-label="Standard multisig recipes">
+              <button class:active={standardRecipe === '2of3'} onclick={() => applyStandardRecipe('2of3')}><strong>2 of 3</strong><small>Recommended</small></button>
+              <button class:active={standardRecipe === '3of5'} onclick={() => applyStandardRecipe('3of5')}><strong>3 of 5</strong><small>Larger group</small></button>
+              <button class:active={standardRecipe === 'custom'} onclick={() => applyStandardRecipe('custom')}><strong>Custom</strong><small>Advanced</small></button>
+            </div>
+            {#if standardRecipe === 'custom'}<div class="threshold-row custom-threshold">
+              <label class="field"><span>Signatures required (M)</span><select aria-label="Signatures required" value={threshold} onchange={(event) => threshold = Number(event.currentTarget.value)}>{#each Array(customCosignerCount - 1) as _, i}<option value={i + 2}>{i + 2}</option>{/each}</select></label>
+              <label class="field"><span>Total signers (N)</span><select aria-label="Total signers" value={customCosignerCount} onchange={(event) => setCustomCosignerCount(Number(event.currentTarget.value))}>{#each Array(5) as _, i}<option value={i + 3}>{i + 3}</option>{/each}</select></label>
+            </div><p class="policy-guidance">Groot starts at 2 signatures. A 1-of-N wallet has no multisig theft protection; use a single-key wallet instead.</p>
+            {:else}<div class="recipe-summary"><strong>{threshold} of {requiredKeys} signatures</strong><span>{standardRecipe === '2of3' ? 'Lose one key without losing access.' : 'Designed for a larger family or team.'}</span></div>{/if}
+          {:else}<div class="path-visual"><span><b>NOW</b><strong>2 of 3 primary keys</strong></span><i></i><span><b>{templateKind === 'recovery' ? '~1 MONTH' : '~1 YEAR'}</b><strong>1 {templateKind === 'recovery' ? 'emergency' : 'heir'} key</strong></span></div><div class="recovery-separation"><ShieldCheck size={15}/><span><strong>Four independent keys required</strong><small>Key 4 is delayed and excluded from the immediate 2-of-3 branch. It cannot be reused as a primary signer.</small></span></div>{/if}
+          {#if error}<p class="form-error">{error}</p>{/if}
+          <div class="coordinator-actions"><Button variant="secondary" onclick={returnToPolicyChoice}><ArrowLeft size={16}/>Back</Button><Button onclick={continueToCosigners}>Continue to signers<ChevronRight size={16}/></Button></div>
+        {/if}
       </section>
     </div>
   {:else if stage === 'keys'}
@@ -810,7 +833,7 @@
         {#if cosigners.length > 0}<p class="cosigner-progress" aria-live="polite">{cosigners.length} of {requiredKeys} signers added</p>{/if}
         {#if reviewAttempted && visibleErrors.length}<div class="policy-errors" aria-live="polite">{#each visibleErrors as item}<p>{item}</p>{/each}</div>{/if}
         {#if error}<p class="form-error">{error}</p>{/if}
-        <div class="coordinator-actions"><Button variant="secondary" onclick={() => {error='';stage='policy';}}><ArrowLeft size={16}/>Back to policy</Button><Button loading={busy} loadingLabel="Building policy…" onclick={review}>Review wallet<ChevronRight size={16}/></Button></div>
+        <div class="coordinator-actions"><Button variant="secondary" onclick={() => {error='';policyStep='configure';stage='policy';}}><ArrowLeft size={16}/>Back to policy</Button><Button loading={busy} loadingLabel="Building policy…" onclick={review}>Review wallet<ChevronRight size={16}/></Button></div>
       </section>
       <aside class="safety-panel"><ShieldCheck size={22}/><h2>Before you continue</h2><p>Groot stores public descriptors only. It cannot spend without enough signatures.</p><ul><li>Back up the wallet descriptor.</li><li>Verify each fingerprint on its device.</li><li>Keep devices in separate places.</li></ul><button class="hardware-help-card" onclick={() => openHardwareHelp()}><CircleHelp size={17}/><span><strong>Hardware setup help</strong><small>Coldcard, BitBox02, Ledger, Trezor, Jade</small></span><ChevronRight size={14}/></button><code>{MULTISIG_ACCOUNT_PATH}</code></aside>
     </div>

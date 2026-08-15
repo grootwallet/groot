@@ -7,6 +7,14 @@ const notice = readFileSync(new URL('./ResumeSetupNotice.svelte', import.meta.ur
 const discardModal = readFileSync(new URL('./DiscardMultisigSetupModal.svelte', import.meta.url), 'utf8');
 
 describe('resumable multisig setup', () => {
+  it('separates policy choice from wallet configuration before signer enrollment', () => {
+    expect(setup).toContain("let policyStep = $state<'choose' | 'configure'>('choose')");
+    expect(setup).toContain('Choose a spending policy');
+    expect(setup).toContain('Configure {templateKind');
+    expect(setup).toContain('Recovery path and Inheritance use the same four-key structure');
+    expect(setup.indexOf("{#if policyStep === 'choose'}")).toBeLessThan(setup.indexOf('<label class="field"><span>Wallet name</span>'));
+  });
+
   it('loads, continuously saves, and explicitly discards the native draft', () => {
     expect(setup).toContain('walletService.multisigSetupDraft()');
     expect(setup).toContain('walletService.saveMultisigSetupDraft(next)');
