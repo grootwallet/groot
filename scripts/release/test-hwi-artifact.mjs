@@ -12,7 +12,7 @@ try {
   const source = join(directory, 'hwi-source.tar.gz');
   const license = join(directory, 'LICENSE');
   const manifestPath = join(directory, 'hwi-provenance.json');
-  writeFileSync(artifact, '#!/bin/sh\nprintf "hwi 3.1.0\\n"\n');
+  writeFileSync(artifact, '#!/bin/sh\nprintf "hwi 3.2.0\\n"\n');
   chmodSync(artifact, 0o700);
   writeFileSync(source, 'disposable source fixture\n');
   writeFileSync(license, 'MIT disposable test fixture\n');
@@ -21,7 +21,7 @@ try {
     license: { filename: 'LICENSE', sha256: digest(license) },
     name: 'Bitcoin Core HWI', schemaVersion: 1,
     source: { filename: 'hwi-source.tar.gz', sha256: digest(source) },
-    updatePolicy: 'bundled-and-replaced-only-by-signed-groot-release', version: '3.1.0',
+    updatePolicy: 'bundled-and-replaced-only-by-signed-groot-release', version: '3.2.0',
   };
   writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
   const verifier = resolve('scripts/release/verify-hwi-artifact.mjs');

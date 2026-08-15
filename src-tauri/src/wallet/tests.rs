@@ -1051,6 +1051,7 @@ fn duplicate_hwi_connection_identity_is_rejected_as_ambiguous() {
         model: "trezor_safe_3".to_owned(),
         path: "usb:1".to_owned(),
         code: None,
+        error: None,
         needs_pin_sent: false,
         needs_passphrase_sent: false,
         warnings: Vec::new(),
@@ -1144,6 +1145,16 @@ fn hwi_response_codes_become_safe_actionable_errors() {
     assert!(ledger_command_failure.message.contains("Bitcoin Test"));
     assert!(ledger_command_failure.message.contains("not Bitcoin"));
 
+    let unsupported_safe_3 = missing_hardware_xpub(
+        "trezor",
+        "m/84'/1'/0'",
+        Some(-13),
+        Some("Could not open client: Unsupported Trezor model at /private/device/path"),
+        "fallback",
+    );
+    assert!(unsupported_safe_3.message.contains("HWI 3.2.0"));
+    assert!(!unsupported_safe_3.message.contains("/private/device/path"));
+
     let mainnet_ledger_failure = hardware_xpub_api_error(
         HardwareError::CommandFailed(Some(-13)),
         "ledger",
@@ -1182,12 +1193,32 @@ fn hwi_response_codes_become_safe_actionable_errors() {
 
 #[test]
 fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
+    let unsupported_safe_3 = hardware_device_dto(HwiDevice {
+        fingerprint: None,
+        device_type: "trezor".to_owned(),
+        model: String::new(),
+        path: "webusb:sensitive-path".to_owned(),
+        code: Some(-13),
+        error: Some(
+            "Could not open client or get fingerprint information: Unsupported Trezor model"
+                .to_owned(),
+        ),
+        needs_pin_sent: false,
+        needs_passphrase_sent: false,
+        warnings: vec![],
+    });
+    assert_eq!(unsupported_safe_3.status, "not_ready");
+    assert_eq!(unsupported_safe_3.action, "retry");
+    assert!(unsupported_safe_3.message.contains("HWI 3.2.0"));
+    assert!(!unsupported_safe_3.message.contains("webusb:sensitive-path"));
+
     let trezor = hardware_device_dto(HwiDevice {
         fingerprint: None,
         device_type: "trezor".to_owned(),
         model: "trezor_1".to_owned(),
         path: "sensitive-usb-path".to_owned(),
         code: Some(-12),
+        error: None,
         needs_pin_sent: true,
         needs_passphrase_sent: false,
         warnings: vec![],
@@ -1203,6 +1234,7 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
         model: "trezor_1".to_owned(),
         path: "sensitive-usb-path".to_owned(),
         code: Some(-12),
+        error: None,
         needs_pin_sent: true,
         needs_passphrase_sent: true,
         warnings: vec![vec![
@@ -1219,6 +1251,7 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
         model: "bitbox02_multi".to_owned(),
         path: "sensitive-usb-path".to_owned(),
         code: Some(-12),
+        error: None,
         needs_pin_sent: false,
         needs_passphrase_sent: false,
         warnings: vec![],
@@ -1233,6 +1266,7 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
         model: "jade".to_owned(),
         path: "serial-path".to_owned(),
         code: Some(-12),
+        error: None,
         needs_pin_sent: false,
         needs_passphrase_sent: false,
         warnings: vec![],
@@ -1246,6 +1280,7 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
         model: "ledger_nano_s_plus".to_owned(),
         path: "ledger-path".to_owned(),
         code: None,
+        error: None,
         needs_pin_sent: false,
         needs_passphrase_sent: false,
         warnings: vec![],
@@ -1264,6 +1299,7 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
             model: device_type.to_owned(),
             path: "device-path".to_owned(),
             code: Some(-12),
+            error: None,
             needs_pin_sent: false,
             needs_passphrase_sent: false,
             warnings: vec![],
@@ -1279,6 +1315,7 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
         model: "keepkey".to_owned(),
         path: "device-path".to_owned(),
         code: Some(-12),
+        error: None,
         needs_pin_sent: true,
         needs_passphrase_sent: false,
         warnings: vec![],
@@ -1292,6 +1329,7 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
         model: "coldcard".to_owned(),
         path: "sensitive-usb-path".to_owned(),
         code: None,
+        error: None,
         needs_pin_sent: false,
         needs_passphrase_sent: false,
         warnings: vec![],
@@ -1308,6 +1346,7 @@ fn trezor_passphrase_warning_requires_explicit_standard_wallet_selection() {
         model: "trezor_1".to_owned(),
         path: "usb-path".to_owned(),
         code: None,
+        error: None,
         needs_pin_sent: false,
         needs_passphrase_sent: false,
         warnings: vec![vec![

@@ -1201,6 +1201,8 @@ struct HwiDevice {
     #[serde(default)]
     code: Option<i64>,
     #[serde(default)]
+    error: Option<String>,
+    #[serde(default)]
     needs_pin_sent: bool,
     #[serde(default)]
     needs_passphrase_sent: bool,
@@ -1282,10 +1284,17 @@ fn missing_hardware_xpub(
             "hardware_unavailable",
             "BitBox02 did not export the account key. Reconnect it, scan again, and enter the device password when prompted. If BitBoxApp is open, quit it so Groot can use USB. Use BitBoxApp only if Groot reports that first-time pairing is required.",
         ),
-        "trezor" | "keepkey" => api_error(
-            "hardware_unavailable",
-            "Trezor did not export the account key. Complete the PIN or wallet selection shown by Groot and the device, then try again.",
-        ),
+        "trezor" | "keepkey" => {
+            let safe_detail = hwi_message.unwrap_or_default().to_ascii_lowercase();
+            let message = if code == Some(-13)
+                && safe_detail.contains("unsupported trezor model")
+            {
+                "The installed Bitcoin Core HWI does not support this Trezor model. Install Groot's reviewed HWI 3.2.0 boundary, restart Groot, then scan again."
+            } else {
+                "Trezor did not export the account key. Complete the PIN or wallet selection shown by Groot and the device, then try again."
+            };
+            api_error("hardware_unavailable", message)
+        }
         "jade" => api_error(
             "hardware_unavailable",
             "Jade did not export the account key. Log in on-device, keep Jade unlocked and connected, then try again.",
@@ -1317,7 +1326,21 @@ fn hardware_device_dto(device: HwiDevice) -> HardwareDeviceDto {
     // be resolved first because no wallet fingerprint exists until it is unlocked.
     let pin_required = matches!(device_type.as_str(), "trezor" | "keepkey")
         && (device.needs_pin_sent || (device.code == Some(-12) && !device.needs_passphrase_sent));
-    let (status, message, action) = if pin_required {
+    let unsupported_trezor_model = matches!(device_type.as_str(), "trezor" | "keepkey")
+        && device.code == Some(-13)
+        && device
+            .error
+            .as_deref()
+            .unwrap_or_default()
+            .to_ascii_lowercase()
+            .contains("unsupported trezor model");
+    let (status, message, action) = if unsupported_trezor_model {
+        (
+            "not_ready",
+            "The installed Bitcoin Core HWI does not support this Trezor model. Install Groot's reviewed HWI 3.2.0 boundary, restart Groot, then scan again.",
+            "retry",
+        )
+    } else if pin_required {
         (
             "needs_pin",
             "Locked. Start the PIN matrix, then tap the blank cells matching the locations shown on the device.",
