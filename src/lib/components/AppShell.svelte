@@ -36,6 +36,7 @@
   let discardingSetup = $state(false);
   let discardSetupError = $state('');
   let setupDraftReadGeneration = 0;
+  let profileReadGeneration = 0;
   let liveSync: LiveSyncController | undefined;
   let selectedProfile = $derived(profiles.find((wallet) => wallet.id === selectedWalletId));
   let policyContext = $derived(selectedProfile?.kind === 'multisig' || page.url.pathname.startsWith('/multisig'));
@@ -75,20 +76,25 @@
   }
 
   async function refreshProfiles() {
+    const generation = ++profileReadGeneration;
     try {
       const registry = await walletService.profiles();
-      profiles = registry.wallets;
-      selectedWalletId = registry.selectedWalletId;
+      if (generation === profileReadGeneration) {
+        profiles = registry.wallets;
+        selectedWalletId = registry.selectedWalletId;
+      }
     } catch {
-      profiles = [];
-      selectedWalletId = null;
+      if (generation === profileReadGeneration) {
+        profiles = [];
+        selectedWalletId = null;
+      }
     }
   }
 
   const profileMutatingRoutes = new Set(['/welcome', '/hardware/new', '/multisig/new', '/multisig/recover', '/multisig/delete']);
 
   afterNavigate(({ from }) => {
-    const previousPath = from?.url.pathname;
+    const previousPath = from?.url?.pathname;
     // Routine navigation must not repeat registry and setup-draft reads that
     // every destination performs independently. Refresh only after a flow that
     // can actually mutate those shell-level records.
@@ -101,6 +107,11 @@
 
   async function selectWallet(walletId: string) {
     if (!walletId || walletId === selectedWalletId) return;
+    const previousWalletId = selectedWalletId;
+    ++profileReadGeneration;
+    // Reflect the explicit choice immediately. The trusted adapter remains the
+    // authority, and a failed selection restores the prior shell state.
+    selectedWalletId = walletId;
     try {
       const selection = await walletService.selectWallet(walletId);
       selectedWalletId = selection.profile.id;
@@ -111,12 +122,14 @@
         liveSync?.stop();
       }
     } catch (cause) {
+      if (selectedWalletId === walletId) selectedWalletId = previousWalletId;
       toast({ title: 'Wallet not switched', description: cause instanceof Error ? cause.message : 'Could not select this wallet.', tone: 'danger' });
     }
   }
   provideWalletShellContext({
     profiles: () => profiles,
     selectedWalletId: () => selectedWalletId,
+    refreshProfiles,
     selectWallet
   });
   onMount(() => {
@@ -139,9 +152,7 @@
       try {
         await refreshSetupDraft();
         if (!await walletService.exists()) { await goto('/welcome'); return; }
-        const registry = await walletService.profiles();
-        profiles = registry.wallets;
-        selectedWalletId = registry.selectedWalletId;
+        await refreshProfiles();
         if (onboardingRoute || lockedRoute) return;
         if (!isPrototypeWallet) liveSync?.start();
       } catch (cause) {

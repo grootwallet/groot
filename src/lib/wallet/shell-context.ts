@@ -6,6 +6,7 @@ const walletShellContextKey = Symbol('wallet-shell-context');
 export type WalletShellContext = {
   profiles: () => WalletProfile[];
   selectedWalletId: () => string | null;
+  refreshProfiles: () => Promise<void>;
   selectWallet: (walletId: string) => Promise<void>;
 };
 

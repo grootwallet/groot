@@ -8,7 +8,9 @@
   import { defaultConfig } from '$lib/config';
   import { isPrototypeWallet, walletService } from '$lib/wallet';
   import { page } from '$app/state';
+  import { useWalletShellContext } from '$lib/wallet/shell-context';
   import type { WalletProfile } from '$lib/wallet/contracts';
+  const walletShell = useWalletShellContext();
 
   let credential = $state('');
   let error = $state('');
@@ -67,6 +69,7 @@
       await walletService.resetRegtestWallet(resetConfirmation);
       resetConfirmation = '';
       showReset = false;
+      await walletShell.refreshProfiles();
       const registry = await walletService.profiles();
       await goto(registry.wallets.length ? '/unlock' : '/welcome');
     } catch (cause) {

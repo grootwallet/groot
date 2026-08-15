@@ -11,7 +11,9 @@
   import { walletService, WalletError } from '$lib/wallet';
   import { goto } from '$app/navigation';
   import { onDestroy, onMount } from 'svelte';
+  import { useWalletShellContext } from '$lib/wallet/shell-context';
   import type { CoreNodeConfig, ExternalSignerWallet, NodeStatus, RecoveryScanSettings, RecoveryScanStatus, WalletProfile, WalletSyncSource } from '$lib/wallet/contracts';
+  const walletShell = useWalletShellContext();
   let deleting = $state(false);
   let confirmText = $state('');
   let deleteCredential = $state('');
@@ -22,6 +24,7 @@
   let theme = $state<'light' | 'dark'>('dark');
   let profiles = $state<WalletProfile[]>([]);
   let selectedWalletId = $state<string | null>(null);
+  let profileReadGeneration = 0;
   let inactivityTimeoutMinutes = $state(5);
   let savingInactivityTimeout = $state(false);
   let selectedProfile = $derived(profiles.find((wallet) => wallet.id === selectedWalletId));
@@ -48,8 +51,10 @@
   let hardwareSignerWallet = $state<ExternalSignerWallet | null>(null);
   let signerRenameOpen = $state(false), signerRenameDraft = $state(''), signerRenameError = $state(''), signerRenaming = $state(false);
   onMount(async () => {
+    const generation = ++profileReadGeneration;
     theme = document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
     const registry = await walletService.profiles();
+    if (generation !== profileReadGeneration) return;
     profiles = registry.wallets;
     selectedWalletId = registry.selectedWalletId;
     inactivityTimeoutMinutes = registry.inactivityTimeoutMinutes;
@@ -205,6 +210,7 @@
       await walletService.deleteWallet(deleteCredential, confirmText);
       deleting = false; confirmText = ''; deleteCredential = '';
       toast({ title: 'Wallet deleted', description: 'Local wallet data and encrypted key material were removed.' });
+      await walletShell.refreshProfiles();
       const registry = await walletService.profiles();
       await goto(registry.wallets.length ? '/unlock' : '/welcome');
     } catch (cause) { toast({ title: 'Could not delete wallet', description: cause instanceof Error ? cause.message : undefined, tone: 'danger' }); }
@@ -245,12 +251,14 @@
   }
   async function selectWallet(profile: WalletProfile) {
     if (profile.id === selectedWalletId) return;
+    const previousWalletId = selectedWalletId;
+    ++profileReadGeneration;
+    selectedWalletId = profile.id;
     try {
-      const selection = await walletService.selectWallet(profile.id);
-      selectedWalletId = selection.profile.id;
-      const destination = '/';
-      await goto(selection.unlocked ? destination : `/unlock?next=${destination}`);
+      await walletShell.selectWallet(profile.id);
+      selectedWalletId = walletShell.selectedWalletId();
     } catch (cause) {
+      if (selectedWalletId === profile.id) selectedWalletId = previousWalletId;
       toast({ title: 'Could not open wallet', description: cause instanceof Error ? cause.message : undefined, tone: 'danger' });
     }
   }

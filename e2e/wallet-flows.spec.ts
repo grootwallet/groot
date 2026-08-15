@@ -664,15 +664,24 @@ test('overview, activity, UTXOs, and settings expose durable states', async ({ p
   await expect(transactionTime).not.toContainText('local time');
   await expect(transactionTime).toHaveAttribute('title', /Local time:.*UTC:/);
   await page.waitForTimeout(220);
-  const compactTop = (await transactionDialog.boundingBox())?.y;
+  const compactBox = await transactionDialog.boundingBox();
   await transactionDialog.locator('.compact-address-button').click();
   await expect(transactionDialog.getByRole('button', { name: 'Show compact address' })).toBeVisible();
-  const expandedTop = (await transactionDialog.boundingBox())?.y;
-  expect(compactTop).toBeDefined();
-  expect(expandedTop).toBeCloseTo(compactTop!, 0);
+  const expandedBox = await transactionDialog.boundingBox();
+  expect(compactBox).not.toBeNull();
+  expect(expandedBox).not.toBeNull();
+  const compactCenter = compactBox!.y + compactBox!.height / 2;
+  const expandedCenter = expandedBox!.y + expandedBox!.height / 2;
+  if ((page.viewportSize()?.width ?? 1180) <= 760) {
+    const compactBottom = compactBox!.y + compactBox!.height;
+    const expandedBottom = expandedBox!.y + expandedBox!.height;
+    expect(expandedBottom).toBeCloseTo(compactBottom, 0);
+  } else {
+    expect(expandedCenter).toBeCloseTo(compactCenter, 0);
+  }
   await transactionDialog.getByRole('button', { name: 'Show compact address' }).click();
   const collapsedTop = (await transactionDialog.boundingBox())?.y;
-  expect(collapsedTop).toBeCloseTo(compactTop!, 0);
+  expect(collapsedTop).toBeCloseTo(compactBox!.y, 0);
   await page.getByRole('button', { name: 'Close' }).click();
   await page.getByRole('link', { name: 'Coins' }).click();
   await expect(page.getByRole('heading', { name: 'Coins' })).toBeVisible();

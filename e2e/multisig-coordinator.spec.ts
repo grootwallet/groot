@@ -215,6 +215,11 @@ test('spends end-to-end from the ready-made demo wallet', async ({ page }) => {
   await expect(hardwareDialog).toBeVisible();
   await expect(hardwareDialog.getByRole('button', { name: /Virtual Trezor One/ })).toContainText('c0ffee03');
   await page.getByRole('button', { name: /Virtual Coldcard/ }).click();
+  const coldcardSetup = page.getByRole('dialog', { name: 'Prepare Coldcard for this wallet' });
+  if (await coldcardSetup.isVisible()) {
+    await coldcardSetup.getByRole('checkbox', { name: /I imported and verified this policy/ }).check();
+    await coldcardSetup.getByRole('button', { name: 'Continue to signing' }).click();
+  }
   await expect(signerSummary.getByText('1 of 2 collected')).toBeVisible();
   await expect(page.getByRole('button', { name: '1 more signature required' })).toBeDisabled();
   await page.getByRole('button', { name: 'Sign with device' }).click();
@@ -315,6 +320,11 @@ test('surfaces partial and fully signed proposals on Overview', async ({ page })
 
   await page.getByRole('button', { name: 'Sign with device' }).click();
   await page.getByRole('button', { name: /Virtual Coldcard/ }).click();
+  const coldcardSetup = page.getByRole('dialog', { name: 'Prepare Coldcard for this wallet' });
+  if (await coldcardSetup.isVisible()) {
+    await coldcardSetup.getByRole('checkbox', { name: /I imported and verified this policy/ }).check();
+    await coldcardSetup.getByRole('button', { name: 'Continue to signing' }).click();
+  }
   await expect(page.getByRole('region', { name: 'Payment signers' }).getByText('1 of 2 collected')).toBeVisible();
   await page.getByRole('button', { name: 'Back to overview' }).click();
   await page.getByRole('dialog', { name: 'Leave signing?' }).getByRole('link', { name: 'Leave to overview' }).click();
