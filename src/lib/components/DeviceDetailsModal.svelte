@@ -9,7 +9,7 @@
   import LocalTimestamp from './LocalTimestamp.svelte';
   import Modal from './Modal.svelte';
 
-  let { signer, health, checking, onclose, oncheck, history = [], policyStatus = null, onpolicy, onrename } = $props<{
+  let { signer, health, checking, onclose, oncheck, history = [], policyStatus = null, onpolicy, onrename, accountStandard = 'BIP48' } = $props<{
     signer: CosignerDraft | null;
     health: CosignerHealthCheck | null;
     checking: boolean;
@@ -25,6 +25,7 @@
     } | null;
     onpolicy?: () => void;
     onrename?: (label: string) => Promise<void> | void;
+    accountStandard?: 'BIP48' | 'BIP84';
   }>();
   let publicKeyOpen = $state(false);
   let editingName = $state(false);
@@ -120,11 +121,11 @@
         {#if checking}
           <HardwareActionPrompt
             title="Checking signer key"
-            detail="Keep the signer connected and unlocked while Groot reads its BIP48 account key and compares it with the saved key."
+            detail={`Keep the signer connected and unlocked while Groot reads its ${accountStandard} account key and compares it with the saved key.`}
             label="Signer health check in progress"
           />
         {:else}
-          <p>{health?.summary ?? 'Connect and unlock the signer to verify that it holds the saved BIP48 account key.'}</p>
+          <p>{health?.summary ?? `Connect and unlock the signer to verify that it holds the saved ${accountStandard} account key.`}</p>
           <Button variant="secondary" class="full" onclick={oncheck}><RefreshCw size={15}/>Run health check</Button>
         {/if}
       </section>

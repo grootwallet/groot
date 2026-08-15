@@ -179,6 +179,33 @@ pub async fn hardware_check_cosigner(
     .map_err(internal)?
 }
 
+#[tauri::command]
+pub async fn hardware_check_external_signer(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    signer: ExternalSignerInput,
+    device_id: String,
+) -> ApiResult<CosignerHealthDto> {
+    signer.validate().map_err(external_signer_api_error)?;
+    let checked_at = now().to_string();
+    let hwi = hwi_cli(&app)?;
+    let device = recently_scanned_hardware_device(&state, &device_id)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let connected = read_hardware_external_signer(&hwi, device, &signer.label, true)?;
+        verify_external_signer_identity(&signer, &connected)?;
+        Ok(CosignerHealthDto {
+            status: "healthy",
+            checked_at,
+            summary: format!(
+                "Connected device matches fingerprint {} and the saved BIP84 account key.",
+                signer.fingerprint
+            ),
+        })
+    })
+    .await
+    .map_err(internal)?
+}
+
 fn parse_hwi_account_keypool(
     output: &[u8],
     expected_path: &str,
@@ -266,6 +293,32 @@ fn verify_cosigner_identity(expected: &CosignerInput, connected: &CosignerInput)
         return Err(api_error(
             "unknown_signer",
             "The connected device does not hold this signer’s saved BIP48 account key.",
+        ));
+    }
+    Ok(())
+}
+
+fn verify_external_signer_identity(
+    expected: &ExternalSignerInput,
+    connected: &ExternalSignerInput,
+) -> ApiResult<()> {
+    let invalid_xpub = |_| {
+        api_error(
+            "invalid_descriptor",
+            "The saved signer account key is invalid.",
+        )
+    };
+    let expected_xpub = Xpub::from_str(expected.xpub.trim()).map_err(invalid_xpub)?;
+    let connected_xpub = Xpub::from_str(connected.xpub.trim()).map_err(invalid_xpub)?;
+    if !expected
+        .fingerprint
+        .eq_ignore_ascii_case(&connected.fingerprint)
+        || expected.derivation_path != connected.derivation_path
+        || expected_xpub != connected_xpub
+    {
+        return Err(api_error(
+            "unknown_signer",
+            "The connected device does not hold this signer’s saved BIP84 account key.",
         ));
     }
     Ok(())
@@ -383,30 +436,41 @@ pub async fn hardware_import_external_signer(
     let hwi = hwi_cli(&app)?;
     let device = recently_scanned_hardware_device(&state, &device_id)?;
     tauri::async_runtime::spawn_blocking(move || {
-        require_explicit_standard_wallet_selection(
-            &device,
+        read_hardware_external_signer(
+            &hwi,
+            device,
+            &label,
             allow_empty_passphrase.unwrap_or(false),
-        )?;
-        let output = hwi
-            .account_keypool(&device.device_type, &device.path, SINGLESIG_ACCOUNT_PATH)
-            .map_err(|error| {
-                hardware_xpub_api_error(error, &device.device_type, SINGLESIG_ACCOUNT_PATH)
-            })?;
-        let (fingerprint, xpub) =
-            parse_hwi_account_keypool(&output, SINGLESIG_ACCOUNT_PATH, &device.device_type)?;
-        let input = ExternalSignerInput {
-            label,
-            fingerprint,
-            xpub,
-            derivation_path: SINGLESIG_ACCOUNT_PATH.to_owned(),
-            source: SignerSource::Usb,
-            device_type: Some(device.device_type),
-        };
-        input.validate().map_err(external_signer_api_error)?;
-        Ok(input)
+        )
     })
     .await
     .map_err(internal)?
+}
+
+fn read_hardware_external_signer(
+    hwi: &HwiCli,
+    device: HwiDevice,
+    label: &str,
+    allow_empty_passphrase: bool,
+) -> ApiResult<ExternalSignerInput> {
+    require_explicit_standard_wallet_selection(&device, allow_empty_passphrase)?;
+    let output = hwi
+        .account_keypool(&device.device_type, &device.path, SINGLESIG_ACCOUNT_PATH)
+        .map_err(|error| {
+            hardware_xpub_api_error(error, &device.device_type, SINGLESIG_ACCOUNT_PATH)
+        })?;
+    let (fingerprint, xpub) =
+        parse_hwi_account_keypool(&output, SINGLESIG_ACCOUNT_PATH, &device.device_type)?;
+    let input = ExternalSignerInput {
+        label: label.to_owned(),
+        fingerprint,
+        xpub,
+        derivation_path: SINGLESIG_ACCOUNT_PATH.to_owned(),
+        source: SignerSource::Usb,
+        device_type: Some(device.device_type),
+    };
+    input.validate().map_err(external_signer_api_error)?;
+    Ok(input)
 }
 
 #[tauri::command]
@@ -1319,6 +1383,21 @@ mod health_check_tests {
         }
     }
 
+    fn external_signer_from_seed(seed_byte: u8) -> ExternalSignerInput {
+        let secp = Secp256k1::new();
+        let master = Xpriv::new_master(PARAMETERS.network, &[seed_byte; 32]).unwrap();
+        let path = DerivationPath::from_str(SINGLESIG_ACCOUNT_PATH).unwrap();
+        let account = master.derive_priv(&secp, &path).unwrap();
+        ExternalSignerInput {
+            label: "Trezor Safe 3".to_owned(),
+            fingerprint: master.fingerprint(&secp).to_string(),
+            xpub: Xpub::from_priv(&secp, &account).to_string(),
+            derivation_path: SINGLESIG_ACCOUNT_PATH.to_owned(),
+            source: SignerSource::Usb,
+            device_type: Some("trezor".to_owned()),
+        }
+    }
+
     #[test]
     fn health_check_requires_the_connected_bip48_account_key() {
         let expected = signer_from_seed(1);
@@ -1330,6 +1409,18 @@ mod health_check_tests {
         let error = verify_cosigner_identity(&expected, &connected).unwrap_err();
         assert_eq!(error.code, "unknown_signer");
         assert!(error.message.contains("saved BIP48 account key"));
+    }
+
+    #[test]
+    fn external_signer_health_check_requires_the_connected_bip84_account_key() {
+        let expected = external_signer_from_seed(3);
+        let mut connected = expected.clone();
+        assert!(verify_external_signer_identity(&expected, &connected).is_ok());
+
+        connected.xpub = external_signer_from_seed(4).xpub;
+        let error = verify_external_signer_identity(&expected, &connected).unwrap_err();
+        assert_eq!(error.code, "unknown_signer");
+        assert!(error.message.contains("saved BIP84 account key"));
     }
 
     #[test]

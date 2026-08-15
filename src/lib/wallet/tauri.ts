@@ -176,6 +176,10 @@ export class TauriWalletAdapter implements WalletPort {
     const result = await command<CosignerHealthCheck>('hardware_check_cosigner', { cosigner, deviceId });
     return { ...result, checkedAt: normalizeTimestamp(result.checkedAt) ?? result.checkedAt };
   }
+  async checkHardwareExternalSigner(signer: ExternalSigner, deviceId: string) {
+    const result = await command<CosignerHealthCheck>('hardware_check_external_signer', { signer, deviceId });
+    return { ...result, checkedAt: normalizeTimestamp(result.checkedAt) ?? result.checkedAt };
+  }
   async multisigSignerPolicyVerifications() {
     const results = await command<import('./contracts').SignerPolicyVerification[]>('multisig_signer_policy_verifications');
     return results.map((result) => ({ ...result, verifiedAt: normalizeTimestamp(result.verifiedAt) ?? result.verifiedAt }));

@@ -196,3 +196,7 @@ Payjoin V2 BIP21 requests are parsed and network-checked only inside Rust. Until
 `Coins → compact sort control → newest/oldest, largest/smallest, or label A–Z/Z–A`
 
 Newest source transaction is the default. Sorting is presentation-only and never changes selection, freeze state, labels, or spend eligibility. Date sorting leaves coins without a known source-transaction timestamp after dated coins.
+
+## External-signer health check
+
+`Settings → Hardware signer identity → Run health check` opens the same public identity detail used by multisig signers. Groot requires the physical device, uses a recent bounded scan, opens that exact device path, and compares its fingerprint, BIP84 derivation path, and full account xpub with the saved external signer. Results and the bounded recent-check log last only for the current app session; they do not replace receive-address verification or an end-to-end signing test.

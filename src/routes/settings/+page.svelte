@@ -1,18 +1,21 @@
 <script lang="ts">
-  import { Check, ChevronRight, Clock3, Cpu, Download, Eye, FileKey, History, KeyRound, LockKeyhole, Moon, Network, Pencil, Plus, RefreshCw, ShieldCheck, Sun, Trash2, WalletCards } from '@lucide/svelte';
+  import { Check, ChevronRight, Clock3, Cpu, Download, Eye, FileKey, HeartPulse, History, KeyRound, LockKeyhole, Moon, Network, Pencil, Plus, RefreshCw, ShieldCheck, Sun, Trash2, WalletCards } from '@lucide/svelte';
   import Button from '$lib/components/Button.svelte';
   import FieldCounter from '$lib/components/FieldCounter.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import PasswordField from '$lib/components/PasswordField.svelte';
   import LanguageToggle from '$lib/components/LanguageToggle.svelte';
   import IdentifierDetailsModal from '$lib/components/IdentifierDetailsModal.svelte';
+  import DeviceDetailsModal from '$lib/components/DeviceDetailsModal.svelte';
   import { toast } from '$lib/stores/toasts';
   import { defaultConfig, networkName } from '$lib/config';
   import { walletService, WalletError } from '$lib/wallet';
   import { goto } from '$app/navigation';
   import { onDestroy, onMount } from 'svelte';
   import { useWalletShellContext } from '$lib/wallet/shell-context';
-  import type { CoreNodeConfig, ExternalSignerWallet, NodeStatus, RecoveryScanSettings, RecoveryScanStatus, WalletProfile, WalletSyncSource } from '$lib/wallet/contracts';
+  import type { CoreNodeConfig, CosignerHealthCheck, ExternalSignerWallet, NodeStatus, RecoveryScanSettings, RecoveryScanStatus, WalletProfile, WalletSyncSource } from '$lib/wallet/contracts';
+  import type { CosignerDraft } from '$lib/multisig/policy';
+  import { matchingDeviceForHealthCheck } from '$lib/hardware/health-check';
   const walletShell = useWalletShellContext();
   let deleting = $state(false);
   let confirmText = $state('');
@@ -49,6 +52,15 @@
   let hardwareBackupOpen = $state(false), descriptorDetailsOpen = $state(false), hardwareBackupPin = $state(''), hardwareBackupError = $state(''), hardwareBackup = $state(''), hardwareBackupContent = $state(''), exportingHardwareBackup = $state(false);
   let renameOpen = $state(false), renameDraft = $state(''), renameError = $state(''), renaming = $state(false);
   let hardwareSignerWallet = $state<ExternalSignerWallet | null>(null);
+  let signerDetailsOpen = $state(false);
+  let signerHealth = $state<CosignerHealthCheck | null>(null);
+  let signerHealthHistory = $state<CosignerHealthCheck[]>([]);
+  let checkingSignerHealth = $state(false);
+  let hardwareSignerDetails = $derived.by<CosignerDraft | null>(() => hardwareSignerWallet ? ({
+    id: `external-${hardwareSignerWallet.signer.fingerprint.toLowerCase()}`,
+    ...hardwareSignerWallet.signer,
+    source: hardwareSignerWallet.signer.source
+  }) : null);
   let signerRenameOpen = $state(false), signerRenameDraft = $state(''), signerRenameError = $state(''), signerRenaming = $state(false);
   onMount(async () => {
     const generation = ++profileReadGeneration;
@@ -187,6 +199,31 @@
       signerRenaming = false;
     }
   }
+  async function runExternalSignerHealthCheck() {
+    if (!hardwareSignerWallet || checkingSignerHealth) return;
+    const signer = hardwareSignerWallet.signer;
+    checkingSignerHealth = true;
+    try {
+      const devices = await walletService.listHardwareDevices();
+      const device = matchingDeviceForHealthCheck(hardwareSignerDetails!, devices);
+      if (!device) throw new WalletError('hardware_unavailable', `Connect and unlock ${signer.label}, enable its USB connection, then try again.`);
+      const result = await walletService.checkHardwareExternalSigner(signer, device.id);
+      signerHealth = result;
+      signerHealthHistory = [result, ...signerHealthHistory].slice(0, 20);
+      toast({ title: 'Health check passed', description: `${signer.label} holds the saved BIP84 account key.`, tone: 'success' });
+    } catch (cause) {
+      const result: CosignerHealthCheck = {
+        checkedAt: new Date().toISOString(),
+        summary: cause instanceof Error ? cause.message : 'The device could not be verified.',
+        status: 'attention'
+      };
+      signerHealth = result;
+      signerHealthHistory = [result, ...signerHealthHistory].slice(0, 20);
+      toast({ title: 'Health check needs attention', description: result.summary, tone: 'danger' });
+    } finally {
+      checkingSignerHealth = false;
+    }
+  }
   async function runFullRescan() {
     scanning=true;scanError='';
     try {
@@ -267,7 +304,7 @@
 <div class="page narrow-page settings-page">
   <header class="page-header"><div><p class="eyebrow">WALLET SETTINGS</p><h1>{selectedProfile?.name ?? 'Settings'}</h1><p class="subtitle">Wallet security and connection. Appearance is global.</p></div></header>
   <section class="settings-group wallet-details"><h2>Wallet details</h2>
-    <div class="settings-list"><button aria-label={`Rename ${selectedProfile?.name ?? 'wallet'}`} onclick={openRename}><span class="setting-icon"><Pencil size={18}/></span><span><strong>Wallet name</strong><small>{selectedProfile?.name ?? 'Unnamed wallet'} · Local display name only</small></span><ChevronRight size={16}/></button>{#if hardwareSignerWallet}<button aria-label={`Rename hardware signer ${hardwareSignerWallet.signer.label}`} onclick={openSignerRename}><span class="setting-icon"><Cpu size={18}/></span><span><strong>Hardware signer name</strong><small>{hardwareSignerWallet.signer.label} · Used on signing and verification screens</small></span><ChevronRight size={16}/></button>{/if}</div>
+    <div class="settings-list"><button aria-label={`Rename ${selectedProfile?.name ?? 'wallet'}`} onclick={openRename}><span class="setting-icon"><Pencil size={18}/></span><span><strong>Wallet name</strong><small>{selectedProfile?.name ?? 'Unnamed wallet'} · Local display name only</small></span><ChevronRight size={16}/></button>{#if hardwareSignerWallet}<button aria-label={`Rename hardware signer ${hardwareSignerWallet.signer.label}`} onclick={openSignerRename}><span class="setting-icon"><Cpu size={18}/></span><span><strong>Hardware signer name</strong><small>{hardwareSignerWallet.signer.label} · Used on signing and verification screens</small></span><ChevronRight size={16}/></button><button aria-label={`Inspect ${hardwareSignerWallet.signer.label} identity and health`} onclick={() => signerDetailsOpen = true}><span class="setting-icon"><HeartPulse size={18}/></span><span><strong>Hardware signer identity</strong><small>{signerHealth?.status === 'healthy' ? 'Healthy · checked in this app session' : signerHealth?.status === 'attention' ? 'Health check needs attention' : 'Inspect identity and run a health check'}</small></span><ChevronRight size={16}/></button>{/if}</div>
   </section>
   <section class="settings-group immediate-security"><h2>Security</h2>
     <div class="settings-list">
@@ -313,6 +350,16 @@
   {#if renameError}<p class="form-error" role="alert">{renameError}</p>{/if}
   <div class="modal-footer"><Button variant="secondary" onclick={() => {renameOpen=false;renameDraft='';renameError='';}}>Cancel</Button><Button disabled={!renameDraft.trim() || renameDraft.trim() === selectedProfile?.name} loading={renaming} loadingLabel="Saving…" onclick={renameWallet}>Save name</Button></div>
 </Modal>
+<DeviceDetailsModal
+  signer={signerDetailsOpen ? hardwareSignerDetails : null}
+  health={signerHealth}
+  history={signerHealthHistory}
+  checking={checkingSignerHealth}
+  accountStandard="BIP84"
+  onclose={() => signerDetailsOpen = false}
+  oncheck={runExternalSignerHealthCheck}
+  onrename={async (label) => { signerRenameDraft = label; await renameHardwareSigner(); }}
+/>
 <Modal open={signerRenameOpen} title="Rename hardware signer" description="Change the local name shown when this signing key is required." onclose={() => {signerRenameOpen=false;signerRenameDraft='';signerRenameError='';}}>
   <label class="field"><span>Hardware signer name</span><input aria-label="New hardware signer name" maxlength="48" bind:value={signerRenameDraft} autocomplete="off"/><FieldCounter value={signerRenameDraft} max={48} hint="This does not change the device, fingerprint, public keys, descriptors, or saved public backups"/></label>
   {#if signerRenameError}<p class="form-error" role="alert">{signerRenameError}</p>{/if}

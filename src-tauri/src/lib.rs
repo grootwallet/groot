@@ -77,6 +77,7 @@ pub fn run() {
             wallet::hardware_commands::hardware_prompt_pin,
             wallet::hardware_commands::hardware_send_pin,
             wallet::hardware_commands::hardware_check_cosigner,
+            wallet::hardware_commands::hardware_check_external_signer,
             wallet::hardware_commands::hardware_import_cosigner,
             wallet::hardware_commands::external_signer_parse_import,
             wallet::hardware_commands::hardware_import_external_signer,

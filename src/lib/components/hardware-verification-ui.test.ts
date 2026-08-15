@@ -12,6 +12,8 @@ const signerSummary = readFileSync(new URL('./SignerSummary.svelte', import.meta
 const hardwareSetup = readFileSync(new URL('../../routes/hardware/new/+page.svelte', import.meta.url), 'utf8');
 const singleKeySend = readFileSync(new URL('../../routes/send/+page.svelte', import.meta.url), 'utf8');
 const multisigPolicy = readFileSync(new URL('../../routes/multisig/+page.svelte', import.meta.url), 'utf8');
+const settings = readFileSync(new URL('../../routes/settings/+page.svelte', import.meta.url), 'utf8');
+const deviceDetails = readFileSync(new URL('./DeviceDetailsModal.svelte', import.meta.url), 'utf8');
 
 describe('hardware receive verification UI', () => {
   it('keeps one shared verification component in both receive flows', () => {
@@ -32,6 +34,15 @@ describe('hardware receive verification UI', () => {
     expect(multisigPolicy).toContain('lockedDeviceForHealthCheck');
     expect(multisigPolicy).toContain('<TrezorPinModal');
     expect(multisigPolicy).toContain('Resuming the signer health check.');
+  });
+
+  it('exposes the shared identity health check for external single-key signers', () => {
+    expect(settings).toContain('Hardware signer identity');
+    expect(settings).toContain('walletService.checkHardwareExternalSigner');
+    expect(settings).toContain('accountStandard="BIP84"');
+    expect(settings).toContain('<DeviceDetailsModal');
+    expect(deviceDetails).toContain("accountStandard = 'BIP48'");
+    expect(deviceDetails).toContain('saved ${accountStandard} account key');
   });
 
   it('uses a deliberate retry status instead of an unstyled empty-list paragraph', () => {

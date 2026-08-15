@@ -345,6 +345,15 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     if (!identityMatches) throw new WalletError('unknown_signer', 'The connected device does not hold this signer’s saved BIP48 account key.');
     return { status: 'healthy' as const, checkedAt, summary: `Connected device matches fingerprint ${cosigner.fingerprint} and the saved BIP48 account key.` };
   }
+  async checkHardwareExternalSigner(signer: ExternalSigner, deviceId: string) {
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    const connected = await this.importHardwareExternalSigner(deviceId, signer.label, true);
+    const identityMatches = connected.fingerprint.toLowerCase() === signer.fingerprint.toLowerCase()
+      && connected.derivationPath === signer.derivationPath
+      && connected.xpub === signer.xpub;
+    if (!identityMatches) throw new WalletError('unknown_signer', 'The connected device does not hold this signer’s saved BIP84 account key.');
+    return { status: 'healthy' as const, checkedAt: new Date().toISOString(), summary: `Connected device matches fingerprint ${signer.fingerprint} and the saved BIP84 account key.` };
+  }
   async multisigSignerPolicyVerifications() {
     return structuredClone(this.multisigPolicyVerificationRecords);
   }

@@ -62,6 +62,7 @@ export interface WalletHardwarePort {
   promptHardwarePin(deviceId: string): Promise<string>;
   sendHardwarePin(challengeId: string, pinPositions: string): Promise<void>;
   checkHardwareCosigner(cosigner: CosignerDraft, deviceId: string): Promise<CosignerHealthCheck>;
+  checkHardwareExternalSigner(signer: ExternalSigner, deviceId: string): Promise<CosignerHealthCheck>;
   multisigSignerPolicyVerifications(): Promise<SignerPolicyVerification[]>;
   multisigPolicyVerificationAddress(): Promise<PolicyVerificationAddress>;
   previewMultisigPolicyVerificationAddress(policy: PolicyDraft): Promise<PolicyVerificationAddress>;
