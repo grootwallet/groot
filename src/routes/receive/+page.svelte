@@ -128,7 +128,7 @@
   <div class="awaiting-addresses">
     {#each awaiting as address}
       <article class:active={current?.id === address.id}>
-        <button class="awaiting-select" aria-label="View {address.label}" onclick={() => { current = address; showDetails = false; }}><span class="status-dot"></span><span><strong>{address.label}</strong><small>{compactAddress(address.address)}</small></span><span class="right-meta">Awaiting<small>{address.created}</small></span></button>
+        <button class="awaiting-select" aria-label="View {address.label}" onclick={() => { current = address; showDetails = false; }}><span class="status-dot"></span><span><strong>{address.label}</strong><small>{compactAddress(address.address)}</small></span><span class="right-meta">Awaiting<small><LocalTimestamp value={address.created}/></small></span></button>
         <button class="awaiting-discard" aria-label="Discard {address.label}" onclick={() => requestDiscard(address)}><Trash2 size={15}/></button>
       </article>
     {:else}
@@ -138,7 +138,7 @@
   <div class="section-heading compact"><div><h2>Address history</h2><p>Used and discarded addresses remain monitored.</p></div></div>
   <div class="address-history">
     {#each history as address}
-      <button class="address-history-row" aria-label="View details for {address.label}" onclick={() => detailAddress = address}><span class="status-dot" class:used={address.status === 'used'}></span><span><strong>{address.label}</strong><small>{compactAddress(address.address)}</small></span><span class="right-meta">{address.status}<small>{address.created}</small></span><ChevronRight size={15}/></button>
+      <button class="address-history-row" aria-label="View details for {address.label}" onclick={() => detailAddress = address}><span class="status-dot" class:used={address.status === 'used'}></span><span><strong>{address.label}</strong><small>{compactAddress(address.address)}</small></span><span class="right-meta">{address.status}<small><LocalTimestamp value={address.created}/></small></span><ChevronRight size={15}/></button>
     {:else}<p class="list-empty">No past addresses yet.</p>
     {/each}
   </div>
