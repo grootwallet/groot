@@ -60,14 +60,6 @@ fn validate_arguments(arguments: &[String]) -> Result<(), HardwareError> {
     Ok(())
 }
 
-fn validate_master_fingerprint(fingerprint: &str) -> Result<(), HardwareError> {
-    if fingerprint.len() == 8 && fingerprint.bytes().all(|byte| byte.is_ascii_hexdigit()) {
-        Ok(())
-    } else {
-        Err(HardwareError::InvalidArgument)
-    }
-}
-
 fn read_bounded<R: Read>(reader: R) -> Result<Vec<u8>, HardwareError> {
     let mut bytes = Vec::new();
     reader
@@ -105,10 +97,10 @@ fn pin_command_input(pin_positions: &[u8]) -> Result<Vec<u8>, HardwareError> {
 
 pub trait HardwareTransport: Send + Sync {
     fn enumerate(&self) -> Result<Vec<u8>, HardwareError>;
-    fn account_xpub(
+    fn account_keypool(
         &self,
         device_type: &str,
-        device_fingerprint: &str,
+        device_path: &str,
         derivation_path: &str,
     ) -> Result<Vec<u8>, HardwareError>;
     fn sign_psbt(
@@ -222,25 +214,6 @@ impl HwiCli {
             command.into(),
         ]
     }
-
-    fn fingerprint_command(
-        &self,
-        device_type: &str,
-        device_fingerprint: &str,
-        command: &str,
-        value: &str,
-    ) -> Vec<String> {
-        vec![
-            "--chain".into(),
-            self.chain.as_hwi_argument().into(),
-            "--device-type".into(),
-            device_type.into(),
-            "--fingerprint".into(),
-            device_fingerprint.into(),
-            command.into(),
-            value.into(),
-        ]
-    }
 }
 
 impl HardwareTransport for HwiCli {
@@ -257,16 +230,28 @@ impl HardwareTransport for HwiCli {
         )
     }
 
-    fn account_xpub(
+    fn account_keypool(
         &self,
         device_type: &str,
-        device_fingerprint: &str,
+        device_path: &str,
         derivation_path: &str,
     ) -> Result<Vec<u8>, HardwareError> {
-        validate_master_fingerprint(device_fingerprint)?;
+        let keypool_path = format!("{derivation_path}/0/*");
         run_program(
             &self.program,
-            &self.fingerprint_command(device_type, device_fingerprint, "getxpub", derivation_path),
+            &[
+                "--chain".into(),
+                self.chain.as_hwi_argument().into(),
+                "--device-type".into(),
+                device_type.into(),
+                "--device-path".into(),
+                device_path.into(),
+                "getkeypool".into(),
+                "--path".into(),
+                keypool_path,
+                "0".into(),
+                "1".into(),
+            ],
             DEFAULT_TIMEOUT,
             self.home.as_deref(),
         )
@@ -574,15 +559,6 @@ mod tests {
             validate_arguments(&["x".repeat(MAX_ARGUMENT_BYTES + 1)]),
             Err(HardwareError::InvalidArgument)
         );
-        assert_eq!(validate_master_fingerprint("f57a3a2b"), Ok(()));
-        assert_eq!(
-            validate_master_fingerprint("--debug"),
-            Err(HardwareError::InvalidArgument)
-        );
-        assert_eq!(
-            validate_master_fingerprint("f57a3a2b00"),
-            Err(HardwareError::InvalidArgument)
-        );
     }
 
     #[test]
@@ -807,20 +783,6 @@ mod tests {
                 parameters_for(network).hwi_chain
             );
         }
-
-        assert_eq!(
-            test.fingerprint_command("ledger", "f57a32b", "getxpub", "m/84'/1'/0'"),
-            [
-                "--chain",
-                "test",
-                "--device-type",
-                "ledger",
-                "--fingerprint",
-                "f57a32b",
-                "getxpub",
-                "m/84'/1'/0'"
-            ]
-        );
     }
 
     #[test]
@@ -832,7 +794,7 @@ mod tests {
         };
         assert_eq!(transport.enumerate(), Err(HardwareError::Unavailable));
         assert_eq!(
-            transport.account_xpub("coldcard", "bed628c0", "m/48'/1'/0'/2'"),
+            transport.account_keypool("trezor", "usb:1", "m/84'/1'/0'"),
             Err(HardwareError::Unavailable)
         );
         assert_eq!(

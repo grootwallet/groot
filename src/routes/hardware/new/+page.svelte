@@ -25,7 +25,7 @@
   let pin = $state(''), confirmation = $state(''), signer = $state<ExternalSigner|null>(null), devices = $state<HardwareDevice[]>([]);
   let importSource = $state<ExternalSignerSource>('file');
   let standardWalletOpen = $state(false), standardWalletDevice = $state<HardwareDevice|null>(null);
-  let hardwareProgress = $state('Scanning…');
+  let hardwareProgress = $state('Scanning all USB hardware wallets…');
   let pinOpen = $state(false), pinBusy = $state(false), pinChallenge = $state(''), pinPositions = $state(''), pinError = $state('');
   let pinErrorCode = $state<WalletErrorCode | ''>('');
   let pinDevice = $state<HardwareDevice|null>(null);
@@ -37,7 +37,7 @@
   onDestroy(() => { pin = ''; confirmation = ''; pinPositions = ''; pinChallenge = ''; });
 
   async function scan() {
-    scanOpen = true; busy = true; hardwareProgress = 'Scanning…'; error = '';
+    scanOpen = true; busy = true; hardwareProgress = 'Scanning all USB hardware wallets…'; error = '';
     try { devices = await walletService.listHardwareDevices(); }
     catch (cause) { devices = []; error = cause instanceof Error ? cause.message : 'Could not scan hardware.'; }
     finally { busy = false; }
@@ -49,7 +49,7 @@
     }
     if (device.status !== 'ready' && device.status !== 'detected' && !allowEmptyPassphrase) { error = device.message; return; }
     busy = true;
-    hardwareProgress = device.model.startsWith('ledger') ? 'Reading the public account key from Ledger…' : `Reading the public key from ${device.label}…`;
+    hardwareProgress = device.model.startsWith('ledger') ? 'Reading the public account key from Ledger…' : `Reading the public account key from ${device.label}…`;
     error = '';
     try {
       const walletLabel = label.trim() || device.label;
@@ -184,7 +184,7 @@
 <IdentifierDetailsModal value={signer?.xpub ?? ''} open={xpubOpen && Boolean(signer)} title="Account public key" description="Complete watch-only key imported from this signer." label="Account xpub" onclose={() => xpubOpen=false}/>
 
 <Modal open={scanOpen} title="Connect hardware signer" description="Quit manufacturer wallet apps after unlocking; only one app can own the USB session." onclose={() => scanOpen=false}>
-  {#if busy}<HardwareActionPrompt title={hardwareProgress} detail={hardwareProgress.includes('Ledger') ? 'Keep Bitcoin Test open for Regtest and follow any prompt on the Ledger screen.' : 'Keep the signer connected and unlocked. Follow any instructions shown on the device.'} label="Hardware wallet setup in progress"/>{:else}<HardwareDeviceList {devices} emptyMessage="HWI returned no device. For Coldcard, sign in first, enable its USB port, reconnect, then scan again. Other signers must be initialized, unlocked, and released by companion apps." onselect={useDevice} onrescan={scan} disabled={busy} detailedStatus />{/if}
+  {#if busy}<HardwareActionPrompt title={hardwareProgress} detail={hardwareProgress.startsWith('Scanning') ? 'Groot is checking each supported USB signer backend. Keep the device connected and leave companion apps closed.' : hardwareProgress.includes('Ledger') ? 'Keep Bitcoin Test open for Regtest and follow any prompt on the Ledger screen.' : 'Groot is reading the fingerprint and account key in one device session. Keep the signer connected and unlocked.'} label="Hardware wallet setup in progress"/>{:else}<HardwareDeviceList {devices} emptyMessage="HWI returned no device. For Coldcard, sign in first, enable its USB port, reconnect, then scan again. Other signers must be initialized, unlocked, and released by companion apps." onselect={useDevice} onrescan={scan} disabled={busy} detailedStatus />{/if}
   {#if error}<div class="hardware-inline-error" role="alert"><AlertTriangle size={18}/><span><strong>Could not read the account key</strong><small>{error}</small></span><Button variant="secondary" size="small" onclick={scan}>Try again</Button></div>{/if}
 </Modal>
 <Modal open={standardWalletOpen} title="Use Trezor standard wallet?" description="This selects the seed-derived wallet with no hardware passphrase." onclose={() => { standardWalletOpen=false; standardWalletDevice=null; scanOpen=true; }}>

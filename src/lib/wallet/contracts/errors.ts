@@ -51,6 +51,7 @@ export const WALLET_ERROR_CODES = [
   'invalid_hardware_request',
   'hardware_pin_rejected',
   'hardware_challenge_expired',
+  'hardware_scan_expired',
   'hardware_wallet_selection_required',
   'malformed_psbt',
   'psbt_too_large',

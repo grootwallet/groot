@@ -1,15 +1,57 @@
 use super::*;
 
+const HARDWARE_SCAN_CACHE_TIMEOUT: Duration = Duration::from_secs(2 * 60);
+
+fn remember_hardware_scan(state: &AppState, devices: &[HwiDevice]) -> ApiResult<()> {
+    let devices = devices
+        .iter()
+        .filter(|device| !device.path.is_empty())
+        .map(|device| (device.path.clone(), device.clone()))
+        .collect();
+    *state.recent_hardware_scan.lock().map_err(internal)? = Some(RecentHardwareScan {
+        devices,
+        created_at: Instant::now(),
+    });
+    Ok(())
+}
+
+fn recently_scanned_hardware_device(state: &AppState, device_id: &str) -> ApiResult<HwiDevice> {
+    let scans = state.recent_hardware_scan.lock().map_err(internal)?;
+    let scan = scans.as_ref().ok_or_else(|| {
+        api_error(
+            "hardware_scan_expired",
+            "Scan for hardware wallets again before continuing.",
+        )
+    })?;
+    if scan.created_at.elapsed() > HARDWARE_SCAN_CACHE_TIMEOUT {
+        return Err(api_error(
+            "hardware_scan_expired",
+            "The hardware scan expired. Scan again before continuing.",
+        ));
+    }
+    scan.devices.get(device_id).cloned().ok_or_else(|| {
+        api_error(
+            "hardware_unavailable",
+            "That hardware wallet was not present in the latest scan. Scan again.",
+        )
+    })
+}
+
 #[tauri::command]
-pub async fn hardware_list(app: AppHandle) -> ApiResult<Vec<HardwareDeviceDto>> {
+pub async fn hardware_list(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> ApiResult<Vec<HardwareDeviceDto>> {
     let hwi = hwi_cli(&app)?;
-    tauri::async_runtime::spawn_blocking(move || {
+    let devices = tauri::async_runtime::spawn_blocking(move || {
         let encoded = hwi.enumerate().map_err(hardware_api_error)?;
         let devices: Vec<HwiDevice> = serde_json::from_slice(&encoded).map_err(internal)?;
-        Ok(devices.into_iter().map(hardware_device_dto).collect())
+        Ok::<_, ApiError>(devices)
     })
     .await
-    .map_err(internal)?
+    .map_err(internal)??;
+    remember_hardware_scan(&state, &devices)?;
+    Ok(devices.into_iter().map(hardware_device_dto).collect())
 }
 #[tauri::command]
 pub async fn hardware_prompt_pin(
@@ -18,10 +60,8 @@ pub async fn hardware_prompt_pin(
     device_id: String,
 ) -> ApiResult<String> {
     let hwi = hwi_cli(&app)?;
+    let device = recently_scanned_hardware_device(&state, &device_id)?;
     let pending = tauri::async_runtime::spawn_blocking(move || {
-        let encoded = hwi.enumerate().map_err(hardware_api_error)?;
-        let devices: Vec<HwiDevice> = serde_json::from_slice(&encoded).map_err(internal)?;
-        let device = select_unique_hardware_device(devices, &device_id)?;
         if !matches!(
             device.device_type.to_ascii_lowercase().as_str(),
             "trezor" | "keepkey"
@@ -115,14 +155,16 @@ pub async fn hardware_send_pin(
 #[tauri::command]
 pub async fn hardware_check_cosigner(
     app: AppHandle,
+    state: State<'_, AppState>,
     cosigner: CosignerInput,
     device_id: String,
 ) -> ApiResult<CosignerHealthDto> {
     cosigner.parse_for_validation().map_err(policy_api_error)?;
     let checked_at = now().to_string();
     let hwi = hwi_cli(&app)?;
+    let device = recently_scanned_hardware_device(&state, &device_id)?;
     tauri::async_runtime::spawn_blocking(move || {
-        let connected = read_hardware_cosigner(&hwi, &device_id, &cosigner.label, true)?;
+        let connected = read_hardware_cosigner(&hwi, device, &cosigner.label, true)?;
         verify_cosigner_identity(&cosigner, &connected)?;
         Ok(CosignerHealthDto {
             status: "healthy",
@@ -135,6 +177,75 @@ pub async fn hardware_check_cosigner(
     })
     .await
     .map_err(internal)?
+}
+
+fn parse_hwi_account_keypool(
+    output: &[u8],
+    expected_path: &str,
+    device_type: &str,
+) -> ApiResult<(String, String)> {
+    let value: serde_json::Value = serde_json::from_slice(output).map_err(internal)?;
+    let descriptor = value
+        .as_array()
+        .and_then(|entries| entries.first())
+        .and_then(|entry| entry.get("desc"))
+        .and_then(serde_json::Value::as_str)
+        .filter(|descriptor| !descriptor.trim().is_empty())
+        .ok_or_else(|| {
+            missing_hardware_xpub(
+                device_type,
+                expected_path,
+                value.get("code").and_then(serde_json::Value::as_i64),
+                value.get("error").and_then(serde_json::Value::as_str),
+                "The device did not return its account descriptor.",
+            )
+        })?;
+    let canonical = Descriptor::<DescriptorPublicKey>::from_str(descriptor)
+        .map_err(|_| api_error("invalid_descriptor", "HWI returned an invalid descriptor."))?
+        .to_string();
+    let origin_start = canonical.find('[').ok_or_else(|| {
+        api_error(
+            "invalid_descriptor",
+            "HWI returned a descriptor without a key origin.",
+        )
+    })? + 1;
+    let origin_end = canonical[origin_start..]
+        .find(']')
+        .map(|offset| origin_start + offset)
+        .ok_or_else(|| api_error("invalid_descriptor", "HWI returned an invalid key origin."))?;
+    let (fingerprint, derivation) = canonical[origin_start..origin_end]
+        .split_once('/')
+        .ok_or_else(|| api_error("invalid_descriptor", "HWI returned an invalid key origin."))?;
+    let derivation = format!("m/{}", derivation.replace(['h', 'H'], "'"));
+    if derivation != expected_path {
+        return Err(api_error(
+            "invalid_derivation_path",
+            "The hardware wallet returned a different account path than Groot requested.",
+        ));
+    }
+    Fingerprint::from_str(fingerprint).map_err(|_| {
+        api_error(
+            "invalid_fingerprint",
+            "HWI returned an invalid fingerprint.",
+        )
+    })?;
+    let key_tail = &canonical[origin_end + 1..];
+    let xpub_end = key_tail.find('/').ok_or_else(|| {
+        api_error(
+            "invalid_descriptor",
+            "HWI returned a descriptor without an account key.",
+        )
+    })?;
+    let xpub = &key_tail[..xpub_end];
+    let parsed = Xpub::from_str(xpub)
+        .map_err(|_| api_error("invalid_descriptor", "HWI returned an invalid account key."))?;
+    if parsed.network.is_mainnet() {
+        return Err(api_error(
+            "wrong_network",
+            "The hardware wallet returned a mainnet account key for this non-mainnet wallet.",
+        ));
+    }
+    Ok((fingerprint.to_ascii_lowercase(), xpub.to_owned()))
 }
 
 fn verify_cosigner_identity(expected: &CosignerInput, connected: &CosignerInput) -> ApiResult<()> {
@@ -162,21 +273,15 @@ fn verify_cosigner_identity(expected: &CosignerInput, connected: &CosignerInput)
 
 fn read_hardware_cosigner(
     hwi: &HwiCli,
-    device_id: &str,
+    device: HwiDevice,
     label: &str,
     allow_empty_passphrase: bool,
 ) -> ApiResult<crate::multisig::CosignerInput> {
-    let encoded = hwi.enumerate().map_err(hardware_api_error)?;
-    let devices: Vec<HwiDevice> = serde_json::from_slice(&encoded).map_err(internal)?;
-    let device = select_unique_hardware_device(devices, device_id)?;
     require_explicit_standard_wallet_selection(&device, allow_empty_passphrase)?;
-    let fingerprint = device
-        .fingerprint
-        .ok_or_else(|| missing_hardware_fingerprint(&device.device_type))?;
     let output = hwi
-        .account_xpub(
+        .account_keypool(
             &device.device_type,
-            &fingerprint,
+            &device.path,
             crate::multisig::MULTISIG_ACCOUNT_PATH,
         )
         .map_err(|error| {
@@ -186,19 +291,11 @@ fn read_hardware_cosigner(
                 crate::multisig::MULTISIG_ACCOUNT_PATH,
             )
         })?;
-    let response: HwiXpub = serde_json::from_slice(&output).map_err(internal)?;
-    let xpub = response
-        .xpub
-        .filter(|value| !value.trim().is_empty())
-        .ok_or_else(|| {
-            missing_hardware_xpub(
-                &device.device_type,
-                crate::multisig::MULTISIG_ACCOUNT_PATH,
-                response.code,
-                response.error.as_deref(),
-                "The device did not return an account xpub.",
-            )
-        })?;
+    let (fingerprint, xpub) = parse_hwi_account_keypool(
+        &output,
+        crate::multisig::MULTISIG_ACCOUNT_PATH,
+        &device.device_type,
+    )?;
     let input = crate::multisig::CosignerInput {
         id: Uuid::new_v4().to_string(),
         label: label.to_owned(),
@@ -215,16 +312,18 @@ fn read_hardware_cosigner(
 #[tauri::command]
 pub async fn hardware_import_cosigner(
     app: AppHandle,
+    state: State<'_, AppState>,
     device_id: String,
     label: String,
     allow_empty_passphrase: Option<bool>,
 ) -> ApiResult<crate::multisig::CosignerInput> {
     let label = normalize_label(&label)?;
     let hwi = hwi_cli(&app)?;
+    let device = recently_scanned_hardware_device(&state, &device_id)?;
     tauri::async_runtime::spawn_blocking(move || {
         read_hardware_cosigner(
             &hwi,
-            &device_id,
+            device,
             &label,
             allow_empty_passphrase.unwrap_or(false),
         )
@@ -275,44 +374,26 @@ pub(crate) fn validate_external_signer_import_network(encoded: &str) -> ApiResul
 #[tauri::command]
 pub async fn hardware_import_external_signer(
     app: AppHandle,
+    state: State<'_, AppState>,
     device_id: String,
     label: String,
     allow_empty_passphrase: Option<bool>,
 ) -> ApiResult<ExternalSignerInput> {
     let label = normalize_label(&label)?;
     let hwi = hwi_cli(&app)?;
+    let device = recently_scanned_hardware_device(&state, &device_id)?;
     tauri::async_runtime::spawn_blocking(move || {
-        let enumerated = hwi.enumerate().map_err(hardware_api_error)?;
-        let devices: Vec<HwiDevice> = serde_json::from_slice(&enumerated).map_err(internal)?;
-        let device = select_unique_hardware_device(devices, &device_id)?;
         require_explicit_standard_wallet_selection(
             &device,
             allow_empty_passphrase.unwrap_or(false),
         )?;
-        let fingerprint = device.fingerprint.ok_or_else(|| {
-            api_error(
-                "hardware_unavailable",
-                "Unlock the device and select its passphrase-protected wallet before importing.",
-            )
-        })?;
         let output = hwi
-            .account_xpub(&device.device_type, &fingerprint, SINGLESIG_ACCOUNT_PATH)
+            .account_keypool(&device.device_type, &device.path, SINGLESIG_ACCOUNT_PATH)
             .map_err(|error| {
                 hardware_xpub_api_error(error, &device.device_type, SINGLESIG_ACCOUNT_PATH)
             })?;
-        let response: HwiXpub = serde_json::from_slice(&output).map_err(internal)?;
-        let xpub = response
-            .xpub
-            .filter(|value| !value.trim().is_empty())
-            .ok_or_else(|| {
-                missing_hardware_xpub(
-                    &device.device_type,
-                    SINGLESIG_ACCOUNT_PATH,
-                    response.code,
-                    response.error.as_deref(),
-                    "The device did not return a BIP84 account xpub.",
-                )
-            })?;
+        let (fingerprint, xpub) =
+            parse_hwi_account_keypool(&output, SINGLESIG_ACCOUNT_PATH, &device.device_type)?;
         let input = ExternalSignerInput {
             label,
             fingerprint,
@@ -1249,5 +1330,27 @@ mod health_check_tests {
         let error = verify_cosigner_identity(&expected, &connected).unwrap_err();
         assert_eq!(error.code, "unknown_signer");
         assert!(error.message.contains("saved BIP48 account key"));
+    }
+
+    #[test]
+    fn keypool_response_binds_fingerprint_xpub_and_requested_path() {
+        let signer = signer_from_seed(7);
+        let origin = MULTISIG_ACCOUNT_PATH.trim_start_matches("m/");
+        let output = serde_json::to_vec(&serde_json::json!([{
+            "desc": format!(
+                "wpkh([{}/{}]{}/0/*)",
+                signer.fingerprint, origin, signer.xpub
+            )
+        }]))
+        .unwrap();
+
+        let (fingerprint, xpub) =
+            parse_hwi_account_keypool(&output, MULTISIG_ACCOUNT_PATH, "trezor").unwrap();
+        assert_eq!(fingerprint, signer.fingerprint);
+        assert_eq!(xpub, signer.xpub);
+
+        let error =
+            parse_hwi_account_keypool(&output, SINGLESIG_ACCOUNT_PATH, "trezor").unwrap_err();
+        assert_eq!(error.code, "invalid_derivation_path");
     }
 }

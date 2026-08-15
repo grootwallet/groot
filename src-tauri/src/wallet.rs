@@ -494,6 +494,7 @@ pub struct AppState {
     pending_mnemonic: Mutex<Option<PendingMnemonic>>,
     verified_recovery: Mutex<HashMap<Uuid, String>>,
     pending_hardware_pins: Mutex<HashMap<String, PendingHardwarePin>>,
+    recent_hardware_scan: Mutex<Option<RecentHardwareScan>>,
     node_auth: Mutex<HashMap<Uuid, NodeAuthSession>>,
     authenticated_software_descriptors: Mutex<HashMap<Uuid, (String, String)>>,
     saved_files: Mutex<HashMap<String, SavedFileReveal>>,
@@ -1210,16 +1211,15 @@ struct HwiDevice {
     warnings: Vec<Vec<String>>,
 }
 
-#[derive(Deserialize)]
-struct HwiSuccess {
-    success: Option<bool>,
-    code: Option<i64>,
+#[derive(Debug)]
+struct RecentHardwareScan {
+    devices: HashMap<String, HwiDevice>,
+    created_at: Instant,
 }
 
 #[derive(Deserialize)]
-struct HwiXpub {
-    xpub: Option<String>,
-    error: Option<String>,
+struct HwiSuccess {
+    success: Option<bool>,
     code: Option<i64>,
 }
 
