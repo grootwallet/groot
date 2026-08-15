@@ -31,6 +31,7 @@
   let pinDevice = $state<HardwareDevice|null>(null);
   let xpubOpen = $state(false);
   let isLedger = $derived(Boolean(signer?.deviceType?.toLowerCase().includes('ledger')));
+  let isTrezor = $derived(Boolean(signer?.deviceType?.toLowerCase().includes('trezor')));
   let isFileImport = $derived(signer?.source === 'file');
 
   onDestroy(() => { pin = ''; confirmation = ''; pinPositions = ''; pinChallenge = ''; });
@@ -152,12 +153,14 @@
       {#if isLedger}
         <div class="credential-warning"><ShieldCheck size={17}/><p><strong>This identifies the wallet currently open on Ledger.</strong><span>A different seed or passphrase produces a different fingerprint and completely different addresses. Nano S Plus does not display this fingerprint, so verify your first receive address on Ledger before using the wallet.</span></p></div>
         <details class="ledger-passphrase-help"><summary>Want to use a Ledger passphrase?</summary><p>Set it directly on Ledger before importing: open device Settings → Security → Passphrase, then choose a temporary passphrase or attach one to a secondary PIN. Go back and import again after activating that wallet. Groot never receives the passphrase.</p></details>
+      {:else if isTrezor}
+        <div class="credential-warning"><ShieldCheck size={17}/><p><strong>This public identity came from the connected Trezor.</strong><span>Trezor does not show its master fingerprint during this export, so no fingerprint comparison is required here. After setup, verify the first receive address on the Trezor before accepting bitcoin.</span></p></div>
       {:else if isFileImport}
         <div class="credential-warning"><ShieldCheck size={17}/><p><strong>Review the public backup identity.</strong><span>Compare the fingerprint with the original wallet or a trusted record when available. After setup, verify the first receive address on the hardware wallet before accepting funds.</span></p></div>
       {:else}
         <div class="credential-warning"><ShieldCheck size={17}/><p><strong>Verify the fingerprint.</strong><span>Compare it with the value shown by the hardware wallet or its trusted export. A different seed or passphrase produces a different wallet.</span></p></div>
       {/if}
-      <div class="split-actions"><Button variant="secondary" onclick={() => { signer=null; step=1; }}>Back</Button><Button disabled={!label.trim()} onclick={() => step=3}>{isLedger ? 'Use this Ledger wallet' : isFileImport ? 'Use this public backup' : 'Fingerprint matches'}<ArrowRight size={17}/></Button></div>
+      <div class="split-actions"><Button variant="secondary" onclick={() => { signer=null; step=1; }}>Back</Button><Button disabled={!label.trim()} onclick={() => step=3}>{isLedger ? 'Use this Ledger wallet' : isTrezor ? 'Use this Trezor wallet' : isFileImport ? 'Use this public backup' : 'Fingerprint matches'}<ArrowRight size={17}/></Button></div>
     </section>
   {:else if signer}
     <form class="form-card hardware-protection-card" onsubmit={(event) => { event.preventDefault(); create(); }}>
@@ -186,7 +189,7 @@
 </Modal>
 <Modal open={standardWalletOpen} title="Use Trezor standard wallet?" description="This selects the seed-derived wallet with no hardware passphrase." onclose={() => { standardWalletOpen=false; standardWalletDevice=null; scanOpen=true; }}>
   <div class="credential-warning"><ShieldCheck size={17}/><p><strong>Your hidden wallet is unchanged.</strong><span>The same Trezor can use a passphrase-derived wallet elsewhere and its standard wallet here. They have different fingerprints and addresses.</span></p></div>
-  <p>Verify the imported fingerprint in the next step. You can enable or choose a Trezor passphrase later, but that opens a different hidden wallet; add it to Groot as a separate wallet while this standard wallet remains unchanged.</p>
+  <p>Review the imported public identity in the next step. You can enable or choose a Trezor passphrase later, but that opens a different hidden wallet; add it to Groot as a separate wallet while this standard wallet remains unchanged.</p>
   {#if busy}<HardwareActionPrompt title="Importing the Trezor standard wallet" detail="Keep Trezor connected while Groot reads its public account key." label="Hardware wallet import in progress"/>{:else}<div class="split-actions"><Button variant="secondary" onclick={() => { standardWalletOpen=false; standardWalletDevice=null; scanOpen=true; }}>Back</Button><Button disabled={!standardWalletDevice} onclick={() => { if(standardWalletDevice) useDevice(standardWalletDevice,true); }}>Use standard wallet</Button></div>{/if}
 </Modal>
 <TrezorPinModal

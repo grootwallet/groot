@@ -65,6 +65,12 @@ describe('hardware receive verification UI', () => {
     expect(opened).toBeGreaterThan(refreshed);
   });
 
+  it('does not require an unverifiable fingerprint attestation for Trezor imports', () => {
+    expect(hardwareSetup).toContain("let isTrezor = $derived(Boolean(signer?.deviceType?.toLowerCase().includes('trezor')))");
+    expect(hardwareSetup).toContain('Trezor does not show its master fingerprint during this export, so no fingerprint comparison is required here.');
+    expect(hardwareSetup).toContain("isTrezor ? 'Use this Trezor wallet'");
+  });
+
   it('reserves the signer summary while the send wallet identity loads', () => {
     expect(singleKeySend).toContain('loading={!signerSummaryReady}');
     expect(singleKeySend).not.toContain('step < 4 && signerSummaryReady');
