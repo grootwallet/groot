@@ -71,7 +71,7 @@ Localization coverage unit-tests locale normalization, persistence, fallback beh
 
 ### Hardware and platform tests
 
-Virtual signer coverage is mandatory in CI. Physical certification is separate and must record device model, firmware, HWI version, host OS, policy registration, xpub import, address display, rejection, signing, reconnect, and cancellation. A simulator result is never labeled physical certification. iOS/Android camera, permission, interruption, background/resume, and safe-area checks require the platform harnesses and real/simulated OS builds.
+Virtual signer coverage is mandatory in CI. Physical certification is separate and must record device model, firmware, HWI version, host OS, policy registration, xpub import, address display, rejection, signing, reconnect, and cancellation. The dependency-free hardware-preflight tests prove that enumeration is time/output bounded and that Jade cancellation and network mismatch become actionable copy without returning raw HWI errors or identifiers. A simulator result is never labeled physical certification. iOS/Android camera, permission, interruption, background/resume, and safe-area checks require the platform harnesses and real/simulated OS builds.
 
 ## Flow traceability matrix
 

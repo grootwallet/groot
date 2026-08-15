@@ -223,7 +223,7 @@
 <div class="page narrow-page send-page">
   <header class="page-header"><div><p class="eyebrow">SEND</p><h1>Send bitcoin</h1><p class="subtitle">{step === 1 && draftStep === 1 ? 'Name the payment and choose its recipient.' : step === 1 ? 'Choose the amount, coins, and network fee.' : step === 2 ? 'Review everything carefully.' : step === 3 ? 'Unlock, sign, and broadcast.' : accelerationMethod === 'cpfp' ? 'Fee acceleration broadcast.' : accelerationMethod === 'rbf' ? 'Replacement broadcast.' : 'Payment sent.'}</p></div></header>
   {#if step < 4}<SendProgress current={progressStep} />{/if}
-  {#if step < 4 && signerSummaryReady}<SignerSummary signers={signerItems} signedFingerprints={externalProposal?.signedFingerprints ?? []} collecting={externalSigner && Boolean(proposal)} />{/if}
+  {#if step < 4}<SignerSummary signers={signerItems} signedFingerprints={externalProposal?.signedFingerprints ?? []} collecting={externalSigner && Boolean(proposal)} loading={!signerSummaryReady} />{/if}
 
   {#if step === 1 && accelerationRequest}
     <form class="form-card send-stage-card" onsubmit={(event) => { event.preventDefault(); prepareCustomAcceleration(); }}>
@@ -269,13 +269,16 @@
     <section class="form-card sign-card">
       {#if externalProposal?.canFinalize}
         <span class="sign-icon success"><Check size={25}/></span><h2>Review signed transaction</h2><p>The hardware signature is verified. Review the transaction once more before broadcasting.</p>
-        <section class="signed-transaction-review" aria-label="Signed transaction review">
-          <dl class="details-list"><div><dt>To</dt><dd><button class="address-review-trigger mono" aria-label="View complete recipient address" onclick={() => addressOpen = true}>{compactAddress(proposal.recipient)}</button></dd></div><div><dt>Label</dt><dd>{proposal.label}</dd></div><div><dt>Amount</dt><dd>{shortSats(proposal.amount)} sats</dd></div><div><dt>Network</dt><dd>{proposal.network}</dd></div><div><dt>Network fee</dt><dd>{shortSats(proposal.fee)} sats</dd></div><div class="total"><dt>Total</dt><dd>{shortSats(proposal.total)} sats</dd></div></dl>
-          <TransactionReviewDetails {proposal} onChangeAddress={() => changeAddressOpen = true}/>
-        </section>
-        <div class="ready-panel"><Check size={18}/><div><strong>Signature verified</strong><small>Enter this wallet’s Groot app PIN to broadcast this exact signed transaction.</small></div></div><PasswordField label="App PIN" bind:value={passphrase} oninput={() => credentialError=''} autocomplete="current-password" error={credentialError}/><Button size="large" class="full" disabled={!passphrase} loading={broadcasting} loadingLabel="Broadcasting…" onclick={broadcast}>Finalize & broadcast</Button>
       {:else}
         <span class="sign-icon"><Cpu size={25}/></span><h2>Sign on your hardware</h2><p>Verify the address, amount, and fee on the signer. Groot never receives its private key or hardware passphrase.</p>
+      {/if}
+      <section class="signed-transaction-review" aria-label={externalProposal?.canFinalize ? 'Signed transaction review' : 'Transaction review'}>
+        <dl class="details-list"><div><dt>To</dt><dd><button class="address-review-trigger mono" aria-label="View complete recipient address" onclick={() => addressOpen = true}>{compactAddress(proposal.recipient)}</button></dd></div><div><dt>Label</dt><dd>{proposal.label}</dd></div><div><dt>Amount</dt><dd>{shortSats(proposal.amount)} sats</dd></div><div><dt>Network</dt><dd>{proposal.network}</dd></div><div><dt>Network fee</dt><dd>{shortSats(proposal.fee)} sats</dd></div><div class="total"><dt>Total</dt><dd>{shortSats(proposal.total)} sats</dd></div></dl>
+        <TransactionReviewDetails {proposal} onChangeAddress={() => changeAddressOpen = true}/>
+      </section>
+      {#if externalProposal?.canFinalize}
+        <div class="ready-panel"><Check size={18}/><div><strong>Signature verified</strong><small>Enter this wallet’s Groot app PIN to broadcast this exact signed transaction.</small></div></div><PasswordField label="App PIN" bind:value={passphrase} oninput={() => credentialError=''} autocomplete="current-password" error={credentialError}/><Button size="large" class="full" disabled={!passphrase} loading={broadcasting} loadingLabel="Broadcasting…" onclick={broadcast}>Finalize & broadcast</Button>
+      {:else}
         <div class="psbt-actions"><Button variant="secondary" onclick={scanHardware}><Cpu size={16}/>Sign with cable</Button><Button variant="secondary" onclick={showPsbtQr}><QrCode size={16}/>Show unsigned QR</Button><Button variant="secondary" onclick={() => {clearSigningTransportError();scannedFrames=[];qrScanOpen=true;}}><ScanLine size={16}/>Scan signed QR</Button><Button variant="secondary" onclick={() => {clearSigningTransportError();importOpen=true;}}><FileUp size={16}/>Import signed PSBT</Button><Button variant="secondary" loading={savingPsbt} loadingLabel="Saving PSBT…" onclick={saveExternalPsbt}><Download size={16}/>Save unsigned PSBT</Button></div>
         {#if importError}<div class="hardware-inline-error signing-transport-error" role="alert"><AlertTriangle size={18}/><span><strong>Signed PSBT rejected</strong><small>{importError}</small></span></div>{:else if credentialError}<p class="form-error" role="alert">{credentialError}</p>{/if}
       {/if}

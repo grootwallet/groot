@@ -14,8 +14,10 @@
   import { toast } from '$lib/stores/toasts';
   import { readTransferFile } from '$lib/transfer';
   import { compactIdentifier } from '$lib/address-display';
+  import { useWalletShellContext } from '$lib/wallet/shell-context';
   import { walletService, WalletError, type ExternalSigner, type ExternalSignerSource, type HardwareDevice, type WalletErrorCode } from '$lib/wallet';
 
+  const walletShell = useWalletShellContext();
   const hardwareSteps = ['Connect signer', 'Review identity', 'Protect app'];
 
   let step = $state(1), busy = $state(false), scanOpen = $state(false), guideOpen = $state(false);
@@ -112,6 +114,7 @@
       await walletService.createExternalSignerWallet(walletName, { ...signer, label: walletName }, pin);
       pin = ''; confirmation = '';
       toast({ title: 'Hardware wallet added', description: 'Only public descriptors are stored in Groot.', tone: 'success' });
+      await walletShell.refreshProfiles();
       await goto('/');
     } catch (cause) {
       errorCode = cause instanceof WalletError ? cause.code : 'internal_error';

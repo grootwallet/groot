@@ -338,12 +338,15 @@ code { font-family: "SFMono-Regular", Consolas, ui-monospace, monospace; }
 .send-progress li.complete { color: var(--muted); }
 .send-progress li.complete > span { color: var(--success); border-color: color-mix(in srgb,var(--success) 40%,var(--border)); background: color-mix(in srgb,var(--success) 9%,var(--bg)); }
 .send-signers { margin: 0 0 14px; padding: 11px 12px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface-inset); }
+.send-signers.loading { position: relative; overflow: hidden; }
+.send-signers.loading::after { content: ''; position: absolute; inset: 0; pointer-events: none; transform: translateX(-100%); background: linear-gradient(90deg,transparent 0%,color-mix(in srgb,var(--text) 4%,transparent) 48%,transparent 100%); animation: skeleton-shimmer 1.65s ease-in-out infinite; }
 .send-signers > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
 .send-signers > header div { display: flex; align-items: baseline; gap: 7px; }
 .send-signers > header span,.send-signers > header small { color: var(--muted); font-size: 9px; }
 .send-signers > header strong { font-size: 10px; }
 .send-signer-list { display: grid; grid-template-columns: repeat(auto-fit,minmax(140px,1fr)); gap: 6px; }
 .send-signer-list article { position: relative; min-width: 0; padding: 7px 8px; display: grid; grid-template-columns: 28px minmax(0,1fr); align-items: center; gap: 8px; border: 1px solid var(--border); border-radius: 7px; background: var(--panel); }
+.send-signer-list article.send-signer-placeholder { min-height: 44px; color: var(--muted); }
 .send-signer-list article.discardable { grid-template-columns: 28px minmax(0,1fr) 28px; }
 .send-signer-list article.signed { border-color: color-mix(in srgb,var(--success) 28%,var(--border)); background: color-mix(in srgb,var(--success) 5%,var(--panel)); }
 .send-signer-icon { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 7px; color: var(--muted); background: var(--surface-icon); }
@@ -941,6 +944,7 @@ code { font-family: "SFMono-Regular", Consolas, ui-monospace, monospace; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
   .wallet-skeleton::after { display: none; }
+  .send-signers.loading::after { display: none; }
 }
 
 @media (max-width: 760px) {

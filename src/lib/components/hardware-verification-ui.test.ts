@@ -8,6 +8,7 @@ const verificationFlow = readFileSync(new URL('./HardwareReceiveVerification.sve
 const singleKeyReceive = readFileSync(new URL('../../routes/receive/+page.svelte', import.meta.url), 'utf8');
 const multisigReceive = readFileSync(new URL('../../routes/multisig/receive/+page.svelte', import.meta.url), 'utf8');
 const hardwareDeviceList = readFileSync(new URL('./HardwareDeviceList.svelte', import.meta.url), 'utf8');
+const signerSummary = readFileSync(new URL('./SignerSummary.svelte', import.meta.url), 'utf8');
 const hardwareSetup = readFileSync(new URL('../../routes/hardware/new/+page.svelte', import.meta.url), 'utf8');
 const singleKeySend = readFileSync(new URL('../../routes/send/+page.svelte', import.meta.url), 'utf8');
 const multisigPolicy = readFileSync(new URL('../../routes/multisig/+page.svelte', import.meta.url), 'utf8');
@@ -53,5 +54,30 @@ describe('hardware receive verification UI', () => {
     for (const route of [hardwareSetup, singleKeySend]) {
       expect(route).toContain('<HardwareDeviceList');
     }
+  });
+
+  it('refreshes the selected wallet before opening a newly created hardware wallet', () => {
+    const created = hardwareSetup.indexOf('await walletService.createExternalSignerWallet');
+    const refreshed = hardwareSetup.indexOf('await walletShell.refreshProfiles()', created);
+    const opened = hardwareSetup.indexOf("await goto('/')", refreshed);
+    expect(created).toBeGreaterThan(-1);
+    expect(refreshed).toBeGreaterThan(created);
+    expect(opened).toBeGreaterThan(refreshed);
+  });
+
+  it('reserves the signer summary while the send wallet identity loads', () => {
+    expect(singleKeySend).toContain('loading={!signerSummaryReady}');
+    expect(singleKeySend).not.toContain('step < 4 && signerSummaryReady');
+    expect(signerSummary).toContain('aria-busy={loading}');
+    expect(signerSummary).toContain('class="send-signer-placeholder"');
+    expect(appCss).toContain('.send-signers.loading::after');
+  });
+
+  it('keeps the single-key transaction review visible while choosing a signing transport', () => {
+    const review = singleKeySend.indexOf("aria-label={externalProposal?.canFinalize ? 'Signed transaction review' : 'Transaction review'}");
+    const cableAction = singleKeySend.indexOf('onclick={scanHardware}', review);
+    expect(review).toBeGreaterThan(-1);
+    expect(cableAction).toBeGreaterThan(review);
+    expect(singleKeySend).toContain('<TransactionReviewDetails {proposal} onChangeAddress={() => changeAddressOpen = true}/>');
   });
 });
