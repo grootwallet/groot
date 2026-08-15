@@ -27,7 +27,7 @@ Every stage is fail-closed: later work may proceed in parallel, but no stage is 
 ### Hardware execution order
 
 1. Certify Trezor Safe 3 under its own model/firmware/OS/HWI row; never inherit Trezor Model One evidence.
-2. Discover BitBox02 Nova's exact HWI identity and desktop-USB pairing behavior, implement any required explicit model mapping, then run its independent USB campaign. Whisper/BLE remains a later authenticated mobile-transport project.
+2. Run BitBox02 Nova's independent HWI 3.2.0 desktop-USB campaign through the exact-model certification path now enabled in Groot. Capture pairing behavior and every BIP84/BIP48, health, negative, recovery, and broadcast row. Whisper/BLE remains a later authenticated mobile-transport project.
 3. Rehearse the exact first-release models—Coldcard Mk4, Trezor Model One, Ledger Nano S Plus, original BitBox02, and original Jade—on the selected public test network and reviewed packaged HWI candidate.
 4. Repeat at least one complete 2-of-3 public-test-network spend and clean descriptor recovery test using two independently administered physical signer families.
 5. Treat Jade Plus, BitBox02 Nova, additional Ledger/Trezor models, and every other roadmap device as separate exact-model targets.
@@ -44,7 +44,7 @@ Implementation exists for the following items, but the distinction between code-
 4. **Recovery:** birthday/gap controls, asynchronous full scan, persisted progress, cancellation, restart-safe interruption, the 65-payment/121-address envelope, and clean file-backed descriptor recovery/reopen are implemented. Complete the independent human clean-storage drill and public-network rehearsal.
 5. **Remote Core:** direct TLS and hostname-preserving v3-onion SOCKS5 transport are implemented with bounded failure/no-fallback automation. Complete a real VPS TLS/Tor run for certificate hostname/expiry/revocation and network-level DNS evidence.
 6. **Release:** unsigned clean-build/hash-comparison and macOS signature-verification scripts exist. Prove matching unsigned hashes on two clean machines, then sign/notarize, produce SBOM/provenance, and commission an independent review.
-7. **Next signer models:** certify Trezor Safe 3 independently, then discover and certify BitBox02 Nova over desktop USB. Jade Plus remains a distinct later target. Do not inherit Model One, original BitBox02, or Jade Classic evidence by family name. Treat QR and Whisper/BLE transports as separate certification and lifecycle projects.
+7. **Next signer models:** complete Trezor Safe 3 independently, then certify BitBox02 Nova through its enabled HWI 3.2.0 desktop-USB path. Jade Plus remains a distinct later target. Do not inherit Model One, original BitBox02, or Jade Classic evidence by family name. Treat QR and Whisper/BLE transports as separate certification and lifecycle projects.
 
 Mainnet stays compile-time disabled until every checklist artifact is attached to an approved replacement for ADR 0012.
 

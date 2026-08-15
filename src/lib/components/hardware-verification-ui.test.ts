@@ -12,6 +12,7 @@ const signerSummary = readFileSync(new URL('./SignerSummary.svelte', import.meta
 const hardwareSetup = readFileSync(new URL('../../routes/hardware/new/+page.svelte', import.meta.url), 'utf8');
 const singleKeySend = readFileSync(new URL('../../routes/send/+page.svelte', import.meta.url), 'utf8');
 const multisigPolicy = readFileSync(new URL('../../routes/multisig/+page.svelte', import.meta.url), 'utf8');
+const multisigSetup = readFileSync(new URL('../../routes/multisig/new/+page.svelte', import.meta.url), 'utf8');
 const settings = readFileSync(new URL('../../routes/settings/+page.svelte', import.meta.url), 'utf8');
 const deviceDetails = readFileSync(new URL('./DeviceDetailsModal.svelte', import.meta.url), 'utf8');
 
@@ -37,7 +38,7 @@ describe('hardware receive verification UI', () => {
   });
 
   it('exposes the shared identity health check for external single-key signers', () => {
-    expect(settings).toContain('Hardware signer identity');
+    expect(settings).toContain('Hardware signer identity &amp; health');
     expect(settings).toContain('walletService.checkHardwareExternalSigner');
     expect(settings).toContain('accountStandard="BIP84"');
     expect(settings).toContain('<DeviceDetailsModal');
@@ -65,6 +66,17 @@ describe('hardware receive verification UI', () => {
     for (const route of [hardwareSetup, singleKeySend]) {
       expect(route).toContain('<HardwareDeviceList');
     }
+  });
+
+  it('performs only one all-backend HWI scan per multisig setup request', () => {
+    const start = multisigSetup.indexOf('async function scanHardware()');
+    const end = multisigSetup.indexOf('function closeHardwareScan()', start);
+    const scanSource = multisigSetup.slice(start, end);
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    expect(scanSource.match(/listHardwareDevices\(\)/g)).toHaveLength(1);
+    expect(scanSource).not.toContain('setTimeout');
+    expect(scanSource).not.toContain('mergeHardwareDiscovery');
   });
 
   it('refreshes the selected wallet before opening a newly created hardware wallet', () => {

@@ -97,7 +97,7 @@ Regtest deliberately permits this explicit developer path while collecting physi
 
 Follow [`hardware-certification.md`](hardware-certification.md) for each model. Keep reports local because fingerprints and paths are sensitive. A model is supported for release only after all required rows pass on the exact firmware/OS/package combination.
 
-BitBox02 Nova begins as a discovery record, not a pass/fail alias for BitBox02. Record only sanitized capability outcomes until its real HWI identity and pairing behavior are implemented. For release review, create a separate summary from [`hardware-certification-summary-template.md`](hardware-certification-summary-template.md) without fingerprints, device paths, addresses, xpubs, or PSBTs; the sensitive local report remains gitignored.
+BitBox02 Nova begins as a separate certification record, not a pass/fail alias for BitBox02. HWI 3.2.0 desktop USB is enabled only to run that Regtest campaign; record sanitized exact-model enumeration, pairing, identity, address, registration, signing, health, negative, restart, recovery, and broadcast outcomes without inheriting original BitBox02 evidence. For release review, create a separate summary from [`hardware-certification-summary-template.md`](hardware-certification-summary-template.md) without fingerprints, device paths, addresses, xpubs, or PSBTs; the sensitive local report remains gitignored.
 
 ## 4. Remote Bitcoin Core over TLS
 

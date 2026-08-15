@@ -103,6 +103,12 @@ pub trait HardwareTransport: Send + Sync {
         device_path: &str,
         derivation_path: &str,
     ) -> Result<Vec<u8>, HardwareError>;
+    fn account_xpub(
+        &self,
+        device_type: &str,
+        device_path: &str,
+        derivation_path: &str,
+    ) -> Result<Vec<u8>, HardwareError>;
     fn sign_psbt(
         &self,
         device_type: &str,
@@ -252,6 +258,20 @@ impl HardwareTransport for HwiCli {
                 "0".into(),
                 "1".into(),
             ],
+            DEFAULT_TIMEOUT,
+            self.home.as_deref(),
+        )
+    }
+
+    fn account_xpub(
+        &self,
+        device_type: &str,
+        device_path: &str,
+        derivation_path: &str,
+    ) -> Result<Vec<u8>, HardwareError> {
+        run_program(
+            &self.program,
+            &self.device_command(device_type, device_path, "getxpub", derivation_path),
             DEFAULT_TIMEOUT,
             self.home.as_deref(),
         )
@@ -795,6 +815,10 @@ mod tests {
         assert_eq!(transport.enumerate(), Err(HardwareError::Unavailable));
         assert_eq!(
             transport.account_keypool("trezor", "usb:1", "m/84'/1'/0'"),
+            Err(HardwareError::Unavailable)
+        );
+        assert_eq!(
+            transport.account_xpub("trezor", "usb:1", "m/84'/1'/0'"),
             Err(HardwareError::Unavailable)
         );
         assert_eq!(

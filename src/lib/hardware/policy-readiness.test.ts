@@ -30,7 +30,7 @@ describe('hardware policy readiness', () => {
     expect(policyRegistrationProfile({ label: 'Jade' }).registration).toBe('interactive_once');
     expect(policyRegistrationProfile({ label: 'Coldcard' }).registration).toBe('file_once');
     expect(policyRegistrationProfile({ label: 'Trezor One' }).registration).toBe('none');
-    expect(policyRegistrationProfile({ label: 'BitBox Nova' }).registration).toBe('unsupported');
+    expect(policyRegistrationProfile({ label: 'BitBox Nova' }).registration).toBe('interactive_once');
   });
 
   it('separates interactive verification, setup gates, and Ledger repeat authorization', () => {
@@ -54,7 +54,7 @@ describe('hardware policy readiness', () => {
     expect(policyReadinessLabel({ label: 'Trezor One' }, null)).toBe('No setup needed');
     expect(policyReadinessLabel({ label: 'Coldcard' }, null)).toBe('Setup not recorded');
     expect(policyReadinessLabel({ label: 'Coldcard' }, coldcardEvidence)).toBe('Policy imported');
-    expect(policyReadinessLabel({ label: 'BitBox Nova' }, null)).toBe('Not supported');
+    expect(policyReadinessLabel({ label: 'BitBox Nova' }, null)).toBe('Setup required');
   });
 
   it('matches persisted evidence by normalized fingerprint', () => {

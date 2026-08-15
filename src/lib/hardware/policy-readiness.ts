@@ -45,11 +45,11 @@ const profiles: Record<PolicyReadinessKind, HardwarePolicyProfile> = {
   },
   bitbox_nova: {
     kind: 'bitbox_nova',
-    name: 'BitBox Nova',
-    registration: 'unsupported',
-    supported: false,
-    creationCopy: 'Not supported by Groot’s pinned HWI release and not yet physically certified.',
-    firstSigningCopy: 'Do not use this device with Groot until its dedicated certification is complete.'
+    name: 'BitBox02 Nova',
+    registration: 'interactive_once',
+    supported: true,
+    creationCopy: 'Certification mode. First-address verification registers this wallet on the Nova; no original BitBox02 evidence is inherited.',
+    firstSigningCopy: 'Register and verify this exact Nova wallet once before the first Regtest transaction.'
   },
   jade: {
     kind: 'jade',

@@ -374,8 +374,9 @@ pub async fn hardware_sign_multisig(
         .map(|cosigner| cosigner.fingerprint.clone())
         .collect::<Vec<_>>();
     let hwi = hwi_cli(&app)?;
+    let device = hardware_commands::recently_scanned_hardware_device(&state, &device_id)?;
     let (signed, signing_identity) = tauri::async_runtime::spawn_blocking(move || {
-        let identity = connected_hardware_identity(&hwi, &device_id, &expected_fingerprints)?;
+        let identity = connected_hardware_identity(device, &expected_fingerprints)?;
         if records_interactive_policy_verification(&identity.device_type)
             && !has_signer_policy_verification(&policy_verifications, &identity)
         {

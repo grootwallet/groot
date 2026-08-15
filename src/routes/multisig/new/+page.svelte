@@ -22,7 +22,6 @@
   import { isMeaningfulMultisigSetupDraft, multisigSetupSignerTarget } from '$lib/wallet/multisig-setup';
   import { coldcardPolicyFilename, readTransferFile, safeTransferFilename } from '$lib/transfer';
   import { parsePublicCosignerFile, PublicCosignerImportError } from '$lib/multisig/cosigner-import';
-  import { mergeHardwareDiscovery } from '$lib/hardware/discovery';
   import { lockedDeviceForHealthCheck, matchingDeviceForHealthCheck } from '$lib/hardware/health-check';
   import { matchingPolicyVerification, policyDeviceName, policyReadinessKind, policyRegistrationProfile, requiresInteractivePolicyVerification } from '$lib/hardware/policy-readiness';
 
@@ -521,13 +520,9 @@
     const generation = ++hardwareScanGeneration;
     pickerOpen = false; hardwareOpen = true; hardware = []; hardwareBusy = true; hardwareProgress = 'Looking for devices…'; error = '';
     try {
-      const first = await walletService.listHardwareDevices();
+      const discovered = await walletService.listHardwareDevices();
       if (generation !== hardwareScanGeneration || !hardwareOpen) return;
-      hardware = first;
-      hardwareProgress = 'Checking for another connected signer…';
-      await new Promise((resolve) => setTimeout(resolve, 550));
-      if (generation !== hardwareScanGeneration || !hardwareOpen) return;
-      hardware = mergeHardwareDiscovery(first, await walletService.listHardwareDevices());
+      hardware = discovered;
     }
     catch (cause) {
       if (generation !== hardwareScanGeneration) return;

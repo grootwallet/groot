@@ -1044,7 +1044,7 @@ fn loaded_hardware_wallet_descriptors_must_match_receive_and_change_identity() {
 }
 
 #[test]
-fn duplicate_hwi_connection_identity_is_rejected_as_ambiguous() {
+fn cached_hwi_connection_identity_must_match_the_saved_signer() {
     let device = HwiDevice {
         fingerprint: Some("d34db33f".to_owned()),
         device_type: "trezor".to_owned(),
@@ -1056,9 +1056,12 @@ fn duplicate_hwi_connection_identity_is_rejected_as_ambiguous() {
         needs_passphrase_sent: false,
         warnings: Vec::new(),
     };
-    let error = select_unique_hardware_device(vec![device.clone(), device], "usb:1").unwrap_err();
-    assert_eq!(error.code, "hardware_ambiguous");
-    assert!(error.message.contains("Disconnect extra devices"));
+    let identity = connected_hardware_identity(device.clone(), &["D34DB33F".to_owned()]).unwrap();
+    assert_eq!(identity.device_type, "trezor");
+    assert_eq!(identity.fingerprint, "d34db33f");
+
+    let error = connected_hardware_identity(device, &["f00dbabe".to_owned()]).unwrap_err();
+    assert_eq!(error.code, "unknown_signer");
 }
 
 #[test]
@@ -1259,6 +1262,39 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
     assert_eq!(bitbox.status, "needs_companion");
     assert_eq!(bitbox.action, "retry");
     assert!(bitbox.message.contains("BitBoxApp"));
+
+    let locked_nova = hardware_device_dto(HwiDevice {
+        fingerprint: None,
+        device_type: "bitbox02".to_owned(),
+        model: "bitbox02_nova_multi".to_owned(),
+        path: "sensitive-nova-path".to_owned(),
+        code: Some(-12),
+        error: None,
+        needs_pin_sent: false,
+        needs_passphrase_sent: false,
+        warnings: vec![],
+    });
+    assert_eq!(locked_nova.label, "bitbox02_nova_multi");
+    assert_eq!(locked_nova.model, "bitbox02");
+    assert_eq!(locked_nova.status, "needs_companion");
+    assert_eq!(locked_nova.action, "retry");
+    assert!(locked_nova.message.contains("BitBoxApp"));
+    assert!(!locked_nova.message.contains("sensitive-nova-path"));
+
+    let ready_nova = hardware_device_dto(HwiDevice {
+        fingerprint: Some("deadbeef".to_owned()),
+        device_type: "bitbox02".to_owned(),
+        model: "bitbox02_nova_multi".to_owned(),
+        path: "sensitive-nova-path".to_owned(),
+        code: None,
+        error: None,
+        needs_pin_sent: false,
+        needs_passphrase_sent: false,
+        warnings: vec![],
+    });
+    assert_eq!(ready_nova.label, "bitbox02_nova_multi");
+    assert_eq!(ready_nova.status, "ready");
+    assert_eq!(ready_nova.action, "import");
 
     let jade = hardware_device_dto(HwiDevice {
         fingerprint: None,

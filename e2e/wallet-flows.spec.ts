@@ -364,7 +364,7 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   await page.getByRole('button', { name: /Connect with cable/ }).click();
   await expect(page.getByRole('status', { name: 'Hardware wallet setup in progress' })).toContainText('Scanning');
   await page.getByRole('button', { name: /Virtual Coldcard/ }).click();
-  await expect(page.getByRole('status', { name: 'Hardware wallet setup in progress' })).toContainText('Reading the public key');
+  await expect(page.getByRole('status', { name: 'Hardware wallet setup in progress' })).toContainText('Reading the public account key');
   await expect(page.getByText('PUBLIC DATA REVIEW')).toBeVisible();
   await expect(page.getByText("m/84'/1'/0'")).toBeVisible();
   await page.getByRole('button', { name: 'Fingerprint matches' }).click();

@@ -29,6 +29,7 @@
   let signerDetailsReviewed = $state(false);
   let addressCopied = $state(false);
   const kind = $derived(policyReadinessKind(signer));
+  const isBitBox = $derived(kind === 'bitbox02' || kind === 'bitbox_nova');
   const deviceName = $derived(policyDeviceName(kind));
   const ledgerAccountName = $derived(`${wallet.threshold} of ${wallet.cosigners.length} Multisig`);
   const testnetAddressDevice = $derived(policyAddress.testnetAlias ? testnetAddressDisplayName(kind) : null);
@@ -58,8 +59,8 @@
       <p>Ledger may label the keys @0 through @{wallet.cosigners.length - 1} in a different order. Match the complete values, not the position.</p>
       {#if verification}<p class="policy-repeat-note">Groot's current Ledger connection must authorize this policy again for each signing request. Keep this reference open until Ledger reaches the transaction.</p>{/if}
     </div>
-  {:else if kind === 'bitbox02'}
-    <div class="instruction-card bitbox-policy-steps"><strong>Before you start on BitBox02</strong><p><b>The BitBox account name must be unused on this device.</b> It is separate from the Groot wallet name. Do not reuse the name of any existing BitBox multisig account or policy.</p><ol><li><b>Enter a new device-local account name.</b> Try “Groot {wallet.threshold}of{wallet.cosigners.length} B”.</li><li><b>Review the policy.</b> Confirm {wallet.threshold}-of-{wallet.cosigners.length} and compare every signer key.</li><li><b>Verify the address.</b> BitBox02 shows it after registration.</li></ol></div>
+  {:else if isBitBox}
+    <div class="instruction-card bitbox-policy-steps"><strong>Before you start on {deviceName}</strong><p><b>The BitBox account name must be unused on this device.</b> It is separate from the Groot wallet name. Do not reuse the name of any existing BitBox multisig account or policy.</p><ol><li><b>Enter a new device-local account name.</b> Try “Groot {wallet.threshold}of{wallet.cosigners.length} B”.</li><li><b>Review the policy.</b> Confirm {wallet.threshold}-of-{wallet.cosigners.length} and compare every signer key.</li><li><b>Verify the address.</b> {deviceName} shows it after registration.</li></ol></div>
   {:else if kind === 'jade'}
     <div class="policy-device-expectation"><strong>Jade will show</strong><p>The multisig registration details before it can verify receive and change addresses. Compare the threshold and every signer identity.</p></div>
   {/if}
@@ -70,7 +71,7 @@
   </details>
 
   <section class="policy-address-check" aria-label="First address to verify">
-    <div><strong>{kind === 'bitbox02' ? 'Address shown after registration' : 'First address to verify'}</strong><small>{kind === 'bitbox02' ? 'BitBox02 shows this only after you name and approve the account.' : 'Approve only if the device shows this exact address.'}</small></div>
+    <div><strong>{isBitBox ? 'Address shown after registration' : 'First address to verify'}</strong><small>{isBitBox ? `${deviceName} shows this only after you name and approve the account.` : 'Approve only if the device shows this exact address.'}</small></div>
     <ReadableAddress address={displayedAddress} copied={addressCopied} oncopy={copyAddress}/>
     {#if testnetAddressDevice}<small>{testnetAddressDevice} displays the Regtest script with a <code>tb1</code> prefix. Rust verified that it decodes to the identical Bitcoin output script.</small>{/if}
   </section>
@@ -79,7 +80,7 @@
   {#if error}<p class="form-error" role="alert">{error}</p>{/if}
   <div class="modal-footer policy-review-actions">
     {#if onback}<Button variant="secondary" disabled={busy} onclick={onback}>Back</Button>{/if}
-    {#if action === 'verify'}<Button disabled={!acknowledged} loading={busy} loadingLabel={`Follow ${deviceName}…`} onclick={onverify}><Check size={15}/>{kind === 'bitbox02' ? 'Start review with a new name' : 'Verify policy & first address'}</Button>
+    {#if action === 'verify'}<Button disabled={!acknowledged} loading={busy} loadingLabel={`Follow ${deviceName}…`} onclick={onverify}><Check size={15}/>{isBitBox ? 'Start review with a new name' : 'Verify policy & first address'}</Button>
     {:else if busy}<Button onclick={onshowtransaction}>{deviceName} policy approved — show transaction</Button>
     {:else}<Button disabled={!acknowledged} onclick={oncontinue}>Start {deviceName} review & signing</Button>{/if}
   </div>

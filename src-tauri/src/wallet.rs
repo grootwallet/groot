@@ -5356,19 +5356,16 @@ fn hardware_xpub_api_error(
     hardware_device_api_error(error, device_type)
 }
 
+#[derive(Debug)]
 struct VerifiedHardwareIdentity {
     device_type: String,
     fingerprint: String,
 }
 
 fn connected_hardware_identity(
-    hwi: &HwiCli,
-    device_id: &str,
+    device: HwiDevice,
     expected_fingerprints: &[String],
 ) -> ApiResult<VerifiedHardwareIdentity> {
-    let encoded = hwi.enumerate().map_err(hardware_api_error)?;
-    let devices: Vec<HwiDevice> = serde_json::from_slice(&encoded).map_err(internal)?;
-    let device = select_unique_hardware_device(devices, device_id)?;
     let fingerprint = device
         .fingerprint
         .ok_or_else(|| missing_hardware_fingerprint(&device.device_type))?;
@@ -5385,30 +5382,10 @@ fn connected_hardware_identity(
 }
 
 fn verify_connected_hardware_identity(
-    hwi: &HwiCli,
-    device_id: &str,
+    device: HwiDevice,
     expected_fingerprints: &[String],
 ) -> ApiResult<String> {
-    Ok(connected_hardware_identity(hwi, device_id, expected_fingerprints)?.device_type)
-}
-
-fn select_unique_hardware_device(devices: Vec<HwiDevice>, device_id: &str) -> ApiResult<HwiDevice> {
-    let mut matches = devices
-        .into_iter()
-        .filter(|device| device.path == device_id);
-    let device = matches.next().ok_or_else(|| {
-        api_error(
-            "hardware_unavailable",
-            "The selected device is no longer connected.",
-        )
-    })?;
-    if matches.next().is_some() {
-        return Err(api_error(
-            "hardware_ambiguous",
-            "More than one hardware record has the selected connection identity. Disconnect extra devices and rescan.",
-        ));
-    }
-    Ok(device)
+    Ok(connected_hardware_identity(device, expected_fingerprints)?.device_type)
 }
 
 #[path = "wallet/hardware_commands.rs"]
