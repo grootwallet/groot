@@ -5030,6 +5030,24 @@ code {
 .instruction-card li + li {
   margin-top: 4px;
 }
+.policy-device-warning {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 7%, var(--surface-inset));
+}
+.policy-device-warning strong {
+  color: var(--warning-text);
+  font-size: 12px;
+}
+.policy-device-warning p {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 10px;
+  line-height: 1.45;
+}
 .policy-device-expectation dl {
   display: grid;
   gap: 7px;

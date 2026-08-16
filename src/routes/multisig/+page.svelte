@@ -578,10 +578,10 @@
   open={!!policySigner}
   title={policySigner && policyRegistrationProfile(policySigner).registration === 'file_once'
     ? 'Prepare Coldcard for this wallet'
-    : 'Verify signer wallet policy'}
+    : 'Verify wallet policy'}
   description={policySigner && policyRegistrationProfile(policySigner).registration === 'file_once'
     ? 'Complete the one-time policy-file import before signing.'
-    : "Compare Groot's saved public policy with every value shown on the hardware device."}
+    : 'Check the policy, signer keys, and first address.'}
   onclose={() => {
     if (!policyBusy) {
       policySigner = null;

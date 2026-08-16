@@ -75,13 +75,13 @@
           ? kind === 'ledger'
             ? 'Policy reference saved in Groot'
             : 'Wallet policy previously verified'
-          : `Verify this wallet policy on ${deviceName}`}</strong
+          : `${wallet.threshold} of ${wallet.cosigners.length} wallet policy`}</strong
       >
       <small
         >{#if verification}{kind === 'ledger' ? 'Previously compared' : 'Verified'}
           <LocalTimestamp value={verification.verifiedAt} /> with signer
-          <code>{verification.signerFingerprint}</code>.{:else}Compare the account, keys, and first
-          address. Reject if anything differs.{/if}</small
+          <code>{verification.signerFingerprint}</code>.{:else}Reject if any value differs on
+          {deviceName}.{/if}</small
       >
     </div>
   </header>
@@ -109,30 +109,18 @@
         </p>{/if}
     </div>
   {:else if isBitBox}
-    <div class="instruction-card bitbox-policy-steps">
-      <strong>Before you start on {deviceName}</strong>
+    <div class="policy-device-warning">
+      <strong>Use a new BitBox account name</strong>
       <p>
-        <b>The BitBox account name must be unused on this device.</b> It is separate from the Groot wallet
-        name. Do not reuse the name of any existing BitBox multisig account or policy.
+        It is separate from the Groot wallet name. Try “Groot {wallet.threshold}of{wallet.cosigners
+          .length} B”.
       </p>
-      <ol>
-        <li>
-          <b>Enter a new device-local account name.</b> Try “Groot {wallet.threshold}of{wallet
-            .cosigners.length} B”.
-        </li>
-        <li>
-          <b>Review the policy.</b> Confirm {wallet.threshold}-of-{wallet.cosigners.length} and compare
-          every signer key.
-        </li>
-        <li><b>Verify the address.</b> {deviceName} shows it after registration.</li>
-      </ol>
     </div>
   {:else if kind === 'jade'}
     <div class="policy-device-expectation">
       <strong>Jade will show</strong>
       <p>
-        The multisig registration details before it can verify receive and change addresses. Compare
-        the threshold and every signer identity.
+        Register the {wallet.threshold}-of-{wallet.cosigners.length} policy, then compare the first address.
       </p>
     </div>
   {/if}
@@ -160,7 +148,7 @@
       <strong>{isBitBox ? 'Address shown after registration' : 'First address to verify'}</strong
       ><small
         >{isBitBox
-          ? `${deviceName} shows this only after you name and approve the account.`
+          ? `${deviceName} shows this after policy approval.`
           : 'Approve only if the device shows this exact address.'}</small
       >
     </div>
@@ -188,9 +176,7 @@
         loading={busy}
         loadingLabel={`Follow ${deviceName}…`}
         onclick={onverify}
-        ><Check size={15} />{isBitBox
-          ? 'Start review with a new name'
-          : 'Verify policy & first address'}</Button
+        ><Check size={15} />{isBitBox ? 'Begin on BitBox' : 'Verify policy & first address'}</Button
       >
     {:else if busy}<Button onclick={onshowtransaction}
         >{deviceName} policy approved — show transaction</Button

@@ -1316,8 +1316,8 @@
 </Modal>
 <Modal
   open={policyReviewOpen}
-  title="Review signer wallet policy"
-  description="Know exactly what the device should show before approving its multisig registration."
+  title="Review wallet policy"
+  description="Check the policy, signer keys, and first address."
   onclose={() => {
     if (!policyReviewBusy) {
       policyReviewOpen = false;

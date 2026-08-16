@@ -1,6 +1,6 @@
 use super::*;
 
-const HARDWARE_SCAN_CACHE_TIMEOUT: Duration = Duration::from_secs(2 * 60);
+const HARDWARE_SCAN_CACHE_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 
 fn remember_hardware_scan(state: &AppState, devices: &[HwiDevice]) -> ApiResult<()> {
     let devices = devices

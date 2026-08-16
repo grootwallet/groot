@@ -973,9 +973,16 @@
 
   async function openDraftPolicyVerification(signer: CosignerDraft) {
     policySigner = signer;
-    policyDevice = null;
+    policyDevice =
+      hardware.find(
+        (device) => device.fingerprint?.toLowerCase() === signer.fingerprint.toLowerCase()
+      ) ?? null;
     policyReviewError = '';
     policyReviewOpen = true;
+    if (policyDevice) {
+      policyReviewBusy = false;
+      return;
+    }
     policyReviewBusy = true;
     try {
       const devices = await walletService.listHardwareDevices();
@@ -1832,8 +1839,8 @@
 </Modal>
 <Modal
   open={policyReviewOpen}
-  title="Verify signer wallet policy"
-  description="Compare Groot's saved public policy with every value shown on the hardware device."
+  title="Verify wallet policy"
+  description="Check the policy, signer keys, and first address."
   onclose={() => {
     if (!policyReviewBusy) {
       policyReviewOpen = false;

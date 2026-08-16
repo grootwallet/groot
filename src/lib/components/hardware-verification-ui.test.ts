@@ -49,6 +49,7 @@ const settings = readFileSync(
 );
 const overview = readFileSync(new URL('../../routes/+page.svelte', import.meta.url), 'utf8');
 const deviceDetails = readFileSync(new URL('./DeviceDetailsModal.svelte', import.meta.url), 'utf8');
+const policyReview = readFileSync(new URL('./SignerPolicyReview.svelte', import.meta.url), 'utf8');
 
 describe('hardware receive verification UI', () => {
   it('keeps one shared verification component in both receive flows', () => {
@@ -120,6 +121,23 @@ describe('hardware receive verification UI', () => {
     expect(scanSource.match(/listHardwareDevices\(\)/g)).toHaveLength(1);
     expect(scanSource).not.toContain('setTimeout');
     expect(scanSource).not.toContain('mergeHardwareDiscovery');
+  });
+
+  it('reuses the matched setup device instead of scanning every backend for policy review', () => {
+    const start = multisigSetup.indexOf('async function openDraftPolicyVerification');
+    const end = multisigSetup.indexOf('async function verifyDraftPolicy', start);
+    const reviewSource = multisigSetup.slice(start, end);
+    expect(reviewSource).toContain('hardware.find(');
+    expect(reviewSource).toMatch(/if \(policyDevice\) \{[\s\S]*?return;/);
+    expect(reviewSource.match(/listHardwareDevices\(\)/g)).toHaveLength(1);
+  });
+
+  it('keeps BitBox policy guidance compact and device-local', () => {
+    expect(policyReview).toContain('Use a new BitBox account name');
+    expect(policyReview).toContain('It is separate from the Groot wallet name.');
+    expect(policyReview).toContain('Begin on BitBox');
+    expect(policyReview).not.toContain('Before you start on');
+    expect(policyReview).not.toContain('Do not reuse the name of any existing');
   });
 
   it('refreshes the selected wallet before opening a newly created hardware wallet', () => {
