@@ -24,7 +24,7 @@ Dependencies point inward. Routes never select adapters. Rust commands translate
 - Reject unbounded input/output, silent fallback, network ambiguity, log payloads, and destructive broad filesystem targets.
 - Reject a production claim supported only by dummy, simulator, snapshot, or mocked evidence.
 - Prefer a small pure function and exhaustive table tests over condition-heavy route or command code.
-- Reuse design-system components for repeated interface structures. A flow may supply device-specific content or behavior, but must not introduce one-off cards, typography, badges, lists, confirmations, or identifier displays when an equivalent pattern exists. If a second flow needs the pattern, extract it into `src/lib/components/` in the same change and document its intended variants in `docs/design-system.md`.
+- New feature UI must compose the existing design-system components in `src/lib/components/`. A flow may supply device-specific content or behavior, but must not introduce route-local cards, typography, badges, lists, confirmations, identifier displays, or other substitutes for an existing pattern. If no existing component satisfies a verified need, explain the gap and obtain the user's explicit approval before creating a new reusable component; once approved, document its intended variants in `docs/design-system.md`.
 
 ## Formatting
 
@@ -57,4 +57,10 @@ Every top-level Rust module is classified by `scripts/quality/check-rust-coverag
 
 ## AI contribution contract
 
-Agents read the nearest `AGENTS.md`, canonical docs, and applicable ADRs before editing. They preserve unrelated work, cite exact test evidence, distinguish unverified external requirements, and never weaken a safety gate merely to make a test or demo pass.
+Agents read the nearest `AGENTS.md`, canonical docs, applicable ADRs, and
+[`agent-harness.md`](agent-harness.md) before editing. They inspect and preserve
+the existing working tree, cite exact test evidence, distinguish unverified
+external requirements, verify live GitHub issue state before repeating it, and
+never weaken a safety gate merely to make a test or demo pass. The offline
+`pnpm test:agent-scaffolding` gate protects the required guides, commands,
+runtime pins, product names, and evidence rules from silent drift.

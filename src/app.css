@@ -1737,6 +1737,9 @@ code {
   border-radius: 12px;
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
 }
+.modal:focus-visible {
+  outline: none;
+}
 .modal-header {
   padding: 20px 20px 16px;
   display: flex;
@@ -7179,6 +7182,34 @@ code {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.permanent-label-tags {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  list-style: none;
+}
+.permanent-label-tag,
+.permanent-label-tags-hidden {
+  width: fit-content;
+  max-width: min(180px, 100%);
+  padding: 3px 6px;
+  overflow: hidden;
+  color: var(--text-soft) !important;
+  background: var(--surface-control);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  font-size: 9px !important;
+  font-weight: 600;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.permanent-label-tags-hidden {
+  color: var(--muted) !important;
+}
 .coin-status {
   flex: 0 0 auto;
   padding: 3px 6px;
@@ -7395,6 +7426,41 @@ code {
   white-space: nowrap;
   text-align: right;
 }
+
+.observed-receive-prompt {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.observed-receive-prompt > span {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  color: var(--warning-text);
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface-control));
+}
+
+.observed-receive-prompt > div {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+
+.observed-receive-prompt strong {
+  font-size: 11px;
+}
+
+.observed-receive-prompt small {
+  color: var(--muted);
+  font-size: 10px;
+}
+
 .coins-empty {
   min-height: 180px;
   display: grid;

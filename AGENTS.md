@@ -20,7 +20,9 @@ Groot is a deliberately small, non-custodial, onchain Bitcoin wallet for desktop
 4. For UI work, read `docs/design-system.md` and `docs/flows.md`.
 5. Read relevant records in `docs/adr/` before changing a settled decision.
 6. Read `docs/engineering-standards.md`, including its supply-chain rules.
-7. Run `pnpm validate` before handing off a change.
+7. Read `docs/agent-harness.md` for the exact test, formatting, CI, GitHub,
+   process-ownership, and hardware-certification workflow.
+8. Run `pnpm validate` before handing off a change.
 
 If code and documentation disagree, stop and resolve the mismatch in the same change. Do not silently choose one.
 
@@ -56,6 +58,7 @@ If code and documentation disagree, stop and resolve the mismatch in the same ch
 - Rust commands return serializable DTOs and stable error codes; do not expose BDK types to Svelte.
 - Keep network endpoints configurable. Signet is the integration default, regtest is for deterministic automation, and Testnet4 is the public rehearsal network.
 - Prefer pure functions for policy. Add or update a unit test when changing a rule.
+- New feature UI must compose the repository's existing reusable components. Before creating a new reusable component, verify that no existing component can satisfy the requirement, explain the verified gap to the user, and obtain the user's explicit approval. Do not create the component before that approval.
 - Keep components small and accessible. Important actions need an inline result and a toast; a toast alone is not durable state.
 - Avoid speculative abstractions. Add one boundary when it protects secrets, platform differences, or a stable domain contract.
 
@@ -66,7 +69,8 @@ If code and documentation disagree, stop and resolve the mismatch in the same ch
 3. Add/update tests and canonical docs.
 4. Run `pnpm validate`.
 5. For UI changes, inspect desktop (1180×780) and mobile (390×844), including keyboard-safe bottom spacing.
-6. For Rust wallet changes, also run `cargo fmt --check`, `cargo clippy --all-targets --all-features -- -D warnings`, and `cargo test` from `src-tauri`.
+6. For Rust wallet changes, also run `cargo fmt --check`, `cargo clippy --locked --all-targets --all-features -- -D warnings`, and `cargo test --locked --all-features` from `src-tauri`.
+7. Use the proportionate extended and CI harness in `docs/agent-harness.md`; `pnpm validate` is mandatory but does not include every CI job.
 
 ## Definition of done
 

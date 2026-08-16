@@ -124,6 +124,7 @@ pub fn run() {
             wallet::multisig_setup_commands::multisig_snapshot,
             wallet::multisig_setup_commands::multisig_sync,
             wallet::multisig_setup_commands::multisig_address_create,
+            wallet::multisig_setup_commands::multisig_address_claim_observed,
             wallet::multisig_setup_commands::multisig_address_discard,
             wallet::multisig_proposal_commands::multisig_tx_prepare,
             wallet::multisig_coin_selection_preview,

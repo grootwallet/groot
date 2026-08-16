@@ -54,7 +54,9 @@ test('creates a 24-word wallet and clears onboarding secrets', async ({ page }) 
   await page.getByRole('button', { name: 'Generate 24 recovery words' }).click();
   await expect(setupProgress.locator('[aria-current="step"]')).toContainText('Back up');
   await expect(page.getByText('Check your surroundings')).toBeVisible();
-  await expect(page.getByText(/no person, camera, or screen sharing/i)).toBeVisible();
+  await expect(page.locator('.recovery-reveal-gate')).toContainText(
+    'Make sure no person, camera, or screen sharing can see them.'
+  );
   await expect(page.locator('.mnemonic-grid > div')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'I wrote them down' })).toBeDisabled();
   await page.getByRole('button', { name: /reveal words/i }).click();
@@ -838,13 +840,16 @@ test('overview, activity, UTXOs, and settings expose durable states', async ({ p
     reusedCoin.getByText(/This coin shares its address with \d+ other coin/)
   ).toBeVisible();
   await expect(reusedCoin.getByText('Linked coin', { exact: true })).toBeVisible();
-  const changeCoin = page.locator('.coin-row').filter({ hasText: 'Refund' });
-  await changeCoin.getByRole('button', { name: 'Show details for Refund' }).click();
+  const changeCoin = page.locator('.coin-row').filter({ hasText: 'Mixed provenance' });
+  const inheritedLabels = changeCoin.getByRole('list', { name: 'Permanent labels' });
+  await expect(inheritedLabels.getByRole('listitem', { name: 'Savings' })).toBeVisible();
+  await expect(inheritedLabels.getByRole('listitem', { name: 'Refund' })).toBeVisible();
+  await changeCoin.getByRole('button', { name: 'Show details for Savings, Refund' }).click();
   await expect(changeCoin.getByText('Source transaction', { exact: true })).toBeVisible();
   await expect(changeCoin.getByText('Source payment intent', { exact: true })).toBeVisible();
   await expect(changeCoin.getByText('Hardware order', { exact: true })).toBeVisible();
   await expect(changeCoin.getByText('Change lineage', { exact: true })).toBeVisible();
-  await expect(changeCoin.getByText('1 wallet input', { exact: true })).toBeVisible();
+  await expect(changeCoin.getByText('2 wallet inputs', { exact: true })).toBeVisible();
   await page.getByRole('link', { name: 'Settings' }).click();
   await expect(page.getByText('Delete wallet', { exact: true })).toBeVisible();
 });
@@ -1111,11 +1116,11 @@ test('discreet mode hides coin labels and amounts without leaking them through c
   await page.getByRole('button', { name: 'Hide wallet amounts' }).first().click();
   await page.getByRole('link', { name: 'Coins' }).click();
   const coinPage = page.locator('.page');
-  await expect(coinPage).toContainText('Label hidden');
+  await expect(coinPage).toContainText('Labels hidden');
   await expect(coinPage).not.toContainText('Savings');
   await expect(coinPage).not.toContainText('1,250,000');
   await expect(
-    page.getByRole('checkbox', { name: 'Select Label hidden', exact: true }).first()
+    page.getByRole('checkbox', { name: 'Select Coin with hidden labels', exact: true }).first()
   ).toBeVisible();
   await expect(page.getByPlaceholder('Filter labels')).toBeDisabled();
 });

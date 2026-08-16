@@ -1,4 +1,5 @@
 use super::hardware_commands::*;
+use super::multisig_setup_commands::claim_observed_receive_output;
 use super::profile_commands::*;
 use super::transaction_commands::*;
 use super::*;
@@ -7,6 +8,24 @@ use crate::multisig::{CosignerInput, CosignerSource, MULTISIG_ACCOUNT_PATH};
 use crate::recovery::{SpendingPath, TimedSpendingPath};
 use bdk_wallet::bitcoin::NetworkKind;
 use std::{net::TcpListener, thread};
+
+#[test]
+fn hardware_and_multisig_profiles_count_as_existing_without_software_secret_storage() {
+    let mut registry = WalletRegistry::default();
+    assert!(!registered_wallets_exist(&registry));
+    registry
+        .add(WalletProfile {
+            id: Uuid::new_v4(),
+            name: "Hardware policy".to_owned(),
+            network: NETWORK_NAME.to_owned(),
+            kind: WalletKind::Multisig,
+            descriptor_checksum: "abcd1234".to_owned(),
+            created_at: 1,
+            backup_verified: true,
+        })
+        .unwrap();
+    assert!(registered_wallets_exist(&registry));
+}
 
 #[test]
 fn compiled_network_rejects_foreign_registry_and_public_reset() {
@@ -285,6 +304,106 @@ fn external_signer_labels_are_normalized_and_bounded() {
 fn pending_balance_includes_trusted_and_untrusted_outputs() {
     assert_eq!(aggregate_pending_balance(100_000, 249_000), 349_000);
     assert_eq!(aggregate_pending_balance(u64::MAX, 1), u64::MAX);
+}
+
+#[test]
+fn observed_unlabeled_receive_output_accepts_one_permanent_label_only() {
+    use bdk_wallet::bitcoin::{
+        absolute::LockTime, hashes::Hash, transaction::Version, ScriptBuf, Sequence, TxOut, Witness,
+    };
+
+    let mnemonic = Mnemonic::parse(WORDS).unwrap();
+    let master = root_key(&mnemonic, "observed receive label").unwrap();
+    let mut db = Connection::open_in_memory().unwrap();
+    init_app_schema(&db).unwrap();
+    let mut wallet = Wallet::create(
+        Bip84(master, KeychainKind::External),
+        Bip84(master, KeychainKind::Internal),
+    )
+    .network(Network::Regtest)
+    .create_wallet(&mut db)
+    .unwrap();
+    let first = wallet.peek_address(KeychainKind::External, 0).address;
+    let second = wallet.peek_address(KeychainKind::External, 1).address;
+    let change = wallet.peek_address(KeychainKind::Internal, 0).address;
+    let funding = Transaction {
+        version: Version::TWO,
+        lock_time: LockTime::ZERO,
+        input: vec![TxIn {
+            previous_output: OutPoint::new(Txid::from_byte_array([7; 32]), 0),
+            script_sig: ScriptBuf::new(),
+            sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
+            witness: Witness::new(),
+        }],
+        output: vec![
+            TxOut {
+                value: Amount::from_sat(100_000),
+                script_pubkey: first.script_pubkey(),
+            },
+            TxOut {
+                value: Amount::from_sat(50_000),
+                script_pubkey: second.script_pubkey(),
+            },
+            TxOut {
+                value: Amount::from_sat(25_000),
+                script_pubkey: change.script_pubkey(),
+            },
+        ],
+    };
+    let funding_txid = funding.compute_txid();
+    wallet.apply_unconfirmed_txs([(funding, 1)]);
+    label_provenance::reconcile_wallet_outputs(&wallet, &db, 1).unwrap();
+
+    let claimed = claim_observed_receive_output(
+        &mut db,
+        &wallet,
+        &format!("{funding_txid}:0"),
+        "  Policy verification funding  ",
+    )
+    .unwrap();
+    assert_eq!(claimed.id, 0);
+    assert_eq!(claimed.label, "Policy verification funding");
+    assert_eq!(claimed.status, "used");
+    let provenance = label_provenance::output_summary(&db, &format!("{funding_txid}:0")).unwrap();
+    assert_eq!(provenance.state, label_provenance::ProvenanceState::Known);
+    assert_eq!(provenance.labels[0].text, "Policy verification funding");
+
+    assert_eq!(
+        claim_observed_receive_output(
+            &mut db,
+            &wallet,
+            &format!("{funding_txid}:0"),
+            "Replacement label",
+        )
+        .err()
+        .unwrap()
+        .code,
+        "invalid_label"
+    );
+    assert_eq!(
+        claim_observed_receive_output(
+            &mut db,
+            &wallet,
+            &format!("{funding_txid}:1"),
+            "Policy verification funding",
+        )
+        .err()
+        .unwrap()
+        .code,
+        "invalid_label"
+    );
+    assert_eq!(
+        claim_observed_receive_output(
+            &mut db,
+            &wallet,
+            &format!("{funding_txid}:2"),
+            "Change label",
+        )
+        .err()
+        .unwrap()
+        .code,
+        "address_not_found"
+    );
 }
 
 #[test]

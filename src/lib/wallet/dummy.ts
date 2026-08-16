@@ -1384,6 +1384,49 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
   async createMultisigAddress(label: string) {
     return this.createAddress(label);
   }
+  async claimObservedMultisigAddress(outpoint: string, rawLabel: string) {
+    const label = normalizePermanentLabel(rawLabel);
+    const coin = this._coins.find((item) => item.outpoint === outpoint);
+    if (!coin || coin.provenance.context !== 'received' || coin.primaryLabel) {
+      throw new WalletError(
+        'address_not_found',
+        'The selected coin is not an unlabeled received output.'
+      );
+    }
+    if (
+      this._addresses.some(
+        (address) => address.label.trim().toLocaleLowerCase() === label.toLocaleLowerCase()
+      )
+    ) {
+      throw new WalletError(
+        'invalid_label',
+        'Permanent labels cannot be reused. Choose a unique label.'
+      );
+    }
+    const permanentLabel = {
+      id: `receive-observed-${Date.now()}`,
+      text: label,
+      origin: 'receive' as const
+    };
+    coin.label = label;
+    coin.primaryLabel = permanentLabel;
+    coin.provenance = {
+      ...coin.provenance,
+      state: 'known',
+      labels: [permanentLabel]
+    };
+    const id = Math.max(-1, ...this._addresses.map((address) => address.id)) + 1;
+    const address: ReceiveAddress = {
+      id,
+      address: coin.address,
+      label,
+      created: 'Just now',
+      status: 'used',
+      derivationPath: `${MULTISIG_ACCOUNT_PATH}/0/${id}`
+    };
+    this._addresses = [address, ...this._addresses];
+    return structuredClone(address);
+  }
   async discardMultisigAddress(id: number) {
     return this.discardAddress(id);
   }

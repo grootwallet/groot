@@ -153,6 +153,10 @@
       >
     </div>
     <ReadableAddress address={displayedAddress} copied={addressCopied} oncopy={copyAddress} />
+    <small class="policy-address-purpose">
+      Verification reference only. Do not fund this address directly; after the wallet is created,
+      use Receive to create a permanently labeled payment request.
+    </small>
     {#if testnetAddressDevice}<small
         >{testnetAddressDevice} displays the Regtest script with a <code>tb1</code> prefix. Rust verified
         that it decodes to the identical Bitcoin output script.</small

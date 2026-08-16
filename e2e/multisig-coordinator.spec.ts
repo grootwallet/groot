@@ -512,7 +512,7 @@ test('shows signer details and runs honest health checks', async ({ page }) => {
     xpubDialog.getByRole('button', { name: 'Copy exact Public account key (xpub)' })
   ).toBeVisible();
   await xpubDialog.getByRole('button', { name: 'Close' }).click();
-  await expect(coldcardDialog.getByText('Not checked in this session')).toBeVisible();
+  await expect(coldcardDialog.getByText('Not checked yet')).toBeVisible();
   await coldcardDialog.getByRole('button', { name: 'Run health check' }).click();
   await expect(
     coldcardDialog.getByRole('status', { name: 'Signer health check in progress' })
@@ -523,7 +523,6 @@ test('shows signer details and runs honest health checks', async ({ page }) => {
       .getByText(/matches fingerprint f00dbabe and the saved BIP48 account key/)
   ).toBeVisible();
   await expect(coldcardDialog.getByText(/Last checked/)).toBeVisible();
-  await expect(coldcardDialog.getByText('Recent checks')).toBeVisible();
   await coldcardDialog.getByRole('button', { name: 'Close' }).click();
 
   await page.getByRole('button', { name: 'View Offline backup details' }).click();
@@ -533,14 +532,12 @@ test('shows signer details and runs honest health checks', async ({ page }) => {
   await expect(
     backupDialog.locator('.health-card').getByText(/Connect and unlock Offline backup/)
   ).toBeVisible();
-  await expect(backupDialog.getByText('Recent checks')).toBeVisible();
   await backupDialog.getByRole('button', { name: 'Close' }).click();
 
   await page.reload();
   await page.getByRole('button', { name: 'View Coldcard details' }).click();
-  await expect(
-    page.getByRole('dialog', { name: 'Coldcard' }).getByText('Not checked in this session')
-  ).toBeVisible();
+  const restoredHealth = page.getByRole('dialog', { name: 'Coldcard' });
+  await expect(restoredHealth.getByText('Not checked yet')).toBeVisible();
 });
 
 test('uses the same wallet navigation for a multisig policy', async ({ page }) => {
@@ -869,9 +866,9 @@ test('explicitly selects a Trezor standard wallet without changing hidden wallet
   await standard.click();
 
   const choice = page.getByRole('dialog', { name: 'Use Trezor standard wallet?' });
-  await expect(
-    choice.getByText(/does not disable, change, or reveal any hidden passphrase wallet/)
-  ).toBeVisible();
+  await expect(choice).toContainText(
+    'It does not disable, change, or reveal any hidden passphrase wallet you may use elsewhere.'
+  );
   await choice.getByRole('button', { name: 'Use standard wallet' }).click();
   await expect(
     choice.getByRole('status', { name: 'Hardware signer import in progress' })
@@ -928,7 +925,7 @@ test('imports a bounded public signer record from a mounted-file flow', async ({
   const renamedDetails = page.getByRole('dialog', { name: 'Air-gapped Coldcard' });
   await expect(renamedDetails).toBeVisible();
   await expect(renamedDetails.getByText('Device health', { exact: true })).toBeVisible();
-  await expect(renamedDetails.getByText('Not checked in this session')).toBeVisible();
+  await expect(renamedDetails.getByText('Not checked yet')).toBeVisible();
   await renamedDetails.getByRole('button', { name: 'Run health check' }).click();
   await expect(
     renamedDetails.getByText(/matches fingerprint f00dbabe and the saved BIP48 account key/)
@@ -988,7 +985,7 @@ test('opens and checks an imported hardware signer during setup', async ({ page 
   );
   await signerCard.click();
   const details = page.getByRole('dialog', { name: 'Virtual Coldcard' });
-  await expect(details.getByText('Not checked in this session')).toBeVisible();
+  await expect(details.getByText('Not checked yet')).toBeVisible();
   await details.getByRole('button', { name: 'Run health check' }).click();
   await expect(
     details
@@ -1081,8 +1078,8 @@ test('creates and verifies a simple 2-of-3 descriptor wallet', async ({ page }) 
     .filter({ hasText: 'Ledger' })
     .getByRole('button', { name: 'Verify policy' });
   await verifyLedgerPolicy.click();
-  const policyDialog = page.getByRole('dialog', { name: 'Verify signer wallet policy' });
-  await expect(policyDialog.getByText('Verify this wallet policy on Ledger')).toBeVisible();
+  const policyDialog = page.getByRole('dialog', { name: 'Verify wallet policy' });
+  await expect(policyDialog).toContainText('Reject if any value differs on Ledger.');
   const policyDialogBounds = await policyDialog.boundingBox();
   const viewport = page.viewportSize();
   expect(policyDialogBounds && viewport).toBeTruthy();
@@ -1147,7 +1144,7 @@ test('creates and verifies a simple 2-of-3 descriptor wallet', async ({ page }) 
   await expect(paymentSigners.getByText('0 of 2 collected')).toBeVisible();
   await page.getByRole('button', { name: 'Sign with device' }).click();
   await page.getByRole('button', { name: /Virtual Ledger outsider/ }).click();
-  const signingPolicyReview = page.getByRole('dialog', { name: 'Review signer wallet policy' });
+  const signingPolicyReview = page.getByRole('dialog', { name: 'Review wallet policy' });
   await expect(signingPolicyReview.getByText('Policy reference saved in Groot')).toBeVisible();
   await signingPolicyReview.getByText('Signer keys to compare', { exact: true }).click();
   await signingPolicyReview.getByLabel('I compared the threshold and every signer key').check();
@@ -1374,7 +1371,7 @@ test('reveals draft errors only after review and keeps signer identity readable'
   await page.getByRole('button', { name: 'View Coldcard details' }).click();
   const details = page.getByRole('dialog', { name: 'Coldcard' });
   await expect(details).toBeVisible();
-  await expect(details.getByText('Not checked in this session')).toBeVisible();
+  await expect(details.getByText('Not checked yet')).toBeVisible();
   await details.getByRole('button', { name: 'Run health check' }).click();
   await expect(details.getByText(/Connect and unlock Coldcard/)).toBeVisible();
   await details.getByRole('button', { name: 'Close' }).click();

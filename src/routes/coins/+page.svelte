@@ -6,6 +6,7 @@
     Copy,
     Lock,
     Snowflake,
+    Tag,
     Unlock
   } from '@lucide/svelte';
   import Button from '$lib/components/Button.svelte';
@@ -25,8 +26,11 @@
   import { slide } from 'svelte/transition';
   import LoadFailure from '$lib/components/LoadFailure.svelte';
   import EmptyState from '$lib/components/EmptyState.svelte';
+  import FieldCounter from '$lib/components/FieldCounter.svelte';
   import { useWalletShellContext } from '$lib/wallet/shell-context';
   import { discreetMode } from '$lib/privacy';
+  import Modal from '$lib/components/Modal.svelte';
+  import PermanentLabelTags from '$lib/components/PermanentLabelTags.svelte';
 
   const walletShell = useWalletShellContext();
   let utxos = $state<Utxo[]>([]);
@@ -39,6 +43,10 @@
   let busy = $state(false);
   let multisig = $state(false);
   let freezeIntent = $state<{ outpoints: string[]; frozen: boolean } | null>(null);
+  let claimIntent = $state<string | null>(null);
+  let claimLabel = $state('');
+  let claimError = $state('');
+  let claimBusy = $state(false);
   let loading = $state(true);
   let loadError = $state('');
   const selectedTotal = $derived(selectedCoinTotal(utxos, selected));
@@ -58,7 +66,16 @@
   );
   const sortedUtxos = $derived(sortCoins(filteredUtxos, transactions, sortOrder));
   const reuseInsights = $derived(addressReuseInsights(utxos));
-  const coinName = (utxo: Utxo) => ($discreetMode ? 'Label hidden' : utxo.label);
+  const coinName = (utxo: Utxo) =>
+    $discreetMode
+      ? 'Coin with hidden labels'
+      : utxo.provenance.labels.map((label) => label.text).join(', ') || utxo.label;
+  const coinKind = (utxo: Utxo) =>
+    utxo.provenance.context === 'received'
+      ? 'Received'
+      : utxo.provenance.context === 'change'
+        ? 'Change'
+        : 'Coin';
   const freezeIntentCoins = $derived(
     freezeIntent ? utxos.filter((coin) => freezeIntent?.outpoints.includes(coin.outpoint)) : []
   );
@@ -184,6 +201,41 @@
       busy = false;
     }
   }
+
+  function beginObservedReceiveClaim(outpoint: string) {
+    claimIntent = outpoint;
+    claimLabel = '';
+    claimError = '';
+  }
+
+  function cancelObservedReceiveClaim() {
+    if (claimBusy) return;
+    claimIntent = null;
+    claimLabel = '';
+    claimError = '';
+  }
+
+  async function claimObservedReceiveAddress() {
+    if (!claimIntent || claimBusy) return;
+    claimBusy = true;
+    claimError = '';
+    try {
+      await walletService.claimObservedMultisigAddress(claimIntent, claimLabel);
+      await load();
+      claimIntent = null;
+      claimLabel = '';
+      toast({
+        title: 'Permanent label saved',
+        description: 'The previously unlabeled received output now has known local provenance.',
+        tone: 'success'
+      });
+    } catch (cause) {
+      claimError =
+        cause instanceof Error ? cause.message : 'The permanent label could not be saved.';
+    } finally {
+      claimBusy = false;
+    }
+  }
 </script>
 
 <div class="page">
@@ -259,7 +311,7 @@
           >
           <div class="coin-main">
             <div class="coin-title">
-              <strong>{coinName(utxo)}</strong>{#if utxo.frozen}<span class="coin-status frozen"
+              <strong>{coinKind(utxo)}</strong>{#if utxo.frozen}<span class="coin-status frozen"
                   >Frozen</span
                 >{:else if utxo.provenance.state === 'mixed'}<span class="coin-status reused"
                   >Mixed provenance</span
@@ -270,6 +322,7 @@
                 >{:else if !utxo.confirmations}<span class="coin-status pending">Unconfirmed</span
                 >{/if}
             </div>
+            <PermanentLabelTags labels={utxo.provenance.labels} hidden={$discreetMode} />
             <span>{$discreetMode ? '••••••' : shortSats(utxo.amount)} sats</span>
           </div>
           <div class="coin-meta coin-actions-meta">
@@ -402,6 +455,20 @@
                   </ul>
                 </div>
               {/if}
+              {#if multisig && !$discreetMode && utxo.provenance.context === 'received' && utxo.provenance.state === 'unknown' && !utxo.primaryLabel}
+                <div class="observed-receive-prompt">
+                  <span><Tag size={15} /></span>
+                  <div>
+                    <strong>No local label</strong>
+                    <small>Assign its first permanent label once.</small>
+                  </div>
+                  <Button
+                    variant="secondary"
+                    size="small"
+                    onclick={() => beginObservedReceiveClaim(utxo.outpoint)}>Add label</Button
+                  >
+                </div>
+              {/if}
             </div>
           {/if}
         </article>
@@ -430,3 +497,42 @@
   onclose={closeFreezeConfirmation}
   onconfirm={confirmFrozenState}
 />
+
+<Modal
+  open={!!claimIntent}
+  title="Add permanent label"
+  description="This received address has no local label. Assign its first label once; it cannot be changed or reused."
+  onclose={cancelObservedReceiveClaim}
+>
+  <form
+    class="modal-form"
+    onsubmit={(event) => (event.preventDefault(), claimObservedReceiveAddress())}
+  >
+    <label class="field">
+      <span>Permanent label</span>
+      <input
+        bind:value={claimLabel}
+        maxlength="48"
+        required
+        disabled={claimBusy}
+        placeholder="What was this payment for?"
+      />
+      <FieldCounter value={claimLabel} max={48} />
+    </label>
+    {#if claimError}<p class="form-error" role="alert">{claimError}</p>{/if}
+    <div class="modal-footer">
+      <Button
+        type="button"
+        variant="secondary"
+        disabled={claimBusy}
+        onclick={cancelObservedReceiveClaim}>Cancel</Button
+      >
+      <Button
+        type="submit"
+        disabled={!claimLabel.trim() || claimBusy}
+        loading={claimBusy}
+        loadingLabel="Saving label…">Save permanent label</Button
+      >
+    </div>
+  </form>
+</Modal>

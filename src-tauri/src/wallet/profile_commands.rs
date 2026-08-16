@@ -10,11 +10,11 @@ pub struct WalletSelection {
 #[tauri::command]
 pub fn wallet_exists(app: AppHandle) -> ApiResult<bool> {
     let registry = load_registry(&app)?;
-    let Some(selected) = registry.selected_wallet_id else {
-        return Ok(false);
-    };
-    let directory = profile_directory(&app, selected)?;
-    Ok(directory.join("wallet.sqlite").exists() && directory.join("secret.json").exists())
+    Ok(registered_wallets_exist(&registry))
+}
+
+pub(crate) fn registered_wallets_exist(registry: &WalletRegistry) -> bool {
+    !registry.wallets.is_empty()
 }
 
 #[tauri::command]

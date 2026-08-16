@@ -217,6 +217,7 @@ export interface WalletMultisigPort {
   recoverMultisig(encodedBackup: string, credential: string): Promise<MultisigWallet>;
   deleteMultisig(credential: string, confirmation: string): Promise<void>;
   createMultisigAddress(label: string): Promise<ReceiveAddress>;
+  claimObservedMultisigAddress(outpoint: string, label: string): Promise<ReceiveAddress>;
   discardMultisigAddress(id: number): Promise<void>;
   verifyMultisigAddress(deviceId: string, addressId: number): Promise<ReceiveAddress>;
   prepareMultisigPayment(

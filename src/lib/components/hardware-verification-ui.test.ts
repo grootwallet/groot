@@ -50,6 +50,7 @@ const settings = readFileSync(
 const overview = readFileSync(new URL('../../routes/+page.svelte', import.meta.url), 'utf8');
 const deviceDetails = readFileSync(new URL('./DeviceDetailsModal.svelte', import.meta.url), 'utf8');
 const policyReview = readFileSync(new URL('./SignerPolicyReview.svelte', import.meta.url), 'utf8');
+const coins = readFileSync(new URL('../../routes/coins/+page.svelte', import.meta.url), 'utf8');
 
 describe('hardware receive verification UI', () => {
   it('keeps one shared verification component in both receive flows', () => {
@@ -138,6 +139,27 @@ describe('hardware receive verification UI', () => {
     expect(policyReview).toContain('Begin on BitBox');
     expect(policyReview).not.toContain('Before you start on');
     expect(policyReview).not.toContain('Do not reuse the name of any existing');
+  });
+
+  it('does not present a policy-verification address as a payment request', () => {
+    expect(policyReview).toContain(
+      'Verification reference only. Do not fund this address directly'
+    );
+    expect(policyReview).toContain('use Receive to create a permanently labeled payment request');
+  });
+
+  it('offers a one-time label only for an unlabeled received multisig output', () => {
+    expect(coins).toContain("utxo.provenance.context === 'received'");
+    expect(coins).toContain("utxo.provenance.state === 'unknown'");
+    expect(coins).toContain('!utxo.primaryLabel');
+    expect(coins).toContain('walletService.claimObservedMultisigAddress');
+    expect(coins).toContain('it cannot be changed or reused');
+    expect(coins).toContain('<FieldCounter value={claimLabel} max={48} />');
+    expect(coins).not.toContain('{[...claimLabel].length}/48');
+  });
+
+  it('does not draw an interactive focus outline around the modal container', () => {
+    expect(appCss).toMatch(/\.modal:focus-visible\s*\{\s*outline:\s*none;\s*\}/);
   });
 
   it('refreshes the selected wallet before opening a newly created hardware wallet', () => {

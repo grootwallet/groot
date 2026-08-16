@@ -9,6 +9,7 @@
 ## Verification
 
 - [ ] `pnpm validate`
+- [ ] `pnpm test:full` or the documented reason each extended suite is not applicable
 - [ ] Architecture and mainnet release guards pass
 - [ ] `pnpm test:e2e` (if a user flow changed)
 - [ ] Rust fmt, strict Clippy, and tests (if `src-tauri` changed)
@@ -19,6 +20,8 @@
 - [ ] Product spec / ADR updated when behavior or architecture changed
 - [ ] Implementation status and flow/design documentation updated when applicable
 - [ ] Fixture, simulator, integration, physical-device, and production claims are labeled precisely
+- [ ] Referenced GitHub issue state was checked live; no issue mutation was performed without authorization
+- [ ] Hardware worksheet, sanitized report, and canonical matrix agree (if hardware evidence changed)
 - [ ] New dependencies are necessary, pinned/locked, licensed, and security-reviewed
 
 ## Evidence

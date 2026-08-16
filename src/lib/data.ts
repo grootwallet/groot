@@ -154,16 +154,16 @@ const refundIntent = {
   origin: 'payment' as const
 };
 const refund = {
-  label: refundLabel,
+  label: savings.label,
   summary: {
-    state: 'known' as const,
+    state: 'mixed' as const,
     context: 'change' as const,
-    labels: [refundLabel],
-    clusterCount: 1,
+    labels: [savings.label, refundLabel],
+    clusterCount: 2,
     addressReused: false,
     sourceTransactionId: transactions[1].id,
     sourceIntentLabel: refundIntent,
-    sourceOutpoints: ['f7c42c16...a1ec:0']
+    sourceOutpoints: ['f7c42c16...a1ec:0', 'c807a142...52ad:1']
   }
 };
 export const utxos: Utxo[] = [
@@ -192,7 +192,7 @@ export const utxos: Utxo[] = [
     amount: 389_090,
     confirmations: 12,
     address: 'tb1q1jd...a04q',
-    label: 'Refund',
+    label: 'Savings',
     frozen: false,
     primaryLabel: refund.label,
     provenance: refund.summary

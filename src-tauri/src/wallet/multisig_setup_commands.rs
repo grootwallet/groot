@@ -1155,6 +1155,112 @@ pub fn multisig_address_create(
     })
 }
 
+pub(crate) fn claim_observed_receive_output(
+    db: &mut Connection,
+    wallet: &Wallet,
+    outpoint: &str,
+    raw_label: &str,
+) -> ApiResult<ReceiveAddressDto> {
+    let label = normalize_label(raw_label)?;
+    let outpoint = OutPoint::from_str(outpoint).map_err(|_| {
+        api_error(
+            "address_not_found",
+            "The selected coin is not an unlabeled received output.",
+        )
+    })?;
+    let output = wallet
+        .list_unspent()
+        .find(|output| output.outpoint == outpoint)
+        .ok_or_else(|| {
+            api_error(
+                "address_not_found",
+                "The selected coin is not an unlabeled received output.",
+            )
+        })?;
+    if output.keychain != KeychainKind::External {
+        return Err(api_error(
+            "address_not_found",
+            "Only an unlabeled received output can receive its first permanent label.",
+        ));
+    }
+    let address = Address::from_script(&output.txout.script_pubkey, NETWORK)
+        .map_err(|_| internal("The received output does not have a valid wallet address."))?;
+    let index = output.derivation_index;
+    let created = now();
+    let transaction = db.transaction().map_err(internal)?;
+    let already_labeled = transaction
+        .query_row(
+            "SELECT 1 FROM groot_addresses WHERE idx = ?1",
+            params![index],
+            |_| Ok(()),
+        )
+        .optional()
+        .map_err(internal)?
+        .is_some()
+        || label_provenance::label_for_subject(&transaction, "address", &index.to_string())
+            .map_err(internal)?
+            .is_some();
+    if already_labeled {
+        return Err(api_error(
+            "invalid_label",
+            "This receive address already has a permanent label and cannot be relabeled.",
+        ));
+    }
+    transaction
+        .execute(
+            "INSERT INTO groot_addresses
+                (idx, address, label, created_at, state, observed)
+             VALUES (?1, ?2, ?3, ?4, 'used', 1)",
+            params![index, address.to_string(), label, created],
+        )
+        .map_err(internal)?;
+    label_provenance::assign_new_label(
+        &transaction,
+        &label,
+        LabelOrigin::Receive,
+        "address",
+        &index.to_string(),
+        created,
+    )
+    .map_err(|error| {
+        if error.sqlite_error_code() == Some(bdk_wallet::rusqlite::ErrorCode::ConstraintViolation) {
+            api_error(
+                "invalid_label",
+                "Permanent labels cannot be reused. Choose a unique label.",
+            )
+        } else {
+            internal(error)
+        }
+    })?;
+    label_provenance::reconcile_wallet_outputs(wallet, &transaction, created).map_err(internal)?;
+    transaction.commit().map_err(internal)?;
+    Ok(ReceiveAddressDto {
+        id: index,
+        testnet_alias: regtest_testnet_address_alias(&address.to_string()),
+        address: address.to_string(),
+        label,
+        created: created.to_string(),
+        status: "used".to_owned(),
+        derivation_path: format!("{MULTISIG_ACCOUNT_PATH}/0/{index}"),
+        hardware_verified_at: None,
+        hardware_verified_by: None,
+    })
+}
+
+#[tauri::command]
+pub fn multisig_address_claim_observed(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    outpoint: String,
+    label: String,
+) -> ApiResult<ReceiveAddressDto> {
+    let _operation = operation_guard(&state)?;
+    require_unlocked(&app, &state)?;
+    let mut db = open_multisig_db(&app)?;
+    let wallet = load_wallet(&mut db)?;
+    claim_observed_receive_output(&mut db, &wallet, &outpoint, &label)
+}
+
 #[tauri::command]
 pub fn multisig_address_discard(
     app: AppHandle,

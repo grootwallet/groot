@@ -8,3 +8,4 @@ This file extends the root `AGENTS.md` for `e2e/`.
 - Browser fixtures prove UI orchestration only. Never describe them as BDK, HWI, persistence, broadcast, or physical-device evidence.
 - Do not put real addresses, xpubs, fingerprints, PSBTs, credentials, or recovery words in committed tests. Use visibly synthetic deterministic fixtures.
 - E2E should validate integration, not duplicate every pure edge case. Unit tests own combinatorial policy coverage; Rust integration owns Bitcoin transaction truth.
+- Run `pnpm test:acceptance` for browser acceptance. These tests use deterministic fixtures and never substitute for isolated real-Core Regtest or physically observed hardware evidence.

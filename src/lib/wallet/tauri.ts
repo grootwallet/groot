@@ -545,6 +545,11 @@ export class TauriWalletAdapter implements WalletPort {
   createMultisigAddress(label: string) {
     return command<ReceiveAddress>('multisig_address_create', { label }).then(normalizeAddress);
   }
+  claimObservedMultisigAddress(outpoint: string, label: string) {
+    return command<ReceiveAddress>('multisig_address_claim_observed', { outpoint, label }).then(
+      normalizeAddress
+    );
+  }
   discardMultisigAddress(id: number) {
     return command<void>('multisig_address_discard', { id });
   }
