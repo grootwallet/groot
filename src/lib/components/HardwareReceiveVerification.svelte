@@ -64,7 +64,7 @@
         description: 'The exact comparison address is on your clipboard.',
         tone: 'success'
       });
-      setTimeout(() => copied = false, 1500);
+      setTimeout(() => (copied = false), 1500);
     } catch {
       toast({
         title: 'Copy failed',
@@ -153,10 +153,7 @@
       await scan();
     } catch (cause) {
       pinChallenge = '';
-      const failure = receiveVerificationFailure(
-        cause,
-        'Trezor did not accept that matrix entry.'
-      );
+      const failure = receiveVerificationFailure(cause, 'Trezor did not accept that matrix entry.');
       pinErrorCode = failure.code;
       pinError = failure.message;
     } finally {
@@ -207,7 +204,7 @@
 </script>
 
 <Button variant="secondary" onclick={scan}>
-  {#if address.hardwareVerifiedAt}<ShieldCheck size={16}/>{:else}<Cpu size={16}/>{/if}
+  {#if address.hardwareVerifiedAt}<ShieldCheck size={16} />{:else}<Cpu size={16} />{/if}
   {address.hardwareVerifiedAt ? 'Verify again' : 'Verify on device'}
 </Button>
 
@@ -217,7 +214,9 @@
   description={comparison.deviceName
     ? `${comparison.deviceName} displays the Regtest output with a testnet prefix. Compare the exact address below.`
     : "Compare the exact address below with the complete address on the signer's trusted display."}
-  onclose={() => { if (!verifyBusy) verifyOpen = false; }}
+  onclose={() => {
+    if (!verifyBusy) verifyOpen = false;
+  }}
 >
   <HardwareAddressComparison
     {comparison}
@@ -228,26 +227,33 @@
   />
   {#if verifyBusy}
     <HardwareActionPrompt
-      title={verificationAction === 'approve' ? 'Check your hardware device' : isMultisig ? 'Looking for a wallet signer' : 'Looking for your saved signer'}
+      title={verificationAction === 'approve'
+        ? 'Check your hardware device'
+        : isMultisig
+          ? 'Looking for a wallet signer'
+          : 'Looking for your saved signer'}
       detail={verificationAction === 'approve'
         ? 'Compare the complete address above, then approve it on the device.'
         : isMultisig
           ? 'Keep the signer connected and unlocked while Groot matches it to this wallet policy.'
           : 'Keep the signer connected and unlocked while Groot matches its saved identity.'}
-      label={verificationAction === 'approve' ? 'Waiting for hardware approval' : 'Hardware device scan in progress'}
+      label={verificationAction === 'approve'
+        ? 'Waiting for hardware approval'
+        : 'Hardware device scan in progress'}
     />
   {:else if devices.length}
     <div class="source-list hardware-device-list">
       {#each devices as device}
         <button disabled={device.action === 'none'} onclick={() => chooseDevice(device)}>
-          <Cpu size={18}/>
+          <Cpu size={18} />
           <span>
             <strong>{device.label}</strong>
             <small>{device.fingerprint ?? device.message}</small>
             <em
               class:ready={device.status === 'ready' || device.status === 'detected'}
-              class:attention={device.action === 'prompt_pin' || device.action === 'confirm_empty_passphrase'}
-            >{device.action === 'prompt_pin'
+              class:attention={device.action === 'prompt_pin' ||
+                device.action === 'confirm_empty_passphrase'}
+              >{device.action === 'prompt_pin'
                 ? 'Unlock'
                 : device.action === 'confirm_empty_passphrase'
                   ? 'Standard wallet'
@@ -255,9 +261,10 @@
                     ? 'Scan again'
                     : device.status === 'ready' || device.status === 'detected'
                       ? 'Ready'
-                      : 'Unavailable'}</em>
+                      : 'Unavailable'}</em
+            >
           </span>
-          {#if device.action !== 'none'}<ChevronRight size={15}/>{/if}
+          {#if device.action !== 'none'}<ChevronRight size={15} />{/if}
         </button>
       {/each}
     </div>
@@ -282,10 +289,12 @@
   device={pinDevice}
   errorCode={pinErrorCode}
   error={pinError}
-  onappend={(position) => pinPositions += position}
-  ondelete={() => pinPositions = pinPositions.slice(0, -1)}
-  onclear={() => pinPositions = ''}
+  onappend={(position) => (pinPositions += position)}
+  ondelete={() => (pinPositions = pinPositions.slice(0, -1))}
+  onclear={() => (pinPositions = '')}
   onsubmit={submitPin}
-  onretry={() => { if (pinDevice) startPin(pinDevice); }}
+  onretry={() => {
+    if (pinDevice) startPin(pinDevice);
+  }}
   onclose={closePin}
 />

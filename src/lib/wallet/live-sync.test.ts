@@ -5,7 +5,16 @@ function registry(kind: 'single_key' | 'multisig') {
   return {
     version: 1,
     selectedWalletId: 'selected',
-    wallets: [{ id: 'selected', name: 'Wallet', network: 'regtest' as const, kind, descriptorChecksum: '12345678', createdAt: 1 }]
+    wallets: [
+      {
+        id: 'selected',
+        name: 'Wallet',
+        network: 'regtest' as const,
+        kind,
+        descriptorChecksum: '12345678',
+        createdAt: 1
+      }
+    ]
   };
 }
 
@@ -29,7 +38,9 @@ describe('live wallet sync', () => {
 
   it('does nothing without an existing wallet and cannot be wedged by error reporting', async () => {
     const error = new Error('offline');
-    const onError = vi.fn(() => { throw new Error('reporter failed'); });
+    const onError = vi.fn(() => {
+      throw new Error('reporter failed');
+    });
     const wallet = {
       exists: vi.fn().mockResolvedValue(false),
       profiles: vi.fn(),
@@ -53,12 +64,19 @@ describe('live wallet sync', () => {
   it('coalesces concurrent wake-ups instead of overlapping native syncs', async () => {
     let release!: () => void;
     let markStarted!: () => void;
-    const blocked = new Promise<void>((resolve) => { release = resolve; });
-    const started = new Promise<void>((resolve) => { markStarted = resolve; });
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
     const wallet = {
       exists: vi.fn().mockResolvedValue(true),
       profiles: vi.fn().mockResolvedValue(registry('single_key')),
-      sync: vi.fn().mockImplementation(() => { markStarted(); return blocked; }),
+      sync: vi.fn().mockImplementation(() => {
+        markStarted();
+        return blocked;
+      }),
       syncMultisig: vi.fn()
     };
     const controller = createLiveSync(wallet, 60_000);
@@ -76,12 +94,22 @@ describe('live wallet sync', () => {
   it('runs the newly selected wallet immediately after an active sync finishes', async () => {
     let release!: () => void;
     let markStarted!: () => void;
-    const blocked = new Promise<void>((resolve) => { release = resolve; });
-    const started = new Promise<void>((resolve) => { markStarted = resolve; });
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
     const wallet = {
       exists: vi.fn().mockResolvedValue(true),
       profiles: vi.fn().mockResolvedValue(registry('single_key')),
-      sync: vi.fn().mockImplementationOnce(() => { markStarted(); return blocked; }).mockResolvedValue(undefined),
+      sync: vi
+        .fn()
+        .mockImplementationOnce(() => {
+          markStarted();
+          return blocked;
+        })
+        .mockResolvedValue(undefined),
       syncMultisig: vi.fn()
     };
     const controller = createLiveSync(wallet, 60_000);

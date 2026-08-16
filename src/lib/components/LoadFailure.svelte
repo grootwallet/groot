@@ -11,5 +11,7 @@
 <div class="load-failure" role="alert">
   <span><WifiOff size={19} /></span>
   <div><strong>{title}</strong><small>{description}</small></div>
-  <button class="button secondary small" type="button" onclick={onretry}><RefreshCw size={14} />Try again</button>
+  <button class="button secondary small" type="button" onclick={onretry}
+    ><RefreshCw size={14} />Try again</button
+  >
 </div>

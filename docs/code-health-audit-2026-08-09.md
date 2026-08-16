@@ -6,16 +6,16 @@ This internal audit reviewed dependency direction, Rust/frontend separation, pre
 
 ## Current evidence
 
-| Layer | Automated evidence | Current result |
-| --- | --- | --- |
-| Static architecture | adapter/import/network/log/state-lifetime boundary gate; mainnet release gate; Svelte diagnostics; strict Rust format, Clippy, and rustdoc | Green |
-| Frontend unit | policy, presentation, localization, address formatting, live sync, modal locking, recovery, descriptors, and fixture-session tests | 82 passing |
-| Rust unit/boundary | 139 named tests, including hostile parsers, entropy failure, descriptor identity, gap limits, PSBT mutation, storage, sessions, and HWI process controls | 139 passing |
-| Deterministic Rust core coverage | explicitly classified nine-module scope | 99.62% lines, 100% functions, 97.36% regions |
-| Whole Rust library coverage | all library modules, including native adapters and command orchestration | 56.83% lines, 52.83% functions, 53.63% regions |
-| Real integration | isolated Bitcoin Core 31.1 descriptor recovery and real 2-of-3 PSBT sign/finalize/broadcast | 2 passing in CI |
-| Browser acceptance | semantic desktop Chromium and mobile WebKit journeys | 99 passing, 1 intentional project skip |
-| Supply chain | frozen lockfiles, immutable Actions, disabled package lifecycle scripts, npm/RustSec advisory jobs | Green with the inherited warnings listed in `SECURITY.md` |
+| Layer                            | Automated evidence                                                                                                                                       | Current result                                            |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| Static architecture              | adapter/import/network/log/state-lifetime boundary gate; mainnet release gate; Svelte diagnostics; strict Rust format, Clippy, and rustdoc               | Green                                                     |
+| Frontend unit                    | policy, presentation, localization, address formatting, live sync, modal locking, recovery, descriptors, and fixture-session tests                       | 82 passing                                                |
+| Rust unit/boundary               | 139 named tests, including hostile parsers, entropy failure, descriptor identity, gap limits, PSBT mutation, storage, sessions, and HWI process controls | 139 passing                                               |
+| Deterministic Rust core coverage | explicitly classified nine-module scope                                                                                                                  | 99.62% lines, 100% functions, 97.36% regions              |
+| Whole Rust library coverage      | all library modules, including native adapters and command orchestration                                                                                 | 56.83% lines, 52.83% functions, 53.63% regions            |
+| Real integration                 | isolated Bitcoin Core 31.1 descriptor recovery and real 2-of-3 PSBT sign/finalize/broadcast                                                              | 2 passing in CI                                           |
+| Browser acceptance               | semantic desktop Chromium and mobile WebKit journeys                                                                                                     | 99 passing, 1 intentional project skip                    |
+| Supply chain                     | frozen lockfiles, immutable Actions, disabled package lifecycle scripts, npm/RustSec advisory jobs                                                       | Green with the inherited warnings listed in `SECURITY.md` |
 
 ## Findings corrected
 

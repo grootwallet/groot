@@ -1,5 +1,16 @@
 <script lang="ts">
-  import { ArrowLeft, ArrowRight, Check, Cpu, Eye, EyeOff, KeyRound, ShieldCheck, Users, X } from '@lucide/svelte';
+  import {
+    ArrowLeft,
+    ArrowRight,
+    Check,
+    Cpu,
+    Eye,
+    EyeOff,
+    KeyRound,
+    ShieldCheck,
+    Users,
+    X
+  } from '@lucide/svelte';
   import Button from '$lib/components/Button.svelte';
   import FieldCounter from '$lib/components/FieldCounter.svelte';
   import BrandMark from '$lib/components/BrandMark.svelte';
@@ -8,12 +19,28 @@
   import SetupProgress from '$lib/components/SetupProgress.svelte';
   import { toast } from '$lib/stores/toasts';
   import { defaultConfig, networkName } from '$lib/config';
-  import { MAX_SUPPLEMENTAL_COIN_FLIPS, MAX_SUPPLEMENTAL_DICE_ROLLS, MIN_SUPPLEMENTAL_COIN_FLIPS, MIN_SUPPLEMENTAL_DICE_ROLLS, walletService, WalletError, type SupplementalEntropyInput } from '$lib/wallet';
+  import {
+    MAX_SUPPLEMENTAL_COIN_FLIPS,
+    MAX_SUPPLEMENTAL_DICE_ROLLS,
+    MIN_SUPPLEMENTAL_COIN_FLIPS,
+    MIN_SUPPLEMENTAL_DICE_ROLLS,
+    walletService,
+    WalletError,
+    type SupplementalEntropyInput
+  } from '$lib/wallet';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { onDestroy, onMount } from 'svelte';
-  import { MAX_WALLET_PASSPHRASE_BYTES, recoveryOrderMatches, shuffledRecoveryWords, utf8ByteLength, type RecoveryWord } from '$lib/mnemonic-verification';
-  let mode = $state<'home'|'choose'|'create'|'words'|'verify'|'passphrase'|'recover'>('home');
+  import {
+    MAX_WALLET_PASSPHRASE_BYTES,
+    recoveryOrderMatches,
+    shuffledRecoveryWords,
+    utf8ByteLength,
+    type RecoveryWord
+  } from '$lib/mnemonic-verification';
+  let mode = $state<'home' | 'choose' | 'create' | 'words' | 'verify' | 'passphrase' | 'recover'>(
+    'home'
+  );
   let revealed = $state(false);
   let passphrase = $state('');
   let confirmation = $state('');
@@ -32,16 +59,34 @@
   let supplementalSource = $state<'none' | 'coin' | 'dice'>('none');
   let supplementalOutcomes = $state('');
   const softwareSteps = ['Generate', 'Back up', 'Protect'];
-  let passphraseError = $derived(utf8ByteLength(passphrase) > MAX_WALLET_PASSPHRASE_BYTES ? 'The wallet passphrase is too long.' : '');
-  let supplementalMinimum = $derived(supplementalSource === 'coin' ? MIN_SUPPLEMENTAL_COIN_FLIPS : MIN_SUPPLEMENTAL_DICE_ROLLS);
-  let supplementalMaximum = $derived(supplementalSource === 'coin' ? MAX_SUPPLEMENTAL_COIN_FLIPS : MAX_SUPPLEMENTAL_DICE_ROLLS);
-  let supplementalReady = $derived(supplementalSource === 'none' || supplementalOutcomes.length >= supplementalMinimum);
+  let passphraseError = $derived(
+    utf8ByteLength(passphrase) > MAX_WALLET_PASSPHRASE_BYTES
+      ? 'The wallet passphrase is too long.'
+      : ''
+  );
+  let supplementalMinimum = $derived(
+    supplementalSource === 'coin' ? MIN_SUPPLEMENTAL_COIN_FLIPS : MIN_SUPPLEMENTAL_DICE_ROLLS
+  );
+  let supplementalMaximum = $derived(
+    supplementalSource === 'coin' ? MAX_SUPPLEMENTAL_COIN_FLIPS : MAX_SUPPLEMENTAL_DICE_ROLLS
+  );
+  let supplementalReady = $derived(
+    supplementalSource === 'none' || supplementalOutcomes.length >= supplementalMinimum
+  );
 
   onMount(async () => {
     hasExistingWallet = await walletService.exists();
     if (hasExistingWallet && page.url.searchParams.get('add') !== '1') await goto('/unlock');
   });
-  onDestroy(() => { void walletService.cancelOnboarding(); words = []; passphrase = ''; confirmation = ''; supplementalOutcomes = ''; backupAcknowledged = false; backupVerified = false; });
+  onDestroy(() => {
+    void walletService.cancelOnboarding();
+    words = [];
+    passphrase = '';
+    confirmation = '';
+    supplementalOutcomes = '';
+    backupAcknowledged = false;
+    backupVerified = false;
+  });
 
   function chooseSupplementalSource(source: 'none' | 'coin' | 'dice') {
     supplementalSource = source;
@@ -56,10 +101,12 @@
   }
 
   async function generate() {
-    busy = true; error = '';
-    const supplementalEntropy: SupplementalEntropyInput | undefined = supplementalSource === 'none'
-      ? undefined
-      : { source: supplementalSource, outcomes: supplementalOutcomes };
+    busy = true;
+    error = '';
+    const supplementalEntropy: SupplementalEntropyInput | undefined =
+      supplementalSource === 'none'
+        ? undefined
+        : { source: supplementalSource, outcomes: supplementalOutcomes };
     supplementalOutcomes = '';
     try {
       const presentation = await walletService.generateMnemonic(supplementalEntropy);
@@ -76,9 +123,11 @@
         revealed = true;
         mode = 'passphrase';
       }
+    } catch (cause) {
+      error = cause instanceof Error ? cause.message : 'Could not generate recovery words.';
+    } finally {
+      busy = false;
     }
-    catch (cause) { error = cause instanceof Error ? cause.message : 'Could not generate recovery words.'; }
-    finally { busy = false; }
   }
 
   function beginVerification() {
@@ -110,7 +159,8 @@
 
   function confirmRecoveryOrder() {
     if (!recoveryOrderMatches(selectedWords, words.length)) {
-      verificationError = 'That order does not match your recovery words. Check your written backup and try again.';
+      verificationError =
+        'That order does not match your recovery words. Check your written backup and try again.';
       return;
     }
     selectedWords = [];
@@ -137,25 +187,50 @@
   }
 
   async function finishCreate() {
-    busy = true; error = '';
+    busy = true;
+    error = '';
     try {
       await walletService.createWallet(walletName, passphrase, backupVerified);
-      words = []; passphrase = ''; confirmation = ''; backupAcknowledged = false;
-      toast({title:'Wallet created',description:backupVerified ? 'Your regtest wallet is ready.' : 'Your wallet is ready. Verify its recovery backup soon.',tone:'success'});
+      words = [];
+      passphrase = '';
+      confirmation = '';
+      backupAcknowledged = false;
+      toast({
+        title: 'Wallet created',
+        description: backupVerified
+          ? 'Your regtest wallet is ready.'
+          : 'Your wallet is ready. Verify its recovery backup soon.',
+        tone: 'success'
+      });
       await goto('/');
-    } catch (cause) { error = cause instanceof WalletError ? cause.message : 'Could not create wallet.'; }
-    finally { passphrase = ''; confirmation = ''; words = []; busy = false; }
+    } catch (cause) {
+      error = cause instanceof WalletError ? cause.message : 'Could not create wallet.';
+    } finally {
+      passphrase = '';
+      confirmation = '';
+      words = [];
+      busy = false;
+    }
   }
 
   async function recoverWallet() {
-    busy = true; error = '';
+    busy = true;
+    error = '';
     try {
       await walletService.recoverWallet(walletName, passphrase);
       passphrase = '';
-      toast({title:'Wallet recovered',description:'Sync to restore transaction history.',tone:'success'});
+      toast({
+        title: 'Wallet recovered',
+        description: 'Sync to restore transaction history.',
+        tone: 'success'
+      });
       await goto('/');
-    } catch (cause) { error = cause instanceof WalletError ? cause.message : 'Could not recover wallet.'; }
-    finally { passphrase = ''; busy = false; }
+    } catch (cause) {
+      error = cause instanceof WalletError ? cause.message : 'Could not recover wallet.';
+    } finally {
+      passphrase = '';
+      busy = false;
+    }
   }
 
   async function returnToWallet() {
@@ -166,95 +241,240 @@
 </script>
 
 <div class="onboarding-overlay">
-  <header class="onboarding-brand"><span class="onboarding-brand-lockup"><BrandLockup /></span><small>{networkName(defaultConfig.network).toUpperCase()}</small>{#if hasExistingWallet}<button class="onboarding-exit" aria-label="Close wallet setup" onclick={returnToWallet}><X size={17}/></button>{/if}</header>
+  <header class="onboarding-brand">
+    <span class="onboarding-brand-lockup"><BrandLockup /></span><small
+      >{networkName(defaultConfig.network).toUpperCase()}</small
+    >{#if hasExistingWallet}<button
+        class="onboarding-exit"
+        aria-label="Close wallet setup"
+        onclick={returnToWallet}><X size={17} /></button
+      >{/if}
+  </header>
   <main class="onboarding-card" class:wallet-choice-card={mode === 'choose'}>
     {#if mode === 'home'}
-      <span class="hero-mark"><BrandMark size={34} /></span><h1>{hasExistingWallet ? 'Add a wallet' : 'Your bitcoin.\nSimply held.'}</h1><p>Create in Groot, connect existing hardware, or recover a software wallet.</p><div class="onboarding-actions simple"><Button size="large" class="full" onclick={() => mode = 'choose'}>Add wallet<ArrowRight size={17} /></Button><Button size="large" variant="secondary" class="full" onclick={() => mode = 'recover'}>Recover software wallet</Button></div><div class="trust-line"><ShieldCheck size={15} />Non-custodial · Onchain only</div>
+      <span class="hero-mark"><BrandMark size={34} /></span>
+      <h1>{hasExistingWallet ? 'Add a wallet' : 'Your bitcoin.\nSimply held.'}</h1>
+      <p>Create in Groot, connect existing hardware, or recover a software wallet.</p>
+      <div class="onboarding-actions simple">
+        <Button size="large" class="full" onclick={() => (mode = 'choose')}
+          >Add wallet<ArrowRight size={17} /></Button
+        ><Button size="large" variant="secondary" class="full" onclick={() => (mode = 'recover')}
+          >Recover software wallet</Button
+        >
+      </div>
+      <div class="trust-line"><ShieldCheck size={15} />Non-custodial · Onchain only</div>
     {:else if mode === 'choose'}
-      <button class="back-link" onclick={() => mode = 'home'}><ArrowLeft size={16} />Back</button>
+      <button class="back-link" onclick={() => (mode = 'home')}><ArrowLeft size={16} />Back</button>
       <span class="setup-step wallet-choice-step">WALLET SETUP</span>
       <h1>How should this wallet be protected?</h1>
       <p>Choose the setup that fits you. You can add another wallet later.</p>
       <div class="wallet-type-grid">
-        <button class="wallet-type-card recommended" onclick={() => mode = 'create'}>
+        <button class="wallet-type-card recommended" onclick={() => (mode = 'create')}>
           <span class="wallet-type-icon"><KeyRound size={20} /></span>
-          <span class="wallet-type-copy"><strong>Use this device</strong><small>Groot creates the wallet and its recovery words here.</small></span>
+          <span class="wallet-type-copy"
+            ><strong>Use this device</strong><small
+              >Groot creates the wallet and its recovery words here.</small
+            ></span
+          >
           <span class="wallet-type-meta">Simplest</span>
           <ArrowRight class="wallet-type-arrow" size={17} />
         </button>
         <a class="wallet-type-card" href="/hardware/new">
           <span class="wallet-type-icon"><Cpu size={20} /></span>
-          <span class="wallet-type-copy"><strong>Add a hardware wallet</strong><small>Connect or import an existing signing device.</small></span>
+          <span class="wallet-type-copy"
+            ><strong>Add a hardware wallet</strong><small
+              >Connect or import an existing signing device.</small
+            ></span
+          >
           <span class="wallet-type-meta">Separate device</span>
           <ArrowRight class="wallet-type-arrow" size={17} />
         </a>
         <a class="wallet-type-card" href="/multisig/new">
           <span class="wallet-type-icon"><Users size={20} /></span>
-          <span class="wallet-type-copy"><strong>Use multiple keys</strong><small>Share control or build in a recovery path.</small></span>
+          <span class="wallet-type-copy"
+            ><strong>Use multiple keys</strong><small
+              >Share control or build in a recovery path.</small
+            ></span
+          >
           <span class="wallet-type-meta">More control</span>
           <ArrowRight class="wallet-type-arrow" size={17} />
         </a>
       </div>
     {:else if mode === 'create'}
-      <button class="back-link" onclick={() => { chooseSupplementalSource('none'); mode = 'choose'; }}><ArrowLeft size={16} />Back</button>
-      <SetupProgress steps={softwareSteps} current={1} label="Software wallet setup progress" context="SOFTWARE WALLET"/>
+      <button
+        class="back-link"
+        onclick={() => {
+          chooseSupplementalSource('none');
+          mode = 'choose';
+        }}><ArrowLeft size={16} />Back</button
+      >
+      <SetupProgress
+        steps={softwareSteps}
+        current={1}
+        label="Software wallet setup progress"
+        context="SOFTWARE WALLET"
+      />
       <h1>Generate wallet</h1>
-      <p>Groot will generate 24 recovery words securely on this device. Write them down in order and keep them offline.</p>
-      <div class="setup-points"><div><ShieldCheck size={18}/><span><strong>You control the keys</strong><small>No account, email, or cloud backup.</small></span></div><div><KeyRound size={18}/><span><strong>Recovery words are the backup</strong><small>Anyone with them can spend your funds.</small></span></div></div>
+      <p>
+        Groot will generate 24 recovery words securely on this device. Write them down in order and
+        keep them offline.
+      </p>
+      <div class="setup-points">
+        <div>
+          <ShieldCheck size={18} /><span
+            ><strong>You control the keys</strong><small>No account, email, or cloud backup.</small
+            ></span
+          >
+        </div>
+        <div>
+          <KeyRound size={18} /><span
+            ><strong>Recovery words are the backup</strong><small
+              >Anyone with them can spend your funds.</small
+            ></span
+          >
+        </div>
+      </div>
       <details class="supplemental-entropy">
         <summary>Advanced: add physical randomness</summary>
-        <p>Optional. Groot always requires 256-bit operating-system randomness. Physical results are mixed in only as an additional input.</p>
+        <p>
+          Optional. Groot always requires 256-bit operating-system randomness. Physical results are
+          mixed in only as an additional input.
+        </p>
         <div class="entropy-source-options" role="group" aria-label="Supplemental entropy source">
-          <button class:active={supplementalSource === 'none'} aria-pressed={supplementalSource === 'none'} onclick={() => chooseSupplementalSource('none')}>None</button>
-          <button class:active={supplementalSource === 'coin'} aria-pressed={supplementalSource === 'coin'} onclick={() => chooseSupplementalSource('coin')}>Coin flips</button>
-          <button class:active={supplementalSource === 'dice'} aria-pressed={supplementalSource === 'dice'} onclick={() => chooseSupplementalSource('dice')}>Six-sided die</button>
+          <button
+            class:active={supplementalSource === 'none'}
+            aria-pressed={supplementalSource === 'none'}
+            onclick={() => chooseSupplementalSource('none')}>None</button
+          >
+          <button
+            class:active={supplementalSource === 'coin'}
+            aria-pressed={supplementalSource === 'coin'}
+            onclick={() => chooseSupplementalSource('coin')}>Coin flips</button
+          >
+          <button
+            class:active={supplementalSource === 'dice'}
+            aria-pressed={supplementalSource === 'dice'}
+            onclick={() => chooseSupplementalSource('dice')}>Six-sided die</button
+          >
         </div>
         {#if supplementalSource !== 'none'}
           <div class="entropy-entry">
             <div class="entropy-progress">
-              <span>{supplementalSource === 'coin' ? 'Flip a physical coin and record each result.' : 'Roll a physical six-sided die and record each result.'}</span>
+              <span
+                >{supplementalSource === 'coin'
+                  ? 'Flip a physical coin and record each result.'
+                  : 'Roll a physical six-sided die and record each result.'}</span
+              >
               <strong>{supplementalOutcomes.length} / {supplementalMinimum} minimum</strong>
             </div>
             <div class="entropy-outcomes" aria-live="polite">
               <code>{supplementalOutcomes.slice(-32) || 'No results recorded'}</code>
               {#if supplementalOutcomes.length > 32}<small>Showing the latest 32</small>{/if}
             </div>
-            <div class:coin={supplementalSource === 'coin'} class="entropy-result-buttons" role="group" aria-label="Record physical result">
+            <div
+              class:coin={supplementalSource === 'coin'}
+              class="entropy-result-buttons"
+              role="group"
+              aria-label="Record physical result"
+            >
               {#if supplementalSource === 'coin'}
-                <button aria-label="Record heads" disabled={supplementalOutcomes.length >= supplementalMaximum} onclick={() => recordSupplementalOutcome('H')}>Heads</button>
-                <button aria-label="Record tails" disabled={supplementalOutcomes.length >= supplementalMaximum} onclick={() => recordSupplementalOutcome('T')}>Tails</button>
+                <button
+                  aria-label="Record heads"
+                  disabled={supplementalOutcomes.length >= supplementalMaximum}
+                  onclick={() => recordSupplementalOutcome('H')}>Heads</button
+                >
+                <button
+                  aria-label="Record tails"
+                  disabled={supplementalOutcomes.length >= supplementalMaximum}
+                  onclick={() => recordSupplementalOutcome('T')}>Tails</button
+                >
               {:else}
                 {#each ['1', '2', '3', '4', '5', '6'] as result}
-                  <button aria-label={`Record die result ${result}`} disabled={supplementalOutcomes.length >= supplementalMaximum} onclick={() => recordSupplementalOutcome(result)}>{result}</button>
+                  <button
+                    aria-label={`Record die result ${result}`}
+                    disabled={supplementalOutcomes.length >= supplementalMaximum}
+                    onclick={() => recordSupplementalOutcome(result)}>{result}</button
+                  >
                 {/each}
               {/if}
             </div>
             <div class="entropy-edit-actions">
-              <button disabled={!supplementalOutcomes} onclick={() => supplementalOutcomes = supplementalOutcomes.slice(0, -1)}>Undo last</button>
-              <button disabled={!supplementalOutcomes} onclick={() => supplementalOutcomes = ''}>Clear</button>
+              <button
+                disabled={!supplementalOutcomes}
+                onclick={() => (supplementalOutcomes = supplementalOutcomes.slice(0, -1))}
+                >Undo last</button
+              >
+              <button disabled={!supplementalOutcomes} onclick={() => (supplementalOutcomes = '')}
+                >Clear</button
+              >
             </div>
-            <p class="entropy-caution"><strong>Use real physical results.</strong> This cannot protect a wallet created on a compromised device, and the operating-system source never becomes optional.</p>
+            <p class="entropy-caution">
+              <strong>Use real physical results.</strong> This cannot protect a wallet created on a compromised
+              device, and the operating-system source never becomes optional.
+            </p>
           </div>
         {/if}
       </details>
       {#if error}<p class="form-error" role="alert">{error}</p>{/if}
-      <Button size="large" class="full" disabled={!supplementalReady} loading={busy} loadingLabel="Generating securely…" onclick={generate}>Generate 24 recovery words</Button>
+      <Button
+        size="large"
+        class="full"
+        disabled={!supplementalReady}
+        loading={busy}
+        loadingLabel="Generating securely…"
+        onclick={generate}>Generate 24 recovery words</Button
+      >
     {:else if mode === 'words'}
-      <button class="back-link" onclick={() => mode = 'create'}><ArrowLeft size={16} />Back</button><SetupProgress steps={softwareSteps} current={2} label="Software wallet setup progress" context="SOFTWARE WALLET"/><h1>Recovery words</h1><p>Write these down in order. Never store them in a screenshot or password manager.</p>
+      <button class="back-link" onclick={() => (mode = 'create')}
+        ><ArrowLeft size={16} />Back</button
+      ><SetupProgress
+        steps={softwareSteps}
+        current={2}
+        label="Software wallet setup progress"
+        context="SOFTWARE WALLET"
+      />
+      <h1>Recovery words</h1>
+      <p>Write these down in order. Never store them in a screenshot or password manager.</p>
       {#if revealed}
-        <div class="mnemonic-grid" aria-label="Recovery words">{#each words as word, i}<div><span>{i+1}</span><strong>{word}</strong></div>{/each}</div>
-        <button class="reveal-button" onclick={() => revealed = false}><EyeOff size={16}/>Hide words</button>
+        <div class="mnemonic-grid" aria-label="Recovery words">
+          {#each words as word, i}<div><span>{i + 1}</span><strong>{word}</strong></div>{/each}
+        </div>
+        <button class="reveal-button" onclick={() => (revealed = false)}
+          ><EyeOff size={16} />Hide words</button
+        >
       {:else}
         <div class="recovery-reveal-gate">
-          <span class="recovery-reveal-icon"><EyeOff size={20}/></span>
-          <div><strong>Check your surroundings</strong><p>Only reveal your recovery words in a private place. Make sure no person, camera, or screen sharing can see them.</p></div>
-          <Button variant="secondary" class="full" onclick={() => revealed = true}><Eye size={16}/>I’m private — reveal words</Button>
+          <span class="recovery-reveal-icon"><EyeOff size={20} /></span>
+          <div>
+            <strong>Check your surroundings</strong>
+            <p>
+              Only reveal your recovery words in a private place. Make sure no person, camera, or
+              screen sharing can see them.
+            </p>
+          </div>
+          <Button variant="secondary" class="full" onclick={() => (revealed = true)}
+            ><Eye size={16} />I’m private — reveal words</Button
+          >
         </div>
       {/if}
-      <Button size="large" class="full" disabled={!revealed} onclick={beginVerification}>I wrote them down<ArrowRight size={17}/></Button>
+      <Button size="large" class="full" disabled={!revealed} onclick={beginVerification}
+        >I wrote them down<ArrowRight size={17} /></Button
+      >
     {:else if mode === 'verify'}
-      <button class="back-link" onclick={() => { selectedWords = []; verificationError = ''; mode = 'words'; }}><ArrowLeft size={16} />Back</button>
-      <SetupProgress steps={softwareSteps} current={2} label="Software wallet setup progress" context="SOFTWARE WALLET"/>
+      <button
+        class="back-link"
+        onclick={() => {
+          selectedWords = [];
+          verificationError = '';
+          mode = 'words';
+        }}><ArrowLeft size={16} />Back</button
+      >
+      <SetupProgress
+        steps={softwareSteps}
+        current={2}
+        label="Software wallet setup progress"
+        context="SOFTWARE WALLET"
+      />
       <h1>Confirm your backup</h1>
       <p>Choose every word in order. This proves your written backup can reconstruct the wallet.</p>
       <div class="mnemonic-verification" aria-label="Recovery word order verification">
@@ -269,49 +489,147 @@
               {#if selectedWords[position]}
                 <button
                   draggable="true"
-                  ondragstart={() => draggedWord = selectedWords[position]}
+                  ondragstart={() => (draggedWord = selectedWords[position])}
                   onclick={() => removeRecoveryWord(position)}
                   aria-label={`Remove ${selectedWords[position].word} from position ${position + 1}`}
-                >{selectedWords[position].word}</button>
+                  >{selectedWords[position].word}</button
+                >
               {:else}<small>Empty</small>{/if}
             </li>
           {/each}
         </ol>
-        <div class="mnemonic-pool" role="group" aria-label="Shuffled recovery words" ondragover={(event) => event.preventDefault()} ondrop={() => { if (draggedWord) removeRecoveryWord(selectedWords.findIndex(({ id }) => id === draggedWord?.id)); draggedWord = null; }}>
+        <div
+          class="mnemonic-pool"
+          role="group"
+          aria-label="Shuffled recovery words"
+          ondragover={(event) => event.preventDefault()}
+          ondrop={() => {
+            if (draggedWord)
+              removeRecoveryWord(selectedWords.findIndex(({ id }) => id === draggedWord?.id));
+            draggedWord = null;
+          }}
+        >
           {#each verificationWords as word (word.id)}
             <button
               disabled={selectedWords.some(({ id }) => id === word.id)}
               draggable={!selectedWords.some(({ id }) => id === word.id)}
-              ondragstart={() => draggedWord = word}
-              onclick={() => selectRecoveryWord(word)}
-            >{word.word}</button>
+              ondragstart={() => (draggedWord = word)}
+              onclick={() => selectRecoveryWord(word)}>{word.word}</button
+            >
           {/each}
         </div>
       </div>
-      <p class="verification-hint">Tap a placed word to return it. You can also drag words between the pool and sequence.</p>
+      <p class="verification-hint">
+        Tap a placed word to return it. You can also drag words between the pool and sequence.
+      </p>
       {#if verificationError}<p class="form-error" role="alert">{verificationError}</p>{/if}
-      <Button size="large" class="full" disabled={selectedWords.length !== words.length} onclick={confirmRecoveryOrder}>Confirm order<ArrowRight size={17}/></Button>
-      <Button size="large" variant="secondary" class="full" onclick={verifyLater}>Verify later</Button>
+      <Button
+        size="large"
+        class="full"
+        disabled={selectedWords.length !== words.length}
+        onclick={confirmRecoveryOrder}>Confirm order<ArrowRight size={17} /></Button
+      >
+      <Button size="large" variant="secondary" class="full" onclick={verifyLater}
+        >Verify later</Button
+      >
     {:else if mode === 'passphrase'}
       <button class="back-link" onclick={backFromPassphrase}><ArrowLeft size={16} />Back</button>
-      <SetupProgress steps={softwareSteps} current={3} label="Software wallet setup progress" context="SOFTWARE WALLET"/>
+      <SetupProgress
+        steps={softwareSteps}
+        current={3}
+        label="Software wallet setup progress"
+        context="SOFTWARE WALLET"
+      />
       <h1>Protect your wallet</h1>
-      <p class="credential-intro">Choose the BIP39 wallet passphrase that completes this backup. The same passphrase unlocks Groot.</p>
-      {#if !backupVerified}<div class="backup-unverified-note" role="status"><ShieldCheck size={17}/><span><strong>Backup not verified yet</strong><small>You can use the wallet now, but Groot will keep reminding you to verify the written words.</small></span></div>{/if}
+      <p class="credential-intro">
+        Choose the BIP39 wallet passphrase that completes this backup. The same passphrase unlocks
+        Groot.
+      </p>
+      {#if !backupVerified}<div class="backup-unverified-note" role="status">
+          <ShieldCheck size={17} /><span
+            ><strong>Backup not verified yet</strong><small
+              >You can use the wallet now, but Groot will keep reminding you to verify the written
+              words.</small
+            ></span
+          >
+        </div>{/if}
       <div class="credential-form">
         <label class="field">
           <span>Wallet name</span>
           <input bind:value={walletName} maxlength="48" placeholder="My wallet" />
-          <FieldCounter value={walletName} max={48}/>
+          <FieldCounter value={walletName} max={48} />
         </label>
-        <PasswordField label="Wallet passphrase" bind:value={passphrase} placeholder="Enter a strong passphrase" autocomplete="new-password" hint="Keep it with your recovery words. It also unlocks Groot on this device." error={passphraseError}/>
-        <PasswordField label="Confirm wallet passphrase" bind:value={confirmation} placeholder="Enter it again" autocomplete="new-password" error={confirmation && passphrase !== confirmation ? 'Passphrases do not match.' : ''}/>
+        <PasswordField
+          label="Wallet passphrase"
+          bind:value={passphrase}
+          placeholder="Enter a strong passphrase"
+          autocomplete="new-password"
+          hint="Keep it with your recovery words. It also unlocks Groot on this device."
+          error={passphraseError}
+        />
+        <PasswordField
+          label="Confirm wallet passphrase"
+          bind:value={confirmation}
+          placeholder="Enter it again"
+          autocomplete="new-password"
+          error={confirmation && passphrase !== confirmation ? 'Passphrases do not match.' : ''}
+        />
       </div>
-      <label class="credential-warning credential-ack"><input type="checkbox" bind:checked={backupAcknowledged}/><ShieldCheck size={16}/><p><strong>Keep it with your backup.</strong><span>I understand this exact passphrase is required with my 24 words. It cannot be reset; a different passphrase opens a different wallet.</span></p></label>
-      {#if error}<p class="form-error" role="alert">{error.replace('passphrase / PIN', 'wallet passphrase')}</p>{/if}
-      <Button size="large" class="full" disabled={!walletName.trim() || !passphrase || !!passphraseError || passphrase !== confirmation || !backupAcknowledged} loading={busy} loadingLabel="Creating wallet…" onclick={finishCreate}><Check size={17}/>Create wallet</Button>
+      <label class="credential-warning credential-ack"
+        ><input type="checkbox" bind:checked={backupAcknowledged} /><ShieldCheck size={16} />
+        <p>
+          <strong>Keep it with your backup.</strong><span
+            >I understand this exact passphrase is required with my 24 words. It cannot be reset; a
+            different passphrase opens a different wallet.</span
+          >
+        </p></label
+      >
+      {#if error}<p class="form-error" role="alert">
+          {error.replace('passphrase / PIN', 'wallet passphrase')}
+        </p>{/if}
+      <Button
+        size="large"
+        class="full"
+        disabled={!walletName.trim() ||
+          !passphrase ||
+          !!passphraseError ||
+          passphrase !== confirmation ||
+          !backupAcknowledged}
+        loading={busy}
+        loadingLabel="Creating wallet…"
+        onclick={finishCreate}><Check size={17} />Create wallet</Button
+      >
     {:else}
-      <button class="back-link" onclick={() => mode = 'home'}><ArrowLeft size={16} />Back</button><span class="setup-step">RECOVERY</span><h1>Recover wallet</h1><p>Your 24 recovery words are entered in a native system window so they never enter Groot’s web interface.</p><label class="field"><span>Wallet name</span><input bind:value={walletName} maxlength="48" placeholder="Recovered wallet" /><FieldCounter value={walletName} max={48}/></label><PasswordField label="Wallet passphrase" bind:value={passphrase} placeholder="Enter the original wallet passphrase" autocomplete="current-password" hint="This exact BIP39 passphrase is required with the recovery words and also unlocks Groot." error={passphraseError}/>{#if error}<p class="form-error" role="alert">{error.replace('passphrase / PIN', 'wallet passphrase')}</p>{/if}<Button size="large" class="full" disabled={!walletName.trim() || !passphrase || !!passphraseError} loading={busy} loadingLabel="Recovering wallet…" onclick={recoverWallet}>Enter recovery words securely<ArrowRight size={17}/></Button>
+      <button class="back-link" onclick={() => (mode = 'home')}><ArrowLeft size={16} />Back</button
+      ><span class="setup-step">RECOVERY</span>
+      <h1>Recover wallet</h1>
+      <p>
+        Your 24 recovery words are entered in a native system window so they never enter Groot’s web
+        interface.
+      </p>
+      <label class="field"
+        ><span>Wallet name</span><input
+          bind:value={walletName}
+          maxlength="48"
+          placeholder="Recovered wallet"
+        /><FieldCounter value={walletName} max={48} /></label
+      ><PasswordField
+        label="Wallet passphrase"
+        bind:value={passphrase}
+        placeholder="Enter the original wallet passphrase"
+        autocomplete="current-password"
+        hint="This exact BIP39 passphrase is required with the recovery words and also unlocks Groot."
+        error={passphraseError}
+      />{#if error}<p class="form-error" role="alert">
+          {error.replace('passphrase / PIN', 'wallet passphrase')}
+        </p>{/if}<Button
+        size="large"
+        class="full"
+        disabled={!walletName.trim() || !passphrase || !!passphraseError}
+        loading={busy}
+        loadingLabel="Recovering wallet…"
+        onclick={recoverWallet}>Enter recovery words securely<ArrowRight size={17} /></Button
+      >
     {/if}
   </main>
   <footer class="onboarding-footer">Keys stay on this device · Open source</footer>

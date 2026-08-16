@@ -1,10 +1,16 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
-const setup = readFileSync(new URL('../../routes/multisig/new/+page.svelte', import.meta.url), 'utf8');
+const setup = readFileSync(
+  new URL('../../routes/multisig/new/+page.svelte', import.meta.url),
+  'utf8'
+);
 const shell = readFileSync(new URL('./AppShell.svelte', import.meta.url), 'utf8');
 const notice = readFileSync(new URL('./ResumeSetupNotice.svelte', import.meta.url), 'utf8');
-const discardModal = readFileSync(new URL('./DiscardMultisigSetupModal.svelte', import.meta.url), 'utf8');
+const discardModal = readFileSync(
+  new URL('./DiscardMultisigSetupModal.svelte', import.meta.url),
+  'utf8'
+);
 
 describe('resumable multisig setup', () => {
   it('separates policy choice from wallet configuration before signer enrollment', () => {
@@ -28,7 +34,10 @@ describe('resumable multisig setup', () => {
   });
 
   it('does not include credentials or transient hardware challenges in the persisted DTO', () => {
-    const draftBuilder = setup.slice(setup.indexOf('function currentSetupDraft'), setup.indexOf('async function drainDraftSaveQueue'));
+    const draftBuilder = setup.slice(
+      setup.indexOf('function currentSetupDraft'),
+      setup.indexOf('async function drainDraftSaveQueue')
+    );
     expect(draftBuilder).not.toContain('credential');
     expect(draftBuilder).not.toContain('confirmation');
     expect(draftBuilder).not.toContain('pinChallenge');

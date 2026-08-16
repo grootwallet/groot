@@ -19,13 +19,17 @@ try {
   const manifest = {
     artifact: { filename: 'hwi', sha256: digest(artifact) },
     license: { filename: 'LICENSE', sha256: digest(license) },
-    name: 'Bitcoin Core HWI', schemaVersion: 1,
+    name: 'Bitcoin Core HWI',
+    schemaVersion: 1,
     source: { filename: 'hwi-source.tar.gz', sha256: digest(source) },
-    updatePolicy: 'bundled-and-replaced-only-by-signed-groot-release', version: '3.2.0',
+    updatePolicy: 'bundled-and-replaced-only-by-signed-groot-release',
+    version: '3.2.0'
   };
   writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
   const verifier = resolve('scripts/release/verify-hwi-artifact.mjs');
-  execFileSync(process.execPath, [verifier, manifestPath, artifact, source, license], { stdio: 'inherit' });
+  execFileSync(process.execPath, [verifier, manifestPath, artifact, source, license], {
+    stdio: 'inherit'
+  });
   writeFileSync(source, 'tampered source\n');
   const rejected = spawnSync(process.execPath, [verifier, manifestPath, artifact, source, license]);
   if (rejected.status === 0) throw new Error('tampered HWI provenance was accepted');

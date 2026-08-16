@@ -24,7 +24,7 @@
   function detail(device: HardwareDevice) {
     return detailedStatus && device.fingerprint
       ? `Fingerprint ${device.fingerprint} · ${device.message}`
-      : device.fingerprint ?? device.message;
+      : (device.fingerprint ?? device.message);
   }
 
   function status(device: HardwareDevice) {
@@ -45,15 +45,19 @@
   <div class="source-list" class:hardware-device-list={detailedStatus}>
     {#each devices as device (device.id)}
       <button onclick={() => onselect(device)} {disabled}>
-        <Cpu size={18}/>
+        <Cpu size={18} />
         <span><strong>{device.label}</strong><small>{detail(device)}</small></span>
         {#if detailedStatus}<em class:ready={device.status === 'ready'}>{status(device)}</em>{/if}
       </button>
     {/each}
     {#if showRescan}
       <button class="hardware-rescan" onclick={onrescan} {disabled}>
-        <RefreshCw size={16}/>
-        <span><strong>Rescan devices</strong><small>Refresh after connecting or unlocking another signer.</small></span>
+        <RefreshCw size={16} />
+        <span
+          ><strong>Rescan devices</strong><small
+            >Refresh after connecting or unlocking another signer.</small
+          ></span
+        >
       </button>
     {/if}
   </div>

@@ -7,7 +7,13 @@
     title,
     description,
     state,
-    status = state === 'complete' ? 'Complete' : state === 'current' ? 'Current step' : state === 'deferred' ? 'Deferred' : 'Complete earlier steps first',
+    status = state === 'complete'
+      ? 'Complete'
+      : state === 'current'
+        ? 'Current step'
+        : state === 'deferred'
+          ? 'Deferred'
+          : 'Complete earlier steps first',
     children
   } = $props<{
     step: number;
@@ -21,9 +27,18 @@
 
 <section class="setup-task {state}" aria-current={state === 'current' ? 'step' : undefined}>
   <header>
-    <span class="setup-task-marker" aria-hidden="true">{#if state === 'complete'}<Check size={15}/>{:else if state === 'deferred'}<Clock3 size={14}/>{:else}{step}{/if}</span>
-    <div><h3>{title}</h3><p>{description}</p></div>
-    <em>{#if state === 'complete'}<Check size={13}/>{/if}{status}</em>
+    <span class="setup-task-marker" aria-hidden="true"
+      >{#if state === 'complete'}<Check size={15} />{:else if state === 'deferred'}<Clock3
+          size={14}
+        />{:else}{step}{/if}</span
+    >
+    <div>
+      <h3>{title}</h3>
+      <p>{description}</p>
+    </div>
+    <em
+      >{#if state === 'complete'}<Check size={13} />{/if}{status}</em
+    >
   </header>
   {#if state === 'complete'}
     <details class="setup-task-complete-details">

@@ -10,7 +10,8 @@ describe('date-time presentation', () => {
     expect(presentLocalTimestamp('2026-08-07T11:13:49.000Z', 'Europe/Andorra')).toEqual({
       dateTime: '2026-08-07T11:13:49.000Z',
       display: 'August 7, 2026, 1:13 PM',
-      detail: 'Local time: August 7, 2026, 1:13:49 PM (Europe/Andorra). UTC: August 7, 2026, 11:13:49 AM UTC.'
+      detail:
+        'Local time: August 7, 2026, 1:13:49 PM (Europe/Andorra). UTC: August 7, 2026, 11:13:49 AM UTC.'
     });
   });
 

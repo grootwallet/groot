@@ -36,15 +36,18 @@ export function createLiveSync(
 
   const perform = async () => {
     try {
-      if (!await wallet.exists()) return;
+      if (!(await wallet.exists())) return;
       const registry = await wallet.profiles();
       const selected = registry.wallets.find((profile) => profile.id === registry.selectedWalletId);
       if (!selected) return;
       if (selected.kind === 'multisig') await wallet.syncMultisig();
       else await wallet.sync();
     } catch (cause) {
-      try { onError(cause); }
-      catch { /* Error reporting must never disable future wallet syncs. */ }
+      try {
+        onError(cause);
+      } catch {
+        /* Error reporting must never disable future wallet syncs. */
+      }
     }
   };
 
@@ -54,8 +57,9 @@ export function createLiveSync(
     if (active) return active;
     const pending = perform();
     active = pending;
-    try { await pending; }
-    finally {
+    try {
+      await pending;
+    } finally {
       if (active === pending) active = undefined;
       if (enabled && rerunRequested) {
         rerunRequested = false;

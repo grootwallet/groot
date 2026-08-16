@@ -10,14 +10,7 @@
     onchange: (event: Event) => unknown;
   };
 
-  let {
-    ariaLabel,
-    accept,
-    title,
-    description,
-    loaded = false,
-    onchange
-  }: Props = $props();
+  let { ariaLabel, accept, title, description, loaded = false, onchange }: Props = $props();
 </script>
 
 <label class:loaded class="transfer-file-picker">
@@ -42,7 +35,10 @@
     color: var(--muted);
     background: var(--surface-inset);
     cursor: pointer;
-    transition: border-color .15s ease, color .15s ease, background .15s ease;
+    transition:
+      border-color 0.15s ease,
+      color 0.15s ease,
+      background 0.15s ease;
   }
 
   .transfer-file-picker:hover,
@@ -66,7 +62,9 @@
     text-align: center;
   }
 
-  strong { font-size: 11px; }
+  strong {
+    font-size: 11px;
+  }
 
   small {
     max-width: min(520px, 70vw);
@@ -87,6 +85,9 @@
   }
 
   @media (max-width: 560px) {
-    .transfer-file-picker { min-height: 72px; padding: 16px 14px; }
+    .transfer-file-picker {
+      min-height: 72px;
+      padding: 16px 14px;
+    }
   }
 </style>

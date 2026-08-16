@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { formatConfirmationCount, formatWalletCount, normalizeLocale, readPersistedLocale } from './i18n';
+import {
+  formatConfirmationCount,
+  formatWalletCount,
+  normalizeLocale,
+  readPersistedLocale
+} from './i18n';
 
 describe('locale preferences', () => {
   it('accepts supported regional locales and rejects unsupported ones', () => {

@@ -35,6 +35,6 @@ export function recoveryDrillNotice(drill: RecoveryDrill) {
   return {
     title: matches ? 'Recovery test passed' : 'Backup does not match',
     description: compactAddress(drill.firstAddress, 16, 12),
-    tone: matches ? 'success' as const : 'danger' as const
+    tone: matches ? ('success' as const) : ('danger' as const)
   };
 }

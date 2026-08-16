@@ -1,7 +1,11 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
 
-  let { title, steps = [], children } = $props<{
+  let {
+    title,
+    steps = [],
+    children
+  } = $props<{
     title: string;
     steps?: string[];
     children?: Snippet;

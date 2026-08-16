@@ -11,7 +11,9 @@ describe('descriptor interoperability helpers', () => {
   it('combines matching receive and change branches as a standard multipath descriptor', () => {
     const receive = "wpkh([d34db33f/84'/1'/0']tpub-test/0/*)#ignored";
     const change = "wpkh([d34db33f/84'/1'/0']tpub-test/1/*)#ignored";
-    expect(combineDescriptorBranches(receive, change)).toMatch(/^wpkh\(.+\/<0;1>\/\*\)#[a-z0-9]{8}$/);
+    expect(combineDescriptorBranches(receive, change)).toMatch(
+      /^wpkh\(.+\/<0;1>\/\*\)#[a-z0-9]{8}$/
+    );
   });
 
   it('refuses to merge branches whose policy differs', () => {

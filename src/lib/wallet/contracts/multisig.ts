@@ -1,5 +1,5 @@
-import type { CosignerDraft, PolicyDraft } from "$lib/multisig/policy";
-import type { PaymentProposal } from "./transactions";
+import type { CosignerDraft, PolicyDraft } from '$lib/multisig/policy';
+import type { PaymentProposal } from './transactions';
 
 export type MultisigWallet = PolicyDraft & {
   kind: 'multisig';

@@ -8,7 +8,14 @@
     software?: boolean;
   };
 
-  let { signers, required = 1, signedFingerprints = [], collecting = false, loading = false, ondiscard } = $props<{
+  let {
+    signers,
+    required = 1,
+    signedFingerprints = [],
+    collecting = false,
+    loading = false,
+    ondiscard
+  } = $props<{
     signers: SignerItem[];
     required?: number;
     signedFingerprints?: string[];
@@ -17,12 +24,32 @@
     ondiscard?: (signer: SignerItem) => void;
   }>();
 
-  const shortenedFingerprint = (value?: string | null) => value ? value.toLowerCase().slice(0, 8) : 'Not recorded';
-  const signedCount = $derived(signers.filter((signer: SignerItem) => signer.fingerprint && signedFingerprints.includes(signer.fingerprint)).length);
+  const shortenedFingerprint = (value?: string | null) =>
+    value ? value.toLowerCase().slice(0, 8) : 'Not recorded';
+  const signedCount = $derived(
+    signers.filter(
+      (signer: SignerItem) => signer.fingerprint && signedFingerprints.includes(signer.fingerprint)
+    ).length
+  );
 </script>
 
 <section class="send-signers" class:loading aria-label="Payment signers" aria-busy={loading}>
-  <header><div><span>Signing with</span><strong>{loading ? 'Checking…' : `${required} of ${signers.length}`}</strong></div><small>{loading ? 'Loading wallet signer' : collecting ? `${signedCount} of ${required} collected` : required === 1 ? 'One signature required' : `${required} signatures required`}</small></header>
+  <header>
+    <div>
+      <span>Signing with</span><strong
+        >{loading ? 'Checking…' : `${required} of ${signers.length}`}</strong
+      >
+    </div>
+    <small
+      >{loading
+        ? 'Loading wallet signer'
+        : collecting
+          ? `${signedCount} of ${required} collected`
+          : required === 1
+            ? 'One signature required'
+            : `${required} signatures required`}</small
+    >
+  </header>
   <div class="send-signer-list">
     {#if loading}
       <article class="send-signer-placeholder" aria-hidden="true">
@@ -31,11 +58,29 @@
       </article>
     {:else}
       {#each signers as signer}
-        {@const signed = Boolean(signer.fingerprint && signedFingerprints.includes(signer.fingerprint))}
+        {@const signed = Boolean(
+          signer.fingerprint && signedFingerprints.includes(signer.fingerprint)
+        )}
         <article class:signed class:discardable={signed && Boolean(ondiscard)}>
-          <span class="send-signer-icon">{#if signed}<Check size={15} strokeWidth={2.5} />{:else if signer.software}<KeyRound size={15} />{:else}<Cpu size={15} />{/if}</span>
-          <div><strong>{signer.label}</strong><small>{signer.detail}{#if signer.fingerprint}{' · '}<code>{shortenedFingerprint(signer.fingerprint)}</code>{/if}</small></div>
-          {#if signed && ondiscard}<button type="button" class="discard-signer-signature" aria-label={`Discard ${signer.label} local signature`} title="Discard local signature" onclick={()=>ondiscard?.(signer)}><X size={14}/></button>{/if}
+          <span class="send-signer-icon"
+            >{#if signed}<Check size={15} strokeWidth={2.5} />{:else if signer.software}<KeyRound
+                size={15}
+              />{:else}<Cpu size={15} />{/if}</span
+          >
+          <div>
+            <strong>{signer.label}</strong><small
+              >{signer.detail}{#if signer.fingerprint}{' · '}<code
+                  >{shortenedFingerprint(signer.fingerprint)}</code
+                >{/if}</small
+            >
+          </div>
+          {#if signed && ondiscard}<button
+              type="button"
+              class="discard-signer-signature"
+              aria-label={`Discard ${signer.label} local signature`}
+              title="Discard local signature"
+              onclick={() => ondiscard?.(signer)}><X size={14} /></button
+            >{/if}
         </article>
       {/each}
     {/if}

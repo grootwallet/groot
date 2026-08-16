@@ -36,11 +36,13 @@ export function multisigSetupStageLabel(stage: MultisigSetupStage): string {
 }
 
 export function isMeaningfulMultisigSetupDraft(draft: MultisigSetupDraft): boolean {
-  return draft.stage !== 'policy'
-    || draft.name.trim() !== ''
-    || draft.cosigners.length > 0
-    || draft.templateKind !== 'standard'
-    || draft.standardRecipe !== 'two_of_three'
-    || draft.customCosignerCount !== 3
-    || draft.threshold !== 2;
+  return (
+    draft.stage !== 'policy' ||
+    draft.name.trim() !== '' ||
+    draft.cosigners.length > 0 ||
+    draft.templateKind !== 'standard' ||
+    draft.standardRecipe !== 'two_of_three' ||
+    draft.customCosignerCount !== 3 ||
+    draft.threshold !== 2
+  );
 }

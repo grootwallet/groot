@@ -102,7 +102,10 @@ export function walletErrorCode(value: unknown): WalletErrorCode {
 }
 
 export class WalletError extends Error {
-  constructor(public readonly code: WalletErrorCode, message: string) {
+  constructor(
+    public readonly code: WalletErrorCode,
+    message: string
+  ) {
     super(message);
     this.name = 'WalletError';
   }

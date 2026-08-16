@@ -26,8 +26,16 @@
 </script>
 
 <span class="insight-tip" class:open bind:this={root}>
-  <button type="button" aria-label={label} aria-expanded={finePointer ? undefined : open} onclick={(event) => { if (finePointer) event.currentTarget.blur(); else open = !open; }}>
-    <Info size={14}/>
+  <button
+    type="button"
+    aria-label={label}
+    aria-expanded={finePointer ? undefined : open}
+    onclick={(event) => {
+      if (finePointer) event.currentTarget.blur();
+      else open = !open;
+    }}
+  >
+    <Info size={14} />
   </button>
   <span role="tooltip">{text}</span>
 </span>

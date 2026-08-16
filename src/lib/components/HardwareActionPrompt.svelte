@@ -13,7 +13,7 @@
 </script>
 
 <div class="hardware-action-prompt" role="status" aria-live="polite" aria-label={label}>
-  <span class="hardware-action-visual" aria-hidden="true"><Cpu size={21}/></span>
+  <span class="hardware-action-visual" aria-hidden="true"><Cpu size={21} /></span>
   <span class="hardware-action-copy">
     <strong>{title}</strong>
     <small>{detail}</small>

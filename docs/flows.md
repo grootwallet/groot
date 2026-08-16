@@ -167,6 +167,7 @@ Address reuse never blocks selection or spending. Every affected row inherits it
 The page/list is durable truth. Unique markers persist in Rust until explicitly acknowledged. Delivery is at-least-once across a crash before acknowledgement and consumers use stable IDs idempotently; background/resume scheduling remains a platform integration gate.
 
 While an unlocked desktop session is open, a single ten-second foreground loop syncs only the selected wallet. Returning to the app wakes it immediately. The returned authoritative snapshot updates the current Overview, Activity, Coins, or Receive view, and durable notification markers produce the receipt/confirmation toast once. Sync and notification reads validate the five-minute session but never refresh its idle deadline; an expired session stops polling and returns to that wallet's unlock screen. Sync pauses on onboarding or lock and never overlaps a previous native sync. Fully terminated push/background execution remains a later platform gate.
+
 ### Add a single hardware signer
 
 1. Choose **Use hardware signer**.

@@ -2,18 +2,51 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 
 const appCss = readFileSync(new URL('../../app.css', import.meta.url), 'utf8');
-const emptyState = readFileSync(new URL('./HardwareDeviceEmptyState.svelte', import.meta.url), 'utf8');
-const addressComparison = readFileSync(new URL('./HardwareAddressComparison.svelte', import.meta.url), 'utf8');
-const verificationFlow = readFileSync(new URL('./HardwareReceiveVerification.svelte', import.meta.url), 'utf8');
-const singleKeyReceive = readFileSync(new URL('../../routes/receive/+page.svelte', import.meta.url), 'utf8');
-const multisigReceive = readFileSync(new URL('../../routes/multisig/receive/+page.svelte', import.meta.url), 'utf8');
-const hardwareDeviceList = readFileSync(new URL('./HardwareDeviceList.svelte', import.meta.url), 'utf8');
+const emptyState = readFileSync(
+  new URL('./HardwareDeviceEmptyState.svelte', import.meta.url),
+  'utf8'
+);
+const addressComparison = readFileSync(
+  new URL('./HardwareAddressComparison.svelte', import.meta.url),
+  'utf8'
+);
+const verificationFlow = readFileSync(
+  new URL('./HardwareReceiveVerification.svelte', import.meta.url),
+  'utf8'
+);
+const singleKeyReceive = readFileSync(
+  new URL('../../routes/receive/+page.svelte', import.meta.url),
+  'utf8'
+);
+const multisigReceive = readFileSync(
+  new URL('../../routes/multisig/receive/+page.svelte', import.meta.url),
+  'utf8'
+);
+const hardwareDeviceList = readFileSync(
+  new URL('./HardwareDeviceList.svelte', import.meta.url),
+  'utf8'
+);
 const signerSummary = readFileSync(new URL('./SignerSummary.svelte', import.meta.url), 'utf8');
-const hardwareSetup = readFileSync(new URL('../../routes/hardware/new/+page.svelte', import.meta.url), 'utf8');
-const singleKeySend = readFileSync(new URL('../../routes/send/+page.svelte', import.meta.url), 'utf8');
-const multisigPolicy = readFileSync(new URL('../../routes/multisig/+page.svelte', import.meta.url), 'utf8');
-const multisigSetup = readFileSync(new URL('../../routes/multisig/new/+page.svelte', import.meta.url), 'utf8');
-const settings = readFileSync(new URL('../../routes/settings/+page.svelte', import.meta.url), 'utf8');
+const hardwareSetup = readFileSync(
+  new URL('../../routes/hardware/new/+page.svelte', import.meta.url),
+  'utf8'
+);
+const singleKeySend = readFileSync(
+  new URL('../../routes/send/+page.svelte', import.meta.url),
+  'utf8'
+);
+const multisigPolicy = readFileSync(
+  new URL('../../routes/multisig/+page.svelte', import.meta.url),
+  'utf8'
+);
+const multisigSetup = readFileSync(
+  new URL('../../routes/multisig/new/+page.svelte', import.meta.url),
+  'utf8'
+);
+const settings = readFileSync(
+  new URL('../../routes/settings/+page.svelte', import.meta.url),
+  'utf8'
+);
 const overview = readFileSync(new URL('../../routes/+page.svelte', import.meta.url), 'utf8');
 const deviceDetails = readFileSync(new URL('./DeviceDetailsModal.svelte', import.meta.url), 'utf8');
 
@@ -24,8 +57,12 @@ describe('hardware receive verification UI', () => {
       expect(route).not.toContain('<TrezorPinModal');
     }
     expect(verificationFlow).toContain('<HardwareAddressComparison');
-    expect(addressComparison).toMatch(/<summary>\s*<span>Address details<\/span>\s*<ChevronDown size=\{14\}\s*\/>\s*<\/summary>/);
-    expect(appCss).toMatch(/\.verification-details\[open\] summary svg\s*\{\s*transform:\s*rotate\(180deg\);\s*\}/);
+    expect(addressComparison).toMatch(
+      /<summary>\s*<span>Address details<\/span>\s*<ChevronDown size=\{14\}\s*\/>\s*<\/summary>/
+    );
+    expect(appCss).toMatch(
+      /\.verification-details\[open\] summary svg\s*\{\s*transform:\s*rotate\(180deg\);\s*\}/
+    );
   });
 
   it('centralizes the bounded PIN and retry presentation', () => {
@@ -96,8 +133,12 @@ describe('hardware receive verification UI', () => {
 
   it('does not require an unverifiable fingerprint attestation for Trezor imports', () => {
     const normalizedSetup = hardwareSetup.replace(/\s+/g, ' ');
-    expect(normalizedSetup).toContain("let isTrezor = $derived(Boolean(signer?.deviceType?.toLowerCase().includes('trezor')))");
-    expect(normalizedSetup).toContain('Trezor does not show its master fingerprint during this export, so no fingerprint comparison is required here.');
+    expect(normalizedSetup).toContain(
+      "let isTrezor = $derived(Boolean(signer?.deviceType?.toLowerCase().includes('trezor')))"
+    );
+    expect(normalizedSetup).toContain(
+      'Trezor does not show its master fingerprint during this export, so no fingerprint comparison is required here.'
+    );
     expect(normalizedSetup).toContain("isTrezor ? 'Use this Trezor wallet'");
   });
 
@@ -116,6 +157,8 @@ describe('hardware receive verification UI', () => {
     const cableAction = singleKeySend.indexOf('onclick={scanHardware}', review);
     expect(review).toBeGreaterThan(-1);
     expect(cableAction).toBeGreaterThan(review);
-    expect(singleKeySend).toMatch(/<TransactionReviewDetails\s+\{proposal\}\s+onChangeAddress=\{\(\)\s*=>\s*\(?changeAddressOpen\s*=\s*true\)?\}\s*\/>/);
+    expect(singleKeySend).toMatch(
+      /<TransactionReviewDetails\s+\{proposal\}\s+onChangeAddress=\{\(\)\s*=>\s*\(?changeAddressOpen\s*=\s*true\)?\}\s*\/>/
+    );
   });
 });

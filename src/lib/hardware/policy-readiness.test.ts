@@ -10,7 +10,13 @@ import {
   shouldShowColdcardPolicyHelp
 } from './policy-readiness';
 
-const coldcardEvidence = { signerFingerprint: 'F00DBABE', deviceType: 'coldcard', verifiedAt: '2026-08-12T10:00:00Z', scope: 'policy_file_acknowledgement' as const, displayedAddress: null };
+const coldcardEvidence = {
+  signerFingerprint: 'F00DBABE',
+  deviceType: 'coldcard',
+  verifiedAt: '2026-08-12T10:00:00Z',
+  scope: 'policy_file_acknowledgement' as const,
+  displayedAddress: null
+};
 
 describe('hardware policy readiness', () => {
   it.each([
@@ -25,12 +31,16 @@ describe('hardware policy readiness', () => {
   });
 
   it('models the exact registration behavior of each supported family', () => {
-    expect(policyRegistrationProfile({ label: 'Ledger' }).registration).toBe('interactive_per_signing');
+    expect(policyRegistrationProfile({ label: 'Ledger' }).registration).toBe(
+      'interactive_per_signing'
+    );
     expect(policyRegistrationProfile({ label: 'BitBox02' }).registration).toBe('interactive_once');
     expect(policyRegistrationProfile({ label: 'Jade' }).registration).toBe('interactive_once');
     expect(policyRegistrationProfile({ label: 'Coldcard' }).registration).toBe('file_once');
     expect(policyRegistrationProfile({ label: 'Trezor One' }).registration).toBe('none');
-    expect(policyRegistrationProfile({ label: 'BitBox Nova' }).registration).toBe('interactive_once');
+    expect(policyRegistrationProfile({ label: 'BitBox Nova' }).registration).toBe(
+      'interactive_once'
+    );
   });
 
   it('separates interactive verification, setup gates, and Ledger repeat authorization', () => {
@@ -47,7 +57,9 @@ describe('hardware policy readiness', () => {
     const connected = [{ label: 'Coldcard MK4', model: 'coldcard', connected: true }];
     expect(shouldShowColdcardPolicyHelp(signers, connected)).toBe(true);
     expect(shouldShowColdcardPolicyHelp(signers, connected, [coldcardEvidence])).toBe(false);
-    expect(shouldShowColdcardPolicyHelp(signers, [{ ...connected[0], connected: false }])).toBe(false);
+    expect(shouldShowColdcardPolicyHelp(signers, [{ ...connected[0], connected: false }])).toBe(
+      false
+    );
   });
 
   it('uses explicit readiness labels instead of a generic ready state', () => {
@@ -58,6 +70,8 @@ describe('hardware policy readiness', () => {
   });
 
   it('matches persisted evidence by normalized fingerprint', () => {
-    expect(matchingPolicyVerification({ fingerprint: 'f00dbabe' }, [coldcardEvidence])).toEqual(coldcardEvidence);
+    expect(matchingPolicyVerification({ fingerprint: 'f00dbabe' }, [coldcardEvidence])).toEqual(
+      coldcardEvidence
+    );
   });
 });

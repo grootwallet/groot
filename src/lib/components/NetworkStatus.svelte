@@ -14,9 +14,27 @@
   let syncSource = $state<WalletSyncSource | null>(null);
   let nodeReachable = $state<boolean | null>(null);
 
-  const backendLabel = $derived(nodeConfig?.backend.type === 'remote_core' ? 'Trusted remote node' : nodeConfig?.backend.type === 'local_core' ? 'Local Bitcoin Core' : 'Available after unlock');
-  const transportLabel = $derived(nodeConfig ? (nodeConfig.torProxy ? 'Tor configured' : 'Direct connection') : 'Available after unlock');
-  const syncLabel = $derived(syncSource?.type === 'compact_filters' ? 'P2P compact filters' : syncSource?.type === 'bitcoin_core' ? 'Bitcoin Core RPC' : 'Available after unlock');
+  const backendLabel = $derived(
+    nodeConfig?.backend.type === 'remote_core'
+      ? 'Trusted remote node'
+      : nodeConfig?.backend.type === 'local_core'
+        ? 'Local Bitcoin Core'
+        : 'Available after unlock'
+  );
+  const transportLabel = $derived(
+    nodeConfig
+      ? nodeConfig.torProxy
+        ? 'Tor configured'
+        : 'Direct connection'
+      : 'Available after unlock'
+  );
+  const syncLabel = $derived(
+    syncSource?.type === 'compact_filters'
+      ? 'P2P compact filters'
+      : syncSource?.type === 'bitcoin_core'
+        ? 'Bitcoin Core RPC'
+        : 'Available after unlock'
+  );
 
   async function refresh() {
     if (loading) return;
@@ -40,7 +58,10 @@
           syncSource = null;
         }
         try {
-          const [config, status] = await Promise.all([walletService.nodeConfig(), walletService.testNodeConnection()]);
+          const [config, status] = await Promise.all([
+            walletService.nodeConfig(),
+            walletService.testNodeConnection()
+          ]);
           nodeConfig = config;
           nodeHeight = status.blocks;
           nodeReachable = status.connected;
@@ -77,23 +98,88 @@
   });
 </script>
 
-<div class="network-status" class:open role="group" aria-label="Network controls" onmouseenter={show} onmouseleave={() => open = false} onfocusin={show} onfocusout={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) open = false; }}>
-  <button type="button" class="network-trigger" aria-label="{networkName(network)} network status" aria-expanded={open} aria-haspopup="dialog" onclick={activate}>
+<div
+  class="network-status"
+  class:open
+  role="group"
+  aria-label="Network controls"
+  onmouseenter={show}
+  onmouseleave={() => (open = false)}
+  onfocusin={show}
+  onfocusout={(event) => {
+    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) open = false;
+  }}
+>
+  <button
+    type="button"
+    class="network-trigger"
+    aria-label="{networkName(network)} network status"
+    aria-expanded={open}
+    aria-haspopup="dialog"
+    onclick={activate}
+  >
     <i class:online={nodeReachable === true} class:offline={nodeReachable === false}></i>
     <span>{networkName(network)}</span>
   </button>
   {#if open}
     <section class="network-popover" aria-label="Network status">
-      <header><span><Network size={15} /></span><div><strong>{networkName(network)}</strong><small>{locked ? 'Wallet locked' : nodeReachable === true ? 'Node reachable' : nodeReachable === false ? 'Node unavailable' : 'Checking node…'}</small></div></header>
+      <header>
+        <span><Network size={15} /></span>
+        <div>
+          <strong>{networkName(network)}</strong><small
+            >{locked
+              ? 'Wallet locked'
+              : nodeReachable === true
+                ? 'Node reachable'
+                : nodeReachable === false
+                  ? 'Node unavailable'
+                  : 'Checking node…'}</small
+          >
+        </div>
+      </header>
       <dl>
-        <div><dt><Gauge size={14} /><span>Priority fee</span></dt><dd>{priorityFee === null ? (loading ? 'Checking…' : 'Unavailable') : `${priorityFee} sat/vB`}</dd></div>
-        <div><dt><Blocks size={14} /><span>Core service tip</span></dt><dd>{nodeHeight === null ? (locked ? 'Unlock to check' : 'Unavailable') : nodeHeight.toLocaleString()}</dd></div>
-        <div><dt><Route size={14} /><span>Transport</span></dt><dd>{transportLabel}</dd></div>
-        <div><dt><Server size={14} /><span>Activity sync</span></dt><dd>{syncLabel}</dd></div>
-        <div><dt><Server size={14} /><span>Fee / broadcast</span></dt><dd>{backendLabel}</dd></div>
+        <div>
+          <dt><Gauge size={14} /><span>Priority fee</span></dt>
+          <dd>
+            {priorityFee === null
+              ? loading
+                ? 'Checking…'
+                : 'Unavailable'
+              : `${priorityFee} sat/vB`}
+          </dd>
+        </div>
+        <div>
+          <dt><Blocks size={14} /><span>Core service tip</span></dt>
+          <dd>
+            {nodeHeight === null
+              ? locked
+                ? 'Unlock to check'
+                : 'Unavailable'
+              : nodeHeight.toLocaleString()}
+          </dd>
+        </div>
+        <div>
+          <dt><Route size={14} /><span>Transport</span></dt>
+          <dd>{transportLabel}</dd>
+        </div>
+        <div>
+          <dt><Server size={14} /><span>Activity sync</span></dt>
+          <dd>{syncLabel}</dd>
+        </div>
+        <div>
+          <dt><Server size={14} /><span>Fee / broadcast</span></dt>
+          <dd>{backendLabel}</dd>
+        </div>
       </dl>
-      {#if locked}<p><LockKeyhole size={13} />Node credentials remain sealed until a wallet is unlocked.</p>{/if}
-      {#if !locked}<button type="button" class="network-refresh" disabled={loading} onclick={() => refresh()}>{loading ? 'Checking…' : 'Check again'}</button>{/if}
+      {#if locked}<p>
+          <LockKeyhole size={13} />Node credentials remain sealed until a wallet is unlocked.
+        </p>{/if}
+      {#if !locked}<button
+          type="button"
+          class="network-refresh"
+          disabled={loading}
+          onclick={() => refresh()}>{loading ? 'Checking…' : 'Check again'}</button
+        >{/if}
     </section>
   {/if}
 </div>

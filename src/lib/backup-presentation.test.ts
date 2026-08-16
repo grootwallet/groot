@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { formatWalletTimestamp, parseWalletTimestamp, recoveryDrillNotice } from './backup-presentation';
+import {
+  formatWalletTimestamp,
+  parseWalletTimestamp,
+  recoveryDrillNotice
+} from './backup-presentation';
 
 describe('backup presentation', () => {
   it('parses Rust epoch seconds and JavaScript epoch milliseconds', () => {
@@ -8,7 +12,9 @@ describe('backup presentation', () => {
   });
 
   it('formats ISO and epoch timestamps as a legible UTC date', () => {
-    expect(formatWalletTimestamp('2026-08-07T16:48:00.000Z')).toBe('Friday, August 7, 2026 at 04:48 PM UTC');
+    expect(formatWalletTimestamp('2026-08-07T16:48:00.000Z')).toBe(
+      'Friday, August 7, 2026 at 04:48 PM UTC'
+    );
     expect(formatWalletTimestamp('not-a-date')).toBe('Date unavailable');
   });
 
@@ -19,6 +25,8 @@ describe('backup presentation', () => {
       description: 'bcrt1qfixtureadd…isibleending',
       tone: 'danger'
     });
-    expect(recoveryDrillNotice({ firstAddress: address, matchesCurrentWallet: true }).title).toBe('Recovery test passed');
+    expect(recoveryDrillNotice({ firstAddress: address, matchesCurrentWallet: true }).title).toBe(
+      'Recovery test passed'
+    );
   });
 });

@@ -15,7 +15,11 @@ describe('toast notifications', () => {
   });
 
   it('coalesces an identical non-action notification while it is visible', () => {
-    const notification = { title: 'Multisig setup resumed', description: 'Returned to Verify.', tone: 'success' as const };
+    const notification = {
+      title: 'Multisig setup resumed',
+      description: 'Returned to Verify.',
+      tone: 'success' as const
+    };
 
     toast(notification);
     toast(notification);
@@ -24,7 +28,11 @@ describe('toast notifications', () => {
   });
 
   it('allows the same notification again after the visible one is dismissed', () => {
-    const notification = { title: 'Multisig setup resumed', description: 'Returned to Verify.', tone: 'success' as const };
+    const notification = {
+      title: 'Multisig setup resumed',
+      description: 'Returned to Verify.',
+      tone: 'success' as const
+    };
     toast(notification);
     dismissToast(get(toasts)[0].id);
 

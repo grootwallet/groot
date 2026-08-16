@@ -20,7 +20,7 @@
       {/each}
     </span>
     <span class="sr-only">{address}</span>
-    {#if copied}<Check size={17}/>{:else}<Copy size={17}/>{/if}
+    {#if copied}<Check size={17} />{:else}<Copy size={17} />{/if}
   </button>
   <p>Spaces are visual only. Copy always uses the exact address.</p>
 </div>

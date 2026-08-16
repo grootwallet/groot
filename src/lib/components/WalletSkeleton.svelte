@@ -5,7 +5,12 @@
   }>();
 </script>
 
-<div class="wallet-skeleton {variant}" role="status" aria-label="Loading wallet data" aria-live="polite">
+<div
+  class="wallet-skeleton {variant}"
+  role="status"
+  aria-label="Loading wallet data"
+  aria-live="polite"
+>
   <span class="sr-only">Loading wallet data…</span>
   {#if variant === 'balance'}
     <span class="skeleton-line label"></span>

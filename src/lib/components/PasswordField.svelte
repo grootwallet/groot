@@ -32,11 +32,27 @@
 </script>
 
 <label class="field password-field">
-  <span class="field-label">{label}{#if tooltip}<InsightTip text={tooltip}/>{/if}</span>
+  <span class="field-label"
+    >{label}{#if tooltip}<InsightTip text={tooltip} />{/if}</span
+  >
   <span class="password-control">
-    <input aria-label={inputLabel} type={revealed ? 'text' : 'password'} bind:value {placeholder} {autocomplete} {disabled} oninput={() => oninput()} {onkeydown} />
-    <button type="button" aria-label={revealed ? `Hide ${inputLabel}` : `Show ${inputLabel}`} {disabled} onclick={() => revealed = !revealed}>
-      {#if revealed}<EyeOff size={16}/>{:else}<Eye size={16}/>{/if}
+    <input
+      aria-label={inputLabel}
+      type={revealed ? 'text' : 'password'}
+      bind:value
+      {placeholder}
+      {autocomplete}
+      {disabled}
+      oninput={() => oninput()}
+      {onkeydown}
+    />
+    <button
+      type="button"
+      aria-label={revealed ? `Hide ${inputLabel}` : `Show ${inputLabel}`}
+      {disabled}
+      onclick={() => (revealed = !revealed)}
+    >
+      {#if revealed}<EyeOff size={16} />{:else}<Eye size={16} />{/if}
     </button>
   </span>
   {#if error}<em>{error}</em>{:else if hint}<small>{hint}</small>{/if}

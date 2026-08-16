@@ -30,7 +30,12 @@ describe('health-check hardware selection', () => {
   });
 
   it('does not guess when another device already exposes the saved fingerprint', () => {
-    expect(lockedDeviceForHealthCheck(signer, [locked, { ...locked, id: 'ready', fingerprint: '3031c299', status: 'ready', action: 'import' }])).toBeNull();
+    expect(
+      lockedDeviceForHealthCheck(signer, [
+        locked,
+        { ...locked, id: 'ready', fingerprint: '3031c299', status: 'ready', action: 'import' }
+      ])
+    ).toBeNull();
   });
 
   it('does not guess between multiple locked Trezors', () => {
@@ -38,8 +43,16 @@ describe('health-check hardware selection', () => {
   });
 
   it('selects a connected device only when its fingerprint matches the saved signer', () => {
-    const matching = { ...locked, id: 'ready', fingerprint: '3031C299', status: 'ready' as const, action: 'import' as const };
-    expect(matchingDeviceForHealthCheck(signer, [{ ...matching, fingerprint: 'deadbeef' }, matching])).toEqual(matching);
+    const matching = {
+      ...locked,
+      id: 'ready',
+      fingerprint: '3031C299',
+      status: 'ready' as const,
+      action: 'import' as const
+    };
+    expect(
+      matchingDeviceForHealthCheck(signer, [{ ...matching, fingerprint: 'deadbeef' }, matching])
+    ).toEqual(matching);
     expect(matchingDeviceForHealthCheck(signer, [{ ...matching, connected: false }])).toBeNull();
   });
 });

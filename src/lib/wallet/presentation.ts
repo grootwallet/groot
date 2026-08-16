@@ -3,12 +3,7 @@ import type { Transaction, Utxo } from '$lib/types';
 import type { Sats, WalletSnapshot } from './contracts';
 
 export type CoinSortOrder =
-	| 'newest'
-	| 'oldest'
-	| 'largest'
-	| 'smallest'
-	| 'label-asc'
-	| 'label-desc';
+  'newest' | 'oldest' | 'largest' | 'smallest' | 'label-asc' | 'label-desc';
 
 /** Pending funds include both trusted change and untrusted incoming mempool outputs. */
 export function pendingBalance(balance: WalletSnapshot['balance']): Sats {
@@ -36,7 +31,10 @@ export function pendingBalanceBreakdown(snapshot: WalletSnapshot): PendingBalanc
     : 0;
   const outgoing = snapshot.transactions
     .filter((transaction) => transaction.status === 'pending' && transaction.direction === 'sent')
-    .reduce((total, transaction) => total + Number(transaction.amount) + Number(transaction.fee ?? 0), 0);
+    .reduce(
+      (total, transaction) => total + Number(transaction.amount) + Number(transaction.fee ?? 0),
+      0
+    );
 
   return {
     incoming: Math.max(0, pending - change) as Sats,
@@ -58,19 +56,19 @@ export function sortTransactionsNewestFirst(items: readonly Transaction[]): Tran
 }
 
 function transactionIdFromOutpoint(outpoint: string): string {
-	const separator = outpoint.lastIndexOf(':');
-	return separator > 0 ? outpoint.slice(0, separator) : outpoint;
+  const separator = outpoint.lastIndexOf(':');
+  return separator > 0 ? outpoint.slice(0, separator) : outpoint;
 }
 
 function compareTimestamp(
-	left: number | null,
-	right: number | null,
-	order: 'newest' | 'oldest'
+  left: number | null,
+  right: number | null,
+  order: 'newest' | 'oldest'
 ): number {
-	if (left === null && right === null) return 0;
-	if (left === null) return 1;
-	if (right === null) return -1;
-	return order === 'newest' ? right - left : left - right;
+  if (left === null && right === null) return 0;
+  if (left === null) return 1;
+  if (right === null) return -1;
+  return order === 'newest' ? right - left : left - right;
 }
 
 /**
@@ -78,59 +76,58 @@ function compareTimestamp(
  * transaction dates remain last so incomplete history never looks recent.
  */
 export function sortCoins(
-	coins: readonly Utxo[],
-	transactions: readonly Transaction[],
-	order: CoinSortOrder = 'newest'
+  coins: readonly Utxo[],
+  transactions: readonly Transaction[],
+  order: CoinSortOrder = 'newest'
 ): Utxo[] {
-	const timestamps = new Map(
-		transactions.map((transaction) => [
-			transaction.id,
-			parseTimestamp(transaction.date)?.getTime() ?? null
-		])
-	);
+  const timestamps = new Map(
+    transactions.map((transaction) => [
+      transaction.id,
+      parseTimestamp(transaction.date)?.getTime() ?? null
+    ])
+  );
 
-	const entries = coins.map((coin, index) => ({
-		coin,
-		index,
-		timestamp: timestamps.get(transactionIdFromOutpoint(coin.outpoint)) ?? null
-	}));
+  const entries = coins.map((coin, index) => ({
+    coin,
+    index,
+    timestamp: timestamps.get(transactionIdFromOutpoint(coin.outpoint)) ?? null
+  }));
 
-	return entries
-		.sort((left, right) => {
-			const newestTieBreak = compareTimestamp(left.timestamp, right.timestamp, 'newest');
-			let comparison = 0;
+  return entries
+    .sort((left, right) => {
+      const newestTieBreak = compareTimestamp(left.timestamp, right.timestamp, 'newest');
+      let comparison = 0;
 
-			switch (order) {
-				case 'newest':
-				case 'oldest':
-					comparison = compareTimestamp(left.timestamp, right.timestamp, order);
-					break;
-				case 'largest':
-					comparison = right.coin.amount - left.coin.amount || newestTieBreak;
-					break;
-				case 'smallest':
-					comparison = left.coin.amount - right.coin.amount || newestTieBreak;
-					break;
-				case 'label-asc':
-				case 'label-desc': {
-					const leftLabel = left.coin.label.trim();
-					const rightLabel = right.coin.label.trim();
-					if (!leftLabel && !rightLabel) comparison = newestTieBreak;
-					else if (!leftLabel) comparison = 1;
-					else if (!rightLabel) comparison = -1;
-					else {
-						const labelOrder = leftLabel.localeCompare(rightLabel, 'en', {
-							numeric: true,
-							sensitivity: 'base'
-						});
-						comparison =
-							(order === 'label-asc' ? labelOrder : -labelOrder) || newestTieBreak;
-					}
-					break;
-				}
-			}
+      switch (order) {
+        case 'newest':
+        case 'oldest':
+          comparison = compareTimestamp(left.timestamp, right.timestamp, order);
+          break;
+        case 'largest':
+          comparison = right.coin.amount - left.coin.amount || newestTieBreak;
+          break;
+        case 'smallest':
+          comparison = left.coin.amount - right.coin.amount || newestTieBreak;
+          break;
+        case 'label-asc':
+        case 'label-desc': {
+          const leftLabel = left.coin.label.trim();
+          const rightLabel = right.coin.label.trim();
+          if (!leftLabel && !rightLabel) comparison = newestTieBreak;
+          else if (!leftLabel) comparison = 1;
+          else if (!rightLabel) comparison = -1;
+          else {
+            const labelOrder = leftLabel.localeCompare(rightLabel, 'en', {
+              numeric: true,
+              sensitivity: 'base'
+            });
+            comparison = (order === 'label-asc' ? labelOrder : -labelOrder) || newestTieBreak;
+          }
+          break;
+        }
+      }
 
-			return comparison || left.index - right.index;
-		})
-		.map(({ coin }) => coin);
+      return comparison || left.index - right.index;
+    })
+    .map(({ coin }) => coin);
 }

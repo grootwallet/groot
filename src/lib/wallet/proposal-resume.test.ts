@@ -6,7 +6,7 @@ import type { MultisigProposal } from './contracts';
 function proposal(
   proposalId: string,
   status: MultisigProposal['status'],
-  createdAt: string,
+  createdAt: string
 ): MultisigProposal {
   return {
     proposalId,
@@ -26,14 +26,25 @@ function proposal(
     locktime: 0,
     rbf: true,
     network: 'regtest',
-    selectionImpact: { strategy: 'balanced', selectedInputCount: 0, estimatedInputWeight: 0, fundingLabels: [], provenanceState: 'unknown', existingClusterCount: 0, newClusterLinks: 0, hasUnknownProvenance: true, hasAddressReuse: false, feeDifferenceVsPrivate: null },
+    selectionImpact: {
+      strategy: 'balanced',
+      selectedInputCount: 0,
+      estimatedInputWeight: 0,
+      fundingLabels: [],
+      provenanceState: 'unknown',
+      existingClusterCount: 0,
+      newClusterLinks: 0,
+      hasUnknownProvenance: true,
+      hasAddressReuse: false,
+      feeDifferenceVsPrivate: null
+    },
     psbt: 'fixture',
     signed: status === 'ready' ? 1 : 0,
     required: 1,
     canFinalize: status === 'ready',
     signedFingerprints: [],
     status,
-    createdAt,
+    createdAt
   };
 }
 

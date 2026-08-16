@@ -1,13 +1,27 @@
 import { describe, expect, it } from 'vitest';
-import { addressForHardwareDisplay, hardwareAddressComparison, testnetAddressDisplayName } from './hardware-display';
+import {
+  addressForHardwareDisplay,
+  hardwareAddressComparison,
+  testnetAddressDisplayName
+} from './hardware-display';
 
 describe('hardware transaction address display', () => {
   it('uses the Rust-supplied testnet alias for devices that render Regtest as testnet', () => {
-    expect(addressForHardwareDisplay('bcrt1-canonical', 'tb1-script-bound-alias', 'Ledger Nano S Plus')).toBe('tb1-script-bound-alias');
-    expect(addressForHardwareDisplay('bcrt1-canonical', 'tb1-script-bound-alias', 'Trezor One')).toBe('tb1-script-bound-alias');
-    expect(addressForHardwareDisplay('bcrt1-canonical', 'tb1-script-bound-alias', 'BitBox02')).toBe('tb1-script-bound-alias');
-    expect(addressForHardwareDisplay('bcrt1-canonical', 'tb1-script-bound-alias', 'Coldcard MK4')).toBe('bcrt1-canonical');
-    expect(addressForHardwareDisplay('bcrt1-canonical', null, 'Ledger Nano S Plus')).toBe('bcrt1-canonical');
+    expect(
+      addressForHardwareDisplay('bcrt1-canonical', 'tb1-script-bound-alias', 'Ledger Nano S Plus')
+    ).toBe('tb1-script-bound-alias');
+    expect(
+      addressForHardwareDisplay('bcrt1-canonical', 'tb1-script-bound-alias', 'Trezor One')
+    ).toBe('tb1-script-bound-alias');
+    expect(addressForHardwareDisplay('bcrt1-canonical', 'tb1-script-bound-alias', 'BitBox02')).toBe(
+      'tb1-script-bound-alias'
+    );
+    expect(
+      addressForHardwareDisplay('bcrt1-canonical', 'tb1-script-bound-alias', 'Coldcard MK4')
+    ).toBe('bcrt1-canonical');
+    expect(addressForHardwareDisplay('bcrt1-canonical', null, 'Ledger Nano S Plus')).toBe(
+      'bcrt1-canonical'
+    );
   });
 
   it('names the exact device display used in comparison copy', () => {
@@ -18,7 +32,9 @@ describe('hardware transaction address display', () => {
   });
 
   it('builds one reusable comparison model for receive and policy review UI', () => {
-    expect(hardwareAddressComparison('bcrt1-canonical', 'tb1-script-bound-alias', 'bitbox02_btconly')).toEqual({
+    expect(
+      hardwareAddressComparison('bcrt1-canonical', 'tb1-script-bound-alias', 'bitbox02_btconly')
+    ).toEqual({
       address: 'tb1-script-bound-alias',
       deviceName: 'BitBox02'
     });

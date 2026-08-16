@@ -10,7 +10,10 @@ async function expectNoHorizontalOverflow(page: import('@playwright/test').Page)
 
 test('Groot branding is visible across wallet themes', async ({ page }) => {
   for (const theme of ['light', 'dark'] as const) {
-    await page.addInitScript((selectedTheme) => localStorage.setItem('groot-theme', selectedTheme), theme);
+    await page.addInitScript(
+      (selectedTheme) => localStorage.setItem('groot-theme', selectedTheme),
+      theme
+    );
     await page.goto('/welcome?add=1');
 
     await expect(page).toHaveTitle('Groot');

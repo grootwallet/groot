@@ -1,7 +1,12 @@
 export const MAX_TRANSFER_BYTES = 256 * 1024;
 
 export function safeTransferFilename(value: string): string {
-  const normalized = value.normalize('NFKD').replace(/\p{M}+/gu, '').replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase();
+  const normalized = value
+    .normalize('NFKD')
+    .replace(/\p{M}+/gu, '')
+    .replace(/[^a-zA-Z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .toLowerCase();
   return normalized.slice(0, 64) || 'groot-wallet';
 }
 
@@ -14,7 +19,11 @@ export function coldcardPolicyFilename(walletName: string): string {
 export function psbtFilename(proposalId: string): string {
   // Short ASCII names are easier to identify on small hardware-wallet screens
   // and stay compatible with conservative removable-media implementations.
-  const identifier = proposalId.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 8) || 'payment';
+  const identifier =
+    proposalId
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, '')
+      .slice(0, 8) || 'payment';
   return `groot-${identifier}.psbt`;
 }
 

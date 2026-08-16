@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { coldcardPolicyFilename, MAX_TRANSFER_BYTES, psbtFilename, safeTransferFilename, validateTransferText } from './transfer';
+import {
+  coldcardPolicyFilename,
+  MAX_TRANSFER_BYTES,
+  psbtFilename,
+  safeTransferFilename,
+  validateTransferText
+} from './transfer';
 
 describe('air-gapped transfer validation', () => {
   it('normalizes a bounded non-empty payload', () => {

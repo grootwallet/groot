@@ -14,21 +14,24 @@ const fail = (message) => {
 
 function sourceFiles(directory) {
   const absolute = fileURLToPath(new URL(`${directory}/`, root));
-  const visit = (path) => readdirSync(path, { withFileTypes: true }).flatMap((entry) => {
-    const child = join(path, entry.name);
-    if (entry.isDirectory()) return visit(child);
-    return ['.rs', '.ts', '.svelte'].includes(extname(entry.name)) ? [child] : [];
-  });
+  const visit = (path) =>
+    readdirSync(path, { withFileTypes: true }).flatMap((entry) => {
+      const child = join(path, entry.name);
+      if (entry.isDirectory()) return visit(child);
+      return ['.rs', '.ts', '.svelte'].includes(extname(entry.name)) ? [child] : [];
+    });
   return visit(absolute).map((path) => ({
     path: relative(rootPath, path),
     content: readFileSync(path, 'utf8')
   }));
 }
 
-const productionSources = [...sourceFiles('src'), ...sourceFiles('src-tauri/src')]
-  .filter(({ path }) => !/\.(?:test|spec)\.(?:ts|js)$/.test(path));
+const productionSources = [...sourceFiles('src'), ...sourceFiles('src-tauri/src')].filter(
+  ({ path }) => !/\.(?:test|spec)\.(?:ts|js)$/.test(path)
+);
 
-const loggingPattern = /\b(?:console\.(?:log|debug|info|warn|error)|(?:println|eprintln|dbg)!|tracing::|log::)/;
+const loggingPattern =
+  /\b(?:console\.(?:log|debug|info|warn|error)|(?:println|eprintln|dbg)!|tracing::|log::)/;
 const logged = productionSources.find(({ content }) => loggingPattern.test(content));
 if (logged) fail(`unreviewed production logging exists in ${logged.path}`);
 
@@ -58,7 +61,14 @@ if (JSON.stringify(capability.permissions) !== JSON.stringify(expectedPermission
 
 const tauriConfig = JSON.parse(read('src-tauri/tauri.conf.json'));
 const csp = tauriConfig?.app?.security?.csp ?? '';
-for (const required of ["default-src 'self'", 'connect-src ipc: http://ipc.localhost', "object-src 'none'", "frame-src 'none'", "frame-ancestors 'none'", "form-action 'self'"]) {
+for (const required of [
+  "default-src 'self'",
+  'connect-src ipc: http://ipc.localhost',
+  "object-src 'none'",
+  "frame-src 'none'",
+  "frame-ancestors 'none'",
+  "form-action 'self'"
+]) {
   if (!csp.includes(required)) fail(`CSP is missing ${required}`);
 }
 if (csp.includes("'unsafe-eval'") || csp.replace('http://ipc.localhost', '').includes('://')) {
@@ -66,8 +76,12 @@ if (csp.includes("'unsafe-eval'") || csp.replace('http://ipc.localhost', '').inc
 }
 
 const packageJson = JSON.parse(read('package.json'));
-const dependencyNames = Object.keys({ ...packageJson.dependencies, ...packageJson.devDependencies });
-const telemetryPattern = /(?:analytics|telemetry|sentry|datadog|segment|mixpanel|posthog|crashlytics|opentelemetry)/i;
+const dependencyNames = Object.keys({
+  ...packageJson.dependencies,
+  ...packageJson.devDependencies
+});
+const telemetryPattern =
+  /(?:analytics|telemetry|sentry|datadog|segment|mixpanel|posthog|crashlytics|opentelemetry)/i;
 const telemetryDependency = dependencyNames.find((name) => telemetryPattern.test(name));
 if (telemetryDependency) fail(`telemetry/crash dependency is not reviewed: ${telemetryDependency}`);
 

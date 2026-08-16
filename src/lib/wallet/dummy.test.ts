@@ -36,7 +36,10 @@ describe('multisig setup drafts', () => {
     };
 
     await adapter.saveMultisigSetupDraft(draft);
-    expect(await adapter.multisigSetupDraft()).toMatchObject({ stage: 'keys', name: 'Resume test' });
+    expect(await adapter.multisigSetupDraft()).toMatchObject({
+      stage: 'keys',
+      name: 'Resume test'
+    });
     await adapter.discardMultisigSetupDraft();
     expect(await adapter.multisigSetupDraft()).toBeNull();
   });

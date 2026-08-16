@@ -1,6 +1,15 @@
 <script lang="ts">
   import { page } from '$app/state';
-  import { Activity, ArrowDownToLine, ArrowUpFromLine, CircleDot, LayoutGrid, Plus, Settings, ShieldCheck } from '@lucide/svelte';
+  import {
+    Activity,
+    ArrowDownToLine,
+    ArrowUpFromLine,
+    CircleDot,
+    LayoutGrid,
+    Plus,
+    Settings,
+    ShieldCheck
+  } from '@lucide/svelte';
   import BrandLockup from './BrandLockup.svelte';
   import DiscardMultisigSetupModal from './DiscardMultisigSetupModal.svelte';
   import ToastHost from './ToastHost.svelte';
@@ -27,8 +36,18 @@
     { href: '/coins', label: 'coins', icon: CircleDot },
     { href: '/multisig', label: 'policy', icon: ShieldCheck }
   ];
-  const walletSetupRoutes = new Set(['/welcome', '/hardware/new', '/multisig/new', '/multisig/recover']);
-  const active = (href: string) => href === '/multisig' ? page.url.pathname === href || page.url.pathname.startsWith('/multisig/policy') || page.url.pathname.startsWith('/multisig/backup') : page.url.pathname === href;
+  const walletSetupRoutes = new Set([
+    '/welcome',
+    '/hardware/new',
+    '/multisig/new',
+    '/multisig/recover'
+  ]);
+  const active = (href: string) =>
+    href === '/multisig'
+      ? page.url.pathname === href ||
+        page.url.pathname.startsWith('/multisig/policy') ||
+        page.url.pathname.startsWith('/multisig/backup')
+      : page.url.pathname === href;
   let profiles = $state<WalletProfile[]>([]);
   let selectedWalletId = $state<string | null>(null);
   let multisigSetupDraft = $state<MultisigSetupDraft | null>(null);
@@ -39,13 +58,19 @@
   let profileReadGeneration = 0;
   let liveSync: LiveSyncController | undefined;
   let selectedProfile = $derived(profiles.find((wallet) => wallet.id === selectedWalletId));
-  let policyContext = $derived(selectedProfile?.kind === 'multisig' || page.url.pathname.startsWith('/multisig'));
+  let policyContext = $derived(
+    selectedProfile?.kind === 'multisig' || page.url.pathname.startsWith('/multisig')
+  );
   let visibleNav = $derived(policyContext ? nav : nav.slice(0, 3));
   let mobileItems = $derived(policyContext ? nav : nav.slice(0, 3));
   let onboardingRoute = $derived(walletSetupRoutes.has(page.url.pathname));
   let lockedRoute = $derived(page.url.pathname === '/unlock');
-  const showQuickActions = $derived(!lockedRoute && (page.url.pathname === '/' || page.url.pathname === '/coins'));
-  const receiveHref = $derived(selectedProfile?.kind === 'multisig' ? '/multisig/receive' : '/receive');
+  const showQuickActions = $derived(
+    !lockedRoute && (page.url.pathname === '/' || page.url.pathname === '/coins')
+  );
+  const receiveHref = $derived(
+    selectedProfile?.kind === 'multisig' ? '/multisig/receive' : '/receive'
+  );
   const sendHref = $derived(selectedProfile?.kind === 'multisig' ? '/multisig/send' : '/send');
   const showSetupResume = $derived(Boolean(multisigSetupDraft) && !onboardingRoute);
 
@@ -54,7 +79,9 @@
     try {
       const draft = await walletService.multisigSetupDraft();
       if (generation === setupDraftReadGeneration) multisigSetupDraft = draft;
-    } catch { /* Keep the last known notice visible across transient read failures. */ }
+    } catch {
+      /* Keep the last known notice visible across transient read failures. */
+    }
   }
 
   async function discardSetupDraft() {
@@ -67,9 +94,14 @@
       ++setupDraftReadGeneration;
       multisigSetupDraft = null;
       discardSetupOpen = false;
-      toast({ title: 'Setup discarded', description: 'The unfinished multisig wallet setup was removed.', tone: 'success' });
+      toast({
+        title: 'Setup discarded',
+        description: 'The unfinished multisig wallet setup was removed.',
+        tone: 'success'
+      });
     } catch (cause) {
-      discardSetupError = cause instanceof Error ? cause.message : 'Could not discard the unfinished setup.';
+      discardSetupError =
+        cause instanceof Error ? cause.message : 'Could not discard the unfinished setup.';
     } finally {
       discardingSetup = false;
     }
@@ -91,7 +123,13 @@
     }
   }
 
-  const profileMutatingRoutes = new Set(['/welcome', '/hardware/new', '/multisig/new', '/multisig/recover', '/multisig/delete']);
+  const profileMutatingRoutes = new Set([
+    '/welcome',
+    '/hardware/new',
+    '/multisig/new',
+    '/multisig/recover',
+    '/multisig/delete'
+  ]);
 
   afterNavigate(({ from }) => {
     const previousPath = from?.url?.pathname;
@@ -123,7 +161,11 @@
       }
     } catch (cause) {
       if (selectedWalletId === walletId) selectedWalletId = previousWalletId;
-      toast({ title: 'Wallet not switched', description: cause instanceof Error ? cause.message : 'Could not select this wallet.', tone: 'danger' });
+      toast({
+        title: 'Wallet not switched',
+        description: cause instanceof Error ? cause.message : 'Could not select this wallet.',
+        tone: 'danger'
+      });
     }
   }
   provideWalletShellContext({
@@ -134,11 +176,34 @@
   });
   onMount(() => {
     const unsubscribe = walletService.subscribe((event) => {
-      if (event.type === 'payment_received') toast({ title: 'Bitcoin received', description: `Received ${shortSats(event.amount)} sats · Balance ${shortSats(event.balance)} sats`, tone: 'success' });
-      if (event.type === 'payment_received_confirmed') toast({ title: 'Bitcoin received', description: `Received ${shortSats(event.amount)} sats · First confirmation · Balance ${shortSats(event.balance)} sats`, tone: 'success' });
-      if (event.type === 'first_confirmation') toast({ title: 'First confirmation', description: `Transaction confirmed · Balance ${shortSats(event.balance)} sats`, tone: 'success' });
-      if (event.type === 'transaction_broadcast') toast({ title: 'Transaction broadcast', description: `Remaining wallet balance: ${shortSats(event.balance)} sats`, tone: 'success' });
-      if (event.type === 'wallet_profile_updated') profiles = profiles.map((profile) => profile.id === event.profile.id ? event.profile : profile);
+      if (event.type === 'payment_received')
+        toast({
+          title: 'Bitcoin received',
+          description: `Received ${shortSats(event.amount)} sats · Balance ${shortSats(event.balance)} sats`,
+          tone: 'success'
+        });
+      if (event.type === 'payment_received_confirmed')
+        toast({
+          title: 'Bitcoin received',
+          description: `Received ${shortSats(event.amount)} sats · First confirmation · Balance ${shortSats(event.balance)} sats`,
+          tone: 'success'
+        });
+      if (event.type === 'first_confirmation')
+        toast({
+          title: 'First confirmation',
+          description: `Transaction confirmed · Balance ${shortSats(event.balance)} sats`,
+          tone: 'success'
+        });
+      if (event.type === 'transaction_broadcast')
+        toast({
+          title: 'Transaction broadcast',
+          description: `Remaining wallet balance: ${shortSats(event.balance)} sats`,
+          tone: 'success'
+        });
+      if (event.type === 'wallet_profile_updated')
+        profiles = profiles.map((profile) =>
+          profile.id === event.profile.id ? event.profile : profile
+        );
     });
     liveSync = createLiveSync(walletService, 10_000, (cause) => {
       if (cause instanceof WalletError && cause.code === 'wallet_locked') {
@@ -146,12 +211,17 @@
         void goto('/unlock');
       }
     });
-    const wakeWhenVisible = () => { if (document.visibilityState === 'visible') void liveSync?.runNow(); };
+    const wakeWhenVisible = () => {
+      if (document.visibilityState === 'visible') void liveSync?.runNow();
+    };
     document.addEventListener('visibilitychange', wakeWhenVisible);
     void (async () => {
       try {
         await refreshSetupDraft();
-        if (!await walletService.exists()) { await goto('/welcome'); return; }
+        if (!(await walletService.exists())) {
+          await goto('/welcome');
+          return;
+        }
         await refreshProfiles();
         if (onboardingRoute || lockedRoute) return;
         if (!isPrototypeWallet) liveSync?.start();
@@ -167,25 +237,46 @@
   });
 </script>
 
-<div class="app-shell" data-sveltekit-preload-code="viewport" data-sveltekit-preload-data="hover" class:onboarding-shell={onboardingRoute} class:mobile-actions-visible={showQuickActions} class:prototype-shell={isPrototypeWallet} class:locked-setup-visible={showSetupResume && lockedRoute}>
+<div
+  class="app-shell"
+  data-sveltekit-preload-code="viewport"
+  data-sveltekit-preload-data="hover"
+  class:onboarding-shell={onboardingRoute}
+  class:mobile-actions-visible={showQuickActions}
+  class:prototype-shell={isPrototypeWallet}
+  class:locked-setup-visible={showSetupResume && lockedRoute}
+>
   <aside class="sidebar">
     <a class="brand" href="/" aria-label="Groot home"><BrandLockup /></a>
     {#if profiles.length}
       <div class="wallet-switcher">
-        <span class="wallet-switcher-label">{t('wallets', $locale)} <strong>{formatWalletCount(profiles.length, $locale)}</strong></span>
+        <span class="wallet-switcher-label"
+          >{t('wallets', $locale)}
+          <strong>{formatWalletCount(profiles.length, $locale)}</strong></span
+        >
         <WalletProfileList {profiles} {selectedWalletId} onselect={selectWallet} compact />
-        <a href="/welcome?add=1"><Plus size={14}/>{t('addWallet', $locale)}</a>
+        <a href="/welcome?add=1"><Plus size={14} />{t('addWallet', $locale)}</a>
       </div>
     {/if}
     {#if !lockedRoute}
       <nav class="side-nav">
         {#each visibleNav as item}
-          <a href={item.href} class:active={active(item.href)} aria-current={active(item.href) ? 'page' : undefined}><item.icon size={17} /><span>{t(item.label, $locale)}</span></a>
+          <a
+            href={item.href}
+            class:active={active(item.href)}
+            aria-current={active(item.href) ? 'page' : undefined}
+            ><item.icon size={17} /><span>{t(item.label, $locale)}</span></a
+          >
         {/each}
       </nav>
     {/if}
     <div class="sidebar-bottom">
-      {#if !lockedRoute}<a href="/settings" class:active={active('/settings')} aria-current={active('/settings') ? 'page' : undefined}><Settings size={17} /><span>{t('settings', $locale)}</span></a>{/if}
+      {#if !lockedRoute}<a
+          href="/settings"
+          class:active={active('/settings')}
+          aria-current={active('/settings') ? 'page' : undefined}
+          ><Settings size={17} /><span>{t('settings', $locale)}</span></a
+        >{/if}
       <div class="preference-toggles"><ThemeToggle /><DiscreetModeToggle /></div>
       <NetworkStatus network={defaultConfig.network} locked={lockedRoute} />
     </div>
@@ -194,14 +285,25 @@
   <a class="mobile-brand" href="/" aria-label="Groot home"><BrandLockup /></a>
 
   <main class="main">
-    {#if isPrototypeWallet}<div class="demo-banner" role="status"><strong>Interactive prototype</strong><span>Dummy data only · Never use real funds or recovery words</span></div>{/if}
+    {#if isPrototypeWallet}<div class="demo-banner" role="status">
+        <strong>Interactive prototype</strong><span
+          >Dummy data only · Never use real funds or recovery words</span
+        >
+      </div>{/if}
     {#if showSetupResume && multisigSetupDraft}
       <ResumeSetupNotice
-        title={lockedRoute ? 'Multisig wallet setup' : multisigSetupDraft.name.trim() || 'Multisig wallet setup'}
-        detail={lockedRoute ? 'Wallet creation in progress' : `${multisigSetupStageLabel(multisigSetupDraft.stage)} · ${multisigSetupDraft.cosigners.length} of ${multisigSetupSignerTarget(multisigSetupDraft)} signers added`}
+        title={lockedRoute
+          ? 'Multisig wallet setup'
+          : multisigSetupDraft.name.trim() || 'Multisig wallet setup'}
+        detail={lockedRoute
+          ? 'Wallet creation in progress'
+          : `${multisigSetupStageLabel(multisigSetupDraft.stage)} · ${multisigSetupDraft.cosigners.length} of ${multisigSetupSignerTarget(multisigSetupDraft)} signers added`}
         href="/multisig/new"
         locked={lockedRoute}
-        ondiscard={() => { discardSetupError = ''; discardSetupOpen = true; }}
+        ondiscard={() => {
+          discardSetupError = '';
+          discardSetupOpen = true;
+        }}
       />
     {/if}
     {#key selectedWalletId}
@@ -210,20 +312,45 @@
   </main>
 
   {#if !lockedRoute}<nav class="mobile-nav" class:policy-nav={policyContext}>
-    {#each mobileItems as item}
-      <a href={item.href} class:active={active(item.href)} aria-current={active(item.href) ? 'page' : undefined}><item.icon size={20} /><span>{t(item.label, $locale)}</span></a>
-    {/each}
-    <a href="/settings" class:active={active('/settings')} aria-current={active('/settings') ? 'page' : undefined}><Settings size={20} /><span>{t('settings', $locale)}</span></a>
-  </nav>{/if}
+      {#each mobileItems as item}
+        <a
+          href={item.href}
+          class:active={active(item.href)}
+          aria-current={active(item.href) ? 'page' : undefined}
+          ><item.icon size={20} /><span>{t(item.label, $locale)}</span></a
+        >
+      {/each}
+      <a
+        href="/settings"
+        class:active={active('/settings')}
+        aria-current={active('/settings') ? 'page' : undefined}
+        ><Settings size={20} /><span>{t('settings', $locale)}</span></a
+      >
+    </nav>{/if}
 
-  {#if lockedRoute}<div class="locked-mobile-utilities"><ThemeToggle /><DiscreetModeToggle /><NetworkStatus network={defaultConfig.network} locked /></div>{/if}
+  {#if lockedRoute}<div class="locked-mobile-utilities">
+      <ThemeToggle /><DiscreetModeToggle /><NetworkStatus network={defaultConfig.network} locked />
+    </div>{/if}
 
   {#if showQuickActions}
     <div class="mobile-actions">
-      <a class="mobile-action secondary" href={receiveHref}><ArrowDownToLine size={18} />{t('receive', $locale)}</a>
-      <a class="mobile-action primary" href={sendHref}><ArrowUpFromLine size={18} />{t('send', $locale)}</a>
+      <a class="mobile-action secondary" href={receiveHref}
+        ><ArrowDownToLine size={18} />{t('receive', $locale)}</a
+      >
+      <a class="mobile-action primary" href={sendHref}
+        ><ArrowUpFromLine size={18} />{t('send', $locale)}</a
+      >
     </div>
   {/if}
-  <DiscardMultisigSetupModal open={discardSetupOpen} busy={discardingSetup} error={discardSetupError} onclose={() => { discardSetupOpen = false; discardSetupError = ''; }} onconfirm={discardSetupDraft}/>
+  <DiscardMultisigSetupModal
+    open={discardSetupOpen}
+    busy={discardingSetup}
+    error={discardSetupError}
+    onclose={() => {
+      discardSetupOpen = false;
+      discardSetupError = '';
+    }}
+    onconfirm={discardSetupDraft}
+  />
   <ToastHost />
 </div>

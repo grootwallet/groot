@@ -20,6 +20,10 @@ export function hardwareAddressComparison(
   return { address: deviceName ? testnetAlias! : canonical, deviceName };
 }
 
-export function addressForHardwareDisplay(canonical: string, testnetAlias: string | null | undefined, deviceIdentity: string) {
+export function addressForHardwareDisplay(
+  canonical: string,
+  testnetAlias: string | null | undefined,
+  deviceIdentity: string
+) {
   return hardwareAddressComparison(canonical, testnetAlias, deviceIdentity).address;
 }

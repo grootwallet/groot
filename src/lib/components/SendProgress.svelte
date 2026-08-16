@@ -9,8 +9,14 @@
   <ol>
     {#each steps as label, index}
       {@const number = index + 1}
-      <li class:active={current === number} class:complete={current > number} aria-current={current === number ? 'step' : undefined}>
-        <span>{#if current > number}<Check size={12} strokeWidth={2.5} />{:else}{number}{/if}</span>
+      <li
+        class:active={current === number}
+        class:complete={current > number}
+        aria-current={current === number ? 'step' : undefined}
+      >
+        <span
+          >{#if current > number}<Check size={12} strokeWidth={2.5} />{:else}{number}{/if}</span
+        >
         <strong>{label}</strong>
       </li>
     {/each}

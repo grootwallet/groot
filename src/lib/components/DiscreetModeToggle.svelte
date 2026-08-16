@@ -12,5 +12,5 @@
   title={$discreetMode ? 'Show wallet amounts' : 'Hide wallet amounts'}
   onclick={() => setDiscreetMode(!$discreetMode)}
 >
-  {#if $discreetMode}<EyeOff size={15}/>{:else}<Eye size={15}/>{/if}
+  {#if $discreetMode}<EyeOff size={15} />{:else}<Eye size={15} />{/if}
 </button>

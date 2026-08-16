@@ -7,7 +7,9 @@ export function lockedDeviceForHealthCheck(
   devices: HardwareDevice[]
 ): HardwareDevice | null {
   if (policyReadinessKind(signer) !== 'trezor') return null;
-  if (devices.some((device) => device.fingerprint?.toLowerCase() === signer.fingerprint.toLowerCase())) {
+  if (
+    devices.some((device) => device.fingerprint?.toLowerCase() === signer.fingerprint.toLowerCase())
+  ) {
     return null;
   }
   const lockedTrezors = devices.filter(
@@ -20,7 +22,10 @@ export function matchingDeviceForHealthCheck(
   signer: CosignerDraft,
   devices: HardwareDevice[]
 ): HardwareDevice | null {
-  return devices.find(
-    (device) => device.connected && device.fingerprint?.toLowerCase() === signer.fingerprint.toLowerCase()
-  ) ?? null;
+  return (
+    devices.find(
+      (device) =>
+        device.connected && device.fingerprint?.toLowerCase() === signer.fingerprint.toLowerCase()
+    ) ?? null
+  );
 }

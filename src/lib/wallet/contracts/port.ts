@@ -1,9 +1,52 @@
-import type { ReceiveAddress } from "$lib/types";
-import type { CosignerDraft, PolicyDraft } from "$lib/multisig/policy";
-import type { HardwareDevice, ExternalSigner, ExternalSignerBackup, ExternalSignerSource, ExternalSignerWallet, CosignerHealthCheck, HardwareHealthCheckRecord, PolicyVerificationAddress, SavedFileResult, SignerPolicyVerification } from "./hardware";
-import type { MultisigPreview, MultisigProposal, MultisigSetupDraft, MultisigWallet, RecoveryDrill, RecoveryPolicyAnalysis, RecoveryTemplate } from "./multisig";
-import type { CoreNodeConfig, MnemonicPresentation, NodeStatus, PayjoinUriInspection, RecoveryScanSettings, RecoveryScanStatus, SupplementalEntropyInput, WalletEvent, WalletProfile, WalletRegistry, WalletSelection, WalletSyncSource, WalletSyncStatus } from "./runtime";
-import type { AccelerationMethod, BroadcastResult, CoinSelection, CoinSelectionPreview, FeeEstimates, FeeRate, PaymentProposal, Sats, WalletSnapshot } from "./transactions";
+import type { ReceiveAddress } from '$lib/types';
+import type { CosignerDraft, PolicyDraft } from '$lib/multisig/policy';
+import type {
+  HardwareDevice,
+  ExternalSigner,
+  ExternalSignerBackup,
+  ExternalSignerSource,
+  ExternalSignerWallet,
+  CosignerHealthCheck,
+  HardwareHealthCheckRecord,
+  PolicyVerificationAddress,
+  SavedFileResult,
+  SignerPolicyVerification
+} from './hardware';
+import type {
+  MultisigPreview,
+  MultisigProposal,
+  MultisigSetupDraft,
+  MultisigWallet,
+  RecoveryDrill,
+  RecoveryPolicyAnalysis,
+  RecoveryTemplate
+} from './multisig';
+import type {
+  CoreNodeConfig,
+  MnemonicPresentation,
+  NodeStatus,
+  PayjoinUriInspection,
+  RecoveryScanSettings,
+  RecoveryScanStatus,
+  SupplementalEntropyInput,
+  WalletEvent,
+  WalletProfile,
+  WalletRegistry,
+  WalletSelection,
+  WalletSyncSource,
+  WalletSyncStatus
+} from './runtime';
+import type {
+  AccelerationMethod,
+  BroadcastResult,
+  CoinSelection,
+  CoinSelectionPreview,
+  FeeEstimates,
+  FeeRate,
+  PaymentProposal,
+  Sats,
+  WalletSnapshot
+} from './transactions';
 
 export interface WalletProfilesPort {
   exists(): Promise<boolean>;
@@ -31,7 +74,11 @@ export interface WalletNetworkPort {
   saveSyncSource(source: WalletSyncSource, credential: string): Promise<WalletSyncSource>;
   inspectPayjoinUri(value: string): Promise<PayjoinUriInspection>;
   recoveryScanSettings(): Promise<RecoveryScanSettings>;
-  saveRecoveryScanSettings(birthdayHeight: number, gapLimit: number, credential: string): Promise<RecoveryScanSettings>;
+  saveRecoveryScanSettings(
+    birthdayHeight: number,
+    gapLimit: number,
+    credential: string
+  ): Promise<RecoveryScanSettings>;
   recoveryScanStatus(): Promise<RecoveryScanStatus>;
   fullRescan(credential: string): Promise<WalletSnapshot>;
   cancelFullRescan(): Promise<RecoveryScanStatus>;
@@ -52,8 +99,18 @@ export interface WalletTransactionsPort {
   setMultisigCoinFrozen(outpoint: string, frozen: boolean): Promise<void>;
   previewCoinSelection(outpoints: string[], amount: Sats): Promise<CoinSelectionPreview>;
   previewMultisigCoinSelection(outpoints: string[], amount: Sats): Promise<CoinSelectionPreview>;
-  preparePayment(recipient: string, label: string, amount: Sats, feeRate: FeeRate, coinSelection?: CoinSelection): Promise<PaymentProposal>;
-  prepareAcceleration(txid: string, method: AccelerationMethod, feeRate: FeeRate): Promise<PaymentProposal>;
+  preparePayment(
+    recipient: string,
+    label: string,
+    amount: Sats,
+    feeRate: FeeRate,
+    coinSelection?: CoinSelection
+  ): Promise<PaymentProposal>;
+  prepareAcceleration(
+    txid: string,
+    method: AccelerationMethod,
+    feeRate: FeeRate
+  ): Promise<PaymentProposal>;
   signAndBroadcast(proposalId: string, credential: string): Promise<BroadcastResult>;
 }
 
@@ -62,26 +119,67 @@ export interface WalletHardwarePort {
   promptHardwarePin(deviceId: string): Promise<string>;
   sendHardwarePin(challengeId: string, pinPositions: string): Promise<void>;
   checkHardwareCosigner(cosigner: CosignerDraft, deviceId: string): Promise<CosignerHealthCheck>;
-  checkHardwareExternalSigner(signer: ExternalSigner, deviceId: string): Promise<CosignerHealthCheck>;
+  checkHardwareExternalSigner(
+    signer: ExternalSigner,
+    deviceId: string
+  ): Promise<CosignerHealthCheck>;
   hardwareHealthChecks(): Promise<HardwareHealthCheckRecord[]>;
-  recordHardwareHealthCheck(signerFingerprint: string, check: CosignerHealthCheck): Promise<HardwareHealthCheckRecord>;
+  recordHardwareHealthCheck(
+    signerFingerprint: string,
+    check: CosignerHealthCheck
+  ): Promise<HardwareHealthCheckRecord>;
   multisigSignerPolicyVerifications(): Promise<SignerPolicyVerification[]>;
   multisigPolicyVerificationAddress(): Promise<PolicyVerificationAddress>;
   previewMultisigPolicyVerificationAddress(policy: PolicyDraft): Promise<PolicyVerificationAddress>;
-  verifyMultisigSignerPolicy(deviceId: string, signerFingerprint: string): Promise<SignerPolicyVerification>;
-  verifyMultisigDraftSignerPolicy(policy: PolicyDraft, deviceId: string, signerFingerprint: string): Promise<SignerPolicyVerification>;
+  verifyMultisigSignerPolicy(
+    deviceId: string,
+    signerFingerprint: string
+  ): Promise<SignerPolicyVerification>;
+  verifyMultisigDraftSignerPolicy(
+    policy: PolicyDraft,
+    deviceId: string,
+    signerFingerprint: string
+  ): Promise<SignerPolicyVerification>;
   acknowledgeColdcardPolicy(signerFingerprint: string): Promise<SignerPolicyVerification>;
-  importHardwareCosigner(deviceId: string, label: string, allowEmptyPassphrase?: boolean): Promise<CosignerDraft>;
-  parseExternalSignerImport(encoded: string, label: string, source: ExternalSignerSource): Promise<ExternalSigner>;
-  importHardwareExternalSigner(deviceId: string, label: string, allowEmptyPassphrase?: boolean): Promise<ExternalSigner>;
-  createExternalSignerWallet(name: string, signer: ExternalSigner, credential: string): Promise<ExternalSignerWallet>;
+  importHardwareCosigner(
+    deviceId: string,
+    label: string,
+    allowEmptyPassphrase?: boolean
+  ): Promise<CosignerDraft>;
+  parseExternalSignerImport(
+    encoded: string,
+    label: string,
+    source: ExternalSignerSource
+  ): Promise<ExternalSigner>;
+  importHardwareExternalSigner(
+    deviceId: string,
+    label: string,
+    allowEmptyPassphrase?: boolean
+  ): Promise<ExternalSigner>;
+  createExternalSignerWallet(
+    name: string,
+    signer: ExternalSigner,
+    credential: string
+  ): Promise<ExternalSignerWallet>;
   externalSignerWallet(): Promise<ExternalSignerWallet>;
   renameExternalSigner(label: string): Promise<ExternalSignerWallet>;
   exportExternalSignerDescriptor(credential: string): Promise<ExternalSignerBackup>;
   externalSignerProposals(): Promise<MultisigProposal[]>;
-  importExternalSignerProposal(proposalId: string, reviewedPsbt: string, signedPsbt: string): Promise<MultisigProposal>;
-  signExternalWithHardware(proposalId: string, deviceId: string, reviewedPsbt: string): Promise<MultisigProposal>;
-  broadcastExternalSignerProposal(proposalId: string, reviewedPsbt: string, credential: string): Promise<BroadcastResult>;
+  importExternalSignerProposal(
+    proposalId: string,
+    reviewedPsbt: string,
+    signedPsbt: string
+  ): Promise<MultisigProposal>;
+  signExternalWithHardware(
+    proposalId: string,
+    deviceId: string,
+    reviewedPsbt: string
+  ): Promise<MultisigProposal>;
+  broadcastExternalSignerProposal(
+    proposalId: string,
+    reviewedPsbt: string,
+    credential: string
+  ): Promise<BroadcastResult>;
   cancelExternalSignerProposal(proposalId: string): Promise<void>;
   verifyExternalAddress(deviceId: string, addressId: number): Promise<ReceiveAddress>;
 }
@@ -91,9 +189,17 @@ export interface WalletMultisigPort {
   saveMultisigSetupDraft(draft: MultisigSetupDraft): Promise<MultisigSetupDraft>;
   discardMultisigSetupDraft(): Promise<void>;
   previewMultisig(policy: PolicyDraft): Promise<MultisigPreview>;
-  analyzeRecoveryPolicy(template: RecoveryTemplate, cosigners: CosignerDraft[]): Promise<RecoveryPolicyAnalysis>;
+  analyzeRecoveryPolicy(
+    template: RecoveryTemplate,
+    cosigners: CosignerDraft[]
+  ): Promise<RecoveryPolicyAnalysis>;
   createMultisig(policy: PolicyDraft, credential: string): Promise<MultisigWallet>;
-  createRecoveryMultisig(name: string, template: RecoveryTemplate, cosigners: CosignerDraft[], credential: string): Promise<MultisigWallet>;
+  createRecoveryMultisig(
+    name: string,
+    template: RecoveryTemplate,
+    cosigners: CosignerDraft[],
+    credential: string
+  ): Promise<MultisigWallet>;
   multisigWallet(): Promise<MultisigWallet | null>;
   renameMultisigSigner(signerId: string, label: string): Promise<MultisigWallet>;
   exportMultisig(credential: string): Promise<string>;
@@ -101,7 +207,11 @@ export interface WalletMultisigPort {
   savePublicBackup(suggestedFilename: string, content: string): Promise<SavedFileResult>;
   printPublicBackup(): Promise<void>;
   inspectMultisigBsms(encodedBackup: string): Promise<RecoveryDrill>;
-  recoverMultisigBsms(name: string, encodedBackup: string, credential: string): Promise<MultisigWallet>;
+  recoverMultisigBsms(
+    name: string,
+    encodedBackup: string,
+    credential: string
+  ): Promise<MultisigWallet>;
   recoveryDrill(encodedBackup: string): Promise<RecoveryDrill>;
   multisigRecoveryDrillStatus(): Promise<boolean>;
   recoverMultisig(encodedBackup: string, credential: string): Promise<MultisigWallet>;
@@ -109,13 +219,39 @@ export interface WalletMultisigPort {
   createMultisigAddress(label: string): Promise<ReceiveAddress>;
   discardMultisigAddress(id: number): Promise<void>;
   verifyMultisigAddress(deviceId: string, addressId: number): Promise<ReceiveAddress>;
-  prepareMultisigPayment(recipient: string, label: string, amount: Sats, feeRate: FeeRate, coinSelection?: CoinSelection): Promise<MultisigProposal>;
-  prepareMultisigAcceleration(txid: string, method: AccelerationMethod, feeRate: FeeRate): Promise<MultisigProposal>;
+  prepareMultisigPayment(
+    recipient: string,
+    label: string,
+    amount: Sats,
+    feeRate: FeeRate,
+    coinSelection?: CoinSelection
+  ): Promise<MultisigProposal>;
+  prepareMultisigAcceleration(
+    txid: string,
+    method: AccelerationMethod,
+    feeRate: FeeRate
+  ): Promise<MultisigProposal>;
   multisigProposals(): Promise<MultisigProposal[]>;
-  importMultisigProposal(proposalId: string, reviewedPsbt: string, signedPsbt: string): Promise<MultisigProposal>;
-  discardMultisigSignature(proposalId: string, reviewedPsbt: string, signerFingerprint: string): Promise<MultisigProposal>;
-  signMultisigWithHardware(proposalId: string, deviceId: string, reviewedPsbt: string): Promise<MultisigProposal>;
-  broadcastMultisigProposal(proposalId: string, reviewedPsbt: string, credential: string): Promise<BroadcastResult>;
+  importMultisigProposal(
+    proposalId: string,
+    reviewedPsbt: string,
+    signedPsbt: string
+  ): Promise<MultisigProposal>;
+  discardMultisigSignature(
+    proposalId: string,
+    reviewedPsbt: string,
+    signerFingerprint: string
+  ): Promise<MultisigProposal>;
+  signMultisigWithHardware(
+    proposalId: string,
+    deviceId: string,
+    reviewedPsbt: string
+  ): Promise<MultisigProposal>;
+  broadcastMultisigProposal(
+    proposalId: string,
+    reviewedPsbt: string,
+    credential: string
+  ): Promise<BroadcastResult>;
   cancelMultisigProposal(proposalId: string): Promise<void>;
 }
 
@@ -131,7 +267,8 @@ export interface WalletEventsPort {
 }
 
 export interface WalletPort
-  extends WalletProfilesPort,
+  extends
+    WalletProfilesPort,
     WalletNetworkPort,
     WalletSnapshotPort,
     WalletTransactionsPort,

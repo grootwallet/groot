@@ -16,7 +16,19 @@
     ariaLabel?: string;
   };
 
-  let { variant = 'default', size = 'default', type = 'button', href = undefined, disabled = false, loading = false, loadingLabel = 'Working…', onclick = undefined, children, class: className = '', ariaLabel = undefined }: Props = $props();
+  let {
+    variant = 'default',
+    size = 'default',
+    type = 'button',
+    href = undefined,
+    disabled = false,
+    loading = false,
+    loadingLabel = 'Working…',
+    onclick = undefined,
+    children,
+    class: className = '',
+    ariaLabel = undefined
+  }: Props = $props();
   let unavailable = $derived(disabled || loading);
 
   function handleLinkClick(event: MouseEvent) {
@@ -29,11 +41,27 @@
 </script>
 
 {#if href}
-  <a {href} aria-label={ariaLabel} aria-disabled={unavailable} aria-busy={loading} onclick={handleLinkClick} class="button {variant} {size === 'default' ? '' : size} {className}">
-    {#if loading}<LoaderCircle class="spin" size={16}/><span>{loadingLabel}</span>{:else}{@render children?.()}{/if}
+  <a
+    {href}
+    aria-label={ariaLabel}
+    aria-disabled={unavailable}
+    aria-busy={loading}
+    onclick={handleLinkClick}
+    class="button {variant} {size === 'default' ? '' : size} {className}"
+  >
+    {#if loading}<LoaderCircle class="spin" size={16} /><span>{loadingLabel}</span
+      >{:else}{@render children?.()}{/if}
   </a>
 {:else}
-  <button {type} disabled={unavailable} aria-label={ariaLabel} aria-busy={loading} {onclick} class="button {variant} {size === 'default' ? '' : size} {className}">
-    {#if loading}<LoaderCircle class="spin" size={16}/><span>{loadingLabel}</span>{:else}{@render children?.()}{/if}
+  <button
+    {type}
+    disabled={unavailable}
+    aria-label={ariaLabel}
+    aria-busy={loading}
+    {onclick}
+    class="button {variant} {size === 'default' ? '' : size} {className}"
+  >
+    {#if loading}<LoaderCircle class="spin" size={16} /><span>{loadingLabel}</span
+      >{:else}{@render children?.()}{/if}
   </button>
 {/if}

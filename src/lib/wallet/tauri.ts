@@ -13,14 +13,42 @@ import {
   type WalletPort,
   type WalletSnapshot
 } from './contracts';
-import type { MnemonicPresentation, SupplementalEntropyInput, WalletProfile, WalletRegistry, WalletSelection } from './contracts';
-import type { CosignerHealthCheck, HardwareDevice, HardwareHealthCheckRecord, MultisigPreview, MultisigProposal, MultisigWallet } from './contracts';
+import type {
+  MnemonicPresentation,
+  SupplementalEntropyInput,
+  WalletProfile,
+  WalletRegistry,
+  WalletSelection
+} from './contracts';
+import type {
+  CosignerHealthCheck,
+  HardwareDevice,
+  HardwareHealthCheckRecord,
+  MultisigPreview,
+  MultisigProposal,
+  MultisigWallet
+} from './contracts';
 import type { RecoveryDrill, RecoveryPolicyAnalysis, RecoveryTemplate } from './contracts';
-import type { ExternalSigner, ExternalSignerBackup, ExternalSignerSource, ExternalSignerWallet, SavedFileResult } from './contracts';
-import type { CoreNodeConfig, NodeStatus, PayjoinUriInspection, WalletSyncSource, WalletSyncStatus } from './contracts';
+import type {
+  ExternalSigner,
+  ExternalSignerBackup,
+  ExternalSignerSource,
+  ExternalSignerWallet,
+  SavedFileResult
+} from './contracts';
+import type {
+  CoreNodeConfig,
+  NodeStatus,
+  PayjoinUriInspection,
+  WalletSyncSource,
+  WalletSyncStatus
+} from './contracts';
 import type { PolicyDraft } from '$lib/multisig/policy';
 import { coalesceNotificationEvents } from './notification-policy';
-import { multisigVerificationTimestampForDisplay, multisigVerificationTimestampForStorage } from './multisig-setup';
+import {
+  multisigVerificationTimestampForDisplay,
+  multisigVerificationTimestampForStorage
+} from './multisig-setup';
 
 type BackendError = { code?: string; message?: string };
 type NotificationEnvelope = { id: number; event: WalletEvent };
@@ -65,7 +93,9 @@ function normalizeSnapshot(snapshot: WalletSnapshot): WalletSnapshot {
   };
 }
 
-function normalizeMultisigSetupDraft(draft: import('./contracts').MultisigSetupDraft): import('./contracts').MultisigSetupDraft {
+function normalizeMultisigSetupDraft(
+  draft: import('./contracts').MultisigSetupDraft
+): import('./contracts').MultisigSetupDraft {
   return {
     ...draft,
     policyVerifications: draft.policyVerifications.map((verification) => ({
@@ -75,13 +105,18 @@ function normalizeMultisigSetupDraft(draft: import('./contracts').MultisigSetupD
   };
 }
 
-function serializeMultisigSetupDraft(draft: import('./contracts').MultisigSetupDraft): import('./contracts').MultisigSetupDraft {
+function serializeMultisigSetupDraft(
+  draft: import('./contracts').MultisigSetupDraft
+): import('./contracts').MultisigSetupDraft {
   return {
     ...draft,
     policyVerifications: draft.policyVerifications.map((verification) => {
       const verifiedAt = multisigVerificationTimestampForStorage(verification.verifiedAt);
       if (!verifiedAt) {
-        throw new WalletError('wallet_corrupt', 'The hardware-policy verification time is invalid. Verify that signer policy again.');
+        throw new WalletError(
+          'wallet_corrupt',
+          'The hardware-policy verification time is invalid. Verify that signer policy again.'
+        );
       }
       return { ...verification, verifiedAt };
     })
@@ -94,7 +129,9 @@ export class TauriWalletAdapter implements WalletPort {
   #selectedWalletId: string | null = null;
   #notificationDrains = new Map<boolean, Promise<void>>();
 
-  exists() { return command<boolean>('wallet_exists'); }
+  exists() {
+    return command<boolean>('wallet_exists');
+  }
   async profiles() {
     const registry = await command<WalletRegistry>('wallet_profiles');
     this.#selectedWalletId = registry.selectedWalletId;
@@ -105,36 +142,90 @@ export class TauriWalletAdapter implements WalletPort {
     this.#emit({ type: 'wallet_profile_updated', profile });
     return profile;
   }
-  saveInactivityTimeout(minutes: number) { return command<WalletRegistry>('wallet_inactivity_timeout_save', { minutes }); }
+  saveInactivityTimeout(minutes: number) {
+    return command<WalletRegistry>('wallet_inactivity_timeout_save', { minutes });
+  }
   async selectWallet(walletId: string) {
     const selection = await command<WalletSelection>('wallet_select', { walletId });
     this.#selectedWalletId = selection.profile.id;
     return selection;
   }
-  async generateMnemonic(supplementalEntropy?: SupplementalEntropyInput): Promise<MnemonicPresentation> {
-    const backupVerified = await command<boolean>('wallet_generate_mnemonic', { supplementalEntropy: supplementalEntropy ?? null });
+  async generateMnemonic(
+    supplementalEntropy?: SupplementalEntropyInput
+  ): Promise<MnemonicPresentation> {
+    const backupVerified = await command<boolean>('wallet_generate_mnemonic', {
+      supplementalEntropy: supplementalEntropy ?? null
+    });
     return { mode: 'native', backupVerified };
   }
-  cancelOnboarding() { return command<void>('wallet_cancel_onboarding'); }
-  createWallet(name: string, credential: string, _backupVerified: boolean) { return command<void>('wallet_create', { name, credential }); }
-  verifyBackup(credential: string) { return command<boolean>('wallet_verify_backup', { credential }); }
-  recoverWallet(name: string, credential: string) { return command<void>('wallet_recover', { name, credential }); }
-  unlock(credential: string) { return command<void>('wallet_unlock', { credential }); }
-  lock() { return command<void>('wallet_lock'); }
-  deleteWallet(credential: string, confirmation: string) { return command<void>('wallet_delete', { credential, confirmation }); }
-  resetRegtestWallet(confirmation: string) { return command<void>('wallet_reset_regtest', { confirmation }); }
-  nodeConfig() { return command<CoreNodeConfig>('node_config'); }
-  saveNodeConfig(config: CoreNodeConfig, password: string, credential: string) { return command<NodeStatus>('node_config_save', { config, password, credential }); }
-  testNodeConnection() { return command<NodeStatus>('node_connection_test'); }
-  syncSource() { return command<WalletSyncSource>('wallet_sync_source'); }
-  syncStatus() { return command<WalletSyncStatus | null>('wallet_sync_status'); }
-  saveSyncSource(source: WalletSyncSource, credential: string) { return command<WalletSyncSource>('wallet_sync_source_save', { source, credential }); }
-  inspectPayjoinUri(value: string) { return command<PayjoinUriInspection>('payjoin_uri_inspect', { value }); }
-  recoveryScanSettings() { return command<import('./contracts').RecoveryScanSettings>('recovery_scan_settings'); }
-  saveRecoveryScanSettings(birthdayHeight: number, gapLimit: number, credential: string) { return command<import('./contracts').RecoveryScanSettings>('recovery_scan_settings_save', { birthdayHeight, gapLimit, credential }); }
-  recoveryScanStatus() { return command<import('./contracts').RecoveryScanStatus>('recovery_scan_status'); }
-  async fullRescan(credential: string) { const snapshot = normalizeSnapshot(await command<WalletSnapshot>('wallet_full_rescan', { credential })); this.#last = snapshot; return snapshot; }
-  cancelFullRescan() { return command<import('./contracts').RecoveryScanStatus>('wallet_full_rescan_cancel'); }
+  cancelOnboarding() {
+    return command<void>('wallet_cancel_onboarding');
+  }
+  createWallet(name: string, credential: string, _backupVerified: boolean) {
+    return command<void>('wallet_create', { name, credential });
+  }
+  verifyBackup(credential: string) {
+    return command<boolean>('wallet_verify_backup', { credential });
+  }
+  recoverWallet(name: string, credential: string) {
+    return command<void>('wallet_recover', { name, credential });
+  }
+  unlock(credential: string) {
+    return command<void>('wallet_unlock', { credential });
+  }
+  lock() {
+    return command<void>('wallet_lock');
+  }
+  deleteWallet(credential: string, confirmation: string) {
+    return command<void>('wallet_delete', { credential, confirmation });
+  }
+  resetRegtestWallet(confirmation: string) {
+    return command<void>('wallet_reset_regtest', { confirmation });
+  }
+  nodeConfig() {
+    return command<CoreNodeConfig>('node_config');
+  }
+  saveNodeConfig(config: CoreNodeConfig, password: string, credential: string) {
+    return command<NodeStatus>('node_config_save', { config, password, credential });
+  }
+  testNodeConnection() {
+    return command<NodeStatus>('node_connection_test');
+  }
+  syncSource() {
+    return command<WalletSyncSource>('wallet_sync_source');
+  }
+  syncStatus() {
+    return command<WalletSyncStatus | null>('wallet_sync_status');
+  }
+  saveSyncSource(source: WalletSyncSource, credential: string) {
+    return command<WalletSyncSource>('wallet_sync_source_save', { source, credential });
+  }
+  inspectPayjoinUri(value: string) {
+    return command<PayjoinUriInspection>('payjoin_uri_inspect', { value });
+  }
+  recoveryScanSettings() {
+    return command<import('./contracts').RecoveryScanSettings>('recovery_scan_settings');
+  }
+  saveRecoveryScanSettings(birthdayHeight: number, gapLimit: number, credential: string) {
+    return command<import('./contracts').RecoveryScanSettings>('recovery_scan_settings_save', {
+      birthdayHeight,
+      gapLimit,
+      credential
+    });
+  }
+  recoveryScanStatus() {
+    return command<import('./contracts').RecoveryScanStatus>('recovery_scan_status');
+  }
+  async fullRescan(credential: string) {
+    const snapshot = normalizeSnapshot(
+      await command<WalletSnapshot>('wallet_full_rescan', { credential })
+    );
+    this.#last = snapshot;
+    return snapshot;
+  }
+  cancelFullRescan() {
+    return command<import('./contracts').RecoveryScanStatus>('wallet_full_rescan_cancel');
+  }
   async snapshot() {
     const snapshot = normalizeSnapshot(await command<WalletSnapshot>('wallet_snapshot'));
     this.#last = snapshot;
@@ -151,106 +242,296 @@ export class TauriWalletAdapter implements WalletPort {
     }
     return snapshot;
   }
-  createAddress(label: string) { return command<ReceiveAddress>('address_create', { label }).then(normalizeAddress); }
-  discardAddress(id: number) { return command<void>('address_discard', { id }); }
-  setCoinFrozen(outpoint: string, frozen: boolean) { return command<void>('coin_set_frozen', { outpoint, frozen }); }
-  setMultisigCoinFrozen(outpoint: string, frozen: boolean) { return command<void>('multisig_coin_set_frozen', { outpoint, frozen }); }
-  previewCoinSelection(outpoints: string[], amount: Sats) { return command<import('./contracts').CoinSelectionPreview>('coin_selection_preview', { outpoints, amount }); }
-  previewMultisigCoinSelection(outpoints: string[], amount: Sats) { return command<import('./contracts').CoinSelectionPreview>('multisig_coin_selection_preview', { outpoints, amount }); }
-  estimateFees() { return command<FeeEstimates>('fees_estimate'); }
-  preparePayment(recipient: string, label: string, amount: Sats, feeRate: FeeRate, coinSelection: CoinSelection = { mode: 'auto' }) {
-    return command<PaymentProposal>('tx_prepare', { recipient, label, amount, feeRate, coinSelection });
+  createAddress(label: string) {
+    return command<ReceiveAddress>('address_create', { label }).then(normalizeAddress);
   }
-  prepareAcceleration(txid: string, method: import('./contracts').AccelerationMethod, feeRate: FeeRate) { return command<PaymentProposal>('tx_acceleration_prepare', { txid, method, feeRate }); }
+  discardAddress(id: number) {
+    return command<void>('address_discard', { id });
+  }
+  setCoinFrozen(outpoint: string, frozen: boolean) {
+    return command<void>('coin_set_frozen', { outpoint, frozen });
+  }
+  setMultisigCoinFrozen(outpoint: string, frozen: boolean) {
+    return command<void>('multisig_coin_set_frozen', { outpoint, frozen });
+  }
+  previewCoinSelection(outpoints: string[], amount: Sats) {
+    return command<import('./contracts').CoinSelectionPreview>('coin_selection_preview', {
+      outpoints,
+      amount
+    });
+  }
+  previewMultisigCoinSelection(outpoints: string[], amount: Sats) {
+    return command<import('./contracts').CoinSelectionPreview>('multisig_coin_selection_preview', {
+      outpoints,
+      amount
+    });
+  }
+  estimateFees() {
+    return command<FeeEstimates>('fees_estimate');
+  }
+  preparePayment(
+    recipient: string,
+    label: string,
+    amount: Sats,
+    feeRate: FeeRate,
+    coinSelection: CoinSelection = { mode: 'auto' }
+  ) {
+    return command<PaymentProposal>('tx_prepare', {
+      recipient,
+      label,
+      amount,
+      feeRate,
+      coinSelection
+    });
+  }
+  prepareAcceleration(
+    txid: string,
+    method: import('./contracts').AccelerationMethod,
+    feeRate: FeeRate
+  ) {
+    return command<PaymentProposal>('tx_acceleration_prepare', { txid, method, feeRate });
+  }
   async signAndBroadcast(proposalId: string, credential: string) {
-    const result = await command<BroadcastResult>('tx_sign_and_broadcast', { proposalId, credential });
+    const result = await command<BroadcastResult>('tx_sign_and_broadcast', {
+      proposalId,
+      credential
+    });
     result.snapshot = normalizeSnapshot(result.snapshot);
     this.#last = result.snapshot;
     await this.#drainNotifications(false);
     return result;
   }
-  listHardwareDevices() { return command<HardwareDevice[]>('hardware_list'); }
-  promptHardwarePin(deviceId: string) { return command<string>('hardware_prompt_pin', { deviceId }); }
-  sendHardwarePin(challengeId: string, pinPositions: string) { return command<void>('hardware_send_pin', { challengeId, pinPositions }); }
+  listHardwareDevices() {
+    return command<HardwareDevice[]>('hardware_list');
+  }
+  promptHardwarePin(deviceId: string) {
+    return command<string>('hardware_prompt_pin', { deviceId });
+  }
+  sendHardwarePin(challengeId: string, pinPositions: string) {
+    return command<void>('hardware_send_pin', { challengeId, pinPositions });
+  }
   async checkHardwareCosigner(cosigner: PolicyDraft['cosigners'][number], deviceId: string) {
-    const result = await command<CosignerHealthCheck>('hardware_check_cosigner', { cosigner, deviceId });
+    const result = await command<CosignerHealthCheck>('hardware_check_cosigner', {
+      cosigner,
+      deviceId
+    });
     return { ...result, checkedAt: normalizeTimestamp(result.checkedAt) ?? result.checkedAt };
   }
   async checkHardwareExternalSigner(signer: ExternalSigner, deviceId: string) {
-    const result = await command<CosignerHealthCheck>('hardware_check_external_signer', { signer, deviceId });
+    const result = await command<CosignerHealthCheck>('hardware_check_external_signer', {
+      signer,
+      deviceId
+    });
     return { ...result, checkedAt: normalizeTimestamp(result.checkedAt) ?? result.checkedAt };
   }
   async hardwareHealthChecks() {
     const results = await command<HardwareHealthCheckRecord[]>('hardware_health_checks');
-    return results.map((result) => ({ ...result, checkedAt: normalizeTimestamp(result.checkedAt) ?? result.checkedAt }));
+    return results.map((result) => ({
+      ...result,
+      checkedAt: normalizeTimestamp(result.checkedAt) ?? result.checkedAt
+    }));
   }
   async recordHardwareHealthCheck(signerFingerprint: string, check: CosignerHealthCheck) {
-    const result = await command<HardwareHealthCheckRecord>('hardware_health_check_record', { signerFingerprint, check });
+    const result = await command<HardwareHealthCheckRecord>('hardware_health_check_record', {
+      signerFingerprint,
+      check
+    });
     return { ...result, checkedAt: normalizeTimestamp(result.checkedAt) ?? result.checkedAt };
   }
   async multisigSignerPolicyVerifications() {
-    const results = await command<import('./contracts').SignerPolicyVerification[]>('multisig_signer_policy_verifications');
-    return results.map((result) => ({ ...result, verifiedAt: normalizeTimestamp(result.verifiedAt) ?? result.verifiedAt }));
+    const results = await command<import('./contracts').SignerPolicyVerification[]>(
+      'multisig_signer_policy_verifications'
+    );
+    return results.map((result) => ({
+      ...result,
+      verifiedAt: normalizeTimestamp(result.verifiedAt) ?? result.verifiedAt
+    }));
   }
-  multisigPolicyVerificationAddress() { return command<import('./contracts').PolicyVerificationAddress>('multisig_policy_verification_address'); }
-  previewMultisigPolicyVerificationAddress(policy: PolicyDraft) { return command<import('./contracts').PolicyVerificationAddress>('multisig_draft_policy_verification_address', { policy }); }
+  multisigPolicyVerificationAddress() {
+    return command<import('./contracts').PolicyVerificationAddress>(
+      'multisig_policy_verification_address'
+    );
+  }
+  previewMultisigPolicyVerificationAddress(policy: PolicyDraft) {
+    return command<import('./contracts').PolicyVerificationAddress>(
+      'multisig_draft_policy_verification_address',
+      { policy }
+    );
+  }
   async verifyMultisigSignerPolicy(deviceId: string, signerFingerprint: string) {
-    const result = await command<import('./contracts').SignerPolicyVerification>('hardware_verify_multisig_policy', { deviceId, signerFingerprint });
+    const result = await command<import('./contracts').SignerPolicyVerification>(
+      'hardware_verify_multisig_policy',
+      { deviceId, signerFingerprint }
+    );
     return { ...result, verifiedAt: normalizeTimestamp(result.verifiedAt) ?? result.verifiedAt };
   }
-  async verifyMultisigDraftSignerPolicy(policy: PolicyDraft, deviceId: string, signerFingerprint: string) {
-    const result = await command<import('./contracts').SignerPolicyVerification>('hardware_verify_multisig_draft_policy', { policy, deviceId, signerFingerprint });
+  async verifyMultisigDraftSignerPolicy(
+    policy: PolicyDraft,
+    deviceId: string,
+    signerFingerprint: string
+  ) {
+    const result = await command<import('./contracts').SignerPolicyVerification>(
+      'hardware_verify_multisig_draft_policy',
+      { policy, deviceId, signerFingerprint }
+    );
     return { ...result, verifiedAt: normalizeTimestamp(result.verifiedAt) ?? result.verifiedAt };
   }
   async acknowledgeColdcardPolicy(signerFingerprint: string) {
-    const result = await command<import('./contracts').SignerPolicyVerification>('multisig_acknowledge_coldcard_policy', { signerFingerprint });
+    const result = await command<import('./contracts').SignerPolicyVerification>(
+      'multisig_acknowledge_coldcard_policy',
+      { signerFingerprint }
+    );
     return { ...result, verifiedAt: normalizeTimestamp(result.verifiedAt) ?? result.verifiedAt };
   }
-  importHardwareCosigner(deviceId: string, label: string, allowEmptyPassphrase = false) { return command<import('$lib/multisig/policy').CosignerDraft>('hardware_import_cosigner', { deviceId, label, allowEmptyPassphrase }); }
-  parseExternalSignerImport(encoded: string, label: string, source: ExternalSignerSource) { return command<ExternalSigner>('external_signer_parse_import', { encoded, label, source }); }
-  importHardwareExternalSigner(deviceId: string, label: string, allowEmptyPassphrase = false) { return command<ExternalSigner>('hardware_import_external_signer', { deviceId, label, allowEmptyPassphrase }); }
-  createExternalSignerWallet(name: string, signer: ExternalSigner, credential: string) { return command<ExternalSignerWallet>('external_signer_create', { name, signer, credential }); }
-  externalSignerWallet() { return command<ExternalSignerWallet>('external_signer_wallet'); }
-  renameExternalSigner(label: string) { return command<ExternalSignerWallet>('external_signer_rename', { label }); }
-  exportExternalSignerDescriptor(credential: string) { return command<ExternalSignerBackup>('external_signer_export_descriptor', { credential }); }
-  externalSignerProposals() { return command<MultisigProposal[]>('external_signer_proposals'); }
-  importExternalSignerProposal(proposalId: string, reviewedPsbt: string, signedPsbt: string) { return command<MultisigProposal>('external_signer_proposal_import', { proposalId, reviewedPsbt, signedPsbt }); }
-  signExternalWithHardware(proposalId: string, deviceId: string, reviewedPsbt: string) { return command<MultisigProposal>('hardware_sign_external', { proposalId, deviceId, reviewedPsbt }); }
-  async broadcastExternalSignerProposal(proposalId: string, reviewedPsbt: string, credential: string) {
-    const result = await command<BroadcastResult>('external_signer_proposal_broadcast', { proposalId, reviewedPsbt, credential });
+  importHardwareCosigner(deviceId: string, label: string, allowEmptyPassphrase = false) {
+    return command<import('$lib/multisig/policy').CosignerDraft>('hardware_import_cosigner', {
+      deviceId,
+      label,
+      allowEmptyPassphrase
+    });
+  }
+  parseExternalSignerImport(encoded: string, label: string, source: ExternalSignerSource) {
+    return command<ExternalSigner>('external_signer_parse_import', { encoded, label, source });
+  }
+  importHardwareExternalSigner(deviceId: string, label: string, allowEmptyPassphrase = false) {
+    return command<ExternalSigner>('hardware_import_external_signer', {
+      deviceId,
+      label,
+      allowEmptyPassphrase
+    });
+  }
+  createExternalSignerWallet(name: string, signer: ExternalSigner, credential: string) {
+    return command<ExternalSignerWallet>('external_signer_create', { name, signer, credential });
+  }
+  externalSignerWallet() {
+    return command<ExternalSignerWallet>('external_signer_wallet');
+  }
+  renameExternalSigner(label: string) {
+    return command<ExternalSignerWallet>('external_signer_rename', { label });
+  }
+  exportExternalSignerDescriptor(credential: string) {
+    return command<ExternalSignerBackup>('external_signer_export_descriptor', { credential });
+  }
+  externalSignerProposals() {
+    return command<MultisigProposal[]>('external_signer_proposals');
+  }
+  importExternalSignerProposal(proposalId: string, reviewedPsbt: string, signedPsbt: string) {
+    return command<MultisigProposal>('external_signer_proposal_import', {
+      proposalId,
+      reviewedPsbt,
+      signedPsbt
+    });
+  }
+  signExternalWithHardware(proposalId: string, deviceId: string, reviewedPsbt: string) {
+    return command<MultisigProposal>('hardware_sign_external', {
+      proposalId,
+      deviceId,
+      reviewedPsbt
+    });
+  }
+  async broadcastExternalSignerProposal(
+    proposalId: string,
+    reviewedPsbt: string,
+    credential: string
+  ) {
+    const result = await command<BroadcastResult>('external_signer_proposal_broadcast', {
+      proposalId,
+      reviewedPsbt,
+      credential
+    });
     result.snapshot = normalizeSnapshot(result.snapshot);
     this.#last = result.snapshot;
     await this.#drainNotifications(false);
     return result;
   }
-  cancelExternalSignerProposal(proposalId: string) { return command<void>('external_signer_proposal_cancel', { proposalId }); }
-  verifyExternalAddress(deviceId: string, addressId: number) { return command<ReceiveAddress>('hardware_verify_external_address', { deviceId, addressId }).then(normalizeAddress); }
+  cancelExternalSignerProposal(proposalId: string) {
+    return command<void>('external_signer_proposal_cancel', { proposalId });
+  }
+  verifyExternalAddress(deviceId: string, addressId: number) {
+    return command<ReceiveAddress>('hardware_verify_external_address', {
+      deviceId,
+      addressId
+    }).then(normalizeAddress);
+  }
   async multisigSetupDraft() {
-    const draft = await command<import('./contracts').MultisigSetupDraft | null>('multisig_setup_draft');
+    const draft = await command<import('./contracts').MultisigSetupDraft | null>(
+      'multisig_setup_draft'
+    );
     return draft ? normalizeMultisigSetupDraft(draft) : null;
   }
   async saveMultisigSetupDraft(draft: import('./contracts').MultisigSetupDraft) {
-    const savedDraft = await command<import('./contracts').MultisigSetupDraft>('multisig_setup_draft_save', { draft: serializeMultisigSetupDraft(draft) });
+    const savedDraft = await command<import('./contracts').MultisigSetupDraft>(
+      'multisig_setup_draft_save',
+      { draft: serializeMultisigSetupDraft(draft) }
+    );
     return normalizeMultisigSetupDraft(savedDraft);
   }
-  discardMultisigSetupDraft() { return command<void>('multisig_setup_draft_discard'); }
-  previewMultisig(policy: PolicyDraft) { return command<MultisigPreview>('multisig_preview', { policy }); }
-  analyzeRecoveryPolicy(template: RecoveryTemplate, cosigners: PolicyDraft['cosigners']) { return command<RecoveryPolicyAnalysis>('recovery_policy_analyze', { template, cosigners }); }
-  createMultisig(policy: PolicyDraft, credential: string) { return command<MultisigWallet>('multisig_create', { policy, credential }); }
-  createRecoveryMultisig(name: string, template: RecoveryTemplate, cosigners: PolicyDraft['cosigners'], credential: string) { return command<MultisigWallet>('multisig_recovery_create', { name, template, cosigners, credential }); }
-  multisigWallet() { return command<MultisigWallet | null>('multisig_wallet'); }
-  renameMultisigSigner(signerId: string, label: string) { return command<MultisigWallet>('multisig_signer_rename', { signerId, label }); }
-  exportMultisig(credential: string) { return command<string>('multisig_export', { credential }); }
-  exportMultisigBsms(credential: string) { return command<string>('multisig_export_bsms', { credential }); }
-  savePublicBackup(suggestedFilename: string, content: string) { return command<SavedFileResult>('public_backup_save', { suggestedFilename, content }); }
-  printPublicBackup() { return command<void>('public_backup_print'); }
-  inspectMultisigBsms(encodedBackup: string) { return command<RecoveryDrill>('multisig_bsms_inspect', { encodedBackup }); }
-  recoverMultisigBsms(name: string, encodedBackup: string, credential: string) { return command<MultisigWallet>('multisig_recover_bsms', { name, encodedBackup, credential }); }
-  recoveryDrill(encodedBackup: string) { return command<RecoveryDrill>('multisig_recovery_drill', { encodedBackup }); }
-  multisigRecoveryDrillStatus() { return command<boolean>('multisig_recovery_drill_status'); }
-  recoverMultisig(encodedBackup: string, credential: string) { return command<MultisigWallet>('multisig_recover', { encodedBackup, credential }); }
-  deleteMultisig(credential: string, confirmation: string) { return command<void>('multisig_delete', { credential, confirmation }); }
-  async multisigSnapshot() { const snapshot = normalizeSnapshot(await command<WalletSnapshot>('multisig_snapshot')); await this.#drainNotifications(true); return snapshot; }
+  discardMultisigSetupDraft() {
+    return command<void>('multisig_setup_draft_discard');
+  }
+  previewMultisig(policy: PolicyDraft) {
+    return command<MultisigPreview>('multisig_preview', { policy });
+  }
+  analyzeRecoveryPolicy(template: RecoveryTemplate, cosigners: PolicyDraft['cosigners']) {
+    return command<RecoveryPolicyAnalysis>('recovery_policy_analyze', { template, cosigners });
+  }
+  createMultisig(policy: PolicyDraft, credential: string) {
+    return command<MultisigWallet>('multisig_create', { policy, credential });
+  }
+  createRecoveryMultisig(
+    name: string,
+    template: RecoveryTemplate,
+    cosigners: PolicyDraft['cosigners'],
+    credential: string
+  ) {
+    return command<MultisigWallet>('multisig_recovery_create', {
+      name,
+      template,
+      cosigners,
+      credential
+    });
+  }
+  multisigWallet() {
+    return command<MultisigWallet | null>('multisig_wallet');
+  }
+  renameMultisigSigner(signerId: string, label: string) {
+    return command<MultisigWallet>('multisig_signer_rename', { signerId, label });
+  }
+  exportMultisig(credential: string) {
+    return command<string>('multisig_export', { credential });
+  }
+  exportMultisigBsms(credential: string) {
+    return command<string>('multisig_export_bsms', { credential });
+  }
+  savePublicBackup(suggestedFilename: string, content: string) {
+    return command<SavedFileResult>('public_backup_save', { suggestedFilename, content });
+  }
+  printPublicBackup() {
+    return command<void>('public_backup_print');
+  }
+  inspectMultisigBsms(encodedBackup: string) {
+    return command<RecoveryDrill>('multisig_bsms_inspect', { encodedBackup });
+  }
+  recoverMultisigBsms(name: string, encodedBackup: string, credential: string) {
+    return command<MultisigWallet>('multisig_recover_bsms', { name, encodedBackup, credential });
+  }
+  recoveryDrill(encodedBackup: string) {
+    return command<RecoveryDrill>('multisig_recovery_drill', { encodedBackup });
+  }
+  multisigRecoveryDrillStatus() {
+    return command<boolean>('multisig_recovery_drill_status');
+  }
+  recoverMultisig(encodedBackup: string, credential: string) {
+    return command<MultisigWallet>('multisig_recover', { encodedBackup, credential });
+  }
+  deleteMultisig(credential: string, confirmation: string) {
+    return command<void>('multisig_delete', { credential, confirmation });
+  }
+  async multisigSnapshot() {
+    const snapshot = normalizeSnapshot(await command<WalletSnapshot>('multisig_snapshot'));
+    await this.#drainNotifications(true);
+    return snapshot;
+  }
   async syncMultisig() {
     const walletId = this.#selectedWalletId;
     const snapshot = normalizeSnapshot(await command<WalletSnapshot>('multisig_sync'));
@@ -261,26 +542,89 @@ export class TauriWalletAdapter implements WalletPort {
     }
     return snapshot;
   }
-  createMultisigAddress(label: string) { return command<ReceiveAddress>('multisig_address_create', { label }).then(normalizeAddress); }
-  discardMultisigAddress(id: number) { return command<void>('multisig_address_discard', { id }); }
-  verifyMultisigAddress(deviceId: string, addressId: number) { return command<ReceiveAddress>('hardware_verify_multisig_address', { deviceId, addressId }).then(normalizeAddress); }
-  prepareMultisigPayment(recipient: string, label: string, amount: Sats, feeRate: FeeRate, coinSelection: CoinSelection = { mode: 'auto' }) { return command<MultisigProposal>('multisig_tx_prepare', { recipient, label, amount, feeRate, coinSelection }); }
-  prepareMultisigAcceleration(txid: string, method: import('./contracts').AccelerationMethod, feeRate: FeeRate) { return command<MultisigProposal>('multisig_acceleration_prepare', { txid, method, feeRate }); }
-  multisigProposals() { return command<MultisigProposal[]>('multisig_proposals'); }
-  importMultisigProposal(proposalId: string, reviewedPsbt: string, signedPsbt: string) { return command<MultisigProposal>('multisig_proposal_import', { proposalId, reviewedPsbt, signedPsbt }); }
-  discardMultisigSignature(proposalId: string, reviewedPsbt: string, signerFingerprint: string) { return command<MultisigProposal>('multisig_proposal_discard_signature', { proposalId, reviewedPsbt, signerFingerprint }); }
-  signMultisigWithHardware(proposalId: string, deviceId: string, reviewedPsbt: string) { return command<MultisigProposal>('hardware_sign_multisig', { proposalId, deviceId, reviewedPsbt }); }
+  createMultisigAddress(label: string) {
+    return command<ReceiveAddress>('multisig_address_create', { label }).then(normalizeAddress);
+  }
+  discardMultisigAddress(id: number) {
+    return command<void>('multisig_address_discard', { id });
+  }
+  verifyMultisigAddress(deviceId: string, addressId: number) {
+    return command<ReceiveAddress>('hardware_verify_multisig_address', {
+      deviceId,
+      addressId
+    }).then(normalizeAddress);
+  }
+  prepareMultisigPayment(
+    recipient: string,
+    label: string,
+    amount: Sats,
+    feeRate: FeeRate,
+    coinSelection: CoinSelection = { mode: 'auto' }
+  ) {
+    return command<MultisigProposal>('multisig_tx_prepare', {
+      recipient,
+      label,
+      amount,
+      feeRate,
+      coinSelection
+    });
+  }
+  prepareMultisigAcceleration(
+    txid: string,
+    method: import('./contracts').AccelerationMethod,
+    feeRate: FeeRate
+  ) {
+    return command<MultisigProposal>('multisig_acceleration_prepare', { txid, method, feeRate });
+  }
+  multisigProposals() {
+    return command<MultisigProposal[]>('multisig_proposals');
+  }
+  importMultisigProposal(proposalId: string, reviewedPsbt: string, signedPsbt: string) {
+    return command<MultisigProposal>('multisig_proposal_import', {
+      proposalId,
+      reviewedPsbt,
+      signedPsbt
+    });
+  }
+  discardMultisigSignature(proposalId: string, reviewedPsbt: string, signerFingerprint: string) {
+    return command<MultisigProposal>('multisig_proposal_discard_signature', {
+      proposalId,
+      reviewedPsbt,
+      signerFingerprint
+    });
+  }
+  signMultisigWithHardware(proposalId: string, deviceId: string, reviewedPsbt: string) {
+    return command<MultisigProposal>('hardware_sign_multisig', {
+      proposalId,
+      deviceId,
+      reviewedPsbt
+    });
+  }
   async broadcastMultisigProposal(proposalId: string, reviewedPsbt: string, credential: string) {
-    const result = await command<BroadcastResult>('multisig_proposal_broadcast', { proposalId, reviewedPsbt, credential });
+    const result = await command<BroadcastResult>('multisig_proposal_broadcast', {
+      proposalId,
+      reviewedPsbt,
+      credential
+    });
     result.snapshot = normalizeSnapshot(result.snapshot);
     await this.#drainNotifications(true);
     return result;
   }
-  cancelMultisigProposal(proposalId: string) { return command<void>('multisig_proposal_cancel', { proposalId }); }
-  savePsbt(suggestedFilename: string, psbt: string) { return command<SavedFileResult>('psbt_file_save', { suggestedFilename, psbt }); }
-  revealSavedFile(revealToken: string) { return command<void>('psbt_file_reveal', { revealToken }); }
-  encodePsbtUr(psbt: string, fragmentBytes = 180) { return command<string[]>('ur_encode_psbt', { psbt, fragmentBytes }); }
-  decodePsbtUr(frames: string[]) { return command<string>('ur_decode_psbt', { frames }); }
+  cancelMultisigProposal(proposalId: string) {
+    return command<void>('multisig_proposal_cancel', { proposalId });
+  }
+  savePsbt(suggestedFilename: string, psbt: string) {
+    return command<SavedFileResult>('psbt_file_save', { suggestedFilename, psbt });
+  }
+  revealSavedFile(revealToken: string) {
+    return command<void>('psbt_file_reveal', { revealToken });
+  }
+  encodePsbtUr(psbt: string, fragmentBytes = 180) {
+    return command<string[]>('ur_encode_psbt', { psbt, fragmentBytes });
+  }
+  decodePsbtUr(frames: string[]) {
+    return command<string>('ur_decode_psbt', { frames });
+  }
   subscribe(listener: (event: WalletEvent) => void) {
     this.#listeners.add(listener);
     return () => this.#listeners.delete(listener);
@@ -290,16 +634,27 @@ export class TauriWalletAdapter implements WalletPort {
     if (pendingDrain) return pendingDrain;
     const drain = (async () => {
       for (let batch = 0; batch < MAX_NOTIFICATION_BATCHES_PER_DRAIN; batch += 1) {
-        const envelopes = await command<NotificationEnvelope[]>('wallet_notifications', { multisig });
-        for (const event of coalesceNotificationEvents(envelopes.map((envelope) => envelope.event))) this.#emit(event);
+        const envelopes = await command<NotificationEnvelope[]>('wallet_notifications', {
+          multisig
+        });
+        for (const event of coalesceNotificationEvents(envelopes.map((envelope) => envelope.event)))
+          this.#emit(event);
         if (!envelopes.length) break;
-        await command<void>('wallet_notifications_ack', { multisig, ids: envelopes.map((envelope) => envelope.id) });
+        await command<void>('wallet_notifications_ack', {
+          multisig,
+          ids: envelopes.map((envelope) => envelope.id)
+        });
         if (envelopes.length < NOTIFICATION_BATCH_SIZE) break;
       }
     })();
     this.#notificationDrains.set(multisig, drain);
-    try { await drain; }
-    finally { this.#notificationDrains.delete(multisig); }
+    try {
+      await drain;
+    } finally {
+      this.#notificationDrains.delete(multisig);
+    }
   }
-  #emit(event: WalletEvent) { this.#listeners.forEach((listener) => listener(event)); }
+  #emit(event: WalletEvent) {
+    this.#listeners.forEach((listener) => listener(event));
+  }
 }

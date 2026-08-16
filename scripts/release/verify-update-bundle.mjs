@@ -32,8 +32,15 @@ try {
   fail('manifest is not valid JSON');
 }
 const exactKeys = [
-  'artifact', 'channel', 'commit', 'minimumSupportedVersion', 'product',
-  'rollbackAllowedFrom', 'schemaVersion', 'sha256', 'version',
+  'artifact',
+  'channel',
+  'commit',
+  'minimumSupportedVersion',
+  'product',
+  'rollbackAllowedFrom',
+  'schemaVersion',
+  'sha256',
+  'version'
 ].sort();
 if (JSON.stringify(Object.keys(manifest).sort()) !== JSON.stringify(exactKeys)) {
   fail('manifest fields do not match schema version 1');
@@ -46,11 +53,16 @@ if (!semver.test(manifest.version) || !semver.test(manifest.minimumSupportedVers
   fail('manifest versions must be exact semantic versions');
 }
 if (!/^[0-9a-f]{40}$/.test(manifest.commit)) fail('commit must be a full lowercase SHA-1');
-if (manifest.artifact !== basename(artifactPath) || basename(manifest.artifact) !== manifest.artifact) {
+if (
+  manifest.artifact !== basename(artifactPath) ||
+  basename(manifest.artifact) !== manifest.artifact
+) {
   fail('artifact filename does not match the manifest');
 }
-if (!Array.isArray(manifest.rollbackAllowedFrom) ||
-    !manifest.rollbackAllowedFrom.every((value) => typeof value === 'string' && semver.test(value))) {
+if (
+  !Array.isArray(manifest.rollbackAllowedFrom) ||
+  !manifest.rollbackAllowedFrom.every((value) => typeof value === 'string' && semver.test(value))
+) {
   fail('rollback allowlist is invalid');
 }
 const digest = await new Promise((resolve, reject) => {
@@ -62,10 +74,22 @@ const digest = await new Promise((resolve, reject) => {
 });
 if (manifest.sha256 !== digest) fail('artifact digest does not match');
 try {
-  execFileSync('openssl', [
-    'pkeyutl', '-verify', '-rawin', '-pubin', '-inkey', publicKeyPath,
-    '-sigfile', signaturePath, '-in', manifestPath,
-  ], { stdio: 'pipe', timeout: 10_000, maxBuffer: 64 * 1024 });
+  execFileSync(
+    'openssl',
+    [
+      'pkeyutl',
+      '-verify',
+      '-rawin',
+      '-pubin',
+      '-inkey',
+      publicKeyPath,
+      '-sigfile',
+      signaturePath,
+      '-in',
+      manifestPath
+    ],
+    { stdio: 'pipe', timeout: 10_000, maxBuffer: 64 * 1024 }
+  );
 } catch {
   fail('manifest signature is invalid');
 }

@@ -4,7 +4,14 @@ export type HardwareDevice = {
   model: string;
   fingerprint: string | null;
   connected: boolean;
-  status: 'ready' | 'detected' | 'needs_pin' | 'needs_passphrase' | 'needs_companion' | 'needs_device_unlock' | 'not_ready';
+  status:
+    | 'ready'
+    | 'detected'
+    | 'needs_pin'
+    | 'needs_passphrase'
+    | 'needs_companion'
+    | 'needs_device_unlock'
+    | 'not_ready';
   message: string;
   action: 'import' | 'prompt_pin' | 'confirm_empty_passphrase' | 'retry' | 'none';
 };
@@ -26,7 +33,11 @@ export type ExternalSignerWallet = {
   internalDescriptor: string;
 };
 export type ExternalSignerBackup = { descriptor: string; content: string };
-export type SavedFileResult = { saved: boolean; revealToken: string | null; revealLabel: string | null };
+export type SavedFileResult = {
+  saved: boolean;
+  revealToken: string | null;
+  revealLabel: string | null;
+};
 
 export type CosignerHealthCheck = {
   status: 'healthy' | 'attention';

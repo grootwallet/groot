@@ -1,10 +1,7 @@
 import { writeText as writeTauriText } from '@tauri-apps/plugin-clipboard-manager';
 
 export type ClipboardContent =
-  | 'bitcoin-address'
-  | 'identifier'
-  | 'public-wallet-data'
-  | 'transaction-data';
+  'bitcoin-address' | 'identifier' | 'public-wallet-data' | 'transaction-data';
 
 const clipboardPolicy: Record<ClipboardContent, { label: string; maxBytes: number }> = {
   'bitcoin-address': { label: 'Bitcoin address', maxBytes: 128 },

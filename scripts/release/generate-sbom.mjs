@@ -13,18 +13,23 @@ if (!output) {
 }
 
 const read = (path) => readFileSync(join(repoRoot, path), 'utf8');
-const commit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repoRoot, encoding: 'utf8' }).trim();
+const commit = execFileSync('git', ['rev-parse', 'HEAD'], {
+  cwd: repoRoot,
+  encoding: 'utf8'
+}).trim();
 const host = execFileSync('rustc', ['-vV'], { encoding: 'utf8' })
   .split('\n')
   .find((line) => line.startsWith('host: '))
   ?.slice(6);
 if (!host) throw new Error('Could not determine the Rust host target.');
 
-const cargoMetadata = JSON.parse(execFileSync(
-  'cargo',
-  ['metadata', '--locked', '--format-version', '1', '--filter-platform', host],
-  { cwd: join(repoRoot, 'src-tauri'), encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }
-));
+const cargoMetadata = JSON.parse(
+  execFileSync(
+    'cargo',
+    ['metadata', '--locked', '--format-version', '1', '--filter-platform', host],
+    { cwd: join(repoRoot, 'src-tauri'), encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }
+  )
+);
 
 const cargoChecksums = new Map();
 for (const block of read('src-tauri/Cargo.lock').split('[[package]]').slice(1)) {
@@ -43,7 +48,11 @@ function licenseEntry(expression, licenseFile) {
   if (!text.trim() || Buffer.byteLength(text) > 128 * 1024) {
     throw new Error(`A declared dependency license file is empty or oversized: ${licenseFile}`);
   }
-  return [{ license: { name: `Declared license file: ${basename(licenseFile)}`, text: { content: text } } }];
+  return [
+    {
+      license: { name: `Declared license file: ${basename(licenseFile)}`, text: { content: text } }
+    }
+  ];
 }
 
 const components = cargoMetadata.packages
@@ -53,7 +62,9 @@ const components = cargoMetadata.packages
     const basePurl = `pkg:cargo/${pkg.name}@${pkg.version}`;
     const purl = pkg.source === null ? `${basePurl}?repository=vendored` : basePurl;
     if (pkg.source?.startsWith('registry+') && !checksum) {
-      throw new Error(`Registry crate is missing its lockfile checksum: ${pkg.name}@${pkg.version}`);
+      throw new Error(
+        `Registry crate is missing its lockfile checksum: ${pkg.name}@${pkg.version}`
+      );
     }
     return {
       type: 'library',
@@ -76,7 +87,9 @@ const components = cargoMetadata.packages
 const packageSection = read('pnpm-lock.yaml').split('\npackages:\n')[1]?.split('\nsnapshots:\n')[0];
 if (!packageSection) throw new Error('pnpm-lock.yaml has no packages section.');
 const lockedNodePackages = new Map();
-for (const match of packageSection.matchAll(/^  (?:'([^']+)'|([^:\n]+)):\n([\s\S]*?)(?=^  (?:'[^']+'|[^:\n]+):\n|$)/gm)) {
+for (const match of packageSection.matchAll(
+  /^  (?:'([^']+)'|([^:\n]+)):\n([\s\S]*?)(?=^  (?:'[^']+'|[^:\n]+):\n|$)/gm
+)) {
   const key = match[1] ?? match[2];
   const integrity = match[3].match(/resolution: \{integrity: ([^,}\s]+)/)?.[1];
   lockedNodePackages.set(key, integrity);
@@ -106,9 +119,11 @@ for (const entry of readdirSync(join(repoRoot, 'node_modules/.pnpm'))) {
 }
 
 for (const [key, pkg] of installedNodePackages) {
-  if (!lockedNodePackages.has(key)) throw new Error(`Installed Node package is absent from pnpm-lock.yaml: ${key}`);
+  if (!lockedNodePackages.has(key))
+    throw new Error(`Installed Node package is absent from pnpm-lock.yaml: ${key}`);
   const integrity = lockedNodePackages.get(key);
-  if (!integrity?.startsWith('sha512-')) throw new Error(`Node package is missing SHA-512 lockfile integrity: ${key}`);
+  if (!integrity?.startsWith('sha512-'))
+    throw new Error(`Node package is missing SHA-512 lockfile integrity: ${key}`);
   const purlName = pkg.name.startsWith('@')
     ? `%40${pkg.name.slice(1).split('/')[0]}/${pkg.name.split('/')[1]}`
     : pkg.name;
@@ -119,7 +134,9 @@ for (const [key, pkg] of installedNodePackages) {
     version: pkg.version,
     purl: `pkg:npm/${purlName}@${pkg.version}`,
     licenses: licenseEntry(typeof pkg.license === 'string' ? pkg.license : pkg.licenses?.[0]?.type),
-    hashes: [{ alg: 'SHA-512', content: Buffer.from(integrity.slice(7), 'base64').toString('hex') }],
+    hashes: [
+      { alg: 'SHA-512', content: Buffer.from(integrity.slice(7), 'base64').toString('hex') }
+    ],
     properties: [{ name: 'groot:ecosystem', value: 'npm' }]
   });
 }

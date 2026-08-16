@@ -15,5 +15,7 @@
     <strong>{title}</strong>
     <small>{description}</small>
   </span>
-  <Button variant="secondary" size="small" onclick={onretry}><RefreshCw size={14} />Scan again</Button>
+  <Button variant="secondary" size="small" onclick={onretry}
+    ><RefreshCw size={14} />Scan again</Button
+  >
 </div>

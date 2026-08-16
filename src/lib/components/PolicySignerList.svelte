@@ -4,7 +4,11 @@
   import { compactIdentifier } from '$lib/address-display';
   import IdentifierDetailsModal from './IdentifierDetailsModal.svelte';
 
-  let { signers, currentFingerprint, detail = 'identity' } = $props<{
+  let {
+    signers,
+    currentFingerprint,
+    detail = 'identity'
+  } = $props<{
     signers: CosignerDraft[];
     currentFingerprint?: string;
     detail?: 'fingerprint' | 'identity';
@@ -31,14 +35,51 @@
     <article class:current>
       <span class="policy-signer-number">{index + 1}</span>
       <div class="policy-signer-copy">
-        <strong>{signer.label}{#if current}<em>This device</em>{/if}</strong>
+        <strong
+          >{signer.label}{#if current}<em>This device</em>{/if}</strong
+        >
         {#if detail === 'fingerprint'}
           <code>{signer.fingerprint.toLowerCase()}</code>
         {:else}
           <div class="policy-signer-identifiers">
-            <button type="button" onclick={() => inspect(signer.fingerprint.toLowerCase(), `${signer.label} fingerprint`, 'Compare all eight hexadecimal characters with the hardware device.', 'Fingerprint')}><span>Fingerprint</span><code>{signer.fingerprint.toLowerCase()}</code><Maximize2 size={12}/></button>
-            <button type="button" onclick={() => inspect(signer.derivationPath, `${signer.label} derivation path`, 'Compare the complete BIP48 account path with the hardware device.', 'Derivation path')}><span>Path</span><code>{signer.derivationPath}</code><Maximize2 size={12}/></button>
-            <button type="button" class="wide" onclick={() => inspect(signer.xpub, `${signer.label} public account key (xpub)`, 'Compare the complete xpub across every hardware-device screen.', 'Public account key (xpub)')}><span>Public account key (xpub)</span><code>{compactIdentifier(signer.xpub, 14, 10)}</code><Maximize2 size={12}/></button>
+            <button
+              type="button"
+              onclick={() =>
+                inspect(
+                  signer.fingerprint.toLowerCase(),
+                  `${signer.label} fingerprint`,
+                  'Compare all eight hexadecimal characters with the hardware device.',
+                  'Fingerprint'
+                )}
+              ><span>Fingerprint</span><code>{signer.fingerprint.toLowerCase()}</code><Maximize2
+                size={12}
+              /></button
+            >
+            <button
+              type="button"
+              onclick={() =>
+                inspect(
+                  signer.derivationPath,
+                  `${signer.label} derivation path`,
+                  'Compare the complete BIP48 account path with the hardware device.',
+                  'Derivation path'
+                )}
+              ><span>Path</span><code>{signer.derivationPath}</code><Maximize2 size={12} /></button
+            >
+            <button
+              type="button"
+              class="wide"
+              onclick={() =>
+                inspect(
+                  signer.xpub,
+                  `${signer.label} public account key (xpub)`,
+                  'Compare the complete xpub across every hardware-device screen.',
+                  'Public account key (xpub)'
+                )}
+              ><span>Public account key (xpub)</span><code
+                >{compactIdentifier(signer.xpub, 14, 10)}</code
+              ><Maximize2 size={12} /></button
+            >
           </div>
         {/if}
       </div>
@@ -46,4 +87,11 @@
   {/each}
 </div>
 
-<IdentifierDetailsModal value={detailValue} open={detailOpen} title={detailTitle} description={detailDescription} label={detailLabel} onclose={() => detailOpen = false}/>
+<IdentifierDetailsModal
+  value={detailValue}
+  open={detailOpen}
+  title={detailTitle}
+  description={detailDescription}
+  label={detailLabel}
+  onclose={() => (detailOpen = false)}
+/>

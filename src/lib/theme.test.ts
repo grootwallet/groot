@@ -5,7 +5,9 @@ const css = readFileSync(new URL('../app.css', import.meta.url), 'utf8');
 const appHtml = readFileSync(new URL('../app.html', import.meta.url), 'utf8');
 
 function declarations(source: string): Record<string, string> {
-  return Object.fromEntries([...source.matchAll(/--([\w-]+):\s*([^;]+);/g)].map((match) => [match[1], match[2].trim()]));
+  return Object.fromEntries(
+    [...source.matchAll(/--([\w-]+):\s*([^;]+);/g)].map((match) => [match[1], match[2].trim()])
+  );
 }
 
 function themeTokens(theme: 'dark' | 'light'): Record<string, string> {
@@ -22,9 +24,11 @@ function resolveToken(name: string, tokens: Record<string, string>): string {
 
 function luminance(hex: string): number {
   const value = hex.replace('#', '');
-  const expanded = value.length === 3 ? [...value].map((character) => character.repeat(2)).join('') : value;
-  const channels = [0, 2, 4].map((offset) => Number.parseInt(expanded.slice(offset, offset + 2), 16) / 255)
-    .map((channel) => channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4);
+  const expanded =
+    value.length === 3 ? [...value].map((character) => character.repeat(2)).join('') : value;
+  const channels = [0, 2, 4]
+    .map((offset) => Number.parseInt(expanded.slice(offset, offset + 2), 16) / 255)
+    .map((channel) => (channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4));
   return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
 }
 
@@ -53,13 +57,18 @@ describe('theme system', () => {
         ['link', 'bg', 4.5]
       ];
       for (const [foreground, background, minimum] of pairs) {
-        expect(contrast(resolveToken(foreground, tokens), resolveToken(background, tokens)), `${foreground} on ${background}`).toBeGreaterThanOrEqual(minimum);
+        expect(
+          contrast(resolveToken(foreground, tokens), resolveToken(background, tokens)),
+          `${foreground} on ${background}`
+        ).toBeGreaterThanOrEqual(minimum);
       }
     });
   }
 
   it('keeps component surfaces semantic and recovery words explicitly readable', () => {
-    expect(css).toMatch(/\.mnemonic-grid > div \{[^}]*color: var\(--text\);[^}]*background: var\(--surface-control\);/);
+    expect(css).toMatch(
+      /\.mnemonic-grid > div \{[^}]*color: var\(--text\);[^}]*background: var\(--surface-control\);/
+    );
     expect(css).toMatch(/\.mnemonic-grid strong\s*\{[^}]*color:\s*var\(--text\);/);
     const componentRules = css.slice(css.indexOf('* {'));
     for (const legacyDarkSurface of ['#121214', '#151517', '#141416', '#101012']) {

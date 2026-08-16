@@ -29,7 +29,9 @@ describe('DummyWalletAdapter wallet sessions', () => {
     await expect(adapter.multisigSnapshot()).rejects.toMatchObject({ code: 'wallet_locked' });
 
     await adapter.unlock('prototype-passphrase');
-    await expect(adapter.multisigSnapshot()).resolves.toMatchObject({ network: expect.any(String) });
+    await expect(adapter.multisigSnapshot()).resolves.toMatchObject({
+      network: expect.any(String)
+    });
 
     await expect(adapter.selectWallet(singleKey!.id)).resolves.toMatchObject({
       profile: { id: singleKey!.id },
@@ -44,6 +46,8 @@ describe('DummyWalletAdapter wallet sessions', () => {
       profile: { id: multisig!.id },
       unlocked: true
     });
-    await expect(adapter.multisigSnapshot()).resolves.toMatchObject({ network: expect.any(String) });
+    await expect(adapter.multisigSnapshot()).resolves.toMatchObject({
+      network: expect.any(String)
+    });
   });
 });

@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { get } from 'svelte/store';
-import { DISCREET_MODE_STORAGE_KEY, discreetMode, initDiscreetMode, setDiscreetMode } from './privacy';
+import {
+  DISCREET_MODE_STORAGE_KEY,
+  discreetMode,
+  initDiscreetMode,
+  setDiscreetMode
+} from './privacy';
 
 describe('discreet mode preference', () => {
   it('restores only the explicit enabled value', () => {

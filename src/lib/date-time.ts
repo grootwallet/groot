@@ -26,7 +26,9 @@ function readableDate(date: Date, timeZone: string, includeSeconds = true) {
     ...(includeSeconds ? { second: '2-digit' as const } : {}),
     hour12: true,
     timeZone
-  }).format(date).replace(' at ', ', ');
+  })
+    .format(date)
+    .replace(' at ', ', ');
 }
 
 export function presentLocalTimestamp(

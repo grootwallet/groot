@@ -16,7 +16,9 @@
   let { coins, frozen, busy = false, onclose, onconfirm }: Props = $props();
   let count = $derived(coins.length);
   let total = $derived(coins.reduce((sum, coin) => sum + coin.amount, 0));
-  let subject = $derived(count === 1 ? coins[0]?.label ?? 'this coin' : `${count} selected coins`);
+  let subject = $derived(
+    count === 1 ? (coins[0]?.label ?? 'this coin') : `${count} selected coins`
+  );
   let title = $derived(`${frozen ? 'Freeze' : 'Unfreeze'} ${subject}?`);
   let actionLabel = $derived(`${frozen ? 'Freeze' : 'Unfreeze'} ${count === 1 ? 'coin' : 'coins'}`);
 
@@ -35,7 +37,9 @@
 >
   <div class="coin-freeze-confirmation">
     <div class="coin-freeze-summary">
-      <span class:frozen>{#if frozen}<Snowflake size={18}/>{:else}<Unlock size={18}/>{/if}</span>
+      <span class:frozen
+        >{#if frozen}<Snowflake size={18} />{:else}<Unlock size={18} />{/if}</span
+      >
       <div>
         <strong>{subject}</strong>
         <small>{shortSats(total)} sats</small>
@@ -46,14 +50,19 @@
       {#if frozen}
         Frozen coins are excluded from automatic and manual spending until you unfreeze them.
       {:else}
-        Unfreezing does not spend this coin. It only makes it eligible for automatic selection and manual sends.
+        Unfreezing does not spend this coin. It only makes it eligible for automatic selection and
+        manual sends.
       {/if}
     </p>
 
     <div class="coin-freeze-actions">
       <Button variant="secondary" disabled={busy} onclick={close}>Cancel</Button>
-      <Button loading={busy} loadingLabel={frozen ? 'Freezing…' : 'Unfreezing…'} onclick={onconfirm}>
-        {#if frozen}<Snowflake size={16}/>{:else}<Unlock size={16}/>{/if}
+      <Button
+        loading={busy}
+        loadingLabel={frozen ? 'Freezing…' : 'Unfreezing…'}
+        onclick={onconfirm}
+      >
+        {#if frozen}<Snowflake size={16} />{:else}<Unlock size={16} />{/if}
         {actionLabel}
       </Button>
     </div>

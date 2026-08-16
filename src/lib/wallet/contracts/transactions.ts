@@ -1,6 +1,6 @@
-import type { ReceiveAddress, Transaction, Utxo } from "$lib/types";
-import type { SupportedNetwork } from "$lib/config";
-import { WalletError } from "./errors";
+import type { ReceiveAddress, Transaction, Utxo } from '$lib/types';
+import type { SupportedNetwork } from '$lib/config';
+import { WalletError } from './errors';
 
 export type Sats = number & { readonly __brand: 'Sats' };
 export type FeeRate = number & { readonly __brand: 'SatPerVbyte' };
@@ -76,14 +76,17 @@ export type BroadcastResult = {
 };
 
 export type AutomaticSelectionStrategy = 'balanced' | 'private' | 'lower_fee';
-export type CoinSelection = { mode: 'auto'; strategy?: AutomaticSelectionStrategy } | { mode: 'manual'; outpoints: string[] };
+export type CoinSelection =
+  { mode: 'auto'; strategy?: AutomaticSelectionStrategy } | { mode: 'manual'; outpoints: string[] };
 export type AccelerationMethod = 'rbf' | 'cpfp';
 export function sats(value: number): Sats {
-  if (!Number.isSafeInteger(value) || value < 0) throw new WalletError('invalid_amount', 'Satoshi amount must be a non-negative safe integer.');
+  if (!Number.isSafeInteger(value) || value < 0)
+    throw new WalletError('invalid_amount', 'Satoshi amount must be a non-negative safe integer.');
   return value as Sats;
 }
 
 export function feeRate(value: number): FeeRate {
-  if (!Number.isFinite(value) || value <= 0) throw new WalletError('invalid_amount', 'Fee rate must be greater than zero.');
+  if (!Number.isFinite(value) || value <= 0)
+    throw new WalletError('invalid_amount', 'Fee rate must be greater than zero.');
   return value as FeeRate;
 }

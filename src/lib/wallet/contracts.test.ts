@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { WALLET_ERROR_CODES, WalletError, walletErrorCode, type WalletErrorCode } from './contracts';
+import {
+  WALLET_ERROR_CODES,
+  WalletError,
+  walletErrorCode,
+  type WalletErrorCode
+} from './contracts';
 
 const remediationErrorCodes = [
   'invalid_coin',

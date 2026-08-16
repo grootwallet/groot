@@ -9,7 +9,12 @@ describe('wallet notification presentation', () => {
       { type: 'first_confirmation', txid: 'received', balance: sats(8_000) }
     ];
     expect(coalesceNotificationEvents(events)).toEqual([
-      { type: 'payment_received_confirmed', txid: 'received', amount: sats(8_000), balance: sats(8_000) }
+      {
+        type: 'payment_received_confirmed',
+        txid: 'received',
+        amount: sats(8_000),
+        balance: sats(8_000)
+      }
     ]);
   });
 
@@ -27,7 +32,12 @@ describe('wallet notification presentation', () => {
       { type: 'payment_received', txid: 'received', amount: sats(8_000), balance: sats(8_000) }
     ];
     expect(coalesceNotificationEvents(events)).toEqual([
-      { type: 'payment_received_confirmed', txid: 'received', amount: sats(8_000), balance: sats(8_000) }
+      {
+        type: 'payment_received_confirmed',
+        txid: 'received',
+        amount: sats(8_000),
+        balance: sats(8_000)
+      }
     ]);
   });
 });

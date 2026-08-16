@@ -107,12 +107,12 @@ Do not edit exported PNG, ICNS, or ICO files by hand.
 
 ### Identity colors
 
-| Role | Value | Use |
-| --- | --- | --- |
-| Blue Ink | `#102A4C` | Primary symbol, large identity fields, primary brand text |
-| Warm Ivory | `#F7F3E9` | Reversed symbol, primary light field, warm negative space |
-| Action Blue | `#2459A9` | Links, focus, selected state, and primary interaction |
-| Signal Red | `#D3293A` | Rare brand punctuation and high-consequence emphasis |
+| Role        | Value     | Use                                                       |
+| ----------- | --------- | --------------------------------------------------------- |
+| Blue Ink    | `#102A4C` | Primary symbol, large identity fields, primary brand text |
+| Warm Ivory  | `#F7F3E9` | Reversed symbol, primary light field, warm negative space |
+| Action Blue | `#2459A9` | Links, focus, selected state, and primary interaction     |
+| Signal Red  | `#D3293A` | Rare brand punctuation and high-consequence emphasis      |
 
 Ink and ivory carry the identity. Action Blue directs interaction. Signal Red should normally occupy less than five percent of a composition and must not be used merely to make a page feel branded.
 
@@ -148,14 +148,14 @@ The wallet uses the approved outlined lockup rather than live Newsreader text. M
 
 Review date: 2026-08-10. This is a preliminary product screen, not legal advice or professional trademark clearance.
 
-| Gate | Result | Decision |
-| --- | --- | --- |
-| Symbol | Pass | Advance the existing Control symbol. It is stronger in the lockup than G Return and remains useful if the name changes. |
-| Wordmark | Pass, pending font QA | Advance Groot set in Newsreader Medium (`500`). Preserve the constructed visible-path baseline rule above. |
-| Small sizes | Pass | Control remains the primary mark from 16 px upward; use the existing optical-small master below 24 px. |
-| Domain | Pass, configuration pending | `usegroot.com`, `grootbitcoin.com`, and `grootwallet.com` were acquired. Use `usegroot.com` as the canonical public and email domain; redirect the other two after DNS is configured. |
-| Market confusion | Material risk | A current Android finance application uses **Groot Pay** and describes itself as a digital wallet. The product category overlap is direct even though its custody model and market differ. |
-| Trademark | Professional clearance required | Marvel has active US GROOT registrations and an active I AM GROOT registration covering downloadable media. Search exact and similar marks in the intended US, EU, UK, French, and Andorran markets and in software, financial, security, and SaaS classes before public adoption. |
+| Gate             | Result                          | Decision                                                                                                                                                                                                                                                                           |
+| ---------------- | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Symbol           | Pass                            | Advance the existing Control symbol. It is stronger in the lockup than G Return and remains useful if the name changes.                                                                                                                                                            |
+| Wordmark         | Pass, pending font QA           | Advance Groot set in Newsreader Medium (`500`). Preserve the constructed visible-path baseline rule above.                                                                                                                                                                         |
+| Small sizes      | Pass                            | Control remains the primary mark from 16 px upward; use the existing optical-small master below 24 px.                                                                                                                                                                             |
+| Domain           | Pass, configuration pending     | `usegroot.com`, `grootbitcoin.com`, and `grootwallet.com` were acquired. Use `usegroot.com` as the canonical public and email domain; redirect the other two after DNS is configured.                                                                                              |
+| Market confusion | Material risk                   | A current Android finance application uses **Groot Pay** and describes itself as a digital wallet. The product category overlap is direct even though its custody model and market differ.                                                                                         |
+| Trademark        | Professional clearance required | Marvel has active US GROOT registrations and an active I AM GROOT registration covering downloadable media. Search exact and similar marks in the intended US, EU, UK, French, and Andorran markets and in software, financial, security, and SaaS classes before public adoption. |
 
 **Adoption decision:** accept the recorded naming risk and adopt **Groot + Control + Newsreader Medium**. The outlined assets are canonical. Domain ownership is not represented as trademark clearance; professional review remains future legal/commercial work.
 
@@ -185,21 +185,21 @@ Every word must earn its place.
 
 ## Canonical assets
 
-| File | Status |
-| --- | --- |
-| [`assets/brand/mark-master.svg`](../assets/brand/mark-master.svg) | Canonical positive master |
-| [`assets/brand/mark-reversed.svg`](../assets/brand/mark-reversed.svg) | Canonical reversed master |
-| [`assets/brand/mark-monochrome.svg`](../assets/brand/mark-monochrome.svg) | One-color reproduction master |
-| [`assets/brand/mark-optical-small.svg`](../assets/brand/mark-optical-small.svg) | Canonical 16–23 px optical master |
-| [`assets/brand/app-icon-layered-source.svg`](../assets/brand/app-icon-layered-source.svg) | Modern unmasked icon source |
-| [`assets/brand/app-icon-layers/`](../assets/brand/app-icon-layers/) | Apple background and foreground layers |
-| [`assets/brand/app-icon-legacy-source.svg`](../assets/brand/app-icon-legacy-source.svg) | Flattened export source |
-| [`assets/brand/lockup-horizontal-ink.svg`](../assets/brand/lockup-horizontal-ink.svg) | Canonical positive Groot lockup |
-| [`assets/brand/lockup-horizontal-reversed.svg`](../assets/brand/lockup-horizontal-reversed.svg) | Canonical reversed Groot lockup |
-| [`assets/brand/wordmark-ink.svg`](../assets/brand/wordmark-ink.svg) | Canonical positive Groot wordmark |
-| [`assets/brand/wordmark-reversed.svg`](../assets/brand/wordmark-reversed.svg) | Canonical reversed Groot wordmark |
-| [`src/lib/components/BrandMark.svelte`](../src/lib/components/BrandMark.svelte) | Product component using the master path |
-| [`src/lib/components/BrandLockup.svelte`](../src/lib/components/BrandLockup.svelte) | Wallet product wordmark component |
+| File                                                                                            | Status                                  |
+| ----------------------------------------------------------------------------------------------- | --------------------------------------- |
+| [`assets/brand/mark-master.svg`](../assets/brand/mark-master.svg)                               | Canonical positive master               |
+| [`assets/brand/mark-reversed.svg`](../assets/brand/mark-reversed.svg)                           | Canonical reversed master               |
+| [`assets/brand/mark-monochrome.svg`](../assets/brand/mark-monochrome.svg)                       | One-color reproduction master           |
+| [`assets/brand/mark-optical-small.svg`](../assets/brand/mark-optical-small.svg)                 | Canonical 16–23 px optical master       |
+| [`assets/brand/app-icon-layered-source.svg`](../assets/brand/app-icon-layered-source.svg)       | Modern unmasked icon source             |
+| [`assets/brand/app-icon-layers/`](../assets/brand/app-icon-layers/)                             | Apple background and foreground layers  |
+| [`assets/brand/app-icon-legacy-source.svg`](../assets/brand/app-icon-legacy-source.svg)         | Flattened export source                 |
+| [`assets/brand/lockup-horizontal-ink.svg`](../assets/brand/lockup-horizontal-ink.svg)           | Canonical positive Groot lockup         |
+| [`assets/brand/lockup-horizontal-reversed.svg`](../assets/brand/lockup-horizontal-reversed.svg) | Canonical reversed Groot lockup         |
+| [`assets/brand/wordmark-ink.svg`](../assets/brand/wordmark-ink.svg)                             | Canonical positive Groot wordmark       |
+| [`assets/brand/wordmark-reversed.svg`](../assets/brand/wordmark-reversed.svg)                   | Canonical reversed Groot wordmark       |
+| [`src/lib/components/BrandMark.svelte`](../src/lib/components/BrandMark.svelte)                 | Product component using the master path |
+| [`src/lib/components/BrandLockup.svelte`](../src/lib/components/BrandLockup.svelte)             | Wallet product wordmark component       |
 
 ## Status and roadmap
 

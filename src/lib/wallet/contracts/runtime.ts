@@ -1,9 +1,8 @@
-import type { SupportedNetwork } from "$lib/config";
-import type { Sats, WalletSnapshot } from "./transactions";
+import type { SupportedNetwork } from '$lib/config';
+import type { Sats, WalletSnapshot } from './transactions';
 
 export type MnemonicPresentation =
-  | { mode: 'native'; backupVerified: boolean }
-  | { mode: 'fixture'; words: string[] };
+  { mode: 'native'; backupVerified: boolean } | { mode: 'fixture'; words: string[] };
 export type WalletProfile = {
   id: string;
   name: string;
@@ -90,5 +89,10 @@ export type WalletEvent =
   | { type: 'payment_received_confirmed'; txid: string; amount: Sats; balance: Sats }
   | { type: 'first_confirmation'; txid: string; balance: Sats }
   | { type: 'transaction_broadcast'; txid: string; balance: Sats }
-  | { type: 'wallet_updated'; walletId: string; walletKind: WalletProfile['kind']; snapshot: WalletSnapshot }
+  | {
+      type: 'wallet_updated';
+      walletId: string;
+      walletKind: WalletProfile['kind'];
+      snapshot: WalletSnapshot;
+    }
   | { type: 'wallet_profile_updated'; profile: WalletProfile };

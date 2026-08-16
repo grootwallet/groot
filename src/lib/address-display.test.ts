@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { compactAddress, compactIdentifier, groupAddressForDisplay, groupIdentifierForDisplay } from './address-display';
+import {
+  compactAddress,
+  compactIdentifier,
+  groupAddressForDisplay,
+  groupIdentifierForDisplay
+} from './address-display';
 
 describe('readable address display', () => {
   it.each([

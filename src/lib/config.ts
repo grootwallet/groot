@@ -7,13 +7,20 @@ export type AppConfig = {
   explorerUrl: string | null;
 };
 
-const configuredNetwork = parseNetwork(import.meta.env.PUBLIC_BITCOIN_NETWORK as string | undefined);
+const configuredNetwork = parseNetwork(
+  import.meta.env.PUBLIC_BITCOIN_NETWORK as string | undefined
+);
 
 const TXID_PATTERN = /^[0-9a-fA-F]{64}$/;
 
 export const defaultConfig: AppConfig = {
   network: configuredNetwork,
-  esploraUrl: configuredNetwork === 'signet' ? 'https://mempool.space/signet/api' : configuredNetwork === 'testnet4' ? 'https://mempool.space/testnet4/api' : null,
+  esploraUrl:
+    configuredNetwork === 'signet'
+      ? 'https://mempool.space/signet/api'
+      : configuredNetwork === 'testnet4'
+        ? 'https://mempool.space/testnet4/api'
+        : null,
   explorerUrl: explorerUrlForNetwork(configuredNetwork)
 };
 
@@ -30,7 +37,8 @@ export function transactionExplorerUrl(network: SupportedNetwork, txid: string):
 }
 
 export function parseNetwork(value: string | undefined): SupportedNetwork {
-  if (value && SUPPORTED_NETWORKS.includes(value as SupportedNetwork)) return value as SupportedNetwork;
+  if (value && SUPPORTED_NETWORKS.includes(value as SupportedNetwork))
+    return value as SupportedNetwork;
   return 'signet';
 }
 
