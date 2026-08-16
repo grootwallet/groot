@@ -7,6 +7,25 @@ pub struct WalletSelection {
     unlocked: bool,
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WalletProfileCompatibility {
+    pub(crate) supported: bool,
+}
+
+pub(crate) fn profile_compatibility_for(
+    profile: &WalletProfile,
+    directory: &Path,
+) -> WalletProfileCompatibility {
+    if profile.kind == WalletKind::SingleKey {
+        return WalletProfileCompatibility { supported: true };
+    }
+    WalletProfileCompatibility {
+        supported: directory.join("wallet.json").is_file()
+            && directory.join("secret.json").is_file(),
+    }
+}
+
 #[tauri::command]
 pub fn wallet_exists(app: AppHandle) -> ApiResult<bool> {
     let registry = load_registry(&app)?;
@@ -20,6 +39,13 @@ pub(crate) fn registered_wallets_exist(registry: &WalletRegistry) -> bool {
 #[tauri::command]
 pub fn wallet_profiles(app: AppHandle) -> ApiResult<WalletRegistry> {
     load_registry(&app)
+}
+
+#[tauri::command]
+pub fn wallet_profile_compatibility(app: AppHandle) -> ApiResult<WalletProfileCompatibility> {
+    let profile = selected_profile(&app)?;
+    let directory = profile_directory(&app, profile.id)?;
+    Ok(profile_compatibility_for(&profile, &directory))
 }
 
 #[tauri::command]

@@ -65,12 +65,13 @@ If code and documentation disagree, stop and resolve the mismatch in the same ch
 ## Safe workflow
 
 1. State the invariant or acceptance criterion being changed.
-2. Make the smallest coherent change.
-3. Add/update tests and canonical docs.
-4. Run `pnpm validate`.
-5. For UI changes, inspect desktop (1180×780) and mobile (390×844), including keyboard-safe bottom spacing.
-6. For Rust wallet changes, also run `cargo fmt --check`, `cargo clippy --locked --all-targets --all-features -- -D warnings`, and `cargo test --locked --all-features` from `src-tauri`.
-7. Use the proportionate extended and CI harness in `docs/agent-harness.md`; `pnpm validate` is mandatory but does not include every CI job.
+2. Before changing a persisted wallet, profile, backup, proposal, or registry format, identify whether existing data remains compatible. Any breaking format change requires an ADR, a clear migration-versus-discard plan, and the user's explicit approval before implementation. Never silently add a migration or strand existing profiles.
+3. Make the smallest coherent change.
+4. Add/update tests and canonical docs.
+5. Run `pnpm validate`.
+6. For UI changes, inspect desktop (1180×780) and mobile (390×844), including keyboard-safe bottom spacing.
+7. For Rust wallet changes, also run `cargo fmt --check`, `cargo clippy --locked --all-targets --all-features -- -D warnings`, and `cargo test --locked --all-features` from `src-tauri`.
+8. Use the proportionate extended and CI harness in `docs/agent-harness.md`; `pnpm validate` is mandatory but does not include every CI job.
 
 ## Definition of done
 

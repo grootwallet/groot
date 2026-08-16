@@ -170,6 +170,11 @@ export class TauriWalletAdapter implements WalletPort {
   recoverWallet(name: string, credential: string) {
     return command<void>('wallet_recover', { name, credential });
   }
+  profileCompatibility() {
+    return command<import('./contracts').WalletProfileCompatibility>(
+      'wallet_profile_compatibility'
+    );
+  }
   unlock(credential: string) {
     return command<void>('wallet_unlock', { credential });
   }

@@ -71,6 +71,9 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       inactivityTimeoutMinutes: this._inactivityTimeoutMinutes
     };
   }
+  async profileCompatibility() {
+    return { supported: true };
+  }
   async renameWallet(name: string) {
     if (!this._selectedWalletId || !this._unlockedWalletIds.has(this._selectedWalletId)) {
       throw new WalletError('wallet_locked', 'Unlock this wallet before renaming it.');

@@ -22,6 +22,10 @@ Before changing files:
 4. Identify who owns any running native app, Vite server, Bitcoin Core process,
    or certification profile. Do not start a second server against the same port
    or stop a process you did not start.
+5. Identify every persisted format touched by the change. If compatibility is
+   not exact, stop before implementation, write the ADR and migration-versus-
+   discard proposal, and obtain explicit user approval. Test or Regtest data is
+   not implicit permission to discard or migrate it.
 
 The pinned local runtime is Node 24.19.0, pnpm 11.13.1, and Rust 1.97.1. Use the
 committed lockfiles. `scripts/dev/tauri-regtest.sh` selects the pinned Node
@@ -127,6 +131,9 @@ and BitBox02 Nova USB #34 are open. Recheck before repeating these states.
   a gate or assertion to obtain green output.
 - Keep product, architecture, implementation status, flow, design, hardware
   matrix, and ADR claims synchronized with code in the same change.
+- Never hide a breaking persisted-format change behind a generic unlock,
+  corruption, or wrong-PIN error. Preserve unsupported data until explicit
+  deletion and state its recovery or recreation path.
 - Review the final diff, rerun the proportionate harness above, and report exact
   commands and results. Commit only coherent completed work when authorized;
   never push unless explicitly asked.

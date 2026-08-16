@@ -24,6 +24,7 @@ import type {
 import type {
   CoreNodeConfig,
   MnemonicPresentation,
+  WalletProfileCompatibility,
   NodeStatus,
   PayjoinUriInspection,
   RecoveryScanSettings,
@@ -51,6 +52,7 @@ import type {
 export interface WalletProfilesPort {
   exists(): Promise<boolean>;
   profiles(): Promise<WalletRegistry>;
+  profileCompatibility(): Promise<WalletProfileCompatibility>;
   renameWallet(name: string): Promise<WalletProfile>;
   saveInactivityTimeout(minutes: number): Promise<WalletRegistry>;
   selectWallet(walletId: string): Promise<WalletSelection>;

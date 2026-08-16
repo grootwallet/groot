@@ -43,6 +43,7 @@ pub fn run() {
             wallet::ur_decode_psbt,
             wallet::profile_commands::wallet_lock,
             wallet::profile_commands::wallet_profiles,
+            wallet::profile_commands::wallet_profile_compatibility,
             wallet::profile_commands::wallet_rename,
             wallet::profile_commands::wallet_inactivity_timeout_save,
             wallet::profile_commands::wallet_select,

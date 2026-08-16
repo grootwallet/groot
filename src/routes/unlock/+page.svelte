@@ -9,7 +9,7 @@
   import { isPrototypeWallet, walletService } from '$lib/wallet';
   import { page } from '$app/state';
   import { useWalletShellContext } from '$lib/wallet/shell-context';
-  import type { WalletProfile } from '$lib/wallet/contracts';
+  import type { WalletProfile, WalletProfileCompatibility } from '$lib/wallet/contracts';
   const walletShell = useWalletShellContext();
 
   let credential = $state('');
@@ -20,6 +20,7 @@
   let resetting = $state(false);
   let profiles = $state<WalletProfile[]>([]);
   let selectedWalletId = $state<string | null>(null);
+  let compatibility = $state<WalletProfileCompatibility | null>(null);
   let selectedProfile = $derived(profiles.find((wallet) => wallet.id === selectedWalletId));
   let isSoftwareWallet = $derived(selectedProfile?.kind === 'single_key');
   let credentialLabel = $derived(isSoftwareWallet ? 'Wallet passphrase' : 'App PIN');
@@ -31,6 +32,7 @@
     const registry = await walletService.profiles();
     profiles = registry.wallets;
     selectedWalletId = registry.selectedWalletId;
+    compatibility = selectedWalletId ? await walletService.profileCompatibility() : null;
   }
 
   onMount(async () => {
@@ -105,39 +107,51 @@
     <span class="sign-icon"><LockKeyhole size={25} /></span>
     <h1>{selectedProfile?.name ?? 'Unlock wallet'}</h1>
     <p>
-      {#if isSoftwareWallet}Enter this wallet’s passphrase to continue.{:else}Enter this wallet’s
-        app PIN to continue.{/if}
+      {#if compatibility && !compatibility.supported}
+        This disposable Regtest wallet uses an unsupported test-profile format.
+      {:else if isSoftwareWallet}Enter this wallet’s passphrase to continue.{:else}Enter this
+        wallet’s app PIN to continue.{/if}
     </p>
+    {#if compatibility && !compatibility.supported}
+      <div class="warning-box">
+        <strong>This profile predates the current hardware-wallet storage format.</strong>
+        Groot will not guess missing metadata or reset its app PIN. Because Regtest wallets are disposable,
+        delete this test wallet and recreate or recover it from a public wallet backup. Its existing files
+        remain untouched until you explicitly delete it.
+      </div>
+    {/if}
     {#if isPrototypeWallet}<p class="prototype-hint">
         UI prototype PIN: <code>prototype-passphrase</code>
       </p>{/if}
-    <form
-      onsubmit={(event) => {
-        event.preventDefault();
-        unlock();
-      }}
-    >
-      <PasswordField
-        label={credentialLabel}
-        tooltip={isSoftwareWallet
-          ? 'This BIP39 passphrase is required with your 24 recovery words and also unlocks Groot. A different passphrase opens a different wallet.'
-          : 'This app PIN protects local Groot data only. It is not a hardware-wallet passphrase and is not part of a signer seed backup.'}
-        bind:value={credential}
-        placeholder={credentialPlaceholder}
-        autocomplete="current-password"
-        {error}
-        oninput={() => (error = '')}
-        onkeydown={submitCredentialOnEnter}
-      />
-      <Button
-        type="submit"
-        size="large"
-        class="full"
-        disabled={!credential}
-        loading={busy}
-        loadingLabel="Unlocking wallet…">Unlock wallet</Button
+    {#if compatibility?.supported !== false}
+      <form
+        onsubmit={(event) => {
+          event.preventDefault();
+          unlock();
+        }}
       >
-    </form>
+        <PasswordField
+          label={credentialLabel}
+          tooltip={isSoftwareWallet
+            ? 'This BIP39 passphrase is required with your 24 recovery words and also unlocks Groot. A different passphrase opens a different wallet.'
+            : 'This app PIN protects local Groot data only. It is not a hardware-wallet passphrase and is not part of a signer seed backup.'}
+          bind:value={credential}
+          placeholder={credentialPlaceholder}
+          autocomplete="current-password"
+          {error}
+          oninput={() => (error = '')}
+          onkeydown={submitCredentialOnEnter}
+        />
+        <Button
+          type="submit"
+          size="large"
+          class="full"
+          disabled={!credential}
+          loading={busy}
+          loadingLabel="Unlocking wallet…">Unlock wallet</Button
+        >
+      </form>
+    {/if}
     {#if defaultConfig.network === 'regtest'}<button
         class="locked-reset"
         onclick={() => (showReset = true)}><Trash2 size={14} />Delete this regtest wallet</button

@@ -22,6 +22,9 @@ export type WalletSelection = {
   profile: WalletProfile;
   unlocked: boolean;
 };
+export type WalletProfileCompatibility = {
+  supported: boolean;
+};
 export type CoreNodeConfig = {
   backend: { type: 'local_core' | 'remote_core'; url: string };
   auth: 'cookie' | 'user_pass';

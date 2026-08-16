@@ -1796,6 +1796,31 @@ fn descriptor_backup() -> MultisigBackupDto {
 }
 
 #[test]
+fn legacy_hardware_profiles_are_explicitly_unsupported_without_current_lock_files() {
+    let directory = std::env::temp_dir().join(format!("groot-legacy-status-{}", Uuid::new_v4()));
+    fs::create_dir_all(&directory).unwrap();
+    let mut profile = WalletProfile {
+        id: Uuid::new_v4(),
+        name: "Legacy".to_owned(),
+        network: NETWORK_NAME.to_owned(),
+        kind: WalletKind::WatchOnly,
+        descriptor_checksum: "abcd1234".to_owned(),
+        created_at: 1,
+        backup_verified: true,
+    };
+    assert!(!profile_compatibility_for(&profile, &directory).supported);
+
+    fs::write(directory.join("wallet.json"), b"{}").unwrap();
+    fs::write(directory.join("secret.json"), b"{}").unwrap();
+    assert!(profile_compatibility_for(&profile, &directory).supported);
+
+    fs::remove_file(directory.join("wallet.json")).unwrap();
+    profile.kind = WalletKind::SingleKey;
+    assert!(profile_compatibility_for(&profile, &directory).supported);
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn hardware_policy_evidence_is_bound_to_the_initiating_wallet_and_policy() {
     let metadata = descriptor_backup().wallet;
     let wallet_id = Uuid::new_v4();

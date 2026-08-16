@@ -15,6 +15,15 @@ Dependencies point inward. Routes never select adapters. Rust commands translate
 5. Run `pnpm format` after editing supported frontend, configuration, or documentation files.
 6. Run `pnpm validate`; add Rust and visual checks when applicable.
 
+## Persisted-format compatibility
+
+- Treat wallet databases, registry entries, public metadata, encrypted verifier files, backups, proposals, labels, and certification profiles as versioned product interfaces even before release.
+- Before implementation, state whether the change is backward compatible, requires a bounded migration, or deliberately drops disposable test data. Name the exact affected networks/profile kinds and recovery path.
+- A breaking change requires an accepted ADR and the user's explicit approval before code or migration work begins. Approval must choose migration versus discard; agents may not infer that choice from test-only status.
+- Unsupported data must remain untouched until an explicit delete/reset action. The UI must identify the format incompatibility directly and must not present a missing verifier as a wrong PIN, corruption, or successful recovery.
+- Public-network wallet data defaults to fail-closed migration or backup recovery. Discarding it is never an agent decision.
+- Add fixtures for the last supported format and the first unsupported format. Any future compatibility window or migration removal is another breaking decision subject to the same gate.
+
 ## Review rules
 
 - Reject boolean “success” responses when a stable typed result/error is needed.
