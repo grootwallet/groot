@@ -1080,6 +1080,7 @@ pub async fn hardware_sign_external(
         ));
     }
     drop(db);
+    let reviewed = decode_psbt(&proposal.psbt).map_err(proposal_api_error)?;
     let encoded = proposal.psbt;
     let expected = vec![metadata.signer.fingerprint];
     let hwi = hwi_cli(&app)?;
@@ -1101,7 +1102,10 @@ pub async fn hardware_sign_external(
     })
     .await
     .map_err(internal)??;
-    import_external_proposal(&app, &proposal_id, &signed)
+    let returned = decode_psbt(&signed).map_err(proposal_api_error)?;
+    let signatures_only =
+        hardware_signature_response(&reviewed, returned).map_err(proposal_api_error)?;
+    import_external_proposal(&app, &proposal_id, &encode_psbt(&signatures_only))
 }
 
 #[tauri::command]

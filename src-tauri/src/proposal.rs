@@ -153,14 +153,38 @@ pub fn signature_progress(
     })
 }
 
-/// Reduce a PSBT returned by a hardware wallet—over cable, file, or QR—to the
-/// only fields Groot asked the signer to produce: partial signatures. Vendor
-/// software may normalize or omit public PSBT metadata, but none of that
-/// returned metadata is trusted or merged. Conflicting returned prevout data
-/// still fails closed because it is the proposal's fee source. The exact
-/// reviewed unsigned transaction and Groot's canonical metadata remain
-/// authoritative.
+/// Reduce a PSBT returned by a directly connected hardware wallet to the only
+/// fields Groot asked the signer to produce: partial signatures.
+///
+/// The returned transaction and public PSBT metadata are deliberately ignored:
+/// vendor transports may normalize them, and Groot must never adopt them. Each
+/// returned SIGHASH_ALL signature is instead verified against Groot's untouched
+/// reviewed PSBT. A signature produced for different inputs, outputs, amounts,
+/// sequences, prevouts, or locktime therefore fails cryptographic verification.
 pub fn hardware_signature_response(reviewed: &Psbt, returned: Psbt) -> Result<Psbt, ProposalError> {
+    if reviewed.inputs.len() != returned.inputs.len() {
+        return Err(ProposalError::ProposalMismatch);
+    }
+    if returned
+        .inputs
+        .iter()
+        .any(|input| input.final_script_sig.is_some() || input.final_script_witness.is_some())
+    {
+        return Err(ProposalError::PrematureFinalization);
+    }
+    let mut signatures_only = reviewed.clone();
+    for (normalized, device_input) in signatures_only.inputs.iter_mut().zip(returned.inputs) {
+        normalized.partial_sigs = device_input.partial_sigs;
+    }
+    verify_partial_signatures(&signatures_only)?;
+    Ok(signatures_only)
+}
+
+/// Normalize a file, text, or QR import while requiring its transaction and
+/// fee-source metadata to match the reviewed proposal before signatures are
+/// considered. Unlike a direct hardware response, an import has no trusted
+/// signer-specific transport boundary.
+fn imported_signature_response(reviewed: &Psbt, returned: Psbt) -> Result<Psbt, ProposalError> {
     if reviewed.unsigned_tx != returned.unsigned_tx
         || reviewed.inputs.len() != returned.inputs.len()
         || reviewed.outputs.len() != returned.outputs.len()
@@ -174,13 +198,13 @@ pub fn hardware_signature_response(reviewed: &Psbt, returned: Psbt) -> Result<Ps
     {
         return Err(ProposalError::PrematureFinalization);
     }
-    for (canonical, vendor) in reviewed.inputs.iter().zip(&returned.inputs) {
-        let prevout_conflicts = vendor.non_witness_utxo.as_ref().is_some_and(|value| {
+    for (canonical, imported) in reviewed.inputs.iter().zip(&returned.inputs) {
+        let prevout_conflicts = imported.non_witness_utxo.as_ref().is_some_and(|value| {
             canonical
                 .non_witness_utxo
                 .as_ref()
                 .is_some_and(|canonical| canonical != value)
-        }) || vendor.witness_utxo.as_ref().is_some_and(|value| {
+        }) || imported.witness_utxo.as_ref().is_some_and(|value| {
             canonical
                 .witness_utxo
                 .as_ref()
@@ -191,8 +215,8 @@ pub fn hardware_signature_response(reviewed: &Psbt, returned: Psbt) -> Result<Ps
         }
     }
     let mut signatures_only = reviewed.clone();
-    for (normalized, device_input) in signatures_only.inputs.iter_mut().zip(returned.inputs) {
-        normalized.partial_sigs = device_input.partial_sigs;
+    for (normalized, imported_input) in signatures_only.inputs.iter_mut().zip(returned.inputs) {
+        normalized.partial_sigs = imported_input.partial_sigs;
     }
     Ok(signatures_only)
 }
@@ -203,7 +227,7 @@ pub fn merge_signed_psbt(
     allowed_fingerprints: &[Fingerprint],
     required: usize,
 ) -> Result<SignatureProgress, ProposalError> {
-    let imported = hardware_signature_response(original, imported)?;
+    let imported = imported_signature_response(original, imported)?;
     verify_partial_signatures(&imported)?;
     let allowed = allowed_fingerprints.iter().copied().collect::<HashSet<_>>();
     for (index, imported_input) in imported.inputs.iter().enumerate() {
@@ -506,15 +530,39 @@ mod tests {
     }
 
     #[test]
-    fn hardware_response_rejects_changed_transaction_and_finalization() {
+    fn hardware_response_uses_only_signatures_verified_against_the_reviewed_transaction() {
+        let (original, signers) = proposal();
+        let mut changed = original.clone();
+        sign_all_inputs(&mut changed, &signers[0]);
+        changed.unsigned_tx.output[0].value = Amount::from_sat(9_999);
+        let normalized = hardware_signature_response(&original, changed).unwrap();
+        assert_eq!(normalized.unsigned_tx, original.unsigned_tx);
+        assert_eq!(
+            normalized.inputs[0].witness_utxo,
+            original.inputs[0].witness_utxo
+        );
+        assert!(normalized.inputs[0]
+            .partial_sigs
+            .contains_key(&signers[0].1));
+
+        let mut signed_changed = original.clone();
+        signed_changed.unsigned_tx.output[0].value = Amount::from_sat(9_999);
+        sign_all_inputs(&mut signed_changed, &signers[0]);
+        assert_eq!(
+            hardware_signature_response(&original, signed_changed),
+            Err(ProposalError::InvalidSignature)
+        );
+    }
+
+    #[test]
+    fn hardware_response_rejects_input_count_changes_and_finalization() {
         let (original, _) = proposal();
         let mut changed = original.clone();
-        changed.unsigned_tx.output[0].value = Amount::from_sat(9_999);
+        changed.inputs.pop();
         assert_eq!(
             hardware_signature_response(&original, changed),
             Err(ProposalError::ProposalMismatch)
         );
-
         let mut finalized = original.clone();
         finalized.inputs[0].final_script_witness = Some(Witness::new());
         assert_eq!(
