@@ -156,8 +156,10 @@ pub fn signature_progress(
 /// Reduce a PSBT returned by a hardware wallet—over cable, file, or QR—to the
 /// only fields Groot asked the signer to produce: partial signatures. Vendor
 /// software may normalize or omit public PSBT metadata, but none of that
-/// returned metadata is trusted or merged. The exact reviewed unsigned
-/// transaction and Groot's canonical metadata remain authoritative.
+/// returned metadata is trusted or merged. Conflicting returned prevout data
+/// still fails closed because it is the proposal's fee source. The exact
+/// reviewed unsigned transaction and Groot's canonical metadata remain
+/// authoritative.
 pub fn hardware_signature_response(reviewed: &Psbt, returned: Psbt) -> Result<Psbt, ProposalError> {
     if reviewed.unsigned_tx != returned.unsigned_tx
         || reviewed.inputs.len() != returned.inputs.len()
@@ -173,7 +175,7 @@ pub fn hardware_signature_response(reviewed: &Psbt, returned: Psbt) -> Result<Ps
         return Err(ProposalError::PrematureFinalization);
     }
     for (canonical, vendor) in reviewed.inputs.iter().zip(&returned.inputs) {
-        let conflicts = vendor.non_witness_utxo.as_ref().is_some_and(|value| {
+        let prevout_conflicts = vendor.non_witness_utxo.as_ref().is_some_and(|value| {
             canonical
                 .non_witness_utxo
                 .as_ref()
@@ -183,23 +185,8 @@ pub fn hardware_signature_response(reviewed: &Psbt, returned: Psbt) -> Result<Ps
                 .witness_utxo
                 .as_ref()
                 .is_some_and(|canonical| canonical != value)
-        }) || vendor.sighash_type.as_ref().is_some_and(|value| {
-            canonical
-                .sighash_type
-                .as_ref()
-                .is_some_and(|canonical| canonical != value)
-        }) || vendor.redeem_script.as_ref().is_some_and(|value| {
-            canonical
-                .redeem_script
-                .as_ref()
-                .is_some_and(|canonical| canonical != value)
-        }) || vendor.witness_script.as_ref().is_some_and(|value| {
-            canonical
-                .witness_script
-                .as_ref()
-                .is_some_and(|canonical| canonical != value)
         });
-        if conflicts {
+        if prevout_conflicts {
             return Err(ProposalError::ProposalMismatch);
         }
     }
@@ -537,41 +524,35 @@ mod tests {
     }
 
     #[test]
-    fn hardware_response_rejects_conflicting_review_metadata() {
-        let (original, _) = proposal();
+    fn hardware_response_discards_conflicting_vendor_signing_metadata() {
+        let (original, signers) = proposal();
+        let allowed = allowed_fingerprints(&signers);
+        let mut returned = original.clone();
+        sign_all_inputs(&mut returned, &signers[0]);
 
-        let mut non_witness = original.clone();
-        non_witness.inputs[0].non_witness_utxo = Some(unsigned_tx(7));
-        let mut reviewed_non_witness = original.clone();
-        reviewed_non_witness.inputs[0].non_witness_utxo = Some(unsigned_tx(6));
+        for input in &mut returned.inputs {
+            input.sighash_type = Some(EcdsaSighashType::Single.into());
+            input.redeem_script = Some(ScriptBuf::from_bytes(vec![0x52]));
+            input.witness_script = Some(ScriptBuf::from_bytes(vec![0x51]));
+        }
+
+        let signatures_only = hardware_signature_response(&original, returned).unwrap();
+        assert_eq!(signatures_only.unsigned_tx, original.unsigned_tx);
         assert_eq!(
-            hardware_signature_response(&reviewed_non_witness, non_witness),
-            Err(ProposalError::ProposalMismatch)
+            signatures_only.inputs[0].witness_utxo,
+            original.inputs[0].witness_utxo
+        );
+        assert_eq!(
+            signatures_only.inputs[0].witness_script,
+            original.inputs[0].witness_script
         );
 
-        let mut sighash = original.clone();
-        sighash.inputs[0].sighash_type = Some(EcdsaSighashType::Single.into());
-        let mut reviewed_sighash = original.clone();
-        reviewed_sighash.inputs[0].sighash_type = Some(EcdsaSighashType::All.into());
+        let mut merged = original.clone();
         assert_eq!(
-            hardware_signature_response(&reviewed_sighash, sighash),
-            Err(ProposalError::ProposalMismatch)
-        );
-
-        let mut redeem = original.clone();
-        redeem.inputs[0].redeem_script = Some(ScriptBuf::from_bytes(vec![0x52]));
-        let mut reviewed_redeem = original.clone();
-        reviewed_redeem.inputs[0].redeem_script = Some(ScriptBuf::from_bytes(vec![0x51]));
-        assert_eq!(
-            hardware_signature_response(&reviewed_redeem, redeem),
-            Err(ProposalError::ProposalMismatch)
-        );
-
-        let mut witness = original.clone();
-        witness.inputs[0].witness_script = Some(ScriptBuf::from_bytes(vec![0x51]));
-        assert_eq!(
-            hardware_signature_response(&original, witness),
-            Err(ProposalError::ProposalMismatch)
+            merge_signed_psbt(&mut merged, signatures_only, &allowed, 2)
+                .unwrap()
+                .signed,
+            1
         );
     }
 
