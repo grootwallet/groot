@@ -24,8 +24,8 @@ describe('hardware receive verification UI', () => {
       expect(route).not.toContain('<TrezorPinModal');
     }
     expect(verificationFlow).toContain('<HardwareAddressComparison');
-    expect(addressComparison).toContain('<summary><span>Address details</span><ChevronDown size={14}/></summary>');
-    expect(appCss).toContain('.verification-details[open] summary svg { transform: rotate(180deg); }');
+    expect(addressComparison).toMatch(/<summary>\s*<span>Address details<\/span>\s*<ChevronDown size=\{14\}\s*\/>\s*<\/summary>/);
+    expect(appCss).toMatch(/\.verification-details\[open\] summary svg\s*\{\s*transform:\s*rotate\(180deg\);\s*\}/);
   });
 
   it('centralizes the bounded PIN and retry presentation', () => {
@@ -44,7 +44,7 @@ describe('hardware receive verification UI', () => {
     expect(overview).toContain('<DeviceDetailsModal');
     expect(settings).toContain('Hardware signer identity &amp; health');
     expect(settings).toContain('walletService.checkHardwareExternalSigner');
-    expect(settings).toContain('<LocalTimestamp value={signerHealth.checkedAt}/>');
+    expect(settings).toMatch(/<LocalTimestamp\s+value=\{signerHealth\.checkedAt\}\s*\/>/);
     expect(settings).toContain("'Not checked'");
     expect(settings).toContain('accountStandard="BIP84"');
     expect(settings).toContain('<DeviceDetailsModal');
@@ -95,9 +95,10 @@ describe('hardware receive verification UI', () => {
   });
 
   it('does not require an unverifiable fingerprint attestation for Trezor imports', () => {
-    expect(hardwareSetup).toContain("let isTrezor = $derived(Boolean(signer?.deviceType?.toLowerCase().includes('trezor')))");
-    expect(hardwareSetup).toContain('Trezor does not show its master fingerprint during this export, so no fingerprint comparison is required here.');
-    expect(hardwareSetup).toContain("isTrezor ? 'Use this Trezor wallet'");
+    const normalizedSetup = hardwareSetup.replace(/\s+/g, ' ');
+    expect(normalizedSetup).toContain("let isTrezor = $derived(Boolean(signer?.deviceType?.toLowerCase().includes('trezor')))");
+    expect(normalizedSetup).toContain('Trezor does not show its master fingerprint during this export, so no fingerprint comparison is required here.');
+    expect(normalizedSetup).toContain("isTrezor ? 'Use this Trezor wallet'");
   });
 
   it('reserves the signer summary while the send wallet identity loads', () => {
@@ -109,10 +110,12 @@ describe('hardware receive verification UI', () => {
   });
 
   it('keeps the single-key transaction review visible while choosing a signing transport', () => {
-    const review = singleKeySend.indexOf("aria-label={externalProposal?.canFinalize ? 'Signed transaction review' : 'Transaction review'}");
+    const review = singleKeySend.search(
+      /aria-label=\{externalProposal\?\.canFinalize\s*\?\s*'Signed transaction review'\s*:\s*'Transaction review'\}/
+    );
     const cableAction = singleKeySend.indexOf('onclick={scanHardware}', review);
     expect(review).toBeGreaterThan(-1);
     expect(cableAction).toBeGreaterThan(review);
-    expect(singleKeySend).toContain('<TransactionReviewDetails {proposal} onChangeAddress={() => changeAddressOpen = true}/>');
+    expect(singleKeySend).toMatch(/<TransactionReviewDetails\s+\{proposal\}\s+onChangeAddress=\{\(\)\s*=>\s*\(?changeAddressOpen\s*=\s*true\)?\}\s*\/>/);
   });
 });

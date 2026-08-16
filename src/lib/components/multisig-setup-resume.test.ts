@@ -12,7 +12,9 @@ describe('resumable multisig setup', () => {
     expect(setup).toContain('Choose a spending policy');
     expect(setup).toContain('Configure {templateKind');
     expect(setup).toContain('Recovery path and Inheritance use the same four-key structure');
-    expect(setup.indexOf("{#if policyStep === 'choose'}")).toBeLessThan(setup.indexOf('<label class="field"><span>Wallet name</span>'));
+    expect(setup.indexOf("{#if policyStep === 'choose'}")).toBeLessThan(
+      setup.search(/<label\s+class="field"[^>]*>\s*<span>Wallet name<\/span>/)
+    );
   });
 
   it('loads, continuously saves, and explicitly discards the native draft', () => {
@@ -39,8 +41,9 @@ describe('resumable multisig setup', () => {
     expect(shell).toContain('Boolean(multisigSetupDraft) && !onboardingRoute');
     expect(shell).not.toContain('Boolean(multisigSetupDraft) && !onboardingRoute && !lockedRoute');
     expect(shell).toContain('<ResumeSetupNotice');
-    expect(shell).toContain("lockedRoute ? 'Multisig wallet setup'");
-    expect(shell).toContain("lockedRoute ? 'Wallet creation in progress'");
+    const normalizedShell = shell.replace(/\s+/g, ' ');
+    expect(normalizedShell).toContain("lockedRoute ? 'Multisig wallet setup'");
+    expect(normalizedShell).toContain("lockedRoute ? 'Wallet creation in progress'");
     expect(shell).toContain('locked={lockedRoute}');
     expect(shell).toContain('class:locked-setup-visible={showSetupResume && lockedRoute}');
     expect(shell).toContain('ondiscard={() =>');

@@ -1,0 +1,30 @@
+# Dependencies and package-manager caches
+node_modules/
+.pnpm-store/
+
+# Framework, build, coverage, and test output
+.svelte-kit/
+build/
+dist/
+coverage/
+playwright-report/
+test-results/
+.vercel/
+outputs/
+
+# Local runtime and release artifacts
+.regtest/
+.regtest-test/
+hardware-certification.local/
+release-artifacts/
+
+# Native generated output, vendored sources, and generated/binary icons
+src-tauri/target/
+src-tauri/gen/
+src-tauri/vendor/
+src-tauri/icons/
+
+# Generated dependency and provenance records
+pnpm-lock.yaml
+src-tauri/Cargo.lock
+docs/hwi-artifact-manifest-[0-9]*.json

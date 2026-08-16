@@ -12,7 +12,8 @@ Dependencies point inward. Routes never select adapters. Rust commands translate
 2. Change the smallest owning layer.
 3. Add pure unit tests first, then adapter/command integration, then the minimum E2E proof.
 4. Update product, architecture, flow, implementation-status, testing, and ADR documents that own the changed claim.
-5. Run `pnpm validate`; add Rust and visual checks when applicable.
+5. Run `pnpm format` after editing supported frontend, configuration, or documentation files.
+6. Run `pnpm validate`; add Rust and visual checks when applicable.
 
 ## Review rules
 
@@ -24,6 +25,12 @@ Dependencies point inward. Routes never select adapters. Rust commands translate
 - Reject a production claim supported only by dummy, simulator, snapshot, or mocked evidence.
 - Prefer a small pure function and exhaustive table tests over condition-heavy route or command code.
 - Reuse design-system components for repeated interface structures. A flow may supply device-specific content or behavior, but must not introduce one-off cards, typography, badges, lists, confirmations, or identifier displays when an equivalent pattern exists. If a second flow needs the pattern, extract it into `src/lib/components/` in the same change and document its intended variants in `docs/design-system.md`.
+
+## Formatting
+
+- Run `pnpm format` after changing Svelte, TypeScript, JavaScript, CSS, JSON, Markdown, or YAML files. Review the resulting diff before committing, especially whitespace-sensitive Svelte templates and documentation examples.
+- `pnpm validate` runs `pnpm format:check` and fails when supported files do not match the repository's Prettier configuration.
+- Prettier does not format Rust. Continue to run `cargo fmt` while editing Rust and `cargo fmt --check` from `src-tauri` before handoff.
 
 ## Supply-chain rules
 
