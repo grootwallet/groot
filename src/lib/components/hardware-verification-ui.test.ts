@@ -128,6 +128,14 @@ describe('hardware receive verification UI', () => {
     }
   });
 
+  it('shows saved signer names only after matching scanned fingerprints', () => {
+    expect(hardwareDeviceList).toContain('hardwareDeviceDisplayName(device, savedSigners)');
+    expect(singleKeySend).toContain('savedSigners={externalWallet ? [externalWallet.signer] : []}');
+    expect(multisigSend).toContain('hardwareDeviceDisplayName(device, wallet?.cosigners ?? [])');
+    expect(singleKeyReceive).toContain('savedSigners={savedSignerFingerprint && savedSignerLabel');
+    expect(multisigReceive).toContain('savedSigners={wallet?.cosigners ?? []}');
+  });
+
   it('performs only one all-backend HWI scan per multisig setup request', () => {
     const start = multisigSetup.indexOf('async function scanHardware()');
     const end = multisigSetup.indexOf('function closeHardwareScan()', start);

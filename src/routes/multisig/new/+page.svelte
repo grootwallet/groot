@@ -1922,7 +1922,7 @@
           disabled={Boolean(addedSigner) || device.action === 'none'}
           onclick={() => handleHardware(device)}
           ><Cpu size={18} /><span
-            ><strong>{device.label}</strong><small
+            ><strong>{addedSigner?.label ?? device.label}</strong><small
               >{addedSigner
                 ? `Fingerprint ${device.fingerprint} · Already added as ${addedSigner.label}.`
                 : device.fingerprint

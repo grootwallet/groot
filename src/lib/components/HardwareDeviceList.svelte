@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Cpu, RefreshCw } from '@lucide/svelte';
   import type { HardwareDevice } from '$lib/wallet';
+  import { hardwareDeviceDisplayName, type SavedHardwareSignerName } from '$lib/hardware/discovery';
   import Button from './Button.svelte';
 
   let {
@@ -10,7 +11,8 @@
     onrescan,
     disabled = false,
     showRescan = false,
-    detailedStatus = false
+    detailedStatus = false,
+    savedSigners = []
   }: {
     devices: HardwareDevice[];
     emptyMessage: string;
@@ -19,6 +21,7 @@
     disabled?: boolean;
     showRescan?: boolean;
     detailedStatus?: boolean;
+    savedSigners?: readonly SavedHardwareSignerName[];
   } = $props();
 
   function detail(device: HardwareDevice) {
@@ -46,7 +49,11 @@
     {#each devices as device (device.id)}
       <button onclick={() => onselect(device)} {disabled}>
         <Cpu size={18} />
-        <span><strong>{device.label}</strong><small>{detail(device)}</small></span>
+        <span
+          ><strong>{hardwareDeviceDisplayName(device, savedSigners)}</strong><small
+            >{detail(device)}</small
+          ></span
+        >
         {#if detailedStatus}<em class:ready={device.status === 'ready'}>{status(device)}</em>{/if}
       </button>
     {/each}

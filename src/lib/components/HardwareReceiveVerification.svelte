@@ -12,6 +12,7 @@
     receiveVerificationFailure,
     receiveVerificationIntent
   } from '$lib/hardware/receive-verification';
+  import { hardwareDeviceDisplayName, type SavedHardwareSignerName } from '$lib/hardware/discovery';
   import { toast } from '$lib/stores/toasts';
   import { walletService, type HardwareDevice, type WalletErrorCode } from '$lib/wallet';
   import { hardwareAddressComparison } from '$lib/wallet/hardware-display';
@@ -23,6 +24,7 @@
     savedDeviceIdentity?: string | null;
     eligibleDeviceTypes: string[];
     eligibleFingerprints: string[];
+    savedSigners?: readonly SavedHardwareSignerName[];
     onverified: (address: ReceiveAddress) => void;
   };
 
@@ -32,6 +34,7 @@
     savedDeviceIdentity = null,
     eligibleDeviceTypes,
     eligibleFingerprints,
+    savedSigners = [],
     onverified
   }: Props = $props();
   let verifyOpen = $state(false);
@@ -269,7 +272,7 @@
         <button disabled={device.action === 'none'} onclick={() => chooseDevice(device)}>
           <Cpu size={18} />
           <span>
-            <strong>{device.label}</strong>
+            <strong>{hardwareDeviceDisplayName(device, savedSigners)}</strong>
             <small>{device.fingerprint ?? device.message}</small>
             <em
               class:ready={device.status === 'ready' || device.status === 'detected'}

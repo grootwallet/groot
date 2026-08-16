@@ -1144,6 +1144,7 @@
         : 'Hardware device scan in progress'}
     />{:else}<HardwareDeviceList
       {devices}
+      savedSigners={externalWallet ? [externalWallet.signer] : []}
       emptyMessage="Connect the signer and scan again. If another wallet app is open, quit it so Groot can use USB."
       onselect={signHardware}
       onrescan={scanHardware}

@@ -214,6 +214,7 @@
           walletKind="multisig"
           {eligibleDeviceTypes}
           {eligibleFingerprints}
+          savedSigners={wallet?.cosigners ?? []}
           onverified={applyVerifiedAddress}
         /><Button variant="ghost-danger" onclick={() => requestDiscard(current!)}
           ><Trash2 size={16} />Discard</Button

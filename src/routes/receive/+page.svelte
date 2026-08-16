@@ -33,6 +33,7 @@
   let receiveCard = $state<HTMLElement | null>(null);
   let savedSignerDeviceType = $state<string | null>(null);
   let savedSignerFingerprint = $state<string | null>(null);
+  let savedSignerLabel = $state<string | null>(null);
   const walletShell = useWalletShellContext();
   let externalSigner = $derived(
     walletShell.profiles().find((profile) => profile.id === walletShell.selectedWalletId())
@@ -87,6 +88,7 @@
         const savedSigner = (await walletService.externalSignerWallet()).signer;
         savedSignerDeviceType = savedSigner.deviceType;
         savedSignerFingerprint = savedSigner.fingerprint;
+        savedSignerLabel = savedSigner.label;
       }
     } catch (cause) {
       toast({
@@ -225,6 +227,9 @@
             savedDeviceIdentity={savedSignerDeviceType}
             eligibleDeviceTypes={savedSignerDeviceType ? [savedSignerDeviceType] : []}
             eligibleFingerprints={savedSignerFingerprint ? [savedSignerFingerprint] : []}
+            savedSigners={savedSignerFingerprint && savedSignerLabel
+              ? [{ fingerprint: savedSignerFingerprint, label: savedSignerLabel }]
+              : []}
             onverified={applyVerifiedAddress}
           />{/if}<Button variant="ghost-danger" onclick={() => requestDiscard(current!)}
           ><Trash2 size={16} />Discard</Button

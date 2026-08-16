@@ -66,6 +66,7 @@
     requiresPolicySetup,
     shouldShowColdcardPolicyHelp
   } from '$lib/hardware/policy-readiness';
+  import { hardwareDeviceDisplayName } from '$lib/hardware/discovery';
   import { fly } from 'svelte/transition';
   import { discreetMode } from '$lib/privacy';
   let wallet = $state<MultisigWallet | null>(null),
@@ -1278,7 +1279,9 @@
             policyRegistrationProfile(device).registration === 'unsupported'}
           onclick={() => handleHardware(device)}
           ><Cpu size={18} /><span
-            ><strong>{device.label}</strong><small>{device.fingerprint ?? device.message}</small><em
+            ><strong>{hardwareDeviceDisplayName(device, wallet?.cosigners ?? [])}</strong><small
+              >{device.fingerprint ?? device.message}</small
+            ><em
               class:ready={!alreadySigned &&
                 (device.status === 'ready' || device.status === 'detected') &&
                 (!policyRequired || !!policyVerified)}
