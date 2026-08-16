@@ -1,6 +1,6 @@
 # ADR 0022: explicit coverage scope and frontend state lifetimes
 
-Status: accepted.
+Status: superseded in part by ADR 0034; coverage decisions remain accepted.
 
 ## Context
 

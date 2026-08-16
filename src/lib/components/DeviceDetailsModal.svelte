@@ -9,13 +9,12 @@
   import LocalTimestamp from './LocalTimestamp.svelte';
   import Modal from './Modal.svelte';
 
-  let { signer, health, checking, onclose, oncheck, history = [], policyStatus = null, onpolicy, onrename, accountStandard = 'BIP48' } = $props<{
+  let { signer, health, checking, onclose, oncheck, policyStatus = null, onpolicy, onrename, accountStandard = 'BIP48' } = $props<{
     signer: CosignerDraft | null;
     health: CosignerHealthCheck | null;
     checking: boolean;
     onclose: () => void;
     oncheck: () => void;
-    history?: CosignerHealthCheck[];
     policyStatus?: {
       label: string;
       description: string;
@@ -117,24 +116,20 @@
         </section>
       {/if}
       <section class="health-card" aria-live="polite">
-        <div class="health-heading"><span class:checked={health?.status === 'healthy'} class:attention={health?.status === 'attention'}><CheckCircle2 size={18}/></span><div><strong>Device health</strong><small>{#if health?.status === 'healthy'}Last checked <LocalTimestamp value={health.checkedAt}/>{:else}Not checked in this session{/if}</small></div></div>
-        {#if checking}
-          <HardwareActionPrompt
-            title="Checking signer key"
-            detail={`Keep the signer connected and unlocked while Groot reads its ${accountStandard} account key and compares it with the saved key.`}
-            label="Signer health check in progress"
-          />
-        {:else}
-          <p>{health?.summary ?? `Connect and unlock the signer to verify that it holds the saved ${accountStandard} account key.`}</p>
-          <Button variant="secondary" class="full" onclick={oncheck}><RefreshCw size={15}/>Run health check</Button>
-        {/if}
+        <div class="health-heading"><span class:checked={health?.status === 'healthy'} class:attention={health?.status === 'attention'}><CheckCircle2 size={18}/></span><div><strong>Device health</strong><small>{#if health}Last checked <LocalTimestamp value={health.checkedAt}/>{:else}Not checked yet{/if}</small></div></div>
+        <div class="health-card-body">
+          {#if checking}
+            <HardwareActionPrompt
+              title="Checking signer key"
+              detail={`Keep the signer connected and unlocked while Groot reads its ${accountStandard} account key and compares it with the saved key.`}
+              label="Signer health check in progress"
+            />
+          {:else}
+            <p>{health?.summary ?? `Connect and unlock the signer to verify that it holds the saved ${accountStandard} account key.`}</p>
+            <Button variant="secondary" class="full" onclick={oncheck}><RefreshCw size={15}/>Run health check</Button>
+          {/if}
+        </div>
       </section>
-      {#if history.length}
-        <section class="health-history" aria-label="Health check history">
-          <div><strong>Recent checks</strong><small>This app session</small></div>
-          <ol>{#each history as entry}<li class:attention={entry.status === 'attention'}><span>{entry.status === 'attention' ? 'Needs attention' : 'Healthy'}</span><LocalTimestamp value={entry.checkedAt}/><small>{entry.summary}</small></li>{/each}</ol>
-        </section>
-      {/if}
     </div>
   {/if}
 </Modal>

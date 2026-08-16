@@ -1112,6 +1112,23 @@ pub struct CosignerHealthDto {
     summary: String,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HardwareHealthCheckInput {
+    status: String,
+    checked_at: String,
+    summary: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HardwareHealthCheckRecordDto {
+    signer_fingerprint: String,
+    status: String,
+    checked_at: String,
+    summary: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SignerPolicyVerificationDto {
@@ -2261,6 +2278,12 @@ fn init_app_schema(db: &Connection) -> ApiResult<()> {
         );
         CREATE INDEX IF NOT EXISTS groot_signer_policy_acknowledgements_signer_time
             ON groot_signer_policy_acknowledgements(signer_fingerprint, acknowledged_at DESC, id DESC);
+        CREATE TABLE IF NOT EXISTS groot_hardware_health_checks (
+            signer_fingerprint TEXT PRIMARY KEY CHECK(length(signer_fingerprint) = 8),
+            status TEXT NOT NULL CHECK(status IN ('healthy', 'attention')),
+            checked_at TEXT NOT NULL,
+            summary TEXT NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS groot_proposals (
             proposal_id TEXT PRIMARY KEY,
             recipient TEXT NOT NULL,

@@ -209,6 +209,114 @@ pub async fn hardware_check_external_signer(
     .map_err(internal)?
 }
 
+fn open_hardware_health_db(app: &AppHandle) -> ApiResult<Connection> {
+    match selected_profile(app)?.kind {
+        WalletKind::Multisig => open_multisig_db(app),
+        WalletKind::WatchOnly => open_db(app),
+        WalletKind::SingleKey => Err(api_error(
+            "wrong_wallet_kind",
+            "The selected wallet does not use an external hardware signer.",
+        )),
+    }
+}
+
+fn validate_hardware_health_record(
+    signer_fingerprint: String,
+    check: HardwareHealthCheckInput,
+) -> ApiResult<HardwareHealthCheckRecordDto> {
+    let signer_fingerprint = signer_fingerprint.trim().to_ascii_lowercase();
+    Fingerprint::from_str(&signer_fingerprint).map_err(|_| {
+        api_error(
+            "invalid_fingerprint",
+            "The hardware signer fingerprint must contain exactly eight hexadecimal characters.",
+        )
+    })?;
+    let status = check.status.trim().to_ascii_lowercase();
+    if !matches!(status.as_str(), "healthy" | "attention") {
+        return Err(api_error(
+            "invalid_hardware_request",
+            "A health check must be healthy or need attention.",
+        ));
+    }
+    let checked_at = check.checked_at.trim().to_owned();
+    if checked_at.is_empty() || checked_at.len() > 64 {
+        return Err(api_error(
+            "invalid_hardware_request",
+            "The health-check time is invalid.",
+        ));
+    }
+    let summary = check.summary.trim().to_owned();
+    if summary.is_empty() || summary.chars().count() > 512 {
+        return Err(api_error(
+            "invalid_hardware_request",
+            "The health-check summary must contain 1 to 512 characters.",
+        ));
+    }
+    Ok(HardwareHealthCheckRecordDto {
+        signer_fingerprint,
+        status,
+        checked_at,
+        summary,
+    })
+}
+
+fn upsert_hardware_health_check(
+    db: &Connection,
+    record: &HardwareHealthCheckRecordDto,
+) -> ApiResult<()> {
+    db.execute(
+        "INSERT INTO groot_hardware_health_checks(signer_fingerprint, status, checked_at, summary) VALUES(?1, ?2, ?3, ?4)\
+         ON CONFLICT(signer_fingerprint) DO UPDATE SET status = excluded.status, checked_at = excluded.checked_at, summary = excluded.summary",
+        params![
+            record.signer_fingerprint,
+            record.status,
+            record.checked_at,
+            record.summary
+        ],
+    )
+    .map_err(internal)?;
+    Ok(())
+}
+
+fn read_hardware_health_checks(db: &Connection) -> ApiResult<Vec<HardwareHealthCheckRecordDto>> {
+    let mut statement = db
+        .prepare(
+            "SELECT signer_fingerprint, status, checked_at, summary FROM groot_hardware_health_checks ORDER BY signer_fingerprint",
+        )
+        .map_err(internal)?;
+    let records = statement
+        .query_map([], |row| {
+            Ok(HardwareHealthCheckRecordDto {
+                signer_fingerprint: row.get(0)?,
+                status: row.get(1)?,
+                checked_at: row.get(2)?,
+                summary: row.get(3)?,
+            })
+        })
+        .map_err(internal)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(internal)?;
+    Ok(records)
+}
+
+#[tauri::command]
+pub fn hardware_health_checks(app: AppHandle) -> ApiResult<Vec<HardwareHealthCheckRecordDto>> {
+    read_hardware_health_checks(&open_hardware_health_db(&app)?)
+}
+
+#[tauri::command]
+pub fn hardware_health_check_record(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    signer_fingerprint: String,
+    check: HardwareHealthCheckInput,
+) -> ApiResult<HardwareHealthCheckRecordDto> {
+    let _operation = operation_guard(&state)?;
+    let record = validate_hardware_health_record(signer_fingerprint, check)?;
+    upsert_hardware_health_check(&open_hardware_health_db(&app)?, &record)?;
+    Ok(record)
+}
+
 fn parse_hwi_account_xpub(output: &[u8], device_type: &str) -> ApiResult<String> {
     let value: serde_json::Value = serde_json::from_slice(output).map_err(internal)?;
     let xpub = value
@@ -1516,5 +1624,58 @@ mod health_check_tests {
         let error =
             parse_hwi_account_keypool(&output, SINGLESIG_ACCOUNT_PATH, "trezor").unwrap_err();
         assert_eq!(error.code, "invalid_derivation_path");
+    }
+
+    #[test]
+    fn health_check_persistence_keeps_only_the_latest_result_per_signer() {
+        let db = Connection::open_in_memory().unwrap();
+        init_app_schema(&db).unwrap();
+        let first = validate_hardware_health_record(
+            "A1B2C3D4".to_owned(),
+            HardwareHealthCheckInput {
+                status: "attention".to_owned(),
+                checked_at: "2026-08-16T06:00:00.000Z".to_owned(),
+                summary: "Unlock the signer.".to_owned(),
+            },
+        )
+        .unwrap();
+        upsert_hardware_health_check(&db, &first).unwrap();
+        let latest = validate_hardware_health_record(
+            "a1b2c3d4".to_owned(),
+            HardwareHealthCheckInput {
+                status: "healthy".to_owned(),
+                checked_at: "2026-08-16T07:00:00.000Z".to_owned(),
+                summary: "Signer matches.".to_owned(),
+            },
+        )
+        .unwrap();
+        upsert_hardware_health_check(&db, &latest).unwrap();
+
+        assert_eq!(read_hardware_health_checks(&db).unwrap(), vec![latest]);
+    }
+
+    #[test]
+    fn health_check_persistence_rejects_invalid_status_and_fingerprint() {
+        let invalid_status = validate_hardware_health_record(
+            "a1b2c3d4".to_owned(),
+            HardwareHealthCheckInput {
+                status: "maybe".to_owned(),
+                checked_at: "2026-08-16T07:00:00.000Z".to_owned(),
+                summary: "Signer matches.".to_owned(),
+            },
+        )
+        .unwrap_err();
+        assert_eq!(invalid_status.code, "invalid_hardware_request");
+
+        let invalid_fingerprint = validate_hardware_health_record(
+            "not-a-key".to_owned(),
+            HardwareHealthCheckInput {
+                status: "healthy".to_owned(),
+                checked_at: "2026-08-16T07:00:00.000Z".to_owned(),
+                summary: "Signer matches.".to_owned(),
+            },
+        )
+        .unwrap_err();
+        assert_eq!(invalid_fingerprint.code, "invalid_fingerprint");
     }
 }

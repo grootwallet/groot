@@ -2,7 +2,7 @@ import { defaultConfig } from '$lib/config';
 import type { ReceiveAddress, Transaction } from '$lib/types';
 import { addressPrefixForNetwork, canDiscardAddress, hasAddressPrefixForNetwork, normalizePermanentLabel } from './policy';
 import { feeRate, MAX_SUPPLEMENTAL_COIN_FLIPS, MAX_SUPPLEMENTAL_DICE_ROLLS, MIN_SUPPLEMENTAL_COIN_FLIPS, MIN_SUPPLEMENTAL_DICE_ROLLS, sats, WalletError, type CoinSelection, type CoinSelectionPreview, type FeeEstimates, type PaymentProposal, type WalletEvent, type WalletPort, type WalletSnapshot } from './contracts';
-import type { CoreNodeConfig, ExternalSigner, ExternalSignerSource, ExternalSignerWallet, MultisigPreview, MultisigProposal, MultisigWallet, RecoveryPolicyAnalysis, RecoveryTemplate, SignerPolicyVerification, WalletProfile, WalletSyncSource } from './contracts';
+import type { CoreNodeConfig, CosignerHealthCheck, ExternalSigner, ExternalSignerSource, ExternalSignerWallet, HardwareHealthCheckRecord, MultisigPreview, MultisigProposal, MultisigWallet, RecoveryPolicyAnalysis, RecoveryTemplate, SignerPolicyVerification, WalletProfile, WalletSyncSource } from './contracts';
 import type { PolicyDraft } from '$lib/multisig/policy';
 import { descriptorPreview, MULTISIG_ACCOUNT_PATH, normalizeCosigner, normalizeSignerLabel, validatePolicyDraft } from '$lib/multisig/policy';
 import { policyReadinessKind } from '$lib/hardware/policy-readiness';
@@ -18,6 +18,7 @@ import {
 export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
   private multisigSetupDraftValue: import('./contracts').MultisigSetupDraft | null = null;
   private multisigPolicyVerificationRecords: SignerPolicyVerification[] = [];
+  private hardwareHealthCheckRecords = new Map<string, HardwareHealthCheckRecord>();
   async exists() { return this._exists; }
   async profiles() { return { version: 1, selectedWalletId: this._selectedWalletId, wallets: structuredClone(this._profiles), inactivityTimeoutMinutes: this._inactivityTimeoutMinutes }; }
   async renameWallet(name: string) {
@@ -353,6 +354,19 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       && connected.xpub === signer.xpub;
     if (!identityMatches) throw new WalletError('unknown_signer', 'The connected device does not hold this signer’s saved BIP84 account key.');
     return { status: 'healthy' as const, checkedAt: new Date().toISOString(), summary: `Connected device matches fingerprint ${signer.fingerprint} and the saved BIP84 account key.` };
+  }
+  async hardwareHealthChecks() {
+    const prefix = `${this._selectedWalletId ?? ''}:`;
+    return [...this.hardwareHealthCheckRecords.entries()]
+      .filter(([key]) => key.startsWith(prefix))
+      .map(([, record]) => structuredClone(record));
+  }
+  async recordHardwareHealthCheck(signerFingerprint: string, check: CosignerHealthCheck) {
+    if (!this._selectedWalletId) throw new WalletError('wallet_not_found', 'Select a wallet first.');
+    const signerFingerprintNormalized = signerFingerprint.trim().toLowerCase();
+    const record = { signerFingerprint: signerFingerprintNormalized, ...structuredClone(check) };
+    this.hardwareHealthCheckRecords.set(`${this._selectedWalletId}:${signerFingerprintNormalized}`, record);
+    return structuredClone(record);
   }
   async multisigSignerPolicyVerifications() {
     return structuredClone(this.multisigPolicyVerificationRecords);

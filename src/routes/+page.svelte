@@ -11,7 +11,7 @@
   import { walletService, WalletError, type CosignerHealthCheck, type ExternalSignerWallet, type MultisigProposal, type MultisigWallet, type WalletProfile, type WalletSnapshot, type WalletSyncSource, type WalletSyncStatus } from '$lib/wallet';
   import type { CosignerDraft } from '$lib/multisig/policy';
   import { matchingDeviceForHealthCheck } from '$lib/hardware/health-check';
-  import { externalSignerHealthKey, externalSignerHealthSessions, recordExternalSignerHealthCheck } from '$lib/hardware/external-signer-health-session';
+  import { hardwareHealthChecks, hardwareHealthKey, recordHardwareHealthCheck, setHardwareHealthChecks } from '$lib/hardware/health-check-state';
   import { latestActiveProposal } from '$lib/wallet/proposal-resume';
   import { pendingBalanceBreakdown, sortTransactionsNewestFirst } from '$lib/wallet/presentation';
   import { onMount } from 'svelte';
@@ -55,9 +55,7 @@
     ...hardwareSignerWallet.signer,
     source: hardwareSignerWallet.signer.source
   }) : null);
-  let signerHealthSession = $derived(hardwareSignerWallet ? $externalSignerHealthSessions[externalSignerHealthKey(hardwareSignerWallet.signer.fingerprint)] ?? null : null);
-  let signerHealth = $derived(signerHealthSession?.latest ?? null);
-  let signerHealthHistory = $derived(signerHealthSession?.history ?? []);
+  let signerHealth = $derived(hardwareSignerWallet ? $hardwareHealthChecks[hardwareHealthKey(hardwareSignerWallet.signer.fingerprint)] ?? null : null);
   const pendingBreakdown = $derived(snapshot ? pendingBalanceBreakdown(snapshot) : { incoming: 0, change: 0, outgoing: 0 });
   const pendingDescription = $derived([
     pendingBreakdown.incoming ? `${shortSats(pendingBreakdown.incoming)} sats awaiting confirmation` : '',
@@ -93,16 +91,19 @@
         snapshot = nextSnapshot;
         multisigWallet = nextWallet;
         hardwareSignerWallet = null;
+        setHardwareHealthChecks([]);
         activeProposal = latestActiveProposal(proposals);
       } else {
         multisigWallet = null;
-        const [nextSnapshot, proposals, nextHardwareSignerWallet] = await Promise.all([
+        const [nextSnapshot, proposals, nextHardwareSignerWallet, nextHealthChecks] = await Promise.all([
           walletService.snapshot(),
           selectedProfile?.kind === 'watch_only' ? walletService.externalSignerProposals() : Promise.resolve([]),
-          selectedProfile?.kind === 'watch_only' ? walletService.externalSignerWallet() : Promise.resolve(null)
+          selectedProfile?.kind === 'watch_only' ? walletService.externalSignerWallet() : Promise.resolve(null),
+          selectedProfile?.kind === 'watch_only' ? walletService.hardwareHealthChecks() : Promise.resolve([])
         ]);
         snapshot = nextSnapshot;
         hardwareSignerWallet = nextHardwareSignerWallet;
+        setHardwareHealthChecks(nextHealthChecks);
         activeProposal = latestActiveProposal(proposals);
       }
       initialDataLoading = false;
@@ -194,7 +195,7 @@
       const device = matchingDeviceForHealthCheck(hardwareSignerDetails, devices);
       if (!device) throw new WalletError('hardware_unavailable', `Connect and unlock ${signer.label}, enable its USB connection, then try again.`);
       const result = await walletService.checkHardwareExternalSigner(signer, device.id);
-      recordExternalSignerHealthCheck(signer.fingerprint, result);
+      await saveHardwareHealthCheck(signer.fingerprint, result);
       toast({ title: 'Health check passed', description: `${signer.label} holds the saved BIP84 account key.`, tone: 'success' });
     } catch (cause) {
       const result: CosignerHealthCheck = {
@@ -202,10 +203,18 @@
         summary: cause instanceof Error ? cause.message : 'The device could not be verified.',
         status: 'attention'
       };
-      recordExternalSignerHealthCheck(signer.fingerprint, result);
+      await saveHardwareHealthCheck(signer.fingerprint, result);
       toast({ title: 'Health check needs attention', description: result.summary, tone: 'danger' });
     } finally {
       checkingSignerHealth = false;
+    }
+  }
+  async function saveHardwareHealthCheck(fingerprint: string, check: CosignerHealthCheck) {
+    recordHardwareHealthCheck(fingerprint, check);
+    try {
+      recordHardwareHealthCheck(fingerprint, await walletService.recordHardwareHealthCheck(fingerprint, check));
+    } catch (cause) {
+      toast({ title: 'Health-check result not saved', description: cause instanceof Error ? cause.message : 'The result will be available only until Groot closes.', tone: 'danger' });
     }
   }
 </script>
@@ -279,7 +288,7 @@
 </div>
 
 <TxDetailsModal transaction={selected} {multisig} onclose={() => selected = null} />
-<DeviceDetailsModal signer={signerDetailsOpen ? hardwareSignerDetails : null} health={signerHealth} history={signerHealthHistory} checking={checkingSignerHealth} onclose={() => signerDetailsOpen = false} oncheck={runExternalSignerHealthCheck} accountStandard="BIP84"/>
+<DeviceDetailsModal signer={signerDetailsOpen ? hardwareSignerDetails : null} health={signerHealth} checking={checkingSignerHealth} onclose={() => signerDetailsOpen = false} oncheck={runExternalSignerHealthCheck} accountStandard="BIP84"/>
 <MultisigDescriptorsModal open={showDescriptors} wallet={multisigWallet} onclose={() => showDescriptors=false}/>
 <Modal open={verifyOpen} title="Verify recovery backup" description="Use your written 24 words to complete a private native challenge. Groot will not reveal them again." onclose={() => { verifyOpen=false; verifyCredential=''; verifyError=''; }}>
   <div class="warning-box"><strong>Have the written backup in front of you.</strong> Verification confirms its exact word order without sending the words into the webview.</div>

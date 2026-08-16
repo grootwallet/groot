@@ -20,8 +20,8 @@
   import { useWalletShellContext } from '$lib/wallet/shell-context';
   import { matchingPolicyVerification, policyReadinessLabel, policyRegistrationProfile, requiresPolicySetup } from '$lib/hardware/policy-readiness';
   import { lockedDeviceForHealthCheck, matchingDeviceForHealthCheck } from '$lib/hardware/health-check';
+  import { hardwareHealthChecks, hardwareHealthKey, recordHardwareHealthCheck, setHardwareHealthChecks } from '$lib/hardware/health-check-state';
   const walletShell = useWalletShellContext();
-  type CosignerHealthLog = CosignerHealthCheck & { signerId: string };
   let wallet = $state<MultisigWallet | null>(null);
   let snapshot = $state<WalletSnapshot | null>(null);
   let selectedSigner = $state<CosignerDraft | null>(null);
@@ -30,7 +30,6 @@
   let moreRoot = $state<HTMLDivElement | null>(null);
   let moreTrigger = $state<HTMLButtonElement | null>(null);
   let checking = $state(false);
-  let healthHistory = $state<Record<string, CosignerHealthLog[]>>({});
   let policyVerifications = $state<SignerPolicyVerification[]>([]);
   let policyAddress = $state<PolicyVerificationAddress | null>(null);
   let policySigner = $state<CosignerDraft | null>(null);
@@ -51,8 +50,17 @@
   onMount(async () => {
     wallet = await walletService.multisigWallet();
     if (!wallet) return;
-    try { [policyVerifications, policyAddress] = await Promise.all([walletService.multisigSignerPolicyVerifications(), walletService.multisigPolicyVerificationAddress()]); }
+    try {
+      const [nextPolicyVerifications, nextPolicyAddress] = await Promise.all([
+        walletService.multisigSignerPolicyVerifications(),
+        walletService.multisigPolicyVerificationAddress()
+      ]);
+      policyVerifications = nextPolicyVerifications;
+      policyAddress = nextPolicyAddress;
+    }
     catch (cause) { toast({title:'Policy status unavailable',description:cause instanceof Error?cause.message:undefined,tone:'danger'}); }
+    try { setHardwareHealthChecks(await walletService.hardwareHealthChecks()); }
+    catch (cause) { toast({title:'Health-check status unavailable',description:cause instanceof Error?cause.message:undefined,tone:'danger'}); }
     try { snapshot = await walletService.syncMultisig(); }
     catch (cause) { toast({title:'Wallet is offline',description:cause instanceof Error?cause.message:undefined,tone:'danger'}); }
   });
@@ -104,12 +112,14 @@
       actionLabel: profile.registration === 'file_once' ? 'Review setup' : 'Verify policy'
     };
   }
-  function latestHealth(signer: CosignerDraft) { return healthHistory[signer.id]?.[0] ?? null; }
-  function recordHealth(signerId: string, check: CosignerHealthCheck) {
-    healthHistory = {
-      ...healthHistory,
-      [signerId]: [{ ...check, signerId }, ...(healthHistory[signerId] ?? [])].slice(0, 20)
-    };
+  function latestHealth(signer: CosignerDraft) { return $hardwareHealthChecks[hardwareHealthKey(signer.fingerprint)] ?? null; }
+  async function saveHardwareHealthCheck(fingerprint: string, check: CosignerHealthCheck) {
+    recordHardwareHealthCheck(fingerprint, check);
+    try {
+      recordHardwareHealthCheck(fingerprint, await walletService.recordHardwareHealthCheck(fingerprint, check));
+    } catch (cause) {
+      toast({ title: 'Health-check result not saved', description: cause instanceof Error ? cause.message : 'The result will be available only until Groot closes.', tone: 'danger' });
+    }
   }
   async function renameSavedSigner(label: string) {
     if (!selectedSigner) return;
@@ -133,11 +143,11 @@
       const device = matchingDeviceForHealthCheck(signer, devices);
       if (!device) throw new WalletError('hardware_unavailable', `Connect and unlock ${signer.label}, enable its USB connection, then try again.`);
       const result = await walletService.checkHardwareCosigner(signer, device.id);
-      recordHealth(signer.id, result);
+      await saveHardwareHealthCheck(signer.fingerprint, result);
       toast({ title: 'Health check passed', description: `${signer.label} holds the saved BIP48 account key.`, tone: 'success' });
     } catch (cause) {
       const summary = cause instanceof Error ? cause.message : 'The device could not be verified.';
-      recordHealth(signer.id, { checkedAt: new Date().toISOString(), summary, status: 'attention' });
+      await saveHardwareHealthCheck(signer.fingerprint, { checkedAt: new Date().toISOString(), summary, status: 'attention' });
       toast({ title: 'Health check needs attention', description: summary, tone: 'danger' });
     } finally {
       checking = false;
@@ -234,7 +244,7 @@
   {/if}
 </div>
 
-<DeviceDetailsModal signer={healthPinOpen ? null : selectedSigner} health={selectedSigner ? latestHealth(selectedSigner) : null} history={selectedSigner ? (healthHistory[selectedSigner.id] ?? []) : []} policyStatus={selectedSigner ? signerPolicyStatus(selectedSigner) : null} {checking} onclose={() => selectedSigner = null} oncheck={runHealthCheck} onpolicy={() => selectedSigner && openPolicyVerification(selectedSigner)} onrename={renameSavedSigner}/>
+<DeviceDetailsModal signer={healthPinOpen ? null : selectedSigner} health={selectedSigner ? latestHealth(selectedSigner) : null} policyStatus={selectedSigner ? signerPolicyStatus(selectedSigner) : null} {checking} onclose={() => selectedSigner = null} oncheck={runHealthCheck} onpolicy={() => selectedSigner && openPolicyVerification(selectedSigner)} onrename={renameSavedSigner}/>
 <TrezorPinModal
   open={healthPinOpen}
   busy={healthPinBusy}

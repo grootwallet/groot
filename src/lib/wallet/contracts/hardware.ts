@@ -34,6 +34,10 @@ export type CosignerHealthCheck = {
   summary: string;
 };
 
+export type HardwareHealthCheckRecord = CosignerHealthCheck & {
+  signerFingerprint: string;
+};
+
 export type SignerPolicyVerification = {
   signerFingerprint: string;
   deviceType: string;

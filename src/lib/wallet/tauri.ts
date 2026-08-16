@@ -14,7 +14,7 @@ import {
   type WalletSnapshot
 } from './contracts';
 import type { MnemonicPresentation, SupplementalEntropyInput, WalletProfile, WalletRegistry, WalletSelection } from './contracts';
-import type { CosignerHealthCheck, HardwareDevice, MultisigPreview, MultisigProposal, MultisigWallet } from './contracts';
+import type { CosignerHealthCheck, HardwareDevice, HardwareHealthCheckRecord, MultisigPreview, MultisigProposal, MultisigWallet } from './contracts';
 import type { RecoveryDrill, RecoveryPolicyAnalysis, RecoveryTemplate } from './contracts';
 import type { ExternalSigner, ExternalSignerBackup, ExternalSignerSource, ExternalSignerWallet, SavedFileResult } from './contracts';
 import type { CoreNodeConfig, NodeStatus, PayjoinUriInspection, WalletSyncSource, WalletSyncStatus } from './contracts';
@@ -178,6 +178,14 @@ export class TauriWalletAdapter implements WalletPort {
   }
   async checkHardwareExternalSigner(signer: ExternalSigner, deviceId: string) {
     const result = await command<CosignerHealthCheck>('hardware_check_external_signer', { signer, deviceId });
+    return { ...result, checkedAt: normalizeTimestamp(result.checkedAt) ?? result.checkedAt };
+  }
+  async hardwareHealthChecks() {
+    const results = await command<HardwareHealthCheckRecord[]>('hardware_health_checks');
+    return results.map((result) => ({ ...result, checkedAt: normalizeTimestamp(result.checkedAt) ?? result.checkedAt }));
+  }
+  async recordHardwareHealthCheck(signerFingerprint: string, check: CosignerHealthCheck) {
+    const result = await command<HardwareHealthCheckRecord>('hardware_health_check_record', { signerFingerprint, check });
     return { ...result, checkedAt: normalizeTimestamp(result.checkedAt) ?? result.checkedAt };
   }
   async multisigSignerPolicyVerifications() {

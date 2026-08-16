@@ -17,7 +17,7 @@
   import type { CoreNodeConfig, CosignerHealthCheck, ExternalSignerWallet, NodeStatus, RecoveryScanSettings, RecoveryScanStatus, WalletProfile, WalletSyncSource } from '$lib/wallet/contracts';
   import type { CosignerDraft } from '$lib/multisig/policy';
   import { matchingDeviceForHealthCheck } from '$lib/hardware/health-check';
-  import { externalSignerHealthKey, externalSignerHealthSessions, recordExternalSignerHealthCheck } from '$lib/hardware/external-signer-health-session';
+  import { hardwareHealthChecks, hardwareHealthKey, recordHardwareHealthCheck, setHardwareHealthChecks } from '$lib/hardware/health-check-state';
   const walletShell = useWalletShellContext();
   let deleting = $state(false);
   let confirmText = $state('');
@@ -61,9 +61,7 @@
     ...hardwareSignerWallet.signer,
     source: hardwareSignerWallet.signer.source
   }) : null);
-  let signerHealthSession = $derived(hardwareSignerWallet ? $externalSignerHealthSessions[externalSignerHealthKey(hardwareSignerWallet.signer.fingerprint)] ?? null : null);
-  let signerHealth = $derived(signerHealthSession?.latest ?? null);
-  let signerHealthHistory = $derived(signerHealthSession?.history ?? []);
+  let signerHealth = $derived(hardwareSignerWallet ? $hardwareHealthChecks[hardwareHealthKey(hardwareSignerWallet.signer.fingerprint)] ?? null : null);
   let signerRenameOpen = $state(false), signerRenameDraft = $state(''), signerRenameError = $state(''), signerRenaming = $state(false);
   onMount(async () => {
     const generation = ++profileReadGeneration;
@@ -74,7 +72,16 @@
     selectedWalletId = registry.selectedWalletId;
     inactivityTimeoutMinutes = registry.inactivityTimeoutMinutes;
     const activeProfile = registry.wallets.find((wallet) => wallet.id === registry.selectedWalletId);
-    if (activeProfile?.kind === 'watch_only') hardwareSignerWallet = await walletService.externalSignerWallet();
+    if (activeProfile?.kind === 'watch_only') {
+      const [nextHardwareSignerWallet, nextHealthChecks] = await Promise.all([
+        walletService.externalSignerWallet(),
+        walletService.hardwareHealthChecks()
+      ]);
+      hardwareSignerWallet = nextHardwareSignerWallet;
+      setHardwareHealthChecks(nextHealthChecks);
+    } else {
+      setHardwareHealthChecks([]);
+    }
     node = await walletService.nodeConfig();
     syncSource = await walletService.syncSource();
     scan = await walletService.recoveryScanSettings(); scanDraft = { ...scan }; scanStatus = await walletService.recoveryScanStatus();
@@ -211,7 +218,7 @@
       const device = matchingDeviceForHealthCheck(hardwareSignerDetails!, devices);
       if (!device) throw new WalletError('hardware_unavailable', `Connect and unlock ${signer.label}, enable its USB connection, then try again.`);
       const result = await walletService.checkHardwareExternalSigner(signer, device.id);
-      recordExternalSignerHealthCheck(signer.fingerprint, result);
+      await saveHardwareHealthCheck(signer.fingerprint, result);
       toast({ title: 'Health check passed', description: `${signer.label} holds the saved BIP84 account key.`, tone: 'success' });
     } catch (cause) {
       const result: CosignerHealthCheck = {
@@ -219,10 +226,18 @@
         summary: cause instanceof Error ? cause.message : 'The device could not be verified.',
         status: 'attention'
       };
-      recordExternalSignerHealthCheck(signer.fingerprint, result);
+      await saveHardwareHealthCheck(signer.fingerprint, result);
       toast({ title: 'Health check needs attention', description: result.summary, tone: 'danger' });
     } finally {
       checkingSignerHealth = false;
+    }
+  }
+  async function saveHardwareHealthCheck(fingerprint: string, check: CosignerHealthCheck) {
+    recordHardwareHealthCheck(fingerprint, check);
+    try {
+      recordHardwareHealthCheck(fingerprint, await walletService.recordHardwareHealthCheck(fingerprint, check));
+    } catch (cause) {
+      toast({ title: 'Health-check result not saved', description: cause instanceof Error ? cause.message : 'The result will be available only until Groot closes.', tone: 'danger' });
     }
   }
   async function runFullRescan() {
@@ -364,7 +379,6 @@
 <DeviceDetailsModal
   signer={signerDetailsOpen ? hardwareSignerDetails : null}
   health={signerHealth}
-  history={signerHealthHistory}
   checking={checkingSignerHealth}
   accountStandard="BIP84"
   onclose={() => signerDetailsOpen = false}

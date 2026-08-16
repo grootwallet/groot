@@ -1,6 +1,6 @@
 import type { ReceiveAddress } from "$lib/types";
 import type { CosignerDraft, PolicyDraft } from "$lib/multisig/policy";
-import type { HardwareDevice, ExternalSigner, ExternalSignerBackup, ExternalSignerSource, ExternalSignerWallet, CosignerHealthCheck, PolicyVerificationAddress, SavedFileResult, SignerPolicyVerification } from "./hardware";
+import type { HardwareDevice, ExternalSigner, ExternalSignerBackup, ExternalSignerSource, ExternalSignerWallet, CosignerHealthCheck, HardwareHealthCheckRecord, PolicyVerificationAddress, SavedFileResult, SignerPolicyVerification } from "./hardware";
 import type { MultisigPreview, MultisigProposal, MultisigSetupDraft, MultisigWallet, RecoveryDrill, RecoveryPolicyAnalysis, RecoveryTemplate } from "./multisig";
 import type { CoreNodeConfig, MnemonicPresentation, NodeStatus, PayjoinUriInspection, RecoveryScanSettings, RecoveryScanStatus, SupplementalEntropyInput, WalletEvent, WalletProfile, WalletRegistry, WalletSelection, WalletSyncSource, WalletSyncStatus } from "./runtime";
 import type { AccelerationMethod, BroadcastResult, CoinSelection, CoinSelectionPreview, FeeEstimates, FeeRate, PaymentProposal, Sats, WalletSnapshot } from "./transactions";
@@ -63,6 +63,8 @@ export interface WalletHardwarePort {
   sendHardwarePin(challengeId: string, pinPositions: string): Promise<void>;
   checkHardwareCosigner(cosigner: CosignerDraft, deviceId: string): Promise<CosignerHealthCheck>;
   checkHardwareExternalSigner(signer: ExternalSigner, deviceId: string): Promise<CosignerHealthCheck>;
+  hardwareHealthChecks(): Promise<HardwareHealthCheckRecord[]>;
+  recordHardwareHealthCheck(signerFingerprint: string, check: CosignerHealthCheck): Promise<HardwareHealthCheckRecord>;
   multisigSignerPolicyVerifications(): Promise<SignerPolicyVerification[]>;
   multisigPolicyVerificationAddress(): Promise<PolicyVerificationAddress>;
   previewMultisigPolicyVerificationAddress(policy: PolicyDraft): Promise<PolicyVerificationAddress>;
