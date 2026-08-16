@@ -309,6 +309,9 @@ export class TauriWalletAdapter implements WalletPort {
   listHardwareDevices() {
     return command<HardwareDevice[]>('hardware_list');
   }
+  listHardwareDevicesForTypes(deviceTypes: string[]) {
+    return command<HardwareDevice[]>('hardware_list_for_device_types', { deviceTypes });
+  }
   promptHardwarePin(deviceId: string) {
     return command<string>('hardware_prompt_pin', { deviceId });
   }

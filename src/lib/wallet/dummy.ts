@@ -694,6 +694,14 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       }
     ];
   }
+
+  async listHardwareDevicesForTypes(deviceTypes: string[]) {
+    const requested = new Set(deviceTypes.map((deviceType) => deviceType.trim().toLowerCase()));
+    return (await this.listHardwareDevices()).filter((device) => {
+      const identity = `${device.id} ${device.label} ${device.model}`.toLowerCase();
+      return [...requested].some((deviceType) => identity.includes(deviceType));
+    });
+  }
   async promptHardwarePin(deviceId: string) {
     if (deviceId !== 'virtual-trezor' || this._trezorPinUnlocked)
       throw new WalletError(

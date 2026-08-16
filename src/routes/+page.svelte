@@ -292,7 +292,12 @@
     const signer = hardwareSignerWallet.signer;
     checkingSignerHealth = true;
     try {
-      const devices = await walletService.listHardwareDevices();
+      if (!signer.deviceType)
+        throw new WalletError(
+          'hardware_unavailable',
+          'This saved signer has no USB device type. Re-import its public account backup.'
+        );
+      const devices = await walletService.listHardwareDevicesForTypes([signer.deviceType]);
       const device = matchingDeviceForHealthCheck(hardwareSignerDetails, devices);
       if (!device)
         throw new WalletError(

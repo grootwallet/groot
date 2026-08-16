@@ -21,10 +21,19 @@
     address: ReceiveAddress;
     walletKind: 'single_key' | 'multisig';
     savedDeviceIdentity?: string | null;
+    eligibleDeviceTypes: string[];
+    eligibleFingerprints: string[];
     onverified: (address: ReceiveAddress) => void;
   };
 
-  let { address, walletKind, savedDeviceIdentity = null, onverified }: Props = $props();
+  let {
+    address,
+    walletKind,
+    savedDeviceIdentity = null,
+    eligibleDeviceTypes,
+    eligibleFingerprints,
+    onverified
+  }: Props = $props();
   let verifyOpen = $state(false);
   let verifyBusy = $state(false);
   let verifyError = $state('');
@@ -81,7 +90,20 @@
     verifyError = '';
     verificationDevice = null;
     try {
-      devices = await walletService.listHardwareDevices();
+      const discovered = await walletService.listHardwareDevicesForTypes(eligibleDeviceTypes);
+      const fingerprints = new Set(
+        eligibleFingerprints.map((fingerprint) => fingerprint.trim().toLowerCase())
+      );
+      devices = discovered.filter(
+        (device) =>
+          device.fingerprint === null || fingerprints.has(device.fingerprint.toLowerCase())
+      );
+      const unidentified = devices.filter((device) => device.fingerprint === null);
+      if (unidentified.length > 1) {
+        devices = [];
+        verifyError =
+          'More than one locked wallet of an eligible type is connected. Disconnect the extra device, then scan again.';
+      }
     } catch (cause) {
       devices = [];
       verifyError = receiveVerificationFailure(cause, 'Could not scan hardware.').message;
@@ -235,8 +257,8 @@
       detail={verificationAction === 'approve'
         ? 'Compare the complete address above, then approve it on the device.'
         : isMultisig
-          ? 'Keep the signer connected and unlocked while Groot matches it to this wallet policy.'
-          : 'Keep the signer connected and unlocked while Groot matches its saved identity.'}
+          ? 'Groot checks only signer types saved in this wallet policy and ignores other connected device families.'
+          : 'Groot checks only this saved signer type and ignores other connected device families.'}
       label={verificationAction === 'approve'
         ? 'Waiting for hardware approval'
         : 'Hardware device scan in progress'}

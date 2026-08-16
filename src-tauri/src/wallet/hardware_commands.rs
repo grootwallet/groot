@@ -1,6 +1,39 @@
 use super::*;
 
 const HARDWARE_SCAN_CACHE_TIMEOUT: Duration = Duration::from_secs(15 * 60);
+const MAX_TARGET_DEVICE_TYPES: usize = 8;
+const SUPPORTED_HWI_DEVICE_TYPES: &[&str] = &[
+    "bitbox02",
+    "coldcard",
+    "digitalbitbox",
+    "jade",
+    "keepkey",
+    "ledger",
+    "trezor",
+];
+
+fn validated_target_device_types(device_types: Vec<String>) -> ApiResult<Vec<String>> {
+    if device_types.is_empty() || device_types.len() > MAX_TARGET_DEVICE_TYPES {
+        return Err(api_error(
+            "invalid_hardware_request",
+            "Choose at least one supported hardware-wallet type.",
+        ));
+    }
+    let mut validated = Vec::with_capacity(device_types.len());
+    for device_type in device_types {
+        let device_type = device_type.trim().to_ascii_lowercase();
+        if !SUPPORTED_HWI_DEVICE_TYPES.contains(&device_type.as_str()) {
+            return Err(api_error(
+                "invalid_hardware_request",
+                "The requested hardware-wallet type is not supported.",
+            ));
+        }
+        if !validated.contains(&device_type) {
+            validated.push(device_type);
+        }
+    }
+    Ok(validated)
+}
 
 fn remember_hardware_scan(state: &AppState, devices: &[HwiDevice]) -> ApiResult<()> {
     let devices = devices
@@ -55,6 +88,57 @@ pub async fn hardware_list(
     .map_err(internal)??;
     remember_hardware_scan(&state, &devices)?;
     Ok(devices.into_iter().map(hardware_device_dto).collect())
+}
+
+#[tauri::command]
+pub async fn hardware_list_for_device_types(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    device_types: Vec<String>,
+) -> ApiResult<Vec<HardwareDeviceDto>> {
+    let device_types = validated_target_device_types(device_types)?;
+    let hwi = hwi_cli(&app)?;
+    let devices = tauri::async_runtime::spawn_blocking(move || {
+        let mut devices = Vec::new();
+        for device_type in device_types {
+            let encoded = hwi
+                .enumerate_device_type(&device_type)
+                .map_err(hardware_api_error)?;
+            let mut discovered: Vec<HwiDevice> =
+                serde_json::from_slice(&encoded).map_err(internal)?;
+            if discovered
+                .iter()
+                .any(|device| !device.device_type.eq_ignore_ascii_case(&device_type))
+            {
+                return Err(api_error(
+                    "hardware_response_invalid",
+                    "HWI returned a hardware-wallet type outside the requested scan.",
+                ));
+            }
+            devices.append(&mut discovered);
+        }
+        Ok::<_, ApiError>(devices)
+    })
+    .await
+    .map_err(internal)??;
+    remember_hardware_scan(&state, &devices)?;
+    Ok(devices.into_iter().map(hardware_device_dto).collect())
+}
+
+#[cfg(test)]
+mod targeted_scan_tests {
+    use super::*;
+
+    #[test]
+    fn targeted_device_types_are_bounded_supported_and_deduplicated() {
+        assert_eq!(
+            validated_target_device_types(vec![" Trezor ".into(), "trezor".into()]).unwrap(),
+            ["trezor"]
+        );
+        assert!(validated_target_device_types(vec![]).is_err());
+        assert!(validated_target_device_types(vec!["unknown".into()]).is_err());
+        assert!(validated_target_device_types(vec!["trezor".into(); 9]).is_err());
+    }
 }
 #[tauri::command]
 pub async fn hardware_prompt_pin(
@@ -163,10 +247,17 @@ pub async fn hardware_check_cosigner(
     device_id: String,
 ) -> ApiResult<CosignerHealthDto> {
     cosigner.parse_for_validation().map_err(policy_api_error)?;
+    let expected_device_type = cosigner.device_type.clone().ok_or_else(|| {
+        api_error(
+            "invalid_hardware_request",
+            "This signer has no saved interactive USB device type.",
+        )
+    })?;
     let checked_at = now().to_string();
     let hwi = hwi_cli(&app)?;
     let device = recently_scanned_hardware_device(&state, &device_id)?;
     tauri::async_runtime::spawn_blocking(move || {
+        require_matching_policy_device_type(Some(&expected_device_type), &device.device_type)?;
         let connected = read_hardware_cosigner(&hwi, device, &cosigner.label, true, true)?;
         verify_cosigner_identity(&cosigner, &connected)?;
         Ok(CosignerHealthDto {
@@ -190,10 +281,17 @@ pub async fn hardware_check_external_signer(
     device_id: String,
 ) -> ApiResult<CosignerHealthDto> {
     signer.validate().map_err(external_signer_api_error)?;
+    let expected_device_type = signer.device_type.clone().ok_or_else(|| {
+        api_error(
+            "invalid_hardware_request",
+            "This signer has no saved interactive USB device type.",
+        )
+    })?;
     let checked_at = now().to_string();
     let hwi = hwi_cli(&app)?;
     let device = recently_scanned_hardware_device(&state, &device_id)?;
     tauri::async_runtime::spawn_blocking(move || {
+        require_matching_policy_device_type(Some(&expected_device_type), &device.device_type)?;
         let connected = read_hardware_external_signer(&hwi, device, &signer.label, true, true)?;
         verify_external_signer_identity(&signer, &connected)?;
         Ok(CosignerHealthDto {

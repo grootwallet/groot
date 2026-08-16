@@ -468,6 +468,10 @@
       pinBusy = false;
     }
   }
+  function closeHardwareReviewOverlays() {
+    hardwareAddressOpen = false;
+    hardwareChangeAddressOpen = false;
+  }
   async function sign(device: HardwareDevice) {
     if (!proposal) return;
     const reviewingPolicy = policyReviewOpen && policyReviewDevice?.id === device.id;
@@ -484,6 +488,7 @@
         device.id,
         proposal.psbt
       );
+      closeHardwareReviewOverlays();
       policyReviewOpen = false;
       policyReviewDevice = null;
       deviceOpen = false;
@@ -493,6 +498,7 @@
         tone: 'success'
       });
     } catch (cause) {
+      closeHardwareReviewOverlays();
       policyReviewOpen = false;
       deviceOpen = true;
       deviceError = cause instanceof Error ? cause.message : 'Device signing failed.';

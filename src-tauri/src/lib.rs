@@ -75,6 +75,7 @@ pub fn run() {
             wallet::profile_commands::wallet_full_rescan,
             wallet::profile_commands::wallet_full_rescan_cancel,
             wallet::hardware_commands::hardware_list,
+            wallet::hardware_commands::hardware_list_for_device_types,
             wallet::hardware_commands::hardware_prompt_pin,
             wallet::hardware_commands::hardware_send_pin,
             wallet::hardware_commands::hardware_check_cosigner,

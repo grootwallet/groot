@@ -97,6 +97,7 @@ fn pin_command_input(pin_positions: &[u8]) -> Result<Vec<u8>, HardwareError> {
 
 pub trait HardwareTransport: Send + Sync {
     fn enumerate(&self) -> Result<Vec<u8>, HardwareError>;
+    fn enumerate_device_type(&self, device_type: &str) -> Result<Vec<u8>, HardwareError>;
     fn account_keypool(
         &self,
         device_type: &str,
@@ -220,6 +221,16 @@ impl HwiCli {
             command.into(),
         ]
     }
+
+    fn enumerate_device_type_command(&self, device_type: &str) -> Vec<String> {
+        vec![
+            "--chain".into(),
+            self.chain.as_hwi_argument().into(),
+            "--device-type".into(),
+            device_type.into(),
+            "enumerate".into(),
+        ]
+    }
 }
 
 impl HardwareTransport for HwiCli {
@@ -231,6 +242,15 @@ impl HardwareTransport for HwiCli {
                 self.chain.as_hwi_argument().into(),
                 "enumerate".into(),
             ],
+            USER_REVIEW_TIMEOUT,
+            self.home.as_deref(),
+        )
+    }
+
+    fn enumerate_device_type(&self, device_type: &str) -> Result<Vec<u8>, HardwareError> {
+        run_program(
+            &self.program,
+            &self.enumerate_device_type_command(device_type),
             USER_REVIEW_TIMEOUT,
             self.home.as_deref(),
         )
@@ -766,6 +786,10 @@ mod tests {
 
         let test = HwiCli::for_chain(HwiChain::Test);
         assert_eq!(
+            test.enumerate_device_type_command("trezor"),
+            ["--chain", "test", "--device-type", "trezor", "enumerate"]
+        );
+        assert_eq!(
             test.device_command("coldcard", "usb:1", "getxpub", "m/48'/1'/0'/2'"),
             [
                 "--chain",
@@ -813,6 +837,10 @@ mod tests {
             home: None,
         };
         assert_eq!(transport.enumerate(), Err(HardwareError::Unavailable));
+        assert_eq!(
+            transport.enumerate_device_type("trezor"),
+            Err(HardwareError::Unavailable)
+        );
         assert_eq!(
             transport.account_keypool("trezor", "usb:1", "m/84'/1'/0'"),
             Err(HardwareError::Unavailable)

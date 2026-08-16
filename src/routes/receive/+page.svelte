@@ -32,6 +32,7 @@
   let detailAddress = $state<ReceiveAddress | null>(null);
   let receiveCard = $state<HTMLElement | null>(null);
   let savedSignerDeviceType = $state<string | null>(null);
+  let savedSignerFingerprint = $state<string | null>(null);
   const walletShell = useWalletShellContext();
   let externalSigner = $derived(
     walletShell.profiles().find((profile) => profile.id === walletShell.selectedWalletId())
@@ -82,8 +83,11 @@
       if (
         registry.wallets.find((profile) => profile.id === registry.selectedWalletId)?.kind ===
         'watch_only'
-      )
-        savedSignerDeviceType = (await walletService.externalSignerWallet()).signer.deviceType;
+      ) {
+        const savedSigner = (await walletService.externalSignerWallet()).signer;
+        savedSignerDeviceType = savedSigner.deviceType;
+        savedSignerFingerprint = savedSigner.fingerprint;
+      }
     } catch (cause) {
       toast({
         title: 'Could not load addresses',
@@ -219,6 +223,8 @@
             address={current}
             walletKind="single_key"
             savedDeviceIdentity={savedSignerDeviceType}
+            eligibleDeviceTypes={savedSignerDeviceType ? [savedSignerDeviceType] : []}
+            eligibleFingerprints={savedSignerFingerprint ? [savedSignerFingerprint] : []}
             onverified={applyVerifiedAddress}
           />{/if}<Button variant="ghost-danger" onclick={() => requestDiscard(current!)}
           ><Trash2 size={16} />Discard</Button

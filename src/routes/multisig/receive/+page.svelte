@@ -15,6 +15,7 @@
   import { walletService, WalletError } from '$lib/wallet';
   import { awaitingPaymentAddresses } from '$lib/wallet/policy';
   import type { ReceiveAddress } from '$lib/types';
+  import type { MultisigWallet } from '$lib/wallet';
   import { copyText } from '$lib/clipboard';
   import { toast } from '$lib/stores/toasts';
   import { useWalletShellContext } from '$lib/wallet/shell-context';
@@ -35,6 +36,17 @@
   let detailAddress = $state<ReceiveAddress | null>(null);
   let awaiting = $derived(awaitingPaymentAddresses(addresses));
   let history = $derived(addresses.filter((address) => address.status !== 'awaiting'));
+  let wallet = $state<MultisigWallet | null>(null);
+  let eligibleDeviceTypes = $derived([
+    ...new Set(
+      (wallet?.cosigners ?? [])
+        .map((signer) => signer.deviceType)
+        .filter((deviceType): deviceType is string => Boolean(deviceType))
+    )
+  ]);
+  let eligibleFingerprints = $derived(
+    (wallet?.cosigners ?? []).map((signer) => signer.fingerprint)
+  );
   onMount(() => {
     let active = true;
     const unsubscribe = walletService.subscribe((event) => {
@@ -60,8 +72,12 @@
           await goto('/receive', { replaceState: true });
           return;
         }
-        const state = await walletService.multisigSnapshot();
+        const [state, savedWallet] = await Promise.all([
+          walletService.multisigSnapshot(),
+          walletService.multisigWallet()
+        ]);
         if (!active) return;
+        wallet = savedWallet;
         applyAddresses(state.receiveAddresses);
         ready = true;
       } catch (cause) {
@@ -196,6 +212,8 @@
         ><HardwareReceiveVerification
           address={current}
           walletKind="multisig"
+          {eligibleDeviceTypes}
+          {eligibleFingerprints}
           onverified={applyVerifiedAddress}
         /><Button variant="ghost-danger" onclick={() => requestDiscard(current!)}
           ><Trash2 size={16} />Discard</Button

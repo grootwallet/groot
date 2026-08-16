@@ -230,7 +230,7 @@
           {#if checking}
             <HardwareActionPrompt
               title="Checking signer key"
-              detail={`Keep the signer connected and unlocked while Groot reads its ${accountStandard} account key and compares it with the saved key.`}
+              detail={`Keep the signer connected and unlocked while Groot reads its ${accountStandard} account key and compares it with the saved key. Other connected device families are ignored.`}
               label="Signer health check in progress"
             />
           {:else}

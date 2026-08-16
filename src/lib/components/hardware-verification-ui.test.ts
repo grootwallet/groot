@@ -43,6 +43,10 @@ const multisigSetup = readFileSync(
   new URL('../../routes/multisig/new/+page.svelte', import.meta.url),
   'utf8'
 );
+const multisigSend = readFileSync(
+  new URL('../../routes/multisig/send/+page.svelte', import.meta.url),
+  'utf8'
+);
 const settings = readFileSync(
   new URL('../../routes/settings/+page.svelte', import.meta.url),
   'utf8'
@@ -102,7 +106,18 @@ describe('hardware receive verification UI', () => {
   it('uses signer terminology throughout the multisig receive flow', () => {
     expect(verificationFlow).toContain('No compatible signer found');
     expect(verificationFlow).toContain('Connect and unlock a signer saved in this wallet policy');
-    expect(`${verificationFlow}\n${multisigReceive}`).not.toMatch(/cosigner/i);
+    expect(verificationFlow).not.toMatch(/cosigner/i);
+  });
+
+  it('limits receive verification discovery to signers saved in the wallet', () => {
+    expect(verificationFlow).toContain(
+      'walletService.listHardwareDevicesForTypes(eligibleDeviceTypes)'
+    );
+    expect(verificationFlow).toContain('eligibleFingerprints');
+    expect(multisigReceive).toContain('{eligibleDeviceTypes}');
+    expect(multisigReceive).toContain('{eligibleFingerprints}');
+    expect(verificationFlow).toContain('ignores other connected device families');
+    expect(deviceDetails).toContain('Other connected device families are ignored.');
   });
 
   it('reuses one bounded hardware device list for setup and signing', () => {
@@ -130,7 +145,10 @@ describe('hardware receive verification UI', () => {
     const reviewSource = multisigSetup.slice(start, end);
     expect(reviewSource).toContain('hardware.find(');
     expect(reviewSource).toMatch(/if \(policyDevice\) \{[\s\S]*?return;/);
-    expect(reviewSource.match(/listHardwareDevices\(\)/g)).toHaveLength(1);
+    expect(
+      reviewSource.match(/listHardwareDevicesForTypes\(\[signer\.deviceType\]\)/g)
+    ).toHaveLength(1);
+    expect(reviewSource).not.toContain('listHardwareDevices()');
   });
 
   it('keeps BitBox policy guidance compact and device-local', () => {
@@ -199,6 +217,30 @@ describe('hardware receive verification UI', () => {
     expect(cableAction).toBeGreaterThan(review);
     expect(singleKeySend).toMatch(
       /<TransactionReviewDetails\s+\{proposal\}\s+onChangeAddress=\{\(\)\s*=>\s*\(?changeAddressOpen\s*=\s*true\)?\}\s*\/>/
+    );
+  });
+
+  it('reveals the parent signing result after every terminal hardware response', () => {
+    const closeHelper = multisigSend.slice(
+      multisigSend.indexOf('function closeHardwareReviewOverlays()'),
+      multisigSend.indexOf(
+        'async function sign(',
+        multisigSend.indexOf('function closeHardwareReviewOverlays()')
+      )
+    );
+    const signing = multisigSend.slice(
+      multisigSend.indexOf('async function sign('),
+      multisigSend.indexOf(
+        'function showTransactionDuringSigning()',
+        multisigSend.indexOf('async function sign(')
+      )
+    );
+
+    expect(closeHelper).toContain('hardwareAddressOpen = false');
+    expect(closeHelper).toContain('hardwareChangeAddressOpen = false');
+    expect(signing.match(/closeHardwareReviewOverlays\(\)/g)).toHaveLength(2);
+    expect(signing).toMatch(
+      /catch \(cause\) \{\s*closeHardwareReviewOverlays\(\);\s*policyReviewOpen = false;\s*deviceOpen = true;/
     );
   });
 });

@@ -224,7 +224,12 @@
     const signer = selectedSigner;
     checking = true;
     try {
-      const devices = await walletService.listHardwareDevices();
+      if (!signer.deviceType)
+        throw new WalletError(
+          'hardware_unavailable',
+          'This signer has no interactive USB device type.'
+        );
+      const devices = await walletService.listHardwareDevicesForTypes([signer.deviceType]);
       const lockedDevice = lockedDeviceForHealthCheck(signer, devices);
       if (lockedDevice) {
         checking = false;
@@ -323,7 +328,12 @@
       return;
     }
     try {
-      const devices = await walletService.listHardwareDevices();
+      if (!signer.deviceType)
+        throw new WalletError(
+          'hardware_unavailable',
+          'This signer has no interactive USB device type.'
+        );
+      const devices = await walletService.listHardwareDevicesForTypes([signer.deviceType]);
       policyDevice =
         devices.find(
           (device) => device.fingerprint?.toLowerCase() === signer.fingerprint.toLowerCase()
