@@ -1,13 +1,17 @@
 <script lang="ts">
-  import { Activity, ArrowDownToLine, ArrowUpFromLine, ChevronRight, CircleDot, Clock3, Eye, EyeOff, FileKey, RefreshCw, ShieldCheck } from '@lucide/svelte';
+  import { Activity, ArrowDownToLine, ArrowUpFromLine, ChevronRight, CircleDot, Clock3, Eye, EyeOff, FileKey, HeartPulse, RefreshCw, ShieldCheck } from '@lucide/svelte';
   import Button from '$lib/components/Button.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import PasswordField from '$lib/components/PasswordField.svelte';
   import TxList from '$lib/components/TxList.svelte';
   import TxDetailsModal from '$lib/components/TxDetailsModal.svelte';
+  import DeviceDetailsModal from '$lib/components/DeviceDetailsModal.svelte';
   import { btc, shortSats } from '$lib/data';
   import { toast } from '$lib/stores/toasts';
-  import { walletService, WalletError, type MultisigProposal, type MultisigWallet, type WalletProfile, type WalletSnapshot, type WalletSyncSource, type WalletSyncStatus } from '$lib/wallet';
+  import { walletService, WalletError, type CosignerHealthCheck, type ExternalSignerWallet, type MultisigProposal, type MultisigWallet, type WalletProfile, type WalletSnapshot, type WalletSyncSource, type WalletSyncStatus } from '$lib/wallet';
+  import type { CosignerDraft } from '$lib/multisig/policy';
+  import { matchingDeviceForHealthCheck } from '$lib/hardware/health-check';
+  import { externalSignerHealthKey, externalSignerHealthSessions, recordExternalSignerHealthCheck } from '$lib/hardware/external-signer-health-session';
   import { latestActiveProposal } from '$lib/wallet/proposal-resume';
   import { pendingBalanceBreakdown, sortTransactionsNewestFirst } from '$lib/wallet/presentation';
   import { onMount } from 'svelte';
@@ -26,6 +30,9 @@
   let syncing = $state(false);
   let snapshot = $state<WalletSnapshot | null>(null);
   let multisigWallet = $state<MultisigWallet | null>(null);
+  let hardwareSignerWallet = $state<ExternalSignerWallet | null>(null);
+  let signerDetailsOpen = $state(false);
+  let checkingSignerHealth = $state(false);
   let activeProposal = $state<MultisigProposal | null>(null);
   let selected = $state<Transaction | null>(null);
   let multisig = $state(false);
@@ -43,6 +50,14 @@
   let syncSource = $state<WalletSyncSource | null>(null);
   let syncStatus = $state<WalletSyncStatus | null>(null);
   let syncPollToken = 0;
+  let hardwareSignerDetails = $derived.by<CosignerDraft | null>(() => hardwareSignerWallet ? ({
+    id: `external-${hardwareSignerWallet.signer.fingerprint.toLowerCase()}`,
+    ...hardwareSignerWallet.signer,
+    source: hardwareSignerWallet.signer.source
+  }) : null);
+  let signerHealthSession = $derived(hardwareSignerWallet ? $externalSignerHealthSessions[externalSignerHealthKey(hardwareSignerWallet.signer.fingerprint)] ?? null : null);
+  let signerHealth = $derived(signerHealthSession?.latest ?? null);
+  let signerHealthHistory = $derived(signerHealthSession?.history ?? []);
   const pendingBreakdown = $derived(snapshot ? pendingBalanceBreakdown(snapshot) : { incoming: 0, change: 0, outgoing: 0 });
   const pendingDescription = $derived([
     pendingBreakdown.incoming ? `${shortSats(pendingBreakdown.incoming)} sats awaiting confirmation` : '',
@@ -77,14 +92,17 @@
         const [nextSnapshot, nextWallet, proposals] = await Promise.all([walletService.multisigSnapshot(), walletService.multisigWallet(), walletService.multisigProposals()]);
         snapshot = nextSnapshot;
         multisigWallet = nextWallet;
+        hardwareSignerWallet = null;
         activeProposal = latestActiveProposal(proposals);
       } else {
         multisigWallet = null;
-        const [nextSnapshot, proposals] = await Promise.all([
+        const [nextSnapshot, proposals, nextHardwareSignerWallet] = await Promise.all([
           walletService.snapshot(),
-          selectedProfile?.kind === 'watch_only' ? walletService.externalSignerProposals() : Promise.resolve([])
+          selectedProfile?.kind === 'watch_only' ? walletService.externalSignerProposals() : Promise.resolve([]),
+          selectedProfile?.kind === 'watch_only' ? walletService.externalSignerWallet() : Promise.resolve(null)
         ]);
         snapshot = nextSnapshot;
+        hardwareSignerWallet = nextHardwareSignerWallet;
         activeProposal = latestActiveProposal(proposals);
       }
       initialDataLoading = false;
@@ -167,6 +185,29 @@
       verifying = false;
     }
   }
+  async function runExternalSignerHealthCheck() {
+    if (!hardwareSignerWallet || !hardwareSignerDetails || checkingSignerHealth) return;
+    const signer = hardwareSignerWallet.signer;
+    checkingSignerHealth = true;
+    try {
+      const devices = await walletService.listHardwareDevices();
+      const device = matchingDeviceForHealthCheck(hardwareSignerDetails, devices);
+      if (!device) throw new WalletError('hardware_unavailable', `Connect and unlock ${signer.label}, enable its USB connection, then try again.`);
+      const result = await walletService.checkHardwareExternalSigner(signer, device.id);
+      recordExternalSignerHealthCheck(signer.fingerprint, result);
+      toast({ title: 'Health check passed', description: `${signer.label} holds the saved BIP84 account key.`, tone: 'success' });
+    } catch (cause) {
+      const result: CosignerHealthCheck = {
+        checkedAt: new Date().toISOString(),
+        summary: cause instanceof Error ? cause.message : 'The device could not be verified.',
+        status: 'attention'
+      };
+      recordExternalSignerHealthCheck(signer.fingerprint, result);
+      toast({ title: 'Health check needs attention', description: result.summary, tone: 'danger' });
+    } finally {
+      checkingSignerHealth = false;
+    }
+  }
 </script>
 
 <div class="page dashboard-page">
@@ -208,6 +249,9 @@
         <div class="overview-more-menu" role="menu" aria-label="More wallet actions" transition:fly={{ y: 5, duration: 160 }}>
           <a href="/activity" role="menuitem" onclick={() => moreOpen = false}><Activity size={16} /><span><strong>Activity</strong><small>View all transactions</small></span></a>
           <a href="/coins" role="menuitem" onclick={() => moreOpen = false}><CircleDot size={16} /><span><strong>Coins</strong><small>Inspect and choose UTXOs</small></span></a>
+          {#if hardwareSignerWallet}
+            <button role="menuitem" onclick={() => { moreOpen = false; signerDetailsOpen = true; }}><HeartPulse size={16}/><span><strong>Health check</strong><small>Verify the connected signer identity</small></span></button>
+          {/if}
           {#if multisig}
             <a href="/multisig" role="menuitem" onclick={() => moreOpen = false}><ShieldCheck size={16} /><span><strong>Policy</strong><small>Keys, backups, and rules</small></span></a>
             <button role="menuitem" onclick={() => { moreOpen = false; showDescriptors = true; }}><Eye size={16}/><span><strong>Show descriptors</strong><small>Inspect receive and change logic</small></span></button>
@@ -235,6 +279,7 @@
 </div>
 
 <TxDetailsModal transaction={selected} {multisig} onclose={() => selected = null} />
+<DeviceDetailsModal signer={signerDetailsOpen ? hardwareSignerDetails : null} health={signerHealth} history={signerHealthHistory} checking={checkingSignerHealth} onclose={() => signerDetailsOpen = false} oncheck={runExternalSignerHealthCheck} accountStandard="BIP84"/>
 <MultisigDescriptorsModal open={showDescriptors} wallet={multisigWallet} onclose={() => showDescriptors=false}/>
 <Modal open={verifyOpen} title="Verify recovery backup" description="Use your written 24 words to complete a private native challenge. Groot will not reveal them again." onclose={() => { verifyOpen=false; verifyCredential=''; verifyError=''; }}>
   <div class="warning-box"><strong>Have the written backup in front of you.</strong> Verification confirms its exact word order without sending the words into the webview.</div>

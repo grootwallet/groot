@@ -7,6 +7,7 @@
   import LanguageToggle from '$lib/components/LanguageToggle.svelte';
   import IdentifierDetailsModal from '$lib/components/IdentifierDetailsModal.svelte';
   import DeviceDetailsModal from '$lib/components/DeviceDetailsModal.svelte';
+  import LocalTimestamp from '$lib/components/LocalTimestamp.svelte';
   import { toast } from '$lib/stores/toasts';
   import { defaultConfig, networkName } from '$lib/config';
   import { walletService, WalletError } from '$lib/wallet';
@@ -16,6 +17,7 @@
   import type { CoreNodeConfig, CosignerHealthCheck, ExternalSignerWallet, NodeStatus, RecoveryScanSettings, RecoveryScanStatus, WalletProfile, WalletSyncSource } from '$lib/wallet/contracts';
   import type { CosignerDraft } from '$lib/multisig/policy';
   import { matchingDeviceForHealthCheck } from '$lib/hardware/health-check';
+  import { externalSignerHealthKey, externalSignerHealthSessions, recordExternalSignerHealthCheck } from '$lib/hardware/external-signer-health-session';
   const walletShell = useWalletShellContext();
   let deleting = $state(false);
   let confirmText = $state('');
@@ -53,14 +55,15 @@
   let renameOpen = $state(false), renameDraft = $state(''), renameError = $state(''), renaming = $state(false);
   let hardwareSignerWallet = $state<ExternalSignerWallet | null>(null);
   let signerDetailsOpen = $state(false);
-  let signerHealth = $state<CosignerHealthCheck | null>(null);
-  let signerHealthHistory = $state<CosignerHealthCheck[]>([]);
   let checkingSignerHealth = $state(false);
   let hardwareSignerDetails = $derived.by<CosignerDraft | null>(() => hardwareSignerWallet ? ({
     id: `external-${hardwareSignerWallet.signer.fingerprint.toLowerCase()}`,
     ...hardwareSignerWallet.signer,
     source: hardwareSignerWallet.signer.source
   }) : null);
+  let signerHealthSession = $derived(hardwareSignerWallet ? $externalSignerHealthSessions[externalSignerHealthKey(hardwareSignerWallet.signer.fingerprint)] ?? null : null);
+  let signerHealth = $derived(signerHealthSession?.latest ?? null);
+  let signerHealthHistory = $derived(signerHealthSession?.history ?? []);
   let signerRenameOpen = $state(false), signerRenameDraft = $state(''), signerRenameError = $state(''), signerRenaming = $state(false);
   onMount(async () => {
     const generation = ++profileReadGeneration;
@@ -208,8 +211,7 @@
       const device = matchingDeviceForHealthCheck(hardwareSignerDetails!, devices);
       if (!device) throw new WalletError('hardware_unavailable', `Connect and unlock ${signer.label}, enable its USB connection, then try again.`);
       const result = await walletService.checkHardwareExternalSigner(signer, device.id);
-      signerHealth = result;
-      signerHealthHistory = [result, ...signerHealthHistory].slice(0, 20);
+      recordExternalSignerHealthCheck(signer.fingerprint, result);
       toast({ title: 'Health check passed', description: `${signer.label} holds the saved BIP84 account key.`, tone: 'success' });
     } catch (cause) {
       const result: CosignerHealthCheck = {
@@ -217,8 +219,7 @@
         summary: cause instanceof Error ? cause.message : 'The device could not be verified.',
         status: 'attention'
       };
-      signerHealth = result;
-      signerHealthHistory = [result, ...signerHealthHistory].slice(0, 20);
+      recordExternalSignerHealthCheck(signer.fingerprint, result);
       toast({ title: 'Health check needs attention', description: result.summary, tone: 'danger' });
     } finally {
       checkingSignerHealth = false;
@@ -304,7 +305,17 @@
 <div class="page narrow-page settings-page">
   <header class="page-header"><div><p class="eyebrow">WALLET SETTINGS</p><h1>{selectedProfile?.name ?? 'Settings'}</h1><p class="subtitle">Wallet security and connection. Appearance is global.</p></div></header>
   <section class="settings-group wallet-details"><h2>Wallet details</h2>
-    <div class="settings-list"><button aria-label={`Rename ${selectedProfile?.name ?? 'wallet'}`} onclick={openRename}><span class="setting-icon"><Pencil size={18}/></span><span><strong>Wallet name</strong><small>{selectedProfile?.name ?? 'Unnamed wallet'} · Local display name only</small></span><ChevronRight size={16}/></button>{#if hardwareSignerWallet}<button aria-label={`Rename hardware signer ${hardwareSignerWallet.signer.label}`} onclick={openSignerRename}><span class="setting-icon"><Cpu size={18}/></span><span><strong>Hardware signer name</strong><small>{hardwareSignerWallet.signer.label} · Used on signing and verification screens</small></span><ChevronRight size={16}/></button><button aria-label={`Inspect ${hardwareSignerWallet.signer.label} identity and health`} onclick={() => signerDetailsOpen = true}><span class="setting-icon"><HeartPulse size={18}/></span><span><strong>Hardware signer identity &amp; health</strong><small>{signerHealth?.status === 'healthy' ? 'Healthy · checked in this app session' : signerHealth?.status === 'attention' ? 'Health check needs attention' : 'Inspect identity or run a health check'}</small></span><ChevronRight size={16}/></button>{/if}</div>
+    <div class="settings-list">
+      <button aria-label={`Rename ${selectedProfile?.name ?? 'wallet'}`} onclick={openRename}><span class="setting-icon"><Pencil size={18}/></span><span><strong>Wallet name</strong><small>{selectedProfile?.name ?? 'Unnamed wallet'} · Local display name only</small></span><ChevronRight size={16}/></button>
+      {#if hardwareSignerWallet}
+        <button aria-label={`Rename hardware signer ${hardwareSignerWallet.signer.label}`} onclick={openSignerRename}><span class="setting-icon"><Cpu size={18}/></span><span><strong>Hardware signer name</strong><small>{hardwareSignerWallet.signer.label} · Used on signing and verification screens</small></span><ChevronRight size={16}/></button>
+        <button aria-label={`Inspect ${hardwareSignerWallet.signer.label} identity and health`} onclick={() => signerDetailsOpen = true}>
+          <span class="setting-icon"><HeartPulse size={18}/></span>
+          <span><strong>Hardware signer identity &amp; health</strong><small>{#if signerHealth}Last checked <LocalTimestamp value={signerHealth.checkedAt}/>{:else}Inspect identity or run a health check{/if}</small></span>
+          <span class="setting-row-status"><span class="info-badge" class:healthy={signerHealth?.status === 'healthy'} class:attention={signerHealth?.status === 'attention'} class:muted={!signerHealth}>{signerHealth?.status === 'healthy' ? 'Checked' : signerHealth?.status === 'attention' ? 'Attention' : 'Not checked'}</span><ChevronRight size={16}/></span>
+        </button>
+      {/if}
+    </div>
   </section>
   <section class="settings-group immediate-security"><h2>Security</h2>
     <div class="settings-list">

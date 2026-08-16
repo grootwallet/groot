@@ -14,6 +14,7 @@ const singleKeySend = readFileSync(new URL('../../routes/send/+page.svelte', imp
 const multisigPolicy = readFileSync(new URL('../../routes/multisig/+page.svelte', import.meta.url), 'utf8');
 const multisigSetup = readFileSync(new URL('../../routes/multisig/new/+page.svelte', import.meta.url), 'utf8');
 const settings = readFileSync(new URL('../../routes/settings/+page.svelte', import.meta.url), 'utf8');
+const overview = readFileSync(new URL('../../routes/+page.svelte', import.meta.url), 'utf8');
 const deviceDetails = readFileSync(new URL('./DeviceDetailsModal.svelte', import.meta.url), 'utf8');
 
 describe('hardware receive verification UI', () => {
@@ -38,8 +39,13 @@ describe('hardware receive verification UI', () => {
   });
 
   it('exposes the shared identity health check for external single-key signers', () => {
+    expect(overview).toContain('<strong>Health check</strong>');
+    expect(overview).toContain('walletService.checkHardwareExternalSigner');
+    expect(overview).toContain('<DeviceDetailsModal');
     expect(settings).toContain('Hardware signer identity &amp; health');
     expect(settings).toContain('walletService.checkHardwareExternalSigner');
+    expect(settings).toContain('<LocalTimestamp value={signerHealth.checkedAt}/>');
+    expect(settings).toContain("'Not checked'");
     expect(settings).toContain('accountStandard="BIP84"');
     expect(settings).toContain('<DeviceDetailsModal');
     expect(deviceDetails).toContain("accountStandard = 'BIP48'");
