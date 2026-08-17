@@ -128,6 +128,16 @@ describe('hardware receive verification UI', () => {
     }
   });
 
+  it('distinguishes discovery failures from account-key failures', () => {
+    expect(hardwareSetup).toContain("errorTitle = $state('Could not scan hardware')");
+    expect(hardwareSetup).toContain("errorTitle = 'Could not read the account key'");
+    expect(hardwareSetup).toContain('{:else if devices.length || !error}<HardwareDeviceList');
+    expect(hardwareSetup).toContain('<strong>{errorTitle}</strong>');
+    expect(hardwareSetup).not.toContain(
+      '<strong>Could not read the account key</strong><small>{error}</small>'
+    );
+  });
+
   it('shows saved signer names only after matching scanned fingerprints', () => {
     expect(hardwareDeviceList).toContain('hardwareDeviceDisplayName(device, savedSigners)');
     expect(singleKeySend).toContain('savedSigners={externalWallet ? [externalWallet.signer] : []}');
@@ -147,16 +157,26 @@ describe('hardware receive verification UI', () => {
     expect(scanSource).not.toContain('mergeHardwareDiscovery');
   });
 
-  it('reuses the matched setup device instead of scanning every backend for policy review', () => {
+  it('reuses the matched setup device or resolves only the saved signer backend for policy review', () => {
     const start = multisigSetup.indexOf('async function openDraftPolicyVerification');
     const end = multisigSetup.indexOf('async function verifyDraftPolicy', start);
     const reviewSource = multisigSetup.slice(start, end);
     expect(reviewSource).toContain('hardware.find(');
     expect(reviewSource).toMatch(/if \(policyDevice\) \{[\s\S]*?return;/);
-    expect(
-      reviewSource.match(/listHardwareDevicesForTypes\(\[signer\.deviceType\]\)/g)
-    ).toHaveLength(1);
+    expect(reviewSource.match(/findSavedHardwareDevice\(signer\)/g)).toHaveLength(1);
+    expect(reviewSource).not.toContain('listHardwareDevicesForTypes');
     expect(reviewSource).not.toContain('listHardwareDevices()');
+  });
+
+  it('keeps saved-signer policy lookup cancellable and uses device-neutral copy', () => {
+    expect(multisigSetup).toContain('policyLookupGeneration += 1');
+    expect(multisigSetup).toContain('closeDraftPolicyVerification');
+    expect(multisigSetup).toContain(
+      'Keep the saved signer connected and unlocked while Groot checks its account key.'
+    );
+    expect(multisigSetup).not.toContain(
+      'Keep the device connected, unlocked, and in its Bitcoin app while Groot matches the saved fingerprint.'
+    );
   });
 
   it('keeps BitBox policy guidance compact and device-local', () => {
@@ -208,6 +228,19 @@ describe('hardware receive verification UI', () => {
     expect(normalizedSetup).toContain("isTrezor ? 'Use this Trezor wallet'");
   });
 
+  it('does not require an unverifiable fingerprint attestation for Nova imports', () => {
+    const normalizedSetup = hardwareSetup.replace(/\s+/g, ' ');
+    expect(normalizedSetup).toContain(
+      "signer?.deviceType?.toLowerCase().includes('bitbox') && signer.label.toLowerCase().includes('nova')"
+    );
+    expect(normalizedSetup).toContain(
+      'Nova does not show its fingerprint during this import, so no fingerprint comparison is required here.'
+    );
+    expect(normalizedSetup).toContain("isBitBoxNova ? 'Use this Nova wallet'");
+    expect(normalizedSetup).toContain('description="Quit other wallet apps so Groot can use USB."');
+    expect(normalizedSetup).toContain("'Keep the signer connected and unlocked.'");
+  });
+
   it('reserves the signer summary while the send wallet identity loads', () => {
     expect(singleKeySend).toContain('loading={!signerSummaryReady}');
     expect(singleKeySend).not.toContain('step < 4 && signerSummaryReady');
@@ -226,6 +259,16 @@ describe('hardware receive verification UI', () => {
     expect(singleKeySend).toMatch(
       /<TransactionReviewDetails\s+\{proposal\}\s+onChangeAddress=\{\(\)\s*=>\s*\(?changeAddressOpen\s*=\s*true\)?\}\s*\/>/
     );
+  });
+
+  it('lets a single-key hardware wallet discard its local signature without canceling payment', () => {
+    expect(singleKeySend).toContain('ondiscard={externalSigner');
+    expect(singleKeySend).toContain('walletService.discardExternalSignerSignature(');
+    expect(singleKeySend).toContain('title="Discard local signature?"');
+    expect(singleKeySend).toContain('This does not revoke the signature.');
+    expect(singleKeySend).toContain('The transaction details are unchanged');
+    expect(singleKeySend).toContain('>Keep signature</Button');
+    expect(singleKeySend).toContain('>Discard local signature</Button');
   });
 
   it('reveals the parent signing result after every terminal hardware response', () => {

@@ -30,6 +30,7 @@
   import DeviceDetailsModal from '$lib/components/DeviceDetailsModal.svelte';
   import LocalTimestamp from '$lib/components/LocalTimestamp.svelte';
   import { toast } from '$lib/stores/toasts';
+  import { locale, t } from '$lib/i18n';
   import { defaultConfig, networkName } from '$lib/config';
   import { walletService, WalletError } from '$lib/wallet';
   import { goto } from '$app/navigation';
@@ -136,7 +137,8 @@
   });
   let scanning = $state(false),
     cancellingScan = $state(false),
-    scanPoll: ReturnType<typeof setInterval> | undefined;
+    scanPoll: ReturnType<typeof setTimeout> | undefined;
+  let destroyed = false;
   let scanPercent = $derived(
     scanStatus.totalBlocks > 0
       ? Math.min(100, Math.round((scanStatus.processedBlocks / scanStatus.totalBlocks) * 100))
@@ -206,6 +208,7 @@
     scanStatus = await walletService.recoveryScanStatus();
   });
   onDestroy(() => {
+    destroyed = true;
     deleteCredential = '';
     confirmText = '';
     nodePassword = '';
@@ -217,7 +220,7 @@
     hardwareBackup = '';
     hardwareBackupContent = '';
     signerRenameDraft = '';
-    if (scanPoll) clearInterval(scanPoll);
+    if (scanPoll) clearTimeout(scanPoll);
   });
   function setTheme(next: 'light' | 'dark') {
     theme = next;
@@ -435,13 +438,7 @@
           'hardware_unavailable',
           'This saved signer has no USB device type. Re-import its public account backup.'
         );
-      const devices = await walletService.listHardwareDevicesForTypes([signer.deviceType]);
-      const device = matchingDeviceForHealthCheck(hardwareSignerDetails!, devices);
-      if (!device)
-        throw new WalletError(
-          'hardware_unavailable',
-          `Connect and unlock ${signer.label}, enable its USB connection, then try again.`
-        );
+      const device = await walletService.findSavedHardwareDevice(signer);
       const result = await walletService.checkHardwareExternalSigner(signer, device.id);
       await saveHardwareHealthCheck(signer.fingerprint, result);
       toast({
@@ -490,13 +487,7 @@
       );
       scanDraft = { ...scan };
       const rescan = walletService.fullRescan(scanCredential);
-      scanPoll = setInterval(async () => {
-        try {
-          scanStatus = await walletService.recoveryScanStatus();
-        } catch {
-          /* The foreground result remains authoritative. */
-        }
-      }, 100);
+      void pollFullRescan();
       const snapshot = await rescan;
       scanStatus = await walletService.recoveryScanStatus();
       scanOpen = false;
@@ -513,11 +504,20 @@
         /* Keep the original failure. */
       }
     } finally {
-      if (scanPoll) clearInterval(scanPoll);
+      if (scanPoll) clearTimeout(scanPoll);
       scanPoll = undefined;
       scanCredential = '';
       scanning = false;
       cancellingScan = false;
+    }
+  }
+  async function pollFullRescan() {
+    try {
+      scanStatus = await walletService.recoveryScanStatus();
+    } catch {
+      /* The foreground result remains authoritative. */
+    } finally {
+      if (scanning && !destroyed) scanPoll = setTimeout(() => void pollFullRescan(), 250);
     }
   }
   async function cancelFullRescan() {
@@ -843,18 +843,19 @@
     </div>
   </section>
   <section class="settings-group">
-    <h2>App appearance</h2>
+    <h2>{t('appAppearance', $locale)}</h2>
     <div class="settings-list">
       <div class="setting-row">
         <span class="setting-icon"
           >{#if theme === 'dark'}<Moon size={18} />{:else}<Sun size={18} />{/if}</span
         ><span
-          ><strong>Theme</strong><small
-            >Quiet contrast with a restrained French tricolor accent.</small
+          ><strong>{t('theme', $locale)}</strong><small>{t('themeDescription', $locale)}</small
           ></span
         ><span class="theme-choice"
-          ><button class:active={theme === 'light'} onclick={() => setTheme('light')}>Light</button
-          ><button class:active={theme === 'dark'} onclick={() => setTheme('dark')}>Dark</button
+          ><button class:active={theme === 'light'} onclick={() => setTheme('light')}
+            >{t('light', $locale)}</button
+          ><button class:active={theme === 'dark'} onclick={() => setTheme('dark')}
+            >{t('dark', $locale)}</button
           ></span
         >
       </div>

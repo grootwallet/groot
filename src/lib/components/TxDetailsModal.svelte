@@ -184,7 +184,9 @@
         <p class="explorer-unavailable">mempool.space cannot see local regtest transactions.</p>
       {/if}
     </details>
-    {#if transaction.status === 'pending'}<div class="psbt-actions">
+    {#if transaction.status === 'pending'}<div
+        class="psbt-actions transaction-acceleration-actions"
+      >
         <Button
           variant="secondary"
           href={`${multisig ? '/multisig/send' : '/send'}?accelerate=rbf&txid=${transaction.id}`}

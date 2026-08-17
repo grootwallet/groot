@@ -99,6 +99,8 @@
     qrScanOpen = $state(false),
     cancelOpen = $state(false),
     cancelError = $state(''),
+    discardSignatureOpen = $state(false),
+    discardSignatureError = $state(''),
     devices = $state<HardwareDevice[]>([]),
     deviceError = $state(''),
     imported = $state(''),
@@ -555,6 +557,28 @@
       broadcasting = false;
     }
   }
+  async function confirmDiscardExternalSignature() {
+    if (!proposal || !externalProposal || broadcasting) return;
+    broadcasting = true;
+    discardSignatureError = '';
+    try {
+      externalProposal = await walletService.discardExternalSignerSignature(
+        proposal.proposalId,
+        externalProposal.psbt
+      );
+      discardSignatureOpen = false;
+      toast({
+        title: 'Local signature discarded',
+        description: 'The transaction details are unchanged and ready for hardware signing again.',
+        tone: 'success'
+      });
+    } catch (cause) {
+      discardSignatureError =
+        cause instanceof Error ? cause.message : 'The local signature could not be discarded.';
+    } finally {
+      broadcasting = false;
+    }
+  }
   async function receiveUrFrame(frame: string) {
     if (scannedFrames.includes(frame)) return;
     scannedFrames = [...scannedFrames, frame];
@@ -598,6 +622,12 @@
       signedFingerprints={externalProposal?.signedFingerprints ?? []}
       collecting={externalSigner && Boolean(proposal)}
       loading={!signerSummaryReady}
+      ondiscard={externalSigner
+        ? () => {
+            discardSignatureError = '';
+            discardSignatureOpen = true;
+          }
+        : undefined}
     />{/if}
 
   {#if step === 1 && accelerationRequest}
@@ -1202,6 +1232,50 @@
   title="Scan signed PSBT"
   description="Groot accepts only crypto-psbt UR frames and verifies the exact proposal before importing."
   onclose={() => (qrScanOpen = false)}><UrQrScanner onframe={receiveUrFrame} /></Modal
+>
+<Modal
+  open={discardSignatureOpen}
+  title="Discard local signature?"
+  description="Keep this transaction and remove its hardware signature from Groot."
+  onclose={() => {
+    if (!broadcasting) {
+      discardSignatureOpen = false;
+      discardSignatureError = '';
+    }
+  }}
+  >{#if proposal && externalProposal}<div class="warning-box danger">
+      <strong>This does not revoke the signature.</strong><span
+        >Any PSBT copy already exported or shared may still contain it and remain broadcastable.</span
+      >
+    </div>
+    <dl class="details-list cancel-proposal-details">
+      <div>
+        <dt>Payment</dt>
+        <dd>{proposal.label}</dd>
+      </div>
+      <div>
+        <dt>Signature progress</dt>
+        <dd>{externalProposal.signed} of 1 → 0 of 1</dd>
+      </div>
+    </dl>
+    {#if discardSignatureError}<p class="form-error" role="alert">
+        {discardSignatureError}
+      </p>{/if}
+    <div class="modal-footer">
+      <Button
+        variant="secondary"
+        disabled={broadcasting}
+        onclick={() => {
+          discardSignatureOpen = false;
+          discardSignatureError = '';
+        }}>Keep signature</Button
+      ><Button
+        variant="danger"
+        loading={broadcasting}
+        loadingLabel="Discarding signature…"
+        onclick={confirmDiscardExternalSignature}>Discard local signature</Button
+      >
+    </div>{/if}</Modal
 >
 <Modal
   open={cancelOpen}

@@ -1,6 +1,7 @@
 use super::*;
 
 const HARDWARE_SCAN_CACHE_TIMEOUT: Duration = Duration::from_secs(15 * 60);
+const TYPE_ONLY_DEVICE_ID_PREFIX: &str = "groot-saved-device:";
 const MAX_TARGET_DEVICE_TYPES: usize = 8;
 const SUPPORTED_HWI_DEVICE_TYPES: &[&str] = &[
     "bitbox02",
@@ -35,6 +36,18 @@ fn validated_target_device_types(device_types: Vec<String>) -> ApiResult<Vec<Str
     Ok(validated)
 }
 
+fn retain_requested_hwi_devices(
+    mut devices: Vec<HwiDevice>,
+    requested_device_type: &str,
+) -> Vec<HwiDevice> {
+    devices.retain(|device| {
+        device
+            .device_type
+            .eq_ignore_ascii_case(requested_device_type)
+    });
+    devices
+}
+
 fn remember_hardware_scan(state: &AppState, devices: &[HwiDevice]) -> ApiResult<()> {
     let devices = devices
         .iter()
@@ -45,6 +58,19 @@ fn remember_hardware_scan(state: &AppState, devices: &[HwiDevice]) -> ApiResult<
         devices,
         created_at: Instant::now(),
     });
+    Ok(())
+}
+
+fn remember_hardware_devices(state: &AppState, devices: &[HwiDevice]) -> ApiResult<()> {
+    let mut scans = state.recent_hardware_scan.lock().map_err(internal)?;
+    let scan = scans.get_or_insert_with(|| RecentHardwareScan {
+        devices: HashMap::new(),
+        created_at: Instant::now(),
+    });
+    for device in devices.iter().filter(|device| !device.path.is_empty()) {
+        scan.devices.insert(device.path.clone(), device.clone());
+    }
+    scan.created_at = Instant::now();
     Ok(())
 }
 
@@ -104,17 +130,13 @@ pub async fn hardware_list_for_device_types(
             let encoded = hwi
                 .enumerate_device_type(&device_type)
                 .map_err(hardware_api_error)?;
-            let mut discovered: Vec<HwiDevice> =
-                serde_json::from_slice(&encoded).map_err(internal)?;
-            if discovered
-                .iter()
-                .any(|device| !device.device_type.eq_ignore_ascii_case(&device_type))
-            {
-                return Err(api_error(
-                    "hardware_response_invalid",
-                    "HWI returned a hardware-wallet type outside the requested scan.",
-                ));
-            }
+            let discovered: Vec<HwiDevice> = serde_json::from_slice(&encoded).map_err(internal)?;
+            // HWI 3.2.0 can include other connected families even when
+            // --device-type is supplied. They are unrelated to this targeted
+            // scan and must never enter its cache. The caller still selects the
+            // saved fingerprint, and the exact-path command independently
+            // verifies the saved device type, fingerprint, and account key.
+            let mut discovered = retain_requested_hwi_devices(discovered, &device_type);
             devices.append(&mut discovered);
         }
         Ok::<_, ApiError>(devices)
@@ -123,6 +145,76 @@ pub async fn hardware_list_for_device_types(
     .map_err(internal)??;
     remember_hardware_scan(&state, &devices)?;
     Ok(devices.into_iter().map(hardware_device_dto).collect())
+}
+
+#[tauri::command]
+pub async fn hardware_find_saved_device(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    device_type: String,
+    fingerprint: String,
+    derivation_path: String,
+    account_xpub: String,
+) -> ApiResult<HardwareDeviceDto> {
+    let device_type = validated_target_device_types(vec![device_type])?
+        .into_iter()
+        .next()
+        .ok_or_else(|| internal("The saved hardware device type is unavailable."))?;
+    let fingerprint = fingerprint.trim().to_ascii_lowercase();
+    Fingerprint::from_str(&fingerprint).map_err(|_| {
+        api_error(
+            "invalid_fingerprint",
+            "The saved hardware signer fingerprint is invalid.",
+        )
+    })?;
+    DerivationPath::from_str(derivation_path.trim()).map_err(|_| {
+        api_error(
+            "invalid_derivation_path",
+            "The saved hardware signer account path is invalid.",
+        )
+    })?;
+    let expected_xpub = Xpub::from_str(account_xpub.trim()).map_err(|_| {
+        api_error(
+            "invalid_descriptor",
+            "The saved hardware signer account key is invalid.",
+        )
+    })?;
+    if expected_xpub.network.is_mainnet() {
+        return Err(api_error(
+            "wrong_network",
+            "The saved hardware signer account key is for the wrong network.",
+        ));
+    }
+
+    let hwi = hwi_cli(&app)?;
+    let requested_type = device_type.clone();
+    let requested_path = derivation_path.trim().to_owned();
+    let connected_xpub = tauri::async_runtime::spawn_blocking(move || {
+        let output = hwi
+            .account_xpub_by_type(&requested_type, &requested_path)
+            .map_err(|error| hardware_xpub_api_error(error, &requested_type, &requested_path))?;
+        let encoded = parse_hwi_account_xpub(&output, &requested_type)?;
+        Xpub::from_str(&encoded)
+            .map_err(|_| api_error("invalid_descriptor", "HWI returned an invalid account key."))
+    })
+    .await
+    .map_err(internal)??;
+    if connected_xpub != expected_xpub {
+        return Err(api_error(
+            "unknown_signer",
+            "The connected device does not hold this signer’s saved account key.",
+        ));
+    }
+
+    let device = HwiDevice {
+        fingerprint: Some(fingerprint.clone()),
+        device_type: device_type.clone(),
+        model: device_type.clone(),
+        path: format!("{TYPE_ONLY_DEVICE_ID_PREFIX}{device_type}:{fingerprint}"),
+        ..HwiDevice::default()
+    };
+    remember_hardware_devices(&state, std::slice::from_ref(&device))?;
+    Ok(hardware_device_dto(device))
 }
 
 #[cfg(test)]
@@ -138,6 +230,36 @@ mod targeted_scan_tests {
         assert!(validated_target_device_types(vec![]).is_err());
         assert!(validated_target_device_types(vec!["unknown".into()]).is_err());
         assert!(validated_target_device_types(vec!["trezor".into(); 9]).is_err());
+    }
+
+    #[test]
+    fn targeted_scan_ignores_unrelated_device_families() {
+        let requested = HwiDevice {
+            device_type: "jade".into(),
+            path: "requested-device".into(),
+            ..HwiDevice::default()
+        };
+        let unrelated = HwiDevice {
+            device_type: "trezor".into(),
+            path: "unrelated-device".into(),
+            ..HwiDevice::default()
+        };
+
+        assert_eq!(
+            retain_requested_hwi_devices(vec![unrelated, requested.clone()], "JADE"),
+            [requested]
+        );
+    }
+
+    #[test]
+    fn targeted_scan_does_not_substitute_an_unrelated_device() {
+        let unrelated = HwiDevice {
+            device_type: "bitbox02".into(),
+            path: "unrelated-device".into(),
+            ..HwiDevice::default()
+        };
+
+        assert!(retain_requested_hwi_devices(vec![unrelated], "jade").is_empty());
     }
 }
 #[tauri::command]
@@ -1059,6 +1181,50 @@ pub fn external_signer_proposal_import(
     }
     drop(db);
     import_external_proposal(&app, &proposal_id, &signed_psbt)
+}
+
+#[tauri::command]
+pub fn external_signer_proposal_discard_signature(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    proposal_id: String,
+    reviewed_psbt: String,
+) -> ApiResult<MultisigProposalDto> {
+    let _operation = operation_guard(&state)?;
+    require_unlocked(&app, &state)?;
+    let metadata = read_external_signer_metadata(&app)?;
+    let mut db = open_db(&app)?;
+    let current = load_external_proposal(&mut db, &metadata, &proposal_id)?;
+    if current.psbt != reviewed_psbt {
+        return Err(api_error(
+            "proposal_mismatch",
+            "The proposal changed after review. Reload it before discarding the signature.",
+        ));
+    }
+
+    let signer = metadata.signer.fingerprint.parse().map_err(internal)?;
+    let mut psbt = decode_psbt(&current.psbt).map_err(proposal_api_error)?;
+    let progress =
+        discard_signer_signature(&mut psbt, signer, &[signer], 1).map_err(proposal_api_error)?;
+    if progress.signed != 0 || progress.can_finalize {
+        return Err(api_error(
+            "signature_not_found",
+            "The hardware signature could not be removed safely. No proposal state was changed.",
+        ));
+    }
+    let changed = db
+        .execute(
+            "UPDATE groot_proposals SET psbt = ?1, status = 'collecting' WHERE proposal_id = ?2 AND status IN ('collecting','ready') AND psbt = ?3",
+            params![encode_psbt(&psbt), proposal_id, reviewed_psbt],
+        )
+        .map_err(internal)?;
+    if changed != 1 {
+        return Err(api_error(
+            "proposal_mismatch",
+            "The proposal changed while the signature was being discarded. Reload it and try again.",
+        ));
+    }
+    load_external_proposal(&mut db, &metadata, &proposal_id)
 }
 
 #[tauri::command]

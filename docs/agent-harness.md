@@ -98,21 +98,31 @@ During a physical session:
 - retain vendor limitations exactly instead of converting them into a stronger
   readiness label.
 
-Current local status on 2026-08-16:
+Current local status on 2026-08-17:
 
 - Coldcard Mk4, Blockstream Jade Classic, original BitBox02 Bitcoin-only,
   Trezor Model One, and Ledger Nano S Plus have the local core passes and open
   limitations recorded in the canonical matrix.
 - Trezor Safe 3 Bitcoin-only, firmware 2.12.3, has a complete BIP84 local
   Regtest USB core pass. Its BIP48 import, 2-of-3 construction, cosigner address
-  proof, confirmed 100,000-sat Groot sync, permanent label, history, and
-  accounting pass; saved-identity health, Safe 3 address review/signing,
-  negative/restart/interruption/recovery, public-network/package, and
-  independent-review rows remain pending. Its policy status is always **No
-  setup needed**, never **Policy verified**.
-- BitBox02 Nova is **not certified**. Its independent HWI 3.2.0 desktop USB
-  campaign is pending. Original BitBox02 evidence is not inherited, and
-  Whisper/BLE remains a separate authenticated mobile-transport review.
+  proof, confirmed 100,000-sat Groot sync, permanent label, history, accounting,
+  saved-identity health, Safe 3 address review/signing, partial-signature
+  restart, duplicate and foreign PSBT rejection, wrong-device rejection, USB
+  interruption with an unchanged successful retry, and independent clean-profile
+  balance/history recovery pass. A bounded hostile unsigned-transaction mutation
+  was also rejected before the preserved proposal reached 2 of 2 with the
+  original Jade and Safe 3; it remains unfinalized and unbroadcast. Only
+  public-network/package and independent-review rows remain pending. Its policy
+  status is always **No setup needed**, never **Policy verified**.
+- BitBox02 Nova firmware 9.26.3 has a local HWI 3.2.0 Regtest USB core pass
+  under self-review for BIP84 and BIP48 import, policy/address proof, funded
+  rejection/retry, canonical signing, restart, Ledger wrong-device rejection,
+  duplicate/foreign/mutated-PSBT rejection, interruption/retry, threshold
+  broadcast/accounting, and independent clean-profile Groot JSON recovery with
+  the funded source preserved and reopened intact. It is **not release
+  certified**: cold-cache reset was not isolated from the shared BitBoxApp cache, and Testnet4,
+  packaged-candidate, independent-review, and Whisper/BLE rows remain open.
+  Original BitBox02 evidence is not inherited.
 
 GitHub issue state is intentionally not duplicated as a large static list. The
 live tracker is <https://github.com/thibistaken/groot/issues>. At this snapshot,

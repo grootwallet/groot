@@ -69,6 +69,7 @@
   let policyDevice = $state<HardwareDevice | null>(null);
   let policyBusy = $state(false);
   let policyError = $state('');
+  let policyLookupGeneration = 0;
   let healthPinOpen = $state(false);
   let healthPinBusy = $state(false);
   let healthPinChallenge = $state('');
@@ -229,19 +230,7 @@
           'hardware_unavailable',
           'This signer has no interactive USB device type.'
         );
-      const devices = await walletService.listHardwareDevicesForTypes([signer.deviceType]);
-      const lockedDevice = lockedDeviceForHealthCheck(signer, devices);
-      if (lockedDevice) {
-        checking = false;
-        await startHealthPin(lockedDevice);
-        return;
-      }
-      const device = matchingDeviceForHealthCheck(signer, devices);
-      if (!device)
-        throw new WalletError(
-          'hardware_unavailable',
-          `Connect and unlock ${signer.label}, enable its USB connection, then try again.`
-        );
+      const device = await walletService.findSavedHardwareDevice(signer);
       const result = await walletService.checkHardwareCosigner(signer, device.id);
       await saveHardwareHealthCheck(signer.fingerprint, result);
       toast({
@@ -318,6 +307,7 @@
     healthPinErrorCode = '';
   }
   async function openPolicyVerification(signer: CosignerDraft) {
+    const generation = ++policyLookupGeneration;
     policySigner = signer;
     selectedSigner = null;
     policyDevice = null;
@@ -333,17 +323,24 @@
           'hardware_unavailable',
           'This signer has no interactive USB device type.'
         );
-      const devices = await walletService.listHardwareDevicesForTypes([signer.deviceType]);
-      policyDevice =
-        devices.find(
-          (device) => device.fingerprint?.toLowerCase() === signer.fingerprint.toLowerCase()
-        ) ?? null;
-      if (!policyDevice) policyError = `Connect and unlock ${signer.label}, then try again.`;
+      const device = await walletService.findSavedHardwareDevice(signer);
+      if (generation !== policyLookupGeneration) return;
+      policyDevice = device;
     } catch (cause) {
+      if (generation !== policyLookupGeneration) return;
       policyError = cause instanceof Error ? cause.message : 'Could not scan hardware devices.';
     } finally {
-      policyBusy = false;
+      if (generation === policyLookupGeneration) policyBusy = false;
     }
+  }
+
+  function closePolicyVerification() {
+    if (policyBusy && policyDevice) return;
+    policyLookupGeneration += 1;
+    policySigner = null;
+    policyDevice = null;
+    policyBusy = false;
+    policyError = '';
   }
   async function verifySignerPolicy() {
     if (!policySigner || !policyDevice || policyBusy) return;
@@ -592,13 +589,7 @@
   description={policySigner && policyRegistrationProfile(policySigner).registration === 'file_once'
     ? 'Complete the one-time policy-file import before signing.'
     : 'Check the policy, signer keys, and first address.'}
-  onclose={() => {
-    if (!policyBusy) {
-      policySigner = null;
-      policyDevice = null;
-      policyError = '';
-    }
-  }}
+  onclose={closePolicyVerification}
 >
   {#if policySigner && wallet && policyRegistrationProfile(policySigner).registration === 'file_once'}<ColdcardPolicySetup
       {wallet}
@@ -610,7 +601,7 @@
     />
   {:else if policyBusy && !policyDevice}<HardwareActionPrompt
       title="Looking for the saved signer"
-      detail="Keep the device connected, unlocked, and in its Bitcoin app while Groot matches the saved fingerprint."
+      detail="Keep the saved signer connected and unlocked while Groot checks its account key."
       label="Signer scan in progress"
     />
   {:else if policySigner && wallet && policyDevice && policyAddress}<SignerPolicyReview

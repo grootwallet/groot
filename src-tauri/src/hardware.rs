@@ -16,6 +16,7 @@ const MAX_SECRET_INPUT_BYTES: usize = 128;
 const MAX_PIN_POSITIONS: usize = 50;
 const MAX_OUTPUT_BYTES: u64 = 384 * 1024;
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(90);
+const SAVED_IDENTITY_TIMEOUT: Duration = Duration::from_secs(30);
 const USER_REVIEW_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 const HWI_DIGEST_HEX_BYTES: usize = 64;
 
@@ -110,6 +111,11 @@ pub trait HardwareTransport: Send + Sync {
         device_path: &str,
         derivation_path: &str,
     ) -> Result<Vec<u8>, HardwareError>;
+    fn account_xpub_by_type(
+        &self,
+        device_type: &str,
+        derivation_path: &str,
+    ) -> Result<Vec<u8>, HardwareError>;
     fn sign_psbt(
         &self,
         device_type: &str,
@@ -193,16 +199,17 @@ impl HwiCli {
         command: &str,
         value: &str,
     ) -> Vec<String> {
-        vec![
+        let mut arguments = vec![
             "--chain".into(),
             self.chain.as_hwi_argument().into(),
             "--device-type".into(),
             device_type.into(),
-            "--device-path".into(),
-            device_path.into(),
-            command.into(),
-            value.into(),
-        ]
+        ];
+        if !device_path.is_empty() && !device_path.starts_with("groot-saved-device:") {
+            arguments.extend(["--device-path".into(), device_path.into()]);
+        }
+        arguments.extend([command.into(), value.into()]);
+        arguments
     }
 
     fn device_command_without_value(
@@ -293,6 +300,19 @@ impl HardwareTransport for HwiCli {
             &self.program,
             &self.device_command(device_type, device_path, "getxpub", derivation_path),
             DEFAULT_TIMEOUT,
+            self.home.as_deref(),
+        )
+    }
+
+    fn account_xpub_by_type(
+        &self,
+        device_type: &str,
+        derivation_path: &str,
+    ) -> Result<Vec<u8>, HardwareError> {
+        run_program(
+            &self.program,
+            &self.device_command(device_type, "", "getxpub", derivation_path),
+            SAVED_IDENTITY_TIMEOUT,
             self.home.as_deref(),
         )
     }
@@ -805,6 +825,33 @@ mod tests {
         let arguments = test.device_command("coldcard", "usb:1", "signtx", "cHNidP8=");
         assert_eq!(arguments[6], "signtx");
         assert_eq!(arguments[7], "cHNidP8=");
+        assert_eq!(
+            test.device_command("jade", "", "getxpub", "m/48'/1'/0'/2'"),
+            [
+                "--chain",
+                "test",
+                "--device-type",
+                "jade",
+                "getxpub",
+                "m/48'/1'/0'/2'"
+            ]
+        );
+        assert_eq!(
+            test.device_command(
+                "jade",
+                "groot-saved-device:jade:00000000",
+                "displayaddress",
+                "wsh(sortedmulti(2,...))#checksum"
+            ),
+            [
+                "--chain",
+                "test",
+                "--device-type",
+                "jade",
+                "displayaddress",
+                "wsh(sortedmulti(2,...))#checksum"
+            ]
+        );
 
         let main = HwiCli::for_chain(HwiChain::Main);
         assert_eq!(
@@ -847,6 +894,10 @@ mod tests {
         );
         assert_eq!(
             transport.account_xpub("trezor", "usb:1", "m/84'/1'/0'"),
+            Err(HardwareError::Unavailable)
+        );
+        assert_eq!(
+            transport.account_xpub_by_type("jade", "m/48'/1'/0'/2'"),
             Err(HardwareError::Unavailable)
         );
         assert_eq!(

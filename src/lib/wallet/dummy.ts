@@ -702,6 +702,26 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       return [...requested].some((deviceType) => identity.includes(deviceType));
     });
   }
+  async findSavedHardwareDevice(signer: {
+    deviceType?: string | null;
+    fingerprint: string;
+    derivationPath: string;
+    xpub: string;
+  }) {
+    if (!signer.deviceType)
+      throw new WalletError(
+        'hardware_unavailable',
+        'This saved signer has no interactive USB device type.'
+      );
+    const devices = await this.listHardwareDevicesForTypes([signer.deviceType]);
+    const device = devices.find(
+      (candidate) =>
+        candidate.fingerprint?.toLowerCase() === signer.fingerprint.trim().toLowerCase()
+    );
+    if (!device)
+      throw new WalletError('hardware_unavailable', 'The saved hardware signer was not found.');
+    return device;
+  }
   async promptHardwarePin(deviceId: string) {
     if (deviceId !== 'virtual-trezor' || this._trezorPinUnlocked)
       throw new WalletError(
@@ -997,6 +1017,26 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
   async signExternalWithHardware(proposalId: string, _deviceId: string, reviewedPsbt: string) {
     await new Promise((resolve) => setTimeout(resolve, 250));
     return this.importExternalSignerProposal(proposalId, reviewedPsbt, reviewedPsbt);
+  }
+  async discardExternalSignerSignature(proposalId: string, reviewedPsbt: string) {
+    const proposal = this._externalProposals.get(proposalId);
+    if (!proposal) throw new WalletError('proposal_not_found', 'Proposal not found.');
+    if (proposal.psbt !== reviewedPsbt)
+      throw new WalletError(
+        'proposal_mismatch',
+        'The proposal changed after review. Reload it before discarding the signature.'
+      );
+    if (!proposal.canFinalize || proposal.signed !== 1)
+      throw new WalletError(
+        'signature_not_found',
+        'The hardware signer has no complete signature in this proposal.'
+      );
+    proposal.signed = 0;
+    proposal.canFinalize = false;
+    proposal.status = 'collecting';
+    proposal.signedFingerprints = [];
+    proposal.psbt = `${proposal.psbt}:discarded-external-signature`;
+    return structuredClone(proposal);
   }
   async broadcastExternalSignerProposal(
     proposalId: string,

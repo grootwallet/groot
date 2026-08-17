@@ -42,6 +42,8 @@ Desktop uses a 224-pixel persistent navigation rail and a centered content area.
 
 Required review sizes are 1180×780 and 390×844. At mobile width, content must have no horizontal overflow, long identifiers must truncate or wrap, and actions must remain above the keyboard/safe area.
 
+Transaction-review action grids respond to the width of their own card, not only the window. They use three columns when the card is spacious, two at compact desktop widths, and one on mobile. Action labels remain concise and on one line; shrinking a card must never create stacked word fragments or horizontal overflow.
+
 ## Components and states
 
 - Buttons: default, secondary, ghost, danger, and danger-outline. Disabled means unavailable for a visible reason—not a placeholder interaction.
@@ -81,7 +83,7 @@ Required review sizes are 1180×780 and 390×844. At mobile width, content must 
 - Hardware-policy flows use the shared instruction card and policy signer list. Device-specific differences are data and actions—not bespoke typography or signer rows. The signer list has compact fingerprint and full inspectable-identity variants; both preserve the same spacing, type scale, current-device treatment, and identifier-detail behavior across setup, Policy, and signing.
 - Completed device-health and wallet-policy evidence always shows its event date and time through `LocalTimestamp`; status words alone are insufficient. Use **Public account key (xpub)** consistently, compact it as `prefix…suffix`, and open the standard grouped identifier detail when activated.
 - Theme: light/dark choice is functional, local-only, and follows system preference until explicitly selected.
-- Language: English, French, and Spanish are local-only preferences selected under **Settings → App appearance**, persisted across launches, and applied before first paint. Shared shell navigation, recurring statuses, and count labels use the central catalog; wallet names, labels, addresses, and transaction data are never translated.
+- Language: English, French, and Spanish are local-only preferences selected under **Settings → App appearance**, persisted across launches, and applied before first paint. Shared shell navigation, recurring statuses, counts, and every control in the appearance group use the central catalog. Remaining route/domain copy is added deliberately rather than implied to be translated; wallet names, labels, addresses, and transaction data are never translated.
 - Counts use locale-aware grammar. Never render forms such as “1 confirmations” or build translated plurals by appending an English suffix.
 - Recovery words, credentials, descriptors, disabled actions, overlays, navigation, modals, and mobile controls must meet the same contrast requirements in both themes. Theme selection is applied before first paint.
 - Toast: broadcast, received payment, first confirmation, copy, creation, deletion, connectivity, and recoverable failure.

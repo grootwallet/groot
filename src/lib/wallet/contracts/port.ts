@@ -119,6 +119,12 @@ export interface WalletTransactionsPort {
 export interface WalletHardwarePort {
   listHardwareDevices(): Promise<HardwareDevice[]>;
   listHardwareDevicesForTypes(deviceTypes: string[]): Promise<HardwareDevice[]>;
+  findSavedHardwareDevice(signer: {
+    deviceType?: string | null;
+    fingerprint: string;
+    derivationPath: string;
+    xpub: string;
+  }): Promise<HardwareDevice>;
   promptHardwarePin(deviceId: string): Promise<string>;
   sendHardwarePin(challengeId: string, pinPositions: string): Promise<void>;
   checkHardwareCosigner(cosigner: CosignerDraft, deviceId: string): Promise<CosignerHealthCheck>;
@@ -172,6 +178,10 @@ export interface WalletHardwarePort {
     proposalId: string,
     reviewedPsbt: string,
     signedPsbt: string
+  ): Promise<MultisigProposal>;
+  discardExternalSignerSignature(
+    proposalId: string,
+    reviewedPsbt: string
   ): Promise<MultisigProposal>;
   signExternalWithHardware(
     proposalId: string,

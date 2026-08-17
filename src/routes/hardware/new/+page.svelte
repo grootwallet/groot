@@ -44,6 +44,7 @@
   let label = $state(''),
     encoded = $state(''),
     error = $state(''),
+    errorTitle = $state('Could not scan hardware'),
     errorCode = $state<WalletErrorCode | ''>('');
   let pin = $state(''),
     confirmation = $state(''),
@@ -63,6 +64,12 @@
   let xpubOpen = $state(false);
   let isLedger = $derived(Boolean(signer?.deviceType?.toLowerCase().includes('ledger')));
   let isTrezor = $derived(Boolean(signer?.deviceType?.toLowerCase().includes('trezor')));
+  let isBitBoxNova = $derived(
+    Boolean(
+      signer?.deviceType?.toLowerCase().includes('bitbox') &&
+      signer.label.toLowerCase().includes('nova')
+    )
+  );
   let isFileImport = $derived(signer?.source === 'file');
 
   onDestroy(() => {
@@ -76,6 +83,7 @@
     scanOpen = true;
     busy = true;
     hardwareProgress = 'Scanning all USB hardware wallets…';
+    errorTitle = 'Could not scan hardware';
     error = '';
     try {
       devices = await walletService.listHardwareDevices();
@@ -102,6 +110,7 @@
       return;
     }
     busy = true;
+    errorTitle = 'Could not read the account key';
     hardwareProgress = device.model.startsWith('ledger')
       ? 'Reading the public account key from Ledger…'
       : `Reading the public account key from ${device.label}…`;
@@ -128,6 +137,7 @@
     const retrying = pinOpen;
     busy = true;
     pinBusy = retrying;
+    errorTitle = 'Could not start hardware unlock';
     error = '';
     pinError = '';
     pinErrorCode = '';
@@ -396,6 +406,17 @@
             >
           </p>
         </div>
+      {:else if isBitBoxNova}
+        <div class="credential-warning">
+          <ShieldCheck size={17} />
+          <p>
+            <strong>This public identity came from the connected Nova.</strong><span
+              >Nova does not show its fingerprint during this import, so no fingerprint comparison
+              is required here. After setup, verify the first receive address on Nova before
+              accepting bitcoin.</span
+            >
+          </p>
+        </div>
       {:else if isFileImport}
         <div class="credential-warning">
           <ShieldCheck size={17} />
@@ -430,9 +451,11 @@
             ? 'Use this Ledger wallet'
             : isTrezor
               ? 'Use this Trezor wallet'
-              : isFileImport
-                ? 'Use this public backup'
-                : 'Fingerprint matches'}<ArrowRight size={17} /></Button
+              : isBitBoxNova
+                ? 'Use this Nova wallet'
+                : isFileImport
+                  ? 'Use this public backup'
+                  : 'Fingerprint matches'}<ArrowRight size={17} /></Button
         >
       </div>
     </section>
@@ -513,7 +536,7 @@
 <Modal
   open={scanOpen}
   title="Connect hardware signer"
-  description="Quit manufacturer wallet apps after unlocking; only one app can own the USB session."
+  description="Quit other wallet apps so Groot can use USB."
   onclose={() => (scanOpen = false)}
 >
   {#if busy}<HardwareActionPrompt
@@ -522,9 +545,9 @@
         ? 'Groot is checking each supported USB signer backend. Keep the device connected and leave companion apps closed.'
         : hardwareProgress.includes('Ledger')
           ? 'Keep Bitcoin Test open for Regtest and follow any prompt on the Ledger screen.'
-          : 'Groot is reading the fingerprint and account key in one device session. Keep the signer connected and unlocked.'}
+          : 'Keep the signer connected and unlocked.'}
       label="Hardware wallet setup in progress"
-    />{:else}<HardwareDeviceList
+    />{:else if devices.length || !error}<HardwareDeviceList
       {devices}
       emptyMessage="HWI returned no device. For Coldcard, sign in first, enable its USB port, reconnect, then scan again. Other signers must be initialized, unlocked, and released by companion apps."
       onselect={useDevice}
@@ -533,9 +556,8 @@
       detailedStatus
     />{/if}
   {#if error}<div class="hardware-inline-error" role="alert">
-      <AlertTriangle size={18} /><span
-        ><strong>Could not read the account key</strong><small>{error}</small></span
-      ><Button variant="secondary" size="small" onclick={scan}>Try again</Button>
+      <AlertTriangle size={18} /><span><strong>{errorTitle}</strong><small>{error}</small></span
+      ><Button variant="secondary" size="small" onclick={scan}>Scan again</Button>
     </div>{/if}
 </Modal>
 <Modal

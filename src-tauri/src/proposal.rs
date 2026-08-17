@@ -654,6 +654,41 @@ mod tests {
     }
 
     #[test]
+    fn discards_a_single_signer_signature_without_changing_the_reviewed_proposal() {
+        let (mut psbt, signers) = proposal();
+        let allowed = [signers[0].2];
+        sign_all_inputs(&mut psbt, &signers[0]);
+        let preserved_unsigned_tx = psbt.unsigned_tx.clone();
+        let preserved_xpub = psbt.xpub.clone();
+        let preserved_inputs = psbt
+            .inputs
+            .iter()
+            .map(|input| {
+                (
+                    input.witness_utxo.clone(),
+                    input.non_witness_utxo.clone(),
+                    input.bip32_derivation.clone(),
+                    input.sighash_type,
+                )
+            })
+            .collect::<Vec<_>>();
+
+        let progress = discard_signer_signature(&mut psbt, signers[0].2, &allowed, 1).unwrap();
+
+        assert_eq!(progress.signed, 0);
+        assert!(!progress.can_finalize);
+        assert_eq!(psbt.unsigned_tx, preserved_unsigned_tx);
+        assert_eq!(psbt.xpub, preserved_xpub);
+        for (input, preserved) in psbt.inputs.iter().zip(preserved_inputs) {
+            assert!(input.partial_sigs.is_empty());
+            assert_eq!(input.witness_utxo, preserved.0);
+            assert_eq!(input.non_witness_utxo, preserved.1);
+            assert_eq!(input.bip32_derivation, preserved.2);
+            assert_eq!(input.sighash_type, preserved.3);
+        }
+    }
+
+    #[test]
     fn rejects_unknown_absent_or_incomplete_signers_without_mutation() {
         let (mut psbt, signers) = proposal();
         let allowed = allowed_fingerprints(&signers);

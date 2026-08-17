@@ -48,3 +48,15 @@ The next automation investment should be native command acceptance with isolated
 - Funded delayed-recovery/reorg tests, remote-node privacy/TLS evidence, large-history performance, single-instance locking, reproducible signed builds, SBOM/provenance, and update-delivery review.
 
 These gaps remain blockers under the canonical mainnet checklist. Test counts and coverage floors do not waive them.
+
+## 2026-08-17 follow-up
+
+A focused review after the Safe 3 signing work found no reason for a broad rewrite. The custody boundary, canonical-PSBT projection, signer identity checks, stable errors, restrictive Tauri capability/CSP configuration, secret-surface gates, supply-chain gates, and mainnet release gate remained intact. A standard parent-only Codex Security scan found no reportable vulnerability; this is internal evidence, not the independent review required for release.
+
+Three bounded defects were corrected without changing persisted formats or proposal behavior:
+
+- multisig PSBT actions now use their review card's available width: three columns when spacious, two at compact desktop widths, and one on mobile; labels stay on one line;
+- every Settings appearance control now uses the EN/FR/ES catalog, while route/domain copy remains explicitly outside the current localization foundation;
+- recovery-scan progress polling is serialized and runs every 250 ms, preventing overlapping native status requests.
+
+The earlier maintainability assessment still stands. Large orchestration modules should be decomposed only through small behavior-preserving extractions with existing adversarial tests; line-count reduction alone is not a wallet-safety objective.

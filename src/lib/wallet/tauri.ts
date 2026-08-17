@@ -312,6 +312,24 @@ export class TauriWalletAdapter implements WalletPort {
   listHardwareDevicesForTypes(deviceTypes: string[]) {
     return command<HardwareDevice[]>('hardware_list_for_device_types', { deviceTypes });
   }
+  findSavedHardwareDevice(signer: {
+    deviceType?: string | null;
+    fingerprint: string;
+    derivationPath: string;
+    xpub: string;
+  }) {
+    if (!signer.deviceType)
+      throw new WalletError(
+        'hardware_unavailable',
+        'This saved signer has no interactive USB device type.'
+      );
+    return command<HardwareDevice>('hardware_find_saved_device', {
+      deviceType: signer.deviceType,
+      fingerprint: signer.fingerprint,
+      derivationPath: signer.derivationPath,
+      accountXpub: signer.xpub
+    });
+  }
   promptHardwarePin(deviceId: string) {
     return command<string>('hardware_prompt_pin', { deviceId });
   }
@@ -428,6 +446,12 @@ export class TauriWalletAdapter implements WalletPort {
       proposalId,
       reviewedPsbt,
       signedPsbt
+    });
+  }
+  discardExternalSignerSignature(proposalId: string, reviewedPsbt: string) {
+    return command<MultisigProposal>('external_signer_proposal_discard_signature', {
+      proposalId,
+      reviewedPsbt
     });
   }
   signExternalWithHardware(proposalId: string, deviceId: string, reviewedPsbt: string) {

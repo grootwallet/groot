@@ -69,6 +69,8 @@ Theme coverage has two layers: unit tests verify every semantic foreground/backg
 
 Localization coverage unit-tests locale normalization, persistence, fallback behavior, and singular/plural confirmation and wallet counts. UI checks verify that the EN/FR/ES selector is available in Settings and that the pre-paint preference survives reload. Wallet policy, accounting, and Rust tests remain language-neutral. Discreet-mode units cover restoration and persistence; transaction classification units verify that fee-only wallet-controlled transfers are emitted as self-spends rather than zero-amount payments.
 
+Responsive transaction-review coverage additionally measures every PSBT action against its containing card, rejects clipped labels and page-level horizontal overflow, and proves the three/two/one-column progression across wide desktop, compact desktop, and mobile. Localization E2E switches languages in place and verifies the complete appearance control group in French and Spanish.
+
 ### Hardware and platform tests
 
 Virtual signer coverage is mandatory in CI. Physical certification is separate and must record device model, firmware, HWI version, host OS, policy registration, xpub import, address display, rejection, signing, reconnect, and cancellation. The dependency-free hardware-preflight tests prove that enumeration is time/output bounded and that Jade cancellation and network mismatch become actionable copy without returning raw HWI errors or identifiers. A simulator result is never labeled physical certification. iOS/Android camera, permission, interruption, background/resume, and safe-area checks require the platform harnesses and real/simulated OS builds.

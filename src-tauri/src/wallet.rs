@@ -1206,7 +1206,7 @@ pub struct RecoveryDrillDto {
     matches_current_wallet: bool,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
 struct HwiDevice {
     #[serde(default)]
     fingerprint: Option<String>,

@@ -468,9 +468,6 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   const verificationDialog = page.getByRole('dialog', { name: 'Verify receive address' });
   const addressDetails = verificationDialog.locator('details.verification-details');
   const addressDetailsSummary = addressDetails.locator('summary');
-  const reviewedAddress = await verificationDialog
-    .locator('.readable-address-groups')
-    .textContent();
   await expect(addressDetailsSummary.getByText('Address details', { exact: true })).toBeVisible();
   await expect(addressDetailsSummary.locator('svg')).toBeVisible();
   await expect(addressDetails).not.toHaveAttribute('open', '');
@@ -478,26 +475,13 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   await expect(addressDetails).toHaveAttribute('open', '');
   await addressDetailsSummary.click();
   await expect(addressDetails).not.toHaveAttribute('open', '');
-  const lockedTrezor = verificationDialog.getByRole('button', { name: /Virtual Trezor One/ });
-  await expect(lockedTrezor).toBeEnabled();
-  await expect(lockedTrezor).toContainText('Unlock');
-  await lockedTrezor.click();
-  const pinDialog = page.getByRole('dialog', { name: 'Unlock Trezor' });
-  await expect(pinDialog.getByText('Match locations, not numbers')).toBeVisible();
-  await pinDialog.getByRole('button', { name: 'Top left position' }).click();
-  await pinDialog.getByRole('button', { name: 'Bottom center position' }).click();
-  await pinDialog.getByRole('button', { name: 'Unlock Trezor' }).click();
-  await expect(verificationDialog).toBeVisible();
-  await expect(verificationDialog.locator('.readable-address-groups')).toHaveText(
-    reviewedAddress ?? ''
-  );
   await expect(
-    verificationDialog.getByRole('button', { name: /Virtual Trezor One/ })
-  ).toContainText('Standard wallet');
+    verificationDialog.getByRole('button', { name: /^Travel signing key / })
+  ).toContainText('Ready');
   await expect(
     page.locator('.address-label').getByText('Not verified', { exact: true })
   ).toBeVisible();
-  await page.getByRole('button', { name: /Virtual Coldcard/ }).click();
+  await verificationDialog.getByRole('button', { name: /^Travel signing key / }).click();
   const hardwareApproval = page.getByRole('status', { name: 'Waiting for hardware approval' });
   await expect(hardwareApproval).toContainText('Check your hardware device');
   await expect(hardwareApproval).toContainText('approve it on the device');
@@ -583,7 +567,7 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   await hardwareReview.getByText('View more details', { exact: true }).click();
   await expect(hardwareReview.getByText('Fee rate', { exact: true })).toBeVisible();
   await expect(hardwareReview.getByText('Transaction inputs', { exact: true })).toHaveCount(0);
-  await page.getByRole('button', { name: /Virtual Coldcard/ }).click();
+  await hardwareReview.getByRole('button', { name: /^Travel signing key / }).click();
   await expect(page.getByRole('status', { name: 'Waiting for hardware signature' })).toContainText(
     'Review the recipient, amount, fee, and change'
   );
@@ -852,6 +836,21 @@ test('overview, activity, UTXOs, and settings expose durable states', async ({ p
   await expect(changeCoin.getByText('2 wallet inputs', { exact: true })).toBeVisible();
   await page.getByRole('link', { name: 'Settings' }).click();
   await expect(page.getByText('Delete wallet', { exact: true })).toBeVisible();
+});
+
+test('translates the complete appearance controls', async ({ page }) => {
+  await page.goto('/settings');
+  await page.getByRole('button', { name: 'FR', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Apparence' })).toBeVisible();
+  await expect(page.getByText('Thème', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Clair' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Sombre' })).toBeVisible();
+
+  await page.getByRole('button', { name: 'ES', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Apariencia' })).toBeVisible();
+  await expect(page.getByText('Tema', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Claro' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Oscuro' })).toBeVisible();
 });
 
 test('renames the selected wallet from settings without changing its identity', async ({

@@ -3,7 +3,8 @@ import {
   formatConfirmationCount,
   formatWalletCount,
   normalizeLocale,
-  readPersistedLocale
+  readPersistedLocale,
+  t
 } from './i18n';
 
 describe('locale preferences', () => {
@@ -30,5 +31,12 @@ describe('locale preferences', () => {
     expect(formatWalletCount(1, 'en')).toBe('1 wallet');
     expect(formatWalletCount(2, 'fr')).toBe('2 portefeuilles');
     expect(formatWalletCount(2, 'es')).toBe('2 carteras');
+  });
+
+  it('translates every app-appearance control', () => {
+    expect(t('appAppearance', 'fr')).toBe('Apparence');
+    expect(t('theme', 'fr')).toBe('Thème');
+    expect(t('light', 'es')).toBe('Claro');
+    expect(t('dark', 'es')).toBe('Oscuro');
   });
 });
