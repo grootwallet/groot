@@ -29,6 +29,7 @@ adapter_modules=(
   label_provenance.rs
   lib.rs
   main.rs
+  market_data.rs
   native_backup.rs
   network.rs
   process_lock.rs
@@ -61,7 +62,7 @@ echo "Reporting adapters separately through whole-library coverage: ${adapter_mo
 
 # Nested files under `wallet/` and `native_backup/` are extracted pieces of
 # those already-classified orchestration/platform adapters, not new core scope.
-adapter_pattern="src/(airgap|compact_filters|direct_rpc|hardware|label_provenance|lib|main|native_backup|network|process_lock|registry|secure_store|tor_rpc|wallet)(\\.rs|/.*\\.rs)$"
+adapter_pattern="src/(airgap|compact_filters|direct_rpc|hardware|label_provenance|lib|main|market_data|native_backup|network|process_lock|registry|secure_store|tor_rpc|wallet)(\\.rs|/.*\\.rs)$"
 cargo llvm-cov \
   --locked \
   --manifest-path src-tauri/Cargo.toml \

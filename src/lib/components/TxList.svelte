@@ -1,6 +1,6 @@
 <script lang="ts">
   import { ArrowDownLeft, ArrowUpRight, ChevronRight, Clock3, Replace } from '@lucide/svelte';
-  import { shortSats } from '$lib/data';
+  import Amount from './Amount.svelte';
   import type { Transaction } from '$lib/types';
   import LocalTimestamp from './LocalTimestamp.svelte';
   import { formatConfirmationCount, locale, t } from '$lib/i18n';
@@ -53,9 +53,11 @@
           class="tx-amount"
           class:positive={tx.direction === 'received' && tx.status === 'confirmed'}
           ><strong
-            >{#if $discreetMode}•••••• sats{:else}{tx.direction === 'received'
-                ? '+'
-                : '−'}{shortSats(tx.amount)} sats{/if}</strong
+            ><Amount
+              value={tx.amount}
+              sign={tx.direction === 'received' ? '+' : '−'}
+              hidden={$discreetMode}
+            /></strong
           ><small
             >{tx.status === 'replaced'
               ? t('notCounted', $locale)

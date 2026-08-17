@@ -43,6 +43,7 @@ import type {
   CoinSelection,
   CoinSelectionPreview,
   FeeEstimates,
+  MaxSpend,
   FeeRate,
   PaymentProposal,
   Sats,
@@ -97,6 +98,12 @@ export interface WalletTransactionsPort {
   createAddress(label: string): Promise<ReceiveAddress>;
   discardAddress(id: number): Promise<void>;
   estimateFees(): Promise<FeeEstimates>;
+  maxSpend(recipient: string, feeRate: FeeRate, coinSelection?: CoinSelection): Promise<MaxSpend>;
+  maxMultisigSpend(
+    recipient: string,
+    feeRate: FeeRate,
+    coinSelection?: CoinSelection
+  ): Promise<MaxSpend>;
   setCoinFrozen(outpoint: string, frozen: boolean): Promise<void>;
   setMultisigCoinFrozen(outpoint: string, frozen: boolean): Promise<void>;
   previewCoinSelection(outpoints: string[], amount: Sats): Promise<CoinSelectionPreview>;

@@ -19,7 +19,8 @@
   import TxList from '$lib/components/TxList.svelte';
   import TxDetailsModal from '$lib/components/TxDetailsModal.svelte';
   import DeviceDetailsModal from '$lib/components/DeviceDetailsModal.svelte';
-  import { btc, shortSats } from '$lib/data';
+  import Amount from '$lib/components/Amount.svelte';
+  import { amountUnit, denomination, formatAmount } from '$lib/denomination';
   import { toast } from '$lib/stores/toasts';
   import {
     walletService,
@@ -55,6 +56,13 @@
   import MultisigDescriptorsModal from '$lib/components/MultisigDescriptorsModal.svelte';
   import { useWalletShellContext } from '$lib/wallet/shell-context';
   import { fly } from 'svelte/transition';
+  import {
+    fiatCurrency,
+    fiatValue,
+    formatFiat,
+    marketService,
+    type MarketTicker
+  } from '$lib/market';
   const walletShell = useWalletShellContext();
   let syncing = $state(false);
   let snapshot = $state<WalletSnapshot | null>(null);
@@ -76,6 +84,11 @@
   let verifyError = $state('');
   let verifying = $state(false);
   let initialDataLoading = $state(true);
+  let marketTicker = $state<MarketTicker | null>(null);
+  let marketLoading = $state(true);
+  let marketError = $state(false);
+  let marketStale = $state(false);
+  let marketRevision = 0;
   let syncSource = $state<WalletSyncSource | null>(null);
   let syncStatus = $state<WalletSyncStatus | null>(null);
   let syncPollToken = 0;
@@ -99,15 +112,17 @@
   const pendingDescription = $derived(
     [
       pendingBreakdown.incoming
-        ? `${shortSats(pendingBreakdown.incoming)} sats awaiting confirmation`
+        ? `${formatAmount(pendingBreakdown.incoming, $denomination)} ${amountUnit($denomination)} awaiting confirmation`
         : '',
       pendingBreakdown.change
-        ? `${shortSats(pendingBreakdown.change)} sats unconfirmed change`
+        ? `${formatAmount(pendingBreakdown.change, $denomination)} ${amountUnit($denomination)} unconfirmed change`
         : '',
-      pendingBreakdown.outgoing ? `${shortSats(pendingBreakdown.outgoing)} sats outgoing` : ''
+      pendingBreakdown.outgoing
+        ? `${formatAmount(pendingBreakdown.outgoing, $denomination)} ${amountUnit($denomination)} outgoing`
+        : ''
     ]
       .filter(Boolean)
-      .join(' · ') || '0 sats pending'
+      .join(' · ') || `0 ${amountUnit($denomination)} pending`
   );
   const recentTransactions = $derived(
     sortTransactionsNewestFirst(snapshot?.transactions ?? []).slice(0, 3)
@@ -125,6 +140,27 @@
     activeProposal ? ($discreetMode ? 'Label hidden' : activeProposal.label) : ''
   );
   onMount(loadSnapshot);
+  onMount(() => {
+    const unsubscribe = fiatCurrency.subscribe(() => void loadMarketTicker());
+    return unsubscribe;
+  });
+  async function loadMarketTicker() {
+    const current = ++marketRevision;
+    marketLoading = true;
+    marketError = false;
+    try {
+      const next = await marketService.ticker($fiatCurrency);
+      if (current !== marketRevision) return;
+      marketTicker = next.value;
+      marketStale = next.stale;
+    } catch {
+      if (current !== marketRevision) return;
+      marketTicker = null;
+      marketError = true;
+    } finally {
+      if (current === marketRevision) marketLoading = false;
+    }
+  }
   async function loadSnapshot() {
     loadError = '';
     initialDataLoading = true;
@@ -421,10 +457,29 @@
         >
       </div>
       <div class="balance-value">
-        {$discreetMode ? '••••••••' : shortSats(snapshot?.balance.total ?? 0)} <small>sats</small>
+        <Amount value={snapshot?.balance.total ?? 0} hidden={$discreetMode} />
       </div>
-      <div class="balance-fiat">
-        {$discreetMode ? '••••••' : `₿ ${btc(snapshot?.balance.total ?? 0)}`}
+      <div class="balance-fiat" aria-live="polite">
+        {#if $discreetMode}
+          <span>Fiat estimate hidden</span>
+        {:else if marketTicker}
+          <a href="/market"
+            ><strong
+              >{formatFiat(
+                fiatValue(snapshot.balance.total, marketTicker.price),
+                $fiatCurrency
+              )}</strong
+            ><span
+              >1 BTC = {formatFiat(marketTicker.price, $fiatCurrency)}{marketStale
+                ? ' · saved price'
+                : ''}</span
+            ></a
+          >
+        {:else if marketLoading}
+          <span>Loading fiat estimate…</span>
+        {:else if marketError}
+          <button onclick={loadMarketTicker}>Fiat estimate unavailable · Retry</button>
+        {/if}
       </div>
       <div class="pending-line">
         <i></i>{$discreetMode ? 'Pending activity hidden' : pendingDescription}

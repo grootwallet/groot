@@ -4,7 +4,7 @@
   import Button from './Button.svelte';
   import { copyText } from '$lib/clipboard';
   import { defaultConfig, transactionExplorerUrl } from '$lib/config';
-  import { shortSats } from '$lib/data';
+  import Amount from './Amount.svelte';
   import { toast } from '$lib/stores/toasts';
   import type { Transaction } from '$lib/types';
   import { compactAddress } from '$lib/address-display';
@@ -62,9 +62,11 @@
         class:replaced={transaction.status === 'replaced'}>{transaction.status}</span
       >
       <strong class:positive={transaction.direction === 'received'}
-        >{#if $discreetMode}••••••{:else}{transaction.direction === 'received'
-            ? '+'
-            : '−'}{shortSats(transaction.amount)}{/if} <small>sats</small></strong
+        ><Amount
+          value={transaction.amount}
+          sign={transaction.direction === 'received' ? '+' : '−'}
+          hidden={$discreetMode}
+        /></strong
       >
       <p>
         {$discreetMode
@@ -85,7 +87,7 @@
       </div>
       {#if transaction.fee}<div>
           <dt>Network fee</dt>
-          <dd>{$discreetMode ? '••••••' : shortSats(transaction.fee)} sats</dd>
+          <dd><Amount value={transaction.fee} hidden={$discreetMode} /></dd>
         </div>{/if}
       {#if transaction.address && !showAddress}<div>
           <dt>{transaction.direction === 'received' ? 'Received at' : 'Sent to'}</dt>
@@ -112,17 +114,19 @@
         {#if transaction.inputCount != null}<div>
             <dt>Inputs</dt>
             <dd>
-              {transaction.inputCount}{#if transaction.walletInputAmount != null}{' · '}{shortSats(
-                  transaction.walletInputAmount
-                )} sats from this wallet{/if}
+              {transaction.inputCount}{#if transaction.walletInputAmount != null}{' · '}<Amount
+                  value={transaction.walletInputAmount}
+                  hidden={$discreetMode}
+                /> from this wallet{/if}
             </dd>
           </div>{/if}
         {#if transaction.outputCount != null}<div>
             <dt>Outputs</dt>
             <dd>
-              {transaction.outputCount}{#if transaction.walletOutputAmount != null}{' · '}{shortSats(
-                  transaction.walletOutputAmount
-                )} sats to this wallet{/if}
+              {transaction.outputCount}{#if transaction.walletOutputAmount != null}{' · '}<Amount
+                  value={transaction.walletOutputAmount}
+                  hidden={$discreetMode}
+                /> to this wallet{/if}
             </dd>
           </div>{/if}
         {#if transaction.feeRate != null}<div>

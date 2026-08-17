@@ -780,6 +780,11 @@ test('overview, activity, UTXOs, and settings expose durable states', async ({ p
   await page.getByRole('button', { name: 'Close' }).click();
   await page.getByRole('link', { name: 'Activity' }).click();
   await expect(page.getByRole('heading', { name: 'Activity' })).toBeVisible();
+  await expect(page.getByPlaceholder('Search labels')).toBeVisible();
+  const activitySort = page.locator('.activity-controls select');
+  await activitySort.selectOption('oldest');
+  await expect(activitySort).toHaveValue('oldest');
+  await activitySort.selectOption('newest');
   await expect(page.locator('.tx-row.pending').getByText('Awaiting confirmation')).toBeVisible();
   await page.getByRole('button', { name: 'Received' }).click();
   const confirmedReceivedTransaction = page.locator('.tx-row:not(.pending)').first();
@@ -830,12 +835,135 @@ test('overview, activity, UTXOs, and settings expose durable states', async ({ p
   await expect(inheritedLabels.getByRole('listitem', { name: 'Refund' })).toBeVisible();
   await changeCoin.getByRole('button', { name: 'Show details for Savings, Refund' }).click();
   await expect(changeCoin.getByText('Source transaction', { exact: true })).toBeVisible();
-  await expect(changeCoin.getByText('Source payment intent', { exact: true })).toBeVisible();
+  await expect(changeCoin.locator('dt').filter({ hasText: 'Source payment intent' })).toBeVisible();
   await expect(changeCoin.getByText('Hardware order', { exact: true })).toBeVisible();
-  await expect(changeCoin.getByText('Change lineage', { exact: true })).toBeVisible();
+  await expect(changeCoin.locator('dt').filter({ hasText: 'Change lineage' })).toBeVisible();
   await expect(changeCoin.getByText('2 wallet inputs', { exact: true })).toBeVisible();
+  await changeCoin.getByRole('button', { name: 'About source payment intent' }).hover();
+  await expect(changeCoin.getByRole('tooltip')).toContainText(
+    'The permanent label of the payment that created this change.'
+  );
+  await changeCoin.getByRole('button', { name: 'About change lineage' }).hover();
+  await expect(changeCoin.getByRole('tooltip')).toContainText(
+    'How many wallet inputs were combined'
+  );
+  const filterHeights = await page.locator('.coin-filters').evaluate((filters) => {
+    const input = filters.querySelector('input');
+    const select = filters.querySelector('select');
+    return {
+      input: input?.getBoundingClientRect().height ?? 0,
+      select: select?.getBoundingClientRect().height ?? 0
+    };
+  });
+  expect(filterHeights.input).toBe(filterHeights.select);
   await page.getByRole('link', { name: 'Settings' }).click();
   await expect(page.getByText('Delete wallet', { exact: true })).toBeVisible();
+});
+
+test('amount denomination stays consistent across wallet surfaces', async ({ page }) => {
+  await page.goto('/settings');
+  const amountDisplay = page.getByLabel('Amount display');
+  await amountDisplay.getByRole('button', { name: 'BTC' }).click();
+  await expect(amountDisplay.getByRole('button', { name: 'BTC' })).toHaveAttribute(
+    'aria-pressed',
+    'true'
+  );
+  const fiatDisplay = page.getByLabel('Fiat currency');
+  await fiatDisplay.getByRole('button', { name: 'GBP' }).click();
+  await expect(fiatDisplay.getByRole('button', { name: 'GBP' })).toHaveAttribute(
+    'aria-pressed',
+    'true'
+  );
+  await page.goto('/coins');
+  await expect(page.locator('.stat-pill .formatted-amount')).toContainText('0.02481240 BTC');
+  await expect(page.locator('.stat-pill .amount-quiet')).toHaveText('0.0');
+  await page.reload();
+  await expect(page.locator('.stat-pill .formatted-amount')).toContainText('0.02481240 BTC');
+});
+
+test('fiat estimate and Market stay display-only, persistent, and accessible', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('.side-nav a[href="/market"]')).toHaveCount(0);
+  await expect(page.locator('.mobile-nav a[href="/market"]')).toHaveCount(0);
+  await expect(page.locator('.global-market-link')).toHaveAttribute('href', '/market');
+  await page.goto('/settings');
+  await expect(page.getByRole('button', { name: 'Open Market' })).toBeVisible();
+  await page.goto('/');
+  const fiatEstimate = page.locator('.balance-fiat');
+  await expect(fiatEstimate.getByRole('link')).toContainText('$');
+  await expect(fiatEstimate).toContainText('1 BTC =');
+  await fiatEstimate.getByRole('link').click();
+
+  await expect(page.getByRole('heading', { name: 'Bitcoin price' })).toBeVisible();
+  await expect(page.getByText('Market context without sharing wallet data.')).toBeVisible();
+  await expect(page.locator('.market-live')).toContainText('Live');
+  await expect(page.locator('.market-page')).toHaveAttribute('data-trend', 'down');
+  await expect(page.getByText('24h high', { exact: true })).toBeVisible();
+  await expect(page.getByText('All-time high', { exact: true })).toBeVisible();
+  const chart = page.getByRole('img', { name: /Bitcoin price history in USD for 1M/ });
+  await expect(chart).toBeVisible();
+  const chartExplorer = page.getByRole('slider', { name: 'Explore market chart' });
+  await chartExplorer.focus();
+  const latestValue = await chartExplorer.getAttribute('aria-valuetext');
+  await chartExplorer.press('ArrowLeft');
+  await expect(chartExplorer).not.toHaveAttribute('aria-valuetext', latestValue ?? '');
+  await expect(page.locator('.market-chart-tooltip')).toContainText('%');
+
+  await page.getByRole('button', { name: '1Y', exact: true }).click();
+  await expect(
+    page.getByRole('img', { name: /Bitcoin price history in USD for 1Y/ })
+  ).toBeVisible();
+  await page.getByRole('button', { name: 'EUR', exact: true }).click();
+  await expect(
+    page.getByRole('img', { name: /Bitcoin price history in EUR for 1Y/ })
+  ).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole('button', { name: 'EUR', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'true'
+  );
+  await expect(page.locator('.market-live')).toContainText('Live');
+
+  await page.evaluate(() => {
+    const now = Date.now();
+    Date.now = () => now + 10 * 60_000;
+    localStorage.setItem('groot-market-fixture', 'offline');
+  });
+  await page.getByRole('button', { name: 'Refresh' }).click();
+  await expect(page.locator('.market-live')).toContainText('Saved');
+  await expect(page.getByText('Showing the last saved result.')).toBeVisible();
+
+  await page.getByRole('button', { name: '5Y', exact: true }).click();
+  await expect(page.getByText('Price unavailable', { exact: true })).toBeVisible();
+  await expect(page.getByRole('img', { name: /Bitcoin price history/ })).toHaveCount(0);
+  await page.evaluate(() => localStorage.removeItem('groot-market-fixture'));
+  await page.getByRole('button', { name: 'Retry' }).click();
+  await expect(
+    page.getByRole('img', { name: /Bitcoin price history in EUR for 5Y/ })
+  ).toBeVisible();
+  await expect(page.locator('.market-page')).toHaveAttribute('data-trend', 'up');
+
+  expect(
+    await page
+      .locator('.market-page')
+      .evaluate((element) => element.scrollWidth <= element.clientWidth)
+  ).toBe(true);
+  if ((page.viewportSize()?.width ?? 0) <= 720) {
+    const mobileItemTops = await page
+      .locator('.mobile-nav a')
+      .evaluateAll((items) => items.map((item) => Math.round(item.getBoundingClientRect().top)));
+    expect(new Set(mobileItemTops).size).toBe(1);
+  }
+});
+
+test('Market explains an initial offline failure and recovers on retry', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('groot-market-fixture', 'offline'));
+  await page.goto('/market');
+  await expect(page.getByText('Price unavailable', { exact: true })).toBeVisible();
+  await expect(page.getByText('Market data is temporarily unavailable.')).toBeVisible();
+  await page.evaluate(() => localStorage.removeItem('groot-market-fixture'));
+  await page.getByRole('button', { name: 'Retry' }).click();
+  await expect(page.locator('.market-live')).toContainText('Live');
 });
 
 test('translates the complete appearance controls', async ({ page }) => {
@@ -901,9 +1029,9 @@ test('CPFP success identifies the fee-only child instead of a zero-sat payment',
   await page.getByRole('button', { name: /Sign & broadcast/ }).click();
 
   await expect(page.getByRole('heading', { name: 'Fee acceleration broadcast' })).toBeVisible();
-  await expect(
-    page.getByText(/fee-only child transaction with a .*sat network fee was broadcast/)
-  ).toBeVisible();
+  await expect(page.locator('.success-state')).toContainText(
+    /fee-only child transaction with a .* sats network fee was broadcast/
+  );
   await expect(page.getByText('0 sats was broadcast to the Bitcoin network.')).toHaveCount(0);
 });
 
@@ -1065,7 +1193,7 @@ test('coin control selects, freezes, and carries coins into send', async ({ page
   const first = page.getByRole('checkbox', { name: 'Select Savings', exact: true });
   await first.check();
   await expect(page.getByText('1 selected')).toBeVisible();
-  await expect(page.getByText('1,250,000 sats selected')).toBeVisible();
+  await expect(page.locator('.coin-toolbar')).toContainText('1,250,000 sats selected');
   await page.getByRole('button', { name: 'Freeze selected' }).click();
   const freezeDialog = page.getByRole('dialog', { name: 'Freeze Savings?' });
   await expect(
@@ -1086,26 +1214,35 @@ test('coin control selects, freezes, and carries coins into send', async ({ page
   await expect(unfreezeDialog.getByText('Unfreezing does not spend this coin.')).toBeVisible();
   await unfreezeDialog.getByRole('button', { name: 'Unfreeze coin' }).click();
   await first.check();
+  await page.getByRole('checkbox', { name: 'Select Savings, Refund', exact: true }).check();
   await page.getByRole('link', { name: 'Send selected coins' }).click();
   await expect(page).toHaveURL(/\/send\?coins=/);
   await page.getByLabel('Payment label').fill('Coin selection test');
   await page.getByLabel('Bitcoin address').fill('bcrt1qreceiver0000000000000000000000000000000');
   await page.getByRole('button', { name: 'Continue to amount' }).click();
-  await expect(page.getByText('Manual · 1 coin')).toBeVisible();
-  await expect(page.locator('.manual-selection-preview')).toContainText(
-    '1 selected · 1,250,000 sats · 500 WU'
+  await expect(page.getByText('Manual · 2 coins')).toBeVisible();
+  const selectionPreview = page.locator('.manual-selection-preview');
+  await expect(selectionPreview).toContainText('2 selected · 1,639,090 sats');
+  await expect(selectionPreview.locator('.selection-technical > span')).toBeHidden();
+  await expect(selectionPreview.getByText('Funding labels', { exact: true })).toBeVisible();
+  await selectionPreview.getByText('Input details', { exact: true }).click();
+  await expect(selectionPreview).toContainText('Estimated input weight: 1,000 WU');
+  const coinMode = page.getByRole('button', { name: /Manual · 2 coins/ });
+  await coinMode.click();
+  await expect(
+    page.locator('.send-coin-picker').getByText('Savings', { exact: true }).first()
+  ).toBeVisible();
+  await expect(page.locator('.send-coin-picker label').first().getByRole('listitem')).toHaveCount(
+    0
   );
-  await expect(page.locator('.manual-selection-preview')).toContainText(
-    'One existing group can fund this amount.'
-  );
-  await page.getByRole('button', { name: /Manual · 1 coin/ }).click();
-  await expect(page.getByRole('button', { name: /Balanced/ })).toBeVisible();
-  await page.getByRole('button', { name: /More private/ }).click();
-  await page.getByRole('button', { name: 'Use automatic selection' }).click();
+  await coinMode.click();
+  await selectionPreview.getByRole('button', { name: 'Use privacy-first selection' }).click();
   await expect(
     page.locator('.coin-mode').getByText('Automatic selection', { exact: true })
   ).toBeVisible();
   await expect(page.locator('.coin-mode')).toContainText('More private');
+  await page.getByRole('button', { name: 'Max' }).click();
+  await expect(page.getByLabel('Amount', { exact: true })).toHaveValue('2480253');
 });
 
 test('discreet mode hides coin labels and amounts without leaking them through controls', async ({
@@ -1142,8 +1279,8 @@ test('send reviews a proposal and rejects a wrong credential', async ({ page }) 
   await expect(page.getByText('25,000')).toBeVisible();
   await expect(page.getByText('Exact strategy comparison')).toBeVisible();
   await expect(
-    page.getByText(/100 sats lower than the valid More private candidate/)
-  ).toBeVisible();
+    page.locator('.selection-review').filter({ hasText: 'Exact strategy comparison' })
+  ).toContainText('100 sats lower than the valid More private candidate');
   await page.getByRole('button', { name: 'Continue to sign' }).click();
   await page.getByLabel('Wallet passphrase', { exact: true }).fill('wrong');
   await page.getByRole('button', { name: /Sign & broadcast/ }).click();
@@ -1256,7 +1393,37 @@ test('locked regtest wallet reset requires exact typed confirmation', async ({ p
 test('locked profiles use recovery-safe credential terms', async ({ page }) => {
   await page.goto('/unlock');
   await expect(page.getByLabel('Wallet passphrase', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'More information' }).click();
+  const infoButton = page.getByRole('button', { name: 'More information' });
+  await page.getByRole('button', { name: 'Use light mode' }).click();
+  await infoButton.hover();
+  const lightTooltip = page.getByRole('tooltip');
+  await expect(lightTooltip).toBeVisible();
+  expect(
+    await lightTooltip.evaluate((tooltip) => {
+      const probe = document.createElement('span');
+      probe.style.background = 'var(--panel-2)';
+      document.body.append(probe);
+      const matches =
+        getComputedStyle(tooltip).backgroundColor === getComputedStyle(probe).backgroundColor;
+      probe.remove();
+      return matches;
+    })
+  ).toBe(true);
+  await page.getByRole('button', { name: 'Use dark mode' }).click();
+  await infoButton.hover();
+  const darkTooltip = page.getByRole('tooltip');
+  await expect(darkTooltip).toBeVisible();
+  expect(
+    await darkTooltip.evaluate((tooltip) => {
+      const probe = document.createElement('span');
+      probe.style.background = 'var(--panel-2)';
+      document.body.append(probe);
+      const matches =
+        getComputedStyle(tooltip).backgroundColor === getComputedStyle(probe).backgroundColor;
+      probe.remove();
+      return matches;
+    })
+  ).toBe(true);
   await expect(
     page.getByText(/BIP39 passphrase is required with your 24 recovery words/)
   ).toBeVisible();

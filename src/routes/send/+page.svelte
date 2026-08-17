@@ -34,6 +34,7 @@
     feeRate as asFeeRate,
     sats,
     walletService,
+    WalletError,
     type AutomaticSelectionStrategy,
     type CoinSelection,
     type CoinSelectionPreview,
@@ -53,6 +54,16 @@
   } from '$lib/wallet/hardware-display';
   import { latestActiveProposal } from '$lib/wallet/proposal-resume';
   import { discreetMode } from '$lib/privacy';
+  import PermanentLabelTags from '$lib/components/PermanentLabelTags.svelte';
+  import FeeSelector from '$lib/components/FeeSelector.svelte';
+  import Amount from '$lib/components/Amount.svelte';
+  import {
+    amountInputValue,
+    amountUnit,
+    denomination,
+    formatAmount,
+    parseAmountInput
+  } from '$lib/denomination';
   import { fly } from 'svelte/transition';
   import { useWalletShellContext } from '$lib/wallet/shell-context';
 
@@ -140,7 +151,7 @@
     Number.isFinite(Number(customFee)) && Number(customFee) > 0 && Number(customFee) <= 10_000
   );
   const fee = $derived(Number(proposal?.fee ?? Math.max(0, Math.round(selectedFeeRate * 141))));
-  const amountSats = $derived(Number(amount || 0));
+  const amountSats = $derived(parseAmountInput(amount, $denomination));
   const addressValid = $derived(hasAddressPrefixForNetwork(address, defaultConfig.network));
   const valid = $derived(
     addressValid &&
@@ -285,7 +296,12 @@
       signerSummaryReady = true;
       toast({
         title: 'Could not load wallet',
-        description: cause instanceof Error ? cause.message : undefined,
+        description:
+          cause instanceof WalletError && cause.code === 'insufficient_funds'
+            ? `The amount plus network fee exceeds the ${selectedCoins.length ? 'selected coin balance' : 'available balance'}.`
+            : cause instanceof Error
+              ? cause.message
+              : undefined,
         tone: 'danger'
       });
     }
@@ -320,6 +336,20 @@
       });
     } finally {
       preparing = false;
+    }
+  }
+
+  async function useMaxAmount() {
+    if (!addressValid || selectedFeeRate <= 0) return;
+    try {
+      const maximum = await walletService.maxSpend(address, asFeeRate(selectedFeeRate), selection);
+      amount = amountInputValue(maximum.amount, $denomination);
+    } catch (cause) {
+      toast({
+        title: 'Maximum unavailable',
+        description: cause instanceof Error ? cause.message : undefined,
+        tone: 'danger'
+      });
     }
   }
 
@@ -720,13 +750,17 @@
       <label class="field"
         ><span>Amount</span>
         <div class="amount-input">
-          <input aria-label="Amount" bind:value={amount} inputmode="numeric" placeholder="0" /><b
-            >sats</b
-          ><button type="button" onclick={() => (amount = String(Math.max(0, available - 1000)))}
-            >Max</button
+          <input
+            aria-label="Amount"
+            bind:value={amount}
+            inputmode={$denomination === 'btc' ? 'decimal' : 'numeric'}
+            placeholder="0"
+          /><b>{$denomination === 'btc' ? 'BTC' : 'sats'}</b><button
+            type="button"
+            onclick={useMaxAmount}>Max</button
           >
         </div>
-        <small>Available: {$discreetMode ? '••••••' : shortSats(available)} sats</small></label
+        <small>Available: <Amount value={available} hidden={$discreetMode} /></small></label
       >
       <div class="coin-control-field">
         <span>Coin selection</span><button
@@ -742,7 +776,7 @@
                 : 'Automatic selection'}</strong
             ><small
               >{selectedCoins.length
-                ? `${$discreetMode ? '••••••' : shortSats(available)} sats available`
+                ? `${$discreetMode ? '••••••' : formatAmount(available, $denomination)} ${amountUnit($denomination)} available`
                 : `${automaticStrategyLabel} · Frozen coins stay untouched`}</small
             ></span
           ><b>{showCoins ? 'Done' : 'Choose'}</b></button
@@ -769,10 +803,20 @@
                   disabled={coin.frozen}
                   onchange={(event) => toggleCoin(coin.outpoint, event.currentTarget.checked)}
                 /><span
-                  ><strong>{$discreetMode ? 'Label hidden' : coin.label}</strong><small
+                  ><span class="coin-picker-title-line"
+                    ><strong>{$discreetMode ? 'Label hidden' : coin.label}</strong
+                    >{#if coin.provenance.state !== 'unknown'}<PermanentLabelTags
+                        labels={coin.provenance.labels.filter(
+                          (item) =>
+                            item.text.trim().toLocaleLowerCase() !==
+                            coin.label.trim().toLocaleLowerCase()
+                        )}
+                        hidden={$discreetMode}
+                      />{/if}</span
+                  ><small
                     >{$discreetMode
-                      ? '•••••• sats · Provenance hidden'
-                      : `${shortSats(coin.amount)} sats · ${coin.provenance.state === 'mixed' ? `${coin.provenance.labels.length} mixed labels` : coin.provenance.state === 'unknown' ? 'Source unknown' : 'Known source'}${coin.provenance.addressReused ? ' · Address reused' : ''}`}{coin.frozen
+                      ? '•••••• · Provenance hidden'
+                      : `${formatAmount(coin.amount, $denomination)} ${amountUnit($denomination)}${coin.provenance.state === 'unknown' ? ' · Source unknown' : ''}${coin.provenance.addressReused ? ' · Address reused' : ''}`}{coin.frozen
                       ? ' · Frozen'
                       : ''}</small
                   ></span
@@ -786,50 +830,55 @@
             class="selection-review manual-selection-preview"
           >
             <strong
-              >{selectionPreview.selectedInputCount} selected · {$discreetMode
-                ? '••••••'
-                : shortSats(selectionPreview.selectedAmount)} sats · {selectionPreview.estimatedInputWeight}
-              WU</strong
-            ><span
-              >{$discreetMode
-                ? 'Funding provenance hidden in discreet mode.'
-                : `${selectionPreview.fundingLabels.length || 'Unknown'} label group${selectionPreview.fundingLabels.length === 1 ? '' : 's'} · ${selectionPreview.newClusterLinks} new link${selectionPreview.newClusterLinks === 1 ? '' : 's'}. ${selectionPreview.oneExistingGroupCanFund ? 'One existing group can fund this amount.' : 'No single existing group can fund this amount.'}`}</span
-            >
+              >{selectionPreview.selectedInputCount} selected · <Amount
+                value={selectionPreview.selectedAmount}
+                hidden={$discreetMode}
+              /></strong
+            >{#if $discreetMode}<span>Funding provenance hidden in discreet mode.</span>{:else}<div
+                class="selection-labels"
+              >
+                <span>Funding labels</span><PermanentLabelTags
+                  labels={selectionPreview.fundingLabels}
+                />
+              </div>
+              <span
+                >{selectionPreview.newClusterLinks
+                  ? `${selectionPreview.newClusterLinks} new public link${selectionPreview.newClusterLinks === 1 ? '' : 's'}.`
+                  : 'No new links between existing groups.'}</span
+              >{#if selectionPreview.oneExistingGroupCanFund && selectionPreview.newClusterLinks > 0}<div
+                  class="selection-recommendation"
+                >
+                  <strong>Privacy recommendation</strong><span
+                    >One existing group can fund this payment without linking these groups.</span
+                  ><button
+                    type="button"
+                    onclick={() => {
+                      automaticStrategy = 'private';
+                      useAutomatic();
+                    }}>Use privacy-first selection</button
+                  >
+                </div>{/if}
+              <details class="selection-technical">
+                <summary>Input details</summary><span
+                  >Estimated input weight: {shortSats(selectionPreview.estimatedInputWeight)} WU</span
+                >
+              </details>{/if}
           </div>{/if}
       </div>
-      <div class="field">
-        <span>Network fee</span>
-        <div class="fee-options">
-          {#each [{ id: 'slow', name: 'Economy', rate: fees.slow }, { id: 'medium', name: 'Standard', rate: fees.medium }, { id: 'fast', name: 'Priority', rate: fees.fast }] as option}
-            <button
-              type="button"
-              class:active={speed === option.id}
-              disabled={!estimates}
-              onclick={() => (speed = option.id)}
-              ><span
-                ><strong>{option.name}</strong><small
-                  >{estimates ? 'Bitcoin Core estimate' : 'Unavailable'}</small
-                ></span
-              ><b>{estimates ? `${option.rate} sat/vB` : '—'}</b></button
-            >
-          {/each}
-          <button type="button" class:active={speed === 'custom'} onclick={() => (speed = 'custom')}
-            ><span><strong>Custom</strong><small>Set rate</small></span
-            >{#if speed === 'custom'}<input
-                aria-label="Custom fee rate"
-                bind:value={customFee}
-                onclick={(event) => event.stopPropagation()}
-                inputmode="decimal"
-                placeholder="0"
-              />{:else}<Gauge size={17} />{/if}</button
-          >
-        </div>
-        <small
-          >Fee estimates: {estimates?.source ?? 'Unavailable—enter a custom rate'} · Estimated fee {shortSats(
-            fee
-          )} sats</small
-        >{#if feeEstimateError}<p class="form-error" role="alert">{feeEstimateError}</p>{/if}
-      </div>
+      <FeeSelector
+        {estimates}
+        value={selectedFeeRate}
+        estimatedFee={fee}
+        error={feeEstimateError}
+        onchange={(rate) => {
+          const match = Object.entries(fees).find(([, value]) => value === rate);
+          if (match) speed = match[0];
+          else {
+            speed = 'custom';
+            customFee = rate ? String(rate) : '';
+          }
+        }}
+      />
       <div class="split-actions">
         <Button variant="secondary" size="large" onclick={() => (draftStep = 1)}>Back</Button
         ><Button
@@ -844,7 +893,7 @@
   {:else if step === 2 && proposal}
     <section class="form-card">
       <div class="review-amount">
-        <span>You send</span><strong>{shortSats(proposal.amount)} <small>sats</small></strong>
+        <span>You send</span><strong><Amount value={proposal.amount} /></strong>
       </div>
       <dl class="details-list">
         <div>
@@ -867,11 +916,11 @@
         </div>
         <div>
           <dt>Network fee</dt>
-          <dd>{shortSats(proposal.fee)} sats</dd>
+          <dd><Amount value={proposal.fee} /></dd>
         </div>
         <div class="total">
           <dt>Total</dt>
-          <dd>{shortSats(proposal.total)} sats</dd>
+          <dd><Amount value={proposal.total} /></dd>
         </div>
       </dl>
       <div class:warning={proposalHasPrivacyWarning} class="selection-review">
@@ -888,10 +937,9 @@
       </div>
       {#if proposal.selectionImpact.feeDifferenceVsPrivate !== null}<div class="selection-review">
           <strong>Exact strategy comparison</strong><span
-            >{Math.abs(proposal.selectionImpact.feeDifferenceVsPrivate)} sats {proposal
-              .selectionImpact.feeDifferenceVsPrivate <= 0
-              ? 'lower'
-              : 'higher'} than the valid More private candidate. Lower fee is not better privacy.</span
+            ><Amount value={Math.abs(proposal.selectionImpact.feeDifferenceVsPrivate)} />
+            {proposal.selectionImpact.feeDifferenceVsPrivate <= 0 ? 'lower' : 'higher'} than the valid
+            More private candidate. Lower fee is not better privacy.</span
           >
         </div>{/if}
       <TransactionReviewDetails {proposal} onChangeAddress={() => (changeAddressOpen = true)} />
@@ -958,7 +1006,7 @@
           </div>
           <div>
             <dt>Amount</dt>
-            <dd>{shortSats(proposal.amount)} sats</dd>
+            <dd><Amount value={proposal.amount} /></dd>
           </div>
           <div>
             <dt>Network</dt>
@@ -966,11 +1014,11 @@
           </div>
           <div>
             <dt>Network fee</dt>
-            <dd>{shortSats(proposal.fee)} sats</dd>
+            <dd><Amount value={proposal.fee} /></dd>
           </div>
           <div class="total">
             <dt>Total</dt>
-            <dd>{shortSats(proposal.total)} sats</dd>
+            <dd><Amount value={proposal.total} /></dd>
           </div>
         </dl>
         <TransactionReviewDetails {proposal} onChangeAddress={() => (changeAddressOpen = true)} />
@@ -1069,7 +1117,8 @@
         disabled={!passphrase}
         loading={broadcasting}
         loadingLabel="Signing & broadcasting…"
-        >Sign & broadcast {shortSats(proposal.amount)} sats</Button
+        >Sign & broadcast {formatAmount(Number(proposal.amount), $denomination)}
+        {amountUnit($denomination)}</Button
       >
       <Button variant="ghost" size="large" class="full sign-back-action" onclick={() => (step = 2)}
         >Back to review</Button
@@ -1086,11 +1135,11 @@
             : 'Payment sent'}
       </h2>
       <p>
-        {#if accelerationMethod === 'cpfp'}A fee-only child transaction with a {shortSats(
-            Number(proposal?.fee ?? 0)
-          )}-sat network fee was broadcast.{:else if accelerationMethod === 'rbf'}The {shortSats(
-            sentAmount
-          )}-sat payment was rebroadcast with a higher fee.{:else}{shortSats(sentAmount)} sats was broadcast
+        {#if accelerationMethod === 'cpfp'}A fee-only child transaction with a <Amount
+            value={Number(proposal?.fee ?? 0)}
+          /> network fee was broadcast.{:else if accelerationMethod === 'rbf'}The <Amount
+            value={sentAmount}
+          /> payment was rebroadcast with a higher fee.{:else}<Amount value={sentAmount} /> was broadcast
           to the Bitcoin network.{/if}{#if balanceSyncPending}
           Balance refresh is pending; sync when the node is available.{/if}
       </p>
@@ -1138,7 +1187,7 @@
         </div>
         <div>
           <dt>Amount</dt>
-          <dd>{shortSats(proposal.amount)} sats</dd>
+          <dd><Amount value={proposal.amount} /></dd>
         </div>
         <div>
           <dt>Network</dt>
@@ -1146,11 +1195,11 @@
         </div>
         <div>
           <dt>Network fee</dt>
-          <dd>{shortSats(proposal.fee)} sats</dd>
+          <dd><Amount value={proposal.fee} /></dd>
         </div>
         <div>
           <dt>Total</dt>
-          <dd>{shortSats(proposal.total)} sats</dd>
+          <dd><Amount value={proposal.total} /></dd>
         </div>
       </dl>
       {#if hardwareTestnetAddressDevice}<p class="verification-network-note">
@@ -1297,7 +1346,7 @@
       </div>
       <div>
         <dt>Amount</dt>
-        <dd>{shortSats(proposal.amount)} sats</dd>
+        <dd><Amount value={proposal.amount} /></dd>
       </div>
       <div>
         <dt>Signatures lost</dt>

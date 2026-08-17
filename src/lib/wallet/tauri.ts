@@ -274,6 +274,24 @@ export class TauriWalletAdapter implements WalletPort {
   estimateFees() {
     return command<FeeEstimates>('fees_estimate');
   }
+  maxSpend(recipient: string, feeRate: FeeRate, coinSelection: CoinSelection = { mode: 'auto' }) {
+    return command<import('./contracts').MaxSpend>('tx_max_spend', {
+      recipient,
+      feeRate,
+      coinSelection
+    });
+  }
+  maxMultisigSpend(
+    recipient: string,
+    feeRate: FeeRate,
+    coinSelection: CoinSelection = { mode: 'auto' }
+  ) {
+    return command<import('./contracts').MaxSpend>('multisig_tx_max_spend', {
+      recipient,
+      feeRate,
+      coinSelection
+    });
+  }
   preparePayment(
     recipient: string,
     label: string,

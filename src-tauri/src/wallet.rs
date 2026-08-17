@@ -941,6 +941,13 @@ pub struct FeeEstimatesDto {
     source: &'static str,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MaxSpendDto {
+    pub amount: u64,
+    pub fee: u64,
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NodeStatusDto {

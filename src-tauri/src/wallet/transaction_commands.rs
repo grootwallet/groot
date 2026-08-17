@@ -177,6 +177,94 @@ pub fn tx_prepare(
     Ok(proposal)
 }
 
+#[tauri::command]
+pub fn tx_max_spend(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    recipient: String,
+    fee_rate: f64,
+    coin_selection: CoinSelectionInput,
+) -> ApiResult<MaxSpendDto> {
+    let _operation = operation_guard(&state)?;
+    require_unlocked(&app, &state)?;
+    let address = Address::from_str(recipient.trim())
+        .map_err(|_| {
+            api_error(
+                "invalid_address",
+                format!("Enter a valid {NETWORK_NAME} Bitcoin address."),
+            )
+        })?
+        .require_network(NETWORK)
+        .map_err(|_| {
+            api_error(
+                "invalid_address",
+                format!("The address is not for {NETWORK_NAME}."),
+            )
+        })?;
+    let applied = fee_rate.ceil();
+    let rate = FeeRate::from_sat_per_vb(applied as u64)
+        .filter(|_| fee_rate.is_finite() && fee_rate > 0.0 && fee_rate <= 10_000.0)
+        .ok_or_else(|| {
+            api_error(
+                "invalid_amount",
+                "Fee rate must be between 0 and 10,000 sat/vB.",
+            )
+        })?;
+    let mut db = open_db(&app)?;
+    let mut transaction = db.transaction().map_err(internal)?;
+    let frozen = frozen_outpoints(&transaction)?;
+    let mut wallet = load_wallet_transaction(&mut transaction)?;
+    let psbt = match coin_selection {
+        CoinSelectionInput::Auto { strategy } => {
+            label_provenance::reconcile_wallet_outputs(&wallet, &transaction, now())
+                .map_err(internal)?;
+            let privacy = label_provenance::coin_privacy_map(&transaction).map_err(internal)?;
+            let mut builder = wallet
+                .build_tx()
+                .coin_selection(PrivacyAwareCoinSelection::new(strategy, privacy));
+            builder
+                .drain_wallet()
+                .drain_to(address.script_pubkey())
+                .fee_rate(rate)
+                .unspendable(frozen);
+            builder.finish().map_err(create_tx_api_error)?
+        }
+        CoinSelectionInput::Manual { outpoints } => {
+            let selected = validate_manual_outpoints(&outpoints, &frozen)?;
+            let mut builder = wallet.build_tx();
+            builder
+                .add_utxos(&selected)
+                .map_err(|_| {
+                    api_error(
+                        "coin_unavailable",
+                        "A selected coin is not available in this wallet.",
+                    )
+                })?
+                .manually_selected_only()
+                .drain_to(address.script_pubkey())
+                .fee_rate(rate);
+            builder.finish().map_err(create_tx_api_error)?
+        }
+    };
+    let amount = psbt
+        .unsigned_tx
+        .output
+        .iter()
+        .find(|output| output.script_pubkey == address.script_pubkey())
+        .map(|output| output.value.to_sat())
+        .ok_or_else(|| {
+            api_error(
+                "insufficient_funds",
+                "The selected balance cannot cover the network fee.",
+            )
+        })?;
+    let fee = psbt
+        .fee_amount()
+        .ok_or_else(|| internal("Unable to calculate the transaction fee."))?
+        .to_sat();
+    Ok(MaxSpendDto { amount, fee })
+}
+
 pub(crate) fn validate_acceleration_rate(fee_rate: f64) -> ApiResult<(f64, FeeRate)> {
     if !fee_rate.is_finite() || fee_rate <= 0.0 || fee_rate > 10_000.0 {
         return Err(api_error(

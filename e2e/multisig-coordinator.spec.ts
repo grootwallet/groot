@@ -747,7 +747,7 @@ test('selects and freezes multisig coins before entering the send flow', async (
 
   const coin = page.getByRole('checkbox', { name: 'Select Savings', exact: true });
   await coin.check();
-  await expect(page.getByText('1,250,000 sats selected')).toBeVisible();
+  await expect(page.locator('.coin-toolbar')).toContainText('1,250,000 sats selected');
   await page.getByRole('button', { name: 'Freeze selected' }).click();
   await page
     .getByRole('dialog', { name: 'Freeze Savings?' })
@@ -760,26 +760,34 @@ test('selects and freezes multisig coins before entering the send flow', async (
     .getByRole('button', { name: 'Unfreeze coin' })
     .click();
   await coin.check();
+  await page.getByRole('checkbox', { name: 'Select Savings, Refund', exact: true }).check();
   await page.getByRole('link', { name: 'Send selected coins' }).click();
   await expect(page).toHaveURL(/\/multisig\/send\?coins=/);
   await page.getByLabel('Payment label').fill('Vault coin selection');
   await page.getByLabel('Bitcoin address').fill('bcrt1qdummy00085n8k2r7v4cx9s6jlawephgzuqf5t8ul');
   await page.getByRole('button', { name: 'Continue to amount' }).click();
-  await expect(page.getByText('Manual · 1 coin')).toBeVisible();
-  await expect(page.locator('.manual-selection-preview')).toContainText(
-    '1 selected · 1,250,000 sats · 500 WU'
+  await expect(page.getByText('Manual · 2 coins')).toBeVisible();
+  const selectionPreview = page.locator('.manual-selection-preview');
+  await expect(selectionPreview).toContainText('2 selected · 1,639,090 sats');
+  await expect(selectionPreview.locator('.selection-technical > span')).toBeHidden();
+  await selectionPreview.getByText('Input details', { exact: true }).click();
+  await expect(selectionPreview).toContainText('Estimated input weight: 1,000 WU');
+  const coinMode = page.getByRole('button', { name: /Manual · 2 coins/ });
+  await coinMode.click();
+  await expect(
+    page.locator('.send-coin-picker').getByText('Savings', { exact: true }).first()
+  ).toBeVisible();
+  await expect(page.locator('.send-coin-picker label').first().getByRole('listitem')).toHaveCount(
+    0
   );
-  await expect(page.locator('.manual-selection-preview')).toContainText(
-    'One existing group can fund this amount.'
-  );
-  await page.getByRole('button', { name: /Manual · 1 coin/ }).click();
-  await expect(page.getByRole('button', { name: /Lower fee/ })).toBeVisible();
-  await page.getByRole('button', { name: /Lower fee/ }).click();
-  await page.getByRole('button', { name: 'Use automatic selection' }).click();
+  await coinMode.click();
+  await selectionPreview.getByRole('button', { name: 'Use privacy-first selection' }).click();
   await expect(
     page.locator('.coin-mode').getByText('Automatic selection', { exact: true })
   ).toBeVisible();
-  await expect(page.locator('.coin-mode')).toContainText('Lower fee');
+  await expect(page.locator('.coin-mode')).toContainText('More private');
+  await page.getByRole('button', { name: 'Max' }).click();
+  await expect(page.getByLabel('Amount', { exact: true })).toHaveValue('2479700');
 });
 
 test('offers safe recipes and advanced M-of-N control', async ({ page }) => {

@@ -69,6 +69,16 @@
   import { hardwareDeviceDisplayName } from '$lib/hardware/discovery';
   import { fly } from 'svelte/transition';
   import { discreetMode } from '$lib/privacy';
+  import PermanentLabelTags from '$lib/components/PermanentLabelTags.svelte';
+  import FeeSelector from '$lib/components/FeeSelector.svelte';
+  import Amount from '$lib/components/Amount.svelte';
+  import {
+    amountInputValue,
+    amountUnit,
+    denomination,
+    formatAmount,
+    parseAmountInput
+  } from '$lib/denomination';
   let wallet = $state<MultisigWallet | null>(null),
     proposal = $state<MultisigProposal | null>(null),
     estimates = $state<FeeEstimates | null>(null);
@@ -156,7 +166,7 @@
     customFeeValid = $derived(
       Number.isFinite(selectedRateNumber) && selectedRateNumber > 0 && selectedRateNumber <= 10_000
     );
-  const amountSats = $derived(Number(amount || 0)),
+  const amountSats = $derived(parseAmountInput(amount, $denomination)),
     estimatedFee = $derived(Math.ceil(selectedRateNumber * 220)),
     addressValid = $derived(hasAddressPrefixForNetwork(address, defaultConfig.network)),
     valid = $derived(
@@ -301,9 +311,28 @@
         selection
       );
     } catch (cause) {
-      error = cause instanceof Error ? cause.message : 'Could not prepare payment.';
+      error =
+        cause instanceof WalletError && cause.code === 'insufficient_funds'
+          ? `The amount plus network fee exceeds the ${selectedCoins.length ? 'selected coin balance' : 'available balance'}.`
+          : cause instanceof Error
+            ? cause.message
+            : 'Could not prepare payment.';
     } finally {
       busy = false;
+    }
+  }
+  async function useMaxAmount() {
+    if (!addressValid || selectedRateNumber <= 0) return;
+    error = '';
+    try {
+      const maximum = await walletService.maxMultisigSpend(
+        address,
+        feeRate(selectedRateNumber),
+        selection
+      );
+      amount = amountInputValue(maximum.amount, $denomination);
+    } catch (cause) {
+      error = cause instanceof Error ? cause.message : 'Maximum amount could not be calculated.';
     }
   }
   async function prepareCustomAcceleration() {
@@ -925,17 +954,14 @@
             aria-label="Amount"
             bind:value={amount}
             oninput={clearDraftError}
-            inputmode="numeric"
+            inputmode={$denomination === 'btc' ? 'decimal' : 'numeric'}
             placeholder="0"
-          /><b>sats</b><button
+          /><b>{$denomination === 'btc' ? 'BTC' : 'sats'}</b><button
             type="button"
-            onclick={() => {
-              error = '';
-              amount = String(Math.max(0, available - estimatedFee));
-            }}>Max</button
+            onclick={useMaxAmount}>Max</button
           >
         </div>
-        <small>Available: {$discreetMode ? '••••••' : shortSats(available)} sats</small></label
+        <small>Available: <Amount value={available} hidden={$discreetMode} /></small></label
       >
       <div class="coin-control-field">
         <span>Coin selection</span><button
@@ -951,7 +977,7 @@
                 : 'Automatic selection'}</strong
             ><small
               >{selectedCoins.length
-                ? `${$discreetMode ? '••••••' : shortSats(available)} sats available`
+                ? `${$discreetMode ? '••••••' : formatAmount(available, $denomination)} ${amountUnit($denomination)} available`
                 : `${automaticStrategyLabel} · Frozen coins stay untouched`}</small
             ></span
           ><b>{showCoins ? 'Done' : 'Choose'}</b></button
@@ -975,10 +1001,20 @@
                   disabled={coin.frozen}
                   onchange={(event) => toggleCoin(coin.outpoint, event.currentTarget.checked)}
                 /><span
-                  ><strong>{$discreetMode ? 'Label hidden' : coin.label}</strong><small
+                  ><span class="coin-picker-title-line"
+                    ><strong>{$discreetMode ? 'Label hidden' : coin.label}</strong
+                    >{#if coin.provenance.state !== 'unknown'}<PermanentLabelTags
+                        labels={coin.provenance.labels.filter(
+                          (item) =>
+                            item.text.trim().toLocaleLowerCase() !==
+                            coin.label.trim().toLocaleLowerCase()
+                        )}
+                        hidden={$discreetMode}
+                      />{/if}</span
+                  ><small
                     >{$discreetMode
-                      ? '•••••• sats · Provenance hidden'
-                      : `${shortSats(coin.amount)} sats · ${coin.provenance.state === 'mixed' ? `${coin.provenance.labels.length} mixed labels` : coin.provenance.state === 'unknown' ? 'Source unknown' : 'Known source'}${coin.provenance.addressReused ? ' · Address reused' : ''}`}{coin.frozen
+                      ? '•••••• · Provenance hidden'
+                      : `${formatAmount(coin.amount, $denomination)} ${amountUnit($denomination)}${coin.provenance.state === 'unknown' ? ' · Source unknown' : ''}${coin.provenance.addressReused ? ' · Address reused' : ''}`}{coin.frozen
                       ? ' · Frozen'
                       : ''}</small
                   ></span
@@ -993,30 +1029,50 @@
           class="selection-review manual-selection-preview"
         >
           <strong
-            >{selectionPreview.selectedInputCount} selected · {$discreetMode
-              ? '••••••'
-              : shortSats(selectionPreview.selectedAmount)} sats · {selectionPreview.estimatedInputWeight}
-            WU</strong
-          ><span
-            >{$discreetMode
-              ? 'Funding provenance hidden in discreet mode.'
-              : `${selectionPreview.fundingLabels.length || 'Unknown'} label group${selectionPreview.fundingLabels.length === 1 ? '' : 's'} · ${selectionPreview.newClusterLinks} new link${selectionPreview.newClusterLinks === 1 ? '' : 's'}. ${selectionPreview.oneExistingGroupCanFund ? 'One existing group can fund this amount.' : 'No single existing group can fund this amount.'}`}</span
-          >
+            >{selectionPreview.selectedInputCount} selected · <Amount
+              value={selectionPreview.selectedAmount}
+              hidden={$discreetMode}
+            /></strong
+          >{#if $discreetMode}<span>Funding provenance hidden in discreet mode.</span>{:else}<div
+              class="selection-labels"
+            >
+              <span>Funding labels</span><PermanentLabelTags
+                labels={selectionPreview.fundingLabels}
+              />
+            </div>
+            <span
+              >{selectionPreview.newClusterLinks
+                ? `${selectionPreview.newClusterLinks} new public link${selectionPreview.newClusterLinks === 1 ? '' : 's'}.`
+                : 'No new links between existing groups.'}</span
+            >{#if selectionPreview.oneExistingGroupCanFund && selectionPreview.newClusterLinks > 0}<div
+                class="selection-recommendation"
+              >
+                <strong>Privacy recommendation</strong><span
+                  >One existing group can fund this payment without linking these groups.</span
+                ><button
+                  type="button"
+                  onclick={() => {
+                    automaticStrategy = 'private';
+                    useAutomatic();
+                  }}>Use privacy-first selection</button
+                >
+              </div>{/if}
+            <details class="selection-technical">
+              <summary>Input details</summary><span
+                >Estimated input weight: {shortSats(selectionPreview.estimatedInputWeight)} WU</span
+              >
+            </details>{/if}
         </div>{/if}
-      <label class="field"
-        ><span>Fee rate</span>
-        <div class="amount-input">
-          <input
-            aria-label="Fee rate"
-            bind:value={selectedRate}
-            oninput={clearDraftError}
-            inputmode="decimal"
-          /><b>sat/vB</b>
-        </div>
-        <small>{estimates?.source ?? 'Bitcoin Core estimate unavailable—enter a custom rate'}</small
-        ></label
-      >
-      {#if feeEstimateError}<p class="form-error" role="alert">{feeEstimateError}</p>{/if}
+      <FeeSelector
+        {estimates}
+        value={selectedRateNumber}
+        {estimatedFee}
+        error={feeEstimateError}
+        onchange={(rate) => {
+          selectedRate = rate;
+          clearDraftError();
+        }}
+      />
       {#if error}<div class="hardware-inline-error send-form-error" role="alert">
           <AlertTriangle size={18} /><span
             ><strong>Payment could not be prepared</strong><small>{error}</small></span
@@ -1045,9 +1101,7 @@
         aria-label={proposal.canFinalize ? 'Signed transaction review' : 'Transaction review'}
       >
         <div class="review-amount">
-          <span>You send</span><strong
-            >{shortSats(Number(proposal.amount))} <small>sats</small></strong
-          >
+          <span>You send</span><strong><Amount value={Number(proposal.amount)} /></strong>
         </div>
         <dl class="details-list proposal-review-primary">
           <div>
@@ -1070,11 +1124,11 @@
           </div>
           <div>
             <dt>Network fee</dt>
-            <dd>{shortSats(Number(proposal.fee))} sats</dd>
+            <dd><Amount value={Number(proposal.fee)} /></dd>
           </div>
           <div class="total">
             <dt>Total</dt>
-            <dd>{shortSats(Number(proposal.total))} sats</dd>
+            <dd><Amount value={Number(proposal.total)} /></dd>
           </div>
         </dl>
         <div class:warning={proposalHasPrivacyWarning} class="selection-review">
@@ -1091,10 +1145,9 @@
         </div>
         {#if proposal.selectionImpact.feeDifferenceVsPrivate !== null}<div class="selection-review">
             <strong>Exact strategy comparison</strong><span
-              >{Math.abs(proposal.selectionImpact.feeDifferenceVsPrivate)} sats {proposal
-                .selectionImpact.feeDifferenceVsPrivate <= 0
-                ? 'lower'
-                : 'higher'} than the valid More private candidate. Lower fee is not better privacy.</span
+              ><Amount value={Math.abs(proposal.selectionImpact.feeDifferenceVsPrivate)} />
+              {proposal.selectionImpact.feeDifferenceVsPrivate <= 0 ? 'lower' : 'higher'} than the valid
+              More private candidate. Lower fee is not better privacy.</span
             >
           </div>{/if}
         <TransactionReviewDetails
@@ -1211,7 +1264,7 @@
         </div>
         <div>
           <dt>Amount</dt>
-          <dd>{shortSats(Number(proposal.amount))} sats</dd>
+          <dd><Amount value={Number(proposal.amount)} /></dd>
         </div>
         <div>
           <dt>Network</dt>
@@ -1219,11 +1272,11 @@
         </div>
         <div>
           <dt>Network fee</dt>
-          <dd>{shortSats(Number(proposal.fee))} sats</dd>
+          <dd><Amount value={Number(proposal.fee)} /></dd>
         </div>
         <div>
           <dt>Total</dt>
-          <dd>{shortSats(Number(proposal.total))} sats</dd>
+          <dd><Amount value={Number(proposal.total)} /></dd>
         </div>
       </dl>
       {#if hardwareTestnetAddressDevice}<p class="verification-network-note">
@@ -1477,7 +1530,7 @@
       </div>
       <div>
         <dt>Amount</dt>
-        <dd>{shortSats(Number(proposal.amount))} sats</dd>
+        <dd><Amount value={Number(proposal.amount)} /></dd>
       </div>
       <div>
         <dt>Signatures lost</dt>
@@ -1567,7 +1620,7 @@
       </div>
       <div>
         <dt>Amount</dt>
-        <dd>{shortSats(Number(proposal.amount))} sats</dd>
+        <dd><Amount value={Number(proposal.amount)} /></dd>
       </div>
       <div>
         <dt>Signatures saved</dt>

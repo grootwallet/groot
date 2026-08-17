@@ -5,6 +5,7 @@ import {
   pendingBalance,
   pendingBalanceBreakdown,
   sortCoins,
+  sortTransactions,
   sortTransactionsNewestFirst
 } from './presentation';
 
@@ -118,6 +119,35 @@ describe('sortTransactionsNewestFirst', () => {
     ]);
 
     expect(result.map(({ id }) => id)).toEqual(['first', 'second']);
+  });
+});
+
+describe('sortTransactions', () => {
+  const older = transaction('older', '2026-08-01T10:00:00Z');
+  const newer = transaction('newer', '2026-08-07T10:00:00Z');
+  older.amount = 900;
+  newer.amount = 100;
+
+  it('sorts activity by authoritative date in either direction', () => {
+    expect(sortTransactions([older, newer], 'newest').map(({ id }) => id)).toEqual([
+      'newer',
+      'older'
+    ]);
+    expect(sortTransactions([older, newer], 'oldest').map(({ id }) => id)).toEqual([
+      'older',
+      'newer'
+    ]);
+  });
+
+  it('sorts activity by absolute payment amount', () => {
+    expect(sortTransactions([newer, older], 'largest').map(({ id }) => id)).toEqual([
+      'older',
+      'newer'
+    ]);
+    expect(sortTransactions([older, newer], 'smallest').map(({ id }) => id)).toEqual([
+      'newer',
+      'older'
+    ]);
   });
 });
 

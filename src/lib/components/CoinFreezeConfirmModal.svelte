@@ -3,6 +3,7 @@
   import Button from './Button.svelte';
   import Modal from './Modal.svelte';
   import { shortSats } from '$lib/data';
+  import Amount from './Amount.svelte';
   import type { Utxo } from '$lib/types';
 
   type Props = {
@@ -42,7 +43,7 @@
       >
       <div>
         <strong>{subject}</strong>
-        <small>{shortSats(total)} sats</small>
+        <small><Amount value={total} /></small>
       </div>
     </div>
 

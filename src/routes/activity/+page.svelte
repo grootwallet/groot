@@ -4,7 +4,7 @@
   import type { Transaction } from '$lib/types';
   import { toast } from '$lib/stores/toasts';
   import { walletService } from '$lib/wallet';
-  import { sortTransactionsNewestFirst } from '$lib/wallet/presentation';
+  import { sortTransactions, type TransactionSortOrder } from '$lib/wallet/presentation';
   import { onMount } from 'svelte';
   import { Activity } from '@lucide/svelte';
   import LoadFailure from '$lib/components/LoadFailure.svelte';
@@ -14,14 +14,26 @@
   let selected = $state<Transaction | null>(null);
   let transactions = $state<Transaction[]>([]);
   let filter = $state<'all' | 'received' | 'sent'>('all');
+  let query = $state('');
+  let sortOrder = $state<TransactionSortOrder>('newest');
   let multisig = $state(false);
   let loading = $state(true);
   let loadError = $state('');
   const visibleTransactions = $derived(
-    sortTransactionsNewestFirst(
-      filter === 'all'
-        ? transactions
-        : transactions.filter((transaction) => transaction.direction === filter)
+    sortTransactions(
+      transactions.filter((transaction) => {
+        if (filter !== 'all' && transaction.direction !== filter) return false;
+        const needle = query.trim().toLocaleLowerCase();
+        if (!needle) return true;
+        return [
+          transaction.label,
+          transaction.intentLabel?.text,
+          ...transaction.provenance.labels.map((label) => label.text)
+        ]
+          .filter(Boolean)
+          .some((value) => value?.toLocaleLowerCase().includes(needle));
+      }),
+      sortOrder
     )
   );
   onMount(load);
@@ -74,6 +86,17 @@
       ><button class:active={filter === 'sent'} onclick={() => (filter = 'sent')}>Sent</button>
     </div>
   </header>
+  <section class="activity-controls" aria-label="Search and sort activity">
+    <label><span>Search</span><input bind:value={query} placeholder="Search labels" /></label>
+    <label
+      ><span>Sort</span><select bind:value={sortOrder}>
+        <option value="newest">Latest first</option><option value="oldest">Earliest first</option>
+        <option value="largest">Biggest amount</option><option value="smallest"
+          >Smallest amount</option
+        >
+      </select></label
+    >
+  </section>
   <section class="section-block">
     {#if loading}
       <TxList items={[]} {loading} />
@@ -83,10 +106,16 @@
       <TxList items={visibleTransactions} onselect={(tx) => (selected = tx)} />
     {:else}
       <EmptyState
-        title={filter === 'all' ? 'No transactions yet' : `No ${filter} transactions`}
-        description={filter === 'all'
-          ? 'Payments you send and receive will appear here.'
-          : `This wallet has no ${filter} transactions yet.`}
+        title={query.trim()
+          ? 'No matching transactions'
+          : filter === 'all'
+            ? 'No transactions yet'
+            : `No ${filter} transactions`}
+        description={query.trim()
+          ? 'Try a different label or filter.'
+          : filter === 'all'
+            ? 'Payments you send and receive will appear here.'
+            : `This wallet has no ${filter} transactions yet.`}
       >
         {#snippet icon()}<Activity size={24} />{/snippet}
       </EmptyState>

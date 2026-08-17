@@ -55,6 +55,30 @@ export function sortTransactionsNewestFirst(items: readonly Transaction[]): Tran
     .map(({ transaction }) => transaction);
 }
 
+export type TransactionSortOrder = 'newest' | 'oldest' | 'largest' | 'smallest';
+
+export function sortTransactions(
+  items: readonly Transaction[],
+  order: TransactionSortOrder = 'newest'
+): Transaction[] {
+  return items
+    .map((transaction, index) => ({
+      transaction,
+      index,
+      timestamp: parseTimestamp(transaction.date)?.getTime() ?? null
+    }))
+    .sort((left, right) => {
+      let comparison = 0;
+      if (order === 'newest' || order === 'oldest') {
+        comparison = compareTimestamp(left.timestamp, right.timestamp, order);
+      } else if (order === 'largest')
+        comparison = right.transaction.amount - left.transaction.amount;
+      else comparison = left.transaction.amount - right.transaction.amount;
+      return comparison || left.index - right.index;
+    })
+    .map(({ transaction }) => transaction);
+}
+
 function transactionIdFromOutpoint(outpoint: string): string {
   const separator = outpoint.lastIndexOf(':');
   return separator > 0 ? outpoint.slice(0, separator) : outpoint;

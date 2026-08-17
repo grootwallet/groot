@@ -8,7 +8,8 @@
     LayoutGrid,
     Plus,
     Settings,
-    ShieldCheck
+    ShieldCheck,
+    TrendingUp
   } from '@lucide/svelte';
   import BrandLockup from './BrandLockup.svelte';
   import DiscardMultisigSetupModal from './DiscardMultisigSetupModal.svelte';
@@ -24,7 +25,9 @@
   import { isPrototypeWallet, walletService, WalletError } from '$lib/wallet';
   import { createLiveSync, type LiveSyncController } from '$lib/wallet/live-sync';
   import { toast } from '$lib/stores/toasts';
-  import { shortSats } from '$lib/data';
+  import { denomination, formatAmount, initDenomination } from '$lib/denomination';
+  import { initFiatCurrency } from '$lib/market';
+  import { fade } from 'svelte/transition';
   import type { MultisigSetupDraft, WalletProfile } from '$lib/wallet/contracts';
   import { formatWalletCount, locale, t, type MessageKey } from '$lib/i18n';
   import { provideWalletShellContext } from '$lib/wallet/shell-context';
@@ -175,29 +178,31 @@
     selectWallet
   });
   onMount(() => {
+    initDenomination();
+    initFiatCurrency();
     const unsubscribe = walletService.subscribe((event) => {
       if (event.type === 'payment_received')
         toast({
           title: 'Bitcoin received',
-          description: `Received ${shortSats(event.amount)} sats · Balance ${shortSats(event.balance)} sats`,
+          description: `Received ${formatAmount(event.amount, $denomination)} ${$denomination === 'btc' ? 'BTC' : 'sats'} · Balance ${formatAmount(event.balance, $denomination)} ${$denomination === 'btc' ? 'BTC' : 'sats'}`,
           tone: 'success'
         });
       if (event.type === 'payment_received_confirmed')
         toast({
           title: 'Bitcoin received',
-          description: `Received ${shortSats(event.amount)} sats · First confirmation · Balance ${shortSats(event.balance)} sats`,
+          description: `Received ${formatAmount(event.amount, $denomination)} ${$denomination === 'btc' ? 'BTC' : 'sats'} · First confirmation · Balance ${formatAmount(event.balance, $denomination)} ${$denomination === 'btc' ? 'BTC' : 'sats'}`,
           tone: 'success'
         });
       if (event.type === 'first_confirmation')
         toast({
           title: 'First confirmation',
-          description: `Transaction confirmed · Balance ${shortSats(event.balance)} sats`,
+          description: `Transaction confirmed · Balance ${formatAmount(event.balance, $denomination)} ${$denomination === 'btc' ? 'BTC' : 'sats'}`,
           tone: 'success'
         });
       if (event.type === 'transaction_broadcast')
         toast({
           title: 'Transaction broadcast',
-          description: `Remaining wallet balance: ${shortSats(event.balance)} sats`,
+          description: `Remaining wallet balance: ${formatAmount(event.balance, $denomination)} ${$denomination === 'btc' ? 'BTC' : 'sats'}`,
           tone: 'success'
         });
       if (event.type === 'wallet_profile_updated')
@@ -277,7 +282,17 @@
           aria-current={active('/settings') ? 'page' : undefined}
           ><Settings size={17} /><span>{t('settings', $locale)}</span></a
         >{/if}
-      <div class="preference-toggles"><ThemeToggle /><DiscreetModeToggle /></div>
+      <div class="preference-toggles">
+        <ThemeToggle /><DiscreetModeToggle />
+        {#if !lockedRoute}<a
+            class="global-market-link"
+            class:active={active('/market')}
+            href="/market"
+            aria-label={t('market', $locale)}
+            aria-current={active('/market') ? 'page' : undefined}
+            title={t('market', $locale)}><TrendingUp size={18} /></a
+          >{/if}
+      </div>
       <NetworkStatus network={defaultConfig.network} locked={lockedRoute} />
     </div>
   </aside>
@@ -306,8 +321,10 @@
         }}
       />
     {/if}
-    {#key selectedWalletId}
-      {@render children?.()}
+    {#key `${selectedWalletId ?? 'none'}:${page.url.pathname}`}
+      <div class="route-transition" in:fade={{ duration: 180 }}>
+        {@render children?.()}
+      </div>
     {/key}
   </main>
 

@@ -20,6 +20,7 @@ export type FeeEstimates = {
   priority: FeeRate;
   source: string;
 };
+export type MaxSpend = { amount: Sats; fee: Sats };
 
 export type SelectionImpact = {
   strategy: 'balanced' | 'private' | 'lower_fee' | 'manual' | 'acceleration';

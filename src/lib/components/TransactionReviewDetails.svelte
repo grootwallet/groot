@@ -1,6 +1,6 @@
 <script lang="ts">
   import { compactAddress } from '$lib/address-display';
-  import { shortSats } from '$lib/data';
+  import Amount from './Amount.svelte';
   import type { MultisigProposal, PaymentProposal } from '$lib/wallet';
 
   let {
@@ -29,9 +29,9 @@
     <div>
       <dt>Inputs</dt>
       <dd>
-        {proposal.inputs.length}{' · '}{shortSats(
-          proposal.inputs.reduce((sum, input) => sum + Number(input.amount), 0)
-        )} sats
+        {proposal.inputs.length}{' · '}<Amount
+          value={proposal.inputs.reduce((sum, input) => sum + Number(input.amount), 0)}
+        />
       </dd>
     </div>
     {#if inputPaths.length}<div>
@@ -50,7 +50,7 @@
     </div>
     <div>
       <dt>Change</dt>
-      <dd>{shortSats(Number(proposal.change))} sats</dd>
+      <dd><Amount value={Number(proposal.change)} /></dd>
     </div>
     {#if proposal.changeAddresses[0]}
       <div>

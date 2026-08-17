@@ -119,6 +119,76 @@ fn core_fee_rates_fail_closed_and_round_up_to_integer_sat_per_vbyte() {
     assert_eq!(ordered_fee_estimates(1.0, 2.0, 5.0), (1.0, 2.0, 5.0));
 }
 
+#[test]
+fn exact_drain_preview_amount_can_be_prepared_at_the_same_fee_rate() {
+    use bdk_wallet::bitcoin::{
+        absolute::LockTime, hashes::Hash, transaction::Version, ScriptBuf, Sequence, TxIn, TxOut,
+        Witness,
+    };
+
+    let mnemonic = Mnemonic::parse(WORDS).unwrap();
+    let master = root_key(&mnemonic, "max preview").unwrap();
+    let mut wallet = Wallet::create(
+        Bip84(master, KeychainKind::External),
+        Bip84(master, KeychainKind::Internal),
+    )
+    .network(Network::Regtest)
+    .create_wallet_no_persist()
+    .unwrap();
+    let receive = wallet.reveal_next_address(KeychainKind::External).address;
+    let funding = Transaction {
+        version: Version::TWO,
+        lock_time: LockTime::ZERO,
+        input: vec![TxIn {
+            previous_output: OutPoint::new(Txid::from_byte_array([21; 32]), 0),
+            script_sig: ScriptBuf::new(),
+            sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
+            witness: Witness::new(),
+        }],
+        output: vec![TxOut {
+            value: Amount::from_sat(143_622),
+            script_pubkey: receive.script_pubkey(),
+        }],
+    };
+    wallet.apply_unconfirmed_txs([(funding, 1)]);
+
+    let recipient_master = root_key(&mnemonic, "max recipient").unwrap();
+    let mut recipient_wallet = Wallet::create(
+        Bip84(recipient_master, KeychainKind::External),
+        Bip84(recipient_master, KeychainKind::Internal),
+    )
+    .network(Network::Regtest)
+    .create_wallet_no_persist()
+    .unwrap();
+    let recipient = recipient_wallet
+        .reveal_next_address(KeychainKind::External)
+        .address;
+    let fee_rate = FeeRate::from_sat_per_vb(2).unwrap();
+
+    let mut max_builder = wallet.build_tx();
+    max_builder
+        .drain_wallet()
+        .drain_to(recipient.script_pubkey())
+        .fee_rate(fee_rate);
+    let max_psbt = max_builder.finish().unwrap();
+    let max_amount = max_psbt
+        .unsigned_tx
+        .output
+        .iter()
+        .find(|output| output.script_pubkey == recipient.script_pubkey())
+        .unwrap()
+        .value;
+    let max_fee = max_psbt.fee_amount().unwrap();
+
+    let mut prepare_builder = wallet.build_tx();
+    prepare_builder
+        .add_recipient(recipient.script_pubkey(), max_amount)
+        .fee_rate(fee_rate);
+    let prepared = prepare_builder.finish().unwrap();
+    assert_eq!(prepared.fee_amount().unwrap(), max_fee);
+    assert_eq!(max_amount + max_fee, Amount::from_sat(143_622));
+}
+
 const WORDS: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art";
 
 fn serve_one_http_response(response: Option<&'static [u8]>) -> String {

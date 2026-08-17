@@ -15,6 +15,7 @@
   import { compactAddress } from '$lib/address-display';
   import { copyText } from '$lib/clipboard';
   import { shortSats } from '$lib/data';
+  import Amount from '$lib/components/Amount.svelte';
   import { addressReuseInsights, selectedCoinTotal } from '$lib/wallet/policy';
   import { walletService } from '$lib/wallet';
   import { toast } from '$lib/stores/toasts';
@@ -23,7 +24,7 @@
   import { formatConfirmationCount, locale, t } from '$lib/i18n';
   import { sortCoins, type CoinSortOrder } from '$lib/wallet/presentation';
   import WalletSkeleton from '$lib/components/WalletSkeleton.svelte';
-  import { slide } from 'svelte/transition';
+  import { fade, fly, slide } from 'svelte/transition';
   import LoadFailure from '$lib/components/LoadFailure.svelte';
   import EmptyState from '$lib/components/EmptyState.svelte';
   import FieldCounter from '$lib/components/FieldCounter.svelte';
@@ -31,6 +32,7 @@
   import { discreetMode } from '$lib/privacy';
   import Modal from '$lib/components/Modal.svelte';
   import PermanentLabelTags from '$lib/components/PermanentLabelTags.svelte';
+  import InsightTip from '$lib/components/InsightTip.svelte';
 
   const walletShell = useWalletShellContext();
   let utxos = $state<Utxo[]>([]);
@@ -247,26 +249,30 @@
     </div>
     <div class="stat-pill">
       <span>{utxos.length} coins</span><strong
-        >{$discreetMode ? '••••••' : shortSats(utxos.reduce((a, u) => a + u.amount, 0))} sats</strong
+        ><Amount value={utxos.reduce((a, u) => a + u.amount, 0)} hidden={$discreetMode} /></strong
       >
     </div>
   </header>
 
   <section class="coin-toolbar" aria-live="polite">
     <div>
-      <strong>{selected.length} selected</strong><span
-        >{$discreetMode ? '••••••' : shortSats(selectedTotal)} sats selected</span
-      >
+      {#key selected.length}<span class="coin-selection-count" in:fly={{ y: -4, duration: 140 }}
+          ><strong>{selected.length} selected</strong><span
+            ><Amount value={selectedTotal} hidden={$discreetMode} /> selected</span
+          ></span
+        >{/key}
     </div>
     <div class="coin-toolbar-actions">
-      {#if selected.length}<Button
-          variant="secondary"
-          size="small"
-          disabled={busy}
-          onclick={() => requestFrozenState(selected, true)}
-          ><Snowflake size={15} />Freeze selected</Button
-        ><Button size="small" href={sendHref}>Send selected coins</Button>{:else}<span
-          class="auto-note"><CircleDot size={14} />Automatic selection remains the default</span
+      {#if selected.length}<span class="coin-selection-actions" in:fade={{ duration: 150 }}
+          ><Button
+            variant="secondary"
+            size="small"
+            disabled={busy}
+            onclick={() => requestFrozenState(selected, true)}
+            ><Snowflake size={15} />Freeze selected</Button
+          ><Button size="small" href={sendHref}>Send selected coins</Button></span
+        >{:else}<span class="auto-note"
+          ><CircleDot size={14} />Automatic selection remains the default</span
         >{/if}<CoinSortMenu value={sortOrder} onchange={(next) => (sortOrder = next)} />
     </div>
   </section>
@@ -321,9 +327,9 @@
                   >Address reused</span
                 >{:else if !utxo.confirmations}<span class="coin-status pending">Unconfirmed</span
                 >{/if}
+              <PermanentLabelTags labels={utxo.provenance.labels} hidden={$discreetMode} />
             </div>
-            <PermanentLabelTags labels={utxo.provenance.labels} hidden={$discreetMode} />
-            <span>{$discreetMode ? '••••••' : shortSats(utxo.amount)} sats</span>
+            <span><Amount value={utxo.amount} hidden={$discreetMode} /></span>
           </div>
           <div class="coin-meta coin-actions-meta">
             <div class="coin-row-actions">
@@ -370,7 +376,12 @@
                   </dd>
                 </div>
                 <div>
-                  <dt>Provenance</dt>
+                  <dt>
+                    Provenance <InsightTip
+                      label="About coin provenance"
+                      text="The permanent labels inherited from this coin’s receive address or funding inputs."
+                    />
+                  </dt>
                   <dd>
                     {$discreetMode
                       ? 'Hidden in discreet mode'
@@ -383,7 +394,12 @@
                   </dd>
                 </div>
                 <div>
-                  <dt>Privacy clusters</dt>
+                  <dt>
+                    Privacy clusters <InsightTip
+                      label="About privacy clusters"
+                      text="Groups already linked by transaction history. Spending across groups creates a new public link."
+                    />
+                  </dt>
                   <dd>
                     {$discreetMode
                       ? 'Hidden in discreet mode'
@@ -396,10 +412,20 @@
                       <code>{compactAddress(utxo.provenance.sourceTransactionId, 18, 10)}</code>
                     </dd>
                   </div>{/if}{#if !$discreetMode && utxo.provenance.sourceIntentLabel}<div>
-                    <dt>Source payment intent</dt>
+                    <dt>
+                      Source payment intent <InsightTip
+                        label="About source payment intent"
+                        text="The permanent label of the payment that created this change. It can differ from the labels this coin inherited."
+                      />
+                    </dt>
                     <dd>{utxo.provenance.sourceIntentLabel.text}</dd>
                   </div>{/if}{#if !$discreetMode && utxo.provenance.context === 'change'}<div>
-                    <dt>Change lineage</dt>
+                    <dt>
+                      Change lineage <InsightTip
+                        label="About change lineage"
+                        text="How many wallet inputs were combined to create this change coin."
+                      />
+                    </dt>
                     <dd>
                       {utxo.provenance.sourceOutpoints?.length ?? 0} wallet input{(utxo.provenance
                         .sourceOutpoints?.length ?? 0) === 1
@@ -446,9 +472,7 @@
                     {#each linkedCoins as linkedCoin (linkedCoin.outpoint)}
                       <li>
                         <span>Linked coin</span>
-                        <strong
-                          >{$discreetMode ? '••••••' : shortSats(linkedCoin.amount)} sats</strong
-                        >
+                        <strong><Amount value={linkedCoin.amount} hidden={$discreetMode} /></strong>
                         <code>{compactAddress(linkedCoin.outpoint, 12, 8)}</code>
                       </li>
                     {/each}

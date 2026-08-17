@@ -35,6 +35,7 @@
   import type { CosignerDraft, CosignerSource } from '$lib/multisig/policy';
   import { defaultConfig, networkName } from '$lib/config';
   import { shortSats } from '$lib/data';
+  import Amount from '$lib/components/Amount.svelte';
   import { toast } from '$lib/stores/toasts';
   import { coldcardPolicyFilename } from '$lib/transfer';
   import { useWalletShellContext } from '$lib/wallet/shell-context';
@@ -444,7 +445,7 @@
     <section class="vault-hero">
       <span><ShieldCheck size={22} /></span>
       <div class="vault-summary">
-        <small>{shortSats(snapshot?.balance.total ?? 0)} sats · Spending policy</small><strong
+        <small><Amount value={snapshot?.balance.total ?? 0} /> · Spending policy</small><strong
           >{wallet.threshold} of {wallet.cosigners.length}</strong
         >
         <p>

@@ -506,6 +506,36 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     };
   }
 
+  async maxSpend(
+    _recipient: string,
+    selectedRate: ReturnType<typeof feeRate>,
+    coinSelection: CoinSelection = { mode: 'auto' }
+  ) {
+    const spendable = this._coins.filter(
+      (coin) =>
+        !coin.frozen &&
+        (coinSelection.mode === 'auto' || coinSelection.outpoints.includes(coin.outpoint))
+    );
+    const available = spendable.reduce((total, coin) => total + coin.amount, 0);
+    const fee = sats(Math.ceil(Number(selectedRate) * 141));
+    return { amount: sats(Math.max(0, available - fee)), fee };
+  }
+
+  async maxMultisigSpend(
+    _recipient: string,
+    selectedRate: ReturnType<typeof feeRate>,
+    coinSelection: CoinSelection = { mode: 'auto' }
+  ) {
+    const spendable = this._coins.filter(
+      (coin) =>
+        !coin.frozen &&
+        (coinSelection.mode === 'auto' || coinSelection.outpoints.includes(coin.outpoint))
+    );
+    const available = spendable.reduce((total, coin) => total + coin.amount, 0);
+    const fee = sats(Math.ceil(Number(selectedRate) * 220));
+    return { amount: sats(Math.max(0, available - fee)), fee };
+  }
+
   async preparePayment(
     recipient: string,
     rawLabel: string,

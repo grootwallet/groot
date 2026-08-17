@@ -9,6 +9,7 @@ mod direct_rpc;
 pub mod external_signer;
 mod hardware;
 mod label_provenance;
+mod market_data;
 mod multisig;
 mod native_backup;
 pub mod network;
@@ -38,6 +39,9 @@ pub fn run() {
         })
         .manage(wallet::AppState::default())
         .invoke_handler(tauri::generate_handler![
+            market_data::market_ticker,
+            market_data::market_history,
+            market_data::market_stats,
             wallet::profile_commands::wallet_exists,
             wallet::ur_encode_psbt,
             wallet::ur_decode_psbt,
@@ -131,6 +135,7 @@ pub fn run() {
             wallet::multisig_setup_commands::multisig_address_claim_observed,
             wallet::multisig_setup_commands::multisig_address_discard,
             wallet::multisig_proposal_commands::multisig_tx_prepare,
+            wallet::multisig_proposal_commands::multisig_tx_max_spend,
             wallet::multisig_coin_selection_preview,
             wallet::multisig_proposal_commands::multisig_proposals,
             wallet::multisig_proposal_commands::multisig_proposal_import,
@@ -139,6 +144,7 @@ pub fn run() {
             wallet::multisig_proposal_commands::multisig_proposal_broadcast,
             wallet::multisig_proposal_commands::multisig_proposal_cancel,
             wallet::transaction_commands::tx_prepare,
+            wallet::transaction_commands::tx_max_spend,
             wallet::coin_selection_preview,
             wallet::transaction_commands::tx_acceleration_prepare,
             wallet::transaction_commands::multisig_acceleration_prepare,
