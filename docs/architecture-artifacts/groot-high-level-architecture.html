@@ -1,0 +1,944 @@
+<style>
+  #groot-high {
+    color-scheme: light dark;
+    --ink: light-dark(#15202a, #e9edf2);
+    --muted: light-dark(#5e6770, #99a5b2);
+    --paper: light-dark(#f4f1e9, #0d1118);
+    --panel: light-dark(#fffdf7, #131923);
+    --raised: light-dark(#f8f5ee, #182131);
+    --line: light-dark(#c9c3b8, #344150);
+    --blue: #3b73c4;
+    --red: #d3293a;
+    --green: #28845b;
+    --amber: #d29a13;
+    --violet: #8064b4;
+    font:
+      13px/1.45 ui-sans-serif,
+      system-ui,
+      -apple-system,
+      BlinkMacSystemFont,
+      'Segoe UI',
+      sans-serif;
+    background: var(--paper);
+    color: var(--ink);
+    padding: 20px;
+    border-radius: 14px;
+    min-width: 0;
+  }
+  #groot-high * {
+    box-sizing: border-box;
+  }
+  #groot-high h1,
+  #groot-high h2,
+  #groot-high h3,
+  #groot-high p {
+    margin: 0;
+  }
+  #groot-high h1 {
+    font:
+      600 clamp(25px, 4vw, 42px)/1.05 Iowan Old Style,
+      Baskerville,
+      Georgia,
+      serif;
+    letter-spacing: -0.02em;
+  }
+  #groot-high h2 {
+    font:
+      600 20px/1.2 Iowan Old Style,
+      Baskerville,
+      Georgia,
+      serif;
+  }
+  #groot-high h3 {
+    font-size: 13px;
+    letter-spacing: 0.02em;
+  }
+  #groot-high button {
+    font: inherit;
+    color: inherit;
+  }
+  #groot-high .mast {
+    display: flex;
+    justify-content: space-between;
+    gap: 20px;
+    align-items: end;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 16px;
+  }
+  .eyebrow {
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    font-size: 10px;
+    color: var(--red);
+    font-weight: 750;
+  }
+  .sub {
+    color: var(--muted);
+    max-width: 680px;
+    margin-top: 7px !important;
+  }
+  .stamp {
+    text-align: right;
+    color: var(--muted);
+    font-size: 11px;
+    white-space: nowrap;
+  }
+  .section {
+    margin-top: 22px;
+  }
+  .section-head {
+    display: flex;
+    align-items: end;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 10px;
+  }
+  .hint {
+    font-size: 11px;
+    color: var(--muted);
+  }
+  #groot-high .legend {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .key,
+  .status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .key:before {
+    content: '';
+    width: 9px;
+    height: 9px;
+    border-radius: 2px;
+    background: var(--c);
+    border: 1px solid color-mix(in srgb, var(--c), black 15%);
+  }
+  .trusted {
+    --c: var(--green);
+  }
+  .untrusted {
+    --c: var(--red);
+  }
+  .secret {
+    --c: var(--violet);
+  }
+  .public {
+    --c: var(--blue);
+  }
+  .persisted {
+    --c: var(--amber);
+  }
+  .external {
+    --c: var(--muted);
+  }
+  #groot-high .journeys {
+    display: flex;
+    gap: 7px;
+    flex-wrap: wrap;
+    margin: 12px 0;
+  }
+  .journeys button,
+  .zoom button {
+    border: 1px solid var(--line);
+    background: var(--panel);
+    border-radius: 8px;
+    padding: 7px 10px;
+    cursor: pointer;
+  }
+  .journeys button[aria-pressed='true'] {
+    background: color-mix(in srgb, var(--blue) 15%, var(--panel));
+    border-color: var(--blue);
+    color: light-dark(#194b8e, #9ec3ff);
+  }
+  .journey-note {
+    min-height: 38px;
+    padding: 9px 12px;
+    border-left: 3px solid var(--blue);
+    background: var(--raised);
+    color: var(--muted);
+    border-radius: 0 8px 8px 0;
+  }
+  .journey-note strong {
+    color: var(--ink);
+  }
+  #groot-high code {
+    background: transparent !important;
+    color: light-dark(#173f70, #cfe2ff) !important;
+    border: 0 !important;
+    padding: 0 !important;
+  }
+  #groot-high .canvas-shell {
+    overflow: auto;
+    border: 1px solid var(--line);
+    border-radius: 13px;
+    background: var(--panel);
+    padding: 14px;
+  }
+  .canvas {
+    min-width: 910px;
+    transform-origin: top left;
+    transition: transform 0.18s ease;
+  }
+  .zone-row {
+    display: grid;
+    grid-template-columns: 1.1fr 1.25fr 1.45fr 1.15fr;
+    gap: 10px;
+    align-items: stretch;
+  }
+  .zone {
+    border: 1px solid var(--line);
+    border-radius: 11px;
+    padding: 12px;
+    position: relative;
+    background: var(--raised);
+    min-height: 310px;
+  }
+  .zone:before {
+    content: '';
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 4px;
+    border-radius: 11px 0 0 11px;
+    background: var(--zone);
+  }
+  .zone.ui {
+    --zone: var(--red);
+    background: color-mix(in srgb, var(--red) 5%, var(--raised));
+  }
+  .zone.boundary {
+    --zone: var(--blue);
+    background: color-mix(in srgb, var(--blue) 6%, var(--raised));
+  }
+  .zone.rust {
+    --zone: var(--green);
+    background: color-mix(in srgb, var(--green) 6%, var(--raised));
+  }
+  .zone.ext {
+    --zone: var(--amber);
+    background: color-mix(in srgb, var(--amber) 7%, var(--raised));
+  }
+  .zone-title {
+    display: flex;
+    justify-content: space-between;
+    align-items: start;
+    margin: 0 0 10px 5px;
+  }
+  .zone-title span {
+    font-size: 10px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+  .node {
+    border: 1px solid var(--line);
+    background: var(--panel);
+    border-radius: 9px;
+    padding: 9px;
+    margin-top: 8px;
+    position: relative;
+    transition: 0.15s;
+  }
+  .node b {
+    display: block;
+    font-size: 12px;
+  }
+  .node small {
+    display: block;
+    color: var(--muted);
+    font-size: 10.5px;
+    margin-top: 2px;
+  }
+  .node .tags {
+    margin-top: 6px;
+  }
+  .tag {
+    display: inline-block;
+    padding: 3px 6px;
+    border: 1px solid light-dark(#a8bfdf, #49698f);
+    border-radius: 4px;
+    background: light-dark(#e4edf9, #233a57) !important;
+    font:
+      750 9px/1.25 ui-monospace,
+      SFMono-Regular,
+      monospace;
+    color: light-dark(#173f70, #e0edff) !important;
+    margin: 2px 2px 0 0;
+  }
+  .node.active {
+    border-color: var(--blue);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--blue) 20%, transparent);
+    transform: translateY(-1px);
+  }
+  .node.dim {
+    opacity: 0.38;
+  }
+  .arrow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--muted);
+    font-size: 16px;
+    height: 16px;
+  }
+  .boundary-line {
+    margin: 12px 0;
+    border-top: 1px dashed var(--line);
+    position: relative;
+  }
+  .boundary-line span {
+    position: absolute;
+    right: 6px;
+    top: -8px;
+    background: var(--raised);
+    padding: 0 5px;
+    color: var(--muted);
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  #groot-high .crossings {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    margin-top: 10px;
+  }
+  .cross {
+    background: var(--raised);
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    padding: 9px;
+  }
+  .cross b {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .cross p {
+    font-size: 10.5px;
+    color: var(--muted);
+    margin-top: 3px;
+  }
+  .cross .yes {
+    color: var(--green);
+  }
+  .cross .no {
+    color: var(--red);
+  }
+  #groot-high .grid3 {
+    display: grid;
+    grid-template-columns: 1.1fr 1fr 1fr;
+    gap: 12px;
+  }
+  .card {
+    border: 1px solid var(--line);
+    background: var(--panel);
+    border-radius: 11px;
+    padding: 14px;
+  }
+  .card h2 {
+    margin-bottom: 10px;
+  }
+  .inv {
+    display: grid;
+    grid-template-columns: 24px 1fr;
+    gap: 8px;
+    margin: 8px 0;
+  }
+  .inv i {
+    font-style: normal;
+    width: 22px;
+    height: 22px;
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--green) 16%, var(--panel));
+    color: var(--green);
+    display: grid;
+    place-items: center;
+    font-weight: 800;
+  }
+  .inv p,
+  .stack li,
+  .risk li {
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .stack,
+  .risk {
+    padding-left: 17px;
+    margin: 8px 0 0;
+  }
+  .stack li,
+  .risk li {
+    margin: 5px 0;
+  }
+  .gate {
+    border-left: 3px solid var(--red);
+    padding-left: 10px;
+    margin: 9px 0;
+  }
+  .gate b {
+    font-size: 11px;
+  }
+  .gate p {
+    font-size: 10.5px;
+    color: var(--muted);
+  }
+  #groot-high .surface-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+  }
+  .surface {
+    border-top: 3px solid var(--c);
+    background: var(--raised);
+    padding: 10px;
+    border-radius: 8px;
+  }
+  .surface b {
+    display: block;
+  }
+  .surface span {
+    font-size: 10px;
+    color: var(--muted);
+  }
+  .surface.native {
+    --c: var(--green);
+  }
+  .surface.fixture {
+    --c: var(--amber);
+  }
+  .surface.blocked {
+    --c: var(--red);
+  }
+  #groot-high details {
+    border-top: 1px solid var(--line);
+    padding: 9px 0;
+  }
+  #groot-high summary {
+    cursor: pointer;
+    font-weight: 700;
+    font-size: 11px;
+  }
+  #groot-high details p {
+    font-size: 10.5px;
+    color: var(--muted);
+    margin-top: 6px;
+  }
+  .sources {
+    columns: 2;
+    column-gap: 24px;
+  }
+  .sources div {
+    break-inside: avoid;
+    margin: 0 0 8px;
+    font-size: 10.5px;
+    color: var(--muted);
+  }
+  .sources code {
+    color: var(--ink);
+    font-size: 10px;
+  }
+  @media (max-width: 760px) {
+    #groot-high {
+      padding: 14px;
+    }
+    .mast,
+    .section-head {
+      align-items: start;
+      flex-direction: column;
+    }
+    .stamp {
+      text-align: left;
+    }
+    .grid3 {
+      grid-template-columns: 1fr;
+    }
+    .surface-grid {
+      grid-template-columns: 1fr 1fr;
+    }
+    .crossings {
+      grid-template-columns: 1fr 1fr;
+    }
+    .sources {
+      columns: 1;
+    }
+    .canvas-shell {
+      padding: 8px;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #groot-high * {
+      transition: none !important;
+    }
+  }
+</style>
+<div id="groot-high">
+  <header class="mast">
+    <div>
+      <div class="eyebrow">Groot · system map</div>
+      <h1>High-level architecture</h1>
+      <p class="sub">
+        A non-custodial, onchain Bitcoin wallet where the webview presents public wallet state and
+        trusted Rust owns keys, policy, persistence, transaction truth, and native integrations.
+      </p>
+    </div>
+    <div class="stamp">Source snapshot · 17 Aug 2026<br />Implemented ≠ release-certified</div>
+  </header>
+  <section class="section">
+    <div class="section-head">
+      <div>
+        <h2>How to read this architecture</h2>
+        <p class="hint">
+          Read left → right. Colored backgrounds are trust zones; select a journey to trace it.
+        </p>
+      </div>
+      <div class="legend">
+        <span class="key trusted">trusted</span><span class="key untrusted">untrusted</span
+        ><span class="key secret">secret</span><span class="key public">public</span
+        ><span class="key persisted">persisted</span><span class="key external">external</span>
+      </div>
+    </div>
+    <div class="journeys" role="group" aria-label="Highlight a user journey">
+      <button data-flow="create" aria-pressed="true">Create / unlock</button
+      ><button data-flow="receive" aria-pressed="false">Receive</button
+      ><button data-flow="send" aria-pressed="false">Send / broadcast</button
+      ><button data-flow="multisig" aria-pressed="false">Multisig</button
+      ><button data-flow="hardware" aria-pressed="false">Hardware sign</button
+      ><button data-flow="backup" aria-pressed="false">Backup / recover</button
+      ><button data-flow="sync" aria-pressed="false">Synchronize</button>
+    </div>
+    <div class="journey-note" aria-live="polite"></div>
+  </section>
+  <section class="section">
+    <div class="section-head">
+      <h2>System and trust zones</h2>
+      <div class="zoom">
+        <button type="button" data-zoom="out" aria-label="Zoom out">−</button>
+        <button type="button" data-zoom="reset">100%</button>
+        <button type="button" data-zoom="in" aria-label="Zoom in">＋</button>
+      </div>
+    </div>
+    <div class="canvas-shell">
+      <div class="canvas">
+        <div class="zone-row">
+          <article class="zone ui">
+            <div class="zone-title">
+              <h3>Presentation</h3>
+              <span>untrusted for secrets</span>
+            </div>
+            <div
+              class="node"
+              data-node="surfaces"
+              data-flows="create receive send multisig hardware backup sync"
+            >
+              <b>Desktop · iOS · Android</b
+              ><small>Tauri webview; shared SvelteKit SPA presentation</small>
+              <div class="tags">
+                <span class="tag">Svelte 5</span><span class="tag">routes + components</span>
+              </div>
+            </div>
+            <div class="node" data-node="browser" data-flows="create receive send multisig sync">
+              <b>Browser prototype</b
+              ><small>Deterministic dummy adapter only; fixture evidence</small>
+              <div class="tags"><span class="tag">no native trust claim</span></div>
+            </div>
+            <div class="boundary-line"><span>state lifetime</span></div>
+            <div class="node" data-node="state" data-flows="receive send multisig sync">
+              <b>Route-local UI state</b
+              ><small>Forms, modals, loading, errors; global toasts only</small>
+            </div>
+          </article>
+          <article class="zone boundary">
+            <div class="zone-title">
+              <h3>Frontend boundary</h3>
+              <span>public DTOs</span>
+            </div>
+            <div
+              class="node"
+              data-node="port"
+              data-flows="create receive send multisig hardware backup sync"
+            >
+              <b><code>WalletPort</code> capabilities</b
+              ><small
+                >Profiles · network · snapshots · transactions · hardware · multisig · files ·
+                events</small
+              >
+            </div>
+            <div class="arrow">↓</div>
+            <div
+              class="node"
+              data-node="composition"
+              data-flows="create receive send multisig hardware backup sync"
+            >
+              <b>Composition root</b
+              ><small><code>walletService</code> chooses Tauri or dummy adapter once</small>
+            </div>
+            <div class="arrow">↓ typed invoke / serialized result</div>
+            <div
+              class="node"
+              data-node="ipc"
+              data-flows="create receive send multisig hardware backup sync"
+            >
+              <b>Tauri IPC</b
+              ><small>Stable error codes; unknown codes → <code>internal_error</code></small>
+              <div class="tags">
+                <span class="tag">no BDK types</span><span class="tag">bounded values</span>
+              </div>
+            </div>
+          </article>
+          <article class="zone rust">
+            <div class="zone-title">
+              <h3>Trusted Rust application</h3>
+              <span>policy + secrets</span>
+            </div>
+            <div
+              class="node"
+              data-node="commands"
+              data-flows="create receive send multisig hardware backup sync"
+            >
+              <b>Command handlers</b
+              ><small
+                >Thin profile, transaction, hardware, multisig setup/proposal orchestration</small
+              >
+            </div>
+            <div
+              class="node"
+              data-node="core"
+              data-flows="create receive send multisig hardware backup sync"
+            >
+              <b>Wallet services & policy</b
+              ><small
+                >Credential checks · descriptor identity · address/label rules · proposal validation
+                · sessions</small
+              >
+            </div>
+            <div class="node" data-node="bdk" data-flows="create receive send multisig sync">
+              <b>BDK / Miniscript / Bitcoin</b
+              ><small
+                >BIP84, BIP48 sortedmulti, PSBT construction, signed-weight review,
+                finalization</small
+              >
+            </div>
+            <div
+              class="node"
+              data-node="persist"
+              data-flows="create receive send multisig hardware backup sync"
+            >
+              <b>Per-wallet SQLite + registry</b
+              ><small
+                >UUID isolation; atomic BDK state, labels, provenance, proposals, events</small
+              >
+              <div class="tags">
+                <span class="tag">persisted</span><span class="tag">process lock</span>
+              </div>
+            </div>
+            <div class="node" data-node="secrets" data-flows="create send backup">
+              <b>Encrypted secret envelope</b
+              ><small>AES-256-GCM; credential + device-key wrapping; zeroizing buffers</small>
+              <div class="tags">
+                <span class="tag">secret</span><span class="tag">Keychain Apple</span>
+              </div>
+            </div>
+          </article>
+          <article class="zone ext">
+            <div class="zone-title">
+              <h3>Native & external</h3>
+              <span>separate trust</span>
+            </div>
+            <div class="node" data-node="native" data-flows="create backup">
+              <b>Native backup / recovery sheets</b
+              ><small>Generated or recovered words never return through IPC</small>
+            </div>
+            <div class="node" data-node="hwi" data-flows="hardware multisig receive send">
+              <b>Bitcoin Core HWI subprocess</b
+              ><small
+                >Absolute executable · cleared env · exact device/path · bounded I/O/time</small
+              >
+            </div>
+            <div
+              class="node"
+              data-node="devices"
+              data-flows="hardware multisig receive send backup"
+            >
+              <b>Physical signer</b><small>Device UI is authoritative human review surface</small>
+            </div>
+            <div class="node" data-node="core-node" data-flows="send sync">
+              <b>Bitcoin Core RPC</b
+              ><small>Exact-chain check; sync, fees, mempool, broadcast</small>
+            </div>
+            <div class="node" data-node="p2p" data-flows="sync">
+              <b>Compact-filter peers</b
+              ><small>Confirmed-only BIP157/158 discovery; no broadcast fallback</small>
+            </div>
+            <div class="node" data-node="tor" data-flows="sync send">
+              <b>Tor SOCKS5 / HTTPS</b
+              ><small>Explicit routes only; onion hostname stays inside SOCKS request</small>
+            </div>
+          </article>
+        </div>
+        <div class="crossings">
+          <div class="cross">
+            <b class="yes">IPC may carry</b>
+            <p>
+              Addresses, balances, UTXOs, public descriptors/xpub metadata, proposal reviews,
+              statuses, bounded PSBT exchange.
+            </p>
+          </div>
+          <div class="cross">
+            <b class="no">IPC must never carry</b>
+            <p>
+              Mnemonic, seed, xpriv/private descriptor, credential after command use, decrypted
+              signing material.
+            </p>
+          </div>
+          <div class="cross">
+            <b>Network egress</b>
+            <p>
+              Core JSON-RPC; verified compact-filter traffic; no REST app server, hosted database,
+              or silent backend fallback.
+            </p>
+          </div>
+          <div class="cross">
+            <b>External media</b>
+            <p>
+              Public descriptor backups and PSBTs via native files / bounded UR; privacy-sensitive
+              but non-spending by themselves.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+  <section class="section">
+    <div class="surface-grid">
+      <div class="surface native">
+        <b>Desktop</b><span>Rust/Tauri functional on Regtest; physical/package gates remain.</span>
+      </div>
+      <div class="surface blocked">
+        <b>iOS</b
+        ><span
+          >Shared shell target; native challenge, secure storage, lifecycle certification
+          pending.</span
+        >
+      </div>
+      <div class="surface blocked">
+        <b>Android</b
+        ><span
+          >Shared shell target; approved non-exportable store and native recovery pending.</span
+        >
+      </div>
+      <div class="surface fixture">
+        <b>Browser</b
+        ><span>Explicit deterministic fixture; mnemonic UI is test-only exception.</span>
+      </div>
+    </div>
+  </section>
+  <section class="section grid3">
+    <article class="card">
+      <h2>Security invariants</h2>
+      <div class="inv">
+        <i>1</i>
+        <p>
+          <b>Secrets stay native.</b> Mnemonic, seed, private descriptors and signing material never
+          enter the webview.
+        </p>
+      </div>
+      <div class="inv">
+        <i>2</i>
+        <p>
+          <b>Review the real transaction.</b> Rust derives review fields from the persisted unsigned
+          PSBT; the UI does not recompute truth.
+        </p>
+      </div>
+      <div class="inv">
+        <i>3</i>
+        <p>
+          <b>Fail closed.</b> Wrong credential, foreign/mutated PSBT, unknown signer, route
+          mismatch, gap risk, or chain mismatch stops the operation.
+        </p>
+      </div>
+      <div class="inv">
+        <i>4</i>
+        <p>
+          <b>Persist coherently.</b> Revealed address + permanent label, proposal + BDK change, and
+          broadcast + intent + notice commit atomically.
+        </p>
+      </div>
+      <div class="inv">
+        <i>5</i>
+        <p><b>Integer accounting.</b> Satoshis are safe integers; fee rates are positive sat/vB.</p>
+      </div>
+    </article>
+    <article class="card">
+      <h2>Technology stack</h2>
+      <ul class="stack">
+        <li><b>Shell:</b> Tauri 2.11.5, desktop/mobile shared Rust entry point</li>
+        <li><b>UI:</b> SvelteKit 2.69.3, Svelte 5.56.5, static SPA</li>
+        <li><b>Wallet:</b> Rust, BDK Wallet 3.1.0, Bitcoin/Miniscript, BIP39</li>
+        <li><b>Storage:</b> SQLite via BDK/rusqlite, device-bound AES-GCM envelopes</li>
+        <li><b>Node:</b> Bitcoin Core RPC; direct HTTPS or explicit onion-over-loopback-SOCKS5</li>
+        <li><b>Discovery:</b> Core or bdk_kyoto 0.17.0 compact filters</li>
+        <li><b>Signing:</b> Bitcoin Core HWI subprocess; file and UR PSBT interchange</li>
+        <li>
+          <b>Release:</b> locked dependencies, SBOM, supply-chain checks, reproducibility/signature
+          gates
+        </li>
+      </ul>
+    </article>
+    <article class="card">
+      <h2>Mainnet & release gates</h2>
+      <div class="gate">
+        <b>Mainnet compile-time disabled</b>
+        <p>
+          No selectable runtime mainnet. Trusted Rust gate is false before wallet database open.
+        </p>
+      </div>
+      <div class="gate">
+        <b>Approval evidence required</b>
+        <p>
+          ADR 0012 supersession, threat model, exact-device physical matrix, public-network
+          rehearsal, recovery checklist, reproducible signed package, independent approval.
+        </p>
+      </div>
+      <div class="gate">
+        <b>Platform boundaries remain explicit</b>
+        <p>
+          Non-Apple public-network secure storage fails closed; terminated background delivery is
+          out of scope; mobile native recovery certification is pending.
+        </p>
+      </div>
+      <div class="gate">
+        <b>Compact-filter limits</b>
+        <p>
+          Memory-only shared headers/filters in pinned engine; recovery, durable cache and direct
+          P2P broadcast are not claimed.
+        </p>
+      </div>
+    </article>
+  </section>
+  <section class="section grid3">
+    <article class="card">
+      <h2>Backup & recovery paths</h2>
+      <details open>
+        <summary>Software wallet · secret path</summary>
+        <p>
+          Native 24-word sheet → exact-order challenge or deferred marker → device-bound encrypted
+          mnemonic. Clean recovery uses native word entry + original BIP39 passphrase + bounded full
+          scan.
+        </p>
+      </details>
+      <details>
+        <summary>Hardware wallet · signer-owned secret</summary>
+        <p>
+          Groot stores only public BIP84 identity and local app-PIN verifier. Recovery depends on
+          the signer's own backup plus Groot's public descriptor export.
+        </p>
+      </details>
+      <details>
+        <summary>Multisig · public coordinator backup</summary>
+        <p>
+          BSMS / descriptor / Groot JSON exports are watch-only and privacy-sensitive. Recovery
+          validates network, branches, descriptor identity and first address before creating state.
+        </p>
+      </details>
+    </article>
+    <article class="card">
+      <h2>Important unresolved boundaries</h2>
+      <ul class="risk">
+        <li>
+          Mobile native mnemonic entry/presentation and non-exportable secure storage are not
+          certified across iOS/Android.
+        </li>
+        <li>
+          HWI inherits vendor firmware, USB stack, host process and physical display assumptions;
+          exact-model evidence cannot be generalized.
+        </li>
+        <li>
+          Compact-filter peers can affect availability and privacy; current engine redownloads
+          public filters after restart.
+        </li>
+        <li>
+          Remote Core confidentiality/availability rests on user endpoint, TLS/Tor configuration and
+          exact-chain verification.
+        </li>
+        <li>
+          Signed update/package/notarization/reproducibility evidence is incomplete; a green test
+          suite is not release proof.
+        </li>
+        <li>
+          Single-key proposals persist after restart, but the generic UI lacks a proposal selector.
+        </li>
+      </ul>
+    </article>
+    <article class="card">
+      <h2>Claim provenance</h2>
+      <div class="sources">
+        <div><code>docs/product-spec.md</code><br />Canonical behavior and limits</div>
+        <div><code>docs/architecture.md</code><br />Trust, persistence, networks</div>
+        <div><code>docs/implementation-status.md</code><br />Fixture / Rust / release evidence</div>
+        <div><code>docs/adr/0001–0035</code><br />Settled boundaries and gates</div>
+        <div><code>src/lib/wallet/contracts/*</code><br />Ports, DTOs, errors, events</div>
+        <div><code>src/lib/wallet/index.ts</code><br />Adapter composition</div>
+        <div><code>src-tauri/src/wallet*</code><br />Commands and atomic state</div>
+        <div><code>secure_store.rs · proposal.rs</code><br />Secrets and PSBT validation</div>
+        <div><code>hardware.rs · network.rs</code><br />HWI and route validation</div>
+        <div><code>compact_filters.rs</code><br />BIP157/158 discovery limits</div>
+        <div><code>release_policy.rs</code><br />Mainnet gate</div>
+        <div><code>docs/agent-harness.md</code><br />Evidence tiers and certification</div>
+      </div>
+    </article>
+  </section>
+</div>
+<script>
+  (() => {
+    const root = document.getElementById('groot-high');
+    const notes = {
+      create:
+        '<strong>Create / unlock:</strong> native OS entropy and native mnemonic UI → Rust descriptor derivation → device-bound encrypted envelope → UUID profile. Unlock authenticates before rebuilding private wallet state; session binding is wallet-scoped.',
+      receive:
+        '<strong>Receive:</strong> route submits a mandatory label → Rust proves recovery-gap discoverability → address revelation and immutable label commit together → optional exact-device address display → retired addresses remain monitored.',
+      send: '<strong>Send / sign / broadcast:</strong> intent + sats + sat/vB → BDK builds and persists PSBT → Rust-derived review → credential or external signatures → validation/finalization → exact-chain Core broadcast → atomic pending state and notification.',
+      multisig:
+        '<strong>Multisig:</strong> public BIP48 signer records → Rust compiles checksummed wsh(sortedmulti) descriptors → watch-only SQLite → persisted PSBT collects any threshold signatures → local verification and finalization.',
+      hardware:
+        '<strong>Hardware signing:</strong> saved device type narrows enumeration → exact path/fingerprint match → isolated HWI process → device reviews → Rust projects only returned partial signatures onto the untouched canonical PSBT.',
+      backup:
+        '<strong>Backup / recover:</strong> software secrets use native sheets only; public hardware/multisig records use bounded native file/print paths. Clean recovery validates identity and scans from an explicit birthday/gap.',
+      sync: '<strong>Synchronize:</strong> AppShell owns one non-overlapping selected-wallet scheduler → Core RPC or explicit confirmed-only compact-filter source → in-memory staging → atomic SQLite apply → wallet-scoped event. Polling never extends unlock.'
+    };
+    let zoom = 1;
+    function flow(name) {
+      root
+        .querySelectorAll('[data-flow]')
+        .forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.flow === name)));
+      root.querySelector('.journey-note').innerHTML = notes[name];
+      root.querySelectorAll('[data-node]').forEach((n) => {
+        const on = n.dataset.flows.split(' ').includes(name);
+        n.classList.toggle('active', on);
+        n.classList.toggle('dim', !on);
+      });
+    }
+    root
+      .querySelectorAll('[data-flow]')
+      .forEach((b) => b.addEventListener('click', () => flow(b.dataset.flow)));
+    root.querySelectorAll('[data-zoom]').forEach((b) =>
+      b.addEventListener('click', () => {
+        zoom =
+          b.dataset.zoom === 'in'
+            ? Math.min(1.35, zoom + 0.1)
+            : b.dataset.zoom === 'out'
+              ? Math.max(0.75, zoom - 0.1)
+              : 1;
+        root.querySelector('.canvas').style.transform = `scale(${zoom})`;
+        root.querySelector('[data-zoom=reset]').textContent = Math.round(zoom * 100) + '%';
+      })
+    );
+    flow('create');
+  })();
+</script>

@@ -1,0 +1,1424 @@
+<style>
+  #groot-low {
+    color-scheme: light dark;
+    --ink: light-dark(#15202a, #e9edf2);
+    --muted: light-dark(#5f6871, #9ca7b3);
+    --paper: light-dark(#f4f1e9, #0d1118);
+    --panel: light-dark(#fffdf7, #131923);
+    --raised: light-dark(#f8f5ee, #182131);
+    --line: light-dark(#c9c3b8, #344150);
+    --blue: #3b73c4;
+    --red: #d3293a;
+    --green: #28845b;
+    --amber: #d29a13;
+    --violet: #8064b4;
+    font:
+      12px/1.45 ui-sans-serif,
+      system-ui,
+      -apple-system,
+      'Segoe UI',
+      sans-serif;
+    background: var(--paper);
+    color: var(--ink);
+    padding: 20px;
+    border-radius: 14px;
+  }
+  #groot-low * {
+    box-sizing: border-box;
+  }
+  #groot-low h1,
+  #groot-low h2,
+  #groot-low h3,
+  #groot-low p {
+    margin: 0;
+  }
+  #groot-low h1 {
+    font:
+      600 clamp(25px, 4vw, 42px)/1.05 Iowan Old Style,
+      Baskerville,
+      Georgia,
+      serif;
+  }
+  #groot-low h2 {
+    font:
+      600 20px/1.2 Iowan Old Style,
+      Baskerville,
+      Georgia,
+      serif;
+  }
+  #groot-low h3 {
+    font-size: 12px;
+  }
+  #groot-low code {
+    font:
+      10.5px ui-monospace,
+      SFMono-Regular,
+      Menlo,
+      monospace;
+    background: transparent !important;
+    border: 0 !important;
+    padding: 0 !important;
+    color: light-dark(#173f70, #cfe2ff) !important;
+    overflow-wrap: anywhere;
+  }
+  #groot-low .mast {
+    display: flex;
+    justify-content: space-between;
+    align-items: end;
+    gap: 20px;
+    padding-bottom: 15px;
+    border-bottom: 1px solid var(--line);
+  }
+  #groot-low .eyebrow {
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    font-size: 10px;
+    font-weight: 800;
+    color: var(--red);
+  }
+  #groot-low .sub {
+    color: var(--muted);
+    max-width: 720px;
+    margin-top: 7px;
+  }
+  #groot-low .stamp {
+    text-align: right;
+    color: var(--muted);
+    font-size: 10px;
+    white-space: nowrap;
+  }
+  #groot-low .tabs {
+    display: flex;
+    gap: 5px;
+    flex-wrap: wrap;
+    margin: 18px 0 12px;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 7px;
+  }
+  .tabs button,
+  .seq-pick button,
+  .zoom button {
+    border: 1px solid var(--line);
+    background: var(--panel);
+    color: var(--ink);
+    border-radius: 7px;
+    padding: 7px 10px;
+    cursor: pointer;
+    font: inherit;
+  }
+  .tabs button[aria-selected='true'],
+  .seq-pick button[aria-pressed='true'] {
+    border-color: var(--blue);
+    background: color-mix(in srgb, var(--blue) 14%, var(--panel));
+    color: light-dark(#174e91, #a8c9fb);
+  }
+  .pane {
+    display: none;
+  }
+  .pane.active {
+    display: block;
+  }
+  .head {
+    display: flex;
+    justify-content: space-between;
+    align-items: end;
+    gap: 12px;
+    margin: 0 0 10px;
+  }
+  .hint {
+    color: var(--muted);
+    font-size: 10.5px;
+  }
+  .legend {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .legend span:before {
+    content: '';
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+    background: var(--c);
+    margin-right: 5px;
+  }
+  .legend span {
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .l-ui {
+    --c: var(--red);
+  }
+  .l-port {
+    --c: var(--blue);
+  }
+  .l-rust {
+    --c: var(--green);
+  }
+  .l-data {
+    --c: var(--amber);
+  }
+  .l-ext {
+    --c: var(--violet);
+  }
+  #groot-low .arch-shell {
+    overflow: auto;
+    border: 1px solid var(--line);
+    border-radius: 11px;
+    background: var(--panel);
+    padding: 12px;
+  }
+  .arch {
+    min-width: 980px;
+    transform-origin: top left;
+    display: grid;
+    grid-template-columns: 1.15fr 1fr 1.2fr 1.2fr 1fr;
+    gap: 9px;
+  }
+  .lane {
+    border-radius: 9px;
+    padding: 10px;
+    background: var(--raised);
+    border-top: 4px solid var(--c);
+  }
+  .lane.ui {
+    --c: var(--red);
+  }
+  .lane.port {
+    --c: var(--blue);
+  }
+  .lane.command {
+    --c: var(--green);
+  }
+  .lane.domain {
+    --c: var(--amber);
+  }
+  .lane.edge {
+    --c: var(--violet);
+  }
+  .lane-title {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+  .lane-title span {
+    font-size: 9px;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .mod {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    padding: 7px;
+    margin: 6px 0;
+    position: relative;
+  }
+  .mod b {
+    font-size: 10.5px;
+    display: block;
+  }
+  #groot-low .mod b code {
+    display: inline-block;
+    max-width: 100%;
+    padding: 2px 6px !important;
+    border: 1px solid light-dark(#9db7d9, #506f95) !important;
+    border-radius: 5px;
+    background: light-dark(#e2ecf9, #223a58) !important;
+    color: light-dark(#153d6d, #e3efff) !important;
+    font-weight: 750;
+    line-height: 1.25;
+  }
+  .mod small {
+    color: var(--muted);
+    font-size: 9.5px;
+    display: block;
+    margin-top: 3px;
+  }
+  .mod.hot {
+    border-color: var(--red);
+    box-shadow: inset 3px 0 var(--red);
+  }
+  .mod.atomic {
+    border-color: var(--amber);
+    box-shadow: inset 3px 0 var(--amber);
+  }
+  .mod.boundary {
+    border-color: var(--blue);
+    box-shadow: inset 3px 0 var(--blue);
+  }
+  .connector {
+    text-align: center;
+    color: var(--muted);
+    font-size: 9px;
+    margin: 2px;
+  }
+  .route-list {
+    columns: 2;
+    column-gap: 8px;
+    margin-top: 4px;
+  }
+  #groot-low .route-list code {
+    display: block;
+    margin: 2px 0;
+    padding: 1px 4px !important;
+    border-radius: 4px;
+    background: light-dark(#e8eef6, #253548) !important;
+    color: light-dark(#213c5c, #d8e5f5) !important;
+    font-weight: 700;
+    line-height: 1.25;
+  }
+  .footer-strip {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 8px;
+    margin-top: 9px;
+  }
+  .foot {
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    padding: 8px;
+    background: var(--raised);
+  }
+  .foot b {
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .foot p {
+    font-size: 9.5px;
+    color: var(--muted);
+    margin-top: 3px;
+  }
+  .zoom {
+    white-space: nowrap;
+  }
+  #groot-low .seq-pick {
+    display: flex;
+    gap: 5px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+  }
+  .seq-frame {
+    border: 1px solid var(--line);
+    border-radius: 11px;
+    background: var(--panel);
+    padding: 12px;
+    overflow: auto;
+  }
+  .seq-title {
+    margin-bottom: 10px;
+  }
+  .seq-title p {
+    color: var(--muted);
+    font-size: 10.5px;
+    margin-top: 3px;
+  }
+  .seq {
+    min-width: 780px;
+  }
+  .actors {
+    display: grid;
+    grid-template-columns: 120px repeat(4, 1fr);
+    gap: 7px;
+    margin-bottom: 6px;
+  }
+  .actor {
+    text-align: center;
+    border-bottom: 3px solid var(--c);
+    padding: 6px;
+    font-weight: 800;
+  }
+  .actor:first-child {
+    border: 0;
+  }
+  .step {
+    display: grid;
+    grid-template-columns: 120px repeat(4, 1fr);
+    gap: 7px;
+    align-items: stretch;
+    margin: 4px 0;
+  }
+  .step-num {
+    display: flex;
+    gap: 7px;
+    align-items: center;
+    color: var(--muted);
+  }
+  .step-num i {
+    font-style: normal;
+    background: var(--raised);
+    width: 22px;
+    height: 22px;
+    border-radius: 6px;
+    display: grid;
+    place-items: center;
+    font-weight: 800;
+    color: var(--ink);
+  }
+  .cell {
+    min-height: 46px;
+    padding: 7px;
+    border-left: 1px dashed var(--line);
+    color: var(--muted);
+    font-size: 9.5px;
+  }
+  .cell.action {
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    background: var(--raised);
+    color: var(--ink);
+  }
+  .cell.secret {
+    background: color-mix(in srgb, var(--violet) 12%, var(--raised));
+    border-color: var(--violet);
+  }
+  .cell.validate {
+    background: color-mix(in srgb, var(--green) 10%, var(--raised));
+    border-color: var(--green);
+  }
+  .cell.reject {
+    background: color-mix(in srgb, var(--red) 9%, var(--raised));
+    border-color: var(--red);
+  }
+  .atom-note {
+    margin-top: 10px;
+    border-left: 3px solid var(--amber);
+    background: var(--raised);
+    padding: 8px;
+    color: var(--muted);
+  }
+  #groot-low .grid2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .card {
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--panel);
+    padding: 13px;
+  }
+  .card h2 {
+    margin-bottom: 9px;
+  }
+  .life {
+    display: flex;
+    gap: 6px;
+    align-items: stretch;
+    overflow: auto;
+  }
+  .life .box {
+    min-width: 130px;
+    flex: 1;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    padding: 8px;
+    background: var(--raised);
+  }
+  .life .box b {
+    font-size: 10px;
+  }
+  .life .box p {
+    font-size: 9.5px;
+    color: var(--muted);
+    margin-top: 3px;
+  }
+  .life .arr {
+    display: grid;
+    place-items: center;
+    color: var(--muted);
+  }
+  .never {
+    margin-top: 8px;
+    padding: 8px;
+    border: 1px solid color-mix(in srgb, var(--red) 55%, var(--line));
+    border-radius: 7px;
+    color: var(--red);
+    font-weight: 700;
+    font-size: 10px;
+  }
+  .matrix {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .matrix th,
+  .matrix td {
+    border-bottom: 1px solid var(--line);
+    padding: 6px;
+    text-align: left;
+    font-size: 9.5px;
+    vertical-align: top;
+  }
+  .matrix th {
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-size: 8.5px;
+  }
+  .ok {
+    color: var(--green);
+    font-weight: 800;
+  }
+  .stop {
+    color: var(--red);
+    font-weight: 800;
+  }
+  .warn {
+    color: var(--amber);
+    font-weight: 800;
+  }
+  .attack {
+    display: grid;
+    grid-template-columns: 100px 1fr;
+    gap: 7px;
+    margin: 7px 0;
+  }
+  .attack b {
+    font-size: 9.5px;
+  }
+  .attack p {
+    font-size: 9.5px;
+    color: var(--muted);
+  }
+  #groot-low .evidence {
+    display: grid;
+    grid-template-columns: 1.1fr 1fr 0.9fr;
+    gap: 12px;
+  }
+  .tier {
+    display: grid;
+    grid-template-columns: 22px 1fr;
+    gap: 7px;
+    margin: 7px 0;
+  }
+  .tier i {
+    font-style: normal;
+    border-radius: 5px;
+    background: var(--raised);
+    display: grid;
+    place-items: center;
+    font-size: 9px;
+    font-weight: 800;
+  }
+  .tier p {
+    color: var(--muted);
+    font-size: 9.5px;
+  }
+  .source {
+    padding: 6px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .source b {
+    font-size: 10px;
+  }
+  .source p {
+    font-size: 9.5px;
+    color: var(--muted);
+  }
+  .risk {
+    padding-left: 16px;
+    margin: 0;
+  }
+  .risk li {
+    font-size: 9.8px;
+    color: var(--muted);
+    margin: 6px 0;
+  }
+  @media (max-width: 760px) {
+    #groot-low {
+      padding: 14px;
+    }
+    .mast,
+    .head {
+      align-items: start;
+      flex-direction: column;
+    }
+    .stamp {
+      text-align: left;
+    }
+    .grid2,
+    .evidence {
+      grid-template-columns: 1fr;
+    }
+    .footer-strip {
+      grid-template-columns: 1fr 1fr;
+    }
+    .life {
+      flex-direction: column;
+    }
+    .life .arr {
+      transform: rotate(90deg);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #groot-low * {
+      transition: none !important;
+    }
+  }
+</style>
+<div id="groot-low">
+  <header class="mast">
+    <div>
+      <div class="eyebrow">Groot · engineering map</div>
+      <h1>Low-level technical architecture</h1>
+      <p class="sub">
+        Real modules, contracts, transformations, validation points, process boundaries, atomic
+        commits, and evidence tiers. Synthetic identifiers only.
+      </p>
+    </div>
+    <div class="stamp">
+      Source snapshot · 17 Aug 2026<br /><span class="stop">Secrets never cross IPC</span>
+    </div>
+  </header>
+  <nav class="tabs" role="tablist" aria-label="Architecture views">
+    <button role="tab" data-tab="map" aria-selected="true">Module map</button
+    ><button role="tab" data-tab="sequences" aria-selected="false">Security sequences</button
+    ><button role="tab" data-tab="controls" aria-selected="false">
+      Validation & attack surfaces</button
+    ><button role="tab" data-tab="evidence" aria-selected="false">Evidence & provenance</button>
+  </nav>
+  <section class="pane active" data-pane="map">
+    <div class="head">
+      <div>
+        <h2>How to read the module map</h2>
+        <p class="hint">
+          Left → right is dependency direction. Red edge = secret-sensitive; amber edge = atomic
+          persistence boundary.
+        </p>
+      </div>
+      <div>
+        <div class="legend">
+          <span class="l-ui">UI</span><span class="l-port">contract</span
+          ><span class="l-rust">trusted Rust</span><span class="l-data">data</span
+          ><span class="l-ext">external</span>
+        </div>
+        <div class="zoom">
+          <button data-zoom="out">−</button> <button data-zoom="reset">100%</button>
+          <button data-zoom="in">＋</button>
+        </div>
+      </div>
+    </div>
+    <div class="arch-shell">
+      <div class="arch">
+        <article class="lane ui">
+          <div class="lane-title">
+            <h3>Svelte presentation</h3>
+            <span>webview</span>
+          </div>
+          <div class="mod">
+            <b><code>src/routes/*</code></b
+            ><small>route orchestration + transient form/modal/error state</small>
+            <div class="route-list">
+              <code>+page</code><code>unlock</code><code>receive</code><code>send</code
+              ><code>activity</code><code>coins</code><code>settings</code><code>hardware/new</code
+              ><code>multisig/*</code>
+            </div>
+          </div>
+          <div class="mod">
+            <b><code>AppShell.svelte</code></b
+            ><small>selected profile, keyed remount, one 10s foreground sync scheduler</small>
+          </div>
+          <div class="mod">
+            <b><code>components/*</code></b
+            ><small>review, signer list, address verification, progress, modals, identifiers</small>
+          </div>
+          <div class="mod">
+            <b><code>stores/toasts.ts</code></b
+            ><small>process-wide presentation only; not durable truth</small>
+          </div>
+          <div class="mod">
+            <b>Latest health cache</b
+            ><small
+              >replace-on-load mirror for two mounted consumers; Rust remains authoritative</small
+            >
+          </div>
+        </article>
+        <article class="lane port">
+          <div class="lane-title">
+            <h3>Frontend wallet boundary</h3>
+            <span>typed DTO</span>
+          </div>
+          <div class="mod boundary">
+            <b><code>contracts/port.ts</code></b
+            ><small
+              >Profiles · Network · Snapshot · Transactions · Hardware · Multisig · File ·
+              Events</small
+            >
+          </div>
+          <div class="mod">
+            <b><code>runtime.ts</code></b
+            ><small>profile, node, sync, scan, event DTOs</small>
+          </div>
+          <div class="mod">
+            <b><code>transactions.ts</code></b
+            ><small>branded Sats / FeeRate, proposal review, selection impact</small>
+          </div>
+          <div class="mod">
+            <b><code>errors.ts</code></b
+            ><small>stable union; unknown native code normalizes to internal_error</small>
+          </div>
+          <div class="mod">
+            <b><code>index.ts</code></b
+            ><small>TauriWalletAdapter ↔ DummyWalletAdapter at composition root</small>
+          </div>
+          <div class="mod boundary">
+            <b><code>tauri.ts → invoke()</code></b
+            ><small
+              >camelCase JSON args/results; timestamp normalization; notification paging</small
+            >
+          </div>
+        </article>
+        <article class="lane command">
+          <div class="lane-title">
+            <h3>Tauri command surface</h3>
+            <span>trusted entry</span>
+          </div>
+          <div class="mod hot">
+            <b><code>profile_commands.rs</code></b
+            ><small>create/recover/unlock/profile/snapshot/sync/address/node/rescan</small>
+          </div>
+          <div class="mod">
+            <b><code>transaction_commands.rs</code></b
+            ><small>tx_prepare · acceleration_prepare · sign_and_broadcast</small>
+          </div>
+          <div class="mod">
+            <b><code>hardware_commands.rs</code></b
+            ><small
+              >allowlisted discovery · exact signer checks · address/policy verify · HWI sign</small
+            >
+          </div>
+          <div class="mod">
+            <b><code>multisig_setup_commands.rs</code></b
+            ><small>draft · preview · backup/recovery · addresses · snapshot</small>
+          </div>
+          <div class="mod">
+            <b><code>multisig_proposal_commands.rs</code></b
+            ><small>prepare · import · discard signature · hardware sign · broadcast</small>
+          </div>
+          <div class="mod">
+            <b><code>wallet.rs</code></b
+            ><small>shared authenticated persistence and transaction invariants</small>
+          </div>
+        </article>
+        <article class="lane domain">
+          <div class="lane-title">
+            <h3>Domain & persistence</h3>
+            <span>Rust only</span>
+          </div>
+          <div class="mod hot">
+            <b><code>secure_store.rs · auth.rs · session.rs</code></b
+            ><small
+              >Argon2id, AES-GCM envelope, device key, throttling, wallet-scoped monotonic
+              expiry</small
+            >
+          </div>
+          <div class="mod">
+            <b><code>proposal.rs</code></b
+            ><small
+              >bounded PSBT decode, exact unsigned tx/metadata checks, SIGHASH_ALL verification,
+              signature projection/merge</small
+            >
+          </div>
+          <div class="mod">
+            <b><code>multisig.rs · external_signer.rs</code></b
+            ><small>BIP48 sortedmulti / BIP84 public descriptor compilers</small>
+          </div>
+          <div class="mod">
+            <b><code>label_provenance.rs · privacy_selection.rs</code></b
+            ><small>immutable assignments, provenance graph, privacy-aware selection</small>
+          </div>
+          <div class="mod atomic">
+            <b><code>Wallet + rusqlite</code></b
+            ><small
+              >BDK changesets, addresses, labels, coins, proposals, scans, notices in UUID
+              SQLite</small
+            >
+          </div>
+          <div class="mod">
+            <b><code>registry.rs · process_lock.rs</code></b
+            ><small
+              >atomic registry, selected profile, network identity, process-lifetime app-data
+              lock</small
+            >
+          </div>
+        </article>
+        <article class="lane edge">
+          <div class="lane-title">
+            <h3>Platform & network</h3>
+            <span>external trust</span>
+          </div>
+          <div class="mod hot">
+            <b><code>native_backup/*</code></b
+            ><small
+              >OS privacy gate, generated-word display, exact-order challenge, recovery entry</small
+            >
+          </div>
+          <div class="mod">
+            <b><code>hardware.rs → HWI</code></b
+            ><small>canonical executable, cleared env, bounded args/stdout/timeouts/stdin</small>
+          </div>
+          <div class="mod">
+            <b>Physical signer</b
+            ><small>fingerprint/path/xpub identity; device screen review; vendor limitations</small>
+          </div>
+          <div class="mod">
+            <b><code>network.rs · direct_rpc.rs · tor_rpc.rs</code></b
+            ><small
+              >validated Core route, no redirects/fallback, exact chain, bounded HTTPS/SOCKS</small
+            >
+          </div>
+          <div class="mod">
+            <b><code>compact_filters.rs</code></b
+            ><small>bdk_kyoto confirmed discovery; explicit peers/proxy; staged atomic apply</small>
+          </div>
+          <div class="mod">
+            <b><code>bsms.rs · ur_transport.rs · airgap.rs</code></b
+            ><small>bounded public descriptors, crypto-psbt UR, native file paths</small>
+          </div>
+        </article>
+      </div>
+      <div class="footer-strip">
+        <div class="foot">
+          <b>Descriptor paths</b>
+          <p>
+            BIP84 test account <code>m/84'/1'/0'</code><br />BIP48 WSH test account
+            <code>m/48'/1'/0'/2'</code>
+          </p>
+        </div>
+        <div class="foot">
+          <b>Secret lifetime</b>
+          <p>
+            Credential command arg → Zeroizing Rust value → authenticate/derive/use → clear on
+            return/lock/expiry.
+          </p>
+        </div>
+        <div class="foot">
+          <b>Review truth</b>
+          <p>
+            Recipient, amount, inputs, change, fee, locktime, RBF and paths derive from actual
+            persisted PSBT.
+          </p>
+        </div>
+        <div class="foot">
+          <b>Atomic unit</b>
+          <p>
+            SQLite transaction combines BDK state with Groot metadata; recovery scans checkpoint per
+            block.
+          </p>
+        </div>
+        <div class="foot">
+          <b>Network identity</b>
+          <p>
+            Compile-time Regtest / Signet / Testnet4. Mainnet selection absent and runtime gate
+            false.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+  <section class="pane" data-pane="sequences">
+    <div class="head">
+      <div>
+        <h2>Security-sensitive sequences</h2>
+        <p class="hint">
+          Choose a flow. Each row names the owning process and the fail-closed point.
+        </p>
+      </div>
+      <div class="legend">
+        <span class="l-ui">webview</span><span class="l-port">IPC</span
+        ><span class="l-rust">Rust</span><span class="l-ext">external</span>
+      </div>
+    </div>
+    <div class="seq-pick" role="group">
+      <button data-seq="unlock" aria-pressed="true">1 Unlock</button
+      ><button data-seq="receive" aria-pressed="false">2 Receive + verify</button
+      ><button data-seq="createpsbt" aria-pressed="false">3 Multisig create + sign</button
+      ><button data-seq="merge" aria-pressed="false">4 Signed PSBT merge</button
+      ><button data-seq="broadcast" aria-pressed="false">5 Broadcast + sync</button
+      ><button data-seq="recovery" aria-pressed="false">6 Backup + clean recovery</button>
+    </div>
+    <div class="seq-frame">
+      <div class="seq-title"></div>
+      <div class="seq"></div>
+      <div class="atom-note"></div>
+    </div>
+  </section>
+  <section class="pane" data-pane="controls">
+    <div class="grid2">
+      <article class="card">
+        <h2>Secret lifecycle</h2>
+        <div class="life">
+          <div class="box">
+            <b>1 · UI field</b>
+            <p>
+              Credential exists transiently in mounted route; clears after use. Mnemonic is absent
+              from production webview.
+            </p>
+          </div>
+          <div class="arr">→</div>
+          <div class="box">
+            <b>2 · Tauri command</b>
+            <p>Bounded string crosses IPC for credential only; no payload logging.</p>
+          </div>
+          <div class="arr">→</div>
+          <div class="box">
+            <b>3 · Rust</b>
+            <p>
+              Zeroizing buffers authenticate envelope, derive seed/descriptors, or authorize action.
+            </p>
+          </div>
+          <div class="arr">→</div>
+          <div class="box">
+            <b>4 · Cleanup</b>
+            <p>
+              Credential/seed buffers zeroize; bounded public descriptor binding may remain in
+              unlocked session.
+            </p>
+          </div>
+        </div>
+        <div class="never">
+          Mnemonic · seed · xpriv · private descriptor · decrypted signing material → NEVER to
+          webview, analytics, logs, clipboard, or notifications.
+        </div>
+        <h2 style="margin-top: 15px">Attack surfaces & stated controls</h2>
+        <div class="attack">
+          <b>Webview / IPC</b>
+          <p>
+            Public DTO allowlist, stable errors, deny-by-default CSP, boundary scripts. Credential
+            necessarily crosses IPC; mnemonic does not.
+          </p>
+        </div>
+        <div class="attack">
+          <b>HWI process</b>
+          <p>
+            Absolute reviewed path, public-network Unix provenance checks, cleared environment,
+            exact args/path/fingerprint, bounded output and time. Vendor/device UI remains external
+            trust.
+          </p>
+        </div>
+        <div class="attack">
+          <b>Filesystem</b>
+          <p>
+            Owner-only files, symlink/type checks, process lock, UUID isolation, atomic
+            rename/transactions. No secure-erasure claim.
+          </p>
+        </div>
+        <div class="attack">
+          <b>Core / Tor</b>
+          <p>
+            Exact route + credentials binding, chain check, HTTPS/no redirects, explicit numeric
+            loopback SOCKS, bounded framing. Endpoint availability/privacy is user/external trust.
+          </p>
+        </div>
+        <div class="attack">
+          <b>Compact filters</b>
+          <p>
+            Peer diversity/manual numeric restrictions and atomic apply. Confirmed-only; adversarial
+            peer and durable cache work remain gated.
+          </p>
+        </div>
+      </article>
+      <article class="card">
+        <h2>PSBT acceptance matrix</h2>
+        <table class="matrix">
+          <thead>
+            <tr>
+              <th>Input</th>
+              <th>Validation</th>
+              <th>Outcome</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Exact reviewed PSBT + new allowed signatures</td>
+              <td>
+                Transaction identity, input count, origins, SIGHASH_ALL, ECDSA per real input
+                sighash
+              </td>
+              <td class="ok">Merge atomically</td>
+            </tr>
+            <tr>
+              <td>Duplicate signature</td>
+              <td>No increase in complete signer progress</td>
+              <td class="stop">no_new_signatures</td>
+            </tr>
+            <tr>
+              <td>Foreign signer / injected origin</td>
+              <td>Fingerprint not in authenticated policy</td>
+              <td class="stop">unknown_signer</td>
+            </tr>
+            <tr>
+              <td>Mutated unsigned transaction</td>
+              <td>Exact persisted proposal mismatch</td>
+              <td class="stop">proposal_mismatch</td>
+            </tr>
+            <tr>
+              <td>Conflicting prevout / fee metadata</td>
+              <td>Imported PSBT metadata mismatch</td>
+              <td class="stop">proposal_mismatch</td>
+            </tr>
+            <tr>
+              <td>Vendor-normalized HWI response</td>
+              <td>Discard returned metadata; project signatures onto untouched canonical PSBT</td>
+              <td class="ok">Accept valid sigs only</td>
+            </tr>
+            <tr>
+              <td>Wrong device/path</td>
+              <td>Recent scan cache + saved device type + exact fingerprint/xpub</td>
+              <td class="stop">hardware mismatch</td>
+            </tr>
+            <tr>
+              <td>Premature finalization / non-ALL sighash</td>
+              <td>Final script or unsupported sighash present</td>
+              <td class="stop">Fail closed</td>
+            </tr>
+          </tbody>
+        </table>
+        <h2 style="margin-top: 15px">Address state machine</h2>
+        <table class="matrix">
+          <tbody>
+            <tr>
+              <td><b>Create</b></td>
+              <td>
+                normalize unique permanent label → prove gap discoverability → reveal BDK external
+                index → commit both
+              </td>
+            </tr>
+            <tr>
+              <td><b>Verify</b></td>
+              <td>
+                exact saved signer/device → HWI display → decode and compare script/address → append
+                evidence
+              </td>
+            </tr>
+            <tr>
+              <td><b>Await</b></td>
+              <td>multiple requests coexist; each index monitored by BDK</td>
+            </tr>
+            <tr>
+              <td><b>Retire</b></td>
+              <td>
+                only awaiting + no observed transaction → hide from presentation, never stop
+                monitoring
+              </td>
+            </tr>
+            <tr>
+              <td><b>Observed</b></td>
+              <td>
+                cannot discard; incoming output inherits permanent assignment/provenance atomically
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </article>
+    </div>
+  </section>
+  <section class="pane" data-pane="evidence">
+    <div class="evidence">
+      <article class="card">
+        <h2>Evidence ladder</h2>
+        <div class="tier">
+          <i>1</i>
+          <p><b>Browser fixture</b> — deterministic UI behavior, never production wallet proof.</p>
+        </div>
+        <div class="tier">
+          <i>2</i>
+          <p><b>Frontend unit/component</b> — contracts and presentation policy.</p>
+        </div>
+        <div class="tier">
+          <i>3</i>
+          <p><b>Rust unit/integration</b> — parsers, policy, persistence, adversarial inputs.</p>
+        </div>
+        <div class="tier">
+          <i>4</i>
+          <p>
+            <b>Real Core Regtest</b> — disposable isolated sync, transaction, multisig, recovery.
+          </p>
+        </div>
+        <div class="tier">
+          <i>5</i>
+          <p><b>Physical exact-device</b> — model/firmware/transport worksheet; no inheritance.</p>
+        </div>
+        <div class="tier">
+          <i>6</i>
+          <p><b>Public-network rehearsal</b> — Signet then Testnet4.</p>
+        </div>
+        <div class="tier">
+          <i>7</i>
+          <p>
+            <b>Packaged candidate + independent review</b> — signature, update, recovery,
+            reproducibility.
+          </p>
+        </div>
+        <p class="hint">No tier implies the next. Mainnet remains blocked.</p>
+      </article>
+      <article class="card">
+        <h2>Primary source map</h2>
+        <div class="source">
+          <b>Product & trust</b>
+          <p>
+            <code>AGENTS.md</code>, <code>docs/product-spec.md</code>,
+            <code>docs/architecture.md</code>, ADR 0001/0002/0011/0012/0028
+          </p>
+        </div>
+        <div class="source">
+          <b>Frontend contracts</b>
+          <p>
+            <code>src/lib/wallet/contracts/*</code>, <code>index.ts</code>, <code>tauri.ts</code>,
+            <code>AppShell.svelte</code>
+          </p>
+        </div>
+        <div class="source">
+          <b>Commands & persistence</b>
+          <p>
+            <code>src-tauri/src/lib.rs</code>, <code>wallet.rs</code>,
+            <code>wallet/*_commands.rs</code>, <code>registry.rs</code>
+          </p>
+        </div>
+        <div class="source">
+          <b>Secrets & sessions</b>
+          <p>
+            <code>secure_store.rs</code>, <code>auth.rs</code>, <code>session.rs</code>,
+            <code>native_backup/*</code>
+          </p>
+        </div>
+        <div class="source">
+          <b>Transactions & signers</b>
+          <p>
+            <code>proposal.rs</code>, <code>multisig.rs</code>, <code>external_signer.rs</code>,
+            <code>hardware.rs</code>
+          </p>
+        </div>
+        <div class="source">
+          <b>Network & release</b>
+          <p>
+            <code>network.rs</code>, <code>direct_rpc.rs</code>, <code>tor_rpc.rs</code>,
+            <code>compact_filters.rs</code>, <code>release_policy.rs</code>
+          </p>
+        </div>
+        <div class="source">
+          <b>Evidence</b>
+          <p>
+            <code>docs/implementation-status.md</code>, <code>docs/agent-harness.md</code>, ADR
+            0007/0014/0016/0032/0033
+          </p>
+        </div>
+      </article>
+      <article class="card">
+        <h2>Unresolved / partial</h2>
+        <ul class="risk">
+          <li>
+            Desktop Rust/Tauri Regtest is the functional center; mobile native secret surfaces and
+            platform certification remain incomplete.
+          </li>
+          <li>
+            Non-Apple secure-store provider intentionally fails closed on public networks;
+            Android/Linux/Windows production storage is not claimed.
+          </li>
+          <li>
+            Generic single-key send retains persisted proposal state but offers no UI selector after
+            restart.
+          </li>
+          <li>
+            Compact-filter headers/filters are memory-only in the pinned engine; recovery and P2P
+            broadcast remain gated.
+          </li>
+          <li>
+            Payjoin V2 stops at bounded URI parsing; transport/session/re-review/fallback work is
+            absent.
+          </li>
+          <li>
+            Guided delayed-path satisfaction and decaying/expanding policies are preview/gated.
+          </li>
+          <li>
+            Package signing, notarization, update inputs, reproducibility and lifecycle acceptance
+            are not complete release evidence.
+          </li>
+          <li>Mainnet is compile-time disabled; dormant code is not enabled-path proof.</li>
+        </ul>
+      </article>
+    </div>
+  </section>
+</div>
+<script>
+  (() => {
+    const root = document.getElementById('groot-low');
+    root.querySelectorAll('[data-tab]').forEach((b) =>
+      b.addEventListener('click', () => {
+        root
+          .querySelectorAll('[data-tab]')
+          .forEach((x) => x.setAttribute('aria-selected', String(x === b)));
+        root
+          .querySelectorAll('[data-pane]')
+          .forEach((p) => p.classList.toggle('active', p.dataset.pane === b.dataset.tab));
+      })
+    );
+    let zoom = 1;
+    root.querySelectorAll('[data-zoom]').forEach((b) =>
+      b.addEventListener('click', () => {
+        zoom =
+          b.dataset.zoom === 'in'
+            ? Math.min(1.3, zoom + 0.1)
+            : b.dataset.zoom === 'out'
+              ? Math.max(0.75, zoom - 0.1)
+              : 1;
+        root.querySelector('.arch').style.transform = `scale(${zoom})`;
+        root.querySelector('[data-zoom=reset]').textContent = Math.round(zoom * 100) + '%';
+      })
+    );
+    const actors = ['Webview', 'Tauri IPC', 'Trusted Rust', 'Persistence / external'];
+    const data = {
+      unlock: {
+        title: '1 · Unlock and secret handling',
+        desc: 'Credential crosses IPC once; mnemonic and seed remain Rust-only.',
+        atomic:
+          'Session authorization is wallet-scoped. Lock, idle expiry, delete or reset erases the selected wallet binding and in-memory RPC credentials.',
+        steps: [
+          ['Submit bounded credential', '', 'command wallet_unlock', ''],
+          [
+            '',
+            'serialize string',
+            'Zeroizing credential; throttle check',
+            'persisted auth counters / retry deadline'
+          ],
+          [
+            '',
+            '',
+            'decrypt device+credential wrapped envelope',
+            'Keychain / Regtest-only device key'
+          ],
+          [
+            '',
+            '',
+            'BIP39 seed → BIP84 external/change public descriptors',
+            'secret buffers zeroize'
+          ],
+          [
+            '',
+            '',
+            'compare both descriptors with registry + DB identity',
+            'fail: invalid_credential / wallet_corrupt'
+          ],
+          [
+            '',
+            'unit success',
+            'store bounded public descriptor binding in wallet session',
+            'monotonic inactivity deadline'
+          ]
+        ]
+      },
+      receive: {
+        title: '2 · Receive-address generation and hardware verification',
+        desc: 'Address revelation and permanent label are one transaction; hardware verification is an additional exact-device proof.',
+        atomic:
+          'SQLite commits the revealed index + immutable label + awaiting marker together. Discard only retires presentation; BDK monitoring continues.',
+        steps: [
+          ['Enter permanent label', '', '', ''],
+          ['', 'address_create(label)', 'normalize; reject empty/reused label', ''],
+          [
+            '',
+            '',
+            'prove next index remains inside recovery gap',
+            'fail: address_gap_limit_reached'
+          ],
+          ['', '', 'BDK reveal external address', 'SQLite transaction'],
+          ['Choose Verify', '', 'derive expected public address/script', ''],
+          [
+            '',
+            'hardware_verify_*',
+            'match saved type/path/fingerprint; HWI display',
+            'physical device review'
+          ],
+          [
+            '',
+            '',
+            'decode returned address and exact compare',
+            'append verification evidence or mismatch'
+          ]
+        ]
+      },
+      createpsbt: {
+        title: '3 · Multisig PSBT creation and hardware signing',
+        desc: 'BIP48 policy identity is authenticated before BDK constructs the proposal; review comes from that PSBT.',
+        atomic:
+          'BDK change derivation + proposal + label/provenance + optional acceleration lineage commit before review returns.',
+        steps: [
+          ['Intent: label, recipient, sats, sat/vB', '', '', ''],
+          [
+            '',
+            'multisig_tx_prepare',
+            'validate policy, network, integer amounts, coin eligibility',
+            ''
+          ],
+          ['', '', 'BDK builder + PSBT_GLOBAL_XPUB', "BIP48 m/48'/1'/0'/2'"],
+          [
+            '',
+            '',
+            'derive canonical review from PSBT',
+            'persist proposal + BDK changes atomically'
+          ],
+          ['Choose signer', '', 'exact saved signer/type', 'type-scoped HWI enumerate'],
+          [
+            '',
+            'hardware_sign_multisig',
+            'recent exact path/fingerprint; bounded HWI request',
+            'physical device reviews transaction'
+          ],
+          [
+            '',
+            '',
+            'project returned partial signatures only',
+            'canonical PSBT remains untouched until valid'
+          ]
+        ]
+      },
+      merge: {
+        title: '4 · Signed-PSBT validation and merge',
+        desc: 'USB, file, text and UR converge on Rust validation; direct hardware responses use a narrower signature-only projection.',
+        atomic:
+          'A rejected payload never mutates proposal state. Successful signature merge and proposal progress update persist together.',
+        steps: [
+          ['Select file / scan bounded UR', '', '', 'public PSBT transport'],
+          ['', 'multisig_proposal_import', 'decode ≤ 1 MiB; exact proposal revision', ''],
+          [
+            '',
+            '',
+            'compare unsigned tx, inputs, fee-source metadata',
+            'reject foreign/mutated/finalized'
+          ],
+          [
+            '',
+            '',
+            'validate origins + allowed fingerprints + SIGHASH_ALL',
+            'reject wrong signer / injected key'
+          ],
+          [
+            '',
+            '',
+            'ECDSA verify each partial sig against real input sighash',
+            'reject invalid / duplicate'
+          ],
+          ['', '', 'merge only new signatures; recompute threshold', 'SQLite proposal update'],
+          ['', 'typed proposal DTO', 'collecting or ready', 'no rejected PSBT retained in UI state']
+        ]
+      },
+      broadcast: {
+        title: '5 · Broadcast and post-broadcast synchronization',
+        desc: 'Broadcast success is distinct from best-effort follow-up sync; exact signed transaction is persisted locally first.',
+        atomic:
+          'Signed tx + BDK unconfirmed state + proposal broadcast status + intent binding + replacement lineage + notification commit in one SQLite transaction.',
+        steps: [
+          ['Re-review + credential', '', '', ''],
+          [
+            '',
+            '*_proposal_broadcast',
+            'verify credential, proposal revision, threshold/finalization',
+            ''
+          ],
+          [
+            '',
+            '',
+            'revalidate intent/output ownership + exact compiled chain',
+            'fail closed before network'
+          ],
+          ['', '', 'sendrawtransaction expected txid', 'Bitcoin Core exact-chain RPC'],
+          ['', '', 'idempotent already-known accepted', ''],
+          [
+            '',
+            '',
+            'apply signed tx locally + atomic commit',
+            'SQLite authoritative pending snapshot'
+          ],
+          [
+            '',
+            'BroadcastResult',
+            'best-effort selected-wallet sync',
+            'syncPending=true if follow-up fails'
+          ]
+        ]
+      },
+      recovery: {
+        title: '6 · Backup export and clean-profile recovery',
+        desc: 'Software recovery words stay in a native sheet; multisig/hardware backups are bounded public descriptor records.',
+        atomic:
+          'Recovery creates a new isolated UUID profile only after descriptor/network validation. Long scans checkpoint each applied block with guarded run ID.',
+        steps: [
+          ['Authorize export', '', 'fresh credential check', ''],
+          [
+            '',
+            'multisig_export / native save',
+            'compile public descriptor/BSMS; reject private material',
+            'user-mediated file / print'
+          ],
+          [
+            'Clean profile: choose recover',
+            '',
+            'native recovery sheet',
+            '24 words entered outside webview'
+          ],
+          [
+            'Name + original passphrase',
+            'wallet_recover(name, credential)',
+            'native words transfer directly to Rust',
+            'native field cleared'
+          ],
+          [
+            '',
+            '',
+            'BIP39 seed → descriptors; identity/network validation',
+            'encrypted envelope + UUID SQLite + registry'
+          ],
+          ['Set birthday + gap', '', 'bounded settings + fresh auth', ''],
+          [
+            '',
+            'wallet_full_rescan',
+            'blocking worker; one run per wallet',
+            'Core blocks; per-block checkpoint'
+          ],
+          [
+            '',
+            'progress DTO',
+            'cancel/interruption never claims completion',
+            'retry starts authoritative pass'
+          ]
+        ]
+      }
+    };
+    function render(name) {
+      root
+        .querySelectorAll('[data-seq]')
+        .forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.seq === name)));
+      const s = data[name];
+      root.querySelector('.seq-title').innerHTML = `<h2>${s.title}</h2><p>${s.desc}</p>`;
+      let html =
+        '<div class="actors"><div></div>' +
+        actors
+          .map(
+            (a, i) =>
+              `<div class="actor" style="--c:${['var(--red)', 'var(--blue)', 'var(--green)', 'var(--violet)'][i]}">${a}</div>`
+          )
+          .join('') +
+        '</div>';
+      s.steps.forEach((row, i) => {
+        html +=
+          `<div class="step"><div class="step-num"><i>${i + 1}</i></div>` +
+          row
+            .map(
+              (v, j) =>
+                `<div class="cell ${v ? (j === 2 ? (v.includes('reject') || v.includes('fail') ? 'reject' : v.includes('valid') || v.includes('compare') || v.includes('verify') ? 'validate' : 'action') : j === 3 && /secret|Keychain|words|device key/.test(v) ? 'secret' : 'action') : ''}">${v}</div>`
+            )
+            .join('') +
+          '</div>';
+      });
+      root.querySelector('.seq').innerHTML = html;
+      root.querySelector('.atom-note').innerHTML = '<b>Persistence boundary:</b> ' + s.atomic;
+    }
+    root
+      .querySelectorAll('[data-seq]')
+      .forEach((b) => b.addEventListener('click', () => render(b.dataset.seq)));
+    render('unlock');
+  })();
+</script>
