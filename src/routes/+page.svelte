@@ -20,7 +20,7 @@
   import TxDetailsModal from '$lib/components/TxDetailsModal.svelte';
   import DeviceDetailsModal from '$lib/components/DeviceDetailsModal.svelte';
   import Amount from '$lib/components/Amount.svelte';
-  import { amountUnit, denomination, formatAmount } from '$lib/denomination';
+  import { amountUnit, denomination, formatAmount, setDenomination } from '$lib/denomination';
   import { toast } from '$lib/stores/toasts';
   import {
     walletService,
@@ -456,9 +456,15 @@
           >{#if $discreetMode}<Eye size={17} />{:else}<EyeOff size={17} />{/if}</button
         >
       </div>
-      <div class="balance-value">
+      <button
+        class="balance-value"
+        type="button"
+        aria-label={$denomination === 'btc' ? 'Show balance in sats' : 'Show balance in BTC'}
+        title={$denomination === 'btc' ? 'Show balance in sats' : 'Show balance in BTC'}
+        onclick={() => setDenomination($denomination === 'btc' ? 'sats' : 'btc')}
+      >
         <Amount value={snapshot?.balance.total ?? 0} hidden={$discreetMode} />
-      </div>
+      </button>
       <div class="balance-fiat" aria-live="polite">
         {#if $discreetMode}
           <span>Fiat estimate hidden</span>

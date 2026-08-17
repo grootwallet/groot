@@ -874,9 +874,32 @@ test('amount denomination stays consistent across wallet surfaces', async ({ pag
     'aria-pressed',
     'true'
   );
+  await page.goto('/');
+  const balanceToggle = page.getByRole('button', { name: 'Show balance in sats' });
+  await expect(balanceToggle).toContainText('0.02481240 BTC');
+  await balanceToggle.press('Enter');
+  await expect(page.getByRole('button', { name: 'Show balance in BTC' })).toContainText(
+    '2,481,240 sats'
+  );
+  await page.getByRole('button', { name: 'Show balance in BTC' }).click();
+  await expect(page.getByRole('button', { name: 'Show balance in sats' })).toContainText(
+    '0.02481240 BTC'
+  );
   await page.goto('/coins');
   await expect(page.locator('.stat-pill .formatted-amount')).toContainText('0.02481240 BTC');
   await expect(page.locator('.stat-pill .amount-quiet')).toHaveText('0.0');
+  const bitcoinParts = page.locator('.stat-pill .formatted-amount');
+  expect(
+    await bitcoinParts.evaluate((amount) => {
+      const quiet = amount.querySelector<HTMLElement>('.amount-quiet');
+      const strong = amount.querySelector<HTMLElement>('strong');
+      if (!quiet || !strong) return false;
+      return (
+        getComputedStyle(quiet).fontSize === getComputedStyle(strong).fontSize &&
+        Math.abs(quiet.getBoundingClientRect().right - strong.getBoundingClientRect().left) < 0.5
+      );
+    })
+  ).toBe(true);
   await page.reload();
   await expect(page.locator('.stat-pill .formatted-amount')).toContainText('0.02481240 BTC');
 });
