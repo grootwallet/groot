@@ -1025,6 +1025,27 @@ mod tests {
     }
 
     #[test]
+    fn rejects_non_witness_fee_source_mutation_without_mutating_original() {
+        let (mut original, signers) = proposal();
+        let allowed = allowed_fingerprints(&signers);
+        original.inputs[0].non_witness_utxo = Some(unsigned_tx(7));
+        let mut imported = original.clone();
+        imported.inputs[0]
+            .non_witness_utxo
+            .as_mut()
+            .unwrap()
+            .version = transaction::Version::ONE;
+        sign_all_inputs(&mut imported, &signers[0]);
+
+        assert_merge_rejected_without_mutation(
+            &mut original,
+            imported,
+            &allowed,
+            ProposalError::ProposalMismatch,
+        );
+    }
+
+    #[test]
     fn ignores_vendor_declared_sighash_all_when_the_reviewed_psbt_has_none() {
         let (mut original, signers) = proposal();
         let allowed = allowed_fingerprints(&signers);
