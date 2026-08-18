@@ -2,6 +2,8 @@
 
 This roadmap is ordered by security dependency, not marketing priority. A phase is complete only when its unit, integration, regtest, responsive UI, backup, and failure-path checks pass.
 
+Commercial packaging and the issue-level sequence are tracked separately in [`commercial-product-strategy.md`](commercial-product-strategy.md) and [`product-backlog.md`](product-backlog.md). The proposed first post-release add-on is the test-network-first, end-to-end encrypted coordination path in [`remote-signer-coordination-roadmap.md`](remote-signer-coordination-roadmap.md). Family, inheritance, cosigner, and insurance direction is bounded by [`recovery-assurance-roadmap.md`](recovery-assurance-roadmap.md). None of those documents weakens the release gates below.
+
 ## Current checkpoint
 
 The regtest app now has labeled receive addresses with enlarged QR and optional derivation detail, persisted coin freeze/unfreeze, automatic or exact-input sends, recommended 2-of-3 and 3-of-5 creation plus safe advanced M-of-N controls, and real Rust-compiled delayed recovery/inheritance descriptor creation. The remaining gates below are ordered; unchecked work must not be presented as production-ready.
