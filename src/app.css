@@ -1951,6 +1951,9 @@ code {
   font-size: 11px;
   line-height: 1.55;
 }
+.verify-backup-warning {
+  margin-bottom: 16px;
+}
 .warning-box.danger {
   border-color: rgba(239, 100, 100, 0.25);
   background: rgba(239, 100, 100, 0.06);

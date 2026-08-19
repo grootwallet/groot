@@ -266,37 +266,39 @@
     {:else if mode === 'choose'}
       <button class="back-link" onclick={() => (mode = 'home')}><ArrowLeft size={16} />Back</button>
       <span class="setup-step wallet-choice-step">WALLET SETUP</span>
-      <h1>How should this wallet be protected?</h1>
-      <p>Choose the setup that fits you. You can add another wallet later.</p>
+      <h1>Choose how to protect your bitcoin</h1>
+      <p>
+        Start simply, use a separate device, or share control. You can add another wallet later.
+      </p>
       <div class="wallet-type-grid">
         <button class="wallet-type-card recommended" onclick={() => (mode = 'create')}>
           <span class="wallet-type-icon"><KeyRound size={20} /></span>
           <span class="wallet-type-copy"
-            ><strong>Use this device</strong><small
-              >Groot creates the wallet and its recovery words here.</small
+            ><strong>Keep it on this device</strong><small
+              >The easiest way to start. Groot creates recovery words for you to write down.</small
             ></span
           >
-          <span class="wallet-type-meta">Simplest</span>
+          <span class="wallet-type-meta">Recommended</span>
           <ArrowRight class="wallet-type-arrow" size={17} />
         </button>
         <a class="wallet-type-card" href="/hardware/new">
           <span class="wallet-type-icon"><Cpu size={20} /></span>
           <span class="wallet-type-copy"
-            ><strong>Add a hardware wallet</strong><small
-              >Connect or import an existing signing device.</small
+            ><strong>Use a hardware wallet</strong><small
+              >Connect one you already own. Your keys stay protected by that device.</small
             ></span
           >
-          <span class="wallet-type-meta">Separate device</span>
+          <span class="wallet-type-meta">Extra protection</span>
           <ArrowRight class="wallet-type-arrow" size={17} />
         </a>
         <a class="wallet-type-card" href="/multisig/new">
           <span class="wallet-type-icon"><Users size={20} /></span>
           <span class="wallet-type-copy"
-            ><strong>Use multiple keys</strong><small
-              >Share control or build in a recovery path.</small
+            ><strong>Set up shared control</strong><small
+              >Require more than one key, or add another way to recover your wallet.</small
             ></span
           >
-          <span class="wallet-type-meta">More control</span>
+          <span class="wallet-type-meta">Advanced</span>
           <ArrowRight class="wallet-type-arrow" size={17} />
         </a>
       </div>

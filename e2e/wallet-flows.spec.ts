@@ -29,7 +29,7 @@ async function confirmGeneratedBackup(page: Page) {
 }
 
 async function chooseSoftwareWallet(page: Page) {
-  await page.getByRole('button', { name: /Use this device/ }).click();
+  await page.getByRole('button', { name: /Keep it on this device/ }).click();
 }
 
 test('creates a 24-word wallet and clears onboarding secrets', async ({ page }) => {
@@ -263,14 +263,14 @@ test('locked wallet can continue into hardware and multisig setup', async ({ pag
 
   await page.goto('/welcome?add=1');
   await page.getByRole('button', { name: 'Add wallet' }).click();
-  await page.getByRole('link', { name: /Add a hardware wallet/ }).click();
+  await page.getByRole('link', { name: /Use a hardware wallet/ }).click();
   await expect(page).toHaveURL(/\/hardware\/new$/);
   await expect(page.getByRole('heading', { name: 'Add hardware wallet' })).toBeVisible();
   await expect(page.locator('.app-shell')).toHaveClass(/onboarding-shell/);
 
   await page.getByRole('link', { name: /Cancel/ }).click();
   await page.getByRole('button', { name: 'Add wallet' }).click();
-  await page.getByRole('link', { name: /Use multiple keys/ }).click();
+  await page.getByRole('link', { name: /Set up shared control/ }).click();
   await expect(page).toHaveURL(/\/multisig\/new$/);
   await expect(page.getByRole('heading', { name: 'Create a multisig wallet' })).toBeVisible();
   await expect(page.locator('.app-shell')).toHaveClass(/onboarding-shell/);
@@ -421,7 +421,7 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   test.setTimeout(60_000);
   await page.goto('/welcome?add=1');
   await page.getByRole('button', { name: 'Add wallet' }).click();
-  await page.getByRole('link', { name: /Add a hardware wallet/ }).click();
+  await page.getByRole('link', { name: /Use a hardware wallet/ }).click();
   await expect(page.getByRole('heading', { name: 'Add hardware wallet' })).toBeVisible();
   await page.getByLabel('Wallet name').fill('Hardware savings');
   await page.getByRole('button', { name: /Connect with cable/ }).click();

@@ -579,7 +579,7 @@
     verifyError = '';
   }}
 >
-  <div class="warning-box">
+  <div class="warning-box verify-backup-warning">
     <strong>Have the written backup in front of you.</strong> Verification confirms its exact word order
     without sending the words into the webview.
   </div>
