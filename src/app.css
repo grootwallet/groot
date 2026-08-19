@@ -1828,7 +1828,10 @@ code {
 
 .modal-layer {
   position: fixed;
-  inset: 0;
+  /* WKWebView lays ordinary content beneath the translucent macOS title bar,
+     while its fixed viewport starts below it. Overdraw that native strip and
+     compensate the top padding so the dialog itself keeps the same position. */
+  inset: -32px 0 0;
   z-index: 100;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -1838,7 +1841,7 @@ code {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 18px;
+  padding: 50px 18px 18px;
 }
 .modal {
   width: min(480px, 100%);
@@ -8359,6 +8362,7 @@ code {
     display: block;
   }
   .modal-layer {
+    inset: 0;
     align-items: flex-end;
     padding: max(10px, env(safe-area-inset-top)) 10px max(10px, env(safe-area-inset-bottom));
   }

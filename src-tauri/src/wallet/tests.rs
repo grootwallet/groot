@@ -297,6 +297,36 @@ fn assert_sanitized_rpc_error(error: ApiError) {
 }
 
 #[test]
+fn rpc_whitelist_rejection_is_actionable_without_exposing_core_details() {
+    let error = rpc_api_error(CoreRpcError::JsonRpc(jsonrpc::Error::Rpc(
+        jsonrpc::error::RpcError {
+            code: -1,
+            message: "RPC User private-user not allowed to call method getnetworkinfo".to_owned(),
+            data: None,
+        },
+    )));
+
+    assert_eq!(error.code, "invalid_node_config");
+    assert_eq!(error.message, RPC_PERMISSION_MESSAGE);
+    for internal_detail in ["private-user", "getnetworkinfo", "JSON-RPC", "code -1"] {
+        assert!(!error.message.contains(internal_detail));
+    }
+}
+
+#[test]
+fn modern_blockchain_info_does_not_require_getnetworkinfo_permission() {
+    let endpoint = serve_one_json(
+        r#"{"result":{"chain":"regtest","blocks":1,"headers":1,"bestblockhash":"0f9188f13cb7b2c71f2a335e3a4fc328bf5beb436012afca590b1a11466e2206","difficulty":1.0,"mediantime":1,"verificationprogress":1.0,"initialblockdownload":false,"chainwork":"00","size_on_disk":1,"pruned":false,"softforks":{},"warnings":[]},"error":null,"id":"groot"}"#,
+    );
+    let client = build_rpc_client(&endpoint, Auth::None, None).unwrap();
+
+    let info = get_blockchain_info(&client).unwrap();
+
+    assert_eq!(info.chain, Network::Regtest);
+    assert_eq!(info.blocks, 1);
+}
+
+#[test]
 fn saved_file_reveal_tokens_are_bounded_expiring_and_single_use() {
     let now = Instant::now();
     let valid_token = Uuid::new_v4().to_string();

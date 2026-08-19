@@ -8,6 +8,14 @@ This runbook produces network-specific desktop builds without enabling mainnet. 
 - Configure a unique RPC username and high-entropy password outside this repository. Do not put credentials in shell history, `.env` files, screenshots, or evidence records.
 - Confirm the node reports the intended chain and preserve the exact Groot commit, Core version, build command, and sanitized timestamps in the evidence record.
 
+If Bitcoin Core uses `rpcwhitelist`, Groot's RPC user must allow the following methods:
+
+```ini
+rpcwhitelist=groot-testnet4:getblockchaininfo,getblockcount,getblockhash,getblock,getrawmempool,getrawtransaction,getmempoolentry,getindexinfo,estimatesmartfee,sendrawtransaction
+```
+
+Use the network-specific username in place of `groot-testnet4` where appropriate. Keep `rpcwhitelistdefault=1` and bind RPC only to the intended interface. Groot deliberately calls the modern typed `getblockchaininfo` response directly instead of adding the dependency's compatibility-only `getnetworkinfo` probe, so the list above remains least privilege. A whitelist rejection becomes a stable permission message; Core's raw RPC response is never displayed.
+
 ## Launch
 
 From the repository root with the pinned Node and Rust toolchains:

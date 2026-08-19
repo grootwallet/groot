@@ -5,7 +5,10 @@ use aes_gcm::{
 use argon2::Argon2;
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use bdk_bitcoind_rpc::{
-    bitcoincore_rpc::{json::EstimateMode, Auth, Client, RpcApi},
+    bitcoincore_rpc::{
+        json::{EstimateMode, GetBlockchainInfoResult},
+        jsonrpc, Auth, Client, Error as CoreRpcError, RpcApi,
+    },
     Emitter,
 };
 use bdk_wallet::{
@@ -395,6 +398,7 @@ pub struct ApiError {
 type ApiResult<T> = Result<T, ApiError>;
 
 const RPC_UNAVAILABLE_MESSAGE: &str = "Could not connect to Bitcoin Core. Check that the node is running and review the RPC address, authentication, and network settings.";
+const RPC_PERMISSION_MESSAGE: &str = "Bitcoin Core accepted the RPC credentials, but this user is missing a required RPC permission. Add Groot's documented RPC methods to the user's rpcwhitelist and restart Bitcoin Core.";
 
 fn api_error(code: &'static str, message: impl ToString) -> ApiError {
     ApiError {
@@ -405,6 +409,25 @@ fn api_error(code: &'static str, message: impl ToString) -> ApiError {
 
 fn rpc_unavailable() -> ApiError {
     api_error("network_unavailable", RPC_UNAVAILABLE_MESSAGE)
+}
+
+fn rpc_api_error(error: CoreRpcError) -> ApiError {
+    match error {
+        CoreRpcError::JsonRpc(jsonrpc::Error::Rpc(response))
+            if response.message.contains("not allowed to call method") =>
+        {
+            api_error("invalid_node_config", RPC_PERMISSION_MESSAGE)
+        }
+        _ => rpc_unavailable(),
+    }
+}
+
+fn get_blockchain_info(client: &Client) -> Result<GetBlockchainInfoResult, CoreRpcError> {
+    // RpcApi::get_blockchain_info performs an extra getnetworkinfo call only
+    // to decode pre-0.19 Core responses. Groot's supported Core versions use
+    // the modern response, so calling the typed RPC directly preserves the
+    // node's least-privilege whitelist.
+    client.call("getblockchaininfo", &[])
 }
 
 fn compact_filter_unavailable() -> ApiError {
@@ -2119,11 +2142,9 @@ fn candidate_rpc_client(config: &CoreNodeConfig, password: &str) -> ApiResult<Cl
 }
 
 fn checked_chain_identity(client: &Client) -> ApiResult<(u64, BlockHash)> {
-    let info = client
-        .get_blockchain_info()
-        .map_err(|_| rpc_unavailable())?;
+    let info = get_blockchain_info(client).map_err(rpc_api_error)?;
     ensure_expected_network(info.chain)?;
-    let observed_genesis = client.get_block_hash(0).map_err(|_| rpc_unavailable())?;
+    let observed_genesis = client.get_block_hash(0).map_err(rpc_api_error)?;
     ensure_expected_genesis(NETWORK, observed_genesis)?;
     Ok((info.blocks, observed_genesis))
 }
@@ -2133,11 +2154,9 @@ fn checked_block_height(client: &Client) -> ApiResult<u64> {
 }
 
 fn checked_node_status(client: &Client, backend: CoreNodeConfig) -> ApiResult<NodeStatusDto> {
-    let info = client
-        .get_blockchain_info()
-        .map_err(|_| rpc_unavailable())?;
+    let info = get_blockchain_info(client).map_err(rpc_api_error)?;
     ensure_expected_network(info.chain)?;
-    let observed_genesis = client.get_block_hash(0).map_err(|_| rpc_unavailable())?;
+    let observed_genesis = client.get_block_hash(0).map_err(rpc_api_error)?;
     ensure_expected_genesis(NETWORK, observed_genesis)?;
     let block_filter_index = match client.get_index_info() {
         Ok(indexes) => indexes
