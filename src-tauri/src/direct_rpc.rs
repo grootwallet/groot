@@ -4,7 +4,7 @@ use serde::{de::DeserializeOwned, Serialize};
 use std::{
     fmt,
     io::{Read, Write},
-    net::{Shutdown, TcpStream, ToSocketAddrs},
+    net::{TcpStream, ToSocketAddrs},
     time::Duration,
 };
 use thiserror::Error;
@@ -117,12 +117,11 @@ impl DirectRpcTransport {
             request.push_str("\r\n");
         }
         request.push_str("\r\n");
+        let mut encoded_request = Zeroizing::new(Vec::with_capacity(request.len() + body.len()));
+        encoded_request.extend_from_slice(request.as_bytes());
+        encoded_request.extend_from_slice(body);
         stream
-            .write_all(request.as_bytes())
-            .and_then(|()| stream.write_all(body))
-            .map_err(|_| transport_error(DirectRpcError::TransportFailed))?;
-        stream
-            .shutdown(Shutdown::Write)
+            .write_all(encoded_request.as_slice())
             .map_err(|_| transport_error(DirectRpcError::TransportFailed))?;
 
         let mut encoded = Vec::new();
@@ -296,6 +295,37 @@ mod tests {
         }
     }
 
+    fn read_http_request(stream: &mut std::net::TcpStream) -> Vec<u8> {
+        stream
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        let mut request = Vec::new();
+        loop {
+            let mut chunk = [0_u8; 4096];
+            let read = stream.read(&mut chunk).unwrap();
+            request.extend_from_slice(&chunk[..read]);
+            let Some(header_end) = request
+                .windows(4)
+                .position(|window| window == b"\r\n\r\n")
+                .map(|index| index + 4)
+            else {
+                continue;
+            };
+            let header = std::str::from_utf8(&request[..header_end]).unwrap();
+            let content_length = header
+                .split("\r\n")
+                .find_map(|line| {
+                    let (name, value) = line.split_once(':')?;
+                    name.eq_ignore_ascii_case("content-length")
+                        .then(|| value.trim().parse::<usize>().unwrap())
+                })
+                .unwrap();
+            if request.len() >= header_end + content_length {
+                return request;
+            }
+        }
+    }
+
     #[test]
     fn refuses_redirects_before_credentials_can_reach_another_origin() {
         let destination = TcpListener::bind("127.0.0.1:0").unwrap();
@@ -338,8 +368,7 @@ mod tests {
         let server = thread::spawn(move || {
             for _ in 0..REQUESTS {
                 let (mut stream, _) = listener.accept().unwrap();
-                let mut request = Vec::new();
-                stream.read_to_end(&mut request).unwrap();
+                let request = read_http_request(&mut stream);
                 assert!(request
                     .windows(b"Connection: close".len())
                     .any(|window| window == b"Connection: close"));
@@ -377,5 +406,25 @@ mod tests {
             Duration::from_millis(20),
         );
         assert!(transport.send_request(rpc_request()).is_err());
+    }
+
+    #[test]
+    #[ignore = "requires an explicitly supplied disposable local Bitcoin Core cookie"]
+    fn live_loopback_core_uses_the_bounded_socket_transport() {
+        let endpoint = std::env::var("GROOT_LIVE_RPC_URL").unwrap();
+        let cookie_path = std::env::var("GROOT_LIVE_RPC_COOKIE").unwrap();
+        let cookie = Zeroizing::new(std::fs::read_to_string(cookie_path).unwrap());
+        let (username, password) = cookie.trim().split_once(':').unwrap();
+        let transport = DirectRpcTransport::new(
+            &endpoint,
+            Some(username),
+            Some(password),
+            Duration::from_secs(2),
+        );
+        let response = transport.send_request(rpc_request()).unwrap();
+        assert!(response.error.is_none());
+        let result: serde_json::Value =
+            serde_json::from_str(response.result.unwrap().get()).unwrap();
+        assert_eq!(result["chain"], "testnet4");
     }
 }
