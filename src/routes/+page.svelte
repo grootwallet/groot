@@ -56,13 +56,6 @@
   import MultisigDescriptorsModal from '$lib/components/MultisigDescriptorsModal.svelte';
   import { useWalletShellContext } from '$lib/wallet/shell-context';
   import { fly } from 'svelte/transition';
-  import {
-    fiatCurrency,
-    fiatValue,
-    formatFiat,
-    marketService,
-    type MarketTicker
-  } from '$lib/market';
   const walletShell = useWalletShellContext();
   let syncing = $state(false);
   let snapshot = $state<WalletSnapshot | null>(null);
@@ -84,11 +77,6 @@
   let verifyError = $state('');
   let verifying = $state(false);
   let initialDataLoading = $state(true);
-  let marketTicker = $state<MarketTicker | null>(null);
-  let marketLoading = $state(true);
-  let marketError = $state(false);
-  let marketStale = $state(false);
-  let marketRevision = 0;
   let syncSource = $state<WalletSyncSource | null>(null);
   let syncStatus = $state<WalletSyncStatus | null>(null);
   let syncPollToken = 0;
@@ -140,27 +128,6 @@
     activeProposal ? ($discreetMode ? 'Label hidden' : activeProposal.label) : ''
   );
   onMount(loadSnapshot);
-  onMount(() => {
-    const unsubscribe = fiatCurrency.subscribe(() => void loadMarketTicker());
-    return unsubscribe;
-  });
-  async function loadMarketTicker() {
-    const current = ++marketRevision;
-    marketLoading = true;
-    marketError = false;
-    try {
-      const next = await marketService.ticker($fiatCurrency);
-      if (current !== marketRevision) return;
-      marketTicker = next.value;
-      marketStale = next.stale;
-    } catch {
-      if (current !== marketRevision) return;
-      marketTicker = null;
-      marketError = true;
-    } finally {
-      if (current === marketRevision) marketLoading = false;
-    }
-  }
   async function loadSnapshot() {
     loadError = '';
     initialDataLoading = true;
@@ -465,28 +432,6 @@
       >
         <Amount value={snapshot?.balance.total ?? 0} hidden={$discreetMode} />
       </button>
-      <div class="balance-fiat" aria-live="polite">
-        {#if $discreetMode}
-          <span>Fiat estimate hidden</span>
-        {:else if marketTicker}
-          <a href="/market"
-            ><strong
-              >{formatFiat(
-                fiatValue(snapshot.balance.total, marketTicker.price),
-                $fiatCurrency
-              )}</strong
-            ><span
-              >1 BTC = {formatFiat(marketTicker.price, $fiatCurrency)}{marketStale
-                ? ' · saved price'
-                : ''}</span
-            ></a
-          >
-        {:else if marketLoading}
-          <span>Loading fiat estimate…</span>
-        {:else if marketError}
-          <button onclick={loadMarketTicker}>Fiat estimate unavailable · Retry</button>
-        {/if}
-      </div>
       <div class="pending-line">
         <i></i>{$discreetMode ? 'Pending activity hidden' : pendingDescription}
       </div>

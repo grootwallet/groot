@@ -145,6 +145,9 @@ export class TauriWalletAdapter implements WalletPort {
   saveInactivityTimeout(minutes: number) {
     return command<WalletRegistry>('wallet_inactivity_timeout_save', { minutes });
   }
+  session() {
+    return command<WalletSelection>('wallet_session');
+  }
   async selectWallet(walletId: string) {
     const selection = await command<WalletSelection>('wallet_select', { walletId });
     this.#selectedWalletId = selection.profile.id;
@@ -246,6 +249,9 @@ export class TauriWalletAdapter implements WalletPort {
       this.#emit({ type: 'wallet_updated', walletId, walletKind: 'single_key', snapshot });
     }
     return snapshot;
+  }
+  cancelSync() {
+    return command<void>('wallet_sync_cancel');
   }
   createAddress(label: string) {
     return command<ReceiveAddress>('address_create', { label }).then(normalizeAddress);

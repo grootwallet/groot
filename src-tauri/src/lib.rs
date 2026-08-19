@@ -9,7 +9,6 @@ mod direct_rpc;
 pub mod external_signer;
 mod hardware;
 mod label_provenance;
-mod market_data;
 mod multisig;
 mod native_backup;
 pub mod network;
@@ -39,14 +38,12 @@ pub fn run() {
         })
         .manage(wallet::AppState::default())
         .invoke_handler(tauri::generate_handler![
-            market_data::market_ticker,
-            market_data::market_history,
-            market_data::market_stats,
             wallet::profile_commands::wallet_exists,
             wallet::ur_encode_psbt,
             wallet::ur_decode_psbt,
             wallet::profile_commands::wallet_lock,
             wallet::profile_commands::wallet_profiles,
+            wallet::profile_commands::wallet_session,
             wallet::profile_commands::wallet_profile_compatibility,
             wallet::profile_commands::wallet_rename,
             wallet::profile_commands::wallet_inactivity_timeout_save,
@@ -59,6 +56,7 @@ pub fn run() {
             wallet::profile_commands::wallet_unlock,
             wallet::profile_commands::wallet_snapshot,
             wallet::profile_commands::wallet_sync,
+            wallet::profile_commands::wallet_sync_cancel,
             wallet::profile_commands::wallet_sync_status,
             wallet::profile_commands::wallet_notifications,
             wallet::profile_commands::wallet_notifications_ack,

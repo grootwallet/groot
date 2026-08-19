@@ -8,7 +8,7 @@ export type LiveSyncController = {
 };
 
 type LiveSyncPort = Pick<WalletProfilesPort, 'exists' | 'profiles'> &
-  Pick<WalletSnapshotPort, 'sync' | 'syncMultisig'>;
+  Pick<WalletSnapshotPort, 'sync' | 'cancelSync' | 'syncMultisig'>;
 
 /**
  * Runs one bounded wallet sync at a time. Repeated wake-ups are coalesced so a
@@ -46,6 +46,14 @@ export function createLiveSync(
       else await wallet.sync();
       return true;
     } catch (cause) {
+      if (
+        typeof cause === 'object' &&
+        cause !== null &&
+        'code' in cause &&
+        cause.code === 'sync_cancelled'
+      ) {
+        return true;
+      }
       try {
         onError(cause);
       } catch {
@@ -92,6 +100,7 @@ export function createLiveSync(
       enabled = false;
       rerunRequested = false;
       clearTimer();
+      if (active) void wallet.cancelSync().catch(() => undefined);
     },
     runNow
   };

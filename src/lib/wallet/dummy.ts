@@ -99,6 +99,14 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     this._inactivityTimeoutMinutes = minutes;
     return this.profiles();
   }
+  async session() {
+    const profile = this._profiles.find((wallet) => wallet.id === this._selectedWalletId);
+    if (!profile) throw new WalletError('wallet_not_found', 'The selected wallet does not exist.');
+    return {
+      profile: structuredClone(profile),
+      unlocked: this._unlockedWalletIds.has(profile.id)
+    };
+  }
   async selectWallet(walletId: string) {
     const profile = this._profiles.find((wallet) => wallet.id === walletId);
     if (!profile) throw new WalletError('wallet_not_found', 'The selected wallet does not exist.');
@@ -421,6 +429,8 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
   async sync(): Promise<WalletSnapshot> {
     return this.snapshot();
   }
+
+  async cancelSync() {}
 
   async createAddress(rawLabel: string): Promise<ReceiveAddress> {
     const label = normalizePermanentLabel(rawLabel);

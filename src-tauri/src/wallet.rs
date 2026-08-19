@@ -527,6 +527,7 @@ fn lock_wallet(state: &State<'_, AppState>, wallet_id: Uuid) -> ApiResult<()> {
 #[derive(Default)]
 pub struct AppState {
     operations: Mutex<()>,
+    foreground_sync: Mutex<Option<ActiveForegroundSync>>,
     proposals: Mutex<HashMap<String, PendingProposal>>,
     unlocked_wallets: Mutex<WalletSessions>,
     pending_mnemonic: Mutex<Option<PendingMnemonic>>,
@@ -639,10 +640,10 @@ fn finish_sync_status(
     if current.wallet_id != wallet_id.to_string() {
         return;
     }
-    current.state = if result.is_ok() {
-        "completed"
-    } else {
-        "failed"
+    current.state = match result {
+        Ok(_) => "completed",
+        Err(error) if error.code == "sync_cancelled" => "cancelled",
+        Err(_) => "failed",
     };
     current.last_verified_height = verified_height;
     current.updated_at = now();
@@ -650,6 +651,11 @@ fn finish_sync_status(
 
 struct ActiveRecoveryScan {
     run_id: String,
+    cancel: Arc<AtomicBool>,
+}
+
+struct ActiveForegroundSync {
+    wallet_id: Uuid,
     cancel: Arc<AtomicBool>,
 }
 
@@ -4492,13 +4498,91 @@ fn sync_wallet_atomically(
     state: &State<'_, AppState>,
     db: &mut Connection,
     multisig: bool,
+    cancel: Option<&AtomicBool>,
 ) -> ApiResult<WalletSnapshotDto> {
     match read_sync_source(app)? {
-        WalletSyncSource::BitcoinCore => sync_wallet_with_core(app, state, db, multisig),
+        WalletSyncSource::BitcoinCore => sync_wallet_with_core(app, state, db, multisig, cancel),
         source @ WalletSyncSource::CompactFilters { .. } => {
+            ensure_foreground_sync_not_cancelled(cancel)?;
             sync_wallet_with_compact_filters(app, state, db, multisig, &source)
         }
     }
+}
+
+fn ensure_foreground_sync_not_cancelled(cancel: Option<&AtomicBool>) -> ApiResult<()> {
+    if cancel.is_some_and(|cancel| cancel.load(Ordering::Acquire)) {
+        Err(api_error(
+            "sync_cancelled",
+            "Wallet refresh paused for a foreground action.",
+        ))
+    } else {
+        Ok(())
+    }
+}
+
+fn cancel_foreground_sync(state: &AppState) -> ApiResult<bool> {
+    let active = state.foreground_sync.lock().map_err(internal)?;
+    let Some(active) = active.as_ref() else {
+        return Ok(false);
+    };
+    active.cancel.store(true, Ordering::Release);
+    Ok(true)
+}
+
+fn run_foreground_sync(
+    app: &AppHandle,
+    state: &State<'_, AppState>,
+    multisig: bool,
+) -> ApiResult<WalletSnapshotDto> {
+    let wallet_id = require_unlocked_for_background_sync(app, state)?;
+    let cancel = Arc::new(AtomicBool::new(false));
+    {
+        let mut active = state.foreground_sync.lock().map_err(internal)?;
+        if active.is_some() {
+            return Err(api_error(
+                "sync_in_progress",
+                "A wallet refresh is already running.",
+            ));
+        }
+        *active = Some(ActiveForegroundSync {
+            wallet_id,
+            cancel: Arc::clone(&cancel),
+        });
+    }
+
+    let result = (|| {
+        let _operation = operation_guard(state)?;
+        ensure_foreground_sync_not_cancelled(Some(cancel.as_ref()))?;
+        let selected = require_unlocked_for_background_sync(app, state)?;
+        if selected != wallet_id {
+            return Err(api_error(
+                "wallet_selection_changed",
+                "The selected wallet changed before refresh could begin.",
+            ));
+        }
+        let mut db = if multisig {
+            open_multisig_db(app)?
+        } else {
+            open_db(app)?
+        };
+        sync_wallet_with_status(
+            app,
+            state,
+            &mut db,
+            multisig,
+            wallet_id,
+            Some(cancel.as_ref()),
+        )
+    })();
+
+    if let Ok(mut active) = state.foreground_sync.lock() {
+        if active.as_ref().is_some_and(|active| {
+            active.wallet_id == wallet_id && Arc::ptr_eq(&active.cancel, &cancel)
+        }) {
+            *active = None;
+        }
+    }
+    result
 }
 
 fn sync_wallet_with_status(
@@ -4507,6 +4591,7 @@ fn sync_wallet_with_status(
     db: &mut Connection,
     multisig: bool,
     wallet_id: Uuid,
+    cancel: Option<&AtomicBool>,
 ) -> ApiResult<WalletSnapshotDto> {
     let source = read_sync_source(app)?;
     let last_verified_height = load_wallet(db)?.latest_checkpoint().height();
@@ -4521,7 +4606,7 @@ fn sync_wallet_with_status(
         initial_state,
         last_verified_height,
     )?;
-    let result = sync_wallet_atomically(app, state, db, multisig);
+    let result = sync_wallet_atomically(app, state, db, multisig, cancel);
     let verified_height = if result.is_ok() {
         load_wallet(db)
             .map(|wallet| wallet.latest_checkpoint().height())
@@ -4538,7 +4623,9 @@ fn sync_wallet_with_core(
     state: &State<'_, AppState>,
     db: &mut Connection,
     multisig: bool,
+    cancel: Option<&AtomicBool>,
 ) -> ApiResult<WalletSnapshotDto> {
+    ensure_foreground_sync_not_cancelled(cancel)?;
     let rpc = Arc::new(rpc_client(app, state)?);
     checked_block_height(rpc.as_ref())?;
     let mut transaction = db.transaction().map_err(internal)?;
@@ -4552,11 +4639,17 @@ fn sync_wallet_with_core(
             .transactions()
             .filter(|tx| tx.chain_position.is_unconfirmed()),
     );
-    while let Some(block) = emitter.next_block().map_err(internal)? {
+    loop {
+        ensure_foreground_sync_not_cancelled(cancel)?;
+        let Some(block) = emitter.next_block().map_err(internal)? else {
+            break;
+        };
+        ensure_foreground_sync_not_cancelled(cancel)?;
         wallet
             .apply_block_connected_to(&block.block, block.block_height(), block.connected_to())
             .map_err(internal)?;
     }
+    ensure_foreground_sync_not_cancelled(cancel)?;
     let mempool = emitter.mempool().map_err(internal)?;
     wallet.apply_evicted_txs(mempool.evicted);
     wallet.apply_unconfirmed_txs(mempool.update);

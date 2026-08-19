@@ -26,4 +26,12 @@ describe('native command scheduling', () => {
   ])('%s keeps blocking disk and RPC work off the native UI thread', (command, source) => {
     expect(commandSource(source, command)).toContain('tauri::async_runtime::spawn_blocking');
   });
+
+  it('node saving cancels automatic sync before waiting for the wallet-operation lock', () => {
+    const source = commandSource(profileCommands, 'node_config_save');
+    expect(source.indexOf('cancel_foreground_sync(&state)?')).toBeGreaterThan(-1);
+    expect(source.indexOf('cancel_foreground_sync(&state)?')).toBeLessThan(
+      source.indexOf('operation_guard(&state)?')
+    );
+  });
 });

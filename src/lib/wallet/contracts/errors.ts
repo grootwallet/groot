@@ -62,6 +62,8 @@ export const WALLET_ERROR_CODES = [
   'scan_not_running',
   'scan_cancelled',
   'scan_interrupted',
+  'sync_in_progress',
+  'sync_cancelled',
   'unknown_signer',
   'no_new_signatures',
   'signature_not_found',

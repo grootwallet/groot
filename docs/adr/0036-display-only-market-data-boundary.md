@@ -1,6 +1,8 @@
 # ADR 0036: display-only market-data boundary
 
-Status: accepted.
+Status: superseded by ADR 0038.
+
+The implementation described here is retained only on the local `codex/market-reference` branch for possible future study. It is not part of the current product or release runtime.
 
 ## Context
 

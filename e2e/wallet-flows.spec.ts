@@ -868,12 +868,6 @@ test('amount denomination stays consistent across wallet surfaces', async ({ pag
     'aria-pressed',
     'true'
   );
-  const fiatDisplay = page.getByLabel('Fiat currency');
-  await fiatDisplay.getByRole('button', { name: 'GBP' }).click();
-  await expect(fiatDisplay.getByRole('button', { name: 'GBP' })).toHaveAttribute(
-    'aria-pressed',
-    'true'
-  );
   await page.goto('/');
   const balanceToggle = page.getByRole('button', { name: 'Show balance in sats' });
   await expect(balanceToggle).toContainText('0.02481240 BTC');
@@ -902,91 +896,6 @@ test('amount denomination stays consistent across wallet surfaces', async ({ pag
   ).toBe(true);
   await page.reload();
   await expect(page.locator('.stat-pill .formatted-amount')).toContainText('0.02481240 BTC');
-});
-
-test('fiat estimate and Market stay display-only, persistent, and accessible', async ({ page }) => {
-  await page.goto('/');
-  await expect(page.locator('.side-nav a[href="/market"]')).toHaveCount(0);
-  await expect(page.locator('.mobile-nav a[href="/market"]')).toHaveCount(0);
-  await expect(page.locator('.global-market-link')).toHaveAttribute('href', '/market');
-  await page.goto('/settings');
-  await expect(page.getByRole('button', { name: 'Open Market' })).toBeVisible();
-  await page.goto('/');
-  const fiatEstimate = page.locator('.balance-fiat');
-  await expect(fiatEstimate.getByRole('link')).toContainText('$');
-  await expect(fiatEstimate).toContainText('1 BTC =');
-  await fiatEstimate.getByRole('link').click();
-
-  await expect(page.getByRole('heading', { name: 'Bitcoin price' })).toBeVisible();
-  await expect(page.getByText('Market context without sharing wallet data.')).toBeVisible();
-  await expect(page.locator('.market-live')).toContainText('Live');
-  await expect(page.locator('.market-page')).toHaveAttribute('data-trend', 'down');
-  await expect(page.getByText('24h high', { exact: true })).toBeVisible();
-  await expect(page.getByText('All-time high', { exact: true })).toBeVisible();
-  const chart = page.getByRole('img', { name: /Bitcoin price history in USD for 1M/ });
-  await expect(chart).toBeVisible();
-  const chartExplorer = page.getByRole('slider', { name: 'Explore market chart' });
-  await chartExplorer.focus();
-  const latestValue = await chartExplorer.getAttribute('aria-valuetext');
-  await chartExplorer.press('ArrowLeft');
-  await expect(chartExplorer).not.toHaveAttribute('aria-valuetext', latestValue ?? '');
-  await expect(page.locator('.market-chart-tooltip')).toContainText('%');
-
-  await page.getByRole('button', { name: '1Y', exact: true }).click();
-  await expect(
-    page.getByRole('img', { name: /Bitcoin price history in USD for 1Y/ })
-  ).toBeVisible();
-  await page.getByRole('button', { name: 'EUR', exact: true }).click();
-  await expect(
-    page.getByRole('img', { name: /Bitcoin price history in EUR for 1Y/ })
-  ).toBeVisible();
-  await page.reload();
-  await expect(page.getByRole('button', { name: 'EUR', exact: true })).toHaveAttribute(
-    'aria-pressed',
-    'true'
-  );
-  await expect(page.locator('.market-live')).toContainText('Live');
-
-  await page.evaluate(() => {
-    const now = Date.now();
-    Date.now = () => now + 10 * 60_000;
-    localStorage.setItem('groot-market-fixture', 'offline');
-  });
-  await page.getByRole('button', { name: 'Refresh' }).click();
-  await expect(page.locator('.market-live')).toContainText('Saved');
-  await expect(page.getByText('Showing the last saved result.')).toBeVisible();
-
-  await page.getByRole('button', { name: '5Y', exact: true }).click();
-  await expect(page.getByText('Price unavailable', { exact: true })).toBeVisible();
-  await expect(page.getByRole('img', { name: /Bitcoin price history/ })).toHaveCount(0);
-  await page.evaluate(() => localStorage.removeItem('groot-market-fixture'));
-  await page.getByRole('button', { name: 'Retry' }).click();
-  await expect(
-    page.getByRole('img', { name: /Bitcoin price history in EUR for 5Y/ })
-  ).toBeVisible();
-  await expect(page.locator('.market-page')).toHaveAttribute('data-trend', 'up');
-
-  expect(
-    await page
-      .locator('.market-page')
-      .evaluate((element) => element.scrollWidth <= element.clientWidth)
-  ).toBe(true);
-  if ((page.viewportSize()?.width ?? 0) <= 720) {
-    const mobileItemTops = await page
-      .locator('.mobile-nav a')
-      .evaluateAll((items) => items.map((item) => Math.round(item.getBoundingClientRect().top)));
-    expect(new Set(mobileItemTops).size).toBe(1);
-  }
-});
-
-test('Market explains an initial offline failure and recovers on retry', async ({ page }) => {
-  await page.addInitScript(() => localStorage.setItem('groot-market-fixture', 'offline'));
-  await page.goto('/market');
-  await expect(page.getByText('Price unavailable', { exact: true })).toBeVisible();
-  await expect(page.getByText('Market data is temporarily unavailable.')).toBeVisible();
-  await page.evaluate(() => localStorage.removeItem('groot-market-fixture'));
-  await page.getByRole('button', { name: 'Retry' }).click();
-  await expect(page.locator('.market-live')).toContainText('Live');
 });
 
 test('translates the complete appearance controls', async ({ page }) => {

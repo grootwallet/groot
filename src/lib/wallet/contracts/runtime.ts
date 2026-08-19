@@ -53,7 +53,14 @@ export type WalletSyncSource =
 export type WalletSyncStatus = {
   walletId: string;
   source: 'bitcoin_core' | 'compact_filters';
-  state: 'connecting' | 'syncing' | 'checking_matches' | 'applying' | 'completed' | 'failed';
+  state:
+    | 'connecting'
+    | 'syncing'
+    | 'checking_matches'
+    | 'applying'
+    | 'completed'
+    | 'cancelled'
+    | 'failed';
   progressPercent: number | null;
   chainHeight: number | null;
   lastVerifiedHeight: number;

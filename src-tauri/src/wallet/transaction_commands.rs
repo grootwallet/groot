@@ -791,7 +791,8 @@ pub fn tx_sign_and_broadcast(
     wallet.persist(&mut persisted).map_err(internal)?;
     drop(wallet);
     persisted.commit().map_err(internal)?;
-    let (snapshot, sync_pending) = match sync_wallet_atomically(&app, &state, &mut db, false) {
+    let (snapshot, sync_pending) = match sync_wallet_atomically(&app, &state, &mut db, false, None)
+    {
         Ok(snapshot) => (snapshot, false),
         Err(_) => (snapshot, true),
     };

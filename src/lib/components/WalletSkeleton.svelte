@@ -15,7 +15,6 @@
   {#if variant === 'balance'}
     <span class="skeleton-line label"></span>
     <span class="skeleton-line amount"></span>
-    <span class="skeleton-line fiat"></span>
     <span class="skeleton-line pending"></span>
   {:else}
     {#each Array(count) as _, index}

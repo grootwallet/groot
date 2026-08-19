@@ -214,6 +214,26 @@ code {
   --locked-setup-notice-right: 32px;
   --locked-setup-notice-left: 256px;
 }
+.startup-gate {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 18px;
+  color: var(--text);
+  background: var(--bg);
+}
+.startup-gate > span[role='img'] {
+  width: 116px;
+  pointer-events: none;
+}
+.startup-gate p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
 .sidebar {
   position: fixed;
   inset: 0 auto 0 0;
@@ -421,27 +441,6 @@ code {
 }
 .preference-toggles .shell-theme-toggle {
   margin-inline: 0;
-}
-.global-market-link {
-  width: 34px;
-  height: 34px;
-  flex: 0 0 auto;
-  display: grid;
-  place-items: center;
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  color: var(--muted);
-  background: var(--surface-control);
-}
-.global-market-link:hover,
-.global-market-link.active {
-  color: var(--text);
-  border-color: var(--border-strong);
-  background: var(--surface-active);
-}
-.global-market-link:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
 }
 .discreet-mode-toggle {
   width: 34px;
@@ -924,45 +923,6 @@ code {
   letter-spacing: 0;
   color: var(--muted);
   font-weight: 500;
-}
-.balance-fiat {
-  color: var(--muted);
-  font-size: 13px;
-  margin-top: 8px;
-}
-.balance-fiat a {
-  position: relative;
-  z-index: 1;
-  width: fit-content;
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 6px 9px;
-  color: var(--muted);
-}
-.balance-fiat a strong {
-  color: var(--text);
-  font-size: 13px;
-  font-variant-numeric: tabular-nums;
-}
-.balance-fiat a span {
-  font-size: 9px;
-}
-.balance-fiat button {
-  position: relative;
-  z-index: 1;
-  padding: 0;
-  border: 0;
-  color: var(--muted);
-  background: none;
-  font: inherit;
-  cursor: pointer;
-}
-.balance-fiat button:hover,
-.balance-fiat button:focus-visible,
-.balance-fiat a:hover strong,
-.balance-fiat a:focus-visible strong {
-  color: var(--link);
 }
 .pending-line {
   color: var(--muted);
@@ -1467,11 +1427,6 @@ code {
   width: min(310px, 58%);
   height: 38px;
   margin-top: 20px;
-}
-.wallet-skeleton.balance .fiat {
-  width: 112px;
-  height: 9px;
-  margin-top: 13px;
 }
 .wallet-skeleton.balance .pending {
   width: 146px;

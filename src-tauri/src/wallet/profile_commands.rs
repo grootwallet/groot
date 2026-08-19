@@ -42,6 +42,17 @@ pub fn wallet_profiles(app: AppHandle) -> ApiResult<WalletRegistry> {
 }
 
 #[tauri::command]
+pub fn wallet_session(app: AppHandle, state: State<'_, AppState>) -> ApiResult<WalletSelection> {
+    let profile = selected_profile(&app)?;
+    let unlocked = match require_unlocked_for_background_sync(&app, &state) {
+        Ok(_) => true,
+        Err(error) if error.code == "wallet_locked" => false,
+        Err(error) => return Err(error),
+    };
+    Ok(WalletSelection { profile, unlocked })
+}
+
+#[tauri::command]
 pub fn wallet_profile_compatibility(app: AppHandle) -> ApiResult<WalletProfileCompatibility> {
     let profile = selected_profile(&app)?;
     let directory = profile_directory(&app, profile.id)?;
@@ -334,13 +345,15 @@ pub fn wallet_snapshot(app: AppHandle, state: State<'_, AppState>) -> ApiResult<
 pub async fn wallet_sync(app: AppHandle) -> ApiResult<WalletSnapshotDto> {
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
-        let _operation = operation_guard(&state)?;
-        let wallet_id = require_unlocked_for_background_sync(&app, &state)?;
-        let mut db = open_db(&app)?;
-        sync_wallet_with_status(&app, &state, &mut db, false, wallet_id)
+        run_foreground_sync(&app, &state, false)
     })
     .await
     .map_err(internal)?
+}
+
+#[tauri::command]
+pub fn wallet_sync_cancel(state: State<'_, AppState>) -> ApiResult<()> {
+    cancel_foreground_sync(&state).map(|_| ())
 }
 
 #[tauri::command]
@@ -842,6 +855,7 @@ pub async fn node_config_save(
 ) -> ApiResult<NodeStatusDto> {
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
+        cancel_foreground_sync(&state)?;
         let _operation = operation_guard(&state)?;
         require_unlocked(&app, &state)?;
         config.validate().map_err(network_config_api_error)?;

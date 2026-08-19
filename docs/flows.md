@@ -29,11 +29,7 @@ Each profile owns a UUID-isolated directory and unlock session. Switching never 
 
 Desktop exposes the selector in the persistent sidebar. Mobile exposes it beside Overview's overflow action; both use the same shell-owned registry and selection flow, and their popup menus stay inside the visible viewport.
 
-Wallet is the common top-level container. Software-key, hardware-key, shared multisig, and recovery/inheritance policies all use the same Overview, Activity, and Coins destinations. Policy is an additional detail destination for wallets with multiple signing paths; it is not a separate balance-bearing vault. Display-only Market is global and secondary: Overview fiat estimates link to it, desktop exposes it with the theme/discreet utilities, and Settings provides the mobile entry point. Notifications are scoped to the selected wallet. If a received transaction is first discovered after it already has a confirmation, Groot combines receipt and confirmation into one toast instead of presenting two events for the same transaction; a sync that finishes after selection changed cannot emit into the newly selected wallet.
-
-`Overview fiat estimate → Market → choose USD/EUR/GBP and history range → inspect or refresh`
-
-Opening Market requests only the chosen currency and range. A successful result shows price, range-relative change, semantic red/green direction, history with crosshair detail and axes, 24-hour/all-time statistics, source, and freshness. A failed initial read shows a durable retry action; a previously cached result remains visible as **Saved** when refresh fails. Reconnection retries automatically. Discreet mode hides Overview's fiat amount together with the bitcoin balance, but the wallet-independent Market page remains available.
+Wallet is the common top-level container. Software-key, hardware-key, shared multisig, and recovery/inheritance policies all use the same Overview, Activity, and Coins destinations. Policy is an additional detail destination for wallets with multiple signing paths; it is not a separate balance-bearing vault. Balances use the global SATS/BTC denomination; Groot does not request or display fiat prices. Notifications are scoped to the selected wallet. If a received transaction is first discovered after it already has a confirmation, Groot combines receipt and confirmation into one toast instead of presenting two events for the same transaction; a sync that finishes after selection changed cannot emit into the newly selected wallet.
 
 ## Unlock and deletion
 

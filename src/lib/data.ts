@@ -34,7 +34,6 @@ export const wallet = {
   name: 'My wallet',
   balance: 2_481_240,
   pending: 125_000,
-  fiatRate: 105_420,
   network: networkName(defaultConfig.network)
 };
 

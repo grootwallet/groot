@@ -25,6 +25,7 @@ describe('live wallet sync', () => {
         exists: vi.fn().mockResolvedValue(true),
         profiles: vi.fn().mockResolvedValue(registry(kind)),
         sync: vi.fn().mockResolvedValue(undefined),
+        cancelSync: vi.fn().mockResolvedValue(undefined),
         syncMultisig: vi.fn().mockResolvedValue(undefined)
       };
       const controller = createLiveSync(wallet, 60_000);
@@ -45,6 +46,7 @@ describe('live wallet sync', () => {
       exists: vi.fn().mockResolvedValue(false),
       profiles: vi.fn(),
       sync: vi.fn(),
+      cancelSync: vi.fn().mockResolvedValue(undefined),
       syncMultisig: vi.fn()
     };
     const controller = createLiveSync(wallet, 60_000, onError);
@@ -71,6 +73,7 @@ describe('live wallet sync', () => {
         .mockRejectedValueOnce(new Error('offline'))
         .mockRejectedValueOnce(new Error('still offline'))
         .mockResolvedValue(undefined),
+      cancelSync: vi.fn().mockResolvedValue(undefined),
       syncMultisig: vi.fn()
     };
     const controller = createLiveSync(wallet, 1_000);
@@ -109,6 +112,7 @@ describe('live wallet sync', () => {
         markStarted();
         return blocked;
       }),
+      cancelSync: vi.fn().mockResolvedValue(undefined),
       syncMultisig: vi.fn()
     };
     const controller = createLiveSync(wallet, 60_000);
@@ -121,6 +125,31 @@ describe('live wallet sync', () => {
     await Promise.all([second, third]);
     expect(wallet.sync).toHaveBeenCalledTimes(1);
     controller.stop();
+  });
+
+  it('cancels an in-flight native sync when automatic sync is stopped', async () => {
+    let markStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    const wallet = {
+      exists: vi.fn().mockResolvedValue(true),
+      profiles: vi.fn().mockResolvedValue(registry('single_key')),
+      sync: vi.fn().mockImplementation(
+        () =>
+          new Promise<void>((_resolve, reject) => {
+            markStarted();
+            setTimeout(() => reject({ code: 'sync_cancelled' }), 0);
+          })
+      ),
+      cancelSync: vi.fn().mockResolvedValue(undefined),
+      syncMultisig: vi.fn()
+    };
+    const controller = createLiveSync(wallet, 60_000);
+    controller.start();
+    await started;
+    controller.stop();
+    expect(wallet.cancelSync).toHaveBeenCalledOnce();
   });
 
   it('runs the newly selected wallet immediately after an active sync finishes', async () => {
@@ -142,6 +171,7 @@ describe('live wallet sync', () => {
           return blocked;
         })
         .mockResolvedValue(undefined),
+      cancelSync: vi.fn().mockResolvedValue(undefined),
       syncMultisig: vi.fn()
     };
     const controller = createLiveSync(wallet, 60_000);

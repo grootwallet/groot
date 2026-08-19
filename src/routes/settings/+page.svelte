@@ -9,7 +9,6 @@
     FileKey,
     HeartPulse,
     History,
-    Landmark,
     KeyRound,
     LockKeyhole,
     Moon,
@@ -19,7 +18,6 @@
     RefreshCw,
     ShieldCheck,
     Sun,
-    TrendingUp,
     Trash2,
     WalletCards
   } from '@lucide/svelte';
@@ -51,7 +49,6 @@
   import type { CosignerDraft } from '$lib/multisig/policy';
   import { matchingDeviceForHealthCheck } from '$lib/hardware/health-check';
   import { amountUnit, denomination, formatAmount, setDenomination } from '$lib/denomination';
-  import { FIAT_CURRENCIES, fiatCurrency, setFiatCurrency } from '$lib/market';
   import {
     hardwareHealthChecks,
     hardwareHealthKey,
@@ -880,24 +877,6 @@
           >
         </span>
       </div>
-      <div class="setting-row">
-        <span class="setting-icon"><Landmark size={18} /></span><span
-          ><strong>Fiat currency</strong><small>Used for local price estimates only.</small></span
-        ><span class="theme-choice" aria-label="Fiat currency">
-          {#each FIAT_CURRENCIES as currency}
-            <button
-              class:active={$fiatCurrency === currency}
-              aria-pressed={$fiatCurrency === currency}
-              onclick={() => setFiatCurrency(currency)}>{currency}</button
-            >
-          {/each}
-        </span>
-      </div>
-      <button aria-label="Open Market" onclick={() => goto('/market')}>
-        <span class="setting-icon"><TrendingUp size={18} /></span><span
-          ><strong>Market</strong><small>Bitcoin price and history.</small></span
-        ><ChevronRight size={16} />
-      </button>
     </div>
   </section>
   <section class="settings-group">

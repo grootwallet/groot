@@ -1093,10 +1093,7 @@ pub fn multisig_snapshot(
 pub async fn multisig_sync(app: AppHandle) -> ApiResult<WalletSnapshotDto> {
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
-        let _operation = operation_guard(&state)?;
-        let wallet_id = require_unlocked_for_background_sync(&app, &state)?;
-        let mut db = open_multisig_db(&app)?;
-        sync_wallet_with_status(&app, &state, &mut db, true, wallet_id)
+        run_foreground_sync(&app, &state, true)
     })
     .await
     .map_err(internal)?

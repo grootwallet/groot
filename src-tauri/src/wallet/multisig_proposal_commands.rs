@@ -549,7 +549,7 @@ pub fn multisig_proposal_broadcast(
         finalized_multisig_proposal_transaction(&mut db, &metadata, &proposal_id, &reviewed_psbt)?;
     let txid = broadcast_transaction(&app, &state, &transaction)?;
     let snapshot = commit_multisig_broadcast(&mut db, &transaction, &proposal_id, &txid, None)?;
-    let (snapshot, sync_pending) = match sync_wallet_atomically(&app, &state, &mut db, true) {
+    let (snapshot, sync_pending) = match sync_wallet_atomically(&app, &state, &mut db, true, None) {
         Ok(snapshot) => (snapshot, false),
         Err(_) => (snapshot, true),
     };

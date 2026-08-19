@@ -56,6 +56,7 @@ export interface WalletProfilesPort {
   profileCompatibility(): Promise<WalletProfileCompatibility>;
   renameWallet(name: string): Promise<WalletProfile>;
   saveInactivityTimeout(minutes: number): Promise<WalletRegistry>;
+  session(): Promise<WalletSelection>;
   selectWallet(walletId: string): Promise<WalletSelection>;
   generateMnemonic(supplementalEntropy?: SupplementalEntropyInput): Promise<MnemonicPresentation>;
   cancelOnboarding(): Promise<void>;
@@ -90,6 +91,7 @@ export interface WalletNetworkPort {
 export interface WalletSnapshotPort {
   snapshot(): Promise<WalletSnapshot>;
   sync(): Promise<WalletSnapshot>;
+  cancelSync(): Promise<void>;
   multisigSnapshot(): Promise<WalletSnapshot>;
   syncMultisig(): Promise<WalletSnapshot>;
 }

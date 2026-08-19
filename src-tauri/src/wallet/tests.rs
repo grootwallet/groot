@@ -89,6 +89,32 @@ fn core_fee_rates_fail_closed_and_round_up_to_integer_sat_per_vbyte() {
 }
 
 #[test]
+fn foreground_sync_cancellation_is_immediate_and_idempotent() {
+    let state = AppState::default();
+    assert!(!cancel_foreground_sync(&state).unwrap());
+
+    let cancel = Arc::new(AtomicBool::new(false));
+    state
+        .foreground_sync
+        .lock()
+        .unwrap()
+        .replace(ActiveForegroundSync {
+            wallet_id: Uuid::new_v4(),
+            cancel: Arc::clone(&cancel),
+        });
+
+    assert!(cancel_foreground_sync(&state).unwrap());
+    assert!(cancel.load(Ordering::Acquire));
+    assert_eq!(
+        ensure_foreground_sync_not_cancelled(Some(cancel.as_ref()))
+            .unwrap_err()
+            .code,
+        "sync_cancelled"
+    );
+    assert!(cancel_foreground_sync(&state).unwrap());
+}
+
+#[test]
 fn exact_drain_preview_amount_can_be_prepared_at_the_same_fee_rate() {
     use bdk_wallet::bitcoin::{
         absolute::LockTime, hashes::Hash, transaction::Version, ScriptBuf, Sequence, TxIn, TxOut,
