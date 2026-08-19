@@ -53,6 +53,7 @@
   import { defaultConfig, networkName } from '$lib/config';
   import { addressPrefixForNetwork, hasAddressPrefixForNetwork } from '$lib/wallet/policy';
   import { compactAddress } from '$lib/address-display';
+  import { accelerationUnavailableTitle } from '$lib/wallet/acceleration-presentation';
   import {
     addressForHardwareDisplay,
     testnetAddressDisplayName
@@ -287,7 +288,15 @@
         }
       } else proposal = proposals[0] ?? null;
     } catch (cause) {
-      error = cause instanceof Error ? cause.message : 'Could not load wallet.';
+      if (accelerationRequest) {
+        feeEstimateError =
+          cause instanceof Error ? cause.message : 'Could not prepare fee acceleration.';
+        toast({
+          title: accelerationUnavailableTitle(accelerationRequest.method),
+          description: feeEstimateError,
+          tone: 'danger'
+        });
+      } else error = cause instanceof Error ? cause.message : 'Could not load wallet.';
     }
   });
   function submitIntentOnEnter(event: KeyboardEvent) {
@@ -336,19 +345,25 @@
     }
   }
   async function prepareCustomAcceleration() {
-    if (!accelerationRequest || !customFeeValid) return;
+    const request = accelerationRequest;
+    if (!request || !customFeeValid) return;
     busy = true;
     feeEstimateError = '';
     try {
       proposal = await walletService.prepareMultisigAcceleration(
-        accelerationRequest.txid,
-        accelerationRequest.method,
+        request.txid,
+        request.method,
         feeRate(selectedRateNumber)
       );
       accelerationRequest = null;
     } catch (cause) {
       feeEstimateError =
         cause instanceof Error ? cause.message : 'Could not prepare fee acceleration.';
+      toast({
+        title: accelerationUnavailableTitle(request.method),
+        description: feeEstimateError,
+        tone: 'danger'
+      });
     } finally {
       busy = false;
     }

@@ -53,6 +53,7 @@
     testnetAddressDisplayName
   } from '$lib/wallet/hardware-display';
   import { latestActiveProposal } from '$lib/wallet/proposal-resume';
+  import { accelerationUnavailableTitle } from '$lib/wallet/acceleration-presentation';
   import { discreetMode } from '$lib/privacy';
   import PermanentLabelTags from '$lib/components/PermanentLabelTags.svelte';
   import FeeSelector from '$lib/components/FeeSelector.svelte';
@@ -303,16 +304,22 @@
       }
     } catch (cause) {
       signerSummaryReady = true;
-      toast({
-        title: 'Could not load wallet',
-        description:
-          cause instanceof WalletError && cause.code === 'insufficient_funds'
-            ? `The amount plus network fee exceeds the ${selectedCoins.length ? 'selected coin balance' : 'available balance'}.`
-            : cause instanceof Error
-              ? cause.message
-              : undefined,
-        tone: 'danger'
-      });
+      const description =
+        cause instanceof WalletError && cause.code === 'insufficient_funds'
+          ? `The amount plus network fee exceeds the ${selectedCoins.length ? 'selected coin balance' : 'available balance'}.`
+          : cause instanceof Error
+            ? cause.message
+            : undefined;
+      if (accelerationRequest) {
+        feeEstimateError = description ?? 'Could not prepare fee acceleration.';
+        toast({
+          title: accelerationUnavailableTitle(accelerationRequest.method),
+          description: feeEstimateError,
+          tone: 'danger'
+        });
+      } else {
+        toast({ title: 'Could not load wallet', description, tone: 'danger' });
+      }
     }
   });
 
@@ -363,12 +370,13 @@
   }
 
   async function prepareCustomAcceleration() {
-    if (!accelerationRequest || !customFeeValid) return;
+    const request = accelerationRequest;
+    if (!request || !customFeeValid) return;
     preparing = true;
     try {
       proposal = await walletService.prepareAcceleration(
-        accelerationRequest.txid,
-        accelerationRequest.method,
+        request.txid,
+        request.method,
         asFeeRate(Number(customFee))
       );
       address = proposal.recipient;
@@ -384,6 +392,11 @@
     } catch (cause) {
       feeEstimateError =
         cause instanceof Error ? cause.message : 'Could not prepare fee acceleration.';
+      toast({
+        title: accelerationUnavailableTitle(request.method),
+        description: feeEstimateError,
+        tone: 'danger'
+      });
     } finally {
       preparing = false;
     }
