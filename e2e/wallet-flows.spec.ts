@@ -881,21 +881,30 @@ test('amount denomination stays consistent across wallet surfaces', async ({ pag
   );
   await page.goto('/coins');
   await expect(page.locator('.stat-pill .formatted-amount')).toContainText('0.02481240 BTC');
-  await expect(page.locator('.stat-pill .amount-quiet')).toHaveText('0.0');
   const bitcoinParts = page.locator('.stat-pill .formatted-amount');
   expect(
     await bitcoinParts.evaluate((amount) => {
-      const quiet = amount.querySelector<HTMLElement>('.amount-quiet');
       const strong = amount.querySelector<HTMLElement>('strong');
-      if (!quiet || !strong) return false;
-      return (
-        getComputedStyle(quiet).fontSize === getComputedStyle(strong).fontSize &&
-        Math.abs(quiet.getBoundingClientRect().right - strong.getBoundingClientRect().left) < 0.5
-      );
+      return Boolean(strong && strong.textContent === '0.02481240' && strong.children.length === 0);
     })
   ).toBe(true);
   await page.reload();
   await expect(page.locator('.stat-pill .formatted-amount')).toContainText('0.02481240 BTC');
+
+  await page.goto('/send');
+  await page.getByLabel('Bitcoin address').fill('bcrt1qreceiver0000000000000000000000000000000');
+  await page.getByLabel('Payment label').fill('Uniform BTC amount');
+  await page.getByRole('button', { name: 'Continue to amount' }).click();
+  await page.getByLabel('Amount', { exact: true }).fill('0.00008000');
+  await page.getByRole('button', { name: 'Review payment' }).click();
+  const reviewedAmount = page.locator('.review-amount .formatted-amount');
+  await expect(reviewedAmount).toContainText('0.00008000 BTC');
+  expect(
+    await reviewedAmount.evaluate((amount) => {
+      const strong = amount.querySelector<HTMLElement>('strong');
+      return Boolean(strong && strong.textContent === '0.00008000' && strong.children.length === 0);
+    })
+  ).toBe(true);
 });
 
 test('translates the complete appearance controls', async ({ page }) => {

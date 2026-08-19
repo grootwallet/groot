@@ -51,11 +51,3 @@ export function parseAmountInput(value: string, unit: Denomination): number {
   const parsed = Number(whole) * 100_000_000 + Number(fraction.padEnd(8, '0'));
   return Number.isSafeInteger(parsed) ? parsed : Number.NaN;
 }
-
-export function bitcoinAmountParts(sats: number): { quiet: string; strong: string } {
-  const formatted = (sats / 100_000_000).toFixed(8);
-  const firstNonZero = formatted.search(/[1-9]/);
-  return firstNonZero < 0
-    ? { quiet: formatted, strong: '' }
-    : { quiet: formatted.slice(0, firstNonZero), strong: formatted.slice(firstNonZero) };
-}

@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   amountInputValue,
-  bitcoinAmountParts,
   formatAmount,
   initDenomination,
   parseAmountInput,
@@ -9,9 +8,8 @@ import {
 } from './denomination';
 
 describe('amount denomination', () => {
-  it('keeps BTC at eight decimals and separates leading zeroes from the meaningful amount', () => {
+  it('keeps BTC at eight decimals as one continuous value', () => {
     expect(formatAmount(1_234_560, 'btc')).toBe('0.01234560');
-    expect(bitcoinAmountParts(1_234_560)).toEqual({ quiet: '0.0', strong: '1234560' });
   });
 
   it('round-trips exact integer satoshi values without floating-point accounting', () => {

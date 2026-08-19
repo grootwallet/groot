@@ -691,11 +691,6 @@ code {
   gap: 0;
   font-variant-numeric: tabular-nums;
 }
-.formatted-amount .amount-quiet {
-  color: var(--muted);
-  font-size: 1em;
-  font-weight: 500;
-}
 .formatted-amount strong {
   color: inherit;
   font-size: 1em;
