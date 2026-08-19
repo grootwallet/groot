@@ -1,8 +1,14 @@
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use jsonrpc::{client::Transport, Error as JsonRpcError, Request, Response};
 use serde::{de::DeserializeOwned, Serialize};
-use std::{fmt, io::Read, time::Duration};
+use std::{
+    fmt,
+    io::{Read, Write},
+    net::{Shutdown, TcpStream, ToSocketAddrs},
+    time::Duration,
+};
 use thiserror::Error;
+use url::{Host, Url};
 use zeroize::Zeroizing;
 
 const MAX_HTTP_HEADER_BYTES: usize = 64 * 1024;
@@ -19,12 +25,16 @@ enum DirectRpcError {
     HttpRejected,
     #[error("the Bitcoin Core RPC transport failed")]
     TransportFailed,
+    #[error("the Bitcoin Core RPC response is malformed")]
+    MalformedResponse,
+    #[error("the local Bitcoin Core RPC endpoint is invalid")]
+    InvalidLoopbackEndpoint,
 }
 
 pub struct DirectRpcTransport {
     endpoint: String,
     authorization: Option<Zeroizing<String>>,
-    timeout_seconds: u64,
+    timeout: Duration,
 }
 
 impl DirectRpcTransport {
@@ -46,7 +56,7 @@ impl DirectRpcTransport {
         Self {
             endpoint: endpoint.to_owned(),
             authorization,
-            timeout_seconds: timeout.as_secs(),
+            timeout,
         }
     }
 
@@ -55,13 +65,22 @@ impl DirectRpcTransport {
         if body.len() > MAX_RPC_BODY_BYTES {
             return Err(transport_error(DirectRpcError::RequestTooLarge));
         }
+        let endpoint = Url::parse(&self.endpoint)
+            .map_err(|_| transport_error(DirectRpcError::TransportFailed))?;
+        if endpoint.scheme() == "http" {
+            return self.request_loopback(&endpoint, &body);
+        }
+        self.request_https(&body)
+    }
+
+    fn request_https<R: DeserializeOwned>(&self, body: &[u8]) -> Result<R, JsonRpcError> {
         let mut request = minreq::post(&self.endpoint)
-            .with_timeout(self.timeout_seconds)
+            .with_timeout(self.timeout.as_secs())
             .with_follow_redirects(false)
             .with_max_headers_size(MAX_HTTP_HEADER_BYTES)
             .with_max_status_line_length(MAX_HTTP_STATUS_BYTES)
             .with_header("Content-Type", "application/json")
-            .with_body(body);
+            .with_body(body.to_vec());
         if let Some(authorization) = self.authorization.as_deref() {
             let header = Zeroizing::new(format!("Basic {authorization}"));
             request = request.with_header("Authorization", header.as_str());
@@ -81,6 +100,163 @@ impl DirectRpcTransport {
         }
         serde_json::from_slice(&encoded).map_err(JsonRpcError::Json)
     }
+
+    fn request_loopback<R: DeserializeOwned>(
+        &self,
+        endpoint: &Url,
+        body: &[u8],
+    ) -> Result<R, JsonRpcError> {
+        let (mut stream, host_header, request_path) = self.connect_loopback(endpoint)?;
+        let mut request = Zeroizing::new(format!(
+            "POST {request_path} HTTP/1.1\r\nHost: {host_header}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n",
+            body.len()
+        ));
+        if let Some(authorization) = self.authorization.as_deref() {
+            request.push_str("Authorization: Basic ");
+            request.push_str(authorization);
+            request.push_str("\r\n");
+        }
+        request.push_str("\r\n");
+        stream
+            .write_all(request.as_bytes())
+            .and_then(|()| stream.write_all(body))
+            .map_err(|_| transport_error(DirectRpcError::TransportFailed))?;
+        stream
+            .shutdown(Shutdown::Write)
+            .map_err(|_| transport_error(DirectRpcError::TransportFailed))?;
+
+        let mut encoded = Vec::new();
+        stream
+            .take((MAX_HTTP_HEADER_BYTES + MAX_RPC_BODY_BYTES + 1) as u64)
+            .read_to_end(&mut encoded)
+            .map_err(|_| transport_error(DirectRpcError::TransportFailed))?;
+        if encoded.len() > MAX_HTTP_HEADER_BYTES + MAX_RPC_BODY_BYTES {
+            return Err(transport_error(DirectRpcError::ResponseTooLarge));
+        }
+        let response_body = parse_loopback_response(&encoded)?;
+        serde_json::from_slice(response_body).map_err(JsonRpcError::Json)
+    }
+
+    fn connect_loopback(
+        &self,
+        endpoint: &Url,
+    ) -> Result<(TcpStream, String, String), JsonRpcError> {
+        if endpoint.scheme() != "http"
+            || !endpoint.username().is_empty()
+            || endpoint.password().is_some()
+        {
+            return Err(transport_error(DirectRpcError::InvalidLoopbackEndpoint));
+        }
+        let host = endpoint
+            .host_str()
+            .ok_or_else(|| transport_error(DirectRpcError::InvalidLoopbackEndpoint))?;
+        let host_is_loopback = match endpoint.host() {
+            Some(Host::Ipv4(address)) => address.is_loopback(),
+            Some(Host::Ipv6(address)) => address.is_loopback(),
+            Some(Host::Domain(domain)) => domain.eq_ignore_ascii_case("localhost"),
+            None => false,
+        };
+        if !host_is_loopback {
+            return Err(transport_error(DirectRpcError::InvalidLoopbackEndpoint));
+        }
+        let port = endpoint
+            .port_or_known_default()
+            .ok_or_else(|| transport_error(DirectRpcError::InvalidLoopbackEndpoint))?;
+        let mut addresses = (host, port)
+            .to_socket_addrs()
+            .map_err(|_| transport_error(DirectRpcError::InvalidLoopbackEndpoint))?
+            .filter(|address| address.ip().is_loopback())
+            .collect::<Vec<_>>();
+        addresses.sort_by_key(|address| !address.is_ipv4());
+        let mut stream = None;
+        for address in addresses {
+            if let Ok(candidate) = TcpStream::connect_timeout(&address, self.timeout) {
+                stream = Some(candidate);
+                break;
+            }
+        }
+        let stream = stream.ok_or_else(|| transport_error(DirectRpcError::TransportFailed))?;
+        stream
+            .set_read_timeout(Some(self.timeout))
+            .and_then(|()| stream.set_write_timeout(Some(self.timeout)))
+            .map_err(|_| transport_error(DirectRpcError::TransportFailed))?;
+
+        let host_value = match endpoint.host() {
+            Some(Host::Ipv6(address)) => format!("[{address}]"),
+            Some(Host::Ipv4(address)) => address.to_string(),
+            Some(Host::Domain(domain)) => domain.to_owned(),
+            None => return Err(transport_error(DirectRpcError::InvalidLoopbackEndpoint)),
+        };
+        let host_header = format!("{host_value}:{port}");
+        let mut request_path = endpoint.path().to_owned();
+        if request_path.is_empty() {
+            request_path.push('/');
+        }
+        if let Some(query) = endpoint.query() {
+            request_path.push('?');
+            request_path.push_str(query);
+        }
+        Ok((stream, host_header, request_path))
+    }
+}
+
+fn parse_loopback_response(encoded: &[u8]) -> Result<&[u8], JsonRpcError> {
+    let header_end = encoded
+        .windows(4)
+        .position(|window| window == b"\r\n\r\n")
+        .map(|index| index + 4)
+        .ok_or_else(|| transport_error(DirectRpcError::MalformedResponse))?;
+    if header_end > MAX_HTTP_HEADER_BYTES {
+        return Err(transport_error(DirectRpcError::ResponseTooLarge));
+    }
+    let header = std::str::from_utf8(&encoded[..header_end])
+        .map_err(|_| transport_error(DirectRpcError::MalformedResponse))?;
+    let mut lines = header.split("\r\n");
+    let mut status_line = lines
+        .next()
+        .ok_or_else(|| transport_error(DirectRpcError::MalformedResponse))?
+        .split_whitespace();
+    let protocol = status_line
+        .next()
+        .ok_or_else(|| transport_error(DirectRpcError::MalformedResponse))?;
+    let status = status_line
+        .next()
+        .and_then(|status| status.parse::<u16>().ok())
+        .ok_or_else(|| transport_error(DirectRpcError::MalformedResponse))?;
+    if !matches!(protocol, "HTTP/1.0" | "HTTP/1.1") {
+        return Err(transport_error(DirectRpcError::MalformedResponse));
+    }
+    if status != 200 {
+        return Err(transport_error(DirectRpcError::HttpRejected));
+    }
+    let mut content_length = None;
+    for line in lines {
+        let Some((name, value)) = line.split_once(':') else {
+            continue;
+        };
+        if name.eq_ignore_ascii_case("transfer-encoding") {
+            return Err(transport_error(DirectRpcError::MalformedResponse));
+        }
+        if name.eq_ignore_ascii_case("content-length") {
+            if content_length.is_some() {
+                return Err(transport_error(DirectRpcError::MalformedResponse));
+            }
+            content_length = value.trim().parse::<usize>().ok();
+            if content_length.is_none() {
+                return Err(transport_error(DirectRpcError::MalformedResponse));
+            }
+        }
+    }
+    let body = &encoded[header_end..];
+    let expected =
+        content_length.ok_or_else(|| transport_error(DirectRpcError::MalformedResponse))?;
+    if expected > MAX_RPC_BODY_BYTES {
+        return Err(transport_error(DirectRpcError::ResponseTooLarge));
+    }
+    if body.len() != expected {
+        return Err(transport_error(DirectRpcError::MalformedResponse));
+    }
+    Ok(body)
 }
 
 impl Transport for DirectRpcTransport {
@@ -152,5 +328,54 @@ mod tests {
         )));
         thread::sleep(Duration::from_millis(20));
         assert!(destination.accept().is_err());
+    }
+
+    #[test]
+    fn loopback_transport_handles_repeated_requests_without_timeout_workers() {
+        const REQUESTS: usize = 256;
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = thread::spawn(move || {
+            for _ in 0..REQUESTS {
+                let (mut stream, _) = listener.accept().unwrap();
+                let mut request = Vec::new();
+                stream.read_to_end(&mut request).unwrap();
+                assert!(request
+                    .windows(b"Connection: close".len())
+                    .any(|window| window == b"Connection: close"));
+                let body =
+                    br#"{"jsonrpc":"2.0","result":{"chain":"testnet4"},"error":null,"id":1}"#;
+                let header = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                    body.len()
+                );
+                stream.write_all(header.as_bytes()).unwrap();
+                stream.write_all(body).unwrap();
+            }
+        });
+        let transport = DirectRpcTransport::new(
+            &format!("http://{address}"),
+            Some("groot"),
+            Some("secret"),
+            Duration::from_secs(1),
+        );
+        for _ in 0..REQUESTS {
+            let response = transport.send_request(rpc_request()).unwrap();
+            let result: serde_json::Value =
+                serde_json::from_str(response.result.unwrap().get()).unwrap();
+            assert_eq!(result["chain"], "testnet4");
+        }
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn plaintext_transport_rejects_non_loopback_hosts() {
+        let transport = DirectRpcTransport::new(
+            "http://192.0.2.1:8332",
+            Some("groot"),
+            Some("secret"),
+            Duration::from_millis(20),
+        );
+        assert!(transport.send_request(rpc_request()).is_err());
     }
 }
