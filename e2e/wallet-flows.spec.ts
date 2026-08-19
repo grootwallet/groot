@@ -1214,6 +1214,17 @@ test('send reviews a proposal and rejects a wrong credential', async ({ page }) 
     page.locator('.selection-review').filter({ hasText: 'Exact strategy comparison' })
   ).toContainText('100 sats lower than the valid More private candidate');
   await page.getByRole('button', { name: 'Continue to sign' }).click();
+  const authorizationReview = page.getByRole('region', {
+    name: 'Transaction authorization review'
+  });
+  await expect(authorizationReview).toBeVisible();
+  await expect(authorizationReview).toContainText('Test payment');
+  await expect(authorizationReview).toContainText('25,000');
+  await expect(authorizationReview).toContainText('Network fee');
+  await expect(authorizationReview).toContainText('Total');
+  await expect(authorizationReview.getByText('Fee rate', { exact: true })).toBeHidden();
+  await authorizationReview.getByText('View more details', { exact: true }).click();
+  await expect(authorizationReview.getByText('Fee rate', { exact: true })).toBeVisible();
   await page.getByLabel('Wallet passphrase', { exact: true }).fill('wrong');
   await page.getByRole('button', { name: /Sign & broadcast/ }).click();
   await expect(page.getByText('Incorrect passphrase / PIN.')).toBeVisible();

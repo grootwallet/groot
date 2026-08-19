@@ -1101,6 +1101,42 @@
       <span class="sign-icon"><LockKeyhole size={25} /></span>
       <h2>Authorize payment</h2>
       <p>Enter your wallet passphrase to unlock the signing keys. It never leaves this device.</p>
+      <section class="signed-transaction-review" aria-label="Transaction authorization review">
+        <dl class="details-list">
+          <div>
+            <dt>To</dt>
+            <dd>
+              <button
+                type="button"
+                class="address-review-trigger mono"
+                aria-label="View complete recipient address"
+                onclick={() => (addressOpen = true)}>{compactAddress(proposal.recipient)}</button
+              >
+            </dd>
+          </div>
+          <div>
+            <dt>Label</dt>
+            <dd>{proposal.label}</dd>
+          </div>
+          <div>
+            <dt>Amount</dt>
+            <dd><Amount value={proposal.amount} /></dd>
+          </div>
+          <div>
+            <dt>Network</dt>
+            <dd>{proposal.network}</dd>
+          </div>
+          <div>
+            <dt>Network fee</dt>
+            <dd><Amount value={proposal.fee} /></dd>
+          </div>
+          <div class="total">
+            <dt>Total</dt>
+            <dd><Amount value={proposal.total} /></dd>
+          </div>
+        </dl>
+        <TransactionReviewDetails {proposal} onChangeAddress={() => (changeAddressOpen = true)} />
+      </section>
       <PasswordField
         label="Wallet passphrase"
         bind:value={passphrase}
