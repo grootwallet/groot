@@ -52,6 +52,7 @@ pub fn run() {
             wallet::profile_commands::wallet_cancel_onboarding,
             wallet::profile_commands::wallet_create,
             wallet::profile_commands::wallet_verify_backup,
+            wallet::profile_commands::wallet_reveal_and_verify_backup,
             wallet::profile_commands::wallet_recover,
             wallet::profile_commands::wallet_unlock,
             wallet::profile_commands::wallet_snapshot,

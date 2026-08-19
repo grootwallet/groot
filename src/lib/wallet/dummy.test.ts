@@ -32,6 +32,17 @@ describe('software payment proposals', () => {
   });
 });
 
+describe('deferred backup verification', () => {
+  it('keeps re-presentation secret-free and marks the fixture verified only after its proof', async () => {
+    const adapter = new DummyWalletAdapter();
+    await adapter.createWallet('Deferred backup', 'correct passphrase', false);
+
+    expect((await adapter.session()).profile.backupVerified).toBe(false);
+    expect(await adapter.revealAndVerifyBackup('correct passphrase')).toBe(true);
+    expect((await adapter.session()).profile.backupVerified).toBe(true);
+  });
+});
+
 describe('multisig setup drafts', () => {
   it('round-trips and explicitly discards public setup progress', async () => {
     const adapter = new DummyWalletAdapter();

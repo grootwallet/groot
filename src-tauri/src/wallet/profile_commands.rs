@@ -290,6 +290,40 @@ pub fn wallet_verify_backup(
 }
 
 #[tauri::command]
+pub fn wallet_reveal_and_verify_backup(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    credential: String,
+) -> ApiResult<bool> {
+    let _operation = operation_guard(&state)?;
+    require_unlocked(&app, &state)?;
+    let profile = selected_profile_of_kind(&app, WalletKind::SingleKey)?;
+    if profile.backup_verified {
+        return Ok(true);
+    }
+    let credential = Zeroizing::new(credential);
+    check_auth_throttle(&app, &state)?;
+    let credential_result = decrypt_mnemonic(&app, credential.as_str());
+    record_auth_result(&app, &state, &credential_result)?;
+    let mnemonic = credential_result?;
+    let words = Zeroizing::new(mnemonic.to_string());
+    let outcome = native_backup::present(&app, words.as_str()).map_err(internal)?;
+    if outcome.cancelled || !outcome.verified {
+        return Ok(false);
+    }
+
+    let mut registry = load_registry(&app)?;
+    let selected = registry
+        .wallets
+        .iter_mut()
+        .find(|wallet| wallet.id == profile.id)
+        .ok_or_else(|| registry_api_error(RegistryError::UnknownSelection))?;
+    selected.backup_verified = true;
+    save_registry(&app, &registry)?;
+    Ok(true)
+}
+
+#[tauri::command]
 pub fn wallet_unlock(
     app: AppHandle,
     state: State<'_, AppState>,

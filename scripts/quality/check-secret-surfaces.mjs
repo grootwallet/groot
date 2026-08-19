@@ -97,5 +97,13 @@ if (!tauriAdapter.includes("command<boolean>('wallet_generate_mnemonic'")) {
 if (/command<[^>]*(?:Mnemonic|string)[^>]*>\('wallet_generate_mnemonic'/.test(tauriAdapter)) {
   fail('generated mnemonic material must never be returned through IPC');
 }
+if (!tauriAdapter.includes("command<boolean>('wallet_reveal_and_verify_backup'")) {
+  fail('recovery-word re-presentation must return only native verification state');
+}
+if (
+  /command<[^>]*(?:Mnemonic|string)[^>]*>\('wallet_reveal_and_verify_backup'/.test(tauriAdapter)
+) {
+  fail('recovery words must never be returned through re-presentation IPC');
+}
 
 console.log('Secret surfaces: write-only, bounded, and free of logging/telemetry sinks.');

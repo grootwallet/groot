@@ -174,6 +174,9 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     profile.backupVerified = true;
     return true;
   }
+  async revealAndVerifyBackup(credential: string) {
+    return this.verifyBackup(credential);
+  }
   async unlock(credential: string) {
     if (this._secureStorageRetryPending) {
       this._secureStorageRetryPending = false;

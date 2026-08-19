@@ -170,6 +170,9 @@ export class TauriWalletAdapter implements WalletPort {
   verifyBackup(credential: string) {
     return command<boolean>('wallet_verify_backup', { credential });
   }
+  revealAndVerifyBackup(credential: string) {
+    return command<boolean>('wallet_reveal_and_verify_backup', { credential });
+  }
   recoverWallet(name: string, credential: string) {
     return command<void>('wallet_recover', { name, credential });
   }

@@ -62,6 +62,7 @@ export interface WalletProfilesPort {
   cancelOnboarding(): Promise<void>;
   createWallet(name: string, credential: string, backupVerified: boolean): Promise<void>;
   verifyBackup(credential: string): Promise<boolean>;
+  revealAndVerifyBackup(credential: string): Promise<boolean>;
   recoverWallet(name: string, credential: string): Promise<void>;
   unlock(credential: string): Promise<void>;
   lock(): Promise<void>;

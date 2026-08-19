@@ -77,6 +77,7 @@
   let verifyCredential = $state('');
   let verifyError = $state('');
   let verifying = $state(false);
+  let revealingBackup = $state(false);
   let initialDataLoading = $state(true);
   let syncSource = $state<WalletSyncSource | null>(null);
   let syncStatus = $state<WalletSyncStatus | null>(null);
@@ -301,6 +302,33 @@
     } finally {
       verifyCredential = '';
       verifying = false;
+    }
+  }
+  async function revealAndVerifyBackup() {
+    revealingBackup = true;
+    verifyError = '';
+    try {
+      const verified = await walletService.revealAndVerifyBackup(verifyCredential);
+      if (!verified) {
+        toast({
+          title: 'Backup still unverified',
+          description: 'Your recovery words remain available to reveal again before verification.'
+        });
+        return;
+      }
+      verifyOpen = false;
+      if (selectedProfile) selectedProfile = { ...selectedProfile, backupVerified: true };
+      toast({
+        title: 'Recovery backup verified',
+        description: 'Your reconstructed word order matched this wallet.',
+        tone: 'success'
+      });
+    } catch (cause) {
+      verifyError =
+        cause instanceof Error ? cause.message : 'Could not reveal this recovery backup.';
+    } finally {
+      verifyCredential = '';
+      revealingBackup = false;
     }
   }
   async function runExternalSignerHealthCheck() {
@@ -585,7 +613,7 @@
 <Modal
   open={verifyOpen}
   title="Verify recovery backup"
-  description="Use your written 24 words to complete a private native challenge. Groot will not reveal them again."
+  description="Use your written 24 words for a private native proof, or reveal them securely first if you still need to make the backup."
   onclose={() => {
     verifyOpen = false;
     verifyCredential = '';
@@ -593,8 +621,8 @@
   }}
 >
   <div class="warning-box verify-backup-warning">
-    <strong>Have the written backup in front of you.</strong> Verification confirms its exact word order
-    without sending the words into the webview.
+    <strong>Recovery words stay inside the trusted native window.</strong> Revealing or verifying them
+    never sends the words into the webview.
   </div>
   <PasswordField
     label="Wallet passphrase"
@@ -605,16 +633,25 @@
   {#if verifyError}<p class="form-error" role="alert">
       {verifyError.replace('passphrase / PIN', 'wallet passphrase')}
     </p>{/if}
-  <div class="modal-footer">
+  <div class="modal-footer verify-backup-actions">
+    <Button
+      class="show-words-action"
+      variant="secondary"
+      disabled={!verifyCredential || verifying || revealingBackup}
+      loading={revealingBackup}
+      loadingLabel="Opening recovery words…"
+      onclick={revealAndVerifyBackup}>View recovery words first</Button
+    >
     <Button
       variant="secondary"
+      disabled={verifying || revealingBackup}
       onclick={() => {
         verifyOpen = false;
         verifyCredential = '';
         verifyError = '';
       }}>Cancel</Button
     ><Button
-      disabled={!verifyCredential}
+      disabled={!verifyCredential || revealingBackup}
       loading={verifying}
       loadingLabel="Opening verification…"
       onclick={verifyBackup}>Continue</Button
