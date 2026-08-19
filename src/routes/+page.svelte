@@ -29,6 +29,7 @@
     type ExternalSignerWallet,
     type MultisigProposal,
     type MultisigWallet,
+    type PaymentProposal,
     type WalletProfile,
     type WalletSnapshot,
     type WalletSyncSource,
@@ -63,7 +64,7 @@
   let hardwareSignerWallet = $state<ExternalSignerWallet | null>(null);
   let signerDetailsOpen = $state(false);
   let checkingSignerHealth = $state(false);
-  let activeProposal = $state<MultisigProposal | null>(null);
+  let activeProposal = $state<MultisigProposal | PaymentProposal | null>(null);
   let selected = $state<Transaction | null>(null);
   let multisig = $state(false);
   let moreOpen = $state(false);
@@ -116,12 +117,21 @@
     sortTransactionsNewestFirst(snapshot?.transactions ?? []).slice(0, 3)
   );
   const proposalHref = $derived(multisig ? '/multisig/send' : '/send');
+  const proposalCanFinalize = $derived(
+    Boolean(activeProposal && 'canFinalize' in activeProposal && activeProposal.canFinalize)
+  );
   const proposalTitle = $derived(
-    activeProposal?.canFinalize ? 'Payment ready to broadcast' : 'Signing in progress'
+    activeProposal && !('canFinalize' in activeProposal)
+      ? 'Payment ready to sign'
+      : proposalCanFinalize
+        ? 'Payment ready to broadcast'
+        : 'Signing in progress'
   );
   const proposalProgress = $derived(
     activeProposal
-      ? `${activeProposal.signed} of ${activeProposal.required} signatures collected`
+      ? 'signed' in activeProposal
+        ? `${activeProposal.signed} of ${activeProposal.required} signatures collected`
+        : '0 of 1 signatures collected'
       : ''
   );
   const proposalLabel = $derived(
@@ -168,7 +178,7 @@
             walletService.snapshot(),
             selectedProfile?.kind === 'watch_only'
               ? walletService.externalSignerProposals()
-              : Promise.resolve([]),
+              : walletService.paymentProposals(),
             selectedProfile?.kind === 'watch_only'
               ? walletService.externalSignerWallet()
               : Promise.resolve(null),
@@ -179,7 +189,10 @@
         snapshot = nextSnapshot;
         hardwareSignerWallet = nextHardwareSignerWallet;
         setHardwareHealthChecks(nextHealthChecks);
-        activeProposal = latestActiveProposal(proposals);
+        activeProposal =
+          selectedProfile?.kind === 'watch_only'
+            ? latestActiveProposal(proposals as MultisigProposal[])
+            : ((proposals as PaymentProposal[])[0] ?? null);
       }
       initialDataLoading = false;
       if (syncSource.type === 'compact_filters') void sync(false);
@@ -443,7 +456,7 @@
     {#if activeProposal}
       <a
         class="active-proposal-callout"
-        class:ready={activeProposal.canFinalize}
+        class:ready={proposalCanFinalize}
         href={proposalHref}
         aria-label={`Resume payment, ${proposalLabel}, ${proposalProgress}`}
       >

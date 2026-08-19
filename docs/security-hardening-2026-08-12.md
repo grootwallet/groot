@@ -26,7 +26,7 @@ The supplied review was static and read-only. Each item below was rechecked agai
 - Recipient dust failures map to `invalid_amount`; malformed or stale coin identifiers map to stable coin-specific errors instead of `internal_error`.
 - The frontend `WalletErrorCode` contract includes the backend's `invalid_coin`, `coin_unavailable`, and `invalid_signature` remediation codes, so renderer-side handling remains type-complete without changing the adapter's stable-code pass-through.
 - The Rust registry accepts exactly the documented inactivity timeout choices: 1, 5, 15, 30, and 60 minutes.
-- Documentation now distinguishes persisted single-key proposal integrity from current UI resumption: external-signer and multisig routes visibly reload active proposals; generic single-key send does not yet expose a post-restart resume selector.
+- At the time of this hardening review, persisted generic single-key proposals did not yet have a visible post-restart selector. The follow-up software-proposal resume work now lists the same persisted PSBTs and uses the shared Overview resume and cancellation-warning flow.
 - ADR 0028 records the new enforcement boundaries and residual risks. `SECURITY.md`, the security model, threat model, architecture, product spec, implementation status, testing guide, and release checklist are updated in the same change.
 
 ## Validation contract

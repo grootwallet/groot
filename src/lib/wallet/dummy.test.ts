@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DummyWalletAdapter } from './dummy';
-import { feeRate, type MultisigSetupDraft } from './contracts';
+import { feeRate, sats, type MultisigSetupDraft } from './contracts';
 
 const pendingTransactionId = '6a1b2c3d4e5f67890123456789abcdef6a1b2c3d4e5f67890123456789abcdef';
 
@@ -13,6 +13,22 @@ describe('dummy acceleration proposals', () => {
 
     expect(resumed).toEqual(first);
     expect(cpfp.proposalId).not.toBe(first.proposalId);
+  });
+});
+
+describe('software payment proposals', () => {
+  it('lists and explicitly cancels a prepared payment', async () => {
+    const adapter = new DummyWalletAdapter();
+    const proposal = await adapter.preparePayment(
+      'tb1qreceiver000000000000000000000000000000000',
+      'Saved software payment',
+      sats(1_000),
+      feeRate(3)
+    );
+
+    expect(await adapter.paymentProposals()).toEqual([proposal]);
+    await adapter.cancelPaymentProposal(proposal.proposalId);
+    expect(await adapter.paymentProposals()).toEqual([]);
   });
 });
 

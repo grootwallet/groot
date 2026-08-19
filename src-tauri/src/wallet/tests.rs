@@ -2737,6 +2737,39 @@ fn restart_restores_proposals_frozen_coins_and_acknowledged_notifications() {
 }
 
 #[test]
+fn restart_lists_only_active_payment_proposals_newest_first() {
+    let directory = std::env::temp_dir().join(format!("groot-proposal-list-{}", Uuid::new_v4()));
+    fs::create_dir_all(&directory).unwrap();
+    let path = directory.join("wallet.sqlite");
+    {
+        let db = Connection::open(&path).unwrap();
+        init_app_schema(&db).unwrap();
+        for (proposal_id, status, created_at) in [
+            ("older-active", "collecting", 10),
+            ("already-sent", "broadcast", 30),
+            ("newer-active", "ready", 20),
+            ("cancelled", "cancelled", 40),
+        ] {
+            db.execute(
+                "INSERT INTO groot_proposals
+                 (proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at)
+                 VALUES (?1, 'bcrt1qfixture', 'Draft', 10, 1, 1, 'fixture', ?2, ?3)",
+                params![proposal_id, status, created_at],
+            )
+            .unwrap();
+        }
+    }
+
+    let restarted_db = Connection::open(&path).unwrap();
+    init_app_schema(&restarted_db).unwrap();
+    assert_eq!(
+        active_payment_proposal_ids(&restarted_db).unwrap(),
+        vec!["newer-active", "older-active"]
+    );
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn locally_broadcast_transaction_is_pending_after_database_restart() {
     use bdk_wallet::bitcoin::{
         absolute::LockTime, hashes::Hash, transaction::Version, ScriptBuf, Sequence, TxOut, Witness,

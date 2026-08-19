@@ -313,6 +313,12 @@ export class TauriWalletAdapter implements WalletPort {
       coinSelection
     });
   }
+  paymentProposals() {
+    return command<PaymentProposal[]>('tx_proposals');
+  }
+  cancelPaymentProposal(proposalId: string) {
+    return command<void>('tx_proposal_cancel', { proposalId });
+  }
   prepareAcceleration(
     txid: string,
     method: import('./contracts').AccelerationMethod,

@@ -1,6 +1,52 @@
 use super::*;
 
 #[tauri::command]
+pub fn tx_proposals(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> ApiResult<Vec<PaymentProposalDto>> {
+    let _operation = operation_guard(&state)?;
+    require_unlocked(&app, &state)?;
+    let mut db = open_db(&app)?;
+    let wallet = load_wallet(&mut db)?;
+    let proposal_ids = active_payment_proposal_ids(&db)?;
+    proposal_ids
+        .iter()
+        .map(|proposal_id| load_payment_proposal_dto(&db, &wallet, proposal_id))
+        .collect()
+}
+
+#[tauri::command]
+pub fn tx_proposal_cancel(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    proposal_id: String,
+) -> ApiResult<()> {
+    let _operation = operation_guard(&state)?;
+    require_unlocked(&app, &state)?;
+    let db = open_db(&app)?;
+    let changed = db
+        .execute(
+            "UPDATE groot_proposals SET status = 'cancelled'
+             WHERE proposal_id = ?1 AND status IN ('collecting', 'ready')",
+            params![proposal_id],
+        )
+        .map_err(internal)?;
+    if changed != 1 {
+        return Err(api_error(
+            "proposal_not_found",
+            "The proposal is no longer active.",
+        ));
+    }
+    state
+        .proposals
+        .lock()
+        .map_err(internal)?
+        .remove(&proposal_id);
+    Ok(())
+}
+
+#[tauri::command]
 pub fn tx_prepare(
     app: AppHandle,
     state: State<'_, AppState>,

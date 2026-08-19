@@ -625,6 +625,13 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     }
     return proposal;
   }
+  async paymentProposals() {
+    return structuredClone([...this._proposals.values()]);
+  }
+  async cancelPaymentProposal(proposalId: string) {
+    if (!this._proposals.delete(proposalId))
+      throw new WalletError('proposal_not_found', 'The proposal is no longer active.');
+  }
   async prepareAcceleration(
     txid: string,
     method: import('./contracts').AccelerationMethod,

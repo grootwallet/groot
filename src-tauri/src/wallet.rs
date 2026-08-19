@@ -4365,6 +4365,22 @@ fn load_payment_proposal_dto(
     })
 }
 
+fn active_payment_proposal_ids(db: &Connection) -> ApiResult<Vec<String>> {
+    let mut statement = db
+        .prepare(
+            "SELECT proposal_id FROM groot_proposals
+             WHERE status IN ('collecting', 'ready')
+             ORDER BY created_at DESC, proposal_id DESC",
+        )
+        .map_err(internal)?;
+    let proposal_ids = statement
+        .query_map([], |row| row.get::<_, String>(0))
+        .map_err(internal)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(internal)?;
+    Ok(proposal_ids)
+}
+
 fn write_private_json(path: &Path, value: &impl Serialize) -> ApiResult<()> {
     let parent = path
         .parent()

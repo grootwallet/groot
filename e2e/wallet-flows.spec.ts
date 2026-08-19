@@ -1234,6 +1234,44 @@ test('send reviews a proposal and rejects a wrong credential', async ({ page }) 
   await expect(page.getByText('Transaction ID')).toBeVisible();
 });
 
+test('software payment resumes through the shared draft callout and cancellation warning', async ({
+  page
+}) => {
+  await page.goto('/send');
+  await page.getByLabel('Bitcoin address').fill('bcrt1qreceiver0000000000000000000000000000000');
+  await page.getByLabel('Payment label').fill('Saved software payment');
+  await page.getByRole('button', { name: 'Continue to amount' }).click();
+  await page.getByLabel('Amount', { exact: true }).fill('8000');
+  await page.getByRole('button', { name: 'Review payment' }).click();
+
+  await page.getByRole('link', { name: 'Overview' }).click();
+  const resume = page.getByRole('link', {
+    name: 'Resume payment, Saved software payment, 0 of 1 signatures collected'
+  });
+  await expect(resume).toContainText('Payment ready to sign');
+  await expect(resume).toContainText('0 of 1 signatures collected');
+  await resume.click();
+
+  await expect(
+    page.locator('.form-card').getByText('Saved software payment', { exact: true })
+  ).toBeVisible();
+  await expect(page.getByText('8,000', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Cancel payment' }).click();
+  const cancellation = page.getByRole('dialog', { name: 'Cancel this payment?' });
+  await expect(cancellation.getByText('This cannot be undone.')).toBeVisible();
+  await expect(cancellation.getByText('0 of 1 collected')).toBeVisible();
+  await cancellation.getByRole('button', { name: 'Keep payment' }).click();
+  await expect(
+    page.locator('.form-card').getByText('Saved software payment', { exact: true })
+  ).toBeVisible();
+
+  await page.getByRole('button', { name: 'Continue to sign' }).click();
+  await page.getByRole('button', { name: 'Cancel payment' }).click();
+  await cancellation.getByRole('button', { name: 'Cancel payment' }).click();
+  await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible();
+  await expect(page.getByRole('link', { name: /Resume payment/ })).toHaveCount(0);
+});
+
 test('an address copied from Receive completes the browser send flow', async ({ page }) => {
   await page.goto('/receive');
   const receiveAddress = await page.locator('.receive-card .address-box code').innerText();

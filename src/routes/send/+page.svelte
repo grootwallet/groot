@@ -291,6 +291,15 @@
           amount = String(activeProposal.amount);
           step = activeProposal.canFinalize ? 3 : 2;
         }
+      } else {
+        const activeProposal = (await walletService.paymentProposals())[0] ?? null;
+        if (activeProposal) {
+          proposal = activeProposal;
+          address = activeProposal.recipient;
+          label = activeProposal.label;
+          amount = String(activeProposal.amount);
+          step = 2;
+        }
       }
     } catch (cause) {
       signerSummaryReady = true;
@@ -561,12 +570,13 @@
       savingPsbt = false;
     }
   }
-  async function confirmCancelExternalProposal() {
-    if (!proposal || !externalProposal || broadcasting) return;
+  async function confirmCancelProposal() {
+    if (!proposal || broadcasting || (externalSigner && !externalProposal)) return;
     broadcasting = true;
     cancelError = '';
     try {
-      await walletService.cancelExternalSignerProposal(proposal.proposalId);
+      if (externalSigner) await walletService.cancelExternalSignerProposal(proposal.proposalId);
+      else await walletService.cancelPaymentProposal(proposal.proposalId);
       proposal = null;
       externalProposal = null;
       address = '';
@@ -947,22 +957,14 @@
         Bitcoin transactions cannot be reversed. Verify the address and amount before signing.
       </div>
       <div class="split-actions">
-        {#if externalSigner}<Button
-            variant="danger-outline"
-            size="large"
-            onclick={() => {
-              cancelError = '';
-              cancelOpen = true;
-            }}>Cancel payment</Button
-          >{:else}<Button
-            variant="secondary"
-            size="large"
-            onclick={() => {
-              proposal = null;
-              step = 1;
-              draftStep = 2;
-            }}>Back</Button
-          >{/if}<Button size="large" onclick={() => (step = 3)}
+        <Button
+          variant="danger-outline"
+          size="large"
+          onclick={() => {
+            cancelError = '';
+            cancelOpen = true;
+          }}>Cancel payment</Button
+        ><Button size="large" onclick={() => (step = 3)}
           >Continue to sign<ArrowRight size={17} /></Button
         >
       </div>
@@ -1158,6 +1160,16 @@
       >
       <Button variant="ghost" size="large" class="full sign-back-action" onclick={() => (step = 2)}
         >Back to review</Button
+      >
+      <Button
+        variant="ghost-danger"
+        size="large"
+        class="full proposal-cancel-action"
+        disabled={broadcasting}
+        onclick={() => {
+          cancelError = '';
+          cancelOpen = true;
+        }}><X size={15} />Cancel payment</Button
       >
     </form>
   {:else}
@@ -1372,7 +1384,7 @@
       cancelError = '';
     }
   }}
-  >{#if proposal && externalProposal}<div class="warning-box">
+  >{#if proposal}<div class="warning-box">
       <strong>This cannot be undone.</strong> You will need to prepare and sign this payment again.
     </div>
     <dl class="details-list cancel-proposal-details">
@@ -1386,7 +1398,7 @@
       </div>
       <div>
         <dt>Signatures lost</dt>
-        <dd>{externalProposal.signed} of {externalProposal.required} collected</dd>
+        <dd>{externalProposal?.signed ?? 0} of {externalProposal?.required ?? 1} collected</dd>
       </div>
     </dl>
     {#if cancelError}<p class="form-error" role="alert">{cancelError}</p>{/if}
@@ -1402,7 +1414,7 @@
         variant="danger"
         loading={broadcasting}
         loadingLabel="Canceling payment…"
-        onclick={confirmCancelExternalProposal}>Cancel payment</Button
+        onclick={confirmCancelProposal}>Cancel payment</Button
       >
     </div>{/if}</Modal
 >

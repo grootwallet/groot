@@ -142,6 +142,8 @@ pub fn run() {
             wallet::multisig_proposal_commands::multisig_proposal_broadcast,
             wallet::multisig_proposal_commands::multisig_proposal_cancel,
             wallet::transaction_commands::tx_prepare,
+            wallet::transaction_commands::tx_proposals,
+            wallet::transaction_commands::tx_proposal_cancel,
             wallet::transaction_commands::tx_max_spend,
             wallet::coin_selection_preview,
             wallet::transaction_commands::tx_acceleration_prepare,

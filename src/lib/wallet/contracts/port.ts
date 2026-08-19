@@ -117,6 +117,8 @@ export interface WalletTransactionsPort {
     feeRate: FeeRate,
     coinSelection?: CoinSelection
   ): Promise<PaymentProposal>;
+  paymentProposals(): Promise<PaymentProposal[]>;
+  cancelPaymentProposal(proposalId: string): Promise<void>;
   prepareAcceleration(
     txid: string,
     method: AccelerationMethod,
