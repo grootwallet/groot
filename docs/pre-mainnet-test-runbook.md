@@ -36,11 +36,11 @@ GROOT_BUILD_NETWORK=testnet4 cargo test --locked --all-features
 
 Then perform these failure-first checks with disposable profiles and sanitized pass/fail notes only:
 
-1. In both Signet and Testnet4 builds, create a v2 software wallet and a multisig wallet, restart, unlock with the correct credential, and confirm a wrong credential remains `invalid_credential`. A secure-store denial must fail closed and must never consult or create a Regtest legacy key.
+1. In both Signet and Testnet4 builds, create a v3 software wallet and a multisig wallet, restart, relocate a backup copy, unlock with the correct credential, and confirm a wrong credential remains `invalid_credential`. A secure-store filesystem denial must fail closed and normal lifecycle operations must never consult or create a platform keystore record.
 2. Repeatedly enter a wrong credential for external-signer descriptor export. Confirm the same per-wallet `rate_limited` behavior used by unlock/signing, including after restart. While one process remains open, moving the wall clock backward must not shorten the retry delay. Do not treat repeated restart plus clock manipulation as closed; ADR 0028 records that residual.
 3. Import a signed PSBT whose ECDSA signature byte has been altered without changing the unsigned transaction. Confirm `invalid_signature`, unchanged signature progress, and byte-identical persisted proposal state. Then import a valid signer PSBT and confirm normal progress/finalization.
 4. Lock a saved multisig wallet and request its saved descriptor/cosigner metadata through the normal UI/command harness. Confirm the data is unavailable until that exact wallet is unlocked.
-5. Inject a failure after each UUID device-key creation path (software, external signer, standard multisig, recovery, BSMS, and Miniscript recovery). Confirm neither the partial profile directory nor UUID-scoped secure-store item remains. Run the final lifecycle against the signed macOS candidate before release.
+5. Inject a failure after each encrypted-profile creation path (software, external signer, standard multisig, recovery, BSMS, and Miniscript recovery). Confirm no partial profile directory remains. Run the final portable create/restart/relocate/restore/delete lifecycle against the signed macOS candidate before release and confirm wallet-secret operations never create, read, update, or delete a Keychain device-key item. Do not confuse platform-native TLS certificate trust with wallet-secret storage.
 6. Inspect direct and Tor RPC failure paths with a disposable password under a debugger or memory tool appropriate to the signed platform. Confirm Groot-owned credential/request buffers have bounded lifetimes and are cleared; record third-party HTTP/TLS buffer behavior as the ADR 0028 residual rather than claiming guaranteed process-wide erasure.
 
 The canonical finding-to-fix map is [`security-hardening-2026-08-12.md`](security-hardening-2026-08-12.md). Attach only sanitized command versions, pass/fail outcomes, exact commit identity, and reviewer sign-off to release evidence.
@@ -76,6 +76,53 @@ Run these stories in order:
 6. Create an unconfirmed payment with wallet change, use **Spend output (CPFP)**, review the child/package fee, sign/broadcast, mine, and confirm the package.
 7. Create a 2-of-3 wallet, export BSMS and Groot JSON, reconstruct the same first address from each, and complete a two-signer file/UR PSBT round trip.
 8. Set a known recovery birthday and gap, perform full rescan, restart, and verify history/balance/labels. Repeat with a deliberately too-late birthday and confirm the documented omission warning.
+
+## 2A. Testnet4 portable storage and Core rehearsal
+
+This is the next public-network rehearsal after the isolated Regtest stories pass. Use only disposable Testnet4 bitcoin. A locally ad-hoc-signed build is useful development evidence, but it is not the signed/notarized release-candidate evidence required by the mainnet checklist.
+
+1. Confirm the intended Testnet4 Core instance is running and fully synchronized without placing its RPC password in shell history:
+
+   ```sh
+   read -s "RPCPASS?RPC password: "; echo
+   print -r -- "$RPCPASS" | bitcoin-cli \
+     -rpcconnect=127.0.0.1 \
+     -rpcport=48332 \
+     -rpcuser=groot-testnet4 \
+     -stdinrpcpass \
+     getblockchaininfo
+   unset RPCPASS
+   ```
+
+   Require `chain: testnet4`, equal `blocks` and `headers`, `verificationprogress: 1`, and `initialblockdownload: false`. Confirm this is the intended existing node and data directory; do not start another node merely because the default `bitcoin-cli -testnet4` port or data directory differs.
+
+2. Build the explicit Testnet4 app and verify its bundle identifier before opening it:
+
+   ```sh
+   GROOT_BUILD_NETWORK=testnet4 pnpm tauri build \
+     --bundles app \
+     --config src-tauri/tauri.testnet4.conf.json
+   /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' \
+     'src-tauri/target/release/bundle/macos/Groot Testnet4.app/Contents/Info.plist'
+   ```
+
+   The identifier must be `app.groot.wallet.testnet4`. Sign according to the current candidate procedure; record the binary hash, commit, host OS, architecture, and whether the signature is ad hoc or release-grade.
+
+3. Create a fresh disposable software wallet. Verify the 24-word native sheet is aligned and unobscured, complete backup confirmation, then quit and reopen the app. Unlock with the correct wallet passphrase and confirm that no Keychain or platform-keystore prompt appears.
+
+4. Enter a wrong wallet passphrase once and require the stable invalid-credential message with the wallet still locked. Retry with the correct passphrase and require a successful unlock. Never record either value.
+
+5. Connect the already-synchronized local node using **This Mac**, RPC URL `http://127.0.0.1:48332`, username/password authentication, RPC username `groot-testnet4`, the existing RPC password, and the selected wallet's wallet passphrase. These are two different credentials. Require a successful exact-Testnet4 chain check and ensure raw JSON-RPC or transport errors never appear in the UI.
+
+6. Restart Groot and unlock the same wallet. Confirm the saved node route and RPC credentials decrypt from the portable wallet envelope, the node reconnects, and no Keychain prompt appears. Lock and unlock once more to exercise session cleanup.
+
+7. Generate a permanently labeled receive address, send a small disposable Testnet4 amount from an independent source, sync, and record only sanitized pass/fail evidence for mempool arrival, confirmation, balance, label, and activity persistence after restart.
+
+8. Send part of the received amount to an independently controlled Testnet4 address. Exercise a Core fee preset when available and a validated custom sat/vB rate when it is not. Verify recipient, amount, fee, change, network, and inputs from the authoritative review; sign, broadcast, confirm, restart, and reconcile activity and balance. Never commit addresses, transaction IDs, PSBTs, or RPC credentials.
+
+9. Using a separate disposable application-data copy, test portable relocation: quit Groot, copy the complete owner-only encrypted profile, open it under the same Testnet4 build on the destination environment, and unlock with the correct credential. Confirm wrong-credential and ciphertext-corruption copies fail closed and that the source profile remains unchanged. Do not run two processes against the same application-data directory.
+
+10. Repeat the create/restart/relocate/corrupt/delete lifecycle for an app-PIN profile such as a disposable external-signer or multisig wallet. Record environment and pass/fail results only. Real hardware signing and a two-device 2-of-3 Testnet4 spend belong to the physical matrix below.
 
 ## 3. Physical hardware matrix
 

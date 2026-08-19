@@ -47,9 +47,6 @@ ur = "=0.4.1"
 # Explicit Tor is local so .onion hostnames reach SOCKS5 without host DNS.
 jsonrpc = "=0.18.0"
 
-[target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
-security-framework = { path = "vendor/security-framework" }
-
 [target.'cfg(not(any(target_os = "macos", target_os = "ios")))'.dependencies]
 libc = "=0.2.186"
 

@@ -6,13 +6,6 @@ use argon2::{Algorithm, Argon2, Params, Version};
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use rand::{rngs::OsRng, RngCore};
 use serde::{Deserialize, Serialize};
-#[cfg(not(any(target_os = "macos", target_os = "ios")))]
-use std::path::PathBuf;
-#[cfg(any(target_os = "macos", target_os = "ios"))]
-use std::{
-    collections::HashMap,
-    sync::{Mutex, OnceLock},
-};
 use std::{
     fs::{self, File, OpenOptions},
     io::{Read, Write},
@@ -21,14 +14,11 @@ use std::{
 use uuid::Uuid;
 use zeroize::Zeroizing;
 
-const VERSION: u8 = 2;
+const VERSION: u8 = 3;
+const DEVICE_BOUND_VERSION: u8 = 2;
 const MAX_METADATA_BYTES: u64 = 256 * 1024;
 const KEY_BYTES: usize = 32;
 const NONCE_BYTES: usize = 12;
-#[cfg(any(target_os = "macos", target_os = "ios"))]
-const KEYCHAIN_SERVICE: &str = "app.groot.wallet.device-wrap.v1";
-#[cfg(any(target_os = "macos", target_os = "ios"))]
-const ERR_SEC_ITEM_NOT_FOUND: i32 = -25_300;
 
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum SecureStoreError {
@@ -38,8 +28,6 @@ pub enum SecureStoreError {
     InvalidCredential,
     #[error("secure storage is unavailable")]
     Unavailable,
-    #[error("secure storage device key was not found")]
-    DeviceKeyNotFound,
 }
 
 fn fill_os_random(destination: &mut [u8]) -> Result<(), SecureStoreError> {
@@ -57,239 +45,10 @@ struct Metadata {
     payload: String,
     credential_nonce: String,
     credential_wrapped_key: String,
-    device_nonce: String,
-    device_wrapped_key: String,
-}
-
-trait DeviceKeyProvider {
-    fn get_or_create(&self, metadata_path: &Path) -> Result<Vec<u8>, SecureStoreError>;
-    fn get(&self, metadata_path: &Path) -> Result<Vec<u8>, SecureStoreError>;
-    fn set(&self, metadata_path: &Path, key: &[u8]) -> Result<(), SecureStoreError>;
-}
-
-struct SystemDeviceKeyProvider;
-
-#[cfg(any(target_os = "macos", target_os = "ios"))]
-fn device_key_cache() -> &'static Mutex<HashMap<String, Zeroizing<Vec<u8>>>> {
-    static CACHE: OnceLock<Mutex<HashMap<String, Zeroizing<Vec<u8>>>>> = OnceLock::new();
-    CACHE.get_or_init(|| Mutex::new(HashMap::new()))
-}
-
-#[cfg(any(target_os = "macos", target_os = "ios"))]
-fn cached_device_key(account: &str) -> Option<Vec<u8>> {
-    device_key_cache()
-        .lock()
-        .ok()
-        .and_then(|cache| cache.get(account).map(|key| key.to_vec()))
-}
-
-#[cfg(any(target_os = "macos", target_os = "ios"))]
-fn cache_device_key(account: &str, key: &[u8]) {
-    if let Ok(mut cache) = device_key_cache().lock() {
-        cache.insert(account.to_owned(), Zeroizing::new(key.to_vec()));
-    }
-}
-
-#[cfg(any(target_os = "macos", target_os = "ios"))]
-fn remove_cached_device_key(account: &str) {
-    if let Ok(mut cache) = device_key_cache().lock() {
-        cache.remove(account);
-    }
-}
-
-#[cfg(any(target_os = "macos", target_os = "ios"))]
-fn account(metadata_path: &Path) -> Result<String, SecureStoreError> {
-    metadata_path
-        .parent()
-        .and_then(Path::file_name)
-        .and_then(|name| name.to_str())
-        .map(|name| format!("wallet:{name}"))
-        .ok_or(SecureStoreError::Unavailable)
-}
-
-#[cfg(any(target_os = "macos", target_os = "ios"))]
-fn read_keychain_device_key(account: &str) -> Result<Vec<u8>, SecureStoreError> {
-    use security_framework::passwords::get_generic_password;
-
-    if let Some(key) = cached_device_key(account) {
-        return validate_device_key(key);
-    }
-
-    match get_generic_password(KEYCHAIN_SERVICE, account) {
-        Ok(key) => {
-            let key = validate_device_key(key)?;
-            cache_device_key(account, &key);
-            Ok(key)
-        }
-        Err(error) if error.code() == ERR_SEC_ITEM_NOT_FOUND => {
-            Err(SecureStoreError::DeviceKeyNotFound)
-        }
-        #[cfg(target_os = "macos")]
-        Err(_) => read_legacy_keychain_device_key(account),
-        #[cfg(target_os = "ios")]
-        Err(_) => Err(SecureStoreError::Unavailable),
-    }
-}
-
-// macOS still supports the original Keychain Services lookup API. Unlike a
-// failed SecItem query against an item owned by an older ad-hoc debug build,
-// this path gives Keychain Services another opportunity to authorize the
-// current executable. It reads the same Keychain item; it is not a weaker
-// fallback store.
-#[cfg(target_os = "macos")]
-fn read_legacy_keychain_device_key(account: &str) -> Result<Vec<u8>, SecureStoreError> {
-    use security_framework::os::macos::passwords::find_generic_password;
-
-    match find_generic_password(None, KEYCHAIN_SERVICE, account) {
-        Ok((password, _item)) => {
-            let key = validate_device_key(password.as_ref().to_vec())?;
-            cache_device_key(account, &key);
-            Ok(key)
-        }
-        Err(error) if error.code() == ERR_SEC_ITEM_NOT_FOUND => {
-            Err(SecureStoreError::DeviceKeyNotFound)
-        }
-        Err(_) => Err(SecureStoreError::Unavailable),
-    }
-}
-
-#[cfg(any(target_os = "macos", target_os = "ios"))]
-impl DeviceKeyProvider for SystemDeviceKeyProvider {
-    fn get_or_create(&self, metadata_path: &Path) -> Result<Vec<u8>, SecureStoreError> {
-        use security_framework::passwords::set_generic_password;
-        let account = account(metadata_path)?;
-        match read_keychain_device_key(&account) {
-            Ok(key) => return Ok(key),
-            Err(SecureStoreError::DeviceKeyNotFound) => {}
-            Err(error) => return Err(error),
-        }
-        let mut key = vec![0_u8; KEY_BYTES];
-        fill_os_random(&mut key)?;
-        set_generic_password(KEYCHAIN_SERVICE, &account, &key)
-            .map_err(|_| SecureStoreError::Unavailable)?;
-        cache_device_key(&account, &key);
-        Ok(key)
-    }
-
-    fn get(&self, metadata_path: &Path) -> Result<Vec<u8>, SecureStoreError> {
-        read_keychain_device_key(&account(metadata_path)?)
-    }
-
-    fn set(&self, metadata_path: &Path, key: &[u8]) -> Result<(), SecureStoreError> {
-        use security_framework::passwords::set_generic_password;
-        validate_device_key(key.to_vec())?;
-        let account = account(metadata_path)?;
-        set_generic_password(KEYCHAIN_SERVICE, &account, key)
-            .map_err(|_| SecureStoreError::Unavailable)?;
-        cache_device_key(&account, key);
-        Ok(())
-    }
-}
-
-#[cfg(not(any(target_os = "macos", target_os = "ios")))]
-impl DeviceKeyProvider for SystemDeviceKeyProvider {
-    fn get_or_create(&self, metadata_path: &Path) -> Result<Vec<u8>, SecureStoreError> {
-        require_sandbox_device_key(crate::build_network::NETWORK)?;
-        let path = sandbox_key_path(metadata_path)?;
-        if path.exists() {
-            return read_sandbox_key(&path);
-        }
-        let mut key = vec![0_u8; KEY_BYTES];
-        fill_os_random(&mut key)?;
-        write_owner_only(&path, &key)?;
-        Ok(key)
-    }
-
-    fn get(&self, metadata_path: &Path) -> Result<Vec<u8>, SecureStoreError> {
-        require_sandbox_device_key(crate::build_network::NETWORK)?;
-        let path = sandbox_key_path(metadata_path)?;
-        if !path.exists() {
-            return Err(SecureStoreError::DeviceKeyNotFound);
-        }
-        read_sandbox_key(&path)
-    }
-
-    fn set(&self, metadata_path: &Path, key: &[u8]) -> Result<(), SecureStoreError> {
-        require_sandbox_device_key(crate::build_network::NETWORK)?;
-        validate_device_key(key.to_vec())?;
-        write_owner_only(&sandbox_key_path(metadata_path)?, key)
-    }
-}
-
-#[cfg(any(test, not(any(target_os = "macos", target_os = "ios"))))]
-fn require_sandbox_device_key(
-    network: bdk_wallet::bitcoin::Network,
-) -> Result<(), SecureStoreError> {
-    if network == bdk_wallet::bitcoin::Network::Regtest {
-        Ok(())
-    } else {
-        // The file-backed key exists only for disposable deterministic tests.
-        // Public-network builds fail closed until their platform provides a
-        // reviewed non-exportable device key (DPAPI/CNG, Android Keystore, or
-        // an approved Linux secret service).
-        Err(SecureStoreError::Unavailable)
-    }
-}
-
-#[cfg(not(any(target_os = "macos", target_os = "ios")))]
-fn sandbox_key_path(metadata_path: &Path) -> Result<PathBuf, SecureStoreError> {
-    Ok(metadata_path
-        .parent()
-        .ok_or(SecureStoreError::Unavailable)?
-        .join("device.wrap"))
-}
-
-#[cfg(not(any(target_os = "macos", target_os = "ios")))]
-fn read_sandbox_key(path: &Path) -> Result<Vec<u8>, SecureStoreError> {
-    let path_metadata = fs::symlink_metadata(path).map_err(|_| SecureStoreError::Unavailable)?;
-    if path_metadata.file_type().is_symlink()
-        || !path_metadata.is_file()
-        || path_metadata.len() != KEY_BYTES as u64
-    {
-        return Err(SecureStoreError::Corrupt);
-    }
-    let mut options = OpenOptions::new();
-    options.read(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
-    }
-    #[cfg(windows)]
-    {
-        use std::os::windows::fs::OpenOptionsExt;
-        const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
-        options.custom_flags(FILE_FLAG_OPEN_REPARSE_POINT);
-    }
-    let file = options
-        .open(path)
-        .map_err(|_| SecureStoreError::Unavailable)?;
-    let opened_metadata = file.metadata().map_err(|_| SecureStoreError::Unavailable)?;
-    if !opened_metadata.is_file() || opened_metadata.len() != KEY_BYTES as u64 {
-        return Err(SecureStoreError::Corrupt);
-    }
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::MetadataExt;
-        if path_metadata.dev() != opened_metadata.dev()
-            || path_metadata.ino() != opened_metadata.ino()
-        {
-            return Err(SecureStoreError::Corrupt);
-        }
-    }
-    let mut key = Vec::with_capacity(KEY_BYTES);
-    file.take((KEY_BYTES + 1) as u64)
-        .read_to_end(&mut key)
-        .map_err(|_| SecureStoreError::Corrupt)?;
-    validate_device_key(key)
-}
-
-fn validate_device_key(key: Vec<u8>) -> Result<Vec<u8>, SecureStoreError> {
-    if key.len() == KEY_BYTES {
-        Ok(key)
-    } else {
-        Err(SecureStoreError::Corrupt)
-    }
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    device_nonce: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    device_wrapped_key: Option<String>,
 }
 
 fn credential_kdf() -> Result<Argon2<'static>, SecureStoreError> {
@@ -329,7 +88,7 @@ fn decrypt(key: &[u8], nonce: &[u8], ciphertext: &[u8]) -> Result<Vec<u8>, Secur
         .map_err(|_| SecureStoreError::InvalidCredential)
 }
 
-fn decode(value: String) -> Result<Vec<u8>, SecureStoreError> {
+fn decode(value: &str) -> Result<Vec<u8>, SecureStoreError> {
     BASE64.decode(value).map_err(|_| SecureStoreError::Corrupt)
 }
 
@@ -382,27 +141,38 @@ fn read_metadata(path: &Path) -> Result<Metadata, SecureStoreError> {
     }
     let metadata: Metadata =
         serde_json::from_str(&encoded).map_err(|_| SecureStoreError::Corrupt)?;
-    if metadata.version != VERSION {
+    if !matches!(metadata.version, DEVICE_BOUND_VERSION | VERSION) {
+        return Err(SecureStoreError::Corrupt);
+    }
+    if metadata.version == DEVICE_BOUND_VERSION
+        && (metadata.device_nonce.is_none() || metadata.device_wrapped_key.is_none())
+    {
+        return Err(SecureStoreError::Corrupt);
+    }
+    if metadata.version == VERSION
+        && (metadata.device_nonce.is_some() || metadata.device_wrapped_key.is_some())
+    {
         return Err(SecureStoreError::Corrupt);
     }
     Ok(metadata)
 }
 
-fn store_with_provider(
+fn encode_metadata(metadata: &Metadata) -> Result<Vec<u8>, SecureStoreError> {
+    serde_json::to_vec(metadata).map_err(|_| SecureStoreError::Corrupt)
+}
+
+fn store_portable(
     metadata_path: &Path,
     secret: &[u8],
     credential: &str,
-    provider: &impl DeviceKeyProvider,
 ) -> Result<(), SecureStoreError> {
     let mut salt = Zeroizing::new(vec![0_u8; 16]);
     let mut data_key = Zeroizing::new(vec![0_u8; KEY_BYTES]);
     fill_os_random(&mut salt)?;
     fill_os_random(&mut data_key)?;
     let credential_key = derive_credential_key(credential, &salt)?;
-    let device_key = Zeroizing::new(provider.get_or_create(metadata_path)?);
     let (payload_nonce, payload) = encrypt(&data_key, secret)?;
     let (credential_nonce, credential_wrapped_key) = encrypt(&credential_key, &data_key)?;
-    let (device_nonce, device_wrapped_key) = encrypt(&device_key, &data_key)?;
     let metadata = Metadata {
         version: VERSION,
         salt: BASE64.encode(&salt),
@@ -410,54 +180,42 @@ fn store_with_provider(
         payload: BASE64.encode(payload),
         credential_nonce: BASE64.encode(credential_nonce),
         credential_wrapped_key: BASE64.encode(credential_wrapped_key),
-        device_nonce: BASE64.encode(device_nonce),
-        device_wrapped_key: BASE64.encode(device_wrapped_key),
+        device_nonce: None,
+        device_wrapped_key: None,
     };
-    let encoded = serde_json::to_vec(&metadata).map_err(|_| SecureStoreError::Corrupt)?;
-    write_owner_only(metadata_path, &encoded)
+    write_owner_only(metadata_path, &encode_metadata(&metadata)?)
 }
 
-fn load_with_provider(
-    metadata_path: &Path,
-    credential: &str,
-    provider: &impl DeviceKeyProvider,
-) -> Result<Vec<u8>, SecureStoreError> {
-    let metadata = read_metadata(metadata_path)?;
-    let salt = Zeroizing::new(decode(metadata.salt)?);
+fn load_portable(metadata_path: &Path, credential: &str) -> Result<Vec<u8>, SecureStoreError> {
+    let mut metadata = read_metadata(metadata_path)?;
+    let salt = Zeroizing::new(decode(&metadata.salt)?);
     if salt.len() != 16 {
         return Err(SecureStoreError::Corrupt);
     }
     let credential_key = derive_credential_key(credential, &salt)?;
-    let device_key = Zeroizing::new(provider.get(metadata_path)?);
     let credential_data_key = Zeroizing::new(decrypt(
         &credential_key,
-        &decode(metadata.credential_nonce)?,
-        &decode(metadata.credential_wrapped_key)?,
+        &decode(&metadata.credential_nonce)?,
+        &decode(&metadata.credential_wrapped_key)?,
     )?);
-    let device_data_key = Zeroizing::new(
-        decrypt(
-            &device_key,
-            &decode(metadata.device_nonce)?,
-            &decode(metadata.device_wrapped_key)?,
-        )
-        .map_err(|_| SecureStoreError::Unavailable)?,
-    );
-    let mismatch = credential_data_key
-        .iter()
-        .zip(device_data_key.iter())
-        .fold(0_u8, |difference, (left, right)| {
-            difference | (left ^ right)
-        });
-    if credential_data_key.len() != KEY_BYTES || device_data_key.len() != KEY_BYTES || mismatch != 0
-    {
+    if credential_data_key.len() != KEY_BYTES {
         return Err(SecureStoreError::Corrupt);
     }
-    decrypt(
+    let plaintext = decrypt(
         &credential_data_key,
-        &decode(metadata.payload_nonce)?,
-        &decode(metadata.payload)?,
+        &decode(&metadata.payload_nonce)?,
+        &decode(&metadata.payload)?,
     )
-    .map_err(|_| SecureStoreError::Corrupt)
+    .map_err(|_| SecureStoreError::Corrupt)?;
+
+    if metadata.version == DEVICE_BOUND_VERSION {
+        metadata.version = VERSION;
+        metadata.device_nonce = None;
+        metadata.device_wrapped_key = None;
+        write_owner_only(metadata_path, &encode_metadata(&metadata)?)?;
+    }
+
+    Ok(plaintext)
 }
 
 pub fn store(
@@ -465,169 +223,128 @@ pub fn store(
     secret: &[u8],
     credential: &str,
 ) -> Result<(), SecureStoreError> {
-    store_with_provider(metadata_path, secret, credential, &SystemDeviceKeyProvider)
+    store_portable(metadata_path, secret, credential)
 }
 
 pub fn load(metadata_path: &Path, credential: &str) -> Result<Vec<u8>, SecureStoreError> {
-    load_with_provider(metadata_path, credential, &SystemDeviceKeyProvider)
-}
-
-struct FixedDeviceKeyProvider(Vec<u8>);
-
-impl DeviceKeyProvider for FixedDeviceKeyProvider {
-    fn get_or_create(&self, _metadata_path: &Path) -> Result<Vec<u8>, SecureStoreError> {
-        Ok(self.0.clone())
-    }
-
-    fn get(&self, _metadata_path: &Path) -> Result<Vec<u8>, SecureStoreError> {
-        Ok(self.0.clone())
-    }
-
-    fn set(&self, _metadata_path: &Path, _key: &[u8]) -> Result<(), SecureStoreError> {
-        Err(SecureStoreError::Unavailable)
-    }
-}
-
-fn load_with_legacy_provider(
-    metadata_path: &Path,
-    legacy_metadata_path: &Path,
-    credential: &str,
-    current: &impl DeviceKeyProvider,
-    legacy: &impl DeviceKeyProvider,
-) -> Result<Vec<u8>, SecureStoreError> {
-    match load_with_provider(metadata_path, credential, current) {
-        Err(SecureStoreError::DeviceKeyNotFound) => {
-            let legacy_key = legacy.get(legacy_metadata_path)?;
-            let plaintext = load_with_provider(
-                metadata_path,
-                credential,
-                &FixedDeviceKeyProvider(legacy_key.clone()),
-            )?;
-            // Copy the same device key only after both the legacy key and user
-            // credential authenticate the existing envelope. Never rotate a
-            // missing key or make a wrong credential appear to repair a wallet.
-            current.set(metadata_path, &legacy_key)?;
-            Ok(plaintext)
-        }
-        result => result,
-    }
-}
-
-pub fn load_with_legacy_device_key(
-    metadata_path: &Path,
-    legacy_metadata_path: &Path,
-    credential: &str,
-) -> Result<Vec<u8>, SecureStoreError> {
-    load_with_legacy_provider(
-        metadata_path,
-        legacy_metadata_path,
-        credential,
-        &SystemDeviceKeyProvider,
-        &SystemDeviceKeyProvider,
-    )
-}
-
-pub fn forget_device_key(metadata_path: &Path) -> Result<(), SecureStoreError> {
-    #[cfg(any(target_os = "macos", target_os = "ios"))]
-    {
-        use security_framework::passwords::delete_generic_password;
-        let account = account(metadata_path)?;
-        remove_cached_device_key(&account);
-        match delete_generic_password(KEYCHAIN_SERVICE, &account) {
-            Ok(()) => Ok(()),
-            Err(error) if error.code() == ERR_SEC_ITEM_NOT_FOUND => Ok(()),
-            Err(_) => Err(SecureStoreError::Unavailable),
-        }
-    }
-
-    #[cfg(not(any(target_os = "macos", target_os = "ios")))]
-    {
-        let path = sandbox_key_path(metadata_path)?;
-        match fs::remove_file(path) {
-            Ok(()) => Ok(()),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-            Err(_) => Err(SecureStoreError::Unavailable),
-        }
-    }
+    load_portable(metadata_path, credential)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Mutex;
-
-    #[derive(Default)]
-    struct MemoryProvider(Mutex<Option<Vec<u8>>>);
-
-    impl DeviceKeyProvider for MemoryProvider {
-        fn get_or_create(&self, _path: &Path) -> Result<Vec<u8>, SecureStoreError> {
-            let mut key = self.0.lock().unwrap();
-            Ok(key.get_or_insert_with(|| vec![7_u8; KEY_BYTES]).clone())
-        }
-
-        fn get(&self, _path: &Path) -> Result<Vec<u8>, SecureStoreError> {
-            self.0
-                .lock()
-                .unwrap()
-                .clone()
-                .ok_or(SecureStoreError::DeviceKeyNotFound)
-        }
-
-        fn set(&self, _path: &Path, value: &[u8]) -> Result<(), SecureStoreError> {
-            *self.0.lock().unwrap() = Some(value.to_vec());
-            Ok(())
-        }
-    }
 
     fn directory() -> std::path::PathBuf {
         std::env::temp_dir().join(format!("groot-secure-store-{}", Uuid::new_v4()))
     }
 
+    fn write_v2_fixture(path: &Path, secret: &[u8], credential: &str) {
+        let mut salt = Zeroizing::new(vec![0_u8; 16]);
+        let mut data_key = Zeroizing::new(vec![0_u8; KEY_BYTES]);
+        fill_os_random(&mut salt).unwrap();
+        fill_os_random(&mut data_key).unwrap();
+        let credential_key = derive_credential_key(credential, &salt).unwrap();
+        let (payload_nonce, payload) = encrypt(&data_key, secret).unwrap();
+        let (credential_nonce, credential_wrapped_key) =
+            encrypt(&credential_key, &data_key).unwrap();
+        let (device_nonce, device_wrapped_key) = encrypt(&[7_u8; KEY_BYTES], &data_key).unwrap();
+        let metadata = Metadata {
+            version: DEVICE_BOUND_VERSION,
+            salt: BASE64.encode(&salt),
+            payload_nonce: BASE64.encode(payload_nonce),
+            payload: BASE64.encode(payload),
+            credential_nonce: BASE64.encode(credential_nonce),
+            credential_wrapped_key: BASE64.encode(credential_wrapped_key),
+            device_nonce: Some(BASE64.encode(device_nonce)),
+            device_wrapped_key: Some(BASE64.encode(device_wrapped_key)),
+        };
+        write_owner_only(path, &encode_metadata(&metadata).unwrap()).unwrap();
+    }
+
     #[test]
-    fn requires_both_the_credential_and_device_key() {
+    fn portable_v3_round_trip_requires_the_credential() {
         let directory = directory();
         let metadata = directory.join("secret.json");
-        let provider = MemoryProvider::default();
-        store_with_provider(&metadata, b"never leave rust", "correct", &provider).unwrap();
+        store(&metadata, b"never leave rust", "correct").unwrap();
+        assert_eq!(load(&metadata, "correct").unwrap(), b"never leave rust");
         assert_eq!(
-            load_with_provider(&metadata, "correct", &provider).unwrap(),
-            b"never leave rust"
-        );
-        assert_eq!(
-            load_with_provider(&metadata, "wrong", &provider),
+            load(&metadata, "wrong"),
             Err(SecureStoreError::InvalidCredential)
         );
-        *provider.0.lock().unwrap() = Some(vec![9_u8; KEY_BYTES]);
+        let encoded = fs::read_to_string(&metadata).unwrap();
+        assert!(encoded.contains("\"version\":3"));
+        assert!(!encoded.contains("deviceNonce"));
+        assert!(!encoded.contains("deviceWrappedKey"));
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn portable_v3_file_can_be_relocated() {
+        let original_directory = directory();
+        let restored_directory = directory();
+        let original = original_directory.join("wallet-a").join("secret.json");
+        let restored = restored_directory.join("wallet-b").join("secret.json");
+        store(&original, b"portable secret", "correct").unwrap();
+        fs::create_dir_all(restored.parent().unwrap()).unwrap();
+        fs::copy(&original, &restored).unwrap();
+
+        assert_eq!(load(&restored, "correct").unwrap(), b"portable secret");
         assert_eq!(
-            load_with_provider(&metadata, "correct", &provider),
-            Err(SecureStoreError::Unavailable)
+            load(&restored, "wrong"),
+            Err(SecureStoreError::InvalidCredential)
+        );
+        fs::remove_dir_all(original_directory).unwrap();
+        fs::remove_dir_all(restored_directory).unwrap();
+    }
+
+    #[test]
+    fn authenticated_v2_load_migrates_without_a_device_key() {
+        let directory = directory();
+        let metadata = directory.join("secret.json");
+        write_v2_fixture(&metadata, b"migration secret", "correct");
+        assert_eq!(load(&metadata, "correct").unwrap(), b"migration secret");
+        let migrated = read_metadata(&metadata).unwrap();
+        assert_eq!(migrated.version, VERSION);
+        assert!(migrated.device_nonce.is_none());
+        assert!(migrated.device_wrapped_key.is_none());
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn wrong_credential_does_not_migrate_v2() {
+        let directory = directory();
+        let metadata = directory.join("secret.json");
+        write_v2_fixture(&metadata, b"migration secret", "correct");
+        let before = fs::read(&metadata).unwrap();
+
+        assert_eq!(
+            load(&metadata, "wrong"),
+            Err(SecureStoreError::InvalidCredential)
+        );
+        assert_eq!(fs::read(&metadata).unwrap(), before);
+        assert_eq!(
+            read_metadata(&metadata).unwrap().version,
+            DEVICE_BOUND_VERSION
         );
         fs::remove_dir_all(directory).unwrap();
     }
 
     #[test]
-    fn migrates_a_renamed_device_key_only_after_full_authentication() {
+    fn corrupt_payload_does_not_migrate_v2() {
         let directory = directory();
-        let metadata = directory.join("new-wallet").join("secret.json");
-        let legacy_metadata = directory.join("regtest-wallet").join("secret.json");
-        let legacy = MemoryProvider::default();
-        let current = MemoryProvider::default();
-        store_with_provider(&metadata, b"migration secret", "correct", &legacy).unwrap();
+        let metadata = directory.join("secret.json");
+        write_v2_fixture(&metadata, b"migration secret", "correct");
+        let mut value: serde_json::Value =
+            serde_json::from_slice(&fs::read(&metadata).unwrap()).unwrap();
+        value["payload"] = serde_json::Value::String(BASE64.encode(b"corrupt"));
+        write_owner_only(&metadata, &serde_json::to_vec(&value).unwrap()).unwrap();
+        let before = fs::read(&metadata).unwrap();
 
+        assert_eq!(load(&metadata, "correct"), Err(SecureStoreError::Corrupt));
+        assert_eq!(fs::read(&metadata).unwrap(), before);
         assert_eq!(
-            load_with_legacy_provider(&metadata, &legacy_metadata, "wrong", &current, &legacy,),
-            Err(SecureStoreError::InvalidCredential)
-        );
-        assert!(current.0.lock().unwrap().is_none());
-
-        assert_eq!(
-            load_with_legacy_provider(&metadata, &legacy_metadata, "correct", &current, &legacy,)
-                .unwrap(),
-            b"migration secret"
-        );
-        assert_eq!(
-            load_with_provider(&metadata, "correct", &current).unwrap(),
-            b"migration secret"
+            read_metadata(&metadata).unwrap().version,
+            DEVICE_BOUND_VERSION
         );
         fs::remove_dir_all(directory).unwrap();
     }
@@ -637,17 +354,10 @@ mod tests {
         let directory = directory();
         fs::create_dir_all(&directory).unwrap();
         let metadata = directory.join("secret.json");
-        let provider = MemoryProvider::default();
         fs::write(&metadata, b"not json").unwrap();
-        assert_eq!(
-            load_with_provider(&metadata, "x", &provider),
-            Err(SecureStoreError::Corrupt)
-        );
+        assert_eq!(load(&metadata, "x"), Err(SecureStoreError::Corrupt));
         fs::write(&metadata, vec![b'x'; MAX_METADATA_BYTES as usize + 1]).unwrap();
-        assert_eq!(
-            load_with_provider(&metadata, "x", &provider),
-            Err(SecureStoreError::Corrupt)
-        );
+        assert_eq!(load(&metadata, "x"), Err(SecureStoreError::Corrupt));
         fs::remove_dir_all(directory).unwrap();
     }
 
@@ -667,96 +377,5 @@ mod tests {
             Err(SecureStoreError::Corrupt)
         ));
         fs::remove_dir_all(directory).unwrap();
-    }
-
-    #[test]
-    fn file_backed_device_keys_are_regtest_only() {
-        use bdk_wallet::bitcoin::Network;
-
-        assert_eq!(require_sandbox_device_key(Network::Regtest), Ok(()));
-        for network in [Network::Signet, Network::Testnet4, Network::Bitcoin] {
-            assert_eq!(
-                require_sandbox_device_key(network),
-                Err(SecureStoreError::Unavailable)
-            );
-        }
-    }
-
-    #[cfg(not(any(target_os = "macos", target_os = "ios")))]
-    #[test]
-    fn forgetting_a_wallet_removes_the_sandbox_device_key() {
-        let directory = directory();
-        fs::create_dir_all(&directory).unwrap();
-        let metadata = directory.join("secret.json");
-        let device_key = sandbox_key_path(&metadata).unwrap();
-        fs::write(&device_key, vec![7_u8; KEY_BYTES]).unwrap();
-
-        forget_device_key(&metadata).unwrap();
-
-        assert!(!device_key.exists());
-        fs::remove_dir_all(directory).unwrap();
-    }
-
-    #[cfg(target_os = "macos")]
-    #[test]
-    #[ignore = "uses a disposable item in the logged-in macOS Keychain"]
-    fn macos_keychain_create_restart_restore_and_delete_lifecycle() {
-        struct KeychainCleanup {
-            metadata: std::path::PathBuf,
-            directories: Vec<std::path::PathBuf>,
-        }
-        impl Drop for KeychainCleanup {
-            fn drop(&mut self) {
-                let _ = forget_device_key(&self.metadata);
-                for directory in &self.directories {
-                    let _ = fs::remove_dir_all(directory);
-                }
-            }
-        }
-
-        let wallet_id = Uuid::new_v4().to_string();
-        let original_directory = directory();
-        let restored_directory = directory();
-        let original = original_directory.join(&wallet_id).join("secret.json");
-        let restored = restored_directory.join(&wallet_id).join("secret.json");
-        let _cleanup = KeychainCleanup {
-            metadata: original.clone(),
-            directories: vec![original_directory, restored_directory],
-        };
-        let provider = SystemDeviceKeyProvider;
-        let secret = b"disposable keychain lifecycle secret";
-        let credential = "disposable test credential";
-
-        store_with_provider(&original, secret, credential, &provider).unwrap();
-        assert_eq!(
-            load_with_provider(&original, credential, &provider).unwrap(),
-            secret
-        );
-        assert_eq!(
-            load_with_provider(&original, "wrong credential", &provider),
-            Err(SecureStoreError::InvalidCredential)
-        );
-
-        let item_account = account(&original).unwrap();
-        remove_cached_device_key(&item_account);
-        assert_eq!(
-            load_with_provider(&original, credential, &provider).unwrap(),
-            secret
-        );
-
-        fs::create_dir_all(restored.parent().unwrap()).unwrap();
-        fs::copy(&original, &restored).unwrap();
-        remove_cached_device_key(&item_account);
-        assert_eq!(
-            load_with_provider(&restored, credential, &provider).unwrap(),
-            secret
-        );
-
-        forget_device_key(&restored).unwrap();
-        remove_cached_device_key(&item_account);
-        assert_eq!(
-            load_with_provider(&restored, credential, &provider),
-            Err(SecureStoreError::DeviceKeyNotFound)
-        );
     }
 }

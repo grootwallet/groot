@@ -2,6 +2,8 @@
 
 Status: internal hardening review complete for the regtest build. This is not an external audit and does not approve mainnet.
 
+Current-state note (2026-08-19): this report records the device-bound version-2 design reviewed on 2026-08-04. ADR 0037 supersedes that storage design with portable credential-encrypted version-3 envelopes. Its original observations remain historical evidence, not the current architecture or release checklist.
+
 ## Scope
 
 The review covered the Svelte/WalletPort boundary, Tauri commands, BDK/Miniscript descriptors and PSBTs, secret storage, wallet registry and SQLite persistence, Bitcoin Core RPC, HWI process execution, backups, notifications, destructive actions, CI, dependency locks, and desktop/mobile browser flows.

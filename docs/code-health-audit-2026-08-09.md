@@ -4,6 +4,8 @@
 
 This internal audit reviewed dependency direction, Rust/frontend separation, presentation-state lifetimes, reusable UI primitives, canonical documentation, ADR coverage, and the automated test pyramid. It is engineering evidence, not an independent security assessment or mainnet approval.
 
+Current-state note (2026-08-19): Keychain and credential-vault statements below describe the platform evidence gap at the time of this audit. ADR 0037 subsequently replaced mandatory platform-keystore storage with portable credential-encrypted version-3 envelopes; current platform gates are profile relocation/restore, filesystem protection, Argon2id calibration, and packaged lifecycle acceptance.
+
 ## Current evidence
 
 | Layer                            | Automated evidence                                                                                                                                       | Current result                                            |

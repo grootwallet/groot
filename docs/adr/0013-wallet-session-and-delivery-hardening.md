@@ -4,6 +4,8 @@ Status: accepted
 
 The wallet-switch revocation clause is superseded by ADR 0017. UUID isolation and the five-minute monotonic idle deadline remain in force.
 
+The Keychain and device-wrapping-key hardening addendum is superseded by ADR 0037. Session, throttling, delivery, database, HWI, and IPC requirements remain in force.
+
 ## Context
 
 Satchel supports multiple isolated wallets, persisted PSBT proposals, and webview notifications. A process-global unlock flag, restart-reset authentication delay, destructive notification drain, or UI-recomputed review field can turn otherwise correct boundaries into cross-wallet authorization, brute-force, lost-event, or transaction-intent failures.

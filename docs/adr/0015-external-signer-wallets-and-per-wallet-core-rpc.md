@@ -4,6 +4,8 @@
 
 Accepted for regtest; the TLS-backend portion is superseded by ADR 0020. Physical-device and remote-node certification remain release gates.
 
+The device-bound secure-storage clause is superseded by ADR 0037. Per-wallet encryption, session lifetime, and RPC transport requirements remain in force.
+
 ## Decision
 
 An externally signed single-key wallet is a first-class `watch_only` wallet profile containing canonical, public-only BIP84 descriptors. V1 fixes the test-chain account path to `m/84'/1'/0'`. USB HWI, file, manual, and QR-text imports normalize to the same label, master fingerprint, account tpub, path, and optional device type before wallet creation.

@@ -3,6 +3,8 @@
 - Status: superseded by ADR 0024
 - Date: 2026-08-10
 
+The device-key namespace decision in this record is additionally superseded by ADR 0037. Historical Keychain records are not required for normal wallet operation.
+
 ## Context
 
 The product is adopting the public name **Groot** and its approved Control-mark identity. Existing Satchel installations already derive their application-data location and Apple Keychain access from technical identifiers containing `satchel`. Renaming those identifiers would make an in-place upgrade appear empty or unable to decrypt an existing wallet unless a cross-platform migration succeeded atomically.

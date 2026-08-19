@@ -31,8 +31,15 @@
 
   async function loadProfiles() {
     const registry = await walletService.profiles();
+    const selectionChanged = selectedWalletId !== registry.selectedWalletId;
     profiles = registry.wallets;
     selectedWalletId = registry.selectedWalletId;
+    if (selectionChanged) {
+      credential = '';
+      error = '';
+      resetConfirmation = '';
+      showReset = false;
+    }
     compatibility = selectedWalletId ? await walletService.profileCompatibility() : null;
   }
 

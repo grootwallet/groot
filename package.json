@@ -60,7 +60,6 @@
     "release:sbom": "node scripts/release/generate-sbom.mjs",
     "release:compare": "bash scripts/release/compare-unsigned.sh",
     "release:verify:macos": "bash scripts/release/verify-macos-package.sh",
-    "release:test:keychain": "bash scripts/release/test-macos-keychain.sh",
     "release:test:macos-lifecycle": "bash scripts/release/test-macos-packaged-lifecycle.sh",
     "release:test:update": "node scripts/release/test-update-bundle.mjs",
     "release:test:hwi": "node scripts/release/test-hwi-artifact.mjs",

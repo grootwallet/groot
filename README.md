@@ -1,6 +1,6 @@
 # Groot
 
-A minimal onchain Bitcoin wallet and descriptor multisig coordinator built with SvelteKit, Tauri v2, BDK, and Miniscript. The native app currently targets local regtest: BDK owns Groot's wallet databases, while Bitcoin Core's `groot-dev` wallet is only the faucet and miner.
+A minimal onchain Bitcoin wallet and descriptor multisig coordinator built with SvelteKit, Tauri v2, BDK, and Miniscript. Native builds are compile-time isolated for Regtest, Signet, or Testnet4; mainnet remains disabled. BDK owns Groot's wallet databases, while the Regtest Bitcoin Core `groot-dev` wallet is only the faucet and miner.
 
 ## Repository boundary
 
@@ -18,7 +18,7 @@ bash scripts/dev/tauri-regtest.sh
 
 Create a wallet in the native window and keep the 24 words and passphrase / PIN. Generate a labeled receive address, then fund it from Bitcoin Core using the amount in BTC:
 
-Generated recovery words appear in a compact platform-native backup sheet attached to Groot. On macOS they use an 8×3 monospaced grid and never enter the Svelte webview. Existing regtest wallets are migrated on first launch into the UUID wallet registry and their version-1 secret envelope is upgraded only after a correct unlock.
+Generated recovery words appear in a compact platform-native backup sheet attached to Groot. On macOS they use an 8×3 monospaced grid and never enter the Svelte webview. Wallet secrets use the portable version-3 envelope described in [ADR 0037](docs/adr/0037-portable-credential-encrypted-secret-envelopes.md): AES-256-GCM encrypts the payload, and an Argon2id key derived from the wallet credential wraps its random data key. Version-2 envelopes migrate atomically after a correct unlock; wrong credentials or corrupt data leave the original file unchanged. Normal wallet operation does not depend on Apple Keychain or another platform keystore.
 
 ```sh
 pnpm regtest:send -- bcrt1q... 1.25 --mine

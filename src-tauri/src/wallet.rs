@@ -394,11 +394,24 @@ pub struct ApiError {
 
 type ApiResult<T> = Result<T, ApiError>;
 
+const RPC_UNAVAILABLE_MESSAGE: &str = "Could not connect to Bitcoin Core. Check that the node is running and review the RPC address, authentication, and network settings.";
+
 fn api_error(code: &'static str, message: impl ToString) -> ApiError {
     ApiError {
         code,
         message: message.to_string(),
     }
+}
+
+fn rpc_unavailable() -> ApiError {
+    api_error("network_unavailable", RPC_UNAVAILABLE_MESSAGE)
+}
+
+fn compact_filter_unavailable() -> ApiError {
+    api_error(
+        "network_unavailable",
+        "Could not sync from the configured Bitcoin peers. Check the peer and proxy settings, then try again.",
+    )
 }
 
 fn internal(error: impl ToString) -> ApiError {
@@ -1914,9 +1927,7 @@ fn build_rpc_client_with_timeout(
     tor_proxy: Option<&str>,
     timeout: Duration,
 ) -> ApiResult<Client> {
-    let (username, password) = auth
-        .get_user_pass()
-        .map_err(|error| api_error("network_unavailable", error))?;
+    let (username, password) = auth.get_user_pass().map_err(|_| rpc_unavailable())?;
     build_rpc_client_with_credentials(
         url,
         username.as_deref(),
@@ -1945,7 +1956,7 @@ fn build_rpc_client_with_credentials(
             proxy,
             timeout,
         )
-        .map_err(|error| api_error("network_unavailable", error))?;
+        .map_err(|_| rpc_unavailable())?;
         Ok(Client::from_jsonrpc(jsonrpc::Client::with_transport(
             transport,
         )))
@@ -1967,10 +1978,19 @@ fn load_node_auth_session(
     state: &State<'_, AppState>,
     credential: &str,
 ) -> ApiResult<()> {
+    let has_saved_config = node_config_path(app)?.exists();
     let config = read_node_config(app)?;
     let profile = selected_profile(app)?;
     let session = if config.auth == RpcAuthMode::UserPass {
         let path = node_secret_path(app)?;
+        if !saved_userpass_config_has_required_secret(has_saved_config, path.exists())? {
+            state
+                .node_auth
+                .lock()
+                .map_err(internal)?
+                .remove(&profile.id);
+            return Ok(());
+        }
         let plaintext =
             Zeroizing::new(secure_store::load(&path, credential).map_err(secure_store_error)?);
         let Some(mut protected) = decode_protected_node_auth(&plaintext, &config)? else {
@@ -1999,6 +2019,22 @@ fn load_node_auth_session(
         sessions.remove(&profile.id);
     }
     Ok(())
+}
+
+fn saved_userpass_config_has_required_secret(
+    has_saved_config: bool,
+    secret_exists: bool,
+) -> ApiResult<bool> {
+    if secret_exists {
+        Ok(true)
+    } else if has_saved_config {
+        Err(api_error(
+            "wallet_corrupt",
+            "The saved Bitcoin Core credentials are missing. Reconnect this wallet to Bitcoin Core.",
+        ))
+    } else {
+        Ok(false)
+    }
 }
 
 fn rpc_client(app: &AppHandle, state: &State<'_, AppState>) -> ApiResult<Client> {
@@ -2085,14 +2121,9 @@ fn candidate_rpc_client(config: &CoreNodeConfig, password: &str) -> ApiResult<Cl
 fn checked_chain_identity(client: &Client) -> ApiResult<(u64, BlockHash)> {
     let info = client
         .get_blockchain_info()
-        .map_err(|error| api_error("network_unavailable", error))?;
+        .map_err(|_| rpc_unavailable())?;
     ensure_expected_network(info.chain)?;
-    let observed_genesis = client.get_block_hash(0).map_err(|error| {
-        api_error(
-            "network_unavailable",
-            format!("Bitcoin Core genesis verification failed: {error}"),
-        )
-    })?;
+    let observed_genesis = client.get_block_hash(0).map_err(|_| rpc_unavailable())?;
     ensure_expected_genesis(NETWORK, observed_genesis)?;
     Ok((info.blocks, observed_genesis))
 }
@@ -2104,11 +2135,9 @@ fn checked_block_height(client: &Client) -> ApiResult<u64> {
 fn checked_node_status(client: &Client, backend: CoreNodeConfig) -> ApiResult<NodeStatusDto> {
     let info = client
         .get_blockchain_info()
-        .map_err(|error| api_error("network_unavailable", error))?;
+        .map_err(|_| rpc_unavailable())?;
     ensure_expected_network(info.chain)?;
-    let observed_genesis = client
-        .get_block_hash(0)
-        .map_err(|error| api_error("network_unavailable", error))?;
+    let observed_genesis = client.get_block_hash(0).map_err(|_| rpc_unavailable())?;
     ensure_expected_genesis(NETWORK, observed_genesis)?;
     let block_filter_index = match client.get_index_info() {
         Ok(indexes) => indexes
@@ -2176,7 +2205,7 @@ fn broadcast_transaction_with_rpc(rpc: &Client, transaction: &Transaction) -> Ap
         Ok(_) => Err(internal(
             "Bitcoin Core returned a transaction ID that did not match the signed transaction.",
         )),
-        Err(error) => {
+        Err(_) => {
             let in_mempool = rpc.get_mempool_entry(&expected).is_ok();
             let confirmed_in_active_chain = rpc
                 .get_raw_transaction_info(&expected, None)
@@ -2187,7 +2216,10 @@ fn broadcast_transaction_with_rpc(rpc: &Client, transaction: &Transaction) -> Ap
             if in_mempool || confirmed_in_active_chain {
                 Ok(expected)
             } else {
-                Err(api_error("broadcast_failed", error))
+                Err(api_error(
+                    "broadcast_failed",
+                    "Bitcoin Core did not accept the transaction. The reviewed payment remains saved and can be retried safely.",
+                ))
             }
         }
     }
@@ -3074,11 +3106,8 @@ fn decrypt_mnemonic(app: &AppHandle, credential: &str) -> ApiResult<Mnemonic> {
     let version = serde_json::from_str::<serde_json::Value>(&encoded)
         .ok()
         .and_then(|value| value.get("version").and_then(|version| version.as_u64()));
-    if version == Some(2) {
-        let plaintext =
-            load_current_or_legacy_regtest_secret(secure_store::load(&path, credential), || {
-                load_legacy_regtest_secret(app, &path, credential, "regtest-wallet")
-            })?;
+    if matches!(version, Some(2 | 3)) {
+        let plaintext = secure_store::load(&path, credential).map_err(secure_store_error)?;
         return parse_mnemonic_bytes(plaintext);
     }
     let secret: EncryptedSecret = serde_json::from_str(&encoded).map_err(internal)?;
@@ -3466,10 +3495,8 @@ fn verify_multisig_credential(app: &AppHandle, credential: &str) -> ApiResult<()
     let version = serde_json::from_str::<serde_json::Value>(&encoded)
         .ok()
         .and_then(|value| value.get("version").and_then(|version| version.as_u64()));
-    let mut plaintext = if version == Some(2) {
-        load_current_or_legacy_regtest_secret(secure_store::load(&path, credential), || {
-            load_legacy_regtest_secret(app, &path, credential, "regtest-multisig")
-        })?
+    let mut plaintext = if matches!(version, Some(2 | 3)) {
+        secure_store::load(&path, credential).map_err(secure_store_error)?
     } else {
         let secret: EncryptedSecret = serde_json::from_str(&encoded).map_err(internal)?;
         let plaintext = decrypt_payload(secret, credential)?;
@@ -4331,46 +4358,8 @@ fn secure_store_error(error: SecureStoreError) -> ApiError {
         ),
         SecureStoreError::Unavailable => api_error(
             "secure_storage_unavailable",
-            if cfg!(any(target_os = "macos", target_os = "ios")) {
-                "macOS Keychain access is unavailable. Enter your PIN again and approve the Groot system prompt. The wallet stayed locked."
-            } else {
-                "Protected device storage is unavailable. Enter your PIN again after restoring operating-system storage access. The wallet stayed locked."
-            },
+            "Encrypted wallet storage is unavailable. Check access to Groot's application data and try again. The wallet stayed locked.",
         ),
-        SecureStoreError::DeviceKeyNotFound => api_error(
-            "wallet_corrupt",
-            "The device protection key is missing. Restore this wallet from its backup.",
-        ),
-    }
-}
-
-fn load_legacy_regtest_secret(
-    app: &AppHandle,
-    path: &Path,
-    credential: &str,
-    legacy_directory: &str,
-) -> ApiResult<Vec<u8>> {
-    if !IS_REGTEST {
-        return Err(api_error(
-            "wallet_corrupt",
-            "A Regtest-only legacy secret cannot be opened by this public-network build.",
-        ));
-    }
-    let legacy_path = app_data_dir(app)?
-        .join(legacy_directory)
-        .join("secret.json");
-    secure_store::load_with_legacy_device_key(path, &legacy_path, credential)
-        .map_err(secure_store_error)
-}
-
-fn load_current_or_legacy_regtest_secret(
-    current: Result<Vec<u8>, SecureStoreError>,
-    legacy: impl FnOnce() -> ApiResult<Vec<u8>>,
-) -> ApiResult<Vec<u8>> {
-    match current {
-        Ok(plaintext) => Ok(plaintext),
-        Err(SecureStoreError::DeviceKeyNotFound) if IS_REGTEST => legacy(),
-        Err(error) => Err(secure_store_error(error)),
     }
 }
 
@@ -4379,7 +4368,6 @@ fn persist_secret_material(path: &Path, material: &[u8], credential: &str) -> Ap
 }
 
 fn cleanup_failed_profile(dir: &Path) -> ApiResult<()> {
-    secure_store::forget_device_key(&dir.join("secret.json")).map_err(secure_store_error)?;
     match fs::remove_dir_all(dir) {
         Ok(()) => Ok(()),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
@@ -4557,7 +4545,7 @@ fn sync_wallet_with_compact_filters(
         &config,
         move |progress| update_compact_filter_sync_status(&status, progress),
     )
-    .map_err(|error| api_error("network_unavailable", error))?;
+    .map_err(|_| compact_filter_unavailable())?;
     drop(wallet);
     if let Ok(mut status) = state.sync_status.lock() {
         if let Some(current) = status.as_mut() {
@@ -5658,7 +5646,6 @@ fn delete_registered_wallet(app: &AppHandle, id: Uuid, path: &Path) -> ApiResult
         let _ = fs::rename(&tombstone, path);
         return Err(internal(error));
     }
-    secure_store::forget_device_key(&path.join("secret.json")).map_err(secure_store_error)?;
     Ok(())
 }
 

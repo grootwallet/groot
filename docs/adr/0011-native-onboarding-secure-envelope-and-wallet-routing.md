@@ -3,6 +3,8 @@
 - Status: accepted
 - Date: 2026-08-03
 
+The mandatory device-key envelope decision is superseded by ADR 0037. Native mnemonic presentation, wallet routing, and proposal persistence remain in force.
+
 ## Context
 
 Generated recovery words previously crossed the Tauri IPC boundary for Svelte to display. Wallet directories were fixed singletons even though a versioned registry existed, and single-key payment proposals disappeared when the process restarted. Credential-only encryption also allowed a copied secret file to be attacked away from the originating device.

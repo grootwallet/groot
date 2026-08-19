@@ -6,7 +6,7 @@ Assess whether the exact candidate commit is safe enough to enter a limited, har
 
 ## In scope
 
-- Rust/Tauri command and secret boundaries, secure-store/keychain failure behavior, credential throttling, wallet isolation and deletion.
+- Rust/Tauri command and secret boundaries, portable version-3 envelope authentication, v2 migration safety, offline-guessing exposure, credential throttling, wallet isolation, and deletion.
 - BDK descriptor construction, BIP39/BIP84/BIP48/Miniscript use, BSMS records, PSBT construction/validation/finalization, RBF/CPFP and recovery scans.
 - HWI process isolation, device identity, address display, signature merging, cable/file/UR transports, and hostile-device behavior.
 - SQLite/filesystem atomicity, corruption, symlink, race, restart and migration behavior.

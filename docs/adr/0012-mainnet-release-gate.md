@@ -4,6 +4,8 @@
 - Date: 2026-08-03
 - Extends: ADR 0003, ADR 0005, ADR 0009, ADR 0011
 
+ADR 0037 supersedes ADR 0011's mandatory device-key storage design. The mainnet gate remains in force; its current storage evidence requires portable-envelope migration/restore, filesystem protection, Argon2id calibration, packaged lifecycle testing, and independent review.
+
 ## Context
 
 Satchel can construct and sign real Bitcoin transactions, but its live backend, derivations, HWI chain, secure-storage certification, and test evidence are still scoped to regtest. A UI network toggle would create a credible risk of cross-network descriptors, wrong-device signing, privacy leakage, unrecoverable backups, or unintended mainnet broadcast.

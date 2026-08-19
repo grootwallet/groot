@@ -19,6 +19,14 @@ use zeroize::Zeroizing;
 
 const HEIGHT: f64 = 670.0;
 const MAX_RECOVERY_INPUT_BYTES: usize = 4_096;
+const BACKUP_SIDE_MARGIN: f64 = 32.0;
+const BACKUP_CARD_GAP: f64 = 10.0;
+const BACKUP_CARD_HEIGHT: f64 = 39.0;
+const BACKUP_CARD_BOTTOM: f64 = 115.0;
+const BACKUP_WARNING_Y: f64 = 82.0;
+const BACKUP_WARNING_HEIGHT: f64 = 20.0;
+const BACKUP_ACTION_Y: f64 = 36.0;
+const BACKUP_ACTION_HEIGHT: f64 = 38.0;
 
 const fn recovery_input_within_limit(bytes: usize) -> bool {
     bytes <= MAX_RECOVERY_INPUT_BYTES
@@ -158,10 +166,24 @@ fn show_recovery_error(view: &RecoveryInputView, message: &str) {
 mod recovery_input_tests {
     use super::*;
 
+    const _: () = {
+        assert!(BACKUP_WARNING_Y >= BACKUP_ACTION_Y + BACKUP_ACTION_HEIGHT + 8.0);
+        assert!(BACKUP_CARD_BOTTOM >= BACKUP_WARNING_Y + BACKUP_WARNING_HEIGHT + 8.0);
+    };
+
     #[test]
     fn native_recovery_limit_is_inclusive_and_rejects_the_next_byte() {
         assert!(recovery_input_within_limit(MAX_RECOVERY_INPUT_BYTES));
         assert!(!recovery_input_within_limit(MAX_RECOVERY_INPUT_BYTES + 1));
+    }
+
+    #[test]
+    fn narrow_backup_layout_keeps_words_and_footer_regions_separate() {
+        let card_width = backup_card_width(340.0);
+        let word_frame = backup_word_frame(card_width, BACKUP_CARD_HEIGHT);
+
+        assert!(word_frame.size.width >= 54.0);
+        assert!(word_frame.origin.x + word_frame.size.width <= card_width - 4.0);
     }
 }
 
@@ -291,13 +313,12 @@ pub(super) fn present(app: &AppHandle, words: &str) -> Result<BackupOutcome, Str
                     &root,
                     "Write these down in order. Keep them offline.",
                     rect(32.0, 520.0, width - 64.0, 24.0),
-                    &NSFont::systemFontOfSize_weight(15.0, 0.0),
+                    &NSFont::systemFontOfSize_weight(13.0, 0.0),
                     &NSColor::secondaryLabelColor(),
                     mtm,
                 );
 
-                let card_gap = 10.0;
-                let card_width = (width - 64.0 - card_gap * 2.0) / 3.0;
+                let card_width = backup_card_width(width);
                 for index in 0..24 {
                     let column = index / 8;
                     let row = index % 8;
@@ -306,10 +327,11 @@ pub(super) fn present(app: &AppHandle, words: &str) -> Result<BackupOutcome, Str
                         index + 1,
                         &words[index],
                         rect(
-                            32.0 + column as f64 * (card_width + card_gap),
-                            458.0 - row as f64 * 49.0,
+                            BACKUP_SIDE_MARGIN + column as f64 * (card_width + BACKUP_CARD_GAP),
+                            BACKUP_CARD_BOTTOM
+                                + (7 - row) as f64 * (BACKUP_CARD_HEIGHT + BACKUP_CARD_GAP),
                             card_width,
-                            39.0,
+                            BACKUP_CARD_HEIGHT,
                         ),
                         mtm,
                     );
@@ -318,7 +340,12 @@ pub(super) fn present(app: &AppHandle, words: &str) -> Result<BackupOutcome, Str
                 add_label(
                     &root,
                     "Anyone with these words can spend your bitcoin.",
-                    rect(32.0, 49.0, (width - 326.0).max(120.0), 20.0),
+                    rect(
+                        BACKUP_SIDE_MARGIN,
+                        BACKUP_WARNING_Y,
+                        width - BACKUP_SIDE_MARGIN * 2.0,
+                        BACKUP_WARNING_HEIGHT,
+                    ),
                     &NSFont::systemFontOfSize_weight(11.0, 0.0),
                     &NSColor::secondaryLabelColor(),
                     mtm,
@@ -346,7 +373,7 @@ pub(super) fn present(app: &AppHandle, words: &str) -> Result<BackupOutcome, Str
                 confirm.setBezelStyle(NSBezelStyle::Push);
                 confirm.setBezelColor(Some(&NSColor::systemBlueColor()));
                 confirm.setKeyEquivalent(&NSString::from_str("\r"));
-                layout_trailing_actions(&cancel, &confirm, width, 36.0, 140.0);
+                layout_trailing_actions(&cancel, &confirm, width, BACKUP_ACTION_Y, 140.0);
                 root.addSubview(&confirm);
 
                 parent.beginSheet_completionHandler(&panel, None);
@@ -645,8 +672,8 @@ fn add_word_card(
     let number_label = add_centered_card_label(
         &card,
         &number.to_string(),
-        rect(8.0, 0.0, 22.0, frame.size.height),
-        &NSFont::monospacedSystemFontOfSize_weight(12.0, 0.0),
+        rect(4.0, 0.0, 18.0, frame.size.height),
+        &NSFont::monospacedSystemFontOfSize_weight(10.5, 0.0),
         &NSColor::secondaryLabelColor(),
         mtm,
     );
@@ -654,12 +681,20 @@ fn add_word_card(
     add_centered_card_label(
         &card,
         word,
-        rect(37.0, 0.0, frame.size.width - 45.0, frame.size.height),
-        &NSFont::monospacedSystemFontOfSize_weight(12.0, 0.25),
+        backup_word_frame(frame.size.width, frame.size.height),
+        &NSFont::monospacedSystemFontOfSize_weight(10.5, 0.25),
         &NSColor::labelColor(),
         mtm,
     );
     root.addSubview(&card);
+}
+
+fn backup_card_width(width: f64) -> f64 {
+    (width - BACKUP_SIDE_MARGIN * 2.0 - BACKUP_CARD_GAP * 2.0) / 3.0
+}
+
+fn backup_word_frame(card_width: f64, card_height: f64) -> NSRect {
+    rect(27.0, 0.0, card_width - 31.0, card_height)
 }
 
 fn add_centered_card_label(
@@ -886,19 +921,18 @@ fn layout_trailing_actions(
 ) {
     const RIGHT_MARGIN: f64 = 24.0;
     const GAP: f64 = 8.0;
-    const HEIGHT: f64 = 38.0;
 
     cancel.sizeToFit();
     primary.sizeToFit();
     let cancel_width = (cancel.frame().size.width + 8.0).max(90.0);
     let primary_width = (primary.frame().size.width + 8.0).max(primary_min_width);
     let primary_x = container_width - RIGHT_MARGIN - primary_width;
-    primary.setFrame(rect(primary_x, y, primary_width, HEIGHT));
+    primary.setFrame(rect(primary_x, y, primary_width, BACKUP_ACTION_HEIGHT));
     cancel.setFrame(rect(
         primary_x - GAP - cancel_width,
         y,
         cancel_width,
-        HEIGHT,
+        BACKUP_ACTION_HEIGHT,
     ));
 }
 

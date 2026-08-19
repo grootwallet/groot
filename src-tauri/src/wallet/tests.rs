@@ -69,37 +69,6 @@ fn compiled_network_rejects_foreign_registry_and_public_reset() {
 }
 
 #[test]
-fn v2_secret_envelopes_prefer_the_current_device_key_on_every_network() {
-    let plaintext = load_current_or_legacy_regtest_secret(Ok(vec![1, 2, 3]), || {
-        panic!("a readable current envelope must not enter legacy migration")
-    })
-    .unwrap();
-    assert_eq!(plaintext, vec![1, 2, 3]);
-}
-
-#[cfg(not(groot_network = "regtest"))]
-#[test]
-fn public_network_builds_fail_closed_instead_of_attempting_regtest_migration() {
-    let error =
-        load_current_or_legacy_regtest_secret(Err(SecureStoreError::DeviceKeyNotFound), || {
-            panic!("public-network builds must not enter Regtest migration")
-        })
-        .unwrap_err();
-    assert_eq!(error.code, "wallet_corrupt");
-}
-
-#[cfg(groot_network = "regtest")]
-#[test]
-fn regtest_can_migrate_only_when_the_current_device_key_is_missing() {
-    let plaintext =
-        load_current_or_legacy_regtest_secret(Err(SecureStoreError::DeviceKeyNotFound), || {
-            Ok(vec![4, 5, 6])
-        })
-        .unwrap();
-    assert_eq!(plaintext, vec![4, 5, 6]);
-}
-
-#[test]
 fn core_fee_rates_fail_closed_and_round_up_to_integer_sat_per_vbyte() {
     assert_eq!(core_fee_rate(Some(Amount::from_sat(1_001))).unwrap(), 2.0);
     assert_eq!(core_fee_rate(Some(Amount::from_sat(1_000))).unwrap(), 1.0);
@@ -261,7 +230,7 @@ fn direct_rpc_auth_timeout_tls_and_chain_fail_closed() {
         .unwrap(),
     )
     .unwrap_err();
-    assert_eq!(error.code, "network_unavailable");
+    assert_sanitized_rpc_error(error);
 
     let stalled = serve_one_http_response(None);
     let error = checked_block_height(
@@ -274,7 +243,7 @@ fn direct_rpc_auth_timeout_tls_and_chain_fail_closed() {
         .unwrap(),
     )
     .unwrap_err();
-    assert_eq!(error.code, "network_unavailable");
+    assert_sanitized_rpc_error(error);
 
     let plaintext = serve_one_http_response(Some(
         b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}",
@@ -290,7 +259,7 @@ fn direct_rpc_auth_timeout_tls_and_chain_fail_closed() {
         .unwrap(),
     )
     .unwrap_err();
-    assert_eq!(error.code, "network_unavailable");
+    assert_sanitized_rpc_error(error);
 
     for network in [Network::Bitcoin, Network::Testnet, Network::Signet] {
         assert_eq!(
@@ -317,6 +286,14 @@ fn direct_rpc_auth_timeout_tls_and_chain_fail_closed() {
         .code,
         "wrong_network"
     );
+}
+
+fn assert_sanitized_rpc_error(error: ApiError) {
+    assert_eq!(error.code, "network_unavailable");
+    assert_eq!(error.message, RPC_UNAVAILABLE_MESSAGE);
+    for internal_detail in ["JSON-RPC", "transport error", "endpoint rejected", "401"] {
+        assert!(!error.message.contains(internal_detail));
+    }
 }
 
 #[test]
@@ -1068,14 +1045,9 @@ fn command_boundary_error_translation_is_complete_and_stable() {
         secure_store_error(SecureStoreError::Corrupt).code,
         "wallet_corrupt"
     );
-    assert_eq!(
-        secure_store_error(SecureStoreError::Unavailable).code,
-        "secure_storage_unavailable"
-    );
-    assert_eq!(
-        secure_store_error(SecureStoreError::DeviceKeyNotFound).code,
-        "wallet_corrupt"
-    );
+    let unavailable = secure_store_error(SecureStoreError::Unavailable);
+    assert_eq!(unavailable.code, "secure_storage_unavailable");
+    assert!(unavailable.message.contains("application data"));
 
     let proposal_cases = [
         (
@@ -1140,6 +1112,18 @@ fn command_boundary_error_translation_is_complete_and_stable() {
         assert_eq!(translated.message, message);
         assert_ne!(translated.message, translated.code);
     }
+}
+
+#[test]
+fn default_public_node_state_does_not_require_unsaved_rpc_credentials() {
+    assert!(!saved_userpass_config_has_required_secret(false, false).unwrap());
+    assert!(saved_userpass_config_has_required_secret(false, true).unwrap());
+    assert!(saved_userpass_config_has_required_secret(true, true).unwrap());
+    let missing = saved_userpass_config_has_required_secret(true, false).unwrap_err();
+    assert_eq!(missing.code, "wallet_corrupt");
+    assert!(missing
+        .message
+        .contains("Bitcoin Core credentials are missing"));
 }
 
 #[test]

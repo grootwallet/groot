@@ -14,7 +14,6 @@ contains_fixed '"productName": "Groot"' src-tauri/tauri.conf.json || fail "Tauri
 contains_fixed '"mainBinaryName": "Groot"' src-tauri/tauri.conf.json || fail "native application binary name is not Groot"
 contains_fixed '"title": "Groot"' src-tauri/tauri.conf.json || fail "native window title is not Groot"
 contains_fixed '"identifier": "app.groot.wallet"' src-tauri/tauri.conf.json || fail "Tauri bundle identifier is not Groot"
-contains_fixed 'const KEYCHAIN_SERVICE: &str = "app.groot.wallet.device-wrap.v1";' src-tauri/src/secure_store.rs || fail "Keychain service is not Groot"
 contains_fixed '"name": "groot-wallet"' package.json || fail "package metadata is not Groot"
 contains_fixed 'name = "groot"' src-tauri/Cargo.toml || fail "Rust package metadata is not Groot"
 contains_fixed 'name = "Groot"' src-tauri/Cargo.toml || fail "Cargo development executable name is not Groot"

@@ -1883,7 +1883,6 @@ dependencies = [
  "objc2-foundation",
  "payjoin",
  "rand",
- "security-framework 3.7.0",
  "serde",
  "serde_json",
  "tauri",
@@ -2754,7 +2753,7 @@ dependencies = [
  "openssl-probe",
  "openssl-sys",
  "schannel",
- "security-framework 3.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "security-framework",
  "security-framework-sys",
  "tempfile",
 ]
@@ -3867,17 +3866,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d4387882333d3aa8cb20530a17c69a3752e97837832f34f6dccc760e715001d9"
 dependencies = [
  "cc",
-]
-
-[[package]]
-name = "security-framework"
-version = "3.7.0"
-dependencies = [
- "bitflags 2.13.1",
- "core-foundation",
- "core-foundation-sys",
- "libc",
- "security-framework-sys",
 ]
 
 [[package]]

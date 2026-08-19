@@ -4,6 +4,8 @@
 - Date: 2026-08-10
 - Supersedes: ADR 0023 identifier-compatibility decision
 
+ADR 0037 supersedes the Apple secure-storage namespace decision for normal wallet lifecycle operations. Historical records are left untouched and are not required for unlock.
+
 ## Context
 
 ADR 0023 retained Satchel-derived identifiers because changing an installed wallet's bundle identity, application-data container, secure-store namespace, database schema, or authenticated marker could strand existing data. The project has not shipped a production build, no current wallet data must survive, and all development remains regtest-only. Carrying an unused legacy namespace into the first distributed build would establish avoidable long-term compatibility obligations.

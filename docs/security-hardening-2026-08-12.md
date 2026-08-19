@@ -1,5 +1,7 @@
 # Security hardening record — 2026-08-12
 
+Current-state note (2026-08-19): GROOT-01 and GROOT-07 below record remediation for the former device-bound version-2 envelope. ADR 0037 supersedes those device-key lifecycle requirements. Version 3 authenticates a credential-wrapped data key and payload without a platform keystore; authenticated v2 files migrate atomically after a correct unlock.
+
 ## Scope and provenance
 
 This remediation starts from commit `dc16efa5efdfee3391898dc7cc6996fd6a467c46`, the exact clean revision reviewed independently in the `codex/first-mainnet-backend-evidence` worktree. Implementation occurs on `codex/security-review-remediation`; the unrelated modified `main` hardware-testing checkout is not touched.

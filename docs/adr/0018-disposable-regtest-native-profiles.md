@@ -2,6 +2,8 @@
 
 Status: accepted
 
+The Keychain-record clause is superseded by ADR 0037. Disposable-profile isolation and cleanup requirements remain in force.
+
 ## Context
 
 Native restart, automatic-lock, print, rescan, and crash-recovery acceptance tests must use real process and platform boundaries. Running a development build against the normal application-data directory can discover or mutate an existing Satchel registry, so those tests cannot safely proceed without storage isolation.

@@ -4,6 +4,8 @@
 - Date: 2026-08-12
 - Applies to: Regtest, Signet, and Testnet4 builds; mainnet remains blocked
 
+ADR 0037 supersedes decisions 1 and 6 only: version-3 envelopes are portable and do not create or require a device key. The remaining remediation decisions stay in force.
+
 ## Context
 
 An independent read-only review of commit `dc16efa` identified gaps in public-network secret-envelope loading, credential throttling, imported-PSBT signature validation, locked-state descriptor privacy, RPC credential memory hygiene, durable cooldown time semantics, and failed-creation Keychain cleanup. The same review also found smaller error-typing, network-copy, timeout-policy, and proposal-resumption documentation inconsistencies.

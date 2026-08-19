@@ -2,6 +2,8 @@
 
 Status: internal audit complete for the current regtest build. This is not physical-device certification, an independent security review, or mainnet authorization.
 
+Current-state note (2026-08-19): the platform secure-storage item below predates ADR 0037. Current evidence requirements cover portable-envelope migration/restore, filesystem protection, Argon2id calibration, and packaged lifecycle behavior instead of mandatory platform-keystore integration.
+
 ## Scope
 
 - Core onboarding, unlock, overview, activity, coins, receive, send, multisig setup/signing, backup, and settings surfaces.

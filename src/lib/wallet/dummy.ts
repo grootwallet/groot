@@ -171,7 +171,7 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       this._secureStorageRetryPending = false;
       throw new WalletError(
         'secure_storage_unavailable',
-        'macOS Keychain access is unavailable. Enter your PIN again and approve the Groot system prompt. The wallet stayed locked.'
+        "Encrypted wallet storage is unavailable. Check access to Groot's application data and try again. The wallet stayed locked."
       );
     }
     const expected = this._selectedWalletId
