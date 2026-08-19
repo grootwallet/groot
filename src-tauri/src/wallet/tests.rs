@@ -314,6 +314,39 @@ fn rpc_whitelist_rejection_is_actionable_without_exposing_core_details() {
 }
 
 #[test]
+fn node_health_retries_only_transient_transport_failures() {
+    let mut attempts = 0;
+    let mut pauses = Vec::new();
+    let result = retry_transient_node_health(
+        || {
+            attempts += 1;
+            if attempts < NODE_HEALTH_ATTEMPTS {
+                Err(rpc_unavailable())
+            } else {
+                Ok(149_142_u64)
+            }
+        },
+        |delay| pauses.push(delay),
+    )
+    .unwrap();
+    assert_eq!(result, 149_142);
+    assert_eq!(attempts, NODE_HEALTH_ATTEMPTS);
+    assert_eq!(pauses, vec![NODE_HEALTH_RETRY_DELAY; 2]);
+
+    let mut attempts = 0;
+    let error = retry_transient_node_health(
+        || {
+            attempts += 1;
+            Err::<(), _>(api_error("wrong_network", "Wrong network."))
+        },
+        |_| panic!("non-transient failures must not pause"),
+    )
+    .unwrap_err();
+    assert_eq!(error.code, "wrong_network");
+    assert_eq!(attempts, 1);
+}
+
+#[test]
 fn modern_blockchain_info_does_not_require_getnetworkinfo_permission() {
     let endpoint = serve_one_json(
         r#"{"result":{"chain":"regtest","blocks":1,"headers":1,"bestblockhash":"0f9188f13cb7b2c71f2a335e3a4fc328bf5beb436012afca590b1a11466e2206","difficulty":1.0,"mediantime":1,"verificationprogress":1.0,"initialblockdownload":false,"chainwork":"00","size_on_disk":1,"pruned":false,"softforks":{},"warnings":[]},"error":null,"id":"groot"}"#,

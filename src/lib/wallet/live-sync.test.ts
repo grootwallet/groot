@@ -61,6 +61,38 @@ describe('live wallet sync', () => {
     controller.stop();
   });
 
+  it('backs off repeated failures and resets after a successful sync', async () => {
+    vi.useFakeTimers();
+    const wallet = {
+      exists: vi.fn().mockResolvedValue(true),
+      profiles: vi.fn().mockResolvedValue(registry('single_key')),
+      sync: vi
+        .fn()
+        .mockRejectedValueOnce(new Error('offline'))
+        .mockRejectedValueOnce(new Error('still offline'))
+        .mockResolvedValue(undefined),
+      syncMultisig: vi.fn()
+    };
+    const controller = createLiveSync(wallet, 1_000);
+    controller.start();
+    await controller.runNow();
+    expect(wallet.sync).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1_999);
+    expect(wallet.sync).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(wallet.sync).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(3_999);
+    expect(wallet.sync).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(wallet.sync).toHaveBeenCalledTimes(3);
+    await vi.advanceTimersByTimeAsync(999);
+    expect(wallet.sync).toHaveBeenCalledTimes(3);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(wallet.sync).toHaveBeenCalledTimes(4);
+    controller.stop();
+    vi.useRealTimers();
+  });
+
   it('coalesces concurrent wake-ups instead of overlapping native syncs', async () => {
     let release!: () => void;
     let markStarted!: () => void;

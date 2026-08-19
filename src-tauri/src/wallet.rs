@@ -101,6 +101,8 @@ const SUPPLEMENTAL_TRANSCRIPT_DOMAIN: &[u8] = b"Groot supplemental entropy trans
 const SUPPLEMENTAL_MIX_DOMAIN: &[u8] = b"Groot BIP39 entropy mix v1";
 const SAVED_FILE_REVEAL_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 const RPC_TIMEOUT: Duration = Duration::from_secs(15);
+const NODE_HEALTH_ATTEMPTS: usize = 3;
+const NODE_HEALTH_RETRY_DELAY: Duration = Duration::from_millis(200);
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -2153,7 +2155,25 @@ fn checked_block_height(client: &Client) -> ApiResult<u64> {
     checked_chain_identity(client).map(|(height, _)| height)
 }
 
-fn checked_node_status(client: &Client, backend: CoreNodeConfig) -> ApiResult<NodeStatusDto> {
+fn retry_transient_node_health<T>(
+    mut operation: impl FnMut() -> ApiResult<T>,
+    mut pause: impl FnMut(Duration),
+) -> ApiResult<T> {
+    for attempt in 0..NODE_HEALTH_ATTEMPTS {
+        match operation() {
+            Ok(value) => return Ok(value),
+            Err(error)
+                if error.code == "network_unavailable" && attempt + 1 < NODE_HEALTH_ATTEMPTS =>
+            {
+                pause(NODE_HEALTH_RETRY_DELAY);
+            }
+            Err(error) => return Err(error),
+        }
+    }
+    unreachable!("node health attempts are non-zero")
+}
+
+fn checked_node_status_once(client: &Client, backend: CoreNodeConfig) -> ApiResult<NodeStatusDto> {
     let info = get_blockchain_info(client).map_err(rpc_api_error)?;
     ensure_expected_network(info.chain)?;
     let observed_genesis = client.get_block_hash(0).map_err(rpc_api_error)?;
@@ -2183,6 +2203,13 @@ fn checked_node_status(client: &Client, backend: CoreNodeConfig) -> ApiResult<No
         size_on_disk: info.size_on_disk,
         block_filter_index,
     })
+}
+
+fn checked_node_status(client: &Client, backend: CoreNodeConfig) -> ApiResult<NodeStatusDto> {
+    retry_transient_node_health(
+        || checked_node_status_once(client, backend.clone()),
+        std::thread::sleep,
+    )
 }
 
 fn ensure_expected_network(network: Network) -> ApiResult<()> {

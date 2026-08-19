@@ -4,11 +4,13 @@
   import { fly } from 'svelte/transition';
   let { open, title, description = '', onclose, children } = $props();
   let dialog = $state<HTMLDivElement>();
+  let documentTop = $state(-32);
 
   $effect(() => {
     if (!open || typeof document === 'undefined') return;
     const previousFocus =
       document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    documentTop = window.scrollY - 32;
     const releaseScrollLock = lockModalScroll(document);
     queueMicrotask(() => {
       const first = dialog?.querySelector<HTMLElement>(
@@ -54,6 +56,7 @@
 {#if open}
   <div
     class="modal-layer"
+    style:--modal-document-top={`${documentTop}px`}
     role="presentation"
     onclick={(e) => e.target === e.currentTarget && onclose()}
   >

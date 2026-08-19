@@ -44,6 +44,7 @@
   --on-blue: #ffffff;
   --focus: #8fb2e0;
   --fr-blue-soft: rgba(36, 89, 169, 0.12);
+  --modal-document-top: -32px;
 }
 
 .descriptor-viewer details {
@@ -1827,11 +1828,15 @@ code {
 }
 
 .modal-layer {
-  position: fixed;
-  /* WKWebView lays ordinary content beneath the translucent macOS title bar,
-     while its fixed viewport starts below it. Overdraw that native strip and
-     compensate the top padding so the dialog itself keeps the same position. */
-  inset: -32px 0 0;
+  /* WKWebView permits document-positioned content beneath the translucent
+     macOS title bar, but clips fixed-position content to the web viewport.
+     Anchor the layer to the current document scroll position so it can cover
+     the native strip while the body is locked. */
+  position: absolute;
+  top: var(--modal-document-top);
+  right: 0;
+  left: 0;
+  min-height: calc(100dvh + 32px);
   z-index: 100;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -8362,7 +8367,9 @@ code {
     display: block;
   }
   .modal-layer {
+    position: fixed;
     inset: 0;
+    min-height: 0;
     align-items: flex-end;
     padding: max(10px, env(safe-area-inset-top)) 10px max(10px, env(safe-area-inset-bottom));
   }

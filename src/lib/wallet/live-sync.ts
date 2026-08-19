@@ -21,8 +21,9 @@ export function createLiveSync(
 ): LiveSyncController {
   let enabled = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
-  let active: Promise<void> | undefined;
+  let active: Promise<boolean> | undefined;
   let rerunRequested = false;
+  let consecutiveFailures = 0;
 
   const clearTimer = () => {
     if (timer !== undefined) clearTimeout(timer);
@@ -31,34 +32,40 @@ export function createLiveSync(
 
   const schedule = () => {
     clearTimer();
-    if (enabled) timer = setTimeout(() => void runNow(), intervalMs);
+    const backoff = Math.min(2 ** consecutiveFailures, 30);
+    if (enabled) timer = setTimeout(() => void runNow(), intervalMs * backoff);
   };
 
-  const perform = async () => {
+  const perform = async (): Promise<boolean> => {
     try {
-      if (!(await wallet.exists())) return;
+      if (!(await wallet.exists())) return true;
       const registry = await wallet.profiles();
       const selected = registry.wallets.find((profile) => profile.id === registry.selectedWalletId);
-      if (!selected) return;
+      if (!selected) return true;
       if (selected.kind === 'multisig') await wallet.syncMultisig();
       else await wallet.sync();
+      return true;
     } catch (cause) {
       try {
         onError(cause);
       } catch {
         /* Error reporting must never disable future wallet syncs. */
       }
+      return false;
     }
   };
 
   const runNow = async (): Promise<void> => {
     if (!enabled) return;
     clearTimer();
-    if (active) return active;
+    if (active) {
+      await active;
+      return;
+    }
     const pending = perform();
     active = pending;
     try {
-      await pending;
+      consecutiveFailures = (await pending) ? 0 : consecutiveFailures + 1;
     } finally {
       if (active === pending) active = undefined;
       if (enabled && rerunRequested) {
@@ -76,6 +83,7 @@ export function createLiveSync(
     },
     restart() {
       enabled = true;
+      consecutiveFailures = 0;
       clearTimer();
       if (active) rerunRequested = true;
       else void runNow();
