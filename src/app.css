@@ -2342,7 +2342,7 @@ code {
   letter-spacing: -0.04em;
 }
 .review-amount small,
-.detail-hero strong small {
+.detail-hero .detail-amount small {
   color: var(--muted);
   font-size: 12px;
   font-weight: 500;
@@ -2555,9 +2555,20 @@ code {
   color: var(--muted);
   background: var(--surface-icon);
 }
-.detail-hero strong {
+.detail-hero .detail-amount {
+  appearance: none;
+  border: 0;
+  background: none;
+  color: var(--text);
   font-size: 27px;
   margin-top: 15px;
+  padding: 0;
+  cursor: pointer;
+}
+.detail-hero .detail-amount:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 5px;
+  border-radius: 4px;
 }
 .detail-hero p {
   color: var(--muted);

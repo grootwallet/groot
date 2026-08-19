@@ -11,6 +11,7 @@
   import ReadableAddress from './ReadableAddress.svelte';
   import LocalTimestamp from './LocalTimestamp.svelte';
   import { discreetMode } from '$lib/privacy';
+  import { denomination, setDenomination } from '$lib/denomination';
 
   let {
     transaction,
@@ -61,13 +62,24 @@
         class:pending={transaction.status === 'pending'}
         class:replaced={transaction.status === 'replaced'}>{transaction.status}</span
       >
-      <strong class:positive={transaction.direction === 'received'}
-        ><Amount
+      <button
+        class="detail-amount"
+        class:positive={transaction.direction === 'received'}
+        type="button"
+        aria-label={$denomination === 'btc'
+          ? 'Show transaction amount in sats'
+          : 'Show transaction amount in BTC'}
+        title={$denomination === 'btc'
+          ? 'Show transaction amount in sats'
+          : 'Show transaction amount in BTC'}
+        onclick={() => setDenomination($denomination === 'btc' ? 'sats' : 'btc')}
+      >
+        <Amount
           value={transaction.amount}
           sign={transaction.direction === 'received' ? '+' : '−'}
           hidden={$discreetMode}
-        /></strong
-      >
+        />
+      </button>
       <p>
         {$discreetMode
           ? 'Label hidden'
