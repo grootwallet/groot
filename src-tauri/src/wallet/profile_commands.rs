@@ -331,11 +331,16 @@ pub fn wallet_snapshot(app: AppHandle, state: State<'_, AppState>) -> ApiResult<
 }
 
 #[tauri::command]
-pub fn wallet_sync(app: AppHandle, state: State<'_, AppState>) -> ApiResult<WalletSnapshotDto> {
-    let _operation = operation_guard(&state)?;
-    let wallet_id = require_unlocked_for_background_sync(&app, &state)?;
-    let mut db = open_db(&app)?;
-    sync_wallet_with_status(&app, &state, &mut db, false, wallet_id)
+pub async fn wallet_sync(app: AppHandle) -> ApiResult<WalletSnapshotDto> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let _operation = operation_guard(&state)?;
+        let wallet_id = require_unlocked_for_background_sync(&app, &state)?;
+        let mut db = open_db(&app)?;
+        sync_wallet_with_status(&app, &state, &mut db, false, wallet_id)
+    })
+    .await
+    .map_err(internal)?
 }
 
 #[tauri::command]
@@ -829,65 +834,69 @@ pub async fn wallet_full_rescan(
 }
 
 #[tauri::command]
-pub fn node_config_save(
+pub async fn node_config_save(
     app: AppHandle,
-    state: State<'_, AppState>,
     config: CoreNodeConfig,
     password: String,
     credential: String,
 ) -> ApiResult<NodeStatusDto> {
-    let _operation = operation_guard(&state)?;
-    require_unlocked(&app, &state)?;
-    config.validate().map_err(network_config_api_error)?;
-    let credential = Zeroizing::new(credential);
-    let password = Zeroizing::new(password);
-    check_auth_throttle(&app, &state)?;
-    let verified = verify_selected_credential(&app, credential.as_str());
-    record_auth_result(&app, &state, &verified)?;
-    verified?;
-    match config.auth {
-        RpcAuthMode::Cookie if !password.is_empty() => {
-            return Err(api_error(
-                "invalid_node_config",
-                "Cookie authentication does not use an RPC password.",
-            ));
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let _operation = operation_guard(&state)?;
+        require_unlocked(&app, &state)?;
+        config.validate().map_err(network_config_api_error)?;
+        let credential = Zeroizing::new(credential);
+        let password = Zeroizing::new(password);
+        check_auth_throttle(&app, &state)?;
+        let verified = verify_selected_credential(&app, credential.as_str());
+        record_auth_result(&app, &state, &verified)?;
+        verified?;
+        match config.auth {
+            RpcAuthMode::Cookie if !password.is_empty() => {
+                return Err(api_error(
+                    "invalid_node_config",
+                    "Cookie authentication does not use an RPC password.",
+                ));
+            }
+            RpcAuthMode::UserPass if password.is_empty() || password.len() > 1024 => {
+                return Err(api_error(
+                    "invalid_node_config",
+                    "Enter an RPC password of at most 1,024 bytes.",
+                ));
+            }
+            _ => {}
         }
-        RpcAuthMode::UserPass if password.is_empty() || password.len() > 1024 => {
-            return Err(api_error(
-                "invalid_node_config",
-                "Enter an RPC password of at most 1,024 bytes.",
-            ));
+        let status = checked_node_status(
+            &candidate_rpc_client(&config, password.as_str())?,
+            config.clone(),
+        )?;
+        if config.auth == RpcAuthMode::UserPass {
+            let protected = Zeroizing::new(
+                serde_json::to_vec(&ProtectedNodeAuthRef {
+                    version: PROTECTED_NODE_AUTH_VERSION,
+                    config: &config,
+                    password: password.as_str(),
+                })
+                .map_err(internal)?,
+            );
+            secure_store::store(
+                &node_secret_path(&app)?,
+                protected.as_slice(),
+                credential.as_str(),
+            )
+            .map_err(secure_store_error)?;
+        } else {
+            let path = node_secret_path(&app)?;
+            if path.exists() {
+                fs::remove_file(path).map_err(internal)?;
+            }
         }
-        _ => {}
-    }
-    let status = checked_node_status(
-        &candidate_rpc_client(&config, password.as_str())?,
-        config.clone(),
-    )?;
-    if config.auth == RpcAuthMode::UserPass {
-        let protected = Zeroizing::new(
-            serde_json::to_vec(&ProtectedNodeAuthRef {
-                version: PROTECTED_NODE_AUTH_VERSION,
-                config: &config,
-                password: password.as_str(),
-            })
-            .map_err(internal)?,
-        );
-        secure_store::store(
-            &node_secret_path(&app)?,
-            protected.as_slice(),
-            credential.as_str(),
-        )
-        .map_err(secure_store_error)?;
-    } else {
-        let path = node_secret_path(&app)?;
-        if path.exists() {
-            fs::remove_file(path).map_err(internal)?;
-        }
-    }
-    write_private_json(&node_config_path(&app)?, &config)?;
-    load_node_auth_session(&app, &state, credential.as_str())?;
-    Ok(status)
+        write_private_json(&node_config_path(&app)?, &config)?;
+        load_node_auth_session(&app, &state, credential.as_str())?;
+        Ok(status)
+    })
+    .await
+    .map_err(internal)?
 }
 
 pub(crate) fn node_test(app: &AppHandle, state: &State<'_, AppState>) -> ApiResult<NodeStatusDto> {
@@ -896,10 +905,12 @@ pub(crate) fn node_test(app: &AppHandle, state: &State<'_, AppState>) -> ApiResu
 }
 
 #[tauri::command]
-pub fn node_connection_test(
-    app: AppHandle,
-    state: State<'_, AppState>,
-) -> ApiResult<NodeStatusDto> {
-    require_unlocked(&app, &state)?;
-    node_test(&app, &state)
+pub async fn node_connection_test(app: AppHandle) -> ApiResult<NodeStatusDto> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        require_unlocked(&app, &state)?;
+        node_test(&app, &state)
+    })
+    .await
+    .map_err(internal)?
 }
