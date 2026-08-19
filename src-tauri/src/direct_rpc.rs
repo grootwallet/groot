@@ -124,14 +124,7 @@ impl DirectRpcTransport {
             .write_all(encoded_request.as_slice())
             .map_err(|_| transport_error(DirectRpcError::TransportFailed))?;
 
-        let mut encoded = Vec::new();
-        stream
-            .take((MAX_HTTP_HEADER_BYTES + MAX_RPC_BODY_BYTES + 1) as u64)
-            .read_to_end(&mut encoded)
-            .map_err(|_| transport_error(DirectRpcError::TransportFailed))?;
-        if encoded.len() > MAX_HTTP_HEADER_BYTES + MAX_RPC_BODY_BYTES {
-            return Err(transport_error(DirectRpcError::ResponseTooLarge));
-        }
+        let encoded = read_loopback_response(&mut stream)?;
         let response_body = parse_loopback_response(&encoded)?;
         serde_json::from_slice(response_body).map_err(JsonRpcError::Json)
     }
@@ -199,7 +192,55 @@ impl DirectRpcTransport {
     }
 }
 
-fn parse_loopback_response(encoded: &[u8]) -> Result<&[u8], JsonRpcError> {
+fn read_loopback_response(stream: &mut TcpStream) -> Result<Vec<u8>, JsonRpcError> {
+    let mut encoded = Vec::new();
+    let header_end = loop {
+        if let Some(header_end) = encoded
+            .windows(4)
+            .position(|window| window == b"\r\n\r\n")
+            .map(|index| index + 4)
+        {
+            break header_end;
+        }
+        if encoded.len() >= MAX_HTTP_HEADER_BYTES {
+            return Err(transport_error(DirectRpcError::ResponseTooLarge));
+        }
+        let remaining = MAX_HTTP_HEADER_BYTES - encoded.len();
+        let mut chunk = [0_u8; 8 * 1024];
+        let read_limit = remaining.min(chunk.len());
+        let read = stream
+            .read(&mut chunk[..read_limit])
+            .map_err(|_| transport_error(DirectRpcError::TransportFailed))?;
+        if read == 0 {
+            return Err(transport_error(DirectRpcError::MalformedResponse));
+        }
+        encoded.extend_from_slice(&chunk[..read]);
+    };
+
+    let expected = parse_loopback_header(&encoded[..header_end])?;
+    let response_end = header_end
+        .checked_add(expected)
+        .ok_or_else(|| transport_error(DirectRpcError::ResponseTooLarge))?;
+    if encoded.len() > response_end {
+        return Err(transport_error(DirectRpcError::MalformedResponse));
+    }
+    encoded.reserve(response_end - encoded.len());
+    while encoded.len() < response_end {
+        let mut chunk = [0_u8; 8 * 1024];
+        let remaining = response_end - encoded.len();
+        let read_limit = remaining.min(chunk.len());
+        let read = stream
+            .read(&mut chunk[..read_limit])
+            .map_err(|_| transport_error(DirectRpcError::TransportFailed))?;
+        if read == 0 {
+            return Err(transport_error(DirectRpcError::MalformedResponse));
+        }
+        encoded.extend_from_slice(&chunk[..read]);
+    }
+    Ok(encoded)
+}
+
+fn parse_loopback_header(encoded: &[u8]) -> Result<usize, JsonRpcError> {
     let header_end = encoded
         .windows(4)
         .position(|window| window == b"\r\n\r\n")
@@ -246,12 +287,22 @@ fn parse_loopback_response(encoded: &[u8]) -> Result<&[u8], JsonRpcError> {
             }
         }
     }
-    let body = &encoded[header_end..];
     let expected =
         content_length.ok_or_else(|| transport_error(DirectRpcError::MalformedResponse))?;
     if expected > MAX_RPC_BODY_BYTES {
         return Err(transport_error(DirectRpcError::ResponseTooLarge));
     }
+    Ok(expected)
+}
+
+fn parse_loopback_response(encoded: &[u8]) -> Result<&[u8], JsonRpcError> {
+    let header_end = encoded
+        .windows(4)
+        .position(|window| window == b"\r\n\r\n")
+        .map(|index| index + 4)
+        .ok_or_else(|| transport_error(DirectRpcError::MalformedResponse))?;
+    let expected = parse_loopback_header(&encoded[..header_end])?;
+    let body = &encoded[header_end..];
     if body.len() != expected {
         return Err(transport_error(DirectRpcError::MalformedResponse));
     }
@@ -394,6 +445,39 @@ mod tests {
                 serde_json::from_str(response.result.unwrap().get()).unwrap();
             assert_eq!(result["chain"], "testnet4");
         }
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn loopback_transport_finishes_without_waiting_for_the_server_to_close() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let (release_sender, release_receiver) = mpsc::channel();
+        let server = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            read_http_request(&mut stream);
+            let body = br#"{"jsonrpc":"2.0","result":{"chain":"testnet4"},"error":null,"id":1}"#;
+            let header = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n",
+                body.len()
+            );
+            stream.write_all(header.as_bytes()).unwrap();
+            stream.write_all(body).unwrap();
+            release_receiver
+                .recv_timeout(Duration::from_secs(2))
+                .unwrap();
+        });
+        let transport = DirectRpcTransport::new(
+            &format!("http://{address}"),
+            Some("groot"),
+            Some("secret"),
+            Duration::from_secs(1),
+        );
+        let response = transport.send_request(rpc_request()).unwrap();
+        let result: serde_json::Value =
+            serde_json::from_str(response.result.unwrap().get()).unwrap();
+        assert_eq!(result["chain"], "testnet4");
+        release_sender.send(()).unwrap();
         server.join().unwrap();
     }
 
