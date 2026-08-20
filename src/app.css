@@ -2344,10 +2344,16 @@ code {
   font-size: 11px;
 }
 .review-amount strong {
+  color: var(--text);
   font-size: 30px;
   letter-spacing: -0.04em;
 }
-.review-amount small,
+.review-amount small {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
 .detail-hero .detail-amount small {
   color: var(--muted);
   font-size: 12px;
