@@ -51,7 +51,12 @@ export function sortTransactionsNewestFirst(items: readonly Transaction[]): Tran
       index,
       timestamp: parseTimestamp(transaction.date)?.getTime() ?? Number.NEGATIVE_INFINITY
     }))
-    .sort((left, right) => right.timestamp - left.timestamp || left.index - right.index)
+    .sort(
+      (left, right) =>
+        comparePendingStatus(left.transaction, right.transaction, 'newest') ||
+        right.timestamp - left.timestamp ||
+        left.index - right.index
+    )
     .map(({ transaction }) => transaction);
 }
 
@@ -70,13 +75,27 @@ export function sortTransactions(
     .sort((left, right) => {
       let comparison = 0;
       if (order === 'newest' || order === 'oldest') {
-        comparison = compareTimestamp(left.timestamp, right.timestamp, order);
+        comparison =
+          comparePendingStatus(left.transaction, right.transaction, order) ||
+          compareTimestamp(left.timestamp, right.timestamp, order);
       } else if (order === 'largest')
         comparison = right.transaction.amount - left.transaction.amount;
       else comparison = left.transaction.amount - right.transaction.amount;
       return comparison || left.index - right.index;
     })
     .map(({ transaction }) => transaction);
+}
+
+function comparePendingStatus(
+  left: Transaction,
+  right: Transaction,
+  order: 'newest' | 'oldest'
+): number {
+  const leftPending = left.status === 'pending';
+  const rightPending = right.status === 'pending';
+  if (leftPending === rightPending) return 0;
+  if (order === 'newest') return leftPending ? -1 : 1;
+  return leftPending ? 1 : -1;
 }
 
 function transactionIdFromOutpoint(outpoint: string): string {

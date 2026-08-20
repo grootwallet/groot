@@ -120,6 +120,18 @@ describe('sortTransactionsNewestFirst', () => {
 
     expect(result.map(({ id }) => id)).toEqual(['first', 'second']);
   });
+
+  it('keeps active pending transactions above confirmed block timestamps', () => {
+    const pending = transaction('pending', '2026-08-20T20:22:00Z');
+    const confirmed = transaction('confirmed', '2026-08-20T21:05:00Z');
+    confirmed.status = 'confirmed';
+    confirmed.confirmations = 3;
+
+    expect(sortTransactionsNewestFirst([confirmed, pending]).map(({ id }) => id)).toEqual([
+      'pending',
+      'confirmed'
+    ]);
+  });
 });
 
 describe('sortTransactions', () => {
@@ -136,6 +148,22 @@ describe('sortTransactions', () => {
     expect(sortTransactions([older, newer], 'oldest').map(({ id }) => id)).toEqual([
       'older',
       'newer'
+    ]);
+  });
+
+  it('places pending activity first for latest and last for earliest', () => {
+    const pending = transaction('pending', '2026-08-20T20:22:00Z');
+    const futureBlockTime = transaction('confirmed', '2026-08-20T21:05:00Z');
+    futureBlockTime.status = 'confirmed';
+    futureBlockTime.confirmations = 3;
+
+    expect(sortTransactions([futureBlockTime, pending], 'newest').map(({ id }) => id)).toEqual([
+      'pending',
+      'confirmed'
+    ]);
+    expect(sortTransactions([futureBlockTime, pending], 'oldest').map(({ id }) => id)).toEqual([
+      'confirmed',
+      'pending'
     ]);
   });
 

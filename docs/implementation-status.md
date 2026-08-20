@@ -55,4 +55,6 @@ v0.4.17 slows the shared animated PSBT QR from four to two frames per second, gi
 
 v0.4.18 slows the shared animated PSBT QR further to one frame per second after physical Jade testing showed that two frames per second was still difficult to scan. The bounded UR payload and persisted proposal remain unchanged.
 
+v0.4.19 makes Overview and Activity use the same deterministic transaction order: active pending entries appear before confirmed history for latest-first views and after it for earliest-first views, with timestamp sorting inside each group. This avoids Testnet4 miner block-time skew placing newly seen mempool activity below older confirmed payments. The change is presentation-only; persisted wallet and proposal formats are unchanged.
+
 Update this table in the same change whenever a capability crosses a boundary.

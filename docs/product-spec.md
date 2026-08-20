@@ -114,7 +114,7 @@ Transaction history details use the same progressive-disclosure pattern as trans
 
 ## Activity and transaction details
 
-Search matches the transaction title, payment-intent label, and inherited provenance labels. Direction filters combine with deterministic latest/earliest and largest/smallest sorting without changing wallet state.
+Search matches the transaction title, payment-intent label, and inherited provenance labels. Direction filters combine with deterministic latest/earliest and largest/smallest sorting without changing wallet state. Time sorting keeps active pending transactions above confirmed history for **Latest first** and below it for **Earliest first**, then orders each group by its timestamp; this prevents a miner-supplied block timestamp from placing a newly seen mempool payment below older confirmed activity.
 
 List received/sent transactions with an authoritative typed classification, label, amount, date, and pending/confirmation state. A fee-only transaction whose value outputs all remain wallet-controlled is a **Self-spend**: its displayed wallet debit is the network fee and it has no counterparty address. Optional details show the transaction ID, block/replacement metadata, self-spend classification, and a network-correct explorer link on supported public test networks. Opening a third-party explorer carries a short privacy warning; local regtest transactions never receive a dead public-explorer link. Compact addresses always preserve both identifying ends as `prefix…suffix`; opening one replaces that compact value with the complete grouped, copy-safe view rather than displaying both at once.
 
