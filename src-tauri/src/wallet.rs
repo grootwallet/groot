@@ -1360,7 +1360,7 @@ fn missing_hardware_xpub(
         }
         "bitbox02" => api_error(
             "hardware_unavailable",
-            "BitBox02 did not export the account key. Reconnect it, scan again, and enter the device password when prompted. If BitBoxApp is open, quit it so Groot can use USB. Use BitBoxApp only if Groot reports that first-time pairing is required.",
+            "Could not read the BitBox account key. Keep it connected and unlocked, then try again.",
         ),
         "trezor" | "keepkey" => {
             let safe_detail = hwi_message.unwrap_or_default().to_ascii_lowercase();
@@ -1439,11 +1439,7 @@ fn hardware_device_dto(device: HwiDevice) -> HardwareDeviceDto {
     } else if device.fingerprint.is_some() {
         ("ready", "Ready to import the public account key.", "import")
     } else if device_type == "bitbox02" {
-        (
-            "needs_companion",
-            "Reconnect BitBox02, scan again, and enter the device password when prompted. If Groot reports that first-time pairing is required, complete that pairing in BitBoxApp, quit it, then rescan.",
-            "retry",
-        )
+        ("detected", "Unlock on BitBox, then continue.", "import")
     } else if device_type == "jade" {
         (
             "needs_device_unlock",

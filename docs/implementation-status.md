@@ -59,4 +59,6 @@ v0.4.19 makes Overview and Activity use the same deterministic transaction order
 
 v0.4.20 removes the Trezor/KeepKey PIN position grid whenever its native challenge is busy, expired, rejected, disconnected, or otherwise failed. Requesting a fresh layout invalidates the previous challenge before the native request starts, and only a newly successful challenge can render a new blank grid. Persisted wallet and proposal formats are unchanged.
 
+v0.4.21 fixes the BitBox02 and BitBox Nova unlock loop in HWI 3.2.0. A path-only enumeration result now continues to an exact-path account-key read that derives the fingerprint and xpub in one live client, instead of forcing another scan. Scan guidance is shorter. Persisted wallet and proposal formats are unchanged.
+
 Update this table in the same change whenever a capability crosses a boundary.

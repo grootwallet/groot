@@ -95,9 +95,9 @@
       id: 'bitbox02',
       name: 'BitBox02',
       steps: [
-        'Connect BitBox02, then scan in Groot.',
-        'Enter the device password when BitBox02 asks.',
-        'If BitBoxApp is open, quit it so Groot can use USB. Use it only if Groot reports that first-time pairing is required.'
+        'Connect and unlock BitBox.',
+        'Quit BitBoxApp so Groot can use USB.',
+        'Continue from the detected device card.'
       ]
     },
     {
@@ -1905,14 +1905,13 @@
 <Modal
   open={hardwareOpen}
   title="Connect hardware device"
-  description="Connect one initialized device over USB, then verify its fingerprint before adding it."
+  description="Connect one signer. Groot verifies it before adding it."
   onclose={closeHardwareScan}
 >
   <div class="hardware-readiness">
     <Usb size={18} /><span
-      ><strong>Connect the signer and release any competing USB session</strong><small
-        >BitBox02 can unlock directly from Groot when scanned. If a companion app is open, quit it
-        first. A locked Trezor Model One is supported from its Groot card.</small
+      ><strong>Keep USB free</strong><small
+        >Unlock the signer and quit other wallet apps before scanning.</small
       ></span
     ><button onclick={() => openHardwareHelp(true)}>Device help</button>
   </div>
