@@ -49,4 +49,6 @@ The Testnet4 v4.7 development bundle exposed that public-network HWI still depen
 
 v0.4.15 standardizes denomination casing across every amount surface: `sats` is always lowercase and `BTC` is always uppercase. The shared amount component now uses the canonical unit formatter and explicitly prevents inherited capitalization; a source regression rejects capitalized sats literals in user-facing Svelte files. This presentation-only change does not alter wallet accounting or persisted formats.
 
+v0.4.16 limits transaction acceleration actions to the selected wallet's actual role. Sender-side fee replacement is labeled **Increase fee (RBF)** and appears only for pending, replaceable wallet-originated transactions. CPFP appears only when the pending transaction pays a wallet-controlled output, so an incoming payment no longer incorrectly offers RBF merely because the sender marked it replaceable. Persisted wallet and proposal formats are unchanged.
+
 Update this table in the same change whenever a capability crosses a boundary.

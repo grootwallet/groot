@@ -25,6 +25,14 @@
     transaction ? transactionExplorerUrl(defaultConfig.network, transaction.id) : null
   );
   let isSelfSpend = $derived(transaction?.kind === 'self_spend');
+  let canIncreaseFee = $derived(
+    transaction?.status === 'pending' &&
+      transaction.direction === 'sent' &&
+      transaction.rbf === true
+  );
+  let canSpendOutput = $derived(
+    transaction?.status === 'pending' && (transaction.walletOutputAmount ?? 0) > 0
+  );
 
   $effect(() => {
     transaction?.id;
@@ -200,18 +208,18 @@
         <p class="explorer-unavailable">mempool.space cannot see local regtest transactions.</p>
       {/if}
     </details>
-    {#if transaction.status === 'pending'}<div
+    {#if canIncreaseFee || canSpendOutput}<div
         class="psbt-actions transaction-acceleration-actions"
       >
-        <Button
-          variant="secondary"
-          href={`${multisig ? '/multisig/send' : '/send'}?accelerate=rbf&txid=${transaction.id}`}
-          ><ArrowUp size={15} />Increase fee</Button
-        ><Button
-          variant="secondary"
-          href={`${multisig ? '/multisig/send' : '/send'}?accelerate=cpfp&txid=${transaction.id}`}
-          ><Layers size={15} />Spend output (CPFP)</Button
-        >
+        {#if canIncreaseFee}<Button
+            variant="secondary"
+            href={`${multisig ? '/multisig/send' : '/send'}?accelerate=rbf&txid=${transaction.id}`}
+            ><ArrowUp size={15} />Increase fee (RBF)</Button
+          >{/if}{#if canSpendOutput}<Button
+            variant="secondary"
+            href={`${multisig ? '/multisig/send' : '/send'}?accelerate=cpfp&txid=${transaction.id}`}
+            ><Layers size={15} />Spend output (CPFP)</Button
+          >{/if}
       </div>{/if}
   {/if}
 </Modal>

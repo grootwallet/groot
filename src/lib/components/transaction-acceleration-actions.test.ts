@@ -9,8 +9,19 @@ describe('transaction acceleration actions', () => {
     expect(component).toContain("multisig ? '/multisig/send' : '/send'");
     expect(component).toContain('accelerate=rbf');
     expect(component).toContain('accelerate=cpfp');
-    expect(component).toContain('<ArrowUp size={15} />Increase fee');
+    expect(component).toContain('<ArrowUp size={15} />Increase fee (RBF)');
     expect(component).toContain('<Layers size={15} />Spend output (CPFP)');
+  });
+
+  it('offers sender-side RBF only for replaceable outgoing transactions', () => {
+    expect(component).toContain("transaction.direction === 'sent'");
+    expect(component).toContain('transaction.rbf === true');
+    expect(component).toContain('{#if canIncreaseFee}<Button');
+  });
+
+  it('offers CPFP only when the transaction pays an output to this wallet', () => {
+    expect(component).toContain('(transaction.walletOutputAmount ?? 0) > 0');
+    expect(component).toContain('{#if canSpendOutput}<Button');
   });
 
   it('gives the two actions a responsive grid without shrinking their icons', () => {
