@@ -99,6 +99,7 @@
   let selectionPreviewRevision = 0;
   let externalWallet = $state<ExternalSignerWallet | null>(null);
   let signerSummaryReady = $state(false);
+  let hardwareScanGeneration = 0;
   let externalSigner = $state(false),
     externalProposal = $state<MultisigProposal | null>(null),
     deviceOpen = $state(false),
@@ -324,6 +325,7 @@
   });
 
   onDestroy(() => {
+    hardwareScanGeneration += 1;
     passphrase = '';
   });
 
@@ -461,19 +463,31 @@
     credentialError = durableError;
   }
   async function scanHardware() {
+    const generation = ++hardwareScanGeneration;
     clearSigningTransportError();
     deviceOpen = true;
     hardwareAction = 'scan';
     broadcasting = true;
     deviceError = '';
     try {
-      devices = await walletService.listHardwareDevices();
+      const discovered = externalWallet
+        ? [await walletService.findSavedHardwareDevice(externalWallet.signer)]
+        : await walletService.listHardwareDevices();
+      if (generation !== hardwareScanGeneration || !deviceOpen) return;
+      devices = discovered;
     } catch (cause) {
+      if (generation !== hardwareScanGeneration) return;
       devices = [];
       deviceError = cause instanceof Error ? cause.message : 'Could not find hardware.';
     } finally {
-      broadcasting = false;
+      if (generation === hardwareScanGeneration) broadcasting = false;
     }
+  }
+  function closeHardwareScan() {
+    if (broadcasting && hardwareAction !== 'scan') return;
+    hardwareScanGeneration += 1;
+    broadcasting = false;
+    deviceOpen = false;
   }
   async function signHardware(device: HardwareDevice) {
     if (!proposal || !externalProposal) return;
@@ -1227,7 +1241,7 @@
   open={deviceOpen}
   title="Sign with hardware"
   description="Use the same passphrase-protected hardware wallet whose fingerprint you imported."
-  onclose={() => (deviceOpen = false)}
+  onclose={closeHardwareScan}
   >{#if proposal}<section class="hardware-review" aria-label="Authoritative transaction details">
       <strong>Transaction to verify</strong>
       <dl class="hardware-review-primary">

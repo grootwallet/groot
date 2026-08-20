@@ -128,6 +128,8 @@ export class TauriWalletAdapter implements WalletPort {
   #last: WalletSnapshot | null = null;
   #selectedWalletId: string | null = null;
   #notificationDrains = new Map<boolean, Promise<void>>();
+  #hardwareListRequest: Promise<HardwareDevice[]> | null = null;
+  #typedHardwareListRequests = new Map<string, Promise<HardwareDevice[]>>();
 
   exists() {
     return command<boolean>('wallet_exists');
@@ -346,10 +348,26 @@ export class TauriWalletAdapter implements WalletPort {
     return result;
   }
   listHardwareDevices() {
-    return command<HardwareDevice[]>('hardware_list');
+    if (this.#hardwareListRequest) return this.#hardwareListRequest;
+    const request = command<HardwareDevice[]>('hardware_list').finally(() => {
+      if (this.#hardwareListRequest === request) this.#hardwareListRequest = null;
+    });
+    this.#hardwareListRequest = request;
+    return request;
   }
   listHardwareDevicesForTypes(deviceTypes: string[]) {
-    return command<HardwareDevice[]>('hardware_list_for_device_types', { deviceTypes });
+    const normalized = [...new Set(deviceTypes.map((type) => type.trim().toLowerCase()))].sort();
+    const key = normalized.join(',');
+    const active = this.#typedHardwareListRequests.get(key);
+    if (active) return active;
+    const request = command<HardwareDevice[]>('hardware_list_for_device_types', {
+      deviceTypes: normalized
+    }).finally(() => {
+      if (this.#typedHardwareListRequests.get(key) === request)
+        this.#typedHardwareListRequests.delete(key);
+    });
+    this.#typedHardwareListRequests.set(key, request);
+    return request;
   }
   findSavedHardwareDevice(signer: {
     deviceType?: string | null;

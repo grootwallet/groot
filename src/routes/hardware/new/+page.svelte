@@ -75,6 +75,7 @@
   let isFileImport = $derived(signer?.source === 'file');
   let networkSetupSource = $state<NetworkSetupSource | null>(null);
   let reuseNetworkSetup = $state(true);
+  let hardwareScanGeneration = 0;
 
   onMount(async () => {
     try {
@@ -85,6 +86,7 @@
   });
 
   onDestroy(() => {
+    hardwareScanGeneration += 1;
     pin = '';
     confirmation = '';
     pinPositions = '';
@@ -92,19 +94,28 @@
   });
 
   async function scan() {
+    const generation = ++hardwareScanGeneration;
     scanOpen = true;
     busy = true;
     hardwareProgress = 'Scanning all USB hardware wallets…';
     errorTitle = 'Could not scan hardware';
     error = '';
     try {
-      devices = await walletService.listHardwareDevices();
+      const discovered = await walletService.listHardwareDevices();
+      if (generation !== hardwareScanGeneration || !scanOpen) return;
+      devices = discovered;
     } catch (cause) {
+      if (generation !== hardwareScanGeneration) return;
       devices = [];
       error = cause instanceof Error ? cause.message : 'Could not scan hardware.';
     } finally {
-      busy = false;
+      if (generation === hardwareScanGeneration) busy = false;
     }
+  }
+  function closeHardwareScan() {
+    hardwareScanGeneration += 1;
+    busy = false;
+    scanOpen = false;
   }
   async function useDevice(device: HardwareDevice, allowEmptyPassphrase = false) {
     if (device.action === 'prompt_pin') {
@@ -568,7 +579,7 @@
   open={scanOpen}
   title="Connect hardware signer"
   description="Quit other wallet apps so Groot can use USB."
-  onclose={() => (scanOpen = false)}
+  onclose={closeHardwareScan}
 >
   {#if busy}<HardwareActionPrompt
       title={hardwareProgress}

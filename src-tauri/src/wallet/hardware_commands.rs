@@ -178,7 +178,10 @@ pub async fn hardware_list_for_device_types(
     })
     .await
     .map_err(internal)??;
-    remember_hardware_scan(&state, &devices)?;
+    // A targeted scan must not discard exact paths learned for other saved
+    // signers. Those paths remain useful for fast, identity-bound follow-up
+    // operations, while the returned list still contains only requested types.
+    remember_hardware_devices(&state, &devices)?;
     Ok(devices.into_iter().map(hardware_device_dto).collect())
 }
 

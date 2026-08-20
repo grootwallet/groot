@@ -132,6 +132,7 @@
     coldcardSetupDevice = $state<HardwareDevice | null>(null);
   let accelerationRequest = $state<{ txid: string; method: 'rbf' | 'cpfp' } | null>(null);
   let hardwareAction = $state<'scan' | 'sign'>('scan');
+  let hardwareScanGeneration = 0;
   let coins = $state<Utxo[]>([]),
     selectedCoins = $state<string[]>([]),
     showCoins = $state(false),
@@ -237,6 +238,7 @@
     error = '';
   }
   onDestroy(() => {
+    hardwareScanGeneration += 1;
     pin = '';
     imported = '';
     pinPositions = '';
@@ -410,19 +412,29 @@
     return signer ? matchingPolicyVerification(signer, policyVerifications) : null;
   }
   async function scan() {
+    const generation = ++hardwareScanGeneration;
     deviceOpen = true;
     activeHardwareDevice = null;
     hardwareAction = 'scan';
     busy = true;
     deviceError = '';
     try {
-      devices = await walletService.listHardwareDevices();
+      const discovered = await walletService.listHardwareDevices();
+      if (generation !== hardwareScanGeneration || !deviceOpen) return;
+      devices = discovered;
     } catch (cause) {
+      if (generation !== hardwareScanGeneration) return;
       devices = [];
       deviceError = cause instanceof Error ? cause.message : 'Could not find hardware.';
     } finally {
-      busy = false;
+      if (generation === hardwareScanGeneration) busy = false;
     }
+  }
+  function closeHardwareScan() {
+    if (busy && hardwareAction !== 'scan') return;
+    hardwareScanGeneration += 1;
+    busy = false;
+    deviceOpen = false;
   }
   async function handleHardware(device: HardwareDevice) {
     if (deviceHasSigned(device)) return;
@@ -1255,9 +1267,7 @@
   open={deviceOpen}
   title="Sign with hardware"
   description="Compare every value below with the device before approving."
-  onclose={() => {
-    if (!busy) deviceOpen = false;
-  }}
+  onclose={closeHardwareScan}
 >
   {#if proposal}
     <section class="hardware-review" aria-label="Authoritative transaction details">

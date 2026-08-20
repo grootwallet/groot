@@ -63,4 +63,6 @@ v0.4.21 fixes the BitBox02 and BitBox Nova unlock loop in HWI 3.2.0. A path-only
 
 v0.4.22 shortens hardware discovery, progress, retry, and device-help copy while preserving the device-specific actions needed to recover. Persisted wallet and proposal formats are unchanged.
 
+v0.4.23 hardens the complete HWI request lifecycle without changing persisted formats. Native HWI processes are single-flight, discovery is bounded to 30 seconds, duplicate frontend scans coalesce, dismissed scan generations ignore late results, targeted scans preserve other saved exact paths, and a saved single-key signer is found by its complete saved identity instead of broad enumeration before signing. BitBox02 and Nova path-only results remain actionable as detected devices.
+
 Update this table in the same change whenever a capability crosses a boundary.

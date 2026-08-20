@@ -1934,17 +1934,15 @@
               class:signed={Boolean(addedSigner)}
               >{addedSigner
                 ? 'Already added'
-                : device.status === 'ready'
+                : device.status === 'ready' || device.status === 'detected'
                   ? 'Ready'
-                  : device.status === 'detected'
-                    ? 'Detected'
-                    : device.status === 'needs_pin'
-                      ? 'Unlock'
-                      : device.action === 'confirm_empty_passphrase'
-                        ? 'Choose wallet'
-                        : device.action === 'retry'
-                          ? 'Scan again'
-                          : 'Unavailable'}</em
+                  : device.status === 'needs_pin'
+                    ? 'Unlock'
+                    : device.action === 'confirm_empty_passphrase'
+                      ? 'Choose wallet'
+                      : device.action === 'retry'
+                        ? 'Scan again'
+                        : 'Unavailable'}</em
             ></span
           >{#if !addedSigner && device.action !== 'none'}<ChevronRight size={15} />{/if}</button
         >{/each}<button class="hardware-rescan" onclick={scanHardware}

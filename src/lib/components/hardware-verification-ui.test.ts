@@ -55,8 +55,29 @@ const overview = readFileSync(new URL('../../routes/+page.svelte', import.meta.u
 const deviceDetails = readFileSync(new URL('./DeviceDetailsModal.svelte', import.meta.url), 'utf8');
 const policyReview = readFileSync(new URL('./SignerPolicyReview.svelte', import.meta.url), 'utf8');
 const coins = readFileSync(new URL('../../routes/coins/+page.svelte', import.meta.url), 'utf8');
+const hardwareTransport = readFileSync(
+  new URL('../../../src-tauri/src/hardware.rs', import.meta.url),
+  'utf8'
+);
 
 describe('hardware receive verification UI', () => {
+  it('targets the saved signer for single-key hardware signing', () => {
+    const scan = singleKeySend.slice(
+      singleKeySend.indexOf('async function scanHardware()'),
+      singleKeySend.indexOf('async function signHardware')
+    );
+    expect(scan).toContain('findSavedHardwareDevice(externalWallet.signer)');
+    expect(scan).toContain('hardwareScanGeneration');
+  });
+
+  it('bounds and serializes native HWI discovery', () => {
+    expect(hardwareTransport).toContain(
+      'const DISCOVERY_TIMEOUT: Duration = Duration::from_secs(30)'
+    );
+    expect(hardwareTransport).toContain('static HWI_PROCESS_LOCK: Mutex<()> = Mutex::new(())');
+    expect(hardwareTransport).toContain('HWI_PROCESS_LOCK.lock()');
+  });
+
   it('keeps one shared verification component in both receive flows', () => {
     for (const route of [singleKeyReceive, multisigReceive]) {
       expect(route).toContain('<HardwareReceiveVerification');

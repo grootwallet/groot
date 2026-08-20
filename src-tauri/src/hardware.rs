@@ -7,6 +7,7 @@ use std::{
     io::{Read, Write},
     path::{Path, PathBuf},
     process::{Command, Stdio},
+    sync::Mutex,
     thread,
     time::{Duration, Instant},
 };
@@ -16,8 +17,10 @@ const MAX_SECRET_INPUT_BYTES: usize = 128;
 const MAX_PIN_POSITIONS: usize = 50;
 const MAX_OUTPUT_BYTES: u64 = 384 * 1024;
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(90);
+const DISCOVERY_TIMEOUT: Duration = Duration::from_secs(30);
 const USER_REVIEW_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 const HWI_DIGEST_HEX_BYTES: usize = 64;
+static HWI_PROCESS_LOCK: Mutex<()> = Mutex::new(());
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HardwareError {
@@ -270,7 +273,7 @@ impl HardwareTransport for HwiCli {
                 self.chain.as_hwi_argument().into(),
                 "enumerate".into(),
             ],
-            USER_REVIEW_TIMEOUT,
+            DISCOVERY_TIMEOUT,
             self.home.as_deref(),
         )
     }
@@ -280,7 +283,7 @@ impl HardwareTransport for HwiCli {
             &self.program,
             &self.source,
             &self.enumerate_device_type_command(device_type),
-            USER_REVIEW_TIMEOUT,
+            DISCOVERY_TIMEOUT,
             self.home.as_deref(),
         )
     }
@@ -459,6 +462,10 @@ fn run_program_with_input(
     home: Option<&Path>,
     input: Option<&[u8]>,
 ) -> Result<Vec<u8>, HardwareError> {
+    // HWI backends share USB transports and pairing state. Concurrent CLI
+    // processes can steal a session from one another or prompt the wrong
+    // connected signer, so every native HWI operation is single-flight.
+    let _process_guard = HWI_PROCESS_LOCK.lock().map_err(|_| HardwareError::Io)?;
     if !program.is_absolute() {
         return Err(HardwareError::Unavailable);
     }
@@ -915,6 +922,13 @@ mod tests {
         for (error, code) in errors {
             assert_eq!(error.code(), code);
         }
+    }
+
+    #[test]
+    fn discovery_is_bounded_below_interactive_device_review() {
+        assert_eq!(DISCOVERY_TIMEOUT, Duration::from_secs(30));
+        assert!(DISCOVERY_TIMEOUT < DEFAULT_TIMEOUT);
+        assert!(DEFAULT_TIMEOUT < USER_REVIEW_TIMEOUT);
     }
 
     #[test]

@@ -51,6 +51,7 @@
   let pinError = $state('');
   let pinErrorCode = $state<WalletErrorCode | ''>('');
   let pinDevice = $state<HardwareDevice | null>(null);
+  let hardwareScanGeneration = 0;
 
   const verificationDeviceIdentity = $derived(
     `${savedDeviceIdentity ?? ''} ${verificationDevice?.label ?? ''} ${verificationDevice?.model ?? ''}`
@@ -60,11 +61,20 @@
   );
   const isMultisig = $derived(walletKind === 'multisig');
 
-  onDestroy(clearPinState);
+  onDestroy(() => {
+    hardwareScanGeneration += 1;
+    clearPinState();
+  });
 
   function clearPinState() {
     pinPositions = '';
     pinChallenge = '';
+  }
+
+  function closeVerification() {
+    hardwareScanGeneration += 1;
+    verifyBusy = false;
+    verifyOpen = false;
   }
 
   async function copyVerificationAddress() {
@@ -87,6 +97,7 @@
   }
 
   async function scan() {
+    const generation = ++hardwareScanGeneration;
     verifyOpen = true;
     verificationAction = 'scan';
     verifyBusy = true;
@@ -94,6 +105,7 @@
     verificationDevice = null;
     try {
       const discovered = await walletService.listHardwareDevicesForTypes(eligibleDeviceTypes);
+      if (generation !== hardwareScanGeneration || !verifyOpen) return;
       const fingerprints = new Set(
         eligibleFingerprints.map((fingerprint) => fingerprint.trim().toLowerCase())
       );
@@ -108,10 +120,11 @@
           'More than one locked wallet of an eligible type is connected. Disconnect the extra device, then scan again.';
       }
     } catch (cause) {
+      if (generation !== hardwareScanGeneration) return;
       devices = [];
       verifyError = receiveVerificationFailure(cause, 'Could not scan hardware.').message;
     } finally {
-      verifyBusy = false;
+      if (generation === hardwareScanGeneration) verifyBusy = false;
     }
   }
 
@@ -240,9 +253,7 @@
   description={comparison.deviceName
     ? `${comparison.deviceName} displays the Regtest output with a testnet prefix. Compare the exact address below.`
     : "Compare the exact address below with the complete address on the signer's trusted display."}
-  onclose={() => {
-    if (!verifyBusy) verifyOpen = false;
-  }}
+  onclose={closeVerification}
 >
   <HardwareAddressComparison
     {comparison}
