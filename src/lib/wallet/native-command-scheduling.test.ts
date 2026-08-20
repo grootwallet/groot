@@ -19,6 +19,7 @@ function commandSource(source: string, command: string): string {
 
 describe('native command scheduling', () => {
   it.each([
+    ['wallet_select', profileCommands],
     ['wallet_sync', profileCommands],
     ['multisig_sync', multisigCommands],
     ['network_setup_adopt', profileCommands],
@@ -30,6 +31,14 @@ describe('native command scheduling', () => {
 
   it('node saving cancels automatic sync before waiting for the wallet-operation lock', () => {
     const source = commandSource(profileCommands, 'node_config_save');
+    expect(source.indexOf('cancel_foreground_sync(&state)?')).toBeGreaterThan(-1);
+    expect(source.indexOf('cancel_foreground_sync(&state)?')).toBeLessThan(
+      source.indexOf('operation_guard(&state)?')
+    );
+  });
+
+  it('wallet switching cancels automatic sync before waiting for the wallet-operation lock', () => {
+    const source = commandSource(profileCommands, 'wallet_select');
     expect(source.indexOf('cancel_foreground_sync(&state)?')).toBeGreaterThan(-1);
     expect(source.indexOf('cancel_foreground_sync(&state)?')).toBeLessThan(
       source.indexOf('operation_guard(&state)?')
