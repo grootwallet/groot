@@ -7,11 +7,12 @@
     Check,
     FileUp,
     HelpCircle,
+    Network,
     QrCode,
     ShieldCheck
   } from '@lucide/svelte';
   import { goto } from '$app/navigation';
-  import { onDestroy } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import Button from '$lib/components/Button.svelte';
   import FieldCounter from '$lib/components/FieldCounter.svelte';
   import HardwareActionPrompt from '$lib/components/HardwareActionPrompt.svelte';
@@ -31,6 +32,7 @@
     type ExternalSigner,
     type ExternalSignerSource,
     type HardwareDevice,
+    type NetworkSetupSource,
     type WalletErrorCode
   } from '$lib/wallet';
 
@@ -71,6 +73,16 @@
     )
   );
   let isFileImport = $derived(signer?.source === 'file');
+  let networkSetupSource = $state<NetworkSetupSource | null>(null);
+  let reuseNetworkSetup = $state(true);
+
+  onMount(async () => {
+    try {
+      networkSetupSource = (await walletService.networkSetupSources())[0] ?? null;
+    } catch {
+      networkSetupSource = null;
+    }
+  });
 
   onDestroy(() => {
     pin = '';
@@ -226,17 +238,27 @@
     error = '';
     errorCode = '';
     try {
+      let networkSetupCopied = true;
       await walletService.createExternalSignerWallet(
         walletName,
         { ...signer, label: walletName },
         pin
       );
+      if (reuseNetworkSetup && networkSetupSource) {
+        try {
+          await walletService.adoptNetworkSetup(networkSetupSource.walletId, pin);
+        } catch {
+          networkSetupCopied = false;
+        }
+      }
       pin = '';
       confirmation = '';
       toast({
         title: 'Hardware wallet added',
-        description: 'Only public descriptors are stored in Groot.',
-        tone: 'success'
+        description: networkSetupCopied
+          ? 'Only public descriptors are stored in Groot.'
+          : 'Network setup was not copied. Configure it in Settings.',
+        tone: networkSetupCopied ? 'success' : 'default'
       });
       await walletShell.refreshProfiles();
       await goto('/');
@@ -484,6 +506,14 @@
         autocomplete="new-password"
         error={confirmation && pin !== confirmation ? 'PINs do not match.' : ''}
       />
+      {#if networkSetupSource}<label class="credential-warning credential-ack"
+          ><input type="checkbox" bind:checked={reuseNetworkSetup} /><Network size={16} />
+          <p>
+            <strong>Use {networkSetupSource.walletName}’s network setup.</strong><span
+              >Copies its node and sync method. This wallet protects its own copy.</span
+            >
+          </p></label
+        >{/if}
       {#if error}
         <div class="hardware-inline-error hardware-create-error" role="alert">
           <AlertTriangle size={18} />

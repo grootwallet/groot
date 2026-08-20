@@ -13,6 +13,14 @@ pub struct WalletProfileCompatibility {
     pub(crate) supported: bool,
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NetworkSetupSource {
+    wallet_id: String,
+    wallet_name: String,
+    sync_source: WalletSyncSource,
+}
+
 pub(crate) fn profile_compatibility_for(
     profile: &WalletProfile,
     directory: &Path,
@@ -57,6 +65,45 @@ pub fn wallet_profile_compatibility(app: AppHandle) -> ApiResult<WalletProfileCo
     let profile = selected_profile(&app)?;
     let directory = profile_directory(&app, profile.id)?;
     Ok(profile_compatibility_for(&profile, &directory))
+}
+
+#[tauri::command]
+pub fn network_setup_sources(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> ApiResult<Vec<NetworkSetupSource>> {
+    require_unlocked(&app, &state)?;
+    let registry = load_registry(&app)?;
+    let unlocked = state.unlocked_wallets.lock().map_err(internal)?;
+    let node_auth = state.node_auth.lock().map_err(internal)?;
+    Ok(registry
+        .wallets
+        .into_iter()
+        .filter_map(|profile| {
+            if !unlocked.is_unlocked(profile.id) {
+                return None;
+            }
+            let path = node_config_path_for(&app, profile.id).ok()?;
+            if !path.is_file() {
+                return None;
+            }
+            let config = read_node_config_for(&app, profile.id).ok()?;
+            let credentials_ready = match config.auth {
+                RpcAuthMode::Cookie => true,
+                RpcAuthMode::UserPass => node_auth
+                    .get(&profile.id)
+                    .is_some_and(|session| session.config == config),
+            };
+            if !credentials_ready {
+                return None;
+            }
+            Some(NetworkSetupSource {
+                wallet_id: profile.id.to_string(),
+                wallet_name: profile.name,
+                sync_source: read_sync_source_for(&app, profile.id).ok()?,
+            })
+        })
+        .collect())
 }
 
 #[tauri::command]
@@ -983,6 +1030,122 @@ pub async fn node_config_save(
             }
         }
         write_private_json(&node_config_path(&app)?, &config)?;
+        load_node_auth_session(&app, &state, credential.as_str())?;
+        Ok(status)
+    })
+    .await
+    .map_err(internal)?
+}
+
+#[tauri::command]
+pub async fn network_setup_adopt(
+    app: AppHandle,
+    source_wallet_id: String,
+    credential: String,
+) -> ApiResult<NodeStatusDto> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        cancel_foreground_sync(&state)?;
+        let _operation = operation_guard(&state)?;
+        let destination = require_unlocked(&app, &state)?;
+        let source = Uuid::parse_str(&source_wallet_id).map_err(|_| {
+            api_error(
+                "wallet_not_found",
+                "The wallet providing this network setup no longer exists.",
+            )
+        })?;
+        if source == destination {
+            return Err(api_error(
+                "invalid_node_config",
+                "Choose another wallet with a saved network setup.",
+            ));
+        }
+        let registry = load_registry(&app)?;
+        if !registry.wallets.iter().any(|profile| profile.id == source) {
+            return Err(api_error(
+                "wallet_not_found",
+                "The wallet providing this network setup no longer exists.",
+            ));
+        }
+        if !node_config_path_for(&app, source)?.is_file() {
+            return Err(api_error(
+                "invalid_node_config",
+                "The selected wallet has no saved Bitcoin Core connection.",
+            ));
+        }
+        if !state
+            .unlocked_wallets
+            .lock()
+            .map_err(internal)?
+            .is_unlocked(source)
+        {
+            return Err(api_error(
+                "wallet_locked",
+                "Unlock the wallet providing this network setup, then try again.",
+            ));
+        }
+
+        let credential = Zeroizing::new(credential);
+        check_auth_throttle(&app, &state)?;
+        let verified = verify_selected_credential(&app, credential.as_str());
+        record_auth_result(&app, &state, &verified)?;
+        verified?;
+
+        let config = read_node_config_for(&app, source)?;
+        let sync_source = read_sync_source_for(&app, source)?;
+        let client = match config.auth {
+            RpcAuthMode::Cookie => candidate_rpc_client(&config, "")?,
+            RpcAuthMode::UserPass => {
+                let sessions = state.node_auth.lock().map_err(internal)?;
+                let session = sessions.get(&source).ok_or_else(|| {
+                    api_error(
+                        "wallet_locked",
+                        "Unlock the wallet providing this network setup, then try again.",
+                    )
+                })?;
+                if session.config != config {
+                    return Err(api_error(
+                        "invalid_node_config",
+                        "The saved connection changed. Open its wallet and verify the node again.",
+                    ));
+                }
+                candidate_rpc_client(&config, session.password.as_str())?
+            }
+        };
+        let status = checked_node_status(&client, config.clone())?;
+
+        if config.auth == RpcAuthMode::UserPass {
+            let protected = {
+                let sessions = state.node_auth.lock().map_err(internal)?;
+                let session = sessions.get(&source).ok_or_else(|| {
+                    api_error(
+                        "wallet_locked",
+                        "Unlock the wallet providing this network setup, then try again.",
+                    )
+                })?;
+                Zeroizing::new(
+                    serde_json::to_vec(&ProtectedNodeAuthRef {
+                        version: PROTECTED_NODE_AUTH_VERSION,
+                        config: &config,
+                        password: session.password.as_str(),
+                    })
+                    .map_err(internal)?,
+                )
+            };
+            secure_store::store(
+                &node_secret_path_for(&app, destination)?,
+                protected.as_slice(),
+                credential.as_str(),
+            )
+            .map_err(secure_store_error)?;
+        } else {
+            let path = node_secret_path_for(&app, destination)?;
+            if path.exists() {
+                fs::remove_file(path).map_err(internal)?;
+            }
+        }
+        write_private_json(&node_config_path_for(&app, destination)?, &config)?;
+        write_private_json(&sync_source_path_for(&app, destination)?, &sync_source)?;
         load_node_auth_session(&app, &state, credential.as_str())?;
         Ok(status)
     })

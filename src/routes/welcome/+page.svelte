@@ -7,6 +7,7 @@
     Eye,
     EyeOff,
     KeyRound,
+    Network,
     ShieldCheck,
     Users,
     X
@@ -26,6 +27,7 @@
     MIN_SUPPLEMENTAL_DICE_ROLLS,
     walletService,
     WalletError,
+    type NetworkSetupSource,
     type SupplementalEntropyInput
   } from '$lib/wallet';
   import { goto } from '$app/navigation';
@@ -58,6 +60,8 @@
   let draggedWord = $state<RecoveryWord | null>(null);
   let supplementalSource = $state<'none' | 'coin' | 'dice'>('none');
   let supplementalOutcomes = $state('');
+  let networkSetupSource = $state<NetworkSetupSource | null>(null);
+  let reuseNetworkSetup = $state(true);
   const softwareSteps = ['Generate', 'Back up', 'Protect'];
   let passphraseError = $derived(
     utf8ByteLength(passphrase) > MAX_WALLET_PASSPHRASE_BYTES
@@ -77,6 +81,13 @@
   onMount(async () => {
     hasExistingWallet = await walletService.exists();
     if (hasExistingWallet && page.url.searchParams.get('add') !== '1') await goto('/unlock');
+    if (hasExistingWallet) {
+      try {
+        networkSetupSource = (await walletService.networkSetupSources())[0] ?? null;
+      } catch {
+        networkSetupSource = null;
+      }
+    }
   });
   onDestroy(() => {
     void walletService.cancelOnboarding();
@@ -186,21 +197,34 @@
     mode = 'words';
   }
 
+  async function adoptNetworkSetup(credential: string) {
+    if (!reuseNetworkSetup || !networkSetupSource) return true;
+    try {
+      await walletService.adoptNetworkSetup(networkSetupSource.walletId, credential);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   async function finishCreate() {
     busy = true;
     error = '';
     try {
       await walletService.createWallet(walletName, passphrase, backupVerified);
+      const networkSetupCopied = await adoptNetworkSetup(passphrase);
       words = [];
       passphrase = '';
       confirmation = '';
       backupAcknowledged = false;
       toast({
         title: 'Wallet created',
-        description: backupVerified
-          ? 'Your regtest wallet is ready.'
-          : 'Your wallet is ready. Verify its recovery backup soon.',
-        tone: 'success'
+        description: !networkSetupCopied
+          ? 'Network setup was not copied. Configure it in Settings.'
+          : backupVerified
+            ? 'Your regtest wallet is ready.'
+            : 'Your wallet is ready. Verify its recovery backup soon.',
+        tone: networkSetupCopied ? 'success' : 'default'
       });
       await goto('/');
     } catch (cause) {
@@ -218,11 +242,14 @@
     error = '';
     try {
       await walletService.recoverWallet(walletName, passphrase);
+      const networkSetupCopied = await adoptNetworkSetup(passphrase);
       passphrase = '';
       toast({
         title: 'Wallet recovered',
-        description: 'Sync to restore transaction history.',
-        tone: 'success'
+        description: networkSetupCopied
+          ? 'Sync to restore transaction history.'
+          : 'Network setup was not copied. Configure it in Settings.',
+        tone: networkSetupCopied ? 'success' : 'default'
       });
       await goto('/');
     } catch (cause) {
@@ -586,6 +613,14 @@
           >
         </p></label
       >
+      {#if networkSetupSource}<label class="credential-warning credential-ack"
+          ><input type="checkbox" bind:checked={reuseNetworkSetup} /><Network size={16} />
+          <p>
+            <strong>Use {networkSetupSource.walletName}’s network setup.</strong><span
+              >Copies its node and sync method. This wallet protects its own copy.</span
+            >
+          </p></label
+        >{/if}
       {#if error}<p class="form-error" role="alert">
           {error.replace('passphrase / PIN', 'wallet passphrase')}
         </p>{/if}
@@ -622,7 +657,14 @@
         autocomplete="current-password"
         hint="This exact BIP39 passphrase is required with the recovery words and also unlocks Groot."
         error={passphraseError}
-      />{#if error}<p class="form-error" role="alert">
+      />{#if networkSetupSource}<label class="credential-warning credential-ack"
+          ><input type="checkbox" bind:checked={reuseNetworkSetup} /><Network size={16} />
+          <p>
+            <strong>Use {networkSetupSource.walletName}’s network setup.</strong><span
+              >Copies its node and sync method. This wallet protects its own copy.</span
+            >
+          </p></label
+        >{/if}{#if error}<p class="form-error" role="alert">
           {error.replace('passphrase / PIN', 'wallet passphrase')}
         </p>{/if}<Button
         size="large"

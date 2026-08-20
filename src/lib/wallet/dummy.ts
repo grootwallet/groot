@@ -247,6 +247,22 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
   async nodeConfig() {
     return structuredClone(this._nodeConfig);
   }
+  async networkSetupSources() {
+    return this._profiles
+      .filter((profile) => this._unlockedWalletIds.has(profile.id))
+      .map((profile) => ({
+        walletId: profile.id,
+        walletName: profile.name,
+        syncSource: structuredClone(this._syncSource)
+      }));
+  }
+  async adoptNetworkSetup(sourceWalletId: string, credential: string) {
+    if (!this._profiles.some((profile) => profile.id === sourceWalletId))
+      throw new WalletError('wallet_not_found', 'The source wallet no longer exists.');
+    if (!this._selectedWalletId || credential !== this._credentials.get(this._selectedWalletId))
+      throw new WalletError('invalid_credential', 'Incorrect app PIN.');
+    return this.testNodeConnection();
+  }
   async saveNodeConfig(config: CoreNodeConfig, password: string, credential: string) {
     if (!this._selectedWalletId || credential !== this._credentials.get(this._selectedWalletId))
       throw new WalletError('invalid_credential', 'Incorrect app PIN.');

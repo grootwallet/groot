@@ -50,6 +50,11 @@ export type WalletSyncSource =
       discoverPeers: boolean;
       torProxy?: string | null;
     };
+export type NetworkSetupSource = {
+  walletId: string;
+  walletName: string;
+  syncSource: WalletSyncSource;
+};
 export type WalletSyncStatus = {
   walletId: string;
   source: 'bitcoin_core' | 'compact_filters';

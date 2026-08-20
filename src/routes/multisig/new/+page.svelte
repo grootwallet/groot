@@ -12,6 +12,7 @@
     Download,
     FileKey,
     FileUp,
+    Network,
     Plus,
     RefreshCw,
     ShieldCheck,
@@ -41,6 +42,7 @@
     type HardwareDevice,
     type MultisigPreview,
     type MultisigSetupDraft,
+    type NetworkSetupSource,
     type PolicyVerificationAddress,
     type RecoveryTemplate,
     type SavedFileResult,
@@ -175,6 +177,8 @@
   let policyLookupGeneration = 0;
   let credential = $state('');
   let confirmation = $state('');
+  let networkSetupSource = $state<NetworkSetupSource | null>(null);
+  let reuseNetworkSetup = $state(true);
   let preview = $state<MultisigPreview | null>(null);
   let policyAddress = $state<PolicyVerificationAddress | null>(null);
   let busy = $state(false);
@@ -473,6 +477,11 @@
   }
 
   onMount(async () => {
+    try {
+      networkSetupSource = (await walletService.networkSetupSources())[0] ?? null;
+    } catch {
+      networkSetupSource = null;
+    }
     try {
       const draft = await walletService.multisigSetupDraft();
       if (draft) {
@@ -1101,15 +1110,25 @@
     error = '';
     createErrorTitle = '';
     try {
+      let networkSetupCopied = true;
       await flushCurrentDraft();
       if (recoveryTemplate)
         await walletService.createRecoveryMultisig(name, recoveryTemplate, cosigners, credential);
       else await walletService.createMultisig(policy, credential);
+      if (reuseNetworkSetup && networkSetupSource) {
+        try {
+          await walletService.adoptNetworkSetup(networkSetupSource.walletId, credential);
+        } catch {
+          networkSetupCopied = false;
+        }
+      }
       hasDraft = false;
       toast({
         title: 'Multisig wallet created',
-        description: `${threshold} signatures are required to spend.`,
-        tone: 'success'
+        description: networkSetupCopied
+          ? `${threshold} signatures are required to spend.`
+          : 'Network setup was not copied. Configure it in Settings.',
+        tone: networkSetupCopied ? 'success' : 'default'
       });
       await goto('/multisig');
     } catch (cause) {
@@ -1752,6 +1771,14 @@
           {#if credential && confirmation && credential !== confirmation}<p class="form-error">
               PINs do not match.
             </p>{/if}
+          {#if networkSetupSource}<label class="credential-warning credential-ack"
+              ><input type="checkbox" bind:checked={reuseNetworkSetup} /><Network size={16} />
+              <p>
+                <strong>Use {networkSetupSource.walletName}’s network setup.</strong><span
+                  >Copies its node and sync method. This wallet protects its own copy.</span
+                >
+              </p></label
+            >{/if}
         </SetupTask>
       </div>
       {#if error}<div class="hardware-inline-error hardware-create-error" role="alert">

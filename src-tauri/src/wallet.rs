@@ -1867,17 +1867,29 @@ fn default_regtest_dir() -> ApiResult<PathBuf> {
 
 fn node_config_path(app: &AppHandle) -> ApiResult<PathBuf> {
     let profile = selected_profile(app)?;
-    Ok(profile_directory(app, profile.id)?.join("node.json"))
+    node_config_path_for(app, profile.id)
+}
+
+fn node_config_path_for(app: &AppHandle, wallet_id: Uuid) -> ApiResult<PathBuf> {
+    Ok(profile_directory(app, wallet_id)?.join("node.json"))
 }
 
 fn node_secret_path(app: &AppHandle) -> ApiResult<PathBuf> {
     let profile = selected_profile(app)?;
-    Ok(profile_directory(app, profile.id)?.join("node-secret.json"))
+    node_secret_path_for(app, profile.id)
+}
+
+fn node_secret_path_for(app: &AppHandle, wallet_id: Uuid) -> ApiResult<PathBuf> {
+    Ok(profile_directory(app, wallet_id)?.join("node-secret.json"))
 }
 
 fn sync_source_path(app: &AppHandle) -> ApiResult<PathBuf> {
     let profile = selected_profile(app)?;
-    Ok(profile_directory(app, profile.id)?.join("sync-source.json"))
+    sync_source_path_for(app, profile.id)
+}
+
+fn sync_source_path_for(app: &AppHandle, wallet_id: Uuid) -> ApiResult<PathBuf> {
+    Ok(profile_directory(app, wallet_id)?.join("sync-source.json"))
 }
 
 fn compact_filter_cache_dir(app: &AppHandle) -> ApiResult<PathBuf> {
@@ -1929,7 +1941,11 @@ fn network_config_api_error(error: NetworkConfigError) -> ApiError {
 }
 
 fn read_node_config(app: &AppHandle) -> ApiResult<CoreNodeConfig> {
-    let path = node_config_path(app)?;
+    read_node_config_for(app, selected_profile(app)?.id)
+}
+
+fn read_node_config_for(app: &AppHandle, wallet_id: Uuid) -> ApiResult<CoreNodeConfig> {
+    let path = node_config_path_for(app, wallet_id)?;
     if !path.exists() {
         return Ok(default_node_config());
     }
@@ -1940,7 +1956,11 @@ fn read_node_config(app: &AppHandle) -> ApiResult<CoreNodeConfig> {
 }
 
 fn read_sync_source(app: &AppHandle) -> ApiResult<WalletSyncSource> {
-    let path = sync_source_path(app)?;
+    read_sync_source_for(app, selected_profile(app)?.id)
+}
+
+fn read_sync_source_for(app: &AppHandle, wallet_id: Uuid) -> ApiResult<WalletSyncSource> {
+    let path = sync_source_path_for(app, wallet_id)?;
     if !path.exists() {
         return Ok(WalletSyncSource::BitcoinCore);
     }

@@ -68,6 +68,8 @@ pub fn run() {
             wallet::profile_commands::fees_estimate,
             wallet::profile_commands::node_config,
             wallet::profile_commands::node_config_save,
+            wallet::profile_commands::network_setup_sources,
+            wallet::profile_commands::network_setup_adopt,
             wallet::profile_commands::node_connection_test,
             wallet::profile_commands::wallet_sync_source,
             wallet::profile_commands::wallet_sync_source_save,

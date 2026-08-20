@@ -26,6 +26,7 @@ import type {
   MnemonicPresentation,
   WalletProfileCompatibility,
   NodeStatus,
+  NetworkSetupSource,
   PayjoinUriInspection,
   RecoveryScanSettings,
   RecoveryScanStatus,
@@ -71,6 +72,8 @@ export interface WalletProfilesPort {
 }
 
 export interface WalletNetworkPort {
+  networkSetupSources(): Promise<NetworkSetupSource[]>;
+  adoptNetworkSetup(sourceWalletId: string, credential: string): Promise<NodeStatus>;
   nodeConfig(): Promise<CoreNodeConfig>;
   saveNodeConfig(config: CoreNodeConfig, password: string, credential: string): Promise<NodeStatus>;
   testNodeConnection(): Promise<NodeStatus>;

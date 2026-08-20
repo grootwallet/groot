@@ -40,6 +40,7 @@
     CoreNodeConfig,
     CosignerHealthCheck,
     ExternalSignerWallet,
+    NetworkSetupSource,
     NodeStatus,
     RecoveryScanSettings,
     RecoveryScanStatus,
@@ -110,6 +111,15 @@
     torProxy: null
   });
   let node = $state<CoreNodeConfig>(localNodeConfig());
+  let networkSetupSources = $state<NetworkSetupSource[]>([]);
+  let networkReuseOpen = $state(false),
+    networkReuseSourceId = $state(''),
+    networkReuseCredential = $state(''),
+    networkReuseError = $state(''),
+    networkReusing = $state(false);
+  let reusableNetworkSetups = $derived(
+    networkSetupSources.filter((source) => source.walletId !== selectedWalletId)
+  );
   let syncSource = $state<WalletSyncSource>({ type: 'bitcoin_core' });
   let syncOpen = $state(false),
     syncSaving = $state(false),
@@ -203,8 +213,11 @@
     } else {
       setHardwareHealthChecks([]);
     }
-    node = await walletService.nodeConfig();
-    syncSource = await walletService.syncSource();
+    [node, syncSource, networkSetupSources] = await Promise.all([
+      walletService.nodeConfig(),
+      walletService.syncSource(),
+      walletService.networkSetupSources()
+    ]);
     scan = await walletService.recoveryScanSettings();
     scanDraft = { ...scan };
     scanStatus = await walletService.recoveryScanStatus();
@@ -215,6 +228,7 @@
     confirmText = '';
     nodePassword = '';
     walletCredential = '';
+    networkReuseCredential = '';
     syncCredential = '';
     scanCredential = '';
     verifyCredential = '';
@@ -301,6 +315,42 @@
       nodePassword = '';
       walletCredential = '';
       busy = false;
+    }
+  }
+  function openNetworkReuse() {
+    networkReuseSourceId = reusableNetworkSetups[0]?.walletId ?? '';
+    networkReuseCredential = '';
+    networkReuseError = '';
+    networkReuseOpen = true;
+  }
+  async function reuseNetworkSetup() {
+    if (!networkReuseSourceId || !networkReuseCredential) return;
+    networkReusing = true;
+    networkReuseError = '';
+    const source = reusableNetworkSetups.find(
+      (candidate) => candidate.walletId === networkReuseSourceId
+    );
+    try {
+      const result = await walletService.adoptNetworkSetup(
+        networkReuseSourceId,
+        networkReuseCredential
+      );
+      node = result.backend;
+      syncSource = await walletService.syncSource();
+      connected = true;
+      nodeStatus = result;
+      networkReuseCredential = '';
+      networkReuseOpen = false;
+      toast({
+        title: 'Network setup reused',
+        description: source ? `Copied from ${source.walletName}.` : undefined,
+        tone: 'success'
+      });
+    } catch (cause) {
+      networkReuseError = cause instanceof Error ? cause.message : 'Could not reuse this setup.';
+    } finally {
+      networkReuseCredential = '';
+      networkReusing = false;
     }
   }
   function openSyncSource() {
@@ -932,6 +982,13 @@
           ></span
         ><ChevronRight size={16} /></button
       >
+      {#if reusableNetworkSetups.length > 0}<button onclick={openNetworkReuse}
+          ><span class="setting-icon"><RefreshCw size={18} /></span><span
+            ><strong>Use an existing network setup</strong><small
+              >Copy the node and sync method from another unlocked wallet.</small
+            ></span
+          ><ChevronRight size={16} /></button
+        >{/if}
       <button disabled={checking} onclick={checkConnection}
         ><span class="setting-icon"><Check size={18} /></span><span
           ><strong>Test connection</strong><small
@@ -1417,6 +1474,47 @@
       loading={scanning}
       loadingLabel="Scanning blocks…"
       onclick={runFullRescan}><RefreshCw size={15} />Save & rescan</Button
+    >
+  </div>
+</Modal>
+<Modal
+  open={networkReuseOpen}
+  title="Use existing network setup"
+  description="Copy a verified node connection and sync method. Wallet data stays separate."
+  onclose={() => {
+    if (networkReusing) return;
+    networkReuseCredential = '';
+    networkReuseError = '';
+    networkReuseOpen = false;
+  }}
+>
+  <label class="field"
+    ><span>Copy from</span><select bind:value={networkReuseSourceId}
+      >{#each reusableNetworkSetups as source}<option value={source.walletId}
+          >{source.walletName}</option
+        >{/each}</select
+    ><small>The RPC password stays inside trusted native code.</small></label
+  >
+  <PasswordField
+    label={credentialLabel}
+    bind:value={networkReuseCredential}
+    autocomplete="current-password"
+    hint="Protects the copied connection for this wallet."
+  />
+  {#if networkReuseError}<p class="form-error" role="alert">{networkReuseError}</p>{/if}
+  <div class="modal-footer">
+    <Button
+      variant="secondary"
+      disabled={networkReusing}
+      onclick={() => {
+        networkReuseCredential = '';
+        networkReuseOpen = false;
+      }}>Cancel</Button
+    ><Button
+      disabled={!networkReuseSourceId || !networkReuseCredential}
+      loading={networkReusing}
+      loadingLabel="Verifying…"
+      onclick={reuseNetworkSetup}>Use setup</Button
     >
   </div>
 </Modal>

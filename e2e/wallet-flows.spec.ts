@@ -41,10 +41,14 @@ test('creates a 24-word wallet and clears onboarding secrets', async ({ page }) 
   await page.getByRole('button', { name: 'Add wallet' }).click();
   await expect(page.locator('.wallet-type-card')).toHaveCount(3);
   await expect(
-    page.getByText('Groot creates the wallet and its recovery words here.')
+    page.getByText('The easiest way to start. Groot creates recovery words for you to write down.')
   ).toBeVisible();
-  await expect(page.getByText('Connect or import an existing signing device.')).toBeVisible();
-  await expect(page.getByText('Share control or build in a recovery path.')).toBeVisible();
+  await expect(
+    page.getByText('Connect one you already own. Your keys stay protected by that device.')
+  ).toBeVisible();
+  await expect(
+    page.getByText('Require more than one key, or add another way to recover your wallet.')
+  ).toBeVisible();
   await chooseSoftwareWallet(page);
   const setupProgress = page.getByRole('navigation', { name: 'Software wallet setup progress' });
   await expect(setupProgress).toContainText('Generate');
@@ -188,7 +192,7 @@ test('keeps recovery words out of the webview and unlock rejects the wrong crede
   await expect(page.getByText(/native recovery window/)).toBeVisible();
   await expect(page.getByLabel('Wallet passphrase', { exact: true })).toHaveValue('');
 
-  await page.goto('/unlock');
+  await page.goto('/unlock?fixture-locked-wallet-switch=1');
   await expect(page.getByRole('link', { name: 'Overview' })).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'Activity' })).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'Coins' })).toHaveCount(0);
@@ -220,16 +224,16 @@ test('keeps recovery words out of the webview and unlock rejects the wrong crede
 test('protected-storage denial stays locked and permits an explicit unlock retry', async ({
   page
 }) => {
-  await page.goto('/unlock?fixture-secure-storage-retry=1');
+  await page.goto('/unlock?fixture-secure-storage-retry=1&fixture-locked-wallet-switch=1');
   const credential = page.getByLabel('Wallet passphrase', { exact: true });
   await credential.fill('prototype-passphrase');
   await page.getByRole('button', { name: 'Unlock wallet' }).click();
-  await expect(page.getByText(/Keychain access is unavailable/)).toBeVisible();
+  await expect(page.getByText(/Encrypted wallet storage is unavailable/)).toBeVisible();
   await expect(credential).toBeEditable();
   await expect(credential).toHaveValue('');
 
   await credential.fill('prototype-passphrase');
-  await expect(page.getByText(/Keychain access is unavailable/)).toBeHidden();
+  await expect(page.getByText(/Encrypted wallet storage is unavailable/)).toBeHidden();
   await page.getByRole('button', { name: 'Unlock wallet' }).click();
   await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible();
 });
@@ -1364,7 +1368,7 @@ test('fee estimate failure preserves explicit RBF and CPFP acceleration', async 
 });
 
 test('locked regtest wallet reset requires exact typed confirmation', async ({ page }) => {
-  await page.goto('/unlock');
+  await page.goto('/unlock?fixture-locked-wallet-switch=1');
   await page.getByRole('button', { name: 'Delete this regtest wallet' }).click();
   await expect(page.getByRole('heading', { name: 'Delete this regtest wallet?' })).toBeVisible();
   const reset = page.getByRole('button', { name: 'Delete test wallet' });
@@ -1384,7 +1388,7 @@ test('locked regtest wallet reset requires exact typed confirmation', async ({ p
 });
 
 test('locked profiles use recovery-safe credential terms', async ({ page }) => {
-  await page.goto('/unlock');
+  await page.goto('/unlock?fixture-locked-wallet-switch=1');
   await expect(page.getByLabel('Wallet passphrase', { exact: true })).toBeVisible();
   const infoButton = page.getByRole('button', { name: 'More information' });
   await page.getByRole('button', { name: 'Use light mode' }).click();
@@ -1521,7 +1525,7 @@ test('light and dark theme tokens keep readable text contrast', async ({ page })
     expect(ratios.muted).toBeGreaterThanOrEqual(4.5);
     expect(ratios.mutedSecondary).toBeGreaterThanOrEqual(4.5);
 
-    await page.goto('/unlock');
+    await page.goto('/unlock?fixture-locked-wallet-switch=1');
     await expect(page.locator('html')).toHaveAttribute('data-theme', theme.toLowerCase());
     await expect(page.locator('.unlock-overlay h1')).toBeVisible();
     await expect(page.getByRole('textbox', { name: 'Wallet passphrase' })).toBeVisible();

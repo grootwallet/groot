@@ -196,6 +196,12 @@ export class TauriWalletAdapter implements WalletPort {
   nodeConfig() {
     return command<CoreNodeConfig>('node_config');
   }
+  networkSetupSources() {
+    return command<import('./contracts').NetworkSetupSource[]>('network_setup_sources');
+  }
+  adoptNetworkSetup(sourceWalletId: string, credential: string) {
+    return command<NodeStatus>('network_setup_adopt', { sourceWalletId, credential });
+  }
   saveNodeConfig(config: CoreNodeConfig, password: string, credential: string) {
     return command<NodeStatus>('node_config_save', { config, password, credential });
   }

@@ -54,6 +54,10 @@ impl WalletSessions {
     pub(crate) fn lock(&mut self, wallet_id: Uuid) {
         self.last_activity.remove(&wallet_id);
     }
+
+    pub(crate) fn is_unlocked(&self, wallet_id: Uuid) -> bool {
+        self.last_activity.contains_key(&wallet_id)
+    }
 }
 
 #[cfg(test)]
@@ -76,6 +80,22 @@ mod tests {
         sessions.lock(second);
         assert!(sessions.authorize_at(first, false, now, idle_timeout));
         assert!(!sessions.authorize_at(second, false, now, idle_timeout));
+    }
+
+    #[test]
+    fn unlocked_membership_tracks_each_wallet_session() {
+        let first = Uuid::new_v4();
+        let second = Uuid::new_v4();
+        let mut sessions = WalletSessions::default();
+
+        sessions.unlock(first);
+        assert!(sessions.is_unlocked(first));
+        assert!(!sessions.is_unlocked(second));
+
+        sessions.unlock(second);
+        sessions.lock(first);
+        assert!(!sessions.is_unlocked(first));
+        assert!(sessions.is_unlocked(second));
     }
 
     #[test]

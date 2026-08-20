@@ -21,6 +21,7 @@ describe('native command scheduling', () => {
   it.each([
     ['wallet_sync', profileCommands],
     ['multisig_sync', multisigCommands],
+    ['network_setup_adopt', profileCommands],
     ['node_config_save', profileCommands],
     ['node_connection_test', profileCommands]
   ])('%s keeps blocking disk and RPC work off the native UI thread', (command, source) => {
