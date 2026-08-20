@@ -9,6 +9,10 @@ const multisigCommands = readFileSync(
   new URL('../../../src-tauri/src/wallet/multisig_setup_commands.rs', import.meta.url),
   'utf8'
 );
+const multisigProposalCommands = readFileSync(
+  new URL('../../../src-tauri/src/wallet/multisig_proposal_commands.rs', import.meta.url),
+  'utf8'
+);
 
 function commandSource(source: string, command: string): string {
   const start = source.indexOf(`pub async fn ${command}`);
@@ -22,6 +26,8 @@ describe('native command scheduling', () => {
     ['wallet_select', profileCommands],
     ['wallet_sync', profileCommands],
     ['multisig_sync', multisigCommands],
+    ['multisig_create', multisigProposalCommands],
+    ['multisig_recovery_create', multisigProposalCommands],
     ['network_setup_adopt', profileCommands],
     ['node_config_save', profileCommands],
     ['node_connection_test', profileCommands]

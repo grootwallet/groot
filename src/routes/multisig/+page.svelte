@@ -109,7 +109,7 @@
       });
     }
     try {
-      snapshot = await walletService.syncMultisig();
+      snapshot = await walletService.multisigSnapshot();
     } catch (cause) {
       toast({
         title: 'Wallet is offline',

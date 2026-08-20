@@ -14,6 +14,7 @@ import type {
 } from './hardware';
 import type {
   MultisigPreview,
+  MultisigCreation,
   MultisigProposal,
   MultisigSetupDraft,
   MultisigWallet,
@@ -221,13 +222,18 @@ export interface WalletMultisigPort {
     template: RecoveryTemplate,
     cosigners: CosignerDraft[]
   ): Promise<RecoveryPolicyAnalysis>;
-  createMultisig(policy: PolicyDraft, credential: string): Promise<MultisigWallet>;
+  createMultisig(
+    policy: PolicyDraft,
+    credential: string,
+    networkSetupSourceWalletId?: string
+  ): Promise<MultisigCreation>;
   createRecoveryMultisig(
     name: string,
     template: RecoveryTemplate,
     cosigners: CosignerDraft[],
-    credential: string
-  ): Promise<MultisigWallet>;
+    credential: string,
+    networkSetupSourceWalletId?: string
+  ): Promise<MultisigCreation>;
   multisigWallet(): Promise<MultisigWallet | null>;
   renameMultisigSigner(signerId: string, label: string): Promise<MultisigWallet>;
   exportMultisig(credential: string): Promise<string>;

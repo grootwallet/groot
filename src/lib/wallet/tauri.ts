@@ -25,6 +25,7 @@ import type {
   HardwareDevice,
   HardwareHealthCheckRecord,
   MultisigPreview,
+  MultisigCreation,
   MultisigProposal,
   MultisigWallet
 } from './contracts';
@@ -564,20 +565,26 @@ export class TauriWalletAdapter implements WalletPort {
   analyzeRecoveryPolicy(template: RecoveryTemplate, cosigners: PolicyDraft['cosigners']) {
     return command<RecoveryPolicyAnalysis>('recovery_policy_analyze', { template, cosigners });
   }
-  createMultisig(policy: PolicyDraft, credential: string) {
-    return command<MultisigWallet>('multisig_create', { policy, credential });
+  createMultisig(policy: PolicyDraft, credential: string, networkSetupSourceWalletId?: string) {
+    return command<MultisigCreation>('multisig_create', {
+      policy,
+      credential,
+      networkSetupSourceWalletId
+    });
   }
   createRecoveryMultisig(
     name: string,
     template: RecoveryTemplate,
     cosigners: PolicyDraft['cosigners'],
-    credential: string
+    credential: string,
+    networkSetupSourceWalletId?: string
   ) {
-    return command<MultisigWallet>('multisig_recovery_create', {
+    return command<MultisigCreation>('multisig_recovery_create', {
       name,
       template,
       cosigners,
-      credential
+      credential,
+      networkSetupSourceWalletId
     });
   }
   multisigWallet() {

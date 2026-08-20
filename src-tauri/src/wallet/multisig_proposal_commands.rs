@@ -1,5 +1,50 @@
 use super::*;
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MultisigCreationDto {
+    wallet: MultisigWalletDto,
+    network_setup_copied: bool,
+}
+
+fn copy_network_setup_before_profile_commit(
+    app: &AppHandle,
+    state: &State<'_, AppState>,
+    source_wallet_id: Option<&str>,
+    destination: Uuid,
+    credential: &str,
+) -> ApiResult<bool> {
+    let Some(source_wallet_id) = source_wallet_id else {
+        return Ok(true);
+    };
+    if profile_commands::adopt_network_setup_for_new_profile(
+        app,
+        state,
+        source_wallet_id,
+        destination,
+        credential,
+    )
+    .is_ok()
+    {
+        return Ok(true);
+    }
+    for path in [
+        node_config_path_for(app, destination)?,
+        node_secret_path_for(app, destination)?,
+        sync_source_path_for(app, destination)?,
+    ] {
+        if path.exists() {
+            fs::remove_file(path).map_err(internal)?;
+        }
+    }
+    state
+        .node_auth
+        .lock()
+        .map_err(internal)?
+        .remove(&destination);
+    Ok(false)
+}
+
 #[tauri::command]
 pub fn multisig_tx_prepare(
     app: AppHandle,
@@ -584,176 +629,214 @@ pub fn multisig_proposal_cancel(
 }
 
 #[tauri::command]
-pub fn multisig_create(
+pub async fn multisig_create(
     app: AppHandle,
-    state: State<'_, AppState>,
     policy: PolicyInput,
     credential: String,
-) -> ApiResult<MultisigWalletDto> {
-    let _operation = operation_guard(&state)?;
-    let credential = Zeroizing::new(credential);
-    validate_credential(credential.as_str())?;
-    reject_virtual_cosigners(&policy.cosigners)?;
-    let preview = policy.preview().map_err(policy_api_error)?;
-    let coldcard_registered =
-        multisig_setup_commands::coldcard_registration_for_preview(&app, &preview)?;
-    let preview_descriptor_checksum = descriptor_checksum(&preview.external_descriptor)?;
-    let (id, dir) = prepare_profile_directory(&app)?;
-    let result = (|| {
-        let mut db = open_wallet_database(&dir.join("wallet.sqlite"))?;
-        init_app_schema(&db)?;
-        Wallet::create(
-            preview.external_descriptor.clone(),
-            preview.internal_descriptor.clone(),
-        )
-        .network(NETWORK)
-        .create_wallet(&mut db)
-        .map_err(internal)?;
-
-        let pending = state
-            .pending_policy_verifications
-            .lock()
+    network_setup_source_wallet_id: Option<String>,
+) -> ApiResult<MultisigCreationDto> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let _operation = operation_guard(&state)?;
+        if network_setup_source_wallet_id.is_some() {
+            require_unlocked(&app, &state)?;
+        }
+        let credential = Zeroizing::new(credential);
+        validate_credential(credential.as_str())?;
+        reject_virtual_cosigners(&policy.cosigners)?;
+        let preview = policy.preview().map_err(policy_api_error)?;
+        let coldcard_registered =
+            multisig_setup_commands::coldcard_registration_for_preview(&app, &preview)?;
+        let preview_descriptor_checksum = descriptor_checksum(&preview.external_descriptor)?;
+        let (id, dir) = prepare_profile_directory(&app)?;
+        let result = (|| {
+            let mut db = open_wallet_database(&dir.join("wallet.sqlite"))?;
+            init_app_schema(&db)?;
+            Wallet::create(
+                preview.external_descriptor.clone(),
+                preview.internal_descriptor.clone(),
+            )
+            .network(NETWORK)
+            .create_wallet(&mut db)
             .map_err(internal)?;
-        for cosigner in &preview.cosigners {
-            let key = format!(
-                "{}:{}",
-                preview_descriptor_checksum,
-                cosigner.fingerprint.to_ascii_lowercase()
-            );
-            if let Some(verification) = pending.get(&key) {
-                db.execute(
-                    "INSERT INTO groot_signer_policy_verifications
+
+            let pending = state
+                .pending_policy_verifications
+                .lock()
+                .map_err(internal)?;
+            for cosigner in &preview.cosigners {
+                let key = format!(
+                    "{}:{}",
+                    preview_descriptor_checksum,
+                    cosigner.fingerprint.to_ascii_lowercase()
+                );
+                if let Some(verification) = pending.get(&key) {
+                    db.execute(
+                        "INSERT INTO groot_signer_policy_verifications
                         (signer_fingerprint, device_type, scope, displayed_address, verified_at)
                      VALUES (?1, ?2, 'policy_and_address', ?3, ?4)",
-                    params![
-                        verification.signer_fingerprint,
-                        verification.device_type,
-                        verification.displayed_address,
-                        verification.verified_at.parse::<u64>().map_err(internal)?
-                    ],
-                )
-                .map_err(internal)?;
-            }
-        }
-        drop(pending);
-
-        if coldcard_registered {
-            let acknowledged_at = now();
-            for cosigner in &preview.cosigners {
-                if supports_coldcard_policy_acknowledgement(cosigner) {
-                    db.execute(
-                        "INSERT INTO groot_signer_policy_acknowledgements
-                            (signer_fingerprint, device_type, scope, acknowledged_at)
-                         VALUES (?1, 'coldcard', 'policy_file_acknowledgement', ?2)",
-                        params![cosigner.fingerprint.to_ascii_lowercase(), acknowledged_at],
+                        params![
+                            verification.signer_fingerprint,
+                            verification.device_type,
+                            verification.displayed_address,
+                            verification.verified_at.parse::<u64>().map_err(internal)?
+                        ],
                     )
                     .map_err(internal)?;
                 }
             }
-        }
+            drop(pending);
 
-        let marker = format!("groot-multisig:{}", preview.external_descriptor);
-        secure_store::store(
-            &dir.join("secret.json"),
-            marker.as_bytes(),
-            credential.as_str(),
-        )
-        .map_err(secure_store_error)?;
-        let wallet = MultisigWalletDto {
-            kind: "multisig".to_owned(),
-            name: preview.name,
-            threshold: preview.threshold,
-            cosigners: preview.cosigners,
-            external_descriptor: preview.external_descriptor,
-            internal_descriptor: preview.internal_descriptor,
-            created_at: now().to_string(),
-            policy_type: "standard".to_owned(),
-            recovery_template: None,
-            spending_paths: Vec::new(),
-        };
-        write_private_json(&dir.join("wallet.json"), &wallet)?;
-        commit_multisig_profile(&app, id, &wallet)?;
-        Ok(wallet)
-    })();
-    if result.is_err() {
-        cleanup_failed_profile(&dir)?;
-    }
-    let wallet = result?;
-    state
-        .pending_policy_verifications
-        .lock()
-        .map_err(internal)?
-        .clear();
-    let _ = multisig_setup_commands::clear_multisig_setup_draft(&app);
-    unlock_selected(&app, &state)?;
-    reset_auth_throttle(&app, &state)?;
-    Ok(wallet)
+            if coldcard_registered {
+                let acknowledged_at = now();
+                for cosigner in &preview.cosigners {
+                    if supports_coldcard_policy_acknowledgement(cosigner) {
+                        db.execute(
+                            "INSERT INTO groot_signer_policy_acknowledgements
+                            (signer_fingerprint, device_type, scope, acknowledged_at)
+                         VALUES (?1, 'coldcard', 'policy_file_acknowledgement', ?2)",
+                            params![cosigner.fingerprint.to_ascii_lowercase(), acknowledged_at],
+                        )
+                        .map_err(internal)?;
+                    }
+                }
+            }
+
+            let marker = format!("groot-multisig:{}", preview.external_descriptor);
+            secure_store::store(
+                &dir.join("secret.json"),
+                marker.as_bytes(),
+                credential.as_str(),
+            )
+            .map_err(secure_store_error)?;
+            let wallet = MultisigWalletDto {
+                kind: "multisig".to_owned(),
+                name: preview.name,
+                threshold: preview.threshold,
+                cosigners: preview.cosigners,
+                external_descriptor: preview.external_descriptor,
+                internal_descriptor: preview.internal_descriptor,
+                created_at: now().to_string(),
+                policy_type: "standard".to_owned(),
+                recovery_template: None,
+                spending_paths: Vec::new(),
+            };
+            write_private_json(&dir.join("wallet.json"), &wallet)?;
+            let network_setup_copied = copy_network_setup_before_profile_commit(
+                &app,
+                &state,
+                network_setup_source_wallet_id.as_deref(),
+                id,
+                credential.as_str(),
+            )?;
+            commit_multisig_profile(&app, id, &wallet)?;
+            Ok((wallet, network_setup_copied))
+        })();
+        if result.is_err() {
+            state.node_auth.lock().map_err(internal)?.remove(&id);
+            cleanup_failed_profile(&dir)?;
+        }
+        let (wallet, network_setup_copied) = result?;
+        state
+            .pending_policy_verifications
+            .lock()
+            .map_err(internal)?
+            .clear();
+        let _ = multisig_setup_commands::clear_multisig_setup_draft(&app);
+        unlock_selected(&app, &state)?;
+        reset_auth_throttle(&app, &state)?;
+        Ok(MultisigCreationDto {
+            wallet,
+            network_setup_copied,
+        })
+    })
+    .await
+    .map_err(internal)?
 }
 #[tauri::command]
-pub fn multisig_recovery_create(
+pub async fn multisig_recovery_create(
     app: AppHandle,
-    state: State<'_, AppState>,
     name: String,
     template: RecoveryTemplate,
     cosigners: Vec<crate::multisig::CosignerInput>,
     credential: String,
-) -> ApiResult<MultisigWalletDto> {
-    let _operation = operation_guard(&state)?;
-    let credential = Zeroizing::new(credential);
-    validate_credential(credential.as_str())?;
-    reject_virtual_cosigners(&cosigners)?;
-    let policy = PolicyInput {
-        name: name.clone(),
-        threshold: 2,
-        cosigners: cosigners.clone(),
-    };
-    policy.preview().map_err(policy_api_error)?;
-    let analysis = analyze_template(&template, &cosigners).map_err(recovery_api_error)?;
-    let threshold = analysis
-        .paths
-        .first()
-        .map(|path| path.threshold)
-        .unwrap_or(2);
-    let (id, dir) = prepare_profile_directory(&app)?;
-    let result = (|| {
-        let mut db = open_wallet_database(&dir.join("wallet.sqlite"))?;
-        init_app_schema(&db)?;
-        Wallet::create(
-            analysis.external_descriptor.clone(),
-            analysis.internal_descriptor.clone(),
-        )
-        .network(NETWORK)
-        .create_wallet(&mut db)
-        .map_err(internal)?;
-        let marker = format!("groot-multisig:{}", analysis.external_descriptor);
-        secure_store::store(
-            &dir.join("secret.json"),
-            marker.as_bytes(),
-            credential.as_str(),
-        )
-        .map_err(secure_store_error)?;
-        let wallet = MultisigWalletDto {
-            kind: "multisig".to_owned(),
-            name,
-            threshold,
-            cosigners,
-            external_descriptor: analysis.external_descriptor,
-            internal_descriptor: analysis.internal_descriptor,
-            created_at: now().to_string(),
-            policy_type: recovery_policy_type(&template).to_owned(),
-            recovery_template: Some(template),
-            spending_paths: analysis.paths,
+    network_setup_source_wallet_id: Option<String>,
+) -> ApiResult<MultisigCreationDto> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let _operation = operation_guard(&state)?;
+        if network_setup_source_wallet_id.is_some() {
+            require_unlocked(&app, &state)?;
+        }
+        let credential = Zeroizing::new(credential);
+        validate_credential(credential.as_str())?;
+        reject_virtual_cosigners(&cosigners)?;
+        let policy = PolicyInput {
+            name: name.clone(),
+            threshold: 2,
+            cosigners: cosigners.clone(),
         };
-        write_private_json(&dir.join("wallet.json"), &wallet)?;
-        commit_multisig_profile(&app, id, &wallet)?;
-        Ok(wallet)
-    })();
-    if result.is_err() {
-        cleanup_failed_profile(&dir)?;
-    }
-    let wallet = result?;
-    let _ = multisig_setup_commands::clear_multisig_setup_draft(&app);
-    unlock_selected(&app, &state)?;
-    reset_auth_throttle(&app, &state)?;
-    Ok(wallet)
+        policy.preview().map_err(policy_api_error)?;
+        let analysis = analyze_template(&template, &cosigners).map_err(recovery_api_error)?;
+        let threshold = analysis
+            .paths
+            .first()
+            .map(|path| path.threshold)
+            .unwrap_or(2);
+        let (id, dir) = prepare_profile_directory(&app)?;
+        let result = (|| {
+            let mut db = open_wallet_database(&dir.join("wallet.sqlite"))?;
+            init_app_schema(&db)?;
+            Wallet::create(
+                analysis.external_descriptor.clone(),
+                analysis.internal_descriptor.clone(),
+            )
+            .network(NETWORK)
+            .create_wallet(&mut db)
+            .map_err(internal)?;
+            let marker = format!("groot-multisig:{}", analysis.external_descriptor);
+            secure_store::store(
+                &dir.join("secret.json"),
+                marker.as_bytes(),
+                credential.as_str(),
+            )
+            .map_err(secure_store_error)?;
+            let wallet = MultisigWalletDto {
+                kind: "multisig".to_owned(),
+                name,
+                threshold,
+                cosigners,
+                external_descriptor: analysis.external_descriptor,
+                internal_descriptor: analysis.internal_descriptor,
+                created_at: now().to_string(),
+                policy_type: recovery_policy_type(&template).to_owned(),
+                recovery_template: Some(template),
+                spending_paths: analysis.paths,
+            };
+            write_private_json(&dir.join("wallet.json"), &wallet)?;
+            let network_setup_copied = copy_network_setup_before_profile_commit(
+                &app,
+                &state,
+                network_setup_source_wallet_id.as_deref(),
+                id,
+                credential.as_str(),
+            )?;
+            commit_multisig_profile(&app, id, &wallet)?;
+            Ok((wallet, network_setup_copied))
+        })();
+        if result.is_err() {
+            state.node_auth.lock().map_err(internal)?.remove(&id);
+            cleanup_failed_profile(&dir)?;
+        }
+        let (wallet, network_setup_copied) = result?;
+        let _ = multisig_setup_commands::clear_multisig_setup_draft(&app);
+        unlock_selected(&app, &state)?;
+        reset_auth_throttle(&app, &state)?;
+        Ok(MultisigCreationDto {
+            wallet,
+            network_setup_copied,
+        })
+    })
+    .await
+    .map_err(internal)?
 }

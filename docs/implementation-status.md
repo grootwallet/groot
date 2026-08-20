@@ -67,4 +67,6 @@ v0.4.23 hardens the complete HWI request lifecycle without changing persisted fo
 
 v0.4.24 fixes Testnet4 multisig policy verification after hardware reconnects. Groot now passes HWI's explicit `testnet4` chain instead of the legacy Testnet chain, and a stale exact USB path gets one type-scoped, fingerprint-bound recovery attempt before the policy display is retried. Interactive rejection, cancellation, and busy results are never retried. Ledger errors are short and device-specific. Persisted wallet and proposal formats are unchanged.
 
+v0.4.25 fixes multisig creation with shared network setup. The protected node and sync copy now finishes inside the native creation operation before the new profile is committed and selected, preventing automatic sync from observing a half-configured wallet. Copy failure is cleaned up and returns one offline setup result without discarding the valid multisig wallet. The Policy route reads the persisted snapshot while AppShell remains the sole refresh owner, removing duplicate startup refreshes and misleading `sync_in_progress` offline errors. Persisted wallet, registry, proposal, and network-settings formats are unchanged.
+
 Update this table in the same change whenever a capability crosses a boundary.

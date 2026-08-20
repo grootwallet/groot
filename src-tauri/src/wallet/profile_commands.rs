@@ -1155,6 +1155,110 @@ pub async fn network_setup_adopt(
     .map_err(internal)?
 }
 
+pub(super) fn adopt_network_setup_for_new_profile(
+    app: &AppHandle,
+    state: &State<'_, AppState>,
+    source_wallet_id: &str,
+    destination: Uuid,
+    credential: &str,
+) -> ApiResult<()> {
+    let source = Uuid::parse_str(source_wallet_id).map_err(|_| {
+        api_error(
+            "wallet_not_found",
+            "The wallet providing this network setup no longer exists.",
+        )
+    })?;
+    if source == destination {
+        return Err(api_error(
+            "invalid_node_config",
+            "Choose another wallet with a saved network setup.",
+        ));
+    }
+    let registry = load_registry(app)?;
+    if !registry.wallets.iter().any(|profile| profile.id == source) {
+        return Err(api_error(
+            "wallet_not_found",
+            "The wallet providing this network setup no longer exists.",
+        ));
+    }
+    if !node_config_path_for(app, source)?.is_file() {
+        return Err(api_error(
+            "invalid_node_config",
+            "The selected wallet has no saved Bitcoin Core connection.",
+        ));
+    }
+    if !state
+        .unlocked_wallets
+        .lock()
+        .map_err(internal)?
+        .is_unlocked(source)
+    {
+        return Err(api_error(
+            "wallet_locked",
+            "Unlock the wallet providing this network setup, then try again.",
+        ));
+    }
+
+    let config = read_node_config_for(app, source)?;
+    let sync_source = read_sync_source_for(app, source)?;
+    let password = match config.auth {
+        RpcAuthMode::Cookie => {
+            checked_node_status(&candidate_rpc_client(&config, "")?, config.clone())?;
+            None
+        }
+        RpcAuthMode::UserPass => {
+            let password = {
+                let sessions = state.node_auth.lock().map_err(internal)?;
+                let session = sessions.get(&source).ok_or_else(|| {
+                    api_error(
+                        "wallet_locked",
+                        "Unlock the wallet providing this network setup, then try again.",
+                    )
+                })?;
+                if session.config != config {
+                    return Err(api_error(
+                        "invalid_node_config",
+                        "The saved connection changed. Open its wallet and verify the node again.",
+                    ));
+                }
+                Zeroizing::new(session.password.to_string())
+            };
+            checked_node_status(
+                &candidate_rpc_client(&config, password.as_str())?,
+                config.clone(),
+            )?;
+            Some(password)
+        }
+    };
+
+    if let Some(password) = password.as_ref() {
+        let protected = Zeroizing::new(
+            serde_json::to_vec(&ProtectedNodeAuthRef {
+                version: PROTECTED_NODE_AUTH_VERSION,
+                config: &config,
+                password: password.as_str(),
+            })
+            .map_err(internal)?,
+        );
+        secure_store::store(
+            &node_secret_path_for(app, destination)?,
+            protected.as_slice(),
+            credential,
+        )
+        .map_err(secure_store_error)?;
+    }
+    write_private_json(&node_config_path_for(app, destination)?, &config)?;
+    write_private_json(&sync_source_path_for(app, destination)?, &sync_source)?;
+
+    let mut sessions = state.node_auth.lock().map_err(internal)?;
+    if let Some(password) = password {
+        sessions.insert(destination, NodeAuthSession { config, password });
+    } else {
+        sessions.remove(&destination);
+    }
+    Ok(())
+}
+
 pub(crate) fn node_test(app: &AppHandle, state: &State<'_, AppState>) -> ApiResult<NodeStatusDto> {
     let config = read_node_config(app)?;
     checked_node_status(&rpc_client(app, state)?, config)

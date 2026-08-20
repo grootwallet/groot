@@ -11,6 +11,11 @@ export type MultisigWallet = PolicyDraft & {
   spendingPaths?: TimedSpendingPath[];
 };
 
+export type MultisigCreation = {
+  wallet: MultisigWallet;
+  networkSetupCopied: boolean;
+};
+
 export type MultisigPreview = {
   name: string;
   threshold: number;

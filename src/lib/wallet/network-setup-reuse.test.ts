@@ -5,16 +5,27 @@ const nativeCommands = readFileSync(
   new URL('../../../src-tauri/src/wallet/profile_commands.rs', import.meta.url),
   'utf8'
 );
+const multisigCommands = readFileSync(
+  new URL('../../../src-tauri/src/wallet/multisig_proposal_commands.rs', import.meta.url),
+  'utf8'
+);
 const runtimeContract = readFileSync(new URL('./contracts/runtime.ts', import.meta.url), 'utf8');
 const settings = readFileSync(
   new URL('../../routes/settings/+page.svelte', import.meta.url),
   'utf8'
 );
-const creationRoutes = [
+const directAdoptionRoutes = [
   readFileSync(new URL('../../routes/welcome/+page.svelte', import.meta.url), 'utf8'),
-  readFileSync(new URL('../../routes/hardware/new/+page.svelte', import.meta.url), 'utf8'),
-  readFileSync(new URL('../../routes/multisig/new/+page.svelte', import.meta.url), 'utf8')
+  readFileSync(new URL('../../routes/hardware/new/+page.svelte', import.meta.url), 'utf8')
 ];
+const multisigCreationRoute = readFileSync(
+  new URL('../../routes/multisig/new/+page.svelte', import.meta.url),
+  'utf8'
+);
+const multisigPolicyRoute = readFileSync(
+  new URL('../../routes/multisig/+page.svelte', import.meta.url),
+  'utf8'
+);
 
 function nativeCommand(name: string): string {
   const start = nativeCommands.indexOf(`pub async fn ${name}`);
@@ -46,14 +57,31 @@ describe('protected network setup reuse', () => {
   });
 
   it('offers the same default choice for software, hardware, and multisig creation', () => {
-    for (const route of creationRoutes) {
+    for (const route of [...directAdoptionRoutes, multisigCreationRoute]) {
       expect(route).toContain('let reuseNetworkSetup = $state(true)');
       expect(route).toContain('walletService.networkSetupSources()');
-      expect(route).toContain('walletService.adoptNetworkSetup(');
       expect(route).toContain(
         'Copies its node and sync method. This wallet protects its own copy.'
       );
     }
+    for (const route of directAdoptionRoutes) {
+      expect(route).toContain('walletService.adoptNetworkSetup(');
+    }
+    expect(multisigCreationRoute).toContain('networkSetupSourceWalletId');
+    expect(multisigCreationRoute).not.toContain('walletService.adoptNetworkSetup(');
+  });
+
+  it('copies multisig network setup before publishing the new profile', () => {
+    const copy = multisigCommands.indexOf('copy_network_setup_before_profile_commit(');
+    const commit = multisigCommands.indexOf('commit_multisig_profile(&app, id, &wallet)?;', copy);
+
+    expect(copy).toBeGreaterThan(-1);
+    expect(commit).toBeGreaterThan(copy);
+  });
+
+  it('leaves multisig refresh ownership with the global live-sync scheduler', () => {
+    expect(multisigPolicyRoute).toContain('walletService.multisigSnapshot()');
+    expect(multisigPolicyRoute).not.toContain('walletService.syncMultisig()');
   });
 
   it('lets existing wallets adopt the same setup from Settings', () => {

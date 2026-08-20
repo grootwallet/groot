@@ -1211,7 +1211,11 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     };
   }
 
-  async createMultisig(policy: PolicyDraft, credential: string): Promise<MultisigWallet> {
+  async createMultisig(
+    policy: PolicyDraft,
+    credential: string,
+    _networkSetupSourceWalletId?: string
+  ): Promise<import('./contracts').MultisigCreation> {
     if (!credential) throw new WalletError('invalid_credential', 'An app PIN is required.');
     const preview = await this.previewMultisig(policy);
     const setupDraft = this.multisigSetupDraftValue;
@@ -1264,15 +1268,16 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
         : [])
     ];
     this.multisigSetupDraftValue = null;
-    return structuredClone(this._multisig);
+    return { wallet: structuredClone(this._multisig), networkSetupCopied: true };
   }
 
   async createRecoveryMultisig(
     name: string,
     template: RecoveryTemplate,
     cosigners: PolicyDraft['cosigners'],
-    credential: string
-  ): Promise<MultisigWallet> {
+    credential: string,
+    _networkSetupSourceWalletId?: string
+  ): Promise<import('./contracts').MultisigCreation> {
     if (!credential) throw new WalletError('invalid_credential', 'An app PIN is required.');
     const analysis = await this.analyzeRecoveryPolicy(template, cosigners);
     this._recoveryVerified = false;
@@ -1310,7 +1315,7 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     this._unlockedWalletIds.add(profile.id);
     this._exists = true;
     this.multisigSetupDraftValue = null;
-    return structuredClone(this._multisig);
+    return { wallet: structuredClone(this._multisig), networkSetupCopied: true };
   }
 
   async multisigWallet() {

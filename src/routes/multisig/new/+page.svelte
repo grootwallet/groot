@@ -1095,25 +1095,25 @@
     error = '';
     createErrorTitle = '';
     try {
-      let networkSetupCopied = true;
       await flushCurrentDraft();
-      if (recoveryTemplate)
-        await walletService.createRecoveryMultisig(name, recoveryTemplate, cosigners, credential);
-      else await walletService.createMultisig(policy, credential);
-      if (reuseNetworkSetup && networkSetupSource) {
-        try {
-          await walletService.adoptNetworkSetup(networkSetupSource.walletId, credential);
-        } catch {
-          networkSetupCopied = false;
-        }
-      }
+      const networkSetupSourceWalletId =
+        reuseNetworkSetup && networkSetupSource ? networkSetupSource.walletId : undefined;
+      const creation = recoveryTemplate
+        ? await walletService.createRecoveryMultisig(
+            name,
+            recoveryTemplate,
+            cosigners,
+            credential,
+            networkSetupSourceWalletId
+          )
+        : await walletService.createMultisig(policy, credential, networkSetupSourceWalletId);
       hasDraft = false;
       toast({
         title: 'Multisig wallet created',
-        description: networkSetupCopied
+        description: creation.networkSetupCopied
           ? `${threshold} signatures are required to spend.`
           : 'Network setup was not copied. Configure it in Settings.',
-        tone: networkSetupCopied ? 'success' : 'default'
+        tone: creation.networkSetupCopied ? 'success' : 'default'
       });
       await goto('/multisig');
     } catch (cause) {
