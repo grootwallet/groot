@@ -701,6 +701,7 @@ code {
   font-size: 0.72em;
   font-weight: 600;
   margin-left: 0.28em;
+  text-transform: none;
 }
 .activity-controls {
   display: grid;
@@ -1305,8 +1306,8 @@ code {
   font-size: 13px;
   font-weight: 550;
 }
-.tx-main small,
-.tx-amount small {
+.tx-main > small,
+.tx-amount > small {
   color: var(--muted);
   font-size: 11px;
   text-transform: capitalize;

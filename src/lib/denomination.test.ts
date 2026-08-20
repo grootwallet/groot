@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   amountInputValue,
+  amountUnit,
   formatAmount,
   initDenomination,
   parseAmountInput,
@@ -8,6 +9,11 @@ import {
 } from './denomination';
 
 describe('amount denomination', () => {
+  it('uses canonical denomination casing', () => {
+    expect(amountUnit('sats')).toBe('sats');
+    expect(amountUnit('btc')).toBe('BTC');
+  });
+
   it('keeps BTC at eight decimals as one continuous value', () => {
     expect(formatAmount(1_234_560, 'btc')).toBe('0.01234560');
   });

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { denomination, formatAmount } from '$lib/denomination';
+  import { amountUnit, denomination, formatAmount } from '$lib/denomination';
   let {
     value,
     sign = '',
@@ -10,5 +10,5 @@
 
 <span class="formatted-amount">
   <strong>{hidden ? '••••••' : `${sign}${formatAmount(value, $denomination)}`}</strong
-  >{#if unit}{' '}<small>{$denomination === 'btc' ? 'BTC' : 'sats'}</small>{/if}
+  >{#if unit}{' '}<small>{amountUnit($denomination)}</small>{/if}
 </span>

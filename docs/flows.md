@@ -29,7 +29,7 @@ Each profile owns a UUID-isolated directory and unlock session. Switching never 
 
 Desktop exposes the selector in the persistent sidebar. Mobile exposes it beside Overview's overflow action; both use the same shell-owned registry and selection flow, and their popup menus stay inside the visible viewport.
 
-Wallet is the common top-level container. Software-key, hardware-key, shared multisig, and recovery/inheritance policies all use the same Overview, Activity, and Coins destinations. Policy is an additional detail destination for wallets with multiple signing paths; it is not a separate balance-bearing vault. Balances use the global SATS/BTC denomination; Groot does not request or display fiat prices. Notifications are scoped to the selected wallet. If a received transaction is first discovered after it already has a confirmation, Groot combines receipt and confirmation into one toast instead of presenting two events for the same transaction; a sync that finishes after selection changed cannot emit into the newly selected wallet.
+Wallet is the common top-level container. Software-key, hardware-key, shared multisig, and recovery/inheritance policies all use the same Overview, Activity, and Coins destinations. Policy is an additional detail destination for wallets with multiple signing paths; it is not a separate balance-bearing vault. Balances use the global sats/BTC denomination; Groot does not request or display fiat prices. Notifications are scoped to the selected wallet. If a received transaction is first discovered after it already has a confirmation, Groot combines receipt and confirmation into one toast instead of presenting two events for the same transaction; a sync that finishes after selection changed cannot emit into the newly selected wallet.
 
 ## Unlock and deletion
 
@@ -57,7 +57,7 @@ Multiple unused addresses may await payment concurrently within the configured r
 
 ## Single-key send
 
-The global SATS/BTC preference applies to the amount field, balance, fees, review, errors, and success copy; BTC is always eight decimals while the wallet boundary remains integer satoshis. **Max** asks the native builder for an exact, non-persisted drain preview with the active fee choice and coin-selection policy. Single-key and multisig sends share Economy, Standard, Priority, and Custom fee choices. Fee provenance is shown once in plain language as **Bitcoin Core**; RPC method names stay hidden.
+The global sats/BTC preference applies to the amount field, balance, fees, review, errors, and success copy; BTC is always eight decimals while the wallet boundary remains integer satoshis. **Max** asks the native builder for an exact, non-persisted drain preview with the active fee choice and coin-selection policy. Single-key and multisig sends share Economy, Standard, Priority, and Custom fee choices. Fee provenance is shown once in plain language as **Bitcoin Core**; RPC method names stay hidden.
 
 `Intent: permanent label+recipient → Amount & fee: amount+privacy strategy or exact coins+fee rate → persist Rust PSBT+label → Review funding privacy → Review & sign: authoritative review+credential → sign+broadcast → durable labeled success`
 

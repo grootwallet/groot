@@ -949,7 +949,7 @@
           <button
             class:active={$denomination === 'sats'}
             aria-pressed={$denomination === 'sats'}
-            onclick={() => setDenomination('sats')}>SATS</button
+            onclick={() => setDenomination('sats')}>sats</button
           ><button
             class:active={$denomination === 'btc'}
             aria-pressed={$denomination === 'btc'}
