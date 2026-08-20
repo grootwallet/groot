@@ -5480,6 +5480,26 @@ fn bundled_hwi_unavailable_message() -> &'static str {
 }
 
 fn hardware_device_api_error(error: HardwareError, device_type: &str) -> ApiError {
+    if device_type.eq_ignore_ascii_case("ledger") {
+        let message = match error {
+            HardwareError::CommandFailed(Some(-3)) => {
+                Some("Ledger disconnected. Reconnect it and try again.")
+            }
+            HardwareError::CommandFailed(Some(-12)) => {
+                Some("Unlock Ledger and open the wallet's Bitcoin app, then try again.")
+            }
+            HardwareError::CommandFailed(Some(-13)) => {
+                Some("Ledger could not register this wallet policy. Keep the Bitcoin app open and try again.")
+            }
+            HardwareError::CommandFailed(Some(-15)) => {
+                Some("Ledger is busy. Quit Ledger Live and try again.")
+            }
+            _ => None,
+        };
+        if let Some(message) = message {
+            return api_error(error.code(), message);
+        }
+    }
     if device_type.eq_ignore_ascii_case("coldcard")
         && matches!(error, HardwareError::CommandFailed(Some(-7)))
     {

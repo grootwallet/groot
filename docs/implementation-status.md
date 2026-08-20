@@ -65,4 +65,6 @@ v0.4.22 shortens hardware discovery, progress, retry, and device-help copy while
 
 v0.4.23 hardens the complete HWI request lifecycle without changing persisted formats. Native HWI processes are single-flight, discovery is bounded to 30 seconds, duplicate frontend scans coalesce, dismissed scan generations ignore late results, targeted scans preserve other saved exact paths, and a saved single-key signer is found by its complete saved identity instead of broad enumeration before signing. BitBox02 and Nova path-only results remain actionable as detected devices.
 
+v0.4.24 fixes Testnet4 multisig policy verification after hardware reconnects. Groot now passes HWI's explicit `testnet4` chain instead of the legacy Testnet chain, and a stale exact USB path gets one type-scoped, fingerprint-bound recovery attempt before the policy display is retried. Interactive rejection, cancellation, and busy results are never retried. Ledger errors are short and device-specific. Persisted wallet and proposal formats are unchanged.
+
 Update this table in the same change whenever a capability crosses a boundary.

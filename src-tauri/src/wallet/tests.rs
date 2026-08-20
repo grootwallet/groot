@@ -1387,6 +1387,26 @@ fn hwi_response_codes_become_safe_actionable_errors() {
     let cancelled = hardware_device_api_error(HardwareError::CommandFailed(Some(-14)), "bitbox02");
     assert!(cancelled.message.contains("cancelled"));
 
+    let ledger_disconnected =
+        hardware_device_api_error(HardwareError::CommandFailed(Some(-3)), "ledger");
+    assert_eq!(
+        ledger_disconnected.message,
+        "Ledger disconnected. Reconnect it and try again."
+    );
+    assert!(!ledger_disconnected.message.contains("Trezor"));
+
+    let ledger_not_ready =
+        hardware_device_api_error(HardwareError::CommandFailed(Some(-12)), "ledger");
+    assert!(ledger_not_ready.message.contains("wallet's Bitcoin app"));
+    assert!(!ledger_not_ready.message.contains("wallet apps"));
+
+    let ledger_policy =
+        hardware_device_api_error(HardwareError::CommandFailed(Some(-13)), "ledger");
+    assert!(ledger_policy
+        .message
+        .contains("register this wallet policy"));
+    assert!(!ledger_policy.message.contains("Trezor"));
+
     let ledger = missing_hardware_xpub("ledger", "m/48'/1'/0'/2'", None, None, "fallback");
     assert_eq!(ledger.code, "hardware_unavailable");
     assert!(ledger.message.contains("approve the public-key export"));

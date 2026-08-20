@@ -1623,6 +1623,58 @@ fn missing_policy_address(device_type: &str, response: HwiAddress) -> ApiError {
     )
 }
 
+fn display_multisig_policy_address(
+    hwi: &HwiCli,
+    device: HwiDevice,
+    expected_fingerprint: &str,
+    expected_device_type: Option<&str>,
+    descriptor: &str,
+) -> ApiResult<(Vec<u8>, VerifiedHardwareIdentity, HwiDevice)> {
+    let identity = connected_hardware_identity(device.clone(), &[expected_fingerprint.to_owned()])?;
+    if !records_interactive_policy_verification(&identity.device_type) {
+        return Err(api_error(
+            "invalid_hardware_request",
+            "This signer does not require interactive policy verification.",
+        ));
+    }
+    require_matching_policy_device_type(expected_device_type, &identity.device_type)?;
+
+    match hwi.display_descriptor_address(&identity.device_type, &device.path, descriptor) {
+        Ok(displayed) => Ok((displayed, identity, device)),
+        Err(first_error @ HardwareError::CommandFailed(Some(-3))) => {
+            // USB paths can change after reconnecting or changing a cable. Recover
+            // once by scanning only this family and selecting the exact saved
+            // fingerprint. Never retry an interactive rejection or cancellation.
+            let refreshed = hwi
+                .enumerate_device_type(&identity.device_type)
+                .ok()
+                .and_then(|encoded| serde_json::from_slice::<Vec<HwiDevice>>(&encoded).ok())
+                .and_then(|devices| {
+                    saved_hwi_device(devices, &identity.device_type, expected_fingerprint)
+                })
+                .filter(|candidate| candidate.path != device.path)
+                .ok_or_else(|| hardware_device_api_error(first_error, &identity.device_type))?;
+            let refreshed_identity =
+                connected_hardware_identity(refreshed.clone(), &[expected_fingerprint.to_owned()])?;
+            require_matching_policy_device_type(
+                expected_device_type,
+                &refreshed_identity.device_type,
+            )?;
+            let displayed = hwi
+                .display_descriptor_address(
+                    &refreshed_identity.device_type,
+                    &refreshed.path,
+                    descriptor,
+                )
+                .map_err(|error| {
+                    hardware_device_api_error(error, &refreshed_identity.device_type)
+                })?;
+            Ok((displayed, refreshed_identity, refreshed))
+        }
+        Err(error) => Err(hardware_device_api_error(error, &identity.device_type)),
+    }
+}
+
 pub(crate) fn ensure_hardware_verification_context(
     initiating_wallet_id: Uuid,
     current_wallet_id: Uuid,
@@ -1677,25 +1729,18 @@ pub async fn hardware_verify_multisig_policy(
         .to_string();
     let hwi = hwi_cli(&app)?;
     let device = recently_scanned_hardware_device(&state, &device_id)?;
-    let (displayed, identity) = tauri::async_runtime::spawn_blocking(move || {
-        let identity = connected_hardware_identity(device, &[expected_fingerprint])?;
-        if !records_interactive_policy_verification(&identity.device_type) {
-            return Err(api_error(
-                "invalid_hardware_request",
-                "This signer does not require Groot's interactive wallet-policy verification flow.",
-            ));
-        }
-        require_matching_policy_device_type(
+    let (displayed, identity, device) = tauri::async_runtime::spawn_blocking(move || {
+        display_multisig_policy_address(
+            &hwi,
+            device,
+            &expected_fingerprint,
             expected_device_type.as_deref(),
-            &identity.device_type,
-        )?;
-        let displayed = hwi
-            .display_descriptor_address(&identity.device_type, &device_id, &descriptor)
-            .map_err(|error| hardware_device_api_error(error, &identity.device_type))?;
-        Ok::<_, ApiError>((displayed, identity))
+            &descriptor,
+        )
     })
     .await
     .map_err(internal)??;
+    remember_hardware_devices(&state, std::slice::from_ref(&device))?;
     let response: HwiAddress = serde_json::from_slice(&displayed).map_err(internal)?;
     let actual = response
         .address
@@ -1762,25 +1807,18 @@ pub async fn hardware_verify_multisig_draft_policy(
         .to_string();
     let hwi = hwi_cli(&app)?;
     let device = recently_scanned_hardware_device(&state, &device_id)?;
-    let (displayed, identity) = tauri::async_runtime::spawn_blocking(move || {
-        let identity = connected_hardware_identity(device, &[expected_fingerprint])?;
-        if !records_interactive_policy_verification(&identity.device_type) {
-            return Err(api_error(
-                "invalid_hardware_request",
-                "This signer does not require Groot's interactive wallet-policy verification flow.",
-            ));
-        }
-        require_matching_policy_device_type(
+    let (displayed, identity, device) = tauri::async_runtime::spawn_blocking(move || {
+        display_multisig_policy_address(
+            &hwi,
+            device,
+            &expected_fingerprint,
             expected_device_type.as_deref(),
-            &identity.device_type,
-        )?;
-        let displayed = hwi
-            .display_descriptor_address(&identity.device_type, &device_id, &descriptor)
-            .map_err(|error| hardware_device_api_error(error, &identity.device_type))?;
-        Ok::<_, ApiError>((displayed, identity))
+            &descriptor,
+        )
     })
     .await
     .map_err(internal)??;
+    remember_hardware_devices(&state, std::slice::from_ref(&device))?;
     let response: HwiAddress = serde_json::from_slice(&displayed).map_err(internal)?;
     let actual = response
         .address

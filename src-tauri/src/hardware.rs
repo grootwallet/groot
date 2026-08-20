@@ -155,6 +155,7 @@ enum HwiSource {
 pub enum HwiChain {
     Main,
     Test,
+    Testnet4,
     Regtest,
     Signet,
 }
@@ -163,7 +164,8 @@ impl HwiChain {
     pub(crate) const fn for_network(network: Network) -> Self {
         match network {
             Network::Bitcoin => Self::Main,
-            Network::Testnet | Network::Testnet4 => Self::Test,
+            Network::Testnet => Self::Test,
+            Network::Testnet4 => Self::Testnet4,
             Network::Signet => Self::Signet,
             Network::Regtest => Self::Regtest,
         }
@@ -173,6 +175,7 @@ impl HwiChain {
         match self {
             Self::Main => "main",
             Self::Test => "test",
+            Self::Testnet4 => "testnet4",
             Self::Regtest => "regtest",
             Self::Signet => "signet",
         }
@@ -1042,6 +1045,7 @@ mod tests {
         );
         assert_eq!(HwiChain::Main.as_hwi_argument(), "main");
         assert_eq!(HwiChain::Test.as_hwi_argument(), "test");
+        assert_eq!(HwiChain::Testnet4.as_hwi_argument(), "testnet4");
         assert_eq!(HwiChain::Regtest.as_hwi_argument(), "regtest");
         assert_eq!(HwiChain::Signet.as_hwi_argument(), "signet");
         for network in [

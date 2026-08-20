@@ -22,7 +22,8 @@ pub const fn parameters_for(network: Network) -> NetworkParameters {
         },
         Network::Signet => test_parameters(network, "signet", "tb"),
         Network::Regtest => test_parameters(network, "regtest", "bcrt"),
-        Network::Testnet | Network::Testnet4 => test_parameters(network, "test", "tb"),
+        Network::Testnet => test_parameters(network, "test", "tb"),
+        Network::Testnet4 => test_parameters(network, "testnet4", "tb"),
     }
 }
 
@@ -107,7 +108,7 @@ mod tests {
         for (network, hwi_chain, address_hrp) in [
             (Network::Regtest, "regtest", "bcrt"),
             (Network::Signet, "signet", "tb"),
-            (Network::Testnet4, "test", "tb"),
+            (Network::Testnet4, "testnet4", "tb"),
         ] {
             let parameters = parameters_for(network);
             assert_eq!(parameters.network, network);
