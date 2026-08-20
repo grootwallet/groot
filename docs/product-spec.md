@@ -92,7 +92,7 @@ A persisted global discreet mode hides wallet amounts across Overview and activi
 
 ## Send
 
-Single-key and multisig payments use the same **Economy**, **Standard**, **Priority**, and **Custom** fee selector. The global **SATS** or **BTC** display preference applies across balances, coins, activity, send flows, alerts, errors, and notifications. BTC always displays eight decimals; accounting and IPC remain integer satoshis.
+Single-key and multisig payments use the same **Economy**, **Standard**, **Priority**, and **Custom** fee selector. Public-network presets come only from the connected Bitcoin Core node. When its current mempool is empty or fits comfortably within one block, the presets may correctly share the same current low rate instead of repeating stale high historical estimates. The UI names Bitcoin Core as the source without exposing RPC method names. The global **SATS** or **BTC** display preference applies across balances, coins, activity, send flows, alerts, errors, and notifications. BTC always displays eight decimals; accounting and IPC remain integer satoshis.
 
 1. A labeled three-stage progress indicator keeps every send flow consistent: **Intent**, **Amount & fee**, and **Review & sign**. Intent asks for the mandatory permanent payment label first, then a network-valid recipient address, so the user names the purpose before choosing how to fund it. Amount & fee contains the integer satoshi amount, coin selection, and fee rate. Rust stores the label with the proposal and resulting outgoing transaction; it is not editable or reused.
 2. Choose economy, standard, priority, or validated custom sat/vB rate.

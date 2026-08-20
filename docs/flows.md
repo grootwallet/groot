@@ -57,7 +57,7 @@ Multiple unused addresses may await payment concurrently within the configured r
 
 ## Single-key send
 
-The global SATS/BTC preference applies to the amount field, balance, fees, review, errors, and success copy; BTC is always eight decimals while the wallet boundary remains integer satoshis. **Max** asks the native builder for an exact, non-persisted drain preview with the active fee choice and coin-selection policy. Single-key and multisig sends share Economy, Standard, Priority, and Custom fee choices.
+The global SATS/BTC preference applies to the amount field, balance, fees, review, errors, and success copy; BTC is always eight decimals while the wallet boundary remains integer satoshis. **Max** asks the native builder for an exact, non-persisted drain preview with the active fee choice and coin-selection policy. Single-key and multisig sends share Economy, Standard, Priority, and Custom fee choices. Fee provenance is shown once in plain language as **Bitcoin Core**; RPC method names stay hidden.
 
 `Intent: permanent label+recipient → Amount & fee: amount+privacy strategy or exact coins+fee rate → persist Rust PSBT+label → Review funding privacy → Review & sign: authoritative review+credential → sign+broadcast → durable labeled success`
 

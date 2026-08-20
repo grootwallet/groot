@@ -1305,6 +1305,9 @@ test('custom fees validate and wallet deletion requires typed confirmation', asy
   await page.getByLabel('Payment label').fill('Coin control test');
   await page.getByRole('button', { name: 'Continue to amount' }).click();
   await page.getByLabel('Amount', { exact: true }).fill('1000');
+  const feeEstimate = page.getByText(/Estimated fee .*Bitcoin Core/);
+  await expect(feeEstimate).toBeVisible();
+  await expect(page.getByText('estimatesmartfee')).toHaveCount(0);
   await page.getByRole('button', { name: /Custom/ }).click();
   await page.getByLabel('Custom fee rate').fill('0');
   await expect(page.getByRole('button', { name: 'Review payment' })).toBeDisabled();

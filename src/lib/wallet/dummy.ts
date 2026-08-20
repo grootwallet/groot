@@ -515,7 +515,7 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       economy: feeRate(3),
       standard: feeRate(7),
       priority: feeRate(12),
-      source: 'mempool.space'
+      source: 'Bitcoin Core'
     };
   }
 

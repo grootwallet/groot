@@ -615,6 +615,38 @@ pub(crate) fn ordered_fee_estimates(economy: f64, standard: f64, priority: f64) 
     (economy, standard, priority)
 }
 
+pub(crate) const SPARSE_MEMPOOL_LIMIT_VBYTES: u64 = 900_000;
+
+pub(crate) fn sparse_mempool_fee_rate(
+    entries: impl IntoIterator<Item = (u64, u64)>,
+) -> Option<f64> {
+    let mut total_vbytes = 0_u64;
+    let mut lowest_rate = None;
+    for (vsize, modified_fee_sats) in entries {
+        if vsize == 0 {
+            continue;
+        }
+        total_vbytes = total_vbytes.checked_add(vsize)?;
+        if total_vbytes > SPARSE_MEMPOOL_LIMIT_VBYTES {
+            return None;
+        }
+        let rate = modified_fee_sats.div_ceil(vsize).max(1);
+        lowest_rate = Some(lowest_rate.map_or(rate, |current: u64| current.min(rate)));
+    }
+    lowest_rate.map(|rate| rate as f64)
+}
+
+pub(crate) fn current_mempool_fee_rate(
+    entries: impl IntoIterator<Item = (u64, u64)>,
+    empty_rate: f64,
+) -> Option<f64> {
+    let mut entries = entries.into_iter().peekable();
+    if entries.peek().is_none() {
+        return Some(empty_rate);
+    }
+    sparse_mempool_fee_rate(entries)
+}
+
 #[tauri::command]
 pub fn fees_estimate(app: AppHandle, state: State<'_, AppState>) -> ApiResult<FeeEstimatesDto> {
     if IS_REGTEST {
@@ -628,16 +660,27 @@ pub fn fees_estimate(app: AppHandle, state: State<'_, AppState>) -> ApiResult<Fe
     require_unlocked(&app, &state)?;
     let client = rpc_client(&app, &state)?;
     checked_chain_identity(&client)?;
-    let (economy, standard, priority) = ordered_fee_estimates(
+    let historical = ordered_fee_estimates(
         estimate_core_fee(&client, 144, EstimateMode::Economical)?,
-        estimate_core_fee(&client, 6, EstimateMode::Conservative)?,
-        estimate_core_fee(&client, 2, EstimateMode::Conservative)?,
+        estimate_core_fee(&client, 6, EstimateMode::Economical)?,
+        estimate_core_fee(&client, 2, EstimateMode::Economical)?,
     );
+    let current_mempool_rate = client.get_raw_mempool_verbose().ok().and_then(|entries| {
+        current_mempool_fee_rate(
+            entries
+                .into_values()
+                .map(|entry| (entry.vsize, entry.fees.modified.to_sat())),
+            historical.0,
+        )
+    });
+    let (economy, standard, priority) = current_mempool_rate
+        .map(|rate| (rate, rate, rate))
+        .unwrap_or(historical);
     Ok(FeeEstimatesDto {
         economy,
         standard,
         priority,
-        source: "Bitcoin Core estimatesmartfee",
+        source: "Bitcoin Core",
     })
 }
 

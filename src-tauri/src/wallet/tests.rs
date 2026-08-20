@@ -86,6 +86,23 @@ fn core_fee_rates_fail_closed_and_round_up_to_integer_sat_per_vbyte() {
     );
     assert_eq!(ordered_fee_estimates(5.0, 2.0, 1.0), (5.0, 5.0, 5.0));
     assert_eq!(ordered_fee_estimates(1.0, 2.0, 5.0), (1.0, 2.0, 5.0));
+    assert_eq!(sparse_mempool_fee_rate([(141, 143), (220, 198)]), Some(1.0));
+    assert_eq!(
+        sparse_mempool_fee_rate([(141, 53_016), (220, 198)]),
+        Some(1.0)
+    );
+    assert_eq!(sparse_mempool_fee_rate([(141, 423), (220, 660)]), Some(3.0));
+    assert_eq!(sparse_mempool_fee_rate([]), None);
+    assert_eq!(current_mempool_fee_rate([], 2.0), Some(2.0));
+    assert_eq!(
+        current_mempool_fee_rate([(141, 143), (220, 198)], 7.0),
+        Some(1.0)
+    );
+    assert_eq!(sparse_mempool_fee_rate([(0, 1_000)]), None);
+    assert_eq!(
+        sparse_mempool_fee_rate([(SPARSE_MEMPOOL_LIMIT_VBYTES + 1, 1_000)]),
+        None
+    );
 }
 
 #[test]

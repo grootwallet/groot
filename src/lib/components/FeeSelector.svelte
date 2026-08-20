@@ -65,10 +65,9 @@
         />{:else}<Gauge size={17} />{/if}</button
     >
   </div>
-  <span class="fee-source"
-    >Fee source: {estimates?.source ?? 'Unavailable—enter a custom rate'} · Estimated fee <Amount
-      value={estimatedFee}
-    /></span
-  >
+  <span class="fee-source">
+    {#if estimates}Estimated fee <Amount value={estimatedFee} /> · {estimates.source}{:else}Estimate
+      unavailable · Enter a custom rate{/if}
+  </span>
   {#if error}<p class="form-error" role="alert">{error}</p>{/if}
 </div>
