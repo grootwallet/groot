@@ -573,14 +573,14 @@
   {#if busy}<HardwareActionPrompt
       title={hardwareProgress}
       detail={hardwareProgress.startsWith('Scanning')
-        ? 'Groot is checking each supported USB signer backend. Keep the device connected and leave companion apps closed.'
+        ? 'Keep the signer connected. Quit other wallet apps.'
         : hardwareProgress.includes('Ledger')
           ? 'Keep Bitcoin Test open for Regtest and follow any prompt on the Ledger screen.'
           : 'Keep the signer connected and unlocked.'}
       label="Hardware wallet setup in progress"
     />{:else if devices.length || !error}<HardwareDeviceList
       {devices}
-      emptyMessage="HWI returned no device. For Coldcard, sign in first, enable its USB port, reconnect, then scan again. Other signers must be initialized, unlocked, and released by companion apps."
+      emptyMessage="Unlock the signer, quit other wallet apps, then scan again."
       onselect={useDevice}
       onrescan={scan}
       disabled={busy}
@@ -668,35 +668,22 @@
   <div class="guide-list">
     <p>
       <strong>Jade</strong><span
-        >Log in or use QR PIN unlock. Select the hidden wallet passphrase on Jade, then connect USB
-        or export its BIP84 xpub by QR.</span
+        >Log in on Jade, then connect USB or import its BIP84 xpub by QR.</span
       >
     </p>
     <p>
-      <strong>BitBox02</strong><span
-        >Connect it and scan. Enter the device password when BitBox02 asks. If BitBoxApp is already
-        open, quit it so Groot can use USB. Use BitBoxApp only if Groot reports that first-time
-        pairing is required.</span
-      >
+      <strong>BitBox02</strong><span>Unlock BitBox and quit BitBoxApp, then scan.</span>
     </p>
     <p>
       <strong>Trezor</strong><span
-        >Safe and Model T devices can confirm passphrases on-device. Model One host passphrase entry
-        is intentionally unavailable until Groot has native secure secret entry.</span
+        >Unlock on-device. Model One hidden-wallet passphrases are not supported.</span
       >
     </p>
     <p>
-      <strong>Ledger</strong><span
-        >For this Regtest build, quit Ledger Live, unlock the device, and open Bitcoin Test—not the
-        main Bitcoin app. Approve the public-key export if Ledger asks. Select a passphrase-attached
-        PIN before connecting if you use one.</span
-      >
+      <strong>Ledger</strong><span>Quit Ledger Live, unlock Ledger, and open Bitcoin Test.</span>
     </p>
     <p>
-      <strong>Passport</strong><span
-        >Passport Core is air-gapped: export a BIP84 descriptor/xpub by microSD or QR. Cable is
-        power-only. Prime cable support requires a documented compatible signing protocol.</span
-      >
+      <strong>Passport</strong><span>Import a BIP84 descriptor or xpub by microSD or QR.</span>
     </p>
   </div>
 </Modal>

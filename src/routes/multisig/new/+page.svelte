@@ -85,47 +85,31 @@
     {
       id: 'coldcard',
       name: 'Coldcard',
-      steps: [
-        'Finish device setup and make an offline seed backup.',
-        'Sign in and enable USB communication if it was disabled.',
-        'Leave the device unlocked and ready at its main menu.'
-      ]
+      steps: ['Sign in and enable USB.', 'Leave Coldcard at its main menu.']
     },
     {
       id: 'bitbox02',
       name: 'BitBox02',
-      steps: [
-        'Connect and unlock BitBox.',
-        'Quit BitBoxApp so Groot can use USB.',
-        'Continue from the detected device card.'
-      ]
+      steps: ['Connect and unlock BitBox.', 'Quit BitBoxApp, then continue.']
     },
     {
       id: 'ledger',
       name: 'Ledger',
-      steps: [
-        'Finish device setup and make an offline recovery backup, then quit Ledger Live completely.',
-        'For Regtest, unlock the device and open Bitcoin Test—not the main Bitcoin app.',
-        'Start the import in Groot, then approve the public-key export shown on Ledger.'
-      ]
+      steps: ['Quit Ledger Live and open Bitcoin Test.', 'Approve the public-key export on Ledger.']
     },
     {
       id: 'trezor',
       name: 'Trezor',
       steps: [
-        'Finish device setup and make an offline seed backup, then quit Trezor Suite completely. Closing its window is not enough.',
-        'Reconnect the device. A locked Model One is expected: select its Groot card to open the position keypad while the device shows a scrambled PIN matrix.',
-        'Choose the standard no-passphrase wallet explicitly, or select a hidden wallet on-device when supported. Model One host passphrase entry is not yet supported.'
+        'Quit Trezor Suite and reconnect.',
+        'For Model One, unlock from its Groot card.',
+        'Choose the standard or on-device hidden wallet.'
       ]
     },
     {
       id: 'jade',
       name: 'Jade',
-      steps: [
-        'Finish device setup and make an offline seed backup.',
-        'Log in on Jade with Recovery Phrase Login or QR PIN Unlock.',
-        'Keep Jade connected over USB while Groot imports the public key.'
-      ]
+      steps: ['Log in on Jade.', 'Keep Jade connected while Groot imports the key.']
     }
   ];
   const creationSteps = ['Policy', 'Signers', 'Verify', 'Back up'];
@@ -1926,13 +1910,12 @@
       title={hardwareProgress}
       detail={hardwareProgress.includes('Ledger')
         ? 'Keep Bitcoin Test open for Regtest and confirm the export on the device screen.'
-        : 'Keep the signer connected and unlocked. Follow any instructions shown on the device.'}
+        : 'Keep the signer connected and unlocked.'}
       label="Hardware signer setup in progress"
     />
   {:else if hardware.length === 0}<div class="device-scan">
       <Cpu size={20} /><strong>{error ? 'Device needs attention' : 'No device found'}</strong><span
-        >{error ||
-          'HWI returned no device. For Coldcard, sign in first, enable its USB port, reconnect, then scan again. Other signers must be initialized, unlocked, and released by companion apps.'}</span
+        >{error || 'Unlock the signer, quit other wallet apps, then scan again.'}</span
       ><Button variant="secondary" size="small" onclick={scanHardware}>Scan again</Button>
     </div>
   {:else}<div class="source-list hardware-device-list">
@@ -1966,9 +1949,7 @@
           >{#if !addedSigner && device.action !== 'none'}<ChevronRight size={15} />{/if}</button
         >{/each}<button class="hardware-rescan" onclick={scanHardware}
         ><RefreshCw size={16} /><span
-          ><strong>Scan again</strong><small
-            >Refresh the list after unlocking or connecting another signer.</small
-          ></span
+          ><strong>Scan again</strong><small>Refresh connected signers.</small></span
         ><ChevronRight size={15} /></button
       >
     </div>{/if}
@@ -2053,7 +2034,7 @@
 <Modal
   open={hardwareHelpOpen}
   title="Prepare your hardware signer"
-  description="Groot imports one public account key. Your seed and private keys never leave the device."
+  description="Groot imports one public account key."
   onclose={closeHardwareHelp}
 >
   <div class="hardware-guide">
@@ -2073,9 +2054,7 @@
       </div>
     </div>
     <p>
-      <strong>Never enter a seed into Groot.</strong> If a device asks you to restore or initialize it
-      during this flow, cancel and complete that process using the device vendor’s trusted instructions
-      first.
+      <strong>Never enter a seed into Groot.</strong> Initialize or restore only with trusted vendor tools.
     </p>
     <Button
       class="full"

@@ -1346,8 +1346,8 @@ fn cached_hwi_connection_identity_must_match_the_saved_signer() {
 #[test]
 fn hwi_response_codes_become_safe_actionable_errors() {
     let cases = [
-        (-3, "another wallet app owns its USB session"),
-        (-12, "another wallet app owns its USB session"),
+        (-3, "quit other wallet apps"),
+        (-12, "quit other wallet apps"),
         (-14, "cancelled"),
         (-15, "busy"),
         (-8, "does not support"),
@@ -1376,13 +1376,13 @@ fn hwi_response_codes_become_safe_actionable_errors() {
 
     let bitbox = hardware_device_api_error(HardwareError::CommandFailed(Some(-12)), "bitbox02");
     assert_eq!(bitbox.code, "hardware_command_failed");
-    assert!(bitbox.message.contains("enter the device password"));
-    assert!(bitbox.message.contains("first-time pairing"));
+    assert!(bitbox.message.contains("connected and unlocked"));
+    assert!(bitbox.message.contains("Quit BitBoxApp"));
 
     let unnamed_account =
         hardware_device_api_error(HardwareError::CommandFailed(Some(-9)), "bitbox02");
-    assert!(unnamed_account.message.contains("short account name"));
-    assert!(unnamed_account.message.contains("verify the first address"));
+    assert!(unnamed_account.message.contains("account name"));
+    assert!(unnamed_account.message.contains("address checks"));
 
     let cancelled = hardware_device_api_error(HardwareError::CommandFailed(Some(-14)), "bitbox02");
     assert!(cancelled.message.contains("cancelled"));
@@ -1451,7 +1451,7 @@ fn hwi_response_codes_become_safe_actionable_errors() {
     assert!(!locked_ledger.message.contains("fingerprint"));
 
     for (device_type, expected) in [
-        ("bitbox02", "enter the device password"),
+        ("bitbox02", "Unlock BitBox"),
         ("jade", "Log in on Jade"),
         ("coldcard", "enable USB communication"),
         ("trezor", "PIN-matrix"),

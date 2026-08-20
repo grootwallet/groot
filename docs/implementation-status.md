@@ -61,4 +61,6 @@ v0.4.20 removes the Trezor/KeepKey PIN position grid whenever its native challen
 
 v0.4.21 fixes the BitBox02 and BitBox Nova unlock loop in HWI 3.2.0. A path-only enumeration result now continues to an exact-path account-key read that derives the fingerprint and xpub in one live client, instead of forcing another scan. Scan guidance is shorter. Persisted wallet and proposal formats are unchanged.
 
+v0.4.22 shortens hardware discovery, progress, retry, and device-help copy while preserving the device-specific actions needed to recover. Persisted wallet and proposal formats are unchanged.
+
 Update this table in the same change whenever a capability crosses a boundary.

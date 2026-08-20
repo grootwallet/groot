@@ -1317,7 +1317,7 @@ struct HwiAddress {
 
 fn missing_hwi_value(code: Option<i64>, value: &str) -> ApiError {
     let message = match code {
-        Some(-3 | -12) => "The device is locked or another wallet app owns its USB session. Follow the unlock prompt shown by Groot or the device. If another wallet app is open, quit it, reconnect, then try again. A locked Trezor Model One can be unlocked from its Groot device card.",
+        Some(-3 | -12) => "Unlock the signer and quit other wallet apps, then try again.",
         Some(-14) => "The action was cancelled on the hardware wallet.",
         Some(-15) => "The hardware wallet is busy. Finish the current action and try again.",
         Some(-8 | -9) => "This hardware wallet does not support the requested operation.",
@@ -5460,7 +5460,7 @@ fn hardware_api_error(error: HardwareError) -> ApiError {
         HardwareError::TimedOut => "The hardware wallet did not respond in time.",
         HardwareError::OutputTooLarge => "The hardware wallet returned an oversized response.",
         HardwareError::CommandFailed(code) => match code {
-            Some(-3 | -12) => "The device is locked or another wallet app owns its USB session. Follow the unlock prompt shown by Groot or the device. If another wallet app is open, quit it, reconnect, then scan again. A locked Trezor Model One can be unlocked from its Groot device card.",
+            Some(-3 | -12) => "Unlock the signer and quit other wallet apps, then try again.",
             Some(-14) => "The action was cancelled on the hardware wallet.",
             Some(-15) => "The hardware wallet is busy. Close its companion app and try again.",
             Some(-8 | -9) => "This hardware wallet does not support the requested operation.",
@@ -5493,7 +5493,7 @@ fn hardware_device_api_error(error: HardwareError, device_type: &str) -> ApiErro
     {
         return api_error(
             error.code(),
-            "BitBox02 did not finish wallet registration. Enter a short account name on the device, approve the multisig policy, then verify the first address.",
+            "Finish the BitBox account name, policy, and address checks on-device.",
         );
     }
     if device_type.eq_ignore_ascii_case("bitbox02")
@@ -5504,7 +5504,7 @@ fn hardware_device_api_error(error: HardwareError, device_type: &str) -> ApiErro
     {
         return api_error(
             error.code(),
-            "Reconnect BitBox02, scan again, and enter the device password when prompted. If BitBoxApp is open, quit it so Groot can use USB. Use BitBoxApp only if Groot reports that first-time pairing is required.",
+            "Keep BitBox connected and unlocked. Quit BitBoxApp, then try again.",
         );
     }
     hardware_api_error(error)
@@ -5515,9 +5515,7 @@ fn missing_hardware_fingerprint(device_type: &str) -> ApiError {
         "ledger" => {
             "Unlock Ledger and open Bitcoin Test—not Bitcoin—for this Regtest wallet, then scan again."
         }
-        "bitbox02" => {
-            "Reconnect BitBox02, scan again, and enter the device password when prompted. Use BitBoxApp only if Groot reports that first-time pairing is required."
-        }
+        "bitbox02" => "Unlock BitBox, then try again.",
         "jade" => {
             "Log in on Jade using Recovery Phrase Login or QR PIN Unlock, then scan again."
         }
