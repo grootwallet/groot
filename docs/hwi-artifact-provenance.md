@@ -8,4 +8,6 @@ node scripts/release/verify-hwi-artifact.mjs \
   /absolute/hwi-3.2.0.tar.gz /absolute/LICENSE
 ```
 
-The verifier streams large-file hashes, rejects symlinks and unbounded inputs, executes only the explicitly supplied regular artifact with a minimal environment and timeout, and requires `--version` to match. HWI may be replaced only inside a signed Groot release. The manifest template and test fixture are not production provenance. The recorded macOS inputs establish the reviewed physical-certification boundary; reproducible packaging, independent signature review, root-owned release installation, and public-network evidence remain release gates.
+The verifier streams large-file hashes, rejects symlinks and unbounded inputs, executes only the explicitly supplied regular artifact with a minimal environment and timeout, and requires `--version` to match. HWI may be replaced only inside a signed Groot release. The manifest template and test fixture are not production provenance.
+
+The macOS release builder copies that exact artifact to `Contents/Resources/hwi`. Package verification requires the same digest and version, an executable non-writable mode, HWI code-signature validity, the sealed app signature, and matching pre-1.0 package metadata. Runtime repeats the digest and signature checks before every spawn and never falls back to a system installation. Developer ID signing, notarization, reproducibility, independent review, and public-network physical evidence remain release gates; an ad-hoc Testnet4 candidate is not production evidence. See ADR 0039.

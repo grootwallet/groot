@@ -31,7 +31,7 @@
   import LocalTimestamp from '$lib/components/LocalTimestamp.svelte';
   import { toast } from '$lib/stores/toasts';
   import { locale, t } from '$lib/i18n';
-  import { defaultConfig, networkName } from '$lib/config';
+  import { APP_VERSION, defaultConfig, networkName } from '$lib/config';
   import { walletService, WalletError } from '$lib/wallet';
   import { goto } from '$app/navigation';
   import { onDestroy, onMount } from 'svelte';
@@ -974,7 +974,7 @@
         >
       </div>
     </section>{/if}
-  <p class="version">Groot 0.1.0 · BDK regtest</p>
+  <p class="version">Groot {APP_VERSION} · BDK {networkName(defaultConfig.network)}</p>
 </div>
 
 <Modal

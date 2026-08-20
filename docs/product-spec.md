@@ -6,6 +6,8 @@ Status: canonical for the current prototype and first live integration build.
 
 Groot is an onchain-only Bitcoin wallet and multisig coordinator. It prioritizes the smallest understandable flows for receiving, sending, reviewing activity, inspecting coins, and coordinating descriptor-based hardware signers. There are no cloud backups, Lightning, address books, or editable labels in the first release.
 
+The distributed macOS application includes Groot's exact reviewed Bitcoin Core HWI dependency for USB hardware signers. A user does not install HWI, Homebrew, or a privileged helper separately. Groot verifies the bundled executable and containing signed app before use and fails closed rather than searching the host system.
+
 ## Settled decisions
 
 - 24-word BIP39 mnemonic.

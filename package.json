@@ -1,7 +1,7 @@
 {
   "name": "groot-wallet",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.4.8",
   "packageManager": "pnpm@11.13.1",
   "engines": {
     "node": "24.19.0",
@@ -19,7 +19,7 @@
     "build:signet": "vite build --mode signet",
     "build:testnet4": "vite build --mode testnet4",
     "build:native:signet": "GROOT_BUILD_NETWORK=signet tauri build --config src-tauri/tauri.signet.conf.json",
-    "build:native:testnet4": "GROOT_BUILD_NETWORK=testnet4 tauri build --config src-tauri/tauri.testnet4.conf.json",
+    "build:native:testnet4": "node scripts/release/build-testnet4-portable.mjs",
     "brand:icons": "bash scripts/brand/generate_app_icons.sh",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
@@ -62,7 +62,8 @@
     "release:verify:macos": "bash scripts/release/verify-macos-package.sh",
     "release:test:macos-lifecycle": "bash scripts/release/test-macos-packaged-lifecycle.sh",
     "release:test:update": "node scripts/release/test-update-bundle.mjs",
-    "release:test:hwi": "node scripts/release/test-hwi-artifact.mjs",
+    "release:test:hwi": "node scripts/release/test-hwi-artifact.mjs && node --test scripts/release/verify-packaged-hwi.test.mjs",
+    "release:verify:packaged-hwi": "node scripts/release/verify-packaged-hwi.mjs",
     "release:test:compare": "bash scripts/release/test-compare-unsigned.sh",
     "tauri": "tauri"
   },

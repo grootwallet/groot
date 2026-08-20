@@ -1,5 +1,8 @@
 fn main() {
     println!("cargo:rerun-if-env-changed=GROOT_BUILD_NETWORK");
+    println!("cargo:rerun-if-env-changed=GROOT_BUNDLED_HWI_RESOURCE");
+    println!("cargo:rerun-if-env-changed=GROOT_HWI_SHA256");
+    println!("cargo:rerun-if-env-changed=GROOT_MACOS_SIGNING_TEAM_ID");
     println!(
         "cargo:rustc-check-cfg=cfg(groot_network, values(\"regtest\", \"signet\", \"testnet4\"))"
     );

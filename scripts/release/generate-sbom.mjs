@@ -142,7 +142,12 @@ for (const [key, pkg] of installedNodePackages) {
 }
 
 components.sort((left, right) => left['bom-ref'].localeCompare(right['bom-ref']));
-const appRef = 'pkg:cargo/groot@0.1.0';
+const packageManifest = JSON.parse(readFileSync(resolve(repoRoot, 'package.json'), 'utf8'));
+const appVersion = packageManifest.version;
+if (typeof appVersion !== 'string' || !/^0\.\d+\.\d+$/.test(appVersion)) {
+  throw new Error('package.json must contain a pre-1.0 semantic version');
+}
+const appRef = `pkg:cargo/groot@${appVersion}`;
 const sbom = {
   bomFormat: 'CycloneDX',
   specVersion: '1.6',
@@ -152,7 +157,7 @@ const sbom = {
       type: 'application',
       'bom-ref': appRef,
       name: 'Groot',
-      version: '0.1.0',
+      version: appVersion,
       purl: appRef,
       properties: [
         { name: 'groot:commit', value: commit },

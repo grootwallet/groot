@@ -101,14 +101,14 @@ This is the next public-network rehearsal after the isolated Regtest stories pas
 2. Build the explicit Testnet4 app and verify its bundle identifier before opening it:
 
    ```sh
-   GROOT_BUILD_NETWORK=testnet4 pnpm tauri build \
-     --bundles app \
-     --config src-tauri/tauri.testnet4.conf.json
+   pnpm build:native:testnet4
+   pnpm release:verify:packaged-hwi -- \
+     'src-tauri/target/release/bundle/macos/Groot Testnet4.app'
    /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' \
      'src-tauri/target/release/bundle/macos/Groot Testnet4.app/Contents/Info.plist'
    ```
 
-   The identifier must be `app.groot.wallet.testnet4`. Sign according to the current candidate procedure; record the binary hash, commit, host OS, architecture, and whether the signature is ad hoc or release-grade.
+   The identifier must be `app.groot.wallet.testnet4`. The builder must package the reviewed HWI and the verifier must report the exact manifest digest, HWI 3.2.0, and matching pre-1.0 app version. Record the binary hash, commit, host OS, architecture, and whether the signature is ad hoc or release-grade.
 
 3. Create a fresh disposable software wallet. Verify the 24-word native sheet is aligned and unobscured, complete backup confirmation, then quit and reopen the app. Unlock with the correct wallet passphrase and confirm that no Keychain or platform-keystore prompt appears.
 
@@ -142,7 +142,7 @@ cp docs/hardware-certification-template.md hardware-certification.local/jade.md
 GROOT_HWI_PATH=/opt/homebrew/bin/hwi pnpm hardware:preflight
 ```
 
-Regtest deliberately permits this explicit developer path while collecting physical evidence. A Signet/Testnet4 release build must also set `GROOT_HWI_SHA256` to the reviewed executable's exact 64-character SHA-256 value and install it under root-owned, non-group/world-writable path ancestry; otherwise HWI fails closed. Record that digest with the certification evidence. Windows remains fail-closed until Authenticode identity verification is implemented.
+Regtest deliberately permits this explicit developer path while collecting physical evidence. A macOS Signet/Testnet4 package must bundle the exact reviewed HWI through the release builder; users must not install HWI separately. The package and runtime verify its compiled digest, internal signature, and containing app seal and never fall back to Homebrew. External public-network Unix installations retain the pinned-digest and root-owned-path rule. Record the packaged digest with certification evidence. Windows remains fail-closed until an authenticated packaged boundary is implemented.
 
 Follow [`hardware-certification.md`](hardware-certification.md) for each model. Keep reports local because fingerprints and paths are sensitive. A model is supported for release only after all required rows pass on the exact firmware/OS/package combination.
 

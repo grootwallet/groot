@@ -1865,7 +1865,7 @@ dependencies = [
 
 [[package]]
 name = "groot"
-version = "0.1.0"
+version = "0.4.8"
 dependencies = [
  "aes-gcm 0.10.3",
  "argon2",
@@ -1875,6 +1875,7 @@ dependencies = [
  "bdk_wallet",
  "bip39",
  "block2",
+ "core-foundation",
  "jsonrpc",
  "libc",
  "minreq",
@@ -1883,6 +1884,7 @@ dependencies = [
  "objc2-foundation",
  "payjoin",
  "rand",
+ "security-framework",
  "serde",
  "serde_json",
  "tauri",

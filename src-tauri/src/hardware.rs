@@ -142,6 +142,16 @@ pub struct HwiCli {
     program: PathBuf,
     chain: HwiChain,
     home: Option<PathBuf>,
+    source: HwiSource,
+}
+
+#[derive(Debug, Clone)]
+enum HwiSource {
+    External,
+    #[cfg(target_os = "macos")]
+    Bundled {
+        bundle_root: PathBuf,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -184,7 +194,23 @@ impl HwiCli {
             program: trusted_hwi_path(),
             chain,
             home: None,
+            source: HwiSource::External,
         }
+    }
+
+    #[cfg(target_os = "macos")]
+    pub fn for_bundled_resource(
+        chain: HwiChain,
+        resource_dir: &Path,
+        resource_name: &str,
+    ) -> Result<Self, HardwareError> {
+        let (program, bundle_root) = bundled_hwi_paths(resource_dir, resource_name)?;
+        Ok(Self {
+            program,
+            chain,
+            home: None,
+            source: HwiSource::Bundled { bundle_root },
+        })
     }
 
     pub fn with_home(mut self, home: PathBuf) -> Result<Self, HardwareError> {
@@ -244,6 +270,7 @@ impl HardwareTransport for HwiCli {
     fn enumerate(&self) -> Result<Vec<u8>, HardwareError> {
         run_program(
             &self.program,
+            &self.source,
             &[
                 "--chain".into(),
                 self.chain.as_hwi_argument().into(),
@@ -257,6 +284,7 @@ impl HardwareTransport for HwiCli {
     fn enumerate_device_type(&self, device_type: &str) -> Result<Vec<u8>, HardwareError> {
         run_program(
             &self.program,
+            &self.source,
             &self.enumerate_device_type_command(device_type),
             USER_REVIEW_TIMEOUT,
             self.home.as_deref(),
@@ -272,6 +300,7 @@ impl HardwareTransport for HwiCli {
         let keypool_path = format!("{derivation_path}/0/*");
         run_program(
             &self.program,
+            &self.source,
             &[
                 "--chain".into(),
                 self.chain.as_hwi_argument().into(),
@@ -298,6 +327,7 @@ impl HardwareTransport for HwiCli {
     ) -> Result<Vec<u8>, HardwareError> {
         run_program(
             &self.program,
+            &self.source,
             &self.device_command(device_type, device_path, "getxpub", derivation_path),
             DEFAULT_TIMEOUT,
             self.home.as_deref(),
@@ -311,6 +341,7 @@ impl HardwareTransport for HwiCli {
     ) -> Result<Vec<u8>, HardwareError> {
         run_program(
             &self.program,
+            &self.source,
             &self.device_command(device_type, "", "getxpub", derivation_path),
             SAVED_IDENTITY_TIMEOUT,
             self.home.as_deref(),
@@ -325,6 +356,7 @@ impl HardwareTransport for HwiCli {
     ) -> Result<Vec<u8>, HardwareError> {
         run_program(
             &self.program,
+            &self.source,
             &self.device_command(device_type, device_path, "signtx", psbt),
             USER_REVIEW_TIMEOUT,
             self.home.as_deref(),
@@ -342,6 +374,7 @@ impl HardwareTransport for HwiCli {
         arguments.push(descriptor.into());
         run_program(
             &self.program,
+            &self.source,
             &arguments,
             USER_REVIEW_TIMEOUT,
             self.home.as_deref(),
@@ -351,6 +384,7 @@ impl HardwareTransport for HwiCli {
     fn prompt_pin(&self, device_type: &str, device_path: &str) -> Result<Vec<u8>, HardwareError> {
         run_program(
             &self.program,
+            &self.source,
             &self.device_command_without_value(device_type, device_path, "promptpin"),
             DEFAULT_TIMEOUT,
             self.home.as_deref(),
@@ -367,6 +401,7 @@ impl HardwareTransport for HwiCli {
         let mut input = pin_command_input(pin_positions)?;
         let result = run_program_with_input(
             &self.program,
+            &self.source,
             &arguments,
             DEFAULT_TIMEOUT,
             self.home.as_deref(),
@@ -391,6 +426,32 @@ fn trusted_hwi_path() -> PathBuf {
     PathBuf::from("/unsupported-platform/hwi")
 }
 
+#[cfg(target_os = "macos")]
+fn bundled_hwi_paths(
+    resource_dir: &Path,
+    resource_name: &str,
+) -> Result<(PathBuf, PathBuf), HardwareError> {
+    if resource_name != "hwi"
+        || !resource_dir.is_absolute()
+        || resource_dir.file_name().and_then(|name| name.to_str()) != Some("Resources")
+    {
+        return Err(HardwareError::Unavailable);
+    }
+    let contents = resource_dir.parent().ok_or(HardwareError::Unavailable)?;
+    if contents.file_name().and_then(|name| name.to_str()) != Some("Contents") {
+        return Err(HardwareError::Unavailable);
+    }
+    let bundle_root = contents.parent().ok_or(HardwareError::Unavailable)?;
+    if bundle_root
+        .extension()
+        .and_then(|extension| extension.to_str())
+        != Some("app")
+    {
+        return Err(HardwareError::Unavailable);
+    }
+    Ok((resource_dir.join(resource_name), bundle_root.to_path_buf()))
+}
+
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 fn first_existing_absolute(candidates: &[&str]) -> PathBuf {
     candidates
@@ -402,15 +463,17 @@ fn first_existing_absolute(candidates: &[&str]) -> PathBuf {
 
 fn run_program(
     program: &Path,
+    source: &HwiSource,
     arguments: &[String],
     timeout: Duration,
     home: Option<&Path>,
 ) -> Result<Vec<u8>, HardwareError> {
-    run_program_with_input(program, arguments, timeout, home, None)
+    run_program_with_input(program, source, arguments, timeout, home, None)
 }
 
 fn run_program_with_input(
     program: &Path,
+    source: &HwiSource,
     arguments: &[String],
     timeout: Duration,
     home: Option<&Path>,
@@ -419,7 +482,7 @@ fn run_program_with_input(
     if !program.is_absolute() {
         return Err(HardwareError::Unavailable);
     }
-    let program = trusted_executable(program)?;
+    let program = trusted_executable(program, source)?;
     validate_arguments(arguments)?;
     if input.is_some_and(|bytes| bytes.is_empty() || bytes.len() > MAX_SECRET_INPUT_BYTES) {
         return Err(HardwareError::InvalidArgument);
@@ -494,7 +557,13 @@ fn trusted_home(home: &Path) -> Result<PathBuf, HardwareError> {
     Ok(canonical)
 }
 
-fn trusted_executable(program: &Path) -> Result<PathBuf, HardwareError> {
+fn trusted_executable(program: &Path, source: &HwiSource) -> Result<PathBuf, HardwareError> {
+    let link_metadata = program
+        .symlink_metadata()
+        .map_err(|_| HardwareError::Unavailable)?;
+    if link_metadata.file_type().is_symlink() {
+        return Err(HardwareError::Unavailable);
+    }
     let canonical = program
         .canonicalize()
         .map_err(|_| HardwareError::Unavailable)?;
@@ -511,8 +580,16 @@ fn trusted_executable(program: &Path) -> Result<PathBuf, HardwareError> {
             return Err(HardwareError::Unavailable);
         }
     }
-    if release_hwi_verification_required(crate::build_network::NETWORK) {
-        verify_release_hwi(&canonical, &metadata)?;
+    match source {
+        HwiSource::External => {
+            if release_hwi_verification_required(crate::build_network::NETWORK) {
+                verify_release_hwi(&canonical, &metadata)?;
+            }
+        }
+        #[cfg(target_os = "macos")]
+        HwiSource::Bundled { bundle_root } => {
+            verify_bundled_macos_hwi(program, &canonical, &metadata, bundle_root)?;
+        }
     }
     Ok(canonical)
 }
@@ -566,6 +643,75 @@ fn verify_executable_digest(path: &Path, expected: [u8; 32]) -> Result<(), Hardw
     } else {
         Err(HardwareError::Unavailable)
     }
+}
+
+#[cfg(target_os = "macos")]
+fn verify_bundled_macos_hwi(
+    requested: &Path,
+    canonical: &Path,
+    metadata: &std::fs::Metadata,
+    bundle_root: &Path,
+) -> Result<(), HardwareError> {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    if requested != canonical
+        || metadata.permissions().mode() & 0o022 != 0
+        || bundle_root
+            .symlink_metadata()
+            .map_err(|_| HardwareError::Unavailable)?
+            .file_type()
+            .is_symlink()
+    {
+        return Err(HardwareError::Unavailable);
+    }
+    let canonical_bundle = bundle_root
+        .canonicalize()
+        .map_err(|_| HardwareError::Unavailable)?;
+    if canonical_bundle != bundle_root || !canonical_bundle.is_dir() {
+        return Err(HardwareError::Unavailable);
+    }
+
+    verify_macos_code_signature(&canonical_bundle, true)?;
+    verify_macos_code_signature(canonical, false)?;
+    verify_executable_digest(canonical, configured_hwi_digest()?)
+}
+
+#[cfg(target_os = "macos")]
+fn verify_macos_code_signature(path: &Path, app_bundle: bool) -> Result<(), HardwareError> {
+    use core_foundation::url::CFURL;
+    use security_framework::os::macos::code_signing::{Flags, SecRequirement, SecStaticCode};
+    use std::str::FromStr as _;
+
+    let url = CFURL::from_path(path, app_bundle).ok_or(HardwareError::Unavailable)?;
+    let code =
+        SecStaticCode::from_path(&url, Flags::NONE).map_err(|_| HardwareError::Unavailable)?;
+    let requirement_text = if app_bundle {
+        macos_app_signing_requirement()?
+    } else {
+        "always".to_owned()
+    };
+    let requirement =
+        SecRequirement::from_str(&requirement_text).map_err(|_| HardwareError::Unavailable)?;
+    let mut flags =
+        Flags::STRICT_VALIDATE | Flags::CHECK_ALL_ARCHITECTURES | Flags::NO_NETWORK_ACCESS;
+    if app_bundle {
+        flags |= Flags::CHECK_NESTED_CODE | Flags::RESTRICT_SYMLINKS;
+    }
+    code.check_validity(flags, &requirement)
+        .map_err(|_| HardwareError::Unavailable)
+}
+
+#[cfg(target_os = "macos")]
+fn macos_app_signing_requirement() -> Result<String, HardwareError> {
+    let Some(team_id) = option_env!("GROOT_MACOS_SIGNING_TEAM_ID") else {
+        return Ok("always".to_owned());
+    };
+    if team_id.len() != 10 || !team_id.bytes().all(|byte| byte.is_ascii_alphanumeric()) {
+        return Err(HardwareError::Unavailable);
+    }
+    Ok(format!(
+        "anchor apple generic and certificate leaf[subject.OU] = \"{team_id}\""
+    ))
 }
 
 #[cfg(unix)]
@@ -634,6 +780,36 @@ mod tests {
         assert!(release_hwi_verification_required(Network::Bitcoin));
     }
 
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn bundled_hwi_path_is_fixed_inside_an_app_resource_directory() {
+        let resources = Path::new("/Applications/Groot Testnet4.app/Contents/Resources");
+        assert_eq!(
+            bundled_hwi_paths(resources, "hwi"),
+            Ok((
+                resources.join("hwi"),
+                PathBuf::from("/Applications/Groot Testnet4.app")
+            ))
+        );
+        assert_eq!(
+            bundled_hwi_paths(resources, "../MacOS/Groot"),
+            Err(HardwareError::Unavailable)
+        );
+        assert_eq!(
+            bundled_hwi_paths(Path::new("/tmp/Resources"), "hwi"),
+            Err(HardwareError::Unavailable)
+        );
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn bundled_hwi_resource_constructor_never_searches_path() {
+        let resources = Path::new("/Applications/Groot Testnet4.app/Contents/Resources");
+        let cli = HwiCli::for_bundled_resource(HwiChain::Test, resources, "hwi").unwrap();
+        assert_eq!(cli.program, resources.join("hwi"));
+        assert!(matches!(cli.source, HwiSource::Bundled { .. }));
+    }
+
     #[test]
     fn executable_digest_rejects_substituted_bytes() {
         let path = std::env::temp_dir().join(format!("groot-hwi-digest-{}", std::process::id()));
@@ -653,6 +829,7 @@ mod tests {
         assert_eq!(
             run_program(
                 Path::new("hwi"),
+                &HwiSource::External,
                 &["enumerate".into()],
                 Duration::ZERO,
                 None,
@@ -670,7 +847,13 @@ mod tests {
         std::fs::write(&path, b"#!/bin/sh\nexit 0\n").unwrap();
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o777)).unwrap();
         assert_eq!(
-            run_program(&path, &["enumerate".into()], Duration::from_secs(1), None,),
+            run_program(
+                &path,
+                &HwiSource::External,
+                &["enumerate".into()],
+                Duration::from_secs(1),
+                None,
+            ),
             Err(HardwareError::Unavailable)
         );
         std::fs::remove_file(path).unwrap();
@@ -680,6 +863,7 @@ mod tests {
     fn preserves_argument_boundaries_without_shell_interpolation() {
         let output = run_program(
             Path::new("/bin/echo"),
+            &HwiSource::External,
             &["$(touch /tmp/groot-must-not-exist)".to_owned()],
             Duration::from_secs(1),
             None,
@@ -697,6 +881,7 @@ mod tests {
         assert_eq!(
             run_program(
                 Path::new("/usr/bin/false"),
+                &HwiSource::External,
                 &["test".to_owned()],
                 Duration::from_secs(1),
                 None,
@@ -706,6 +891,7 @@ mod tests {
         assert_eq!(
             run_program(
                 Path::new("/bin/sleep"),
+                &HwiSource::External,
                 &["1".to_owned()],
                 Duration::from_millis(10),
                 None,
@@ -715,6 +901,7 @@ mod tests {
         assert_eq!(
             run_program(
                 Path::new("/definitely/not/an/executable"),
+                &HwiSource::External,
                 &["test".to_owned()],
                 Duration::from_secs(1),
                 None,
@@ -784,6 +971,7 @@ mod tests {
         let home = std::env::temp_dir();
         let output = run_program(
             Path::new("/usr/bin/env"),
+            &HwiSource::External,
             &[],
             Duration::from_secs(1),
             Some(&home),
@@ -882,6 +1070,7 @@ mod tests {
             program: PathBuf::from("/definitely/not/an/executable"),
             chain: HwiChain::Test,
             home: None,
+            source: HwiSource::External,
         };
         assert_eq!(transport.enumerate(), Err(HardwareError::Unavailable));
         assert_eq!(

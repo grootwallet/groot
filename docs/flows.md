@@ -81,7 +81,7 @@ Signer-specific discovery is scoped before HWI touches a device. A health or pol
 
 Signer import paths:
 
-- Desktop USB: Rust invokes Bitcoin Core HWI, enumerates a device, and requests the fixed BIP48 test-network account xpub.
+- Desktop USB: Rust invokes the exact reviewed HWI packaged inside the signed macOS app, enumerates a device, and requests the fixed BIP48 test-network account xpub. The user does not install HWI separately, and a packaged public-network build never falls back to a system copy.
 - Mounted file: bounded Groot or compatible Coldcard **Export XPUB** JSON containing only a test-chain public origin, fingerprint, and BIP48 account tpub. Both field-based exports and current `p2wsh_desc` key expressions are normalized to the canonical `m/48'/1'/0'/2'` account origin. Private/recovery material, wrong-network paths, mainnet xpubs, and extended private keys are rejected. The inline warning identifies the mismatch and gives the exact safe re-export path instead of exposing a parser error. Manual entry remains available. PSBT signing also supports bounded `crypto-psbt` UR v2 animation/camera through a bundled local QR decoder, with file/text fallback.
 - Virtual device: deterministic browser/CI fixture only; it must be visibly identified as a test device.
 

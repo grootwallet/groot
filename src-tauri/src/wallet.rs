@@ -385,8 +385,18 @@ pub fn public_backup_print(window: WebviewWindow) -> ApiResult<()> {
 
 fn hwi_cli(app: &AppHandle) -> ApiResult<HwiCli> {
     let home = app.path().home_dir().map_err(internal)?;
-    HwiCli::for_chain(HwiChain::for_network(NETWORK))
-        .with_home(home)
+    let chain = HwiChain::for_network(NETWORK);
+    #[cfg(target_os = "macos")]
+    let cli = if let Some(resource_name) = option_env!("GROOT_BUNDLED_HWI_RESOURCE") {
+        let resource_dir = app.path().resource_dir().map_err(internal)?;
+        HwiCli::for_bundled_resource(chain, &resource_dir, resource_name)
+    } else {
+        Ok(HwiCli::for_chain(chain))
+    };
+    #[cfg(not(target_os = "macos"))]
+    let cli = Ok(HwiCli::for_chain(chain));
+
+    cli.and_then(|cli| cli.with_home(home))
         .map_err(hardware_api_error)
 }
 
@@ -1357,7 +1367,7 @@ fn missing_hardware_xpub(
             let message = if code == Some(-13)
                 && safe_detail.contains("unsupported trezor model")
             {
-                "The installed Bitcoin Core HWI does not support this Trezor model. Install Groot's reviewed HWI 3.2.0 boundary, restart Groot, then scan again."
+                "This Groot release's bundled HWI 3.2.0 does not support this Trezor model. Update Groot when a reviewed release adds support, then scan again."
             } else {
                 "Trezor did not export the account key. Complete the PIN or wallet selection shown by Groot and the device, then try again."
             };
@@ -1405,7 +1415,7 @@ fn hardware_device_dto(device: HwiDevice) -> HardwareDeviceDto {
     let (status, message, action) = if unsupported_trezor_model {
         (
             "not_ready",
-            "The installed Bitcoin Core HWI does not support this Trezor model. Install Groot's reviewed HWI 3.2.0 boundary, restart Groot, then scan again.",
+            "This Groot release's bundled HWI 3.2.0 does not support this Trezor model. Update Groot when a reviewed release adds support, then scan again.",
             "retry",
         )
     } else if pin_required {
@@ -5430,7 +5440,7 @@ pub(crate) mod profile_commands;
 fn hardware_api_error(error: HardwareError) -> ApiError {
     let message = match error {
         HardwareError::InvalidArgument => "The hardware wallet request was rejected.",
-        HardwareError::Unavailable => "Bitcoin Core HWI is not installed or could not be started.",
+        HardwareError::Unavailable => bundled_hwi_unavailable_message(),
         HardwareError::TimedOut => "The hardware wallet did not respond in time.",
         HardwareError::OutputTooLarge => "The hardware wallet returned an oversized response.",
         HardwareError::CommandFailed(code) => match code {
@@ -5443,6 +5453,14 @@ fn hardware_api_error(error: HardwareError) -> ApiError {
         HardwareError::Io => "Communication with the hardware wallet failed.",
     };
     api_error(error.code(), message)
+}
+
+fn bundled_hwi_unavailable_message() -> &'static str {
+    #[cfg(target_os = "macos")]
+    if option_env!("GROOT_BUNDLED_HWI_RESOURCE").is_some() {
+        return "Groot's bundled hardware support could not be verified or started. Reinstall this Groot release, then scan again; do not install HWI separately.";
+    }
+    "Bitcoin Core HWI is not installed or could not be started."
 }
 
 fn hardware_device_api_error(error: HardwareError, device_type: &str) -> ApiError {

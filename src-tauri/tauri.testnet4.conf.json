@@ -4,5 +4,10 @@
   "build": {
     "beforeDevCommand": "pnpm dev --mode testnet4",
     "beforeBuildCommand": "pnpm build:testnet4"
+  },
+  "bundle": {
+    "resources": {
+      "target/groot-hwi-stage/hwi": "hwi"
+    }
   }
 }

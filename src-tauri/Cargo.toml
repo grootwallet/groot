@@ -1,6 +1,6 @@
 [package]
 name = "groot"
-version = "0.1.0"
+version = "0.4.8"
 description = "Groot, a minimal onchain Bitcoin wallet"
 edition = "2021"
 
@@ -52,9 +52,13 @@ libc = "=0.2.186"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 block2 = "=0.6.2"
+core-foundation = "=0.10.1"
 objc2 = "=0.6.4"
 objc2-app-kit = "=0.3.2"
 objc2-foundation = "=0.3.2"
+# The packaged HWI sidecar is checked with macOS Code Signing Services before
+# execution. Both crates were already pinned transitively by the keychain stack.
+security-framework = "=3.7.0"
 
 [patch.crates-io]
 security-framework-sys = { path = "vendor/security-framework-sys" }
