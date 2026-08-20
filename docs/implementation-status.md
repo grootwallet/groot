@@ -51,4 +51,6 @@ v0.4.15 standardizes denomination casing across every amount surface: `sats` is 
 
 v0.4.16 limits transaction acceleration actions to the selected wallet's actual role. Sender-side fee replacement is labeled **Increase fee (RBF)** and appears only for pending, replaceable wallet-originated transactions. CPFP appears only when the pending transaction pays a wallet-controlled output, so an incoming payment no longer incorrectly offers RBF merely because the sender marked it replaceable. Persisted wallet and proposal formats are unchanged.
 
+v0.4.17 slows the shared animated PSBT QR from four to two frames per second, giving Jade and other physical signer cameras twice as long to acquire each `crypto-psbt` frame. The bounded UR payload and persisted proposal remain unchanged.
+
 Update this table in the same change whenever a capability crosses a boundary.
