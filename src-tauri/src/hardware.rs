@@ -16,7 +16,6 @@ const MAX_SECRET_INPUT_BYTES: usize = 128;
 const MAX_PIN_POSITIONS: usize = 50;
 const MAX_OUTPUT_BYTES: u64 = 384 * 1024;
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(90);
-const SAVED_IDENTITY_TIMEOUT: Duration = Duration::from_secs(30);
 const USER_REVIEW_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 const HWI_DIGEST_HEX_BYTES: usize = 64;
 
@@ -109,11 +108,6 @@ pub trait HardwareTransport: Send + Sync {
         &self,
         device_type: &str,
         device_path: &str,
-        derivation_path: &str,
-    ) -> Result<Vec<u8>, HardwareError>;
-    fn account_xpub_by_type(
-        &self,
-        device_type: &str,
         derivation_path: &str,
     ) -> Result<Vec<u8>, HardwareError>;
     fn sign_psbt(
@@ -330,20 +324,6 @@ impl HardwareTransport for HwiCli {
             &self.source,
             &self.device_command(device_type, device_path, "getxpub", derivation_path),
             DEFAULT_TIMEOUT,
-            self.home.as_deref(),
-        )
-    }
-
-    fn account_xpub_by_type(
-        &self,
-        device_type: &str,
-        derivation_path: &str,
-    ) -> Result<Vec<u8>, HardwareError> {
-        run_program(
-            &self.program,
-            &self.source,
-            &self.device_command(device_type, "", "getxpub", derivation_path),
-            SAVED_IDENTITY_TIMEOUT,
             self.home.as_deref(),
         )
     }
@@ -1083,10 +1063,6 @@ mod tests {
         );
         assert_eq!(
             transport.account_xpub("trezor", "usb:1", "m/84'/1'/0'"),
-            Err(HardwareError::Unavailable)
-        );
-        assert_eq!(
-            transport.account_xpub_by_type("jade", "m/48'/1'/0'/2'"),
             Err(HardwareError::Unavailable)
         );
         assert_eq!(

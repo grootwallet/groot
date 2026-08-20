@@ -1,7 +1,6 @@
 use super::*;
 
 const HARDWARE_SCAN_CACHE_TIMEOUT: Duration = Duration::from_secs(15 * 60);
-const TYPE_ONLY_DEVICE_ID_PREFIX: &str = "groot-saved-device:";
 const MAX_TARGET_DEVICE_TYPES: usize = 8;
 const SUPPORTED_HWI_DEVICE_TYPES: &[&str] = &[
     "bitbox02",
@@ -46,6 +45,42 @@ fn retain_requested_hwi_devices(
             .eq_ignore_ascii_case(requested_device_type)
     });
     devices
+}
+
+fn saved_hwi_device(
+    devices: Vec<HwiDevice>,
+    requested_device_type: &str,
+    requested_fingerprint: &str,
+) -> Option<HwiDevice> {
+    devices.into_iter().find(|device| {
+        !device.path.is_empty()
+            && device
+                .device_type
+                .eq_ignore_ascii_case(requested_device_type)
+            && device
+                .fingerprint
+                .as_deref()
+                .is_some_and(|fingerprint| fingerprint.eq_ignore_ascii_case(requested_fingerprint))
+    })
+}
+
+fn recently_scanned_saved_hardware_device(
+    state: &AppState,
+    device_type: &str,
+    fingerprint: &str,
+) -> ApiResult<Option<HwiDevice>> {
+    let scans = state.recent_hardware_scan.lock().map_err(internal)?;
+    let Some(scan) = scans.as_ref() else {
+        return Ok(None);
+    };
+    if scan.created_at.elapsed() > HARDWARE_SCAN_CACHE_TIMEOUT {
+        return Ok(None);
+    }
+    // A cached scan is stored in a HashMap. Sort the ephemeral paths only to
+    // make selection deterministic if HWI exposed duplicate matching entries.
+    let mut devices: Vec<_> = scan.devices.values().cloned().collect();
+    devices.sort_by(|left, right| left.path.cmp(&right.path));
+    Ok(saved_hwi_device(devices, device_type, fingerprint))
 }
 
 fn remember_hardware_scan(state: &AppState, devices: &[HwiDevice]) -> ApiResult<()> {
@@ -186,16 +221,40 @@ pub async fn hardware_find_saved_device(
         ));
     }
 
+    // Prefer the exact path already proven by the bounded import/scan. This is
+    // what prevents an unlocked unrelated Ledger or BitBox from entering a
+    // Jade health check. After restart, perform a type-scoped discovery once,
+    // select the saved fingerprint, and then use only that exact path.
+    let cached_device = recently_scanned_saved_hardware_device(&state, &device_type, &fingerprint)?;
     let hwi = hwi_cli(&app)?;
     let requested_type = device_type.clone();
+    let requested_fingerprint = fingerprint.clone();
     let requested_path = derivation_path.trim().to_owned();
-    let connected_xpub = tauri::async_runtime::spawn_blocking(move || {
+    let (connected_xpub, device) = tauri::async_runtime::spawn_blocking(move || {
+        let device = if let Some(device) = cached_device {
+            device
+        } else {
+            let encoded = hwi
+                .enumerate_device_type(&requested_type)
+                .map_err(hardware_api_error)?;
+            let discovered: Vec<HwiDevice> =
+                serde_json::from_slice(&encoded).map_err(internal)?;
+            saved_hwi_device(discovered, &requested_type, &requested_fingerprint).ok_or_else(
+                || {
+                    api_error(
+                        "hardware_unavailable",
+                        "The saved hardware signer was not found. Keep that signer connected and unlocked, then try again.",
+                    )
+                },
+            )?
+        };
         let output = hwi
-            .account_xpub_by_type(&requested_type, &requested_path)
+            .account_xpub(&requested_type, &device.path, &requested_path)
             .map_err(|error| hardware_xpub_api_error(error, &requested_type, &requested_path))?;
         let encoded = parse_hwi_account_xpub(&output, &requested_type)?;
-        Xpub::from_str(&encoded)
-            .map_err(|_| api_error("invalid_descriptor", "HWI returned an invalid account key."))
+        let connected_xpub = Xpub::from_str(&encoded)
+            .map_err(|_| api_error("invalid_descriptor", "HWI returned an invalid account key."))?;
+        Ok::<_, ApiError>((connected_xpub, device))
     })
     .await
     .map_err(internal)??;
@@ -205,14 +264,6 @@ pub async fn hardware_find_saved_device(
             "The connected device does not hold this signer’s saved account key.",
         ));
     }
-
-    let device = HwiDevice {
-        fingerprint: Some(fingerprint.clone()),
-        device_type: device_type.clone(),
-        model: device_type.clone(),
-        path: format!("{TYPE_ONLY_DEVICE_ID_PREFIX}{device_type}:{fingerprint}"),
-        ..HwiDevice::default()
-    };
     remember_hardware_devices(&state, std::slice::from_ref(&device))?;
     Ok(hardware_device_dto(device))
 }
@@ -260,6 +311,45 @@ mod targeted_scan_tests {
         };
 
         assert!(retain_requested_hwi_devices(vec![unrelated], "jade").is_empty());
+    }
+
+    #[test]
+    fn saved_health_check_selects_exact_jade_with_unlocked_other_devices() {
+        let ledger = HwiDevice {
+            fingerprint: Some("11111111".into()),
+            device_type: "ledger".into(),
+            path: "usb-ledger".into(),
+            ..HwiDevice::default()
+        };
+        let bitbox = HwiDevice {
+            fingerprint: Some("22222222".into()),
+            device_type: "bitbox02".into(),
+            path: "usb-bitbox".into(),
+            ..HwiDevice::default()
+        };
+        let jade = HwiDevice {
+            fingerprint: Some("a1b2c3d4".into()),
+            device_type: "jade".into(),
+            path: "usb-jade".into(),
+            ..HwiDevice::default()
+        };
+
+        assert_eq!(
+            saved_hwi_device(vec![ledger, bitbox, jade.clone()], "JADE", "A1B2C3D4"),
+            Some(jade)
+        );
+    }
+
+    #[test]
+    fn saved_health_check_does_not_substitute_another_jade() {
+        let other_jade = HwiDevice {
+            fingerprint: Some("11111111".into()),
+            device_type: "jade".into(),
+            path: "usb-other-jade".into(),
+            ..HwiDevice::default()
+        };
+
+        assert!(saved_hwi_device(vec![other_jade], "jade", "a1b2c3d4").is_none());
     }
 }
 #[tauri::command]
