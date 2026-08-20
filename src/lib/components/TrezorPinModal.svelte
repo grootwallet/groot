@@ -7,6 +7,7 @@
     hardwareBrand,
     TREZOR_PIN_CELLS,
     TREZOR_PIN_MAX_POSITIONS,
+    trezorPinGridAvailable,
     trezorPinError
   } from '$lib/hardware/trezor-pin';
   import type { HardwareDevice, WalletErrorCode } from '$lib/wallet/contracts';
@@ -43,6 +44,7 @@
 
   const brand = $derived(hardwareBrand(device));
   const errorPresentation = $derived(trezorPinError(errorCode, error));
+  const gridAvailable = $derived(trezorPinGridAvailable(challengeReady, busy, error));
 </script>
 
 <Modal
@@ -62,34 +64,6 @@
         >
       </span>
     </div>
-    {#if positions}
-      <output aria-label={`${positions.length} PIN positions selected`}
-        >{'•'.repeat(positions.length)}</output
-      >
-    {/if}
-    <div class="pin-grid-heading">
-      <strong>Blank position grid</strong>
-      <small
-        >The shuffled digits appear only on Trezor. This grid deliberately stays blank—even when
-        Trezor generates a fresh layout.</small
-      >
-    </div>
-    <div class="pin-matrix" aria-label="Blind PIN position grid">
-      {#each TREZOR_PIN_CELLS as cell}
-        <button
-          type="button"
-          aria-label={cell.label}
-          disabled={busy || !challengeReady || positions.length >= TREZOR_PIN_MAX_POSITIONS}
-          onclick={() => onappend(cell.value)}><span aria-hidden="true"></span></button
-        >
-      {/each}
-    </div>
-    <div class="pin-matrix-actions">
-      <Button variant="secondary" disabled={!positions || busy} onclick={ondelete}
-        ><Delete size={15} />Delete last</Button
-      >
-      <Button variant="secondary" disabled={!positions || busy} onclick={onclear}>Clear</Button>
-    </div>
     {#if error}
       <div class="pin-error-card" role="alert" aria-live="assertive">
         <AlertTriangle size={18} />
@@ -106,7 +80,35 @@
         detail="Keep it connected while the device checks the selected PIN positions."
         label="Trezor unlock in progress"
       />
-    {:else}
+    {:else if gridAvailable}
+      {#if positions}
+        <output aria-label={`${positions.length} PIN positions selected`}
+          >{'•'.repeat(positions.length)}</output
+        >
+      {/if}
+      <div class="pin-grid-heading">
+        <strong>Blank position grid</strong>
+        <small
+          >The shuffled digits appear only on Trezor. This grid deliberately stays blank—even when
+          Trezor generates a fresh layout.</small
+        >
+      </div>
+      <div class="pin-matrix" aria-label="Blind PIN position grid">
+        {#each TREZOR_PIN_CELLS as cell}
+          <button
+            type="button"
+            aria-label={cell.label}
+            disabled={positions.length >= TREZOR_PIN_MAX_POSITIONS}
+            onclick={() => onappend(cell.value)}><span aria-hidden="true"></span></button
+          >
+        {/each}
+      </div>
+      <div class="pin-matrix-actions">
+        <Button variant="secondary" disabled={!positions} onclick={ondelete}
+          ><Delete size={15} />Delete last</Button
+        >
+        <Button variant="secondary" disabled={!positions} onclick={onclear}>Clear</Button>
+      </div>
       <Button class="full" disabled={!positions || !challengeReady} onclick={onsubmit}
         >Unlock {brand}</Button
       >

@@ -257,6 +257,7 @@
     healthPinError = '';
     healthPinErrorCode = '';
     healthPinPositions = '';
+    healthPinChallenge = '';
     try {
       healthPinChallenge = await walletService.promptHardwarePin(device.id);
       healthPinDevice = device;

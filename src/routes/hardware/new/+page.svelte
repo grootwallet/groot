@@ -154,6 +154,7 @@
     pinError = '';
     pinErrorCode = '';
     pinPositions = '';
+    pinChallenge = '';
     try {
       pinChallenge = await walletService.promptHardwarePin(device.id);
       pinDevice = device;

@@ -57,4 +57,6 @@ v0.4.18 slows the shared animated PSBT QR further to one frame per second after 
 
 v0.4.19 makes Overview and Activity use the same deterministic transaction order: active pending entries appear before confirmed history for latest-first views and after it for earliest-first views, with timestamp sorting inside each group. This avoids Testnet4 miner block-time skew placing newly seen mempool activity below older confirmed payments. The change is presentation-only; persisted wallet and proposal formats are unchanged.
 
+v0.4.20 removes the Trezor/KeepKey PIN position grid whenever its native challenge is busy, expired, rejected, disconnected, or otherwise failed. Requesting a fresh layout invalidates the previous challenge before the native request starts, and only a newly successful challenge can render a new blank grid. Persisted wallet and proposal formats are unchanged.
+
 Update this table in the same change whenever a capability crosses a boundary.

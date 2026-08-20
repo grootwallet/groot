@@ -13,6 +13,14 @@ export const TREZOR_PIN_CELLS = [
 ] as const;
 export const TREZOR_PIN_MAX_POSITIONS = 50;
 
+export function trezorPinGridAvailable(
+  challengeReady: boolean,
+  busy: boolean,
+  error: string
+): boolean {
+  return challengeReady && !busy && !error;
+}
+
 export function hardwareBrand(device: HardwareDevice | null): string {
   const identity = `${device?.label ?? ''} ${device?.model ?? ''}`.toLowerCase();
   if (identity.includes('trezor')) return 'Trezor';
@@ -35,6 +43,12 @@ export function trezorPinError(
     return {
       title: 'PIN matrix expired',
       detail: 'Ask Trezor for a fresh layout and complete it within two minutes.'
+    };
+  }
+  if (code === 'hardware_unavailable' || code === 'hardware_io_error') {
+    return {
+      title: 'Device disconnected',
+      detail: 'Reconnect the hardware wallet, then ask for a new layout.'
     };
   }
   return {

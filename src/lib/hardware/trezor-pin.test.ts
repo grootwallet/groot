@@ -4,6 +4,7 @@ import {
   hardwareBrand,
   TREZOR_PIN_CELLS,
   TREZOR_PIN_MAX_POSITIONS,
+  trezorPinGridAvailable,
   trezorPinError
 } from './trezor-pin';
 
@@ -52,9 +53,20 @@ describe('Trezor PIN presentation', () => {
         'Check the attempts remaining on Trezor. Ask it for a fresh layout, then tap each blank Groot cell by location—not by the digit printed on Trezor.'
     });
     expect(trezorPinError('hardware_challenge_expired', 'raw').title).toBe('PIN matrix expired');
+    expect(trezorPinError('hardware_unavailable', 'raw')).toEqual({
+      title: 'Device disconnected',
+      detail: 'Reconnect the hardware wallet, then ask for a new layout.'
+    });
     expect(trezorPinError('internal_error', 'USB unavailable').detail).toBe('USB unavailable');
     expect(trezorPinError('', '').detail).toBe(
       'Reconnect the hardware wallet and start a new PIN matrix.'
     );
+  });
+
+  it('shows the PIN grid only for a live, idle challenge without an error', () => {
+    expect(trezorPinGridAvailable(true, false, '')).toBe(true);
+    expect(trezorPinGridAvailable(false, false, '')).toBe(false);
+    expect(trezorPinGridAvailable(true, true, '')).toBe(false);
+    expect(trezorPinGridAvailable(true, false, 'Disconnected')).toBe(false);
   });
 });
