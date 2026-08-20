@@ -2,7 +2,7 @@
   import QRCode from 'qrcode';
   import { onDestroy } from 'svelte';
 
-  let { frames, intervalMs = 500 } = $props<{ frames: string[]; intervalMs?: number }>();
+  let { frames, intervalMs = 1000 } = $props<{ frames: string[]; intervalMs?: number }>();
   let image = $state('');
   let index = $state(0);
   let timer: ReturnType<typeof setInterval> | undefined;

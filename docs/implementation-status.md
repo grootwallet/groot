@@ -53,4 +53,6 @@ v0.4.16 limits transaction acceleration actions to the selected wallet's actual 
 
 v0.4.17 slows the shared animated PSBT QR from four to two frames per second, giving Jade and other physical signer cameras twice as long to acquire each `crypto-psbt` frame. The bounded UR payload and persisted proposal remain unchanged.
 
+v0.4.18 slows the shared animated PSBT QR further to one frame per second after physical Jade testing showed that two frames per second was still difficult to scan. The bounded UR payload and persisted proposal remain unchanged.
+
 Update this table in the same change whenever a capability crosses a boundary.
