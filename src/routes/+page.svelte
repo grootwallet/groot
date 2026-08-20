@@ -345,8 +345,8 @@
       const result = await walletService.checkHardwareExternalSigner(signer, device.id);
       await saveHardwareHealthCheck(signer.fingerprint, result);
       toast({
-        title: 'Health check passed',
-        description: `${signer.label} holds the saved BIP84 account key.`,
+        title: 'Signer verified',
+        description: `${signer.label} matches this wallet.`,
         tone: 'success'
       });
     } catch (cause) {
@@ -603,7 +603,6 @@
   checking={checkingSignerHealth}
   onclose={() => (signerDetailsOpen = false)}
   oncheck={runExternalSignerHealthCheck}
-  accountStandard="BIP84"
 />
 <MultisigDescriptorsModal
   open={showDescriptors}

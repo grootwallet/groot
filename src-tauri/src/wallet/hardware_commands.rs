@@ -475,10 +475,7 @@ pub async fn hardware_check_cosigner(
         Ok(CosignerHealthDto {
             status: "healthy",
             checked_at,
-            summary: format!(
-                "Connected device matches fingerprint {} and the saved BIP48 account key.",
-                cosigner.fingerprint
-            ),
+            summary: "Signer matches this wallet.".to_owned(),
         })
     })
     .await
@@ -509,10 +506,7 @@ pub async fn hardware_check_external_signer(
         Ok(CosignerHealthDto {
             status: "healthy",
             checked_at,
-            summary: format!(
-                "Connected device matches fingerprint {} and the saved BIP84 account key.",
-                signer.fingerprint
-            ),
+            summary: "Signer matches this wallet.".to_owned(),
         })
     })
     .await

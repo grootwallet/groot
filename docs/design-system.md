@@ -17,6 +17,7 @@ Groot combines calm, task-focused desktop density with restrained native-utility
 5. Use progressive disclosure for long addresses, xpubs, descriptors, and transaction IDs while preserving copy/export access.
 6. User-facing copy always calls a participant a **signer**, never a cosigner. Legacy `cosigner` names may remain inside persisted schemas, command contracts, and implementation identifiers, but must not surface in labels, instructions, errors, accessibility text, printable views, or device fixtures.
 7. Empty, loading, offline, invalid, and retry states are designed states—not exceptions. A completed read transitions immediately from its skeleton to data, an explicit empty state, or a durable retry state; empty results never remain behind an artificial loading delay.
+8. Default UI copy is brief, plain, and action-led. Prefer one short sentence. Do not repeat technical values already visible nearby; move optional protocol detail behind disclosure. Keep security consequences and recovery instructions explicit, but state them once.
 
 Hardware operations use the shared animated hardware-action panel wherever Groot is waiting on discovery, public-key import, device unlock, saved-identity health checks, address approval, or transaction signing. The panel names the current action, states what the user must do on the external device, exposes a polite live status to assistive technology, and respects reduced-motion preferences. Device- and network-specific instructions may refine its copy, but must not replace this common interaction pattern with a static icon or button-only spinner.
 
@@ -97,7 +98,7 @@ Transaction-review action grids respond to the width of their own card, not only
 
 Use “bitcoin” for the asset and “Bitcoin” for the network/protocol. **Wallet** is the top-level concept for software-key, hardware-key, standard multisig, and custom-policy accounts. Never use **vault** as a synonym for ordinary multisig; reserve it for a specifically defined product or policy with constrained spending paths such as timelocked recovery or inheritance. Prefer “2 of 3 signatures” to “quorum,” and “public account key” before “xpub.” Say **wallet passphrase** only for a Groot-generated software wallet; it is part of the BIP39 backup and also unlocks Groot. Say **app PIN** for multisig and external-hardware wallets; it protects local app data and is not a hardware passphrase or seed backup. Never imply that an app PIN can recover a hardware wallet or that a public descriptor can spend.
 
-Headings and controls should carry the flow whenever possible. Do not repeat a heading with a subtitle that merely restates it. Keep permanent consequences and recovery instructions explicit, but move protocol detail behind optional insight.
+Headings and controls should carry the flow whenever possible. Do not repeat a heading with a subtitle that merely restates it. Use the shortest familiar wording that preserves meaning. Keep permanent consequences and recovery instructions explicit, but move protocol detail behind optional insight.
 
 ## Accessibility
 

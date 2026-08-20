@@ -29,8 +29,7 @@
     oncheck,
     policyStatus = null,
     onpolicy,
-    onrename,
-    accountStandard = 'BIP48'
+    onrename
   } = $props<{
     signer: CosignerDraft | null;
     health: CosignerHealthCheck | null;
@@ -46,7 +45,6 @@
     } | null;
     onpolicy?: () => void;
     onrename?: (label: string) => Promise<void> | void;
-    accountStandard?: 'BIP48' | 'BIP84';
   }>();
   let publicKeyOpen = $state(false);
   let editingName = $state(false);
@@ -65,7 +63,7 @@
   }
 
   function healthLabel() {
-    if (health?.status === 'healthy') return 'Healthy';
+    if (health?.status === 'healthy') return 'Verified';
     if (health?.status === 'attention') return 'Attention';
     return 'Ready';
   }
@@ -107,7 +105,7 @@
 <Modal
   open={!!signer}
   title={signer?.label ?? 'Signer details'}
-  description="Public identity and verification status. No private key is stored here."
+  description="Public signer identity. No private keys stored."
   {onclose}
 >
   {#if signer}
@@ -117,8 +115,8 @@
         <div>
           <strong>{sourceName(signer.source)}</strong><small
             >{signer.source === 'usb' || signer.source === 'virtual'
-              ? 'Connection can be verified now'
-              : 'Connect the signer to verify its saved key'}</small
+              ? 'Ready to check'
+              : 'Connect signer to check'}</small
           >
         </div>
         <span class="ready-badge" class:attention={health?.status === 'attention'}
@@ -179,8 +177,8 @@
           <dt>Connection</dt>
           <dd>
             {signer.source === 'usb' || signer.source === 'virtual'
-              ? 'Available for verification'
-              : 'USB required for health check'}
+              ? 'Ready to check'
+              : 'USB connection needed'}
           </dd>
         </div>
         <div class="public-key-detail">
@@ -220,7 +218,7 @@
             class:attention={health?.status === 'attention'}><CheckCircle2 size={18} /></span
           >
           <div>
-            <strong>Device health</strong><small
+            <strong>Signer check</strong><small
               >{#if health}Last checked <LocalTimestamp value={health.checkedAt} />{:else}Not
                 checked yet{/if}</small
             >
@@ -229,17 +227,18 @@
         <div class="health-card-body">
           {#if checking}
             <HardwareActionPrompt
-              title="Checking signer key"
-              detail={`Keep the signer connected and unlocked while Groot reads its ${accountStandard} account key and compares it with the saved key. Other connected device families are ignored.`}
-              label="Signer health check in progress"
+              title="Checking signer"
+              detail="Keep it connected and unlocked."
+              label="Checking signer"
             />
           {:else}
             <p>
-              {health?.summary ??
-                `Connect and unlock the signer to verify that it holds the saved ${accountStandard} account key.`}
+              {health?.status === 'healthy'
+                ? 'Signer matches this wallet.'
+                : (health?.summary ?? 'Connect and unlock the signer to check it.')}
             </p>
             <Button variant="secondary" class="full" onclick={oncheck}
-              ><RefreshCw size={15} />Run health check</Button
+              ><RefreshCw size={15} />Check signer</Button
             >
           {/if}
         </div>
@@ -252,7 +251,7 @@
     value={signer.xpub}
     open={publicKeyOpen}
     title={`${signer.label} public account key (xpub)`}
-    description="Extended public key used to derive this signer’s wallet addresses. It cannot sign transactions."
+    description="Derives wallet addresses. Cannot sign."
     label="Public account key (xpub)"
     onclose={() => (publicKeyOpen = false)}
   />{/if}

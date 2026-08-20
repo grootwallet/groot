@@ -89,10 +89,10 @@ describe('hardware receive verification UI', () => {
     expect(settings).toContain('walletService.checkHardwareExternalSigner');
     expect(settings).toMatch(/<LocalTimestamp\s+value=\{signerHealth\.checkedAt\}\s*\/>/);
     expect(settings).toContain("'Not checked'");
-    expect(settings).toContain('accountStandard="BIP84"');
     expect(settings).toContain('<DeviceDetailsModal');
-    expect(deviceDetails).toContain("accountStandard = 'BIP48'");
-    expect(deviceDetails).toContain('saved ${accountStandard} account key');
+    expect(deviceDetails).toContain('title="Checking signer"');
+    expect(deviceDetails).toContain('detail="Keep it connected and unlocked."');
+    expect(deviceDetails).toContain("'Signer matches this wallet.'");
   });
 
   it('uses a deliberate retry status instead of an unstyled empty-list paragraph', () => {
@@ -117,7 +117,7 @@ describe('hardware receive verification UI', () => {
     expect(multisigReceive).toContain('{eligibleDeviceTypes}');
     expect(multisigReceive).toContain('{eligibleFingerprints}');
     expect(verificationFlow).toContain('ignores other connected device families');
-    expect(deviceDetails).toContain('Other connected device families are ignored.');
+    expect(deviceDetails).toContain('Keep it connected and unlocked.');
   });
 
   it('reuses one bounded hardware device list for setup and signing', () => {

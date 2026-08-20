@@ -807,7 +807,7 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     return {
       status: 'healthy' as const,
       checkedAt,
-      summary: `Connected device matches fingerprint ${cosigner.fingerprint} and the saved BIP48 account key.`
+      summary: 'Signer matches this wallet.'
     };
   }
   async checkHardwareExternalSigner(signer: ExternalSigner, deviceId: string) {
@@ -825,7 +825,7 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     return {
       status: 'healthy' as const,
       checkedAt: new Date().toISOString(),
-      summary: `Connected device matches fingerprint ${signer.fingerprint} and the saved BIP84 account key.`
+      summary: 'Signer matches this wallet.'
     };
   }
   async hardwareHealthChecks() {

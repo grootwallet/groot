@@ -564,22 +564,20 @@ test('shows signer details and runs honest health checks', async ({ page }) => {
   ).toBeVisible();
   await xpubDialog.getByRole('button', { name: 'Close' }).click();
   await expect(coldcardDialog.getByText('Not checked yet')).toBeVisible();
-  await coldcardDialog.getByRole('button', { name: 'Run health check' }).click();
+  await coldcardDialog.getByRole('button', { name: 'Check signer' }).click();
+  await expect(coldcardDialog.getByRole('status', { name: 'Checking signer' })).toContainText(
+    'Checking signer'
+  );
   await expect(
-    coldcardDialog.getByRole('status', { name: 'Signer health check in progress' })
-  ).toContainText('Checking signer key');
-  await expect(
-    coldcardDialog
-      .locator('.health-card')
-      .getByText(/matches fingerprint f00dbabe and the saved BIP48 account key/)
+    coldcardDialog.locator('.health-card').getByText('Signer matches this wallet.')
   ).toBeVisible();
   await expect(coldcardDialog.getByText(/Last checked/)).toBeVisible();
   await coldcardDialog.getByRole('button', { name: 'Close' }).click();
 
   await page.getByRole('button', { name: 'View Offline backup details' }).click();
   const backupDialog = page.getByRole('dialog', { name: 'Offline backup' });
-  await expect(backupDialog.getByText('Device health', { exact: true })).toBeVisible();
-  await backupDialog.getByRole('button', { name: 'Run health check' }).click();
+  await expect(backupDialog.getByText('Signer check', { exact: true })).toBeVisible();
+  await backupDialog.getByRole('button', { name: 'Check signer' }).click();
   await expect(
     backupDialog.getByText('This signer has no interactive USB device type.')
   ).toBeVisible();
@@ -935,7 +933,7 @@ test('explicitly selects a Trezor standard wallet without changing hidden wallet
   await expect(
     page.getByRole('button', { name: 'View Virtual Trezor Standard details' })
   ).toBeVisible();
-  await expect(page.getByText('c0ffee02')).toBeVisible();
+  await expect(page.getByText('c0ffee02', { exact: true }).first()).toBeVisible();
 });
 
 test('imports a bounded public signer record from a mounted-file flow', async ({ page }) => {
@@ -983,14 +981,12 @@ test('imports a bounded public signer record from a mounted-file flow', async ({
   await details.getByRole('button', { name: 'Save name' }).click();
   const renamedDetails = page.getByRole('dialog', { name: 'Air-gapped Coldcard' });
   await expect(renamedDetails).toBeVisible();
-  await expect(renamedDetails.getByText('Device health', { exact: true })).toBeVisible();
+  await expect(renamedDetails.getByText('Signer check', { exact: true })).toBeVisible();
   await expect(renamedDetails.getByText('Not checked yet')).toBeVisible();
-  await renamedDetails.getByRole('button', { name: 'Run health check' }).click();
+  await renamedDetails.getByRole('button', { name: 'Check signer' }).click();
+  await expect(renamedDetails.getByText('Signer matches this wallet.')).toBeVisible();
   await expect(
-    renamedDetails.getByText(/matches fingerprint f00dbabe and the saved BIP48 account key/)
-  ).toBeVisible();
-  await expect(
-    page.getByText('holds the saved BIP48 account key.', { exact: false })
+    page.getByText('Air-gapped Coldcard matches this wallet.', { exact: true })
   ).toBeVisible();
   await page.getByRole('button', { name: 'Close' }).click();
   await expect(
@@ -1045,11 +1041,9 @@ test('opens and checks an imported hardware signer during setup', async ({ page 
   await signerCard.click();
   const details = page.getByRole('dialog', { name: 'Virtual Coldcard' });
   await expect(details.getByText('Not checked yet')).toBeVisible();
-  await details.getByRole('button', { name: 'Run health check' }).click();
+  await details.getByRole('button', { name: 'Check signer' }).click();
   await expect(
-    details
-      .locator('.health-card')
-      .getByText(/matches fingerprint f00dbabe and the saved BIP48 account key/)
+    details.locator('.health-card').getByText('Signer matches this wallet.')
   ).toBeVisible();
   await expect(details.getByText(/Last checked/)).toBeVisible();
   await details.getByRole('button', { name: 'Close' }).click();
@@ -1429,7 +1423,7 @@ test('reveals draft errors only after review and keeps signer identity readable'
   const details = page.getByRole('dialog', { name: 'Coldcard' });
   await expect(details).toBeVisible();
   await expect(details.getByText('Not checked yet')).toBeVisible();
-  await details.getByRole('button', { name: 'Run health check' }).click();
+  await details.getByRole('button', { name: 'Check signer' }).click();
   await expect(details.getByText('This signer has no interactive USB device type.')).toBeVisible();
   await details.getByRole('button', { name: 'Close' }).click();
 

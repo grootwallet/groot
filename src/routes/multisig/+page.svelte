@@ -235,8 +235,8 @@
       const result = await walletService.checkHardwareCosigner(signer, device.id);
       await saveHardwareHealthCheck(signer.fingerprint, result);
       toast({
-        title: 'Health check passed',
-        description: `${signer.label} holds the saved BIP48 account key.`,
+        title: 'Signer verified',
+        description: `${signer.label} matches this wallet.`,
         tone: 'success'
       });
     } catch (cause) {
