@@ -55,6 +55,7 @@
   let pinErrorCode = $state<WalletErrorCode | ''>('');
   let pinDevice = $state<HardwareDevice | null>(null);
   let hardwareScanGeneration = 0;
+  let hardwareCancellation: Promise<void> | null = null;
 
   const verificationDeviceIdentity = $derived(
     `${savedDeviceIdentity ?? ''} ${verificationDevice?.label ?? ''} ${verificationDevice?.model ?? ''}`
@@ -67,8 +68,24 @@
   onDestroy(() => {
     hardwareScanGeneration += 1;
     clearPinState();
-    void walletService.cancelHardwareOperations();
+    beginHardwareCancellation();
   });
+
+  function beginHardwareCancellation() {
+    const cancellation = walletService.cancelHardwareOperations();
+    hardwareCancellation = cancellation;
+    void cancellation.catch(() => {});
+  }
+
+  async function waitForHardwareCancellation() {
+    const cancellation = hardwareCancellation;
+    if (!cancellation) return;
+    try {
+      await cancellation;
+    } finally {
+      if (hardwareCancellation === cancellation) hardwareCancellation = null;
+    }
+  }
 
   function clearPinState() {
     pinPositions = '';
@@ -79,7 +96,7 @@
     hardwareScanGeneration += 1;
     verifyBusy = false;
     verifyOpen = false;
-    void walletService.cancelHardwareOperations();
+    beginHardwareCancellation();
   }
 
   async function copyVerificationAddress() {
@@ -109,6 +126,8 @@
     verifyError = '';
     verificationDevice = null;
     try {
+      await waitForHardwareCancellation();
+      if (generation !== hardwareScanGeneration || !verifyOpen) return;
       const discovered = await walletService.listHardwareDevicesForTypes(eligibleDeviceTypes);
       if (generation !== hardwareScanGeneration || !verifyOpen) return;
       const fingerprints = new Set(
@@ -220,6 +239,7 @@
   }
 
   async function verifyAddress(device: HardwareDevice, unlockFirst = false) {
+    const generation = hardwareScanGeneration;
     const targetAddressId = address.id;
     verificationDevice = device;
     verificationAction = unlockFirst ? 'unlock' : 'approve';
@@ -229,6 +249,7 @@
       const verified = isMultisig
         ? await walletService.verifyMultisigAddress(device.id, targetAddressId)
         : await walletService.verifyExternalAddress(device.id, targetAddressId);
+      if (generation !== hardwareScanGeneration || !verifyOpen) return;
       if (address.id !== targetAddressId) {
         verifyError = translate($locale, 'The selected address changed. Start verification again.');
         return;
@@ -241,13 +262,14 @@
         tone: 'success'
       });
     } catch (cause) {
+      if (generation !== hardwareScanGeneration || !verifyOpen) return;
       verifyError = localizedReceiveVerificationFailure(
         cause,
         $locale,
         'The device could not verify this address.'
       ).message;
     } finally {
-      verifyBusy = false;
+      if (generation === hardwareScanGeneration) verifyBusy = false;
     }
   }
 

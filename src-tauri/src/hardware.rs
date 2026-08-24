@@ -21,6 +21,7 @@ const MAX_STDIN_BYTES: usize = MAX_ARGUMENT_BYTES + 1024;
 const MAX_PIN_POSITIONS: usize = 50;
 const MAX_OUTPUT_BYTES: u64 = 384 * 1024;
 const PIPE_CLEANUP_TIMEOUT: Duration = Duration::from_secs(2);
+const CANCELLATION_CLEANUP_TIMEOUT: Duration = Duration::from_secs(5);
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(90);
 const DISCOVERY_TIMEOUT: Duration = Duration::from_secs(30);
 const USER_REVIEW_TIMEOUT: Duration = Duration::from_secs(5 * 60);
@@ -237,12 +238,35 @@ impl Drop for HardwareOperation {
     }
 }
 
-pub fn cancel_hardware_operations() {
+pub fn cancel_hardware_operations_and_wait() -> Result<(), HardwareError> {
     let coordinator = hardware_coordinator();
-    if let Ok(mut state) = coordinator.state.lock() {
-        cancel_coordinator_state(&mut state);
-        coordinator.available.notify_all();
+    let mut state = coordinator.state.lock().map_err(|_| HardwareError::Io)?;
+    let cancelled_id = state.active.as_ref().map(|active| active.id);
+    cancel_coordinator_state(&mut state);
+    coordinator.available.notify_all();
+
+    let deadline = Instant::now()
+        .checked_add(CANCELLATION_CLEANUP_TIMEOUT)
+        .ok_or(HardwareError::Io)?;
+    while cancelled_id.is_some_and(|id| state.active.as_ref().is_some_and(|active| active.id == id))
+    {
+        let remaining = deadline
+            .checked_duration_since(Instant::now())
+            .filter(|remaining| !remaining.is_zero())
+            .ok_or(HardwareError::TimedOut)?;
+        let (next, wait) = coordinator
+            .available
+            .wait_timeout(state, remaining)
+            .map_err(|_| HardwareError::Io)?;
+        state = next;
+        if wait.timed_out()
+            && cancelled_id
+                .is_some_and(|id| state.active.as_ref().is_some_and(|active| active.id == id))
+        {
+            return Err(HardwareError::TimedOut);
+        }
     }
+    Ok(())
 }
 
 fn cancel_coordinator_state(state: &mut HardwareCoordinatorState) {
@@ -1336,14 +1360,14 @@ mod tests {
             thread::sleep(Duration::from_millis(10));
         }
         assert!(started_file.exists(), "cancellation fixture did not start");
-        cancel_hardware_operations();
-        assert_eq!(running.join().unwrap(), Err(HardwareError::Cancelled));
+        cancel_hardware_operations_and_wait().unwrap();
 
         let fast = test_script("after-cancel", "IFS= read -r command\nprintf '%s\\n' '[]'");
         assert_eq!(
             HwiCli::for_test_program(fast.clone()).enumerate().unwrap(),
             b"[]\n"
         );
+        assert_eq!(running.join().unwrap(), Err(HardwareError::Cancelled));
         std::fs::remove_file(slow).unwrap();
         std::fs::remove_file(fast).unwrap();
         std::fs::remove_file(started_file).unwrap();

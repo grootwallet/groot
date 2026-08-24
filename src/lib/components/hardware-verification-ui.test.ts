@@ -88,7 +88,14 @@ describe('hardware receive verification UI', () => {
     );
     expect(hardwareTransport).toContain('HardwareError::Busy');
     expect(hardwareTransport).toContain('cancel_hardware_operations');
+    expect(hardwareTransport).toContain('cancel_hardware_operations_and_wait');
     expect(hardwareTransport).toContain('const HWI_FIXED_ARGV: &[&str] = &["--stdin"]');
+  });
+
+  it('waits for native cleanup before reopening receive verification', () => {
+    expect(verificationFlow).toContain('beginHardwareCancellation()');
+    expect(verificationFlow).toContain('await waitForHardwareCancellation()');
+    expect(verificationFlow).toContain('generation !== hardwareScanGeneration || !verifyOpen');
   });
 
   it('keeps one shared verification component in both receive flows', () => {

@@ -15,14 +15,17 @@ const SUPPORTED_HWI_DEVICE_TYPES: &[&str] = &[
 ];
 
 #[tauri::command]
-pub fn hardware_cancel_operations(state: State<'_, AppState>) -> ApiResult<()> {
-    crate::hardware::cancel_hardware_operations();
+pub async fn hardware_cancel_operations(state: State<'_, AppState>) -> ApiResult<()> {
     state
         .pending_hardware_pins
         .lock()
         .map_err(internal)?
         .clear();
     *state.recent_hardware_scan.lock().map_err(internal)? = None;
+    tauri::async_runtime::spawn_blocking(crate::hardware::cancel_hardware_operations_and_wait)
+        .await
+        .map_err(internal)?
+        .map_err(hardware_api_error)?;
     Ok(())
 }
 
