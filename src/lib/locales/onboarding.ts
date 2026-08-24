@@ -66,10 +66,6 @@ export const onboardingCopy = {
       fr: 'Choisissez la phrase secrète BIP39 qui complète cette sauvegarde. La même phrase secrète déverrouille Groot.',
       es: 'Elige la frase de contraseña BIP39 que completa esta copia. La misma frase desbloquea Groot.'
     },
-  'Connect one you already own. Your keys stay protected by that device.': {
-    fr: 'Connectez un appareil que vous possédez déjà. Vos clés restent protégées par cet appareil.',
-    es: 'Conecta uno que ya tengas. Tus claves permanecen protegidas por ese dispositivo.'
-  },
   'Copies its node and sync method. This wallet protects its own copy.': {
     fr: 'Copie son nœud et sa méthode de synchronisation. Ce portefeuille protège sa propre copie.',
     es: 'Copia su nodo y método de sincronización. Esta cartera protege su propia copia.'
@@ -98,21 +94,9 @@ export const onboardingCopy = {
       fr: 'Facultatif. Groot exige toujours 256 bits d’aléa fourni par le système d’exploitation. Les résultats physiques ne sont ajoutés que comme entrée supplémentaire.',
       es: 'Opcional. Groot siempre requiere 256 bits de aleatoriedad del sistema operativo. Los resultados físicos solo se mezclan como entrada adicional.'
     },
-  'Require more than one key, or add another way to recover your wallet.': {
-    fr: 'Exigez plusieurs clés ou ajoutez une autre méthode de récupération du portefeuille.',
-    es: 'Exige más de una clave o añade otra forma de recuperar tu cartera.'
-  },
-  'Start simply, use a separate device, or share control. You can add another wallet later.': {
-    fr: 'Commencez simplement, utilisez un appareil séparé ou partagez le contrôle. Vous pourrez ajouter un autre portefeuille plus tard.',
-    es: 'Empieza de forma sencilla, usa un dispositivo separado o comparte el control. Puedes añadir otra cartera más adelante.'
-  },
   'Tap a placed word to return it. You can also drag words between the pool and sequence.': {
     fr: 'Touchez un mot placé pour le remettre dans la liste. Vous pouvez aussi faire glisser les mots entre la liste et la séquence.',
     es: 'Pulsa una palabra colocada para devolverla. También puedes arrastrar palabras entre el grupo y la secuencia.'
-  },
-  'The easiest way to start. Groot creates recovery words for you to write down.': {
-    fr: 'La façon la plus simple de commencer. Groot crée des mots de récupération que vous devez noter.',
-    es: 'La forma más sencilla de empezar. Groot crea palabras de recuperación para que las anotes.'
   },
   'This cannot protect a wallet created on a compromised device, and the operating-system source never becomes optional.':
     {
@@ -147,21 +131,25 @@ export const onboardingCopy = {
     es: 'Copia de seguridad aún sin verificar'
   },
   'Check your surroundings': { fr: 'Vérifiez votre environnement', es: 'Comprueba tu entorno' },
-  'Choose how to protect your bitcoin': {
-    fr: 'Choisissez comment protéger votre bitcoin',
-    es: 'Elige cómo proteger tu bitcoin'
+  'Choose your wallet': {
+    fr: 'Choisissez votre portefeuille',
+    es: 'Elige tu cartera'
   },
   Clear: { fr: 'Effacer', es: 'Borrar' },
   'Coin flips': { fr: 'Lancers de pièce', es: 'Lanzamientos de moneda' },
   'Confirm order': { fr: 'Confirmer l’ordre', es: 'Confirmar orden' },
   'Confirm your backup': { fr: 'Confirmez votre sauvegarde', es: 'Confirma tu copia de seguridad' },
   'Create wallet': { fr: 'Créer le portefeuille', es: 'Crear cartera' },
+  'Create and back up your keys in Groot.': {
+    fr: 'Créez et sauvegardez vos clés dans Groot.',
+    es: 'Crea y respalda tus claves en Groot.'
+  },
   Empty: { fr: 'Vide', es: 'Vacío' },
   'Enter recovery words securely': {
     fr: 'Saisir les mots de récupération en toute sécurité',
     es: 'Introducir las palabras de recuperación de forma segura'
   },
-  'Extra protection': { fr: 'Protection supplémentaire', es: 'Protección adicional' },
+  'Flexible security': { fr: 'Sécurité flexible', es: 'Seguridad flexible' },
   'Generate 24 recovery words': {
     fr: 'Générer 24 mots de récupération',
     es: 'Generar 24 palabras de recuperación'
@@ -174,10 +162,7 @@ export const onboardingCopy = {
     fr: 'Je suis à l’abri des regards — afficher les mots',
     es: 'Estoy en privado — mostrar palabras'
   },
-  'Keep it on this device': {
-    fr: 'Le conserver sur cet appareil',
-    es: 'Mantenerla en este dispositivo'
-  },
+  'Hardware wallet': { fr: 'Portefeuille matériel', es: 'Cartera física' },
   'Keep it with your backup.': {
     fr: 'Conservez-le avec votre sauvegarde.',
     es: 'Guárdalo con tu copia de seguridad.'
@@ -196,6 +181,7 @@ export const onboardingCopy = {
     es: 'Sin custodia · Solo onchain'
   },
   None: { fr: 'Aucun', es: 'Ninguno' },
+  'On this device': { fr: 'Sur cet appareil', es: 'En este dispositivo' },
   'Protect your wallet': { fr: 'Protégez votre portefeuille', es: 'Protege tu cartera' },
   Recommended: { fr: 'Recommandé', es: 'Recomendado' },
   'Recover software wallet': {
@@ -209,18 +195,25 @@ export const onboardingCopy = {
     fr: 'Les mots de récupération constituent la sauvegarde',
     es: 'Las palabras de recuperación son la copia de seguridad'
   },
-  'Set up shared control': {
-    fr: 'Configurer un contrôle partagé',
-    es: 'Configurar control compartido'
+  'Separate device': { fr: 'Appareil séparé', es: 'Dispositivo separado' },
+  'Software wallet': { fr: 'Portefeuille logiciel', es: 'Cartera de software' },
+  'Start with what feels right. You can always add another.': {
+    fr: 'Commencez avec la solution qui vous convient. Vous pourrez toujours en ajouter une autre.',
+    es: 'Empieza con la opción que mejor te encaje. Siempre podrás añadir otra.'
   },
   'Showing the latest 32': { fr: 'Affichage des 32 derniers', es: 'Mostrando los últimos 32' },
   'Six-sided die': { fr: 'Dé à six faces', es: 'Dado de seis caras' },
   Tails: { fr: 'Pile', es: 'Cruz' },
   'Undo last': { fr: 'Annuler le dernier', es: 'Deshacer último' },
   Use: { fr: 'Utiliser', es: 'Usar' },
-  'Use a hardware wallet': {
-    fr: 'Utiliser un portefeuille matériel',
-    es: 'Usar una cartera física'
+  'Connect a device you already trust.': {
+    fr: 'Connectez un appareil auquel vous faites déjà confiance.',
+    es: 'Conecta un dispositivo en el que ya confías.'
+  },
+  'Multisig wallet': { fr: 'Portefeuille multisig', es: 'Cartera multifirma' },
+  'Custom spending, recovery, inheritance, or shared control.': {
+    fr: 'Dépenses sur mesure, récupération, héritage ou contrôle partagé.',
+    es: 'Gasto personalizado, recuperación, herencia o control compartido.'
   },
   'Use real physical results.': {
     fr: 'Utilisez de vrais résultats physiques.',

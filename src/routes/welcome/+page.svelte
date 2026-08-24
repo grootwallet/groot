@@ -11,7 +11,6 @@
     KeyRound,
     Network,
     ShieldCheck,
-    Users,
     X
   } from '@lucide/svelte';
   import Button from '$lib/components/Button.svelte';
@@ -305,51 +304,42 @@
         ><ArrowLeft size={16} />{translate($locale, 'Back')}</button
       >
       <span class="setup-step wallet-choice-step">{translate($locale, 'WALLET SETUP')}</span>
-      <h1>{translate($locale, 'Choose how to protect your bitcoin')}</h1>
+      <h1>{translate($locale, 'Choose your wallet')}</h1>
       <p>
-        {translate(
-          $locale,
-          'Start simply, use a separate device, or share control. You can add another wallet later.'
-        )}
+        {translate($locale, 'Start with what feels right. You can always add another.')}
       </p>
       <div class="wallet-type-grid">
-        <button class="wallet-type-card recommended" onclick={() => (mode = 'create')}>
+        <button class="wallet-type-card software" onclick={() => (mode = 'create')}>
           <span class="wallet-type-icon"><KeyRound size={20} /></span>
           <span class="wallet-type-copy"
-            ><strong>{translate($locale, 'Keep it on this device')}</strong><small
-              >{translate(
-                $locale,
-                'The easiest way to start. Groot creates recovery words for you to write down.'
-              )}</small
+            ><strong>{translate($locale, 'Software wallet')}</strong><small
+              >{translate($locale, 'Create and back up your keys in Groot.')}</small
             ></span
           >
-          <span class="wallet-type-meta">{translate($locale, 'Recommended')}</span>
+          <span class="wallet-type-meta">{translate($locale, 'On this device')}</span>
           <ArrowRight class="wallet-type-arrow" size={17} />
         </button>
-        <a class="wallet-type-card" href="/hardware/new">
+        <a class="wallet-type-card hardware" href="/hardware/new">
           <span class="wallet-type-icon"><Cpu size={20} /></span>
           <span class="wallet-type-copy"
-            ><strong>{translate($locale, 'Use a hardware wallet')}</strong><small
-              >{translate(
-                $locale,
-                'Connect one you already own. Your keys stay protected by that device.'
-              )}</small
+            ><strong>{translate($locale, 'Hardware wallet')}</strong><small
+              >{translate($locale, 'Connect a device you already trust.')}</small
             ></span
           >
-          <span class="wallet-type-meta">{translate($locale, 'Extra protection')}</span>
+          <span class="wallet-type-meta">{translate($locale, 'Separate device')}</span>
           <ArrowRight class="wallet-type-arrow" size={17} />
         </a>
-        <a class="wallet-type-card" href="/multisig/new">
-          <span class="wallet-type-icon"><Users size={20} /></span>
+        <a class="wallet-type-card multisig" href="/multisig/new">
+          <span class="wallet-type-icon"><ShieldCheck size={20} /></span>
           <span class="wallet-type-copy"
-            ><strong>{translate($locale, 'Set up shared control')}</strong><small
+            ><strong>{translate($locale, 'Multisig wallet')}</strong><small
               >{translate(
                 $locale,
-                'Require more than one key, or add another way to recover your wallet.'
+                'Custom spending, recovery, inheritance, or shared control.'
               )}</small
             ></span
           >
-          <span class="wallet-type-meta">{translate($locale, 'Advanced')}</span>
+          <span class="wallet-type-meta">{translate($locale, 'Flexible security')}</span>
           <ArrowRight class="wallet-type-arrow" size={17} />
         </a>
       </div>
