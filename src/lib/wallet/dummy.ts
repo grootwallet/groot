@@ -807,6 +807,7 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       );
     this._trezorPinUnlocked = true;
   }
+  async cancelHardwareOperations() {}
   async checkHardwareCosigner(cosigner: PolicyDraft['cosigners'][number], deviceId: string) {
     await new Promise((resolve) => setTimeout(resolve, 200));
     const checkedAt = new Date().toISOString();
@@ -820,11 +821,13 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
         'unknown_signer',
         'The connected device does not hold this signer’s saved BIP48 account key.'
       );
-    return {
+    const result = {
       status: 'healthy' as const,
       checkedAt,
       summary: 'Signer matches this wallet.'
     };
+    this.persistFixtureHardwareHealth(cosigner.fingerprint, result);
+    return result;
   }
   async checkHardwareExternalSigner(signer: ExternalSigner, deviceId: string) {
     await new Promise((resolve) => setTimeout(resolve, 200));
@@ -838,11 +841,13 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
         'unknown_signer',
         'The connected device does not hold this signer’s saved BIP84 account key.'
       );
-    return {
+    const result = {
       status: 'healthy' as const,
       checkedAt: new Date().toISOString(),
       summary: 'Signer matches this wallet.'
     };
+    this.persistFixtureHardwareHealth(signer.fingerprint, result);
+    return result;
   }
   async hardwareHealthChecks() {
     const prefix = `${this._selectedWalletId ?? ''}:`;
@@ -850,7 +855,7 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       .filter(([key]) => key.startsWith(prefix))
       .map(([, record]) => structuredClone(record));
   }
-  async recordHardwareHealthCheck(signerFingerprint: string, check: CosignerHealthCheck) {
+  private persistFixtureHardwareHealth(signerFingerprint: string, check: CosignerHealthCheck) {
     if (!this._selectedWalletId)
       throw new WalletError('wallet_not_found', 'Select a wallet first.');
     const signerFingerprintNormalized = signerFingerprint.trim().toLowerCase();
@@ -859,7 +864,6 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       `${this._selectedWalletId}:${signerFingerprintNormalized}`,
       record
     );
-    return structuredClone(record);
   }
   async multisigSignerPolicyVerifications() {
     return structuredClone(this.multisigPolicyVerificationRecords);
@@ -1364,8 +1368,12 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       revealLabel: 'Show in Finder'
     };
   }
-  async printPublicBackup() {
+  async preparePublicBackupPdf(_suggestedFilename: string) {
     window.print();
+    return { prepared: false, saveToken: null };
+  }
+  async savePublicBackupPdf(_saveToken: string, _markup: string) {
+    return { saved: false, revealToken: null, revealLabel: null };
   }
   async inspectMultisigBsms(encodedBackup: string) {
     const lines = encodedBackup.trimEnd().split('\n');

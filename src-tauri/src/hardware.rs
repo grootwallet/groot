@@ -7,26 +7,35 @@ use std::{
     io::{Read, Write},
     path::{Path, PathBuf},
     process::{Command, Stdio},
-    sync::Mutex,
+    sync::mpsc,
+    sync::{
+        atomic::{AtomicBool, AtomicU64, Ordering},
+        Arc, Condvar, Mutex, OnceLock,
+    },
     thread,
     time::{Duration, Instant},
 };
 
 const MAX_ARGUMENT_BYTES: usize = 384 * 1024;
-const MAX_SECRET_INPUT_BYTES: usize = 128;
+const MAX_STDIN_BYTES: usize = MAX_ARGUMENT_BYTES + 1024;
 const MAX_PIN_POSITIONS: usize = 50;
 const MAX_OUTPUT_BYTES: u64 = 384 * 1024;
+const PIPE_CLEANUP_TIMEOUT: Duration = Duration::from_secs(2);
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(90);
 const DISCOVERY_TIMEOUT: Duration = Duration::from_secs(30);
 const USER_REVIEW_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 const HWI_DIGEST_HEX_BYTES: usize = 64;
-static HWI_PROCESS_LOCK: Mutex<()> = Mutex::new(());
+const HWI_FIXED_ARGV: &[&str] = &["--stdin"];
+static HWI_COORDINATOR: OnceLock<HardwareCoordinator> = OnceLock::new();
 
+#[cfg_attr(test, allow(dead_code))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HardwareError {
     InvalidArgument,
     Unavailable,
     TimedOut,
+    Busy,
+    Cancelled,
     OutputTooLarge,
     CommandFailed(Option<i64>),
     Io,
@@ -38,10 +47,208 @@ impl HardwareError {
             Self::InvalidArgument => "invalid_hardware_request",
             Self::Unavailable => "hardware_unavailable",
             Self::TimedOut => "hardware_timeout",
+            Self::Busy => "hardware_busy",
+            Self::Cancelled => "hardware_cancelled",
             Self::OutputTooLarge => "hardware_response_too_large",
             Self::CommandFailed(_) => "hardware_command_failed",
             Self::Io => "hardware_io_error",
         }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum HardwareOperationKind {
+    Discovery,
+    Interactive,
+}
+
+#[cfg_attr(test, allow(dead_code))]
+#[derive(Debug)]
+struct ActiveHardwareOperation {
+    id: u64,
+    kind: HardwareOperationKind,
+    cancelled: Arc<AtomicBool>,
+}
+
+#[cfg_attr(test, allow(dead_code))]
+#[derive(Debug, Default)]
+struct HardwareCoordinatorState {
+    active: Option<ActiveHardwareOperation>,
+    interactive_waiter: bool,
+    cancellation_generation: u64,
+}
+
+#[derive(Debug)]
+struct HardwareCoordinator {
+    state: Mutex<HardwareCoordinatorState>,
+    available: Condvar,
+    next_id: AtomicU64,
+}
+
+impl Default for HardwareCoordinator {
+    fn default() -> Self {
+        Self {
+            state: Mutex::new(HardwareCoordinatorState::default()),
+            available: Condvar::new(),
+            next_id: AtomicU64::new(1),
+        }
+    }
+}
+
+fn hardware_coordinator() -> &'static HardwareCoordinator {
+    HWI_COORDINATOR.get_or_init(HardwareCoordinator::default)
+}
+
+fn admission_error(
+    state: &HardwareCoordinatorState,
+    kind: HardwareOperationKind,
+) -> Option<HardwareError> {
+    if state.interactive_waiter {
+        return Some(HardwareError::Busy);
+    }
+    match (kind, state.active.as_ref().map(|active| active.kind)) {
+        (HardwareOperationKind::Discovery, Some(_))
+        | (HardwareOperationKind::Interactive, Some(HardwareOperationKind::Interactive)) => {
+            Some(HardwareError::Busy)
+        }
+        _ => None,
+    }
+}
+
+#[derive(Debug)]
+pub struct HardwareOperation {
+    id: u64,
+    deadline: Instant,
+    cancelled: Arc<AtomicBool>,
+}
+
+impl HardwareOperation {
+    fn acquire(kind: HardwareOperationKind, timeout: Duration) -> Result<Self, HardwareError> {
+        #[cfg(not(test))]
+        let requested_deadline = Instant::now()
+            .checked_add(timeout)
+            .ok_or(HardwareError::InvalidArgument)?;
+        let coordinator = hardware_coordinator();
+        let mut state = coordinator.state.lock().map_err(|_| HardwareError::Io)?;
+
+        #[cfg(test)]
+        while state.active.is_some() {
+            state = coordinator
+                .available
+                .wait(state)
+                .map_err(|_| HardwareError::Io)?;
+        }
+
+        // Parallel unit tests share this process-wide coordinator. Their
+        // production admission/deadline semantics are covered separately;
+        // do not charge unrelated test execution against a fixture timeout.
+        #[cfg(test)]
+        let requested_deadline = Instant::now()
+            .checked_add(timeout)
+            .ok_or(HardwareError::InvalidArgument)?;
+
+        #[cfg(not(test))]
+        {
+            if let Some(error) = admission_error(&state, kind) {
+                return Err(error);
+            }
+            if kind == HardwareOperationKind::Interactive {
+                if let Some(active) = state.active.as_ref() {
+                    let cancellation_generation = state.cancellation_generation;
+                    active.cancelled.store(true, Ordering::Release);
+                    state.interactive_waiter = true;
+                    while state.active.is_some() {
+                        if state.cancellation_generation != cancellation_generation {
+                            state.interactive_waiter = false;
+                            return Err(HardwareError::Cancelled);
+                        }
+                        let now = Instant::now();
+                        if now >= requested_deadline {
+                            state.interactive_waiter = false;
+                            return Err(HardwareError::TimedOut);
+                        }
+                        let remaining = requested_deadline.saturating_duration_since(now);
+                        let (next, wait) = coordinator
+                            .available
+                            .wait_timeout(state, remaining)
+                            .map_err(|_| HardwareError::Io)?;
+                        state = next;
+                        if state.cancellation_generation != cancellation_generation {
+                            state.interactive_waiter = false;
+                            return Err(HardwareError::Cancelled);
+                        }
+                        if wait.timed_out() && state.active.is_some() {
+                            state.interactive_waiter = false;
+                            return Err(HardwareError::TimedOut);
+                        }
+                    }
+                    state.interactive_waiter = false;
+                }
+            }
+        }
+
+        Self::claim(coordinator, state, kind, requested_deadline)
+    }
+
+    fn claim(
+        coordinator: &HardwareCoordinator,
+        mut state: std::sync::MutexGuard<'_, HardwareCoordinatorState>,
+        kind: HardwareOperationKind,
+        deadline: Instant,
+    ) -> Result<Self, HardwareError> {
+        let id = coordinator.next_id.fetch_add(1, Ordering::Relaxed);
+        let cancelled = Arc::new(AtomicBool::new(false));
+        state.active = Some(ActiveHardwareOperation {
+            id,
+            kind,
+            cancelled: Arc::clone(&cancelled),
+        });
+        Ok(Self {
+            id,
+            deadline,
+            cancelled,
+        })
+    }
+
+    fn remaining(&self) -> Result<Duration, HardwareError> {
+        if self.cancelled.load(Ordering::Acquire) {
+            return Err(HardwareError::Cancelled);
+        }
+        self.deadline
+            .checked_duration_since(Instant::now())
+            .filter(|remaining| !remaining.is_zero())
+            .ok_or(HardwareError::TimedOut)
+    }
+}
+
+impl Drop for HardwareOperation {
+    fn drop(&mut self) {
+        let coordinator = hardware_coordinator();
+        if let Ok(mut state) = coordinator.state.lock() {
+            if state
+                .active
+                .as_ref()
+                .is_some_and(|active| active.id == self.id)
+            {
+                state.active = None;
+                coordinator.available.notify_all();
+            }
+        }
+    }
+}
+
+pub fn cancel_hardware_operations() {
+    let coordinator = hardware_coordinator();
+    if let Ok(mut state) = coordinator.state.lock() {
+        cancel_coordinator_state(&mut state);
+        coordinator.available.notify_all();
+    }
+}
+
+fn cancel_coordinator_state(state: &mut HardwareCoordinatorState) {
+    state.cancellation_generation = state.cancellation_generation.wrapping_add(1);
+    if let Some(active) = state.active.as_ref() {
+        active.cancelled.store(true, Ordering::Release);
     }
 }
 
@@ -100,7 +307,6 @@ fn pin_command_input(pin_positions: &[u8]) -> Result<Vec<u8>, HardwareError> {
 
 pub trait HardwareTransport: Send + Sync {
     fn enumerate(&self) -> Result<Vec<u8>, HardwareError>;
-    fn enumerate_device_type(&self, device_type: &str) -> Result<Vec<u8>, HardwareError>;
     fn account_keypool(
         &self,
         device_type: &str,
@@ -113,12 +319,14 @@ pub trait HardwareTransport: Send + Sync {
         device_path: &str,
         derivation_path: &str,
     ) -> Result<Vec<u8>, HardwareError>;
+    #[cfg(test)]
     fn sign_psbt(
         &self,
         device_type: &str,
         device_path: &str,
         psbt: &str,
     ) -> Result<Vec<u8>, HardwareError>;
+    #[cfg(test)]
     fn display_descriptor_address(
         &self,
         device_type: &str,
@@ -218,6 +426,16 @@ impl HwiCli {
         Ok(self)
     }
 
+    #[cfg(test)]
+    pub(crate) fn for_test_program(program: PathBuf) -> Self {
+        Self {
+            program,
+            chain: HwiChain::Test,
+            home: None,
+            source: HwiSource::External,
+        }
+    }
+
     fn device_command(
         &self,
         device_type: &str,
@@ -255,50 +473,23 @@ impl HwiCli {
         ]
     }
 
-    fn enumerate_device_type_command(&self, device_type: &str) -> Vec<String> {
-        vec![
-            "--chain".into(),
-            self.chain.as_hwi_argument().into(),
-            "--device-type".into(),
-            device_type.into(),
-            "enumerate".into(),
-        ]
-    }
-}
-
-impl HardwareTransport for HwiCli {
-    fn enumerate(&self) -> Result<Vec<u8>, HardwareError> {
-        run_program(
-            &self.program,
-            &self.source,
-            &[
-                "--chain".into(),
-                self.chain.as_hwi_argument().into(),
-                "enumerate".into(),
-            ],
-            DISCOVERY_TIMEOUT,
-            self.home.as_deref(),
-        )
+    pub fn begin_interactive_operation(&self) -> Result<HardwareOperation, HardwareError> {
+        HardwareOperation::acquire(HardwareOperationKind::Interactive, USER_REVIEW_TIMEOUT)
     }
 
-    fn enumerate_device_type(&self, device_type: &str) -> Result<Vec<u8>, HardwareError> {
-        run_program(
-            &self.program,
-            &self.source,
-            &self.enumerate_device_type_command(device_type),
-            DISCOVERY_TIMEOUT,
-            self.home.as_deref(),
-        )
+    fn begin_discovery_operation(&self) -> Result<HardwareOperation, HardwareError> {
+        HardwareOperation::acquire(HardwareOperationKind::Discovery, DISCOVERY_TIMEOUT)
     }
 
-    fn account_keypool(
+    pub fn account_keypool_in_operation(
         &self,
+        operation: &HardwareOperation,
         device_type: &str,
         device_path: &str,
         derivation_path: &str,
     ) -> Result<Vec<u8>, HardwareError> {
         let keypool_path = format!("{derivation_path}/0/*");
-        run_program(
+        run_program_in_operation(
             &self.program,
             &self.source,
             &[
@@ -314,9 +505,76 @@ impl HardwareTransport for HwiCli {
                 "0".into(),
                 "1".into(),
             ],
-            DEFAULT_TIMEOUT,
+            operation,
             self.home.as_deref(),
+            None,
         )
+    }
+
+    pub fn sign_psbt_in_operation(
+        &self,
+        operation: &HardwareOperation,
+        device_type: &str,
+        device_path: &str,
+        psbt: &str,
+    ) -> Result<Vec<u8>, HardwareError> {
+        run_program_in_operation(
+            &self.program,
+            &self.source,
+            &self.device_command(device_type, device_path, "signtx", psbt),
+            operation,
+            self.home.as_deref(),
+            None,
+        )
+    }
+
+    pub fn display_descriptor_address_in_operation(
+        &self,
+        operation: &HardwareOperation,
+        device_type: &str,
+        device_path: &str,
+        descriptor: &str,
+    ) -> Result<Vec<u8>, HardwareError> {
+        let mut arguments =
+            self.device_command(device_type, device_path, "displayaddress", "--desc");
+        arguments.push(descriptor.into());
+        run_program_in_operation(
+            &self.program,
+            &self.source,
+            &arguments,
+            operation,
+            self.home.as_deref(),
+            None,
+        )
+    }
+}
+
+impl HardwareTransport for HwiCli {
+    fn enumerate(&self) -> Result<Vec<u8>, HardwareError> {
+        let operation = self.begin_discovery_operation()?;
+        run_program_in_operation(
+            &self.program,
+            &self.source,
+            &[
+                "--chain".into(),
+                self.chain.as_hwi_argument().into(),
+                "enumerate".into(),
+            ],
+            &operation,
+            self.home.as_deref(),
+            None,
+        )
+    }
+
+    fn account_keypool(
+        &self,
+        device_type: &str,
+        device_path: &str,
+        derivation_path: &str,
+    ) -> Result<Vec<u8>, HardwareError> {
+        let operation =
+            HardwareOperation::acquire(HardwareOperationKind::Interactive, DEFAULT_TIMEOUT)?;
+        self.account_keypool_in_operation(&operation, device_type, device_path, derivation_path)
     }
 
     fn account_xpub(
@@ -325,55 +583,55 @@ impl HardwareTransport for HwiCli {
         device_path: &str,
         derivation_path: &str,
     ) -> Result<Vec<u8>, HardwareError> {
-        run_program(
+        let operation =
+            HardwareOperation::acquire(HardwareOperationKind::Interactive, DEFAULT_TIMEOUT)?;
+        run_program_in_operation(
             &self.program,
             &self.source,
             &self.device_command(device_type, device_path, "getxpub", derivation_path),
-            DEFAULT_TIMEOUT,
+            &operation,
             self.home.as_deref(),
+            None,
         )
     }
 
+    #[cfg(test)]
     fn sign_psbt(
         &self,
         device_type: &str,
         device_path: &str,
         psbt: &str,
     ) -> Result<Vec<u8>, HardwareError> {
-        run_program(
-            &self.program,
-            &self.source,
-            &self.device_command(device_type, device_path, "signtx", psbt),
-            USER_REVIEW_TIMEOUT,
-            self.home.as_deref(),
-        )
+        let operation = self.begin_interactive_operation()?;
+        self.sign_psbt_in_operation(&operation, device_type, device_path, psbt)
     }
 
+    #[cfg(test)]
     fn display_descriptor_address(
         &self,
         device_type: &str,
         device_path: &str,
         descriptor: &str,
     ) -> Result<Vec<u8>, HardwareError> {
-        let mut arguments =
-            self.device_command(device_type, device_path, "displayaddress", "--desc");
-        arguments.push(descriptor.into());
-        run_program(
-            &self.program,
-            &self.source,
-            &arguments,
-            USER_REVIEW_TIMEOUT,
-            self.home.as_deref(),
+        let operation = self.begin_interactive_operation()?;
+        self.display_descriptor_address_in_operation(
+            &operation,
+            device_type,
+            device_path,
+            descriptor,
         )
     }
 
     fn prompt_pin(&self, device_type: &str, device_path: &str) -> Result<Vec<u8>, HardwareError> {
-        run_program(
+        let operation =
+            HardwareOperation::acquire(HardwareOperationKind::Interactive, DEFAULT_TIMEOUT)?;
+        run_program_in_operation(
             &self.program,
             &self.source,
             &self.device_command_without_value(device_type, device_path, "promptpin"),
-            DEFAULT_TIMEOUT,
+            &operation,
             self.home.as_deref(),
+            None,
         )
     }
 
@@ -385,11 +643,13 @@ impl HardwareTransport for HwiCli {
     ) -> Result<Vec<u8>, HardwareError> {
         let arguments = self.device_command_without_value(device_type, device_path, "--stdin");
         let mut input = pin_command_input(pin_positions)?;
-        let result = run_program_with_input(
+        let operation =
+            HardwareOperation::acquire(HardwareOperationKind::Interactive, DEFAULT_TIMEOUT)?;
+        let result = run_program_in_operation(
             &self.program,
             &self.source,
             &arguments,
-            DEFAULT_TIMEOUT,
+            &operation,
             self.home.as_deref(),
             Some(&input),
         );
@@ -447,6 +707,7 @@ fn first_existing_absolute(candidates: &[&str]) -> PathBuf {
         .unwrap_or_else(|| PathBuf::from(candidates[0]))
 }
 
+#[cfg(test)]
 fn run_program(
     program: &Path,
     source: &HwiSource,
@@ -454,80 +715,129 @@ fn run_program(
     timeout: Duration,
     home: Option<&Path>,
 ) -> Result<Vec<u8>, HardwareError> {
-    run_program_with_input(program, source, arguments, timeout, home, None)
+    if !program.is_absolute() {
+        return Err(HardwareError::Unavailable);
+    }
+    let _ = trusted_executable(program, source)?;
+    let operation = HardwareOperation::acquire(HardwareOperationKind::Interactive, timeout)?;
+    run_program_in_operation(program, source, arguments, &operation, home, None)
 }
 
-fn run_program_with_input(
+fn quote_hwi_stdin_argument(argument: &str) -> String {
+    format!("'{}'", argument.replace('\'', "'\"'\"'"))
+}
+
+fn hwi_stdin_command(
+    arguments: &[String],
+    extra_input: Option<&[u8]>,
+) -> Result<Vec<u8>, HardwareError> {
+    validate_arguments(arguments)?;
+    let mut input = arguments
+        .iter()
+        .map(|argument| quote_hwi_stdin_argument(argument))
+        .collect::<Vec<_>>()
+        .join(" ")
+        .into_bytes();
+    input.push(b'\n');
+    if let Some(extra) = extra_input {
+        if extra.is_empty() || extra.contains(&0) {
+            input.fill(0);
+            return Err(HardwareError::InvalidArgument);
+        }
+        input.extend_from_slice(extra);
+        if !extra.ends_with(b"\n") {
+            input.push(b'\n');
+        }
+    }
+    input.push(b'\n');
+    if input.len() > MAX_STDIN_BYTES {
+        input.fill(0);
+        return Err(HardwareError::InvalidArgument);
+    }
+    Ok(input)
+}
+
+fn run_program_in_operation(
     program: &Path,
     source: &HwiSource,
     arguments: &[String],
-    timeout: Duration,
+    operation: &HardwareOperation,
     home: Option<&Path>,
-    input: Option<&[u8]>,
+    extra_input: Option<&[u8]>,
 ) -> Result<Vec<u8>, HardwareError> {
-    // HWI backends share USB transports and pairing state. Concurrent CLI
-    // processes can steal a session from one another or prompt the wrong
-    // connected signer, so every native HWI operation is single-flight.
-    let _process_guard = HWI_PROCESS_LOCK.lock().map_err(|_| HardwareError::Io)?;
+    operation.remaining()?;
     if !program.is_absolute() {
         return Err(HardwareError::Unavailable);
     }
     let program = trusted_executable(program, source)?;
-    validate_arguments(arguments)?;
-    if input.is_some_and(|bytes| bytes.is_empty() || bytes.len() > MAX_SECRET_INPUT_BYTES) {
-        return Err(HardwareError::InvalidArgument);
-    }
+    let mut input = hwi_stdin_command(arguments, extra_input)?;
     let mut command = Command::new(program);
-    command.args(arguments).env_clear();
+    // HWI 3.2.0 reparses all selectors and the command from stdin. Keeping argv
+    // fixed prevents process metadata from exposing device paths, fingerprints,
+    // addresses, descriptors, account keys, or PSBTs.
+    command.args(HWI_FIXED_ARGV).env_clear();
     if let Some(home) = home {
         command.env("HOME", trusted_home(home)?);
     }
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt as _;
+        command.process_group(0);
+    }
     let mut child = command
-        .stdin(if input.is_some() {
-            Stdio::piped()
-        } else {
-            Stdio::null()
-        })
+        .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
         .map_err(|_| HardwareError::Unavailable)?;
     let stdout = child.stdout.take().ok_or(HardwareError::Io)?;
     let stderr = child.stderr.take().ok_or(HardwareError::Io)?;
-    let stdout_reader = thread::spawn(move || read_bounded(stdout));
-    let stderr_reader = thread::spawn(move || read_bounded(stderr));
-    if let Some(input) = input {
-        let mut secret = input.to_vec();
-        let write_result = child
-            .stdin
-            .take()
-            .ok_or(HardwareError::Io)
-            .and_then(|mut stdin| stdin.write_all(&secret).map_err(|_| HardwareError::Io));
-        secret.fill(0);
-        if let Err(error) = write_result {
-            let _ = child.kill();
-            let _ = child.wait();
-            let _ = stdout_reader.join();
-            let _ = stderr_reader.join();
-            return Err(error);
-        }
+    let (stdout_tx, stdout_rx) = mpsc::sync_channel(1);
+    let (stderr_tx, stderr_rx) = mpsc::sync_channel(1);
+    thread::spawn(move || {
+        let _ = stdout_tx.send(read_bounded(stdout));
+    });
+    thread::spawn(move || {
+        let _ = stderr_tx.send(read_bounded(stderr));
+    });
+    let write_result = child
+        .stdin
+        .take()
+        .ok_or(HardwareError::Io)
+        .and_then(|mut stdin| stdin.write_all(&input).map_err(|_| HardwareError::Io));
+    input.fill(0);
+    if let Err(error) = write_result {
+        terminate_process_tree(&mut child);
+        let _ = collect_pipes(&stdout_rx, &stderr_rx);
+        return Err(error);
     }
-    let started = Instant::now();
     let status = loop {
         if let Some(status) = child.try_wait().map_err(|_| HardwareError::Io)? {
             break status;
         }
-        if started.elapsed() >= timeout {
-            let _ = child.kill();
-            let _ = child.wait();
-            let _ = stdout_reader.join();
-            let _ = stderr_reader.join();
+        if operation.cancelled.load(Ordering::Acquire) {
+            terminate_process_tree(&mut child);
+            let _ = collect_pipes(&stdout_rx, &stderr_rx);
+            return Err(HardwareError::Cancelled);
+        }
+        if operation.remaining().is_err() {
+            terminate_process_tree(&mut child);
+            let _ = collect_pipes(&stdout_rx, &stderr_rx);
             return Err(HardwareError::TimedOut);
         }
         thread::sleep(Duration::from_millis(20));
     };
-    let stdout = stdout_reader.join().map_err(|_| HardwareError::Io)??;
-    let stderr = stderr_reader.join().map_err(|_| HardwareError::Io)??;
+    let (stdout, stderr) = match collect_pipes(&stdout_rx, &stderr_rx) {
+        Ok(output) => output,
+        Err(error) => {
+            // A direct parent can exit while one of its descendants still owns
+            // an inherited pipe. Reap the whole isolated process group before
+            // releasing the global HWI lease.
+            terminate_process_tree(&mut child);
+            let _ = collect_pipes(&stdout_rx, &stderr_rx);
+            return Err(error);
+        }
+    };
     if !status.success() {
         // HWI stderr can contain device paths and transaction details. It is deliberately
         // discarded here; callers expose a stable error without leaking it to the webview.
@@ -535,6 +845,52 @@ fn run_program_with_input(
         return Err(HardwareError::CommandFailed(hwi_error_code(&stdout)));
     }
     Ok(stdout)
+}
+
+fn collect_pipe_until(
+    receiver: &mpsc::Receiver<Result<Vec<u8>, HardwareError>>,
+    deadline: Instant,
+) -> Result<Vec<u8>, HardwareError> {
+    let remaining = deadline
+        .checked_duration_since(Instant::now())
+        .filter(|remaining| !remaining.is_zero())
+        .ok_or(HardwareError::Io)?;
+    receiver
+        .recv_timeout(remaining)
+        .map_err(|_| HardwareError::Io)?
+}
+
+fn collect_pipes(
+    stdout: &mpsc::Receiver<Result<Vec<u8>, HardwareError>>,
+    stderr: &mpsc::Receiver<Result<Vec<u8>, HardwareError>>,
+) -> Result<(Vec<u8>, Vec<u8>), HardwareError> {
+    let deadline = Instant::now() + PIPE_CLEANUP_TIMEOUT;
+    let stdout = collect_pipe_until(stdout, deadline)?;
+    let stderr = collect_pipe_until(stderr, deadline)?;
+    Ok((stdout, stderr))
+}
+
+fn terminate_process_tree(child: &mut std::process::Child) {
+    #[cfg(unix)]
+    {
+        let process_group = child.id() as i32;
+        // SAFETY: the child was placed in a new process group whose id is its
+        // pid. A negative pid targets only that group.
+        unsafe {
+            libc::kill(-process_group, libc::SIGKILL);
+        }
+    }
+    #[cfg(windows)]
+    {
+        let _ = Command::new(r"C:\Windows\System32\taskkill.exe")
+            .args(["/PID", &child.id().to_string(), "/T", "/F"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+    }
+    let _ = child.kill();
+    let _ = child.wait();
 }
 
 fn trusted_home(home: &Path) -> Result<PathBuf, HardwareError> {
@@ -741,6 +1097,20 @@ fn verify_release_hwi(_: &Path, _: &std::fs::Metadata) -> Result<(), HardwareErr
 mod tests {
     use super::*;
 
+    #[cfg(unix)]
+    fn test_script(name: &str, body: &str) -> PathBuf {
+        use std::os::unix::fs::PermissionsExt as _;
+
+        let path = std::env::temp_dir().join(format!(
+            "groot-hwi-{name}-{}-{:?}",
+            std::process::id(),
+            thread::current().id()
+        ));
+        std::fs::write(&path, format!("#!/bin/sh\n{body}\n")).unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        path
+    }
+
     #[test]
     fn rejects_empty_control_and_oversized_arguments() {
         assert_eq!(
@@ -850,20 +1220,41 @@ mod tests {
     }
 
     #[test]
-    fn preserves_argument_boundaries_without_shell_interpolation() {
-        let output = run_program(
-            Path::new("/bin/echo"),
-            &HwiSource::External,
-            &["$(touch /tmp/groot-must-not-exist)".to_owned()],
-            Duration::from_secs(1),
-            None,
-        )
-        .expect("echo");
-        assert_eq!(
-            String::from_utf8(output).expect("utf8"),
-            "$(touch /tmp/groot-must-not-exist)\n"
-        );
+    fn keeps_dynamic_and_sensitive_values_in_stdin_only() {
+        let sensitive = [
+            "signtx".to_owned(),
+            "cHNidP8=private-transaction-metadata".to_owned(),
+            "--device-path".to_owned(),
+            "private-usb-path".to_owned(),
+            "a1b2c3d4".to_owned(),
+            "tb1qprivateaddressmetadata".to_owned(),
+            "tpub-private-account-metadata".to_owned(),
+            "displayaddress".to_owned(),
+            "--desc".to_owned(),
+            "wsh(sortedmulti(2,private-wallet-metadata))".to_owned(),
+        ];
+        let input = String::from_utf8(hwi_stdin_command(&sensitive, None).unwrap()).unwrap();
+        for value in &sensitive {
+            assert!(input.contains(value));
+            assert!(!HWI_FIXED_ARGV
+                .iter()
+                .any(|argument| argument.contains(value)));
+        }
+        assert_eq!(HWI_FIXED_ARGV, ["--stdin"]);
         assert!(!std::path::Path::new("/tmp/groot-must-not-exist").exists());
+    }
+
+    #[test]
+    fn spawned_hwi_process_receives_only_the_fixed_argv() {
+        let script = test_script(
+            "argv-inspection",
+            "IFS= read -r command\nprintf '%s\\n' \"$@\"",
+        );
+        let output = HwiCli::for_test_program(script.clone())
+            .enumerate()
+            .unwrap();
+        assert_eq!(output, b"--stdin\n");
+        std::fs::remove_file(script).unwrap();
     }
 
     #[test]
@@ -878,9 +1269,10 @@ mod tests {
             ),
             Err(HardwareError::CommandFailed(None))
         );
+        let slow = test_script("slow", "IFS= read -r command\n/bin/sleep 1");
         assert_eq!(
             run_program(
-                Path::new("/bin/sleep"),
+                &slow,
                 &HwiSource::External,
                 &["1".to_owned()],
                 Duration::from_millis(10),
@@ -888,6 +1280,7 @@ mod tests {
             ),
             Err(HardwareError::TimedOut)
         );
+        std::fs::remove_file(slow).unwrap();
         assert_eq!(
             run_program(
                 Path::new("/definitely/not/an/executable"),
@@ -898,6 +1291,132 @@ mod tests {
             ),
             Err(HardwareError::Unavailable)
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn cancellation_terminates_running_work_and_releases_the_next_lease() {
+        let started_file = std::env::temp_dir().join(format!(
+            "groot-hwi-cancel-started-{}-{:?}",
+            std::process::id(),
+            thread::current().id()
+        ));
+        let slow = test_script(
+            "cancel",
+            &format!(
+                "IFS= read -r command\nprintf '%s\\n' started > '{}'\n/bin/sleep 30\nprintf '%s\\n' '[]'",
+                started_file.display()
+            ),
+        );
+        let hwi = HwiCli::for_test_program(slow.clone());
+        let running = thread::spawn(move || hwi.enumerate());
+        let wait_started = Instant::now();
+        while !started_file.exists() && wait_started.elapsed() < Duration::from_secs(5) {
+            thread::sleep(Duration::from_millis(10));
+        }
+        assert!(started_file.exists(), "cancellation fixture did not start");
+        cancel_hardware_operations();
+        assert_eq!(running.join().unwrap(), Err(HardwareError::Cancelled));
+
+        let fast = test_script("after-cancel", "IFS= read -r command\nprintf '%s\\n' '[]'");
+        assert_eq!(
+            HwiCli::for_test_program(fast.clone()).enumerate().unwrap(),
+            b"[]\n"
+        );
+        std::fs::remove_file(slow).unwrap();
+        std::fs::remove_file(fast).unwrap();
+        std::fs::remove_file(started_file).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn timeout_terminates_descendants_and_bounds_pipe_cleanup() {
+        let pid_file = std::env::temp_dir().join(format!(
+            "groot-hwi-descendant-pid-{}-{:?}",
+            std::process::id(),
+            thread::current().id()
+        ));
+        let script = test_script(
+            "descendant",
+            &format!(
+                "/bin/sleep 30 &\nprintf '%s\\n' \"$!\" > '{}'\nwait",
+                pid_file.display()
+            ),
+        );
+        let started = Instant::now();
+        assert_eq!(
+            run_program(
+                &script,
+                &HwiSource::External,
+                &["enumerate".into()],
+                Duration::from_millis(500),
+                None,
+            ),
+            Err(HardwareError::TimedOut)
+        );
+        // The process-wide test coordinator may queue this fixture behind the
+        // other subprocess tests; the operation itself is bounded by its
+        // 500 ms deadline plus the two-second pipe cleanup window.
+        assert!(started.elapsed() < Duration::from_secs(6));
+        let pid = std::fs::read_to_string(&pid_file)
+            .unwrap()
+            .trim()
+            .parse::<i32>()
+            .unwrap();
+        let descendant_alive = unsafe { libc::kill(pid, 0) } == 0;
+        assert!(
+            !descendant_alive,
+            "the timed-out descendant survived cleanup"
+        );
+        std::fs::remove_file(script).unwrap();
+        std::fs::remove_file(pid_file).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn exited_parent_with_inherited_pipes_still_terminates_descendants() {
+        let pid_file = std::env::temp_dir().join(format!(
+            "groot-hwi-exited-parent-pid-{}-{:?}",
+            std::process::id(),
+            thread::current().id()
+        ));
+        let script = test_script(
+            "exited-parent",
+            &format!(
+                "IFS= read -r command\n/bin/sleep 30 &\nprintf '%s\\n' \"$!\" > '{}'\nprintf '%s\\n' '[]'\nexit 0",
+                pid_file.display()
+            ),
+        );
+        let started = Instant::now();
+        assert_eq!(
+            run_program(
+                &script,
+                &HwiSource::External,
+                &["enumerate".into()],
+                Duration::from_secs(5),
+                None,
+            ),
+            Err(HardwareError::Io)
+        );
+        assert!(started.elapsed() < Duration::from_secs(6));
+        let pid = std::fs::read_to_string(&pid_file)
+            .unwrap()
+            .trim()
+            .parse::<i32>()
+            .unwrap();
+        assert_ne!(unsafe { libc::kill(pid, 0) }, 0);
+
+        let fast = test_script(
+            "after-exited-parent",
+            "IFS= read -r command\nprintf '%s\\n' '[]'",
+        );
+        assert_eq!(
+            HwiCli::for_test_program(fast.clone()).enumerate().unwrap(),
+            b"[]\n"
+        );
+        std::fs::remove_file(script).unwrap();
+        std::fs::remove_file(fast).unwrap();
+        std::fs::remove_file(pid_file).unwrap();
     }
 
     #[test]
@@ -913,6 +1432,8 @@ mod tests {
     fn every_error_has_a_stable_code() {
         let errors = [
             (HardwareError::InvalidArgument, "invalid_hardware_request"),
+            (HardwareError::Busy, "hardware_busy"),
+            (HardwareError::Cancelled, "hardware_cancelled"),
             (HardwareError::Unavailable, "hardware_unavailable"),
             (HardwareError::TimedOut, "hardware_timeout"),
             (HardwareError::OutputTooLarge, "hardware_response_too_large"),
@@ -932,6 +1453,54 @@ mod tests {
         assert_eq!(DISCOVERY_TIMEOUT, Duration::from_secs(30));
         assert!(DISCOVERY_TIMEOUT < DEFAULT_TIMEOUT);
         assert!(DEFAULT_TIMEOUT < USER_REVIEW_TIMEOUT);
+    }
+
+    #[test]
+    fn interactive_prompt_blocks_discovery_and_excess_work_is_rejected() {
+        let state = HardwareCoordinatorState {
+            active: Some(ActiveHardwareOperation {
+                id: 1,
+                kind: HardwareOperationKind::Interactive,
+                cancelled: Arc::new(AtomicBool::new(false)),
+            }),
+            interactive_waiter: false,
+            cancellation_generation: 0,
+        };
+        assert_eq!(
+            admission_error(&state, HardwareOperationKind::Discovery),
+            Some(HardwareError::Busy)
+        );
+        assert_eq!(
+            admission_error(&state, HardwareOperationKind::Interactive),
+            Some(HardwareError::Busy)
+        );
+
+        let pending = HardwareCoordinatorState {
+            active: None,
+            interactive_waiter: true,
+            cancellation_generation: 0,
+        };
+        assert_eq!(
+            admission_error(&pending, HardwareOperationKind::Discovery),
+            Some(HardwareError::Busy)
+        );
+    }
+
+    #[test]
+    fn cancellation_invalidates_queued_work_and_flags_active_work() {
+        let cancelled = Arc::new(AtomicBool::new(false));
+        let mut state = HardwareCoordinatorState {
+            active: Some(ActiveHardwareOperation {
+                id: 1,
+                kind: HardwareOperationKind::Discovery,
+                cancelled: Arc::clone(&cancelled),
+            }),
+            interactive_waiter: true,
+            cancellation_generation: 7,
+        };
+        cancel_coordinator_state(&mut state);
+        assert!(cancelled.load(Ordering::Acquire));
+        assert_eq!(state.cancellation_generation, 8);
     }
 
     #[test]
@@ -966,8 +1535,12 @@ mod tests {
     #[test]
     fn passes_only_a_validated_home_after_clearing_the_environment() {
         let home = std::env::temp_dir();
+        let environment_fixture = test_script(
+            "environment",
+            "IFS= read -r command\nprintf 'HOME=%s\\n' \"$HOME\"",
+        );
         let output = run_program(
-            Path::new("/usr/bin/env"),
+            &environment_fixture,
             &HwiSource::External,
             &[],
             Duration::from_secs(1),
@@ -979,6 +1552,7 @@ mod tests {
             environment,
             format!("HOME={}\n", home.canonicalize().unwrap().display())
         );
+        std::fs::remove_file(environment_fixture).unwrap();
         assert_eq!(
             trusted_home(Path::new("relative")),
             Err(HardwareError::Unavailable)
@@ -990,10 +1564,6 @@ mod tests {
         use crate::build_network::parameters_for;
 
         let test = HwiCli::for_chain(HwiChain::Test);
-        assert_eq!(
-            test.enumerate_device_type_command("trezor"),
-            ["--chain", "test", "--device-type", "trezor", "enumerate"]
-        );
         assert_eq!(
             test.device_command("coldcard", "usb:1", "getxpub", "m/48'/1'/0'/2'"),
             [
@@ -1071,10 +1641,6 @@ mod tests {
             source: HwiSource::External,
         };
         assert_eq!(transport.enumerate(), Err(HardwareError::Unavailable));
-        assert_eq!(
-            transport.enumerate_device_type("trezor"),
-            Err(HardwareError::Unavailable)
-        );
         assert_eq!(
             transport.account_keypool("trezor", "usb:1", "m/84'/1'/0'"),
             Err(HardwareError::Unavailable)

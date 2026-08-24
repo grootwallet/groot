@@ -4,7 +4,15 @@ use bdk_kyoto::{
     ScanType, Update,
 };
 use bdk_wallet::{bitcoin::Network, Wallet};
-use std::{fs, path::Path, sync::Arc, time::Duration};
+use std::{
+    fs,
+    path::Path,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+    time::Duration,
+};
 
 use crate::network::ValidatedCompactFilterConfig;
 
@@ -31,6 +39,8 @@ pub enum CompactFilterError {
     Stopped(#[from] bdk_kyoto::UpdateError),
     #[error("compact-filter sync did not reach the network tip before the bounded deadline")]
     TimedOut,
+    #[error("compact-filter sync was cancelled before completion")]
+    Cancelled,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -82,7 +92,7 @@ fn sync(
     cache_dir: &Path,
     config: &ValidatedCompactFilterConfig,
 ) -> Result<Update, CompactFilterError> {
-    sync_with_progress(wallet, network, cache_dir, config, |_| {})
+    sync_with_progress(wallet, network, cache_dir, config, None, |_| {})
 }
 
 pub fn sync_with_progress<F>(
@@ -90,6 +100,7 @@ pub fn sync_with_progress<F>(
     network: Network,
     cache_dir: &Path,
     config: &ValidatedCompactFilterConfig,
+    cancel: Option<&AtomicBool>,
     on_progress: F,
 ) -> Result<Update, CompactFilterError>
 where
@@ -105,6 +116,7 @@ where
             response: PEER_RESPONSE_TIMEOUT,
             handshake: PEER_HANDSHAKE_TIMEOUT,
         },
+        cancel,
         on_progress,
     )
 }
@@ -115,11 +127,15 @@ fn sync_with_timeouts<F>(
     cache_dir: &Path,
     config: &ValidatedCompactFilterConfig,
     timeouts: SyncTimeouts,
+    cancel: Option<&AtomicBool>,
     on_progress: F,
 ) -> Result<Update, CompactFilterError>
 where
     F: Fn(SyncProgress) + Send + Sync + 'static,
 {
+    if cancel.is_some_and(|cancel| cancel.load(Ordering::Acquire)) {
+        return Err(CompactFilterError::Cancelled);
+    }
     prepare_working_directory(cache_dir)?;
     let mut builder = Builder::new(network)
         .data_dir(cache_dir)
@@ -176,11 +192,25 @@ where
             }
         });
         let _active = client.start();
-        tokio::time::timeout(timeouts.sync, updates.update())
-            .await
-            .map_err(|_| CompactFilterError::TimedOut)?
-            .map_err(CompactFilterError::Stopped)
+        tokio::select! {
+            update = updates.update() => update.map_err(CompactFilterError::Stopped),
+            () = wait_for_cancellation(cancel) => Err(CompactFilterError::Cancelled),
+            () = tokio::time::sleep(timeouts.sync) => Err(CompactFilterError::TimedOut),
+        }
     })
+}
+
+async fn wait_for_cancellation(cancel: Option<&AtomicBool>) {
+    let Some(cancel) = cancel else {
+        std::future::pending::<()>().await;
+        return;
+    };
+    loop {
+        if cancel.load(Ordering::Acquire) {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
 }
 
 #[cfg(test)]
@@ -233,6 +263,7 @@ mod tests {
                 response: Duration::from_millis(100),
                 handshake: Duration::from_millis(100),
             },
+            None,
             |_| {},
         )
     }
@@ -306,6 +337,7 @@ mod tests {
                 response: Duration::from_millis(50),
                 handshake: Duration::from_millis(50),
             },
+            None,
             |_| {},
         );
         assert!(matches!(result, Err(CompactFilterError::Build(_))));
@@ -346,6 +378,52 @@ mod tests {
             server.join().unwrap();
             fs::remove_dir_all(cache).unwrap();
         }
+    }
+
+    #[test]
+    fn cancellation_preempts_sync_without_mutating_the_wallet() {
+        let wallet = test_wallet();
+        let checkpoint = wallet.latest_checkpoint();
+        let balance = wallet.balance();
+        let cache = temporary_path("cancelled-peer");
+        let cancel = AtomicBool::new(true);
+        let started = std::time::Instant::now();
+        let result = sync_with_timeouts(
+            &wallet,
+            Network::Regtest,
+            &cache,
+            &manual_config("127.0.0.1:1".parse().unwrap()),
+            SyncTimeouts {
+                sync: Duration::from_secs(5),
+                response: Duration::from_secs(1),
+                handshake: Duration::from_secs(1),
+            },
+            Some(&cancel),
+            |_| {},
+        );
+        assert!(matches!(result, Err(CompactFilterError::Cancelled)));
+        assert!(started.elapsed() < Duration::from_secs(1));
+        assert_eq!(wallet.latest_checkpoint(), checkpoint);
+        assert_eq!(wallet.balance(), balance);
+        assert!(!cache.exists());
+    }
+
+    #[test]
+    fn cancellation_waiter_observes_a_later_signal() {
+        let cancel = Arc::new(AtomicBool::new(false));
+        let trigger = Arc::clone(&cancel);
+        let cancellation = thread::spawn(move || {
+            thread::sleep(Duration::from_millis(50));
+            trigger.store(true, Ordering::Release);
+        });
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_time()
+            .build()
+            .unwrap();
+        let started = std::time::Instant::now();
+        runtime.block_on(wait_for_cancellation(Some(&cancel)));
+        assert!(started.elapsed() < Duration::from_secs(1));
+        cancellation.join().unwrap();
     }
 
     #[test]

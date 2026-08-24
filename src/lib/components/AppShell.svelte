@@ -20,7 +20,7 @@
   import ResumeSetupNotice from './ResumeSetupNotice.svelte';
   import { defaultConfig } from '$lib/config';
   import { onMount } from 'svelte';
-  import { afterNavigate, goto } from '$app/navigation';
+  import { afterNavigate, beforeNavigate, goto } from '$app/navigation';
   import { isPrototypeWallet, walletService, WalletError } from '$lib/wallet';
   import { createLiveSync, type LiveSyncController } from '$lib/wallet/live-sync';
   import { toast } from '$lib/stores/toasts';
@@ -42,6 +42,12 @@
     '/hardware/new',
     '/multisig/new',
     '/multisig/recover'
+  ]);
+  const foregroundWalletRoutes = new Set([
+    '/receive',
+    '/send',
+    '/multisig/receive',
+    '/multisig/send'
   ]);
   const active = (href: string) =>
     href === '/multisig'
@@ -68,7 +74,10 @@
   let onboardingRoute = $derived(walletSetupRoutes.has(page.url.pathname));
   let lockedRoute = $derived(page.url.pathname === '/unlock');
   let syncPausedRoute = $derived(
-    onboardingRoute || lockedRoute || page.url.pathname === '/settings'
+    onboardingRoute ||
+      lockedRoute ||
+      page.url.pathname === '/settings' ||
+      foregroundWalletRoutes.has(page.url.pathname)
   );
   const showQuickActions = $derived(
     !lockedRoute && (page.url.pathname === '/' || page.url.pathname === '/coins')
@@ -136,6 +145,11 @@
     '/multisig/delete'
   ]);
 
+  beforeNavigate(({ to }) => {
+    void walletService.cancelHardwareOperations();
+    if (to && foregroundWalletRoutes.has(to.url.pathname)) liveSync?.stop();
+  });
+
   afterNavigate(({ from }) => {
     const previousPath = from?.url?.pathname;
     // Routine navigation must not repeat registry and setup-draft reads that
@@ -150,6 +164,7 @@
 
   async function selectWallet(walletId: string) {
     if (!walletId || walletId === selectedWalletId) return;
+    await walletService.cancelHardwareOperations();
     const previousWalletId = selectedWalletId;
     ++profileReadGeneration;
     // Reflect the explicit choice immediately. The trusted adapter remains the

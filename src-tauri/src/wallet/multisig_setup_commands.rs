@@ -704,28 +704,30 @@ pub fn recovery_policy_analyze(
 }
 
 #[tauri::command]
-pub fn multisig_wallet(
-    app: AppHandle,
-    state: State<'_, AppState>,
-) -> ApiResult<Option<MultisigWalletDto>> {
-    let _operation = operation_guard(&state)?;
-    let registry = load_registry(&app)?;
-    let Some(selected) = registry.selected_wallet_id else {
-        return Ok(None);
-    };
-    let Some(profile) = registry.wallets.iter().find(|wallet| wallet.id == selected) else {
-        return Err(registry_api_error(RegistryError::UnknownSelection));
-    };
-    if profile.kind != WalletKind::Multisig {
-        return Ok(None);
-    }
-    require_unlocked(&app, &state)?;
-    let path = multisig_metadata_path(&app)?;
-    if !path.exists() {
-        return Ok(None);
-    }
-    let encoded = read_private_text(&path)?;
-    serde_json::from_str(&encoded).map(Some).map_err(internal)
+pub async fn multisig_wallet(app: AppHandle) -> ApiResult<Option<MultisigWalletDto>> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let _operation = operation_guard(&state)?;
+        let registry = load_registry(&app)?;
+        let Some(selected) = registry.selected_wallet_id else {
+            return Ok(None);
+        };
+        let Some(profile) = registry.wallets.iter().find(|wallet| wallet.id == selected) else {
+            return Err(registry_api_error(RegistryError::UnknownSelection));
+        };
+        if profile.kind != WalletKind::Multisig {
+            return Ok(None);
+        }
+        require_unlocked(&app, &state)?;
+        let path = multisig_metadata_path(&app)?;
+        if !path.exists() {
+            return Ok(None);
+        }
+        let encoded = read_private_text(&path)?;
+        serde_json::from_str(&encoded).map(Some).map_err(internal)
+    })
+    .await
+    .map_err(internal)?
 }
 
 #[tauri::command]
@@ -1078,15 +1080,17 @@ pub fn multisig_delete(
 }
 
 #[tauri::command]
-pub fn multisig_snapshot(
-    app: AppHandle,
-    state: State<'_, AppState>,
-) -> ApiResult<WalletSnapshotDto> {
-    let _operation = operation_guard(&state)?;
-    require_unlocked(&app, &state)?;
-    let mut db = open_multisig_db(&app)?;
-    let wallet = load_wallet(&mut db)?;
-    snapshot_from(&wallet, &db, None, true)
+pub async fn multisig_snapshot(app: AppHandle) -> ApiResult<WalletSnapshotDto> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let _operation = operation_guard(&state)?;
+        require_unlocked(&app, &state)?;
+        let mut db = open_multisig_db(&app)?;
+        let wallet = load_wallet(&mut db)?;
+        snapshot_from(&wallet, &db, None, true)
+    })
+    .await
+    .map_err(internal)?
 }
 
 #[tauri::command]

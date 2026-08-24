@@ -10,6 +10,7 @@ import type {
   HardwareHealthCheckRecord,
   PolicyVerificationAddress,
   SavedFileResult,
+  PendingPdfExport,
   SignerPolicyVerification
 } from './hardware';
 import type {
@@ -133,6 +134,7 @@ export interface WalletTransactionsPort {
 }
 
 export interface WalletHardwarePort {
+  cancelHardwareOperations(): Promise<void>;
   listHardwareDevices(): Promise<HardwareDevice[]>;
   listHardwareDevicesForTypes(deviceTypes: string[]): Promise<HardwareDevice[]>;
   findSavedHardwareDevice(signer: {
@@ -149,10 +151,6 @@ export interface WalletHardwarePort {
     deviceId: string
   ): Promise<CosignerHealthCheck>;
   hardwareHealthChecks(): Promise<HardwareHealthCheckRecord[]>;
-  recordHardwareHealthCheck(
-    signerFingerprint: string,
-    check: CosignerHealthCheck
-  ): Promise<HardwareHealthCheckRecord>;
   multisigSignerPolicyVerifications(): Promise<SignerPolicyVerification[]>;
   multisigPolicyVerificationAddress(): Promise<PolicyVerificationAddress>;
   previewMultisigPolicyVerificationAddress(policy: PolicyDraft): Promise<PolicyVerificationAddress>;
@@ -239,7 +237,8 @@ export interface WalletMultisigPort {
   exportMultisig(credential: string): Promise<string>;
   exportMultisigBsms(credential: string): Promise<string>;
   savePublicBackup(suggestedFilename: string, content: string): Promise<SavedFileResult>;
-  printPublicBackup(): Promise<void>;
+  preparePublicBackupPdf(suggestedFilename: string): Promise<PendingPdfExport>;
+  savePublicBackupPdf(saveToken: string, markup: string): Promise<SavedFileResult>;
   inspectMultisigBsms(encodedBackup: string): Promise<RecoveryDrill>;
   recoverMultisigBsms(
     name: string,

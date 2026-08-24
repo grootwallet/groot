@@ -10,6 +10,60 @@ use bdk_wallet::bitcoin::NetworkKind;
 use std::{net::TcpListener, thread};
 
 #[test]
+fn pdf_backup_filename_is_bounded_and_path_free() {
+    assert_eq!(
+        validate_public_backup_pdf_filename("groot-policy-backup.pdf").unwrap(),
+        "groot-policy-backup.pdf"
+    );
+    for invalid in [
+        "",
+        "backup.json",
+        "backup.PDF",
+        "../backup.pdf",
+        "folder/backup.pdf",
+        "folder\\backup.pdf",
+    ] {
+        assert_eq!(
+            validate_public_backup_pdf_filename(invalid)
+                .unwrap_err()
+                .code,
+            "invalid_backup"
+        );
+    }
+}
+
+#[test]
+fn pending_pdf_save_tokens_are_expiring_and_single_use() {
+    let token = Uuid::new_v4().to_string();
+    let now = Instant::now();
+    let mut pending = HashMap::from([(
+        token.clone(),
+        PendingPdfExport {
+            path: PathBuf::from("wallet.pdf"),
+            prepared_at: now,
+        },
+    )]);
+
+    assert_eq!(
+        consume_pending_pdf_export(&mut pending, &token, now)
+            .unwrap()
+            .path,
+        PathBuf::from("wallet.pdf")
+    );
+    assert!(consume_pending_pdf_export(&mut pending, &token, now).is_none());
+
+    pending.insert(
+        token.clone(),
+        PendingPdfExport {
+            path: PathBuf::from("expired.pdf"),
+            prepared_at: now - PENDING_PDF_EXPORT_TIMEOUT - Duration::from_secs(1),
+        },
+    );
+    assert!(consume_pending_pdf_export(&mut pending, &token, now).is_none());
+    assert!(pending.is_empty());
+}
+
+#[test]
 fn hardware_and_multisig_profiles_count_as_existing_without_software_secret_storage() {
     let mut registry = WalletRegistry::default();
     assert!(!registered_wallets_exist(&registry));
@@ -1325,6 +1379,7 @@ fn loaded_hardware_wallet_descriptors_must_match_receive_and_change_identity() {
 #[test]
 fn cached_hwi_connection_identity_must_match_the_saved_signer() {
     let device = HwiDevice {
+        capability: "opaque-device".to_owned(),
         fingerprint: Some("d34db33f".to_owned()),
         device_type: "trezor".to_owned(),
         model: "trezor_safe_3".to_owned(),
@@ -1496,6 +1551,7 @@ fn hwi_response_codes_become_safe_actionable_errors() {
 #[test]
 fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
     let unsupported_safe_3 = hardware_device_dto(HwiDevice {
+        capability: "opaque-device".to_owned(),
         fingerprint: None,
         device_type: "trezor".to_owned(),
         model: String::new(),
@@ -1515,6 +1571,7 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
     assert!(!unsupported_safe_3.message.contains("webusb:sensitive-path"));
 
     let trezor = hardware_device_dto(HwiDevice {
+        capability: "opaque-device".to_owned(),
         fingerprint: None,
         device_type: "trezor".to_owned(),
         model: "trezor_1".to_owned(),
@@ -1531,6 +1588,7 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
     assert!(!trezor.message.contains("sensitive-usb-path"));
 
     let locked_passphrase_trezor = hardware_device_dto(HwiDevice {
+        capability: "opaque-device".to_owned(),
         fingerprint: None,
         device_type: "trezor".to_owned(),
         model: "trezor_1".to_owned(),
@@ -1548,6 +1606,7 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
     assert!(locked_passphrase_trezor.fingerprint.is_none());
 
     let bitbox = hardware_device_dto(HwiDevice {
+        capability: "opaque-device".to_owned(),
         fingerprint: None,
         device_type: "bitbox02".to_owned(),
         model: "bitbox02_multi".to_owned(),
@@ -1563,6 +1622,7 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
     assert_eq!(bitbox.message, "Unlock on BitBox, then continue.");
 
     let locked_nova = hardware_device_dto(HwiDevice {
+        capability: "opaque-device".to_owned(),
         fingerprint: None,
         device_type: "bitbox02".to_owned(),
         model: "bitbox02_nova_multi".to_owned(),
@@ -1581,6 +1641,7 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
     assert!(!locked_nova.message.contains("sensitive-nova-path"));
 
     let ready_nova = hardware_device_dto(HwiDevice {
+        capability: "opaque-device".to_owned(),
         fingerprint: Some("deadbeef".to_owned()),
         device_type: "bitbox02".to_owned(),
         model: "bitbox02_nova_multi".to_owned(),
@@ -1596,6 +1657,7 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
     assert_eq!(ready_nova.action, "import");
 
     let jade = hardware_device_dto(HwiDevice {
+        capability: "opaque-device".to_owned(),
         fingerprint: None,
         device_type: "jade".to_owned(),
         model: "jade".to_owned(),
@@ -1610,6 +1672,7 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
     assert!(jade.message.contains("QR PIN Unlock"));
 
     let ledger = hardware_device_dto(HwiDevice {
+        capability: "opaque-device".to_owned(),
         fingerprint: Some("f00dbabe".to_owned()),
         device_type: "ledger".to_owned(),
         model: "ledger_nano_s_plus".to_owned(),
@@ -1629,6 +1692,7 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
         ("coldcard", "USB communication"),
     ] {
         let device = hardware_device_dto(HwiDevice {
+            capability: "opaque-device".to_owned(),
             fingerprint: None,
             device_type: device_type.to_owned(),
             model: device_type.to_owned(),
@@ -1645,6 +1709,7 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
     }
 
     let keepkey = hardware_device_dto(HwiDevice {
+        capability: "opaque-device".to_owned(),
         fingerprint: None,
         device_type: "keepkey".to_owned(),
         model: "keepkey".to_owned(),
@@ -1659,6 +1724,7 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
     assert_eq!(keepkey.action, "prompt_pin");
 
     let ready = hardware_device_dto(HwiDevice {
+        capability: "opaque-device".to_owned(),
         fingerprint: Some("f00dbabe".to_owned()),
         device_type: "coldcard".to_owned(),
         model: "coldcard".to_owned(),
@@ -1676,6 +1742,7 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
 #[test]
 fn trezor_passphrase_warning_requires_explicit_standard_wallet_selection() {
     let hwi_device = HwiDevice {
+        capability: "opaque-device".to_owned(),
         fingerprint: Some("emptywallet".to_owned()),
         device_type: "trezor".to_owned(),
         model: "trezor_1".to_owned(),

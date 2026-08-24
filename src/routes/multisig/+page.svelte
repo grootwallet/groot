@@ -194,21 +194,6 @@
   }
   async function saveHardwareHealthCheck(fingerprint: string, check: CosignerHealthCheck) {
     recordHardwareHealthCheck(fingerprint, check);
-    try {
-      recordHardwareHealthCheck(
-        fingerprint,
-        await walletService.recordHardwareHealthCheck(fingerprint, check)
-      );
-    } catch (cause) {
-      toast({
-        title: 'Health-check result not saved',
-        description:
-          cause instanceof Error
-            ? cause.message
-            : 'The result will be available only until Groot closes.',
-        tone: 'danger'
-      });
-    }
   }
   async function renameSavedSigner(label: string) {
     if (!selectedSigner) return;
@@ -446,11 +431,11 @@
     <section class="vault-hero">
       <span><ShieldCheck size={22} /></span>
       <div class="vault-summary">
-        <small><Amount value={snapshot?.balance.total ?? 0} /> · Spending policy</small><strong
+        <small><Amount value={snapshot?.balance.total ?? 0} /></small><strong
           >{wallet.threshold} of {wallet.cosigners.length}</strong
         >
         <p>
-          Native SegWit · sortedmulti · {networkName(snapshot?.network ?? defaultConfig.network)}
+          Native SegWit · {networkName(snapshot?.network ?? defaultConfig.network)}
         </p>
         {#if isPrototypeWallet}<p class="prototype-hint">
             Ready-to-test demo wallet <span>·</span> PIN <code>prototype-passphrase</code>

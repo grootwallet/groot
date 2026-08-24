@@ -45,6 +45,8 @@ use std::{
     },
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
+#[cfg(target_os = "macos")]
+use tauri::{webview::PageLoadEvent, WebviewUrl, WebviewWindowBuilder};
 use tauri::{AppHandle, Manager, State, WebviewWindow};
 use tauri_plugin_dialog::DialogExt;
 use uuid::Uuid;
@@ -90,6 +92,8 @@ const ONBOARDING_SESSION_SECONDS: u64 = 15 * 60;
 const HARDWARE_PIN_CHALLENGE_TIMEOUT: Duration = Duration::from_secs(2 * 60);
 const MAX_HARDWARE_PIN_POSITIONS: usize = 50;
 const MAX_PUBLIC_BACKUP_BYTES: usize = 256 * 1024;
+const MAX_PUBLIC_BACKUP_PDF_BYTES: usize = 32 * 1024 * 1024;
+const MAX_PUBLIC_BACKUP_PDF_HTML_BYTES: usize = 2 * 1024 * 1024;
 const REGTEST_APP_DATA_OVERRIDE: &str = "GROOT_REGTEST_APP_DATA_DIR";
 const MIN_RECOVERY_GAP_LIMIT: u32 = 20;
 const MAX_RECOVERY_GAP_LIMIT: u32 = 1_000;
@@ -100,6 +104,7 @@ const MAX_SUPPLEMENTAL_DICE_ROLLS: usize = 100;
 const SUPPLEMENTAL_TRANSCRIPT_DOMAIN: &[u8] = b"Groot supplemental entropy transcript v1";
 const SUPPLEMENTAL_MIX_DOMAIN: &[u8] = b"Groot BIP39 entropy mix v1";
 const SAVED_FILE_REVEAL_TIMEOUT: Duration = Duration::from_secs(10 * 60);
+const PENDING_PDF_EXPORT_TIMEOUT: Duration = Duration::from_secs(2 * 60);
 const RPC_TIMEOUT: Duration = Duration::from_secs(15);
 const NODE_HEALTH_ATTEMPTS: usize = 3;
 const NODE_HEALTH_RETRY_DELAY: Duration = Duration::from_millis(200);
@@ -110,6 +115,18 @@ pub struct SavedFileDto {
     pub saved: bool,
     pub reveal_token: Option<String>,
     pub reveal_label: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PendingPdfExportDto {
+    pub prepared: bool,
+    pub save_token: Option<String>,
+}
+
+struct PendingPdfExport {
+    path: PathBuf,
+    prepared_at: Instant,
 }
 
 fn validate_public_backup_filename(value: &str) -> ApiResult<&str> {
@@ -124,6 +141,21 @@ fn validate_public_backup_filename(value: &str) -> ApiResult<&str> {
         return Err(api_error(
             "invalid_backup",
             "Choose a valid .bsms, .json, or .txt backup name.",
+        ));
+    }
+    Ok(trimmed)
+}
+
+fn validate_public_backup_pdf_filename(value: &str) -> ApiResult<&str> {
+    let trimmed = value.trim();
+    if trimmed.is_empty()
+        || trimmed.len() > 128
+        || trimmed.contains(['/', '\\', '\0'])
+        || !trimmed.ends_with(".pdf")
+    {
+        return Err(api_error(
+            "invalid_backup",
+            "Choose a valid .pdf backup name.",
         ));
     }
     Ok(trimmed)
@@ -336,6 +368,19 @@ fn consume_saved_file_token(
     saved_files.remove(reveal_token)
 }
 
+fn consume_pending_pdf_export(
+    pending_exports: &mut HashMap<String, PendingPdfExport>,
+    save_token: &str,
+    now: Instant,
+) -> Option<PendingPdfExport> {
+    if Uuid::parse_str(save_token).is_err() {
+        return None;
+    }
+    pending_exports
+        .retain(|_, pending| now.duration_since(pending.prepared_at) <= PENDING_PDF_EXPORT_TIMEOUT);
+    pending_exports.remove(save_token)
+}
+
 #[cfg(target_os = "macos")]
 fn reveal_saved_file(app: &AppHandle, path: PathBuf) -> ApiResult<()> {
     use objc2::rc::autoreleasepool;
@@ -378,9 +423,230 @@ fn reveal_saved_file(_app: &AppHandle, _path: PathBuf) -> ApiResult<()> {
     ))
 }
 
+#[cfg(target_os = "macos")]
+async fn capture_public_backup_pdf(
+    window: WebviewWindow,
+    width: f64,
+    height: f64,
+) -> ApiResult<Vec<u8>> {
+    use block2::RcBlock;
+    use objc2::MainThreadMarker;
+    use objc2_core_foundation::{CGPoint, CGRect, CGSize};
+    use objc2_foundation::{NSData, NSError};
+    use objc2_web_kit::{WKPDFConfiguration, WKWebView};
+    use std::sync::mpsc::sync_channel;
+
+    if !width.is_finite()
+        || !height.is_finite()
+        || !(300.0..=2_000.0).contains(&width)
+        || !(300.0..=4_000.0).contains(&height)
+    {
+        return Err(api_error(
+            "invalid_backup",
+            "The PDF backup has invalid page dimensions.",
+        ));
+    }
+
+    let (sender, receiver) = sync_channel(1);
+    window
+        .with_webview(move |platform| unsafe {
+            let webview: &WKWebView = &*platform.inner().cast();
+            let configuration = WKPDFConfiguration::new(MainThreadMarker::new_unchecked());
+            configuration.setRect(CGRect::new(CGPoint::ZERO, CGSize::new(width, height)));
+            let completion = RcBlock::new(move |data: *mut NSData, error: *mut NSError| {
+                let result = if let Some(data) = data.as_ref() {
+                    Ok(data.to_vec())
+                } else if let Some(error) = error.as_ref() {
+                    Err(error.localizedDescription().to_string())
+                } else {
+                    Err("WebKit returned no PDF data.".to_owned())
+                };
+                let _ = sender.send(result);
+            });
+            webview.createPDFWithConfiguration_completionHandler(Some(&configuration), &completion);
+        })
+        .map_err(internal)?;
+
+    let pdf = tauri::async_runtime::spawn_blocking(move || {
+        receiver
+            .recv_timeout(Duration::from_secs(30))
+            .map_err(|_| api_error("backup_export_failed", "PDF export timed out."))?
+            .map_err(|message| api_error("backup_export_failed", message))
+    })
+    .await
+    .map_err(internal)??;
+    if pdf.len() > MAX_PUBLIC_BACKUP_PDF_BYTES || !pdf.starts_with(b"%PDF-") {
+        return Err(api_error(
+            "backup_export_failed",
+            "WebKit returned an invalid PDF backup.",
+        ));
+    }
+    Ok(pdf)
+}
+
+#[cfg(target_os = "macos")]
+async fn render_public_backup_pdf(app: &AppHandle, markup: String) -> ApiResult<Vec<u8>> {
+    use std::sync::mpsc::sync_channel;
+
+    const PDF_WIDTH: f64 = 595.0;
+    const PDF_HEIGHT: f64 = 842.0;
+
+    if markup.is_empty() || markup.len() > MAX_PUBLIC_BACKUP_PDF_HTML_BYTES {
+        return Err(api_error(
+            "invalid_backup",
+            "The PDF backup has invalid document content.",
+        ));
+    }
+
+    let encoded_markup = serde_json::to_string(&markup).map_err(internal)?;
+    let initialization_script = format!(
+        "window.addEventListener('DOMContentLoaded',()=>{{document.body.innerHTML={encoded_markup};}});"
+    );
+    let (sender, receiver) = sync_channel(1);
+    let label = format!("public-backup-pdf-{}", Uuid::new_v4());
+    let renderer = WebviewWindowBuilder::new(
+        app,
+        label,
+        WebviewUrl::App("pdf-backup-renderer.html".into()),
+    )
+    .title("Groot PDF renderer")
+    .inner_size(PDF_WIDTH, PDF_HEIGHT)
+    .min_inner_size(PDF_WIDTH, PDF_HEIGHT)
+    .max_inner_size(PDF_WIDTH, PDF_HEIGHT)
+    .visible(false)
+    .decorations(false)
+    .resizable(false)
+    .skip_taskbar(true)
+    .initialization_script(initialization_script)
+    .on_page_load(move |_window, payload| {
+        if matches!(payload.event(), PageLoadEvent::Finished) {
+            let _ = sender.try_send(());
+        }
+    })
+    .build()
+    .map_err(internal)?;
+
+    let loaded = tauri::async_runtime::spawn_blocking(move || {
+        receiver.recv_timeout(Duration::from_secs(10)).map_err(|_| {
+            api_error(
+                "backup_export_failed",
+                "The isolated PDF renderer timed out.",
+            )
+        })
+    })
+    .await
+    .map_err(internal)?;
+    if let Err(error) = loaded {
+        let _ = renderer.close();
+        return Err(error);
+    }
+
+    let result = capture_public_backup_pdf(renderer.clone(), PDF_WIDTH, PDF_HEIGHT).await;
+    let _ = renderer.close();
+    result
+}
+
+#[cfg(target_os = "macos")]
 #[tauri::command]
-pub fn public_backup_print(window: WebviewWindow) -> ApiResult<()> {
-    window.print().map_err(internal)
+pub async fn public_backup_pdf_prepare(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    suggested_filename: String,
+) -> ApiResult<PendingPdfExportDto> {
+    let filename = validate_public_backup_pdf_filename(&suggested_filename)?.to_owned();
+    let selected_path = tauri::async_runtime::spawn_blocking(move || {
+        let selected = app
+            .dialog()
+            .file()
+            .set_file_name(&filename)
+            .add_filter("PDF wallet backup", &["pdf"])
+            .blocking_save_file();
+        selected
+            .map(|path| path.into_path().map_err(internal))
+            .transpose()
+    })
+    .await
+    .map_err(internal)??;
+    let Some(path) = selected_path else {
+        return Ok(PendingPdfExportDto {
+            prepared: false,
+            save_token: None,
+        });
+    };
+
+    let token = Uuid::new_v4().to_string();
+    let now = Instant::now();
+    let mut pending_exports = state.pending_pdf_exports.lock().map_err(internal)?;
+    pending_exports
+        .retain(|_, pending| now.duration_since(pending.prepared_at) <= PENDING_PDF_EXPORT_TIMEOUT);
+    if pending_exports.len() >= 4 {
+        pending_exports.clear();
+    }
+    pending_exports.insert(
+        token.clone(),
+        PendingPdfExport {
+            path,
+            prepared_at: now,
+        },
+    );
+    Ok(PendingPdfExportDto {
+        prepared: true,
+        save_token: Some(token),
+    })
+}
+
+#[cfg(target_os = "macos")]
+#[tauri::command]
+pub async fn public_backup_pdf_save(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    save_token: String,
+    markup: String,
+) -> ApiResult<SavedFileDto> {
+    let pending = state
+        .pending_pdf_exports
+        .lock()
+        .map_err(internal)
+        .and_then(|mut pending_exports| {
+            consume_pending_pdf_export(&mut pending_exports, &save_token, Instant::now())
+                .ok_or_else(|| {
+                    api_error(
+                        "backup_export_failed",
+                        "This PDF save request expired. Choose Save PDF again.",
+                    )
+                })
+        })?;
+
+    let pdf = render_public_backup_pdf(&app, markup).await?;
+    let saved_path = tauri::async_runtime::spawn_blocking(move || {
+        write_public_export(&pending.path, &pdf)?;
+        Ok(pending.path)
+    })
+    .await
+    .map_err(internal)??;
+    saved_file_result(&state, Some(saved_path))
+}
+
+#[cfg(not(target_os = "macos"))]
+#[tauri::command]
+pub fn public_backup_pdf_prepare(
+    window: WebviewWindow,
+    _suggested_filename: String,
+) -> ApiResult<PendingPdfExportDto> {
+    window.print().map_err(internal)?;
+    Ok(PendingPdfExportDto {
+        prepared: false,
+        save_token: None,
+    })
+}
+
+#[cfg(not(target_os = "macos"))]
+#[tauri::command]
+pub fn public_backup_pdf_save(_save_token: String, _markup: String) -> ApiResult<SavedFileDto> {
+    Err(api_error(
+        "backup_export_failed",
+        "Native PDF saving is not available on this platform.",
+    ))
 }
 
 fn hwi_cli(app: &AppHandle) -> ApiResult<HwiCli> {
@@ -400,7 +666,7 @@ fn hwi_cli(app: &AppHandle) -> ApiResult<HwiCli> {
         .map_err(hardware_api_error)
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ApiError {
     code: &'static str,
@@ -547,6 +813,7 @@ pub struct AppState {
     node_auth: Mutex<HashMap<Uuid, NodeAuthSession>>,
     authenticated_software_descriptors: Mutex<HashMap<Uuid, (String, String)>>,
     saved_files: Mutex<HashMap<String, SavedFileReveal>>,
+    pending_pdf_exports: Mutex<HashMap<String, PendingPdfExport>>,
     recovery_scans: Mutex<HashMap<Uuid, ActiveRecoveryScan>>,
     runtime_auth_retry_at: Mutex<HashMap<Uuid, Instant>>,
     pending_policy_verifications: Mutex<HashMap<String, SignerPolicyVerificationDto>>,
@@ -1173,14 +1440,6 @@ pub struct CosignerHealthDto {
     summary: String,
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct HardwareHealthCheckInput {
-    status: String,
-    checked_at: String,
-    summary: String,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HardwareHealthCheckRecordDto {
@@ -1269,6 +1528,8 @@ pub struct RecoveryDrillDto {
 
 #[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
 struct HwiDevice {
+    #[serde(skip)]
+    capability: String,
     #[serde(default)]
     fingerprint: Option<String>,
     #[serde(default, rename = "type")]
@@ -1293,6 +1554,7 @@ struct HwiDevice {
 struct RecentHardwareScan {
     devices: HashMap<String, HwiDevice>,
     created_at: Instant,
+    generation: Option<u64>,
 }
 
 #[derive(Deserialize)]
@@ -1466,7 +1728,7 @@ fn hardware_device_dto(device: HwiDevice) -> HardwareDeviceDto {
         )
     };
     HardwareDeviceDto {
-        id: device.path,
+        id: device.capability,
         label,
         model: device.device_type,
         fingerprint: device.fingerprint,
@@ -4546,7 +4808,7 @@ fn sync_wallet_atomically(
         WalletSyncSource::BitcoinCore => sync_wallet_with_core(app, state, db, multisig, cancel),
         source @ WalletSyncSource::CompactFilters { .. } => {
             ensure_foreground_sync_not_cancelled(cancel)?;
-            sync_wallet_with_compact_filters(app, state, db, multisig, &source)
+            sync_wallet_with_compact_filters(app, state, db, multisig, &source, cancel)
         }
     }
 }
@@ -4711,6 +4973,7 @@ fn sync_wallet_with_compact_filters(
     db: &mut Connection,
     multisig: bool,
     source: &WalletSyncSource,
+    cancel: Option<&AtomicBool>,
 ) -> ApiResult<WalletSnapshotDto> {
     let config = source
         .validate(NETWORK)
@@ -4724,10 +4987,18 @@ fn sync_wallet_with_compact_filters(
         NETWORK,
         &cache_dir,
         &config,
+        cancel,
         move |progress| update_compact_filter_sync_status(&status, progress),
     )
-    .map_err(|_| compact_filter_unavailable())?;
+    .map_err(|error| match error {
+        crate::compact_filters::CompactFilterError::Cancelled => api_error(
+            "sync_cancelled",
+            "Wallet refresh paused for a foreground action.",
+        ),
+        _ => compact_filter_unavailable(),
+    })?;
     drop(wallet);
+    ensure_foreground_sync_not_cancelled(cancel)?;
     if let Ok(mut status) = state.sync_status.lock() {
         if let Some(current) = status.as_mut() {
             current.state = "applying";
@@ -5458,6 +5729,8 @@ fn hardware_api_error(error: HardwareError) -> ApiError {
         HardwareError::InvalidArgument => "The hardware wallet request was rejected.",
         HardwareError::Unavailable => bundled_hwi_unavailable_message(),
         HardwareError::TimedOut => "The hardware wallet did not respond in time.",
+        HardwareError::Busy => "Another hardware-wallet action is already in progress.",
+        HardwareError::Cancelled => "The hardware-wallet action was cancelled.",
         HardwareError::OutputTooLarge => "The hardware wallet returned an oversized response.",
         HardwareError::CommandFailed(code) => match code {
             Some(-3 | -12) => "Unlock the signer and quit other wallet apps, then try again.",
@@ -5587,6 +5860,7 @@ struct VerifiedHardwareIdentity {
     fingerprint: String,
 }
 
+#[cfg(test)]
 fn connected_hardware_identity(
     device: HwiDevice,
     expected_fingerprints: &[String],
@@ -5604,13 +5878,6 @@ fn connected_hardware_identity(
         device_type: device.device_type,
         fingerprint,
     })
-}
-
-fn verify_connected_hardware_identity(
-    device: HwiDevice,
-    expected_fingerprints: &[String],
-) -> ApiResult<String> {
-    Ok(connected_hardware_identity(device, expected_fingerprints)?.device_type)
 }
 
 #[path = "wallet/hardware_commands.rs"]

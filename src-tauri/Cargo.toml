@@ -1,6 +1,6 @@
 [package]
 name = "groot"
-version = "0.4.25"
+version = "0.4.28"
 description = "Groot, a minimal onchain Bitcoin wallet"
 edition = "2021"
 
@@ -47,7 +47,7 @@ ur = "=0.4.1"
 # Explicit Tor is local so .onion hostnames reach SOCKS5 without host DNS.
 jsonrpc = "=0.18.0"
 
-[target.'cfg(not(any(target_os = "macos", target_os = "ios")))'.dependencies]
+[target.'cfg(unix)'.dependencies]
 libc = "=0.2.186"
 
 [target.'cfg(target_os = "macos")'.dependencies]
@@ -55,7 +55,9 @@ block2 = "=0.6.2"
 core-foundation = "=0.10.1"
 objc2 = "=0.6.4"
 objc2-app-kit = "=0.3.2"
+objc2-core-foundation = "=0.3.2"
 objc2-foundation = "=0.3.2"
+objc2-web-kit = { version = "=0.3.2", default-features = false, features = ["block2", "objc2-core-foundation", "WKPDFConfiguration", "WKWebView"] }
 # The packaged HWI sidecar is checked with macOS Code Signing Services before
 # execution. Both crates were already pinned transitively by the keychain stack.
 security-framework = "=3.7.0"

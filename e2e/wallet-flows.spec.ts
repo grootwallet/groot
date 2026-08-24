@@ -948,19 +948,18 @@ test('renames the selected wallet from settings without changing its identity', 
   }
 });
 
-test('pending transaction opens RBF and CPFP review without bypassing signing', async ({
+test('pending incoming transaction opens CPFP review without offering sender-side RBF', async ({
   page
 }) => {
-  for (const action of ['Increase fee', 'Spend output (CPFP)']) {
-    await page.goto('/activity');
-    await page.getByRole('button', { name: /Invoice #104/ }).click();
-    await page.getByRole('link', { name: action }).click();
-    await expect(page).toHaveURL(action === 'Increase fee' ? /accelerate=rbf/ : /accelerate=cpfp/);
-    await expect(page.getByText('Fee rate', { exact: true })).toBeHidden();
-    await page.getByText('View more details', { exact: true }).click();
-    await expect(page.getByText('Fee rate', { exact: true })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Continue to sign' })).toBeVisible();
-  }
+  await page.goto('/activity');
+  await page.getByRole('button', { name: /Invoice #104/ }).click();
+  await expect(page.getByRole('link', { name: 'Increase fee (RBF)' })).toHaveCount(0);
+  await page.getByRole('link', { name: 'Spend output (CPFP)' }).click();
+  await expect(page).toHaveURL(/accelerate=cpfp/);
+  await expect(page.getByText('Fee rate', { exact: true })).toBeHidden();
+  await page.getByText('View more details', { exact: true }).click();
+  await expect(page.getByText('Fee rate', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Continue to sign' })).toBeVisible();
 });
 
 test('CPFP success identifies the fee-only child instead of a zero-sat payment', async ({
@@ -980,30 +979,15 @@ test('CPFP success identifies the fee-only child instead of a zero-sat payment',
   await expect(page.getByText('0 sats was broadcast to the Bitcoin network.')).toHaveCount(0);
 });
 
-test('successful RBF keeps the original visibly replaced and excluded from accounting', async ({
+test('confirmed outgoing and pending incoming transactions do not offer sender-side RBF', async ({
   page
 }) => {
   await page.goto('/activity');
+  await page.getByRole('button', { name: /Hardware order/ }).click();
+  await expect(page.getByRole('link', { name: 'Increase fee (RBF)' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Close' }).click();
   await page.getByRole('button', { name: /Invoice #104/ }).click();
-  await page.getByRole('link', { name: 'Increase fee' }).click();
-  await page.getByRole('button', { name: 'Continue to sign' }).click();
-  await page.getByLabel('Wallet passphrase', { exact: true }).fill('prototype-passphrase');
-  await page.getByRole('button', { name: /Sign & broadcast/ }).click();
-  await page.getByRole('link', { name: 'View transaction' }).click();
-
-  const replaced = page.locator('.tx-row.replaced').filter({ hasText: 'Invoice #104' });
-  await expect(replaced).toContainText('Replaced');
-  await expect(replaced).toContainText('Not counted · replaced');
-  await replaced.click();
-  const details = page.getByRole('dialog', { name: 'Transaction details' });
-  await expect(details.getByText('replaced', { exact: true })).toBeVisible();
-  await expect(details.getByText('Replaced by', { exact: true })).toBeHidden();
-  await details.getByText('View more details', { exact: true }).click();
-  await expect(details.getByText('Replaced by', { exact: true })).toBeVisible();
-  await details.getByRole('button', { name: 'Close' }).click();
-  await expect(page.locator('.tx-row.pending').filter({ hasText: 'Invoice #104' })).toContainText(
-    'Awaiting confirmation'
-  );
+  await expect(page.getByRole('link', { name: 'Increase fee (RBF)' })).toHaveCount(0);
 });
 
 test('recovery scan and private network controls preserve explicit safety choices', async ({
@@ -1056,8 +1040,9 @@ test('recovery scan and private network controls preserve explicit safety choice
   await page.getByLabel('RPC URL').fill('http://groottestnode.onion:8332');
   await page.getByLabel('RPC username').fill('groot');
   await page.getByLabel('RPC password', { exact: true }).fill('rpc-secret');
-  await page.getByLabel('Wallet passphrase', { exact: true }).fill('prototype-passphrase');
-  await page.getByRole('button', { name: 'Save & test' }).click();
+  const coreDialog = page.getByRole('dialog', { name: 'Connect Bitcoin Core' });
+  await coreDialog.getByLabel('Wallet passphrase', { exact: true }).fill('prototype-passphrase');
+  await coreDialog.getByRole('button', { name: 'Save & test' }).click();
   await expect(page.getByText(/Trusted remote server/)).toBeVisible();
 });
 
@@ -1351,20 +1336,18 @@ test('fee estimate failure never invents a send rate and preserves the custom pa
   await expect(page.getByText('Explicit fee test', { exact: true })).toBeVisible();
 });
 
-test('fee estimate failure preserves explicit RBF and CPFP acceleration', async ({ page }) => {
-  for (const action of ['Increase fee', 'Spend output (CPFP)']) {
-    await page.goto('/activity?fixture-fee-estimates-unavailable=1');
-    await page.getByRole('button', { name: /Invoice #104/ }).click();
-    await page.getByRole('link', { name: action }).click();
-    await expect(page.getByRole('heading', { name: 'Enter a custom fee rate' })).toBeVisible();
-    await expect(page.getByText(/will not invent one/)).toBeVisible();
-    const review = page.getByRole('button', { name: 'Review acceleration' });
-    await expect(review).toBeDisabled();
-    await page.getByLabel('Custom acceleration fee rate').fill('15');
-    await expect(review).toBeEnabled();
-    await review.click();
-    await expect(page.getByRole('button', { name: 'Continue to sign' })).toBeVisible();
-  }
+test('fee estimate failure preserves explicit CPFP acceleration', async ({ page }) => {
+  await page.goto('/activity?fixture-fee-estimates-unavailable=1');
+  await page.getByRole('button', { name: /Invoice #104/ }).click();
+  await page.getByRole('link', { name: 'Spend output (CPFP)' }).click();
+  await expect(page.getByRole('heading', { name: 'Enter a custom fee rate' })).toBeVisible();
+  await expect(page.getByText(/will not invent one/)).toBeVisible();
+  const review = page.getByRole('button', { name: 'Review acceleration' });
+  await expect(review).toBeDisabled();
+  await page.getByLabel('Custom acceleration fee rate').fill('15');
+  await expect(review).toBeEnabled();
+  await review.click();
+  await expect(page.getByRole('button', { name: 'Continue to sign' })).toBeVisible();
 });
 
 test('locked regtest wallet reset requires exact typed confirmation', async ({ page }) => {

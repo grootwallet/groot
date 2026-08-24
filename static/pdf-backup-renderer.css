@@ -1,0 +1,140 @@
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  width: 595px;
+  height: 842px;
+  margin: 0;
+  overflow: hidden;
+  background: #fff;
+}
+.backup-print-sheet {
+  width: 595px;
+  min-height: 842px;
+  padding: 53px;
+  color: #111827;
+  background: #fff;
+  font-family:
+    ui-sans-serif,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    sans-serif;
+}
+.backup-print-sheet header {
+  padding-bottom: 10px;
+  border-bottom: 2px solid #111827;
+}
+.backup-print-sheet header p {
+  margin: 0 0 8px;
+  color: #4b5563;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.backup-print-sheet header h1 {
+  margin: 0 0 6px;
+  font:
+    600 26px/1.1 Georgia,
+    serif;
+}
+.backup-print-sheet header strong {
+  font-size: 11px;
+}
+.backup-print-sheet dl {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1px;
+  margin: 11px 0;
+  border: 1px solid #d1d5db;
+  background: #d1d5db;
+}
+.backup-print-sheet dl div {
+  padding: 7px;
+  background: #fff;
+}
+.backup-print-sheet dt {
+  color: #6b7280;
+  font-size: 7px;
+  text-transform: uppercase;
+}
+.backup-print-sheet dd {
+  margin: 3px 0 0;
+  font-size: 8px;
+}
+.backup-print-sheet section {
+  margin-top: 10px;
+}
+.backup-print-sheet h2 {
+  margin: 0 0 6px;
+  font-size: 11px;
+}
+.backup-print-sheet ol {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.backup-print-sheet li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  border: 1px solid #d1d5db;
+  border-radius: 5px;
+}
+.backup-print-sheet li strong {
+  font-size: 8px;
+}
+.backup-print-sheet li span {
+  color: #4b5563;
+  font-size: 7px;
+}
+.print-descriptors {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+.print-descriptors > div {
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+}
+.print-descriptors img,
+.print-descriptors .print-qr {
+  display: block;
+  width: 188px;
+  height: 188px;
+  margin: 0 auto 6px;
+}
+.print-descriptors .print-qr path {
+  fill: #000;
+}
+.print-descriptors code {
+  display: block;
+  color: #111827;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 5.5px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+}
+.backup-print-sheet footer {
+  margin-top: 9px;
+  padding: 8px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+}
+.backup-print-sheet footer strong {
+  font-size: 8px;
+}
+.backup-print-sheet footer p {
+  margin: 3px 0 0;
+  color: #4b5563;
+  font-size: 7px;
+  line-height: 1.35;
+}

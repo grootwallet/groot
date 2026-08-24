@@ -34,7 +34,7 @@ The command prints only device model and readiness. Fingerprints, xpubs, and dev
 Detected-but-not-ready devices are not equivalent to missing devices:
 
 - **Trezor Safe 3:** the reviewed minimum is HWI 3.2.0. HWI 2.3.1 reports code `-13` / unsupported model even after a successful on-device PIN; that is a host compatibility failure, not a bad PIN or incomplete backup. Keep Trezor Suite fully quit, enter the PIN on the Safe 3 touchscreen, and rescan after Groot is restarted against the reviewed boundary.
-- **HWI 3.2.0 scan latency:** physical Safe 3 testing and isolated host timing measured one all-backend `enumerate` at roughly 9–12 seconds, including large standalone HWI startup/import cost. Groot performs that unavoidable discovery once, caps it at 30 seconds, coalesces duplicate frontend scans, and caches only its bounded result for 15 minutes. Native HWI processes are serialized so a retry, health check, or second window cannot steal the active USB session. Groot reopens the selected device by exact type and path; targeted scans merge their proven paths instead of erasing other saved signer paths. Multisig setup reuses that matched device for policy verification instead of scanning every backend again. Every exact-path operation still re-reads and verifies the saved fingerprint and account key before accepting a result. Initial import deliberately uses one exact-path `getkeypool` session so fingerprint and account xpub come from the same opened device; this avoids a device-swap window before identity is saved. Later saved-identity health checks use the lighter exact-path `getxpub` command and compare both the cached fingerprint and returned full xpub with the saved record. Process isolation remains intentional because upstream HWI 3.2.0 has no persistent request protocol and a resident process would retain USB sessions across actions.
+- **HWI 3.2.0 scan latency:** physical Safe 3 testing and isolated host timing measured one all-backend `enumerate` at roughly 9–12 seconds, including large standalone HWI startup/import cost. HWI 3.2.0 ignores its `--device-type` selector for enumeration, so v0.4.28 invokes exactly one aggregate `enumerate` per explicit scan even when three or seven saved families are eligible. Rust validates the bounded response, rejects conflicting non-empty paths, caches all valid paths behind opaque short-lived capabilities, and filters each caller afterward. Discovery is capped at an absolute 30 seconds including admission. A native coordinator prevents scans during interactive prompts, rejects excess work, and cancels/terminates the complete process tree on modal close, navigation, or wallet switch. Every health, display, policy, and signing operation treats the cached path only as a hint and freshly proves the type, fingerprint, derivation, and full saved account xpub under the same exclusive lease as the action. Dynamic selectors, paths, descriptors, and PSBTs use HWI's stdin protocol rather than process argv. Process isolation remains intentional; migration to an in-process hardware library requires a separate ADR.
 - **Focused regression after the bounded-read change:** each previously passed USB model needs one focused account-import or saved-identity health-check smoke test at the relevant BIP84/BIP48 path before release. Existing receive, signing, interruption, and hostile-PSBT evidence remains valid unless that focused identity check fails.
 - **Trezor Model One / KeepKey:** quit Trezor Suite or other companion software completely before scanning; an unlock session created by the companion app is not shared with Groot. Choose the locked device in Groot and start the scrambled PIN matrix. For every PIN digit visible in the shuffled device matrix, tap the blank Groot cell in the same spatial location; never enter the digit itself. If passphrase support is enabled, Groot may import the seed-only standard wallet only after the user explicitly confirms that choice. A hidden wallet requiring host passphrase entry remains blocked.
 - **Coldcard invisible while locked:** HWI may return no device before the Coldcard exposes its USB wallet interface. Groot cannot truthfully identify a device from an empty HWI result. Sign in on Coldcard, ensure its USB port is enabled, reconnect, and scan again.
@@ -57,19 +57,17 @@ cd /Users/thibm/Documents/Codex/2026-07-17/let
 bash scripts/dev/tauri-regtest.sh
 ```
 
-Saved signer checks must not use the generic all-backend import scan. Health,
-signing, and policy lookup for one known signer issue a bounded command to only
-that saved device family and require the complete returned account key to match
-the saved key before proceeding. This avoids HWI initializing unrelated
-backends, including after a fresh Groot restart when no device-path cache
-exists. Multi-candidate receive verification enumerates only device types in
-the active wallet and filters unrelated results; single-key receive
-verification admits only its saved signer. Keep unrelated device families
-attached during the focused regression and require that they receive no
-prompt. The subsequent address, policy, or signing command must still prove its
-result against the saved descriptor or canonical PSBT. Lookup must time out and
-be cancellable without treating a late response as success; an actual
-on-device mutation remains protected until its bounded command returns.
+Each explicit scan must execute one aggregate HWI `enumerate`, regardless of
+the number of saved signer families. Rust filters the validated result for the
+active wallet; conflicting non-empty paths fail closed as `hardware_ambiguous`,
+and a locked/unidentified row is informational rather than a retry action.
+Keep unrelated device families attached during the focused regression and
+confirm that only eligible saved identities are offered. After selection, the
+health, address, policy, or signing operation must freshly prove the exact
+device type, fingerprint, derivation, and complete account key under the same
+exclusive lease as its action, then prove the returned address or PSBT against
+the authoritative wallet context. Closing the modal must cancel the native
+operation, release the lease, and prevent any late prompt or persistence.
 
 ## Per-device acceptance story
 

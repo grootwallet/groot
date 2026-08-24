@@ -64,6 +64,7 @@
   onDestroy(() => {
     hardwareScanGeneration += 1;
     clearPinState();
+    void walletService.cancelHardwareOperations();
   });
 
   function clearPinState() {
@@ -75,6 +76,7 @@
     hardwareScanGeneration += 1;
     verifyBusy = false;
     verifyOpen = false;
+    void walletService.cancelHardwareOperations();
   }
 
   async function copyVerificationAddress() {
@@ -281,7 +283,10 @@
   {:else if devices.length}
     <div class="source-list hardware-device-list">
       {#each devices as device}
-        <button disabled={device.action === 'none'} onclick={() => chooseDevice(device)}>
+        <button
+          disabled={device.action === 'none' || device.action === 'retry'}
+          onclick={() => chooseDevice(device)}
+        >
           <Cpu size={18} />
           <span>
             <strong>{hardwareDeviceDisplayName(device, savedSigners)}</strong>
@@ -295,7 +300,7 @@
                 : device.action === 'confirm_empty_passphrase'
                   ? 'Standard wallet'
                   : device.action === 'retry'
-                    ? 'Scan again'
+                    ? 'Unlock, then scan again'
                     : device.status === 'ready' || device.status === 'detected'
                       ? 'Ready'
                       : 'Unavailable'}</em

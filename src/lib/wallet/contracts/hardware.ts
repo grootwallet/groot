@@ -38,6 +38,10 @@ export type SavedFileResult = {
   revealToken: string | null;
   revealLabel: string | null;
 };
+export type PendingPdfExport = {
+  prepared: boolean;
+  saveToken: string | null;
+};
 
 export type CosignerHealthCheck = {
   status: 'healthy' | 'attention';

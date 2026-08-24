@@ -35,7 +35,8 @@ import type {
   ExternalSignerBackup,
   ExternalSignerSource,
   ExternalSignerWallet,
-  SavedFileResult
+  SavedFileResult,
+  PendingPdfExport
 } from './contracts';
 import type {
   CoreNodeConfig,
@@ -348,6 +349,11 @@ export class TauriWalletAdapter implements WalletPort {
     await this.#drainNotifications(false);
     return result;
   }
+  cancelHardwareOperations() {
+    this.#hardwareListRequest = null;
+    this.#typedHardwareListRequests.clear();
+    return command<void>('hardware_cancel_operations');
+  }
   listHardwareDevices() {
     if (this.#hardwareListRequest) return this.#hardwareListRequest;
     const request = command<HardwareDevice[]>('hardware_list').finally(() => {
@@ -414,13 +420,6 @@ export class TauriWalletAdapter implements WalletPort {
       ...result,
       checkedAt: normalizeTimestamp(result.checkedAt) ?? result.checkedAt
     }));
-  }
-  async recordHardwareHealthCheck(signerFingerprint: string, check: CosignerHealthCheck) {
-    const result = await command<HardwareHealthCheckRecord>('hardware_health_check_record', {
-      signerFingerprint,
-      check
-    });
-    return { ...result, checkedAt: normalizeTimestamp(result.checkedAt) ?? result.checkedAt };
   }
   async multisigSignerPolicyVerifications() {
     const results = await command<import('./contracts').SignerPolicyVerification[]>(
@@ -602,8 +601,14 @@ export class TauriWalletAdapter implements WalletPort {
   savePublicBackup(suggestedFilename: string, content: string) {
     return command<SavedFileResult>('public_backup_save', { suggestedFilename, content });
   }
-  printPublicBackup() {
-    return command<void>('public_backup_print');
+  preparePublicBackupPdf(suggestedFilename: string) {
+    return command<PendingPdfExport>('public_backup_pdf_prepare', { suggestedFilename });
+  }
+  savePublicBackupPdf(saveToken: string, markup: string) {
+    return command<SavedFileResult>('public_backup_pdf_save', {
+      saveToken,
+      markup
+    });
   }
   inspectMultisigBsms(encodedBackup: string) {
     return command<RecoveryDrill>('multisig_bsms_inspect', { encodedBackup });

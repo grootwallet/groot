@@ -839,23 +839,20 @@ test('explains hardware readiness before scanning', async ({ page }) => {
   await page.getByRole('button', { name: 'Hardware setup help' }).click();
   const help = page.getByRole('dialog', { name: 'Prepare your hardware signer' });
   await expect(help).toBeVisible();
-  await expect(help.getByText(/seed and private keys never leave the device/)).toBeVisible();
+  await expect(help.getByText(/Never enter a seed into Groot/)).toBeVisible();
   await help.getByRole('button', { name: 'Ledger' }).click();
   await expect(help.getByText(/open Bitcoin Test/)).toBeVisible();
   await help.getByRole('button', { name: 'BitBox02' }).click();
-  await expect(help.getByText(/Enter the device password when BitBox02 asks/)).toBeVisible();
-  await expect(help.getByText(/first-time pairing is required/)).toBeVisible();
+  await expect(help.getByText(/Connect and unlock BitBox/)).toBeVisible();
+  await expect(help.getByText(/Quit BitBoxApp/)).toBeVisible();
   await help.getByRole('button', { name: 'Trezor' }).click();
-  await expect(help.getByText(/quit Trezor Suite completely/)).toBeVisible();
-  await expect(help.getByText(/locked Model One is expected/)).toBeVisible();
+  await expect(help.getByText(/Quit Trezor Suite and reconnect/)).toBeVisible();
+  await expect(help.getByText(/For Model One, unlock from its Groot card/)).toBeVisible();
   await expect(help.getByText(/Never enter a seed into Groot/)).toBeVisible();
   await help.getByRole('button', { name: 'Scan for devices' }).click();
   const scan = page.getByRole('dialog', { name: 'Connect hardware device' });
-  await expect(
-    scan.getByText('Connect the signer and release any competing USB session')
-  ).toBeVisible();
-  await expect(scan.getByText(/BitBox02 can unlock directly from Groot/)).toBeVisible();
-  await expect(scan.getByText(/locked Trezor Model One is supported/)).toBeVisible();
+  await expect(scan.getByText('Keep USB free', { exact: true })).toBeVisible();
+  await expect(scan.getByText(/Unlock the signer and quit other wallet apps/)).toBeVisible();
   expect(await scan.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
   expect(
     await scan
@@ -1265,7 +1262,7 @@ test('creates and verifies a simple 2-of-3 descriptor wallet', async ({ page }) 
   await page.evaluate(() => {
     window.print = () => document.documentElement.setAttribute('data-print-called', 'true');
   });
-  await page.getByRole('button', { name: 'Print / save PDF' }).click();
+  await page.getByRole('button', { name: 'Save PDF' }).click();
   await expect(page.locator('html')).toHaveAttribute('data-print-called', 'true');
   await page.getByLabel('Backup file import').setInputFiles({
     name: 'family-vault-backup.json',

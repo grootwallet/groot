@@ -20,9 +20,16 @@
   import InsightTip from '$lib/components/InsightTip.svelte';
   import { copyText } from '$lib/clipboard';
   import { formatWalletTimestamp, recoveryDrillNotice } from '$lib/backup-presentation';
+  import { createPrintableQr, type PrintableQr } from '$lib/printable-qr';
   import { toast } from '$lib/stores/toasts';
   import { readTransferFile, safeTransferFilename } from '$lib/transfer';
-  import { WalletError, walletService, type MultisigWallet, type RecoveryDrill } from '$lib/wallet';
+  import {
+    WalletError,
+    walletService,
+    type MultisigWallet,
+    type RecoveryDrill,
+    type SavedFileResult
+  } from '$lib/wallet';
   import { defaultConfig, networkName } from '$lib/config';
 
   let wallet = $state<MultisigWallet | null>(null);
@@ -35,6 +42,8 @@
   let backupFormat = $state<'bsms' | 'groot'>('bsms');
   let receiveQr = $state('');
   let changeQr = $state('');
+  let receivePrintQr = $state<PrintableQr | null>(null);
+  let changePrintQr = $state<PrintableQr | null>(null);
   let loadedBackupName = $state('');
 
   onDestroy(() => {
@@ -49,7 +58,11 @@
     const current = wallet;
     receiveQr = '';
     changeQr = '';
+    receivePrintQr = null;
+    changePrintQr = null;
     if (!current) return;
+    receivePrintQr = createPrintableQr(current.externalDescriptor);
+    changePrintQr = createPrintableQr(current.internalDescriptor);
     void QRCode.toDataURL(current.externalDescriptor, {
       width: 520,
       margin: 2,
@@ -144,6 +157,24 @@
     });
   }
 
+  function savedFileAction(saved: SavedFileResult) {
+    if (!saved.revealToken || !saved.revealLabel) return undefined;
+    return {
+      label: saved.revealLabel,
+      run: async () => {
+        try {
+          await walletService.revealSavedFile(saved.revealToken!);
+        } catch (cause) {
+          toast({
+            title: 'Could not show saved file',
+            description: cause instanceof Error ? cause.message : undefined,
+            tone: 'danger'
+          });
+        }
+      }
+    };
+  }
+
   async function saveBackupFile() {
     exportError = '';
     try {
@@ -156,23 +187,7 @@
           title: 'Backup saved',
           description: 'The public wallet backup was written to the selected file.',
           tone: 'success',
-          action:
-            saved.revealToken && saved.revealLabel
-              ? {
-                  label: saved.revealLabel,
-                  run: async () => {
-                    try {
-                      await walletService.revealSavedFile(saved.revealToken!);
-                    } catch (cause) {
-                      toast({
-                        title: 'Could not show saved backup',
-                        description: cause instanceof Error ? cause.message : undefined,
-                        tone: 'danger'
-                      });
-                    }
-                  }
-                }
-              : undefined
+          action: savedFileAction(saved)
         });
     } catch (cause) {
       exportError = cause instanceof Error ? cause.message : 'Could not save the public backup.';
@@ -183,10 +198,21 @@
   async function printBackup() {
     exportError = '';
     try {
-      await walletService.printPublicBackup();
+      const pending = await walletService.preparePublicBackupPdf(`${backupBaseName}-backup.pdf`);
+      if (!pending.prepared || !pending.saveToken) return;
+      const sheet = document.querySelector<HTMLElement>('.backup-print-sheet');
+      if (!sheet) throw new Error('The PDF backup is not ready.');
+      const saved = await walletService.savePublicBackupPdf(pending.saveToken, sheet.outerHTML);
+      if (saved.saved)
+        toast({
+          title: 'PDF saved',
+          description: 'The public wallet backup was saved.',
+          tone: 'success',
+          action: savedFileAction(saved)
+        });
     } catch (cause) {
-      exportError = cause instanceof Error ? cause.message : 'Could not open the print dialog.';
-      toast({ title: 'Print unavailable', description: exportError, tone: 'danger' });
+      exportError = cause instanceof Error ? cause.message : 'Could not save the PDF backup.';
+      toast({ title: 'PDF not saved', description: exportError, tone: 'danger' });
     }
   }
 </script>
@@ -294,9 +320,7 @@
             }}><Copy size={15} />Copy backup</Button
           ><Button variant="secondary" onclick={saveBackupFile}
             ><Download size={15} />Download {backupFormat === 'bsms' ? 'BSMS' : 'JSON'}</Button
-          ><Button variant="secondary" onclick={printBackup}
-            ><Printer size={15} />Print / save PDF</Button
-          >
+          ><Button variant="secondary" onclick={printBackup}><Printer size={15} />Save PDF</Button>
         </div>
         {#if exportError}<p class="form-error" aria-live="polite">{exportError}</p>{/if}
         <div class="descriptor-qr-preview">
@@ -376,7 +400,12 @@
           >Continue to wallet deletion</Button
         >
       </section>{/if}
-    {#if backup}<article class="backup-print-sheet" aria-label="Printable wallet descriptor backup">
+    {#if backup}<article
+        class="backup-print-sheet"
+        aria-label="Printable wallet descriptor backup"
+        aria-hidden="true"
+        inert
+      >
         <header>
           <p>Groot · Public wallet backup</p>
           <h1>{wallet.name}</h1>
@@ -415,15 +444,23 @@
         <section class="print-descriptors">
           <div>
             <h2>Receive descriptor</h2>
-            {#if receiveQr}<img src={receiveQr} alt="Receive descriptor QR code" />{/if}<code
-              >{wallet.externalDescriptor}</code
-            >
+            {#if receivePrintQr}<svg
+                class="print-qr"
+                viewBox={`0 0 ${receivePrintQr.size} ${receivePrintQr.size}`}
+                shape-rendering="crispEdges"
+                aria-label="Receive descriptor QR code"
+                role="img"><path d={receivePrintQr.path} /></svg
+              >{/if}<code>{wallet.externalDescriptor}</code>
           </div>
           <div>
             <h2>Change descriptor</h2>
-            {#if changeQr}<img src={changeQr} alt="Change descriptor QR code" />{/if}<code
-              >{wallet.internalDescriptor}</code
-            >
+            {#if changePrintQr}<svg
+                class="print-qr"
+                viewBox={`0 0 ${changePrintQr.size} ${changePrintQr.size}`}
+                shape-rendering="crispEdges"
+                aria-label="Change descriptor QR code"
+                role="img"><path d={changePrintQr.path} /></svg
+              >{/if}<code>{wallet.internalDescriptor}</code>
           </div>
         </section>
         <footer>

@@ -70,12 +70,16 @@ describe('hardware receive verification UI', () => {
     expect(scan).toContain('hardwareScanGeneration');
   });
 
-  it('bounds and serializes native HWI discovery', () => {
+  it('bounds, coordinates, and cancels native HWI work', () => {
     expect(hardwareTransport).toContain(
       'const DISCOVERY_TIMEOUT: Duration = Duration::from_secs(30)'
     );
-    expect(hardwareTransport).toContain('static HWI_PROCESS_LOCK: Mutex<()> = Mutex::new(())');
-    expect(hardwareTransport).toContain('HWI_PROCESS_LOCK.lock()');
+    expect(hardwareTransport).toContain(
+      'static HWI_COORDINATOR: OnceLock<HardwareCoordinator> = OnceLock::new()'
+    );
+    expect(hardwareTransport).toContain('HardwareError::Busy');
+    expect(hardwareTransport).toContain('cancel_hardware_operations');
+    expect(hardwareTransport).toContain('const HWI_FIXED_ARGV: &[&str] = &["--stdin"]');
   });
 
   it('keeps one shared verification component in both receive flows', () => {

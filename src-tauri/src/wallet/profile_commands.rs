@@ -416,12 +416,17 @@ pub fn wallet_lock(app: AppHandle, state: State<'_, AppState>) -> ApiResult<()> 
 }
 
 #[tauri::command]
-pub fn wallet_snapshot(app: AppHandle, state: State<'_, AppState>) -> ApiResult<WalletSnapshotDto> {
-    let _operation = operation_guard(&state)?;
-    require_unlocked(&app, &state)?;
-    let mut db = open_db(&app)?;
-    let wallet = load_wallet(&mut db)?;
-    snapshot_from(&wallet, &db, None, false)
+pub async fn wallet_snapshot(app: AppHandle) -> ApiResult<WalletSnapshotDto> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let _operation = operation_guard(&state)?;
+        require_unlocked(&app, &state)?;
+        let mut db = open_db(&app)?;
+        let wallet = load_wallet(&mut db)?;
+        snapshot_from(&wallet, &db, None, false)
+    })
+    .await
+    .map_err(internal)?
 }
 
 #[tauri::command]

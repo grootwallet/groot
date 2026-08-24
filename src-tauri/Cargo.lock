@@ -1865,7 +1865,7 @@ dependencies = [
 
 [[package]]
 name = "groot"
-version = "0.4.25"
+version = "0.4.28"
 dependencies = [
  "aes-gcm 0.10.3",
  "argon2",
@@ -1881,7 +1881,9 @@ dependencies = [
  "minreq",
  "objc2",
  "objc2-app-kit",
+ "objc2-core-foundation",
  "objc2-foundation",
+ "objc2-web-kit",
  "payjoin",
  "rand",
  "security-framework",
@@ -2896,7 +2898,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2a180dd8642fa45cdb7dd721cd4c11b1cadd4929ce112ebd8b9f5803cc79d536"
 dependencies = [
  "bitflags 2.13.1",
+ "block2",
  "dispatch2",
+ "libc",
  "objc2",
 ]
 

@@ -503,15 +503,28 @@ pub async fn hardware_sign_multisig(
     let reviewed_global_xpubs = signing_psbt.xpub.clone();
     add_multisig_global_xpubs(&mut signing_psbt, &metadata)?;
     let encoded = encode_psbt(&signing_psbt);
-    let expected_fingerprints = metadata
-        .cosigners
-        .iter()
-        .map(|cosigner| cosigner.fingerprint.clone())
-        .collect::<Vec<_>>();
     let hwi = hwi_cli(&app)?;
     let device = hardware_commands::recently_scanned_hardware_device(&state, &device_id)?;
+    let cached_fingerprint = device
+        .fingerprint
+        .as_deref()
+        .ok_or_else(|| missing_hardware_fingerprint(&device.device_type))?;
+    let expected_signer = metadata
+        .cosigners
+        .iter()
+        .find(|signer| signer.fingerprint.eq_ignore_ascii_case(cached_fingerprint))
+        .cloned()
+        .ok_or_else(unknown_hardware_signer)?;
     let (signed, signing_identity) = tauri::async_runtime::spawn_blocking(move || {
-        let identity = connected_hardware_identity(device, &expected_fingerprints)?;
+        let operation = hwi
+            .begin_interactive_operation()
+            .map_err(hardware_api_error)?;
+        let identity = hardware_commands::prove_live_cosigner_identity(
+            &hwi,
+            &operation,
+            &device,
+            &expected_signer,
+        )?;
         if records_interactive_policy_verification(&identity.device_type)
             && !has_signer_policy_verification(&policy_verifications, &identity)
         {
@@ -529,7 +542,7 @@ pub async fn hardware_sign_multisig(
             ));
         }
         let output = hwi
-            .sign_psbt(&identity.device_type, &device_id, &encoded)
+            .sign_psbt_in_operation(&operation, &identity.device_type, &device.path, &encoded)
             .map_err(|error| hardware_device_api_error(error, &identity.device_type))?;
         let response: HwiPsbt = serde_json::from_slice(&output).map_err(internal)?;
         let signed = response.psbt.ok_or_else(|| {

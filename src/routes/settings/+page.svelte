@@ -512,21 +512,6 @@
   }
   async function saveHardwareHealthCheck(fingerprint: string, check: CosignerHealthCheck) {
     recordHardwareHealthCheck(fingerprint, check);
-    try {
-      recordHardwareHealthCheck(
-        fingerprint,
-        await walletService.recordHardwareHealthCheck(fingerprint, check)
-      );
-    } catch (cause) {
-      toast({
-        title: 'Health-check result not saved',
-        description:
-          cause instanceof Error
-            ? cause.message
-            : 'The result will be available only until Groot closes.',
-        tone: 'danger'
-      });
-    }
   }
   async function runFullRescan() {
     scanning = true;

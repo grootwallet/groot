@@ -16,7 +16,7 @@ const device = (action: HardwareDevice['action']): HardwareDevice => ({
 describe('receive hardware-verification orchestration', () => {
   it.each([
     ['prompt_pin', 'prompt_pin'],
-    ['retry', 'rescan'],
+    ['retry', 'unavailable'],
     ['none', 'unavailable'],
     ['import', 'verify'],
     ['confirm_empty_passphrase', 'verify']

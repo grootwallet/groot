@@ -9,7 +9,7 @@ export type ReceiveVerificationFailure = {
 
 export function receiveVerificationIntent(device: HardwareDevice): ReceiveVerificationIntent {
   if (device.action === 'prompt_pin') return 'prompt_pin';
-  if (device.action === 'retry') return 'rescan';
+  if (device.action === 'retry') return 'unavailable';
   if (device.action === 'none') return 'unavailable';
   return 'verify';
 }
