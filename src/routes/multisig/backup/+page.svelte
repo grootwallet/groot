@@ -273,7 +273,10 @@
           {translate($locale, 'Backup formats')}
           <InsightTip
             label={translate($locale, 'About backup formats')}
-            text="BSMS is a portable public descriptor record supported by compatible coordinators. Groot JSON also preserves Groot-specific labels and metadata. Neither contains private keys."
+            text={translate(
+              $locale,
+              'BSMS is a portable public descriptor record supported by compatible coordinators. Groot JSON also preserves Groot-specific labels and metadata. Neither contains private keys.'
+            )}
           />
         </p>
         <div class="backup-security-note">
@@ -370,7 +373,10 @@
             {translate($locale, '2. Test recovery')}
             <InsightTip
               label={translate($locale, 'What does this test do?')}
-              text="Groot safely imports the watch-only backup in memory and proves it derives the same first address. It never signs or moves bitcoin."
+              text={translate(
+                $locale,
+                'Groot safely imports the watch-only backup in memory and proves it derives the same first address. It never signs or moves bitcoin.'
+              )}
             />
           </h2>
           <p>

@@ -158,8 +158,14 @@
           <PasswordField
             label={credentialLabel}
             tooltip={isSoftwareWallet
-              ? 'This BIP39 passphrase is required with your 24 recovery words and also unlocks Groot. A different passphrase opens a different wallet.'
-              : 'This app PIN protects local Groot data only. It is not a hardware-wallet passphrase and is not part of a signer seed backup.'}
+              ? translate(
+                  $locale,
+                  'This BIP39 passphrase is required with your 24 recovery words and also unlocks Groot. A different passphrase opens a different wallet.'
+                )
+              : translate(
+                  $locale,
+                  'This app PIN protects local Groot data only. It is not a hardware-wallet passphrase and is not part of a signer seed backup.'
+                )}
             bind:value={credential}
             placeholder={credentialPlaceholder}
             autocomplete="current-password"

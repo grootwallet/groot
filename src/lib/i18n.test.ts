@@ -83,6 +83,26 @@ describe('locale preferences', () => {
     );
   });
 
+  it('translates security and privacy tooltip copy', () => {
+    expect(
+      translate(
+        'fr',
+        'This app PIN protects local Groot data only. It is not a hardware-wallet passphrase and is not part of a signer seed backup.'
+      )
+    ).toBe(
+      'Ce code PIN protège uniquement les données locales de Groot. Ce n’est pas une phrase secrète de portefeuille matériel et il ne fait pas partie de la sauvegarde de la graine d’un signataire.'
+    );
+    expect(
+      translate(
+        'es',
+        'The permanent labels inherited from this coin’s receive address or funding inputs.'
+      )
+    ).toBe(
+      'Las etiquetas permanentes heredadas de la dirección de recepción de esta moneda o de sus entradas de financiación.'
+    );
+    expect(translate('fr', 'More information')).toBe('Plus d’informations');
+  });
+
   it('provides non-empty French and Spanish copy for every catalog entry', () => {
     expect(Object.keys(copyCatalog).length).toBeGreaterThan(800);
     for (const translation of Object.values(copyCatalog)) {

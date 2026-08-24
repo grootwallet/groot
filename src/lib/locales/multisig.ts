@@ -7,6 +7,21 @@ export const multisigCopy = {
   },
   'This wallet': { fr: 'Ce portefeuille', es: 'Esta cartera' },
   'This template': { fr: 'Ce modèle', es: 'Esta plantilla' },
+  'A descriptor is a public, watch-only recipe that defines the signing policy and derives every receive and change address. It cannot spend bitcoin, but it reveals the wallet’s complete address history, so keep it private and back it up.':
+    {
+      fr: 'Un descripteur est une recette publique en lecture seule qui définit la politique de signature et dérive chaque adresse de réception et de monnaie. Il ne peut pas dépenser de bitcoin, mais il révèle tout l’historique des adresses du portefeuille ; conservez-le donc en privé et sauvegardez-le.',
+      es: 'Un descriptor es una receta pública de solo lectura que define la política de firma y deriva cada dirección de recepción y cambio. No puede gastar bitcoin, pero revela todo el historial de direcciones de la cartera; mantenlo privado y guárdalo como copia de seguridad.'
+    },
+  'BSMS is a portable public descriptor record supported by compatible coordinators. Groot JSON also preserves Groot-specific labels and metadata. Neither contains private keys.':
+    {
+      fr: 'BSMS est un enregistrement portable de descripteur public pris en charge par les coordinateurs compatibles. Le JSON Groot conserve également les libellés et métadonnées propres à Groot. Aucun des deux ne contient de clés privées.',
+      es: 'BSMS es un registro portátil de descriptor público compatible con coordinadores compatibles. El JSON de Groot también conserva las etiquetas y los metadatos propios de Groot. Ninguno contiene claves privadas.'
+    },
+  'Groot safely imports the watch-only backup in memory and proves it derives the same first address. It never signs or moves bitcoin.':
+    {
+      fr: 'Groot importe en mémoire la sauvegarde en lecture seule de manière sécurisée et vérifie qu’elle dérive la même première adresse. Il ne signe ni ne déplace jamais de bitcoin.',
+      es: 'Groot importa de forma segura en memoria la copia de solo lectura y comprueba que deriva la misma primera dirección. Nunca firma ni mueve bitcoin.'
+    },
   'Add {count} more signer.': {
     fr: 'Ajoutez encore {count} signataire.',
     es: 'Añade {count} firmante más.'

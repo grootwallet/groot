@@ -26,6 +26,20 @@ const missing = new Map();
 const rawCopy = [];
 const rawExpressions = [];
 const fileFilter = process.argv[2];
+const userFacingAttributes = new Set([
+  'alt',
+  'aria-label',
+  'description',
+  'detail',
+  'emptyMessage',
+  'hint',
+  'label',
+  'loadingLabel',
+  'placeholder',
+  'text',
+  'title',
+  'tooltip'
+]);
 const allowedUntranslated = new Set([
   'BTC',
   'BDK',
@@ -63,6 +77,7 @@ const allowedUntranslated = new Set([
   'sortCoins',
   'px',
   'repeat(',
+  'q…',
   ', minmax(0, 1fr))'
 ]);
 
@@ -135,20 +150,22 @@ for (const file of files) {
         rawCopy.push(`${JSON.stringify(text)}\t${file}`);
       }
     }
+    if (
+      value.type === 'Attribute' &&
+      userFacingAttributes.has(value.name) &&
+      Array.isArray(value.value)
+    ) {
+      for (const part of value.value) {
+        if (part.type !== 'Text') continue;
+        const text = (part.data ?? '').replace(/\s+/g, ' ').trim();
+        if (/[A-Za-z]/.test(text) && !allowedUntranslated.has(text)) {
+          rawCopy.push(`${JSON.stringify(text)}\t${file}`);
+        }
+      }
+    }
     if (value.type === 'ExpressionTag') {
       const attributeName = parent?.type === 'Attribute' ? parent.name : null;
-      const userFacingAttribute = [
-        'alt',
-        'aria-label',
-        'description',
-        'detail',
-        'emptyMessage',
-        'hint',
-        'label',
-        'loadingLabel',
-        'placeholder',
-        'title'
-      ].includes(attributeName);
+      const userFacingAttribute = userFacingAttributes.has(attributeName);
       const displayExpression = parent?.type !== 'Attribute' || userFacingAttribute;
       const rootType = value.expression?.type;
       if (

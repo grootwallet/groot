@@ -174,6 +174,24 @@ export const walletCopy = {
   Outpoint: { fr: 'Point de sortie', es: 'Punto de salida' },
   'Permanent label': { fr: 'Libellé permanent', es: 'Etiqueta permanente' },
   'Privacy clusters': { fr: 'Groupes de confidentialité', es: 'Grupos de privacidad' },
+  'The permanent labels inherited from this coin’s receive address or funding inputs.': {
+    fr: 'Les libellés permanents hérités de l’adresse de réception de cette pièce ou de ses entrées de financement.',
+    es: 'Las etiquetas permanentes heredadas de la dirección de recepción de esta moneda o de sus entradas de financiación.'
+  },
+  'Groups already linked by transaction history. Spending across groups creates a new public link.':
+    {
+      fr: 'Groupes déjà reliés par l’historique des transactions. Dépenser depuis plusieurs groupes crée un nouveau lien public.',
+      es: 'Grupos ya vinculados por el historial de transacciones. Gastar desde varios grupos crea un nuevo vínculo público.'
+    },
+  'The permanent label of the payment that created this change. It can differ from the labels this coin inherited.':
+    {
+      fr: 'Le libellé permanent du paiement à l’origine de cette monnaie. Il peut différer des libellés hérités par cette pièce.',
+      es: 'La etiqueta permanente del pago que creó este cambio. Puede diferir de las etiquetas heredadas por esta moneda.'
+    },
+  'How many wallet inputs were combined to create this change coin.': {
+    fr: 'Nombre d’entrées du portefeuille combinées pour créer cette pièce de monnaie.',
+    es: 'Cuántas entradas de la cartera se combinaron para crear esta moneda de cambio.'
+  },
   Provenance: { fr: 'Provenance', es: 'Procedencia' },
   'Received bitcoin will appear here after sync.': {
     fr: 'Le bitcoin reçu apparaîtra ici après synchronisation.',

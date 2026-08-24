@@ -1636,7 +1636,10 @@
           <ChevronDown size={14} class={showDescriptor ? 'rotated' : ''} /></button
         ><InsightTip
           label={translate($locale, 'About wallet descriptors')}
-          text="A descriptor is a public, watch-only recipe that defines the signing policy and derives every receive and change address. It cannot spend bitcoin, but it reveals the wallet’s complete address history, so keep it private and back it up."
+          text={translate(
+            $locale,
+            'A descriptor is a public, watch-only recipe that defines the signing policy and derives every receive and change address. It cannot spend bitcoin, but it reveals the wallet’s complete address history, so keep it private and back it up.'
+          )}
         />
       </div>
       {#if showDescriptor}<div

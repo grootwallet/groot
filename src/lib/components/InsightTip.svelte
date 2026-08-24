@@ -1,7 +1,9 @@
 <script lang="ts">
+  import { locale } from '$lib/i18n';
+  import { translate } from '$lib/i18n-catalog';
   import { Info } from '@lucide/svelte';
   import { onMount } from 'svelte';
-  let { text, label = 'More information' } = $props<{ text: string; label?: string }>();
+  let { text, label = '' } = $props<{ text: string; label?: string }>();
   let open = $state(false);
   let finePointer = $state(true);
   let root: HTMLSpanElement | null = null;
@@ -28,7 +30,7 @@
 <span class="insight-tip" class:open bind:this={root}>
   <button
     type="button"
-    aria-label={label}
+    aria-label={label || translate($locale, 'More information')}
     aria-expanded={finePointer ? undefined : open}
     onclick={(event) => {
       if (finePointer) event.currentTarget.blur();

@@ -25,6 +25,16 @@ export const onboardingCopy = {
     fr: 'Saisissez la phrase secrète de ce portefeuille pour continuer.',
     es: 'Introduce la frase de contraseña de esta cartera para continuar.'
   },
+  'This BIP39 passphrase is required with your 24 recovery words and also unlocks Groot. A different passphrase opens a different wallet.':
+    {
+      fr: 'Cette phrase secrète BIP39 est requise avec vos 24 mots de récupération et déverrouille également Groot. Une phrase secrète différente ouvre un portefeuille différent.',
+      es: 'Esta frase de contraseña BIP39 es necesaria junto con tus 24 palabras de recuperación y también desbloquea Groot. Una frase diferente abre una cartera diferente.'
+    },
+  'This app PIN protects local Groot data only. It is not a hardware-wallet passphrase and is not part of a signer seed backup.':
+    {
+      fr: 'Ce code PIN protège uniquement les données locales de Groot. Ce n’est pas une phrase secrète de portefeuille matériel et il ne fait pas partie de la sauvegarde de la graine d’un signataire.',
+      es: 'Este PIN solo protege los datos locales de Groot. No es una frase de contraseña de la cartera física ni forma parte de la copia de la semilla de un firmante.'
+    },
   'Groot will not guess missing metadata or reset its app PIN. Because Regtest wallets are disposable, delete this test wallet and recreate or recover it from a public wallet backup. Its existing files remain untouched until you explicitly delete it.':
     {
       fr: 'Groot ne devinera pas les métadonnées manquantes et ne réinitialisera pas son code PIN. Les portefeuilles Regtest étant jetables, supprimez ce portefeuille de test puis recréez-le ou récupérez-le depuis une sauvegarde publique. Ses fichiers existants restent intacts jusqu’à leur suppression explicite.',

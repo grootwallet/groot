@@ -370,10 +370,13 @@
               <button
                 class="coin-details-toggle"
                 aria-expanded={expanded.includes(utxo.outpoint)}
-                aria-label="{translate(
+                aria-label={translate(
                   $locale,
-                  expanded.includes(utxo.outpoint) ? 'Hide' : 'Show'
-                )} details for {coinName(utxo)}"
+                  expanded.includes(utxo.outpoint)
+                    ? 'Hide details for {coin}'
+                    : 'Show details for {coin}',
+                  { coin: coinName(utxo) }
+                )}
                 onclick={() => toggleDetails(utxo.outpoint)}
                 >{translate($locale, 'Details')}
                 <ChevronDown
@@ -402,7 +405,10 @@
                     {translate($locale, 'Provenance')}
                     <InsightTip
                       label={translate($locale, 'About coin provenance')}
-                      text="The permanent labels inherited from this coin’s receive address or funding inputs."
+                      text={translate(
+                        $locale,
+                        'The permanent labels inherited from this coin’s receive address or funding inputs.'
+                      )}
                     />
                   </dt>
                   <dd>
@@ -425,7 +431,10 @@
                     {translate($locale, 'Privacy clusters')}
                     <InsightTip
                       label={translate($locale, 'About privacy clusters')}
-                      text="Groups already linked by transaction history. Spending across groups creates a new public link."
+                      text={translate(
+                        $locale,
+                        'Groups already linked by transaction history. Spending across groups creates a new public link.'
+                      )}
                     />
                   </dt>
                   <dd>
@@ -447,7 +456,10 @@
                       {translate($locale, 'Source payment intent')}
                       <InsightTip
                         label={translate($locale, 'About source payment intent')}
-                        text="The permanent label of the payment that created this change. It can differ from the labels this coin inherited."
+                        text={translate(
+                          $locale,
+                          'The permanent label of the payment that created this change. It can differ from the labels this coin inherited.'
+                        )}
                       />
                     </dt>
                     <dd>{utxo.provenance.sourceIntentLabel.text}</dd>
@@ -456,7 +468,10 @@
                       {translate($locale, 'Change lineage')}
                       <InsightTip
                         label={translate($locale, 'About change lineage')}
-                        text="How many wallet inputs were combined to create this change coin."
+                        text={translate(
+                          $locale,
+                          'How many wallet inputs were combined to create this change coin.'
+                        )}
                       />
                     </dt>
                     <dd>

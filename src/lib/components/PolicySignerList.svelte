@@ -9,11 +9,11 @@
   let {
     signers,
     currentFingerprint,
-    detail = 'identity'
+    detailMode = 'identity'
   } = $props<{
     signers: CosignerDraft[];
     currentFingerprint?: string;
-    detail?: 'fingerprint' | 'identity';
+    detailMode?: 'fingerprint' | 'identity';
   }>();
 
   let detailOpen = $state(false);
@@ -40,7 +40,7 @@
         <strong
           >{signer.label}{#if current}<em>{translate($locale, 'This device')}</em>{/if}</strong
         >
-        {#if detail === 'fingerprint'}
+        {#if detailMode === 'fingerprint'}
           <code>{signer.fingerprint.toLowerCase()}</code>
         {:else}
           <div class="policy-signer-identifiers">

@@ -1,6 +1,15 @@
 import type { CatalogSection } from './types';
 
 export const accessibilityCopy = {
+  'Hide details for {coin}': {
+    fr: 'Masquer les détails de {coin}',
+    es: 'Ocultar los detalles de {coin}'
+  },
+  'More information': { fr: 'Plus d’informations', es: 'Más información' },
+  'Show details for {coin}': {
+    fr: 'Afficher les détails de {coin}',
+    es: 'Mostrar los detalles de {coin}'
+  },
   'Account public key': { fr: 'Clé publique du compte', es: 'Clave pública de la cuenta' },
   'Add a signer': { fr: 'Ajouter un signataire', es: 'Añadir un firmante' },
   'Add permanent label': { fr: 'Ajouter un libellé permanent', es: 'Añadir etiqueta permanente' },

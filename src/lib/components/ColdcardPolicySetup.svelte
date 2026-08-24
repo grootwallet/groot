@@ -59,7 +59,7 @@
   <PolicySignerList
     signers={wallet.cosigners}
     currentFingerprint={signer.fingerprint}
-    detail="fingerprint"
+    detailMode="fingerprint"
   />
 
   <label class="policy-review-confirmation"
