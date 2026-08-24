@@ -68,11 +68,6 @@ export const componentCopy = {
   bcrt1: { fr: 'bcrt1', es: 'bcrt1' },
   Block: { fr: 'Bloc', es: 'Bloque' },
   Change: { fr: 'Monnaie', es: 'Cambio' },
-  'Cancel on Trezor': { fr: 'Annulez sur Trezor', es: 'Cancela en Trezor' },
-  'Cancel the PIN request on Trezor before closing this dialog.': {
-    fr: 'Annulez la demande de PIN sur Trezor avant de fermer cette fenêtre.',
-    es: 'Cancela la solicitud de PIN en Trezor antes de cerrar esta ventana.'
-  },
   'Change address': { fr: 'Adresse de monnaie', es: 'Dirección de cambio' },
   'Change descriptor': { fr: 'Descripteur de monnaie', es: 'Descriptor de cambio' },
   'Check signer': { fr: 'Contrôler le signataire', es: 'Comprobar firmante' },
@@ -144,6 +139,7 @@ export const componentCopy = {
     fr: 'Continuer la saisie du PIN',
     es: 'Continuar con el PIN'
   },
+  'Disconnect Trezor': { fr: 'Déconnectez Trezor', es: 'Desconecta Trezor' },
   Fingerprint: { fr: 'Empreinte', es: 'Huella' },
   'from this wallet': { fr: 'depuis ce portefeuille', es: 'desde esta cartera' },
   'Frozen coins are excluded from automatic and manual spending until you unfreeze them.': {
@@ -334,13 +330,17 @@ export const componentCopy = {
     es: 'La etiqueta es permanente. Los espacios superiores son solo visuales; al copiar siempre se usa la dirección exacta.'
   },
   'This device': { fr: 'Cet appareil', es: 'Este dispositivo' },
-  'Trezor cancellation required': {
-    fr: 'Annulation requise sur Trezor',
-    es: 'Cancelación requerida en Trezor'
+  'Trezor disconnection required': {
+    fr: 'Déconnexion de Trezor requise',
+    es: 'Debes desconectar Trezor'
   },
-  'I canceled on Trezor': {
-    fr: 'J’ai annulé sur Trezor',
-    es: 'He cancelado en Trezor'
+  'I disconnected Trezor': {
+    fr: 'J’ai déconnecté Trezor',
+    es: 'He desconectado Trezor'
+  },
+  'Unplug Trezor to cancel the PIN request, then close this dialog.': {
+    fr: 'Débranchez Trezor pour annuler la demande de PIN, puis fermez cette fenêtre.',
+    es: 'Desconecta Trezor para cancelar la solicitud de PIN y luego cierra esta ventana.'
   },
   'This exact address was shown on and matched by a saved hardware signer. The verification applies only to this address.':
     {

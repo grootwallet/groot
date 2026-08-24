@@ -65,7 +65,7 @@
     onclose();
   }
 
-  async function confirmDeviceCancellation() {
+  async function confirmDeviceDisconnection() {
     if (cancellationBusy) return;
     cancellationBusy = true;
     try {
@@ -101,9 +101,12 @@
     </div>
     {#if cancellationRequested}
       <HardwareActionPrompt
-        title={translate($locale, 'Cancel on Trezor')}
-        detail={translate($locale, 'Cancel the PIN request on Trezor before closing this dialog.')}
-        label={translate($locale, 'Trezor cancellation required')}
+        title={translate($locale, 'Disconnect Trezor')}
+        detail={translate(
+          $locale,
+          'Unplug Trezor to cancel the PIN request, then close this dialog.'
+        )}
+        label={translate($locale, 'Trezor disconnection required')}
       />
       <div class="pin-matrix-actions">
         <Button
@@ -112,8 +115,8 @@
           onclick={() => (cancellationRequested = false)}
           >{translate($locale, 'Continue PIN entry')}</Button
         >
-        <Button disabled={cancellationBusy} onclick={confirmDeviceCancellation}
-          >{translate($locale, 'I canceled on Trezor')}</Button
+        <Button disabled={cancellationBusy} onclick={confirmDeviceDisconnection}
+          >{translate($locale, 'I disconnected Trezor')}</Button
         >
       </div>
     {:else if error}

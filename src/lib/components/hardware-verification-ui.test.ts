@@ -80,8 +80,9 @@ describe('hardware receive verification UI', () => {
     const pinModal = readFileSync(new URL('./TrezorPinModal.svelte', import.meta.url), 'utf8');
     expect(pinModal).toContain('if (challengeReady || busy)');
     expect(pinModal).toContain('attentionSignal += 1');
-    expect(pinModal).toContain('Cancel on Trezor');
-    expect(pinModal).toContain('I canceled on Trezor');
+    expect(pinModal).toContain('Disconnect Trezor');
+    expect(pinModal).toContain('I disconnected Trezor');
+    expect(pinModal).toContain('Unplug Trezor to cancel the PIN request');
     expect(pinModal).toContain('await walletService.cancelHardwareOperations()');
     expect(pinModal).toContain('onclose={requestClose}');
   });
