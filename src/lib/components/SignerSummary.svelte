@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { locale } from '$lib/i18n';
+  import { translate } from '$lib/i18n-catalog';
   import { Check, Cpu, KeyRound, X } from '@lucide/svelte';
 
   type SignerItem = {
@@ -25,7 +27,7 @@
   }>();
 
   const shortenedFingerprint = (value?: string | null) =>
-    value ? value.toLowerCase().slice(0, 8) : 'Not recorded';
+    value ? value.toLowerCase().slice(0, 8) : translate($locale, 'Not recorded');
   const signedCount = $derived(
     signers.filter(
       (signer: SignerItem) => signer.fingerprint && signedFingerprints.includes(signer.fingerprint)
@@ -33,28 +35,48 @@
   );
 </script>
 
-<section class="send-signers" class:loading aria-label="Payment signers" aria-busy={loading}>
+<section
+  class="send-signers"
+  class:loading
+  aria-label={translate($locale, 'Payment signers')}
+  aria-busy={loading}
+>
   <header>
     <div>
-      <span>Signing with</span><strong
-        >{loading ? 'Checking…' : `${required} of ${signers.length}`}</strong
+      <span>{translate($locale, 'Signing with')}</span><strong
+        >{loading
+          ? translate($locale, 'Checking…')
+          : translate($locale, '{required} of {total}', {
+              required,
+              total: signers.length
+            })}</strong
       >
     </div>
     <small
-      >{loading
-        ? 'Loading wallet signer'
-        : collecting
-          ? `${signedCount} of ${required} collected`
-          : required === 1
-            ? 'One signature required'
-            : `${required} signatures required`}</small
+      >{translate(
+        $locale,
+        loading
+          ? translate($locale, 'Loading wallet signer')
+          : collecting
+            ? translate($locale, '{signed} of {required} collected', {
+                signed: signedCount,
+                required
+              })
+            : required === 1
+              ? 'One signature required'
+              : `${required} signatures required`
+      )}</small
     >
   </header>
   <div class="send-signer-list">
     {#if loading}
       <article class="send-signer-placeholder" aria-hidden="true">
         <span class="send-signer-icon"><Cpu size={15} /></span>
-        <div><strong>Loading signer</strong><small>Checking wallet identity…</small></div>
+        <div>
+          <strong>{translate($locale, 'Loading signer')}</strong><small
+            >{translate($locale, 'Checking wallet identity…')}</small
+          >
+        </div>
       </article>
     {:else}
       {#each signers as signer}
@@ -69,7 +91,7 @@
           >
           <div>
             <strong>{signer.label}</strong><small
-              >{signer.detail}{#if signer.fingerprint}{' · '}<code
+              >{translate($locale, signer.detail)}{#if signer.fingerprint}{' · '}<code
                   >{shortenedFingerprint(signer.fingerprint)}</code
                 >{/if}</small
             >
@@ -77,8 +99,10 @@
           {#if signed && ondiscard}<button
               type="button"
               class="discard-signer-signature"
-              aria-label={`Discard ${signer.label} local signature`}
-              title="Discard local signature"
+              aria-label={translate($locale, 'Discard {signer} local signature', {
+                signer: signer.label
+              })}
+              title={translate($locale, 'Discard local signature')}
               onclick={() => ondiscard?.(signer)}><X size={14} /></button
             >{/if}
         </article>

@@ -1,6 +1,8 @@
 <script lang="ts">
   import { Eye, EyeOff } from '@lucide/svelte';
   import InsightTip from '$lib/components/InsightTip.svelte';
+  import { locale } from '$lib/i18n';
+  import { translate } from '$lib/i18n-catalog';
 
   let {
     value = $bindable(),
@@ -48,7 +50,9 @@
     />
     <button
       type="button"
-      aria-label={revealed ? `Hide ${inputLabel}` : `Show ${inputLabel}`}
+      aria-label={translate($locale, revealed ? 'Hide {label}' : 'Show {label}', {
+        label: translate($locale, inputLabel)
+      })}
       {disabled}
       onclick={() => (revealed = !revealed)}
     >

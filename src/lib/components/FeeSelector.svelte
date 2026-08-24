@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { locale } from '$lib/i18n';
+  import { translate } from '$lib/i18n-catalog';
   import { Gauge } from '@lucide/svelte';
   import Amount from './Amount.svelte';
   import type { FeeEstimates } from '$lib/wallet';
@@ -29,7 +31,7 @@
 </script>
 
 <div class="field fee-selector">
-  <span>Network fee</span>
+  <span>{translate($locale, 'Network fee')}</span>
   <div class="fee-options">
     {#each options as option}
       <button
@@ -40,8 +42,8 @@
           customChosen = false;
           onchange(option.rate);
         }}
-        ><span><strong>{option.name}</strong></span><b
-          >{estimates ? `${option.rate} sat/vB` : 'Unavailable'}</b
+        ><span><strong>{translate($locale, option.name)}</strong></span><b
+          >{translate($locale, estimates ? `${option.rate} sat/vB` : 'Unavailable')}</b
         ></button
       >
     {/each}
@@ -52,8 +54,12 @@
         customChosen = true;
         onchange(Number(custom || 0));
       }}
-      ><span><strong>Custom</strong><small>Set rate</small></span>{#if customActive}<input
-          aria-label="Custom fee rate"
+      ><span
+        ><strong>{translate($locale, 'Custom')}</strong><small
+          >{translate($locale, 'Set rate')}</small
+        ></span
+      >{#if customActive}<input
+          aria-label={translate($locale, 'Custom fee rate')}
           value={custom || (value ? String(value) : '')}
           onclick={(event) => event.stopPropagation()}
           oninput={(event) => {
@@ -66,8 +72,11 @@
     >
   </div>
   <span class="fee-source">
-    {#if estimates}Estimated fee <Amount value={estimatedFee} /> · {estimates.source}{:else}Estimate
-      unavailable · Enter a custom rate{/if}
+    {#if estimates}{translate($locale, 'Estimated fee')}
+      <Amount value={estimatedFee} /> · {estimates.source}{:else}{translate(
+        $locale,
+        'Estimate\n      unavailable · Enter a custom rate'
+      )}{/if}
   </span>
   {#if error}<p class="form-error" role="alert">{error}</p>{/if}
 </div>

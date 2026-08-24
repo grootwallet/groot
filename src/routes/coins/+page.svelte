@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { translate, localizedError } from '$lib/i18n-catalog';
   import {
     AlertTriangle,
     ChevronDown,
@@ -124,7 +125,7 @@
       utxos = snapshot.utxos;
       transactions = snapshot.transactions;
     } catch (cause) {
-      loadError = cause instanceof Error ? cause.message : 'Coin data could not be read.';
+      loadError = localizedError(cause, $locale, 'Coin data could not be read.');
       toast({ title: 'Could not load coins', description: loadError, tone: 'danger' });
     } finally {
       loading = false;
@@ -157,7 +158,10 @@
   async function copy(value: string, label: string, content: 'bitcoin-address' | 'identifier') {
     try {
       await copyText(value, content);
-      toast({ title: `${label} copied`, tone: 'success' });
+      toast({
+        title: translate($locale, '{label} copied', { label: translate($locale, label) }),
+        tone: 'success'
+      });
     } catch {
       toast({ title: 'Copy failed', description: 'Select and copy it manually.', tone: 'danger' });
     }
@@ -196,7 +200,7 @@
     } catch (cause) {
       toast({
         title: 'Could not update coins',
-        description: cause instanceof Error ? cause.message : undefined,
+        description: localizedError(cause, $locale),
         tone: 'danger'
       });
     } finally {
@@ -232,8 +236,7 @@
         tone: 'success'
       });
     } catch (cause) {
-      claimError =
-        cause instanceof Error ? cause.message : 'The permanent label could not be saved.';
+      claimError = localizedError(cause, $locale, 'The permanent label could not be saved.');
     } finally {
       claimBusy = false;
     }
@@ -243,12 +246,12 @@
 <div class="page">
   <header class="page-header">
     <div>
-      <p class="eyebrow">COINS</p>
-      <h1>Coins</h1>
-      <p class="subtitle">Choose exactly what a payment may spend.</p>
+      <p class="eyebrow">{translate($locale, 'COINS')}</p>
+      <h1>{translate($locale, 'Coins')}</h1>
+      <p class="subtitle">{translate($locale, 'Choose exactly what a payment may spend.')}</p>
     </div>
     <div class="stat-pill">
-      <span>{utxos.length} coins</span><strong
+      <span>{utxos.length} {translate($locale, 'coins')}</span><strong
         ><Amount value={utxos.reduce((a, u) => a + u.amount, 0)} hidden={$discreetMode} /></strong
       >
     </div>
@@ -257,8 +260,9 @@
   <section class="coin-toolbar" aria-live="polite">
     <div>
       {#key selected.length}<span class="coin-selection-count" in:fly={{ y: -4, duration: 140 }}
-          ><strong>{selected.length} selected</strong><span
-            ><Amount value={selectedTotal} hidden={$discreetMode} /> selected</span
+          ><strong>{selected.length} {translate($locale, 'selected')}</strong><span
+            ><Amount value={selectedTotal} hidden={$discreetMode} />
+            {translate($locale, 'selected')}</span
           ></span
         >{/key}
     </div>
@@ -269,26 +273,34 @@
             size="small"
             disabled={busy}
             onclick={() => requestFrozenState(selected, true)}
-            ><Snowflake size={15} />Freeze selected</Button
-          ><Button size="small" href={sendHref}>Send selected coins</Button></span
+            ><Snowflake size={15} />{translate($locale, 'Freeze selected')}</Button
+          ><Button size="small" href={sendHref}>{translate($locale, 'Send selected coins')}</Button
+          ></span
         >{:else}<span class="auto-note"
-          ><CircleDot size={14} />Automatic selection remains the default</span
+          ><CircleDot size={14} />{translate(
+            $locale,
+            'Automatic selection remains the default'
+          )}</span
         >{/if}<CoinSortMenu value={sortOrder} onchange={(next) => (sortOrder = next)} />
     </div>
   </section>
-  <section class="coin-filters" aria-label="Filter coins by label and provenance">
+  <section
+    class="coin-filters"
+    aria-label={translate($locale, 'Filter coins by label and provenance')}
+  >
     <label
-      ><span>Label</span><input
+      ><span>{translate($locale, 'Label')}</span><input
         bind:value={labelFilter}
-        placeholder="Filter labels"
+        placeholder={translate($locale, 'Filter labels')}
         disabled={$discreetMode}
       /></label
     ><label
-      ><span>Provenance</span><select bind:value={provenanceFilter}
-        ><option value="all">All sources</option><option value="known">Known</option><option
-          value="mixed">Mixed</option
-        ><option value="unknown">Unknown</option><option value="reused">Address reused</option
-        ></select
+      ><span>{translate($locale, 'Provenance')}</span><select bind:value={provenanceFilter}
+        ><option value="all">{translate($locale, 'All sources')}</option><option value="known"
+          >{translate($locale, 'Known')}</option
+        ><option value="mixed">{translate($locale, 'Mixed')}</option><option value="unknown"
+          >{translate($locale, 'Unknown')}</option
+        ><option value="reused">{translate($locale, 'Address reused')}</option></select
       ></label
     >
   </section>
@@ -296,7 +308,11 @@
   {#if loading}
     <WalletSkeleton variant="coins" count={4} />
   {:else if loadError}
-    <LoadFailure title="Coins are unavailable" description={loadError} onretry={load} />
+    <LoadFailure
+      title={translate($locale, 'Coins are unavailable')}
+      description={loadError}
+      onretry={load}
+    />
   {:else if sortedUtxos.length}
     <section class="coin-list selectable">
       {#each sortedUtxos as utxo (utxo.outpoint)}
@@ -306,7 +322,7 @@
           <label class="coin-check"
             ><input
               type="checkbox"
-              aria-label="Select {coinName(utxo)}"
+              aria-label={translate($locale, 'Select {coin}', { coin: coinName(utxo) })}
               checked={selected.includes(utxo.outpoint)}
               disabled={utxo.frozen || busy}
               onchange={(event) => toggle(utxo.outpoint, event.currentTarget.checked)}
@@ -318,14 +334,15 @@
           <div class="coin-main">
             <div class="coin-title">
               <strong>{coinKind(utxo)}</strong>{#if utxo.frozen}<span class="coin-status frozen"
-                  >Frozen</span
+                  >{translate($locale, 'Frozen')}</span
                 >{:else if utxo.provenance.state === 'mixed'}<span class="coin-status reused"
-                  >Mixed provenance</span
+                  >{translate($locale, 'Mixed provenance')}</span
                 >{:else if utxo.provenance.state === 'unknown'}<span class="coin-status pending"
-                  >Unknown source</span
+                  >{translate($locale, 'Unknown source')}</span
                 >{:else if reuse || utxo.provenance.addressReused}<span class="coin-status reused"
-                  >Address reused</span
-                >{:else if !utxo.confirmations}<span class="coin-status pending">Unconfirmed</span
+                  >{translate($locale, 'Address reused')}</span
+                >{:else if !utxo.confirmations}<span class="coin-status pending"
+                  >{translate($locale, 'Unconfirmed')}</span
                 >{/if}
               <PermanentLabelTags labels={utxo.provenance.labels} hidden={$discreetMode} />
             </div>
@@ -336,28 +353,30 @@
               {#if utxo.frozen}
                 <button
                   class="coin-unfreeze-action"
-                  aria-label="Unfreeze {coinName(utxo)}"
+                  aria-label={translate($locale, 'Unfreeze {coin}', { coin: coinName(utxo) })}
                   disabled={busy}
                   onclick={() => requestFrozenState([utxo.outpoint], false)}
-                  ><Unlock size={14} />Unfreeze</button
+                  ><Unlock size={14} />{translate($locale, 'Unfreeze')}</button
                 >
               {:else}
                 <button
                   class="coin-freeze-action"
-                  aria-label="Freeze {coinName(utxo)}"
+                  aria-label={translate($locale, 'Freeze {coin}', { coin: coinName(utxo) })}
                   disabled={busy}
                   onclick={() => requestFrozenState([utxo.outpoint], true)}
-                  ><Snowflake size={14} />Freeze</button
+                  ><Snowflake size={14} />{translate($locale, 'Freeze')}</button
                 >
               {/if}
               <button
                 class="coin-details-toggle"
                 aria-expanded={expanded.includes(utxo.outpoint)}
-                aria-label="{expanded.includes(utxo.outpoint)
-                  ? 'Hide'
-                  : 'Show'} details for {coinName(utxo)}"
+                aria-label="{translate(
+                  $locale,
+                  expanded.includes(utxo.outpoint) ? 'Hide' : 'Show'
+                )} details for {coinName(utxo)}"
                 onclick={() => toggleDetails(utxo.outpoint)}
-                >Details <ChevronDown
+                >{translate($locale, 'Details')}
+                <ChevronDown
                   size={13}
                   class={expanded.includes(utxo.outpoint) ? 'rotated' : ''}
                 /></button
@@ -368,86 +387,103 @@
             <div class="coin-details" transition:slide={{ duration: 180 }}>
               <dl>
                 <div>
-                  <dt>Status</dt>
+                  <dt>{translate($locale, 'Status')}</dt>
                   <dd>
-                    {utxo.confirmations
-                      ? formatConfirmationCount(utxo.confirmations, $locale)
-                      : `${t('unconfirmed', $locale)} · ${t('awaitingConfirmation', $locale)}`}
+                    {translate(
+                      $locale,
+                      utxo.confirmations
+                        ? formatConfirmationCount(utxo.confirmations, $locale)
+                        : `${t('unconfirmed', $locale)} · ${t('awaitingConfirmation', $locale)}`
+                    )}
                   </dd>
                 </div>
                 <div>
                   <dt>
-                    Provenance <InsightTip
-                      label="About coin provenance"
+                    {translate($locale, 'Provenance')}
+                    <InsightTip
+                      label={translate($locale, 'About coin provenance')}
                       text="The permanent labels inherited from this coin’s receive address or funding inputs."
                     />
                   </dt>
                   <dd>
-                    {$discreetMode
-                      ? 'Hidden in discreet mode'
-                      : utxo.provenance.state === 'unknown'
-                        ? 'Source unknown'
-                        : utxo.provenance.labels.map((label) => label.text).join(' + ') ||
-                          utxo.label}{!$discreetMode && utxo.provenance.state === 'mixed'
-                      ? ' · Mixed'
-                      : ''}
+                    {translate(
+                      $locale,
+                      $discreetMode
+                        ? 'Hidden in discreet mode'
+                        : utxo.provenance.state === 'unknown'
+                          ? 'Source unknown'
+                          : utxo.provenance.labels.map((label) => label.text).join(' + ') ||
+                            utxo.label
+                    )}{translate(
+                      $locale,
+                      !$discreetMode && utxo.provenance.state === 'mixed' ? ' · Mixed' : ''
+                    )}
                   </dd>
                 </div>
                 <div>
                   <dt>
-                    Privacy clusters <InsightTip
-                      label="About privacy clusters"
+                    {translate($locale, 'Privacy clusters')}
+                    <InsightTip
+                      label={translate($locale, 'About privacy clusters')}
                       text="Groups already linked by transaction history. Spending across groups creates a new public link."
                     />
                   </dt>
                   <dd>
-                    {$discreetMode
-                      ? 'Hidden in discreet mode'
-                      : `${utxo.provenance.clusterCount || 'Unknown'}${utxo.provenance.addressReused ? ' · Address reused' : ''}`}
+                    {translate(
+                      $locale,
+                      $discreetMode
+                        ? 'Hidden in discreet mode'
+                        : `${utxo.provenance.clusterCount || 'Unknown'}${utxo.provenance.addressReused ? ' · Address reused' : ''}`
+                    )}
                   </dd>
                 </div>
                 {#if !$discreetMode && utxo.provenance.sourceTransactionId}<div>
-                    <dt>Source transaction</dt>
+                    <dt>{translate($locale, 'Source transaction')}</dt>
                     <dd>
                       <code>{compactAddress(utxo.provenance.sourceTransactionId, 18, 10)}</code>
                     </dd>
                   </div>{/if}{#if !$discreetMode && utxo.provenance.sourceIntentLabel}<div>
                     <dt>
-                      Source payment intent <InsightTip
-                        label="About source payment intent"
+                      {translate($locale, 'Source payment intent')}
+                      <InsightTip
+                        label={translate($locale, 'About source payment intent')}
                         text="The permanent label of the payment that created this change. It can differ from the labels this coin inherited."
                       />
                     </dt>
                     <dd>{utxo.provenance.sourceIntentLabel.text}</dd>
                   </div>{/if}{#if !$discreetMode && utxo.provenance.context === 'change'}<div>
                     <dt>
-                      Change lineage <InsightTip
-                        label="About change lineage"
+                      {translate($locale, 'Change lineage')}
+                      <InsightTip
+                        label={translate($locale, 'About change lineage')}
                         text="How many wallet inputs were combined to create this change coin."
                       />
                     </dt>
                     <dd>
-                      {utxo.provenance.sourceOutpoints?.length ?? 0} wallet input{(utxo.provenance
-                        .sourceOutpoints?.length ?? 0) === 1
-                        ? ''
-                        : 's'}
+                      {translate(
+                        $locale,
+                        (utxo.provenance.sourceOutpoints?.length ?? 0) === 1
+                          ? '{count} wallet input'
+                          : '{count} wallet inputs',
+                        { count: utxo.provenance.sourceOutpoints?.length ?? 0 }
+                      )}
                     </dd>
                   </div>{/if}
                 <div>
-                  <dt>Address</dt>
+                  <dt>{translate($locale, 'Address')}</dt>
                   <dd>
                     <code>{compactAddress(utxo.address)}</code><button
-                      aria-label="Copy address"
+                      aria-label={translate($locale, 'Copy address')}
                       onclick={() => copy(utxo.address, 'Address', 'bitcoin-address')}
                       ><Copy size={13} /></button
                     >
                   </dd>
                 </div>
                 <div>
-                  <dt>Outpoint</dt>
+                  <dt>{translate($locale, 'Outpoint')}</dt>
                   <dd>
                     <code>{compactAddress(utxo.outpoint, 18, 10)}</code><button
-                      aria-label="Copy outpoint"
+                      aria-label={translate($locale, 'Copy outpoint')}
                       onclick={() => copy(utxo.outpoint, 'Outpoint', 'identifier')}
                       ><Copy size={13} /></button
                     >
@@ -460,18 +496,23 @@
                     <AlertTriangle size={14} />
                     <span>
                       <strong
-                        >{linkedCoins.length === 1
-                          ? 'This coin shares its address with 1 other coin.'
-                          : `This coin shares its address with ${linkedCoins.length} other coins.`}</strong
+                        >{translate(
+                          $locale,
+                          linkedCoins.length === 1
+                            ? 'This coin shares its address with 1 other coin.'
+                            : `This coin shares its address with ${linkedCoins.length} other coins.`
+                        )}</strong
                       >
-                      Spending them separately cannot undo their public link. Use a fresh labeled address
-                      for future payments.
+                      {translate(
+                        $locale,
+                        'Spending them separately cannot undo their public link. Use a fresh labeled address\n                      for future payments.'
+                      )}
                     </span>
                   </div>
-                  <ul aria-label="Coins linked by address reuse">
+                  <ul aria-label={translate($locale, 'Coins linked by address reuse')}>
                     {#each linkedCoins as linkedCoin (linkedCoin.outpoint)}
                       <li>
-                        <span>Linked coin</span>
+                        <span>{translate($locale, 'Linked coin')}</span>
                         <strong><Amount value={linkedCoin.amount} hidden={$discreetMode} /></strong>
                         <code>{compactAddress(linkedCoin.outpoint, 12, 8)}</code>
                       </li>
@@ -483,13 +524,14 @@
                 <div class="observed-receive-prompt">
                   <span><Tag size={15} /></span>
                   <div>
-                    <strong>No local label</strong>
-                    <small>Assign its first permanent label once.</small>
+                    <strong>{translate($locale, 'No local label')}</strong>
+                    <small>{translate($locale, 'Assign its first permanent label once.')}</small>
                   </div>
                   <Button
                     variant="secondary"
                     size="small"
-                    onclick={() => beginObservedReceiveClaim(utxo.outpoint)}>Add label</Button
+                    onclick={() => beginObservedReceiveClaim(utxo.outpoint)}
+                    >{translate($locale, 'Add label')}</Button
                   >
                 </div>
               {/if}
@@ -498,16 +540,18 @@
         </article>
       {:else}
         <div class="coins-empty">
-          <CircleDot size={22} /><strong>No spendable outputs yet</strong><span
-            >Received bitcoin will appear here after sync.</span
-          >
+          <CircleDot size={22} /><strong>{translate($locale, 'No spendable outputs yet')}</strong
+          ><span>{translate($locale, 'Received bitcoin will appear here after sync.')}</span>
         </div>
       {/each}
     </section>
   {:else}
     <EmptyState
-      title="No coins yet"
-      description="Received bitcoin will appear here after this wallet has synchronized."
+      title={translate($locale, 'No coins yet')}
+      description={translate(
+        $locale,
+        'Received bitcoin will appear here after this wallet has synchronized.'
+      )}
     >
       {#snippet icon()}<CircleDot size={24} />{/snippet}
     </EmptyState>
@@ -524,8 +568,11 @@
 
 <Modal
   open={!!claimIntent}
-  title="Add permanent label"
-  description="This received address has no local label. Assign its first label once; it cannot be changed or reused."
+  title={translate($locale, 'Add permanent label')}
+  description={translate(
+    $locale,
+    'This received address has no local label. Assign its first label once; it cannot be changed or reused.'
+  )}
   onclose={cancelObservedReceiveClaim}
 >
   <form
@@ -533,13 +580,13 @@
     onsubmit={(event) => (event.preventDefault(), claimObservedReceiveAddress())}
   >
     <label class="field">
-      <span>Permanent label</span>
+      <span>{translate($locale, 'Permanent label')}</span>
       <input
         bind:value={claimLabel}
         maxlength="48"
         required
         disabled={claimBusy}
-        placeholder="What was this payment for?"
+        placeholder={translate($locale, 'What was this payment for?')}
       />
       <FieldCounter value={claimLabel} max={48} />
     </label>
@@ -549,13 +596,14 @@
         type="button"
         variant="secondary"
         disabled={claimBusy}
-        onclick={cancelObservedReceiveClaim}>Cancel</Button
+        onclick={cancelObservedReceiveClaim}>{translate($locale, 'Cancel')}</Button
       >
       <Button
         type="submit"
         disabled={!claimLabel.trim() || claimBusy}
         loading={claimBusy}
-        loadingLabel="Saving label…">Save permanent label</Button
+        loadingLabel={translate($locale, 'Saving label…')}
+        >{translate($locale, 'Save permanent label')}</Button
       >
     </div>
   </form>

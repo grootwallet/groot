@@ -1,6 +1,8 @@
 <script lang="ts">
   import { Check, X, Radio } from '@lucide/svelte';
   import { toasts, dismissToast } from '$lib/stores/toasts';
+  import { locale } from '$lib/i18n';
+  import { translate } from '$lib/i18n-catalog';
   import { fly } from 'svelte/transition';
 </script>
 
@@ -13,16 +15,19 @@
           />{/if}
       </div>
       <div class="toast-copy">
-        <strong>{item.title}</strong>{#if item.description}<span>{item.description}</span
+        <strong>{translate($locale, item.title)}</strong>{#if item.description}<span
+            >{translate($locale, item.description)}</span
           >{/if}{#if item.action}<button
             onclick={async () => {
               await item.action?.run();
               dismissToast(item.id);
-            }}>{item.action.label}</button
+            }}>{translate($locale, item.action.label)}</button
           >{/if}
       </div>
-      <button class="toast-close" aria-label="Dismiss" onclick={() => dismissToast(item.id)}
-        ><X size={14} /></button
+      <button
+        class="toast-close"
+        aria-label={translate($locale, 'Dismiss')}
+        onclick={() => dismissToast(item.id)}><X size={14} /></button
       >
     </div>
   {/each}

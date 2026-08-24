@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { translate, localizedError } from '$lib/i18n-catalog';
   import { page } from '$app/state';
   import {
     Activity,
@@ -114,8 +115,7 @@
         tone: 'success'
       });
     } catch (cause) {
-      discardSetupError =
-        cause instanceof Error ? cause.message : 'Could not discard the unfinished setup.';
+      discardSetupError = localizedError(cause, $locale, 'Could not discard the unfinished setup.');
     } finally {
       discardingSetup = false;
     }
@@ -183,7 +183,7 @@
       if (selectedWalletId === walletId) selectedWalletId = previousWalletId;
       toast({
         title: 'Wallet not switched',
-        description: cause instanceof Error ? cause.message : 'Could not select this wallet.',
+        description: localizedError(cause, $locale, 'Could not select this wallet.'),
         tone: 'danger'
       });
     }
@@ -224,25 +224,43 @@
       if (event.type === 'payment_received')
         toast({
           title: 'Bitcoin received',
-          description: `Received ${formatAmount(event.amount, $denomination)} ${$denomination === 'btc' ? 'BTC' : 'sats'} · Balance ${formatAmount(event.balance, $denomination)} ${$denomination === 'btc' ? 'BTC' : 'sats'}`,
+          description: translate($locale, 'Received {amount} {unit} · Balance {balance} {unit}', {
+            amount: formatAmount(event.amount, $denomination),
+            balance: formatAmount(event.balance, $denomination),
+            unit: $denomination === 'btc' ? 'BTC' : 'sats'
+          }),
           tone: 'success'
         });
       if (event.type === 'payment_received_confirmed')
         toast({
           title: 'Bitcoin received',
-          description: `Received ${formatAmount(event.amount, $denomination)} ${$denomination === 'btc' ? 'BTC' : 'sats'} · First confirmation · Balance ${formatAmount(event.balance, $denomination)} ${$denomination === 'btc' ? 'BTC' : 'sats'}`,
+          description: translate(
+            $locale,
+            'Received {amount} {unit} · First confirmation · Balance {balance} {unit}',
+            {
+              amount: formatAmount(event.amount, $denomination),
+              balance: formatAmount(event.balance, $denomination),
+              unit: $denomination === 'btc' ? 'BTC' : 'sats'
+            }
+          ),
           tone: 'success'
         });
       if (event.type === 'first_confirmation')
         toast({
           title: 'First confirmation',
-          description: `Transaction confirmed · Balance ${formatAmount(event.balance, $denomination)} ${$denomination === 'btc' ? 'BTC' : 'sats'}`,
+          description: translate($locale, 'Transaction confirmed · Balance {balance} {unit}', {
+            balance: formatAmount(event.balance, $denomination),
+            unit: $denomination === 'btc' ? 'BTC' : 'sats'
+          }),
           tone: 'success'
         });
       if (event.type === 'transaction_broadcast')
         toast({
           title: 'Transaction broadcast',
-          description: `Remaining wallet balance: ${formatAmount(event.balance, $denomination)} ${$denomination === 'btc' ? 'BTC' : 'sats'}`,
+          description: translate($locale, 'Remaining wallet balance: {balance} {unit}', {
+            balance: formatAmount(event.balance, $denomination),
+            unit: $denomination === 'btc' ? 'BTC' : 'sats'
+          }),
           tone: 'success'
         });
       if (event.type === 'wallet_profile_updated')
@@ -282,15 +300,17 @@
     <div class="startup-gate" role="status" aria-live="polite">
       <BrandLockup />
       {#if startupState === 'failed'}
-        <p>Groot could not verify the wallet lock state.</p>
-        <button class="button secondary" onclick={resolveStartupRoute}>Retry</button>
+        <p>{translate($locale, 'Groot could not verify the wallet lock state.')}</p>
+        <button class="button secondary" onclick={resolveStartupRoute}
+          >{translate($locale, 'Retry')}</button
+        >
       {:else}
-        <span class="sr-only">Checking wallet lock state</span>
+        <span class="sr-only">{translate($locale, 'Checking wallet lock state')}</span>
       {/if}
     </div>
   {:else}
     <aside class="sidebar">
-      <a class="brand" href="/" aria-label="Groot home"><BrandLockup /></a>
+      <a class="brand" href="/" aria-label={translate($locale, 'Groot home')}><BrandLockup /></a>
       {#if profiles.length}
         <div class="wallet-switcher">
           <span class="wallet-switcher-label"
@@ -327,22 +347,30 @@
       </div>
     </aside>
 
-    <a class="mobile-brand" href="/" aria-label="Groot home"><BrandLockup /></a>
+    <a class="mobile-brand" href="/" aria-label={translate($locale, 'Groot home')}
+      ><BrandLockup /></a
+    >
 
     <main class="main">
       {#if isPrototypeWallet}<div class="demo-banner" role="status">
-          <strong>Interactive prototype</strong><span
-            >Dummy data only · Never use real funds or recovery words</span
+          <strong>{translate($locale, 'Interactive prototype')}</strong><span
+            >{translate($locale, 'Dummy data only · Never use real funds or recovery words')}</span
           >
         </div>{/if}
       {#if showSetupResume && multisigSetupDraft}
         <ResumeSetupNotice
-          title={lockedRoute
-            ? 'Multisig wallet setup'
-            : multisigSetupDraft.name.trim() || 'Multisig wallet setup'}
-          detail={lockedRoute
-            ? 'Wallet creation in progress'
-            : `${multisigSetupStageLabel(multisigSetupDraft.stage)} · ${multisigSetupDraft.cosigners.length} of ${multisigSetupSignerTarget(multisigSetupDraft)} signers added`}
+          title={translate(
+            $locale,
+            lockedRoute
+              ? 'Multisig wallet setup'
+              : multisigSetupDraft.name.trim() || 'Multisig wallet setup'
+          )}
+          detail={translate(
+            $locale,
+            lockedRoute
+              ? 'Wallet creation in progress'
+              : `${multisigSetupStageLabel(multisigSetupDraft.stage)} · ${multisigSetupDraft.cosigners.length} of ${multisigSetupSignerTarget(multisigSetupDraft)} signers added`
+          )}
           href="/multisig/new"
           locked={lockedRoute}
           ondiscard={() => {

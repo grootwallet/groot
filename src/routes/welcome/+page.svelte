@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { locale } from '$lib/i18n';
+  import { translate, localizedError } from '$lib/i18n-catalog';
   import {
     ArrowLeft,
     ArrowRight,
@@ -26,7 +28,6 @@
     MIN_SUPPLEMENTAL_COIN_FLIPS,
     MIN_SUPPLEMENTAL_DICE_ROLLS,
     walletService,
-    WalletError,
     type NetworkSetupSource,
     type SupplementalEntropyInput
   } from '$lib/wallet';
@@ -135,7 +136,7 @@
         mode = 'passphrase';
       }
     } catch (cause) {
-      error = cause instanceof Error ? cause.message : 'Could not generate recovery words.';
+      error = localizedError(cause, $locale, 'Could not generate recovery words.');
     } finally {
       busy = false;
     }
@@ -228,7 +229,7 @@
       });
       await goto('/');
     } catch (cause) {
-      error = cause instanceof WalletError ? cause.message : 'Could not create wallet.';
+      error = localizedError(cause, $locale, 'Could not create wallet.');
     } finally {
       passphrase = '';
       confirmation = '';
@@ -253,7 +254,7 @@
       });
       await goto('/');
     } catch (cause) {
-      error = cause instanceof WalletError ? cause.message : 'Could not recover wallet.';
+      error = localizedError(cause, $locale, 'Could not recover wallet.');
     } finally {
       passphrase = '';
       busy = false;
@@ -273,59 +274,82 @@
       >{networkName(defaultConfig.network).toUpperCase()}</small
     >{#if hasExistingWallet}<button
         class="onboarding-exit"
-        aria-label="Close wallet setup"
+        aria-label={translate($locale, 'Close wallet setup')}
         onclick={returnToWallet}><X size={17} /></button
       >{/if}
   </header>
   <main class="onboarding-card" class:wallet-choice-card={mode === 'choose'}>
     {#if mode === 'home'}
       <span class="hero-mark"><BrandMark size={34} /></span>
-      <h1>{hasExistingWallet ? 'Add a wallet' : 'Your bitcoin.\nSimply held.'}</h1>
-      <p>Create in Groot, connect existing hardware, or recover a software wallet.</p>
+      <h1>
+        {translate($locale, hasExistingWallet ? 'Add a wallet' : 'Your bitcoin.\nSimply held.')}
+      </h1>
+      <p>
+        {translate(
+          $locale,
+          'Create in Groot, connect existing hardware, or recover a software wallet.'
+        )}
+      </p>
       <div class="onboarding-actions simple">
         <Button size="large" class="full" onclick={() => (mode = 'choose')}
-          >Add wallet<ArrowRight size={17} /></Button
+          >{translate($locale, 'Add wallet')}<ArrowRight size={17} /></Button
         ><Button size="large" variant="secondary" class="full" onclick={() => (mode = 'recover')}
-          >Recover software wallet</Button
+          >{translate($locale, 'Recover software wallet')}</Button
         >
       </div>
-      <div class="trust-line"><ShieldCheck size={15} />Non-custodial · Onchain only</div>
+      <div class="trust-line">
+        <ShieldCheck size={15} />{translate($locale, 'Non-custodial · Onchain only')}
+      </div>
     {:else if mode === 'choose'}
-      <button class="back-link" onclick={() => (mode = 'home')}><ArrowLeft size={16} />Back</button>
-      <span class="setup-step wallet-choice-step">WALLET SETUP</span>
-      <h1>Choose how to protect your bitcoin</h1>
+      <button class="back-link" onclick={() => (mode = 'home')}
+        ><ArrowLeft size={16} />{translate($locale, 'Back')}</button
+      >
+      <span class="setup-step wallet-choice-step">{translate($locale, 'WALLET SETUP')}</span>
+      <h1>{translate($locale, 'Choose how to protect your bitcoin')}</h1>
       <p>
-        Start simply, use a separate device, or share control. You can add another wallet later.
+        {translate(
+          $locale,
+          'Start simply, use a separate device, or share control. You can add another wallet later.'
+        )}
       </p>
       <div class="wallet-type-grid">
         <button class="wallet-type-card recommended" onclick={() => (mode = 'create')}>
           <span class="wallet-type-icon"><KeyRound size={20} /></span>
           <span class="wallet-type-copy"
-            ><strong>Keep it on this device</strong><small
-              >The easiest way to start. Groot creates recovery words for you to write down.</small
+            ><strong>{translate($locale, 'Keep it on this device')}</strong><small
+              >{translate(
+                $locale,
+                'The easiest way to start. Groot creates recovery words for you to write down.'
+              )}</small
             ></span
           >
-          <span class="wallet-type-meta">Recommended</span>
+          <span class="wallet-type-meta">{translate($locale, 'Recommended')}</span>
           <ArrowRight class="wallet-type-arrow" size={17} />
         </button>
         <a class="wallet-type-card" href="/hardware/new">
           <span class="wallet-type-icon"><Cpu size={20} /></span>
           <span class="wallet-type-copy"
-            ><strong>Use a hardware wallet</strong><small
-              >Connect one you already own. Your keys stay protected by that device.</small
+            ><strong>{translate($locale, 'Use a hardware wallet')}</strong><small
+              >{translate(
+                $locale,
+                'Connect one you already own. Your keys stay protected by that device.'
+              )}</small
             ></span
           >
-          <span class="wallet-type-meta">Extra protection</span>
+          <span class="wallet-type-meta">{translate($locale, 'Extra protection')}</span>
           <ArrowRight class="wallet-type-arrow" size={17} />
         </a>
         <a class="wallet-type-card" href="/multisig/new">
           <span class="wallet-type-icon"><Users size={20} /></span>
           <span class="wallet-type-copy"
-            ><strong>Set up shared control</strong><small
-              >Require more than one key, or add another way to recover your wallet.</small
+            ><strong>{translate($locale, 'Set up shared control')}</strong><small
+              >{translate(
+                $locale,
+                'Require more than one key, or add another way to recover your wallet.'
+              )}</small
             ></span
           >
-          <span class="wallet-type-meta">Advanced</span>
+          <span class="wallet-type-meta">{translate($locale, 'Advanced')}</span>
           <ArrowRight class="wallet-type-arrow" size={17} />
         </a>
       </div>
@@ -335,92 +359,118 @@
         onclick={() => {
           chooseSupplementalSource('none');
           mode = 'choose';
-        }}><ArrowLeft size={16} />Back</button
+        }}><ArrowLeft size={16} />{translate($locale, 'Back')}</button
       >
       <SetupProgress
         steps={softwareSteps}
         current={1}
-        label="Software wallet setup progress"
+        label={translate($locale, 'Software wallet setup progress')}
         context="SOFTWARE WALLET"
       />
-      <h1>Generate wallet</h1>
+      <h1>{translate($locale, 'Generate wallet')}</h1>
       <p>
-        Groot will generate 24 recovery words securely on this device. Write them down in order and
-        keep them offline.
+        {translate(
+          $locale,
+          'Groot will generate 24 recovery words securely on this device. Write them down in order and\n        keep them offline.'
+        )}
       </p>
       <div class="setup-points">
         <div>
           <ShieldCheck size={18} /><span
-            ><strong>You control the keys</strong><small>No account, email, or cloud backup.</small
+            ><strong>{translate($locale, 'You control the keys')}</strong><small
+              >{translate($locale, 'No account, email, or cloud backup.')}</small
             ></span
           >
         </div>
         <div>
           <KeyRound size={18} /><span
-            ><strong>Recovery words are the backup</strong><small
-              >Anyone with them can spend your funds.</small
+            ><strong>{translate($locale, 'Recovery words are the backup')}</strong><small
+              >{translate($locale, 'Anyone with them can spend your funds.')}</small
             ></span
           >
         </div>
       </div>
       <details class="supplemental-entropy">
-        <summary>Advanced: add physical randomness</summary>
+        <summary>{translate($locale, 'Advanced: add physical randomness')}</summary>
         <p>
-          Optional. Groot always requires 256-bit operating-system randomness. Physical results are
-          mixed in only as an additional input.
+          {translate(
+            $locale,
+            'Optional. Groot always requires 256-bit operating-system randomness. Physical results are\n          mixed in only as an additional input.'
+          )}
         </p>
-        <div class="entropy-source-options" role="group" aria-label="Supplemental entropy source">
+        <div
+          class="entropy-source-options"
+          role="group"
+          aria-label={translate($locale, 'Supplemental entropy source')}
+        >
           <button
             class:active={supplementalSource === 'none'}
             aria-pressed={supplementalSource === 'none'}
-            onclick={() => chooseSupplementalSource('none')}>None</button
+            onclick={() => chooseSupplementalSource('none')}>{translate($locale, 'None')}</button
           >
           <button
             class:active={supplementalSource === 'coin'}
             aria-pressed={supplementalSource === 'coin'}
-            onclick={() => chooseSupplementalSource('coin')}>Coin flips</button
+            onclick={() => chooseSupplementalSource('coin')}
+            >{translate($locale, 'Coin flips')}</button
           >
           <button
             class:active={supplementalSource === 'dice'}
             aria-pressed={supplementalSource === 'dice'}
-            onclick={() => chooseSupplementalSource('dice')}>Six-sided die</button
+            onclick={() => chooseSupplementalSource('dice')}
+            >{translate($locale, 'Six-sided die')}</button
           >
         </div>
         {#if supplementalSource !== 'none'}
           <div class="entropy-entry">
             <div class="entropy-progress">
               <span
-                >{supplementalSource === 'coin'
-                  ? 'Flip a physical coin and record each result.'
-                  : 'Roll a physical six-sided die and record each result.'}</span
+                >{translate(
+                  $locale,
+                  supplementalSource === 'coin'
+                    ? 'Flip a physical coin and record each result.'
+                    : 'Roll a physical six-sided die and record each result.'
+                )}</span
               >
-              <strong>{supplementalOutcomes.length} / {supplementalMinimum} minimum</strong>
+              <strong
+                >{supplementalOutcomes.length} / {supplementalMinimum}
+                {translate($locale, 'minimum')}</strong
+              >
             </div>
             <div class="entropy-outcomes" aria-live="polite">
-              <code>{supplementalOutcomes.slice(-32) || 'No results recorded'}</code>
-              {#if supplementalOutcomes.length > 32}<small>Showing the latest 32</small>{/if}
+              <code
+                >{translate(
+                  $locale,
+                  supplementalOutcomes.slice(-32) || 'No results recorded'
+                )}</code
+              >
+              {#if supplementalOutcomes.length > 32}<small
+                  >{translate($locale, 'Showing the latest 32')}</small
+                >{/if}
             </div>
             <div
               class:coin={supplementalSource === 'coin'}
               class="entropy-result-buttons"
               role="group"
-              aria-label="Record physical result"
+              aria-label={translate($locale, 'Record physical result')}
             >
               {#if supplementalSource === 'coin'}
                 <button
-                  aria-label="Record heads"
+                  aria-label={translate($locale, 'Record heads')}
                   disabled={supplementalOutcomes.length >= supplementalMaximum}
-                  onclick={() => recordSupplementalOutcome('H')}>Heads</button
+                  onclick={() => recordSupplementalOutcome('H')}
+                  >{translate($locale, 'Heads')}</button
                 >
                 <button
-                  aria-label="Record tails"
+                  aria-label={translate($locale, 'Record tails')}
                   disabled={supplementalOutcomes.length >= supplementalMaximum}
-                  onclick={() => recordSupplementalOutcome('T')}>Tails</button
+                  onclick={() => recordSupplementalOutcome('T')}
+                  >{translate($locale, 'Tails')}</button
                 >
               {:else}
                 {#each ['1', '2', '3', '4', '5', '6'] as result}
                   <button
-                    aria-label={`Record die result ${result}`}
+                    aria-label={translate($locale, 'Record die result {result}', { result })}
                     disabled={supplementalOutcomes.length >= supplementalMaximum}
                     onclick={() => recordSupplementalOutcome(result)}>{result}</button
                   >
@@ -431,15 +481,18 @@
               <button
                 disabled={!supplementalOutcomes}
                 onclick={() => (supplementalOutcomes = supplementalOutcomes.slice(0, -1))}
-                >Undo last</button
+                >{translate($locale, 'Undo last')}</button
               >
               <button disabled={!supplementalOutcomes} onclick={() => (supplementalOutcomes = '')}
-                >Clear</button
+                >{translate($locale, 'Clear')}</button
               >
             </div>
             <p class="entropy-caution">
-              <strong>Use real physical results.</strong> This cannot protect a wallet created on a compromised
-              device, and the operating-system source never becomes optional.
+              <strong>{translate($locale, 'Use real physical results.')}</strong>
+              {translate(
+                $locale,
+                'This cannot protect a wallet created on a compromised\n              device, and the operating-system source never becomes optional.'
+              )}
             </p>
           </div>
         {/if}
@@ -450,44 +503,51 @@
         class="full"
         disabled={!supplementalReady}
         loading={busy}
-        loadingLabel="Generating securely…"
-        onclick={generate}>Generate 24 recovery words</Button
+        loadingLabel={translate($locale, 'Generating securely…')}
+        onclick={generate}>{translate($locale, 'Generate 24 recovery words')}</Button
       >
     {:else if mode === 'words'}
       <button class="back-link" onclick={() => (mode = 'create')}
-        ><ArrowLeft size={16} />Back</button
+        ><ArrowLeft size={16} />{translate($locale, 'Back')}</button
       ><SetupProgress
         steps={softwareSteps}
         current={2}
-        label="Software wallet setup progress"
+        label={translate($locale, 'Software wallet setup progress')}
         context="SOFTWARE WALLET"
       />
-      <h1>Recovery words</h1>
-      <p>Write these down in order. Never store them in a screenshot or password manager.</p>
+      <h1>{translate($locale, 'Recovery words')}</h1>
+      <p>
+        {translate(
+          $locale,
+          'Write these down in order. Never store them in a screenshot or password manager.'
+        )}
+      </p>
       {#if revealed}
-        <div class="mnemonic-grid" aria-label="Recovery words">
+        <div class="mnemonic-grid" aria-label={translate($locale, 'Recovery words')}>
           {#each words as word, i}<div><span>{i + 1}</span><strong>{word}</strong></div>{/each}
         </div>
         <button class="reveal-button" onclick={() => (revealed = false)}
-          ><EyeOff size={16} />Hide words</button
+          ><EyeOff size={16} />{translate($locale, 'Hide words')}</button
         >
       {:else}
         <div class="recovery-reveal-gate">
           <span class="recovery-reveal-icon"><EyeOff size={20} /></span>
           <div>
-            <strong>Check your surroundings</strong>
+            <strong>{translate($locale, 'Check your surroundings')}</strong>
             <p>
-              Only reveal your recovery words in a private place. Make sure no person, camera, or
-              screen sharing can see them.
+              {translate(
+                $locale,
+                'Only reveal your recovery words in a private place. Make sure no person, camera, or\n              screen sharing can see them.'
+              )}
             </p>
           </div>
           <Button variant="secondary" class="full" onclick={() => (revealed = true)}
-            ><Eye size={16} />I’m private — reveal words</Button
+            ><Eye size={16} />{translate($locale, 'I’m private — reveal words')}</Button
           >
         </div>
       {/if}
       <Button size="large" class="full" disabled={!revealed} onclick={beginVerification}
-        >I wrote them down<ArrowRight size={17} /></Button
+        >{translate($locale, 'I wrote them down')}<ArrowRight size={17} /></Button
       >
     {:else if mode === 'verify'}
       <button
@@ -496,18 +556,26 @@
           selectedWords = [];
           verificationError = '';
           mode = 'words';
-        }}><ArrowLeft size={16} />Back</button
+        }}><ArrowLeft size={16} />{translate($locale, 'Back')}</button
       >
       <SetupProgress
         steps={softwareSteps}
         current={2}
-        label="Software wallet setup progress"
+        label={translate($locale, 'Software wallet setup progress')}
         context="SOFTWARE WALLET"
       />
-      <h1>Confirm your backup</h1>
-      <p>Choose every word in order. This proves your written backup can reconstruct the wallet.</p>
-      <div class="mnemonic-verification" aria-label="Recovery word order verification">
-        <ol class="mnemonic-slots" aria-label="Your recovery word sequence">
+      <h1>{translate($locale, 'Confirm your backup')}</h1>
+      <p>
+        {translate(
+          $locale,
+          'Choose every word in order. This proves your written backup can reconstruct the wallet.'
+        )}
+      </p>
+      <div
+        class="mnemonic-verification"
+        aria-label={translate($locale, 'Recovery word order verification')}
+      >
+        <ol class="mnemonic-slots" aria-label={translate($locale, 'Your recovery word sequence')}>
           {#each Array(words.length) as _, position}
             <li
               class:filled={!!selectedWords[position]}
@@ -520,17 +588,19 @@
                   draggable="true"
                   ondragstart={() => (draggedWord = selectedWords[position])}
                   onclick={() => removeRecoveryWord(position)}
-                  aria-label={`Remove ${selectedWords[position].word} from position ${position + 1}`}
-                  >{selectedWords[position].word}</button
+                  aria-label={translate($locale, 'Remove {word} from position {position}', {
+                    word: selectedWords[position].word,
+                    position: position + 1
+                  })}>{selectedWords[position].word}</button
                 >
-              {:else}<small>Empty</small>{/if}
+              {:else}<small>{translate($locale, 'Empty')}</small>{/if}
             </li>
           {/each}
         </ol>
         <div
           class="mnemonic-pool"
           role="group"
-          aria-label="Shuffled recovery words"
+          aria-label={translate($locale, 'Shuffled recovery words')}
           ondragover={(event) => event.preventDefault()}
           ondrop={() => {
             if (draggedWord)
@@ -549,57 +619,74 @@
         </div>
       </div>
       <p class="verification-hint">
-        Tap a placed word to return it. You can also drag words between the pool and sequence.
+        {translate(
+          $locale,
+          'Tap a placed word to return it. You can also drag words between the pool and sequence.'
+        )}
       </p>
       {#if verificationError}<p class="form-error" role="alert">{verificationError}</p>{/if}
       <Button
         size="large"
         class="full"
         disabled={selectedWords.length !== words.length}
-        onclick={confirmRecoveryOrder}>Confirm order<ArrowRight size={17} /></Button
+        onclick={confirmRecoveryOrder}
+        >{translate($locale, 'Confirm order')}<ArrowRight size={17} /></Button
       >
       <Button size="large" variant="secondary" class="full" onclick={verifyLater}
-        >Verify later</Button
+        >{translate($locale, 'Verify later')}</Button
       >
     {:else if mode === 'passphrase'}
-      <button class="back-link" onclick={backFromPassphrase}><ArrowLeft size={16} />Back</button>
+      <button class="back-link" onclick={backFromPassphrase}
+        ><ArrowLeft size={16} />{translate($locale, 'Back')}</button
+      >
       <SetupProgress
         steps={softwareSteps}
         current={3}
-        label="Software wallet setup progress"
+        label={translate($locale, 'Software wallet setup progress')}
         context="SOFTWARE WALLET"
       />
-      <h1>Protect your wallet</h1>
+      <h1>{translate($locale, 'Protect your wallet')}</h1>
       <p class="credential-intro">
-        Choose the BIP39 wallet passphrase that completes this backup. The same passphrase unlocks
-        Groot.
+        {translate(
+          $locale,
+          'Choose the BIP39 wallet passphrase that completes this backup. The same passphrase unlocks\n        Groot.'
+        )}
       </p>
       {#if !backupVerified}<div class="backup-unverified-note" role="status">
           <ShieldCheck size={17} /><span
-            ><strong>Backup not verified yet</strong><small
-              >You can use the wallet now, but Groot will keep reminding you to verify the written
-              words.</small
+            ><strong>{translate($locale, 'Backup not verified yet')}</strong><small
+              >{translate(
+                $locale,
+                'You can use the wallet now, but Groot will keep reminding you to verify the written\n              words.'
+              )}</small
             ></span
           >
         </div>{/if}
       <div class="credential-form">
         <label class="field">
-          <span>Wallet name</span>
-          <input bind:value={walletName} maxlength="48" placeholder="My wallet" />
+          <span>{translate($locale, 'Wallet name')}</span>
+          <input
+            bind:value={walletName}
+            maxlength="48"
+            placeholder={translate($locale, 'My wallet')}
+          />
           <FieldCounter value={walletName} max={48} />
         </label>
         <PasswordField
-          label="Wallet passphrase"
+          label={translate($locale, 'Wallet passphrase')}
           bind:value={passphrase}
-          placeholder="Enter a strong passphrase"
+          placeholder={translate($locale, 'Enter a strong passphrase')}
           autocomplete="new-password"
-          hint="Keep it with your recovery words. It also unlocks Groot on this device."
+          hint={translate(
+            $locale,
+            'Keep it with your recovery words. It also unlocks Groot on this device.'
+          )}
           error={passphraseError}
         />
         <PasswordField
-          label="Confirm wallet passphrase"
+          label={translate($locale, 'Confirm wallet passphrase')}
           bind:value={confirmation}
-          placeholder="Enter it again"
+          placeholder={translate($locale, 'Enter it again')}
           autocomplete="new-password"
           error={confirmation && passphrase !== confirmation ? 'Passphrases do not match.' : ''}
         />
@@ -607,17 +694,25 @@
       <label class="credential-warning credential-ack"
         ><input type="checkbox" bind:checked={backupAcknowledged} /><ShieldCheck size={16} />
         <p>
-          <strong>Keep it with your backup.</strong><span
-            >I understand this exact passphrase is required with my 24 words. It cannot be reset; a
-            different passphrase opens a different wallet.</span
+          <strong>{translate($locale, 'Keep it with your backup.')}</strong><span
+            >{translate(
+              $locale,
+              'I understand this exact passphrase is required with my 24 words. It cannot be reset; a\n            different passphrase opens a different wallet.'
+            )}</span
           >
         </p></label
       >
       {#if networkSetupSource}<label class="credential-warning credential-ack"
           ><input type="checkbox" bind:checked={reuseNetworkSetup} /><Network size={16} />
           <p>
-            <strong>Use {networkSetupSource.walletName}’s network setup.</strong><span
-              >Copies its node and sync method. This wallet protects its own copy.</span
+            <strong
+              >{translate($locale, 'Use')}
+              {networkSetupSource.walletName}{translate($locale, '’s network setup.')}</strong
+            ><span
+              >{translate(
+                $locale,
+                'Copies its node and sync method. This wallet protects its own copy.'
+              )}</span
             >
           </p></label
         >{/if}
@@ -633,35 +728,47 @@
           passphrase !== confirmation ||
           !backupAcknowledged}
         loading={busy}
-        loadingLabel="Creating wallet…"
-        onclick={finishCreate}><Check size={17} />Create wallet</Button
+        loadingLabel={translate($locale, 'Creating wallet…')}
+        onclick={finishCreate}><Check size={17} />{translate($locale, 'Create wallet')}</Button
       >
     {:else}
-      <button class="back-link" onclick={() => (mode = 'home')}><ArrowLeft size={16} />Back</button
-      ><span class="setup-step">RECOVERY</span>
-      <h1>Recover wallet</h1>
+      <button class="back-link" onclick={() => (mode = 'home')}
+        ><ArrowLeft size={16} />{translate($locale, 'Back')}</button
+      ><span class="setup-step">{translate($locale, 'RECOVERY')}</span>
+      <h1>{translate($locale, 'Recover wallet')}</h1>
       <p>
-        Your 24 recovery words are entered in a native system window so they never enter Groot’s web
-        interface.
+        {translate(
+          $locale,
+          'Your 24 recovery words are entered in a native system window so they never enter Groot’s web\n        interface.'
+        )}
       </p>
       <label class="field"
-        ><span>Wallet name</span><input
+        ><span>{translate($locale, 'Wallet name')}</span><input
           bind:value={walletName}
           maxlength="48"
-          placeholder="Recovered wallet"
+          placeholder={translate($locale, 'Recovered wallet')}
         /><FieldCounter value={walletName} max={48} /></label
       ><PasswordField
-        label="Wallet passphrase"
+        label={translate($locale, 'Wallet passphrase')}
         bind:value={passphrase}
-        placeholder="Enter the original wallet passphrase"
+        placeholder={translate($locale, 'Enter the original wallet passphrase')}
         autocomplete="current-password"
-        hint="This exact BIP39 passphrase is required with the recovery words and also unlocks Groot."
+        hint={translate(
+          $locale,
+          'This exact BIP39 passphrase is required with the recovery words and also unlocks Groot.'
+        )}
         error={passphraseError}
       />{#if networkSetupSource}<label class="credential-warning credential-ack"
           ><input type="checkbox" bind:checked={reuseNetworkSetup} /><Network size={16} />
           <p>
-            <strong>Use {networkSetupSource.walletName}’s network setup.</strong><span
-              >Copies its node and sync method. This wallet protects its own copy.</span
+            <strong
+              >{translate($locale, 'Use')}
+              {networkSetupSource.walletName}{translate($locale, '’s network setup.')}</strong
+            ><span
+              >{translate(
+                $locale,
+                'Copies its node and sync method. This wallet protects its own copy.'
+              )}</span
             >
           </p></label
         >{/if}{#if error}<p class="form-error" role="alert">
@@ -671,10 +778,13 @@
         class="full"
         disabled={!walletName.trim() || !passphrase || !!passphraseError}
         loading={busy}
-        loadingLabel="Recovering wallet…"
-        onclick={recoverWallet}>Enter recovery words securely<ArrowRight size={17} /></Button
+        loadingLabel={translate($locale, 'Recovering wallet…')}
+        onclick={recoverWallet}
+        >{translate($locale, 'Enter recovery words securely')}<ArrowRight size={17} /></Button
       >
     {/if}
   </main>
-  <footer class="onboarding-footer">Keys stay on this device · Open source</footer>
+  <footer class="onboarding-footer">
+    {translate($locale, 'Keys stay on this device · Open source')}
+  </footer>
 </div>

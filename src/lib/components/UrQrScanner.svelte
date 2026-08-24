@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { locale } from '$lib/i18n';
+  import { translate } from '$lib/i18n-catalog';
   import { Camera, CameraOff } from '@lucide/svelte';
   import { onMount } from 'svelte';
   import QrScanner from 'qr-scanner';
@@ -60,13 +62,19 @@
 </script>
 
 <div class="scanner">
-  <video bind:this={video} muted playsinline aria-label="Animated QR camera preview"></video>
+  <video
+    bind:this={video}
+    muted
+    playsinline
+    aria-label={translate($locale, 'Animated QR camera preview')}
+  ></video>
   <div class="scan-guide" aria-hidden="true"></div>
   <div class="scan-status">
     {#if error}<CameraOff size={16} /><span>{error}</span>{:else}<Camera size={16} /><span
-        >{scanned
-          ? `${scanned} unique frames scanned`
-          : 'Point the camera at a crypto-psbt QR'}</span
+        >{translate(
+          $locale,
+          scanned ? `${scanned} unique frames scanned` : 'Point the camera at a crypto-psbt QR'
+        )}</span
       >{/if}
   </div>
 </div>

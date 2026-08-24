@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { locale } from '$lib/i18n';
+  import { translate } from '$lib/i18n-catalog';
   import Modal from './Modal.svelte';
   import ReadableAddress from './ReadableAddress.svelte';
   import { copyText } from '$lib/clipboard';
@@ -46,8 +48,10 @@
     </div>
     <ReadableAddress {address} {copied} oncopy={copy} />
     <p>
-      The brighter first and last groups are the quickest comparison points. Spaces are visual only;
-      copying uses the exact address.
+      {translate(
+        $locale,
+        'The brighter first and last groups are the quickest comparison points. Spaces are visual only;\n      copying uses the exact address.'
+      )}
     </p>
   </div>
 </Modal>

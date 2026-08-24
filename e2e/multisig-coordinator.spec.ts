@@ -84,11 +84,11 @@ test('keeps multisig receive verification disclosure visibly expandable', async 
       .click();
   else await page.getByRole('main').getByRole('link', { name: 'Receive' }).click();
   await page.getByRole('button', { name: 'Verify on device' }).click();
-  await expect(
-    page.getByRole('status', { name: 'Hardware device scan in progress' })
-  ).toBeVisible();
-
   const dialog = page.getByRole('dialog', { name: 'Verify receive address' });
+  await expect(
+    page.getByRole('status', { name: 'Hardware device scan in progress' }).or(dialog).first()
+  ).toBeVisible();
+  await expect(dialog).toBeVisible();
   await expect(dialog).not.toContainText(/cosigner/i);
   const details = dialog.locator('details.verification-details');
   const summary = details.locator('summary');

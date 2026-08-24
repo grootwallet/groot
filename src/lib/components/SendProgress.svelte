@@ -1,11 +1,13 @@
 <script lang="ts">
+  import { locale } from '$lib/i18n';
+  import { translate } from '$lib/i18n-catalog';
   import { Check } from '@lucide/svelte';
 
   let { current } = $props<{ current: 1 | 2 | 3 }>();
   const steps = ['Intent', 'Amount & fee', 'Review & sign'];
 </script>
 
-<nav class="send-progress" aria-label="Payment progress">
+<nav class="send-progress" aria-label={translate($locale, 'Payment progress')}>
   <ol>
     {#each steps as label, index}
       {@const number = index + 1}

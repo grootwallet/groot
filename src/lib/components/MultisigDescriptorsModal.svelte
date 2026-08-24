@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { locale } from '$lib/i18n';
+  import { translate } from '$lib/i18n-catalog';
   import { Copy, ShieldCheck } from '@lucide/svelte';
   import Modal from '$lib/components/Modal.svelte';
   import { copyText } from '$lib/clipboard';
@@ -18,7 +20,7 @@
   async function copyDescriptor(value: string, label: string) {
     await copyText(value, 'public-wallet-data');
     toast({
-      title: `${label} descriptor copied`,
+      title: translate($locale, '{label} descriptor copied', { label: translate($locale, label) }),
       description: 'Public watch-only descriptor copied.',
       tone: 'success'
     });
@@ -27,8 +29,11 @@
 
 <Modal
   {open}
-  title="Wallet descriptors"
-  description="Public watch-only logic for receiving and change. It cannot sign transactions, but it reveals wallet activity."
+  title={translate($locale, 'Wallet descriptors')}
+  description={translate(
+    $locale,
+    'Public watch-only logic for receiving and change. It cannot sign transactions, but it reveals wallet activity.'
+  )}
   {onclose}
 >
   {#if wallet}
@@ -36,67 +41,72 @@
       {#if combinedDescriptor}
         <section class="descriptor-primary">
           <div>
-            <span>Portable wallet descriptor</span><small
-              >Standard multipath form: branch 0 receives, branch 1 creates change.</small
+            <span>{translate($locale, 'Portable wallet descriptor')}</span><small
+              >{translate(
+                $locale,
+                'Standard multipath form: branch 0 receives, branch 1 creates change.'
+              )}</small
             >
           </div>
           <code>{combinedDescriptor}</code>
           <button onclick={() => copyDescriptor(combinedDescriptor!, 'Wallet')}
-            ><Copy size={15} />Copy wallet descriptor</button
+            ><Copy size={15} />{translate($locale, 'Copy wallet descriptor')}</button
           >
         </section>
         <details>
-          <summary>View separate receive and change descriptors</summary>
+          <summary>{translate($locale, 'View separate receive and change descriptors')}</summary>
           <section>
             <div>
-              <span>Receive descriptor</span><small
-                >Generates addresses shared for incoming payments.</small
+              <span>{translate($locale, 'Receive descriptor')}</span><small
+                >{translate($locale, 'Generates addresses shared for incoming payments.')}</small
               >
             </div>
             <code>{wallet.externalDescriptor}</code><button
               onclick={() => copyDescriptor(wallet!.externalDescriptor, 'Receive')}
-              ><Copy size={15} />Copy receive descriptor</button
+              ><Copy size={15} />{translate($locale, 'Copy receive descriptor')}</button
             >
           </section>
           <section>
             <div>
-              <span>Change descriptor</span><small
-                >Generates private change addresses after spending.</small
+              <span>{translate($locale, 'Change descriptor')}</span><small
+                >{translate($locale, 'Generates private change addresses after spending.')}</small
               >
             </div>
             <code>{wallet.internalDescriptor}</code><button
               onclick={() => copyDescriptor(wallet!.internalDescriptor, 'Change')}
-              ><Copy size={15} />Copy change descriptor</button
+              ><Copy size={15} />{translate($locale, 'Copy change descriptor')}</button
             >
           </section>
         </details>
       {:else}
         <section>
           <div>
-            <span>Receive descriptor</span><small
-              >Generates addresses shared for incoming payments.</small
+            <span>{translate($locale, 'Receive descriptor')}</span><small
+              >{translate($locale, 'Generates addresses shared for incoming payments.')}</small
             >
           </div>
           <code>{wallet.externalDescriptor}</code><button
             onclick={() => copyDescriptor(wallet!.externalDescriptor, 'Receive')}
-            ><Copy size={15} />Copy receive descriptor</button
+            ><Copy size={15} />{translate($locale, 'Copy receive descriptor')}</button
           >
         </section>
         <section>
           <div>
-            <span>Change descriptor</span><small
-              >Generates private change addresses after spending.</small
+            <span>{translate($locale, 'Change descriptor')}</span><small
+              >{translate($locale, 'Generates private change addresses after spending.')}</small
             >
           </div>
           <code>{wallet.internalDescriptor}</code><button
             onclick={() => copyDescriptor(wallet!.internalDescriptor, 'Change')}
-            ><Copy size={15} />Copy change descriptor</button
+            ><Copy size={15} />{translate($locale, 'Copy change descriptor')}</button
           >
         </section>
       {/if}
       <p>
-        <ShieldCheck size={14} />Keep descriptors private even though they cannot spend. They reveal
-        every address in this wallet.
+        <ShieldCheck size={14} />{translate(
+          $locale,
+          'Keep descriptors private even though they cannot spend. They reveal\n        every address in this wallet.'
+        )}
       </p>
     </div>
   {/if}

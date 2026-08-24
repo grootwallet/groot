@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { locale } from '$lib/i18n';
+  import { translate } from '$lib/i18n-catalog';
   import { X } from '@lucide/svelte';
   import { lockModalScroll } from './modal-scroll-lock';
   import { fly } from 'svelte/transition';
@@ -75,7 +77,9 @@
           <h2>{title}</h2>
           {#if description}<p>{description}</p>{/if}
         </div>
-        <button class="icon-button" aria-label="Close" onclick={onclose}><X size={18} /></button>
+        <button class="icon-button" aria-label={translate($locale, 'Close')} onclick={onclose}
+          ><X size={18} /></button
+        >
       </header>
       <div class="modal-body">{@render children?.()}</div>
     </div>

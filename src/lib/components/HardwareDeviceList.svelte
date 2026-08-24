@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { locale } from '$lib/i18n';
+  import { translate } from '$lib/i18n-catalog';
   import { Cpu, RefreshCw } from '@lucide/svelte';
   import type { HardwareDevice } from '$lib/wallet';
   import { hardwareDeviceDisplayName, type SavedHardwareSignerName } from '$lib/hardware/discovery';
@@ -26,7 +28,10 @@
 
   function detail(device: HardwareDevice) {
     return detailedStatus && device.fingerprint
-      ? `Fingerprint ${device.fingerprint} · ${device.message}`
+      ? translate($locale, 'Fingerprint {fingerprint} · {message}', {
+          fingerprint: device.fingerprint,
+          message: translate($locale, device.message)
+        })
       : (device.fingerprint ?? device.message);
   }
 
@@ -40,9 +45,9 @@
 
 {#if !devices.length}
   <div class="device-scan">
-    <strong>No device found</strong>
+    <strong>{translate($locale, 'No device found')}</strong>
     <span>{emptyMessage}</span>
-    <Button variant="secondary" onclick={onrescan}>Scan again</Button>
+    <Button variant="secondary" onclick={onrescan}>{translate($locale, 'Scan again')}</Button>
   </div>
 {:else}
   <div class="source-list" class:hardware-device-list={detailedStatus}>
@@ -51,18 +56,20 @@
         <Cpu size={18} />
         <span
           ><strong>{hardwareDeviceDisplayName(device, savedSigners)}</strong><small
-            >{detail(device)}</small
+            >{translate($locale, detail(device))}</small
           ></span
         >
-        {#if detailedStatus}<em class:ready={device.status === 'ready'}>{status(device)}</em>{/if}
+        {#if detailedStatus}<em class:ready={device.status === 'ready'}
+            >{translate($locale, status(device))}</em
+          >{/if}
       </button>
     {/each}
     {#if showRescan}
       <button class="hardware-rescan" onclick={onrescan} {disabled}>
         <RefreshCw size={16} />
         <span
-          ><strong>Rescan devices</strong><small
-            >Refresh after connecting or unlocking another signer.</small
+          ><strong>{translate($locale, 'Rescan devices')}</strong><small
+            >{translate($locale, 'Refresh after connecting or unlocking another signer.')}</small
           ></span
         >
       </button>

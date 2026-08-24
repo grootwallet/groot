@@ -1,0 +1,372 @@
+import type { CatalogSection } from './types';
+
+export const componentCopy = {
+  '{label} copied': { fr: '{label} copié', es: '{label} copiado' },
+  'Select and copy the {label} manually.': {
+    fr: 'Sélectionnez et copiez manuellement {label}.',
+    es: 'Selecciona y copia {label} manualmente.'
+  },
+  '{label} descriptor copied': {
+    fr: 'Descripteur {label} copié',
+    es: 'Descriptor {label} copiado'
+  },
+  'Received {amount} {unit} · Balance {balance} {unit}': {
+    fr: 'Reçu {amount} {unit} · Solde {balance} {unit}',
+    es: 'Recibido {amount} {unit} · Saldo {balance} {unit}'
+  },
+  'Received {amount} {unit} · First confirmation · Balance {balance} {unit}': {
+    fr: 'Reçu {amount} {unit} · Première confirmation · Solde {balance} {unit}',
+    es: 'Recibido {amount} {unit} · Primera confirmación · Saldo {balance} {unit}'
+  },
+  'Transaction confirmed · Balance {balance} {unit}': {
+    fr: 'Transaction confirmée · Solde {balance} {unit}',
+    es: 'Transacción confirmada · Saldo {balance} {unit}'
+  },
+  'Remaining wallet balance: {balance} {unit}': {
+    fr: 'Solde restant du portefeuille : {balance} {unit}',
+    es: 'Saldo restante de la cartera: {balance} {unit}'
+  },
+  'Trusted remote node': { fr: 'Nœud distant de confiance', es: 'Nodo remoto de confianza' },
+  'Local Bitcoin Core': { fr: 'Bitcoin Core local', es: 'Bitcoin Core local' },
+  'Available after unlock': {
+    fr: 'Disponible après déverrouillage',
+    es: 'Disponible después de desbloquear'
+  },
+  'Tor configured': { fr: 'Tor configuré', es: 'Tor configurado' },
+  'Direct connection': { fr: 'Connexion directe', es: 'Conexión directa' },
+  'P2P compact filters': { fr: 'Filtres compacts P2P', es: 'Filtros compactos P2P' },
+  'Bitcoin Core RPC': { fr: 'RPC Bitcoin Core', es: 'RPC de Bitcoin Core' },
+  'Wallet locked': { fr: 'Portefeuille verrouillé', es: 'Cartera bloqueada' },
+  'Node reachable': { fr: 'Nœud accessible', es: 'Nodo accesible' },
+  'Checking node…': { fr: 'Vérification du nœud…', es: 'Comprobando nodo…' },
+  'Checking…': { fr: 'Vérification…', es: 'Comprobando…' },
+  'Unlock to check': { fr: 'Déverrouillez pour vérifier', es: 'Desbloquea para comprobar' },
+  'Check again': { fr: 'Vérifier à nouveau', es: 'Comprobar de nuevo' },
+  'Label hidden': { fr: 'Libellé masqué', es: 'Etiqueta oculta' },
+  '{network} network status': { fr: 'État du réseau {network}', es: 'Estado de la red {network}' },
+  '. The prefix and six-character checksum differ; Rust verified that both decode to the identical Bitcoin output script.':
+    {
+      fr: '. Le préfixe et la somme de contrôle à six caractères diffèrent ; Rust a vérifié que les deux correspondent au même script de sortie Bitcoin.',
+      es: '. El prefijo y la suma de comprobación de seis caracteres difieren; Rust verificó que ambos corresponden al mismo script de salida de Bitcoin.'
+    },
+  '· keep the scanner steady': {
+    fr: '· maintenez le scanner immobile',
+    es: '· mantén el escáner estable'
+  },
+  'Account name': { fr: 'Nom du compte', es: 'Nombre de la cuenta' },
+  'Account path': { fr: 'Chemin du compte', es: 'Ruta de la cuenta' },
+  'Activity sync': { fr: 'Synchronisation de l’activité', es: 'Sincronización de actividad' },
+  'Address details': { fr: 'Détails de l’adresse', es: 'Detalles de la dirección' },
+  'Address index': { fr: 'Index de l’adresse', es: 'Índice de la dirección' },
+  'Address type': { fr: 'Type d’adresse', es: 'Tipo de dirección' },
+  Any: { fr: 'N’importe lequel', es: 'Cualquiera' },
+  'Ask Trezor for a fresh layout': {
+    fr: 'Demander une nouvelle disposition au Trezor',
+    es: 'Pedir una nueva disposición al Trezor'
+  },
+  'B”.': { fr: 'B ».', es: 'B”.' },
+  bcrt1: { fr: 'bcrt1', es: 'bcrt1' },
+  'Blank position grid': { fr: 'Grille de positions vide', es: 'Cuadrícula de posiciones vacía' },
+  Block: { fr: 'Bloc', es: 'Bloque' },
+  Change: { fr: 'Monnaie', es: 'Cambio' },
+  'Change address': { fr: 'Adresse de monnaie', es: 'Dirección de cambio' },
+  'Change descriptor': { fr: 'Descripteur de monnaie', es: 'Descriptor de cambio' },
+  'Check signer': { fr: 'Contrôler le signataire', es: 'Comprobar firmante' },
+  'Checking wallet identity…': {
+    fr: 'Vérification de l’identité du portefeuille…',
+    es: 'Comprobando la identidad de la cartera…'
+  },
+  'Checking wallet lock state': {
+    fr: 'Vérification du verrouillage du portefeuille',
+    es: 'Comprobando el bloqueo de la cartera'
+  },
+  'Coldcard cannot learn this multisig policy automatically over Groot’s USB signing connection.': {
+    fr: 'Coldcard ne peut pas apprendre automatiquement cette politique multisignature via la connexion de signature USB de Groot.',
+    es: 'Coldcard no puede aprender automáticamente esta política multifirma mediante la conexión USB de firma de Groot.'
+  },
+  'Coldcard setup was not recorded': {
+    fr: 'La configuration Coldcard n’a pas été consignée',
+    es: 'La configuración de Coldcard no se registró'
+  },
+  Confirmations: { fr: 'Confirmations', es: 'Confirmaciones' },
+  Connection: { fr: 'Connexion', es: 'Conexión' },
+  'Continue to signing': { fr: 'Continuer vers la signature', es: 'Continuar a la firma' },
+  'Copy change descriptor': {
+    fr: 'Copier le descripteur de monnaie',
+    es: 'Copiar descriptor de cambio'
+  },
+  'Copy receive descriptor': {
+    fr: 'Copier le descripteur de réception',
+    es: 'Copiar descriptor de recepción'
+  },
+  'Copy wallet descriptor': {
+    fr: 'Copier le descripteur du portefeuille',
+    es: 'Copiar descriptor de la cartera'
+  },
+  'Core service tip': { fr: 'Hauteur du service Core', es: 'Altura del servicio Core' },
+  'Create or recover another wallet': {
+    fr: 'Créer ou récupérer un autre portefeuille',
+    es: 'Crear o recuperar otra cartera'
+  },
+  Created: { fr: 'Créée', es: 'Creada' },
+  Custom: { fr: 'Personnalisé', es: 'Personalizado' },
+  Date: { fr: 'Date', es: 'Fecha' },
+  'Delete last': { fr: 'Supprimer le dernier', es: 'Borrar último' },
+  Derivation: { fr: 'Dérivation', es: 'Derivación' },
+  'Derivation path': { fr: 'Chemin de dérivation', es: 'Ruta de derivación' },
+  Discard: { fr: 'Abandonner', es: 'Descartar' },
+  'Discard setup': { fr: 'Abandonner la configuration', es: 'Descartar configuración' },
+  'displays the Regtest script with a': {
+    fr: 'affiche le script Regtest avec un préfixe',
+    es: 'muestra el script de Regtest con un prefijo'
+  },
+  'Dummy data only · Never use real funds or recovery words': {
+    fr: 'Données fictives uniquement · N’utilisez jamais de vrais fonds ni mots de récupération',
+    es: 'Solo datos ficticios · Nunca uses fondos ni palabras de recuperación reales'
+  },
+  'Edit name': { fr: 'Modifier le nom', es: 'Editar nombre' },
+  'Estimate unavailable · Enter a custom rate': {
+    fr: 'Estimation indisponible · Saisissez un taux personnalisé',
+    es: 'Estimación no disponible · Introduce una tasa personalizada'
+  },
+  'Estimated fee': { fr: 'Frais estimés', es: 'Comisión estimada' },
+  'Fee / broadcast': { fr: 'Frais / diffusion', es: 'Comisión / difusión' },
+  'Fee rate': { fr: 'Taux de frais', es: 'Tasa de comisión' },
+  'Find each PIN digit on the Trezor screen, then tap the blank Groot cell in the same location. Never enter recovery words or a hardware passphrase here.':
+    {
+      fr: 'Repérez chaque chiffre du PIN sur l’écran du Trezor, puis touchez la case vide de Groot au même emplacement. Ne saisissez jamais ici de mots de récupération ni de phrase secrète matérielle.',
+      es: 'Busca cada dígito del PIN en la pantalla del Trezor y pulsa la celda vacía de Groot en la misma posición. Nunca introduzcas aquí palabras de recuperación ni una frase de contraseña del dispositivo.'
+    },
+  Fingerprint: { fr: 'Empreinte', es: 'Huella' },
+  'from this wallet': { fr: 'depuis ce portefeuille', es: 'desde esta cartera' },
+  'Frozen coins are excluded from automatic and manual spending until you unfreeze them.': {
+    fr: 'Les pièces gelées sont exclues des dépenses automatiques et manuelles jusqu’à leur dégel.',
+    es: 'Las monedas congeladas se excluyen del gasto automático y manual hasta que las descongeles.'
+  },
+  'Generates addresses shared for incoming payments.': {
+    fr: 'Génère les adresses communiquées pour recevoir des paiements.',
+    es: 'Genera las direcciones compartidas para recibir pagos.'
+  },
+  'Generates private change addresses after spending.': {
+    fr: 'Génère des adresses privées de monnaie après une dépense.',
+    es: 'Genera direcciones privadas de cambio después de gastar.'
+  },
+  'Groot could not verify the wallet lock state.': {
+    fr: 'Groot n’a pas pu vérifier l’état de verrouillage du portefeuille.',
+    es: 'Groot no pudo verificar el estado de bloqueo de la cartera.'
+  },
+  "Groot's current Ledger connection must authorize this policy again for each signing request. Keep this reference open until Ledger reaches the transaction.":
+    {
+      fr: 'La connexion Ledger actuelle de Groot doit autoriser à nouveau cette politique pour chaque demande de signature. Gardez cette référence ouverte jusqu’à ce que Ledger atteigne la transaction.',
+      es: 'La conexión actual de Ledger con Groot debe volver a autorizar esta política para cada solicitud de firma. Mantén esta referencia abierta hasta que Ledger llegue a la transacción.'
+    },
+  'Hardware verified': { fr: 'Vérifiée sur le matériel', es: 'Verificada en el dispositivo' },
+  'I compared the threshold and every signer key': {
+    fr: 'J’ai comparé le seuil et chaque clé de signataire',
+    es: 'He comparado el umbral y cada clave de firmante'
+  },
+  'I imported and verified this policy on': {
+    fr: 'J’ai importé et vérifié cette politique sur',
+    es: 'He importado y verificado esta política en'
+  },
+  'in a different order. Match the complete values, not the position.': {
+    fr: 'dans un ordre différent. Comparez les valeurs complètes, pas leur position.',
+    es: 'en un orden diferente. Compara los valores completos, no la posición.'
+  },
+  'Increase fee (RBF)': { fr: 'Augmenter les frais (RBF)', es: 'Aumentar comisión (RBF)' },
+  Input: { fr: 'Entrée', es: 'Entrada' },
+  Inputs: { fr: 'Entrées', es: 'Entradas' },
+  'Interactive prototype': { fr: 'Prototype interactif', es: 'Prototipo interactivo' },
+  'It is separate from the Groot wallet name. Try “Groot': {
+    fr: 'Il est distinct du nom du portefeuille Groot. Essayez « Groot',
+    es: 'Es distinto del nombre de la cartera de Groot. Prueba “Groot'
+  },
+  'Jade will show': { fr: 'Jade affichera', es: 'Jade mostrará' },
+  'Keep descriptors private even though they cannot spend. They reveal every address in this wallet.':
+    {
+      fr: 'Gardez les descripteurs privés même s’ils ne peuvent pas dépenser. Ils révèlent toutes les adresses de ce portefeuille.',
+      es: 'Mantén privados los descriptores aunque no puedan gastar. Revelan todas las direcciones de esta cartera.'
+    },
+  'Keep setup': { fr: 'Conserver la configuration', es: 'Conservar configuración' },
+  'Key source': { fr: 'Source de la clé', es: 'Origen de la clave' },
+  'keys must sign': { fr: 'clés doivent signer', es: 'claves deben firmar' },
+  'Labels hidden': { fr: 'Libellés masqués', es: 'Etiquetas ocultas' },
+  'Last verified': { fr: 'Dernière vérification', es: 'Última verificación' },
+  'Ledger may label the keys @0 through @': {
+    fr: 'Ledger peut nommer les clés de @0 à @',
+    es: 'Ledger puede etiquetar las claves de @0 a @'
+  },
+  'Ledger will show': { fr: 'Ledger affichera', es: 'Ledger mostrará' },
+  'Loading signer': { fr: 'Chargement du signataire', es: 'Cargando firmante' },
+  'Loading wallet data…': {
+    fr: 'Chargement des données du portefeuille…',
+    es: 'Cargando datos de la cartera…'
+  },
+  'Locktime / RBF': { fr: 'Verrou temporel / RBF', es: 'Bloqueo temporal / RBF' },
+  'Master fingerprint': { fr: 'Empreinte principale', es: 'Huella maestra' },
+  'Match locations, not numbers': {
+    fr: 'Faites correspondre les positions, pas les chiffres',
+    es: 'Haz coincidir las posiciones, no los números'
+  },
+  'mempool.space cannot see local regtest transactions.': {
+    fr: 'mempool.space ne peut pas voir les transactions Regtest locales.',
+    es: 'mempool.space no puede ver las transacciones locales de Regtest.'
+  },
+  'Network fee': { fr: 'Frais réseau', es: 'Comisión de red' },
+  'No device found': { fr: 'Aucun appareil trouvé', es: 'No se encontró ningún dispositivo' },
+  'No wallet, signer seed, or bitcoin is deleted.': {
+    fr: 'Aucun portefeuille, graine de signataire ni bitcoin n’est supprimé.',
+    es: 'No se elimina ninguna cartera, semilla de firmante ni bitcoin.'
+  },
+  'Node credentials remain sealed until a wallet is unlocked.': {
+    fr: 'Les identifiants du nœud restent scellés jusqu’au déverrouillage d’un portefeuille.',
+    es: 'Las credenciales del nodo permanecen selladas hasta que se desbloquea una cartera.'
+  },
+  'Not checked yet': { fr: 'Pas encore contrôlé', es: 'Aún sin comprobar' },
+  'on Regtest while Groot normally uses': {
+    fr: 'sur Regtest alors que Groot utilise normalement',
+    es: 'en Regtest mientras que Groot normalmente usa'
+  },
+  'Opening this shares the transaction lookup with mempool.space.': {
+    fr: 'Ouvrir ce lien partage la recherche de transaction avec mempool.space.',
+    es: 'Abrirlo comparte la consulta de la transacción con mempool.space.'
+  },
+  Outputs: { fr: 'Sorties', es: 'Salidas' },
+  Path: { fr: 'Chemin', es: 'Ruta' },
+  'policy approved — show transaction': {
+    fr: 'politique approuvée — afficher la transaction',
+    es: 'política aprobada — mostrar transacción'
+  },
+  'policy, then compare the first address.': {
+    fr: 'la politique, puis comparez la première adresse.',
+    es: 'la política y compara la primera dirección.'
+  },
+  'Portable wallet descriptor': {
+    fr: 'Descripteur portable du portefeuille',
+    es: 'Descriptor portátil de la cartera'
+  },
+  'prefix. Rust verified that it decodes to the identical Bitcoin output script.': {
+    fr: '. Rust a vérifié qu’il correspond au même script de sortie Bitcoin.',
+    es: '. Rust verificó que corresponde al mismo script de salida de Bitcoin.'
+  },
+  'Preparing QR…': { fr: 'Préparation du QR…', es: 'Preparando QR…' },
+  'Priority fee': { fr: 'Frais prioritaires', es: 'Comisión prioritaria' },
+  Privacy: { fr: 'Confidentialité', es: 'Privacidad' },
+  'Public account key (xpub)': {
+    fr: 'Clé publique du compte (xpub)',
+    es: 'Clave pública de la cuenta (xpub)'
+  },
+  'Receive descriptor': { fr: 'Descripteur de réception', es: 'Descriptor de recepción' },
+  'Refresh after connecting or unlocking another signer.': {
+    fr: 'Actualisez après avoir connecté ou déverrouillé un autre signataire.',
+    es: 'Actualiza después de conectar o desbloquear otro firmante.'
+  },
+  'Register the': { fr: 'Enregistrer la politique sur', es: 'Registrar la política en' },
+  'Register this wallet on': {
+    fr: 'Enregistrer ce portefeuille sur',
+    es: 'Registrar esta cartera en'
+  },
+  'Reject if any value differs on': {
+    fr: 'Refusez si une valeur diffère sur',
+    es: 'Rechaza si algún valor difiere en'
+  },
+  'Replaced by': { fr: 'Remplacée par', es: 'Reemplazada por' },
+  'Rescan devices': {
+    fr: 'Rechercher à nouveau les appareils',
+    es: 'Volver a buscar dispositivos'
+  },
+  'Resume setup': { fr: 'Reprendre la configuration', es: 'Reanudar configuración' },
+  Retry: { fr: 'Réessayer', es: 'Reintentar' },
+  'review & signing': { fr: 'vérification et signature', es: 'revisión y firma' },
+  'sat/vB': { fr: 'sat/vB', es: 'sat/vB' },
+  'Save Coldcard policy': {
+    fr: 'Enregistrer la politique Coldcard',
+    es: 'Guardar política de Coldcard'
+  },
+  'Scan again': { fr: 'Rechercher à nouveau', es: 'Buscar de nuevo' },
+  'Self-spend': { fr: 'Auto-dépense', es: 'Autogasto' },
+  'Set rate': { fr: 'Définir le taux', es: 'Establecer tasa' },
+  'Show compact address': { fr: 'Afficher l’adresse compacte', es: 'Mostrar dirección compacta' },
+  shows: { fr: 'affiche', es: 'muestra' },
+  'Signer check': { fr: 'Contrôle du signataire', es: 'Comprobación del firmante' },
+  'Signer fingerprint': { fr: 'Empreinte du signataire', es: 'Huella del firmante' },
+  'Signer keys to compare': {
+    fr: 'Clés de signataires à comparer',
+    es: 'Claves de firmantes para comparar'
+  },
+  'Signer name': { fr: 'Nom du signataire', es: 'Nombre del firmante' },
+  'signers · fingerprint, path, and public key': {
+    fr: 'signataires · empreinte, chemin et clé publique',
+    es: 'firmantes · huella, ruta y clave pública'
+  },
+  'Signing with': { fr: 'Signature avec', es: 'Firmando con' },
+  'Spaces are visual only. Copy always uses the exact address.': {
+    fr: 'Les espaces sont uniquement visuels. La copie utilise toujours l’adresse exacte.',
+    es: 'Los espacios son solo visuales. Al copiar siempre se usa la dirección exacta.'
+  },
+  'Spaces are visual only. Copy always uses the exact value.': {
+    fr: 'Les espaces sont uniquement visuels. La copie utilise toujours la valeur exacte.',
+    es: 'Los espacios son solo visuales. Al copiar siempre se usa el valor exacto.'
+  },
+  'Spend output (CPFP)': { fr: 'Dépenser la sortie (CPFP)', es: 'Gastar salida (CPFP)' },
+  'Spending policy': { fr: 'Politique de dépense', es: 'Política de gasto' },
+  'Standard multipath form: branch 0 receives, branch 1 creates change.': {
+    fr: 'Forme multichemin standard : la branche 0 reçoit, la branche 1 crée la monnaie.',
+    es: 'Forma multirruta estándar: la rama 0 recibe y la rama 1 crea cambio.'
+  },
+  Start: { fr: 'Début', es: 'Inicio' },
+  Status: { fr: 'État', es: 'Estado' },
+  tb1: { fr: 'tb1', es: 'tb1' },
+  'The brighter first and last groups are the quickest comparison points. Spaces are visual only; copying uses the exact address.':
+    {
+      fr: 'Les premiers et derniers groupes plus lumineux sont les points de comparaison les plus rapides. Les espaces sont uniquement visuels ; la copie utilise l’adresse exacte.',
+      es: 'Los primeros y últimos grupos más brillantes son los puntos de comparación más rápidos. Los espacios son solo visuales; al copiar se usa la dirección exacta.'
+    },
+  'The label is permanent. Spaces above are visual only; copying always uses the exact address.': {
+    fr: 'Le libellé est permanent. Les espaces ci-dessus sont uniquement visuels ; la copie utilise toujours l’adresse exacte.',
+    es: 'La etiqueta es permanente. Los espacios superiores son solo visuales; al copiar siempre se usa la dirección exacta.'
+  },
+  'The shuffled digits appear only on Trezor. This grid deliberately stays blank—even when Trezor generates a fresh layout.':
+    {
+      fr: 'Les chiffres mélangés apparaissent uniquement sur le Trezor. Cette grille reste volontairement vide, même lorsque Trezor génère une nouvelle disposition.',
+      es: 'Los dígitos mezclados solo aparecen en el Trezor. Esta cuadrícula permanece vacía a propósito, incluso cuando Trezor genera una nueva disposición.'
+    },
+  'This device': { fr: 'Cet appareil', es: 'Este dispositivo' },
+  'This records your on-device check for this wallet and signer fingerprint.': {
+    fr: 'Cela consigne votre contrôle sur l’appareil pour ce portefeuille et cette empreinte de signataire.',
+    es: 'Esto registra tu comprobación en el dispositivo para esta cartera y esta huella de firmante.'
+  },
+  'to this wallet': { fr: 'vers ce portefeuille', es: 'a esta cartera' },
+  'Transaction ID': { fr: 'Identifiant de transaction', es: 'ID de transacción' },
+  'Transaction type': { fr: 'Type de transaction', es: 'Tipo de transacción' },
+  Transport: { fr: 'Transport', es: 'Transporte' },
+  'UNFINISHED WALLET': { fr: 'PORTEFEUILLE INACHEVÉ', es: 'CARTERA INCOMPLETA' },
+  'Unfreezing does not spend this coin. It only makes it eligible for automatic selection and manual sends.':
+    {
+      fr: 'Dégeler cette pièce ne la dépense pas. Cela la rend seulement admissible à la sélection automatique et aux envois manuels.',
+      es: 'Descongelar esta moneda no la gasta. Solo permite usarla en la selección automática y en envíos manuales.'
+    },
+  Unlock: { fr: 'Déverrouiller', es: 'Desbloquear' },
+  'Use a new BitBox account name': {
+    fr: 'Utiliser un nouveau nom de compte BitBox',
+    es: 'Usar un nuevo nombre de cuenta BitBox'
+  },
+  'Verification reference only. Do not fund this address directly; after the wallet is created, use Receive to create a permanently labeled payment request.':
+    {
+      fr: 'Référence de vérification uniquement. N’alimentez pas cette adresse directement ; après la création du portefeuille, utilisez Recevoir pour créer une demande de paiement avec un libellé permanent.',
+      es: 'Solo como referencia de verificación. No envíes fondos directamente a esta dirección; tras crear la cartera, usa Recibir para crear una solicitud de pago con etiqueta permanente.'
+    },
+  'Verified on hardware': { fr: 'Vérifiée sur le matériel', es: 'Verificada en el dispositivo' },
+  'View completed step': { fr: 'Afficher l’étape terminée', es: 'Ver paso completado' },
+  'View on mempool.space': { fr: 'Afficher sur mempool.space', es: 'Ver en mempool.space' },
+  'View separate receive and change descriptors': {
+    fr: 'Afficher séparément les descripteurs de réception et de monnaie',
+    es: 'Ver por separado los descriptores de recepción y cambio'
+  },
+  'Wallet policy': { fr: 'Politique du portefeuille', es: 'Política de la cartera' },
+  'with signer': { fr: 'avec le signataire', es: 'con el firmante' },
+  'You will need to add the signers again.': {
+    fr: 'Vous devrez ajouter à nouveau les signataires.',
+    es: 'Tendrás que volver a añadir los firmantes.'
+  }
+} as const satisfies CatalogSection;

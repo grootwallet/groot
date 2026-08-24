@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { locale } from '$lib/i18n';
+  import { translate, localizedError } from '$lib/i18n-catalog';
   import { Check, ChevronDown, ChevronRight, Copy, Plus, QrCode, Trash2 } from '@lucide/svelte';
   import QRCode from 'qrcode';
   import { goto } from '$app/navigation';
@@ -88,7 +90,7 @@
         }
         toast({
           title: 'Could not load wallet',
-          description: cause instanceof Error ? cause.message : undefined,
+          description: localizedError(cause, $locale),
           tone: 'danger'
         });
       }
@@ -125,7 +127,7 @@
         tone: 'success'
       });
     } catch (cause) {
-      generateError = cause instanceof Error ? cause.message : 'Could not generate the address.';
+      generateError = localizedError(cause, $locale, 'Could not generate the address.');
       toast({ title: 'Could not generate address', description: generateError, tone: 'danger' });
     } finally {
       busy = false;
@@ -158,7 +160,7 @@
     } catch (cause) {
       toast({
         title: 'Could not discard address',
-        description: cause instanceof Error ? cause.message : undefined,
+        description: localizedError(cause, $locale),
         tone: 'danger'
       });
     } finally {
@@ -183,24 +185,25 @@
 <div class="page narrow-page receive-page">
   <header class="page-header">
     <div>
-      <p class="eyebrow">RECEIVE</p>
-      <h1>Receive bitcoin</h1>
-      <p class="subtitle">Create a labeled address for one payment.</p>
+      <p class="eyebrow">{translate($locale, 'RECEIVE')}</p>
+      <h1>{translate($locale, 'Receive bitcoin')}</h1>
+      <p class="subtitle">{translate($locale, 'Create a labeled address for one payment.')}</p>
     </div>
-    <Button variant="secondary" href="/">Back to overview</Button>
+    <Button variant="secondary" href="/">{translate($locale, 'Back to overview')}</Button>
   </header>
   {#if current}<section class="receive-card">
       <button
         class="qr-placeholder qr-button"
-        aria-label="Enlarge QR code"
+        aria-label={translate($locale, 'Enlarge QR code')}
         onclick={() => (showQr = true)}
-        >{#if qrDataUrl}<img src={qrDataUrl} alt="QR code for {current.address}" />{:else}<QrCode
-            size={154}
-          />{/if}</button
+        >{#if qrDataUrl}<img
+            src={qrDataUrl}
+            alt={translate($locale, 'QR code for {address}', { address: current.address })}
+          />{:else}<QrCode size={154} />{/if}</button
       >
       <div class="address-label">
         <span>{current.label}</span>{#if current.hardwareVerifiedAt}<HardwareVerificationStatus
-          />{:else}<small>Not verified</small>{/if}
+          />{:else}<small>{translate($locale, 'Not verified')}</small>{/if}
       </div>
       <button class="address-box" onclick={copy}
         ><code>{current.address}</code>{#if copied}<Check size={17} />{:else}<Copy
@@ -208,7 +211,8 @@
           />{/if}</button
       >
       <div class="receive-actions">
-        <Button variant="secondary" onclick={copy}><Copy size={16} />Copy address</Button
+        <Button variant="secondary" onclick={copy}
+          ><Copy size={16} />{translate($locale, 'Copy address')}</Button
         ><HardwareReceiveVerification
           address={current}
           walletKind="multisig"
@@ -217,54 +221,62 @@
           savedSigners={wallet?.cosigners ?? []}
           onverified={applyVerifiedAddress}
         /><Button variant="ghost-danger" onclick={() => requestDiscard(current!)}
-          ><Trash2 size={16} />Discard</Button
+          ><Trash2 size={16} />{translate($locale, 'Discard')}</Button
         >
       </div>
       <button class="insight-toggle" onclick={() => (showDetails = !showDetails)}
-        >{showDetails ? 'Hide' : 'Show'} address details <ChevronDown
-          size={14}
-          class={showDetails ? 'rotated' : ''}
-        /></button
+        >{translate($locale, showDetails ? 'Hide' : 'Show')}
+        {translate($locale, 'address details')}
+        <ChevronDown size={14} class={showDetails ? 'rotated' : ''} /></button
       >{#if showDetails}<dl class="optional-details">
           <div>
-            <dt>Derivation</dt>
+            <dt>{translate($locale, 'Derivation')}</dt>
             <dd><code>{current.derivationPath}</code></dd>
           </div>
           <div>
-            <dt>Type</dt>
-            <dd>Descriptor · Miniscript</dd>
+            <dt>{translate($locale, 'Type')}</dt>
+            <dd>{translate($locale, 'Descriptor · Miniscript')}</dd>
           </div>
           {#if current.hardwareVerifiedAt}<div>
-              <dt>Hardware verified</dt>
+              <dt>{translate($locale, 'Hardware verified')}</dt>
               <dd><LocalTimestamp value={current.hardwareVerifiedAt} /></dd>
             </div>{/if}{#if current.hardwareVerifiedBy}<div>
-              <dt>Signer fingerprint</dt>
+              <dt>{translate($locale, 'Signer fingerprint')}</dt>
               <dd><code>{current.hardwareVerifiedBy}</code></dd>
             </div>{/if}
         </dl>{/if}{#if !current.hardwareVerifiedAt}<p class="privacy-note">
-          Verify on a wallet signer before sharing this address.
+          {translate($locale, 'Verify on a wallet signer before sharing this address.')}
         </p>{/if}
     </section>
   {:else}<section class="empty-state">
       <span class="empty-icon"><QrCode size={24} /></span>
-      <h2>{ready ? 'No address awaiting payment' : 'Loading receive addresses…'}</h2>
+      <h2>
+        {translate($locale, ready ? 'No address awaiting payment' : 'Loading receive addresses…')}
+      </h2>
       <p>
-        {ready
-          ? 'Every receive address needs a permanent label.'
-          : 'Confirming the selected wallet before deriving an address.'}
+        {translate(
+          $locale,
+          ready
+            ? 'Every receive address needs a permanent label.'
+            : 'Confirming the selected wallet before deriving an address.'
+        )}
       </p>
       <Button
         disabled={!ready}
         onclick={() => {
           generateError = '';
           showGenerate = true;
-        }}><Plus size={17} />New address</Button
+        }}><Plus size={17} />{translate($locale, 'New address')}</Button
       >
     </section>{/if}
   <div class="section-heading compact">
     <div>
-      <h2>Awaiting payment</h2>
-      <p>{awaiting.length} active {awaiting.length === 1 ? 'address' : 'addresses'}</p>
+      <h2>{translate($locale, 'Awaiting payment')}</h2>
+      <p>
+        {awaiting.length}
+        {translate($locale, 'active')}
+        {translate($locale, awaiting.length === 1 ? 'address' : 'addresses')}
+      </p>
     </div>
     <Button
       variant="secondary"
@@ -274,14 +286,14 @@
         generateError = '';
         showGenerate = true;
       }}
-      ariaLabel="New receive address"><Plus size={15} />New</Button
+      ariaLabel="New receive address"><Plus size={15} />{translate($locale, 'New')}</Button
     >
   </div>
   <div class="awaiting-addresses">
     {#each awaiting as address}<article class:active={current?.id === address.id}>
         <button
           class="awaiting-select"
-          aria-label="View {address.label}"
+          aria-label={translate($locale, 'View {label}', { label: address.label })}
           onclick={() => {
             current = address;
             showDetails = false;
@@ -289,39 +301,43 @@
           ><span class="status-dot"></span><span
             ><strong>{address.label}</strong><small>{compactAddress(address.address)}</small></span
           ><span class="right-meta"
-            >Awaiting<small><LocalTimestamp value={address.created} /></small></span
+            >{translate($locale, 'Awaiting')}<small
+              ><LocalTimestamp value={address.created} /></small
+            ></span
           ></button
         ><button
           class="awaiting-discard"
-          aria-label="Discard {address.label}"
+          aria-label={translate($locale, 'Discard {label}', { label: address.label })}
           onclick={() => requestDiscard(address)}><Trash2 size={15} /></button
         >
-      </article>{:else}<p class="list-empty">No active payment requests.</p>{/each}
+      </article>{:else}<p class="list-empty">
+        {translate($locale, 'No active payment requests.')}
+      </p>{/each}
   </div>
   <div class="section-heading compact">
     <div>
-      <h2>Address history</h2>
-      <p>Used and discarded addresses remain monitored.</p>
+      <h2>{translate($locale, 'Address history')}</h2>
+      <p>{translate($locale, 'Used and discarded addresses remain monitored.')}</p>
     </div>
   </div>
   <div class="address-history">
     {#each history as address}<button
         class="address-history-row"
-        aria-label="View details for {address.label}"
+        aria-label={translate($locale, 'View details for {label}', { label: address.label })}
         onclick={() => (detailAddress = address)}
         ><span class="status-dot" class:used={address.status === 'used'}></span><span
           ><strong>{address.label}</strong><small>{compactAddress(address.address)}</small></span
         ><span class="right-meta"
           >{address.status}<small><LocalTimestamp value={address.created} /></small></span
         ><ChevronRight size={15} /></button
-      >{:else}<p class="list-empty">No past addresses yet.</p>{/each}
+      >{:else}<p class="list-empty">{translate($locale, 'No past addresses yet.')}</p>{/each}
   </div>
 </div>
 
 <Modal
   open={showGenerate}
-  title="New receive address"
-  description="Labels cannot be changed."
+  title={translate($locale, 'New receive address')}
+  description={translate($locale, 'Labels cannot be changed.')}
   onclose={() => {
     if (!busy) {
       showGenerate = false;
@@ -335,11 +351,11 @@
     }}
   >
     <label class="field"
-      ><span>Permanent label</span><input
+      ><span>{translate($locale, 'Permanent label')}</span><input
         bind:value={label}
         oninput={() => (generateError = '')}
         maxlength="48"
-        placeholder="e.g. Treasury deposit"
+        placeholder={translate($locale, 'e.g. Treasury deposit')}
       /><FieldCounter value={label} max={48} /></label
     >{#if generateError}<p class="form-error" role="alert">{generateError}</p>{/if}
     <div class="modal-footer">
@@ -349,20 +365,23 @@
         onclick={() => {
           showGenerate = false;
           generateError = '';
-        }}>Cancel</Button
+        }}>{translate($locale, 'Cancel')}</Button
       ><Button
         type="submit"
         disabled={!ready || busy || !label.trim()}
         loading={busy}
-        loadingLabel="Generating address…">Generate address</Button
+        loadingLabel={translate($locale, 'Generating address…')}
+        >{translate($locale, 'Generate address')}</Button
       >
     </div>
   </form></Modal
 >
 <Modal
   open={showDiscard}
-  title="Discard {discardTarget?.label ?? 'this receive address'}?"
-  description="It remains monitored but will never be offered again."
+  title={translate($locale, 'Discard {label}?', {
+    label: discardTarget?.label ?? translate($locale, 'this receive address')
+  })}
+  description={translate($locale, 'It remains monitored but will never be offered again.')}
   onclose={() => {
     showDiscard = false;
     discardTarget = null;
@@ -373,23 +392,25 @@
       onclick={() => {
         showDiscard = false;
         discardTarget = null;
-      }}>Keep address</Button
-    ><Button variant="danger" loading={busy} loadingLabel="Discarding…" onclick={discard}
-      >Discard address</Button
+      }}>{translate($locale, 'Keep address')}</Button
+    ><Button
+      variant="danger"
+      loading={busy}
+      loadingLabel={translate($locale, 'Discarding…')}
+      onclick={discard}>{translate($locale, 'Discard address')}</Button
     >
   </div></Modal
 >
 <Modal
   open={showQr}
-  title={current?.label ?? 'Receive address'}
-  description="Scan to pay this exact descriptor address."
+  title={translate($locale, current?.label ?? 'Receive address')}
+  description={translate($locale, 'Scan to pay this exact descriptor address.')}
   onclose={() => (showQr = false)}
   >{#if current && qrDataUrl}<div class="large-qr">
-      <img src={qrDataUrl} alt="Large QR code for {current.address}" /><ReadableAddress
-        address={current.address}
-        {copied}
-        oncopy={copy}
-      />
+      <img
+        src={qrDataUrl}
+        alt={translate($locale, 'Large QR code for {address}', { address: current.address })}
+      /><ReadableAddress address={current.address} {copied} oncopy={copy} />
     </div>{/if}</Modal
 >
 <AddressDetailsModal

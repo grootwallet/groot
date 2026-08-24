@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { locale } from '$lib/i18n';
+  import { translate } from '$lib/i18n-catalog';
   import Modal from './Modal.svelte';
   import ReadableAddress from './ReadableAddress.svelte';
   import LocalTimestamp from './LocalTimestamp.svelte';
@@ -38,8 +40,8 @@
 
 <Modal
   {open}
-  title={address?.label ?? 'Address details'}
-  description="Permanent receive record for this wallet."
+  title={translate($locale, address?.label ?? 'Address details')}
+  description={translate($locale, 'Permanent receive record for this wallet.')}
   {onclose}
 >
   {#if address}
@@ -47,44 +49,50 @@
       <div class="address-detail-status">
         <span class="status-dot" class:used={address.status === 'used'}></span><span
           ><strong>{address.label}</strong><small
-            >{address.status === 'awaiting'
-              ? 'Awaiting payment'
-              : address.status === 'used'
-                ? 'Payment received'
-                : 'Retired from presentation'}</small
+            >{translate(
+              $locale,
+              address.status === 'awaiting'
+                ? 'Awaiting payment'
+                : address.status === 'used'
+                  ? 'Payment received'
+                  : 'Retired from presentation'
+            )}</small
           ></span
         >
       </div>
       <ReadableAddress address={address.address} {copied} oncopy={copy} />
       <dl>
         <div>
-          <dt>Status</dt>
+          <dt>{translate($locale, 'Status')}</dt>
           <dd>{address.status}</dd>
         </div>
         <div>
-          <dt>Created</dt>
+          <dt>{translate($locale, 'Created')}</dt>
           <dd class="address-created-time"><LocalTimestamp value={address.created} /></dd>
         </div>
         {#if address.hardwareVerifiedAt}<div>
-            <dt>Hardware verified</dt>
+            <dt>{translate($locale, 'Hardware verified')}</dt>
             <dd class="address-created-time">
               <LocalTimestamp value={address.hardwareVerifiedAt} />
             </dd>
           </div>{/if}{#if address.hardwareVerifiedBy}<div>
-            <dt>Signer fingerprint</dt>
+            <dt>{translate($locale, 'Signer fingerprint')}</dt>
             <dd><code>{address.hardwareVerifiedBy}</code></dd>
           </div>{/if}
         <div>
-          <dt>Derivation path</dt>
+          <dt>{translate($locale, 'Derivation path')}</dt>
           <dd><code>{address.derivationPath}</code></dd>
         </div>
         <div>
-          <dt>Address type</dt>
+          <dt>{translate($locale, 'Address type')}</dt>
           <dd>{walletType}</dd>
         </div>
       </dl>
       <p>
-        The label is permanent. Spaces above are visual only; copying always uses the exact address.
+        {translate(
+          $locale,
+          'The label is permanent. Spaces above are visual only; copying always uses the exact address.'
+        )}
       </p>
     </div>
   {/if}

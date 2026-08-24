@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { locale } from '$lib/i18n';
+  import { translate } from '$lib/i18n-catalog';
   import { Check, Copy } from '@lucide/svelte';
   import { groupIdentifierForDisplay } from '$lib/address-display';
 
@@ -20,7 +22,7 @@
   <button
     type="button"
     class="readable-address"
-    aria-label={`Copy exact ${label}`}
+    aria-label={translate($locale, 'Copy exact {label}', { label: translate($locale, label) })}
     onclick={oncopy}
   >
     <span class="readable-address-groups" aria-hidden="true">
@@ -31,5 +33,5 @@
     <span class="sr-only">{value}</span>
     {#if copied}<Check size={17} />{:else}<Copy size={17} />{/if}
   </button>
-  <p>Spaces are visual only. Copy always uses the exact value.</p>
+  <p>{translate($locale, 'Spaces are visual only. Copy always uses the exact value.')}</p>
 </div>

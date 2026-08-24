@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { locale } from '$lib/i18n';
+  import { translate } from '$lib/i18n-catalog';
   import { Check, Clock3 } from '@lucide/svelte';
   import type { Snippet } from 'svelte';
 
@@ -42,7 +44,7 @@
   </header>
   {#if state === 'complete'}
     <details class="setup-task-complete-details">
-      <summary>View completed step</summary>
+      <summary>{translate($locale, 'View completed step')}</summary>
       <div class="setup-task-content">{@render children?.()}</div>
     </details>
   {:else}

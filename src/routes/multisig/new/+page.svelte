@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { translate, localizedError } from '$lib/i18n-catalog';
   import {
     AlertTriangle,
     ArrowLeft,
@@ -200,7 +201,13 @@
     ...validatePolicyDraft(policy),
     ...(cosigners.length !== requiredKeys
       ? [
-          `${templateKind === 'standard' ? 'This wallet' : 'This template'} needs exactly ${requiredKeys} signers.`
+          translate($locale, '{subject} needs exactly {count} signers.', {
+            subject: translate(
+              $locale,
+              templateKind === 'standard' ? 'This wallet' : 'This template'
+            ),
+            count: requiredKeys
+          })
         ]
       : [])
   ]);
@@ -209,13 +216,28 @@
     const countErrors = new Set([
       'Add at least 3 signers.',
       'The threshold cannot exceed the number of signers.',
-      `${templateKind === 'standard' ? 'This wallet' : 'This template'} needs exactly ${requiredKeys} signers.`
+      translate($locale, '{subject} needs exactly {count} signers.', {
+        subject: translate($locale, templateKind === 'standard' ? 'This wallet' : 'This template'),
+        count: requiredKeys
+      })
     ]);
     const remaining = requiredKeys - cosigners.length;
     const countGuidance =
       remaining > 0
-        ? `Add ${remaining} more signer${remaining === 1 ? '' : 's'}.`
-        : `Remove ${Math.abs(remaining)} signer${remaining === -1 ? '' : 's'}.`;
+        ? translate(
+            $locale,
+            remaining === 1 ? 'Add {count} more signer.' : 'Add {count} more signers.',
+            {
+              count: remaining
+            }
+          )
+        : translate(
+            $locale,
+            remaining === -1 ? 'Remove {count} signer.' : 'Remove {count} signers.',
+            {
+              count: Math.abs(remaining)
+            }
+          );
     return [...errors.filter((item) => !countErrors.has(item)), countGuidance].map(signerLanguage);
   });
   const recoveryTemplate = $derived.by<RecoveryTemplate | null>(() => {
@@ -310,9 +332,11 @@
     if (cause instanceof WalletError && cause.code === 'wallet_corrupt') {
       return 'A saved hardware-policy verification could not be validated. Verify that signer again; your signers and descriptor are unchanged.';
     }
-    return cause instanceof Error
-      ? cause.message
-      : 'Groot could not save this setup. It will retry automatically.';
+    return localizedError(
+      cause,
+      $locale,
+      'Groot could not save this setup. It will retry automatically.'
+    );
   }
 
   async function drainDraftSaveQueue() {
@@ -454,8 +478,7 @@
       });
       await goto('/');
     } catch (cause) {
-      discardDraftError =
-        cause instanceof Error ? cause.message : 'The saved setup could not be discarded.';
+      discardDraftError = localizedError(cause, $locale, 'The saved setup could not be discarded.');
     } finally {
       discardingDraft = false;
     }
@@ -475,14 +498,24 @@
         hasDraft = true;
         toast({
           title: 'Multisig setup resumed',
-          description: `Returned to ${draft.stage === 'keys' ? 'Signers' : draft.stage === 'review' ? 'Verify' : draft.stage === 'backup' ? 'Back up' : 'Policy'}.`,
+          description: translate($locale, 'Returned to {stage}.', {
+            stage: translate(
+              $locale,
+              draft.stage === 'keys'
+                ? 'Signers'
+                : draft.stage === 'review'
+                  ? 'Verify'
+                  : draft.stage === 'backup'
+                    ? 'Back up'
+                    : 'Policy'
+            )
+          }),
           tone: 'success'
         });
       }
     } catch (cause) {
       hasDraft = true;
-      draftSaveError =
-        cause instanceof Error ? cause.message : 'Saved setup progress could not be loaded.';
+      draftSaveError = localizedError(cause, $locale, 'Saved setup progress could not be loaded.');
     } finally {
       draftReady = true;
     }
@@ -508,7 +541,10 @@
   });
 
   function signerLanguage(value: string) {
-    return value.replaceAll('cosigners', 'signers').replaceAll('cosigner', 'signer');
+    return translate(
+      $locale,
+      value.replaceAll('cosigners', 'signers').replaceAll('cosigner', 'signer')
+    );
   }
 
   function chooseSource(next: CosignerSource) {
@@ -522,12 +558,24 @@
     const duplicate = findDuplicateCosigner(cosigners, candidate);
     if (!duplicate) return null;
     if (duplicate.match === 'both') {
-      return `This signer is already added as “${duplicate.cosigner.label}” (fingerprint ${duplicate.cosigner.fingerprint.toLowerCase()}).`;
+      return translate(
+        $locale,
+        'This signer is already added as “{label}” (fingerprint {fingerprint}).',
+        {
+          label: duplicate.cosigner.label,
+          fingerprint: duplicate.cosigner.fingerprint.toLowerCase()
+        }
+      );
     }
     if (duplicate.match === 'fingerprint') {
-      return `Fingerprint ${candidate.fingerprint.trim().toLowerCase()} is already used by “${duplicate.cosigner.label}”.`;
+      return translate($locale, 'Fingerprint {fingerprint} is already used by “{label}”.', {
+        fingerprint: candidate.fingerprint.trim().toLowerCase(),
+        label: duplicate.cosigner.label
+      });
     }
-    return `This account xpub is already used by “${duplicate.cosigner.label}”.`;
+    return translate($locale, 'This account xpub is already used by “{label}”.', {
+      label: duplicate.cosigner.label
+    });
   }
 
   function appendCosigner(candidate: CosignerDraft, showError: (message: string) => void): boolean {
@@ -557,7 +605,9 @@
       pickerOpen = false;
       toast({
         title: 'Public signer imported',
-        description: `${imported.label} was loaded from a local file.`,
+        description: translate($locale, '{signerName} was loaded from a local file.', {
+          signerName: imported.label
+        }),
         tone: 'success'
       });
     } catch (cause) {
@@ -565,8 +615,7 @@
         cause instanceof PublicCosignerImportError
           ? 'Could not import this signer'
           : 'Could not read this file';
-      pickerError =
-        cause instanceof Error ? cause.message : 'The public-key file could not be read.';
+      pickerError = localizedError(cause, $locale, 'The public-key file could not be read.');
       pickerErrorGuidance =
         cause instanceof PublicCosignerImportError
           ? cause.guidance
@@ -689,7 +738,9 @@
     signerPendingRemoval = null;
     toast({
       title: 'Signer removed',
-      description: `${removedLabel} was removed from this unfinished wallet.`,
+      description: translate($locale, '{signerName} was removed from this unfinished wallet.', {
+        signerName: removedLabel
+      }),
       tone: 'success'
     });
   }
@@ -704,7 +755,7 @@
     await flushCurrentDraft();
     toast({
       title: 'Signer renamed',
-      description: `This signer is now “${normalized}”.`,
+      description: translate($locale, 'This signer is now “{label}”.', { label: normalized }),
       tone: 'success'
     });
   }
@@ -724,11 +775,13 @@
       healthChecks[signer.id] = result;
       toast({
         title: 'Signer verified',
-        description: `${signer.label} matches this wallet.`,
+        description: translate($locale, '{signerName} matches this wallet.', {
+          signerName: signer.label
+        }),
         tone: 'success'
       });
     } catch (cause) {
-      const summary = cause instanceof Error ? cause.message : 'The device could not be verified.';
+      const summary = localizedError(cause, $locale, 'The device could not be verified.');
       healthChecks[signer.id] = {
         checkedAt: new Date().toISOString(),
         summary,
@@ -755,7 +808,7 @@
     } catch (cause) {
       if (generation !== hardwareScanGeneration) return;
       if (hardware.length === 0)
-        error = cause instanceof Error ? cause.message : 'Could not scan for devices.';
+        error = localizedError(cause, $locale, 'Could not scan for devices.');
     } finally {
       if (generation === hardwareScanGeneration) hardwareBusy = false;
     }
@@ -770,7 +823,7 @@
   async function copyDescriptor(value: string, label: 'Wallet' | 'Receive' | 'Change') {
     await copyText(value, 'public-wallet-data');
     toast({
-      title: `${label} descriptor copied`,
+      title: translate($locale, '{label} descriptor copied', { label: translate($locale, label) }),
       description: 'Public watch-only descriptor copied.',
       tone: 'success'
     });
@@ -786,7 +839,7 @@
         } catch (cause) {
           toast({
             title: 'Could not show saved file',
-            description: cause instanceof Error ? cause.message : undefined,
+            description: localizedError(cause, $locale),
             tone: 'danger'
           });
         }
@@ -818,8 +871,7 @@
         });
       }
     } catch (cause) {
-      backupError =
-        cause instanceof Error ? cause.message : 'Could not save the descriptor backup.';
+      backupError = localizedError(cause, $locale, 'Could not save the descriptor backup.');
       toast({ title: 'Descriptor backup not saved', description: backupError, tone: 'danger' });
     } finally {
       savingDescriptor = false;
@@ -843,7 +895,7 @@
           action: savedFileAction(savedPolicy)
         });
     } catch (cause) {
-      backupError = cause instanceof Error ? cause.message : 'Could not save the Coldcard policy.';
+      backupError = localizedError(cause, $locale, 'Could not save the Coldcard policy.');
       toast({ title: 'Coldcard policy not saved', description: backupError, tone: 'danger' });
     } finally {
       savingDescriptor = false;
@@ -853,7 +905,13 @@
   async function importHardware(device: HardwareDevice, allowEmptyPassphrase = false) {
     const profile = policyRegistrationProfile(device);
     if (!profile.supported && profile.registration === 'unsupported') {
-      error = `${profile.name} is not supported by Groot's pinned HWI release and has not completed physical certification.`;
+      error = translate(
+        $locale,
+        "{device} is not supported by Groot's pinned HWI release and has not completed physical certification.",
+        {
+          device: profile.name
+        }
+      );
       return;
     }
     const deviceLabel = label.trim() || device.label;
@@ -862,7 +920,7 @@
       ? 'Reading the multisig account key from Ledger…'
       : device.model === 'bitbox02'
         ? 'Reading the public key from BitBox02…'
-        : `Reading the public key from ${device.label}…`;
+        : translate($locale, 'Reading the public key from {device}…', { device: device.label });
     error = '';
     try {
       const candidate = await walletService.importHardwareCosigner(
@@ -876,7 +934,7 @@
       standardWalletDevice = null;
       label = '';
     } catch (cause) {
-      error = cause instanceof Error ? cause.message : 'Could not read the public key.';
+      error = localizedError(cause, $locale, 'Could not read the public key.');
     } finally {
       hardwareBusy = false;
     }
@@ -910,7 +968,7 @@
       hardwareOpen = false;
       pinOpen = true;
     } catch (cause) {
-      const message = cause instanceof Error ? cause.message : 'Could not start the PIN matrix.';
+      const message = localizedError(cause, $locale, 'Could not start the PIN matrix.');
       if (retrying) {
         pinErrorCode = cause instanceof WalletError ? cause.code : 'internal_error';
         pinError = message;
@@ -952,8 +1010,7 @@
     } catch (cause) {
       pinChallenge = '';
       pinErrorCode = cause instanceof WalletError ? cause.code : 'internal_error';
-      pinError =
-        cause instanceof Error ? cause.message : 'Trezor did not accept that matrix entry.';
+      pinError = localizedError(cause, $locale, 'Trezor did not accept that matrix entry.');
     } finally {
       positions = '';
       pinBusy = false;
@@ -985,8 +1042,7 @@
       policyDevice = device;
     } catch (cause) {
       if (generation !== policyLookupGeneration) return;
-      policyReviewError =
-        cause instanceof Error ? cause.message : 'Could not scan hardware devices.';
+      policyReviewError = localizedError(cause, $locale, 'Could not scan hardware devices.');
     } finally {
       if (generation === policyLookupGeneration) policyReviewBusy = false;
     }
@@ -1025,12 +1081,21 @@
       policyDevice = null;
       toast({
         title: 'Wallet policy verified',
-        description: `${signerLabel} registered the policy and verified its first address.`,
+        description: translate(
+          $locale,
+          '{signerName} registered the policy and verified its first address.',
+          {
+            signerName: signerLabel
+          }
+        ),
         tone: 'success'
       });
     } catch (cause) {
-      policyReviewError =
-        cause instanceof Error ? cause.message : 'The wallet policy could not be verified.';
+      policyReviewError = localizedError(
+        cause,
+        $locale,
+        'The wallet policy could not be verified.'
+      );
     } finally {
       policyReviewBusy = false;
     }
@@ -1068,7 +1133,7 @@
       showDescriptor = false;
       backupError = '';
     } catch (cause) {
-      error = cause instanceof Error ? cause.message : 'Could not build the descriptor.';
+      error = localizedError(cause, $locale, 'Could not build the descriptor.');
     } finally {
       busy = false;
     }
@@ -1124,10 +1189,11 @@
           'Groot could not safely restore the saved verification. Open “Verify hardware wallet policies” and verify the signer again.';
       } else {
         createErrorTitle = 'Wallet could not be created';
-        error =
-          cause instanceof Error
-            ? cause.message
-            : 'Try again. Your hardware-wallet keys and saved descriptor are unchanged.';
+        error = localizedError(
+          cause,
+          $locale,
+          'Try again. Your hardware-wallet keys and saved descriptor are unchanged.'
+        );
       }
     } finally {
       credential = '';
@@ -1140,14 +1206,17 @@
 <div class="page coordinator-page">
   <header class="page-header">
     <div>
-      <p class="eyebrow">MULTISIG WALLET</p>
-      <h1>Create a multisig wallet</h1>
+      <p class="eyebrow">{translate($locale, 'MULTISIG WALLET')}</p>
+      <h1>{translate($locale, 'Create a multisig wallet')}</h1>
       <p class="subtitle">
-        {stage === 'policy' && policyStep === 'choose'
-          ? 'Choose how this wallet can be spent.'
-          : stage === 'policy'
-            ? 'Name and configure the policy before adding signers.'
-            : 'Add independent signers, verify the policy, and back it up.'}
+        {translate(
+          $locale,
+          stage === 'policy' && policyStep === 'choose'
+            ? 'Choose how this wallet can be spent.'
+            : stage === 'policy'
+              ? 'Name and configure the policy before adding signers.'
+              : 'Add independent signers, verify the policy, and back it up.'
+        )}
       </p>
     </div>
     <div class="page-header-actions">
@@ -1157,27 +1226,32 @@
           onclick={() => {
             discardDraftError = '';
             discardDraftOpen = true;
-          }}><Trash2 size={14} />Discard setup</Button
+          }}><Trash2 size={14} />{translate($locale, 'Discard setup')}</Button
         >{/if}{#if stage === 'policy'}<a
           class="secondary-link"
           href="/multisig/recover"
-          aria-label="Recover from backup"><FileUp size={15} />Recover</a
-        >{/if}<span class="network-chip">Regtest · Native SegWit</span>
+          aria-label={translate($locale, 'Recover from backup')}
+          ><FileUp size={15} />{translate($locale, 'Recover')}</a
+        >{/if}<span class="network-chip">{translate($locale, 'Regtest · Native SegWit')}</span>
     </div>
   </header>
-  <SetupProgress steps={creationSteps} current={creationStep} label="Wallet creation progress" />
+  <SetupProgress
+    steps={creationSteps}
+    current={creationStep}
+    label={translate($locale, 'Wallet creation progress')}
+  />
   {#if draftSaveError}<div class="warning-box danger" role="alert">
-      <AlertTriangle size={16} /><strong>Setup progress could not be saved</strong><span
-        >{draftSaveError}</span
-      >
+      <AlertTriangle size={16} /><strong
+        >{translate($locale, 'Setup progress could not be saved')}</strong
+      ><span>{draftSaveError}</span>
     </div>{/if}
 
   {#if !draftReady}
     <section class="form-card">
       <HardwareActionPrompt
-        title="Restoring multisig setup"
-        detail="Checking for saved public policy progress…"
-        label="Restoring multisig setup"
+        title={translate($locale, 'Restoring multisig setup')}
+        detail={translate($locale, 'Checking for saved public policy progress…')}
+        label={translate($locale, 'Restoring multisig setup')}
       />
     </section>
   {:else if stage === 'policy'}
@@ -1186,117 +1260,153 @@
         {#if policyStep === 'choose'}
           <div class="section-heading compact policy-choice-heading">
             <div>
-              <span class="setup-step">POLICY · 1 OF 2</span>
-              <h2>Choose a spending policy</h2>
+              <span class="setup-step">{translate($locale, 'POLICY · 1 OF 2')}</span>
+              <h2>{translate($locale, 'Choose a spending policy')}</h2>
               <p>
-                Start with who should be able to spend and whether a separate delayed key is needed.
+                {translate(
+                  $locale,
+                  'Start with who should be able to spend and whether a separate delayed key is needed.'
+                )}
               </p>
             </div>
           </div>
-          <div class="template-grid policy-template-grid" aria-label="Wallet policies">
+          <div
+            class="template-grid policy-template-grid"
+            aria-label={translate($locale, 'Wallet policies')}
+          >
             <button
               class:active={templateKind === 'standard'}
               onclick={() => chooseTemplate('standard')}
-              ><Users size={18} /><strong>Standard</strong><small
-                >A fixed group approves every payment. No timer.</small
+              ><Users size={18} /><strong>{translate($locale, 'Standard')}</strong><small
+                >{translate($locale, 'A fixed group approves every payment. No timer.')}</small
               ></button
             >
             <button
               class:active={templateKind === 'recovery'}
               onclick={() => chooseTemplate('recovery')}
-              ><ShieldCheck size={18} /><strong>Recovery path</strong><small
-                >2 of 3 now; an emergency key after about one month.</small
+              ><ShieldCheck size={18} /><strong>{translate($locale, 'Recovery path')}</strong><small
+                >{translate($locale, '2 of 3 now; an emergency key after about one month.')}</small
               ></button
             >
             <button
               class:active={templateKind === 'inheritance'}
               onclick={() => chooseTemplate('inheritance')}
-              ><Clock3 size={18} /><strong>Inheritance</strong><small
-                >2 of 3 now; an heir key after about one year.</small
+              ><Clock3 size={18} /><strong>{translate($locale, 'Inheritance')}</strong><small
+                >{translate($locale, '2 of 3 now; an heir key after about one year.')}</small
               ></button
             >
           </div>
           <div class="template-tradeoff policy-choice-explainer">
             <strong
-              >{templateKind === 'standard'
-                ? 'Best for ordinary shared custody'
-                : templateKind === 'recovery'
-                  ? 'Shorter emergency fallback'
-                  : 'Longer planned handoff'}</strong
+              >{translate(
+                $locale,
+                templateKind === 'standard'
+                  ? 'Best for ordinary shared custody'
+                  : templateKind === 'recovery'
+                    ? 'Shorter emergency fallback'
+                    : 'Longer planned handoff'
+              )}</strong
             >
             <span
-              >{templateKind === 'standard'
-                ? 'Every payment always needs the chosen number of signers.'
-                : templateKind === 'recovery'
-                  ? 'A fourth independent key can spend after each coin has aged about 4,320 blocks.'
-                  : 'A fourth independent heir key can spend after each coin has aged about 52,560 blocks.'}</span
+              >{translate(
+                $locale,
+                templateKind === 'standard'
+                  ? 'Every payment always needs the chosen number of signers.'
+                  : templateKind === 'recovery'
+                    ? 'A fourth independent key can spend after each coin has aged about 4,320 blocks.'
+                    : 'A fourth independent heir key can spend after each coin has aged about 52,560 blocks.'
+              )}</span
             >
           </div>
           <p class="policy-template-note">
-            Recovery path and Inheritance use the same four-key structure. Their intended holder and
-            delay are different; the delayed key cannot spend before its timer matures.
+            {translate(
+              $locale,
+              'Recovery path and Inheritance use the same four-key structure. Their intended holder and\n            delay are different; the delayed key cannot spend before its timer matures.'
+            )}
           </p>
           <div class="coordinator-actions">
-            <Button variant="secondary" href="/settings"><ArrowLeft size={16} />Cancel</Button
+            <Button variant="secondary" href="/settings"
+              ><ArrowLeft size={16} />{translate($locale, 'Cancel')}</Button
             ><Button onclick={continueToPolicyConfiguration}
-              >Configure {templateKind === 'standard'
-                ? 'standard'
-                : templateKind === 'recovery'
-                  ? 'recovery path'
-                  : 'inheritance'}<ChevronRight size={16} /></Button
+              >{translate($locale, 'Configure')}
+              {translate(
+                $locale,
+                templateKind === 'standard'
+                  ? 'standard'
+                  : templateKind === 'recovery'
+                    ? 'recovery path'
+                    : 'inheritance'
+              )}<ChevronRight size={16} /></Button
             >
           </div>
         {:else}
           <button class="back-link" onclick={returnToPolicyChoice}
-            ><ArrowLeft size={16} />Change policy type</button
+            ><ArrowLeft size={16} />{translate($locale, 'Change policy type')}</button
           >
           <div class="section-heading compact policy-configure-heading">
             <div>
-              <span class="setup-step">POLICY · 2 OF 2</span>
+              <span class="setup-step">{translate($locale, 'POLICY · 2 OF 2')}</span>
               <h2>
-                Configure {templateKind === 'standard'
-                  ? 'a standard wallet'
-                  : templateKind === 'recovery'
-                    ? 'the recovery path'
-                    : 'inheritance'}
+                {translate($locale, 'Configure')}
+                {translate(
+                  $locale,
+                  templateKind === 'standard'
+                    ? 'a standard wallet'
+                    : templateKind === 'recovery'
+                      ? 'the recovery path'
+                      : 'inheritance'
+                )}
               </h2>
-              <p>Choose a local name and confirm how many independent keys this policy needs.</p>
+              <p>
+                {translate(
+                  $locale,
+                  'Choose a local name and confirm how many independent keys this policy needs.'
+                )}
+              </p>
             </div>
             <span class="policy-pill"
-              >{templateKind === 'standard'
-                ? `${threshold} of ${requiredKeys}`
-                : '2 of 3 + delayed key'}</span
+              >{translate(
+                $locale,
+                templateKind === 'standard'
+                  ? `${threshold} of ${requiredKeys}`
+                  : '2 of 3 + delayed key'
+              )}</span
             >
           </div>
           <label class="field"
-            ><span>Wallet name</span><input
+            ><span>{translate($locale, 'Wallet name')}</span><input
               bind:value={name}
               maxlength="48"
-              placeholder="e.g. Family wallet"
+              placeholder={translate($locale, 'e.g. Family wallet')}
             /><FieldCounter value={name} max={48} /></label
           >
           {#if templateKind === 'standard'}
-            <div class="policy-recipes" aria-label="Standard multisig recipes">
+            <div
+              class="policy-recipes"
+              aria-label={translate($locale, 'Standard multisig recipes')}
+            >
               <button
                 class:active={standardRecipe === '2of3'}
                 onclick={() => applyStandardRecipe('2of3')}
-                ><strong>2 of 3</strong><small>Recommended</small></button
+                ><strong>2 of 3</strong><small>{translate($locale, 'Recommended')}</small></button
               >
               <button
                 class:active={standardRecipe === '3of5'}
                 onclick={() => applyStandardRecipe('3of5')}
-                ><strong>3 of 5</strong><small>Larger group</small></button
+                ><strong>3 of 5</strong><small>{translate($locale, 'Larger group')}</small></button
               >
               <button
                 class:active={standardRecipe === 'custom'}
                 onclick={() => applyStandardRecipe('custom')}
-                ><strong>Custom</strong><small>Advanced</small></button
+                ><strong>{translate($locale, 'Custom')}</strong><small
+                  >{translate($locale, 'Advanced')}</small
+                ></button
               >
             </div>
             {#if standardRecipe === 'custom'}<div class="threshold-row custom-threshold">
                 <label class="field"
-                  ><span>Signatures required (M)</span><select
-                    aria-label="Signatures required"
+                  ><span>{translate($locale, 'Signatures required (M)')}</span><select
+                    aria-label={translate($locale, 'Signatures required')}
                     value={threshold}
                     onchange={(event) => (threshold = Number(event.currentTarget.value))}
                     >{#each Array(customCosignerCount - 1) as _, i}<option value={i + 2}
@@ -1305,8 +1415,8 @@
                   ></label
                 >
                 <label class="field"
-                  ><span>Total signers (N)</span><select
-                    aria-label="Total signers"
+                  ><span>{translate($locale, 'Total signers (N)')}</span><select
+                    aria-label={translate($locale, 'Total signers')}
                     value={customCosignerCount}
                     onchange={(event) => setCustomCosignerCount(Number(event.currentTarget.value))}
                     >{#each Array(5) as _, i}<option value={i + 3}>{i + 3}</option>{/each}</select
@@ -1314,37 +1424,51 @@
                 >
               </div>
               <p class="policy-guidance">
-                Groot starts at 2 signatures. A 1-of-N wallet has no multisig theft protection; use
-                a single-key wallet instead.
+                {translate(
+                  $locale,
+                  'Groot starts at 2 signatures. A 1-of-N wallet has no multisig theft protection; use\n                a single-key wallet instead.'
+                )}
               </p>
             {:else}<div class="recipe-summary">
-                <strong>{threshold} of {requiredKeys} signatures</strong><span
-                  >{standardRecipe === '2of3'
-                    ? 'Lose one key without losing access.'
-                    : 'Designed for a larger family or team.'}</span
+                <strong>{threshold} of {requiredKeys} {translate($locale, 'signatures')}</strong
+                ><span
+                  >{translate(
+                    $locale,
+                    standardRecipe === '2of3'
+                      ? 'Lose one key without losing access.'
+                      : 'Designed for a larger family or team.'
+                  )}</span
                 >
               </div>{/if}
           {:else}<div class="path-visual">
-              <span><b>NOW</b><strong>2 of 3 primary keys</strong></span><i></i><span
-                ><b>{templateKind === 'recovery' ? '~1 MONTH' : '~1 YEAR'}</b><strong
-                  >1 {templateKind === 'recovery' ? 'emergency' : 'heir'} key</strong
+              <span
+                ><b>{translate($locale, 'NOW')}</b><strong
+                  >{translate($locale, '2 of 3 primary keys')}</strong
+                ></span
+              ><i></i><span
+                ><b>{translate($locale, templateKind === 'recovery' ? '~1 MONTH' : '~1 YEAR')}</b
+                ><strong
+                  >1 {translate($locale, templateKind === 'recovery' ? 'emergency' : 'heir')}
+                  {translate($locale, 'key')}</strong
                 ></span
               >
             </div>
             <div class="recovery-separation">
               <ShieldCheck size={15} /><span
-                ><strong>Four independent keys required</strong><small
-                  >Key 4 is delayed and excluded from the immediate 2-of-3 branch. It cannot be
-                  reused as a primary signer.</small
+                ><strong>{translate($locale, 'Four independent keys required')}</strong><small
+                  >{translate(
+                    $locale,
+                    'Key 4 is delayed and excluded from the immediate 2-of-3 branch. It cannot be\n                  reused as a primary signer.'
+                  )}</small
                 ></span
               >
             </div>{/if}
           {#if error}<p class="form-error">{error}</p>{/if}
           <div class="coordinator-actions">
             <Button variant="secondary" onclick={returnToPolicyChoice}
-              ><ArrowLeft size={16} />Back</Button
+              ><ArrowLeft size={16} />{translate($locale, 'Back')}</Button
             ><Button onclick={continueToCosigners}
-              >Continue to signers<ChevronRight size={16} /></Button
+              >{translate($locale, 'Continue to signers')}<ChevronRight size={16} /></Button
             >
           </div>
         {/if}
@@ -1355,12 +1479,19 @@
       <section class="form-card coordinator-main">
         <div class="section-heading compact cosigner-step-heading">
           <div>
-            <span class="setup-step">SIGNERS</span>
-            <h2>Add {requiredKeys} independent keys</h2>
+            <span class="setup-step">{translate($locale, 'SIGNERS')}</span>
+            <h2>
+              {translate($locale, 'Add')}
+              {requiredKeys}
+              {translate($locale, 'independent keys')}
+            </h2>
             <p>
-              {name.trim()} · {templateKind === 'standard'
-                ? `${threshold} of ${requiredKeys}`
-                : '2 of 3 + recovery'}
+              {name.trim()} · {translate(
+                $locale,
+                templateKind === 'standard'
+                  ? `${threshold} of ${requiredKeys}`
+                  : '2 of 3 + recovery'
+              )}
             </p>
           </div>
           <Button
@@ -1368,9 +1499,10 @@
             size="small"
             disabled={cosigners.length >= requiredKeys}
             onclick={() => (pickerOpen = true)}
-            ><Plus size={15} />{cosigners.length >= requiredKeys
-              ? 'All added'
-              : 'Add a signer'}</Button
+            ><Plus size={15} />{translate(
+              $locale,
+              cosigners.length >= requiredKeys ? 'All added' : 'Add a signer'
+            )}</Button
           >
         </div>
         <div class="cosigner-list">
@@ -1378,7 +1510,7 @@
             <article class="cosigner-card">
               <button
                 class="draft-cosigner-trigger"
-                aria-label="View {signer.label} details"
+                aria-label={translate($locale, 'View {signer} details', { signer: signer.label })}
                 onclick={() => (selectedSigner = signer)}
               >
                 <span class="device-number" aria-hidden="true">{i + 1}</span>
@@ -1386,22 +1518,28 @@
                   <strong class="cosigner-name">{signer.label}</strong>
                   <span class="cosigner-metadata">
                     {#if templateKind !== 'standard'}<span
-                        ><small>Policy role</small><span class="source-badge"
-                          >{i === 3 ? 'Recovery-only signer' : 'Primary signer'}</span
+                        ><small>{translate($locale, 'Policy role')}</small><span
+                          class="source-badge"
+                          >{translate(
+                            $locale,
+                            i === 3 ? 'Recovery-only signer' : 'Primary signer'
+                          )}</span
                         ></span
                       >{/if}
                     <span
-                      ><small>Device fingerprint</small><code
+                      ><small>{translate($locale, 'Device fingerprint')}</small><code
                         >{signer.fingerprint.toLowerCase()}</code
                       ></span
                     >
                     <span
-                      ><small>{sourceHeading(signer.source)}</small><span class="source-badge"
-                        >{sourceLabel(signer.source)}</span
+                      ><small>{translate($locale, sourceHeading(signer.source))}</small><span
+                        class="source-badge">{translate($locale, sourceLabel(signer.source))}</span
                       ></span
                     >
                     <span class="cosigner-public-key"
-                      ><small>Public account key (xpub)</small><code>{signer.xpub}</code></span
+                      ><small>{translate($locale, 'Public account key (xpub)')}</small><code
+                        >{signer.xpub}</code
+                      ></span
                     >
                   </span>
                 </span>
@@ -1409,24 +1547,27 @@
               </button>
               <button
                 class="remove-cosigner"
-                aria-label="Remove {signer.label}"
-                title="Remove signer"
+                aria-label={translate($locale, 'Remove {signer}', { signer: signer.label })}
+                title={translate($locale, 'Remove signer')}
                 onclick={() => (signerPendingRemoval = signer)}><Trash2 size={16} /></button
               >
             </article>
           {:else}
             <div class="keys-empty">
-              <FileKey size={22} /><strong>No signers yet</strong><span
-                >Add {requiredKeys} independent keys for this template.</span
+              <FileKey size={22} /><strong>{translate($locale, 'No signers yet')}</strong><span
+                >{translate($locale, 'Add')}
+                {requiredKeys}
+                {translate($locale, 'independent keys for this template.')}</span
               >
             </div>
           {/each}
         </div>
         {#if cosigners.length > 0}<p class="cosigner-progress" aria-live="polite">
-            {cosigners.length} of {requiredKeys} signers added
+            {cosigners.length} of {requiredKeys}
+            {translate($locale, 'signers added')}
           </p>{/if}
         {#if reviewAttempted && visibleErrors.length}<div class="policy-errors" aria-live="polite">
-            {#each visibleErrors as item}<p>{item}</p>{/each}
+            {#each visibleErrors as item}<p>{translate($locale, item)}</p>{/each}
           </div>{/if}
         {#if error}<p class="form-error">{error}</p>{/if}
         <div class="coordinator-actions">
@@ -1436,25 +1577,32 @@
               error = '';
               policyStep = 'configure';
               stage = 'policy';
-            }}><ArrowLeft size={16} />Back to policy</Button
-          ><Button loading={busy} loadingLabel="Building policy…" onclick={review}
-            >Review wallet<ChevronRight size={16} /></Button
+            }}><ArrowLeft size={16} />{translate($locale, 'Back to policy')}</Button
+          ><Button
+            loading={busy}
+            loadingLabel={translate($locale, 'Building policy…')}
+            onclick={review}>{translate($locale, 'Review wallet')}<ChevronRight size={16} /></Button
           >
         </div>
       </section>
       <aside class="safety-panel">
         <ShieldCheck size={22} />
-        <h2>Before you continue</h2>
-        <p>Groot stores public descriptors only. It cannot spend without enough signatures.</p>
+        <h2>{translate($locale, 'Before you continue')}</h2>
+        <p>
+          {translate(
+            $locale,
+            'Groot stores public descriptors only. It cannot spend without enough signatures.'
+          )}
+        </p>
         <ul>
-          <li>Back up the wallet descriptor.</li>
-          <li>Verify each fingerprint on its device.</li>
-          <li>Keep devices in separate places.</li>
+          <li>{translate($locale, 'Back up the wallet descriptor.')}</li>
+          <li>{translate($locale, 'Verify each fingerprint on its device.')}</li>
+          <li>{translate($locale, 'Keep devices in separate places.')}</li>
         </ul>
         <button class="hardware-help-card" onclick={() => openHardwareHelp()}
           ><CircleHelp size={17} /><span
-            ><strong>Hardware setup help</strong><small
-              >Coldcard, BitBox02, Ledger, Trezor, Jade</small
+            ><strong>{translate($locale, 'Hardware setup help')}</strong><small
+              >{translate($locale, 'Coldcard, BitBox02, Ledger, Trezor, Jade')}</small
             ></span
           ><ChevronRight size={14} /></button
         ><code>{MULTISIG_ACCOUNT_PATH}</code>
@@ -1463,15 +1611,18 @@
   {:else if stage === 'review' && preview}
     <section class="form-card review-policy">
       <button class="back-link" onclick={() => (stage = 'keys')}
-        ><ArrowLeft size={16} />Edit keys</button
+        ><ArrowLeft size={16} />{translate($locale, 'Edit keys')}</button
       >
-      <span class="setup-step">FINAL REVIEW</span>
+      <span class="setup-step">{translate($locale, 'FINAL REVIEW')}</span>
       <h2>{preview.name}</h2>
       <p class="review-intro">
-        Confirm the policy and save the descriptor before creating this wallet.
+        {translate(
+          $locale,
+          'Confirm the policy and save the descriptor before creating this wallet.'
+        )}
       </p>
       <div class="policy-summary">
-        <strong>{threshold} of {cosigners.length} signatures</strong><span
+        <strong>{threshold} of {cosigners.length} {translate($locale, 'signatures')}</strong><span
           >wsh · sortedmulti · BIP48</span
         >
       </div>
@@ -1480,12 +1631,10 @@
           class="descriptor-toggle"
           aria-expanded={showDescriptor}
           onclick={() => (showDescriptor = !showDescriptor)}
-          >Descriptor logic <ChevronDown
-            size={14}
-            class={showDescriptor ? 'rotated' : ''}
-          /></button
+          >{translate($locale, 'Descriptor logic')}
+          <ChevronDown size={14} class={showDescriptor ? 'rotated' : ''} /></button
         ><InsightTip
-          label="About wallet descriptors"
+          label={translate($locale, 'About wallet descriptors')}
           text="A descriptor is a public, watch-only recipe that defines the signing policy and derives every receive and change address. It cannot spend bitcoin, but it reveals the wallet’s complete address history, so keep it private and back it up."
         />
       </div>
@@ -1495,85 +1644,97 @@
         >
           {#if combinedDescriptor}<section class="descriptor-primary">
               <div>
-                <span>Portable wallet descriptor</span><small
-                  >Standard multipath form: branch 0 receives, branch 1 creates change.</small
+                <span>{translate($locale, 'Portable wallet descriptor')}</span><small
+                  >{translate(
+                    $locale,
+                    'Standard multipath form: branch 0 receives, branch 1 creates change.'
+                  )}</small
                 >
               </div>
               <code>{combinedDescriptor}</code><button
-                aria-label="Copy wallet descriptor"
+                aria-label={translate($locale, 'Copy wallet descriptor')}
                 onclick={() => copyDescriptor(combinedDescriptor!, 'Wallet')}
-                ><Copy size={14} />Copy wallet descriptor</button
+                ><Copy size={14} />{translate($locale, 'Copy wallet descriptor')}</button
               >
             </section>
             <details>
-              <summary>View separate receive and change descriptors</summary>
+              <summary>{translate($locale, 'View separate receive and change descriptors')}</summary
+              >
               <section>
                 <div>
-                  <span>Receive descriptor</span><small
-                    >Generates addresses shared for incoming payments.</small
+                  <span>{translate($locale, 'Receive descriptor')}</span><small
+                    >{translate(
+                      $locale,
+                      'Generates addresses shared for incoming payments.'
+                    )}</small
                   >
                 </div>
                 <code>{preview.externalDescriptor}</code><button
-                  aria-label="Copy receive descriptor"
+                  aria-label={translate($locale, 'Copy receive descriptor')}
                   onclick={() => copyDescriptor(preview!.externalDescriptor, 'Receive')}
-                  ><Copy size={14} />Copy receive descriptor</button
+                  ><Copy size={14} />{translate($locale, 'Copy receive descriptor')}</button
                 >
               </section>
               <section>
                 <div>
-                  <span>Change descriptor</span><small
-                    >Generates private change addresses after spending.</small
+                  <span>{translate($locale, 'Change descriptor')}</span><small
+                    >{translate(
+                      $locale,
+                      'Generates private change addresses after spending.'
+                    )}</small
                   >
                 </div>
                 <code>{preview.internalDescriptor}</code><button
-                  aria-label="Copy change descriptor"
+                  aria-label={translate($locale, 'Copy change descriptor')}
                   onclick={() => copyDescriptor(preview!.internalDescriptor, 'Change')}
-                  ><Copy size={14} />Copy change descriptor</button
+                  ><Copy size={14} />{translate($locale, 'Copy change descriptor')}</button
                 >
               </section>
             </details>
           {:else}<section>
               <div>
-                <span>Receive descriptor</span><small
-                  >Generates addresses shared for incoming payments.</small
+                <span>{translate($locale, 'Receive descriptor')}</span><small
+                  >{translate($locale, 'Generates addresses shared for incoming payments.')}</small
                 >
               </div>
               <code>{preview.externalDescriptor}</code><button
-                aria-label="Copy receive descriptor"
+                aria-label={translate($locale, 'Copy receive descriptor')}
                 onclick={() => copyDescriptor(preview!.externalDescriptor, 'Receive')}
-                ><Copy size={14} />Copy receive descriptor</button
+                ><Copy size={14} />{translate($locale, 'Copy receive descriptor')}</button
               >
             </section>
             <section>
               <div>
-                <span>Change descriptor</span><small
-                  >Generates private change addresses after spending.</small
+                <span>{translate($locale, 'Change descriptor')}</span><small
+                  >{translate($locale, 'Generates private change addresses after spending.')}</small
                 >
               </div>
               <code>{preview.internalDescriptor}</code><button
-                aria-label="Copy change descriptor"
+                aria-label={translate($locale, 'Copy change descriptor')}
                 onclick={() => copyDescriptor(preview!.internalDescriptor, 'Change')}
-                ><Copy size={14} />Copy change descriptor</button
+                ><Copy size={14} />{translate($locale, 'Copy change descriptor')}</button
               >
             </section>{/if}
-          {#if recoveryTemplate?.type === 'recovery'}<span>Spend paths</span><code
-              >2 of first 3 now · 1 recovery key after {formatInteger(
-                recoveryTemplate.recovery.availableAfterBlocks,
-                $locale
-              )}
-              blocks</code
+          {#if recoveryTemplate?.type === 'recovery'}<span>{translate($locale, 'Spend paths')}</span
+            ><code
+              >{translate($locale, '2 of first 3 now · 1 recovery key after')}
+              {formatInteger(recoveryTemplate.recovery.availableAfterBlocks, $locale)}
+              {translate($locale, 'blocks')}</code
             >{/if}
           <p>
-            <ShieldCheck size={14} />Keep descriptors private even though they cannot spend. They
-            reveal every address in this wallet.
+            <ShieldCheck size={14} />{translate(
+              $locale,
+              'Keep descriptors private even though they cannot spend. They\n            reveal every address in this wallet.'
+            )}
           </p>
           <button
             class="descriptor-download"
             disabled={savingDescriptor}
             onclick={saveDescriptorDraft}
-            ><Download size={14} />{savingDescriptor
-              ? 'Opening save dialog…'
-              : 'Save public descriptor text'}</button
+            ><Download size={14} />{translate(
+              $locale,
+              savingDescriptor ? 'Opening save dialog…' : 'Save public descriptor text'
+            )}</button
           >
         </div>{/if}
       {#if backupError}<p class="form-error" role="alert">{backupError}</p>{/if}
@@ -1586,30 +1747,35 @@
       </div>
       <div class="coordinator-actions">
         <Button variant="secondary" onclick={() => (stage = 'keys')}
-          ><ArrowLeft size={16} />Back to signers</Button
+          ><ArrowLeft size={16} />{translate($locale, 'Back to signers')}</Button
         ><Button onclick={() => (stage = 'backup')}
-          >Continue to backup<ChevronRight size={16} /></Button
+          >{translate($locale, 'Continue to backup')}<ChevronRight size={16} /></Button
         >
       </div>
     </section>
   {:else if stage === 'backup' && preview}
     <section class="form-card review-policy">
       <button class="back-link" onclick={() => (stage = 'review')}
-        ><ArrowLeft size={16} />Back to verification</button
+        ><ArrowLeft size={16} />{translate($locale, 'Back to verification')}</button
       >
-      <span class="setup-step">BACK UP</span>
-      <h2>Protect {preview.name}</h2>
-      <p class="review-intro">Complete each section before creating this coordinator.</p>
+      <span class="setup-step">{translate($locale, 'BACK UP')}</span>
+      <h2>{translate($locale, 'Protect')} {preview.name}</h2>
+      <p class="review-intro">
+        {translate($locale, 'Complete each section before creating this coordinator.')}
+      </p>
       <div class="policy-summary">
-        <strong>{threshold} of {cosigners.length} signatures</strong><span
+        <strong>{threshold} of {cosigners.length} {translate($locale, 'signatures')}</strong><span
           >wsh · sortedmulti · BIP48</span
         >
       </div>
       <div class="backup-setup-sections">
         <SetupTask
           step={1}
-          title="Save the wallet descriptor"
-          description="This public backup recovers every wallet address and coordinates signatures. It cannot spend, but it reveals wallet activity."
+          title={translate($locale, 'Save the wallet descriptor')}
+          description={translate(
+            $locale,
+            'This public backup recovers every wallet address and coordinates signatures. It cannot spend, but it reveals wallet activity.'
+          )}
           state={saved ? 'complete' : 'current'}
           status={saved ? 'Saved' : 'Current step'}
         >
@@ -1618,18 +1784,22 @@
             class="full"
             disabled={savingDescriptor}
             loading={savingDescriptor}
-            loadingLabel="Opening save dialog…"
+            loadingLabel={translate($locale, 'Opening save dialog…')}
             onclick={saveDescriptorDraft}
-            ><Download size={14} />{saved
-              ? 'Save another copy'
-              : 'Save public descriptor text'}</Button
+            ><Download size={14} />{translate(
+              $locale,
+              saved ? 'Save another copy' : 'Save public descriptor text'
+            )}</Button
           >
           {#if backupError}<p class="form-error" role="alert">{backupError}</p>{/if}
         </SetupTask>
         {#if coldcardRegistrationRequired}<SetupTask
             step={coldcardStep}
-            title="Register the policy on Coldcard"
-            description="Recommended now, but optional during coordinator creation. Coldcard must know the complete policy before it signs."
+            title={translate($locale, 'Register the policy on Coldcard')}
+            description={translate(
+              $locale,
+              'Recommended now, but optional during coordinator creation. Coldcard must know the complete policy before it signs.'
+            )}
             state={coldcardRegistered
               ? 'complete'
               : policyVerificationDeferred
@@ -1646,12 +1816,16 @@
                   : 'Available after backup'}
           >
             <ol>
-              <li>Save the policy to microSD or Coldcard Virtual Disk.</li>
+              <li>{translate($locale, 'Save the policy to microSD or Coldcard Virtual Disk.')}</li>
               <li>
-                On every Coldcard, import it from <b>Settings → Multisig Wallets → Import</b>.
+                {translate($locale, 'On every Coldcard, import it from')}
+                <b>{translate($locale, 'Settings → Multisig Wallets → Import')}</b>.
               </li>
               <li>
-                Verify the wallet name, 2-of-3 threshold, and all signer fingerprints on-device.
+                {translate(
+                  $locale,
+                  'Verify the wallet name, 2-of-3 threshold, and all signer fingerprints on-device.'
+                )}
               </li>
             </ol>
             <Button
@@ -1659,13 +1833,17 @@
               class="full"
               disabled={!saved || savingDescriptor}
               loading={savingDescriptor}
-              loadingLabel="Opening save dialog…"
-              onclick={saveColdcardPolicy}><Download size={14} />Save Coldcard policy</Button
+              loadingLabel={translate($locale, 'Opening save dialog…')}
+              onclick={saveColdcardPolicy}
+              ><Download size={14} />{translate($locale, 'Save Coldcard policy')}</Button
             >
             <label class="backup-confirmation"
               ><input type="checkbox" disabled={!saved} bind:checked={coldcardRegistered} /><span
-                ><strong>Policy verified on every Coldcard</strong><small
-                  >I matched the wallet name, threshold, and signer fingerprints on each device.</small
+                ><strong>{translate($locale, 'Policy verified on every Coldcard')}</strong><small
+                  >{translate(
+                    $locale,
+                    'I matched the wallet name, threshold, and signer fingerprints on each device.'
+                  )}</small
                 ></span
               ></label
             >
@@ -1674,17 +1852,24 @@
                 disabled={!saved}
                 onclick={() => (policyVerificationDeferred = true)}
                 ><Clock3 size={14} /><span
-                  ><strong>Finish hardware setup before first signature</strong><small
-                    >Create the watch-only coordinator now. Groot will stop an unregistered Coldcard
-                    before transaction signing.</small
+                  ><strong
+                    >{translate($locale, 'Finish hardware setup before first signature')}</strong
+                  ><small
+                    >{translate(
+                      $locale,
+                      'Create the watch-only coordinator now. Groot will stop an unregistered Coldcard\n                    before transaction signing.'
+                    )}</small
                   ></span
                 ></button
               >{/if}
           </SetupTask>{/if}
         {#if interactivePolicySigners.length}<SetupTask
             step={interactivePolicyStep}
-            title="Verify hardware wallet policies"
-            description="Recommended now, but optional during coordinator creation. Register the policy and prove its first receive address before first use."
+            title={translate($locale, 'Verify hardware wallet policies')}
+            description={translate(
+              $locale,
+              'Recommended now, but optional during coordinator creation. Register the policy and prove its first receive address before first use.'
+            )}
             state={interactivePoliciesComplete
               ? 'complete'
               : policyVerificationDeferred
@@ -1707,9 +1892,12 @@
                   <span><ShieldCheck size={17} /></span>
                   <div>
                     <strong>{signer.label}</strong><small
-                      >{verification
-                        ? `Policy and first address verified on ${policyDeviceName(policyReadinessKind(signer))}`
-                        : policyRegistrationProfile(signer).creationCopy}</small
+                      >{translate(
+                        $locale,
+                        verification
+                          ? `Policy and first address verified on ${policyDeviceName(policyReadinessKind(signer))}`
+                          : policyRegistrationProfile(signer).creationCopy
+                      )}</small
                     >
                   </div>
                   <Button
@@ -1717,7 +1905,7 @@
                     size="small"
                     disabled={!saved || (coldcardRegistrationRequired && !coldcardRegistered)}
                     onclick={() => openDraftPolicyVerification(signer)}
-                    >{verification ? 'Verify again' : 'Verify policy'}</Button
+                    >{translate($locale, verification ? 'Verify again' : 'Verify policy')}</Button
                   >
                 </article>{/each}
             </div>
@@ -1726,45 +1914,58 @@
                 disabled={!saved}
                 onclick={() => (policyVerificationDeferred = true)}
                 ><Clock3 size={14} /><span
-                  ><strong>Finish hardware setup before first signature</strong><small
-                    >Create the watch-only coordinator now. Groot will block each unverified signer
-                    before transaction signing.</small
+                  ><strong
+                    >{translate($locale, 'Finish hardware setup before first signature')}</strong
+                  ><small
+                    >{translate(
+                      $locale,
+                      'Create the watch-only coordinator now. Groot will block each unverified signer\n                    before transaction signing.'
+                    )}</small
                   ></span
                 ></button
               >{/if}
           </SetupTask>{/if}
         <SetupTask
           step={pinStep}
-          title="Set the coordinator PIN"
-          description="This PIN protects local Groot data. It is separate from every hardware-wallet credential."
+          title={translate($locale, 'Set the coordinator PIN')}
+          description={translate(
+            $locale,
+            'This PIN protects local Groot data. It is separate from every hardware-wallet credential.'
+          )}
           state={pinAvailable ? 'current' : 'upcoming'}
           status={pinAvailable ? 'Current step' : 'Available after earlier steps'}
         >
           <div class="credential-grid">
             <PasswordField
-              label="App PIN"
+              label={translate($locale, 'App PIN')}
               inputLabel="App PIN"
               bind:value={credential}
-              placeholder="Unlock this coordinator"
+              placeholder={translate($locale, 'Unlock this coordinator')}
               autocomplete="new-password"
               disabled={!pinAvailable}
             /><PasswordField
-              label="Confirm app PIN"
+              label={translate($locale, 'Confirm app PIN')}
               inputLabel="Confirm app PIN"
               bind:value={confirmation}
-              placeholder="Enter it again"
+              placeholder={translate($locale, 'Enter it again')}
               autocomplete="new-password"
               disabled={!pinAvailable}
             />
           </div>
           {#if credential && confirmation && credential !== confirmation}<p class="form-error">
-              PINs do not match.
+              {translate($locale, 'PINs do not match.')}
             </p>{/if}
           {#if networkSetupSource}<label class="credential-warning credential-ack"
               ><input type="checkbox" bind:checked={reuseNetworkSetup} /><Network size={16} />
               <p>
-                <strong>Use {networkSetupSource.walletName}’s network setup.</strong><span
-                  >Copies its node and sync method. This wallet protects its own copy.</span
+                <strong
+                  >{translate($locale, 'Use')}
+                  {networkSetupSource.walletName}{translate($locale, '’s network setup.')}</strong
+                ><span
+                  >{translate(
+                    $locale,
+                    'Copies its node and sync method. This wallet protects its own copy.'
+                  )}</span
                 >
               </p></label
             >{/if}
@@ -1772,9 +1973,8 @@
       </div>
       {#if error}<div class="hardware-inline-error hardware-create-error" role="alert">
           <AlertTriangle size={18} /><span
-            ><strong>{createErrorTitle || 'Wallet could not be created'}</strong><small
-              >{error}</small
-            ></span
+            ><strong>{translate($locale, createErrorTitle || 'Wallet could not be created')}</strong
+            ><small>{error}</small></span
           >
         </div>{/if}
       <Button
@@ -1785,8 +1985,8 @@
           !credential ||
           credential !== confirmation}
         loading={busy}
-        loadingLabel="Creating wallet…"
-        onclick={create}>Create wallet</Button
+        loadingLabel={translate($locale, 'Creating wallet…')}
+        onclick={create}>{translate($locale, 'Create wallet')}</Button
       >
     </section>
   {/if}
@@ -1805,44 +2005,50 @@
 
 <Modal
   open={Boolean(signerPendingRemoval)}
-  title="Remove signer?"
-  description={signerPendingRemoval
-    ? `Remove ${signerPendingRemoval.label} from this unfinished wallet?`
-    : ''}
+  title={translate($locale, 'Remove signer?')}
+  description={translate(
+    $locale,
+    signerPendingRemoval ? `Remove ${signerPendingRemoval.label} from this unfinished wallet?` : ''
+  )}
   onclose={() => (signerPendingRemoval = null)}
 >
   {#if signerPendingRemoval}
     <div class="warning-box">
-      <AlertTriangle size={17} /><strong>You will need to add this signer again.</strong><span
-        >Its hardware wallet and seed are not changed.</span
-      >
+      <AlertTriangle size={17} /><strong
+        >{translate($locale, 'You will need to add this signer again.')}</strong
+      ><span>{translate($locale, 'Its hardware wallet and seed are not changed.')}</span>
     </div>
     <div class="modal-footer">
-      <Button variant="secondary" onclick={() => (signerPendingRemoval = null)}>Keep signer</Button
-      ><Button variant="danger" onclick={confirmCosignerRemoval}>Remove signer</Button>
+      <Button variant="secondary" onclick={() => (signerPendingRemoval = null)}
+        >{translate($locale, 'Keep signer')}</Button
+      ><Button variant="danger" onclick={confirmCosignerRemoval}
+        >{translate($locale, 'Remove signer')}</Button
+      >
     </div>
   {/if}
 </Modal>
 
 <Modal
   open={pickerOpen}
-  title="Add a signer"
-  description="Choose how to import this signer’s public account key."
+  title={translate($locale, 'Add a signer')}
+  description={translate($locale, 'Choose how to import this signer’s public account key.')}
   onclose={closeSignerPicker}
 >
   <div class="source-list">
     <button onclick={scanHardware}
       ><Cpu size={18} /><span
-        ><strong>Connect hardware device</strong><small>Desktop · Bitcoin Core HWI</small></span
+        ><strong>{translate($locale, 'Connect hardware device')}</strong><small
+          >{translate($locale, 'Desktop · Bitcoin Core HWI')}</small
+        ></span
       ><ChevronRight size={15} /></button
     >
     <label class="source-button"
       ><FileUp size={18} /><span
-        ><strong>Import public-key file</strong><small
-          >Coldcard XPUB JSON or Groot signer JSON · 256 KiB maximum</small
+        ><strong>{translate($locale, 'Import public-key file')}</strong><small
+          >{translate($locale, 'Coldcard XPUB JSON or Groot signer JSON · 256 KiB maximum')}</small
         ></span
       ><ChevronRight size={15} /><input
-        aria-label="Public signer file"
+        aria-label={translate($locale, 'Public signer file')}
         type="file"
         accept=".json,application/json"
         onchange={importCosignerFile}
@@ -1850,27 +2056,33 @@
     >
     <button onclick={() => chooseSource('manual')}
       ><FileKey size={18} /><span
-        ><strong>Enter public key</strong><small>Paste an account xpub and fingerprint</small></span
+        ><strong>{translate($locale, 'Enter public key')}</strong><small
+          >{translate($locale, 'Paste an account xpub and fingerprint')}</small
+        ></span
       ><ChevronRight size={15} /></button
     >
   </div>
   {#if pickerError}<div class="import-error" role="alert" aria-live="polite">
       <AlertTriangle size={18} /><span
-        ><strong>{pickerErrorTitle}</strong><b>{pickerError}</b><small>{pickerErrorGuidance}</small
+        ><strong>{translate($locale, pickerErrorTitle)}</strong><b>{pickerError}</b><small
+          >{translate($locale, pickerErrorGuidance)}</small
         ></span
       >
     </div>{/if}
 </Modal>
 <Modal
   open={policyReviewOpen}
-  title="Verify wallet policy"
-  description="Check the policy, signer keys, and first address."
+  title={translate($locale, 'Verify wallet policy')}
+  description={translate($locale, 'Check the policy, signer keys, and first address.')}
   onclose={closeDraftPolicyVerification}
 >
   {#if policyReviewBusy && !policyDevice}<HardwareActionPrompt
-      title="Looking for the saved signer"
-      detail="Keep the saved signer connected and unlocked while Groot checks its account key."
-      label="Signer scan in progress"
+      title={translate($locale, 'Looking for the saved signer')}
+      detail={translate(
+        $locale,
+        'Keep the saved signer connected and unlocked while Groot checks its account key.'
+      )}
+      label={translate($locale, 'Signer scan in progress')}
     />
   {:else if policySigner && policyDevice && preview && policyAddress}<SignerPolicyReview
       wallet={{ ...preview, kind: 'multisig', createdAt: '', policyType: 'standard' }}
@@ -1882,90 +2094,121 @@
       onverify={verifyDraftPolicy}
     />
   {:else if policySigner}<div class="device-scan">
-      <Cpu size={20} /><strong>Saved signer not found</strong><span
-        >{policyReviewError || `Connect and unlock ${policySigner.label}, then scan again.`}</span
+      <Cpu size={20} /><strong>{translate($locale, 'Saved signer not found')}</strong><span
+        >{translate(
+          $locale,
+          policyReviewError || `Connect and unlock ${policySigner.label}, then scan again.`
+        )}</span
       ><Button variant="secondary" onclick={() => openDraftPolicyVerification(policySigner!)}
-        >Scan again</Button
+        >{translate($locale, 'Scan again')}</Button
       >
     </div>{/if}
 </Modal>
 
 <Modal
   open={hardwareOpen}
-  title="Connect hardware device"
-  description="Connect one signer. Groot verifies it before adding it."
+  title={translate($locale, 'Connect hardware device')}
+  description={translate($locale, 'Connect one signer. Groot verifies it before adding it.')}
   onclose={closeHardwareScan}
 >
   <div class="hardware-readiness">
     <Usb size={18} /><span
-      ><strong>Keep USB free</strong><small
-        >Unlock the signer and quit other wallet apps before scanning.</small
+      ><strong>{translate($locale, 'Keep USB free')}</strong><small
+        >{translate(
+          $locale,
+          'Unlock the signer and quit other wallet apps before scanning.'
+        )}</small
       ></span
-    ><button onclick={() => openHardwareHelp(true)}>Device help</button>
+    ><button onclick={() => openHardwareHelp(true)}>{translate($locale, 'Device help')}</button>
   </div>
   <label class="field"
-    ><span>Signer label</span><input
+    ><span>{translate($locale, 'Signer label')}</span><input
       bind:value={label}
-      placeholder="Defaults to device model"
+      placeholder={translate($locale, 'Defaults to device model')}
       maxlength="48"
     /><FieldCounter value={label} max={48} /></label
   >
   {#if hardwareBusy}<HardwareActionPrompt
-      title={hardwareProgress}
-      detail={hardwareProgress.includes('Ledger')
-        ? 'Keep Bitcoin Test open for Regtest and confirm the export on the device screen.'
-        : 'Keep the signer connected and unlocked.'}
-      label="Hardware signer setup in progress"
+      title={translate($locale, hardwareProgress)}
+      detail={translate(
+        $locale,
+        hardwareProgress.includes('Ledger')
+          ? 'Keep Bitcoin Test open for Regtest and confirm the export on the device screen.'
+          : 'Keep the signer connected and unlocked.'
+      )}
+      label={translate($locale, 'Hardware signer setup in progress')}
     />
   {:else if hardware.length === 0}<div class="device-scan">
-      <Cpu size={20} /><strong>{error ? 'Device needs attention' : 'No device found'}</strong><span
-        >{error || 'Unlock the signer, quit other wallet apps, then scan again.'}</span
-      ><Button variant="secondary" size="small" onclick={scanHardware}>Scan again</Button>
+      <Cpu size={20} /><strong
+        >{translate($locale, error ? 'Device needs attention' : 'No device found')}</strong
+      ><span
+        >{translate(
+          $locale,
+          error || 'Unlock the signer, quit other wallet apps, then scan again.'
+        )}</span
+      ><Button variant="secondary" size="small" onclick={scanHardware}
+        >{translate($locale, 'Scan again')}</Button
+      >
     </div>
   {:else}<div class="source-list hardware-device-list">
       {#each hardware as device}{@const addedSigner = addedSignerForDevice(device)}<button
           disabled={Boolean(addedSigner) || device.action === 'none'}
           onclick={() => handleHardware(device)}
           ><Cpu size={18} /><span
-            ><strong>{addedSigner?.label ?? device.label}</strong><small
-              >{addedSigner
-                ? `Fingerprint ${device.fingerprint} · Already added as ${addedSigner.label}.`
-                : device.fingerprint
-                  ? `Fingerprint ${device.fingerprint} · ${device.message}`
-                  : device.message}</small
+            ><strong>{translate($locale, addedSigner?.label ?? device.label)}</strong><small
+              >{translate(
+                $locale,
+                addedSigner
+                  ? `Fingerprint ${device.fingerprint} · Already added as ${addedSigner.label}.`
+                  : device.fingerprint
+                    ? `Fingerprint ${device.fingerprint} · ${device.message}`
+                    : device.message
+              )}</small
             ><em
               class:ready={!addedSigner && device.status === 'ready'}
               class:signed={Boolean(addedSigner)}
-              >{addedSigner
-                ? 'Already added'
-                : device.status === 'ready' || device.status === 'detected'
-                  ? 'Ready'
-                  : device.status === 'needs_pin'
-                    ? 'Unlock'
-                    : device.action === 'confirm_empty_passphrase'
-                      ? 'Choose wallet'
-                      : device.action === 'retry'
-                        ? 'Scan again'
-                        : 'Unavailable'}</em
+              >{translate(
+                $locale,
+                addedSigner
+                  ? 'Already added'
+                  : device.status === 'ready' || device.status === 'detected'
+                    ? 'Ready'
+                    : device.status === 'needs_pin'
+                      ? 'Unlock'
+                      : device.action === 'confirm_empty_passphrase'
+                        ? 'Choose wallet'
+                        : device.action === 'retry'
+                          ? 'Scan again'
+                          : 'Unavailable'
+              )}</em
             ></span
           >{#if !addedSigner && device.action !== 'none'}<ChevronRight size={15} />{/if}</button
         >{/each}<button class="hardware-rescan" onclick={scanHardware}
         ><RefreshCw size={16} /><span
-          ><strong>Scan again</strong><small>Refresh connected signers.</small></span
+          ><strong>{translate($locale, 'Scan again')}</strong><small
+            >{translate($locale, 'Refresh connected signers.')}</small
+          ></span
         ><ChevronRight size={15} /></button
       >
     </div>{/if}
   {#if error && hardware.length > 0}<div class="hardware-inline-error" role="alert">
       <AlertTriangle size={18} /><span
-        ><strong>Could not read the account key</strong><small>{error}</small></span
-      ><Button variant="secondary" size="small" onclick={scanHardware}>Try again</Button>
+        ><strong>{translate($locale, 'Could not read the account key')}</strong><small
+          >{error}</small
+        ></span
+      ><Button variant="secondary" size="small" onclick={scanHardware}
+        >{translate($locale, 'Try again')}</Button
+      >
     </div>{/if}
 </Modal>
 
 <Modal
   open={standardWalletOpen}
-  title="Use Trezor standard wallet?"
-  description="Passphrase protection can expose several independent wallets from the same device."
+  title={translate($locale, 'Use Trezor standard wallet?')}
+  description={translate(
+    $locale,
+    'Passphrase protection can expose several independent wallets from the same device.'
+  )}
   onclose={() => {
     standardWalletOpen = false;
     standardWalletDevice = null;
@@ -1975,21 +2218,29 @@
   <div class="credential-warning">
     <ShieldCheck size={17} />
     <p>
-      <strong>No hardware passphrase for this signer</strong><span
-        >This imports the key derived from the device seed alone. It does not disable, change, or
-        reveal any hidden passphrase wallet you may use elsewhere.</span
+      <strong>{translate($locale, 'No hardware passphrase for this signer')}</strong><span
+        >{translate(
+          $locale,
+          'This imports the key derived from the device seed alone. It does not disable, change, or\n        reveal any hidden passphrase wallet you may use elsewhere.'
+        )}</span
       >
     </p>
   </div>
   <p class="policy-guidance">
-    Choose this only if you intentionally want the Trezor <strong>standard wallet</strong> in this multisig
-    policy. Enabling or choosing a passphrase later opens a different hidden wallet; it does not change
-    this signer. The imported fingerprint is permanently bound to this policy.
+    {translate($locale, 'Choose this only if you intentionally want the Trezor')}
+    <strong>{translate($locale, 'standard wallet')}</strong>
+    {translate(
+      $locale,
+      'in this multisig\n    policy. Enabling or choosing a passphrase later opens a different hidden wallet; it does not change\n    this signer. The imported fingerprint is permanently bound to this policy.'
+    )}
   </p>
   {#if hardwareBusy}<HardwareActionPrompt
-      title="Importing the Trezor standard wallet"
-      detail="Keep Trezor connected while Groot reads its public BIP48 account key."
-      label="Hardware signer import in progress"
+      title={translate($locale, 'Importing the Trezor standard wallet')}
+      detail={translate(
+        $locale,
+        'Keep Trezor connected while Groot reads its public BIP48 account key.'
+      )}
+      label={translate($locale, 'Hardware signer import in progress')}
     />{:else}<div class="modal-footer">
       <Button
         variant="secondary"
@@ -1997,12 +2248,12 @@
           standardWalletOpen = false;
           standardWalletDevice = null;
           hardwareOpen = true;
-        }}>Back</Button
+        }}>{translate($locale, 'Back')}</Button
       ><Button
         disabled={!standardWalletDevice}
         onclick={() => {
           if (standardWalletDevice) importHardware(standardWalletDevice, true);
-        }}>Use standard wallet</Button
+        }}>{translate($locale, 'Use standard wallet')}</Button
       >
     </div>{/if}
 </Modal>
@@ -2035,12 +2286,12 @@
 
 <Modal
   open={hardwareHelpOpen}
-  title="Prepare your hardware signer"
-  description="Groot imports one public account key."
+  title={translate($locale, 'Prepare your hardware signer')}
+  description={translate($locale, 'Groot imports one public account key.')}
   onclose={closeHardwareHelp}
 >
   <div class="hardware-guide">
-    <div class="hardware-guide-tabs" aria-label="Hardware signer model">
+    <div class="hardware-guide-tabs" aria-label={translate($locale, 'Hardware signer model')}>
       {#each hardwareGuides as guide}<button
           class:active={hardwareGuide === guide.id}
           onclick={() => (hardwareGuide = guide.id)}>{guide.name}</button
@@ -2056,7 +2307,8 @@
       </div>
     </div>
     <p>
-      <strong>Never enter a seed into Groot.</strong> Initialize or restore only with trusted vendor tools.
+      <strong>{translate($locale, 'Never enter a seed into Groot.')}</strong>
+      {translate($locale, 'Initialize or restore only with trusted vendor tools.')}
     </p>
     <Button
       class="full"
@@ -2064,15 +2316,15 @@
         hardwareHelpOpen = false;
         hardwareHelpReturnsToScan = false;
         scanHardware();
-      }}>Scan for devices</Button
+      }}>{translate($locale, 'Scan for devices')}</Button
     >
   </div>
 </Modal>
 
 <Modal
   open={keyOpen}
-  title="Enter public signer key"
-  description="No private key or seed should ever be entered here."
+  title={translate($locale, 'Enter public signer key')}
+  description={translate($locale, 'No private key or seed should ever be entered here.')}
   onclose={() => {
     keyOpen = false;
     keyError = '';
@@ -2085,34 +2337,38 @@
     }}
   >
     <label class="field"
-      ><span>Signer label</span><input
-        aria-label="Signer label"
+      ><span>{translate($locale, 'Signer label')}</span><input
+        aria-label={translate($locale, 'Signer label')}
         bind:value={label}
-        placeholder="e.g. Coldcard"
+        placeholder={translate($locale, 'e.g. Coldcard')}
         maxlength="48"
       /><FieldCounter value={label} max={48} /></label
     >
     <label class="field"
-      ><span>Master fingerprint</span><input
-        aria-label="Master fingerprint"
+      ><span>{translate($locale, 'Master fingerprint')}</span><input
+        aria-label={translate($locale, 'Master fingerprint')}
         bind:value={fingerprint}
-        placeholder="8 hex characters"
+        placeholder={translate($locale, '8 hex characters')}
         maxlength="8"
       /></label
     >
     <label class="field"
-      ><span>Account xpub</span><textarea
-        aria-label="Account xpub"
+      ><span>{translate($locale, 'Account xpub')}</span><textarea
+        aria-label={translate($locale, 'Account xpub')}
         bind:value={xpub}
         rows="3"
-        placeholder="tpub…"></textarea><small>Derivation: {MULTISIG_ACCOUNT_PATH}</small></label
+        placeholder={translate($locale, 'tpub…')}></textarea><small
+        >{translate($locale, 'Derivation:')} {MULTISIG_ACCOUNT_PATH}</small
+      ></label
     >
     {#if keyError}<p class="form-error" role="alert">{keyError}</p>{/if}
     <div class="modal-footer">
-      <Button variant="secondary" onclick={() => (keyOpen = false)}>Cancel</Button><Button
+      <Button variant="secondary" onclick={() => (keyOpen = false)}
+        >{translate($locale, 'Cancel')}</Button
+      ><Button
         type="submit"
         disabled={!label.trim() || !/^[0-9a-fA-F]{8}$/.test(fingerprint.trim()) || !xpub.trim()}
-        >Add key</Button
+        >{translate($locale, 'Add key')}</Button
       >
     </div>
   </form>

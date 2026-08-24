@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { translate, localizedError } from '$lib/i18n-catalog';
   import {
     Activity,
     ArrowDownToLine,
@@ -103,17 +104,26 @@
   const pendingDescription = $derived(
     [
       pendingBreakdown.incoming
-        ? `${formatAmount(pendingBreakdown.incoming, $denomination)} ${amountUnit($denomination)} awaiting confirmation`
+        ? translate($locale, '{amount} {unit} awaiting confirmation', {
+            amount: formatAmount(pendingBreakdown.incoming, $denomination),
+            unit: amountUnit($denomination)
+          })
         : '',
       pendingBreakdown.change
-        ? `${formatAmount(pendingBreakdown.change, $denomination)} ${amountUnit($denomination)} unconfirmed change`
+        ? translate($locale, '{amount} {unit} unconfirmed change', {
+            amount: formatAmount(pendingBreakdown.change, $denomination),
+            unit: amountUnit($denomination)
+          })
         : '',
       pendingBreakdown.outgoing
-        ? `${formatAmount(pendingBreakdown.outgoing, $denomination)} ${amountUnit($denomination)} outgoing`
+        ? translate($locale, '{amount} {unit} outgoing', {
+            amount: formatAmount(pendingBreakdown.outgoing, $denomination),
+            unit: amountUnit($denomination)
+          })
         : ''
     ]
       .filter(Boolean)
-      .join(' · ') || `0 ${amountUnit($denomination)} pending`
+      .join(' · ') || translate($locale, '0 {unit} pending', { unit: amountUnit($denomination) })
   );
   const recentTransactions = $derived(
     sortTransactionsNewestFirst(snapshot?.transactions ?? []).slice(0, 3)
@@ -123,17 +133,26 @@
     Boolean(activeProposal && 'canFinalize' in activeProposal && activeProposal.canFinalize)
   );
   const proposalTitle = $derived(
-    activeProposal && !('canFinalize' in activeProposal)
-      ? 'Payment ready to sign'
-      : proposalCanFinalize
-        ? 'Payment ready to broadcast'
-        : 'Signing in progress'
+    translate(
+      $locale,
+      activeProposal && !('canFinalize' in activeProposal)
+        ? 'Payment ready to sign'
+        : proposalCanFinalize
+          ? 'Payment ready to broadcast'
+          : 'Signing in progress'
+    )
   );
   const proposalProgress = $derived(
     activeProposal
       ? 'signed' in activeProposal
-        ? `${activeProposal.signed} of ${activeProposal.required} signatures collected`
-        : '0 of 1 signatures collected'
+        ? translate($locale, '{signed} of {required} signatures collected', {
+            signed: activeProposal.signed,
+            required: activeProposal.required
+          })
+        : translate($locale, '{signed} of {required} signatures collected', {
+            signed: 0,
+            required: 1
+          })
       : ''
   );
   const proposalLabel = $derived(
@@ -203,7 +222,7 @@
         await goto('/unlock');
         return;
       }
-      loadError = cause instanceof Error ? cause.message : 'The wallet data could not be read.';
+      loadError = localizedError(cause, $locale, 'The wallet data could not be read.');
       initialDataLoading = false;
       toast({ title: 'Could not open wallet', description: loadError, tone: 'danger' });
     }
@@ -269,7 +288,7 @@
       if (showToast)
         toast({
           title: 'Sync failed',
-          description: cause instanceof Error ? cause.message : undefined,
+          description: localizedError(cause, $locale),
           tone: 'danger'
         });
     } finally {
@@ -298,8 +317,7 @@
         tone: 'success'
       });
     } catch (cause) {
-      verifyError =
-        cause instanceof Error ? cause.message : 'Could not verify this recovery backup.';
+      verifyError = localizedError(cause, $locale, 'Could not verify this recovery backup.');
     } finally {
       verifyCredential = '';
       verifying = false;
@@ -325,8 +343,7 @@
         tone: 'success'
       });
     } catch (cause) {
-      verifyError =
-        cause instanceof Error ? cause.message : 'Could not reveal this recovery backup.';
+      verifyError = localizedError(cause, $locale, 'Could not reveal this recovery backup.');
     } finally {
       verifyCredential = '';
       revealingBackup = false;
@@ -347,13 +364,15 @@
       await saveHardwareHealthCheck(signer.fingerprint, result);
       toast({
         title: 'Signer verified',
-        description: `${signer.label} matches this wallet.`,
+        description: translate($locale, '{signerName} matches this wallet.', {
+          signerName: signer.label
+        }),
         tone: 'success'
       });
     } catch (cause) {
       const result: CosignerHealthCheck = {
         checkedAt: new Date().toISOString(),
-        summary: cause instanceof Error ? cause.message : 'The device could not be verified.',
+        summary: localizedError(cause, $locale, 'The device could not be verified.'),
         status: 'attention'
       };
       await saveHardwareHealthCheck(signer.fingerprint, result);
@@ -370,17 +389,18 @@
 <div class="page dashboard-page">
   <header class="page-header">
     <div>
-      <p class="eyebrow">WALLET</p>
-      <h1>Overview</h1>
+      <p class="eyebrow">{translate($locale, 'WALLET')}</p>
+      <h1>{translate($locale, 'Overview')}</h1>
     </div>
     <button class="sync-button" disabled={syncing} onclick={() => sync(true)}
-      ><RefreshCw size={15} class={syncing ? 'spin' : ''} />{syncing &&
-      syncStatus?.progressPercent !== null &&
-      syncStatus?.progressPercent !== undefined
-        ? `${syncStatus.progressPercent}%`
-        : syncing
-          ? 'Syncing'
-          : 'Updated now'}</button
+      ><RefreshCw size={15} class={syncing ? 'spin' : ''} />{translate(
+        $locale,
+        syncing && syncStatus?.progressPercent !== null && syncStatus?.progressPercent !== undefined
+          ? `${syncStatus.progressPercent}%`
+          : syncing
+            ? 'Syncing'
+            : 'Updated now'
+      )}</button
     >
   </header>
   {#if syncSource?.type === 'compact_filters' && syncStatus && (syncing || syncStatus.state === 'failed')}
@@ -391,37 +411,65 @@
     >
       <div>
         <strong
-          >{syncStatus.state === 'connecting'
-            ? 'Connecting to filter peers'
-            : syncStatus.state === 'checking_matches'
-              ? 'Checking matching blocks'
-              : syncStatus.state === 'applying'
-                ? 'Saving verified wallet state'
-                : syncStatus.state === 'failed'
-                  ? 'Compact-filter sync stopped'
-                  : 'Downloading and checking compact filters'}</strong
+          >{translate(
+            $locale,
+            syncStatus.state === 'connecting'
+              ? 'Connecting to filter peers'
+              : syncStatus.state === 'checking_matches'
+                ? 'Checking matching blocks'
+                : syncStatus.state === 'applying'
+                  ? 'Saving verified wallet state'
+                  : syncStatus.state === 'failed'
+                    ? 'Compact-filter sync stopped'
+                    : 'Downloading and checking compact filters'
+          )}</strong
         ><small
           >{syncStatus.state === 'failed'
-            ? `Balance remains verified through block ${formatInteger(syncStatus.lastVerifiedHeight, $locale)}. Retry when your connection is available.`
+            ? translate(
+                $locale,
+                'Balance remains verified through block {height}. Retry when your connection is available.',
+                {
+                  height: formatInteger(syncStatus.lastVerifiedHeight, $locale)
+                }
+              )
             : syncStatus.chainHeight !== null
-              ? `Network height ${formatInteger(syncStatus.chainHeight, $locale)} · verified wallet state stays unchanged until completion`
+              ? translate(
+                  $locale,
+                  'Network height {height} · verified wallet state stays unchanged until completion',
+                  {
+                    height: formatInteger(syncStatus.chainHeight, $locale)
+                  }
+                )
               : syncStatus.connectedPeers !== null && syncStatus.requiredPeers !== null
-                ? `${syncStatus.connectedPeers} of ${syncStatus.requiredPeers} required peers connected`
-                : 'Verified wallet state stays unchanged until the scan completes.'}</small
+                ? translate($locale, '{connected} of {required} required peers connected', {
+                    connected: syncStatus.connectedPeers,
+                    required: syncStatus.requiredPeers
+                  })
+                : translate(
+                    $locale,
+                    'Verified wallet state stays unchanged until the scan completes.'
+                  )}</small
         >
       </div>
       {#if syncStatus.progressPercent !== null && syncStatus.state !== 'failed'}<progress
           max="100"
           value={syncStatus.progressPercent}
-          aria-label="Compact-filter download progress">{syncStatus.progressPercent}%</progress
+          aria-label={translate($locale, 'Compact-filter download progress')}
+          >{syncStatus.progressPercent}%</progress
         >{/if}
     </section>
   {/if}
   {#if selectedProfile?.kind === 'single_key' && !selectedProfile.backupVerified}
-    <section class="backup-verification-banner" aria-label="Recovery backup status">
+    <section
+      class="backup-verification-banner"
+      aria-label={translate($locale, 'Recovery backup status')}
+    >
       <ShieldCheck size={18} /><span
-        ><strong>Recovery backup not verified</strong><small
-          >Confirm your written words so you know this wallet can be recovered.</small
+        ><strong>{translate($locale, 'Recovery backup not verified')}</strong><small
+          >{translate(
+            $locale,
+            'Confirm your written words so you know this wallet can be recovered.'
+          )}</small
         ></span
       ><Button
         size="small"
@@ -429,22 +477,25 @@
         onclick={() => {
           verifyError = '';
           verifyOpen = true;
-        }}>Verify now</Button
+        }}>{translate($locale, 'Verify now')}</Button
       >
     </section>
   {/if}
   {#if loadError && !snapshot}
     <LoadFailure
-      title="Wallet data is unavailable"
+      title={translate($locale, 'Wallet data is unavailable')}
       description={loadError}
       onretry={loadSnapshot}
     />
   {:else if snapshot && !initialDataLoading}
     <section class="balance-card content-reveal">
       <div class="balance-top">
-        <span>Total balance</span><button
+        <span>{translate($locale, 'Total balance')}</span><button
           class="ghost-icon"
-          aria-label={$discreetMode ? 'Show wallet amounts' : 'Hide wallet amounts'}
+          aria-label={translate(
+            $locale,
+            $discreetMode ? 'Show wallet amounts' : 'Hide wallet amounts'
+          )}
           aria-pressed={$discreetMode}
           onclick={() => setDiscreetMode(!$discreetMode)}
           >{#if $discreetMode}<Eye size={17} />{:else}<EyeOff size={17} />{/if}</button
@@ -453,14 +504,20 @@
       <button
         class="balance-value"
         type="button"
-        aria-label={$denomination === 'btc' ? 'Show balance in sats' : 'Show balance in BTC'}
-        title={$denomination === 'btc' ? 'Show balance in sats' : 'Show balance in BTC'}
+        aria-label={translate(
+          $locale,
+          $denomination === 'btc' ? 'Show balance in sats' : 'Show balance in BTC'
+        )}
+        title={translate(
+          $locale,
+          $denomination === 'btc' ? 'Show balance in sats' : 'Show balance in BTC'
+        )}
         onclick={() => setDenomination($denomination === 'btc' ? 'sats' : 'btc')}
       >
         <Amount value={snapshot?.balance.total ?? 0} hidden={$discreetMode} />
       </button>
       <div class="pending-line">
-        <i></i>{$discreetMode ? 'Pending activity hidden' : pendingDescription}
+        <i></i>{translate($locale, $discreetMode ? 'Pending activity hidden' : pendingDescription)}
       </div>
     </section>
   {:else}
@@ -472,13 +529,18 @@
         class="active-proposal-callout"
         class:ready={proposalCanFinalize}
         href={proposalHref}
-        aria-label={`Resume payment, ${proposalLabel}, ${proposalProgress}`}
+        aria-label={translate($locale, 'Resume payment, {label}, {progress}', {
+          label: proposalLabel,
+          progress: proposalProgress
+        })}
       >
         <span class="active-proposal-icon"><Clock3 size={17} /></span>
         <span class="active-proposal-copy"
           ><strong>{proposalTitle}</strong><small>{proposalLabel} · {proposalProgress}</small></span
         >
-        <span class="active-proposal-action">Resume <ChevronRight size={15} /></span>
+        <span class="active-proposal-action"
+          >{translate($locale, 'Resume')} <ChevronRight size={15} /></span
+        >
       </a>
     {/if}
     <div class="primary-actions">
@@ -490,7 +552,7 @@
       <div class="overview-more" bind:this={moreMenu}>
         <OverflowMenuButton
           bind:element={moreTrigger}
-          label="More wallet actions"
+          label={translate($locale, 'More wallet actions')}
           expanded={moreOpen}
           size="large"
           onclick={() => (moreOpen = !moreOpen)}
@@ -499,17 +561,21 @@
           <div
             class="overview-more-menu"
             role="menu"
-            aria-label="More wallet actions"
+            aria-label={translate($locale, 'More wallet actions')}
             transition:fly={{ y: 5, duration: 160 }}
           >
             <a href="/activity" role="menuitem" onclick={() => (moreOpen = false)}
               ><Activity size={16} /><span
-                ><strong>Activity</strong><small>View all transactions</small></span
+                ><strong>{translate($locale, 'Activity')}</strong><small
+                  >{translate($locale, 'View all transactions')}</small
+                ></span
               ></a
             >
             <a href="/coins" role="menuitem" onclick={() => (moreOpen = false)}
               ><CircleDot size={16} /><span
-                ><strong>Coins</strong><small>Inspect and choose UTXOs</small></span
+                ><strong>{translate($locale, 'Coins')}</strong><small
+                  >{translate($locale, 'Inspect and choose UTXOs')}</small
+                ></span
               ></a
             >
             {#if hardwareSignerWallet}
@@ -520,7 +586,8 @@
                   signerDetailsOpen = true;
                 }}
                 ><HeartPulse size={16} /><span
-                  ><strong>Health check</strong><small>Verify the connected signer identity</small
+                  ><strong>{translate($locale, 'Health check')}</strong><small
+                    >{translate($locale, 'Verify the connected signer identity')}</small
                   ></span
                 ></button
               >
@@ -528,7 +595,9 @@
             {#if multisig}
               <a href="/multisig" role="menuitem" onclick={() => (moreOpen = false)}
                 ><ShieldCheck size={16} /><span
-                  ><strong>Policy</strong><small>Keys, backups, and rules</small></span
+                  ><strong>{translate($locale, 'Policy')}</strong><small
+                    >{translate($locale, 'Keys, backups, and rules')}</small
+                  ></span
                 ></a
               >
               <button
@@ -538,13 +607,16 @@
                   showDescriptors = true;
                 }}
                 ><Eye size={16} /><span
-                  ><strong>Show descriptors</strong><small>Inspect receive and change logic</small
+                  ><strong>{translate($locale, 'Show descriptors')}</strong><small
+                    >{translate($locale, 'Inspect receive and change logic')}</small
                   ></span
                 ></button
               >
               <a href="/multisig/backup" role="menuitem" onclick={() => (moreOpen = false)}
                 ><FileKey size={16} /><span
-                  ><strong>Export & verify</strong><small>Save a public wallet backup</small></span
+                  ><strong>{translate($locale, 'Export & verify')}</strong><small
+                    >{translate($locale, 'Save a public wallet backup')}</small
+                  ></span
                 ></a
               >
             {/if}
@@ -553,17 +625,19 @@
       </div>
       <a
         class="button secondary large overview-inline-primary"
-        href={multisig ? '/multisig/receive' : '/receive'}><ArrowDownToLine size={18} />Receive</a
+        href={multisig ? '/multisig/receive' : '/receive'}
+        ><ArrowDownToLine size={18} />{translate($locale, 'Receive')}</a
       >
       <a
         class="button default large overview-inline-primary"
-        href={multisig ? '/multisig/send' : '/send'}><ArrowUpFromLine size={18} />Send</a
+        href={multisig ? '/multisig/send' : '/send'}
+        ><ArrowUpFromLine size={18} />{translate($locale, 'Send')}</a
       >
     </div>
     <section class="section-block">
       <div class="section-heading">
-        <div><h2>Recent activity</h2></div>
-        <a href="/activity">View all</a>
+        <div><h2>{translate($locale, 'Recent activity')}</h2></div>
+        <a href="/activity">{translate($locale, 'View all')}</a>
       </div>
       {#if initialDataLoading}
         <TxList items={[]} loading />
@@ -572,8 +646,8 @@
       {:else}
         <EmptyState
           compact
-          title="No transactions yet"
-          description="Received and sent transactions will appear here."
+          title={translate($locale, 'No transactions yet')}
+          description={translate($locale, 'Received and sent transactions will appear here.')}
         >
           {#snippet icon()}<Activity size={22} />{/snippet}
         </EmptyState>
@@ -597,8 +671,11 @@
 />
 <Modal
   open={verifyOpen}
-  title="Verify recovery backup"
-  description="Use your written 24 words for a private native proof, or reveal them securely first if you still need to make the backup."
+  title={translate($locale, 'Verify recovery backup')}
+  description={translate(
+    $locale,
+    'Use your written 24 words for a private native proof, or reveal them securely first if you still need to make the backup.'
+  )}
   onclose={() => {
     verifyOpen = false;
     verifyCredential = '';
@@ -606,14 +683,17 @@
   }}
 >
   <div class="warning-box verify-backup-warning">
-    <strong>Recovery words stay inside the trusted native window.</strong> Revealing or verifying them
-    never sends the words into the webview.
+    <strong>{translate($locale, 'Recovery words stay inside the trusted native window.')}</strong>
+    {translate($locale, 'Revealing or verifying them\n    never sends the words into the webview.')}
   </div>
   <PasswordField
-    label="Wallet passphrase"
+    label={translate($locale, 'Wallet passphrase')}
     bind:value={verifyCredential}
     autocomplete="current-password"
-    hint="Required to decrypt the recovery words only inside trusted Rust code."
+    hint={translate(
+      $locale,
+      'Required to decrypt the recovery words only inside trusted Rust code.'
+    )}
   />
   {#if verifyError}<p class="form-error" role="alert">
       {verifyError.replace('passphrase / PIN', 'wallet passphrase')}
@@ -624,8 +704,8 @@
       variant="secondary"
       disabled={!verifyCredential || verifying || revealingBackup}
       loading={revealingBackup}
-      loadingLabel="Opening recovery words…"
-      onclick={revealAndVerifyBackup}>View recovery words first</Button
+      loadingLabel={translate($locale, 'Opening recovery words…')}
+      onclick={revealAndVerifyBackup}>{translate($locale, 'View recovery words first')}</Button
     >
     <Button
       variant="secondary"
@@ -634,12 +714,12 @@
         verifyOpen = false;
         verifyCredential = '';
         verifyError = '';
-      }}>Cancel</Button
+      }}>{translate($locale, 'Cancel')}</Button
     ><Button
       disabled={!verifyCredential || revealingBackup}
       loading={verifying}
-      loadingLabel="Opening verification…"
-      onclick={verifyBackup}>Continue</Button
+      loadingLabel={translate($locale, 'Opening verification…')}
+      onclick={verifyBackup}>{translate($locale, 'Continue')}</Button
     >
   </div>
 </Modal>

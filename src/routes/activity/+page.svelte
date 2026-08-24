@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { locale } from '$lib/i18n';
+  import { translate, localizedError } from '$lib/i18n-catalog';
   import TxDetailsModal from '$lib/components/TxDetailsModal.svelte';
   import TxList from '$lib/components/TxList.svelte';
   import type { Transaction } from '$lib/types';
@@ -55,7 +57,7 @@
         : await walletService.snapshot();
       transactions = snapshot.transactions;
     } catch (cause) {
-      loadError = cause instanceof Error ? cause.message : 'Transaction history could not be read.';
+      loadError = localizedError(cause, $locale, 'Transaction history could not be read.');
       toast({ title: 'Could not load transactions', description: loadError, tone: 'danger' });
     } finally {
       loading = false;
@@ -76,23 +78,33 @@
 <div class="page">
   <header class="page-header">
     <div>
-      <p class="eyebrow">HISTORY</p>
-      <h1>Activity</h1>
+      <p class="eyebrow">{translate($locale, 'HISTORY')}</p>
+      <h1>{translate($locale, 'Activity')}</h1>
     </div>
     <div class="segmented">
-      <button class:active={filter === 'all'} onclick={() => (filter = 'all')}>All</button><button
-        class:active={filter === 'received'}
-        onclick={() => (filter = 'received')}>Received</button
-      ><button class:active={filter === 'sent'} onclick={() => (filter = 'sent')}>Sent</button>
+      <button class:active={filter === 'all'} onclick={() => (filter = 'all')}
+        >{translate($locale, 'All')}</button
+      ><button class:active={filter === 'received'} onclick={() => (filter = 'received')}
+        >{translate($locale, 'Received')}</button
+      ><button class:active={filter === 'sent'} onclick={() => (filter = 'sent')}
+        >{translate($locale, 'Sent')}</button
+      >
     </div>
   </header>
-  <section class="activity-controls" aria-label="Search and sort activity">
-    <label><span>Search</span><input bind:value={query} placeholder="Search labels" /></label>
+  <section class="activity-controls" aria-label={translate($locale, 'Search and sort activity')}>
     <label
-      ><span>Sort</span><select bind:value={sortOrder}>
-        <option value="newest">Latest first</option><option value="oldest">Earliest first</option>
-        <option value="largest">Biggest amount</option><option value="smallest"
-          >Smallest amount</option
+      ><span>{translate($locale, 'Search')}</span><input
+        bind:value={query}
+        placeholder={translate($locale, 'Search labels')}
+      /></label
+    >
+    <label
+      ><span>{translate($locale, 'Sort')}</span><select bind:value={sortOrder}>
+        <option value="newest">{translate($locale, 'Latest first')}</option><option value="oldest"
+          >{translate($locale, 'Earliest first')}</option
+        >
+        <option value="largest">{translate($locale, 'Biggest amount')}</option><option
+          value="smallest">{translate($locale, 'Smallest amount')}</option
         >
       </select></label
     >
@@ -101,21 +113,33 @@
     {#if loading}
       <TxList items={[]} {loading} />
     {:else if loadError}
-      <LoadFailure title="Transactions are unavailable" description={loadError} onretry={load} />
+      <LoadFailure
+        title={translate($locale, 'Transactions are unavailable')}
+        description={loadError}
+        onretry={load}
+      />
     {:else if visibleTransactions.length}
       <TxList items={visibleTransactions} onselect={(tx) => (selected = tx)} />
     {:else}
       <EmptyState
         title={query.trim()
-          ? 'No matching transactions'
+          ? translate($locale, 'No matching transactions')
           : filter === 'all'
-            ? 'No transactions yet'
-            : `No ${filter} transactions`}
+            ? translate($locale, 'No transactions yet')
+            : translate(
+                $locale,
+                filter === 'received' ? 'No received transactions' : 'No sent transactions'
+              )}
         description={query.trim()
-          ? 'Try a different label or filter.'
+          ? translate($locale, 'Try a different label or filter.')
           : filter === 'all'
-            ? 'Payments you send and receive will appear here.'
-            : `This wallet has no ${filter} transactions yet.`}
+            ? translate($locale, 'Payments you send and receive will appear here.')
+            : translate(
+                $locale,
+                filter === 'received'
+                  ? 'This wallet has no received transactions yet.'
+                  : 'This wallet has no sent transactions yet.'
+              )}
       >
         {#snippet icon()}<Activity size={24} />{/snippet}
       </EmptyState>

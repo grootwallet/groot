@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { locale } from '$lib/i18n';
+  import { translate } from '$lib/i18n-catalog';
   import { Maximize2 } from '@lucide/svelte';
   import type { CosignerDraft } from '$lib/multisig/policy';
   import { compactIdentifier } from '$lib/address-display';
@@ -36,7 +38,7 @@
       <span class="policy-signer-number">{index + 1}</span>
       <div class="policy-signer-copy">
         <strong
-          >{signer.label}{#if current}<em>This device</em>{/if}</strong
+          >{signer.label}{#if current}<em>{translate($locale, 'This device')}</em>{/if}</strong
         >
         {#if detail === 'fingerprint'}
           <code>{signer.fingerprint.toLowerCase()}</code>
@@ -51,9 +53,9 @@
                   'Compare all eight hexadecimal characters with the hardware device.',
                   'Fingerprint'
                 )}
-              ><span>Fingerprint</span><code>{signer.fingerprint.toLowerCase()}</code><Maximize2
-                size={12}
-              /></button
+              ><span>{translate($locale, 'Fingerprint')}</span><code
+                >{signer.fingerprint.toLowerCase()}</code
+              ><Maximize2 size={12} /></button
             >
             <button
               type="button"
@@ -64,7 +66,8 @@
                   'Compare the complete BIP48 account path with the hardware device.',
                   'Derivation path'
                 )}
-              ><span>Path</span><code>{signer.derivationPath}</code><Maximize2 size={12} /></button
+              ><span>{translate($locale, 'Path')}</span><code>{signer.derivationPath}</code
+              ><Maximize2 size={12} /></button
             >
             <button
               type="button"
@@ -76,7 +79,7 @@
                   'Compare the complete xpub across every hardware-device screen.',
                   'Public account key (xpub)'
                 )}
-              ><span>Public account key (xpub)</span><code
+              ><span>{translate($locale, 'Public account key (xpub)')}</span><code
                 >{compactIdentifier(signer.xpub, 14, 10)}</code
               ><Maximize2 size={12} /></button
             >

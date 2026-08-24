@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { locale } from '$lib/i18n';
+  import { translate, localizedError } from '$lib/i18n-catalog';
   import { LockKeyhole, Trash2 } from '@lucide/svelte';
   import { afterNavigate, goto } from '$app/navigation';
   import { onDestroy, onMount } from 'svelte';
@@ -24,9 +26,11 @@
   let compatibility = $state<WalletProfileCompatibility | null>(null);
   let selectedProfile = $derived(profiles.find((wallet) => wallet.id === selectedWalletId));
   let isSoftwareWallet = $derived(selectedProfile?.kind === 'single_key');
-  let credentialLabel = $derived(isSoftwareWallet ? 'Wallet passphrase' : 'App PIN');
+  let credentialLabel = $derived(
+    translate($locale, isSoftwareWallet ? 'Wallet passphrase' : 'App PIN')
+  );
   let credentialPlaceholder = $derived(
-    isSoftwareWallet ? 'Enter wallet passphrase' : 'Enter app PIN'
+    translate($locale, isSoftwareWallet ? 'Enter wallet passphrase' : 'Enter app PIN')
   );
 
   async function loadProfiles() {
@@ -73,7 +77,7 @@
           : '/';
       await goto(next);
     } catch (cause) {
-      error = cause instanceof Error ? cause.message : 'Could not unlock wallet.';
+      error = localizedError(cause, $locale, 'Could not unlock wallet.');
       credential = '';
     } finally {
       busy = false;
@@ -102,7 +106,7 @@
       const registry = await walletService.profiles();
       await goto(registry.wallets.length ? '/unlock' : '/welcome');
     } catch (cause) {
-      error = cause instanceof Error ? cause.message : 'Could not reset the local test wallet.';
+      error = localizedError(cause, $locale, 'Could not reset the local test wallet.');
     } finally {
       resetting = false;
     }
@@ -112,25 +116,37 @@
 <div class="onboarding-overlay unlock-overlay">
   {#key selectedWalletId}
     <main class="onboarding-card" in:fly={{ y: 6, duration: 260, opacity: 0 }}>
-      <span class="setup-step">WALLET LOCKED</span>
+      <span class="setup-step">{translate($locale, 'WALLET LOCKED')}</span>
       <span class="sign-icon"><LockKeyhole size={25} /></span>
-      <h1>{selectedProfile?.name ?? 'Unlock wallet'}</h1>
+      <h1>{translate($locale, selectedProfile?.name ?? 'Unlock wallet')}</h1>
       <p>
         {#if compatibility && !compatibility.supported}
-          This disposable Regtest wallet uses an unsupported test-profile format.
-        {:else if isSoftwareWallet}Enter this wallet’s passphrase to continue.{:else}Enter this
-          wallet’s app PIN to continue.{/if}
+          {translate(
+            $locale,
+            'This disposable Regtest wallet uses an unsupported test-profile format.'
+          )}
+        {:else if isSoftwareWallet}{translate(
+            $locale,
+            'Enter this wallet’s passphrase to continue.'
+          )}{:else}{translate($locale, 'Enter this\n          wallet’s app PIN to continue.')}{/if}
       </p>
       {#if compatibility && !compatibility.supported}
         <div class="warning-box">
-          <strong>This profile predates the current hardware-wallet storage format.</strong>
-          Groot will not guess missing metadata or reset its app PIN. Because Regtest wallets are disposable,
-          delete this test wallet and recreate or recover it from a public wallet backup. Its existing
-          files remain untouched until you explicitly delete it.
+          <strong
+            >{translate(
+              $locale,
+              'This profile predates the current hardware-wallet storage format.'
+            )}</strong
+          >
+          {translate(
+            $locale,
+            'Groot will not guess missing metadata or reset its app PIN. Because Regtest wallets are disposable,\n          delete this test wallet and recreate or recover it from a public wallet backup. Its existing\n          files remain untouched until you explicitly delete it.'
+          )}
         </div>
       {/if}
       {#if isPrototypeWallet}<p class="prototype-hint">
-          UI prototype PIN: <code>prototype-passphrase</code>
+          {translate($locale, 'UI prototype PIN:')}
+          <code>{translate($locale, 'prototype-passphrase')}</code>
         </p>{/if}
       {#if compatibility?.supported !== false}
         <form
@@ -157,40 +173,52 @@
             class="full"
             disabled={!credential}
             loading={busy}
-            loadingLabel="Unlocking wallet…">Unlock wallet</Button
+            loadingLabel={translate($locale, 'Unlocking wallet…')}
+            >{translate($locale, 'Unlock wallet')}</Button
           >
         </form>
       {/if}
       {#if defaultConfig.network === 'regtest'}<button
           class="locked-reset"
-          onclick={() => (showReset = true)}><Trash2 size={14} />Delete this regtest wallet</button
+          onclick={() => (showReset = true)}
+          ><Trash2 size={14} />{translate($locale, 'Delete this regtest wallet')}</button
         >{/if}
     </main>
   {/key}
-  <footer class="onboarding-footer">Keys stay on this device · Open source</footer>
+  <footer class="onboarding-footer">
+    {translate($locale, 'Keys stay on this device · Open source')}
+  </footer>
 </div>
 
 <Modal
   open={showReset}
-  title="Delete this regtest wallet?"
-  description={selectedProfile
-    ? `Remove ${selectedProfile.name} from this device.`
-    : 'Use this only for disposable local testing.'}
+  title={translate($locale, 'Delete this regtest wallet?')}
+  description={translate(
+    $locale,
+    selectedProfile
+      ? `Remove ${selectedProfile.name} from this device.`
+      : 'Use this only for disposable local testing.'
+  )}
   onclose={() => {
     showReset = false;
     resetConfirmation = '';
   }}
 >
   <div class="warning-box danger">
-    <strong>This removes the encrypted wallet data from this device.</strong>
-    {#if isSoftwareWallet}It cannot be undone unless you have the correct 24 recovery words and
-      wallet passphrase.{:else}It cannot be undone unless you have the public wallet backup and
-      access to the required signer or signers.{/if}
+    <strong>{translate($locale, 'This removes the encrypted wallet data from this device.')}</strong
+    >
+    {#if isSoftwareWallet}{translate(
+        $locale,
+        'It cannot be undone unless you have the correct 24 recovery words and\n      wallet passphrase.'
+      )}{:else}{translate(
+        $locale,
+        'It cannot be undone unless you have the public wallet backup and\n      access to the required signer or signers.'
+      )}{/if}
   </div>
   <label class="field"
-    ><span>Type RESET REGTEST to confirm</span><input
+    ><span>{translate($locale, 'Type RESET REGTEST to confirm')}</span><input
       bind:value={resetConfirmation}
-      placeholder="RESET REGTEST"
+      placeholder={translate($locale, 'RESET REGTEST')}
       autocomplete="off"
     /></label
   >
@@ -200,13 +228,13 @@
       onclick={() => {
         showReset = false;
         resetConfirmation = '';
-      }}>Cancel</Button
+      }}>{translate($locale, 'Cancel')}</Button
     ><Button
       variant="danger"
       disabled={resetConfirmation !== 'RESET REGTEST'}
       loading={resetting}
-      loadingLabel="Deleting…"
-      onclick={resetRegtestWallet}>Delete test wallet</Button
+      loadingLabel={translate($locale, 'Deleting…')}
+      onclick={resetRegtestWallet}>{translate($locale, 'Delete test wallet')}</Button
     >
   </div>
 </Modal>

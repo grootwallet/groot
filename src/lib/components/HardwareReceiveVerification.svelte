@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { locale } from '$lib/i18n';
+  import { translate } from '$lib/i18n-catalog';
   import { ChevronRight, Cpu, ShieldCheck } from '@lucide/svelte';
   import { onDestroy } from 'svelte';
   import Button from '$lib/components/Button.svelte';
@@ -246,15 +248,18 @@
 
 <Button variant="secondary" onclick={scan}>
   {#if address.hardwareVerifiedAt}<ShieldCheck size={16} />{:else}<Cpu size={16} />{/if}
-  {address.hardwareVerifiedAt ? 'Verify again' : 'Verify on device'}
+  {translate($locale, address.hardwareVerifiedAt ? 'Verify again' : 'Verify on device')}
 </Button>
 
 <Modal
   open={verifyOpen}
-  title="Verify receive address"
-  description={comparison.deviceName
-    ? `${comparison.deviceName} displays the Regtest output with a testnet prefix. Compare the exact address below.`
-    : "Compare the exact address below with the complete address on the signer's trusted display."}
+  title={translate($locale, 'Verify receive address')}
+  description={translate(
+    $locale,
+    comparison.deviceName
+      ? `${comparison.deviceName} displays the Regtest output with a testnet prefix. Compare the exact address below.`
+      : "Compare the exact address below with the complete address on the signer's trusted display."
+  )}
   onclose={closeVerification}
 >
   <HardwareAddressComparison
@@ -266,19 +271,28 @@
   />
   {#if verifyBusy}
     <HardwareActionPrompt
-      title={verificationAction === 'approve'
-        ? 'Check your hardware device'
-        : isMultisig
-          ? 'Looking for a wallet signer'
-          : 'Looking for your saved signer'}
-      detail={verificationAction === 'approve'
-        ? 'Compare the complete address above, then approve it on the device.'
-        : isMultisig
-          ? 'Groot checks only signer types saved in this wallet policy and ignores other connected device families.'
-          : 'Groot checks only this saved signer type and ignores other connected device families.'}
-      label={verificationAction === 'approve'
-        ? 'Waiting for hardware approval'
-        : 'Hardware device scan in progress'}
+      title={translate(
+        $locale,
+        verificationAction === 'approve'
+          ? 'Check your hardware device'
+          : isMultisig
+            ? 'Looking for a wallet signer'
+            : 'Looking for your saved signer'
+      )}
+      detail={translate(
+        $locale,
+        verificationAction === 'approve'
+          ? 'Compare the complete address above, then approve it on the device.'
+          : isMultisig
+            ? 'Groot checks only signer types saved in this wallet policy and ignores other connected device families.'
+            : 'Groot checks only this saved signer type and ignores other connected device families.'
+      )}
+      label={translate(
+        $locale,
+        verificationAction === 'approve'
+          ? 'Waiting for hardware approval'
+          : 'Hardware device scan in progress'
+      )}
     />
   {:else if devices.length}
     <div class="source-list hardware-device-list">
@@ -290,33 +304,44 @@
           <Cpu size={18} />
           <span>
             <strong>{hardwareDeviceDisplayName(device, savedSigners)}</strong>
-            <small>{device.fingerprint ?? device.message}</small>
+            <small>{translate($locale, device.fingerprint ?? device.message)}</small>
             <em
               class:ready={device.status === 'ready' || device.status === 'detected'}
               class:attention={device.action === 'prompt_pin' ||
                 device.action === 'confirm_empty_passphrase'}
-              >{device.action === 'prompt_pin'
-                ? 'Unlock'
-                : device.action === 'confirm_empty_passphrase'
-                  ? 'Standard wallet'
-                  : device.action === 'retry'
-                    ? 'Unlock, then scan again'
-                    : device.status === 'ready' || device.status === 'detected'
-                      ? 'Ready'
-                      : 'Unavailable'}</em
+              >{translate(
+                $locale,
+                device.action === 'prompt_pin'
+                  ? 'Unlock'
+                  : device.action === 'confirm_empty_passphrase'
+                    ? 'Standard wallet'
+                    : device.action === 'retry'
+                      ? 'Unlock, then scan again'
+                      : device.status === 'ready' || device.status === 'detected'
+                        ? 'Ready'
+                        : 'Unavailable'
+              )}</em
             >
           </span>
           {#if device.action !== 'none'}<ChevronRight size={15} />{/if}
         </button>
       {/each}
     </div>
-    <Button class="verification-rescan" variant="secondary" onclick={scan}>Scan again</Button>
+    <Button class="verification-rescan" variant="secondary" onclick={scan}
+      >{translate($locale, 'Scan again')}</Button
+    >
   {:else}
     <HardwareDeviceEmptyState
-      title={isMultisig ? 'No compatible signer found' : 'Saved signer not found'}
-      description={isMultisig
-        ? 'Connect and unlock a signer saved in this wallet policy, then scan again.'
-        : 'Connect and unlock this wallet’s hardware signer, then scan again.'}
+      title={translate(
+        $locale,
+        isMultisig ? 'No compatible signer found' : 'Saved signer not found'
+      )}
+      description={translate(
+        $locale,
+        isMultisig
+          ? 'Connect and unlock a signer saved in this wallet policy, then scan again.'
+          : 'Connect and unlock this wallet’s hardware signer, then scan again.'
+      )}
       onretry={scan}
     />
   {/if}

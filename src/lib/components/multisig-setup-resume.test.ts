@@ -16,10 +16,12 @@ describe('resumable multisig setup', () => {
   it('separates policy choice from wallet configuration before signer enrollment', () => {
     expect(setup).toContain("let policyStep = $state<'choose' | 'configure'>('choose')");
     expect(setup).toContain('Choose a spending policy');
-    expect(setup).toContain('Configure {templateKind');
+    expect(setup).toContain("{translate($locale, 'Configure')}");
     expect(setup).toContain('Recovery path and Inheritance use the same four-key structure');
     expect(setup.indexOf("{#if policyStep === 'choose'}")).toBeLessThan(
-      setup.search(/<label\s+class="field"[^>]*>\s*<span>Wallet name<\/span>/)
+      setup.search(
+        /<label\s+class="field"[^>]*>\s*<span>\{translate\(\$locale, 'Wallet name'\)\}<\/span>/
+      )
     );
   });
 

@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { locale } from '$lib/i18n';
+  import { translate, localizedError } from '$lib/i18n-catalog';
   import {
     CheckCircle2,
     KeyRound,
@@ -95,7 +97,7 @@
       await onrename(normalized);
       cancelRenaming();
     } catch (cause) {
-      nameError = cause instanceof Error ? cause.message : 'Could not rename this signer.';
+      nameError = localizedError(cause, $locale, 'Could not rename this signer.');
     } finally {
       renaming = false;
     }
@@ -104,8 +106,8 @@
 
 <Modal
   open={!!signer}
-  title={signer?.label ?? 'Signer details'}
-  description="Public signer identity. No private keys stored."
+  title={translate($locale, signer?.label ?? 'Signer details')}
+  description={translate($locale, 'Public signer identity. No private keys stored.')}
   {onclose}
 >
   {#if signer}
@@ -113,14 +115,17 @@
       <div class="device-identity">
         <span><KeyRound size={20} /></span>
         <div>
-          <strong>{sourceName(signer.source)}</strong><small
-            >{signer.source === 'usb' || signer.source === 'virtual'
-              ? 'Ready to check'
-              : 'Connect signer to check'}</small
+          <strong>{translate($locale, sourceName(signer.source))}</strong><small
+            >{translate(
+              $locale,
+              signer.source === 'usb' || signer.source === 'virtual'
+                ? 'Ready to check'
+                : 'Connect signer to check'
+            )}</small
           >
         </div>
         <span class="ready-badge" class:attention={health?.status === 'attention'}
-          >{healthLabel()}</span
+          >{translate($locale, healthLabel())}</span
         >
       </div>
       {#if onrename}
@@ -133,60 +138,68 @@
               }}
             >
               <label
-                ><span>Signer name</span><input
-                  aria-label="Signer name"
+                ><span>{translate($locale, 'Signer name')}</span><input
+                  aria-label={translate($locale, 'Signer name')}
                   bind:value={nameDraft}
                   maxlength="48"
                   autocomplete="off"
                 /></label
               >
               <div>
-                <Button variant="secondary" size="small" onclick={cancelRenaming}>Cancel</Button
+                <Button variant="secondary" size="small" onclick={cancelRenaming}
+                  >{translate($locale, 'Cancel')}</Button
                 ><Button
                   size="small"
                   type="submit"
                   loading={renaming}
-                  loadingLabel="Saving…"
-                  disabled={Boolean(signerLabelError(nameDraft))}>Save name</Button
+                  loadingLabel={translate($locale, 'Saving…')}
+                  disabled={Boolean(signerLabelError(nameDraft))}
+                  >{translate($locale, 'Save name')}</Button
                 >
               </div>
             </form>
             {#if nameError}<p class="form-error" role="alert">{nameError}</p>{/if}
           {:else}
-            <span><small>Signer name</small><strong>{signer.label}</strong></span>
+            <span
+              ><small>{translate($locale, 'Signer name')}</small><strong>{signer.label}</strong
+              ></span
+            >
             <Button variant="secondary" size="small" onclick={startRenaming}
-              ><Pencil size={13} />Edit name</Button
+              ><Pencil size={13} />{translate($locale, 'Edit name')}</Button
             >
           {/if}
         </section>
       {/if}
       <dl>
         <div>
-          <dt>Master fingerprint</dt>
+          <dt>{translate($locale, 'Master fingerprint')}</dt>
           <dd><code>{signer.fingerprint}</code></dd>
         </div>
         <div>
-          <dt>Account path</dt>
+          <dt>{translate($locale, 'Account path')}</dt>
           <dd><code>{signer.derivationPath}</code></dd>
         </div>
         <div>
-          <dt>Key source</dt>
-          <dd>{sourceName(signer.source)}</dd>
+          <dt>{translate($locale, 'Key source')}</dt>
+          <dd>{translate($locale, sourceName(signer.source))}</dd>
         </div>
         <div>
-          <dt>Connection</dt>
+          <dt>{translate($locale, 'Connection')}</dt>
           <dd>
-            {signer.source === 'usb' || signer.source === 'virtual'
-              ? 'Ready to check'
-              : 'USB connection needed'}
+            {translate(
+              $locale,
+              signer.source === 'usb' || signer.source === 'virtual'
+                ? 'Ready to check'
+                : 'USB connection needed'
+            )}
           </dd>
         </div>
         <div class="public-key-detail">
-          <dt>Public account key (xpub)</dt>
+          <dt>{translate($locale, 'Public account key (xpub)')}</dt>
           <dd>
             <button
               class="public-key-trigger"
-              aria-label="View public account key (xpub)"
+              aria-label={translate($locale, 'View public account key (xpub)')}
               onclick={() => (publicKeyOpen = true)}
               ><code>{compactIdentifier(signer.xpub, 18, 12)}</code><Maximize2 size={14} /></button
             >
@@ -197,16 +210,17 @@
         <section class="device-policy-status" class:attention={policyStatus.attention}>
           <span><ShieldCheck size={18} /></span>
           <div>
-            <strong>Wallet policy</strong>
-            <small>{policyStatus.description}</small>
+            <strong>{translate($locale, 'Wallet policy')}</strong>
+            <small>{translate($locale, policyStatus.description)}</small>
             {#if policyStatus.verifiedAt}<small
-                >Last verified <LocalTimestamp value={policyStatus.verifiedAt} /></small
+                >{translate($locale, 'Last verified')}
+                <LocalTimestamp value={policyStatus.verifiedAt} /></small
               >{/if}
           </div>
-          <em>{policyStatus.label}</em>
+          <em>{translate($locale, policyStatus.label)}</em>
           {#if policyStatus.actionLabel && onpolicy}
             <Button variant="secondary" size="small" onclick={onpolicy}
-              >{policyStatus.actionLabel}</Button
+              >{translate($locale, policyStatus.actionLabel)}</Button
             >
           {/if}
         </section>
@@ -218,27 +232,33 @@
             class:attention={health?.status === 'attention'}><CheckCircle2 size={18} /></span
           >
           <div>
-            <strong>Signer check</strong><small
-              >{#if health}Last checked <LocalTimestamp value={health.checkedAt} />{:else}Not
-                checked yet{/if}</small
+            <strong>{translate($locale, 'Signer check')}</strong><small
+              >{#if health}{translate($locale, 'Last checked')}
+                <LocalTimestamp value={health.checkedAt} />{:else}{translate(
+                  $locale,
+                  'Not\n                checked yet'
+                )}{/if}</small
             >
           </div>
         </div>
         <div class="health-card-body">
           {#if checking}
             <HardwareActionPrompt
-              title="Checking signer"
-              detail="Keep it connected and unlocked."
-              label="Checking signer"
+              title={translate($locale, 'Checking signer')}
+              detail={translate($locale, 'Keep it connected and unlocked.')}
+              label={translate($locale, 'Checking signer')}
             />
           {:else}
             <p>
-              {health?.status === 'healthy'
-                ? 'Signer matches this wallet.'
-                : (health?.summary ?? 'Connect and unlock the signer to check it.')}
+              {translate(
+                $locale,
+                health?.status === 'healthy'
+                  ? 'Signer matches this wallet.'
+                  : (health?.summary ?? 'Connect and unlock the signer to check it.')
+              )}
             </p>
             <Button variant="secondary" class="full" onclick={oncheck}
-              ><RefreshCw size={15} />Check signer</Button
+              ><RefreshCw size={15} />{translate($locale, 'Check signer')}</Button
             >
           {/if}
         </div>
@@ -250,8 +270,8 @@
 {#if signer}<IdentifierDetailsModal
     value={signer.xpub}
     open={publicKeyOpen}
-    title={`${signer.label} public account key (xpub)`}
-    description="Derives wallet addresses. Cannot sign."
-    label="Public account key (xpub)"
+    title={translate($locale, '{signer} public account key (xpub)', { signer: signer.label })}
+    description={translate($locale, 'Derives wallet addresses. Cannot sign.')}
+    label={translate($locale, 'Public account key (xpub)')}
     onclose={() => (publicKeyOpen = false)}
   />{/if}

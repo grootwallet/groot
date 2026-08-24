@@ -9,8 +9,8 @@ describe('transaction acceleration actions', () => {
     expect(component).toContain("multisig ? '/multisig/send' : '/send'");
     expect(component).toContain('accelerate=rbf');
     expect(component).toContain('accelerate=cpfp');
-    expect(component).toContain('<ArrowUp size={15} />Increase fee (RBF)');
-    expect(component).toContain('<Layers size={15} />Spend output (CPFP)');
+    expect(component).toContain("<ArrowUp size={15} />{translate($locale, 'Increase fee (RBF)')}");
+    expect(component).toContain("<Layers size={15} />{translate($locale, 'Spend output (CPFP)')}");
   });
 
   it('offers sender-side RBF only for replaceable outgoing transactions', () => {

@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { locale } from '$lib/i18n';
+  import { translate } from '$lib/i18n-catalog';
   import { AlertTriangle, RefreshCw } from '@lucide/svelte';
   import Button from './Button.svelte';
 
@@ -16,6 +18,6 @@
     <small>{description}</small>
   </span>
   <Button variant="secondary" size="small" onclick={onretry}
-    ><RefreshCw size={14} />Scan again</Button
+    ><RefreshCw size={14} />{translate($locale, 'Scan again')}</Button
   >
 </div>

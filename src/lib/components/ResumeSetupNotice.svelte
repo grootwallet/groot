@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { locale } from '$lib/i18n';
+  import { translate } from '$lib/i18n-catalog';
   import { ArrowRight, Clock3, Trash2 } from '@lucide/svelte';
   import Button from './Button.svelte';
 
@@ -21,19 +23,21 @@
   class="resume-setup-notice"
   class:locked
   role="status"
-  aria-label="Unfinished wallet setup"
+  aria-label={translate($locale, 'Unfinished wallet setup')}
 >
   <span class="resume-setup-icon" aria-hidden="true"><Clock3 size={18} /></span>
   <span class="resume-setup-copy">
-    <small>UNFINISHED WALLET</small>
+    <small>{translate($locale, 'UNFINISHED WALLET')}</small>
     <strong>{title}</strong>
     <span>{detail}</span>
   </span>
   <span class="resume-setup-actions">
     {#if ondiscard}<Button variant="danger-outline" size="small" onclick={ondiscard}
-        ><Trash2 size={14} />Discard</Button
+        ><Trash2 size={14} />{translate($locale, 'Discard')}</Button
       >{/if}
-    <Button variant="secondary" size="small" {href}>Resume setup<ArrowRight size={15} /></Button>
+    <Button variant="secondary" size="small" {href}
+      >{translate($locale, 'Resume setup')}<ArrowRight size={15} /></Button
+    >
   </span>
 </section>
 

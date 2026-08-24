@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { locale } from '$lib/i18n';
+  import { translate, localizedError } from '$lib/i18n-catalog';
   import {
     AlertTriangle,
     ArrowRight,
@@ -127,11 +129,14 @@
       : { mode: 'auto', strategy: automaticStrategy }
   );
   const automaticStrategyLabel = $derived(
-    automaticStrategy === 'private'
-      ? 'More private'
-      : automaticStrategy === 'lower_fee'
-        ? 'Lower fee'
-        : 'Balanced'
+    translate(
+      $locale,
+      automaticStrategy === 'private'
+        ? 'More private'
+        : automaticStrategy === 'lower_fee'
+          ? 'Lower fee'
+          : 'Balanced'
+    )
   );
   const proposalHasPrivacyWarning = $derived(
     Boolean(
@@ -250,8 +255,11 @@
       try {
         estimates = await walletService.estimateFees();
       } catch (cause) {
-        feeEstimateError =
-          cause instanceof Error ? cause.message : 'Bitcoin Core fee estimates are unavailable.';
+        feeEstimateError = localizedError(
+          cause,
+          $locale,
+          'Bitcoin Core fee estimates are unavailable.'
+        );
         speed = 'custom';
         toast({
           title: 'Fee estimates unavailable',
@@ -308,9 +316,7 @@
       const description =
         cause instanceof WalletError && cause.code === 'insufficient_funds'
           ? `The amount plus network fee exceeds the ${selectedCoins.length ? 'selected coin balance' : 'available balance'}.`
-          : cause instanceof Error
-            ? cause.message
-            : undefined;
+          : localizedError(cause, $locale);
       if (accelerationRequest) {
         feeEstimateError = description ?? 'Could not prepare fee acceleration.';
         toast({
@@ -349,7 +355,7 @@
     } catch (cause) {
       toast({
         title: 'Could not prepare payment',
-        description: cause instanceof Error ? cause.message : undefined,
+        description: localizedError(cause, $locale),
         tone: 'danger'
       });
     } finally {
@@ -365,7 +371,7 @@
     } catch (cause) {
       toast({
         title: 'Maximum unavailable',
-        description: cause instanceof Error ? cause.message : undefined,
+        description: localizedError(cause, $locale),
         tone: 'danger'
       });
     }
@@ -392,8 +398,7 @@
       accelerationRequest = null;
       step = 2;
     } catch (cause) {
-      feeEstimateError =
-        cause instanceof Error ? cause.message : 'Could not prepare fee acceleration.';
+      feeEstimateError = localizedError(cause, $locale, 'Could not prepare fee acceleration.');
       toast({
         title: accelerationUnavailableTitle(request.method),
         description: feeEstimateError,
@@ -439,7 +444,7 @@
       passphrase = '';
       step = 4;
     } catch (cause) {
-      credentialError = cause instanceof Error ? cause.message : 'Could not sign or broadcast.';
+      credentialError = localizedError(cause, $locale, 'Could not sign or broadcast.');
       passphrase = '';
     } finally {
       broadcasting = false;
@@ -478,7 +483,7 @@
     } catch (cause) {
       if (generation !== hardwareScanGeneration) return;
       devices = [];
-      deviceError = cause instanceof Error ? cause.message : 'Could not find hardware.';
+      deviceError = localizedError(cause, $locale, 'Could not find hardware.');
     } finally {
       if (generation === hardwareScanGeneration) broadcasting = false;
     }
@@ -503,7 +508,7 @@
       deviceOpen = false;
       toast({ title: 'Hardware signature added', tone: 'success' });
     } catch (cause) {
-      deviceError = cause instanceof Error ? cause.message : 'Hardware signing failed.';
+      deviceError = localizedError(cause, $locale, 'Hardware signing failed.');
     } finally {
       broadcasting = false;
     }
@@ -523,7 +528,7 @@
       importOpen = false;
       toast({ title: 'Signed PSBT validated', tone: 'success' });
     } catch (cause) {
-      importError = cause instanceof Error ? cause.message : 'Signed PSBT was rejected.';
+      importError = localizedError(cause, $locale, 'Signed PSBT was rejected.');
       credentialError = importError;
       toast({ title: 'Signed PSBT rejected', description: importError, tone: 'danger' });
     } finally {
@@ -540,7 +545,7 @@
     try {
       imported = await readTransferFile(file);
     } catch (cause) {
-      importError = cause instanceof Error ? cause.message : 'Could not read PSBT.';
+      importError = localizedError(cause, $locale, 'Could not read PSBT.');
       credentialError = importError;
       toast({ title: 'Could not read PSBT', description: importError, tone: 'danger' });
     }
@@ -553,7 +558,7 @@
       urFrames = await walletService.encodePsbtUr(externalProposal.psbt);
       qrOpen = true;
     } catch (cause) {
-      credentialError = cause instanceof Error ? cause.message : 'Could not encode the PSBT QR.';
+      credentialError = localizedError(cause, $locale, 'Could not encode the PSBT QR.');
     } finally {
       broadcasting = false;
     }
@@ -582,7 +587,7 @@
                     } catch (cause) {
                       toast({
                         title: 'Could not show saved PSBT',
-                        description: cause instanceof Error ? cause.message : undefined,
+                        description: localizedError(cause, $locale),
                         tone: 'danger'
                       });
                     }
@@ -591,7 +596,7 @@
               : undefined
         });
     } catch (cause) {
-      credentialError = cause instanceof Error ? cause.message : 'Could not save the PSBT.';
+      credentialError = localizedError(cause, $locale, 'Could not save the PSBT.');
       toast({ title: 'Could not save PSBT', description: credentialError, tone: 'danger' });
     } finally {
       savingPsbt = false;
@@ -619,7 +624,7 @@
       });
       await goto('/');
     } catch (cause) {
-      cancelError = cause instanceof Error ? cause.message : 'The payment could not be canceled.';
+      cancelError = localizedError(cause, $locale, 'The payment could not be canceled.');
     } finally {
       broadcasting = false;
     }
@@ -640,8 +645,11 @@
         tone: 'success'
       });
     } catch (cause) {
-      discardSignatureError =
-        cause instanceof Error ? cause.message : 'The local signature could not be discarded.';
+      discardSignatureError = localizedError(
+        cause,
+        $locale,
+        'The local signature could not be discarded.'
+      );
     } finally {
       broadcasting = false;
     }
@@ -654,7 +662,7 @@
       qrScanOpen = false;
       await importSigned();
     } catch (cause) {
-      const message = cause instanceof Error ? cause.message : '';
+      const message = localizedError(cause, $locale, '');
       if (!message.includes('Keep scanning'))
         credentialError = message || 'The QR frame was rejected.';
     }
@@ -664,22 +672,25 @@
 <div class="page narrow-page send-page">
   <header class="page-header">
     <div>
-      <p class="eyebrow">SEND</p>
-      <h1>Send bitcoin</h1>
+      <p class="eyebrow">{translate($locale, 'SEND')}</p>
+      <h1>{translate($locale, 'Send bitcoin')}</h1>
       <p class="subtitle">
-        {step === 1 && draftStep === 1
-          ? 'Name the payment and choose its recipient.'
-          : step === 1
-            ? 'Choose the amount, coins, and network fee.'
-            : step === 2
-              ? 'Review everything carefully.'
-              : step === 3
-                ? 'Unlock, sign, and broadcast.'
-                : accelerationMethod === 'cpfp'
-                  ? 'Fee acceleration broadcast.'
-                  : accelerationMethod === 'rbf'
-                    ? 'Replacement broadcast.'
-                    : 'Payment sent.'}
+        {translate(
+          $locale,
+          step === 1 && draftStep === 1
+            ? 'Name the payment and choose its recipient.'
+            : step === 1
+              ? 'Choose the amount, coins, and network fee.'
+              : step === 2
+                ? 'Review everything carefully.'
+                : step === 3
+                  ? 'Unlock, sign, and broadcast.'
+                  : accelerationMethod === 'cpfp'
+                    ? 'Fee acceleration broadcast.'
+                    : accelerationMethod === 'rbf'
+                      ? 'Replacement broadcast.'
+                      : 'Payment sent.'
+        )}
       </p>
     </div>
   </header>
@@ -706,33 +717,36 @@
       }}
     >
       <div class="send-stage-heading">
-        <span>FEE ACCELERATION</span>
-        <h2>Enter a custom fee rate</h2>
+        <span>{translate($locale, 'FEE ACCELERATION')}</span>
+        <h2>{translate($locale, 'Enter a custom fee rate')}</h2>
         <p>
-          Bitcoin Core has no usable estimate. Groot will not invent one; choose the sat/vB rate you
-          want to review.
+          {translate(
+            $locale,
+            'Bitcoin Core has no usable estimate. Groot will not invent one; choose the sat/vB rate you\n          want to review.'
+          )}
         </p>
       </div>
       <label class="field"
-        ><span>Custom fee rate</span>
+        ><span>{translate($locale, 'Custom fee rate')}</span>
         <div class="amount-input">
           <input
-            aria-label="Custom acceleration fee rate"
+            aria-label={translate($locale, 'Custom acceleration fee rate')}
             bind:value={customFee}
             inputmode="decimal"
             placeholder="0"
-          /><b>sat/vB</b>
+          /><b>{translate($locale, 'sat/vB')}</b>
         </div>
-        <small>Required · greater than 0 and at most 10,000 sat/vB</small></label
+        <small>{translate($locale, 'Required · greater than 0 and at most 10,000 sat/vB')}</small
+        ></label
       >
       {#if feeEstimateError}<p class="form-error" role="alert">{feeEstimateError}</p>{/if}
       <Button
         type="submit"
         disabled={!customFeeValid}
         loading={preparing}
-        loadingLabel="Preparing acceleration…"
+        loadingLabel={translate($locale, 'Preparing acceleration…')}
         size="large"
-        class="full">Review acceleration<ArrowRight size={17} /></Button
+        class="full">{translate($locale, 'Review acceleration')}<ArrowRight size={17} /></Button
       >
     </form>
   {:else if step === 1 && draftStep === 1}
@@ -745,29 +759,37 @@
       in:fly={{ x: 8, duration: 180 }}
     >
       <div class="send-stage-heading">
-        <span>STEP 1</span>
-        <h2>What is this payment for?</h2>
-        <p>This permanent label helps you recognize the transaction later.</p>
+        <span>{translate($locale, 'STEP 1')}</span>
+        <h2>{translate($locale, 'What is this payment for?')}</h2>
+        <p>
+          {translate($locale, 'This permanent label helps you recognize the transaction later.')}
+        </p>
       </div>
       <label class="field"
-        ><span>Payment label</span><input
-          aria-label="Payment label"
+        ><span>{translate($locale, 'Payment label')}</span><input
+          aria-label={translate($locale, 'Payment label')}
           bind:value={label}
-          placeholder="e.g. Hardware purchase, Pay Alex, Test transaction"
+          placeholder={translate($locale, 'e.g. Hardware purchase, Pay Alex, Test transaction')}
           maxlength="48"
-        /><FieldCounter value={label} max={48} hint="Required · cannot be changed" /></label
+        /><FieldCounter
+          value={label}
+          max={48}
+          hint={translate($locale, 'Required · cannot be changed')}
+        /></label
       >
       <label class="field"
-        ><span>Bitcoin address</span><input
-          aria-label="Bitcoin address"
+        ><span>{translate($locale, 'Bitcoin address')}</span><input
+          aria-label={translate($locale, 'Bitcoin address')}
           bind:value={address}
           placeholder="{addressPrefixForNetwork(defaultConfig.network)}q…"
         />{#if address && !addressValid}<em
-            >Enter a valid {networkName(defaultConfig.network)} address</em
+            >{translate($locale, 'Enter a valid')}
+            {networkName(defaultConfig.network)}
+            {translate($locale, 'address')}</em
           >{/if}</label
       >
       <Button type="submit" disabled={!intentValid} size="large" class="full"
-        >Continue to amount<ArrowRight size={17} /></Button
+        >{translate($locale, 'Continue to amount')}<ArrowRight size={17} /></Button
       >
     </form>
   {:else if step === 1}
@@ -780,27 +802,35 @@
       in:fly={{ x: 8, duration: 180 }}
     >
       <div class="send-stage-heading">
-        <span>STEP 2</span>
-        <h2>Fund the payment</h2>
-        <p>Set the amount, then keep automatic selection or choose specific coins.</p>
+        <span>{translate($locale, 'STEP 2')}</span>
+        <h2>{translate($locale, 'Fund the payment')}</h2>
+        <p>
+          {translate(
+            $locale,
+            'Set the amount, then keep automatic selection or choose specific coins.'
+          )}
+        </p>
       </div>
       <label class="field"
-        ><span>Amount</span>
+        ><span>{translate($locale, 'Amount')}</span>
         <div class="amount-input">
           <input
-            aria-label="Amount"
+            aria-label={translate($locale, 'Amount')}
             bind:value={amount}
             inputmode={$denomination === 'btc' ? 'decimal' : 'numeric'}
             placeholder="0"
-          /><b>{$denomination === 'btc' ? 'BTC' : 'sats'}</b><button
+          /><b>{translate($locale, $denomination === 'btc' ? 'BTC' : 'sats')}</b><button
             type="button"
-            onclick={useMaxAmount}>Max</button
+            onclick={useMaxAmount}>{translate($locale, 'Max')}</button
           >
         </div>
-        <small>Available: <Amount value={available} hidden={$discreetMode} /></small></label
+        <small
+          >{translate($locale, 'Available:')}
+          <Amount value={available} hidden={$discreetMode} /></small
+        ></label
       >
       <div class="coin-control-field">
-        <span>Coin selection</span><button
+        <span>{translate($locale, 'Coin selection')}</span><button
           type="button"
           class="coin-mode"
           class:open={showCoins}
@@ -809,18 +839,27 @@
           ><CircleDot size={16} /><span
             ><strong
               >{selectedCoins.length
-                ? `Manual · ${selectedCoins.length} coin${selectedCoins.length === 1 ? '' : 's'}`
-                : 'Automatic selection'}</strong
+                ? translate(
+                    $locale,
+                    selectedCoins.length === 1 ? 'Manual · {count} coin' : 'Manual · {count} coins',
+                    { count: selectedCoins.length }
+                  )
+                : translate($locale, 'Automatic selection')}</strong
             ><small
               >{selectedCoins.length
-                ? `${$discreetMode ? '••••••' : formatAmount(available, $denomination)} ${amountUnit($denomination)} available`
-                : `${automaticStrategyLabel} · Frozen coins stay untouched`}</small
+                ? translate($locale, '{amount} {unit} available', {
+                    amount: $discreetMode ? '••••••' : formatAmount(available, $denomination),
+                    unit: amountUnit($denomination)
+                  })
+                : translate($locale, '{strategy} · Frozen coins stay untouched', {
+                    strategy: automaticStrategyLabel
+                  })}</small
             ></span
-          ><b>{showCoins ? 'Done' : 'Choose'}</b></button
+          ><b>{translate($locale, showCoins ? 'Done' : 'Choose')}</b></button
         >
         {#if showCoins}<div class="send-coin-picker">
             <fieldset class="automatic-strategies">
-              <legend>Automatic strategy</legend
+              <legend>{translate($locale, 'Automatic strategy')}</legend
               >{#each [{ id: 'balanced', name: 'Balanced', detail: 'Limit privacy merges without excessive fees' }, { id: 'private', name: 'More private', detail: 'Avoid reused, unknown, and unrelated coins' }, { id: 'lower_fee', name: 'Lower fee', detail: 'Prefer fewer, larger inputs' }] as option}<button
                   type="button"
                   class:active={automaticStrategy === option.id && !selectedCoins.length}
@@ -841,7 +880,8 @@
                   onchange={(event) => toggleCoin(coin.outpoint, event.currentTarget.checked)}
                 /><span
                   ><span class="coin-picker-title-line"
-                    ><strong>{$discreetMode ? 'Label hidden' : coin.label}</strong
+                    ><strong
+                      >{translate($locale, $discreetMode ? 'Label hidden' : coin.label)}</strong
                     >{#if coin.provenance.state !== 'unknown'}<PermanentLabelTags
                         labels={coin.provenance.labels.filter(
                           (item) =>
@@ -851,14 +891,17 @@
                         hidden={$discreetMode}
                       />{/if}</span
                   ><small
-                    >{$discreetMode
-                      ? '•••••• · Provenance hidden'
-                      : `${formatAmount(coin.amount, $denomination)} ${amountUnit($denomination)}${coin.provenance.state === 'unknown' ? ' · Source unknown' : ''}${coin.provenance.addressReused ? ' · Address reused' : ''}`}{coin.frozen
-                      ? ' · Frozen'
-                      : ''}</small
+                    >{translate(
+                      $locale,
+                      $discreetMode
+                        ? '•••••• · Provenance hidden'
+                        : `${formatAmount(coin.amount, $denomination)} ${amountUnit($denomination)}${coin.provenance.state === 'unknown' ? ' · Source unknown' : ''}${coin.provenance.addressReused ? ' · Address reused' : ''}`
+                    )}{translate($locale, coin.frozen ? ' · Frozen' : '')}</small
                   ></span
                 ></label
-              >{/each}<button type="button" onclick={useAutomatic}>Use automatic selection</button>
+              >{/each}<button type="button" onclick={useAutomatic}
+              >{translate($locale, 'Use automatic selection')}</button
+            >
           </div>{/if}
         {#if selectionPreview}<div
             class:warning={selectionPreview.newClusterLinks > 0 ||
@@ -867,37 +910,43 @@
             class="selection-review manual-selection-preview"
           >
             <strong
-              >{selectionPreview.selectedInputCount} selected · <Amount
-                value={selectionPreview.selectedAmount}
-                hidden={$discreetMode}
-              /></strong
-            >{#if $discreetMode}<span>Funding provenance hidden in discreet mode.</span>{:else}<div
-                class="selection-labels"
-              >
-                <span>Funding labels</span><PermanentLabelTags
+              >{selectionPreview.selectedInputCount}
+              {translate($locale, 'selected ·')}
+              <Amount value={selectionPreview.selectedAmount} hidden={$discreetMode} /></strong
+            >{#if $discreetMode}<span
+                >{translate($locale, 'Funding provenance hidden in discreet mode.')}</span
+              >{:else}<div class="selection-labels">
+                <span>{translate($locale, 'Funding labels')}</span><PermanentLabelTags
                   labels={selectionPreview.fundingLabels}
                 />
               </div>
               <span
-                >{selectionPreview.newClusterLinks
-                  ? `${selectionPreview.newClusterLinks} new public link${selectionPreview.newClusterLinks === 1 ? '' : 's'}.`
-                  : 'No new links between existing groups.'}</span
+                >{translate(
+                  $locale,
+                  selectionPreview.newClusterLinks
+                    ? `${selectionPreview.newClusterLinks} new public link${selectionPreview.newClusterLinks === 1 ? '' : 's'}.`
+                    : 'No new links between existing groups.'
+                )}</span
               >{#if selectionPreview.oneExistingGroupCanFund && selectionPreview.newClusterLinks > 0}<div
                   class="selection-recommendation"
                 >
-                  <strong>Privacy recommendation</strong><span
-                    >One existing group can fund this payment without linking these groups.</span
+                  <strong>{translate($locale, 'Privacy recommendation')}</strong><span
+                    >{translate(
+                      $locale,
+                      'One existing group can fund this payment without linking these groups.'
+                    )}</span
                   ><button
                     type="button"
                     onclick={() => {
                       automaticStrategy = 'private';
                       useAutomatic();
-                    }}>Use privacy-first selection</button
+                    }}>{translate($locale, 'Use privacy-first selection')}</button
                   >
                 </div>{/if}
               <details class="selection-technical">
-                <summary>Input details</summary><span
-                  >Estimated input weight: {shortSats(selectionPreview.estimatedInputWeight)} WU</span
+                <summary>{translate($locale, 'Input details')}</summary><span
+                  >{translate($locale, 'Estimated input weight:')}
+                  {shortSats(selectionPreview.estimatedInputWeight)} WU</span
                 >
               </details>{/if}
           </div>{/if}
@@ -917,71 +966,87 @@
         }}
       />
       <div class="split-actions">
-        <Button variant="secondary" size="large" onclick={() => (draftStep = 1)}>Back</Button
+        <Button variant="secondary" size="large" onclick={() => (draftStep = 1)}
+          >{translate($locale, 'Back')}</Button
         ><Button
           type="submit"
           disabled={!valid}
           loading={preparing}
-          loadingLabel="Preparing payment…"
-          size="large">Review payment<ArrowRight size={17} /></Button
+          loadingLabel={translate($locale, 'Preparing payment…')}
+          size="large">{translate($locale, 'Review payment')}<ArrowRight size={17} /></Button
         >
       </div>
     </form>
   {:else if step === 2 && proposal}
     <section class="form-card">
       <div class="review-amount">
-        <span>You send</span><strong><Amount value={proposal.amount} /></strong>
+        <span>{translate($locale, 'You send')}</span><strong
+          ><Amount value={proposal.amount} /></strong
+        >
       </div>
       <dl class="details-list">
         <div>
-          <dt>To</dt>
+          <dt>{translate($locale, 'To')}</dt>
           <dd>
             <button
               class="address-review-trigger mono"
-              aria-label="View complete recipient address"
+              aria-label={translate($locale, 'View complete recipient address')}
               onclick={() => (addressOpen = true)}>{compactAddress(proposal.recipient)}</button
             >
           </dd>
         </div>
         <div>
-          <dt>Label</dt>
+          <dt>{translate($locale, 'Label')}</dt>
           <dd>{proposal.label}</dd>
         </div>
         <div>
-          <dt>Network</dt>
+          <dt>{translate($locale, 'Network')}</dt>
           <dd>{proposal.network}</dd>
         </div>
         <div>
-          <dt>Network fee</dt>
+          <dt>{translate($locale, 'Network fee')}</dt>
           <dd><Amount value={proposal.fee} /></dd>
         </div>
         <div class="total">
-          <dt>Total</dt>
+          <dt>{translate($locale, 'Total')}</dt>
           <dd><Amount value={proposal.total} /></dd>
         </div>
       </dl>
       <div class:warning={proposalHasPrivacyWarning} class="selection-review">
         <strong
-          >{proposal.selectionImpact.selectedInputCount} funding coin{proposal.selectionImpact
-            .selectedInputCount === 1
-            ? ''
-            : 's'} · {proposal.selectionImpact.strategy.replace('_', ' ')}</strong
+          >{proposal.selectionImpact.selectedInputCount}
+          {translate($locale, 'funding coin')}{translate(
+            $locale,
+            proposal.selectionImpact.selectedInputCount === 1 ? '' : 's'
+          )} · {proposal.selectionImpact.strategy.replace('_', ' ')}</strong
         ><span
-          >{proposalHasPrivacyWarning
-            ? `Review: ${proposal.selectionImpact.newClusterLinks} new cluster link${proposal.selectionImpact.newClusterLinks === 1 ? '' : 's'}; unknown or reused sources are called out.`
-            : 'No new cluster link, unknown provenance, or address-reuse warning.'}</span
+          >{translate(
+            $locale,
+            proposalHasPrivacyWarning
+              ? `Review: ${proposal.selectionImpact.newClusterLinks} new cluster link${proposal.selectionImpact.newClusterLinks === 1 ? '' : 's'}; unknown or reused sources are called out.`
+              : 'No new cluster link, unknown provenance, or address-reuse warning.'
+          )}</span
         >
       </div>
       {#if proposal.selectionImpact.feeDifferenceVsPrivate !== null}<div class="selection-review">
-          <strong>Exact strategy comparison</strong><span
+          <strong>{translate($locale, 'Exact strategy comparison')}</strong><span
             ><Amount value={Math.abs(proposal.selectionImpact.feeDifferenceVsPrivate)} />
-            {proposal.selectionImpact.feeDifferenceVsPrivate <= 0 ? 'lower' : 'higher'} than the valid
-            More private candidate. Lower fee is not better privacy.</span
+            {translate(
+              $locale,
+              proposal.selectionImpact.feeDifferenceVsPrivate <= 0 ? 'lower' : 'higher'
+            )}
+            {translate(
+              $locale,
+              'than the valid\n            More private candidate. Lower fee is not better privacy.'
+            )}</span
           >
         </div>{/if}
       <TransactionReviewDetails {proposal} onChangeAddress={() => (changeAddressOpen = true)} />
       <div class="warning-box">
-        Bitcoin transactions cannot be reversed. Verify the address and amount before signing.
+        {translate(
+          $locale,
+          'Bitcoin transactions cannot be reversed. Verify the address and amount before signing.'
+        )}
       </div>
       <div class="split-actions">
         <Button
@@ -990,9 +1055,9 @@
           onclick={() => {
             cancelError = '';
             cancelOpen = true;
-          }}>Cancel payment</Button
+          }}>{translate($locale, 'Cancel payment')}</Button
         ><Button size="large" onclick={() => (step = 3)}
-          >Continue to sign<ArrowRight size={17} /></Button
+          >{translate($locale, 'Continue to sign')}<ArrowRight size={17} /></Button
         >
       </div>
     </section>
@@ -1000,53 +1065,59 @@
     <section class="form-card sign-card">
       {#if externalProposal?.canFinalize}
         <span class="sign-icon success"><Check size={25} /></span>
-        <h2>Review signed transaction</h2>
+        <h2>{translate($locale, 'Review signed transaction')}</h2>
         <p>
-          The hardware signature is verified. Review the transaction once more before broadcasting.
+          {translate(
+            $locale,
+            'The hardware signature is verified. Review the transaction once more before broadcasting.'
+          )}
         </p>
       {:else}
         <span class="sign-icon"><Cpu size={25} /></span>
-        <h2>Sign on your hardware</h2>
+        <h2>{translate($locale, 'Sign on your hardware')}</h2>
         <p>
-          Verify the address, amount, and fee on the signer. Groot never receives its private key or
-          hardware passphrase.
+          {translate(
+            $locale,
+            'Verify the address, amount, and fee on the signer. Groot never receives its private key or\n          hardware passphrase.'
+          )}
         </p>
       {/if}
       <section
         class="signed-transaction-review"
-        aria-label={externalProposal?.canFinalize
-          ? 'Signed transaction review'
-          : 'Transaction review'}
+        aria-label={translate(
+          $locale,
+          externalProposal?.canFinalize ? 'Signed transaction review' : 'Transaction review'
+        )}
       >
         <dl class="details-list">
           <div>
-            <dt>To</dt>
+            <dt>{translate($locale, 'To')}</dt>
             <dd>
               <button
                 class="address-review-trigger mono"
-                aria-label="View complete recipient address"
+                aria-label={translate($locale, 'View complete recipient address')}
                 onclick={() => (addressOpen = true)}>{compactAddress(proposal.recipient)}</button
               >
             </dd>
           </div>
           <div>
-            <dt>Label</dt>
+            <dt>{translate($locale, 'Label')}</dt>
             <dd>{proposal.label}</dd>
           </div>
           <div>
-            <dt>Amount</dt>
+            <dt>{translate($locale, 'Amount')}</dt>
             <dd><Amount value={proposal.amount} /></dd>
           </div>
           <div>
-            <dt>Network</dt>
+            <dt>{translate($locale, 'Network')}</dt>
             <dd>{proposal.network}</dd>
           </div>
           <div>
-            <dt>Network fee</dt>
+            <dt>{translate($locale, 'Network fee')}</dt>
             <dd><Amount value={proposal.fee} /></dd>
           </div>
           <div class="total">
-            <dt>Total</dt>
+            <dt>{translate($locale, 'Total')}</dt>
             <dd><Amount value={proposal.total} /></dd>
           </div>
         </dl>
@@ -1056,13 +1127,16 @@
         <div class="ready-panel">
           <Check size={18} />
           <div>
-            <strong>Signature verified</strong><small
-              >Enter this wallet’s Groot app PIN to broadcast this exact signed transaction.</small
+            <strong>{translate($locale, 'Signature verified')}</strong><small
+              >{translate(
+                $locale,
+                'Enter this wallet’s Groot app PIN to broadcast this exact signed transaction.'
+              )}</small
             >
           </div>
         </div>
         <PasswordField
-          label="App PIN"
+          label={translate($locale, 'App PIN')}
           bind:value={passphrase}
           oninput={() => (credentialError = '')}
           autocomplete="current-password"
@@ -1072,41 +1146,44 @@
           class="full"
           disabled={!passphrase}
           loading={broadcasting}
-          loadingLabel="Broadcasting…"
-          onclick={broadcast}>Finalize & broadcast</Button
+          loadingLabel={translate($locale, 'Broadcasting…')}
+          onclick={broadcast}>{translate($locale, 'Finalize & broadcast')}</Button
         >
       {:else}
         <div class="psbt-actions">
           <Button variant="secondary" onclick={scanHardware}
-            ><Cpu size={16} />Sign with cable</Button
+            ><Cpu size={16} />{translate($locale, 'Sign with cable')}</Button
           ><Button variant="secondary" onclick={showPsbtQr}
-            ><QrCode size={16} />Show unsigned QR</Button
+            ><QrCode size={16} />{translate($locale, 'Show unsigned QR')}</Button
           ><Button
             variant="secondary"
             onclick={() => {
               clearSigningTransportError();
               scannedFrames = [];
               qrScanOpen = true;
-            }}><ScanLine size={16} />Scan signed QR</Button
+            }}><ScanLine size={16} />{translate($locale, 'Scan signed QR')}</Button
           ><Button variant="secondary" onclick={openPsbtImport}
-            ><FileUp size={16} />Import signed PSBT</Button
+            ><FileUp size={16} />{translate($locale, 'Import signed PSBT')}</Button
           ><Button
             variant="secondary"
             loading={savingPsbt}
-            loadingLabel="Saving PSBT…"
-            onclick={saveExternalPsbt}><Download size={16} />Save unsigned PSBT</Button
+            loadingLabel={translate($locale, 'Saving PSBT…')}
+            onclick={saveExternalPsbt}
+            ><Download size={16} />{translate($locale, 'Save unsigned PSBT')}</Button
           >
         </div>
         {#if importError}<div class="hardware-inline-error signing-transport-error" role="alert">
             <AlertTriangle size={18} /><span
-              ><strong>Signed PSBT rejected</strong><small>{importError}</small></span
+              ><strong>{translate($locale, 'Signed PSBT rejected')}</strong><small
+                >{importError}</small
+              ></span
             >
           </div>{:else if credentialError}<p class="form-error" role="alert">
             {credentialError}
           </p>{/if}
       {/if}
       <Button variant="ghost" size="large" class="full sign-back-action" onclick={() => (step = 2)}
-        >Back to review</Button
+        >{translate($locale, 'Back to review')}</Button
       >
       <Button
         variant="ghost-danger"
@@ -1116,7 +1193,7 @@
         onclick={() => {
           cancelError = '';
           cancelOpen = true;
-        }}><X size={15} />Cancel payment</Button
+        }}><X size={15} />{translate($locale, 'Cancel payment')}</Button
       >
     </section>
   {:else if step === 3 && proposal}
@@ -1128,52 +1205,63 @@
       }}
     >
       <span class="sign-icon"><LockKeyhole size={25} /></span>
-      <h2>Authorize payment</h2>
-      <p>Enter your wallet passphrase to unlock the signing keys. It never leaves this device.</p>
-      <section class="signed-transaction-review" aria-label="Transaction authorization review">
+      <h2>{translate($locale, 'Authorize payment')}</h2>
+      <p>
+        {translate(
+          $locale,
+          'Enter your wallet passphrase to unlock the signing keys. It never leaves this device.'
+        )}
+      </p>
+      <section
+        class="signed-transaction-review"
+        aria-label={translate($locale, 'Transaction authorization review')}
+      >
         <dl class="details-list">
           <div>
-            <dt>To</dt>
+            <dt>{translate($locale, 'To')}</dt>
             <dd>
               <button
                 type="button"
                 class="address-review-trigger mono"
-                aria-label="View complete recipient address"
+                aria-label={translate($locale, 'View complete recipient address')}
                 onclick={() => (addressOpen = true)}>{compactAddress(proposal.recipient)}</button
               >
             </dd>
           </div>
           <div>
-            <dt>Label</dt>
+            <dt>{translate($locale, 'Label')}</dt>
             <dd>{proposal.label}</dd>
           </div>
           <div>
-            <dt>Amount</dt>
+            <dt>{translate($locale, 'Amount')}</dt>
             <dd><Amount value={proposal.amount} /></dd>
           </div>
           <div>
-            <dt>Network</dt>
+            <dt>{translate($locale, 'Network')}</dt>
             <dd>{proposal.network}</dd>
           </div>
           <div>
-            <dt>Network fee</dt>
+            <dt>{translate($locale, 'Network fee')}</dt>
             <dd><Amount value={proposal.fee} /></dd>
           </div>
           <div class="total">
-            <dt>Total</dt>
+            <dt>{translate($locale, 'Total')}</dt>
             <dd><Amount value={proposal.total} /></dd>
           </div>
         </dl>
         <TransactionReviewDetails {proposal} onChangeAddress={() => (changeAddressOpen = true)} />
       </section>
       <PasswordField
-        label="Wallet passphrase"
+        label={translate($locale, 'Wallet passphrase')}
         bind:value={passphrase}
         oninput={() => (credentialError = '')}
-        placeholder="Enter wallet passphrase"
+        placeholder={translate($locale, 'Enter wallet passphrase')}
         autocomplete="current-password"
         error={credentialError}
-        hint="The BIP39 passphrase kept with this software wallet’s recovery words."
+        hint={translate(
+          $locale,
+          'The BIP39 passphrase kept with this software wallet’s recovery words.'
+        )}
       />
       <Button
         type="submit"
@@ -1181,12 +1269,13 @@
         class="full"
         disabled={!passphrase}
         loading={broadcasting}
-        loadingLabel="Signing & broadcasting…"
-        >Sign & broadcast {formatAmount(Number(proposal.amount), $denomination)}
+        loadingLabel={translate($locale, 'Signing & broadcasting…')}
+        >{translate($locale, 'Sign & broadcast')}
+        {formatAmount(Number(proposal.amount), $denomination)}
         {amountUnit($denomination)}</Button
       >
       <Button variant="ghost" size="large" class="full sign-back-action" onclick={() => (step = 2)}
-        >Back to review</Button
+        >{translate($locale, 'Back to review')}</Button
       >
       <Button
         variant="ghost-danger"
@@ -1196,29 +1285,45 @@
         onclick={() => {
           cancelError = '';
           cancelOpen = true;
-        }}><X size={15} />Cancel payment</Button
+        }}><X size={15} />{translate($locale, 'Cancel payment')}</Button
       >
     </form>
   {:else}
     <section class="empty-state success-state">
       <span class="empty-icon success"><Check size={25} /></span>
       <h2>
-        {accelerationMethod === 'cpfp'
-          ? 'Fee acceleration broadcast'
-          : accelerationMethod === 'rbf'
-            ? 'Replacement broadcast'
-            : 'Payment sent'}
+        {translate(
+          $locale,
+          accelerationMethod === 'cpfp'
+            ? 'Fee acceleration broadcast'
+            : accelerationMethod === 'rbf'
+              ? 'Replacement broadcast'
+              : 'Payment sent'
+        )}
       </h2>
       <p>
-        {#if accelerationMethod === 'cpfp'}A fee-only child transaction with a <Amount
-            value={Number(proposal?.fee ?? 0)}
-          /> network fee was broadcast.{:else if accelerationMethod === 'rbf'}The <Amount
+        {#if accelerationMethod === 'cpfp'}{translate(
+            $locale,
+            'A fee-only child transaction with a'
+          )}
+          <Amount value={Number(proposal?.fee ?? 0)} />
+          {translate(
+            $locale,
+            'network fee was broadcast.'
+          )}{:else if accelerationMethod === 'rbf'}{translate($locale, 'The')}
+          <Amount value={sentAmount} />
+          {translate($locale, 'payment was rebroadcast with a higher fee.')}{:else}<Amount
             value={sentAmount}
-          /> payment was rebroadcast with a higher fee.{:else}<Amount value={sentAmount} /> was broadcast
-          to the Bitcoin network.{/if}{#if balanceSyncPending}
-          Balance refresh is pending; sync when the node is available.{/if}
+          />
+          {translate(
+            $locale,
+            'was broadcast\n          to the Bitcoin network.'
+          )}{/if}{#if balanceSyncPending}
+          {translate($locale, 'Balance refresh is pending; sync when the node is available.')}{/if}
       </p>
-      <div class="txid-box"><span>Transaction ID</span><code>{txid}</code></div>
+      <div class="txid-box">
+        <span>{translate($locale, 'Transaction ID')}</span><code>{txid}</code>
+      </div>
       <Button
         onclick={() => {
           step = 1;
@@ -1231,22 +1336,28 @@
           sentAmount = 0;
           balanceSyncPending = false;
           accelerationMethod = null;
-        }}>Make another payment</Button
-      ><a href="/activity">View transaction</a>
+        }}>{translate($locale, 'Make another payment')}</Button
+      ><a href="/activity">{translate($locale, 'View transaction')}</a>
     </section>
   {/if}
 </div>
 
 <Modal
   open={deviceOpen}
-  title="Sign with hardware"
-  description="Use the same passphrase-protected hardware wallet whose fingerprint you imported."
+  title={translate($locale, 'Sign with hardware')}
+  description={translate(
+    $locale,
+    'Use the same passphrase-protected hardware wallet whose fingerprint you imported.'
+  )}
   onclose={closeHardwareScan}
-  >{#if proposal}<section class="hardware-review" aria-label="Authoritative transaction details">
-      <strong>Transaction to verify</strong>
+  >{#if proposal}<section
+      class="hardware-review"
+      aria-label={translate($locale, 'Authoritative transaction details')}
+    >
+      <strong>{translate($locale, 'Transaction to verify')}</strong>
       <dl class="hardware-review-primary">
         <div>
-          <dt>Recipient</dt>
+          <dt>{translate($locale, 'Recipient')}</dt>
           <dd>
             <button
               type="button"
@@ -1257,29 +1368,34 @@
           </dd>
         </div>
         <div>
-          <dt>Label</dt>
+          <dt>{translate($locale, 'Label')}</dt>
           <dd>{proposal.label}</dd>
         </div>
         <div>
-          <dt>Amount</dt>
+          <dt>{translate($locale, 'Amount')}</dt>
           <dd><Amount value={proposal.amount} /></dd>
         </div>
         <div>
-          <dt>Network</dt>
+          <dt>{translate($locale, 'Network')}</dt>
           <dd>{proposal.network}</dd>
         </div>
         <div>
-          <dt>Network fee</dt>
+          <dt>{translate($locale, 'Network fee')}</dt>
           <dd><Amount value={proposal.fee} /></dd>
         </div>
         <div>
-          <dt>Total</dt>
+          <dt>{translate($locale, 'Total')}</dt>
           <dd><Amount value={proposal.total} /></dd>
         </div>
       </dl>
       {#if hardwareTestnetAddressDevice}<p class="verification-network-note">
-          {hardwareTestnetAddressDevice} shows the Regtest output with a <code>tb1</code> prefix. Rust
-          supplied this alias only after proving it decodes to the identical Bitcoin output script.
+          {hardwareTestnetAddressDevice}
+          {translate($locale, 'shows the Regtest output with a')}
+          <code>{translate($locale, 'tb1')}</code>
+          {translate(
+            $locale,
+            'prefix. Rust\n          supplied this alias only after proving it decodes to the identical Bitcoin output script.'
+          )}
         </p>{/if}<TransactionReviewDetails
         {proposal}
         compact
@@ -1287,80 +1403,104 @@
         onChangeAddress={() => (hardwareChangeAddressOpen = true)}
       />
     </section>{/if}{#if broadcasting}<HardwareActionPrompt
-      title={hardwareAction === 'sign'
-        ? 'Check your hardware device'
-        : 'Looking for hardware devices'}
-      detail={hardwareAction === 'sign'
-        ? 'Review the recipient, amount, fee, and change, then approve the transaction on the device.'
-        : 'Keep the signer connected. Follow any unlock instructions shown by Groot or the device.'}
-      label={hardwareAction === 'sign'
-        ? 'Waiting for hardware signature'
-        : 'Hardware device scan in progress'}
+      title={translate(
+        $locale,
+        hardwareAction === 'sign' ? 'Check your hardware device' : 'Looking for hardware devices'
+      )}
+      detail={translate(
+        $locale,
+        hardwareAction === 'sign'
+          ? 'Review the recipient, amount, fee, and change, then approve the transaction on the device.'
+          : 'Keep the signer connected. Follow any unlock instructions shown by Groot or the device.'
+      )}
+      label={translate(
+        $locale,
+        hardwareAction === 'sign'
+          ? 'Waiting for hardware signature'
+          : 'Hardware device scan in progress'
+      )}
     />{:else}<HardwareDeviceList
       {devices}
       savedSigners={externalWallet ? [externalWallet.signer] : []}
-      emptyMessage="Connect the signer and scan again. If another wallet app is open, quit it so Groot can use USB."
+      emptyMessage={translate(
+        $locale,
+        'Connect the signer and scan again. If another wallet app is open, quit it so Groot can use USB.'
+      )}
       onselect={signHardware}
       onrescan={scanHardware}
       showRescan
     />{/if}{#if deviceError}<div class="hardware-inline-error" role="alert">
       <AlertTriangle size={18} /><span
-        ><strong>Hardware signing failed</strong><small>{deviceError}</small></span
-      ><Button variant="secondary" size="small" onclick={scanHardware}>Rescan</Button>
+        ><strong>{translate($locale, 'Hardware signing failed')}</strong><small>{deviceError}</small
+        ></span
+      ><Button variant="secondary" size="small" onclick={scanHardware}
+        >{translate($locale, 'Rescan')}</Button
+      >
     </div>{/if}</Modal
 >
 <Modal
   open={importOpen}
-  title="Import signed PSBT"
-  description="Only a valid signature from this wallet’s exact fingerprint is accepted."
+  title={translate($locale, 'Import signed PSBT')}
+  description={translate(
+    $locale,
+    'Only a valid signature from this wallet’s exact fingerprint is accepted.'
+  )}
   onclose={closePsbtImport}
   ><label class="file-action"
-    ><FileUp size={16} />Choose signed PSBT<input
-      aria-label="Choose signed PSBT file"
+    ><FileUp size={16} />{translate($locale, 'Choose signed PSBT')}<input
+      aria-label={translate($locale, 'Choose signed PSBT file')}
       type="file"
       accept=".psbt,text/plain"
       onchange={loadSignedFile}
     /></label
   ><label class="field"
-    ><span>Signed PSBT</span><textarea
+    ><span>{translate($locale, 'Signed PSBT')}</span><textarea
       rows="6"
       bind:value={imported}
       oninput={() => {
         importError = '';
         credentialError = '';
       }}
-      placeholder="cHNidP8…"></textarea></label
+      placeholder={translate($locale, 'cHNidP8…')}></textarea></label
   >{#if importError}<div class="hardware-inline-error" role="alert">
       <AlertTriangle size={18} /><span
-        ><strong>Signed PSBT rejected</strong><small>{importError}</small></span
+        ><strong>{translate($locale, 'Signed PSBT rejected')}</strong><small>{importError}</small
+        ></span
       >
     </div>{/if}
   <div class="modal-footer">
-    <Button variant="secondary" disabled={broadcasting} onclick={closePsbtImport}>Cancel</Button
+    <Button variant="secondary" disabled={broadcasting} onclick={closePsbtImport}
+      >{translate($locale, 'Cancel')}</Button
     ><Button
       disabled={!imported.trim()}
       loading={broadcasting}
-      loadingLabel="Validating…"
-      onclick={importSigned}>Validate signature</Button
+      loadingLabel={translate($locale, 'Validating…')}
+      onclick={importSigned}>{translate($locale, 'Validate signature')}</Button
     >
   </div></Modal
 >
 <Modal
   open={qrOpen}
-  title="Unsigned PSBT"
-  description="Scan with an offline signer. No private key data is encoded."
+  title={translate($locale, 'Unsigned PSBT')}
+  description={translate($locale, 'Scan with an offline signer. No private key data is encoded.')}
   onclose={() => (qrOpen = false)}><AnimatedUrQr frames={urFrames} /></Modal
 >
 <Modal
   open={qrScanOpen}
-  title="Scan signed PSBT"
-  description="Groot accepts only crypto-psbt UR frames and verifies the exact proposal before importing."
+  title={translate($locale, 'Scan signed PSBT')}
+  description={translate(
+    $locale,
+    'Groot accepts only crypto-psbt UR frames and verifies the exact proposal before importing.'
+  )}
   onclose={() => (qrScanOpen = false)}><UrQrScanner onframe={receiveUrFrame} /></Modal
 >
 <Modal
   open={discardSignatureOpen}
-  title="Discard local signature?"
-  description="Keep this transaction and remove its hardware signature from Groot."
+  title={translate($locale, 'Discard local signature?')}
+  description={translate(
+    $locale,
+    'Keep this transaction and remove its hardware signature from Groot.'
+  )}
   onclose={() => {
     if (!broadcasting) {
       discardSignatureOpen = false;
@@ -1368,18 +1508,21 @@
     }
   }}
   >{#if proposal && externalProposal}<div class="warning-box danger">
-      <strong>This does not revoke the signature.</strong><span
-        >Any PSBT copy already exported or shared may still contain it and remain broadcastable.</span
+      <strong>{translate($locale, 'This does not revoke the signature.')}</strong><span
+        >{translate(
+          $locale,
+          'Any PSBT copy already exported or shared may still contain it and remain broadcastable.'
+        )}</span
       >
     </div>
     <dl class="details-list cancel-proposal-details">
       <div>
-        <dt>Payment</dt>
+        <dt>{translate($locale, 'Payment')}</dt>
         <dd>{proposal.label}</dd>
       </div>
       <div>
-        <dt>Signature progress</dt>
-        <dd>{externalProposal.signed} of 1 → 0 of 1</dd>
+        <dt>{translate($locale, 'Signature progress')}</dt>
+        <dd>{externalProposal.signed} {translate($locale, 'of 1 → 0 of 1')}</dd>
       </div>
     </dl>
     {#if discardSignatureError}<p class="form-error" role="alert">
@@ -1392,19 +1535,20 @@
         onclick={() => {
           discardSignatureOpen = false;
           discardSignatureError = '';
-        }}>Keep signature</Button
+        }}>{translate($locale, 'Keep signature')}</Button
       ><Button
         variant="danger"
         loading={broadcasting}
-        loadingLabel="Discarding signature…"
-        onclick={confirmDiscardExternalSignature}>Discard local signature</Button
+        loadingLabel={translate($locale, 'Discarding signature…')}
+        onclick={confirmDiscardExternalSignature}
+        >{translate($locale, 'Discard local signature')}</Button
       >
     </div>{/if}</Modal
 >
 <Modal
   open={cancelOpen}
-  title="Cancel this payment?"
-  description="Review what will be discarded before continuing."
+  title={translate($locale, 'Cancel this payment?')}
+  description={translate($locale, 'Review what will be discarded before continuing.')}
   onclose={() => {
     if (!broadcasting) {
       cancelOpen = false;
@@ -1412,20 +1556,26 @@
     }
   }}
   >{#if proposal}<div class="warning-box">
-      <strong>This cannot be undone.</strong> You will need to prepare and sign this payment again.
+      <strong>{translate($locale, 'This cannot be undone.')}</strong>
+      {translate($locale, 'You will need to prepare and sign this payment again.')}
     </div>
     <dl class="details-list cancel-proposal-details">
       <div>
-        <dt>Payment</dt>
+        <dt>{translate($locale, 'Payment')}</dt>
         <dd>{proposal.label}</dd>
       </div>
       <div>
-        <dt>Amount</dt>
+        <dt>{translate($locale, 'Amount')}</dt>
         <dd><Amount value={proposal.amount} /></dd>
       </div>
       <div>
-        <dt>Signatures lost</dt>
-        <dd>{externalProposal?.signed ?? 0} of {externalProposal?.required ?? 1} collected</dd>
+        <dt>{translate($locale, 'Signatures lost')}</dt>
+        <dd>
+          {translate($locale, '{signed} of {required} collected', {
+            signed: externalProposal?.signed ?? 0,
+            required: externalProposal?.required ?? 1
+          })}
+        </dd>
       </div>
     </dl>
     {#if cancelError}<p class="form-error" role="alert">{cancelError}</p>{/if}
@@ -1436,44 +1586,50 @@
         onclick={() => {
           cancelOpen = false;
           cancelError = '';
-        }}>Keep payment</Button
+        }}>{translate($locale, 'Keep payment')}</Button
       ><Button
         variant="danger"
         loading={broadcasting}
-        loadingLabel="Canceling payment…"
-        onclick={confirmCancelProposal}>Cancel payment</Button
+        loadingLabel={translate($locale, 'Canceling payment…')}
+        onclick={confirmCancelProposal}>{translate($locale, 'Cancel payment')}</Button
       >
     </div>{/if}</Modal
 >
 <RecipientAddressModal
   open={addressOpen}
   address={proposal?.recipient ?? ''}
-  label={proposal?.label ?? ''}
+  label={translate($locale, proposal?.label ?? '')}
   onclose={() => (addressOpen = false)}
 />
 <RecipientAddressModal
   open={changeAddressOpen}
   address={proposal?.changeAddresses[0] ?? ''}
-  label="Wallet change"
-  title="Change address"
-  description="This output was verified by the Rust wallet as controlled by this wallet."
-  detail="Internal wallet output · not the recipient"
+  label={translate($locale, 'Wallet change')}
+  title={translate($locale, 'Change address')}
+  description={translate(
+    $locale,
+    'This output was verified by the Rust wallet as controlled by this wallet.'
+  )}
+  detail={translate($locale, 'Internal wallet output · not the recipient')}
   onclose={() => (changeAddressOpen = false)}
 />
 <RecipientAddressModal
   open={hardwareAddressOpen}
   address={hardwareRecipient}
-  label={proposal?.label ?? ''}
-  title="Address shown on hardware"
-  description="Compare this exact encoding with the hardware device."
+  label={translate($locale, proposal?.label ?? '')}
+  title={translate($locale, 'Address shown on hardware')}
+  description={translate($locale, 'Compare this exact encoding with the hardware device.')}
   onclose={() => (hardwareAddressOpen = false)}
 />
 <RecipientAddressModal
   open={hardwareChangeAddressOpen}
   address={hardwareChangeAddress}
-  label="Wallet change"
-  title="Change shown on hardware"
-  description="Compare this exact wallet-controlled output with the hardware device."
-  detail="Internal wallet output · not the recipient"
+  label={translate($locale, 'Wallet change')}
+  title={translate($locale, 'Change shown on hardware')}
+  description={translate(
+    $locale,
+    'Compare this exact wallet-controlled output with the hardware device.'
+  )}
+  detail={translate($locale, 'Internal wallet output · not the recipient')}
   onclose={() => (hardwareChangeAddressOpen = false)}
 />

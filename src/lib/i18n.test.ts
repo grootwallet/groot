@@ -7,6 +7,7 @@ import {
   readPersistedLocale,
   t
 } from './i18n';
+import { copyCatalog, localizedError, translate } from './i18n-catalog';
 
 describe('locale preferences', () => {
   it('accepts supported regional locales and rejects unsupported ones', () => {
@@ -45,5 +46,32 @@ describe('locale preferences', () => {
     expect(t('theme', 'fr')).toBe('Thème');
     expect(t('light', 'es')).toBe('Claro');
     expect(t('dark', 'es')).toBe('Oscuro');
+  });
+
+  it('translates catalog copy and interpolates values without translating user data', () => {
+    expect(translate('fr', 'Dismiss')).toBe('Fermer');
+    expect(translate('es', 'Try again')).toBe('Intentar de nuevo');
+    expect(translate('en', 'Loading…')).toBe('Loading…');
+    expect(translate('es', '{blocks} blocks · full block history', { blocks: '149.669' })).toBe(
+      '149.669 bloques · historial completo de bloques'
+    );
+    expect(translate('fr', '{signerName} matches this wallet.', { signerName: 'Mon Ledger' })).toBe(
+      'Mon Ledger correspond à ce portefeuille.'
+    );
+  });
+
+  it('does not leak English native errors into non-English UI', () => {
+    expect(localizedError({ code: 'invalid_credential' }, 'es')).toBe('Credencial incorrecta.');
+    expect(localizedError(new Error('Uncatalogued native detail'), 'fr')).toBe(
+      'Une erreur est survenue. Réessayez.'
+    );
+  });
+
+  it('provides non-empty French and Spanish copy for every catalog entry', () => {
+    expect(Object.keys(copyCatalog).length).toBeGreaterThan(800);
+    for (const translation of Object.values(copyCatalog)) {
+      expect(translation.fr.trim()).not.toBe('');
+      expect(translation.es.trim()).not.toBe('');
+    }
   });
 });

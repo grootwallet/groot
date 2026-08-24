@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { locale } from '$lib/i18n';
+  import { translate } from '$lib/i18n-catalog';
   import QRCode from 'qrcode';
   import { onDestroy } from 'svelte';
 
@@ -45,11 +47,17 @@
 <div class="ur-qr" aria-live="polite">
   {#if image}<img
       src={image}
-      alt="Animated crypto-psbt QR frame {index + 1} of {frames.length}"
-    />{:else}<div class="placeholder">Preparing QR…</div>{/if}
+      alt={translate($locale, 'Animated crypto-psbt QR frame {current} of {total}', {
+        current: index + 1,
+        total: frames.length
+      })}
+    />{:else}<div class="placeholder">{translate($locale, 'Preparing QR…')}</div>{/if}
   <small
-    >{frames.length > 1 ? `Frame ${index + 1} of ${frames.length}` : 'Single frame'} · keep the scanner
-    steady</small
+    >{translate(
+      $locale,
+      frames.length > 1 ? `Frame ${index + 1} of ${frames.length}` : 'Single frame'
+    )}
+    {translate($locale, '· keep the scanner\n    steady')}</small
   >
 </div>
 

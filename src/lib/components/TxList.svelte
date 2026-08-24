@@ -7,6 +7,7 @@
   import { discreetMode } from '$lib/privacy';
   import { fly } from 'svelte/transition';
   import WalletSkeleton from './WalletSkeleton.svelte';
+  import { translate } from '$lib/i18n-catalog';
   let {
     items,
     loading = false,
@@ -41,12 +42,15 @@
             />{/if}
         </span>
         <span class="tx-main"
-          ><strong>{$discreetMode ? 'Label hidden' : tx.label}</strong><small
-            ><LocalTimestamp value={tx.date} />{' · '}{tx.status === 'pending'
-              ? t('unconfirmed', $locale)
-              : tx.status === 'replaced'
-                ? t('replaced', $locale)
-                : formatConfirmationCount(tx.confirmations, $locale)}</small
+          ><strong>{$discreetMode ? translate($locale, 'Label hidden') : tx.label}</strong><small
+            ><LocalTimestamp value={tx.date} />{' · '}{translate(
+              $locale,
+              tx.status === 'pending'
+                ? t('unconfirmed', $locale)
+                : tx.status === 'replaced'
+                  ? t('replaced', $locale)
+                  : formatConfirmationCount(tx.confirmations, $locale)
+            )}</small
           ></span
         >
         <span
@@ -62,7 +66,7 @@
             >{tx.status === 'replaced'
               ? t('notCounted', $locale)
               : tx.kind === 'self_spend'
-                ? 'Network fee'
+                ? translate($locale, 'Network fee')
                 : tx.status === 'pending'
                   ? t('awaitingConfirmation', $locale)
                   : t('confirmed', $locale)}</small

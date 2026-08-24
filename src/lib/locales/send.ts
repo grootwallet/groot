@@ -1,0 +1,315 @@
+import type { CatalogSection } from './types';
+
+export const sendCopy = {
+  'Automatic selection': { fr: 'Sélection automatique', es: 'Selección automática' },
+  '{source} signer': { fr: 'Signataire {source}', es: 'Firmante {source}' },
+  'Manual · {count} coin': { fr: 'Manuel · {count} pièce', es: 'Manual · {count} moneda' },
+  'Manual · {count} coins': { fr: 'Manuel · {count} pièces', es: 'Manual · {count} monedas' },
+  '{amount} {unit} available': {
+    fr: '{amount} {unit} disponibles',
+    es: '{amount} {unit} disponibles'
+  },
+  '{strategy} · Frozen coins stay untouched': {
+    fr: '{strategy} · les pièces gelées restent intactes',
+    es: '{strategy} · las monedas congeladas no se modifican'
+  },
+  '{count} more signature required': {
+    fr: 'Encore {count} signature requise',
+    es: 'Se necesita {count} firma más'
+  },
+  '{count} more signatures required': {
+    fr: 'Encore {count} signatures requises',
+    es: 'Se necesitan {count} firmas más'
+  },
+  'External hardware signer': { fr: 'Signataire matériel externe', es: 'Firmante físico externo' },
+  'Groot app': { fr: 'Application Groot', es: 'Aplicación Groot' },
+  'Software signer · This device': {
+    fr: 'Signataire logiciel · cet appareil',
+    es: 'Firmante de software · este dispositivo'
+  },
+  Economy: { fr: 'Économie', es: 'Económica' },
+  Standard: { fr: 'Standard', es: 'Estándar' },
+  Priority: { fr: 'Priorité', es: 'Prioritaria' },
+  'The signed transaction was saved to the selected file.': {
+    fr: 'La transaction signée a été enregistrée dans le fichier sélectionné.',
+    es: 'La transacción firmada se guardó en el archivo seleccionado.'
+  },
+  'The unsigned transaction was saved to the selected file.': {
+    fr: 'La transaction non signée a été enregistrée dans le fichier sélectionné.',
+    es: 'La transacción sin firmar se guardó en el archivo seleccionado.'
+  },
+  'Signed PSBT saved': { fr: 'PSBT signée enregistrée', es: 'PSBT firmada guardada' },
+  '{signed} of {required} collected': {
+    fr: '{signed} sur {required} collectées',
+    es: '{signed} de {required} recopiladas'
+  },
+  'A fee-only child transaction with a': {
+    fr: 'Une transaction enfant composée uniquement de frais avec un',
+    es: 'Una transacción hija solo de comisión con un'
+  },
+  address: { fr: 'adresse', es: 'dirección' },
+  Amount: { fr: 'Montant', es: 'Importe' },
+  'Any PSBT copy already exported or shared may still contain it and remain broadcastable.': {
+    fr: 'Toute copie de la PSBT déjà exportée ou partagée peut encore la contenir et rester diffusable.',
+    es: 'Cualquier copia de la PSBT ya exportada o compartida puede seguir conteniéndola y ser difundible.'
+  },
+  'Any PSBT copy already exported or shared may still contain it and can remain broadcastable if it has enough signatures.':
+    {
+      fr: 'Toute copie de la PSBT déjà exportée ou partagée peut encore la contenir et rester diffusable si elle possède assez de signatures.',
+      es: 'Cualquier copia de la PSBT ya exportada o compartida puede seguir conteniéndola y ser difundible si tiene suficientes firmas.'
+    },
+  'Authorize payment': { fr: 'Autoriser le paiement', es: 'Autorizar pago' },
+  'Automatic strategy': { fr: 'Stratégie automatique', es: 'Estrategia automática' },
+  'Available:': { fr: 'Disponible :', es: 'Disponible:' },
+  'Back to review': { fr: 'Retour à la vérification', es: 'Volver a la revisión' },
+  'Balance refresh is pending; sync when the node is available.': {
+    fr: 'L’actualisation du solde est en attente ; synchronisez lorsque le nœud est disponible.',
+    es: 'La actualización del saldo está pendiente; sincroniza cuando el nodo esté disponible.'
+  },
+  'Bitcoin address': { fr: 'Adresse Bitcoin', es: 'Dirección de Bitcoin' },
+  'Bitcoin Core has no usable estimate. Groot will not invent one; choose the sat/vB rate you want to review.':
+    {
+      fr: 'Bitcoin Core ne fournit aucune estimation utilisable. Groot n’en inventera pas ; choisissez le taux en sat/vB que vous souhaitez vérifier.',
+      es: 'Bitcoin Core no tiene una estimación utilizable. Groot no inventará una; elige la tasa en sat/vB que quieras revisar.'
+    },
+  'Bitcoin Core has no usable estimate. Groot will not invent one; choose the sat/vB rate every signer will review.':
+    {
+      fr: 'Bitcoin Core ne fournit aucune estimation utilisable. Groot n’en inventera pas ; choisissez le taux en sat/vB que chaque signataire vérifiera.',
+      es: 'Bitcoin Core no tiene una estimación utilizable. Groot no inventará una; elige la tasa en sat/vB que revisará cada firmante.'
+    },
+  'Bitcoin transactions cannot be reversed. Verify the address and amount before signing.': {
+    fr: 'Les transactions Bitcoin sont irréversibles. Vérifiez l’adresse et le montant avant de signer.',
+    es: 'Las transacciones de Bitcoin no se pueden revertir. Verifica la dirección y el importe antes de firmar.'
+  },
+  'Cancel payment': { fr: 'Annuler le paiement', es: 'Cancelar pago' },
+  'Choose signed PSBT': { fr: 'Choisir une PSBT signée', es: 'Elegir PSBT firmada' },
+  'Choose PSBT file': { fr: 'Choisir un fichier PSBT', es: 'Elegir archivo PSBT' },
+  'Coin selection': { fr: 'Sélection des pièces', es: 'Selección de monedas' },
+  collected: { fr: 'recueillies', es: 'recopiladas' },
+  'Coldcard must know this wallet policy': {
+    fr: 'Coldcard doit connaître cette politique de portefeuille',
+    es: 'Coldcard debe conocer esta política de cartera'
+  },
+  'Connect an HWI-compatible device, or use signed PSBT import.': {
+    fr: 'Connectez un appareil compatible HWI ou importez une PSBT signée.',
+    es: 'Conecta un dispositivo compatible con HWI o importa una PSBT firmada.'
+  },
+  'Continue to amount': { fr: 'Continuer vers le montant', es: 'Continuar al importe' },
+  'Continue to sign': { fr: 'Continuer vers la signature', es: 'Continuar a la firma' },
+  'Copy PSBT': { fr: 'Copier la PSBT', es: 'Copiar PSBT' },
+  'Custom fee rate': { fr: 'Taux de frais personnalisé', es: 'Tasa de comisión personalizada' },
+  'Device still showing the wallet policy?': {
+    fr: 'L’appareil affiche toujours la politique du portefeuille ?',
+    es: '¿El dispositivo sigue mostrando la política de la cartera?'
+  },
+  'Discard local signature': { fr: 'Écarter la signature locale', es: 'Descartar firma local' },
+  'Enter a custom fee rate': {
+    fr: 'Saisissez un taux de frais personnalisé',
+    es: 'Introduce una tasa de comisión personalizada'
+  },
+  'Enter a valid': { fr: 'Saisissez une valeur valide de', es: 'Introduce un valor válido de' },
+  'Enter this wallet’s Groot app PIN to broadcast this exact signed transaction.': {
+    fr: 'Saisissez le code PIN Groot de ce portefeuille pour diffuser cette transaction signée exacte.',
+    es: 'Introduce el PIN de Groot de esta cartera para difundir esta transacción firmada exacta.'
+  },
+  'Enter your wallet passphrase to unlock the signing keys. It never leaves this device.': {
+    fr: 'Saisissez la phrase secrète du portefeuille pour déverrouiller les clés de signature. Elle ne quitte jamais cet appareil.',
+    es: 'Introduce la frase de contraseña de la cartera para desbloquear las claves de firma. Nunca sale de este dispositivo.'
+  },
+  'Enter the coordinator app PIN. Hardware signatures are already inside the PSBT.': {
+    fr: 'Saisissez le code PIN de l’application du coordinateur. Les signatures matérielles sont déjà dans la PSBT.',
+    es: 'Introduce el PIN de la aplicación del coordinador. Las firmas de los dispositivos ya están dentro de la PSBT.'
+  },
+  'Estimated input weight:': {
+    fr: 'Poids estimé des entrées :',
+    es: 'Peso estimado de las entradas:'
+  },
+  'Exact strategy comparison': {
+    fr: 'Comparaison exacte des stratégies',
+    es: 'Comparación exacta de estrategias'
+  },
+  'FEE ACCELERATION': { fr: 'ACCÉLÉRATION DES FRAIS', es: 'ACELERACIÓN DE COMISIÓN' },
+  'Finalize & broadcast': { fr: 'Finaliser et diffuser', es: 'Finalizar y difundir' },
+  'Fund the payment': { fr: 'Financer le paiement', es: 'Financiar el pago' },
+  'funding coin': { fr: 'pièce de financement', es: 'moneda de financiación' },
+  'Funding labels': { fr: 'Libellés de financement', es: 'Etiquetas de financiación' },
+  'Funding provenance hidden in discreet mode.': {
+    fr: 'Provenance du financement masquée en mode discret.',
+    es: 'Procedencia de la financiación oculta en modo discreto.'
+  },
+  'Hardware signing failed': {
+    fr: 'Échec de la signature matérielle',
+    es: 'Error de firma del dispositivo'
+  },
+  'If it reports an unknown multisig wallet, import this public descriptor from Settings → Multisig Wallets → Import.':
+    {
+      fr: 'S’il signale un portefeuille multisignature inconnu, importez ce descripteur public depuis Réglages → Portefeuilles multisignatures → Importer.',
+      es: 'Si informa de una cartera multifirma desconocida, importa este descriptor público desde Ajustes → Carteras multifirma → Importar.'
+    },
+  'Import signed PSBT': { fr: 'Importer une PSBT signée', es: 'Importar PSBT firmada' },
+  'Input details': { fr: 'Détails des entrées', es: 'Detalles de las entradas' },
+  'Keep payment': { fr: 'Conserver le paiement', es: 'Conservar pago' },
+  'Keep signature': { fr: 'Conserver la signature', es: 'Conservar firma' },
+  'Keep signing': { fr: 'Continuer à signer', es: 'Seguir firmando' },
+  'Leave to overview': { fr: 'Quitter vers l’aperçu', es: 'Salir al resumen' },
+  'Make another payment': { fr: 'Effectuer un autre paiement', es: 'Hacer otro pago' },
+  Max: { fr: 'Max.', es: 'Máx.' },
+  Network: { fr: 'Réseau', es: 'Red' },
+  'network fee was broadcast.': {
+    fr: 'de frais réseau a été diffusée.',
+    es: 'de comisión de red se difundió.'
+  },
+  'network.': { fr: 'réseau.', es: 'red.' },
+  'of 1 → 0 of 1': { fr: 'sur 1 → 0 sur 1', es: 'de 1 → 0 de 1' },
+  'One existing group can fund this payment without linking these groups.': {
+    fr: 'Un groupe existant peut financer ce paiement sans relier ces groupes.',
+    es: 'Un grupo existente puede financiar este pago sin vincular estos grupos.'
+  },
+  Payment: { fr: 'Paiement', es: 'Pago' },
+  'Payment action failed': {
+    fr: 'Échec de l’action de paiement',
+    es: 'Error en la acción de pago'
+  },
+  'Payment could not be prepared': {
+    fr: 'Le paiement n’a pas pu être préparé',
+    es: 'No se pudo preparar el pago'
+  },
+  'Payment label': { fr: 'Libellé du paiement', es: 'Etiqueta del pago' },
+  'payment was rebroadcast with a higher fee.': {
+    fr: 'le paiement a été rediffusé avec des frais plus élevés.',
+    es: 'el pago se volvió a difundir con una comisión mayor.'
+  },
+  'prefix. Rust supplied this alias only after proving it decodes to the identical Bitcoin output script.':
+    {
+      fr: '. Rust n’a fourni cet alias qu’après avoir prouvé qu’il correspond au même script de sortie Bitcoin.',
+      es: '. Rust solo proporcionó este alias después de demostrar que corresponde al mismo script de salida de Bitcoin.'
+    },
+  'Privacy recommendation': {
+    fr: 'Recommandation de confidentialité',
+    es: 'Recomendación de privacidad'
+  },
+  'Ready to finalize': { fr: 'Prêt à finaliser', es: 'Listo para finalizar' },
+  Recipient: { fr: 'Destinataire', es: 'Destinatario' },
+  'Required · greater than 0 and at most 10,000 sat/vB': {
+    fr: 'Requis · supérieur à 0 et au maximum 10 000 sat/vB',
+    es: 'Obligatorio · mayor que 0 y como máximo 10.000 sat/vB'
+  },
+  Rescan: { fr: 'Rechercher à nouveau', es: 'Volver a buscar' },
+  'Return to the saved policy reference without interrupting this signing request.': {
+    fr: 'Revenez à la référence de politique enregistrée sans interrompre cette demande de signature.',
+    es: 'Vuelve a la referencia de política guardada sin interrumpir esta solicitud de firma.'
+  },
+  'Return to wallet': { fr: 'Retour au portefeuille', es: 'Volver a la cartera' },
+  'Review acceleration': { fr: 'Vérifier l’accélération', es: 'Revisar aceleración' },
+  'Review payment': { fr: 'Vérifier le paiement', es: 'Revisar pago' },
+  'Review signed transaction': {
+    fr: 'Vérifier la transaction signée',
+    es: 'Revisar transacción firmada'
+  },
+  'Save PSBT': { fr: 'Enregistrer la PSBT', es: 'Guardar PSBT' },
+  'Save signed PSBT': { fr: 'Enregistrer la PSBT signée', es: 'Guardar PSBT firmada' },
+  'Save unsigned PSBT': { fr: 'Enregistrer la PSBT non signée', es: 'Guardar PSBT sin firmar' },
+  'Save wallet policy': {
+    fr: 'Enregistrer la politique du portefeuille',
+    es: 'Guardar política de la cartera'
+  },
+  'Scan signed QR': { fr: 'Scanner le QR signé', es: 'Escanear QR firmado' },
+  'selected ·': { fr: 'sélectionnées ·', es: 'seleccionadas ·' },
+  SEND: { fr: 'ENVOYER', es: 'ENVIAR' },
+  'Send bitcoin': { fr: 'Envoyer du bitcoin', es: 'Enviar bitcoin' },
+  'Set the amount, then keep automatic selection or choose specific coins.': {
+    fr: 'Définissez le montant, puis conservez la sélection automatique ou choisissez des pièces précises.',
+    es: 'Establece el importe y mantén la selección automática o elige monedas concretas.'
+  },
+  'Show unsigned QR': { fr: 'Afficher le QR non signé', es: 'Mostrar QR sin firmar' },
+  'shows the Regtest output with a': {
+    fr: 'affiche la sortie Regtest avec un préfixe',
+    es: 'muestra la salida de Regtest con un prefijo'
+  },
+  'Sign & broadcast': { fr: 'Signer et diffuser', es: 'Firmar y difundir' },
+  'Sign on your hardware': { fr: 'Signer sur votre appareil', es: 'Firmar en tu dispositivo' },
+  'Sign with cable': { fr: 'Signer par câble', es: 'Firmar por cable' },
+  'Sign with device': { fr: 'Signer avec l’appareil', es: 'Firmar con el dispositivo' },
+  'Signature progress': { fr: 'Progression des signatures', es: 'Progreso de firmas' },
+  'Signature verified': { fr: 'Signature vérifiée', es: 'Firma verificada' },
+  'Signatures lost': { fr: 'Signatures perdues', es: 'Firmas perdidas' },
+  'Signatures saved': { fr: 'Signatures conservées', es: 'Firmas guardadas' },
+  'Signed PSBT': { fr: 'PSBT signée', es: 'PSBT firmada' },
+  Signer: { fr: 'Signataire', es: 'Firmante' },
+  'STEP 1': { fr: 'ÉTAPE 1', es: 'PASO 1' },
+  'STEP 2': { fr: 'ÉTAPE 2', es: 'PASO 2' },
+  'than the valid More private candidate. Lower fee is not better privacy.': {
+    fr: 'que l’option valide Plus privé. Des frais plus faibles n’offrent pas une meilleure confidentialité.',
+    es: 'que la opción válida Más privada. Una comisión menor no mejora la privacidad.'
+  },
+  The: { fr: 'Le', es: 'El' },
+  'The hardware signature is verified. Review the transaction once more before broadcasting.': {
+    fr: 'La signature matérielle est vérifiée. Vérifiez encore une fois la transaction avant de la diffuser.',
+    es: 'La firma del dispositivo está verificada. Revisa la transacción una vez más antes de difundirla.'
+  },
+  'The signed transaction was accepted by the': {
+    fr: 'La transaction signée a été acceptée par le',
+    es: 'La transacción firmada fue aceptada por la'
+  },
+  'This cannot be undone.': {
+    fr: 'Cette action est irréversible.',
+    es: 'Esto no se puede deshacer.'
+  },
+  'This device could not sign': {
+    fr: 'Cet appareil n’a pas pu signer',
+    es: 'Este dispositivo no pudo firmar'
+  },
+  'This does not revoke the signature.': {
+    fr: 'Cela ne révoque pas la signature.',
+    es: 'Esto no revoca la firma.'
+  },
+  'This permanent label helps you recognize the transaction later.': {
+    fr: 'Ce libellé permanent vous aide à reconnaître la transaction plus tard.',
+    es: 'Esta etiqueta permanente te ayuda a reconocer la transacción más adelante.'
+  },
+  'This permanent label helps every signer recognize the transaction.': {
+    fr: 'Ce libellé permanent aide chaque signataire à reconnaître la transaction.',
+    es: 'Esta etiqueta permanente ayuda a cada firmante a reconocer la transacción.'
+  },
+  To: { fr: 'À', es: 'A' },
+  Total: { fr: 'Total', es: 'Total' },
+  'Transaction to verify': { fr: 'Transaction à vérifier', es: 'Transacción para verificar' },
+  'Use automatic selection': {
+    fr: 'Utiliser la sélection automatique',
+    es: 'Usar selección automática'
+  },
+  'Use privacy-first selection': {
+    fr: 'Utiliser la sélection axée sur la confidentialité',
+    es: 'Usar selección orientada a la privacidad'
+  },
+  'Validate & merge': { fr: 'Valider et fusionner', es: 'Validar y combinar' },
+  'Validate signature': { fr: 'Valider la signature', es: 'Validar firma' },
+  'Verify the address, amount, and fee on the signer. Groot never receives its private key or hardware passphrase.':
+    {
+      fr: 'Vérifiez l’adresse, le montant et les frais sur le signataire. Groot ne reçoit jamais sa clé privée ni sa phrase secrète matérielle.',
+      es: 'Verifica la dirección, el importe y la comisión en el firmante. Groot nunca recibe su clave privada ni su frase de contraseña.'
+    },
+  'View policy reference': {
+    fr: 'Afficher la référence de politique',
+    es: 'Ver referencia de política'
+  },
+  'View transaction': { fr: 'Afficher la transaction', es: 'Ver transacción' },
+  'was broadcast to the Bitcoin network.': {
+    fr: 'a été diffusée sur le réseau Bitcoin.',
+    es: 'se difundió en la red Bitcoin.'
+  },
+  'What is this payment for?': { fr: 'À quoi sert ce paiement ?', es: '¿Para qué es este pago?' },
+  'You can return to signing without rebuilding the transaction or losing collected signatures.': {
+    fr: 'Vous pouvez reprendre la signature sans reconstruire la transaction ni perdre les signatures recueillies.',
+    es: 'Puedes volver a la firma sin reconstruir la transacción ni perder las firmas recopiladas.'
+  },
+  'You send': { fr: 'Vous envoyez', es: 'Envías' },
+  'You will need to prepare and sign this payment again.': {
+    fr: 'Vous devrez préparer et signer à nouveau ce paiement.',
+    es: 'Tendrás que preparar y firmar este pago de nuevo.'
+  },
+  'Your proposal will stay saved.': {
+    fr: 'Votre proposition restera enregistrée.',
+    es: 'Tu propuesta seguirá guardada.'
+  }
+} as const satisfies CatalogSection;

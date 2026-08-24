@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { translate } from '$lib/i18n-catalog';
   import { Blocks, Gauge, LockKeyhole, Network, Route, Server } from '@lucide/svelte';
   import { networkName, type SupportedNetwork } from '$lib/config';
   import { formatInteger, locale } from '$lib/i18n';
@@ -16,25 +17,34 @@
   let nodeReachable = $state<boolean | null>(null);
 
   const backendLabel = $derived(
-    nodeConfig?.backend.type === 'remote_core'
-      ? 'Trusted remote node'
-      : nodeConfig?.backend.type === 'local_core'
-        ? 'Local Bitcoin Core'
-        : 'Available after unlock'
+    translate(
+      $locale,
+      nodeConfig?.backend.type === 'remote_core'
+        ? 'Trusted remote node'
+        : nodeConfig?.backend.type === 'local_core'
+          ? 'Local Bitcoin Core'
+          : 'Available after unlock'
+    )
   );
   const transportLabel = $derived(
-    nodeConfig
-      ? nodeConfig.torProxy
-        ? 'Tor configured'
-        : 'Direct connection'
-      : 'Available after unlock'
+    translate(
+      $locale,
+      nodeConfig
+        ? nodeConfig.torProxy
+          ? 'Tor configured'
+          : 'Direct connection'
+        : 'Available after unlock'
+    )
   );
   const syncLabel = $derived(
-    syncSource?.type === 'compact_filters'
-      ? 'P2P compact filters'
-      : syncSource?.type === 'bitcoin_core'
-        ? 'Bitcoin Core RPC'
-        : 'Available after unlock'
+    translate(
+      $locale,
+      syncSource?.type === 'compact_filters'
+        ? 'P2P compact filters'
+        : syncSource?.type === 'bitcoin_core'
+          ? 'Bitcoin Core RPC'
+          : 'Available after unlock'
+    )
   );
 
   async function refresh() {
@@ -103,7 +113,7 @@
   class="network-status"
   class:open
   role="group"
-  aria-label="Network controls"
+  aria-label={translate($locale, 'Network controls')}
   onmouseenter={show}
   onmouseleave={() => (open = false)}
   onfocusin={show}
@@ -114,7 +124,7 @@
   <button
     type="button"
     class="network-trigger"
-    aria-label="{networkName(network)} network status"
+    aria-label={translate($locale, '{network} network status', { network: networkName(network) })}
     aria-expanded={open}
     aria-haspopup="dialog"
     onclick={activate}
@@ -123,63 +133,67 @@
     <span>{networkName(network)}</span>
   </button>
   {#if open}
-    <section class="network-popover" aria-label="Network status">
+    <section class="network-popover" aria-label={translate($locale, 'Network status')}>
       <header>
         <span><Network size={15} /></span>
         <div>
           <strong>{networkName(network)}</strong><small
             >{locked
-              ? 'Wallet locked'
+              ? translate($locale, 'Wallet locked')
               : nodeReachable === true
-                ? 'Node reachable'
+                ? translate($locale, 'Node reachable')
                 : nodeReachable === false
-                  ? 'Node unavailable'
-                  : 'Checking node…'}</small
+                  ? translate($locale, 'Node unavailable')
+                  : translate($locale, 'Checking node…')}</small
           >
         </div>
       </header>
       <dl>
         <div>
-          <dt><Gauge size={14} /><span>Priority fee</span></dt>
+          <dt><Gauge size={14} /><span>{translate($locale, 'Priority fee')}</span></dt>
           <dd>
             {priorityFee === null
               ? loading
-                ? 'Checking…'
-                : 'Unavailable'
-              : `${priorityFee} sat/vB`}
+                ? translate($locale, 'Checking…')
+                : translate($locale, 'Unavailable')
+              : translate($locale, '{rate} sat/vB', { rate: priorityFee })}
           </dd>
         </div>
         <div>
-          <dt><Blocks size={14} /><span>Core service tip</span></dt>
+          <dt><Blocks size={14} /><span>{translate($locale, 'Core service tip')}</span></dt>
           <dd>
             {nodeHeight === null
               ? locked
-                ? 'Unlock to check'
-                : 'Unavailable'
+                ? translate($locale, 'Unlock to check')
+                : translate($locale, 'Unavailable')
               : formatInteger(nodeHeight, $locale)}
           </dd>
         </div>
         <div>
-          <dt><Route size={14} /><span>Transport</span></dt>
+          <dt><Route size={14} /><span>{translate($locale, 'Transport')}</span></dt>
           <dd>{transportLabel}</dd>
         </div>
         <div>
-          <dt><Server size={14} /><span>Activity sync</span></dt>
+          <dt><Server size={14} /><span>{translate($locale, 'Activity sync')}</span></dt>
           <dd>{syncLabel}</dd>
         </div>
         <div>
-          <dt><Server size={14} /><span>Fee / broadcast</span></dt>
+          <dt><Server size={14} /><span>{translate($locale, 'Fee / broadcast')}</span></dt>
           <dd>{backendLabel}</dd>
         </div>
       </dl>
       {#if locked}<p>
-          <LockKeyhole size={13} />Node credentials remain sealed until a wallet is unlocked.
+          <LockKeyhole size={13} />{translate(
+            $locale,
+            'Node credentials remain sealed until a wallet is unlocked.'
+          )}
         </p>{/if}
       {#if !locked}<button
           type="button"
           class="network-refresh"
           disabled={loading}
-          onclick={() => refresh()}>{loading ? 'Checking…' : 'Check again'}</button
+          onclick={() => refresh()}
+          >{loading ? translate($locale, 'Checking…') : translate($locale, 'Check again')}</button
         >{/if}
     </section>
   {/if}

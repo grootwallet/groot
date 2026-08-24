@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { locale } from '$lib/i18n';
+  import { translate } from '$lib/i18n-catalog';
   import { ArrowUp, Copy, ExternalLink, Layers } from '@lucide/svelte';
   import Modal from './Modal.svelte';
   import Button from './Button.svelte';
@@ -63,7 +65,7 @@
   }
 </script>
 
-<Modal open={!!transaction} title="Transaction details" {onclose}>
+<Modal open={!!transaction} title={translate($locale, 'Transaction details')} {onclose}>
   {#if transaction}
     <div class="detail-hero">
       <span
@@ -74,12 +76,18 @@
         class="detail-amount"
         class:positive={transaction.direction === 'received'}
         type="button"
-        aria-label={$denomination === 'btc'
-          ? 'Show transaction amount in sats'
-          : 'Show transaction amount in BTC'}
-        title={$denomination === 'btc'
-          ? 'Show transaction amount in sats'
-          : 'Show transaction amount in BTC'}
+        aria-label={translate(
+          $locale,
+          $denomination === 'btc'
+            ? 'Show transaction amount in sats'
+            : 'Show transaction amount in BTC'
+        )}
+        title={translate(
+          $locale,
+          $denomination === 'btc'
+            ? 'Show transaction amount in sats'
+            : 'Show transaction amount in BTC'
+        )}
         onclick={() => setDenomination($denomination === 'btc' ? 'sats' : 'btc')}
       >
         <Amount
@@ -89,28 +97,33 @@
         />
       </button>
       <p>
-        {$discreetMode
-          ? 'Label hidden'
-          : isSelfSpend
-            ? 'Self-spend · network fee'
-            : transaction.label}
+        {translate(
+          $locale,
+          $discreetMode
+            ? 'Label hidden'
+            : isSelfSpend
+              ? 'Self-spend · network fee'
+              : transaction.label
+        )}
       </p>
     </div>
     <dl class="details-list">
       <div>
-        <dt>Date</dt>
+        <dt>{translate($locale, 'Date')}</dt>
         <dd><LocalTimestamp value={transaction.date} /></dd>
       </div>
       <div>
-        <dt>Confirmations</dt>
+        <dt>{translate($locale, 'Confirmations')}</dt>
         <dd>{transaction.confirmations}</dd>
       </div>
       {#if transaction.fee}<div>
-          <dt>Network fee</dt>
+          <dt>{translate($locale, 'Network fee')}</dt>
           <dd><Amount value={transaction.fee} hidden={$discreetMode} /></dd>
         </div>{/if}
       {#if transaction.address && !showAddress}<div>
-          <dt>{transaction.direction === 'received' ? 'Received at' : 'Sent to'}</dt>
+          <dt>
+            {translate($locale, transaction.direction === 'received' ? 'Received at' : 'Sent to')}
+          </dt>
           <dd>
             <button
               type="button"
@@ -126,86 +139,110 @@
           address={transaction.address}
           copied={addressCopied}
           oncopy={copyAddress}
-        /><button type="button" onclick={() => (showAddress = false)}>Show compact address</button>
+        /><button type="button" onclick={() => (showAddress = false)}
+          >{translate($locale, 'Show compact address')}</button
+        >
       </div>{/if}
     <details class="proposal-review-details transaction-more-details" bind:open={showMore}>
-      <summary>View more details</summary>
+      <summary>{translate($locale, 'View more details')}</summary>
       <dl class="details-list">
         {#if transaction.inputCount != null}<div>
-            <dt>Inputs</dt>
+            <dt>{translate($locale, 'Inputs')}</dt>
             <dd>
               {transaction.inputCount}{#if transaction.walletInputAmount != null}{' · '}<Amount
                   value={transaction.walletInputAmount}
                   hidden={$discreetMode}
-                /> from this wallet{/if}
+                />
+                {translate($locale, 'from this wallet')}{/if}
             </dd>
           </div>{/if}
         {#if transaction.outputCount != null}<div>
-            <dt>Outputs</dt>
+            <dt>{translate($locale, 'Outputs')}</dt>
             <dd>
               {transaction.outputCount}{#if transaction.walletOutputAmount != null}{' · '}<Amount
                   value={transaction.walletOutputAmount}
                   hidden={$discreetMode}
-                /> to this wallet{/if}
+                />
+                {translate($locale, 'to this wallet')}{/if}
             </dd>
           </div>{/if}
         {#if transaction.feeRate != null}<div>
-            <dt>Fee rate</dt>
-            <dd>{transaction.feeRate} sat/vB</dd>
+            <dt>{translate($locale, 'Fee rate')}</dt>
+            <dd>{transaction.feeRate} {translate($locale, 'sat/vB')}</dd>
           </div>{/if}
         <div>
-          <dt>{transaction.direction === 'sent' ? 'Payment intent' : 'Received provenance'}</dt>
+          <dt>
+            {translate(
+              $locale,
+              transaction.direction === 'sent' ? 'Payment intent' : 'Received provenance'
+            )}
+          </dt>
           <dd>
-            {$discreetMode
-              ? 'Hidden in discreet mode'
-              : transaction.direction === 'sent'
-                ? (transaction.intentLabel?.text ?? transaction.label)
-                : transaction.provenance.state === 'unknown'
-                  ? 'Source unknown'
-                  : transaction.provenance.labels
-                      .map((label: { text: string }) => label.text)
-                      .join(' + ') || transaction.label}
+            {translate(
+              $locale,
+              $discreetMode
+                ? 'Hidden in discreet mode'
+                : transaction.direction === 'sent'
+                  ? (transaction.intentLabel?.text ?? transaction.label)
+                  : transaction.provenance.state === 'unknown'
+                    ? 'Source unknown'
+                    : transaction.provenance.labels
+                        .map((label: { text: string }) => label.text)
+                        .join(' + ') || transaction.label
+            )}
           </dd>
         </div>
         {#if transaction.provenance.state === 'mixed'}<div>
-            <dt>Privacy</dt>
+            <dt>{translate($locale, 'Privacy')}</dt>
             <dd>
-              {$discreetMode
-                ? 'Hidden in discreet mode'
-                : `${transaction.provenance.clusterCount} source clusters combined`}
+              {translate(
+                $locale,
+                $discreetMode
+                  ? 'Hidden in discreet mode'
+                  : `${transaction.provenance.clusterCount} source clusters combined`
+              )}
             </dd>
           </div>{/if}
         {#if transaction.locktime != null && transaction.rbf != null}<div>
-            <dt>Locktime / RBF</dt>
-            <dd>{transaction.locktime}{' · '}{transaction.rbf ? 'Enabled' : 'Disabled'}</dd>
+            <dt>{translate($locale, 'Locktime / RBF')}</dt>
+            <dd>
+              {transaction.locktime}{' · '}{translate(
+                $locale,
+                transaction.rbf ? 'Enabled' : 'Disabled'
+              )}
+            </dd>
           </div>{/if}
         {#if transaction.status === 'replaced' && transaction.replacedBy}<div>
-            <dt>Replaced by</dt>
+            <dt>{translate($locale, 'Replaced by')}</dt>
             <dd><code>{transaction.replacedBy}</code></dd>
           </div>{/if}
         {#if transaction.block}<div>
-            <dt>Block</dt>
+            <dt>{translate($locale, 'Block')}</dt>
             <dd>{transaction.block}</dd>
           </div>{/if}
         {#if isSelfSpend}<div>
-            <dt>Transaction type</dt>
-            <dd>Self-spend</dd>
+            <dt>{translate($locale, 'Transaction type')}</dt>
+            <dd>{translate($locale, 'Self-spend')}</dd>
           </div>{/if}
       </dl>
       <button class="hash-box" onclick={copyTxid}
-        ><span>Transaction ID</span><code>{transaction.id}</code><Copy size={16} /></button
+        ><span>{translate($locale, 'Transaction ID')}</span><code>{transaction.id}</code><Copy
+          size={16}
+        /></button
       >
       {#if explorerUrl}
         <div class="explorer-panel">
           <a class="explorer-link" href={explorerUrl} target="_blank" rel="noopener noreferrer"
-            >View on mempool.space <ExternalLink size={14} /></a
+            >{translate($locale, 'View on mempool.space')} <ExternalLink size={14} /></a
           >
           <p class="explorer-privacy">
-            Opening this shares the transaction lookup with mempool.space.
+            {translate($locale, 'Opening this shares the transaction lookup with mempool.space.')}
           </p>
         </div>
       {:else if defaultConfig.network === 'regtest'}
-        <p class="explorer-unavailable">mempool.space cannot see local regtest transactions.</p>
+        <p class="explorer-unavailable">
+          {translate($locale, 'mempool.space cannot see local regtest transactions.')}
+        </p>
       {/if}
     </details>
     {#if canIncreaseFee || canSpendOutput}<div
@@ -214,11 +251,11 @@
         {#if canIncreaseFee}<Button
             variant="secondary"
             href={`${multisig ? '/multisig/send' : '/send'}?accelerate=rbf&txid=${transaction.id}`}
-            ><ArrowUp size={15} />Increase fee (RBF)</Button
+            ><ArrowUp size={15} />{translate($locale, 'Increase fee (RBF)')}</Button
           >{/if}{#if canSpendOutput}<Button
             variant="secondary"
             href={`${multisig ? '/multisig/send' : '/send'}?accelerate=cpfp&txid=${transaction.id}`}
-            ><Layers size={15} />Spend output (CPFP)</Button
+            ><Layers size={15} />{translate($locale, 'Spend output (CPFP)')}</Button
           >{/if}
       </div>{/if}
   {/if}

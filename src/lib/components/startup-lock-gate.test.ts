@@ -22,6 +22,6 @@ describe('startup wallet lock gate', () => {
   it('shows no wallet data when startup session verification fails', () => {
     expect(shell).toContain("startupState = 'failed'");
     expect(shell).toContain('Groot could not verify the wallet lock state.');
-    expect(shell).toContain('onclick={resolveStartupRoute}>Retry</button>');
+    expect(shell).toContain("{translate($locale, 'Retry')}</button");
   });
 });

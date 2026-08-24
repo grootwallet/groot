@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { locale } from '$lib/i18n';
+  import { translate } from '$lib/i18n-catalog';
   let { variant = 'transactions', count = 3 } = $props<{
     variant?: 'balance' | 'transactions' | 'coins';
     count?: number;
@@ -8,10 +10,10 @@
 <div
   class="wallet-skeleton {variant}"
   role="status"
-  aria-label="Loading wallet data"
+  aria-label={translate($locale, 'Loading wallet data')}
   aria-live="polite"
 >
-  <span class="sr-only">Loading wallet data…</span>
+  <span class="sr-only">{translate($locale, 'Loading wallet data…')}</span>
   {#if variant === 'balance'}
     <span class="skeleton-line label"></span>
     <span class="skeleton-line amount"></span>

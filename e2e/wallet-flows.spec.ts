@@ -911,19 +911,29 @@ test('amount denomination stays consistent across wallet surfaces', async ({ pag
   ).toBe(true);
 });
 
-test('translates the complete appearance controls', async ({ page }) => {
+test('translates settings, connection feedback, and route copy', async ({ page }) => {
   await page.goto('/settings');
   await page.getByRole('button', { name: 'FR', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Apparence' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Détails du portefeuille' })).toBeVisible();
   await expect(page.getByText('Thème', { exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Clair' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Sombre' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Clair', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Sombre', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: /Tester la connexion/ }).click();
+  await expect(page.getByText('Nœud Bitcoin connecté')).toBeVisible();
+  await expect(page.getByText(/blocs · historique complet des blocs/)).toBeVisible();
 
   await page.getByRole('button', { name: 'ES', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Apariencia' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Detalles de la cartera' })).toBeVisible();
   await expect(page.getByText('Tema', { exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Claro' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Oscuro' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Claro', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Oscuro', exact: true })).toBeVisible();
+
+  await page.goto('/send');
+  await expect(page.getByRole('heading', { name: 'Enviar bitcoin' })).toBeVisible();
+  await expect(page.getByLabel('Etiqueta del pago')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Continuar al importe' })).toBeVisible();
 });
 
 test('renames the selected wallet from settings without changing its identity', async ({

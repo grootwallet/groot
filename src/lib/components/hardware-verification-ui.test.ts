@@ -89,7 +89,7 @@ describe('hardware receive verification UI', () => {
     }
     expect(verificationFlow).toContain('<HardwareAddressComparison');
     expect(addressComparison).toMatch(
-      /<summary>\s*<span>Address details<\/span>\s*<ChevronDown size=\{14\}\s*\/>\s*<\/summary>/
+      /<summary>\s*<span>\{translate\(\$locale, 'Address details'\)\}<\/span>\s*<ChevronDown size=\{14\}\s*\/>\s*<\/summary>/
     );
     expect(appCss).toMatch(
       /\.verification-details\[open\] summary svg\s*\{\s*transform:\s*rotate\(180deg\);\s*\}/
@@ -107,16 +107,18 @@ describe('hardware receive verification UI', () => {
   });
 
   it('exposes the shared identity health check for external single-key signers', () => {
-    expect(overview).toContain('<strong>Health check</strong>');
+    expect(overview).toContain("<strong>{translate($locale, 'Health check')}</strong>");
     expect(overview).toContain('walletService.checkHardwareExternalSigner');
     expect(overview).toContain('<DeviceDetailsModal');
-    expect(settings).toContain('Hardware signer identity &amp; health');
+    expect(settings).toContain("{translate($locale, 'Hardware signer identity & health')}");
     expect(settings).toContain('walletService.checkHardwareExternalSigner');
     expect(settings).toMatch(/<LocalTimestamp\s+value=\{signerHealth\.checkedAt\}\s*\/>/);
     expect(settings).toContain("'Not checked'");
     expect(settings).toContain('<DeviceDetailsModal');
-    expect(deviceDetails).toContain('title="Checking signer"');
-    expect(deviceDetails).toContain('detail="Keep it connected and unlocked."');
+    expect(deviceDetails).toContain("title={translate($locale, 'Checking signer')}");
+    expect(deviceDetails).toContain(
+      "detail={translate($locale, 'Keep it connected and unlocked.')}"
+    );
     expect(deviceDetails).toContain("'Signer matches this wallet.'");
   });
 
@@ -157,7 +159,7 @@ describe('hardware receive verification UI', () => {
     expect(hardwareSetup).toContain("errorTitle = $state('Could not scan hardware')");
     expect(hardwareSetup).toContain("errorTitle = 'Could not read the account key'");
     expect(hardwareSetup).toContain('{:else if devices.length || !error}<HardwareDeviceList');
-    expect(hardwareSetup).toContain('<strong>{errorTitle}</strong>');
+    expect(hardwareSetup).toContain('<strong>{translate($locale, errorTitle)}</strong>');
     expect(hardwareSetup).not.toContain(
       '<strong>Could not read the account key</strong><small>{error}</small>'
     );
@@ -248,8 +250,9 @@ describe('hardware receive verification UI', () => {
       "let isTrezor = $derived(Boolean(signer?.deviceType?.toLowerCase().includes('trezor')))"
     );
     expect(normalizedSetup).toContain(
-      'Trezor does not show its master fingerprint during this export, so no fingerprint comparison is required here.'
+      'Trezor does not show its master fingerprint during this export, so no fingerprint'
     );
+    expect(normalizedSetup).toContain('comparison is required here. After setup');
     expect(normalizedSetup).toContain("isTrezor ? 'Use this Trezor wallet'");
   });
 
@@ -259,10 +262,13 @@ describe('hardware receive verification UI', () => {
       "signer?.deviceType?.toLowerCase().includes('bitbox') && signer.label.toLowerCase().includes('nova')"
     );
     expect(normalizedSetup).toContain(
-      'Nova does not show its fingerprint during this import, so no fingerprint comparison is required here.'
+      'Nova does not show its fingerprint during this import, so no fingerprint comparison'
     );
+    expect(normalizedSetup).toContain('is required here. After setup');
     expect(normalizedSetup).toContain("isBitBoxNova ? 'Use this Nova wallet'");
-    expect(normalizedSetup).toContain('description="Quit other wallet apps so Groot can use USB."');
+    expect(normalizedSetup).toContain(
+      "description={translate($locale, 'Quit other wallet apps so Groot can use USB.')}"
+    );
     expect(normalizedSetup).toContain("'Keep the signer connected and unlocked.'");
   });
 
@@ -275,8 +281,8 @@ describe('hardware receive verification UI', () => {
   });
 
   it('keeps the single-key transaction review visible while choosing a signing transport', () => {
-    const review = singleKeySend.search(
-      /aria-label=\{externalProposal\?\.canFinalize\s*\?\s*'Signed transaction review'\s*:\s*'Transaction review'\}/
+    const review = singleKeySend.indexOf(
+      "externalProposal?.canFinalize ? 'Signed transaction review'"
     );
     const cableAction = singleKeySend.indexOf('onclick={scanHardware}', review);
     expect(review).toBeGreaterThan(-1);
@@ -289,11 +295,11 @@ describe('hardware receive verification UI', () => {
   it('lets a single-key hardware wallet discard its local signature without canceling payment', () => {
     expect(singleKeySend).toContain('ondiscard={externalSigner');
     expect(singleKeySend).toContain('walletService.discardExternalSignerSignature(');
-    expect(singleKeySend).toContain('title="Discard local signature?"');
+    expect(singleKeySend).toContain("title={translate($locale, 'Discard local signature?')}");
     expect(singleKeySend).toContain('This does not revoke the signature.');
     expect(singleKeySend).toContain('The transaction details are unchanged');
-    expect(singleKeySend).toContain('>Keep signature</Button');
-    expect(singleKeySend).toContain('>Discard local signature</Button');
+    expect(singleKeySend).toContain("{translate($locale, 'Keep signature')}</Button");
+    expect(singleKeySend).toContain("{translate($locale, 'Discard local signature')}</Button");
   });
 
   it('reveals the parent signing result after every terminal hardware response', () => {

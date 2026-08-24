@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { locale } from '$lib/i18n';
+  import { translate } from '$lib/i18n-catalog';
   import { ChevronDown, Cpu, Plus, ShieldCheck, WalletCards } from '@lucide/svelte';
   import { onMount } from 'svelte';
   import type { WalletProfile } from '$lib/wallet/contracts';
@@ -47,7 +49,7 @@
     bind:this={trigger}
     type="button"
     class="mobile-wallet-trigger"
-    aria-label="Switch wallet"
+    aria-label={translate($locale, 'Switch wallet')}
     aria-haspopup="menu"
     aria-expanded={open}
     onclick={() => (open = !open)}
@@ -57,11 +59,11 @@
       />{:else if selected?.kind === 'watch_only'}<Cpu size={17} />{:else}<WalletCards
         size={17}
       />{/if}
-    <span>{selected?.name ?? 'Wallet'}</span>
+    <span>{translate($locale, selected?.name ?? 'Wallet')}</span>
     <ChevronDown size={15} />
   </button>
   {#if open}
-    <div class="mobile-wallet-menu" role="menu" aria-label="Wallets">
+    <div class="mobile-wallet-menu" role="menu" aria-label={translate($locale, 'Wallets')}>
       {#each profiles as profile}
         <button
           type="button"
@@ -79,18 +81,23 @@
           >
           <span
             ><strong>{profile.name}</strong><small
-              >{profile.kind === 'multisig'
-                ? 'Multisig wallet'
-                : profile.kind === 'watch_only'
-                  ? 'Hardware wallet'
-                  : 'Software wallet'}</small
+              >{translate(
+                $locale,
+                profile.kind === 'multisig'
+                  ? 'Multisig wallet'
+                  : profile.kind === 'watch_only'
+                    ? 'Hardware wallet'
+                    : 'Software wallet'
+              )}</small
             ></span
           >
         </button>
       {/each}
       <a href="/welcome?add=1" role="menuitem" onclick={() => (open = false)}
         ><span class="mobile-wallet-menu-icon"><Plus size={16} /></span><span
-          ><strong>Add wallet</strong><small>Create or recover another wallet</small></span
+          ><strong>{translate($locale, 'Add wallet')}</strong><small
+            >{translate($locale, 'Create or recover another wallet')}</small
+          ></span
         ></a
       >
     </div>

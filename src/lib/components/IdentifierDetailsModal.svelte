@@ -3,6 +3,8 @@
   import ReadableIdentifier from './ReadableIdentifier.svelte';
   import { copyText } from '$lib/clipboard';
   import { toast } from '$lib/stores/toasts';
+  import { locale } from '$lib/i18n';
+  import { translate } from '$lib/i18n-catalog';
 
   let { value, open, title, description, label, onclose } = $props<{
     value: string;
@@ -18,12 +20,17 @@
     try {
       await copyText(value, 'identifier');
       copied = true;
-      toast({ title: `${label} copied`, tone: 'success' });
+      toast({
+        title: translate($locale, '{label} copied', { label: translate($locale, label) }),
+        tone: 'success'
+      });
       setTimeout(() => (copied = false), 1_500);
     } catch {
       toast({
         title: 'Copy failed',
-        description: `Select and copy the ${label.toLowerCase()} manually.`,
+        description: translate($locale, 'Select and copy the {label} manually.', {
+          label: translate($locale, label).toLocaleLowerCase($locale)
+        }),
         tone: 'danger'
       });
     }

@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { locale } from '$lib/i18n';
+  import { translate } from '$lib/i18n-catalog';
   import { Snowflake, Unlock } from '@lucide/svelte';
   import Button from './Button.svelte';
   import Modal from './Modal.svelte';
@@ -31,9 +33,12 @@
 <Modal
   open={count > 0}
   {title}
-  description={frozen
-    ? 'This changes coin selection only. Your bitcoin stays in this wallet.'
-    : 'This makes the coin available for payments again.'}
+  description={translate(
+    $locale,
+    frozen
+      ? 'This changes coin selection only. Your bitcoin stays in this wallet.'
+      : 'This makes the coin available for payments again.'
+  )}
   onclose={close}
 >
   <div class="coin-freeze-confirmation">
@@ -49,18 +54,25 @@
 
     <p>
       {#if frozen}
-        Frozen coins are excluded from automatic and manual spending until you unfreeze them.
+        {translate(
+          $locale,
+          'Frozen coins are excluded from automatic and manual spending until you unfreeze them.'
+        )}
       {:else}
-        Unfreezing does not spend this coin. It only makes it eligible for automatic selection and
-        manual sends.
+        {translate(
+          $locale,
+          'Unfreezing does not spend this coin. It only makes it eligible for automatic selection and\n        manual sends.'
+        )}
       {/if}
     </p>
 
     <div class="coin-freeze-actions">
-      <Button variant="secondary" disabled={busy} onclick={close}>Cancel</Button>
+      <Button variant="secondary" disabled={busy} onclick={close}
+        >{translate($locale, 'Cancel')}</Button
+      >
       <Button
         loading={busy}
-        loadingLabel={frozen ? 'Freezing…' : 'Unfreezing…'}
+        loadingLabel={translate($locale, frozen ? 'Freezing…' : 'Unfreezing…')}
         onclick={onconfirm}
       >
         {#if frozen}<Snowflake size={16} />{:else}<Unlock size={16} />{/if}

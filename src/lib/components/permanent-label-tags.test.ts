@@ -9,7 +9,7 @@ describe('permanent label tags', () => {
   it('renders every unique authoritative label without deriving provenance in the UI', () => {
     expect(component).toContain('new Map(labels.map((label) => [label.id, label]))');
     expect(component).toContain('{#each uniqueLabels as label (label.id)}');
-    expect(component).toContain('aria-label="Permanent labels"');
+    expect(component).toContain("aria-label={translate($locale, 'Permanent labels')}");
     expect(component).not.toMatch(/sourceOutpoints|context ===|state ===/);
   });
 

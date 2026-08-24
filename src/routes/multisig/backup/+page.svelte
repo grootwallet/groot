@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { locale } from '$lib/i18n';
+  import { translate, localizedError } from '$lib/i18n-catalog';
   import {
     Braces,
     Check,
@@ -90,7 +92,7 @@
       return `That app PIN does not match ${wallet?.name ?? 'this wallet'}.`;
     if (cause instanceof WalletError && cause.code === 'wallet_locked')
       return 'Your previous session expired. Re-enter this wallet’s app PIN to authorize the backup.';
-    return cause instanceof Error ? cause.message : 'Could not prepare the public backup.';
+    return localizedError(cause, $locale, 'Could not prepare the public backup.');
   }
 
   async function exportBackup() {
@@ -122,7 +124,7 @@
         : await walletService.recoveryDrill(backup);
       toast(recoveryDrillNotice(drill));
     } catch (cause) {
-      drillError = cause instanceof Error ? cause.message : 'Recovery test failed.';
+      drillError = localizedError(cause, $locale, 'Recovery test failed.');
     } finally {
       busy = false;
     }
@@ -144,14 +146,14 @@
       drillError = '';
       toast({ title: 'Backup file ready', description: file.name, tone: 'success' });
     } catch (cause) {
-      drillError = cause instanceof Error ? cause.message : 'Could not read the backup file.';
+      drillError = localizedError(cause, $locale, 'Could not read the backup file.');
     }
   }
 
   async function copyDescriptor(value: string, label: string) {
     await copyText(value, 'public-wallet-data');
     toast({
-      title: `${label} descriptor copied`,
+      title: translate($locale, '{label} descriptor copied', { label: translate($locale, label) }),
       description: 'Public watch-only descriptor copied.',
       tone: 'success'
     });
@@ -167,7 +169,7 @@
         } catch (cause) {
           toast({
             title: 'Could not show saved file',
-            description: cause instanceof Error ? cause.message : undefined,
+            description: localizedError(cause, $locale),
             tone: 'danger'
           });
         }
@@ -190,7 +192,7 @@
           action: savedFileAction(saved)
         });
     } catch (cause) {
-      exportError = cause instanceof Error ? cause.message : 'Could not save the public backup.';
+      exportError = localizedError(cause, $locale, 'Could not save the public backup.');
       toast({ title: 'Backup not saved', description: exportError, tone: 'danger' });
     }
   }
@@ -211,7 +213,7 @@
           action: savedFileAction(saved)
         });
     } catch (cause) {
-      exportError = cause instanceof Error ? cause.message : 'Could not save the PDF backup.';
+      exportError = localizedError(cause, $locale, 'Could not save the PDF backup.');
       toast({ title: 'PDF not saved', description: exportError, tone: 'danger' });
     }
   }
@@ -220,25 +222,32 @@
 <div class="page narrow-page backup-page">
   <header class="page-header">
     <div>
-      <p class="eyebrow">WALLET BACKUP</p>
-      <h1>Export & verify</h1>
+      <p class="eyebrow">{translate($locale, 'WALLET BACKUP')}</p>
+      <h1>{translate($locale, 'Export & verify')}</h1>
       <p class="subtitle">
-        A public descriptor backup reconstructs this wallet without exposing signing keys.
+        {translate(
+          $locale,
+          'A public descriptor backup reconstructs this wallet without exposing signing keys.'
+        )}
       </p>
     </div>
-    <Button variant="secondary" href="/multisig">Back to policy</Button>
+    <Button variant="secondary" href="/multisig">{translate($locale, 'Back to policy')}</Button>
   </header>
   {#if wallet}
     <section class="form-card backup-export-card">
       <div class="section-heading compact">
         <div>
-          <h2>1. Export backup</h2>
-          <p>Authorize a public, watch-only copy of this wallet.</p>
+          <h2>{translate($locale, '1. Export backup')}</h2>
+          <p>{translate($locale, 'Authorize a public, watch-only copy of this wallet.')}</p>
         </div>
         <FileKey size={19} />
       </div>
       {#if !backup}
-        <div class="backup-format-grid" role="radiogroup" aria-label="Backup format">
+        <div
+          class="backup-format-grid"
+          role="radiogroup"
+          aria-label={translate($locale, 'Backup format')}
+        >
           <button
             class:active={backupFormat === 'bsms'}
             aria-pressed={backupFormat === 'bsms'}
@@ -247,7 +256,7 @@
               exportError = '';
             }}
             ><span><FileText size={18} /></span><strong>BSMS 1.0</strong><small
-              >Most interoperable · recommended</small
+              >{translate($locale, 'Most interoperable · recommended')}</small
             ></button
           ><button
             class:active={backupFormat === 'groot'}
@@ -256,40 +265,42 @@
               backupFormat = 'groot';
               exportError = '';
             }}
-            ><span><Braces size={18} /></span><strong>Groot JSON</strong><small
-              >Descriptors plus Groot metadata</small
-            ></button
+            ><span><Braces size={18} /></span><strong>{translate($locale, 'Groot JSON')}</strong
+            ><small>{translate($locale, 'Descriptors plus Groot metadata')}</small></button
           >
         </div>
         <p class="optional-insight">
-          Backup formats <InsightTip
-            label="About backup formats"
+          {translate($locale, 'Backup formats')}
+          <InsightTip
+            label={translate($locale, 'About backup formats')}
             text="BSMS is a portable public descriptor record supported by compatible coordinators. Groot JSON also preserves Groot-specific labels and metadata. Neither contains private keys."
           />
         </p>
         <div class="backup-security-note">
           <ShieldCheck size={18} /><span
-            ><strong>Re-authenticate this export</strong><small
-              >Use {wallet.name}’s app PIN. This protects access to private financial metadata even
-              while the wallet screen is open. The exported descriptor is not encrypted: it cannot
-              spend, but it reveals addresses and should remain private.</small
+            ><strong>{translate($locale, 'Re-authenticate this export')}</strong><small
+              >{translate($locale, 'Use')}
+              {wallet.name}{translate(
+                $locale,
+                '’s app PIN. This protects access to private financial metadata even\n              while the wallet screen is open. The exported descriptor is not encrypted: it cannot\n              spend, but it reveals addresses and should remain private.'
+              )}</small
             ></span
           >
         </div>
         <div class="backup-auth">
           <PasswordField
-            label="App PIN"
+            label={translate($locale, 'App PIN')}
             inputLabel="Backup app PIN"
             bind:value={pin}
-            placeholder="Enter this wallet’s app PIN"
+            placeholder={translate($locale, 'Enter this wallet’s app PIN')}
             autocomplete="current-password"
           /><Button
             class="full"
             size="large"
             disabled={!pin}
             loading={busy}
-            loadingLabel="Authorizing…"
-            onclick={exportBackup}>Authorize & prepare backup</Button
+            loadingLabel={translate($locale, 'Authorizing…')}
+            onclick={exportBackup}>{translate($locale, 'Authorize & prepare backup')}</Button
           >
         </div>
         {#if exportError}<p class="form-error" aria-live="polite">{exportError}</p>{/if}
@@ -297,16 +308,17 @@
         <div class="backup-ready">
           <span><Check size={17} /></span>
           <div>
-            <strong>Public backup ready</strong><small
-              >{backupFormat === 'bsms'
-                ? 'BSMS 1.0 descriptor record'
-                : 'Groot recovery metadata'}</small
+            <strong>{translate($locale, 'Public backup ready')}</strong><small
+              >{translate(
+                $locale,
+                backupFormat === 'bsms' ? 'BSMS 1.0 descriptor record' : 'Groot recovery metadata'
+              )}</small
             >
           </div>
         </div>
         <details class="backup-raw">
-          <summary>View raw backup</summary><textarea
-            aria-label="Descriptor backup"
+          <summary>{translate($locale, 'View raw backup')}</summary><textarea
+            aria-label={translate($locale, 'Descriptor backup')}
             rows="9"
             readonly
             value={backup}></textarea>
@@ -317,25 +329,33 @@
             onclick={async () => {
               await copyText(backup, 'public-wallet-data');
               toast({ title: 'Backup copied', tone: 'success' });
-            }}><Copy size={15} />Copy backup</Button
+            }}><Copy size={15} />{translate($locale, 'Copy backup')}</Button
           ><Button variant="secondary" onclick={saveBackupFile}
-            ><Download size={15} />Download {backupFormat === 'bsms' ? 'BSMS' : 'JSON'}</Button
-          ><Button variant="secondary" onclick={printBackup}><Printer size={15} />Save PDF</Button>
+            ><Download size={15} />{translate($locale, 'Download')}
+            {translate($locale, backupFormat === 'bsms' ? 'BSMS' : 'JSON')}</Button
+          ><Button variant="secondary" onclick={printBackup}
+            ><Printer size={15} />{translate($locale, 'Save PDF')}</Button
+          >
         </div>
         {#if exportError}<p class="form-error" aria-live="polite">{exportError}</p>{/if}
         <div class="descriptor-qr-preview">
           <div>
-            <span><QrCode size={16} /><strong>Receive descriptor QR</strong></span
+            <span
+              ><QrCode size={16} /><strong>{translate($locale, 'Receive descriptor QR')}</strong
+              ></span
             >{#if receiveQr}<img
                 src={receiveQr}
-                alt="QR code for the receive descriptor"
+                alt={translate($locale, 'QR code for the receive descriptor')}
               />{:else}<small
-                >QR unavailable for this descriptor size. Use the downloaded file.</small
+                >{translate(
+                  $locale,
+                  'QR unavailable for this descriptor size. Use the downloaded file.'
+                )}</small
               >{/if}
           </div>
           <div class="descriptor-copy-row">
             <code>{wallet.externalDescriptor}</code><button
-              aria-label="Copy receive descriptor"
+              aria-label={translate($locale, 'Copy receive descriptor')}
               onclick={() => copyDescriptor(wallet!.externalDescriptor, 'Receive')}
               ><Copy size={15} /></button
             >
@@ -347,30 +367,41 @@
       <div class="section-heading compact">
         <div>
           <h2>
-            2. Test recovery <InsightTip
-              label="What does this test do?"
+            {translate($locale, '2. Test recovery')}
+            <InsightTip
+              label={translate($locale, 'What does this test do?')}
               text="Groot safely imports the watch-only backup in memory and proves it derives the same first address. It never signs or moves bitcoin."
             />
           </h2>
-          <p>Confirm this backup reconstructs the same wallet before relying on it.</p>
+          <p>
+            {translate(
+              $locale,
+              'Confirm this backup reconstructs the same wallet before relying on it.'
+            )}
+          </p>
         </div>
         <ClipboardCheck size={19} />
       </div>
       {#if drill}<div class="drill-result" class:passed={drill.matchesCurrentWallet}>
           {#if drill.matchesCurrentWallet}<Check size={17} />{:else}<X size={17} />{/if}<span
             ><strong
-              >{drill.matchesCurrentWallet ? 'Backup verified' : 'Backup does not match'}</strong
+              >{translate(
+                $locale,
+                drill.matchesCurrentWallet ? 'Backup verified' : 'Backup does not match'
+              )}</strong
             ><code>{drill.firstAddress}</code></span
           >
         </div>{/if}
       <label class="file-action" class:file-loaded={Boolean(loadedBackupName)}>
         <FileUp size={16} />
         <span>
-          <strong>{loadedBackupName ? 'Backup ready' : 'Load backup file'}</strong>
+          <strong
+            >{translate($locale, loadedBackupName ? 'Backup ready' : 'Load backup file')}</strong
+          >
           {#if loadedBackupName}<small title={loadedBackupName}>{loadedBackupName}</small>{/if}
         </span>
         <input
-          aria-label="Backup file import"
+          aria-label={translate($locale, 'Backup file import')}
           type="file"
           accept=".bsms,.json,application/json,text/plain"
           onchange={importBackup}
@@ -380,100 +411,108 @@
         class="full"
         disabled={!backup}
         loading={busy}
-        loadingLabel="Testing recovery…"
-        onclick={verifyBackup}>Test recovery</Button
+        loadingLabel={translate($locale, 'Testing recovery…')}
+        onclick={verifyBackup}>{translate($locale, 'Test recovery')}</Button
       >
       {#if drillError}<p class="form-error" aria-live="polite">{drillError}</p>{/if}
     </section>
     {#if drill?.matchesCurrentWallet}<section class="form-card">
         <div class="section-heading compact">
           <div>
-            <h2>Recovery confirmed</h2>
+            <h2>{translate($locale, 'Recovery confirmed')}</h2>
             <p>
-              This successful drill is available to the separate wallet-deletion flow for this app
-              session.
+              {translate(
+                $locale,
+                'This successful drill is available to the separate wallet-deletion flow for this app\n              session.'
+              )}
             </p>
           </div>
           <ShieldCheck size={19} />
         </div>
         <Button variant="danger-outline" class="full" href="/multisig/delete"
-          >Continue to wallet deletion</Button
+          >{translate($locale, 'Continue to wallet deletion')}</Button
         >
       </section>{/if}
     {#if backup}<article
         class="backup-print-sheet"
-        aria-label="Printable wallet descriptor backup"
+        aria-label={translate($locale, 'Printable wallet descriptor backup')}
         aria-hidden="true"
         inert
       >
         <header>
-          <p>Groot · Public wallet backup</p>
+          <p>{translate($locale, 'Groot · Public wallet backup')}</p>
           <h1>{wallet.name}</h1>
-          <strong>Watch-only descriptors — cannot spend bitcoin</strong>
+          <strong>{translate($locale, 'Watch-only descriptors — cannot spend bitcoin')}</strong>
         </header>
         <dl>
           <div>
-            <dt>Network</dt>
+            <dt>{translate($locale, 'Network')}</dt>
             <dd>{networkName(defaultConfig.network)}</dd>
           </div>
           <div>
-            <dt>Policy</dt>
-            <dd>{wallet.threshold} of {wallet.cosigners.length} signatures</dd>
+            <dt>{translate($locale, 'Policy')}</dt>
+            <dd>
+              {wallet.threshold} of {wallet.cosigners.length}
+              {translate($locale, 'signatures')}
+            </dd>
           </div>
           <div>
-            <dt>Script</dt>
-            <dd>Native SegWit · sortedmulti</dd>
+            <dt>{translate($locale, 'Script')}</dt>
+            <dd>{translate($locale, 'Native SegWit · sortedmulti')}</dd>
           </div>
           <div>
-            <dt>Created</dt>
+            <dt>{translate($locale, 'Created')}</dt>
             <dd>{formatWalletTimestamp(wallet.createdAt)}</dd>
           </div>
         </dl>
         <section>
-          <h2>Signers</h2>
+          <h2>{translate($locale, 'Signers')}</h2>
           <ol>
             {#each wallet.cosigners as signer}<li>
                 <strong>{signer.label}</strong><span
-                  >Fingerprint {signer.fingerprint.toLowerCase()} · {signer.source === 'usb'
-                    ? 'USB hardware'
-                    : signer.source}</span
+                  >{translate($locale, 'Fingerprint')}
+                  {signer.fingerprint.toLowerCase()} · {translate(
+                    $locale,
+                    signer.source === 'usb' ? 'USB hardware' : signer.source
+                  )}</span
                 >
               </li>{/each}
           </ol>
         </section>
         <section class="print-descriptors">
           <div>
-            <h2>Receive descriptor</h2>
+            <h2>{translate($locale, 'Receive descriptor')}</h2>
             {#if receivePrintQr}<svg
                 class="print-qr"
                 viewBox={`0 0 ${receivePrintQr.size} ${receivePrintQr.size}`}
                 shape-rendering="crispEdges"
-                aria-label="Receive descriptor QR code"
+                aria-label={translate($locale, 'Receive descriptor QR code')}
                 role="img"><path d={receivePrintQr.path} /></svg
               >{/if}<code>{wallet.externalDescriptor}</code>
           </div>
           <div>
-            <h2>Change descriptor</h2>
+            <h2>{translate($locale, 'Change descriptor')}</h2>
             {#if changePrintQr}<svg
                 class="print-qr"
                 viewBox={`0 0 ${changePrintQr.size} ${changePrintQr.size}`}
                 shape-rendering="crispEdges"
-                aria-label="Change descriptor QR code"
+                aria-label={translate($locale, 'Change descriptor QR code')}
                 role="img"><path d={changePrintQr.path} /></svg
               >{/if}<code>{wallet.internalDescriptor}</code>
           </div>
         </section>
         <footer>
-          <strong>Privacy note</strong>
+          <strong>{translate($locale, 'Privacy note')}</strong>
           <p>
-            This public backup cannot sign transactions. Anyone who sees it can derive wallet
-            addresses and observe wallet activity. Store it privately and separately from enough
-            signing devices.
+            {translate(
+              $locale,
+              'This public backup cannot sign transactions. Anyone who sees it can derive wallet\n            addresses and observe wallet activity. Store it privately and separately from enough\n            signing devices.'
+            )}
           </p>
         </footer>
       </article>{/if}
   {:else}<section class="empty-state">
-      <h2>No multisig wallet selected</h2>
-      <Button href="/multisig">Return to wallet</Button>
+      <h2>{translate($locale, 'No multisig wallet selected')}</h2>
+      <Button href="/multisig">{translate($locale, 'Return to wallet')}</Button>
     </section>{/if}
 </div>

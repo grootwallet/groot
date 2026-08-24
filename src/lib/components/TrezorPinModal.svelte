@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { locale } from '$lib/i18n';
+  import { translate } from '$lib/i18n-catalog';
   import { AlertTriangle, Delete, LockKeyhole } from '@lucide/svelte';
   import Button from '$lib/components/Button.svelte';
   import HardwareActionPrompt from '$lib/components/HardwareActionPrompt.svelte';
@@ -49,18 +51,23 @@
 
 <Modal
   {open}
-  title="Unlock {brand}"
-  description="Use the shuffled matrix shown only on your device. Groot receives positions, never your PIN digits."
+  title={translate($locale, 'Unlock {brand}', { brand })}
+  description={translate(
+    $locale,
+    'Use the shuffled matrix shown only on your device. Groot receives positions, never your PIN digits.'
+  )}
   {onclose}
 >
   <div class="pin-matrix-flow">
     <div class="hardware-readiness">
       <LockKeyhole size={18} />
       <span>
-        <strong>Match locations, not numbers</strong>
+        <strong>{translate($locale, 'Match locations, not numbers')}</strong>
         <small
-          >Find each PIN digit on the Trezor screen, then tap the blank Groot cell in the same
-          location. Never enter recovery words or a hardware passphrase here.</small
+          >{translate(
+            $locale,
+            'Find each PIN digit on the Trezor screen, then tap the blank Groot cell in the same\n          location. Never enter recovery words or a hardware passphrase here.'
+          )}</small
         >
       </span>
     </div>
@@ -72,28 +79,35 @@
         >
       </div>
       <Button class="full" variant="secondary" onclick={onretry}
-        >Ask Trezor for a fresh layout</Button
+        >{translate($locale, 'Ask Trezor for a fresh layout')}</Button
       >
     {:else if busy}
       <HardwareActionPrompt
-        title="Waiting for Trezor"
-        detail="Keep it connected while the device checks the selected PIN positions."
-        label="Trezor unlock in progress"
+        title={translate($locale, 'Waiting for Trezor')}
+        detail={translate(
+          $locale,
+          'Keep it connected while the device checks the selected PIN positions.'
+        )}
+        label={translate($locale, 'Trezor unlock in progress')}
       />
     {:else if gridAvailable}
       {#if positions}
-        <output aria-label={`${positions.length} PIN positions selected`}
-          >{'•'.repeat(positions.length)}</output
+        <output
+          aria-label={translate($locale, '{count} PIN positions selected', {
+            count: positions.length
+          })}>{'•'.repeat(positions.length)}</output
         >
       {/if}
       <div class="pin-grid-heading">
-        <strong>Blank position grid</strong>
+        <strong>{translate($locale, 'Blank position grid')}</strong>
         <small
-          >The shuffled digits appear only on Trezor. This grid deliberately stays blank—even when
-          Trezor generates a fresh layout.</small
+          >{translate(
+            $locale,
+            'The shuffled digits appear only on Trezor. This grid deliberately stays blank—even when\n          Trezor generates a fresh layout.'
+          )}</small
         >
       </div>
-      <div class="pin-matrix" aria-label="Blind PIN position grid">
+      <div class="pin-matrix" aria-label={translate($locale, 'Blind PIN position grid')}>
         {#each TREZOR_PIN_CELLS as cell}
           <button
             type="button"
@@ -105,12 +119,14 @@
       </div>
       <div class="pin-matrix-actions">
         <Button variant="secondary" disabled={!positions} onclick={ondelete}
-          ><Delete size={15} />Delete last</Button
+          ><Delete size={15} />{translate($locale, 'Delete last')}</Button
         >
-        <Button variant="secondary" disabled={!positions} onclick={onclear}>Clear</Button>
+        <Button variant="secondary" disabled={!positions} onclick={onclear}
+          >{translate($locale, 'Clear')}</Button
+        >
       </div>
       <Button class="full" disabled={!positions || !challengeReady} onclick={onsubmit}
-        >Unlock {brand}</Button
+        >{translate($locale, 'Unlock')} {brand}</Button
       >
     {/if}
   </div>

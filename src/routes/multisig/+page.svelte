@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { locale } from '$lib/i18n';
+  import { translate, localizedError } from '$lib/i18n-catalog';
   import {
     ChevronRight,
     Cpu,
@@ -95,7 +97,7 @@
     } catch (cause) {
       toast({
         title: 'Policy status unavailable',
-        description: cause instanceof Error ? cause.message : undefined,
+        description: localizedError(cause, $locale),
         tone: 'danger'
       });
     }
@@ -104,7 +106,7 @@
     } catch (cause) {
       toast({
         title: 'Health-check status unavailable',
-        description: cause instanceof Error ? cause.message : undefined,
+        description: localizedError(cause, $locale),
         tone: 'danger'
       });
     }
@@ -113,7 +115,7 @@
     } catch (cause) {
       toast({
         title: 'Wallet is offline',
-        description: cause instanceof Error ? cause.message : undefined,
+        description: localizedError(cause, $locale),
         tone: 'danger'
       });
     }
@@ -160,10 +162,11 @@
   function signerPolicyStatus(signer: CosignerDraft) {
     const profile = policyRegistrationProfile(signer);
     const verification = matchingPolicyVerification(signer, policyVerifications);
-    const label = policyReadinessLabel(signer, verification);
-    if (!profile.supported) return { label, description: profile.creationCopy, attention: true };
+    const label = translate($locale, policyReadinessLabel(signer, verification));
+    if (!profile.supported)
+      return { label, description: translate($locale, profile.creationCopy), attention: true };
     if (profile.registration === 'none')
-      return { label, description: profile.creationCopy, attention: false };
+      return { label, description: translate($locale, profile.creationCopy), attention: false };
     if (verification) {
       const description =
         profile.registration === 'file_once'
@@ -173,7 +176,7 @@
             : 'Policy and first address were verified for this wallet.';
       return {
         label,
-        description,
+        description: translate($locale, description),
         attention: false,
         verifiedAt: verification.verifiedAt,
         actionLabel: profile.registration === 'file_once' ? 'Review setup' : 'Verify again'
@@ -184,7 +187,7 @@
       description:
         profile.registration === 'file_once'
           ? 'Groot has no saved acknowledgement yet. Record the existing Coldcard policy import or review the setup steps.'
-          : profile.creationCopy,
+          : translate($locale, profile.creationCopy),
       attention: true,
       actionLabel: profile.registration === 'file_once' ? 'Review setup' : 'Verify policy'
     };
@@ -202,7 +205,7 @@
     selectedSigner = wallet.cosigners.find((signer) => signer.id === signerId) ?? null;
     toast({
       title: 'Signer renamed',
-      description: `This signer is now “${label}”.`,
+      description: translate($locale, 'This signer is now “{label}”.', { label }),
       tone: 'success'
     });
   }
@@ -221,11 +224,13 @@
       await saveHardwareHealthCheck(signer.fingerprint, result);
       toast({
         title: 'Signer verified',
-        description: `${signer.label} matches this wallet.`,
+        description: translate($locale, '{signerName} matches this wallet.', {
+          signerName: signer.label
+        }),
         tone: 'success'
       });
     } catch (cause) {
-      const summary = cause instanceof Error ? cause.message : 'The device could not be verified.';
+      const summary = localizedError(cause, $locale, 'The device could not be verified.');
       await saveHardwareHealthCheck(signer.fingerprint, {
         checkedAt: new Date().toISOString(),
         summary,
@@ -249,8 +254,7 @@
       healthPinOpen = true;
     } catch (cause) {
       healthPinErrorCode = cause instanceof WalletError ? cause.code : 'internal_error';
-      healthPinError =
-        cause instanceof Error ? cause.message : 'Could not start the Trezor PIN matrix.';
+      healthPinError = localizedError(cause, $locale, 'Could not start the Trezor PIN matrix.');
       if (!retrying)
         toast({ title: 'Trezor unlock unavailable', description: healthPinError, tone: 'danger' });
     } finally {
@@ -278,8 +282,7 @@
     } catch (cause) {
       healthPinChallenge = '';
       healthPinErrorCode = cause instanceof WalletError ? cause.code : 'internal_error';
-      healthPinError =
-        cause instanceof Error ? cause.message : 'Trezor did not accept that matrix entry.';
+      healthPinError = localizedError(cause, $locale, 'Trezor did not accept that matrix entry.');
     } finally {
       healthPinBusy = false;
     }
@@ -315,7 +318,7 @@
       policyDevice = device;
     } catch (cause) {
       if (generation !== policyLookupGeneration) return;
-      policyError = cause instanceof Error ? cause.message : 'Could not scan hardware devices.';
+      policyError = localizedError(cause, $locale, 'Could not scan hardware devices.');
     } finally {
       if (generation === policyLookupGeneration) policyBusy = false;
     }
@@ -350,12 +353,15 @@
       policyDevice = null;
       toast({
         title: 'Wallet policy verified',
-        description: `${signerLabel} registered the policy and verified its first address.`,
+        description: translate(
+          $locale,
+          '{signerName} registered the policy and verified its first address.',
+          { signerName: signerLabel }
+        ),
         tone: 'success'
       });
     } catch (cause) {
-      policyError =
-        cause instanceof Error ? cause.message : 'The wallet policy could not be verified.';
+      policyError = localizedError(cause, $locale, 'The wallet policy could not be verified.');
     } finally {
       policyBusy = false;
     }
@@ -383,7 +389,7 @@
               : undefined
         });
     } catch (cause) {
-      policyError = cause instanceof Error ? cause.message : 'Could not save the Coldcard policy.';
+      policyError = localizedError(cause, $locale, 'Could not save the Coldcard policy.');
     } finally {
       policyBusy = false;
     }
@@ -408,8 +414,7 @@
       });
       policySigner = null;
     } catch (cause) {
-      policyError =
-        cause instanceof Error ? cause.message : 'Could not record the Coldcard policy check.';
+      policyError = localizedError(cause, $locale, 'Could not record the Coldcard policy check.');
     } finally {
       policyBusy = false;
     }
@@ -420,10 +425,13 @@
   {#if wallet}
     <header class="page-header">
       <div>
-        <p class="eyebrow">WALLET POLICY</p>
+        <p class="eyebrow">{translate($locale, 'WALLET POLICY')}</p>
         <h1>{wallet.name}</h1>
         <p class="subtitle">
-          A watch-only wallet whose spending policy is enforced by independent keys.
+          {translate(
+            $locale,
+            'A watch-only wallet whose spending policy is enforced by independent keys.'
+          )}
         </p>
       </div>
       <span class="policy-pill">{wallet.threshold} of {wallet.cosigners.length}</span>
@@ -435,17 +443,19 @@
           >{wallet.threshold} of {wallet.cosigners.length}</strong
         >
         <p>
-          Native SegWit · {networkName(snapshot?.network ?? defaultConfig.network)}
+          {translate($locale, 'Native SegWit ·')}
+          {networkName(snapshot?.network ?? defaultConfig.network)}
         </p>
         {#if isPrototypeWallet}<p class="prototype-hint">
-            Ready-to-test demo wallet <span>·</span> PIN <code>prototype-passphrase</code>
+            {translate($locale, 'Ready-to-test demo wallet')} <span>·</span>
+            {translate($locale, 'PIN')} <code>{translate($locale, 'prototype-passphrase')}</code>
           </p>{/if}
       </div>
       <div class="vault-actions">
         <div class="wallet-more" bind:this={moreRoot}>
           <OverflowMenuButton
             bind:element={moreTrigger}
-            label="More wallet actions"
+            label={translate($locale, 'More wallet actions')}
             expanded={moreOpen}
             onclick={() => (moreOpen = !moreOpen)}
           />{#if moreOpen}<div class="wallet-more-menu" role="menu">
@@ -456,34 +466,41 @@
                   showDescriptors = true;
                 }}
                 ><Eye size={15} /><span
-                  ><strong>Show descriptors</strong><small>Inspect receive and change logic</small
+                  ><strong>{translate($locale, 'Show descriptors')}</strong><small
+                    >{translate($locale, 'Inspect receive and change logic')}</small
                   ></span
                 ></button
               ><a role="menuitem" href="/multisig/backup"
                 ><FileKey size={15} /><span
-                  ><strong>Export & verify</strong><small>Save a public wallet backup</small></span
+                  ><strong>{translate($locale, 'Export & verify')}</strong><small
+                    >{translate($locale, 'Save a public wallet backup')}</small
+                  ></span
                 ></a
               ><a role="menuitem" href="/multisig/policy"
                 ><FlaskConical size={15} /><span
-                  ><strong>Recovery policy lab</strong><small>Explore guided Miniscript paths</small
+                  ><strong>{translate($locale, 'Recovery policy lab')}</strong><small
+                    >{translate($locale, 'Explore guided Miniscript paths')}</small
                   ></span
                 ></a
               >
             </div>{/if}
         </div>
-        <Button variant="secondary" href="/multisig/receive">Receive</Button><Button
-          href="/multisig/send">Send</Button
-        >
+        <Button variant="secondary" href="/multisig/receive">{translate($locale, 'Receive')}</Button
+        ><Button href="/multisig/send">{translate($locale, 'Send')}</Button>
       </div>
     </section>
     <div class="vault-grid">
       <section class="vault-cosigners">
         <div class="section-heading compact">
           <div>
-            <h2>Signing keys</h2>
+            <h2>{translate($locale, 'Signing keys')}</h2>
             <p>
-              Sign with any {wallet.threshold} keys. Open a signer to inspect its identity, health, and
-              wallet-policy status.
+              {translate($locale, 'Sign with any')}
+              {wallet.threshold}
+              {translate(
+                $locale,
+                'keys. Open a signer to inspect its identity, health, and\n              wallet-policy status.'
+              )}
             </p>
           </div>
         </div>
@@ -493,16 +510,19 @@
               policyVerifications
             )}
             <article>
-              <button aria-label="View {signer.label} details" onclick={() => openSigner(signer)}
+              <button
+                aria-label={translate($locale, 'View {signer} details', { signer: signer.label })}
+                onclick={() => openSigner(signer)}
                 ><span class="device-number">{i + 1}</span><span class="saved-cosigner-copy"
                   ><strong>{signer.label}</strong><span
-                    ><code>{signer.fingerprint.toLowerCase()}</code><i></i>{sourceName(
-                      signer.source
-                    )}{#if latestHealth(signer)}<i></i>Checked <LocalTimestamp
+                    ><code>{signer.fingerprint.toLowerCase()}</code><i></i>{translate(
+                      $locale,
+                      sourceName(signer.source)
+                    )}{#if latestHealth(signer)}<i></i>{translate($locale, 'Checked')}
+                      <LocalTimestamp
                         value={latestHealth(signer)!.checkedAt}
-                      />{:else if verification}<i></i>Policy verified <LocalTimestamp
-                        value={verification.verifiedAt}
-                      />{/if}</span
+                      />{:else if verification}<i></i>{translate($locale, 'Policy verified')}
+                      <LocalTimestamp value={verification.verifiedAt} />{/if}</span
                   ></span
                 ><span
                   class="ready-badge"
@@ -518,22 +538,34 @@
       <aside class="vault-backup-card">
         <span class="vault-backup-icon"><FileKey size={20} /></span>
         <div>
-          <h2>Backups & recovery</h2>
-          <p>Save the public policy, then verify it rebuilds the same first address.</p>
+          <h2>{translate($locale, 'Backups & recovery')}</h2>
+          <p>
+            {translate(
+              $locale,
+              'Save the public policy, then verify it rebuilds the same first address.'
+            )}
+          </p>
         </div>
-        <Button variant="secondary" class="full" href="/multisig/backup">Export & verify</Button
-        ><Button variant="ghost" class="full" href="/multisig/policy">Recovery policy lab</Button>
+        <Button variant="secondary" class="full" href="/multisig/backup"
+          >{translate($locale, 'Export & verify')}</Button
+        ><Button variant="ghost" class="full" href="/multisig/policy"
+          >{translate($locale, 'Recovery policy lab')}</Button
+        >
       </aside>
     </div>
   {:else}
     <section class="empty-state vault-empty">
       <span class="empty-icon"><Usb size={24} /></span>
-      <h2>Single-key policy</h2>
+      <h2>{translate($locale, 'Single-key policy')}</h2>
       <p>
-        This wallet is controlled by one signing key. Add another wallet to use a shared or recovery
-        policy.
+        {translate(
+          $locale,
+          'This wallet is controlled by one signing key. Add another wallet to use a shared or recovery\n        policy.'
+        )}
       </p>
-      <Button href="/welcome?add=1"><Plus size={16} />Add another wallet</Button>
+      <Button href="/welcome?add=1"
+        ><Plus size={16} />{translate($locale, 'Add another wallet')}</Button
+      >
     </section>
   {/if}
 </div>
@@ -570,12 +602,18 @@
 />
 <Modal
   open={!!policySigner}
-  title={policySigner && policyRegistrationProfile(policySigner).registration === 'file_once'
-    ? 'Prepare Coldcard for this wallet'
-    : 'Verify wallet policy'}
-  description={policySigner && policyRegistrationProfile(policySigner).registration === 'file_once'
-    ? 'Complete the one-time policy-file import before signing.'
-    : 'Check the policy, signer keys, and first address.'}
+  title={translate(
+    $locale,
+    policySigner && policyRegistrationProfile(policySigner).registration === 'file_once'
+      ? 'Prepare Coldcard for this wallet'
+      : 'Verify wallet policy'
+  )}
+  description={translate(
+    $locale,
+    policySigner && policyRegistrationProfile(policySigner).registration === 'file_once'
+      ? 'Complete the one-time policy-file import before signing.'
+      : 'Check the policy, signer keys, and first address.'
+  )}
   onclose={closePolicyVerification}
 >
   {#if policySigner && wallet && policyRegistrationProfile(policySigner).registration === 'file_once'}<ColdcardPolicySetup
@@ -587,9 +625,12 @@
       onconfirm={confirmColdcardPolicy}
     />
   {:else if policyBusy && !policyDevice}<HardwareActionPrompt
-      title="Looking for the saved signer"
-      detail="Keep the saved signer connected and unlocked while Groot checks its account key."
-      label="Signer scan in progress"
+      title={translate($locale, 'Looking for the saved signer')}
+      detail={translate(
+        $locale,
+        'Keep the saved signer connected and unlocked while Groot checks its account key.'
+      )}
+      label={translate($locale, 'Signer scan in progress')}
     />
   {:else if policySigner && wallet && policyDevice && policyAddress}<SignerPolicyReview
       {wallet}
@@ -601,10 +642,13 @@
       onverify={verifySignerPolicy}
     />
   {:else if policySigner}<div class="device-scan">
-      <Cpu size={20} /><strong>Saved signer not found</strong><span
-        >{policyError || `Connect and unlock ${policySigner.label}, then scan again.`}</span
+      <Cpu size={20} /><strong>{translate($locale, 'Saved signer not found')}</strong><span
+        >{translate(
+          $locale,
+          policyError || `Connect and unlock ${policySigner.label}, then scan again.`
+        )}</span
       ><Button variant="secondary" onclick={() => openPolicyVerification(policySigner!)}
-        >Scan again</Button
+        >{translate($locale, 'Scan again')}</Button
       >
     </div>{/if}
 </Modal>
