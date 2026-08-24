@@ -1820,6 +1820,27 @@ code {
 .modal:focus-visible {
   outline: none;
 }
+.modal.modal-attention {
+  animation: modal-attention 360ms ease-out;
+}
+@keyframes modal-attention {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  22% {
+    transform: translateX(-6px);
+  }
+  45% {
+    transform: translateX(5px);
+  }
+  68% {
+    transform: translateX(-3px);
+  }
+  84% {
+    transform: translateX(2px);
+  }
+}
 .modal-header {
   padding: 20px 20px 16px;
   display: flex;
@@ -8289,6 +8310,11 @@ code {
   }
   .send-signers.loading::after {
     display: none;
+  }
+  .modal.modal-attention {
+    animation: none !important;
+    outline: 2px solid var(--fr-blue);
+    outline-offset: -2px;
   }
 }
 

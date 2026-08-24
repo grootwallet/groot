@@ -3,10 +3,35 @@
   import { translate } from '$lib/i18n-catalog';
   import { X } from '@lucide/svelte';
   import { lockModalScroll } from './modal-scroll-lock';
+  import { onDestroy } from 'svelte';
   import { fly } from 'svelte/transition';
-  let { open, title, description = '', onclose, children } = $props();
+  let { open, title, description = '', onclose, attentionSignal = 0, children } = $props();
   let dialog = $state<HTMLDivElement>();
   let documentTop = $state(-32);
+  let attentionActive = $state(false);
+  let attentionFrame: number | null = null;
+  let attentionTimer: ReturnType<typeof setTimeout> | null = null;
+
+  onDestroy(() => {
+    if (attentionFrame !== null) cancelAnimationFrame(attentionFrame);
+    if (attentionTimer !== null) clearTimeout(attentionTimer);
+  });
+
+  $effect(() => {
+    const signal = attentionSignal;
+    if (!open || !signal || typeof requestAnimationFrame === 'undefined') return;
+    if (attentionFrame !== null) cancelAnimationFrame(attentionFrame);
+    if (attentionTimer !== null) clearTimeout(attentionTimer);
+    attentionActive = false;
+    attentionFrame = requestAnimationFrame(() => {
+      attentionFrame = null;
+      attentionActive = true;
+      attentionTimer = setTimeout(() => {
+        attentionTimer = null;
+        attentionActive = false;
+      }, 420);
+    });
+  });
 
   $effect(() => {
     if (!open || typeof document === 'undefined') return;
@@ -65,6 +90,7 @@
     <div
       bind:this={dialog}
       class="modal"
+      class:modal-attention={attentionActive}
       role="dialog"
       aria-modal="true"
       aria-label={title}

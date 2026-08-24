@@ -170,6 +170,7 @@ test('keeps multisig receive verification disclosure visibly expandable', async 
   await expect(dialog.getByRole('button', { name: /^Trezor / })).toContainText('Ready');
   await dialog.getByRole('button', { name: /^Trezor / }).click();
   await dialog.getByRole('button', { name: 'Close' }).click();
+  await expect(dialog).toHaveClass(/modal-attention/);
   await expect(
     dialog.getByRole('status', { name: 'Waiting for hardware cancellation' })
   ).toBeVisible();

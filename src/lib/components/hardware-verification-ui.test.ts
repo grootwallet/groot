@@ -18,6 +18,7 @@ const verificationFlow = readFileSync(
   new URL('./HardwareReceiveVerification.svelte', import.meta.url),
   'utf8'
 );
+const modal = readFileSync(new URL('./Modal.svelte', import.meta.url), 'utf8');
 const singleKeyReceive = readFileSync(
   new URL('../../routes/receive/+page.svelte', import.meta.url),
   'utf8'
@@ -65,6 +66,16 @@ const hardwareTransport = readFileSync(
 );
 
 describe('hardware receive verification UI', () => {
+  it('acknowledges blocked modal dismissal with repeatable reduced-motion-safe feedback', () => {
+    expect(verificationFlow).toContain('modalAttentionSignal += 1');
+    expect(verificationFlow).toContain('attentionSignal={modalAttentionSignal}');
+    expect(modal).toContain('class:modal-attention={attentionActive}');
+    expect(appCss).toMatch(/@keyframes modal-attention/);
+    expect(appCss).toMatch(
+      /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.modal\.modal-attention\s*\{[\s\S]*?animation:\s*none !important;[\s\S]*?outline:/
+    );
+  });
+
   it('localizes the hardware-verification tooltip as well as its accessible label', () => {
     expect(verificationStatus).toContain('<Tooltip text={translate($locale, explanation)}>');
     expect(verificationStatus).toContain('explanation: translate($locale, explanation)');

@@ -47,6 +47,7 @@
   let verificationDevice = $state<HardwareDevice | null>(null);
   let verificationAction = $state<'scan' | 'unlock' | 'approve'>('scan');
   let cancelRequested = $state(false);
+  let modalAttentionSignal = $state(0);
   let copied = $state(false);
   let pinOpen = $state(false);
   let pinBusy = $state(false);
@@ -104,6 +105,7 @@
   function closeVerification() {
     if (verifyBusy && verificationAction !== 'scan') {
       cancelRequested = true;
+      modalAttentionSignal += 1;
       return;
     }
     finishVerificationClose(true);
@@ -315,6 +317,7 @@
       : "Compare the exact address below with the complete address on the signer's trusted display."
   )}
   onclose={closeVerification}
+  attentionSignal={modalAttentionSignal}
 >
   <HardwareAddressComparison
     {comparison}
