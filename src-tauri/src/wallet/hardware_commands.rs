@@ -1283,6 +1283,12 @@ fn read_hardware_account_identity(
     derivation_path: &str,
     compare_with_saved_identity: bool,
 ) -> ApiResult<(String, String)> {
+    // Reading an account identity can require a person to unlock or approve on
+    // the device. Keep discovery bounded separately, but give this interactive
+    // step the same user-review budget as display and signing operations.
+    let operation = hwi
+        .begin_interactive_operation()
+        .map_err(hardware_api_error)?;
     if compare_with_saved_identity {
         let fingerprint = device
             .fingerprint
@@ -1295,7 +1301,12 @@ fn read_hardware_account_identity(
             )
         })?;
         let output = hwi
-            .account_xpub(&device.device_type, &device.path, derivation_path)
+            .account_xpub_in_operation(
+                &operation,
+                &device.device_type,
+                &device.path,
+                derivation_path,
+            )
             .map_err(|error| {
                 hardware_xpub_api_error(error, &device.device_type, derivation_path)
             })?;
@@ -1309,7 +1320,12 @@ fn read_hardware_account_identity(
     // same open HWI client. A cached enumerate fingerprint plus a later xpub
     // would introduce a device-swap window before Groot has a saved identity.
     let output = hwi
-        .account_keypool(&device.device_type, &device.path, derivation_path)
+        .account_keypool_in_operation(
+            &operation,
+            &device.device_type,
+            &device.path,
+            derivation_path,
+        )
         .map_err(|error| hardware_xpub_api_error(error, &device.device_type, derivation_path))?;
     parse_hwi_account_keypool(&output, derivation_path, &device.device_type)
 }

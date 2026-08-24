@@ -29,7 +29,7 @@ async function confirmGeneratedBackup(page: Page) {
 }
 
 async function chooseSoftwareWallet(page: Page) {
-  await page.getByRole('button', { name: /Keep it on this device/ }).click();
+  await page.getByRole('button', { name: /Software wallet/ }).click();
 }
 
 test('creates a 24-word wallet and clears onboarding secrets', async ({ page }) => {
@@ -40,14 +40,10 @@ test('creates a 24-word wallet and clears onboarding secrets', async ({ page }) 
   await expect(page.getByRole('button', { name: 'Recover software wallet' })).toBeVisible();
   await page.getByRole('button', { name: 'Add wallet' }).click();
   await expect(page.locator('.wallet-type-card')).toHaveCount(3);
+  await expect(page.getByText('Create and back up your keys in Groot.')).toBeVisible();
+  await expect(page.getByText('Connect a device you already trust.')).toBeVisible();
   await expect(
-    page.getByText('The easiest way to start. Groot creates recovery words for you to write down.')
-  ).toBeVisible();
-  await expect(
-    page.getByText('Connect one you already own. Your keys stay protected by that device.')
-  ).toBeVisible();
-  await expect(
-    page.getByText('Require more than one key, or add another way to recover your wallet.')
+    page.getByText('Custom spending, recovery, inheritance, or shared control.')
   ).toBeVisible();
   await chooseSoftwareWallet(page);
   const setupProgress = page.getByRole('navigation', { name: 'Software wallet setup progress' });
@@ -267,14 +263,14 @@ test('locked wallet can continue into hardware and multisig setup', async ({ pag
 
   await page.goto('/welcome?add=1');
   await page.getByRole('button', { name: 'Add wallet' }).click();
-  await page.getByRole('link', { name: /Use a hardware wallet/ }).click();
+  await page.getByRole('link', { name: /Hardware wallet/ }).click();
   await expect(page).toHaveURL(/\/hardware\/new$/);
   await expect(page.getByRole('heading', { name: 'Add hardware wallet' })).toBeVisible();
   await expect(page.locator('.app-shell')).toHaveClass(/onboarding-shell/);
 
   await page.getByRole('link', { name: /Cancel/ }).click();
   await page.getByRole('button', { name: 'Add wallet' }).click();
-  await page.getByRole('link', { name: /Set up shared control/ }).click();
+  await page.getByRole('link', { name: /Multisig wallet/ }).click();
   await expect(page).toHaveURL(/\/multisig\/new$/);
   await expect(page.getByRole('heading', { name: 'Create a multisig wallet' })).toBeVisible();
   await expect(page.locator('.app-shell')).toHaveClass(/onboarding-shell/);
@@ -425,7 +421,7 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   test.setTimeout(60_000);
   await page.goto('/welcome?add=1');
   await page.getByRole('button', { name: 'Add wallet' }).click();
-  await page.getByRole('link', { name: /Use a hardware wallet/ }).click();
+  await page.getByRole('link', { name: /Hardware wallet/ }).click();
   await expect(page.getByRole('heading', { name: 'Add hardware wallet' })).toBeVisible();
   await page.getByLabel('Wallet name').fill('Hardware savings');
   await page.getByRole('button', { name: /Connect with cable/ }).click();
@@ -722,8 +718,10 @@ test('unlocks a Trezor before choosing its standard single-key wallet', async ({
   await scan.getByRole('button', { name: /Virtual Trezor One/ }).click();
 
   const pin = page.getByRole('dialog', { name: 'Unlock Trezor' });
-  await expect(pin.getByText(/receives positions, never your PIN digits/)).toBeVisible();
-  await expect(pin.getByText(/grid deliberately stays blank/)).toBeVisible();
+  await expect(pin.getByText('Match locations, not numbers')).toBeVisible();
+  await expect(
+    pin.getByText('For each PIN digit on Trezor, tap the blank cell in the same location.')
+  ).toBeVisible();
   await expect(pin.getByRole('button', { name: 'Top left position' })).toHaveText('');
   await pin.getByRole('button', { name: 'Top left position' }).click();
   await pin.getByRole('button', { name: 'Bottom left position' }).click();

@@ -50,6 +50,14 @@ export const hardwareCopy = {
     fr: 'Impossible de rechercher les appareils matériels.',
     es: 'No se pudieron buscar dispositivos físicos.'
   },
+  'Could not scan hardware': {
+    fr: 'Impossible de rechercher les appareils matériels',
+    es: 'No se pudieron buscar dispositivos físicos'
+  },
+  'Could not start hardware unlock': {
+    fr: 'Impossible de démarrer le déverrouillage matériel',
+    es: 'No se pudo iniciar el desbloqueo del dispositivo'
+  },
   'Could not start the PIN matrix.': {
     fr: 'Impossible de démarrer la matrice du PIN.',
     es: 'No se pudo iniciar la matriz del PIN.'

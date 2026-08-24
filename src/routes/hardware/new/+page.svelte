@@ -661,6 +661,7 @@
       onrescan={scan}
       disabled={busy}
       detailedStatus
+      showRescan
     />{/if}
   {#if error}<div class="hardware-inline-error" role="alert">
       <AlertTriangle size={18} /><span

@@ -234,11 +234,13 @@ describe('hardware receive verification UI', () => {
     for (const route of [hardwareSetup, singleKeySend]) {
       expect(route).toContain('<HardwareDeviceList');
     }
+    expect(hardwareSetup).toContain('showRescan');
   });
 
   it('distinguishes discovery failures from account-key failures', () => {
     expect(hardwareSetup).toContain("errorTitle = $state('Could not scan hardware')");
     expect(hardwareSetup).toContain("errorTitle = 'Could not read the account key'");
+    expect(hardwareSetup).toContain("errorTitle = 'Could not start hardware unlock'");
     expect(hardwareSetup).toContain('{:else if devices.length || !error}<HardwareDeviceList');
     expect(hardwareSetup).toContain('<strong>{translate($locale, errorTitle)}</strong>');
     expect(hardwareSetup).not.toContain(

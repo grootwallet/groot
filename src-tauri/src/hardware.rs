@@ -331,12 +331,14 @@ fn pin_command_input(pin_positions: &[u8]) -> Result<Vec<u8>, HardwareError> {
 
 pub trait HardwareTransport: Send + Sync {
     fn enumerate(&self) -> Result<Vec<u8>, HardwareError>;
+    #[cfg(test)]
     fn account_keypool(
         &self,
         device_type: &str,
         device_path: &str,
         derivation_path: &str,
     ) -> Result<Vec<u8>, HardwareError>;
+    #[cfg(test)]
     fn account_xpub(
         &self,
         device_type: &str,
@@ -618,6 +620,7 @@ impl HardwareTransport for HwiCli {
         )
     }
 
+    #[cfg(test)]
     fn account_keypool(
         &self,
         device_type: &str,
@@ -629,6 +632,7 @@ impl HardwareTransport for HwiCli {
         self.account_keypool_in_operation(&operation, device_type, device_path, derivation_path)
     }
 
+    #[cfg(test)]
     fn account_xpub(
         &self,
         device_type: &str,
