@@ -220,6 +220,8 @@
 
   async function submitPin() {
     if (!pinChallenge || !pinPositions || pinBusy) return;
+    const device = pinDevice;
+    if (!device) return;
     pinBusy = true;
     pinError = '';
     pinErrorCode = '';
@@ -230,12 +232,8 @@
       pinChallenge = '';
       pinOpen = false;
       pinDevice = null;
-      toast({
-        title: translate($locale, 'Hardware wallet unlocked'),
-        description: translate($locale, 'Scanning again so you can verify the unchanged address.'),
-        tone: 'success'
-      });
-      await scan();
+      verifyOpen = true;
+      await verifyAddress(device);
     } catch (cause) {
       pinChallenge = '';
       const failure = localizedReceiveVerificationFailure(

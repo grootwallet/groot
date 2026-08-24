@@ -1585,6 +1585,25 @@ mod tests {
         assert_eq!(arguments.last().map(String::as_str), Some("--stdin"));
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn trezor_pin_prompt_is_a_complete_single_hwi_stdin_command() {
+        let script = test_script(
+            "pin-prompt-command",
+            "IFS= read -r command\nIFS= read -r terminator\n[ -z \"$terminator\" ] || exit 2\nprintf '%s\\n' \"$command\"",
+        );
+        let output = HwiCli::for_test_program(script.clone())
+            .prompt_pin("trezor", "usb-device-path")
+            .unwrap();
+        let command = String::from_utf8(output).unwrap();
+        assert!(command.contains("--device-type"));
+        assert!(command.contains("trezor"));
+        assert!(command.contains("--device-path"));
+        assert!(command.contains("usb-device-path"));
+        assert!(command.contains("promptpin"));
+        std::fs::remove_file(script).unwrap();
+    }
+
     #[test]
     fn passes_only_a_validated_home_after_clearing_the_environment() {
         let home = std::env::temp_dir();

@@ -155,7 +155,10 @@ describe('hardware receive verification UI', () => {
     expect(verificationFlow).toContain('walletService.promptHardwarePin(device.id)');
     expect(verificationFlow).toContain('walletService.sendHardwarePin(pinChallenge, positions)');
     expect(verificationFlow).toContain('<TrezorPinModal');
-    expect(verificationFlow).toContain('Scanning again so you can verify the unchanged address.');
+    expect(verificationFlow).toContain('await verifyAddress(device);');
+    expect(verificationFlow).not.toContain(
+      'Scanning again so you can verify the unchanged address.'
+    );
     expect(multisigPolicy).toContain('lockedDeviceForHealthCheck');
     expect(multisigPolicy).toContain('<TrezorPinModal');
     expect(multisigPolicy).toContain('Resuming the signer health check.');
