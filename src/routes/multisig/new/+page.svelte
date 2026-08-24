@@ -1213,7 +1213,7 @@
         {translate(
           $locale,
           stage === 'policy' && policyStep === 'choose'
-            ? 'Choose how this wallet can be spent.'
+            ? 'Set the spending rules.'
             : stage === 'policy'
               ? 'Name and configure the policy before adding signers.'
               : 'Add independent signers, verify the policy, and back it up.'
@@ -1237,7 +1237,7 @@
     </div>
   </header>
   <SetupProgress
-    steps={creationSteps}
+    steps={creationSteps.map((step) => translate($locale, step))}
     current={creationStep}
     label={translate($locale, 'Wallet creation progress')}
   />
@@ -1257,17 +1257,14 @@
     </section>
   {:else if stage === 'policy'}
     <div class="coordinator-grid policy-only-grid">
-      <section class="form-card coordinator-main">
+      <section class="form-card coordinator-main policy-setup-card">
         {#if policyStep === 'choose'}
           <div class="section-heading compact policy-choice-heading">
             <div>
               <span class="setup-step">{translate($locale, 'POLICY · 1 OF 2')}</span>
-              <h2>{translate($locale, 'Choose a spending policy')}</h2>
+              <h2>{translate($locale, 'Choose how this wallet spends')}</h2>
               <p>
-                {translate(
-                  $locale,
-                  'Start with who should be able to spend and whether a separate delayed key is needed.'
-                )}
+                {translate($locale, 'Pick a plan. Review every key before creating the wallet.')}
               </p>
             </div>
           </div>
@@ -1276,92 +1273,81 @@
             aria-label={translate($locale, 'Wallet policies')}
           >
             <button
+              class="policy-kind-card standard"
               class:active={templateKind === 'standard'}
               onclick={() => chooseTemplate('standard')}
-              ><Users size={18} /><strong>{translate($locale, 'Standard')}</strong><small
-                >{translate($locale, 'A fixed group approves every payment. No timer.')}</small
-              ></button
+              ><span class="policy-kind-icon"><Users size={21} /></span><span
+                class="policy-kind-copy"
+                ><strong>{translate($locale, 'Standard')}</strong><small
+                  >{translate($locale, 'Your chosen threshold approves every payment.')}</small
+                ></span
+              ><span class="policy-kind-meta">{translate($locale, 'No delay')}</span
+              >{#if templateKind === 'standard'}<span class="policy-kind-check" aria-hidden="true"
+                  ><Check size={14} /></span
+                >{/if}</button
             >
             <button
+              class="policy-kind-card recovery"
               class:active={templateKind === 'recovery'}
               onclick={() => chooseTemplate('recovery')}
-              ><ShieldCheck size={18} /><strong>{translate($locale, 'Recovery path')}</strong><small
-                >{translate($locale, '2 of 3 now; an emergency key after about one month.')}</small
-              ></button
+              ><span class="policy-kind-icon"><ShieldCheck size={21} /></span><span
+                class="policy-kind-copy"
+                ><strong>{translate($locale, 'Recovery')}</strong><small
+                  >{translate($locale, '2 of 3 now, or one backup key later.')}</small
+                ></span
+              ><span class="policy-kind-meta">{translate($locale, 'About one month')}</span
+              >{#if templateKind === 'recovery'}<span class="policy-kind-check" aria-hidden="true"
+                  ><Check size={14} /></span
+                >{/if}</button
             >
             <button
+              class="policy-kind-card inheritance"
               class:active={templateKind === 'inheritance'}
               onclick={() => chooseTemplate('inheritance')}
-              ><Clock3 size={18} /><strong>{translate($locale, 'Inheritance')}</strong><small
-                >{translate($locale, '2 of 3 now; an heir key after about one year.')}</small
-              ></button
+              ><span class="policy-kind-icon"><Clock3 size={21} /></span><span
+                class="policy-kind-copy"
+                ><strong>{translate($locale, 'Inheritance')}</strong><small
+                  >{translate($locale, '2 of 3 now, or one heir key later.')}</small
+                ></span
+              ><span class="policy-kind-meta">{translate($locale, 'About one year')}</span
+              >{#if templateKind === 'inheritance'}<span
+                  class="policy-kind-check"
+                  aria-hidden="true"><Check size={14} /></span
+                >{/if}</button
             >
           </div>
-          <div class="template-tradeoff policy-choice-explainer">
-            <strong
-              >{translate(
-                $locale,
-                templateKind === 'standard'
-                  ? 'Best for ordinary shared custody'
-                  : templateKind === 'recovery'
-                    ? 'Shorter emergency fallback'
-                    : 'Longer planned handoff'
-              )}</strong
-            >
-            <span
-              >{translate(
-                $locale,
-                templateKind === 'standard'
-                  ? 'Every payment always needs the chosen number of signers.'
-                  : templateKind === 'recovery'
-                    ? 'A fourth independent key can spend after each coin has aged about 4,320 blocks.'
-                    : 'A fourth independent heir key can spend after each coin has aged about 52,560 blocks.'
-              )}</span
-            >
-          </div>
-          <p class="policy-template-note">
-            {translate(
-              $locale,
-              'Recovery path and Inheritance use the same four-key structure. Their intended holder and\n            delay are different; the delayed key cannot spend before its timer matures.'
-            )}
-          </p>
           <div class="coordinator-actions">
             <Button variant="secondary" href="/settings"
               ><ArrowLeft size={16} />{translate($locale, 'Cancel')}</Button
             ><Button onclick={continueToPolicyConfiguration}
-              >{translate($locale, 'Configure')}
-              {translate(
-                $locale,
-                templateKind === 'standard'
-                  ? 'standard'
-                  : templateKind === 'recovery'
-                    ? 'recovery path'
-                    : 'inheritance'
-              )}<ChevronRight size={16} /></Button
+              >{translate($locale, 'Continue')}<ChevronRight size={16} /></Button
             >
           </div>
         {:else}
           <button class="back-link" onclick={returnToPolicyChoice}
-            ><ArrowLeft size={16} />{translate($locale, 'Change policy type')}</button
+            ><ArrowLeft size={16} />{translate($locale, 'Policy options')}</button
           >
           <div class="section-heading compact policy-configure-heading">
             <div>
               <span class="setup-step">{translate($locale, 'POLICY · 2 OF 2')}</span>
               <h2>
-                {translate($locale, 'Configure')}
                 {translate(
                   $locale,
                   templateKind === 'standard'
-                    ? 'a standard wallet'
+                    ? 'Standard multisig'
                     : templateKind === 'recovery'
-                      ? 'the recovery path'
-                      : 'inheritance'
+                      ? 'Recovery wallet'
+                      : 'Inheritance wallet'
                 )}
               </h2>
               <p>
                 {translate(
                   $locale,
-                  'Choose a local name and confirm how many independent keys this policy needs.'
+                  templateKind === 'standard'
+                    ? 'Name the wallet and choose its signature threshold.'
+                    : templateKind === 'recovery'
+                      ? 'Three primary keys. One delayed recovery key.'
+                      : 'Three primary keys. One delayed heir key.'
                 )}
               </p>
             </div>
@@ -1389,19 +1375,29 @@
               <button
                 class:active={standardRecipe === '2of3'}
                 onclick={() => applyStandardRecipe('2of3')}
-                ><strong>2 of 3</strong><small>{translate($locale, 'Recommended')}</small></button
+                ><span
+                  ><strong>2 of 3</strong><small
+                    >{translate($locale, 'One key can be unavailable')}</small
+                  ></span
+                ><em>{translate($locale, 'Balanced')}</em></button
               >
               <button
                 class:active={standardRecipe === '3of5'}
                 onclick={() => applyStandardRecipe('3of5')}
-                ><strong>3 of 5</strong><small>{translate($locale, 'Larger group')}</small></button
+                ><span
+                  ><strong>3 of 5</strong><small
+                    >{translate($locale, 'Two keys can be unavailable')}</small
+                  ></span
+                ><em>{translate($locale, 'Larger group')}</em></button
               >
               <button
                 class:active={standardRecipe === 'custom'}
                 onclick={() => applyStandardRecipe('custom')}
-                ><strong>{translate($locale, 'Custom')}</strong><small
-                  >{translate($locale, 'Advanced')}</small
-                ></button
+                ><span
+                  ><strong>{translate($locale, 'Custom')}</strong><small
+                    >{translate($locale, 'Choose your own threshold')}</small
+                  ></span
+                ><em>{translate($locale, 'Advanced')}</em></button
               >
             </div>
             {#if standardRecipe === 'custom'}<div class="threshold-row custom-threshold">
@@ -1425,42 +1421,35 @@
                 >
               </div>
               <p class="policy-guidance">
-                {translate(
-                  $locale,
-                  'Groot starts at 2 signatures. A 1-of-N wallet has no multisig theft protection; use\n                a single-key wallet instead.'
-                )}
+                {translate($locale, 'Multisig requires at least two signatures.')}
               </p>
-            {:else}<div class="recipe-summary">
-                <strong>{threshold} of {requiredKeys} {translate($locale, 'signatures')}</strong
-                ><span
-                  >{translate(
-                    $locale,
-                    standardRecipe === '2of3'
-                      ? 'Lose one key without losing access.'
-                      : 'Designed for a larger family or team.'
-                  )}</span
-                >
-              </div>{/if}
+            {/if}
           {:else}<div class="path-visual">
               <span
-                ><b>{translate($locale, 'NOW')}</b><strong
+                ><b>{translate($locale, 'TODAY')}</b><strong
                   >{translate($locale, '2 of 3 primary keys')}</strong
                 ></span
               ><i></i><span
-                ><b>{translate($locale, templateKind === 'recovery' ? '~1 MONTH' : '~1 YEAR')}</b
+                ><b
+                  >{translate(
+                    $locale,
+                    templateKind === 'recovery' ? 'ABOUT 1 MONTH' : 'ABOUT 1 YEAR'
+                  )}</b
                 ><strong
-                  >1 {translate($locale, templateKind === 'recovery' ? 'emergency' : 'heir')}
-                  {translate($locale, 'key')}</strong
+                  >{translate(
+                    $locale,
+                    templateKind === 'recovery' ? '1 recovery key' : '1 heir key'
+                  )}</strong
+                ><small
+                  >{formatInteger(templateKind === 'recovery' ? 4_320 : 52_560, $locale)}
+                  {translate($locale, 'blocks')}</small
                 ></span
               >
             </div>
             <div class="recovery-separation">
               <ShieldCheck size={15} /><span
-                ><strong>{translate($locale, 'Four independent keys required')}</strong><small
-                  >{translate(
-                    $locale,
-                    'Key 4 is delayed and excluded from the immediate 2-of-3 branch. It cannot be\n                  reused as a primary signer.'
-                  )}</small
+                ><strong>{translate($locale, 'Four separate keys')}</strong><small
+                  >{translate($locale, 'The delayed key never joins the immediate 2-of-3.')}</small
                 ></span
               >
             </div>{/if}
@@ -1523,7 +1512,11 @@
                           class="source-badge"
                           >{translate(
                             $locale,
-                            i === 3 ? 'Recovery-only signer' : 'Primary signer'
+                            i === 3
+                              ? templateKind === 'inheritance'
+                                ? 'Heir-only signer'
+                                : 'Recovery-only signer'
+                              : 'Primary signer'
                           )}</span
                         ></span
                       >{/if}

@@ -12,7 +12,7 @@ const recoveryKey = {
 };
 
 async function continueToSigners(page: Page, name: string) {
-  const configure = page.getByRole('button', { name: /^Configure / });
+  const configure = page.getByRole('button', { name: 'Continue', exact: true });
   const walletName = page.getByLabel('Wallet name');
   await configure.or(walletName).first().waitFor();
   if (await configure.isVisible()) await configure.click();
@@ -856,13 +856,21 @@ test('selects and freezes multisig coins before entering the send flow', async (
 
 test('offers safe recipes and advanced M-of-N control', async ({ page }) => {
   await page.goto('/multisig/new');
-  await expect(page.getByRole('heading', { name: 'Choose a spending policy' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Choose how this wallet spends' })).toBeVisible();
   await expect(page.getByLabel('Wallet name')).toHaveCount(0);
-  await expect(
-    page.getByText(/Recovery path and Inheritance use the same four-key structure/)
-  ).toBeVisible();
-  await page.getByRole('button', { name: 'Configure standard' }).click();
-  await expect(page.getByRole('heading', { name: 'Configure a standard wallet' })).toBeVisible();
+  await expect(page.getByText(/same four-key structure/)).toHaveCount(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true
+  );
+  for (const card of await page.locator('.policy-kind-card').all()) {
+    expect(
+      Number.parseFloat(
+        await card.locator('strong').evaluate((node) => getComputedStyle(node).fontSize)
+      )
+    ).toBeGreaterThanOrEqual(15);
+  }
+  await page.getByRole('button', { name: 'Continue', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Standard multisig' })).toBeVisible();
   await expect(page.getByText('2 of 3', { exact: true }).first()).toBeVisible();
   await page.getByRole('button', { name: /3 of 5/ }).click();
   await expect(page.locator('.policy-pill')).toHaveText('3 of 5');
@@ -871,11 +879,11 @@ test('offers safe recipes and advanced M-of-N control', async ({ page }) => {
   await page.getByLabel('Signatures required').selectOption('3');
   await expect(page.locator('.policy-pill')).toHaveText('3 of 4');
   await expect(page.getByLabel('Signatures required').locator('option[value="1"]')).toHaveCount(0);
-  await expect(page.getByText(/1-of-N wallet has no multisig theft protection/)).toBeVisible();
+  await expect(page.getByText('Multisig requires at least two signatures.')).toBeVisible();
   await continueToSigners(page, 'Advanced policy vault');
   await expect(page.getByText('Advanced policy vault · 3 of 4')).toBeVisible();
   await page.getByRole('button', { name: 'Back to policy' }).click();
-  await expect(page.getByRole('heading', { name: 'Configure a standard wallet' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Standard multisig' })).toBeVisible();
   await expect(page.getByLabel('Wallet name')).toHaveValue('Advanced policy vault');
   await expect(page.getByLabel('Total signers')).toHaveValue('4');
   await expect(page.getByLabel('Signatures required')).toHaveValue('3');
@@ -1481,7 +1489,7 @@ test('reveals draft errors only after review and keeps signer identity readable'
   page
 }) => {
   await page.goto('/multisig/new');
-  await page.getByRole('button', { name: 'Configure standard' }).click();
+  await page.getByRole('button', { name: 'Continue', exact: true }).click();
   await page.getByRole('button', { name: 'Continue to signers' }).click();
   await expect(page.getByText('A wallet name is required.')).toBeVisible();
   await continueToSigners(page, 'Incomplete vault');
@@ -1549,12 +1557,12 @@ test('compiles and simulates guided Miniscript recovery policies', async ({ page
 
 test('creates a guided recovery descriptor from a visible template', async ({ page }) => {
   await page.goto('/multisig/new');
-  await page.getByRole('button', { name: /Recovery path/ }).click();
-  await expect(page.getByText('Shorter emergency fallback', { exact: true })).toBeVisible();
-  await expect(page.getByText(/4,320 blocks/)).toBeVisible();
+  await page.getByRole('button', { name: /^Recovery/ }).click();
   await expect(page.getByLabel('Wallet name')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Configure recovery path' }).click();
-  await expect(page.getByText('Four independent keys required')).toBeVisible();
+  await page.getByRole('button', { name: 'Continue', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Recovery wallet' })).toBeVisible();
+  await expect(page.getByText(/4,320\s+blocks/)).toBeVisible();
+  await expect(page.getByText('Four separate keys')).toBeVisible();
   await continueToSigners(page, 'Resilient vault');
   for (const key of [...keys, recoveryKey]) {
     await page.getByRole('button', { name: 'Add a signer' }).click();
@@ -1577,6 +1585,29 @@ test('creates a guided recovery descriptor from a visible template', async ({ pa
   await page.getByLabel('Confirm app PIN', { exact: true }).fill('recovery-pin');
   await page.getByRole('button', { name: 'Create wallet' }).click();
   await expect(page.getByRole('heading', { name: 'Resilient vault' })).toBeVisible();
+});
+
+test('creates a guided inheritance descriptor with a distinct heir role', async ({ page }) => {
+  await page.goto('/multisig/new');
+  await page.getByRole('button', { name: /^Inheritance/ }).click();
+  await expect(page.getByText('About one year', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Continue', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Inheritance wallet' })).toBeVisible();
+  await expect(page.getByText(/52,560\s+blocks/)).toBeVisible();
+  await continueToSigners(page, 'Family inheritance');
+  for (const key of [...keys, { ...recoveryKey, label: 'Heir key' }]) {
+    await page.getByRole('button', { name: 'Add a signer' }).click();
+    await page.getByRole('button', { name: 'Enter public key' }).click();
+    await page.getByLabel('Signer label').fill(key.label);
+    await page.getByLabel('Master fingerprint').fill(key.fingerprint);
+    await page.getByLabel('Account xpub').fill(key.xpub);
+    await page.getByRole('button', { name: 'Add key' }).click();
+  }
+  await expect(page.getByText('Heir-only signer', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Review wallet' }).click();
+  await expect(page.getByText('2 of 4 signatures')).toBeVisible();
+  await page.getByRole('button', { name: 'Descriptor logic' }).click();
+  await expect(page.getByTestId('descriptor-preview')).toContainText('52,560 blocks');
 });
 
 test('rejects duplicate signer identity before insertion', async ({ page }) => {
@@ -1646,7 +1677,7 @@ test('coordinator has no horizontal overflow on mobile', async ({ page }, testIn
     clientWidth: document.documentElement.clientWidth
   }));
   expect(sizes.scrollWidth).toBeLessThanOrEqual(sizes.clientWidth);
-  await expect(page.getByRole('button', { name: 'Configure standard' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Continue', exact: true })).toBeVisible();
   await continueToSigners(page, 'Mobile vault');
   await expect(page.getByRole('button', { name: 'Add a signer' })).toBeVisible();
   const motion = await page

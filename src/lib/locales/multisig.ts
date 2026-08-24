@@ -447,6 +447,73 @@ export const multisigCopy = {
     fr: 'Choisissez une politique de dépense',
     es: 'Elige una política de gasto'
   },
+  'Choose how this wallet spends': {
+    fr: 'Choisissez comment dépenser avec ce portefeuille',
+    es: 'Elige cómo se gasta desde esta cartera'
+  },
+  'Pick a plan. Review every key before creating the wallet.': {
+    fr: 'Choisissez un plan. Vérifiez chaque clé avant de créer le portefeuille.',
+    es: 'Elige un plan. Revisa cada clave antes de crear la cartera.'
+  },
+  'Your chosen threshold approves every payment.': {
+    fr: 'Le seuil choisi approuve chaque paiement.',
+    es: 'El umbral elegido aprueba cada pago.'
+  },
+  'No delay': { fr: 'Sans délai', es: 'Sin demora' },
+  Recovery: { fr: 'Récupération', es: 'Recuperación' },
+  '2 of 3 now, or one backup key later.': {
+    fr: '2 sur 3 maintenant, ou une clé de secours plus tard.',
+    es: '2 de 3 ahora, o una clave de respaldo más adelante.'
+  },
+  '1 recovery key': { fr: '1 clé de récupération', es: '1 clave de recuperación' },
+  '1 heir key': { fr: '1 clé d’héritier', es: '1 clave de heredero' },
+  'About one month': { fr: 'Environ un mois', es: 'Aproximadamente un mes' },
+  '2 of 3 now, or one heir key later.': {
+    fr: '2 sur 3 maintenant, ou une clé d’héritier plus tard.',
+    es: '2 de 3 ahora, o una clave de heredero más adelante.'
+  },
+  'About one year': { fr: 'Environ un an', es: 'Aproximadamente un año' },
+  'Policy options': { fr: 'Options de politique', es: 'Opciones de política' },
+  'Standard multisig': { fr: 'Multisignature standard', es: 'Multifirma estándar' },
+  'Recovery wallet': { fr: 'Portefeuille de récupération', es: 'Cartera de recuperación' },
+  'Inheritance wallet': { fr: 'Portefeuille d’héritage', es: 'Cartera de herencia' },
+  'Name the wallet and choose its signature threshold.': {
+    fr: 'Nommez le portefeuille et choisissez son seuil de signatures.',
+    es: 'Pon nombre a la cartera y elige su umbral de firmas.'
+  },
+  'Three primary keys. One delayed recovery key.': {
+    fr: 'Trois clés principales. Une clé de récupération différée.',
+    es: 'Tres claves principales. Una clave de recuperación retrasada.'
+  },
+  'Three primary keys. One delayed heir key.': {
+    fr: 'Trois clés principales. Une clé d’héritier différée.',
+    es: 'Tres claves principales. Una clave de heredero retrasada.'
+  },
+  'One key can be unavailable': {
+    fr: 'Une clé peut être indisponible',
+    es: 'Una clave puede no estar disponible'
+  },
+  Balanced: { fr: 'Équilibré', es: 'Equilibrado' },
+  'Two keys can be unavailable': {
+    fr: 'Deux clés peuvent être indisponibles',
+    es: 'Dos claves pueden no estar disponibles'
+  },
+  'Choose your own threshold': {
+    fr: 'Choisissez votre propre seuil',
+    es: 'Elige tu propio umbral'
+  },
+  'Multisig requires at least two signatures.': {
+    fr: 'La multisignature exige au moins deux signatures.',
+    es: 'La multifirma requiere al menos dos firmas.'
+  },
+  TODAY: { fr: 'AUJOURD’HUI', es: 'HOY' },
+  'ABOUT 1 MONTH': { fr: 'ENVIRON 1 MOIS', es: 'APROX. 1 MES' },
+  'ABOUT 1 YEAR': { fr: 'ENVIRON 1 AN', es: 'APROX. 1 AÑO' },
+  'Four separate keys': { fr: 'Quatre clés distinctes', es: 'Cuatro claves separadas' },
+  'The delayed key never joins the immediate 2-of-3.': {
+    fr: 'La clé différée ne rejoint jamais le 2 sur 3 immédiat.',
+    es: 'La clave retrasada nunca forma parte del 2 de 3 inmediato.'
+  },
   'Choose this only if you intentionally want the Trezor': {
     fr: 'Choisissez ceci uniquement si vous souhaitez intentionnellement le portefeuille Trezor',
     es: 'Elige esto solo si quieres intencionadamente la cartera Trezor'
@@ -523,6 +590,10 @@ export const multisigCopy = {
   'Hardware setup help': {
     fr: 'Aide à la configuration matérielle',
     es: 'Ayuda para configurar dispositivos'
+  },
+  'Heir-only signer': {
+    fr: 'Signataire réservé à l’héritage',
+    es: 'Firmante exclusivo para herencia'
   },
   'I matched the wallet name, threshold, and signer fingerprints on each device.': {
     fr: 'J’ai comparé le nom du portefeuille, le seuil et les empreintes des signataires sur chaque appareil.',
@@ -622,6 +693,10 @@ export const multisigCopy = {
   'Setup progress could not be saved': {
     fr: 'La progression de la configuration n’a pas pu être enregistrée',
     es: 'No se pudo guardar el progreso de la configuración'
+  },
+  'Set the spending rules.': {
+    fr: 'Définissez les règles de dépense.',
+    es: 'Define las reglas de gasto.'
   },
   signatures: { fr: 'signatures', es: 'firmas' },
   'Signatures required (M)': { fr: 'Signatures requises (M)', es: 'Firmas requeridas (M)' },

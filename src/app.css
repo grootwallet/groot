@@ -4036,8 +4036,19 @@ code {
 }
 .policy-only-grid {
   grid-template-columns: minmax(0, 1fr);
-  width: min(900px, 100%);
+  width: min(960px, 100%);
   margin: 0 auto;
+}
+.policy-setup-card {
+  padding: 34px 36px;
+  border-radius: 18px;
+  background:
+    radial-gradient(
+      circle at 50% 0%,
+      color-mix(in srgb, var(--fr-blue) 6%, transparent),
+      transparent 46%
+    ),
+    var(--panel);
 }
 .coordinator-main .section-heading.compact {
   margin: 0 0 24px;
@@ -4079,33 +4090,61 @@ code {
 .policy-recipes {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-  margin: 2px 0 16px;
+  gap: 12px;
+  margin: 4px 0 22px;
 }
 .policy-recipes button {
-  min-height: 62px;
+  position: relative;
+  min-height: 118px;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  justify-content: center;
-  gap: 4px;
-  padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 17px;
+  border: 1px solid var(--control-border);
+  border-radius: 12px;
   color: var(--text);
-  background: var(--surface-inset);
+  background: var(--surface-control);
   cursor: pointer;
+  text-align: left;
+  transition:
+    transform 0.15s ease,
+    border-color 0.15s ease,
+    background 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.policy-recipes button:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--fr-blue) 65%, var(--control-border));
+  background: var(--panel-2);
+  box-shadow: 0 9px 24px rgba(0, 0, 0, 0.09);
 }
 .policy-recipes button.active {
-  border-color: var(--accent);
-  background: var(--accent-soft);
+  border-color: var(--fr-blue);
+  background: var(--fr-blue-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--fr-blue) 22%, transparent);
+}
+.policy-recipes button > span {
+  display: grid;
+  gap: 6px;
 }
 .policy-recipes strong {
-  font-size: 12px;
+  font-size: 17px;
+  line-height: 1.15;
 }
 .policy-recipes small {
   color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+.policy-recipes em {
+  color: var(--muted-2);
   font-size: 9px;
+  font-style: normal;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 .custom-threshold {
   grid-template-columns: 1fr 1fr;
@@ -4118,7 +4157,7 @@ code {
 .policy-guidance {
   margin: 0 0 20px;
   color: var(--muted);
-  font-size: 9px;
+  font-size: 11px;
   line-height: 1.5;
 }
 .recipe-summary {
@@ -8223,30 +8262,43 @@ code {
 }
 .path-visual {
   display: grid;
-  grid-template-columns: auto 1fr auto;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 4px 22px;
-  border-bottom: 1px solid var(--border);
+  grid-template-columns: minmax(0, 1fr) 48px minmax(0, 1fr);
+  align-items: stretch;
+  gap: 12px;
+  padding: 4px 0 0;
 }
 .path-visual span {
+  min-height: 108px;
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  justify-content: center;
+  gap: 7px;
+  padding: 16px;
+  border: 1px solid var(--control-border);
+  border-radius: 12px;
+  background: var(--surface-control);
 }
 .path-visual span:last-child {
-  text-align: right;
+  text-align: left;
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--control-border));
+  background: color-mix(in srgb, var(--accent) 7%, var(--surface-control));
 }
 .path-visual b {
   color: var(--link);
-  font-size: 8px;
-  letter-spacing: 0.08em;
+  font-size: 9px;
+  letter-spacing: 0.1em;
 }
 .path-visual strong {
-  font-size: 11px;
+  font-size: 15px;
+  line-height: 1.25;
+}
+.path-visual small {
+  color: var(--muted);
+  font-size: 10px;
 }
 .path-visual i {
-  height: 1px;
+  align-self: center;
+  height: 2px;
   background: linear-gradient(90deg, var(--fr-blue), var(--fr-red));
 }
 .descriptor-toggle-row {
@@ -8287,43 +8339,130 @@ code {
   display: block;
   margin-bottom: 7px;
 }
-.policy-template-grid button {
-  min-height: 118px;
+.policy-choice-heading h2,
+.policy-configure-heading h2 {
+  font-size: 24px;
+  line-height: 1.18;
+  letter-spacing: -0.025em;
 }
-.policy-template-grid button small {
-  max-width: 30ch;
-  font-size: 10px;
+.policy-choice-heading p,
+.policy-configure-heading p {
+  max-width: 58ch;
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.policy-template-grid button {
+  position: relative;
+  min-height: 192px;
+  padding: 20px;
+  gap: 17px;
+  border-radius: 13px;
+  overflow: hidden;
+  transition:
+    transform 0.15s ease,
+    border-color 0.15s ease,
+    background 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.policy-template-grid button::before {
+  content: '';
+  position: absolute;
+  width: 96px;
+  height: 96px;
+  top: -50px;
+  right: -44px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--policy-accent, var(--fr-blue)) 12%, transparent);
+  transition: transform 0.18s ease;
+}
+.policy-template-grid button.standard {
+  --policy-accent: var(--fr-blue);
+}
+.policy-template-grid button.recovery {
+  --policy-accent: var(--success);
+}
+.policy-template-grid button.inheritance {
+  --policy-accent: var(--accent);
+}
+.policy-template-grid button:hover {
+  transform: translateY(-3px);
+  border-color: color-mix(in srgb, var(--policy-accent) 70%, var(--control-border));
+  background: var(--panel-2);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.11);
+}
+.policy-template-grid button:hover::before {
+  transform: scale(1.14);
+}
+.policy-template-grid button.active {
+  border-color: var(--policy-accent);
+  background: color-mix(in srgb, var(--policy-accent) 8%, var(--surface-control));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--policy-accent) 20%, transparent);
+}
+.policy-kind-icon {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  color: var(--policy-accent);
+  background: color-mix(in srgb, var(--policy-accent) 12%, transparent);
+  border-radius: 10px;
+}
+.policy-kind-copy {
+  display: grid;
+  gap: 8px;
+}
+.policy-template-grid .policy-kind-copy strong {
+  font-size: 15px;
+  line-height: 1.2;
+}
+.policy-template-grid .policy-kind-copy small {
+  max-width: 26ch;
+  font-size: 11px;
   line-height: 1.45;
 }
-.policy-choice-explainer {
-  margin-bottom: 10px;
+.policy-kind-meta {
+  margin-top: auto;
+  color: var(--muted-2);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
-.policy-choice-explainer span {
-  font-size: 10px;
-  line-height: 1.5;
+.policy-kind-check {
+  position: absolute;
+  right: 15px;
+  bottom: 14px;
+  width: 25px;
+  height: 25px;
+  display: grid;
+  place-items: center;
+  color: var(--panel);
+  background: var(--policy-accent);
+  border-radius: 50%;
 }
-.policy-template-note {
-  margin: 0 0 22px;
-  padding: 11px 12px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  color: var(--muted);
-  background: var(--surface-inset);
-  font-size: 10px;
-  line-height: 1.5;
+.policy-template-grid + .coordinator-actions {
+  margin-top: 28px;
 }
 .policy-configure-heading {
-  margin-top: 18px !important;
+  margin-top: 24px !important;
+}
+.policy-setup-card > .field > span {
+  font-size: 12px;
+}
+.policy-setup-card > .field input {
+  min-height: 48px;
+  font-size: 14px;
 }
 .recovery-separation {
   display: grid;
-  grid-template-columns: 18px minmax(0, 1fr);
-  gap: 9px;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 12px;
   align-items: start;
-  padding: 11px 12px;
-  margin: -10px 0 20px;
+  padding: 15px 16px;
+  margin: 14px 0 22px;
   border: 1px solid rgba(242, 169, 0, 0.24);
-  border-radius: 8px;
+  border-radius: 11px;
   color: var(--accent);
   background: var(--accent-soft);
 }
@@ -8334,11 +8473,11 @@ code {
 }
 .recovery-separation strong {
   color: var(--text-soft);
-  font-size: 10px;
+  font-size: 12px;
 }
 .recovery-separation small {
   color: var(--muted);
-  font-size: 9px;
+  font-size: 11px;
   line-height: 1.45;
 }
 
@@ -9068,6 +9207,68 @@ code {
   }
   .template-grid button {
     min-height: 70px;
+  }
+  .policy-setup-card {
+    padding: 24px 18px;
+    border-radius: 14px;
+  }
+  .policy-choice-heading h2,
+  .policy-configure-heading h2 {
+    font-size: 21px;
+  }
+  .policy-template-grid button {
+    min-height: 118px;
+    display: grid;
+    grid-template-columns: 42px minmax(0, 1fr) auto;
+    grid-template-rows: auto auto;
+    align-items: start;
+    column-gap: 13px;
+    row-gap: 10px;
+    padding: 15px;
+  }
+  .policy-kind-icon {
+    grid-row: 1 / 3;
+  }
+  .policy-kind-copy {
+    grid-column: 2 / 4;
+    grid-row: 1;
+    padding-right: 18px;
+  }
+  .policy-kind-meta {
+    grid-column: 2;
+    grid-row: 2;
+    margin: 0;
+  }
+  .policy-kind-check {
+    position: static;
+    grid-column: 3;
+    grid-row: 2;
+    width: 23px;
+    height: 23px;
+    justify-self: end;
+  }
+  .policy-recipes {
+    grid-template-columns: 1fr;
+  }
+  .policy-recipes button {
+    min-height: 92px;
+    flex-direction: row;
+    align-items: center;
+  }
+  .policy-recipes em {
+    margin-left: auto;
+  }
+  .path-visual {
+    grid-template-columns: 1fr;
+  }
+  .path-visual i {
+    width: 2px;
+    height: 28px;
+    justify-self: center;
+    background: linear-gradient(180deg, var(--fr-blue), var(--fr-red));
+  }
+  .path-visual span {
+    min-height: 92px;
   }
   .creation-progress span {
     font-size: 9px;
