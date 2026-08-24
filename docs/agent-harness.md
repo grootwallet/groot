@@ -98,11 +98,19 @@ During a physical session:
 - retain vendor limitations exactly instead of converting them into a stronger
   readiness label.
 
-Current local status on 2026-08-17:
+Current local status on 2026-08-24:
 
 - Coldcard Mk4, Blockstream Jade Classic, original BitBox02 Bitcoin-only,
   Trezor Model One, and Ledger Nano S Plus have the local core passes and open
   limitations recorded in the canonical matrix.
+- Blockstream Jade Classic additionally passed a focused packaged v0.4.28
+  Testnet4 regression: Groot initiated locked-device login, completed trusted
+  address display, kept the modal open when close was requested during the
+  device decision, drained an explicit Jade rejection without persisting
+  verification, and completed a fresh approved retry. HWI 3.2.0 exposes no
+  common remote-cancel command for active address display, so the equivalent
+  close/reject/retry regression remains required per exact Ledger, Trezor,
+  BitBox02, and Coldcard model; source-path similarity is not physical evidence.
 - Trezor Safe 3 Bitcoin-only, firmware 2.12.3, has a complete BIP84 local
   Regtest USB core pass. Its BIP48 import, 2-of-3 construction, cosigner address
   proof, confirmed 100,000-sat Groot sync, permanent label, history, accounting,

@@ -145,3 +145,26 @@ Signet, a packaged release, another firmware version, or another host OS.
 
 Mainnet remains disabled. This partial physical result does not change the
 mainnet release gate.
+
+## Packaged v0.4.28 Testnet4 trusted-display follow-up — 2026-08-24
+
+The local reviewer exercised the ad-hoc-signed
+`Groot Testnet4 Portable v0.4.28.app` with the reviewed HWI 3.2.0 artifact and
+the same original Jade Classic family. This focused follow-up does not replace
+or broaden the Regtest campaign above and does not certify Jade Plus, QR, BLE,
+another firmware, or the remaining release rows.
+
+| Criterion                                     | Result | Evidence note                                                                                                                                                            |
+| --------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Locked-device login begins from Groot         | PASS   | Selecting the detected locked Jade caused the PIN/login interaction to begin on Jade; Groot accepted no credential and exposed no device path.                           |
+| Trusted address display succeeds              | PASS   | Jade displayed the requested Testnet4-family receive address and Groot persisted verification only after the reviewer approved the exact device display.                 |
+| Groot close does not strand the device prompt | PASS   | While Jade displayed a second address, closing in Groot kept the modal open and showed localized on-device cancellation guidance instead of terminating HWI prematurely. |
+| On-device rejection closes both sides safely  | PASS   | Rejecting on Jade ended its address screen and then closed the Groot modal. The address remained unverified and no late success was persisted.                           |
+| Fresh unchanged retry succeeds                | PASS   | A new scan found the same saved signer, a new trusted-display request completed, and on-device approval produced the expected verified state.                            |
+
+This result validates the v0.4.28 Jade-specific regression discovered during
+Testnet4 review: HWI 3.2.0 `close()` only disconnects Jade's serial transport
+and does not remotely dismiss an active `get_receive_address` decision. Groot
+therefore preserves the live request until Jade returns the user's rejection.
+The packaged HWI digest remained
+`87a8991848a0216213ddf6497c753cebbda492626afaf5608c30931155c922c3`.
