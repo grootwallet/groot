@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { HardwareDevice } from '$lib/wallet/contracts';
-import { receiveVerificationFailure, receiveVerificationIntent } from './receive-verification';
+import {
+  hasAmbiguousUnidentifiedHardware,
+  receiveVerificationFailure,
+  receiveVerificationIntent
+} from './receive-verification';
 
 const device = (action: HardwareDevice['action']): HardwareDevice => ({
   id: 'fixture-device',
@@ -16,6 +20,7 @@ const device = (action: HardwareDevice['action']): HardwareDevice => ({
 describe('receive hardware-verification orchestration', () => {
   it.each([
     ['prompt_pin', 'prompt_pin'],
+    ['unlock', 'unlock'],
     ['retry', 'unavailable'],
     ['none', 'unavailable'],
     ['import', 'verify'],
@@ -41,5 +46,14 @@ describe('receive hardware-verification orchestration', () => {
       code: 'internal_error',
       message: 'Fallback'
     });
+  });
+
+  it('fails only duplicate unidentified paths from the same device family', () => {
+    const lockedJade = { ...device('unlock'), fingerprint: null, model: 'jade' };
+    const lockedLedger = { ...device('unlock'), fingerprint: null, model: 'ledger' };
+    expect(hasAmbiguousUnidentifiedHardware([lockedJade, lockedLedger])).toBe(false);
+    expect(
+      hasAmbiguousUnidentifiedHardware([lockedJade, { ...lockedJade, id: 'second-jade' }])
+    ).toBe(true);
   });
 });

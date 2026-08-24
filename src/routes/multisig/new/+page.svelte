@@ -942,6 +942,7 @@
 
   async function handleHardware(device: HardwareDevice) {
     if (device.action === 'import') return importHardware(device);
+    if (device.action === 'unlock') return importHardware(device);
     if (device.action === 'prompt_pin') return startHardwarePin(device);
     if (device.action === 'confirm_empty_passphrase') {
       standardWalletDevice = device;
@@ -2173,13 +2174,15 @@
                   ? 'Already added'
                   : device.status === 'ready' || device.status === 'detected'
                     ? 'Ready'
-                    : device.status === 'needs_pin'
-                      ? 'Unlock'
-                      : device.action === 'confirm_empty_passphrase'
-                        ? 'Choose wallet'
-                        : device.action === 'retry'
-                          ? 'Scan again'
-                          : 'Unavailable'
+                    : device.action === 'unlock'
+                      ? 'Unlock & continue'
+                      : device.status === 'needs_pin'
+                        ? 'Unlock'
+                        : device.action === 'confirm_empty_passphrase'
+                          ? 'Choose wallet'
+                          : device.action === 'retry'
+                            ? 'Scan again'
+                            : 'Unavailable'
               )}</em
             ></span
           >{#if !addedSigner && device.action !== 'none'}<ChevronRight size={15} />{/if}</button

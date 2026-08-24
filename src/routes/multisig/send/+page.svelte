@@ -1498,11 +1498,13 @@
                   $locale,
                   device.status === 'ready' || device.status === 'detected'
                     ? 'No setup needed'
-                    : device.action === 'prompt_pin'
-                      ? 'Unlock'
-                      : device.action === 'retry'
-                        ? 'Scan again'
-                        : 'Attention'
+                    : device.action === 'unlock'
+                      ? 'Unlock & continue'
+                      : device.action === 'prompt_pin'
+                        ? 'Unlock'
+                        : device.action === 'retry'
+                          ? 'Scan again'
+                          : 'Attention'
                 )}{/if}</em
             ></span
           ></button

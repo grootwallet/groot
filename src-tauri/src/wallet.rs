@@ -1701,18 +1701,22 @@ fn hardware_device_dto(device: HwiDevice) -> HardwareDeviceDto {
     } else if device.fingerprint.is_some() {
         ("ready", "Ready to import the public account key.", "import")
     } else if device_type == "bitbox02" {
-        ("detected", "Unlock on BitBox, then continue.", "import")
+        (
+            "needs_device_unlock",
+            "Select this signer, then unlock it on BitBox to continue.",
+            "unlock",
+        )
     } else if device_type == "jade" {
         (
             "needs_device_unlock",
-            "Log in on Jade using Recovery Phrase Login or QR PIN Unlock, then keep it connected and scan again.",
-            "retry",
+            "Select this signer to start Jade login, then complete Recovery Phrase Login or QR PIN Unlock on-device.",
+            "unlock",
         )
     } else if device_type == "ledger" {
         (
             "needs_device_unlock",
-            "For Regtest, unlock Ledger and open Bitcoin Test—not Bitcoin—then scan again.",
-            "retry",
+            "Select this signer, unlock Ledger, and open Bitcoin Test—not Bitcoin—to continue.",
+            "unlock",
         )
     } else if device_type == "coldcard" {
         (

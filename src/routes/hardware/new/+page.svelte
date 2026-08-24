@@ -130,7 +130,12 @@
       standardWalletOpen = true;
       return;
     }
-    if (device.status !== 'ready' && device.status !== 'detected' && !allowEmptyPassphrase) {
+    if (
+      device.status !== 'ready' &&
+      device.status !== 'detected' &&
+      device.action !== 'unlock' &&
+      !allowEmptyPassphrase
+    ) {
       error = device.message;
       return;
     }

@@ -38,6 +38,7 @@
   function status(device: HardwareDevice) {
     if (device.status === 'ready') return 'Ready';
     if (device.status === 'detected') return 'Detected';
+    if (device.action === 'unlock') return 'Unlock & continue';
     if (device.action === 'confirm_empty_passphrase') return 'Choose wallet';
     return 'Attention';
   }

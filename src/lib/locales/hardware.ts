@@ -1,6 +1,35 @@
 import type { CatalogSection } from './types';
 
 export const hardwareCopy = {
+  scan: { fr: 'analyser', es: 'buscar' },
+  unlock: { fr: 'déverrouiller', es: 'desbloquear' },
+  'Unlock & continue': { fr: 'Déverrouiller et continuer', es: 'Desbloquear y continuar' },
+  'Unlock and check your hardware device': {
+    fr: 'Déverrouillez et vérifiez votre appareil matériel',
+    es: 'Desbloquea y comprueba tu dispositivo físico'
+  },
+  'Complete the login or unlock on-device, then compare the complete address above and approve it.':
+    {
+      fr: 'Terminez la connexion ou le déverrouillage sur l’appareil, puis comparez l’adresse complète ci-dessus et approuvez-la.',
+      es: 'Completa el inicio de sesión o desbloqueo en el dispositivo, compara la dirección completa de arriba y apruébala.'
+    },
+  'Waiting for hardware unlock and approval': {
+    fr: 'En attente du déverrouillage et de l’approbation sur l’appareil',
+    es: 'Esperando el desbloqueo y la aprobación del dispositivo'
+  },
+  'Select this signer, then unlock it on BitBox to continue.': {
+    fr: 'Sélectionnez ce signataire, puis déverrouillez-le sur BitBox pour continuer.',
+    es: 'Selecciona este firmante y desbloquéalo en BitBox para continuar.'
+  },
+  'Select this signer to start Jade login, then complete Recovery Phrase Login or QR PIN Unlock on-device.':
+    {
+      fr: 'Sélectionnez ce signataire pour démarrer la connexion Jade, puis terminez « Recovery Phrase Login » ou « QR PIN Unlock » sur l’appareil.',
+      es: 'Selecciona este firmante para iniciar la conexión de Jade y completa «Recovery Phrase Login» o «QR PIN Unlock» en el dispositivo.'
+    },
+  'Select this signer, unlock Ledger, and open Bitcoin Test—not Bitcoin—to continue.': {
+    fr: 'Sélectionnez ce signataire, déverrouillez Ledger et ouvrez Bitcoin Test — pas Bitcoin — pour continuer.',
+    es: 'Selecciona este firmante, desbloquea Ledger y abre Bitcoin Test —no Bitcoin— para continuar.'
+  },
   usb: { fr: 'USB', es: 'USB' },
   qr: { fr: 'QR', es: 'QR' },
   file: { fr: 'fichier', es: 'archivo' },

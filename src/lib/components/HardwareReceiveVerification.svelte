@@ -11,6 +11,7 @@
   import TrezorPinModal from '$lib/components/TrezorPinModal.svelte';
   import { copyText } from '$lib/clipboard';
   import {
+    hasAmbiguousUnidentifiedHardware,
     receiveVerificationFailure,
     receiveVerificationIntent
   } from '$lib/hardware/receive-verification';
@@ -44,7 +45,7 @@
   let verifyError = $state('');
   let devices = $state<HardwareDevice[]>([]);
   let verificationDevice = $state<HardwareDevice | null>(null);
-  let verificationAction = $state<'scan' | 'approve'>('scan');
+  let verificationAction = $state<'scan' | 'unlock' | 'approve'>('scan');
   let copied = $state(false);
   let pinOpen = $state(false);
   let pinBusy = $state(false);
@@ -117,8 +118,7 @@
         (device) =>
           device.fingerprint === null || fingerprints.has(device.fingerprint.toLowerCase())
       );
-      const unidentified = devices.filter((device) => device.fingerprint === null);
-      if (unidentified.length > 1) {
+      if (hasAmbiguousUnidentifiedHardware(devices)) {
         devices = [];
         verifyError =
           'More than one locked wallet of an eligible type is connected. Disconnect the extra device, then scan again.';
@@ -137,8 +137,8 @@
       case 'prompt_pin':
         await startPin(device);
         return;
-      case 'rescan':
-        await scan();
+      case 'unlock':
+        await verifyAddress(device, true);
         return;
       case 'unavailable':
         verifyError = device.message;
@@ -205,10 +205,10 @@
     }
   }
 
-  async function verifyAddress(device: HardwareDevice) {
+  async function verifyAddress(device: HardwareDevice, unlockFirst = false) {
     const targetAddressId = address.id;
     verificationDevice = device;
-    verificationAction = 'approve';
+    verificationAction = unlockFirst ? 'unlock' : 'approve';
     verifyBusy = true;
     verifyError = '';
     try {
@@ -273,24 +273,30 @@
     <HardwareActionPrompt
       title={translate(
         $locale,
-        verificationAction === 'approve'
-          ? 'Check your hardware device'
+        verificationAction !== 'scan'
+          ? verificationAction === 'unlock'
+            ? 'Unlock and check your hardware device'
+            : 'Check your hardware device'
           : isMultisig
             ? 'Looking for a wallet signer'
             : 'Looking for your saved signer'
       )}
       detail={translate(
         $locale,
-        verificationAction === 'approve'
-          ? 'Compare the complete address above, then approve it on the device.'
+        verificationAction !== 'scan'
+          ? verificationAction === 'unlock'
+            ? 'Complete the login or unlock on-device, then compare the complete address above and approve it.'
+            : 'Compare the complete address above, then approve it on the device.'
           : isMultisig
             ? 'Groot checks only signer types saved in this wallet policy and ignores other connected device families.'
             : 'Groot checks only this saved signer type and ignores other connected device families.'
       )}
       label={translate(
         $locale,
-        verificationAction === 'approve'
-          ? 'Waiting for hardware approval'
+        verificationAction !== 'scan'
+          ? verificationAction === 'unlock'
+            ? 'Waiting for hardware unlock and approval'
+            : 'Waiting for hardware approval'
           : 'Hardware device scan in progress'
       )}
     />
@@ -313,13 +319,15 @@
                 $locale,
                 device.action === 'prompt_pin'
                   ? 'Unlock'
-                  : device.action === 'confirm_empty_passphrase'
-                    ? 'Standard wallet'
-                    : device.action === 'retry'
-                      ? 'Unlock, then scan again'
-                      : device.status === 'ready' || device.status === 'detected'
-                        ? 'Ready'
-                        : 'Unavailable'
+                  : device.action === 'unlock'
+                    ? 'Unlock & continue'
+                    : device.action === 'confirm_empty_passphrase'
+                      ? 'Standard wallet'
+                      : device.action === 'retry'
+                        ? 'Unlock, then scan again'
+                        : device.status === 'ready' || device.status === 'detected'
+                          ? 'Ready'
+                          : 'Unavailable'
               )}</em
             >
           </span>

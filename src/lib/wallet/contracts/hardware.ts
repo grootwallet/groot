@@ -13,7 +13,7 @@ export type HardwareDevice = {
     | 'needs_device_unlock'
     | 'not_ready';
   message: string;
-  action: 'import' | 'prompt_pin' | 'confirm_empty_passphrase' | 'retry' | 'none';
+  action: 'import' | 'unlock' | 'prompt_pin' | 'confirm_empty_passphrase' | 'retry' | 'none';
 };
 
 export type ExternalSignerSource = 'usb' | 'qr' | 'file' | 'manual';

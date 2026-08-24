@@ -164,17 +164,47 @@ fn saved_hwi_device(
     devices: Vec<HwiDevice>,
     requested_device_type: &str,
     requested_fingerprint: &str,
-) -> Option<HwiDevice> {
-    devices.into_iter().find(|device| {
+) -> ApiResult<Option<HwiDevice>> {
+    let eligible = devices.into_iter().filter(|device| {
         !device.path.is_empty()
             && device
                 .device_type
                 .eq_ignore_ascii_case(requested_device_type)
-            && device
-                .fingerprint
-                .as_deref()
-                .is_some_and(|fingerprint| fingerprint.eq_ignore_ascii_case(requested_fingerprint))
-    })
+    });
+    let (matching, unidentified): (Vec<_>, Vec<_>) = eligible.partition(|device| {
+        device
+            .fingerprint
+            .as_deref()
+            .is_some_and(|fingerprint| fingerprint.eq_ignore_ascii_case(requested_fingerprint))
+    });
+    if matching.len() > 1 {
+        return Err(api_error(
+            "hardware_ambiguous",
+            "More than one connected device reports the saved signer identity. Disconnect the extra device and scan again.",
+        ));
+    }
+    if let Some(device) = matching.into_iter().next() {
+        return Ok(Some(device));
+    }
+    if !matches!(
+        requested_device_type.to_ascii_lowercase().as_str(),
+        "bitbox02" | "jade" | "ledger"
+    ) {
+        return Ok(None);
+    }
+    let unidentified = unidentified
+        .into_iter()
+        .filter(|device| device.fingerprint.is_none())
+        .collect::<Vec<_>>();
+    if unidentified.len() > 1 {
+        return Err(api_error(
+            "hardware_ambiguous",
+            "More than one locked device of the saved signer type is connected. Disconnect the extra device and scan again.",
+        ));
+    }
+    // This is only an opaque path hint. The interactive caller must derive and
+    // match the complete saved identity before health, display, or signing.
+    Ok(unidentified.into_iter().next())
 }
 
 fn same_cosigner_identity(left: &CosignerInput, right: &CosignerInput) -> bool {
@@ -200,7 +230,7 @@ fn recently_scanned_saved_hardware_device(
     // make selection deterministic if HWI exposed duplicate matching entries.
     let mut devices: Vec<_> = scan.devices.values().cloned().collect();
     devices.sort_by(|left, right| left.path.cmp(&right.path));
-    Ok(saved_hwi_device(devices, device_type, fingerprint))
+    saved_hwi_device(devices, device_type, fingerprint)
 }
 
 fn remember_hardware_scan(
@@ -383,7 +413,7 @@ pub async fn hardware_find_saved_device(
             device
         } else {
             let (_, discovered) = discover_hardware_singleflight(&hwi)?;
-            saved_hwi_device(discovered, &requested_type, &requested_fingerprint).ok_or_else(
+            saved_hwi_device(discovered, &requested_type, &requested_fingerprint)?.ok_or_else(
                 || {
                     api_error(
                         "hardware_unavailable",
@@ -569,7 +599,7 @@ mod targeted_scan_tests {
         };
 
         assert_eq!(
-            saved_hwi_device(vec![ledger, bitbox, jade.clone()], "JADE", "A1B2C3D4"),
+            saved_hwi_device(vec![ledger, bitbox, jade.clone()], "JADE", "A1B2C3D4").unwrap(),
             Some(jade)
         );
     }
@@ -583,7 +613,75 @@ mod targeted_scan_tests {
             ..HwiDevice::default()
         };
 
-        assert!(saved_hwi_device(vec![other_jade], "jade", "a1b2c3d4").is_none());
+        assert!(saved_hwi_device(vec![other_jade], "jade", "a1b2c3d4")
+            .unwrap()
+            .is_none());
+    }
+
+    #[test]
+    fn saved_device_can_redeem_one_locked_same_type_hint_for_live_binding() {
+        let locked_jade = HwiDevice {
+            fingerprint: None,
+            device_type: "jade".into(),
+            path: "usb-locked-jade".into(),
+            ..HwiDevice::default()
+        };
+        assert_eq!(
+            saved_hwi_device(vec![locked_jade.clone()], "jade", "a1b2c3d4").unwrap(),
+            Some(locked_jade)
+        );
+    }
+
+    #[test]
+    fn saved_device_prefers_exact_identity_over_locked_same_type_hint() {
+        let exact = HwiDevice {
+            fingerprint: Some("a1b2c3d4".into()),
+            device_type: "jade".into(),
+            path: "usb-ready-jade".into(),
+            ..HwiDevice::default()
+        };
+        let locked = HwiDevice {
+            fingerprint: None,
+            device_type: "jade".into(),
+            path: "usb-locked-jade".into(),
+            ..HwiDevice::default()
+        };
+        assert_eq!(
+            saved_hwi_device(vec![locked, exact.clone()], "jade", "a1b2c3d4").unwrap(),
+            Some(exact)
+        );
+    }
+
+    #[test]
+    fn saved_device_rejects_ambiguous_locked_same_type_hints() {
+        let locked = |path: &str| HwiDevice {
+            fingerprint: None,
+            device_type: "jade".into(),
+            path: path.into(),
+            ..HwiDevice::default()
+        };
+        let error = saved_hwi_device(
+            vec![locked("usb-locked-jade-1"), locked("usb-locked-jade-2")],
+            "jade",
+            "a1b2c3d4",
+        )
+        .unwrap_err();
+        assert_eq!(error.code, "hardware_ambiguous");
+    }
+
+    #[test]
+    fn saved_device_does_not_redeem_locked_coldcard_or_trezor_hints() {
+        for device_type in ["coldcard", "trezor"] {
+            let locked = HwiDevice {
+                fingerprint: None,
+                device_type: device_type.into(),
+                path: format!("usb-{device_type}"),
+                ..HwiDevice::default()
+            };
+            assert!(saved_hwi_device(vec![locked], device_type, "a1b2c3d4")
+                .unwrap()
+                .is_none());
+        }
     }
 }
 #[tauri::command]

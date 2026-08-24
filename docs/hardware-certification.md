@@ -60,7 +60,10 @@ bash scripts/dev/tauri-regtest.sh
 Each explicit scan must execute one aggregate HWI `enumerate`, regardless of
 the number of saved signer families. Rust filters the validated result for the
 active wallet; conflicting non-empty paths fail closed as `hardware_ambiguous`,
-and a locked/unidentified row is informational rather than a retry action.
+and selecting a uniquely path-addressable locked BitBox02, Jade, or Ledger row
+redeems its existing capability into a full live-identity proof rather than a
+retry scan. Multiple unresolved same-family paths fail closed as ambiguous;
+Coldcard readiness still requires preparation and an explicit rescan.
 Keep unrelated device families attached during the focused regression and
 confirm that only eligible saved identities are offered. After selection, the
 health, address, policy, or signing operation must freshly prove the exact

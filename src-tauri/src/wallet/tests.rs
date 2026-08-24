@@ -1617,9 +1617,9 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
         needs_passphrase_sent: false,
         warnings: vec![],
     });
-    assert_eq!(bitbox.status, "detected");
-    assert_eq!(bitbox.action, "import");
-    assert_eq!(bitbox.message, "Unlock on BitBox, then continue.");
+    assert_eq!(bitbox.status, "needs_device_unlock");
+    assert_eq!(bitbox.action, "unlock");
+    assert!(bitbox.message.contains("unlock it on BitBox"));
 
     let locked_nova = hardware_device_dto(HwiDevice {
         capability: "opaque-device".to_owned(),
@@ -1635,9 +1635,9 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
     });
     assert_eq!(locked_nova.label, "bitbox02_nova_multi");
     assert_eq!(locked_nova.model, "bitbox02");
-    assert_eq!(locked_nova.status, "detected");
-    assert_eq!(locked_nova.action, "import");
-    assert_eq!(locked_nova.message, "Unlock on BitBox, then continue.");
+    assert_eq!(locked_nova.status, "needs_device_unlock");
+    assert_eq!(locked_nova.action, "unlock");
+    assert!(locked_nova.message.contains("unlock it on BitBox"));
     assert!(!locked_nova.message.contains("sensitive-nova-path"));
 
     let ready_nova = hardware_device_dto(HwiDevice {
@@ -1669,6 +1669,7 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
         warnings: vec![],
     });
     assert_eq!(jade.status, "needs_device_unlock");
+    assert_eq!(jade.action, "unlock");
     assert!(jade.message.contains("QR PIN Unlock"));
 
     let ledger = hardware_device_dto(HwiDevice {
@@ -1687,9 +1688,9 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
     assert_eq!(ledger.action, "import");
     assert!(ledger.message.contains("Bitcoin Test"));
 
-    for (device_type, expected) in [
-        ("ledger", "Bitcoin Test"),
-        ("coldcard", "USB communication"),
+    for (device_type, expected, action) in [
+        ("ledger", "Bitcoin Test", "unlock"),
+        ("coldcard", "USB communication", "retry"),
     ] {
         let device = hardware_device_dto(HwiDevice {
             capability: "opaque-device".to_owned(),
@@ -1704,7 +1705,7 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
             warnings: vec![],
         });
         assert_eq!(device.status, "needs_device_unlock");
-        assert_eq!(device.action, "retry");
+        assert_eq!(device.action, action);
         assert!(device.message.contains(expected));
     }
 
