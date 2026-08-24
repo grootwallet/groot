@@ -1527,7 +1527,7 @@ fn hwi_response_codes_become_safe_actionable_errors() {
 
     for (device_type, expected) in [
         ("bitbox02", "Unlock BitBox"),
-        ("jade", "Log in on Jade"),
+        ("jade", "enter your PIN on Jade"),
         ("coldcard", "enable USB communication"),
         ("trezor", "PIN-matrix"),
         ("unknown", "Unlock the hardware wallet"),
@@ -1670,7 +1670,7 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
     });
     assert_eq!(jade.status, "needs_device_unlock");
     assert_eq!(jade.action, "unlock");
-    assert!(jade.message.contains("QR PIN Unlock"));
+    assert!(jade.message.contains("enter your PIN on Jade"));
 
     let ledger = hardware_device_dto(HwiDevice {
         capability: "opaque-device".to_owned(),

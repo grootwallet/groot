@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { HardwareDevice } from '$lib/wallet/contracts';
 import {
   hasAmbiguousUnidentifiedHardware,
+  localizedReceiveVerificationFailure,
   receiveVerificationFailure,
   receiveVerificationIntent
 } from './receive-verification';
@@ -45,6 +46,33 @@ describe('receive hardware-verification orchestration', () => {
     expect(receiveVerificationFailure('hostile value', 'Fallback')).toEqual({
       code: 'internal_error',
       message: 'Fallback'
+    });
+  });
+
+  it('localizes exact safe Jade guidance and falls back to the localized error category', () => {
+    expect(
+      localizedReceiveVerificationFailure(
+        {
+          code: 'hardware_unavailable',
+          message: 'Jade is still locked. Select it again and enter your PIN on Jade when prompted.'
+        },
+        'fr',
+        'The device could not verify this address.'
+      )
+    ).toEqual({
+      code: 'hardware_unavailable',
+      message:
+        'Jade est toujours verrouillé. Sélectionnez-le à nouveau et saisissez votre PIN sur Jade lorsqu’il vous le demande.'
+    });
+    expect(
+      localizedReceiveVerificationFailure(
+        { code: 'hardware_unavailable', message: 'Uncatalogued native detail' },
+        'fr',
+        'The device could not verify this address.'
+      )
+    ).toEqual({
+      code: 'hardware_unavailable',
+      message: 'Le portefeuille matériel est indisponible. Vérifiez sa connexion et réessayez.'
     });
   });
 

@@ -12,7 +12,7 @@
   import { copyText } from '$lib/clipboard';
   import {
     hasAmbiguousUnidentifiedHardware,
-    receiveVerificationFailure,
+    localizedReceiveVerificationFailure,
     receiveVerificationIntent
   } from '$lib/hardware/receive-verification';
   import { hardwareDeviceDisplayName, type SavedHardwareSignerName } from '$lib/hardware/discovery';
@@ -87,15 +87,15 @@
       await copyText(comparison.address, 'bitcoin-address');
       copied = true;
       toast({
-        title: 'Address copied',
-        description: 'The exact comparison address is on your clipboard.',
+        title: translate($locale, 'Address copied'),
+        description: translate($locale, 'The exact comparison address is on your clipboard.'),
         tone: 'success'
       });
       setTimeout(() => (copied = false), 1500);
     } catch {
       toast({
-        title: 'Copy failed',
-        description: 'Select and copy the address manually.',
+        title: translate($locale, 'Copy failed'),
+        description: translate($locale, 'Select and copy the address manually.'),
         tone: 'danger'
       });
     }
@@ -120,13 +120,19 @@
       );
       if (hasAmbiguousUnidentifiedHardware(devices)) {
         devices = [];
-        verifyError =
-          'More than one locked wallet of an eligible type is connected. Disconnect the extra device, then scan again.';
+        verifyError = translate(
+          $locale,
+          'More than one locked wallet of an eligible type is connected. Disconnect the extra device, then scan again.'
+        );
       }
     } catch (cause) {
       if (generation !== hardwareScanGeneration) return;
       devices = [];
-      verifyError = receiveVerificationFailure(cause, 'Could not scan hardware.').message;
+      verifyError = localizedReceiveVerificationFailure(
+        cause,
+        $locale,
+        'Could not scan hardware.'
+      ).message;
     } finally {
       if (generation === hardwareScanGeneration) verifyBusy = false;
     }
@@ -141,7 +147,7 @@
         await verifyAddress(device, true);
         return;
       case 'unavailable':
-        verifyError = device.message;
+        verifyError = translate($locale, device.message);
         return;
       case 'verify':
         await verifyAddress(device);
@@ -163,7 +169,11 @@
       verifyOpen = false;
       pinOpen = true;
     } catch (cause) {
-      const failure = receiveVerificationFailure(cause, 'Could not start the PIN matrix.');
+      const failure = localizedReceiveVerificationFailure(
+        cause,
+        $locale,
+        'Could not start the PIN matrix.'
+      );
       if (retrying) {
         pinErrorCode = failure.code;
         pinError = failure.message;
@@ -189,14 +199,18 @@
       pinOpen = false;
       pinDevice = null;
       toast({
-        title: 'Hardware wallet unlocked',
-        description: 'Scanning again so you can verify the unchanged address.',
+        title: translate($locale, 'Hardware wallet unlocked'),
+        description: translate($locale, 'Scanning again so you can verify the unchanged address.'),
         tone: 'success'
       });
       await scan();
     } catch (cause) {
       pinChallenge = '';
-      const failure = receiveVerificationFailure(cause, 'Trezor did not accept that matrix entry.');
+      const failure = localizedReceiveVerificationFailure(
+        cause,
+        $locale,
+        'Trezor did not accept that matrix entry.'
+      );
       pinErrorCode = failure.code;
       pinError = failure.message;
     } finally {
@@ -216,19 +230,20 @@
         ? await walletService.verifyMultisigAddress(device.id, targetAddressId)
         : await walletService.verifyExternalAddress(device.id, targetAddressId);
       if (address.id !== targetAddressId) {
-        verifyError = 'The selected address changed. Start verification again.';
+        verifyError = translate($locale, 'The selected address changed. Start verification again.');
         return;
       }
       onverified(verified);
       verifyOpen = false;
       toast({
-        title: 'Address verified',
-        description: 'The verification time was saved with this address.',
+        title: translate($locale, 'Address verified'),
+        description: translate($locale, 'The verification time was saved with this address.'),
         tone: 'success'
       });
     } catch (cause) {
-      verifyError = receiveVerificationFailure(
+      verifyError = localizedReceiveVerificationFailure(
         cause,
+        $locale,
         'The device could not verify this address.'
       ).message;
     } finally {

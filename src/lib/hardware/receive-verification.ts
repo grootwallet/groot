@@ -1,3 +1,5 @@
+import type { Locale } from '$lib/i18n';
+import { localizedError, translate } from '$lib/i18n-catalog';
 import { walletErrorCode, type HardwareDevice, type WalletErrorCode } from '$lib/wallet/contracts';
 
 export type ReceiveVerificationIntent = 'prompt_pin' | 'unlock' | 'unavailable' | 'verify';
@@ -39,4 +41,19 @@ export function receiveVerificationFailure(
     };
   }
   return { code: 'internal_error', message: fallback };
+}
+
+export function localizedReceiveVerificationFailure(
+  cause: unknown,
+  current: Locale,
+  fallback: string
+): ReceiveVerificationFailure {
+  const failure = receiveVerificationFailure(cause, fallback);
+  if (current === 'en') return failure;
+
+  const exact = translate(current, failure.message);
+  return {
+    ...failure,
+    message: exact !== failure.message ? exact : localizedError(cause, current, fallback)
+  };
 }

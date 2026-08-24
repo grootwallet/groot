@@ -505,25 +505,17 @@ pub async fn hardware_sign_multisig(
     let encoded = encode_psbt(&signing_psbt);
     let hwi = hwi_cli(&app)?;
     let device = hardware_commands::recently_scanned_hardware_device(&state, &device_id)?;
-    let cached_fingerprint = device
-        .fingerprint
-        .as_deref()
-        .ok_or_else(|| missing_hardware_fingerprint(&device.device_type))?;
-    let expected_signer = metadata
-        .cosigners
-        .iter()
-        .find(|signer| signer.fingerprint.eq_ignore_ascii_case(cached_fingerprint))
-        .cloned()
-        .ok_or_else(unknown_hardware_signer)?;
+    let expected_signers =
+        hardware_commands::saved_cosigner_candidates_for_device(&metadata.cosigners, &device)?;
     let (signed, signing_identity) = tauri::async_runtime::spawn_blocking(move || {
         let operation = hwi
             .begin_interactive_operation()
             .map_err(hardware_api_error)?;
-        let identity = hardware_commands::prove_live_cosigner_identity(
+        let identity = hardware_commands::prove_live_cosigner_identity_for_candidates(
             &hwi,
             &operation,
             &device,
-            &expected_signer,
+            &expected_signers,
         )?;
         if records_interactive_policy_verification(&identity.device_type)
             && !has_signer_policy_verification(&policy_verifications, &identity)

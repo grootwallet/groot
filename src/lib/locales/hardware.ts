@@ -21,11 +21,43 @@ export const hardwareCopy = {
     fr: 'Sélectionnez ce signataire, puis déverrouillez-le sur BitBox pour continuer.',
     es: 'Selecciona este firmante y desbloquéalo en BitBox para continuar.'
   },
-  'Select this signer to start Jade login, then complete Recovery Phrase Login or QR PIN Unlock on-device.':
+  'Select this signer. Groot will ask Jade to unlock; enter your PIN on Jade when prompted.': {
+    fr: 'Sélectionnez ce signataire. Groot demandera à Jade de se déverrouiller ; saisissez votre PIN sur Jade lorsqu’il vous le demande.',
+    es: 'Selecciona este firmante. Groot pedirá a Jade que se desbloquee; introduce tu PIN en Jade cuando te lo pida.'
+  },
+  'Jade is still locked. Select it again and enter your PIN on Jade when prompted.': {
+    fr: 'Jade est toujours verrouillé. Sélectionnez-le à nouveau et saisissez votre PIN sur Jade lorsqu’il vous le demande.',
+    es: 'Jade sigue bloqueado. Selecciónalo de nuevo e introduce tu PIN en Jade cuando te lo pida.'
+  },
+  'Jade did not unlock. Try again and enter your PIN on Jade when prompted.': {
+    fr: 'Jade ne s’est pas déverrouillé. Réessayez et saisissez votre PIN sur Jade lorsqu’il vous le demande.',
+    es: 'Jade no se desbloqueó. Inténtalo de nuevo e introduce tu PIN en Jade cuando te lo pida.'
+  },
+  'More than one locked wallet of an eligible type is connected. Disconnect the extra device, then scan again.':
     {
-      fr: 'Sélectionnez ce signataire pour démarrer la connexion Jade, puis terminez « Recovery Phrase Login » ou « QR PIN Unlock » sur l’appareil.',
-      es: 'Selecciona este firmante para iniciar la conexión de Jade y completa «Recovery Phrase Login» o «QR PIN Unlock» en el dispositivo.'
+      fr: 'Plusieurs portefeuilles verrouillés du même type sont connectés. Déconnectez l’appareil supplémentaire, puis relancez l’analyse.',
+      es: 'Hay varias carteras bloqueadas del mismo tipo conectadas. Desconecta el dispositivo adicional y vuelve a buscar.'
     },
+  'The selected address changed. Start verification again.': {
+    fr: 'L’adresse sélectionnée a changé. Recommencez la vérification.',
+    es: 'La dirección seleccionada ha cambiado. Vuelve a iniciar la verificación.'
+  },
+  'The device could not verify this address.': {
+    fr: 'L’appareil n’a pas pu vérifier cette adresse.',
+    es: 'El dispositivo no pudo verificar esta dirección.'
+  },
+  'Could not scan hardware.': {
+    fr: 'Impossible de rechercher les appareils matériels.',
+    es: 'No se pudieron buscar dispositivos físicos.'
+  },
+  'Could not start the PIN matrix.': {
+    fr: 'Impossible de démarrer la matrice du PIN.',
+    es: 'No se pudo iniciar la matriz del PIN.'
+  },
+  'Trezor did not accept that matrix entry.': {
+    fr: 'Trezor n’a pas accepté cette saisie dans la matrice.',
+    es: 'Trezor no aceptó esa entrada de la matriz.'
+  },
   'Select this signer, unlock Ledger, and open Bitcoin Test—not Bitcoin—to continue.': {
     fr: 'Sélectionnez ce signataire, déverrouillez Ledger et ouvrez Bitcoin Test — pas Bitcoin — pour continuer.',
     es: 'Selecciona este firmante, desbloquea Ledger y abre Bitcoin Test —no Bitcoin— para continuar.'

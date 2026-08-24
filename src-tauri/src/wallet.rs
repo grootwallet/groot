@@ -1637,7 +1637,7 @@ fn missing_hardware_xpub(
         }
         "jade" => api_error(
             "hardware_unavailable",
-            "Jade did not export the account key. Log in on-device, keep Jade unlocked and connected, then try again.",
+            "Jade did not unlock. Try again and enter your PIN on Jade when prompted.",
         ),
         "coldcard" => api_error(
             "hardware_unavailable",
@@ -1709,7 +1709,7 @@ fn hardware_device_dto(device: HwiDevice) -> HardwareDeviceDto {
     } else if device_type == "jade" {
         (
             "needs_device_unlock",
-            "Select this signer to start Jade login, then complete Recovery Phrase Login or QR PIN Unlock on-device.",
+            "Select this signer. Groot will ask Jade to unlock; enter your PIN on Jade when prompted.",
             "unlock",
         )
     } else if device_type == "ledger" {
@@ -5813,9 +5813,7 @@ fn missing_hardware_fingerprint(device_type: &str) -> ApiError {
             "Unlock Ledger and open Bitcoin Test—not Bitcoin—for this Regtest wallet, then scan again."
         }
         "bitbox02" => "Unlock BitBox, then try again.",
-        "jade" => {
-            "Log in on Jade using Recovery Phrase Login or QR PIN Unlock, then scan again."
-        }
+        "jade" => "Jade is still locked. Select it again and enter your PIN on Jade when prompted.",
         "coldcard" => "Unlock Coldcard and enable USB communication, then scan again.",
         "trezor" | "keepkey" => {
             "Unlock the device using Groot's PIN-matrix flow, then scan again."

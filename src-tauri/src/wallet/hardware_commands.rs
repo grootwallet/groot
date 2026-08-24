@@ -186,10 +186,7 @@ fn saved_hwi_device(
     if let Some(device) = matching.into_iter().next() {
         return Ok(Some(device));
     }
-    if !matches!(
-        requested_device_type.to_ascii_lowercase().as_str(),
-        "bitbox02" | "jade" | "ledger"
-    ) {
+    if !supports_locked_interactive_identity(requested_device_type) {
         return Ok(None);
     }
     let unidentified = unidentified
@@ -205,6 +202,44 @@ fn saved_hwi_device(
     // This is only an opaque path hint. The interactive caller must derive and
     // match the complete saved identity before health, display, or signing.
     Ok(unidentified.into_iter().next())
+}
+
+fn supports_locked_interactive_identity(device_type: &str) -> bool {
+    matches!(
+        device_type.to_ascii_lowercase().as_str(),
+        "bitbox02" | "jade" | "ledger"
+    )
+}
+
+pub(super) fn saved_cosigner_candidates_for_device(
+    cosigners: &[CosignerInput],
+    device: &HwiDevice,
+) -> ApiResult<Vec<CosignerInput>> {
+    if let Some(fingerprint) = device.fingerprint.as_deref() {
+        return cosigners
+            .iter()
+            .find(|signer| signer.fingerprint.eq_ignore_ascii_case(fingerprint))
+            .cloned()
+            .map(|signer| vec![signer])
+            .ok_or_else(unknown_hardware_signer);
+    }
+    if !supports_locked_interactive_identity(&device.device_type) {
+        return Err(missing_hardware_fingerprint(&device.device_type));
+    }
+    let candidates = cosigners
+        .iter()
+        .filter(|signer| {
+            signer
+                .device_type
+                .as_deref()
+                .is_some_and(|saved_type| saved_type.eq_ignore_ascii_case(&device.device_type))
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    if candidates.is_empty() {
+        return Err(unknown_hardware_signer());
+    }
+    Ok(candidates)
 }
 
 fn same_cosigner_identity(left: &CosignerInput, right: &CosignerInput) -> bool {
@@ -1095,26 +1130,56 @@ pub(super) fn prove_live_cosigner_identity(
     device: &HwiDevice,
     expected: &CosignerInput,
 ) -> ApiResult<VerifiedHardwareIdentity> {
-    let expected_device_type = expected.device_type.as_deref().ok_or_else(|| {
+    prove_live_cosigner_identity_for_candidates(
+        hwi,
+        operation,
+        device,
+        std::slice::from_ref(expected),
+    )
+}
+
+pub(super) fn prove_live_cosigner_identity_for_candidates(
+    hwi: &HwiCli,
+    operation: &crate::hardware::HardwareOperation,
+    device: &HwiDevice,
+    expected: &[CosignerInput],
+) -> ApiResult<VerifiedHardwareIdentity> {
+    let first = expected.first().ok_or_else(unknown_hardware_signer)?;
+    let expected_device_type = first.device_type.as_deref().ok_or_else(|| {
         api_error(
             "invalid_hardware_request",
             "This signer has no saved interactive USB device type.",
         )
     })?;
     require_matching_policy_device_type(Some(expected_device_type), &device.device_type)?;
+    if expected.iter().any(|signer| {
+        signer.derivation_path != first.derivation_path
+            || signer
+                .device_type
+                .as_deref()
+                .is_none_or(|device_type| !device_type.eq_ignore_ascii_case(expected_device_type))
+    }) {
+        return Err(api_error(
+            "invalid_hardware_request",
+            "The saved signer candidates do not share one hardware account boundary.",
+        ));
+    }
     let output = hwi
         .account_keypool_in_operation(
             operation,
             &device.device_type,
             &device.path,
-            &expected.derivation_path,
+            &first.derivation_path,
         )
         .map_err(|error| {
-            hardware_xpub_api_error(error, &device.device_type, &expected.derivation_path)
+            hardware_xpub_api_error(error, &device.device_type, &first.derivation_path)
         })?;
     let (fingerprint, xpub) =
-        parse_hwi_account_keypool(&output, &expected.derivation_path, &device.device_type)?;
-    if !fingerprint.eq_ignore_ascii_case(&expected.fingerprint) || xpub != expected.xpub {
+        parse_hwi_account_keypool(&output, &first.derivation_path, &device.device_type)?;
+    if !expected
+        .iter()
+        .any(|signer| fingerprint.eq_ignore_ascii_case(&signer.fingerprint) && xpub == signer.xpub)
+    {
         return Err(unknown_hardware_signer());
     }
     Ok(VerifiedHardwareIdentity {
@@ -1947,21 +2012,17 @@ pub async fn hardware_verify_multisig_address(
         .to_string();
     let hwi = hwi_cli(&app)?;
     let device = recently_scanned_hardware_device(&state, &device_id)?;
-    let cached_fingerprint = device
-        .fingerprint
-        .as_deref()
-        .ok_or_else(|| missing_hardware_fingerprint(&device.device_type))?;
-    let expected_signer = metadata
-        .cosigners
-        .iter()
-        .find(|signer| signer.fingerprint.eq_ignore_ascii_case(cached_fingerprint))
-        .cloned()
-        .ok_or_else(unknown_hardware_signer)?;
+    let expected_signers = saved_cosigner_candidates_for_device(&metadata.cosigners, &device)?;
     let (displayed, identity) = tauri::async_runtime::spawn_blocking(move || {
         let operation = hwi
             .begin_interactive_operation()
             .map_err(hardware_api_error)?;
-        let identity = prove_live_cosigner_identity(&hwi, &operation, &device, &expected_signer)?;
+        let identity = prove_live_cosigner_identity_for_candidates(
+            &hwi,
+            &operation,
+            &device,
+            &expected_signers,
+        )?;
         let displayed = hwi
             .display_descriptor_address_in_operation(
                 &operation,
@@ -2444,6 +2505,114 @@ mod health_check_tests {
             source: SignerSource::Usb,
             device_type: Some("trezor".to_owned()),
         }
+    }
+
+    #[test]
+    fn locked_interactive_device_uses_saved_same_family_candidates() {
+        let mut first = signer_from_seed(10);
+        first.device_type = Some("jade".to_owned());
+        let mut second = signer_from_seed(11);
+        second.device_type = Some("jade".to_owned());
+        let mut unrelated = signer_from_seed(12);
+        unrelated.device_type = Some("ledger".to_owned());
+        let locked_jade = HwiDevice {
+            device_type: "jade".to_owned(),
+            path: "opaque-resolved-path".to_owned(),
+            ..HwiDevice::default()
+        };
+
+        let candidates = saved_cosigner_candidates_for_device(
+            &[first.clone(), unrelated, second.clone()],
+            &locked_jade,
+        )
+        .unwrap();
+        assert_eq!(candidates.len(), 2);
+        assert_eq!(candidates[0].fingerprint, first.fingerprint);
+        assert_eq!(candidates[1].fingerprint, second.fingerprint);
+    }
+
+    #[test]
+    fn identified_device_cannot_fall_back_to_another_same_family_signer() {
+        let mut expected = signer_from_seed(13);
+        expected.device_type = Some("jade".to_owned());
+        let mut other = signer_from_seed(14);
+        other.device_type = Some("jade".to_owned());
+        let identified_jade = HwiDevice {
+            device_type: "jade".to_owned(),
+            path: "opaque-resolved-path".to_owned(),
+            fingerprint: Some(expected.fingerprint.clone()),
+            ..HwiDevice::default()
+        };
+
+        let candidates =
+            saved_cosigner_candidates_for_device(&[other, expected.clone()], &identified_jade)
+                .unwrap();
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].fingerprint, expected.fingerprint);
+    }
+
+    #[test]
+    fn fingerprintless_prepare_then_rescan_device_still_fails_closed() {
+        let mut saved = signer_from_seed(15);
+        saved.device_type = Some("coldcard".to_owned());
+        let locked_coldcard = HwiDevice {
+            device_type: "coldcard".to_owned(),
+            path: "opaque-resolved-path".to_owned(),
+            ..HwiDevice::default()
+        };
+
+        let error = saved_cosigner_candidates_for_device(&[saved], &locked_coldcard).unwrap_err();
+        assert_eq!(error.code, "hardware_unavailable");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn locked_jade_account_key_request_selects_only_the_matching_full_identity() {
+        use std::os::unix::fs::PermissionsExt as _;
+
+        let mut wrong = signer_from_seed(16);
+        wrong.device_type = Some("jade".to_owned());
+        let mut expected = signer_from_seed(17);
+        expected.device_type = Some("jade".to_owned());
+        let origin = MULTISIG_ACCOUNT_PATH.trim_start_matches("m/");
+        let response = serde_json::to_string(&serde_json::json!([{
+            "desc": format!(
+                "wpkh([{}/{}]{}/0/*)",
+                expected.fingerprint, origin, expected.xpub
+            )
+        }]))
+        .unwrap();
+        let shell_response = response.replace('\'', "'\"'\"'");
+        let script = std::env::temp_dir().join(format!(
+            "groot-locked-jade-proof-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        std::fs::write(
+            &script,
+            format!(
+                "#!/bin/sh\nIFS= read -r command\ncase \"$command\" in *getkeypool*) printf '%s\\n' '{shell_response}' ;; *) exit 2 ;; esac\n"
+            ),
+        )
+        .unwrap();
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let hwi = HwiCli::for_test_program(script.clone());
+        let operation = hwi.begin_interactive_operation().unwrap();
+        let locked_jade = HwiDevice {
+            device_type: "jade".to_owned(),
+            path: "opaque-resolved-path".to_owned(),
+            ..HwiDevice::default()
+        };
+
+        let identity = prove_live_cosigner_identity_for_candidates(
+            &hwi,
+            &operation,
+            &locked_jade,
+            &[wrong, expected.clone()],
+        )
+        .unwrap();
+        assert_eq!(identity.fingerprint, expected.fingerprint);
+        std::fs::remove_file(script).unwrap();
     }
 
     #[test]
