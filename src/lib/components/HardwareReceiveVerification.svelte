@@ -56,6 +56,8 @@
   let pinError = $state('');
   let pinErrorCode = $state<WalletErrorCode | ''>('');
   let pinDevice = $state<HardwareDevice | null>(null);
+  let standardWalletOpen = $state(false);
+  let standardWalletDevice = $state<HardwareDevice | null>(null);
   let hardwareScanGeneration = 0;
   let hardwareCancellation: Promise<void> | null = null;
 
@@ -130,7 +132,20 @@
     }
   }
 
-  async function scan() {
+  function eligibleDevices(discovered: HardwareDevice[]) {
+    const fingerprints = new Set(
+      eligibleFingerprints.map((fingerprint) => fingerprint.trim().toLowerCase())
+    );
+    return discovered.filter(
+      (device) => device.fingerprint === null || fingerprints.has(device.fingerprint.toLowerCase())
+    );
+  }
+
+  function isTrezor(device: HardwareDevice) {
+    return `${device.label} ${device.model}`.toLowerCase().includes('trezor');
+  }
+
+  async function runScan(afterPin: boolean) {
     const generation = ++hardwareScanGeneration;
     verifyOpen = true;
     verificationAction = 'scan';
@@ -141,21 +156,37 @@
     try {
       await waitForHardwareCancellation();
       if (generation !== hardwareScanGeneration || !verifyOpen) return;
-      const discovered = await walletService.listHardwareDevicesForTypes(eligibleDeviceTypes);
+      let discovered = await walletService.listHardwareDevicesForTypes(eligibleDeviceTypes);
       if (generation !== hardwareScanGeneration || !verifyOpen) return;
-      const fingerprints = new Set(
-        eligibleFingerprints.map((fingerprint) => fingerprint.trim().toLowerCase())
-      );
-      devices = discovered.filter(
-        (device) =>
-          device.fingerprint === null || fingerprints.has(device.fingerprint.toLowerCase())
-      );
+      let eligible = eligibleDevices(discovered);
+      if (
+        afterPin &&
+        eligible.some(
+          (device) => isTrezor(device) && receiveVerificationIntent(device) === 'prompt_pin'
+        )
+      ) {
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        if (generation !== hardwareScanGeneration || !verifyOpen) return;
+        discovered = await walletService.listHardwareDevicesForTypes(eligibleDeviceTypes);
+        if (generation !== hardwareScanGeneration || !verifyOpen) return;
+        eligible = eligibleDevices(discovered);
+      }
+      devices = eligible;
       if (hasAmbiguousUnidentifiedHardware(devices)) {
         devices = [];
         verifyError = translate(
           $locale,
           'More than one locked wallet of an eligible type is connected. Disconnect the extra device, then scan again.'
         );
+      } else if (afterPin) {
+        const trezors = devices.filter(isTrezor);
+        if (trezors.length === 1 && trezors[0].action === 'confirm_empty_passphrase') {
+          standardWalletDevice = trezors[0];
+          standardWalletOpen = true;
+          verifyOpen = false;
+        } else if (trezors.length === 1 && receiveVerificationIntent(trezors[0]) === 'verify') {
+          await verifyAddress(trezors[0]);
+        }
       }
     } catch (cause) {
       if (generation !== hardwareScanGeneration) return;
@@ -168,6 +199,14 @@
     } finally {
       if (generation === hardwareScanGeneration) verifyBusy = false;
     }
+  }
+
+  async function scan() {
+    await runScan(false);
+  }
+
+  async function scanAfterPin() {
+    await runScan(true);
   }
 
   async function chooseDevice(device: HardwareDevice) {
@@ -220,8 +259,7 @@
 
   async function submitPin() {
     if (!pinChallenge || !pinPositions || pinBusy) return;
-    const device = pinDevice;
-    if (!device) return;
+    if (!pinDevice) return;
     pinBusy = true;
     pinError = '';
     pinErrorCode = '';
@@ -233,7 +271,7 @@
       pinOpen = false;
       pinDevice = null;
       verifyOpen = true;
-      await verifyAddress(device);
+      await scanAfterPin();
     } catch (cause) {
       pinChallenge = '';
       const failure = localizedReceiveVerificationFailure(
@@ -297,6 +335,21 @@
     pinError = '';
     pinErrorCode = '';
     verifyOpen = true;
+  }
+
+  function closeStandardWalletChoice() {
+    standardWalletOpen = false;
+    standardWalletDevice = null;
+    verifyOpen = true;
+  }
+
+  async function confirmStandardWallet() {
+    const device = standardWalletDevice;
+    if (!device) return;
+    standardWalletOpen = false;
+    standardWalletDevice = null;
+    verifyOpen = true;
+    await verifyAddress(device);
   }
 </script>
 
@@ -420,6 +473,30 @@
         ></span
       >
     </div>{/if}
+</Modal>
+
+<Modal
+  open={standardWalletOpen}
+  title={translate($locale, 'Use Trezor standard wallet?')}
+  description={translate(
+    $locale,
+    'This selects the seed-derived wallet with no hardware passphrase.'
+  )}
+  onclose={closeStandardWalletChoice}
+>
+  <div class="credential-warning">
+    <ShieldCheck size={17} />
+    <p>
+      <strong>{translate($locale, 'Your hidden wallet is unchanged.')}</strong>
+      <span>{translate($locale, 'Confirm this standard wallet to continue.')}</span>
+    </p>
+  </div>
+  <div class="split-actions">
+    <Button variant="secondary" onclick={closeStandardWalletChoice}
+      >{translate($locale, 'Back')}</Button
+    >
+    <Button onclick={confirmStandardWallet}>{translate($locale, 'Use standard wallet')}</Button>
+  </div>
 </Modal>
 
 <TrezorPinModal

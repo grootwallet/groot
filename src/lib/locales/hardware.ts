@@ -226,6 +226,10 @@ export const hardwareCopy = {
     es: 'Desbloquea en el dispositivo. No se admiten frases de contraseña de cartera oculta en Model One.'
   },
   'Use standard wallet': { fr: 'Utiliser le portefeuille standard', es: 'Usar cartera estándar' },
+  'Confirm this standard wallet to continue.': {
+    fr: 'Confirmez ce portefeuille standard pour continuer.',
+    es: 'Confirma esta cartera estándar para continuar.'
+  },
   'Validate public key': { fr: 'Valider la clé publique', es: 'Validar clave pública' },
   'Verify the fingerprint.': { fr: 'Vérifiez l’empreinte.', es: 'Verifica la huella.' },
   'Want to use a Ledger passphrase?': {

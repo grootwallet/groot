@@ -155,7 +155,10 @@ describe('hardware receive verification UI', () => {
     expect(verificationFlow).toContain('walletService.promptHardwarePin(device.id)');
     expect(verificationFlow).toContain('walletService.sendHardwarePin(pinChallenge, positions)');
     expect(verificationFlow).toContain('<TrezorPinModal');
-    expect(verificationFlow).toContain('await verifyAddress(device);');
+    expect(verificationFlow).toContain('await scanAfterPin();');
+    expect(verificationFlow).toContain("trezors[0].action === 'confirm_empty_passphrase'");
+    expect(verificationFlow).toContain("title={translate($locale, 'Use Trezor standard wallet?')}");
+    expect(verificationFlow).toContain('onclick={confirmStandardWallet}');
     expect(verificationFlow).not.toContain(
       'Scanning again so you can verify the unchanged address.'
     );
