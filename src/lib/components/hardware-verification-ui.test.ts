@@ -10,6 +10,10 @@ const addressComparison = readFileSync(
   new URL('./HardwareAddressComparison.svelte', import.meta.url),
   'utf8'
 );
+const verificationStatus = readFileSync(
+  new URL('./HardwareVerificationStatus.svelte', import.meta.url),
+  'utf8'
+);
 const verificationFlow = readFileSync(
   new URL('./HardwareReceiveVerification.svelte', import.meta.url),
   'utf8'
@@ -61,6 +65,11 @@ const hardwareTransport = readFileSync(
 );
 
 describe('hardware receive verification UI', () => {
+  it('localizes the hardware-verification tooltip as well as its accessible label', () => {
+    expect(verificationStatus).toContain('<Tooltip text={translate($locale, explanation)}>');
+    expect(verificationStatus).toContain('explanation: translate($locale, explanation)');
+  });
+
   it('targets the saved signer for single-key hardware signing', () => {
     const scan = singleKeySend.slice(
       singleKeySend.indexOf('async function scanHardware()'),

@@ -58,6 +58,22 @@ describe('locale preferences', () => {
     expect(translate('fr', '{signerName} matches this wallet.', { signerName: 'Mon Ledger' })).toBe(
       'Mon Ledger correspond à ce portefeuille.'
     );
+    expect(
+      translate(
+        'fr',
+        'This exact address was shown on and matched by a saved hardware signer. The verification applies only to this address.'
+      )
+    ).toBe(
+      'Cette adresse exacte a été affichée et confirmée par un signataire matériel enregistré. La vérification s’applique uniquement à cette adresse.'
+    );
+    expect(
+      translate(
+        'es',
+        'This exact address was shown on and matched by a saved hardware signer. The verification applies only to this address.'
+      )
+    ).toBe(
+      'Esta dirección exacta se mostró y se verificó con un firmante físico guardado. La verificación solo se aplica a esta dirección.'
+    );
   });
 
   it('does not leak English native errors into non-English UI', () => {

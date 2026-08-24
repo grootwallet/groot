@@ -332,6 +332,11 @@ export const componentCopy = {
       es: 'Los dígitos mezclados solo aparecen en el Trezor. Esta cuadrícula permanece vacía a propósito, incluso cuando Trezor genera una nueva disposición.'
     },
   'This device': { fr: 'Cet appareil', es: 'Este dispositivo' },
+  'This exact address was shown on and matched by a saved hardware signer. The verification applies only to this address.':
+    {
+      fr: 'Cette adresse exacte a été affichée et confirmée par un signataire matériel enregistré. La vérification s’applique uniquement à cette adresse.',
+      es: 'Esta dirección exacta se mostró y se verificó con un firmante físico guardado. La verificación solo se aplica a esta dirección.'
+    },
   'This records your on-device check for this wallet and signer fingerprint.': {
     fr: 'Cela consigne votre contrôle sur l’appareil pour ce portefeuille et cette empreinte de signataire.',
     es: 'Esto registra tu comprobación en el dispositivo para esta cartera y esta huella de firmante.'

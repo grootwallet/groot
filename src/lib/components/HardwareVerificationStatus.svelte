@@ -8,7 +8,7 @@
     'This exact address was shown on and matched by a saved hardware signer. The verification applies only to this address.';
 </script>
 
-<Tooltip text={explanation}>
+<Tooltip text={translate($locale, explanation)}>
   <button
     type="button"
     class="hardware-verification-status"
