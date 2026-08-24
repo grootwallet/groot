@@ -255,6 +255,14 @@ export const multisigCopy = {
   'Paste instead': { fr: 'Coller à la place', es: 'Pegar en su lugar' },
   PIN: { fr: 'PIN', es: 'PIN' },
   'Policy verified': { fr: 'Politique vérifiée', es: 'Política verificada' },
+  'Policy imported': { fr: 'Politique importée', es: 'Política importada' },
+  'Not certified': { fr: 'Non certifié', es: 'Sin certificar' },
+  'Not supported': { fr: 'Non pris en charge', es: 'No compatible' },
+  'Setup not recorded': {
+    fr: 'Configuration non enregistrée',
+    es: 'Configuración no registrada'
+  },
+  'Setup required': { fr: 'Configuration requise', es: 'Configuración necesaria' },
   'Preview reviewed Miniscript templates in Rust. This lab never changes the selected wallet.': {
     fr: 'Prévisualisez dans Rust des modèles Miniscript examinés. Ce laboratoire ne modifie jamais le portefeuille sélectionné.',
     es: 'Previsualiza en Rust plantillas de Miniscript revisadas. Este laboratorio nunca cambia la cartera seleccionada.'

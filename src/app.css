@@ -261,8 +261,13 @@ code {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  gap: 2px 8px;
   justify-content: space-between;
+}
+.wallet-switcher-label > span {
+  min-width: 0;
 }
 .wallet-switcher-label strong {
   min-width: 0;
@@ -6377,13 +6382,16 @@ code {
   gap: 8px;
 }
 .ready-badge {
+  max-width: 150px;
   color: var(--success);
   font-size: 9px;
+  line-height: 1.25;
   padding: 4px 7px;
   border: 1px solid rgba(88, 199, 139, 0.18);
   background: rgba(88, 199, 139, 0.08);
   border-radius: 999px;
-  white-space: nowrap;
+  text-align: center;
+  overflow-wrap: anywhere;
 }
 .ready-badge.attention {
   color: var(--danger);
@@ -6522,6 +6530,10 @@ code {
   align-items: start;
   gap: 20px;
 }
+.vault-cosigners,
+.vault-backup-card {
+  min-width: 0;
+}
 .vault-cosigners .section-heading.compact {
   margin: 10px 0 14px;
 }
@@ -6574,6 +6586,7 @@ code {
 }
 .saved-cosigner-copy > span {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 7px;
   color: var(--muted);
@@ -6615,6 +6628,12 @@ code {
   color: var(--muted);
   font-size: 10px;
   line-height: 1.55;
+}
+.vault-backup-card .button {
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 .device-details {
   display: grid;
@@ -9010,6 +9029,23 @@ code {
   }
   .page {
     padding-inline: 36px;
+  }
+  .wallet-switcher-label {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .wallet-switcher-label strong {
+    text-align: left;
+    white-space: normal;
+  }
+  .vault-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .saved-cosigner-list button {
+    grid-template-columns: 34px minmax(0, 1fr) auto;
+  }
+  .saved-cosigner-list .row-chevron {
+    display: none;
   }
 }
 

@@ -47,6 +47,54 @@ test('uses signer terminology across multisig user flows', async ({ page }) => {
   }
 });
 
+test('keeps localized wallet policy content contained at compact desktop widths', async ({
+  page
+}, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop', 'desktop-width layout assertion');
+  await page.goto('/settings');
+  await page.getByRole('button', { name: 'FR', exact: true }).click();
+  await page.goto('/multisig');
+  const signerList = page.locator('.saved-cosigner-list');
+  await expect(signerList).toContainText('Configuration non enregistrée');
+  await expect(signerList).toContainText('Aucune configuration nécessaire');
+  await expect(signerList).toContainText('Non certifié');
+
+  for (const width of [1180, 950, 761]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect(page.getByRole('heading', { name: 'Clés de signature' })).toBeVisible();
+    await expect(signerList).not.toContainText(
+      /Policy verified|No setup needed|Setup required|Setup not recorded|Policy imported|Not certified|Not supported/
+    );
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)
+    ).toBe(true);
+
+    const backupCard = page.locator('.vault-backup-card');
+    const backupBounds = await backupCard.boundingBox();
+    expect(backupBounds).toBeTruthy();
+    for (const button of await backupCard.getByRole('link').all()) {
+      const bounds = await button.boundingBox();
+      expect(bounds).toBeTruthy();
+      expect(bounds!.x).toBeGreaterThanOrEqual(backupBounds!.x);
+      expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(backupBounds!.x + backupBounds!.width);
+      expect(await button.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(
+        true
+      );
+    }
+
+    for (const row of await page.locator('.saved-cosigner-list button').all()) {
+      expect(await row.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(
+        true
+      );
+    }
+    expect(
+      await page
+        .locator('.wallet-switcher-label')
+        .evaluate((element) => element.scrollWidth <= element.clientWidth)
+    ).toBe(true);
+  }
+});
+
 test('renames a saved signer from its reusable details modal', async ({ page }) => {
   await page.goto('/multisig');
   await page.getByRole('button', { name: 'View Coldcard details' }).click();

@@ -1491,9 +1491,9 @@
               >{#if alreadySigned}<Check size={11} />{translate(
                   $locale,
                   'Already signed'
-                )}{:else if policyRequired || policyRegistrationProfile(device).registration === 'unsupported'}{policyReadinessLabel(
-                  device,
-                  policyVerified
+                )}{:else if policyRequired || policyRegistrationProfile(device).registration === 'unsupported'}{translate(
+                  $locale,
+                  policyReadinessLabel(device, policyVerified)
                 )}{:else}{translate(
                   $locale,
                   device.status === 'ready' || device.status === 'detected'

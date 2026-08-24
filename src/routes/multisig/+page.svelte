@@ -529,7 +529,7 @@
                   class:attention={(requiresPolicySetup(signer) && !verification) ||
                     !policyRegistrationProfile(signer).supported ||
                     latestHealth(signer)?.status === 'attention'}
-                  >{policyReadinessLabel(signer, verification)}</span
+                  >{translate($locale, policyReadinessLabel(signer, verification))}</span
                 ><ChevronRight class="row-chevron" size={16} /></button
               >
             </article>{/each}

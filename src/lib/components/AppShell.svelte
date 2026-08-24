@@ -314,7 +314,7 @@
       {#if profiles.length}
         <div class="wallet-switcher">
           <span class="wallet-switcher-label"
-            >{t('wallets', $locale)}
+            ><span>{t('wallets', $locale)}</span>
             <strong>{formatWalletCount(profiles.length, $locale)}</strong></span
           >
           <WalletProfileList {profiles} {selectedWalletId} onselect={selectWallet} compact />
