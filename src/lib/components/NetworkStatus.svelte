@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Blocks, Gauge, LockKeyhole, Network, Route, Server } from '@lucide/svelte';
   import { networkName, type SupportedNetwork } from '$lib/config';
+  import { formatInteger, locale } from '$lib/i18n';
   import { walletService } from '$lib/wallet';
   import type { CoreNodeConfig, WalletSyncSource } from '$lib/wallet/contracts';
 
@@ -155,7 +156,7 @@
               ? locked
                 ? 'Unlock to check'
                 : 'Unavailable'
-              : nodeHeight.toLocaleString()}
+              : formatInteger(nodeHeight, $locale)}
           </dd>
         </div>
         <div>

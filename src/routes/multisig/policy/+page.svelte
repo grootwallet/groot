@@ -2,6 +2,7 @@
   import { AlertTriangle, Check, Clock3, ShieldCheck } from '@lucide/svelte';
   import { onMount } from 'svelte';
   import Button from '$lib/components/Button.svelte';
+  import { formatInteger, locale } from '$lib/i18n';
   import {
     walletService,
     type MultisigWallet,
@@ -211,14 +212,14 @@
                 <strong
                   >{path.availableAfterBlocks === 0
                     ? 'Available immediately'
-                    : `After ${path.availableAfterBlocks.toLocaleString()} blocks`}</strong
+                    : `After ${formatInteger(path.availableAfterBlocks, $locale)} blocks`}</strong
                 ><small>{path.threshold} of {path.signerIds.length} listed keys can spend</small>
               </div>
               {#if activePath === path}<Check size={16} />{/if}
             </article>{/each}
         </div>
         <label class="field"
-          ><span>Simulate UTXO age: {age.toLocaleString()} blocks</span><input
+          ><span>Simulate UTXO age: {formatInteger(age, $locale)} blocks</span><input
             aria-label="Simulated UTXO age"
             type="range"
             min="0"

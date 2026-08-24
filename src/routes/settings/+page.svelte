@@ -30,7 +30,7 @@
   import DeviceDetailsModal from '$lib/components/DeviceDetailsModal.svelte';
   import LocalTimestamp from '$lib/components/LocalTimestamp.svelte';
   import { toast } from '$lib/stores/toasts';
-  import { locale, t } from '$lib/i18n';
+  import { formatInteger, locale, t } from '$lib/i18n';
   import { APP_VERSION, defaultConfig, networkName } from '$lib/config';
   import { walletService, WalletError } from '$lib/wallet';
   import { goto } from '$app/navigation';
@@ -259,7 +259,7 @@
       nodeStatus = result;
       toast({
         title: 'Bitcoin node connected',
-        description: `${result.blocks} blocks · ${result.pruned ? `pruned from ${result.pruneHeight ?? 'an unknown height'}` : 'full block history'}`,
+        description: `${formatInteger(result.blocks, $locale)} blocks · ${result.pruned ? `pruned from ${result.pruneHeight === null ? 'an unknown height' : formatInteger(result.pruneHeight, $locale)}` : 'full block history'}`,
         tone: 'success'
       });
     } catch (cause) {
@@ -305,7 +305,7 @@
       walletCredential = '';
       toast({
         title: 'Node saved and verified',
-        description: `Connected at block ${result.blocks} · ${result.pruned ? 'pruned' : 'full history'}.`,
+        description: `Connected at block ${formatInteger(result.blocks, $locale)} · ${result.pruned ? 'pruned' : 'full history'}.`,
         tone: 'success'
       });
     } catch (cause) {
@@ -842,7 +842,10 @@
         }}
         ><span class="setting-icon"><History size={18} /></span><span
           ><strong>Recovery scan</strong><small
-            >Birthday block {scan.birthdayHeight} · gap limit {scan.gapLimit}</small
+            >Birthday block {formatInteger(scan.birthdayHeight, $locale)} · gap limit {formatInteger(
+              scan.gapLimit,
+              $locale
+            )}</small
           ></span
         ><ChevronRight size={16} /></button
       >
@@ -978,7 +981,7 @@
         ><span class="setting-icon"><Check size={18} /></span><span
           ><strong>Test connection</strong><small
             >{nodeStatus
-              ? `${nodeStatus.pruned ? `Pruned from block ${nodeStatus.pruneHeight ?? 'unknown'}` : 'Full block history'} · ${storageSize(nodeStatus.sizeOnDisk)} chain data · filter index ${nodeStatus.blockFilterIndex}${nodeStatus.initialBlockDownload ? ' · initial download active' : ''}`
+              ? `${nodeStatus.pruned ? `Pruned from block ${nodeStatus.pruneHeight === null ? 'unknown' : formatInteger(nodeStatus.pruneHeight, $locale)}` : 'Full block history'} · ${storageSize(nodeStatus.sizeOnDisk)} chain data · filter index ${nodeStatus.blockFilterIndex}${nodeStatus.initialBlockDownload ? ' · initial download active' : ''}`
               : 'Verify RPC authentication, retained block history, IBD, disk use, and filter-index status.'}</small
           ></span
         ><span class="badge" class:offline={connected === false}
@@ -1426,9 +1429,12 @@
                     ? 'Previous scan failed'
                     : `Scanning blocks · ${scanPercent}%`}</strong
           ><small
-            >{scanStatus.processedBlocks.toLocaleString()} of {scanStatus.totalBlocks.toLocaleString()}
+            >{formatInteger(scanStatus.processedBlocks, $locale)} of {formatInteger(
+              scanStatus.totalBlocks,
+              $locale
+            )}
             blocks processed{scanStatus.currentHeight
-              ? ` · height ${scanStatus.currentHeight.toLocaleString()}`
+              ? ` · height ${formatInteger(scanStatus.currentHeight, $locale)}`
               : ''}</small
           >
         </div>

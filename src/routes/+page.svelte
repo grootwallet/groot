@@ -21,6 +21,7 @@
   import DeviceDetailsModal from '$lib/components/DeviceDetailsModal.svelte';
   import Amount from '$lib/components/Amount.svelte';
   import { amountUnit, denomination, formatAmount, setDenomination } from '$lib/denomination';
+  import { formatInteger, locale } from '$lib/i18n';
   import { toast } from '$lib/stores/toasts';
   import {
     walletService,
@@ -401,9 +402,9 @@
                   : 'Downloading and checking compact filters'}</strong
         ><small
           >{syncStatus.state === 'failed'
-            ? `Balance remains verified through block ${syncStatus.lastVerifiedHeight}. Retry when your connection is available.`
+            ? `Balance remains verified through block ${formatInteger(syncStatus.lastVerifiedHeight, $locale)}. Retry when your connection is available.`
             : syncStatus.chainHeight !== null
-              ? `Network height ${syncStatus.chainHeight.toLocaleString()} · verified wallet state stays unchanged until completion`
+              ? `Network height ${formatInteger(syncStatus.chainHeight, $locale)} · verified wallet state stays unchanged until completion`
               : syncStatus.connectedPeers !== null && syncStatus.requiredPeers !== null
                 ? `${syncStatus.connectedPeers} of ${syncStatus.requiredPeers} required peers connected`
                 : 'Verified wallet state stays unchanged until the scan completes.'}</small

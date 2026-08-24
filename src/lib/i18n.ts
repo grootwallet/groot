@@ -152,6 +152,10 @@ export function t(key: MessageKey, current: Locale): string {
   return messages[current][key];
 }
 
+export function formatInteger(value: number, current: Locale): string {
+  return value.toLocaleString(current, { maximumFractionDigits: 0 });
+}
+
 export function formatConfirmationCount(count: number, current: Locale): string {
   const unit =
     current === 'fr'
@@ -161,7 +165,7 @@ export function formatConfirmationCount(count: number, current: Locale): string 
           ? 'confirmación'
           : 'confirmaciones'
         : `confirmation${count === 1 ? '' : 's'}`;
-  return `${count.toLocaleString(current)} ${unit}`;
+  return `${formatInteger(count, current)} ${unit}`;
 }
 
 export function formatWalletCount(count: number, current: Locale): string {
@@ -171,5 +175,5 @@ export function formatWalletCount(count: number, current: Locale): string {
       : current === 'es'
         ? `cartera${count === 1 ? '' : 's'}`
         : `wallet${count === 1 ? '' : 's'}`;
-  return `${count.toLocaleString(current)} ${unit}`;
+  return `${formatInteger(count, current)} ${unit}`;
 }

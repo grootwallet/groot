@@ -23,6 +23,7 @@
   import { goto } from '$app/navigation';
   import { onDestroy, onMount } from 'svelte';
   import Button from '$lib/components/Button.svelte';
+  import { formatInteger, locale } from '$lib/i18n';
   import FieldCounter from '$lib/components/FieldCounter.svelte';
   import HardwareActionPrompt from '$lib/components/HardwareActionPrompt.svelte';
   import InsightTip from '$lib/components/InsightTip.svelte';
@@ -1556,7 +1557,10 @@
               >
             </section>{/if}
           {#if recoveryTemplate?.type === 'recovery'}<span>Spend paths</span><code
-              >2 of first 3 now · 1 recovery key after {recoveryTemplate.recovery.availableAfterBlocks.toLocaleString()}
+              >2 of first 3 now · 1 recovery key after {formatInteger(
+                recoveryTemplate.recovery.availableAfterBlocks,
+                $locale
+              )}
               blocks</code
             >{/if}
           <p>

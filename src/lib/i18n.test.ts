@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   formatConfirmationCount,
+  formatInteger,
   formatWalletCount,
   normalizeLocale,
   readPersistedLocale,
@@ -31,6 +32,12 @@ describe('locale preferences', () => {
     expect(formatWalletCount(1, 'en')).toBe('1 wallet');
     expect(formatWalletCount(2, 'fr')).toBe('2 portefeuilles');
     expect(formatWalletCount(2, 'es')).toBe('2 carteras');
+  });
+
+  it('formats large integer values with the selected locale separator', () => {
+    expect(formatInteger(149_669, 'en')).toBe('149,669');
+    expect(formatInteger(149_669, 'fr')).toBe('149\u202f669');
+    expect(formatInteger(149_669, 'es')).toBe('149.669');
   });
 
   it('translates every app-appearance control', () => {
