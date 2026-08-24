@@ -108,8 +108,13 @@ Current local status on 2026-08-24:
   address display, kept the modal open when close was requested during the
   device decision, drained an explicit Jade rejection without persisting
   verification, and completed a fresh approved retry. HWI 3.2.0 exposes no
-  common remote-cancel command for active address display, so the equivalent
-  close/reject/retry regression remains required per exact Ledger, Trezor,
+  common remote-cancel command for active address display.
+- Ledger Nano S Plus additionally passed the equivalent focused packaged
+  v0.4.28 Testnet4 regression: the trusted address display remained active,
+  repeated blocked-dismissal attempts gave clear modal attention feedback,
+  explicit Ledger rejection closed the device prompt and modal without
+  persisting verification, and a fresh unchanged approval succeeded. The
+  equivalent close/reject/retry regression remains required per exact Trezor,
   BitBox02, and Coldcard model; source-path similarity is not physical evidence.
 - Trezor Safe 3 Bitcoin-only, firmware 2.12.3, has a complete BIP84 local
   Regtest USB core pass. Its BIP48 import, 2-of-3 construction, cosigner address
