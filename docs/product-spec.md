@@ -167,7 +167,7 @@ Every explicit USB discovery request invokes HWI `enumerate` exactly once, becau
 
 After discovery returns a fingerprint that exactly matches a saved signer, wallet-scoped device lists show that signer's current user-defined name. The HWI factory/model label remains the fallback for locked, unmatched, and initial-import devices and is never used to infer identity.
 
-Testnet4 hardware commands use HWI's explicit `testnet4` chain. Cached paths are hints rather than identity. Disconnect, timeout, cancellation, wallet switch, or scan-generation change revokes them; the user must explicitly scan again after reconnect. Groot never retries discovery or an interactive device request automatically.
+Testnet4 hardware commands use HWI's explicit `testnet4` chain except for Jade. HWI 3.2.0's Jade adapter has no Testnet4 mapping and uses its `test` selector for Jade's shared test-network family, so Groot applies that selector only to exact-device Jade operations; wallet derivation and every saved-identity check remain Testnet4 authoritative. Cached paths are hints rather than identity. Disconnect, timeout, cancellation, wallet switch, or scan-generation change revokes them; the user must explicitly scan again after reconnect. Groot never retries discovery or an interactive device request automatically.
 
 ## Interoperable backups
 

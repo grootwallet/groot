@@ -388,6 +388,17 @@ impl HwiChain {
             Self::Signet => "signet",
         }
     }
+
+    fn as_hwi_argument_for_device(self, device_type: &str) -> &'static str {
+        // HWI 3.2.0 exposes Testnet4 globally, but its Jade adapter only maps
+        // Chain::TEST to Jade's shared test-network family. Passing TESTNET4
+        // fails before JadeClient can call auth_user and display the PIN flow.
+        if self == Self::Testnet4 && device_type.eq_ignore_ascii_case("jade") {
+            Self::Test.as_hwi_argument()
+        } else {
+            self.as_hwi_argument()
+        }
+    }
 }
 
 impl Default for HwiCli {
@@ -445,7 +456,7 @@ impl HwiCli {
     ) -> Vec<String> {
         let mut arguments = vec![
             "--chain".into(),
-            self.chain.as_hwi_argument().into(),
+            self.chain.as_hwi_argument_for_device(device_type).into(),
             "--device-type".into(),
             device_type.into(),
         ];
@@ -464,7 +475,7 @@ impl HwiCli {
     ) -> Vec<String> {
         vec![
             "--chain".into(),
-            self.chain.as_hwi_argument().into(),
+            self.chain.as_hwi_argument_for_device(device_type).into(),
             "--device-type".into(),
             device_type.into(),
             "--device-path".into(),
@@ -494,7 +505,7 @@ impl HwiCli {
             &self.source,
             &[
                 "--chain".into(),
-                self.chain.as_hwi_argument().into(),
+                self.chain.as_hwi_argument_for_device(device_type).into(),
                 "--device-type".into(),
                 device_type.into(),
                 "--device-path".into(),
@@ -1634,6 +1645,19 @@ mod tests {
         assert_eq!(HwiChain::Main.as_hwi_argument(), "main");
         assert_eq!(HwiChain::Test.as_hwi_argument(), "test");
         assert_eq!(HwiChain::Testnet4.as_hwi_argument(), "testnet4");
+        let testnet4 = HwiCli::for_chain(HwiChain::Testnet4);
+        assert_eq!(
+            testnet4.device_command("jade", "usb:jade", "getxpub", "m/84'/1'/0'")[1],
+            "test"
+        );
+        assert_eq!(
+            testnet4.device_command("ledger", "usb:ledger", "getxpub", "m/84'/1'/0'")[1],
+            "testnet4"
+        );
+        assert_eq!(
+            testnet4.device_command("bitbox02", "usb:bitbox", "getxpub", "m/84'/1'/0'")[1],
+            "testnet4"
+        );
         assert_eq!(HwiChain::Regtest.as_hwi_argument(), "regtest");
         assert_eq!(HwiChain::Signet.as_hwi_argument(), "signet");
         for network in [
