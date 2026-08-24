@@ -16,16 +16,18 @@ const SUPPORTED_HWI_DEVICE_TYPES: &[&str] = &[
 
 #[tauri::command]
 pub async fn hardware_cancel_operations(state: State<'_, AppState>) -> ApiResult<()> {
-    state
-        .pending_hardware_pins
-        .lock()
-        .map_err(internal)?
-        .clear();
+    let pending_pins = {
+        let mut pending = state.pending_hardware_pins.lock().map_err(internal)?;
+        std::mem::take(&mut *pending)
+    };
     *state.recent_hardware_scan.lock().map_err(internal)? = None;
-    tauri::async_runtime::spawn_blocking(crate::hardware::cancel_hardware_operations_and_wait)
-        .await
-        .map_err(internal)?
-        .map_err(hardware_api_error)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        drop(pending_pins);
+        crate::hardware::cancel_hardware_operations_and_wait()
+    })
+    .await
+    .map_err(internal)?
+    .map_err(hardware_api_error)?;
     Ok(())
 }
 
@@ -730,7 +732,12 @@ pub async fn hardware_prompt_pin(
 ) -> ApiResult<String> {
     let hwi = hwi_cli(&app)?;
     let device = recently_scanned_hardware_device(&state, &device_id)?;
+    let stale_pins = {
+        let mut pending = state.pending_hardware_pins.lock().map_err(internal)?;
+        std::mem::take(&mut *pending)
+    };
     let pending = tauri::async_runtime::spawn_blocking(move || {
+        drop(stale_pins);
         if !matches!(
             device.device_type.to_ascii_lowercase().as_str(),
             "trezor" | "keepkey"
@@ -741,8 +748,8 @@ pub async fn hardware_prompt_pin(
                 "This device does not need Groot's PIN-matrix flow.",
             ));
         }
-        let output = hwi
-            .prompt_pin(&device.device_type, &device.path)
+        let (output, session) = hwi
+            .start_pin_session(&device.device_type, &device.path)
             .map_err(hardware_api_error)?;
         let response: HwiSuccess = serde_json::from_slice(&output).map_err(internal)?;
         if response.success != Some(true) {
@@ -752,9 +759,8 @@ pub async fn hardware_prompt_pin(
             ));
         }
         Ok(PendingHardwarePin {
-            device_type: device.device_type,
-            device_path: device.path,
             created_at: Instant::now(),
+            session,
         })
     })
     .await
@@ -768,7 +774,6 @@ pub async fn hardware_prompt_pin(
 
 #[tauri::command]
 pub async fn hardware_send_pin(
-    app: AppHandle,
     state: State<'_, AppState>,
     challenge_id: String,
     mut pin_positions: String,
@@ -797,16 +802,16 @@ pub async fn hardware_send_pin(
                 "The PIN request expired. Start the PIN matrix again.",
             )
         })?;
-    if pending.created_at.elapsed() > HARDWARE_PIN_CHALLENGE_TIMEOUT {
-        return Err(api_error(
-            "hardware_challenge_expired",
-            "The PIN request expired. Start the PIN matrix again.",
-        ));
-    }
-    let hwi = hwi_cli(&app)?;
     tauri::async_runtime::spawn_blocking(move || {
-        let output = hwi
-            .send_pin(&pending.device_type, &pending.device_path, pin.as_slice())
+        if pending.created_at.elapsed() > HARDWARE_PIN_CHALLENGE_TIMEOUT {
+            return Err(api_error(
+                "hardware_challenge_expired",
+                "The PIN request expired. Start the PIN matrix again.",
+            ));
+        }
+        let output = pending
+            .session
+            .send_pin(pin.as_slice())
             .map_err(hardware_api_error)?;
         let response: HwiSuccess = serde_json::from_slice(&output).map_err(internal)?;
         if response.success != Some(true) {

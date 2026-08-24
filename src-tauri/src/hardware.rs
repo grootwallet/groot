@@ -4,9 +4,9 @@ use bdk_wallet::bitcoin::{
 };
 use std::{
     fs::File,
-    io::{Read, Write},
+    io::{BufRead, BufReader, Read, Write},
     path::{Path, PathBuf},
-    process::{Command, Stdio},
+    process::{Child, ChildStdin, Command, Stdio},
     sync::mpsc,
     sync::{
         atomic::{AtomicBool, AtomicU64, Ordering},
@@ -15,6 +15,7 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
+use zeroize::Zeroizing;
 
 const MAX_ARGUMENT_BYTES: usize = 384 * 1024;
 const MAX_STDIN_BYTES: usize = MAX_ARGUMENT_BYTES + 1024;
@@ -23,6 +24,7 @@ const MAX_OUTPUT_BYTES: u64 = 384 * 1024;
 const PIPE_CLEANUP_TIMEOUT: Duration = Duration::from_secs(2);
 const CANCELLATION_CLEANUP_TIMEOUT: Duration = Duration::from_secs(5);
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(90);
+const PIN_SESSION_TIMEOUT: Duration = Duration::from_secs(2 * 60);
 const DISCOVERY_TIMEOUT: Duration = Duration::from_secs(30);
 const USER_REVIEW_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 const HWI_DIGEST_HEX_BYTES: usize = 64;
@@ -357,13 +359,28 @@ pub trait HardwareTransport: Send + Sync {
         device_path: &str,
         descriptor: &str,
     ) -> Result<Vec<u8>, HardwareError>;
-    fn prompt_pin(&self, device_type: &str, device_path: &str) -> Result<Vec<u8>, HardwareError>;
-    fn send_pin(
-        &self,
-        device_type: &str,
-        device_path: &str,
-        pin_positions: &[u8],
-    ) -> Result<Vec<u8>, HardwareError>;
+}
+
+pub struct HwiPinSession {
+    commands: Option<mpsc::SyncSender<PinSessionCommand>>,
+    worker: Option<thread::JoinHandle<()>>,
+}
+
+enum PinSessionCommand {
+    Send {
+        input: Zeroizing<Vec<u8>>,
+        response: mpsc::SyncSender<Result<Vec<u8>, HardwareError>>,
+    },
+    Cancel,
+}
+
+struct PinProcess {
+    child: Option<Child>,
+    stdin: Option<ChildStdin>,
+    stdout: mpsc::Receiver<Result<Vec<u8>, HardwareError>>,
+    stdout_done: mpsc::Receiver<()>,
+    stderr: mpsc::Receiver<Result<Vec<u8>, HardwareError>>,
+    operation: Option<HardwareOperation>,
 }
 
 #[derive(Debug, Clone)]
@@ -516,6 +533,19 @@ impl HwiCli {
         HardwareOperation::acquire(HardwareOperationKind::Discovery, DISCOVERY_TIMEOUT)
     }
 
+    pub fn start_pin_session(
+        &self,
+        device_type: &str,
+        device_path: &str,
+    ) -> Result<(Vec<u8>, HwiPinSession), HardwareError> {
+        HwiPinSession::start(
+            &self.program,
+            &self.source,
+            &self.device_command_without_value(device_type, device_path, "--stdin"),
+            self.home.as_deref(),
+        )
+    }
+
     pub fn account_keypool_in_operation(
         &self,
         operation: &HardwareOperation,
@@ -666,41 +696,6 @@ impl HardwareTransport for HwiCli {
             descriptor,
         )
     }
-
-    fn prompt_pin(&self, device_type: &str, device_path: &str) -> Result<Vec<u8>, HardwareError> {
-        let operation =
-            HardwareOperation::acquire(HardwareOperationKind::Interactive, DEFAULT_TIMEOUT)?;
-        run_program_in_operation(
-            &self.program,
-            &self.source,
-            &self.device_command_without_value(device_type, device_path, "promptpin"),
-            &operation,
-            self.home.as_deref(),
-            None,
-        )
-    }
-
-    fn send_pin(
-        &self,
-        device_type: &str,
-        device_path: &str,
-        pin_positions: &[u8],
-    ) -> Result<Vec<u8>, HardwareError> {
-        let arguments = self.device_command_without_value(device_type, device_path, "--stdin");
-        let mut input = pin_command_input(pin_positions)?;
-        let operation =
-            HardwareOperation::acquire(HardwareOperationKind::Interactive, DEFAULT_TIMEOUT)?;
-        let result = run_program_in_operation(
-            &self.program,
-            &self.source,
-            &arguments,
-            &operation,
-            self.home.as_deref(),
-            Some(&input),
-        );
-        input.fill(0);
-        result
-    }
 }
 
 fn trusted_hwi_path() -> PathBuf {
@@ -772,10 +767,7 @@ fn quote_hwi_stdin_argument(argument: &str) -> String {
     format!("'{}'", argument.replace('\'', "'\"'\"'"))
 }
 
-fn hwi_stdin_command(
-    arguments: &[String],
-    extra_input: Option<&[u8]>,
-) -> Result<Vec<u8>, HardwareError> {
+fn hwi_stdin_command_line(arguments: &[String]) -> Result<Vec<u8>, HardwareError> {
     validate_arguments(arguments)?;
     let mut input = arguments
         .iter()
@@ -784,6 +776,18 @@ fn hwi_stdin_command(
         .join(" ")
         .into_bytes();
     input.push(b'\n');
+    if input.len() > MAX_STDIN_BYTES {
+        input.fill(0);
+        return Err(HardwareError::InvalidArgument);
+    }
+    Ok(input)
+}
+
+fn hwi_stdin_command(
+    arguments: &[String],
+    extra_input: Option<&[u8]>,
+) -> Result<Vec<u8>, HardwareError> {
+    let mut input = hwi_stdin_command_line(arguments)?;
     if let Some(extra) = extra_input {
         if extra.is_empty() || extra.contains(&0) {
             input.fill(0);
@@ -800,6 +804,347 @@ fn hwi_stdin_command(
         return Err(HardwareError::InvalidArgument);
     }
     Ok(input)
+}
+
+fn read_bounded_line<R: BufRead>(reader: &mut R) -> Result<Option<Vec<u8>>, HardwareError> {
+    let mut bytes = Vec::new();
+    let read = reader
+        .take(MAX_OUTPUT_BYTES + 1)
+        .read_until(b'\n', &mut bytes)
+        .map_err(|_| HardwareError::Io)?;
+    if read == 0 {
+        return Ok(None);
+    }
+    if bytes.len() as u64 > MAX_OUTPUT_BYTES {
+        return Err(HardwareError::OutputTooLarge);
+    }
+    Ok(Some(bytes))
+}
+
+impl HwiPinSession {
+    fn start(
+        program: &Path,
+        source: &HwiSource,
+        arguments: &[String],
+        home: Option<&Path>,
+    ) -> Result<(Vec<u8>, Self), HardwareError> {
+        let program = program.to_path_buf();
+        let source = source.clone();
+        let arguments = arguments.to_vec();
+        let home = home.map(Path::to_path_buf);
+        let (commands_tx, commands_rx) = mpsc::sync_channel(1);
+        let (started_tx, started_rx) = mpsc::sync_channel(1);
+        let worker = thread::spawn(move || {
+            let (prompt, process) =
+                match PinProcess::start(&program, &source, &arguments, home.as_deref()) {
+                    Ok(started) => started,
+                    Err(error) => {
+                        let _ = started_tx.send(Err(error));
+                        return;
+                    }
+                };
+            if started_tx.send(Ok(prompt)).is_err() {
+                return;
+            }
+            loop {
+                let remaining = match process
+                    .operation
+                    .as_ref()
+                    .ok_or(HardwareError::Io)
+                    .and_then(HardwareOperation::remaining)
+                {
+                    Ok(remaining) => remaining,
+                    Err(_) => return,
+                };
+                match commands_rx.recv_timeout(remaining.min(Duration::from_millis(20))) {
+                    Ok(PinSessionCommand::Send { input, response }) => {
+                        let _ = response.send(process.send_input(input));
+                        return;
+                    }
+                    Ok(PinSessionCommand::Cancel) | Err(mpsc::RecvTimeoutError::Disconnected) => {
+                        return
+                    }
+                    Err(mpsc::RecvTimeoutError::Timeout) => {}
+                }
+            }
+        });
+        let mut session = Self {
+            commands: Some(commands_tx),
+            worker: Some(worker),
+        };
+        match started_rx.recv_timeout(PIN_SESSION_TIMEOUT + PIPE_CLEANUP_TIMEOUT) {
+            Ok(Ok(prompt)) => Ok((prompt, session)),
+            Ok(Err(error)) => {
+                session.join_worker()?;
+                Err(error)
+            }
+            Err(_) => {
+                drop(session);
+                Err(HardwareError::TimedOut)
+            }
+        }
+    }
+
+    fn join_worker(&mut self) -> Result<(), HardwareError> {
+        self.commands = None;
+        match self.worker.take() {
+            Some(worker) => worker.join().map_err(|_| HardwareError::Io),
+            None => Ok(()),
+        }
+    }
+
+    pub fn send_pin(mut self, pin_positions: &[u8]) -> Result<Vec<u8>, HardwareError> {
+        let commands = self.commands.as_ref().cloned().ok_or(HardwareError::Io)?;
+        let input = Zeroizing::new(pin_command_input(pin_positions)?);
+        let (response_tx, response_rx) = mpsc::sync_channel(1);
+        let command = PinSessionCommand::Send {
+            input,
+            response: response_tx,
+        };
+        if let Err(mpsc::SendError(command)) = commands.send(command) {
+            if let PinSessionCommand::Send { mut input, .. } = command {
+                input.fill(0);
+            }
+            return Err(HardwareError::Io);
+        }
+        self.commands = None;
+        let result = response_rx
+            .recv_timeout(PIN_SESSION_TIMEOUT + PIPE_CLEANUP_TIMEOUT)
+            .map_err(|_| HardwareError::TimedOut)?;
+        self.join_worker()?;
+        result
+    }
+}
+
+impl Drop for HwiPinSession {
+    fn drop(&mut self) {
+        if let Some(commands) = self.commands.take() {
+            let _ = commands.send(PinSessionCommand::Cancel);
+        }
+        let _ = self.join_worker();
+    }
+}
+
+impl PinProcess {
+    fn start(
+        program: &Path,
+        source: &HwiSource,
+        arguments: &[String],
+        home: Option<&Path>,
+    ) -> Result<(Vec<u8>, Self), HardwareError> {
+        if !program.is_absolute() {
+            return Err(HardwareError::Unavailable);
+        }
+        let program = trusted_executable(program, source)?;
+        let operation =
+            HardwareOperation::acquire(HardwareOperationKind::Interactive, PIN_SESSION_TIMEOUT)?;
+        let mut input = hwi_stdin_command_line(arguments)?;
+        input.extend_from_slice(b"promptpin\n");
+        if input.len() > MAX_STDIN_BYTES {
+            input.fill(0);
+            return Err(HardwareError::InvalidArgument);
+        }
+
+        let mut command = Command::new(program);
+        command.args(HWI_FIXED_ARGV).env_clear();
+        if let Some(home) = home {
+            command.env("HOME", trusted_home(home)?);
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::CommandExt as _;
+            command.process_group(0);
+        }
+        let mut child = command
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|_| HardwareError::Unavailable)?;
+        let Some(stdin) = child.stdin.take() else {
+            terminate_process_tree(&mut child);
+            return Err(HardwareError::Io);
+        };
+        let Some(stdout) = child.stdout.take() else {
+            terminate_process_tree(&mut child);
+            return Err(HardwareError::Io);
+        };
+        let Some(stderr) = child.stderr.take() else {
+            terminate_process_tree(&mut child);
+            return Err(HardwareError::Io);
+        };
+
+        let (stdout_tx, stdout_rx) = mpsc::channel();
+        let (stdout_done_tx, stdout_done_rx) = mpsc::sync_channel(1);
+        thread::spawn(move || {
+            let mut stdout = BufReader::new(stdout);
+            loop {
+                match read_bounded_line(&mut stdout) {
+                    Ok(Some(line)) => {
+                        if stdout_tx.send(Ok(line)).is_err() {
+                            break;
+                        }
+                    }
+                    Ok(None) => break,
+                    Err(error) => {
+                        let _ = stdout_tx.send(Err(error));
+                        break;
+                    }
+                }
+            }
+            let _ = stdout_done_tx.send(());
+        });
+        let (stderr_tx, stderr_rx) = mpsc::sync_channel(1);
+        thread::spawn(move || {
+            let _ = stderr_tx.send(read_bounded(stderr));
+        });
+
+        let mut session = Self {
+            child: Some(child),
+            stdin: Some(stdin),
+            stdout: stdout_rx,
+            stdout_done: stdout_done_rx,
+            stderr: stderr_rx,
+            operation: Some(operation),
+        };
+        let write_result = session
+            .stdin
+            .as_mut()
+            .ok_or(HardwareError::Io)
+            .and_then(|stdin| stdin.write_all(&input).map_err(|_| HardwareError::Io));
+        input.fill(0);
+        if let Err(error) = write_result {
+            session.abort();
+            return Err(error);
+        }
+        let prompt = match session.next_output() {
+            Ok(output) => output,
+            Err(error) => {
+                session.abort();
+                return Err(error);
+            }
+        };
+        Ok((prompt, session))
+    }
+
+    fn next_output(&mut self) -> Result<Vec<u8>, HardwareError> {
+        loop {
+            let remaining = self
+                .operation
+                .as_ref()
+                .ok_or(HardwareError::Io)?
+                .remaining()?;
+            match self
+                .stdout
+                .recv_timeout(remaining.min(Duration::from_millis(20)))
+            {
+                Ok(output) => return output,
+                Err(mpsc::RecvTimeoutError::Timeout) => {}
+                Err(mpsc::RecvTimeoutError::Disconnected) => {
+                    return Err(HardwareError::CommandFailed(None));
+                }
+            }
+        }
+    }
+
+    fn wait_for_exit(&mut self) -> Result<std::process::ExitStatus, HardwareError> {
+        loop {
+            if let Some(status) = self
+                .child
+                .as_mut()
+                .ok_or(HardwareError::Io)?
+                .try_wait()
+                .map_err(|_| HardwareError::Io)?
+            {
+                return Ok(status);
+            }
+            self.operation
+                .as_ref()
+                .ok_or(HardwareError::Io)?
+                .remaining()?;
+            thread::sleep(Duration::from_millis(20));
+        }
+    }
+
+    fn collect_pipes(&self) -> Result<(), HardwareError> {
+        let deadline = Instant::now()
+            .checked_add(PIPE_CLEANUP_TIMEOUT)
+            .ok_or(HardwareError::Io)?;
+        let remaining = deadline
+            .checked_duration_since(Instant::now())
+            .filter(|remaining| !remaining.is_zero())
+            .ok_or(HardwareError::Io)?;
+        self.stdout_done
+            .recv_timeout(remaining)
+            .map_err(|_| HardwareError::Io)?;
+        let remaining = deadline
+            .checked_duration_since(Instant::now())
+            .filter(|remaining| !remaining.is_zero())
+            .ok_or(HardwareError::Io)?;
+        self.stderr
+            .recv_timeout(remaining)
+            .map_err(|_| HardwareError::Io)??;
+        match self.stdout.try_recv() {
+            Err(mpsc::TryRecvError::Empty | mpsc::TryRecvError::Disconnected) => Ok(()),
+            Ok(_) => Err(HardwareError::Io),
+        }
+    }
+
+    fn abort(&mut self) {
+        self.stdin.take();
+        if let Some(child) = self.child.as_mut() {
+            terminate_process_tree(child);
+            let _ = self.collect_pipes();
+        }
+        self.child = None;
+        self.operation = None;
+    }
+
+    fn send_input(mut self, mut input: Zeroizing<Vec<u8>>) -> Result<Vec<u8>, HardwareError> {
+        let write_result = self
+            .stdin
+            .as_mut()
+            .ok_or(HardwareError::Io)
+            .and_then(|stdin| stdin.write_all(&input).map_err(|_| HardwareError::Io));
+        input.fill(0);
+        self.stdin.take();
+        if let Err(error) = write_result {
+            self.abort();
+            return Err(error);
+        }
+        let output = match self.next_output() {
+            Ok(output) => output,
+            Err(error) => {
+                self.abort();
+                return Err(error);
+            }
+        };
+        let status = match self.wait_for_exit() {
+            Ok(status) => status,
+            Err(error) => {
+                self.abort();
+                return Err(error);
+            }
+        };
+        if let Err(error) = self.collect_pipes() {
+            self.abort();
+            return Err(error);
+        }
+        self.child = None;
+        self.operation = None;
+        if !status.success() {
+            return Err(HardwareError::CommandFailed(hwi_error_code(&output)));
+        }
+        Ok(output)
+    }
+}
+
+impl Drop for PinProcess {
+    fn drop(&mut self) {
+        if self.child.is_some() {
+            self.abort();
+        }
+    }
 }
 
 fn run_program_in_operation(
@@ -1583,6 +1928,53 @@ mod tests {
             HwiCli::default().device_command_without_value("trezor", "usb-device-path", "--stdin");
         assert!(!arguments.iter().any(|argument| argument.contains("719")));
         assert_eq!(arguments.last().map(String::as_str), Some("--stdin"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn trezor_pin_prompt_and_submission_share_one_fixed_argv_process() {
+        let argv_file = std::env::temp_dir().join(format!(
+            "groot-hwi-pin-argv-{}-{:?}",
+            std::process::id(),
+            thread::current().id()
+        ));
+        let script = test_script(
+            "pin-session",
+            &format!(
+                "printf '%s\\n' \"$@\" > '{}'\nIFS= read -r selector\nIFS= read -r prompt\n[ \"$prompt\" = promptpin ] || exit 2\nprintf '%s\\n' '{{\"success\":true}}'\nIFS= read -r send\n[ \"$send\" = 'sendpin 719' ] || exit 3\nIFS= read -r terminator\n[ -z \"$terminator\" ] || exit 4\nprintf '%s\\n' '{{\"success\":true}}'",
+                argv_file.display()
+            ),
+        );
+        let hwi = HwiCli::for_test_program(script.clone());
+        let (prompt, session) = hwi.start_pin_session("trezor", "usb-device-path").unwrap();
+        assert_eq!(prompt, b"{\"success\":true}\n");
+        assert_eq!(session.send_pin(b"719").unwrap(), b"{\"success\":true}\n");
+        assert_eq!(std::fs::read_to_string(&argv_file).unwrap(), "--stdin\n");
+        std::fs::remove_file(script).unwrap();
+        std::fs::remove_file(argv_file).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn dropping_a_pending_pin_session_terminates_it_and_releases_the_lease() {
+        let script = test_script(
+            "pin-session-cancel",
+            "IFS= read -r selector\nIFS= read -r prompt\nprintf '%s\\n' '{\"success\":true}'\nIFS= read -r send",
+        );
+        let hwi = HwiCli::for_test_program(script.clone());
+        let (_, session) = hwi.start_pin_session("trezor", "usb-device-path").unwrap();
+        drop(session);
+
+        let fast = test_script(
+            "after-pin-session",
+            "IFS= read -r command\nprintf '%s\\n' '[]'",
+        );
+        assert_eq!(
+            HwiCli::for_test_program(fast.clone()).enumerate().unwrap(),
+            b"[]\n"
+        );
+        std::fs::remove_file(script).unwrap();
+        std::fs::remove_file(fast).unwrap();
     }
 
     #[test]
