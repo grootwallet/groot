@@ -76,6 +76,16 @@ describe('hardware receive verification UI', () => {
     expect(pinModal).not.toContain('recovery words or a hardware passphrase');
   });
 
+  it('blocks every modal dismissal while a Trezor PIN challenge is active', () => {
+    const pinModal = readFileSync(new URL('./TrezorPinModal.svelte', import.meta.url), 'utf8');
+    expect(pinModal).toContain('if (challengeReady || busy)');
+    expect(pinModal).toContain('attentionSignal += 1');
+    expect(pinModal).toContain('Cancel on Trezor');
+    expect(pinModal).toContain('I canceled on Trezor');
+    expect(pinModal).toContain('await walletService.cancelHardwareOperations()');
+    expect(pinModal).toContain('onclose={requestClose}');
+  });
+
   it('acknowledges blocked modal dismissal with repeatable reduced-motion-safe feedback', () => {
     expect(verificationFlow).toContain('modalAttentionSignal += 1');
     expect(verificationFlow).toContain('attentionSignal={modalAttentionSignal}');

@@ -12,6 +12,7 @@
     trezorPinGridAvailable,
     trezorPinError
   } from '$lib/hardware/trezor-pin';
+  import { walletService } from '$lib/wallet';
   import type { HardwareDevice, WalletErrorCode } from '$lib/wallet/contracts';
 
   let {
@@ -47,9 +48,44 @@
   const brand = $derived(hardwareBrand(device));
   const errorPresentation = $derived(trezorPinError(errorCode, error));
   const gridAvailable = $derived(trezorPinGridAvailable(challengeReady, busy, error));
+  let cancellationRequested = $state(false);
+  let cancellationBusy = $state(false);
+  let attentionSignal = $state(0);
+
+  $effect(() => {
+    if (!open || (!challengeReady && !busy)) cancellationRequested = false;
+  });
+
+  function requestClose() {
+    if (challengeReady || busy) {
+      cancellationRequested = true;
+      attentionSignal += 1;
+      return;
+    }
+    onclose();
+  }
+
+  async function confirmDeviceCancellation() {
+    if (cancellationBusy) return;
+    cancellationBusy = true;
+    try {
+      await walletService.cancelHardwareOperations();
+    } catch {
+      // The device-side cancellation is authoritative; still clear the local flow.
+    } finally {
+      cancellationBusy = false;
+      cancellationRequested = false;
+      onclose();
+    }
+  }
 </script>
 
-<Modal {open} title={translate($locale, 'Unlock {brand}', { brand })} {onclose}>
+<Modal
+  {open}
+  title={translate($locale, 'Unlock {brand}', { brand })}
+  onclose={requestClose}
+  {attentionSignal}
+>
   <div class="pin-matrix-flow">
     <div class="hardware-readiness">
       <LockKeyhole size={18} />
@@ -63,7 +99,24 @@
         >
       </span>
     </div>
-    {#if error}
+    {#if cancellationRequested}
+      <HardwareActionPrompt
+        title={translate($locale, 'Cancel on Trezor')}
+        detail={translate($locale, 'Cancel the PIN request on Trezor before closing this dialog.')}
+        label={translate($locale, 'Trezor cancellation required')}
+      />
+      <div class="pin-matrix-actions">
+        <Button
+          variant="secondary"
+          disabled={cancellationBusy}
+          onclick={() => (cancellationRequested = false)}
+          >{translate($locale, 'Continue PIN entry')}</Button
+        >
+        <Button disabled={cancellationBusy} onclick={confirmDeviceCancellation}
+          >{translate($locale, 'I canceled on Trezor')}</Button
+        >
+      </div>
+    {:else if error}
       <div class="pin-error-card" role="alert" aria-live="assertive">
         <AlertTriangle size={18} />
         <span

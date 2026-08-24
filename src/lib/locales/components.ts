@@ -68,6 +68,11 @@ export const componentCopy = {
   bcrt1: { fr: 'bcrt1', es: 'bcrt1' },
   Block: { fr: 'Bloc', es: 'Bloque' },
   Change: { fr: 'Monnaie', es: 'Cambio' },
+  'Cancel on Trezor': { fr: 'Annulez sur Trezor', es: 'Cancela en Trezor' },
+  'Cancel the PIN request on Trezor before closing this dialog.': {
+    fr: 'Annulez la demande de PIN sur Trezor avant de fermer cette fenêtre.',
+    es: 'Cancela la solicitud de PIN en Trezor antes de cerrar esta ventana.'
+  },
   'Change address': { fr: 'Adresse de monnaie', es: 'Dirección de cambio' },
   'Change descriptor': { fr: 'Descripteur de monnaie', es: 'Descriptor de cambio' },
   'Check signer': { fr: 'Contrôler le signataire', es: 'Comprobar firmante' },
@@ -134,6 +139,10 @@ export const componentCopy = {
   'For each PIN digit on Trezor, tap the blank cell in the same location.': {
     fr: 'Pour chaque chiffre du PIN sur Trezor, touchez la case vide au même emplacement.',
     es: 'Para cada dígito del PIN en Trezor, pulsa la celda vacía en la misma posición.'
+  },
+  'Continue PIN entry': {
+    fr: 'Continuer la saisie du PIN',
+    es: 'Continuar con el PIN'
   },
   Fingerprint: { fr: 'Empreinte', es: 'Huella' },
   'from this wallet': { fr: 'depuis ce portefeuille', es: 'desde esta cartera' },
@@ -325,6 +334,14 @@ export const componentCopy = {
     es: 'La etiqueta es permanente. Los espacios superiores son solo visuales; al copiar siempre se usa la dirección exacta.'
   },
   'This device': { fr: 'Cet appareil', es: 'Este dispositivo' },
+  'Trezor cancellation required': {
+    fr: 'Annulation requise sur Trezor',
+    es: 'Cancelación requerida en Trezor'
+  },
+  'I canceled on Trezor': {
+    fr: 'J’ai annulé sur Trezor',
+    es: 'He cancelado en Trezor'
+  },
   'This exact address was shown on and matched by a saved hardware signer. The verification applies only to this address.':
     {
       fr: 'Cette adresse exacte a été affichée et confirmée par un signataire matériel enregistré. La vérification s’applique uniquement à cette adresse.',
