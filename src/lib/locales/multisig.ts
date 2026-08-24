@@ -305,8 +305,8 @@ export const multisigCopy = {
     },
   'Recovery confirmed': { fr: 'Récupération confirmée', es: 'Recuperación confirmada' },
   'Recovery policy lab': {
-    fr: 'Laboratoire de politique de récupération',
-    es: 'Laboratorio de política de recuperación'
+    fr: 'Laboratoire de récupération',
+    es: 'Laboratorio de recuperación'
   },
   'Recovery signatures': { fr: 'Signatures de récupération', es: 'Firmas de recuperación' },
   'Recovery test required': {

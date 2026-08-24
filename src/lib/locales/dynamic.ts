@@ -436,7 +436,7 @@ export const dynamicCopy = {
     es: 'Sin nuevos vínculos entre grupos existentes.'
   },
   'No results recorded': { fr: 'Aucun résultat enregistré', es: 'No hay resultados registrados' },
-  'No setup needed': { fr: 'Aucune configuration nécessaire', es: 'No requiere configuración' },
+  'No setup needed': { fr: 'Aucun réglage requis', es: 'Sin configuración necesaria' },
   'One signature required': { fr: 'Une signature requise', es: 'Se requiere una firma' },
   'Open “Signer keys to compare” first.': {
     fr: 'Ouvrez d’abord « Clés de signataires à comparer ».',

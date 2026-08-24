@@ -56,7 +56,7 @@ test('keeps localized wallet policy content contained at compact desktop widths'
   await page.goto('/multisig');
   const signerList = page.locator('.saved-cosigner-list');
   await expect(signerList).toContainText('Configuration non enregistrée');
-  await expect(signerList).toContainText('Aucune configuration nécessaire');
+  await expect(signerList).toContainText('Aucun réglage requis');
   await expect(signerList).toContainText('Non certifié');
 
   for (const width of [1180, 950, 761]) {
@@ -87,6 +87,12 @@ test('keeps localized wallet policy content contained at compact desktop widths'
         true
       );
     }
+    for (const badge of await page.locator('.saved-cosigner-list .ready-badge').all()) {
+      expect((await badge.boundingBox())?.height).toBeLessThanOrEqual(25);
+    }
+    const recoveryLab = backupCard.getByRole('link', { name: 'Laboratoire de récupération' });
+    await expect(recoveryLab).toBeVisible();
+    expect((await recoveryLab.boundingBox())?.height).toBeLessThanOrEqual(40);
     expect(
       await page
         .locator('.wallet-switcher-label')

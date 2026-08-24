@@ -6382,7 +6382,6 @@ code {
   gap: 8px;
 }
 .ready-badge {
-  max-width: 150px;
   color: var(--success);
   font-size: 9px;
   line-height: 1.25;
@@ -6391,7 +6390,7 @@ code {
   background: rgba(88, 199, 139, 0.08);
   border-radius: 999px;
   text-align: center;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
 }
 .ready-badge.attention {
   color: var(--danger);
@@ -6632,8 +6631,6 @@ code {
 .vault-backup-card .button {
   min-width: 0;
   max-width: 100%;
-  white-space: normal;
-  overflow-wrap: anywhere;
 }
 .device-details {
   display: grid;
