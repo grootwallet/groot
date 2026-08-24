@@ -142,6 +142,14 @@ describe('hardware receive verification UI', () => {
     expect(verificationFlow).not.toMatch(/\{:else\}<p>No compatible/);
   });
 
+  it('renders receive-verification failures with the shared hardware alert treatment', () => {
+    expect(verificationFlow).toContain(
+      'class="hardware-inline-error" role="alert" aria-live="polite"'
+    );
+    expect(verificationFlow).toContain("translate($locale, 'Device needs attention')");
+    expect(verificationFlow).not.toContain('<p class="form-error" role="alert">{verifyError}</p>');
+  });
+
   it('uses signer terminology throughout the multisig receive flow', () => {
     expect(verificationFlow).toContain('No compatible signer found');
     expect(verificationFlow).toContain('Connect and unlock a signer saved in this wallet policy');

@@ -1164,6 +1164,38 @@ pub(super) fn prove_live_cosigner_identity_for_candidates(
             "The saved signer candidates do not share one hardware account boundary.",
         ));
     }
+
+    // HWI's Jade login is initiated while opening an exact-path public-key
+    // request. Discovery can return Jade (and some other interactive families)
+    // before it has a fingerprint, so use the same getxpub operation that has
+    // completed physical certification to unlock and bind that signer. The
+    // complete live account key selects exactly one saved full identity; no
+    // fingerprint supplied by the renderer is trusted.
+    if device.fingerprint.is_none() && supports_locked_interactive_identity(&device.device_type) {
+        let output = hwi
+            .account_xpub_in_operation(
+                operation,
+                &device.device_type,
+                &device.path,
+                &first.derivation_path,
+            )
+            .map_err(|error| {
+                hardware_xpub_api_error(error, &device.device_type, &first.derivation_path)
+            })?;
+        let xpub = parse_hwi_account_xpub(&output, &device.device_type)?;
+        let matching = expected
+            .iter()
+            .filter(|signer| signer.xpub == xpub)
+            .collect::<Vec<_>>();
+        if matching.len() != 1 {
+            return Err(unknown_hardware_signer());
+        }
+        return Ok(VerifiedHardwareIdentity {
+            device_type: device.device_type.clone(),
+            fingerprint: matching[0].fingerprint.to_ascii_lowercase(),
+        });
+    }
+
     let output = hwi
         .account_keypool_in_operation(
             operation,
@@ -1201,6 +1233,26 @@ fn prove_live_external_signer_identity(
         )
     })?;
     require_matching_policy_device_type(Some(expected_device_type), &device.device_type)?;
+    if device.fingerprint.is_none() && supports_locked_interactive_identity(&device.device_type) {
+        let output = hwi
+            .account_xpub_in_operation(
+                operation,
+                &device.device_type,
+                &device.path,
+                &expected.derivation_path,
+            )
+            .map_err(|error| {
+                hardware_xpub_api_error(error, &device.device_type, &expected.derivation_path)
+            })?;
+        let xpub = parse_hwi_account_xpub(&output, &device.device_type)?;
+        if xpub != expected.xpub {
+            return Err(unknown_hardware_signer());
+        }
+        return Ok(VerifiedHardwareIdentity {
+            device_type: device.device_type.clone(),
+            fingerprint: expected.fingerprint.to_ascii_lowercase(),
+        });
+    }
     let output = hwi
         .account_keypool_in_operation(
             operation,
@@ -2567,21 +2619,15 @@ mod health_check_tests {
 
     #[cfg(unix)]
     #[test]
-    fn locked_jade_account_key_request_selects_only_the_matching_full_identity() {
+    fn locked_jade_xpub_request_unlocks_and_selects_only_the_matching_full_identity() {
         use std::os::unix::fs::PermissionsExt as _;
 
         let mut wrong = signer_from_seed(16);
         wrong.device_type = Some("jade".to_owned());
         let mut expected = signer_from_seed(17);
         expected.device_type = Some("jade".to_owned());
-        let origin = MULTISIG_ACCOUNT_PATH.trim_start_matches("m/");
-        let response = serde_json::to_string(&serde_json::json!([{
-            "desc": format!(
-                "wpkh([{}/{}]{}/0/*)",
-                expected.fingerprint, origin, expected.xpub
-            )
-        }]))
-        .unwrap();
+        let response =
+            serde_json::to_string(&serde_json::json!({ "xpub": expected.xpub })).unwrap();
         let shell_response = response.replace('\'', "'\"'\"'");
         let script = std::env::temp_dir().join(format!(
             "groot-locked-jade-proof-{}-{:?}",
@@ -2591,7 +2637,7 @@ mod health_check_tests {
         std::fs::write(
             &script,
             format!(
-                "#!/bin/sh\nIFS= read -r command\ncase \"$command\" in *getkeypool*) printf '%s\\n' '{shell_response}' ;; *) exit 2 ;; esac\n"
+                "#!/bin/sh\nIFS= read -r command\ncase \"$command\" in *getxpub*) printf '%s\\n' '{shell_response}' ;; *) exit 2 ;; esac\n"
             ),
         )
         .unwrap();
@@ -2611,6 +2657,83 @@ mod health_check_tests {
             &[wrong, expected.clone()],
         )
         .unwrap();
+        assert_eq!(identity.fingerprint, expected.fingerprint);
+        std::fs::remove_file(script).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn locked_device_rejects_an_unmatched_live_account_key() {
+        use std::os::unix::fs::PermissionsExt as _;
+
+        let mut saved = signer_from_seed(18);
+        saved.device_type = Some("jade".to_owned());
+        let mut different = signer_from_seed(19);
+        different.device_type = Some("jade".to_owned());
+        let response =
+            serde_json::to_string(&serde_json::json!({ "xpub": different.xpub })).unwrap();
+        let shell_response = response.replace('\'', "'\"'\"'");
+        let script = std::env::temp_dir().join(format!(
+            "groot-locked-jade-mismatch-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        std::fs::write(
+            &script,
+            format!(
+                "#!/bin/sh\nIFS= read -r command\ncase \"$command\" in *getxpub*) printf '%s\\n' '{shell_response}' ;; *) exit 2 ;; esac\n"
+            ),
+        )
+        .unwrap();
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let hwi = HwiCli::for_test_program(script.clone());
+        let operation = hwi.begin_interactive_operation().unwrap();
+        let locked_jade = HwiDevice {
+            device_type: "jade".to_owned(),
+            path: "opaque-resolved-path".to_owned(),
+            ..HwiDevice::default()
+        };
+
+        let error =
+            prove_live_cosigner_identity_for_candidates(&hwi, &operation, &locked_jade, &[saved])
+                .unwrap_err();
+        assert_eq!(error.code, "unknown_signer");
+        std::fs::remove_file(script).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn locked_external_jade_uses_the_certified_xpub_unlock_request() {
+        use std::os::unix::fs::PermissionsExt as _;
+
+        let mut expected = external_signer_from_seed(20);
+        expected.device_type = Some("jade".to_owned());
+        let response =
+            serde_json::to_string(&serde_json::json!({ "xpub": expected.xpub })).unwrap();
+        let shell_response = response.replace('\'', "'\"'\"'");
+        let script = std::env::temp_dir().join(format!(
+            "groot-locked-external-jade-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        std::fs::write(
+            &script,
+            format!(
+                "#!/bin/sh\nIFS= read -r command\ncase \"$command\" in *getxpub*) printf '%s\\n' '{shell_response}' ;; *) exit 2 ;; esac\n"
+            ),
+        )
+        .unwrap();
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let hwi = HwiCli::for_test_program(script.clone());
+        let operation = hwi.begin_interactive_operation().unwrap();
+        let locked_jade = HwiDevice {
+            device_type: "jade".to_owned(),
+            path: "opaque-resolved-path".to_owned(),
+            ..HwiDevice::default()
+        };
+
+        let identity =
+            prove_live_external_signer_identity(&hwi, &operation, &locked_jade, &expected).unwrap();
         assert_eq!(identity.fingerprint, expected.fingerprint);
         std::fs::remove_file(script).unwrap();
     }

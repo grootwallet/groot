@@ -511,6 +511,23 @@ impl HwiCli {
         )
     }
 
+    pub fn account_xpub_in_operation(
+        &self,
+        operation: &HardwareOperation,
+        device_type: &str,
+        device_path: &str,
+        derivation_path: &str,
+    ) -> Result<Vec<u8>, HardwareError> {
+        run_program_in_operation(
+            &self.program,
+            &self.source,
+            &self.device_command(device_type, device_path, "getxpub", derivation_path),
+            operation,
+            self.home.as_deref(),
+            None,
+        )
+    }
+
     pub fn sign_psbt_in_operation(
         &self,
         operation: &HardwareOperation,
@@ -585,14 +602,7 @@ impl HardwareTransport for HwiCli {
     ) -> Result<Vec<u8>, HardwareError> {
         let operation =
             HardwareOperation::acquire(HardwareOperationKind::Interactive, DEFAULT_TIMEOUT)?;
-        run_program_in_operation(
-            &self.program,
-            &self.source,
-            &self.device_command(device_type, device_path, "getxpub", derivation_path),
-            &operation,
-            self.home.as_deref(),
-            None,
-        )
+        self.account_xpub_in_operation(&operation, device_type, device_path, derivation_path)
     }
 
     #[cfg(test)]
@@ -1343,21 +1353,24 @@ mod tests {
                 pid_file.display()
             ),
         );
+        let operation =
+            HardwareOperation::acquire(HardwareOperationKind::Interactive, Duration::from_secs(2))
+                .unwrap();
         let started = Instant::now();
         assert_eq!(
-            run_program(
+            run_program_in_operation(
                 &script,
                 &HwiSource::External,
                 &["enumerate".into()],
-                Duration::from_millis(500),
+                &operation,
+                None,
                 None,
             ),
             Err(HardwareError::TimedOut)
         );
-        // The process-wide test coordinator may queue this fixture behind the
-        // other subprocess tests; the operation itself is bounded by its
-        // 500 ms deadline plus the two-second pipe cleanup window.
-        assert!(started.elapsed() < Duration::from_secs(6));
+        // Admission completed before timing starts, so unrelated parallel
+        // fixtures cannot consume this operation's cleanup assertion.
+        assert!(started.elapsed() < Duration::from_secs(8));
         let pid = std::fs::read_to_string(&pid_file)
             .unwrap()
             .trim()
@@ -1387,13 +1400,17 @@ mod tests {
                 pid_file.display()
             ),
         );
+        let operation =
+            HardwareOperation::acquire(HardwareOperationKind::Interactive, Duration::from_secs(5))
+                .unwrap();
         let started = Instant::now();
         assert_eq!(
-            run_program(
+            run_program_in_operation(
                 &script,
                 &HwiSource::External,
                 &["enumerate".into()],
-                Duration::from_secs(5),
+                &operation,
+                None,
                 None,
             ),
             Err(HardwareError::Io)
@@ -1405,6 +1422,7 @@ mod tests {
             .parse::<i32>()
             .unwrap();
         assert_ne!(unsafe { libc::kill(pid, 0) }, 0);
+        drop(operation);
 
         let fast = test_script(
             "after-exited-parent",

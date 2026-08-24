@@ -1,7 +1,7 @@
 <script lang="ts">
   import { locale } from '$lib/i18n';
   import { translate } from '$lib/i18n-catalog';
-  import { ChevronRight, Cpu, ShieldCheck } from '@lucide/svelte';
+  import { AlertTriangle, ChevronRight, Cpu, ShieldCheck } from '@lucide/svelte';
   import { onDestroy } from 'svelte';
   import Button from '$lib/components/Button.svelte';
   import HardwareActionPrompt from '$lib/components/HardwareActionPrompt.svelte';
@@ -368,7 +368,12 @@
       onretry={scan}
     />
   {/if}
-  {#if verifyError}<p class="form-error" role="alert">{verifyError}</p>{/if}
+  {#if verifyError}<div class="hardware-inline-error" role="alert" aria-live="polite">
+      <AlertTriangle size={18} /><span
+        ><strong>{translate($locale, 'Device needs attention')}</strong><small>{verifyError}</small
+        ></span
+      >
+    </div>{/if}
 </Modal>
 
 <TrezorPinModal
