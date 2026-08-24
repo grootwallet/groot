@@ -49,15 +49,7 @@
   const gridAvailable = $derived(trezorPinGridAvailable(challengeReady, busy, error));
 </script>
 
-<Modal
-  {open}
-  title={translate($locale, 'Unlock {brand}', { brand })}
-  description={translate(
-    $locale,
-    'Use the shuffled matrix shown only on your device. Groot receives positions, never your PIN digits.'
-  )}
-  {onclose}
->
+<Modal {open} title={translate($locale, 'Unlock {brand}', { brand })} {onclose}>
   <div class="pin-matrix-flow">
     <div class="hardware-readiness">
       <LockKeyhole size={18} />
@@ -66,7 +58,7 @@
         <small
           >{translate(
             $locale,
-            'Find each PIN digit on the Trezor screen, then tap the blank Groot cell in the same\n          location. Never enter recovery words or a hardware passphrase here.'
+            'For each PIN digit on Trezor, tap the blank cell in the same location.'
           )}</small
         >
       </span>
@@ -98,15 +90,6 @@
           })}>{'•'.repeat(positions.length)}</output
         >
       {/if}
-      <div class="pin-grid-heading">
-        <strong>{translate($locale, 'Blank position grid')}</strong>
-        <small
-          >{translate(
-            $locale,
-            'The shuffled digits appear only on Trezor. This grid deliberately stays blank—even when\n          Trezor generates a fresh layout.'
-          )}</small
-        >
-      </div>
       <div class="pin-matrix" aria-label={translate($locale, 'Blind PIN position grid')}>
         {#each TREZOR_PIN_CELLS as cell}
           <button

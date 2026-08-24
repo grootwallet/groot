@@ -66,6 +66,16 @@ const hardwareTransport = readFileSync(
 );
 
 describe('hardware receive verification UI', () => {
+  it('keeps the Trezor PIN matrix instruction short and position-focused', () => {
+    const pinModal = readFileSync(new URL('./TrezorPinModal.svelte', import.meta.url), 'utf8');
+    expect(pinModal).toContain('Match locations, not numbers');
+    expect(pinModal).toContain(
+      'For each PIN digit on Trezor, tap the blank cell in the same location.'
+    );
+    expect(pinModal).not.toContain('pin-grid-heading');
+    expect(pinModal).not.toContain('recovery words or a hardware passphrase');
+  });
+
   it('acknowledges blocked modal dismissal with repeatable reduced-motion-safe feedback', () => {
     expect(verificationFlow).toContain('modalAttentionSignal += 1');
     expect(verificationFlow).toContain('attentionSignal={modalAttentionSignal}');

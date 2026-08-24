@@ -439,11 +439,6 @@ export const attributeCopy = {
     fr: 'Utilisez le même portefeuille matériel protégé par phrase secrète dont vous avez importé l’empreinte.',
     es: 'Usa la misma cartera física protegida con frase de contraseña cuya huella importaste.'
   },
-  'Use the shuffled matrix shown only on your device. Groot receives positions, never your PIN digits.':
-    {
-      fr: 'Utilisez la matrice mélangée affichée uniquement sur votre appareil. Groot reçoit des positions, jamais les chiffres de votre code PIN.',
-      es: 'Usa la matriz aleatoria que solo se muestra en tu dispositivo. Groot recibe posiciones, nunca los dígitos de tu PIN.'
-    },
   'Use your written 24 words for a private native proof, or reveal them securely first if you still need to make the backup.':
     {
       fr: 'Utilisez vos 24 mots écrits pour une preuve native privée, ou affichez-les d’abord de façon sécurisée si vous devez encore créer la sauvegarde.',

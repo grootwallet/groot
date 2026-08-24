@@ -950,8 +950,11 @@ test('unlocks a detected Trezor with the bounded PIN-position flow', async ({ pa
   await scan.getByRole('button', { name: /Virtual Trezor One/ }).click();
 
   const pin = page.getByRole('dialog', { name: 'Unlock Trezor' });
-  await expect(pin.getByText(/receives positions, never your PIN digits/)).toBeVisible();
-  await expect(pin.getByText(/grid deliberately stays blank/)).toBeVisible();
+  await expect(
+    pin.getByText('For each PIN digit on Trezor, tap the blank cell in the same location.')
+  ).toBeVisible();
+  await expect(pin.getByText(/receives positions, never your PIN digits/)).toHaveCount(0);
+  await expect(pin.getByText(/grid deliberately stays blank/)).toHaveCount(0);
   await expect(pin.getByRole('button', { name: 'Top left position' })).toHaveText('');
   await pin.getByRole('button', { name: 'Top left position' }).click();
   await pin.getByRole('button', { name: 'Bottom left position' }).click();

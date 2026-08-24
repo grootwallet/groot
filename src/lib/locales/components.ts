@@ -66,7 +66,6 @@ export const componentCopy = {
   },
   'B”.': { fr: 'B ».', es: 'B”.' },
   bcrt1: { fr: 'bcrt1', es: 'bcrt1' },
-  'Blank position grid': { fr: 'Grille de positions vide', es: 'Cuadrícula de posiciones vacía' },
   Block: { fr: 'Bloc', es: 'Bloque' },
   Change: { fr: 'Monnaie', es: 'Cambio' },
   'Change address': { fr: 'Adresse de monnaie', es: 'Dirección de cambio' },
@@ -132,11 +131,10 @@ export const componentCopy = {
   'Estimated fee': { fr: 'Frais estimés', es: 'Comisión estimada' },
   'Fee / broadcast': { fr: 'Frais / diffusion', es: 'Comisión / difusión' },
   'Fee rate': { fr: 'Taux de frais', es: 'Tasa de comisión' },
-  'Find each PIN digit on the Trezor screen, then tap the blank Groot cell in the same location. Never enter recovery words or a hardware passphrase here.':
-    {
-      fr: 'Repérez chaque chiffre du PIN sur l’écran du Trezor, puis touchez la case vide de Groot au même emplacement. Ne saisissez jamais ici de mots de récupération ni de phrase secrète matérielle.',
-      es: 'Busca cada dígito del PIN en la pantalla del Trezor y pulsa la celda vacía de Groot en la misma posición. Nunca introduzcas aquí palabras de recuperación ni una frase de contraseña del dispositivo.'
-    },
+  'For each PIN digit on Trezor, tap the blank cell in the same location.': {
+    fr: 'Pour chaque chiffre du PIN sur Trezor, touchez la case vide au même emplacement.',
+    es: 'Para cada dígito del PIN en Trezor, pulsa la celda vacía en la misma posición.'
+  },
   Fingerprint: { fr: 'Empreinte', es: 'Huella' },
   'from this wallet': { fr: 'depuis ce portefeuille', es: 'desde esta cartera' },
   'Frozen coins are excluded from automatic and manual spending until you unfreeze them.': {
@@ -326,11 +324,6 @@ export const componentCopy = {
     fr: 'Le libellé est permanent. Les espaces ci-dessus sont uniquement visuels ; la copie utilise toujours l’adresse exacte.',
     es: 'La etiqueta es permanente. Los espacios superiores son solo visuales; al copiar siempre se usa la dirección exacta.'
   },
-  'The shuffled digits appear only on Trezor. This grid deliberately stays blank—even when Trezor generates a fresh layout.':
-    {
-      fr: 'Les chiffres mélangés apparaissent uniquement sur le Trezor. Cette grille reste volontairement vide, même lorsque Trezor génère une nouvelle disposition.',
-      es: 'Los dígitos mezclados solo aparecen en el Trezor. Esta cuadrícula permanece vacía a propósito, incluso cuando Trezor genera una nueva disposición.'
-    },
   'This device': { fr: 'Cet appareil', es: 'Este dispositivo' },
   'This exact address was shown on and matched by a saved hardware signer. The verification applies only to this address.':
     {
