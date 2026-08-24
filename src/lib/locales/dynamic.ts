@@ -222,6 +222,10 @@ export const dynamicCopy = {
     es: 'BSMS, texto de descriptor o JSON de Groot · hasta 256 KiB'
   },
   'Cancelling safely…': { fr: 'Annulation sécurisée…', es: 'Cancelando de forma segura…' },
+  'Cancel on your hardware device': {
+    fr: 'Annulez sur votre appareil matériel',
+    es: 'Cancela en tu dispositivo físico'
+  },
   'Check your hardware device': {
     fr: 'Vérifiez votre appareil matériel',
     es: 'Comprueba tu dispositivo físico'
@@ -622,6 +626,10 @@ export const dynamicCopy = {
   'Waiting for hardware approval': {
     fr: 'En attente de l’approbation matérielle',
     es: 'Esperando aprobación del dispositivo'
+  },
+  'Waiting for hardware cancellation': {
+    fr: 'En attente de l’annulation sur l’appareil',
+    es: 'Esperando la cancelación en el dispositivo'
   },
   'Waiting for hardware signature': {
     fr: 'En attente de la signature matérielle',

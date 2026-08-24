@@ -98,6 +98,13 @@ describe('hardware receive verification UI', () => {
     expect(verificationFlow).toContain('generation !== hardwareScanGeneration || !verifyOpen');
   });
 
+  it('keeps an interactive review open until the device rejects it', () => {
+    expect(verificationFlow).toContain('cancelRequested = true');
+    expect(verificationFlow).toContain("verificationAction !== 'scan'");
+    expect(verificationFlow).toContain('Cancel on your hardware device');
+    expect(verificationFlow).toContain('finishVerificationClose(false)');
+  });
+
   it('keeps one shared verification component in both receive flows', () => {
     for (const route of [singleKeyReceive, multisigReceive]) {
       expect(route).toContain('<HardwareReceiveVerification');

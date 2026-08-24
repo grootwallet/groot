@@ -137,6 +137,7 @@ test('keeps multisig receive verification disclosure visibly expandable', async 
       .filter({ hasText: /^Receive$/ })
       .click();
   else await page.getByRole('main').getByRole('link', { name: 'Receive' }).click();
+  await page.evaluate(() => sessionStorage.setItem('fixture-hardware-review-rejected', '1'));
   await page.getByRole('button', { name: 'Verify on device' }).click();
   const dialog = page.getByRole('dialog', { name: 'Verify receive address' });
   await expect(
@@ -166,6 +167,16 @@ test('keeps multisig receive verification disclosure visibly expandable', async 
   await pinDialog.getByRole('button', { name: 'Unlock Trezor' }).click();
   await expect(dialog).toBeVisible();
   await expect(dialog.locator('.readable-address-groups')).toHaveText(reviewedAddress ?? '');
+  await expect(dialog.getByRole('button', { name: /^Trezor / })).toContainText('Ready');
+  await dialog.getByRole('button', { name: /^Trezor / }).click();
+  await dialog.getByRole('button', { name: 'Close' }).click();
+  await expect(
+    dialog.getByRole('status', { name: 'Waiting for hardware cancellation' })
+  ).toBeVisible();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByRole('button', { name: 'Verify on device' })).toBeVisible();
+  await page.evaluate(() => sessionStorage.removeItem('fixture-hardware-review-rejected'));
+  await page.getByRole('button', { name: 'Verify on device' }).click();
   await expect(dialog.getByRole('button', { name: /^Trezor / })).toContainText('Ready');
   await dialog.getByRole('button', { name: /^Trezor / }).click();
   await expect(dialog).toBeHidden();

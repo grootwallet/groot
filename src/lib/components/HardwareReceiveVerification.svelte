@@ -46,6 +46,7 @@
   let devices = $state<HardwareDevice[]>([]);
   let verificationDevice = $state<HardwareDevice | null>(null);
   let verificationAction = $state<'scan' | 'unlock' | 'approve'>('scan');
+  let cancelRequested = $state(false);
   let copied = $state(false);
   let pinOpen = $state(false);
   let pinBusy = $state(false);
@@ -92,11 +93,20 @@
     pinChallenge = '';
   }
 
-  function closeVerification() {
+  function finishVerificationClose(cancelNative: boolean) {
     hardwareScanGeneration += 1;
     verifyBusy = false;
     verifyOpen = false;
-    beginHardwareCancellation();
+    cancelRequested = false;
+    if (cancelNative) beginHardwareCancellation();
+  }
+
+  function closeVerification() {
+    if (verifyBusy && verificationAction !== 'scan') {
+      cancelRequested = true;
+      return;
+    }
+    finishVerificationClose(true);
   }
 
   async function copyVerificationAddress() {
@@ -122,6 +132,7 @@
     const generation = ++hardwareScanGeneration;
     verifyOpen = true;
     verificationAction = 'scan';
+    cancelRequested = false;
     verifyBusy = true;
     verifyError = '';
     verificationDevice = null;
@@ -243,6 +254,7 @@
     const targetAddressId = address.id;
     verificationDevice = device;
     verificationAction = unlockFirst ? 'unlock' : 'approve';
+    cancelRequested = false;
     verifyBusy = true;
     verifyError = '';
     try {
@@ -254,6 +266,7 @@
         verifyError = translate($locale, 'The selected address changed. Start verification again.');
         return;
       }
+      cancelRequested = false;
       onverified(verified);
       verifyOpen = false;
       toast({
@@ -263,6 +276,10 @@
       });
     } catch (cause) {
       if (generation !== hardwareScanGeneration || !verifyOpen) return;
+      if (cancelRequested) {
+        finishVerificationClose(false);
+        return;
+      }
       verifyError = localizedReceiveVerificationFailure(
         cause,
         $locale,
@@ -310,31 +327,37 @@
     <HardwareActionPrompt
       title={translate(
         $locale,
-        verificationAction !== 'scan'
-          ? verificationAction === 'unlock'
-            ? 'Unlock and check your hardware device'
-            : 'Check your hardware device'
-          : isMultisig
-            ? 'Looking for a wallet signer'
-            : 'Looking for your saved signer'
+        cancelRequested
+          ? 'Cancel on your hardware device'
+          : verificationAction !== 'scan'
+            ? verificationAction === 'unlock'
+              ? 'Unlock and check your hardware device'
+              : 'Check your hardware device'
+            : isMultisig
+              ? 'Looking for a wallet signer'
+              : 'Looking for your saved signer'
       )}
       detail={translate(
         $locale,
-        verificationAction !== 'scan'
-          ? verificationAction === 'unlock'
-            ? 'Complete the login or unlock on-device, then compare the complete address above and approve it.'
-            : 'Compare the complete address above, then approve it on the device.'
-          : isMultisig
-            ? 'Groot checks only signer types saved in this wallet policy and ignores other connected device families.'
-            : 'Groot checks only this saved signer type and ignores other connected device families.'
+        cancelRequested
+          ? 'Reject or cancel the pending request on the device. Groot will close this dialog after the device responds.'
+          : verificationAction !== 'scan'
+            ? verificationAction === 'unlock'
+              ? 'Complete the login or unlock on-device, then compare the complete address above and approve it.'
+              : 'Compare the complete address above, then approve it on the device.'
+            : isMultisig
+              ? 'Groot checks only signer types saved in this wallet policy and ignores other connected device families.'
+              : 'Groot checks only this saved signer type and ignores other connected device families.'
       )}
       label={translate(
         $locale,
-        verificationAction !== 'scan'
-          ? verificationAction === 'unlock'
-            ? 'Waiting for hardware unlock and approval'
-            : 'Waiting for hardware approval'
-          : 'Hardware device scan in progress'
+        cancelRequested
+          ? 'Waiting for hardware cancellation'
+          : verificationAction !== 'scan'
+            ? verificationAction === 'unlock'
+              ? 'Waiting for hardware unlock and approval'
+              : 'Waiting for hardware approval'
+            : 'Hardware device scan in progress'
       )}
     />
   {:else if devices.length}

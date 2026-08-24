@@ -1130,7 +1130,12 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     this._externalProposals.delete(proposalId);
   }
   async verifyExternalAddress(deviceId: string, addressId: number) {
-    await new Promise((resolve) => setTimeout(resolve, 250));
+    const rejectReview =
+      typeof sessionStorage !== 'undefined' &&
+      sessionStorage.getItem('fixture-hardware-review-rejected') === '1';
+    await new Promise((resolve) => setTimeout(resolve, rejectReview ? 800 : 250));
+    if (rejectReview)
+      throw new WalletError('hardware_cancelled', 'The address review was rejected on-device.');
     const expected = this._externalWallet?.signer.fingerprint.toLowerCase();
     const device = (await this.listHardwareDevices()).find(
       (item) => item.id === deviceId && item.status === 'ready'
@@ -1779,7 +1784,12 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     proposal.status = 'cancelled';
   }
   async verifyMultisigAddress(deviceId: string, addressId: number) {
-    await new Promise((resolve) => setTimeout(resolve, 250));
+    const rejectReview =
+      typeof sessionStorage !== 'undefined' &&
+      sessionStorage.getItem('fixture-hardware-review-rejected') === '1';
+    await new Promise((resolve) => setTimeout(resolve, rejectReview ? 800 : 250));
+    if (rejectReview)
+      throw new WalletError('hardware_cancelled', 'The address review was rejected on-device.');
     const device = (await this.listHardwareDevices()).find(
       (item) => item.id === deviceId && item.status === 'ready'
     );

@@ -87,6 +87,11 @@ export const copyCatalog = {
     fr: 'Poursuivez la vérification de la transaction sur l’appareil.',
     es: 'Continúa la revisión de la transacción en el dispositivo.'
   },
+  'Reject or cancel the pending request on the device. Groot will close this dialog after the device responds.':
+    {
+      fr: 'Refusez ou annulez la demande en attente sur l’appareil. Groot fermera cette fenêtre après la réponse de l’appareil.',
+      es: 'Rechaza o cancela la solicitud pendiente en el dispositivo. Groot cerrará esta ventana cuando responda el dispositivo.'
+    },
   'Copy failed': { fr: 'Échec de la copie', es: 'Error al copiar' },
   'Could not delete wallet': {
     fr: 'Impossible de supprimer le portefeuille',
