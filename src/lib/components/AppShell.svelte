@@ -66,6 +66,7 @@
   let profileReadGeneration = 0;
   let liveSync: LiveSyncController | undefined;
   let startupState = $state<'checking' | 'ready' | 'failed'>('checking');
+  let navigationPending = $state(false);
   let selectedProfile = $derived(profiles.find((wallet) => wallet.id === selectedWalletId));
   let policyContext = $derived(
     selectedProfile?.kind === 'multisig' || page.url.pathname.startsWith('/multisig')
@@ -146,11 +147,13 @@
   ]);
 
   beforeNavigate(({ to }) => {
+    navigationPending = Boolean(to && to.url.href !== page.url.href);
     void walletService.cancelHardwareOperations();
     if (to && foregroundWalletRoutes.has(to.url.pathname)) liveSync?.stop();
   });
 
   afterNavigate(({ from }) => {
+    navigationPending = false;
     const previousPath = from?.url?.pathname;
     // Routine navigation must not repeat registry and setup-draft reads that
     // every destination performs independently. Refresh only after a flow that
@@ -295,6 +298,7 @@
   class:mobile-actions-visible={showQuickActions}
   class:prototype-shell={isPrototypeWallet}
   class:locked-setup-visible={showSetupResume && lockedRoute}
+  class:navigation-pending={navigationPending}
 >
   {#if startupState !== 'ready'}
     <div class="startup-gate" role="status" aria-live="polite">
@@ -309,6 +313,7 @@
       {/if}
     </div>
   {:else}
+    <div class="navigation-progress" aria-hidden="true"></div>
     <aside class="sidebar">
       <a class="brand" href="/" aria-label={translate($locale, 'Groot home')}><BrandLockup /></a>
       {#if profiles.length}

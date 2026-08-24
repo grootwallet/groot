@@ -245,6 +245,34 @@ code {
   flex-direction: column;
   z-index: 10;
 }
+.navigation-progress {
+  position: fixed;
+  z-index: 95;
+  top: 0;
+  right: 0;
+  left: 224px;
+  height: 2px;
+  opacity: 0;
+  pointer-events: none;
+  transform: scaleX(0.08);
+  transform-origin: left;
+  background: linear-gradient(90deg, var(--fr-blue), color-mix(in srgb, var(--link) 70%, white));
+}
+.app-shell.navigation-pending .navigation-progress {
+  opacity: 0.72;
+  animation: navigation-progress 0.9s cubic-bezier(0.2, 0.75, 0.3, 1) both;
+}
+@keyframes navigation-progress {
+  0% {
+    transform: scaleX(0.08);
+  }
+  65% {
+    transform: scaleX(0.68);
+  }
+  100% {
+    transform: scaleX(0.88);
+  }
+}
 .wallet-switcher {
   margin: 19px 0 13px;
   padding: 9px;
@@ -317,6 +345,12 @@ code {
   background: var(--surface-control);
   text-align: left;
   cursor: pointer;
+  transition:
+    color 0.16s ease,
+    border-color 0.16s ease,
+    background-color 0.16s ease,
+    box-shadow 0.16s ease,
+    transform 0.16s ease;
 }
 .wallet-profile-list button:hover {
   color: var(--text-soft);
@@ -418,10 +452,37 @@ code {
     background-color 0.16s ease,
     box-shadow 0.16s ease;
 }
+.side-nav a svg,
+.sidebar-bottom > a svg,
+.wallet-switcher a svg,
+.wallet-profile-icon svg,
+.mobile-nav a svg,
+.mobile-action svg,
+.button > svg {
+  transition:
+    color 0.16s ease,
+    transform 0.16s cubic-bezier(0.2, 0.75, 0.3, 1);
+}
 .side-nav a:hover,
 .sidebar-bottom > a:hover {
   color: var(--text-soft);
   background: var(--surface-hover);
+}
+.side-nav a:hover svg,
+.sidebar-bottom > a:hover svg,
+.wallet-switcher a:hover svg,
+.wallet-profile-list button:hover .wallet-profile-icon svg,
+.mobile-nav a:hover svg,
+.mobile-action:hover svg,
+.button:hover > svg {
+  transform: translateY(-1px) scale(1.025);
+}
+.side-nav a:active,
+.sidebar-bottom > a:active,
+.wallet-profile-list button:active,
+.mobile-nav a:active,
+.mobile-action:active {
+  transform: scale(0.992);
 }
 .side-nav a.active,
 .sidebar-bottom > a.active {
@@ -1096,6 +1157,8 @@ code {
 }
 .button.default:hover {
   background: var(--primary-hover);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--primary-bg) 12%, transparent);
+  transform: translateY(-1px);
 }
 .button.secondary {
   background: var(--surface-control);
@@ -1104,6 +1167,12 @@ code {
 }
 .button.secondary:hover {
   background: var(--surface-hover);
+  border-color: color-mix(in srgb, var(--control-border) 72%, var(--link));
+  transform: translateY(-1px);
+}
+.button:active:not(:disabled):not([aria-disabled='true']) {
+  box-shadow: none;
+  transform: translateY(0) scale(0.992);
 }
 .button.ghost {
   background: transparent;
@@ -8484,6 +8553,9 @@ code {
     backdrop-filter: blur(16px);
     border-top: 1px solid var(--border);
     z-index: 20;
+  }
+  .navigation-progress {
+    left: 0;
   }
   .mobile-nav.policy-nav {
     grid-template-columns: repeat(5, 1fr);

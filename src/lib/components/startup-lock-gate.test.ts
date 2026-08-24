@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const shell = readFileSync(new URL('./AppShell.svelte', import.meta.url), 'utf8');
+const appCss = readFileSync(new URL('../../app.css', import.meta.url), 'utf8');
 
 describe('startup wallet lock gate', () => {
   it('resolves the trusted session before mounting authenticated route content', () => {
@@ -23,5 +24,13 @@ describe('startup wallet lock gate', () => {
     expect(shell).toContain("startupState = 'failed'");
     expect(shell).toContain('Groot could not verify the wallet lock state.');
     expect(shell).toContain("{translate($locale, 'Retry')}</button");
+  });
+
+  it('acknowledges route navigation immediately without overriding reduced motion', () => {
+    expect(shell).toContain('navigationPending = Boolean(to && to.url.href !== page.url.href)');
+    expect(shell).toContain('class:navigation-pending={navigationPending}');
+    expect(shell).toContain('class="navigation-progress" aria-hidden="true"');
+    expect(appCss).toContain('.app-shell.navigation-pending .navigation-progress');
+    expect(appCss).toContain('@media (prefers-reduced-motion: reduce)');
   });
 });
