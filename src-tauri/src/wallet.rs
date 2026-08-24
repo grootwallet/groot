@@ -61,7 +61,7 @@ use crate::external_signer::{
     self, ExternalSignerError, ExternalSignerInput, ExternalSignerWallet, SignerSource,
     SINGLESIG_ACCOUNT_PATH,
 };
-use crate::hardware::{HardwareError, HardwareTransport, HwiChain, HwiCli, HwiPinSession};
+use crate::hardware::{HardwareError, HardwareTransport, HwiChain, HwiCli};
 use crate::label_provenance::{
     self, LabelOrigin, PermanentLabelDto, ProvenanceState, ProvenanceSummaryDto,
 };
@@ -1002,8 +1002,9 @@ struct PendingMnemonic {
 }
 
 struct PendingHardwarePin {
+    device_type: String,
+    device_path: String,
     created_at: Instant,
-    session: HwiPinSession,
 }
 
 #[derive(Deserialize)]
