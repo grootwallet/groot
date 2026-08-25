@@ -503,17 +503,16 @@
         <div class="policy-maturity-panel-heading">
           <span><Clock3 size={19} /></span>
           <div>
-            <p class="eyebrow">
+            <h2>
               {translate(
                 $locale,
-                delayedPolicyType === 'inheritance' ? 'INHERITANCE TIMELINE' : 'RECOVERY TIMELINE'
+                delayedPolicyType === 'inheritance' ? 'Heir access' : 'Recovery access'
               )}
-            </p>
-            <h2>{translate($locale, 'When your backup key becomes available')}</h2>
+            </h2>
             <p>
               {translate(
                 $locale,
-                'Each confirmed coin has its own wait before the recovery or heir key becomes available.'
+                'Each coin has its own wait before the backup key becomes available.'
               )}
             </p>
           </div>
@@ -537,22 +536,24 @@
         </div>
         <div class="policy-maturity-stats">
           <div>
-            <strong>{maturitySummary.immature}</strong><span>{translate($locale, 'Protected')}</span
+            <span>{translate($locale, 'Protected')}</span><strong>{maturitySummary.immature}</strong
             >
           </div>
           <div>
-            <strong>{maturitySummary.approaching}</strong><span
-              >{translate($locale, 'Available soon')}</span
+            <span>{translate($locale, 'Available soon')}</span><strong
+              >{maturitySummary.approaching}</strong
             >
           </div>
           <div>
-            <strong>{maturitySummary.mature}</strong><span>{translate($locale, 'Can spend')}</span>
+            <span>{translate($locale, 'Key available')}</span><strong
+              >{maturitySummary.mature}</strong
+            >
           </div>
         </div>
-        <div class="policy-maturity-truth">
+        <div class="warning-box policy-maturity-truth">
           <ShieldCheck size={17} />
           <span>
-            <strong>{translate($locale, 'The normal 2-of-3 path remains available.')}</strong>
+            <strong>{translate($locale, 'Your normal keys keep working for every coin.')}</strong>
             {#if maturitySummary.chainCurrent && maturitySummary.nextRemainingBlocks !== null}
               {translate($locale, 'Next transition in {count} blocks.', {
                 count: formatInteger(maturitySummary.nextRemainingBlocks, $locale)
@@ -563,23 +564,17 @@
           </span>
         </div>
         <details class="policy-maturity-details">
-          <summary>{translate($locale, 'Why this changes your wallet security')}</summary>
+          <summary>{translate($locale, 'How backup-key access works')}</summary>
           <p>
             {translate(
               $locale,
-              'After the wait, the recovery or heir key can spend that coin alone. The coin does not expire, and your normal 2-of-3 keys still work.'
-            )}
-          </p>
-          <p>
-            {translate(
-              $locale,
-              'When it is available, choose that coin to send with the recovery or heir key.'
+              'After its wait, the backup key can spend that coin alone. The coin does not expire, and your normal keys still work.'
             )}
           </p>
           {#if maturitySummary.mature > 0}<p>
               {translate(
                 $locale,
-                'To make the extra key wait again, open that coin and choose the policy-specific restart action.'
+                'Open an available coin to use the backup key or restart its wait.'
               )}
             </p>{/if}
         </details>

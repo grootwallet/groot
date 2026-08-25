@@ -10,7 +10,9 @@ test('shows security-accurate delayed-policy state across overview, coins, and p
   await expect(overview).toContainText('Next key change in 820 blocks');
   await overview.getByRole('link', { name: 'Review coins' }).click();
 
-  await expect(page.getByText('Each coin has its own protection timeline')).toBeVisible();
+  const timelineNote = page.locator('.coin-list > .warning-box.coin-timeline-note');
+  await expect(timelineNote).toContainText('Each coin has its own protection timeline.');
+  await expect(timelineNote).toContainText('Your normal keys keep working.');
   await expect(page.getByText('Recovery key can spend', { exact: true }).first()).toBeVisible();
   await expect(page.getByText('Backup key protected', { exact: true }).first()).toBeVisible();
   await expect(page.getByText('Wait starts after confirmation', { exact: true })).toBeVisible();
@@ -33,13 +35,11 @@ test('shows security-accurate delayed-policy state across overview, coins, and p
   ).toBeVisible();
 
   await page.goto('/multisig?fixture-policy-maturity=1');
+  await expect(page.getByRole('heading', { name: 'Recovery access' })).toBeVisible();
+  await expect(page.getByText('Your normal keys keep working for every coin.')).toBeVisible();
+  await page.getByText('How backup-key access works').click();
   await expect(
-    page.getByRole('heading', { name: 'When your backup key becomes available' })
-  ).toBeVisible();
-  await expect(page.getByText('The normal 2-of-3 path remains available.')).toBeVisible();
-  await page.getByText('Why this changes your wallet security').click();
-  await expect(
-    page.getByText('When it is available, choose that coin to send with the recovery or heir key.')
+    page.getByText('Open an available coin to use the backup key or restart its wait.')
   ).toBeVisible();
   await expect(page.locator('body')).not.toContainText(/\bexpired\b/i);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
@@ -134,10 +134,10 @@ test('pauses exact countdowns when the verified chain tip is stale', async ({ pa
 test('localizes maturity state without layout overflow', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('groot-language', 'fr'));
   await page.goto('/multisig?fixture-policy-maturity=1');
+  await expect(page.getByRole('heading', { name: 'Accès de récupération' })).toBeVisible();
   await expect(
-    page.getByRole('heading', { name: 'Quand votre clé de secours devient disponible' })
+    page.getByText('Vos clés normales continuent de fonctionner pour chaque pièce.')
   ).toBeVisible();
-  await expect(page.getByText('Le chemin normal 2 sur 3 reste disponible.')).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true
   );

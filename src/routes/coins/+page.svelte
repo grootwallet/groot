@@ -337,33 +337,6 @@
     </div>
   </header>
 
-  {#if maturitySummary}
-    <section class="policy-maturity-banner compact" aria-live="polite">
-      <span class="policy-maturity-icon"><AlertTriangle size={17} /></span>
-      <div>
-        <strong>{translate($locale, 'Each coin has its own protection timeline')}</strong>
-        <small
-          >{translate(
-            $locale,
-            'The recovery or heir key becomes available separately for each coin. Your normal 2-of-3 keys always remain available.'
-          )}</small
-        >
-        {#if !maturitySummary.chainCurrent}<small class="stale-copy"
-            >{translate(
-              $locale,
-              'Exact countdowns are paused because the last verified chain tip is stale or unavailable.'
-            )}</small
-          ><Button
-            variant="secondary"
-            size="small"
-            loading={syncing}
-            loadingLabel={translate($locale, 'Syncing…')}
-            onclick={syncNow}><RefreshCw size={14} />{translate($locale, 'Sync now')}</Button
-          >{/if}
-      </div>
-    </section>
-  {/if}
-
   <section class="coin-toolbar" aria-live="polite">
     <div>
       {#key selected.length}<span class="coin-selection-count" in:fly={{ y: -4, duration: 140 }}
@@ -440,6 +413,28 @@
     />
   {:else if sortedUtxos.length}
     <section class="coin-list selectable">
+      {#if maturitySummary}<aside class="warning-box coin-timeline-note" aria-live="polite">
+          <AlertTriangle size={15} />
+          <span>
+            <strong>{translate($locale, 'Each coin has its own protection timeline.')}</strong>
+            {translate(
+              $locale,
+              'Recovery access becomes available separately for each coin. Your normal keys keep working.'
+            )}
+            {#if !maturitySummary.chainCurrent}<small class="stale-copy"
+                >{translate(
+                  $locale,
+                  'Exact countdowns are paused because the last verified chain tip is stale or unavailable.'
+                )}</small
+              ><Button
+                variant="secondary"
+                size="small"
+                loading={syncing}
+                loadingLabel={translate($locale, 'Syncing…')}
+                onclick={syncNow}><RefreshCw size={14} />{translate($locale, 'Sync now')}</Button
+              >{/if}
+          </span>
+        </aside>{/if}
       {#each sortedUtxos as utxo (utxo.outpoint)}
         {@const reuse = reuseFor(utxo.outpoint)}
         {@const linkedCoins = linkedCoinsFor(utxo.outpoint)}

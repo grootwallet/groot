@@ -2923,6 +2923,34 @@ code {
 .coin-list article:last-child {
   border: 0;
 }
+.coin-timeline-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  border: 0;
+  border-bottom: 1px solid rgba(227, 170, 25, 0.22);
+  border-radius: 0;
+  padding: 10px 14px;
+}
+.coin-timeline-note > svg {
+  flex: 0 0 auto;
+}
+.coin-timeline-note > span {
+  min-width: 0;
+}
+.coin-timeline-note strong {
+  margin-right: 4px;
+  font-size: inherit;
+  font-weight: 650;
+}
+.coin-timeline-note small {
+  display: block;
+  margin-top: 3px;
+}
+.coin-timeline-note .button {
+  margin-top: 7px;
+}
 .coin-icon {
   width: 36px;
   height: 36px;
@@ -6688,10 +6716,11 @@ code {
 
 .policy-maturity-panel {
   display: grid;
-  gap: 16px;
-  padding: 20px;
+  gap: 12px;
+  margin-bottom: 24px;
+  padding: 16px;
   border: 1px solid var(--border);
-  border-radius: 18px;
+  border-radius: 12px;
   background: var(--panel);
 }
 
@@ -6704,10 +6733,10 @@ code {
 
 .policy-maturity-panel-heading > span:first-child {
   display: grid;
-  width: 38px;
-  height: 38px;
+  width: 32px;
+  height: 32px;
   place-items: center;
-  border-radius: 11px;
+  border-radius: 9px;
   color: var(--focus);
   background: var(--surface-icon);
 }
@@ -6718,8 +6747,15 @@ code {
 }
 
 .policy-maturity-panel-heading p:not(.eyebrow) {
-  margin-top: 4px;
+  margin-top: 2px;
   color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.policy-maturity-panel-heading h2 {
+  font-size: 14px;
+  font-weight: 650;
 }
 
 .ready-badge.danger {
@@ -6731,61 +6767,69 @@ code {
 .policy-maturity-stats {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.policy-maturity-stats > div {
-  display: grid;
-  gap: 2px;
-  padding: 12px;
+  overflow: hidden;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 9px;
   background: var(--surface-inset);
 }
 
+.policy-maturity-stats > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 11px;
+  border-right: 1px solid var(--border);
+}
+
+.policy-maturity-stats > div:last-child {
+  border-right: 0;
+}
+
 .policy-maturity-stats strong {
-  font-size: 1.25rem;
+  color: var(--text);
+  font-size: 12px;
 }
 
 .policy-maturity-stats span {
   color: var(--muted);
-  font-size: 0.78rem;
+  font-size: 10px;
 }
 
 .policy-maturity-truth {
   display: flex;
-  align-items: flex-start;
-  gap: 9px;
-  padding: 12px 14px;
-  border-radius: 12px;
-  color: var(--muted);
-  background: color-mix(in srgb, var(--focus) 7%, var(--surface-inset));
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 9px 11px;
 }
 
 .policy-maturity-truth svg {
   flex: 0 0 auto;
-  color: var(--focus);
 }
 
 .policy-maturity-truth strong {
-  display: block;
-  color: var(--text);
+  margin-right: 4px;
+  color: inherit;
+  font-weight: 650;
 }
 
 .policy-maturity-details {
-  border-top: 1px solid var(--border);
-  padding-top: 12px;
+  padding: 0 2px;
 }
 
 .policy-maturity-details summary {
   cursor: pointer;
-  color: var(--text);
-  font-weight: 650;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .policy-maturity-details p {
-  margin: 10px 0 0;
+  max-width: 720px;
+  margin: 8px 0 0;
   color: var(--muted);
+  font-size: 11px;
   line-height: 1.5;
 }
 .vault-actions {
@@ -9035,6 +9079,15 @@ code {
 
   .policy-maturity-stats {
     grid-template-columns: 1fr;
+  }
+
+  .policy-maturity-stats > div {
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .policy-maturity-stats > div:last-child {
+    border-bottom: 0;
   }
 }
 

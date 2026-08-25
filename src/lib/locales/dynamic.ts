@@ -733,6 +733,14 @@ export const dynamicCopy = {
     fr: 'Chaque pièce confirmée a sa propre attente avant que la clé de récupération ou d’héritier soit disponible.',
     es: 'Cada moneda confirmada tiene su propia espera antes de que la clave de recuperación o heredero esté disponible.'
   },
+  'Each coin has its own protection timeline.': {
+    fr: 'Chaque pièce a son propre calendrier de protection.',
+    es: 'Cada moneda tiene su propio calendario de protección.'
+  },
+  'Each coin has its own wait before the backup key becomes available.': {
+    fr: 'Chaque pièce a sa propre attente avant que la clé de secours soit disponible.',
+    es: 'Cada moneda tiene su propia espera antes de que la clave de respaldo esté disponible.'
+  },
   'Extra key became available at block {height}': {
     fr: 'La clé supplémentaire est devenue disponible au bloc {height}',
     es: 'La clave adicional estuvo disponible en el bloque {height}'
@@ -741,6 +749,11 @@ export const dynamicCopy = {
     fr: 'Fonctionnement de la récupération assistée',
     es: 'Cómo funciona la recuperación asistida'
   },
+  'How backup-key access works': {
+    fr: 'Fonctionnement de l’accès par clé de secours',
+    es: 'Cómo funciona el acceso con la clave de respaldo'
+  },
+  'Heir access': { fr: 'Accès de l’héritier', es: 'Acceso del heredero' },
   'It can now move this coin by itself. Your usual 2-of-3 keys still work too.': {
     fr: 'Elle peut maintenant déplacer seule cette pièce. Vos clés habituelles 2 sur 3 fonctionnent toujours.',
     es: 'Ahora puede mover esta moneda por sí sola. Tus claves habituales 2 de 3 también siguen funcionando.'
@@ -748,6 +761,16 @@ export const dynamicCopy = {
   'Keep using your normal keys, use the recovery key, or restart this coin’s wait.': {
     fr: 'Continuez avec vos clés normales, utilisez la clé de récupération ou relancez l’attente de cette pièce.',
     es: 'Sigue usando tus claves normales, usa la clave de recuperación o reinicia la espera de esta moneda.'
+  },
+  'Key available': { fr: 'Clé disponible', es: 'Clave disponible' },
+  'Open an available coin to use the backup key or restart its wait.': {
+    fr: 'Ouvrez une pièce disponible pour utiliser la clé de secours ou relancer son attente.',
+    es: 'Abre una moneda disponible para usar la clave de respaldo o reiniciar su espera.'
+  },
+  'Recovery access': { fr: 'Accès de récupération', es: 'Acceso de recuperación' },
+  'Recovery access becomes available separately for each coin. Your normal keys keep working.': {
+    fr: 'L’accès de récupération devient disponible séparément pour chaque pièce. Vos clés normales continuent de fonctionner.',
+    es: 'El acceso de recuperación se habilita por separado para cada moneda. Tus claves normales siguen funcionando.'
   },
   'Labels and existing public links': {
     fr: 'Libellés et liens publics existants',
@@ -895,6 +918,11 @@ export const dynamicCopy = {
     fr: 'Quand votre clé de secours devient disponible',
     es: 'Cuándo estará disponible tu clave de respaldo'
   },
+  'After its wait, the backup key can spend that coin alone. The coin does not expire, and your normal keys still work.':
+    {
+      fr: 'Après son délai, la clé de secours peut dépenser seule cette pièce. La pièce n’expire pas et vos clés normales fonctionnent toujours.',
+      es: 'Tras su espera, la clave de respaldo puede gastar esa moneda por sí sola. La moneda no caduca y tus claves normales siguen funcionando.'
+    },
   'Where should this coin go?': {
     fr: 'Où envoyer cette pièce ?',
     es: '¿Adónde debe ir esta moneda?'
@@ -924,6 +952,10 @@ export const dynamicCopy = {
   'Your normal 2-of-3 keys still work. No action is required.': {
     fr: 'Vos clés normales 2 sur 3 fonctionnent toujours. Aucune action requise.',
     es: 'Tus claves normales 2 de 3 siguen funcionando. No es necesario hacer nada.'
+  },
+  'Your normal keys keep working for every coin.': {
+    fr: 'Vos clés normales continuent de fonctionner pour chaque pièce.',
+    es: 'Tus claves normales siguen funcionando para cada moneda.'
   },
   'Your normal keys approve this payment. Any wallet change begins a fresh wait after confirmation.':
     {
