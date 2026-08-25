@@ -1,6 +1,7 @@
 use bdk_wallet::rusqlite::OptionalExtension;
 use bdk_wallet::rusqlite::{params, params_from_iter, Connection};
 use serde::Serialize;
+use std::collections::HashSet;
 
 pub const DELIVERY_BATCH_SIZE: usize = 256;
 
@@ -221,8 +222,16 @@ pub fn pending(db: &Connection) -> bdk_wallet::rusqlite::Result<Vec<Notification
     let mut rows: Vec<NotificationEnvelope> = rows;
     if rows.len() < DELIVERY_BATCH_SIZE {
         let mut statement = db.prepare(
-            "SELECT id,outpoint,stage,remaining_blocks,policy_type
-             FROM groot_policy_notifications WHERE delivered = 0 ORDER BY id LIMIT ?1",
+            "SELECT notification.id,notification.outpoint,notification.stage,
+                    notification.remaining_blocks,notification.policy_type
+             FROM groot_policy_notifications AS notification
+             INNER JOIN groot_policy_maturity_state AS state
+                ON state.outpoint = notification.outpoint
+               AND state.generation = notification.generation
+             WHERE notification.delivered = 0
+               AND ((notification.stage = 'approaching' AND state.rank = 1)
+                 OR (notification.stage = 'mature' AND state.rank = 2))
+             ORDER BY notification.id LIMIT ?1",
         )?;
         let policy_rows = statement
             .query_map(
@@ -286,13 +295,54 @@ pub fn reconcile_policy_maturity(
     observations: &[PolicyMaturityObservation],
     created_at: u64,
 ) -> bdk_wallet::rusqlite::Result<()> {
+    let mut observed_outpoints = HashSet::with_capacity(observations.len());
     for observation in observations {
         if observation.rank > 2
             || !matches!(observation.policy_type.as_str(), "recovery" | "inheritance")
+            || observation.outpoint.is_empty()
             || observation.outpoint.len() > 80
+            || !observed_outpoints.insert(observation.outpoint.as_str())
         {
             return Err(bdk_wallet::rusqlite::Error::InvalidQuery);
         }
+    }
+
+    let tracked = {
+        let mut statement = db.prepare(
+            "SELECT outpoint,rank,generation
+             FROM groot_policy_maturity_state WHERE rank > 0",
+        )?;
+        let rows = statement
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, u8>(1)?,
+                    row.get::<_, u32>(2)?,
+                ))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        rows
+    };
+    for (outpoint, _, generation) in tracked {
+        if observed_outpoints.contains(outpoint.as_str()) {
+            continue;
+        }
+        let generation = generation
+            .checked_add(1)
+            .ok_or(bdk_wallet::rusqlite::Error::InvalidQuery)?;
+        db.execute(
+            "UPDATE groot_policy_maturity_state
+             SET rank=0,generation=?2,updated_at=?3 WHERE outpoint=?1",
+            params![outpoint, generation, created_at],
+        )?;
+        db.execute(
+            "UPDATE groot_policy_notifications SET delivered=1
+             WHERE outpoint=?1 AND delivered=0 AND generation < ?2",
+            params![outpoint, generation],
+        )?;
+    }
+
+    for observation in observations {
         let previous = db
             .query_row(
                 "SELECT rank,generation FROM groot_policy_maturity_state WHERE outpoint=?1",
@@ -302,7 +352,9 @@ pub fn reconcile_policy_maturity(
             .optional()?;
         let (previous_rank, generation) = previous.unwrap_or((0, 0));
         let generation = if previous.is_some() && observation.rank < previous_rank {
-            generation.saturating_add(1)
+            generation
+                .checked_add(1)
+                .ok_or(bdk_wallet::rusqlite::Error::InvalidQuery)?
         } else {
             generation
         };
@@ -311,6 +363,12 @@ pub fn reconcile_policy_maturity(
              VALUES(?1,?2,?3,?4)
              ON CONFLICT(outpoint) DO UPDATE SET rank=excluded.rank,generation=excluded.generation,updated_at=excluded.updated_at",
             params![observation.outpoint, observation.rank, generation, created_at],
+        )?;
+        db.execute(
+            "UPDATE groot_policy_notifications SET delivered=1
+             WHERE outpoint=?1 AND delivered=0
+               AND (generation < ?2 OR (generation = ?2 AND stage = 'approaching' AND ?3 = 2))",
+            params![observation.outpoint, generation, observation.rank],
         )?;
         if observation.rank <= previous_rank || observation.rank == 0 {
             continue;
@@ -500,6 +558,54 @@ mod tests {
         ));
         drop(db);
         std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn undelivered_old_generation_is_retired_after_reorg_and_rematurity() {
+        let db = db();
+        let observation = |rank, remaining_blocks| PolicyMaturityObservation {
+            outpoint: format!("{}:0", "c".repeat(64)),
+            rank,
+            remaining_blocks,
+            policy_type: "recovery".to_owned(),
+        };
+
+        reconcile_policy_maturity(&db, &[observation(2, Some(0))], 1).unwrap();
+        assert_eq!(pending(&db).unwrap().len(), 1);
+        reconcile_policy_maturity(&db, &[observation(1, Some(1))], 2).unwrap();
+        assert!(pending(&db).unwrap().is_empty());
+        reconcile_policy_maturity(&db, &[observation(2, Some(0))], 3).unwrap();
+
+        let pending = pending(&db).unwrap();
+        assert_eq!(pending.len(), 1);
+        assert!(matches!(
+            pending[0].event,
+            WalletNotification::PolicyMature { .. }
+        ));
+    }
+
+    #[test]
+    fn absent_mature_outpoint_rearms_when_it_reappears() {
+        let mut db = db();
+        let observation = PolicyMaturityObservation {
+            outpoint: format!("{}:0", "d".repeat(64)),
+            rank: 2,
+            remaining_blocks: Some(0),
+            policy_type: "inheritance".to_owned(),
+        };
+
+        reconcile_policy_maturity(&db, std::slice::from_ref(&observation), 1).unwrap();
+        let initial = pending(&db).unwrap();
+        acknowledge(&mut db, &[initial[0].id.clone()]).unwrap();
+        reconcile_policy_maturity(&db, &[], 2).unwrap();
+        reconcile_policy_maturity(&db, &[observation], 3).unwrap();
+
+        let pending = pending(&db).unwrap();
+        assert_eq!(pending.len(), 1);
+        assert!(matches!(
+            pending[0].event,
+            WalletNotification::PolicyMature { .. }
+        ));
     }
 
     #[test]

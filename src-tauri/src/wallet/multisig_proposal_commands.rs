@@ -1183,15 +1183,7 @@ pub async fn multisig_recovery_create(
             .first()
             .map(|path| path.threshold)
             .unwrap_or(2);
-        let policy_type = if analysis
-            .paths
-            .iter()
-            .any(|path| path.available_after_blocks == 52_560)
-        {
-            "inheritance"
-        } else {
-            recovery_policy_type(&template)
-        };
+        let policy_type = verified_recovery_policy_type(&template, &analysis.paths);
         let (id, dir) = prepare_profile_directory(&app)?;
         let result = (|| {
             let mut db = open_wallet_database(&dir.join("wallet.sqlite"))?;

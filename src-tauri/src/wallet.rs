@@ -3739,6 +3739,21 @@ fn recovery_policy_type(template: &RecoveryTemplate) -> &'static str {
     }
 }
 
+fn verified_recovery_policy_type(
+    template: &RecoveryTemplate,
+    paths: &[crate::recovery::TimedSpendingPath],
+) -> &'static str {
+    if matches!(template, RecoveryTemplate::Recovery { .. })
+        && paths
+            .iter()
+            .any(|path| path.available_after_blocks == 52_560)
+    {
+        "inheritance"
+    } else {
+        recovery_policy_type(template)
+    }
+}
+
 fn delayed_policy_context(wallet: &MultisigWalletDto) -> ApiResult<Option<DelayedPolicyContext>> {
     let Some(template @ RecoveryTemplate::Recovery { .. }) = wallet.recovery_template.as_ref()
     else {
@@ -3814,7 +3829,7 @@ fn validate_multisig_backup(encoded: &str) -> ApiResult<MultisigBackupDto> {
             (
                 analysis.external_descriptor,
                 analysis.internal_descriptor,
-                recovery_policy_type(template),
+                verified_recovery_policy_type(template, &analysis.paths),
                 analysis.paths,
             )
         } else {

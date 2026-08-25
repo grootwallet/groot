@@ -2299,6 +2299,41 @@ fn recovery_descriptor_backup_recompiles_the_persisted_template() {
 }
 
 #[test]
+fn inheritance_descriptor_backup_recompiles_the_persisted_template() {
+    use crate::recovery::{SpendingPath, TimedSpendingPath};
+
+    let mut backup = descriptor_backup();
+    let ids = backup
+        .wallet
+        .cosigners
+        .iter()
+        .map(|key| key.id.clone())
+        .collect::<Vec<_>>();
+    let template = RecoveryTemplate::Recovery {
+        immediate: SpendingPath::new(2, ids[..3].to_vec()),
+        recovery: TimedSpendingPath::new(52_560, 1, [ids[3].clone()]),
+    };
+    let analysis = analyze_template(&template, &backup.wallet.cosigners).unwrap();
+    backup.wallet.external_descriptor = analysis.external_descriptor;
+    backup.wallet.internal_descriptor = analysis.internal_descriptor;
+    backup.wallet.threshold = analysis.paths[0].threshold;
+    backup.wallet.policy_type = "inheritance".to_owned();
+    backup.wallet.recovery_template = Some(template);
+    backup.wallet.spending_paths = analysis.paths;
+
+    let validated = validate_multisig_backup(&serde_json::to_string(&backup).unwrap()).unwrap();
+    assert_eq!(validated.wallet.policy_type, "inheritance");
+    assert_eq!(
+        validated.wallet.spending_paths[1].available_after_blocks,
+        52_560
+    );
+    assert_eq!(
+        first_multisig_address(&validated.wallet).unwrap(),
+        first_multisig_address(&backup.wallet).unwrap()
+    );
+}
+
+#[test]
 fn descriptor_backup_rejects_oversize_network_and_policy_tampering() {
     assert_eq!(
         validate_multisig_backup(&"x".repeat(256 * 1024 + 1))
