@@ -65,6 +65,17 @@ describe('locale preferences', () => {
     ).toBe(
       'BitBox peut redemander son mot de passe pour cette nouvelle connexion sécurisée. Saisissez-le uniquement sur BitBox.'
     );
+    expect(
+      translate(
+        'fr',
+        'Locked. Start the PIN matrix, then tap the blank cells matching the locations shown on the device.'
+      )
+    ).toBe(
+      'Verrouillé. Démarrez la matrice du PIN, puis touchez les cases vides correspondant aux positions affichées sur l’appareil.'
+    );
+    expect(translate('es', 'Ready to import the public account key.')).toBe(
+      'Listo para importar la clave pública de la cuenta.'
+    );
     expect(translate('en', 'Loading…')).toBe('Loading…');
     expect(translate('es', '{blocks} blocks · full block history', { blocks: '149.669' })).toBe(
       '149.669 bloques · historial completo de bloques'

@@ -80,6 +80,11 @@ seconds for aggregate discovery and five minutes for selected-device review.
 Fingerprint-less BitBox rows are presented as detected, and the second password
 prompt is explicit; the password remains entirely on-device.
 
+Hardware discovery row copy returned by Rust is cataloged in English, French,
+and Spanish. A source-contract test extracts every native device-status message
+and fails when any message is absent from the localization catalog, covering
+ready, PIN, passphrase, unsupported-model, and device-specific readiness rows.
+
 v0.4.25 fixes multisig creation with shared network setup. The protected node and sync copy now finishes inside the native creation operation before the new profile is committed and selected, preventing automatic sync from observing a half-configured wallet. Copy failure is cleaned up and returns one offline setup result without discarding the valid multisig wallet. The Policy route reads the persisted snapshot while AppShell remains the sole refresh owner, removing duplicate startup refreshes and misleading `sync_in_progress` offline errors. Persisted wallet, registry, proposal, and network-settings formats are unchanged.
 
 Update this table in the same change whenever a capability crosses a boundary.

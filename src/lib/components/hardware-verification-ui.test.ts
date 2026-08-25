@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { copyCatalog } from '$lib/i18n-catalog';
 
 const appCss = readFileSync(new URL('../../app.css', import.meta.url), 'utf8');
 const emptyState = readFileSync(
@@ -64,8 +65,28 @@ const hardwareTransport = readFileSync(
   new URL('../../../src-tauri/src/hardware.rs', import.meta.url),
   'utf8'
 );
+const nativeWallet = readFileSync(
+  new URL('../../../src-tauri/src/wallet.rs', import.meta.url),
+  'utf8'
+);
 
 describe('hardware receive verification UI', () => {
+  it('catalogs every native hardware device status message', () => {
+    const start = nativeWallet.indexOf('fn hardware_device_dto(');
+    const end = nativeWallet.indexOf('fn require_explicit_standard_wallet_selection(', start);
+    const source = nativeWallet.slice(start, end);
+    const messages = [...source.matchAll(/"([^"\n]+[.!?])"/g)].map((match) => match[1]);
+
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    expect(messages.length).toBeGreaterThanOrEqual(10);
+    for (const message of messages) {
+      expect(copyCatalog, `missing native hardware status translation: ${message}`).toHaveProperty(
+        message
+      );
+    }
+  });
+
   it('keeps the Trezor PIN matrix instruction short and position-focused', () => {
     const pinModal = readFileSync(new URL('./TrezorPinModal.svelte', import.meta.url), 'utf8');
     expect(pinModal).toContain('Match locations, not numbers');

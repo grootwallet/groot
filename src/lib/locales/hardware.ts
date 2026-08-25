@@ -45,6 +45,37 @@ export const hardwareCopy = {
       fr: 'BitBox peut redemander son mot de passe pour cette nouvelle connexion sécurisée. Vérifiez son écran, saisissez le mot de passe sur BitBox si demandé, puis réessayez.',
       es: 'BitBox puede volver a solicitar su contraseña para esta nueva conexión segura. Comprueba su pantalla, introduce la contraseña en BitBox si se solicita y vuelve a intentarlo.'
     },
+  "This Groot release's bundled HWI 3.2.0 does not support this Trezor model. Update Groot when a reviewed release adds support, then scan again.":
+    {
+      fr: 'La version HWI 3.2.0 intégrée à cette version de Groot ne prend pas en charge ce modèle Trezor. Mettez Groot à jour lorsqu’une version vérifiée ajoutera sa prise en charge, puis relancez la recherche.',
+      es: 'La versión HWI 3.2.0 incluida en esta versión de Groot no admite este modelo de Trezor. Actualiza Groot cuando una versión revisada añada compatibilidad y vuelve a buscar.'
+    },
+  'Locked. Start the PIN matrix, then tap the blank cells matching the locations shown on the device.':
+    {
+      fr: 'Verrouillé. Démarrez la matrice du PIN, puis touchez les cases vides correspondant aux positions affichées sur l’appareil.',
+      es: 'Bloqueado. Inicia la matriz del PIN y toca las casillas vacías que correspondan a las posiciones mostradas en el dispositivo.'
+    },
+  'Passphrase protection is enabled. Choose the standard wallet with no passphrase, or select a hidden wallet on-device when supported.':
+    {
+      fr: 'La protection par phrase secrète est activée. Choisissez le portefeuille standard sans phrase secrète, ou sélectionnez un portefeuille masqué sur l’appareil lorsque cela est pris en charge.',
+      es: 'La protección con frase de contraseña está activada. Elige la cartera estándar sin frase de contraseña o selecciona una cartera oculta en el dispositivo cuando sea compatible.'
+    },
+  'Detected. Groot verifies that Bitcoin Test is open when it reads the public account key.': {
+    fr: 'Détecté. Groot vérifie que Bitcoin Test est ouvert lors de la lecture de la clé publique du compte.',
+    es: 'Detectado. Groot verifica que Bitcoin Test esté abierto al leer la clave pública de la cuenta.'
+  },
+  'Ready to import the public account key.': {
+    fr: 'Prêt à importer la clé publique du compte.',
+    es: 'Listo para importar la clave pública de la cuenta.'
+  },
+  'Unlock Coldcard and enable USB communication, then scan again.': {
+    fr: 'Déverrouillez Coldcard et activez la communication USB, puis relancez la recherche.',
+    es: 'Desbloquea Coldcard, activa la comunicación USB y vuelve a buscar.'
+  },
+  'Detected, but not ready. Finish setup and unlock the device, then scan again.': {
+    fr: 'Détecté, mais pas prêt. Terminez la configuration et déverrouillez l’appareil, puis relancez la recherche.',
+    es: 'Detectado, pero no está listo. Termina la configuración, desbloquea el dispositivo y vuelve a buscar.'
+  },
   'Select this signer. Groot will ask Jade to unlock; enter your PIN on Jade when prompted.': {
     fr: 'Sélectionnez ce signataire. Groot demandera à Jade de se déverrouiller ; saisissez votre PIN sur Jade lorsqu’il vous le demande.',
     es: 'Selecciona este firmante. Groot pedirá a Jade que se desbloquee; introduce tu PIN en Jade cuando te lo pida.'
