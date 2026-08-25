@@ -25,6 +25,13 @@ maps the vendor's non-granular generic failure to its otherwise unsupported
 another aggregate scan, recreating the same handoff instead of retrying the
 selected capability.
 
+Physical v0.4.29 follow-up then proved that retries could not correct the
+owning regression. Groot's earlier certified BitBox import used HWI's direct
+`getxpub` command. Later live-identity hardening replaced it with HWI's compound
+`getkeypool` command so fingerprint and account key came from one client. Nova
+continued to unlock but consistently rejected that compound operation, even as
+the only connected device.
+
 A subsequent packaged Nova test showed two further UX problems. HWI closes the
 enumeration client before Groot opens the exact-path account-key client, and
 BitBox can request its password again for that new secure connection. Groot
@@ -49,6 +56,13 @@ an endless scan when one backend stalls.
   acceptable. The retries remain inside the existing interactive lease. Cancellation, timeout, malformed
   output, wrong network/path, and incomplete or mismatched identity are never
   retried or accepted.
+- BitBox initial import uses the physically proven direct `getxpub` operation,
+  not `getkeypool`. Under one exclusive interactive lease, Groot reads the
+  exact-path account key, re-enumerates to obtain the fingerprint for that same
+  exact path, and reads the account key again. The fingerprint is accepted only
+  when exactly one BitBox row retains the selected path and both independently
+  parsed account keys are identical. Missing identity, path ambiguity, device
+  replacement, or any key mismatch fails closed.
 - An account-key failure keeps a direct retry action for the selected
   capability instead of making another aggregate scan the primary recovery.
 - A returned path remains an opaque capability. Initial import, health,

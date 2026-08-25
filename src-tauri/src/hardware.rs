@@ -524,6 +524,24 @@ impl HwiCli {
         HardwareOperation::acquire(HardwareOperationKind::Discovery, DISCOVERY_TIMEOUT)
     }
 
+    pub fn enumerate_in_operation(
+        &self,
+        operation: &HardwareOperation,
+    ) -> Result<Vec<u8>, HardwareError> {
+        run_program_in_operation(
+            &self.program,
+            &self.source,
+            &[
+                "--chain".into(),
+                self.chain.as_hwi_argument().into(),
+                "enumerate".into(),
+            ],
+            operation,
+            self.home.as_deref(),
+            None,
+        )
+    }
+
     pub fn account_keypool_in_operation(
         &self,
         operation: &HardwareOperation,
@@ -612,18 +630,7 @@ impl HwiCli {
 impl HardwareTransport for HwiCli {
     fn enumerate(&self) -> Result<Vec<u8>, HardwareError> {
         let operation = self.begin_discovery_operation()?;
-        run_program_in_operation(
-            &self.program,
-            &self.source,
-            &[
-                "--chain".into(),
-                self.chain.as_hwi_argument().into(),
-                "enumerate".into(),
-            ],
-            &operation,
-            self.home.as_deref(),
-            None,
-        )
+        self.enumerate_in_operation(&operation)
     }
 
     #[cfg(test)]
