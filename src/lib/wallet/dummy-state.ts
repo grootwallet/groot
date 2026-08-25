@@ -17,6 +17,16 @@ import type {
 } from './contracts';
 
 export const prototypeCredential = 'prototype-passphrase';
+type FixtureDelayedPolicyType = 'recovery' | 'inheritance';
+
+function fixtureDelayedPolicyType(): FixtureDelayedPolicyType | null {
+  if (typeof location === 'undefined') return null;
+  const params = new URLSearchParams(location.search);
+  if (params.has('fixture-policy-inheritance')) return 'inheritance';
+  return params.has('fixture-policy-maturity') ? 'recovery' : null;
+}
+const fixtureDelayedPolicy = fixtureDelayedPolicyType();
+
 export const fixtureCosigners: PolicyDraft['cosigners'] = [
   {
     id: 'fixture-coldcard',
@@ -52,9 +62,7 @@ export function fixtureAddressForNetwork(address: string): string {
 
 function fixtureCoins(): Utxo[] {
   const coins = structuredClone(utxos);
-  const maturityFixture =
-    typeof location !== 'undefined' &&
-    new URLSearchParams(location.search).has('fixture-policy-maturity');
+  const maturityFixture = fixtureDelayedPolicy !== null;
 
   if (!maturityFixture) return coins;
 
@@ -79,15 +87,15 @@ function fixtureCoins(): Utxo[] {
 }
 
 export function fixtureMultisigWallet(): MultisigWallet {
-  const maturityFixture =
-    typeof location !== 'undefined' &&
-    new URLSearchParams(location.search).has('fixture-policy-maturity');
+  const policyType = fixtureDelayedPolicy;
+  const maturityFixture = policyType !== null;
+  const delayBlocks = policyType === 'inheritance' ? 52_560 : 4_320;
   const policyCosigners = maturityFixture
     ? [
         ...fixtureCosigners,
         {
           id: 'fixture-recovery',
-          label: 'Recovery key',
+          label: policyType === 'inheritance' ? 'Heir key' : 'Recovery key',
           fingerprint: 'a11ce404',
           xpub: 'tpubD6NzVbkrYhZ4Y-fixture-recovery-public-key',
           derivationPath: MULTISIG_ACCOUNT_PATH,
@@ -103,7 +111,7 @@ export function fixtureMultisigWallet(): MultisigWallet {
     externalDescriptor: descriptorPreview(2, fixtureCosigners, 0),
     internalDescriptor: descriptorPreview(2, fixtureCosigners, 1),
     createdAt: '2026-07-17T10:00:00.000Z',
-    policyType: maturityFixture ? 'recovery' : 'standard',
+    policyType: policyType ?? 'standard',
     recoveryTemplate: maturityFixture
       ? {
           type: 'recovery',
@@ -112,7 +120,7 @@ export function fixtureMultisigWallet(): MultisigWallet {
             signerIds: policyCosigners.map((signer) => signer.id).slice(0, 3)
           },
           recovery: {
-            availableAfterBlocks: 4_320,
+            availableAfterBlocks: delayBlocks,
             threshold: 1,
             signerIds: [policyCosigners[3].id]
           }
@@ -125,7 +133,7 @@ export function fixtureMultisigWallet(): MultisigWallet {
             threshold: 2,
             signerIds: policyCosigners.map((signer) => signer.id).slice(0, 3)
           },
-          { availableAfterBlocks: 4_320, threshold: 1, signerIds: [policyCosigners[3].id] }
+          { availableAfterBlocks: delayBlocks, threshold: 1, signerIds: [policyCosigners[3].id] }
         ]
       : undefined
   };
@@ -168,8 +176,7 @@ export abstract class DummyWalletState {
       ]
     : [];
   protected _selectedWalletId: string | null =
-    typeof location !== 'undefined' &&
-    new URLSearchParams(location.search).has('fixture-policy-maturity')
+    fixtureDelayedPolicy !== null
       ? (this._multisigProfileId ?? this._profiles[0]?.id ?? null)
       : (this._profiles[0]?.id ?? null);
   protected _inactivityTimeoutMinutes = 5;
@@ -182,7 +189,7 @@ export abstract class DummyWalletState {
       ? []
       : typeof location !== 'undefined' &&
           (new URLSearchParams(location.search).has('fixture-delayed-wallet-switch') ||
-            new URLSearchParams(location.search).has('fixture-policy-maturity'))
+            fixtureDelayedPolicy !== null)
         ? this._profiles.map((profile) => profile.id)
         : this._profiles[0]
           ? [this._profiles[0].id]
@@ -191,40 +198,69 @@ export abstract class DummyWalletState {
   protected _coins = fixtureCoins().map((coin, index) => ({
     ...coin,
     confirmations:
-      typeof location !== 'undefined' &&
-      new URLSearchParams(location.search).has('fixture-policy-maturity')
+      fixtureDelayedPolicy !== null
         ? index === 0
-          ? 4_320
+          ? fixtureDelayedPolicy === 'inheritance'
+            ? 52_560
+            : 4_320
           : index === 1
-            ? 3_500
+            ? fixtureDelayedPolicy === 'inheritance'
+              ? 48_000
+              : 3_500
             : index === 2
               ? 12
               : 0
         : coin.confirmations,
     address: fixtureAddressForNetwork(coin.address),
     policyMaturity:
-      typeof location !== 'undefined' &&
-      new URLSearchParams(location.search).has('fixture-policy-maturity')
-        ? {
-            state:
-              index === 0
-                ? ('mature' as const)
-                : index === 1
-                  ? ('approaching' as const)
-                  : index === 2
-                    ? ('immature' as const)
-                    : ('unconfirmed' as const),
-            policyType: 'recovery' as const,
-            delayBlocks: 4_320,
-            ageBlocks: index === 0 ? 4_320 : index === 1 ? 3_500 : index === 2 ? 12 : 0,
-            remainingBlocks: index === 0 ? 0 : index === 1 ? 820 : index === 2 ? 4_308 : null,
-            approachingAtBlocks: 1_008,
-            maturityHeight:
-              index === 0 ? 250_000 : index === 1 ? 250_820 : index === 2 ? 254_308 : null,
-            approximateSecondsRemaining:
-              index === 0 ? 0 : index === 1 ? 492_000 : index === 2 ? 2_584_800 : null,
-            delayedSpendSupported: false as const
-          }
+      fixtureDelayedPolicy !== null
+        ? (() => {
+            const policyType = fixtureDelayedPolicy;
+            const delayBlocks = policyType === 'inheritance' ? 52_560 : 4_320;
+            const approachingAge = policyType === 'inheritance' ? 48_000 : 3_500;
+            const approachingRemaining = delayBlocks - approachingAge;
+            const immatureRemaining = delayBlocks - 12;
+            return {
+              state:
+                index === 0
+                  ? ('mature' as const)
+                  : index === 1
+                    ? ('approaching' as const)
+                    : index === 2
+                      ? ('immature' as const)
+                      : ('unconfirmed' as const),
+              policyType,
+              delayBlocks,
+              ageBlocks:
+                index === 0 ? delayBlocks : index === 1 ? approachingAge : index === 2 ? 12 : 0,
+              remainingBlocks:
+                index === 0
+                  ? 0
+                  : index === 1
+                    ? approachingRemaining
+                    : index === 2
+                      ? immatureRemaining
+                      : null,
+              approachingAtBlocks: policyType === 'inheritance' ? 5_256 : 1_008,
+              maturityHeight:
+                index === 0
+                  ? 250_000
+                  : index === 1
+                    ? 250_000 + approachingRemaining
+                    : index === 2
+                      ? 250_000 + immatureRemaining
+                      : null,
+              approximateSecondsRemaining:
+                index === 0
+                  ? 0
+                  : index === 1
+                    ? approachingRemaining * 600
+                    : index === 2
+                      ? immatureRemaining * 600
+                      : null,
+              delayedSpendSupported: true
+            };
+          })()
         : null
   }));
   protected _addresses = structuredClone(receiveAddresses).map((address) => ({

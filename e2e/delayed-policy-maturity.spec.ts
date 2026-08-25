@@ -125,6 +125,45 @@ test('keeps mature-coin selection calm and moves secondary actions into overflow
   await expect(more).toBeFocused();
 });
 
+test('organizes optional coin details for recovery and inheritance wallets', async ({ page }) => {
+  for (const fixture of [
+    {
+      query: 'fixture-policy-maturity=1',
+      badge: 'Recovery key can spend',
+      delayedAction: 'Use recovery key',
+      renewalAction: 'Restart recovery wait'
+    },
+    {
+      query: 'fixture-policy-inheritance=1',
+      badge: 'Heir key can spend',
+      delayedAction: 'Use heir key',
+      renewalAction: 'Postpone heir access'
+    }
+  ]) {
+    await page.goto(`/coins?${fixture.query}`);
+    const coin = page.locator('.coin-row').filter({ hasText: fixture.badge });
+    await coin.getByRole('button', { name: /Show details for/ }).click();
+    await expect(coin.locator('.coin-detail-chevron')).toHaveCount(2);
+    await expect(coin.getByRole('link', { name: fixture.delayedAction })).toBeVisible();
+    await expect(coin.getByRole('link', { name: fixture.renewalAction })).toBeVisible();
+
+    const privacy = coin.locator('details.coin-detail-group').nth(0);
+    await privacy.getByText('Privacy & history', { exact: true }).click();
+    await expect(privacy.getByRole('term').filter({ hasText: /^Provenance/ })).toBeVisible();
+    await expect(privacy.getByRole('term').filter({ hasText: /^Privacy clusters/ })).toBeVisible();
+    expect(await privacy.evaluate((node) => getComputedStyle(node).borderTopWidth)).toBe('0px');
+
+    const technical = coin.locator('details.coin-detail-group').nth(1);
+    await technical.getByText('Technical details', { exact: true }).click();
+    await expect(technical.getByText('Confirmations', { exact: true })).toBeVisible();
+    await expect(technical.getByText('Address', { exact: true })).toBeVisible();
+    await expect(technical.getByText('Outpoint', { exact: true })).toBeVisible();
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)
+    ).toBe(true);
+  }
+});
+
 test('spends one mature coin with only its recovery key', async ({ page }) => {
   await page.goto('/coins?fixture-policy-maturity=1');
   const matureCoin = page.locator('.coin-row').filter({ hasText: 'Recovery key can spend' });

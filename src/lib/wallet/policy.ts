@@ -168,6 +168,8 @@ export function validPolicyMaturity(coin: Utxo): NonNullable<Utxo['policyMaturit
   ];
   if (
     !integers.every((item) => Number.isSafeInteger(item) && item >= 0) ||
+    typeof value.delayedSpendSupported !== 'boolean' ||
+    !(['recovery', 'inheritance'] as string[]).includes(value.policyType) ||
     value.approachingAtBlocks > value.delayBlocks ||
     (value.state === 'unconfirmed' && value.remainingBlocks !== null) ||
     (value.state === 'mature' && value.remainingBlocks !== 0) ||

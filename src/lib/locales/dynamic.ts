@@ -777,9 +777,9 @@ export const dynamicCopy = {
     fr: 'Elle peut maintenant déplacer seule cette pièce. Vos clés habituelles 2 sur 3 fonctionnent toujours.',
     es: 'Ahora puede mover esta moneda por sí sola. Tus claves habituales 2 de 3 también siguen funcionando.'
   },
-  'Keep using your normal keys, use the recovery key, or restart this coin’s wait.': {
-    fr: 'Continuez avec vos clés normales, utilisez la clé de récupération ou relancez l’attente de cette pièce.',
-    es: 'Sigue usando tus claves normales, usa la clave de recuperación o reinicia la espera de esta moneda.'
+  'Keep using your normal keys, use the backup key, or restart this coin’s wait.': {
+    fr: 'Continuez avec vos clés normales, utilisez la clé de secours ou relancez l’attente de cette pièce.',
+    es: 'Sigue usando tus claves normales, usa la clave de respaldo o reinicia la espera de esta moneda.'
   },
   'Key available': { fr: 'Clé disponible', es: 'Clave disponible' },
   'Open an available coin to use the backup key or restart its wait.': {
@@ -799,9 +799,9 @@ export const dynamicCopy = {
     fr: 'L’état de récupération est suspendu jusqu’à ce que la chaîne soit à jour.',
     es: 'El estado de recuperación está en pausa hasta que la cadena esté actualizada.'
   },
-  'Recovery access becomes available separately for each coin. Your normal keys keep working.': {
-    fr: 'L’accès de récupération devient disponible séparément pour chaque pièce. Vos clés normales continuent de fonctionner.',
-    es: 'El acceso de recuperación se habilita por separado para cada moneda. Tus claves normales siguen funcionando.'
+  'Backup-key access becomes available separately for each coin. Your normal keys keep working.': {
+    fr: 'L’accès par clé de secours devient disponible séparément pour chaque pièce. Vos clés normales continuent de fonctionner.',
+    es: 'El acceso con la clave de respaldo se habilita por separado para cada moneda. Tus claves normales siguen funcionando.'
   },
   'Labels and existing public links': {
     fr: 'Libellés et liens publics existants',

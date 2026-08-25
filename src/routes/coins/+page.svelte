@@ -47,11 +47,12 @@
   const MATURITY_MATURE = 'mature' as const;
   const MATURITY_APPROACHING = 'approaching' as const;
   const MATURITY_UNCONFIRMED = 'unconfirmed' as const;
-  const maturityFixtureSuffix =
-    typeof location !== 'undefined' &&
-    new URLSearchParams(location.search).has('fixture-policy-maturity')
-      ? '&fixture-policy-maturity=1'
-      : '';
+  const maturityFixtureSuffix = (() => {
+    if (typeof location === 'undefined') return '';
+    const params = new URLSearchParams(location.search);
+    if (params.has('fixture-policy-inheritance')) return '&fixture-policy-inheritance=1';
+    return params.has('fixture-policy-maturity') ? '&fixture-policy-maturity=1' : '';
+  })();
   let utxos = $state<Utxo[]>([]);
   let transactions = $state<Transaction[]>([]);
   let sortOrder = $state<CoinSortOrder>('newest');
@@ -389,21 +390,21 @@
               expanded={selectionMenuOpen}
               onclick={() => (selectionMenuOpen = !selectionMenuOpen)}
             />{#if selectionMenuOpen}<div class="wallet-more-menu coin-selection-menu" role="menu">
-                {#if renewalCoin && chainTipCurrent && multisig}<a
-                    role="menuitem"
-                    href={delayedSpendHref}
-                    ><Unlock size={15} /><span
-                      ><strong
-                        >{translate(
-                          $locale,
-                          renewalCoin.policyMaturity?.policyType === 'inheritance'
-                            ? 'Use heir key'
-                            : 'Use recovery key'
-                        )}</strong
-                      ><small>{translate($locale, 'Spend this coin with its backup key')}</small
-                      ></span
-                    ></a
-                  ><a role="menuitem" href={renewalHref}
+                {#if renewalCoin && chainTipCurrent && multisig}{#if renewalCoin.policyMaturity?.delayedSpendSupported}<a
+                      role="menuitem"
+                      href={delayedSpendHref}
+                      ><Unlock size={15} /><span
+                        ><strong
+                          >{translate(
+                            $locale,
+                            renewalCoin.policyMaturity?.policyType === 'inheritance'
+                              ? 'Use heir key'
+                              : 'Use recovery key'
+                          )}</strong
+                        ><small>{translate($locale, 'Spend this coin with its backup key')}</small
+                        ></span
+                      ></a
+                    >{/if}<a role="menuitem" href={renewalHref}
                     ><RefreshCw size={15} /><span
                       ><strong
                         >{translate(
@@ -485,7 +486,7 @@
             <strong>{translate($locale, 'Each coin has its own protection timeline.')}</strong>
             {translate(
               $locale,
-              'Recovery access becomes available separately for each coin. Your normal keys keep working.'
+              'Backup-key access becomes available separately for each coin. Your normal keys keep working.'
             )}
             {#if !maturitySummary.chainCurrent}<small class="stale-copy"
                 >{translate(
@@ -672,7 +673,7 @@
                         <small
                           >{translate(
                             $locale,
-                            'Keep using your normal keys, use the recovery key, or restart this coin’s wait.'
+                            'Keep using your normal keys, use the backup key, or restart this coin’s wait.'
                           )}</small
                         >
                       </div>
@@ -687,17 +688,17 @@
                               ? 'Postpone heir access'
                               : 'Restart recovery wait'
                           )}</Button
-                        ><Button
-                          variant="secondary"
-                          size="small"
-                          href={`/multisig/send?coins=${encodeURIComponent(utxo.outpoint)}&delayedSpend=1${maturityFixtureSuffix}`}
-                          >{translate(
-                            $locale,
-                            maturity.policyType === 'inheritance'
-                              ? 'Use heir key'
-                              : 'Use recovery key'
-                          )}</Button
-                        >
+                        >{#if maturity.delayedSpendSupported}<Button
+                            variant="secondary"
+                            size="small"
+                            href={`/multisig/send?coins=${encodeURIComponent(utxo.outpoint)}&delayedSpend=1${maturityFixtureSuffix}`}
+                            >{translate(
+                              $locale,
+                              maturity.policyType === 'inheritance'
+                                ? 'Use heir key'
+                                : 'Use recovery key'
+                            )}</Button
+                          >{/if}
                       </div>
                     </div>{/if}
                 </section>{/if}
@@ -713,7 +714,7 @@
                           : 'Labels and existing public links'
                       )}</small
                     >
-                  </span>
+                  </span><ChevronDown class="coin-detail-chevron" size={14} />
                 </summary>
                 <dl>
                   <div>
@@ -832,7 +833,7 @@
                   <span>
                     <strong>{translate($locale, 'Technical details')}</strong>
                     <small>{translate($locale, 'Confirmations, address and outpoint')}</small>
-                  </span>
+                  </span><ChevronDown class="coin-detail-chevron" size={14} />
                 </summary>
                 <dl>
                   <div>

@@ -69,6 +69,6 @@ export type Utxo = {
     approachingAtBlocks: number;
     maturityHeight: number | null;
     approximateSecondsRemaining: number | null;
-    delayedSpendSupported: false;
+    delayedSpendSupported: boolean;
   } | null;
 };

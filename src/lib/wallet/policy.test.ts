@@ -300,6 +300,18 @@ describe('wallet invariants', () => {
       delayedSpendSupported: false as const
     };
     expect(validPolicyMaturity({ ...base, outpoint: 'none:0' })).toBeNull();
+    expect(
+      validPolicyMaturity({
+        ...base,
+        outpoint: 'invalid-support:0',
+        policyMaturity: {
+          ...maturity,
+          state: 'approaching',
+          remainingBlocks: 820,
+          delayedSpendSupported: 'yes' as unknown as boolean
+        }
+      })
+    ).toBeNull();
     const coins: Utxo[] = [
       {
         ...base,

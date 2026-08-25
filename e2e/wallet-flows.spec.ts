@@ -826,20 +826,24 @@ test('overview, activity, UTXOs, and settings expose durable states', async ({ p
   await expect(reusedCoin.getByText(/Address reused/)).toBeVisible();
   await expect(reusedCoin.getByText('Outpoint', { exact: true })).toHaveCount(0);
   await reusedCoin.getByRole('button', { name: 'Show details' }).click();
-  await expect(reusedCoin.getByText('Outpoint', { exact: true })).toBeVisible();
+  await reusedCoin.getByText('Privacy & history', { exact: true }).click();
   await expect(
     reusedCoin.getByText(/This coin shares its address with \d+ other coin/)
   ).toBeVisible();
   await expect(reusedCoin.getByText('Linked coin', { exact: true })).toBeVisible();
+  await reusedCoin.getByText('Technical details', { exact: true }).click();
+  await expect(reusedCoin.getByText('Outpoint', { exact: true })).toBeVisible();
   const changeCoin = page.locator('.coin-row').filter({ hasText: 'Mixed provenance' });
   const inheritedLabels = changeCoin.getByRole('list', { name: 'Permanent labels' });
   await expect(inheritedLabels.getByRole('listitem', { name: 'Savings' })).toBeVisible();
   await expect(inheritedLabels.getByRole('listitem', { name: 'Refund' })).toBeVisible();
   await changeCoin.getByRole('button', { name: 'Show details for Savings, Refund' }).click();
-  await expect(changeCoin.getByText('Source transaction', { exact: true })).toBeVisible();
+  await changeCoin.getByText('Privacy & history', { exact: true }).click();
   await expect(changeCoin.locator('dt').filter({ hasText: 'Source payment intent' })).toBeVisible();
   await expect(changeCoin.getByText('Hardware order', { exact: true })).toBeVisible();
   await expect(changeCoin.locator('dt').filter({ hasText: 'Change lineage' })).toBeVisible();
+  await changeCoin.getByText('Technical details', { exact: true }).click();
+  await expect(changeCoin.getByText('Source transaction', { exact: true })).toBeVisible();
   await expect(changeCoin.getByText('2 wallet inputs', { exact: true })).toBeVisible();
   await changeCoin.getByRole('button', { name: 'About source payment intent' }).hover();
   await expect(changeCoin.getByRole('tooltip')).toContainText(

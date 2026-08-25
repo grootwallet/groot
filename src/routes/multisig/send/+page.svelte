@@ -175,13 +175,20 @@
     )
   );
   const selectedReadyCoins = $derived(
-    coins.filter(
-      (coin) =>
-        selectedCoins.includes(coin.outpoint) && validPolicyMaturity(coin)?.state === 'mature'
-    )
+    coins.filter((coin) => {
+      const maturity = validPolicyMaturity(coin);
+      return (
+        selectedCoins.includes(coin.outpoint) &&
+        maturity?.state === 'mature' &&
+        maturity.delayedSpendSupported
+      );
+    })
   );
   const recoveryReadyCoins = $derived(
-    coins.filter((coin) => !coin.frozen && validPolicyMaturity(coin)?.state === 'mature')
+    coins.filter((coin) => {
+      const maturity = validPolicyMaturity(coin);
+      return !coin.frozen && maturity?.state === 'mature' && maturity.delayedSpendSupported;
+    })
   );
   const recoveryReadyKeyName = $derived(
     (recoveryReadyCoins[0] ? validPolicyMaturity(recoveryReadyCoins[0]) : null)?.policyType ===
@@ -398,7 +405,12 @@
       } else if (delayedSpendRequested && proposals.length === 0 && selectedCoins.length === 1) {
         const candidate = coins.find((coin) => coin.outpoint === selectedCoins[0]) ?? null;
         const maturity = candidate ? validPolicyMaturity(candidate) : null;
-        if (candidate && maturity?.state === 'mature' && snapshotCurrent) {
+        if (
+          candidate &&
+          maturity?.state === 'mature' &&
+          maturity.delayedSpendSupported &&
+          snapshotCurrent
+        ) {
           delayedSpendMode = true;
           delayedSpendCoin = candidate;
         } else {

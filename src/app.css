@@ -8076,19 +8076,25 @@ code {
   border-top: 1px solid var(--border);
   padding-top: 11px;
 }
+.coin-details > .coin-detail-group:first-of-type {
+  padding-top: 0;
+  border-top: 0;
+}
 .coin-detail-group summary {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   cursor: pointer;
   color: var(--link);
+  list-style: none;
 }
-.coin-detail-group summary::marker {
-  color: var(--muted);
+.coin-detail-group summary::-webkit-details-marker {
+  display: none;
 }
 .coin-detail-group summary span {
   display: grid;
   gap: 2px;
-  margin-left: 5px;
 }
 .coin-detail-group summary strong {
   color: var(--text-soft);
@@ -8098,8 +8104,44 @@ code {
   color: var(--muted);
   font-size: 9px;
 }
+.coin-detail-group .coin-detail-chevron {
+  flex: 0 0 auto;
+  color: var(--muted);
+  transition:
+    transform 0.15s ease,
+    color 0.15s ease;
+}
+.coin-detail-group summary:hover .coin-detail-chevron,
+.coin-detail-group summary:focus-visible .coin-detail-chevron {
+  color: var(--link);
+}
+.coin-detail-group[open] .coin-detail-chevron {
+  transform: rotate(180deg);
+}
 .coin-detail-group[open] summary {
   margin-bottom: 12px;
+}
+.coin-detail-group dl {
+  gap: 0;
+}
+.coin-detail-group dl > div {
+  grid-template-columns: minmax(132px, 28%) minmax(0, 1fr);
+  min-height: 38px;
+  padding: 8px 0;
+  box-sizing: border-box;
+  align-items: center;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+}
+.coin-detail-group dl > div:first-child {
+  padding-top: 0;
+}
+.coin-detail-group dl > div:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+.coin-detail-group dt {
+  justify-content: space-between;
+  gap: 8px;
 }
 .coin-details dl > div {
   min-width: 0;
@@ -9499,6 +9541,14 @@ code {
   }
   .coin-details {
     margin-left: 0;
+  }
+  .coin-detail-group dl > div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 3px;
+    align-items: start;
+  }
+  .coin-detail-group dt {
+    justify-content: flex-start;
   }
   .coin-reuse-details ul {
     margin-left: 0;

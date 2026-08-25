@@ -1274,7 +1274,7 @@ test('creates and verifies a simple 2-of-3 descriptor wallet', async ({ page }) 
 
   await expect(page).toHaveURL(/\/multisig$/);
   await expect(page.getByRole('heading', { name: 'Family vault' })).toBeVisible();
-  await expect(page.locator('header').getByText('2 of 3')).toBeVisible();
+  await expect(page.locator('.vault-policy-tags').getByText('2 of 3 keys')).toBeVisible();
   await page.getByRole('main').getByRole('link', { name: 'Receive' }).click();
   await expect(page.getByRole('heading', { name: 'Receive bitcoin' })).toBeVisible();
   await expect(page.getByRole('img', { name: /QR code for/ })).toBeVisible();
