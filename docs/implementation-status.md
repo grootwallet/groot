@@ -89,7 +89,14 @@ Nova enumeration remained fingerprint-less after unlock. BitBox single-key
 import now uses HWI's canonical BIP84 keypool form without `--path`, returning
 the live fingerprint, exact account origin, and account key from one open
 client; full live identity validation remains mandatory. Physical packaged
-retesting is still open.
+testing on both original BitBox02 and Nova disproved that correction while
+Trezor and Ledger passed. The remaining common boundary was Groot reopening
+the cached BitBox HID path after aggregate enumeration. BitBox single-key
+import now asks HWI to rediscover and open the device inside the account-key
+process, using the scanned fingerprint when available or requiring exactly one
+fingerprint-less BitBox row. The low-level path is not forwarded, and the same
+atomic identity validation remains mandatory. Physical packaged retesting is
+still open separately for original BitBox02 and Nova.
 
 Hardware discovery row copy returned by Rust is cataloged in English, French,
 and Spanish. A source-contract test extracts every native device-status message

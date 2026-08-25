@@ -63,6 +63,14 @@ impl HardwareError {
     }
 }
 
+fn validate_master_fingerprint(fingerprint: &str) -> Result<(), HardwareError> {
+    if fingerprint.len() == 8 && fingerprint.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        Ok(())
+    } else {
+        Err(HardwareError::InvalidArgument)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum HardwareOperationKind {
     Discovery,
@@ -558,26 +566,31 @@ impl HwiCli {
         &self,
         operation: &HardwareOperation,
         device_type: &str,
-        device_path: &str,
+        device_fingerprint: Option<&str>,
     ) -> Result<Vec<u8>, HardwareError> {
+        let mut selector = vec![
+            "--chain".into(),
+            self.chain.as_hwi_argument_for_device(device_type).into(),
+            "--device-type".into(),
+            device_type.into(),
+        ];
+        if let Some(fingerprint) = device_fingerprint {
+            validate_master_fingerprint(fingerprint)?;
+            selector.extend(["--fingerprint".into(), fingerprint.into()]);
+        }
+        selector.extend([
+            "getkeypool".into(),
+            "--addr-type".into(),
+            "wit".into(),
+            "--account".into(),
+            "0".into(),
+            "0".into(),
+            "1".into(),
+        ]);
         run_program_in_operation(
             &self.program,
             &self.source,
-            &[
-                "--chain".into(),
-                self.chain.as_hwi_argument_for_device(device_type).into(),
-                "--device-type".into(),
-                device_type.into(),
-                "--device-path".into(),
-                device_path.into(),
-                "getkeypool".into(),
-                "--addr-type".into(),
-                "wit".into(),
-                "--account".into(),
-                "0".into(),
-                "0".into(),
-                "1".into(),
-            ],
+            &selector,
             operation,
             self.home.as_deref(),
             None,

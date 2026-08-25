@@ -32,6 +32,13 @@ owning regression. Groot's earlier certified BitBox import used HWI's direct
 continued to unlock but consistently rejected that compound operation, even as
 the only connected device.
 
+The next packaged candidate replaced the custom path with HWI's canonical
+BIP84 keypool arguments but still reopened Groot's cached HID path directly.
+Physical Testnet4 testing disproved that correction on both an original
+BitBox02 and a Nova, while Trezor and Ledger imports passed in the same package.
+The common failure boundary is therefore BitBox's post-enumeration direct-path
+reopen, not the test-chain derivation or aggregate multi-device filtering.
+
 A subsequent packaged Nova test showed two further UX problems. HWI closes the
 enumeration client before Groot opens the exact-path account-key client, and
 BitBox can request its password again for that new secure connection. Groot
@@ -49,8 +56,13 @@ an endless scan when one backend stalls.
   interactive operation may cancel it and excess discovery still fails busy.
 - Only an explicit user scan starts discovery. Groot never retries a timed-out
   scan automatically.
-- Initial BitBox account-key import may reopen the same opaque path up to three
-  times when HWI returns only code `-3`, `-9`, `-12`, or `-15`. Code `-9` is
+- Initial BitBox account-key import lets HWI rediscover and open the signer
+  inside the selected account-key subprocess instead of reopening Groot's
+  cached low-level path. When discovery returned a fingerprint, Groot supplies
+  it as the exact selector. A fingerprint-less selection is allowed only when
+  the cached scan contains exactly one BitBox family row; otherwise it fails
+  ambiguous before starting the command. The account-key operation may retry
+  up to three times when HWI returns only code `-3`, `-9`, `-12`, or `-15`. Code `-9` is
   retryable only in this BitBox initial-import boundary, where Groot supplies a
   fixed valid BIP84 or BIP48 path; it does not make an unsupported operation
   acceptable. The retries remain inside the existing interactive lease. Cancellation, timeout, malformed
@@ -67,7 +79,9 @@ an endless scan when one backend stalls.
   Multisig import retains the exact BIP48 keypool operation.
 - An account-key failure keeps a direct retry action for the selected
   capability instead of making another aggregate scan the primary recovery.
-- A returned path remains an opaque capability. Initial import, health,
+- A returned path remains an opaque capability. BitBox initial single-key
+  import redeems that capability into an HWI-owned fingerprint or unique-family
+  selection rather than forwarding its stale HID path. Health,
   display, policy, and signing still require their existing fresh full identity
   proof under the action lease.
 - The scan UI tells the user to follow any unlock prompt on the signer while
@@ -88,6 +102,7 @@ A locked BitBox02 has 90 seconds to complete the vendor password interaction
 before HWI returns its aggregate discovery record. A genuinely stalled scan is
 therefore bounded and cancelable without appearing to hang for five minutes.
 The selected-device connection still has five minutes for password entry and
-review. A transient Nova HID handoff costs at most two short reopen delays
-without weakening the atomic fingerprint/account-key proof. Physical retesting
+review. HWI now owns BitBox rediscovery and account-key extraction within that
+one bounded process, without weakening the atomic fingerprint/account-key
+proof or placing device metadata in process arguments. Physical retesting
 remains required; automated fixtures do not prove vendor timing or USB behavior.

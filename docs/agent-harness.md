@@ -145,12 +145,15 @@ Current local status on 2026-08-24:
   scan, so discovery is now capped at 90 seconds while selected-device review
   retains five minutes;
   physical retesting is still required before recording a pass.
-- The following packaged BitBox02 Nova attempt completed discovery but returned
-  sanitized `hardware_unavailable` from initial account-key import. Repeating
-  the primary action unnecessarily repeated aggregate discovery. The corrective
-  candidate retains the selected capability, retries only typed HWI transient
-  reopen codes, and localizes the scan title; exact-model physical retesting is
-  still required.
+- Packaged v0.4.29 testing subsequently disproved transient retries, custom-path
+  keypool, direct-`getxpub` re-attestation, and canonical BIP84 keypool over
+  Groot's cached HID path. The last candidate failed on both original BitBox02
+  and Nova while Trezor and Ledger passed in the same package. Initial BitBox
+  single-key import now lets HWI rediscover and open the signer inside the
+  account-key subprocess, using a known fingerprint or requiring exactly one
+  fingerprint-less BitBox row. The HID path is not forwarded and the complete
+  live identity proof remains mandatory; separate exact-model physical retests
+  are still required.
 
 GitHub issue state is intentionally not duplicated as a large static list. The
 live tracker is <https://github.com/thibistaken/groot/issues>. At this snapshot,
