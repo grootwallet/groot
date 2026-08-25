@@ -23,7 +23,11 @@ const MAX_OUTPUT_BYTES: u64 = 384 * 1024;
 const PIPE_CLEANUP_TIMEOUT: Duration = Duration::from_secs(2);
 const CANCELLATION_CLEANUP_TIMEOUT: Duration = Duration::from_secs(5);
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(90);
-const DISCOVERY_TIMEOUT: Duration = Duration::from_secs(30);
+// HWI 3.2.0 opens and initializes every BitBox02 client before `enumerate`
+// can return its path-only row. A locked device can therefore ask for its
+// password during aggregate discovery itself, before Groot has a capability
+// that could start a separate interactive request.
+const DISCOVERY_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 const USER_REVIEW_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 const HWI_DIGEST_HEX_BYTES: usize = 64;
 const HWI_FIXED_ARGV: &[&str] = &["--stdin"];
@@ -1506,10 +1510,10 @@ mod tests {
     }
 
     #[test]
-    fn discovery_is_bounded_below_interactive_device_review() {
-        assert_eq!(DISCOVERY_TIMEOUT, Duration::from_secs(30));
-        assert!(DISCOVERY_TIMEOUT < DEFAULT_TIMEOUT);
-        assert!(DEFAULT_TIMEOUT < USER_REVIEW_TIMEOUT);
+    fn aggregate_discovery_allows_locked_bitbox_password_entry() {
+        assert_eq!(DISCOVERY_TIMEOUT, Duration::from_secs(5 * 60));
+        assert!(DEFAULT_TIMEOUT < DISCOVERY_TIMEOUT);
+        assert_eq!(DISCOVERY_TIMEOUT, USER_REVIEW_TIMEOUT);
     }
 
     #[test]

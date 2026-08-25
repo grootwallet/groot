@@ -428,6 +428,9 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   await expect(
     page.getByRole('status', { name: 'Hardware wallet setup in progress' })
   ).toContainText('Scanning');
+  await expect(
+    page.getByRole('status', { name: 'Hardware wallet setup in progress' })
+  ).toContainText('Follow any unlock prompt on the signer. Keep other wallet apps closed.');
   await page.getByRole('button', { name: /Virtual Coldcard/ }).click();
   await expect(
     page.getByRole('status', { name: 'Hardware wallet setup in progress' })

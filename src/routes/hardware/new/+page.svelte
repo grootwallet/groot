@@ -645,7 +645,7 @@
       detail={translate(
         $locale,
         hardwareProgress.startsWith('Scanning')
-          ? 'Keep the signer connected. Quit other wallet apps.'
+          ? 'Follow any unlock prompt on the signer. Keep other wallet apps closed.'
           : hardwareProgress.includes('Ledger')
             ? 'Keep Bitcoin Test open for Regtest and follow any prompt on the Ledger screen.'
             : 'Keep the signer connected and unlocked.'

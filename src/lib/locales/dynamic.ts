@@ -380,6 +380,10 @@ export const dynamicCopy = {
     fr: 'Gardez le signataire connecté. Quittez les autres applications de portefeuille.',
     es: 'Mantén el firmante conectado. Cierra otras aplicaciones de cartera.'
   },
+  'Follow any unlock prompt on the signer. Keep other wallet apps closed.': {
+    fr: 'Suivez toute demande de déverrouillage sur le signataire. Gardez les autres applications de portefeuille fermées.',
+    es: 'Sigue cualquier solicitud de desbloqueo en el firmante. Mantén cerradas las demás aplicaciones de cartera.'
+  },
   'Load backup file': { fr: 'Charger le fichier de sauvegarde', es: 'Cargar archivo de copia' },
   'Load wallet backup': {
     fr: 'Charger la sauvegarde du portefeuille',
