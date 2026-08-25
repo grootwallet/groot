@@ -1686,6 +1686,36 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     this._multisigProposals.set(proposal.proposalId, proposal);
     return structuredClone(proposal);
   }
+  async prepareMultisigPolicyRenewal(
+    outpoint: string,
+    rawLabel: string,
+    selectedRate: ReturnType<typeof feeRate>
+  ) {
+    const coin = this._coins.find((candidate) => candidate.outpoint === outpoint);
+    if (!coin || coin.frozen)
+      throw new WalletError('coin_unavailable', 'The selected coin is not available.');
+    if (coin.policyMaturity?.state !== 'mature')
+      throw new WalletError(
+        'coin_unavailable',
+        'The extra recovery or heir key cannot spend this coin yet.'
+      );
+    const fee = Math.ceil(Number(selectedRate) * 220);
+    const proposal = await this.prepareMultisigPayment(
+      fixtureAddressForNetwork('tb1qrenewedprotection0000000000000000000000'),
+      rawLabel,
+      sats(coin.amount - fee),
+      selectedRate,
+      { mode: 'manual', outpoints: [outpoint] }
+    );
+    proposal.selectionImpact = {
+      ...proposal.selectionImpact,
+      provenanceState: coin.provenance.state,
+      hasUnknownProvenance: coin.provenance.state === 'unknown',
+      fundingLabels: structuredClone(coin.provenance.labels)
+    };
+    this._multisigProposals.set(proposal.proposalId, proposal);
+    return structuredClone(proposal);
+  }
   async prepareMultisigAcceleration(
     txid: string,
     method: import('./contracts').AccelerationMethod,

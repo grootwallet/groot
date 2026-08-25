@@ -281,6 +281,7 @@ describe('wallet invariants', () => {
     expect(
       policyMaturitySummary(coins, { height: 200_000, observedAt: null, status: 'stale' })
     ).toEqual({
+      policyType: 'recovery',
       total: 3,
       unconfirmed: 1,
       immature: 0,
@@ -307,6 +308,7 @@ describe('wallet invariants', () => {
         { height: 200_000, observedAt: '1', status: 'recent' }
       )
     ).toEqual({
+      policyType: 'recovery',
       total: 1,
       unconfirmed: 0,
       immature: 1,
@@ -322,6 +324,18 @@ describe('wallet invariants', () => {
         status: 'recent'
       })
     ).toMatchObject({ nextRemainingBlocks: null, chainCurrent: true });
+    expect(
+      policyMaturitySummary(
+        [
+          coins[0],
+          {
+            ...coins[1],
+            policyMaturity: { ...coins[1].policyMaturity!, policyType: 'inheritance' }
+          }
+        ],
+        { height: 200_000, observedAt: '1', status: 'recent' }
+      )
+    ).toBeNull();
   });
 
   it('rejects hostile maturity DTO values and formats time as secondary approximation', () => {

@@ -1,6 +1,43 @@
 import type { CatalogSection } from './types';
 
 export const multisigCopy = {
+  'When the extra key can spend': {
+    fr: 'Quand la clé supplémentaire peut dépenser',
+    es: 'Cuándo puede gastar la clave adicional'
+  },
+  'Each confirmed coin has its own wait before the recovery or heir key can spend it.': {
+    fr: 'Chaque pièce confirmée a sa propre attente avant que la clé de récupération ou d’héritier puisse la dépenser.',
+    es: 'Cada moneda confirmada tiene su propia espera antes de que la clave de recuperación o del heredero pueda gastarla.'
+  },
+  '{count} can be spent': {
+    fr: '{count} peuvent être dépensées',
+    es: 'Se pueden gastar {count}'
+  },
+  '{count} unlocking soon': {
+    fr: '{count} bientôt déverrouillées',
+    es: '{count} se desbloquearán pronto'
+  },
+  'All extra keys locked': {
+    fr: 'Toutes les clés supplémentaires sont verrouillées',
+    es: 'Todas las claves adicionales están bloqueadas'
+  },
+  'Key locked': { fr: 'Clé verrouillée', es: 'Clave bloqueada' },
+  'Unlocking soon': { fr: 'Bientôt déverrouillée', es: 'Se desbloqueará pronto' },
+  'Can spend': { fr: 'Peut dépenser', es: 'Puede gastar' },
+  'Why this changes your wallet security': {
+    fr: 'Pourquoi cela change la sécurité de votre portefeuille',
+    es: 'Por qué esto cambia la seguridad de tu cartera'
+  },
+  'After the wait, the recovery or heir key can spend that coin alone. The coin does not expire, and your normal 2-of-3 keys still work.':
+    {
+      fr: 'Après l’attente, la clé de récupération ou d’héritier peut dépenser seule cette pièce. La pièce n’expire pas et vos clés normales 2 sur 3 fonctionnent toujours.',
+      es: 'Tras la espera, la clave de recuperación o del heredero puede gastar esa moneda por sí sola. La moneda no caduca y tus claves normales 2 de 3 siguen funcionando.'
+    },
+  'To lock the extra key again, choose Renew protection for that coin. Groot moves only that coin and starts a new wait after confirmation.':
+    {
+      fr: 'Pour reverrouiller la clé supplémentaire, choisissez Renouveler la protection pour cette pièce. Groot ne déplace que cette pièce et démarre une nouvelle attente après confirmation.',
+      es: 'Para volver a bloquear la clave adicional, elige Renovar protección para esa moneda. Groot mueve solo esa moneda e inicia una nueva espera tras la confirmación.'
+    },
   'INHERITANCE TIMELINE': { fr: 'CALENDRIER D’HÉRITAGE', es: 'CRONOLOGÍA DE HERENCIA' },
   'RECOVERY TIMELINE': { fr: 'CALENDRIER DE RÉCUPÉRATION', es: 'CRONOLOGÍA DE RECUPERACIÓN' },
   'Per-coin maturity': { fr: 'Maturité par pièce', es: 'Madurez por moneda' },

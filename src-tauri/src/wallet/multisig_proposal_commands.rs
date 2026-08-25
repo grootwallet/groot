@@ -45,6 +45,34 @@ fn copy_network_setup_before_profile_commit(
     Ok(false)
 }
 
+pub(crate) fn build_policy_renewal(
+    wallet: &mut Wallet,
+    selected: OutPoint,
+    rate: FeeRate,
+) -> ApiResult<(Psbt, Address)> {
+    let policy_paths = immediate_policy_paths(wallet)?;
+    let destination = wallet.next_unused_address(KeychainKind::Internal).address;
+    let destination_script = destination.script_pubkey();
+    let mut builder = wallet.build_tx();
+    builder
+        .add_utxo(selected)
+        .map_err(|_| {
+            api_error(
+                "coin_unavailable",
+                "The selected coin is not available in this wallet.",
+            )
+        })?
+        .manually_selected_only()
+        .drain_to(destination_script)
+        .fee_rate(rate)
+        .add_global_xpubs();
+    for (keychain, path) in policy_paths {
+        builder.policy_path(path, keychain);
+    }
+    let psbt = builder.finish().map_err(create_tx_api_error)?;
+    Ok((psbt, destination))
+}
+
 #[tauri::command]
 pub fn multisig_tx_prepare(
     app: AppHandle,
@@ -88,6 +116,7 @@ pub fn multisig_tx_prepare(
     let rate = FeeRate::from_sat_per_vb(applied_fee_rate as u64)
         .ok_or_else(|| api_error("invalid_amount", "Fee rate must be greater than zero."))?;
     let metadata = read_multisig_metadata(&app)?;
+    let uses_delayed_policy = delayed_policy_context(&metadata)?.is_some();
     let mut db = open_multisig_db(&app)?;
     let mut transaction = db.transaction().map_err(internal)?;
     let selection_strategy = coin_selection.strategy_name().to_owned();
@@ -102,6 +131,11 @@ pub fn multisig_tx_prepare(
         label_provenance::reconcile_wallet_outputs(&comparison_wallet, &transaction, now())
             .map_err(internal)?;
         let privacy = label_provenance::coin_privacy_map(&transaction).map_err(internal)?;
+        let policy_paths = if uses_delayed_policy {
+            immediate_policy_paths(&comparison_wallet)?
+        } else {
+            Vec::new()
+        };
         let private_psbt = build_automatic_payment(
             &mut comparison_wallet,
             AutomaticPaymentOptions {
@@ -112,6 +146,7 @@ pub fn multisig_tx_prepare(
                 strategy: AutomaticSelectionStrategy::Private,
                 privacy,
                 global_xpubs: true,
+                policy_paths,
             },
         )?;
         let fee = private_psbt
@@ -129,6 +164,11 @@ pub fn multisig_tx_prepare(
             label_provenance::reconcile_wallet_outputs(&wallet, &transaction, now())
                 .map_err(internal)?;
             let privacy = label_provenance::coin_privacy_map(&transaction).map_err(internal)?;
+            let policy_paths = if uses_delayed_policy {
+                immediate_policy_paths(&wallet)?
+            } else {
+                Vec::new()
+            };
             build_automatic_payment(
                 &mut wallet,
                 AutomaticPaymentOptions {
@@ -139,11 +179,17 @@ pub fn multisig_tx_prepare(
                     strategy,
                     privacy,
                     global_xpubs: true,
+                    policy_paths,
                 },
             )?
         }
         CoinSelectionInput::Manual { outpoints } => {
             let selected = validate_manual_outpoints(&outpoints, &frozen)?;
+            let policy_paths = if uses_delayed_policy {
+                immediate_policy_paths(&wallet)?
+            } else {
+                Vec::new()
+            };
             let mut builder = wallet.build_tx();
             builder
                 .add_recipient(address.script_pubkey(), Amount::from_sat(amount))
@@ -157,6 +203,9 @@ pub fn multisig_tx_prepare(
                     )
                 })?
                 .manually_selected_only();
+            for (keychain, path) in policy_paths {
+                builder.policy_path(path, keychain);
+            }
             builder.finish().map_err(create_tx_api_error)?
         }
     };
@@ -172,6 +221,124 @@ pub fn multisig_tx_prepare(
     transaction.execute(
         "INSERT INTO groot_proposals (proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at, selection_strategy, fee_difference_vs_private) VALUES (?1,?2,?3,?4,?5,?6,?7,'collecting',?8,?9,?10)",
         params![proposal_id, address.to_string(), label, amount, fee, applied_fee_rate, encoded, created_at, selection_strategy, fee_difference_vs_private],
+    ).map_err(internal)?;
+    label_provenance::assign_payment_intent(&transaction, &label, &proposal_id, created_at, false)
+        .map_err(|error| {
+            if error.sqlite_error_code()
+                == Some(bdk_wallet::rusqlite::ErrorCode::ConstraintViolation)
+            {
+                api_error(
+                    "invalid_label",
+                    "Permanent labels cannot be reused for a different payment.",
+                )
+            } else {
+                internal(error)
+            }
+        })?;
+    wallet.persist(&mut transaction).map_err(internal)?;
+    drop(wallet);
+    transaction.commit().map_err(internal)?;
+    load_multisig_proposal(&mut db, &metadata, &proposal_id)
+}
+
+#[tauri::command]
+pub fn multisig_policy_renewal_prepare(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    outpoint: String,
+    label: String,
+    fee_rate: f64,
+) -> ApiResult<MultisigProposalDto> {
+    let _operation = operation_guard(&state)?;
+    require_unlocked(&app, &state)?;
+    let label = normalize_label(&label)?;
+    let applied_fee_rate = fee_rate.ceil();
+    let rate = FeeRate::from_sat_per_vb(applied_fee_rate as u64)
+        .filter(|_| fee_rate.is_finite() && fee_rate > 0.0 && fee_rate <= 10_000.0)
+        .ok_or_else(|| {
+            api_error(
+                "invalid_amount",
+                "Fee rate must be between 0 and 10,000 sat/vB.",
+            )
+        })?;
+    let selected = OutPoint::from_str(outpoint.trim()).map_err(|_| {
+        api_error(
+            "coin_unavailable",
+            "The selected coin is not available in this wallet.",
+        )
+    })?;
+    let metadata = read_multisig_metadata(&app)?;
+    let delayed_policy = selected_delayed_policy_context(&app)?.ok_or_else(|| {
+        api_error(
+            "unknown_spending_path",
+            "Protection renewal is available only for a verified Recovery or Inheritance wallet.",
+        )
+    })?;
+    let mut db = open_multisig_db(&app)?;
+    let mut transaction = db.transaction().map_err(internal)?;
+    let frozen = frozen_outpoints(&transaction)?;
+    if frozen.contains(&selected) {
+        return Err(api_error(
+            "coin_unavailable",
+            "Unfreeze this coin before renewing its protection.",
+        ));
+    }
+    let mut wallet = load_wallet_transaction(&mut transaction)?;
+    let snapshot = snapshot_from(&wallet, &transaction, None, true, Some(&delayed_policy))?;
+    if snapshot.chain_tip.status != "recent" {
+        return Err(api_error(
+            "network_unavailable",
+            "Sync this wallet before renewing protection so coin maturity can be verified.",
+        ));
+    }
+    let coin = snapshot
+        .utxos
+        .iter()
+        .find(|coin| coin.outpoint == selected.to_string())
+        .ok_or_else(|| {
+            api_error(
+                "coin_unavailable",
+                "The selected coin is not available in this wallet.",
+            )
+        })?;
+    if !matches!(
+        coin.policy_maturity.as_ref().map(|value| value.state),
+        Some(MaturityState::Mature)
+    ) {
+        return Err(api_error(
+            "coin_unavailable",
+            "The extra recovery or heir key cannot spend this coin yet.",
+        ));
+    }
+
+    let (psbt, destination) = build_policy_renewal(&mut wallet, selected, rate)?;
+    let destination_address = destination.to_string();
+    let destination_script = destination.script_pubkey();
+    enforce_change_recovery_gap(&transaction, &wallet, &psbt)?;
+    let amount = psbt
+        .unsigned_tx
+        .output
+        .iter()
+        .find(|output| output.script_pubkey == destination_script)
+        .map(|output| output.value.to_sat())
+        .ok_or_else(|| {
+            api_error(
+                "insufficient_funds",
+                "The selected coin cannot cover the network fee.",
+            )
+        })?;
+    crate::release_policy::validate_spend(NETWORK, 1, amount)
+        .map_err(|_| api_error("invalid_amount", "This spend is blocked by release policy."))?;
+    let fee = psbt
+        .fee_amount()
+        .ok_or_else(|| internal("Unable to calculate the transaction fee."))?
+        .to_sat();
+    let proposal_id = Uuid::new_v4().to_string();
+    let encoded = encode_psbt(&psbt);
+    let created_at = now();
+    transaction.execute(
+        "INSERT INTO groot_proposals (proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at, selection_strategy, fee_difference_vs_private) VALUES (?1,?2,?3,?4,?5,?6,?7,'collecting',?8,'manual',NULL)",
+        params![proposal_id, destination_address, label, amount, fee, applied_fee_rate, encoded, created_at],
     ).map_err(internal)?;
     label_provenance::assign_payment_intent(&transaction, &label, &proposal_id, created_at, false)
         .map_err(|error| {
@@ -225,6 +392,7 @@ pub fn multisig_tx_max_spend(
                 "Fee rate must be between 0 and 10,000 sat/vB.",
             )
         })?;
+    let uses_delayed_policy = selected_delayed_policy_context(&app)?.is_some();
     let mut db = open_multisig_db(&app)?;
     let mut transaction = db.transaction().map_err(internal)?;
     let frozen = frozen_outpoints(&transaction)?;
@@ -234,6 +402,11 @@ pub fn multisig_tx_max_spend(
             label_provenance::reconcile_wallet_outputs(&wallet, &transaction, now())
                 .map_err(internal)?;
             let privacy = label_provenance::coin_privacy_map(&transaction).map_err(internal)?;
+            let policy_paths = if uses_delayed_policy {
+                immediate_policy_paths(&wallet)?
+            } else {
+                Vec::new()
+            };
             let mut builder = wallet
                 .build_tx()
                 .coin_selection(PrivacyAwareCoinSelection::new(strategy, privacy));
@@ -243,10 +416,18 @@ pub fn multisig_tx_max_spend(
                 .fee_rate(rate)
                 .unspendable(frozen)
                 .add_global_xpubs();
+            for (keychain, path) in policy_paths {
+                builder.policy_path(path, keychain);
+            }
             builder.finish().map_err(create_tx_api_error)?
         }
         CoinSelectionInput::Manual { outpoints } => {
             let selected = validate_manual_outpoints(&outpoints, &frozen)?;
+            let policy_paths = if uses_delayed_policy {
+                immediate_policy_paths(&wallet)?
+            } else {
+                Vec::new()
+            };
             let mut builder = wallet.build_tx();
             builder
                 .add_utxos(&selected)
@@ -260,6 +441,9 @@ pub fn multisig_tx_max_spend(
                 .drain_to(address.script_pubkey())
                 .fee_rate(rate)
                 .add_global_xpubs();
+            for (keychain, path) in policy_paths {
+                builder.policy_path(path, keychain);
+            }
             builder.finish().map_err(create_tx_api_error)?
         }
     };

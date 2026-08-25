@@ -1,6 +1,109 @@
 import type { CatalogSection } from './types';
 
 export const sendCopy = {
+  'Renew protection': { fr: 'Renouveler la protection', es: 'Renovar protección' },
+  'Move this coin within your wallet to restart its protection.': {
+    fr: 'Déplacez cette pièce dans votre portefeuille pour redémarrer sa protection.',
+    es: 'Mueve esta moneda dentro de tu cartera para reiniciar su protección.'
+  },
+  'Review the renewal, then approve it with your usual keys.': {
+    fr: 'Vérifiez le renouvellement, puis approuvez-le avec vos clés habituelles.',
+    es: 'Revisa la renovación y apruébala con tus claves habituales.'
+  },
+  'Lock the extra key again': {
+    fr: 'Reverrouiller la clé supplémentaire',
+    es: 'Volver a bloquear la clave adicional'
+  },
+  'Only this coin moves. Its protection restarts after the new coin confirms.': {
+    fr: 'Seule cette pièce est déplacée. Sa protection redémarre après confirmation de la nouvelle pièce.',
+    es: 'Solo se mueve esta moneda. Su protección se reinicia cuando se confirma la nueva moneda.'
+  },
+  'How it works': { fr: 'Comment cela fonctionne', es: 'Cómo funciona' },
+  'Your usual 2-of-3 keys approve the move. The {key} is not used.': {
+    fr: 'Vos clés habituelles 2 sur 3 approuvent le déplacement. La {key} n’est pas utilisée.',
+    es: 'Tus claves habituales 2 de 3 aprueban el movimiento. La {key} no se utiliza.'
+  },
+  'After confirmation, the new coin gets a fresh {count}-block wait.': {
+    fr: 'Après confirmation, la nouvelle pièce bénéficie d’une nouvelle attente de {count} blocs.',
+    es: 'Tras la confirmación, la nueva moneda recibe una nueva espera de {count} bloques.'
+  },
+  'The fee comes from this coin. No other coin is combined, but the move remains visible onchain.':
+    {
+      fr: 'Les frais proviennent de cette pièce. Aucune autre pièce n’est combinée, mais le déplacement reste visible sur la blockchain.',
+      es: 'La comisión sale de esta moneda. No se combina ninguna otra moneda, pero el movimiento sigue visible en la cadena.'
+    },
+  'Protection renewal broadcast': {
+    fr: 'Renouvellement de protection diffusé',
+    es: 'Renovación de protección transmitida'
+  },
+  'COIN PROTECTION': { fr: 'PROTECTION DE LA PIÈCE', es: 'PROTECCIÓN DE LA MONEDA' },
+  'Renew this coin’s protection': {
+    fr: 'Renouveler la protection de cette pièce',
+    es: 'Renovar la protección de esta moneda'
+  },
+  'Choose a label and fee. You will review everything before signing.': {
+    fr: 'Choisissez un libellé et des frais. Vous vérifierez tout avant de signer.',
+    es: 'Elige una etiqueta y una comisión. Revisarás todo antes de firmar.'
+  },
+  'Coin being renewed': { fr: 'Pièce renouvelée', es: 'Moneda que se renueva' },
+  '{key} can spend now': {
+    fr: '{key} peut dépenser maintenant',
+    es: '{key} puede gastar ahora'
+  },
+  'Permanent transaction label': {
+    fr: 'Libellé permanent de la transaction',
+    es: 'Etiqueta permanente de la transacción'
+  },
+  'e.g. Renew savings protection': {
+    fr: 'p. ex. Renouveler la protection de l’épargne',
+    es: 'p. ej. Renovar protección de ahorros'
+  },
+  'Required · cannot be changed or reused': {
+    fr: 'Requis · non modifiable et non réutilisable',
+    es: 'Obligatoria · no se puede cambiar ni reutilizar'
+  },
+  'Protection renewal could not be prepared': {
+    fr: 'Le renouvellement de protection n’a pas pu être préparé',
+    es: 'No se pudo preparar la renovación de protección'
+  },
+  'Preparing renewal…': { fr: 'Préparation du renouvellement…', es: 'Preparando renovación…' },
+  'Review protection renewal': {
+    fr: 'Vérifier le renouvellement',
+    es: 'Revisar renovación de protección'
+  },
+  'New protected coin': { fr: 'Nouvelle pièce protégée', es: 'Nueva moneda protegida' },
+  'New wallet address': {
+    fr: 'Nouvelle adresse du portefeuille',
+    es: 'Nueva dirección de la cartera'
+  },
+  'Protection restarts after confirmation': {
+    fr: 'La protection redémarre après confirmation',
+    es: 'La protección se reinicia tras la confirmación'
+  },
+  'Only this coin moves. The network fee is the only amount leaving your wallet.': {
+    fr: 'Seule cette pièce est déplacée. Les frais de réseau sont le seul montant qui quitte votre portefeuille.',
+    es: 'Solo se mueve esta moneda. La comisión de red es la única cantidad que sale de tu cartera.'
+  },
+  'Protection renewal unavailable': {
+    fr: 'Renouvellement de protection indisponible',
+    es: 'Renovación de protección no disponible'
+  },
+  'Choose one coin whose recovery or heir key can already spend.': {
+    fr: 'Choisissez une pièce que la clé de récupération ou d’héritier peut déjà dépenser.',
+    es: 'Elige una moneda que la clave de recuperación o del heredero ya pueda gastar.'
+  },
+  'Sync the wallet before renewing protection.': {
+    fr: 'Synchronisez le portefeuille avant de renouveler la protection.',
+    es: 'Sincroniza la cartera antes de renovar la protección.'
+  },
+  'Payment already in progress': {
+    fr: 'Paiement déjà en cours',
+    es: 'Ya hay un pago en curso'
+  },
+  'Finish or cancel it before renewing another coin.': {
+    fr: 'Terminez-le ou annulez-le avant de renouveler une autre pièce.',
+    es: 'Termínalo o cancélalo antes de renovar otra moneda.'
+  },
   'Automatic selection': { fr: 'Sélection automatique', es: 'Selección automática' },
   '{source} signer': { fr: 'Signataire {source}', es: 'Firmante {source}' },
   'Manual · {count} coin': { fr: 'Manuel · {count} pièce', es: 'Manual · {count} moneda' },

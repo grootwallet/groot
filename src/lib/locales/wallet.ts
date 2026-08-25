@@ -1,6 +1,100 @@
 import type { CatalogSection } from './types';
 
 export const walletCopy = {
+  'Recovery key': { fr: 'Clé de récupération', es: 'Clave de recuperación' },
+  'Heir key': { fr: 'Clé d’héritier', es: 'Clave del heredero' },
+  '{key} unlocks soon': {
+    fr: '{key} sera bientôt déverrouillée',
+    es: '{key} se desbloqueará pronto'
+  },
+  '{key} can now spend a coin': {
+    fr: '{key} peut maintenant dépenser une pièce',
+    es: '{key} ya puede gastar una moneda'
+  },
+  '{count} blocks remain before it can spend one coin.': {
+    fr: 'Il reste {count} blocs avant qu’elle puisse dépenser une pièce.',
+    es: 'Quedan {count} bloques antes de que pueda gastar una moneda.'
+  },
+  'Your normal 2-of-3 keys still work. Review the coin or renew its protection.': {
+    fr: 'Vos clés normales 2 sur 3 fonctionnent toujours. Vérifiez la pièce ou renouvelez sa protection.',
+    es: 'Tus claves normales 2 de 3 siguen funcionando. Revisa la moneda o renueva su protección.'
+  },
+  '{count} coins can now be spent with the {key}': {
+    fr: '{count} pièces peuvent maintenant être dépensées avec la {key}',
+    es: '{count} monedas ya pueden gastarse con la {key}'
+  },
+  '{key} unlocks soon for {count} coins': {
+    fr: '{key} sera bientôt déverrouillée pour {count} pièces',
+    es: '{key} se desbloqueará pronto para {count} monedas'
+  },
+  '{key} is still locked': {
+    fr: '{key} est encore verrouillée',
+    es: '{key} sigue bloqueada'
+  },
+  'Next key change in {count} blocks · times are approximate': {
+    fr: 'Prochain changement de clé dans {count} blocs · les durées sont approximatives',
+    es: 'Próximo cambio de clave en {count} bloques · los tiempos son aproximados'
+  },
+  'The extra key can spend every confirmed coin shown.': {
+    fr: 'La clé supplémentaire peut dépenser chaque pièce confirmée affichée.',
+    es: 'La clave adicional puede gastar cada moneda confirmada mostrada.'
+  },
+  'Your normal 2-of-3 keys still work for every coin.': {
+    fr: 'Vos clés normales 2 sur 3 fonctionnent toujours pour chaque pièce.',
+    es: 'Tus claves normales 2 de 3 siguen funcionando para cada moneda.'
+  },
+  'Each coin has its own protection timeline': {
+    fr: 'Chaque pièce a son propre calendrier de protection',
+    es: 'Cada moneda tiene su propio calendario de protección'
+  },
+  'The recovery or heir key unlocks separately for each coin. Your normal 2-of-3 keys always remain available.':
+    {
+      fr: 'La clé de récupération ou d’héritier se déverrouille séparément pour chaque pièce. Vos clés normales 2 sur 3 restent toujours disponibles.',
+      es: 'La clave de recuperación o del heredero se desbloquea por separado para cada moneda. Tus claves normales 2 de 3 siempre siguen disponibles.'
+    },
+  '{key} can spend': { fr: '{key} peut dépenser', es: '{key} puede gastar' },
+  '{key} unlocks in {count} blocks': {
+    fr: '{key} se déverrouille dans {count} blocs',
+    es: '{key} se desbloquea en {count} bloques'
+  },
+  'Protection starts after confirmation': {
+    fr: 'La protection commence après confirmation',
+    es: 'La protección comienza tras la confirmación'
+  },
+  '{key} locked': { fr: '{key} verrouillée', es: '{key} bloqueada' },
+  'Extra key': { fr: 'Clé supplémentaire', es: 'Clave adicional' },
+  'Waiting for confirmation': {
+    fr: 'En attente de confirmation',
+    es: 'Esperando confirmación'
+  },
+  '{key} can spend this coin': {
+    fr: '{key} peut dépenser cette pièce',
+    es: '{key} puede gastar esta moneda'
+  },
+  '{key} is locked': { fr: '{key} est verrouillée', es: '{key} está bloqueada' },
+  'Exact timeline': { fr: 'Calendrier exact', es: 'Calendario exacto' },
+  'Extra key unlocked at block {height}': {
+    fr: 'Clé supplémentaire déverrouillée au bloc {height}',
+    es: 'Clave adicional desbloqueada en el bloque {height}'
+  },
+  '{key} can now spend this coin alone. Your normal 2-of-3 keys still work.': {
+    fr: '{key} peut maintenant dépenser seule cette pièce. Vos clés normales 2 sur 3 fonctionnent toujours.',
+    es: '{key} ya puede gastar esta moneda por sí sola. Tus claves normales 2 de 3 siguen funcionando.'
+  },
+  '{key} cannot spend this coin yet. Your normal 2-of-3 keys work now and remain available later.':
+    {
+      fr: '{key} ne peut pas encore dépenser cette pièce. Vos clés normales 2 sur 3 fonctionnent maintenant et resteront disponibles.',
+      es: '{key} aún no puede gastar esta moneda. Tus claves normales 2 de 3 funcionan ahora y seguirán disponibles.'
+    },
+  'Want the extra key locked again?': {
+    fr: 'Vous voulez reverrouiller la clé supplémentaire ?',
+    es: '¿Quieres volver a bloquear la clave adicional?'
+  },
+  'Move only this coin within your wallet. Its protection restarts after confirmation.': {
+    fr: 'Déplacez uniquement cette pièce dans votre portefeuille. Sa protection redémarre après confirmation.',
+    es: 'Mueve solo esta moneda dentro de tu cartera. Su protección se reinicia tras la confirmación.'
+  },
+  'Renew protection': { fr: 'Renouveler la protection', es: 'Renovar protección' },
   'Recovery path approaching maturity': {
     fr: 'Le chemin de récupération approche de la maturité',
     es: 'La ruta de recuperación se acerca a la madurez'

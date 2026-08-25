@@ -679,6 +679,14 @@ export class TauriWalletAdapter implements WalletPort {
       coinSelection
     });
   }
+
+  prepareMultisigPolicyRenewal(outpoint: string, label: string, feeRate: FeeRate) {
+    return command<MultisigProposal>('multisig_policy_renewal_prepare', {
+      outpoint,
+      label,
+      feeRate: Number(feeRate)
+    });
+  }
   prepareMultisigAcceleration(
     txid: string,
     method: import('./contracts').AccelerationMethod,

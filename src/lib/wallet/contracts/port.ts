@@ -260,6 +260,11 @@ export interface WalletMultisigPort {
     feeRate: FeeRate,
     coinSelection?: CoinSelection
   ): Promise<MultisigProposal>;
+  prepareMultisigPolicyRenewal(
+    outpoint: string,
+    label: string,
+    feeRate: FeeRate
+  ): Promise<MultisigProposal>;
   prepareMultisigAcceleration(
     txid: string,
     method: AccelerationMethod,

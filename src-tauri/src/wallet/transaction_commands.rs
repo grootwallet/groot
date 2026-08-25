@@ -112,6 +112,7 @@ pub fn tx_prepare(
                 strategy: AutomaticSelectionStrategy::Private,
                 privacy,
                 global_xpubs: false,
+                policy_paths: Vec::new(),
             },
         )?;
         let fee = private_psbt
@@ -139,6 +140,7 @@ pub fn tx_prepare(
                     strategy,
                     privacy,
                     global_xpubs: false,
+                    policy_paths: Vec::new(),
                 },
             )?
         }

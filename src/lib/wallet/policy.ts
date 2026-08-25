@@ -93,6 +93,7 @@ export function addressReuseInsights(
 }
 
 export type PolicyMaturitySummary = {
+  policyType: 'recovery' | 'inheritance';
   total: number;
   unconfirmed: number;
   immature: number;
@@ -130,10 +131,13 @@ export function policyMaturitySummary(
 ): PolicyMaturitySummary | null {
   const maturities = coins.map(validPolicyMaturity).filter((value) => value !== null);
   if (!maturities.length) return null;
+  const policyType = maturities[0].policyType;
+  if (maturities.some((value) => value.policyType !== policyType)) return null;
   const remaining = maturities
     .map((value) => value.remainingBlocks)
     .filter((value): value is number => value !== null && value > 0);
   return {
+    policyType,
     total: maturities.length,
     unconfirmed: maturities.filter((value) => value.state === 'unconfirmed').length,
     immature: maturities.filter((value) => value.state === 'immature').length,

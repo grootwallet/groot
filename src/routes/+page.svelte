@@ -498,36 +498,31 @@
           >{translate(
             $locale,
             maturitySummary.mature > 0
-              ? '{count} coins have a matured delayed path'
+              ? '{count} coins can now be spent with the {key}'
               : maturitySummary.approaching > 0
-                ? '{count} coins are approaching delayed-path maturity'
-                : 'Delayed paths are still immature',
+                ? '{key} unlocks soon for {count} coins'
+                : '{key} is still locked',
             {
               count:
-                maturitySummary.mature > 0 ? maturitySummary.mature : maturitySummary.approaching
+                maturitySummary.mature > 0 ? maturitySummary.mature : maturitySummary.approaching,
+              key: translate(
+                $locale,
+                maturitySummary.policyType === 'inheritance' ? 'Heir key' : 'Recovery key'
+              )
             }
           )}</strong
         ><small
           >{maturitySummary.chainCurrent
             ? maturitySummary.nextRemainingBlocks !== null
-              ? translate(
-                  $locale,
-                  'Next change in {count} blocks · approximate time is secondary',
-                  {
-                    count: formatInteger(maturitySummary.nextRemainingBlocks, $locale)
-                  }
-                )
-              : translate($locale, 'All confirmed delayed paths shown here are mature.')
+              ? translate($locale, 'Next key change in {count} blocks · times are approximate', {
+                  count: formatInteger(maturitySummary.nextRemainingBlocks, $locale)
+                })
+              : translate($locale, 'The extra key can spend every confirmed coin shown.')
             : translate(
                 $locale,
                 'Countdown paused until Groot verifies a recent chain tip. Saved coin states are shown as of the last sync.'
               )}</small
-        ><small
-          >{translate(
-            $locale,
-            'Maturity adds an independent single-key path. The normal 2-of-3 path stays valid.'
-          )}</small
-        >
+        ><small>{translate($locale, 'Your normal 2-of-3 keys still work for every coin.')}</small>
       </div>
       <Button size="small" variant="secondary" href="/coins"
         >{translate($locale, 'Review coins')}</Button

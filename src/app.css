@@ -2317,6 +2317,75 @@ code {
 .send-page.signing-page {
   max-width: 1080px;
 }
+.policy-renewal-banner {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 14px;
+  border: 1px solid color-mix(in srgb, var(--link) 30%, var(--border));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--link) 6%, var(--panel));
+}
+.policy-renewal-banner > span {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  color: var(--link);
+  background: var(--surface-icon);
+}
+.policy-renewal-banner > div {
+  min-width: 0;
+}
+.policy-renewal-banner strong {
+  font-size: 12px;
+}
+.policy-renewal-banner p,
+.policy-renewal-banner ul,
+.policy-renewal-banner details {
+  margin: 4px 0 0;
+  color: var(--text-soft);
+  font-size: 10px;
+  line-height: 1.5;
+}
+.policy-renewal-banner ul {
+  padding-left: 17px;
+}
+.policy-renewal-banner summary {
+  width: fit-content;
+  cursor: pointer;
+  color: var(--link);
+  font-weight: 650;
+}
+.policy-renewal-banner details[open] summary {
+  margin-bottom: 4px;
+}
+.renewal-coin-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 12px;
+  margin-bottom: 18px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-inset);
+}
+.renewal-coin-summary span,
+.renewal-coin-summary small {
+  color: var(--muted);
+  font-size: 10px;
+}
+.renewal-coin-summary strong {
+  grid-row: 1 / 3;
+  grid-column: 2;
+  align-self: center;
+  font-size: 13px;
+}
+.renewal-review {
+  border-color: color-mix(in srgb, var(--link) 24%, var(--border));
+}
 .multisig-signing-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 250px;
@@ -7765,6 +7834,34 @@ code {
 .coin-policy-explanation dd {
   max-width: 62ch;
   line-height: 1.45;
+}
+.coin-policy-renewal {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.coin-policy-renewal > svg {
+  padding: 6px;
+  box-sizing: content-box;
+  border-radius: 7px;
+  color: var(--link);
+  background: var(--surface-icon);
+}
+.coin-policy-renewal > div {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+.coin-policy-renewal strong {
+  font-size: 11px;
+}
+.coin-policy-renewal small {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.4;
 }
 .coin-main > span {
   color: var(--text-soft);

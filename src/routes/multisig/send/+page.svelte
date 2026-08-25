@@ -53,7 +53,11 @@
   } from '$lib/wallet';
   import type { Utxo } from '$lib/types';
   import { defaultConfig, networkName } from '$lib/config';
-  import { addressPrefixForNetwork, hasAddressPrefixForNetwork } from '$lib/wallet/policy';
+  import {
+    addressPrefixForNetwork,
+    hasAddressPrefixForNetwork,
+    validPolicyMaturity
+  } from '$lib/wallet/policy';
   import { compactAddress } from '$lib/address-display';
   import { accelerationUnavailableTitle } from '$lib/wallet/acceleration-presentation';
   import {
@@ -140,6 +144,8 @@
     showCoins = $state(false),
     available = $state(0);
   let automaticStrategy = $state<AutomaticSelectionStrategy>('balanced');
+  let renewalMode = $state(false),
+    renewalCoin = $state<Utxo | null>(null);
   let selectionPreview = $state<CoinSelectionPreview | null>(null),
     selectionPreviewRevision = 0;
   let draftStep = $state<1 | 2>(1);
@@ -189,6 +195,17 @@
     addressValid && label.trim().length > 0 && label.trim().length <= 48
   );
   const progressStep = $derived<1 | 2 | 3>(proposal ? 3 : draftStep);
+  const renewalMaturity = $derived(renewalCoin ? validPolicyMaturity(renewalCoin) : null);
+  const renewalKeyName = $derived(
+    renewalMaturity?.policyType === 'inheritance' ? 'Heir key' : 'Recovery key'
+  );
+  const renewalValid = $derived(
+    renewalMode &&
+      renewalCoin !== null &&
+      label.trim().length > 0 &&
+      label.trim().length <= 48 &&
+      customFeeValid
+  );
   const signaturesRemaining = $derived(
     proposal ? Math.max(0, proposal.required - proposal.signed) : 0
   );
@@ -273,11 +290,38 @@
       coins = snapshot.utxos;
       const url = new URL(window.location.href),
         requested = url.searchParams.get('coins')?.split(',').filter(Boolean) ?? [],
+        renewalRequested = url.searchParams.get('renewProtection') === '1',
         method = url.searchParams.get('accelerate'),
         txid = url.searchParams.get('txid');
       selectedCoins = requested.filter((outpoint) =>
         coins.some((coin) => coin.outpoint === outpoint && !coin.frozen)
       );
+      const snapshotCurrent = snapshot.chainTip.status === 'recent';
+      if (renewalRequested && proposals.length === 0 && selectedCoins.length === 1) {
+        const candidate = coins.find((coin) => coin.outpoint === selectedCoins[0]) ?? null;
+        const maturity = candidate ? validPolicyMaturity(candidate) : null;
+        if (candidate && maturity?.state === 'mature' && snapshotCurrent) {
+          renewalMode = true;
+          renewalCoin = candidate;
+        } else {
+          toast({
+            title: translate($locale, 'Protection renewal unavailable'),
+            description: translate(
+              $locale,
+              snapshotCurrent
+                ? 'Choose one coin whose recovery or heir key can already spend.'
+                : 'Sync the wallet before renewing protection.'
+            ),
+            tone: 'danger'
+          });
+        }
+      } else if (renewalRequested && proposals.length > 0) {
+        toast({
+          title: translate($locale, 'Payment already in progress'),
+          description: translate($locale, 'Finish or cancel it before renewing another coin.'),
+          tone: 'danger'
+        });
+      }
       updateAvailable();
       try {
         estimates = await walletService.estimateFees();
@@ -341,6 +385,22 @@
         cause instanceof WalletError && cause.code === 'insufficient_funds'
           ? `The amount plus network fee exceeds the ${selectedCoins.length ? 'selected coin balance' : 'available balance'}.`
           : localizedError(cause, $locale, 'Could not prepare payment.');
+    } finally {
+      busy = false;
+    }
+  }
+  async function prepareRenewal() {
+    if (!renewalValid || !renewalCoin) return;
+    busy = true;
+    error = '';
+    try {
+      proposal = await walletService.prepareMultisigPolicyRenewal(
+        renewalCoin.outpoint,
+        label,
+        feeRate(selectedRateNumber)
+      );
+    } catch (cause) {
+      error = localizedError(cause, $locale, 'Could not prepare the protection renewal.');
     } finally {
       busy = false;
     }
@@ -883,15 +943,19 @@
   <header class="page-header">
     <div>
       <p class="eyebrow">{translate($locale, 'SEND')}</p>
-      <h1>{translate($locale, 'Send bitcoin')}</h1>
+      <h1>{translate($locale, renewalMode ? 'Renew protection' : 'Send bitcoin')}</h1>
       <p class="subtitle">
         {translate(
           $locale,
-          !proposal && draftStep === 1
-            ? 'Name the payment and choose its recipient.'
-            : !proposal
-              ? 'Choose the amount, coins, and network fee.'
-              : `Review once, then collect ${wallet?.threshold ?? 'the required'} signatures.`
+          renewalMode
+            ? proposal
+              ? 'Review the renewal, then approve it with your usual keys.'
+              : 'Move this coin within your wallet to restart its protection.'
+            : !proposal && draftStep === 1
+              ? 'Name the payment and choose its recipient.'
+              : !proposal
+                ? 'Choose the amount, coins, and network fee.'
+                : `Review once, then collect ${wallet?.threshold ?? 'the required'} signatures.`
         )}
       </p>
     </div>
@@ -903,15 +967,59 @@
         >{translate($locale, 'Back')}</Button
       >{/if}
   </header>
-  {#if !txid}<SendProgress current={progressStep} />{#if wallet && !proposal}<SignerSummary
+  {#if !txid && (!renewalMode || proposal)}<SendProgress
+      current={progressStep}
+    />{#if wallet && !proposal && !renewalMode}<SignerSummary
         signers={signerItems}
         required={wallet.threshold}
         signedFingerprints={[]}
         collecting={false}
       />{/if}{/if}
+  {#if renewalMode && renewalCoin && renewalMaturity}<section
+      class="policy-renewal-banner"
+      aria-live="polite"
+    >
+      <span><RefreshCw size={18} /></span>
+      <div>
+        <strong>{translate($locale, 'Lock the extra key again')}</strong>
+        <p>
+          {translate(
+            $locale,
+            'Only this coin moves. Its protection restarts after the new coin confirms.'
+          )}
+        </p>
+        <details>
+          <summary>{translate($locale, 'How it works')}</summary>
+          <ul>
+            <li>
+              {translate(
+                $locale,
+                'Your usual 2-of-3 keys approve the move. The {key} is not used.',
+                { key: translate($locale, renewalKeyName) }
+              )}
+            </li>
+            <li>
+              {translate(
+                $locale,
+                'After confirmation, the new coin gets a fresh {count}-block wait.',
+                { count: renewalMaturity.delayBlocks.toLocaleString() }
+              )}
+            </li>
+            <li>
+              {translate(
+                $locale,
+                'The fee comes from this coin. No other coin is combined, but the move remains visible onchain.'
+              )}
+            </li>
+          </ul>
+        </details>
+      </div>
+    </section>{/if}
   {#if txid}<section class="empty-state success-state">
       <span class="empty-icon success"><Check size={25} /></span>
-      <h2>{translate($locale, 'Transaction broadcast')}</h2>
+      <h2>
+        {translate($locale, renewalMode ? 'Protection renewal broadcast' : 'Transaction broadcast')}
+      </h2>
       <p>
         {translate($locale, 'The signed transaction was accepted by the')}
         {networkName(defaultConfig.network)}
@@ -959,6 +1067,70 @@
         loading={busy}
         loadingLabel={translate($locale, 'Preparing acceleration…')}
         >{translate($locale, 'Review acceleration')}</Button
+      >
+    </form>
+  {:else if renewalMode && renewalCoin && !proposal}<form
+      class="form-card send-stage-card"
+      onsubmit={(event) => {
+        event.preventDefault();
+        prepareRenewal();
+      }}
+      in:fly={{ x: 8, duration: 180 }}
+    >
+      <div class="send-stage-heading">
+        <span>{translate($locale, 'COIN PROTECTION')}</span>
+        <h2>{translate($locale, 'Renew this coin’s protection')}</h2>
+        <p>
+          {translate($locale, 'Choose a label and fee. You will review everything before signing.')}
+        </p>
+      </div>
+      <div class="renewal-coin-summary">
+        <span>{translate($locale, 'Coin being renewed')}</span>
+        <strong><Amount value={renewalCoin.amount} hidden={$discreetMode} /></strong>
+        <small
+          >{translate($locale, '{key} can spend now', {
+            key: translate($locale, renewalKeyName)
+          })}</small
+        >
+      </div>
+      <label class="field"
+        ><span>{translate($locale, 'Permanent transaction label')}</span><input
+          aria-label={translate($locale, 'Permanent transaction label')}
+          bind:value={label}
+          oninput={clearDraftError}
+          placeholder={translate($locale, 'e.g. Renew savings protection')}
+          maxlength="48"
+        /><FieldCounter
+          value={label}
+          max={48}
+          hint={translate($locale, 'Required · cannot be changed or reused')}
+        /></label
+      >
+      <FeeSelector
+        {estimates}
+        value={selectedRateNumber}
+        {estimatedFee}
+        error={feeEstimateError}
+        onchange={(rate) => {
+          selectedRate = rate;
+          clearDraftError();
+        }}
+      />
+      {#if error}<div class="hardware-inline-error send-form-error" role="alert">
+          <AlertTriangle size={18} /><span
+            ><strong>{translate($locale, 'Protection renewal could not be prepared')}</strong><small
+              >{error}</small
+            ></span
+          >
+        </div>{/if}
+      <Button
+        type="submit"
+        size="large"
+        class="full"
+        disabled={!renewalValid}
+        loading={busy}
+        loadingLabel={translate($locale, 'Preparing renewal…')}
+        >{translate($locale, 'Review protection renewal')}</Button
       >
     </form>
   {:else if !proposal && draftStep === 1}
@@ -1212,13 +1384,13 @@
         )}
       >
         <div class="review-amount">
-          <span>{translate($locale, 'You send')}</span><strong
+          <span>{translate($locale, renewalMode ? 'New protected coin' : 'You send')}</span><strong
             ><Amount value={Number(proposal.amount)} /></strong
           >
         </div>
         <dl class="details-list proposal-review-primary">
           <div>
-            <dt>{translate($locale, 'To')}</dt>
+            <dt>{translate($locale, renewalMode ? 'New wallet address' : 'To')}</dt>
             <dd>
               <button
                 class="address-review-trigger mono"
@@ -1260,6 +1432,14 @@
             )}</span
           >
         </div>
+        {#if renewalMode}<div class="selection-review renewal-review">
+            <strong>{translate($locale, 'Protection restarts after confirmation')}</strong><span
+              >{translate(
+                $locale,
+                'Only this coin moves. The network fee is the only amount leaving your wallet.'
+              )}</span
+            >
+          </div>{/if}
         {#if proposal.selectionImpact.feeDifferenceVsPrivate !== null}<div class="selection-review">
             <strong>{translate($locale, 'Exact strategy comparison')}</strong><span
               ><Amount value={Math.abs(proposal.selectionImpact.feeDifferenceVsPrivate)} />

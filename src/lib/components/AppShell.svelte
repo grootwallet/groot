@@ -268,31 +268,27 @@
         });
       if (event.type === 'policy_approaching_maturity')
         toast({
-          title: translate(
-            $locale,
-            event.policyType === 'inheritance'
-              ? 'Inheritance path approaching maturity'
-              : 'Recovery path approaching maturity'
-          ),
-          description: translate(
-            $locale,
-            '{count} blocks remain for one coin. Review its policy.',
-            {
-              count: event.remainingBlocks
-            }
-          )
+          title: translate($locale, '{key} unlocks soon', {
+            key: translate(
+              $locale,
+              event.policyType === 'inheritance' ? 'Heir key' : 'Recovery key'
+            )
+          }),
+          description: translate($locale, '{count} blocks remain before it can spend one coin.', {
+            count: event.remainingBlocks
+          })
         });
       if (event.type === 'policy_mature')
         toast({
-          title: translate(
-            $locale,
-            event.policyType === 'inheritance'
-              ? 'Inheritance path matured'
-              : 'Recovery path matured'
-          ),
+          title: translate($locale, '{key} can now spend a coin', {
+            key: translate(
+              $locale,
+              event.policyType === 'inheritance' ? 'Heir key' : 'Recovery key'
+            )
+          }),
           description: translate(
             $locale,
-            'One coin now has an additional single-key path. The normal 2-of-3 path still works.'
+            'Your normal 2-of-3 keys still work. Review the coin or renew its protection.'
           )
         });
       if (event.type === 'wallet_profile_updated')

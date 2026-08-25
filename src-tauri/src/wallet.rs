@@ -21,7 +21,7 @@ use bdk_wallet::{
         Weight,
     },
     chain::{BlockId, ChainPosition, CheckPoint, ConfirmationBlockTime},
-    descriptor::{Descriptor, DescriptorPublicKey},
+    descriptor::{policy::SatisfiableItem, Descriptor, DescriptorPublicKey},
     error::CreateTxError,
     psbt::PsbtUtils,
     rusqlite::{
@@ -34,7 +34,7 @@ use bip39::Mnemonic;
 use rand::{rngs::OsRng, RngCore};
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     fs::{self, File, OpenOptions},
     io::{Read, Write},
     path::{Path, PathBuf},
@@ -6137,6 +6137,9 @@ fn validate_manual_outpoints(values: &[String], frozen: &[OutPoint]) -> ApiResul
     Ok(selected)
 }
 
+type PolicyPath = BTreeMap<String, Vec<usize>>;
+type KeychainPolicyPath = (KeychainKind, PolicyPath);
+
 struct AutomaticPaymentOptions<'a> {
     recipient: &'a Address,
     amount: u64,
@@ -6145,6 +6148,56 @@ struct AutomaticPaymentOptions<'a> {
     strategy: AutomaticSelectionStrategy,
     privacy: std::collections::HashMap<String, crate::privacy_selection::CoinPrivacy>,
     global_xpubs: bool,
+    policy_paths: Vec<KeychainPolicyPath>,
+}
+
+fn policy_contains_relative_timelock(item: &SatisfiableItem) -> bool {
+    match item {
+        SatisfiableItem::RelativeTimelock { .. } => true,
+        SatisfiableItem::Thresh { items, .. } => items
+            .iter()
+            .any(|policy| policy_contains_relative_timelock(&policy.item)),
+        _ => false,
+    }
+}
+
+fn immediate_policy_path(wallet: &Wallet, keychain: KeychainKind) -> ApiResult<PolicyPath> {
+    let policy = wallet
+        .policies(keychain)
+        .map_err(internal)?
+        .ok_or_else(|| api_error("wallet_corrupt", "The wallet spending policy is missing."))?;
+    let SatisfiableItem::Thresh { items, threshold } = &policy.item else {
+        return Err(api_error(
+            "wallet_corrupt",
+            "The delayed wallet spending policy is not selectable.",
+        ));
+    };
+    if *threshold != 1 || items.len() != 2 {
+        return Err(api_error(
+            "wallet_corrupt",
+            "The delayed wallet spending policy has an unexpected branch shape.",
+        ));
+    }
+    let candidates = items
+        .iter()
+        .enumerate()
+        .filter(|(_, item)| !policy_contains_relative_timelock(&item.item))
+        .map(|(index, _)| index)
+        .collect::<Vec<_>>();
+    if candidates.len() != 1 {
+        return Err(api_error(
+            "wallet_corrupt",
+            "The immediate wallet spending branch is ambiguous.",
+        ));
+    }
+    Ok([(policy.id, vec![candidates[0]])].into_iter().collect())
+}
+
+fn immediate_policy_paths(wallet: &Wallet) -> ApiResult<Vec<KeychainPolicyPath>> {
+    [KeychainKind::External, KeychainKind::Internal]
+        .into_iter()
+        .map(|keychain| immediate_policy_path(wallet, keychain).map(|path| (keychain, path)))
+        .collect()
 }
 
 fn build_automatic_payment(
@@ -6159,6 +6212,7 @@ fn build_automatic_payment(
         strategy,
         privacy,
         global_xpubs,
+        policy_paths,
     } = options;
     let mut builder = wallet
         .build_tx()
@@ -6167,6 +6221,9 @@ fn build_automatic_payment(
         .add_recipient(recipient.script_pubkey(), Amount::from_sat(amount))
         .fee_rate(rate)
         .unspendable(frozen);
+    for (keychain, path) in policy_paths {
+        builder.policy_path(path, keychain);
+    }
     if global_xpubs {
         builder.add_global_xpubs();
     }

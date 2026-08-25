@@ -1,5 +1,5 @@
 use super::multisig_proposal_commands::{
-    finalized_multisig_proposal_transaction, import_multisig_proposal_in_db,
+    build_policy_renewal, finalized_multisig_proposal_transaction, import_multisig_proposal_in_db,
 };
 use super::transaction_commands::{
     prepare_persisted_multisig_acceleration, validate_acceleration_rate,
@@ -11,7 +11,7 @@ use bdk_bitcoind_rpc::bitcoincore_rpc::jsonrpc;
 use bdk_wallet::bitcoin::{
     bip32::{DerivationPath, Xpriv, Xpub},
     secp256k1::Secp256k1,
-    BlockHash, NetworkKind,
+    BlockHash, NetworkKind, Sequence,
 };
 
 struct TemporaryDatabase(PathBuf);
@@ -354,6 +354,62 @@ fn funded_delayed_policy_tracks_each_coin_restarts_and_rearms_after_reorg() {
         WalletNotification::PolicyMature { ref outpoint, .. }
             if outpoint.starts_with(&first_txid.to_string())
     ));
+
+    let selected = rematured
+        .utxos
+        .iter()
+        .find(|coin| coin.outpoint.starts_with(&first_txid.to_string()))
+        .unwrap()
+        .outpoint
+        .parse::<OutPoint>()
+        .unwrap();
+    let (mut renewal, destination) =
+        build_policy_renewal(&mut wallet, selected, FeeRate::from_sat_per_vb(2).unwrap()).unwrap();
+    assert_eq!(renewal.unsigned_tx.input.len(), 1);
+    assert_eq!(renewal.unsigned_tx.input[0].previous_output, selected);
+    assert_eq!(renewal.unsigned_tx.input[0].sequence, Sequence(0xffff_fffd));
+    assert_eq!(renewal.unsigned_tx.output.len(), 1);
+    assert_eq!(
+        renewal.unsigned_tx.output[0].script_pubkey,
+        destination.script_pubkey()
+    );
+    sign_original(&keys, &mut renewal);
+    assert!(wallet
+        .finalize_psbt(&mut renewal, SignOptions::default())
+        .unwrap());
+    let renewal_tx = renewal.extract_tx().unwrap();
+    let renewal_txid = broadcast_transaction_with_rpc(&rpc, &renewal_tx).unwrap();
+    sync(&mut wallet, &mut db, Arc::clone(&rpc));
+    let pending =
+        snapshot_from(&wallet, &db, Some(now().to_string()), true, Some(&policy)).unwrap();
+    let replacement = pending
+        .utxos
+        .iter()
+        .find(|coin| coin.outpoint.starts_with(&renewal_txid.to_string()))
+        .unwrap();
+    assert_eq!(
+        replacement.policy_maturity.as_ref().unwrap().state,
+        MaturityState::Unconfirmed
+    );
+    assert!(pending.transactions.iter().any(|transaction| {
+        transaction.id == renewal_txid.to_string() && transaction.kind == "self_spend"
+    }));
+
+    rpc.generate_to_address(1, &competing_mining).unwrap();
+    sync(&mut wallet, &mut db, Arc::clone(&rpc));
+    let confirmed =
+        snapshot_from(&wallet, &db, Some(now().to_string()), true, Some(&policy)).unwrap();
+    let replacement = confirmed
+        .utxos
+        .iter()
+        .find(|coin| coin.outpoint.starts_with(&renewal_txid.to_string()))
+        .unwrap()
+        .policy_maturity
+        .as_ref()
+        .unwrap();
+    assert_eq!(replacement.state, MaturityState::Approaching);
+    assert_eq!(replacement.age_blocks, 1);
+    assert_eq!(replacement.remaining_blocks, Some(143));
 }
 
 #[test]

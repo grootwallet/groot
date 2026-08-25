@@ -6,6 +6,7 @@
     CircleDot,
     Copy,
     Lock,
+    RefreshCw,
     Snowflake,
     Tag,
     Unlock
@@ -45,6 +46,11 @@
   const MATURITY_MATURE = 'mature' as const;
   const MATURITY_APPROACHING = 'approaching' as const;
   const MATURITY_UNCONFIRMED = 'unconfirmed' as const;
+  const maturityFixtureSuffix =
+    typeof location !== 'undefined' &&
+    new URLSearchParams(location.search).has('fixture-policy-maturity')
+      ? '&fixture-policy-maturity=1'
+      : '';
   let utxos = $state<Utxo[]>([]);
   let transactions = $state<Transaction[]>([]);
   let sortOrder = $state<CoinSortOrder>('newest');
@@ -69,6 +75,16 @@
   const selectedTotal = $derived(selectedCoinTotal(utxos, selected));
   const chainTipCurrent = $derived(chainTip.status === 'recent');
   const maturitySummary = $derived(policyMaturitySummary(utxos, chainTip));
+  const renewalCoin = $derived(
+    selected.length === 1
+      ? (utxos.find((coin) => {
+          const maturity = validPolicyMaturity(coin);
+          return (
+            coin.outpoint === selected[0] && !coin.frozen && maturity?.state === MATURITY_MATURE
+          );
+        }) ?? null)
+      : null
+  );
   const filteredUtxos = $derived(
     utxos.filter((coin) => {
       const needle = labelFilter.trim().toLocaleLowerCase();
@@ -105,6 +121,13 @@
   const sendHref = $derived(
     `${multisig ? '/multisig/send' : '/send'}?coins=${encodeURIComponent(selected.join(','))}`
   );
+  const renewalHref = $derived(
+    renewalCoin
+      ? `/multisig/send?coins=${encodeURIComponent(renewalCoin.outpoint)}&renewProtection=1${maturityFixtureSuffix}`
+      : ''
+  );
+  const extraKeyName = (maturity: NonNullable<Utxo['policyMaturity']>) =>
+    maturity.policyType === 'inheritance' ? 'Heir key' : 'Recovery key';
 
   $effect(() => {
     if ($discreetMode) labelFilter = '';
@@ -283,11 +306,11 @@
     <section class="policy-maturity-banner compact" aria-live="polite">
       <span class="policy-maturity-icon"><AlertTriangle size={17} /></span>
       <div>
-        <strong>{translate($locale, 'Each coin has its own delayed-path clock')}</strong>
+        <strong>{translate($locale, 'Each coin has its own protection timeline')}</strong>
         <small
           >{translate(
             $locale,
-            'Maturity adds a recovery or heir single-key path; it never removes the normal 2-of-3 path.'
+            'The recovery or heir key unlocks separately for each coin. Your normal 2-of-3 keys always remain available.'
           )}</small
         >
         {#if !maturitySummary.chainCurrent}<small class="stale-copy"
@@ -317,7 +340,13 @@
             disabled={busy}
             onclick={() => requestFrozenState(selected, true)}
             ><Snowflake size={15} />{translate($locale, 'Freeze selected')}</Button
-          ><Button size="small" href={sendHref}>{translate($locale, 'Send selected coins')}</Button
+          >{#if renewalCoin && chainTipCurrent && multisig}<Button
+              variant="secondary"
+              size="small"
+              href={renewalHref}
+              ><RefreshCw size={15} />{translate($locale, 'Renew protection')}</Button
+            >{/if}<Button size="small" href={sendHref}
+            >{translate($locale, 'Send selected coins')}</Button
           ></span
         >{:else}<span class="auto-note"
           ><CircleDot size={14} />{translate(
@@ -381,18 +410,26 @@
                   >{translate($locale, 'Frozen')}</span
                 >{:else if maturity && maturityIs(maturity, MATURITY_MATURE)}<span
                   class="coin-status policy-mature"
-                  >{translate($locale, 'Delayed path mature')}</span
+                  >{translate($locale, '{key} can spend', {
+                    key: translate($locale, extraKeyName(maturity))
+                  })}</span
                 >{:else if maturity && maturityIs(maturity, MATURITY_APPROACHING)}<span
                   class="coin-status policy-approaching"
                   >{chainTipCurrent && maturity.remainingBlocks !== null
-                    ? translate($locale, '{count} blocks to maturity', {
+                    ? translate($locale, '{key} unlocks in {count} blocks', {
+                        key: translate($locale, extraKeyName(maturity)),
                         count: formatInteger(maturity.remainingBlocks, $locale)
                       })
-                    : translate($locale, 'Approaching maturity')}</span
+                    : translate($locale, '{key} unlocks soon', {
+                        key: translate($locale, extraKeyName(maturity))
+                      })}</span
                 >{:else if maturity && maturityIs(maturity, MATURITY_UNCONFIRMED)}<span
-                  class="coin-status pending">{translate($locale, 'Delay not started')}</span
+                  class="coin-status pending"
+                  >{translate($locale, 'Protection starts after confirmation')}</span
                 >{:else if maturity}<span class="coin-status policy-immature"
-                  >{translate($locale, 'Delayed path immature')}</span
+                  >{translate($locale, '{key} locked', {
+                    key: translate($locale, extraKeyName(maturity))
+                  })}</span
                 >{:else if utxo.provenance.state === 'mixed'}<span class="coin-status reused"
                   >{translate($locale, 'Mixed provenance')}</span
                 >{:else if utxo.provenance.state === 'unknown'}<span class="coin-status pending"
@@ -459,22 +496,25 @@
                   </dd>
                 </div>
                 {#if maturity}<div>
-                    <dt>{translate($locale, 'Delayed spending path')}</dt>
+                    <dt>{translate($locale, 'Extra key')}</dt>
                     <dd>
-                      {translate(
-                        $locale,
-                        maturityIs(maturity, MATURITY_UNCONFIRMED)
-                          ? 'Unconfirmed · delay not started'
-                          : maturityIs(maturity, MATURITY_MATURE)
-                            ? 'Mature · additional single-key path available'
-                            : maturityIs(maturity, MATURITY_APPROACHING)
-                              ? 'Approaching maturity'
-                              : 'Immature'
-                      )}
+                      {maturityIs(maturity, MATURITY_UNCONFIRMED)
+                        ? translate($locale, 'Waiting for confirmation')
+                        : maturityIs(maturity, MATURITY_MATURE)
+                          ? translate($locale, '{key} can spend this coin', {
+                              key: translate($locale, extraKeyName(maturity))
+                            })
+                          : maturityIs(maturity, MATURITY_APPROACHING)
+                            ? translate($locale, '{key} unlocks soon', {
+                                key: translate($locale, extraKeyName(maturity))
+                              })
+                            : translate($locale, '{key} is locked', {
+                                key: translate($locale, extraKeyName(maturity))
+                              })}
                     </dd>
                   </div>
                   <div>
-                    <dt>{translate($locale, 'Exact block status')}</dt>
+                    <dt>{translate($locale, 'Exact timeline')}</dt>
                     <dd>
                       {!chainTipCurrent
                         ? translate($locale, 'Paused · last verified at block {height}', {
@@ -483,7 +523,7 @@
                         : maturityIs(maturity, MATURITY_UNCONFIRMED)
                           ? translate($locale, 'Starts after the first confirmation')
                           : maturity.remainingBlocks === 0
-                            ? translate($locale, 'Mature at block {height}', {
+                            ? translate($locale, 'Extra key unlocked at block {height}', {
                                 height: formatInteger(
                                   maturity.maturityHeight ?? chainTip.height,
                                   $locale
@@ -507,12 +547,39 @@
                   <div class="coin-policy-explanation">
                     <dt>{translate($locale, 'What changes')}</dt>
                     <dd>
-                      {translate(
-                        $locale,
-                        'The independent delayed key can spend alone after maturity. Groot still sends only through the normal 2-of-3 path.'
-                      )}
+                      {maturityIs(maturity, MATURITY_MATURE)
+                        ? translate(
+                            $locale,
+                            '{key} can now spend this coin alone. Your normal 2-of-3 keys still work.',
+                            { key: translate($locale, extraKeyName(maturity)) }
+                          )
+                        : translate(
+                            $locale,
+                            '{key} cannot spend this coin yet. Your normal 2-of-3 keys work now and remain available later.',
+                            { key: translate($locale, extraKeyName(maturity)) }
+                          )}
                     </dd>
-                  </div>{/if}
+                  </div>
+                  {#if multisig && chainTipCurrent && maturityIs(maturity, MATURITY_MATURE)}<div
+                      class="coin-policy-renewal"
+                    >
+                      <RefreshCw size={15} />
+                      <div>
+                        <strong>{translate($locale, 'Want the extra key locked again?')}</strong>
+                        <small
+                          >{translate(
+                            $locale,
+                            'Move only this coin within your wallet. Its protection restarts after confirmation.'
+                          )}</small
+                        >
+                      </div>
+                      <Button
+                        variant="secondary"
+                        size="small"
+                        href={`/multisig/send?coins=${encodeURIComponent(utxo.outpoint)}&renewProtection=1${maturityFixtureSuffix}`}
+                        >{translate($locale, 'Renew protection')}</Button
+                      >
+                    </div>{/if}{/if}
                 <div>
                   <dt>
                     {translate($locale, 'Provenance')}

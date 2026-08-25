@@ -510,11 +510,11 @@
                 delayedPolicyType === 'inheritance' ? 'INHERITANCE TIMELINE' : 'RECOVERY TIMELINE'
               )}
             </p>
-            <h2>{translate($locale, 'Per-coin maturity')}</h2>
+            <h2>{translate($locale, 'When the extra key can spend')}</h2>
             <p>
               {translate(
                 $locale,
-                'Each confirmed coin ages independently toward the delayed single-key path.'
+                'Each confirmed coin has its own wait before the recovery or heir key can spend it.'
               )}
             </p>
           </div>
@@ -525,10 +525,10 @@
             >{translate(
               $locale,
               maturitySummary.mature > 0
-                ? '{count} mature'
+                ? '{count} can be spent'
                 : maturitySummary.approaching > 0
-                  ? '{count} approaching'
-                  : 'All immature',
+                  ? '{count} unlocking soon'
+                  : 'All extra keys locked',
               {
                 count:
                   maturitySummary.mature > 0 ? maturitySummary.mature : maturitySummary.approaching
@@ -538,15 +538,17 @@
         </div>
         <div class="policy-maturity-stats">
           <div>
-            <strong>{maturitySummary.immature}</strong><span>{translate($locale, 'Immature')}</span>
-          </div>
-          <div>
-            <strong>{maturitySummary.approaching}</strong><span
-              >{translate($locale, 'Approaching maturity')}</span
+            <strong>{maturitySummary.immature}</strong><span
+              >{translate($locale, 'Key locked')}</span
             >
           </div>
           <div>
-            <strong>{maturitySummary.mature}</strong><span>{translate($locale, 'Mature')}</span>
+            <strong>{maturitySummary.approaching}</strong><span
+              >{translate($locale, 'Unlocking soon')}</span
+            >
+          </div>
+          <div>
+            <strong>{maturitySummary.mature}</strong><span>{translate($locale, 'Can spend')}</span>
           </div>
         </div>
         <div class="policy-maturity-truth">
@@ -563,11 +565,11 @@
           </span>
         </div>
         <details class="policy-maturity-details">
-          <summary>{translate($locale, 'How spending authority changes')}</summary>
+          <summary>{translate($locale, 'Why this changes your wallet security')}</summary>
           <p>
             {translate(
               $locale,
-              'At maturity, the independent delayed key gains a second way to spend that coin alone. The coin does not expire, and the immediate 2-of-3 branch is unchanged.'
+              'After the wait, the recovery or heir key can spend that coin alone. The coin does not expire, and your normal 2-of-3 keys still work.'
             )}
           </p>
           <p>
@@ -576,6 +578,12 @@
               'Groot does not yet coordinate delayed-key spending. Send remains fail-closed on the reviewed 2-of-3 path.'
             )}
           </p>
+          {#if maturitySummary.mature > 0}<p>
+              {translate(
+                $locale,
+                'To lock the extra key again, choose Renew protection for that coin. Groot moves only that coin and starts a new wait after confirmation.'
+              )}
+            </p>{/if}
         </details>
       </section>
     {/if}
