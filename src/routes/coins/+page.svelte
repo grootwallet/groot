@@ -14,6 +14,7 @@
   import Button from '$lib/components/Button.svelte';
   import CoinFreezeConfirmModal from '$lib/components/CoinFreezeConfirmModal.svelte';
   import CoinSortMenu from '$lib/components/CoinSortMenu.svelte';
+  import OverflowMenuButton from '$lib/components/OverflowMenuButton.svelte';
   import { compactAddress } from '$lib/address-display';
   import { copyText } from '$lib/clipboard';
   import { shortSats } from '$lib/data';
@@ -57,6 +58,9 @@
   let provenanceFilter = $state<'all' | 'known' | 'mixed' | 'unknown' | 'reused'>('all');
   let labelFilter = $state('');
   let selected = $state<string[]>([]);
+  let selectionMenuOpen = $state(false);
+  let selectionMenuRoot = $state<HTMLDivElement | null>(null);
+  let selectionMenuTrigger = $state<HTMLButtonElement | null>(null);
   let expanded = $state<string[]>([]);
   let busy = $state(false);
   let syncing = $state(false);
@@ -138,6 +142,9 @@
   $effect(() => {
     if ($discreetMode) labelFilter = '';
   });
+  $effect(() => {
+    if (!selected.length) selectionMenuOpen = false;
+  });
 
   onMount(load);
   onMount(() =>
@@ -155,6 +162,28 @@
       }
     })
   );
+  onMount(() => {
+    const closeOutside = (event: PointerEvent) => {
+      if (
+        selectionMenuOpen &&
+        selectionMenuRoot &&
+        event.target instanceof Node &&
+        !selectionMenuRoot.contains(event.target)
+      )
+        selectionMenuOpen = false;
+    };
+    const closeEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || !selectionMenuOpen) return;
+      selectionMenuOpen = false;
+      requestAnimationFrame(() => selectionMenuTrigger?.focus());
+    };
+    document.addEventListener('pointerdown', closeOutside);
+    document.addEventListener('keydown', closeEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOutside);
+      document.removeEventListener('keydown', closeEscape);
+    };
+  });
 
   async function load() {
     loading = true;
@@ -347,39 +376,76 @@
         >{/key}
     </div>
     <div class="coin-toolbar-actions">
-      {#if selected.length}<span class="coin-selection-actions" in:fade={{ duration: 150 }}
-          ><Button
-            variant="secondary"
-            size="small"
-            disabled={busy}
-            onclick={() => requestFrozenState(selected, true)}
-            ><Snowflake size={15} />{translate($locale, 'Freeze selected')}</Button
-          >{#if renewalCoin && chainTipCurrent && multisig}<Button
-              variant="secondary"
-              size="small"
-              href={renewalHref}
-              ><RefreshCw size={15} />{translate(
+      {#if selected.length}<div class="coin-selection-actions" in:fade={{ duration: 150 }}>
+          <div class="wallet-more" bind:this={selectionMenuRoot}>
+            <OverflowMenuButton
+              bind:element={selectionMenuTrigger}
+              label={translate(
                 $locale,
-                renewalCoin.policyMaturity?.policyType === 'inheritance'
-                  ? 'Postpone heir access'
-                  : 'Restart recovery wait'
-              )}</Button
-            ><Button variant="secondary" size="small" href={delayedSpendHref}
-              >{translate(
-                $locale,
-                renewalCoin.policyMaturity?.policyType === 'inheritance'
-                  ? 'Use heir key'
-                  : 'Use recovery key'
-              )}</Button
-            >{/if}<Button size="small" href={sendHref}
-            >{translate($locale, 'Send selected coins')}</Button
-          ></span
-        >{:else}<span class="auto-note"
+                selected.length === 1
+                  ? 'More actions for selected coin'
+                  : 'More actions for selected coins'
+              )}
+              expanded={selectionMenuOpen}
+              onclick={() => (selectionMenuOpen = !selectionMenuOpen)}
+            />{#if selectionMenuOpen}<div class="wallet-more-menu coin-selection-menu" role="menu">
+                {#if renewalCoin && chainTipCurrent && multisig}<a
+                    role="menuitem"
+                    href={delayedSpendHref}
+                    ><Unlock size={15} /><span
+                      ><strong
+                        >{translate(
+                          $locale,
+                          renewalCoin.policyMaturity?.policyType === 'inheritance'
+                            ? 'Use heir key'
+                            : 'Use recovery key'
+                        )}</strong
+                      ><small>{translate($locale, 'Spend this coin with its backup key')}</small
+                      ></span
+                    ></a
+                  ><a role="menuitem" href={renewalHref}
+                    ><RefreshCw size={15} /><span
+                      ><strong
+                        >{translate(
+                          $locale,
+                          renewalCoin.policyMaturity?.policyType === 'inheritance'
+                            ? 'Postpone heir access'
+                            : 'Restart recovery wait'
+                        )}</strong
+                      ><small
+                        >{translate(
+                          $locale,
+                          'Move it within this wallet to begin a new wait'
+                        )}</small
+                      ></span
+                    ></a
+                  >{/if}<button
+                  role="menuitem"
+                  disabled={busy}
+                  onclick={() => {
+                    selectionMenuOpen = false;
+                    requestFrozenState(selected, true);
+                  }}
+                  ><Snowflake size={15} /><span
+                    ><strong>{translate($locale, 'Freeze selected')}</strong><small
+                      >{translate($locale, 'Keep this selection out of automatic payments')}</small
+                    ></span
+                  ></button
+                >
+              </div>{/if}
+          </div>
+          <Button size="small" href={sendHref}
+            >{translate(
+              $locale,
+              selected.length === 1 ? 'Send selected coin' : 'Send selected coins'
+            )}</Button
+          >
+        </div>{:else}<span class="auto-note"
           ><CircleDot size={14} />{translate(
             $locale,
             'Automatic selection remains the default'
           )}</span
-        >{/if}<CoinSortMenu value={sortOrder} onchange={(next) => (sortOrder = next)} />
+        ><CoinSortMenu value={sortOrder} onchange={(next) => (sortOrder = next)} />{/if}
     </div>
   </section>
   <section

@@ -1132,7 +1132,8 @@ test('coin control selects, freezes, and carries coins into send', async ({ page
   await first.check();
   await expect(page.getByText('1 selected')).toBeVisible();
   await expect(page.locator('.coin-toolbar')).toContainText('1,250,000 sats selected');
-  await page.getByRole('button', { name: 'Freeze selected' }).click();
+  await page.getByRole('button', { name: 'More actions for selected coin' }).click();
+  await page.getByRole('menuitem', { name: /Freeze selected/ }).click();
   const freezeDialog = page.getByRole('dialog', { name: 'Freeze Savings?' });
   await expect(
     freezeDialog.getByText(
@@ -1141,7 +1142,8 @@ test('coin control selects, freezes, and carries coins into send', async ({ page
   ).toBeVisible();
   await freezeDialog.getByRole('button', { name: 'Cancel' }).click();
   await expect(page.getByText('Frozen', { exact: true })).toHaveCount(0);
-  await page.getByRole('button', { name: 'Freeze selected' }).click();
+  await page.getByRole('button', { name: 'More actions for selected coin' }).click();
+  await page.getByRole('menuitem', { name: /Freeze selected/ }).click();
   await page
     .getByRole('dialog', { name: 'Freeze Savings?' })
     .getByRole('button', { name: 'Freeze coin' })

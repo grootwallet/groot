@@ -99,6 +99,32 @@ test('renews one mature coin without merging another coin', async ({ page }) => 
   await expect(page.getByRole('button', { name: 'Sign with device' })).toBeVisible();
 });
 
+test('keeps mature-coin selection calm and moves secondary actions into overflow', async ({
+  page
+}) => {
+  await page.goto('/coins?fixture-policy-maturity=1');
+  const matureCoin = page.locator('.coin-row').filter({ hasText: 'Recovery key can spend' });
+  await matureCoin.getByRole('checkbox').check();
+
+  const toolbar = page.locator('.coin-toolbar');
+  await expect(toolbar.getByRole('link', { name: 'Send selected coin' })).toBeVisible();
+  await expect(toolbar.getByRole('button', { name: 'Sort coins' })).toHaveCount(0);
+  await expect(toolbar.getByRole('link', { name: 'Use recovery key' })).toHaveCount(0);
+  await expect(toolbar.getByRole('link', { name: 'Restart recovery wait' })).toHaveCount(0);
+  await expect(toolbar.getByRole('menuitem', { name: /Freeze selected/ })).toHaveCount(0);
+
+  const more = toolbar.getByRole('button', { name: 'More actions for selected coin' });
+  await more.click();
+  await expect(toolbar.getByRole('menuitem', { name: /Use recovery key/ })).toBeVisible();
+  await expect(toolbar.getByRole('menuitem', { name: /Restart recovery wait/ })).toBeVisible();
+  await expect(toolbar.getByRole('menuitem', { name: /Freeze selected/ })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true
+  );
+  await page.keyboard.press('Escape');
+  await expect(more).toBeFocused();
+});
+
 test('spends one mature coin with only its recovery key', async ({ page }) => {
   await page.goto('/coins?fixture-policy-maturity=1');
   const matureCoin = page.locator('.coin-row').filter({ hasText: 'Recovery key can spend' });

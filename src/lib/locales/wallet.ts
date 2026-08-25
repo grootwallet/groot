@@ -360,6 +360,10 @@ export const walletCopy = {
   Details: { fr: 'Détails', es: 'Detalles' },
   Freeze: { fr: 'Geler', es: 'Congelar' },
   'Freeze selected': { fr: 'Geler la sélection', es: 'Congelar selección' },
+  'Keep this selection out of automatic payments': {
+    fr: 'Exclure cette sélection des paiements automatiques',
+    es: 'Excluir esta selección de los pagos automáticos'
+  },
   Frozen: { fr: 'Gelée', es: 'Congelada' },
   Known: { fr: 'Connue', es: 'Conocida' },
   Label: { fr: 'Libellé', es: 'Etiqueta' },
@@ -405,6 +409,26 @@ export const walletCopy = {
   'Send selected coins': {
     fr: 'Envoyer les pièces sélectionnées',
     es: 'Enviar monedas seleccionadas'
+  },
+  'Send selected coin': {
+    fr: 'Envoyer la pièce sélectionnée',
+    es: 'Enviar moneda seleccionada'
+  },
+  'More actions for selected coin': {
+    fr: 'Plus d’actions pour la pièce sélectionnée',
+    es: 'Más acciones para la moneda seleccionada'
+  },
+  'More actions for selected coins': {
+    fr: 'Plus d’actions pour les pièces sélectionnées',
+    es: 'Más acciones para las monedas seleccionadas'
+  },
+  'Spend this coin with its backup key': {
+    fr: 'Dépenser cette pièce avec sa clé de secours',
+    es: 'Gastar esta moneda con su clave de respaldo'
+  },
+  'Move it within this wallet to begin a new wait': {
+    fr: 'La déplacer dans ce portefeuille pour recommencer l’attente',
+    es: 'Moverla dentro de esta cartera para iniciar una nueva espera'
   },
   'Source payment intent': { fr: 'Objet du paiement source', es: 'Motivo del pago de origen' },
   'Source transaction': { fr: 'Transaction source', es: 'Transacción de origen' },

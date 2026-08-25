@@ -7667,6 +7667,9 @@ code {
   align-items: center;
   gap: 8px;
 }
+.coin-selection-menu {
+  width: 260px;
+}
 .coin-toolbar strong {
   font-size: 12px;
 }

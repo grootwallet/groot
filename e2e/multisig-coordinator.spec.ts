@@ -819,7 +819,8 @@ test('selects and freezes multisig coins before entering the send flow', async (
   const coin = page.getByRole('checkbox', { name: 'Select Savings', exact: true });
   await coin.check();
   await expect(page.locator('.coin-toolbar')).toContainText('1,250,000 sats selected');
-  await page.getByRole('button', { name: 'Freeze selected' }).click();
+  await page.getByRole('button', { name: 'More actions for selected coin' }).click();
+  await page.getByRole('menuitem', { name: /Freeze selected/ }).click();
   await page
     .getByRole('dialog', { name: 'Freeze Savings?' })
     .getByRole('button', { name: 'Freeze coin' })
