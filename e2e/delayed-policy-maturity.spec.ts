@@ -145,6 +145,10 @@ test('pauses exact countdowns when the verified chain tip is stale', async ({ pa
 test('localizes maturity state without layout overflow', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('groot-language', 'fr'));
   await page.goto('/multisig?fixture-policy-maturity=1');
+  await expect(page.getByText('2 clés principales sur 3', { exact: true })).toBeVisible();
+  await expect(
+    page.getByText('Clé de récupération après l’attente', { exact: true })
+  ).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Accès de récupération' })).toBeVisible();
   await expect(
     page.getByText('Vos clés normales continuent de fonctionner pour chaque pièce.')

@@ -448,8 +448,13 @@
       <div class="vault-summary">
         <strong class="vault-balance"><Amount value={snapshot?.balance.total ?? 0} /></strong>
         <div class="vault-policy-tags" aria-label={translate($locale, 'Spending policy')}>
-          {#if policyPresentation?.delayed}
-            <span class="policy-pill">{translate($locale, '2 of 3 primary keys')}</span>
+          {#if policyPresentation?.delayed && policyPresentation.delayedKeyLabel}
+            <span class="policy-pill"
+              >{translate($locale, '{required} of {total} primary keys', {
+                required: policyPresentation.primaryThreshold,
+                total: policyPresentation.primarySignerCount
+              })}</span
+            >
             <span class="policy-pill delayed"
               ><Clock3 size={12} />{translate(
                 $locale,
@@ -458,8 +463,15 @@
                   : 'Recovery key after wait'
               )}</span
             >
-          {:else}
-            <span class="policy-pill">{policyPresentation?.summary}</span>
+          {:else if policyPresentation?.delayed}
+            <span class="policy-pill">{translate($locale, 'Policy details unavailable')}</span>
+          {:else if policyPresentation}
+            <span class="policy-pill"
+              >{translate($locale, '{required} of {total} keys', {
+                required: policyPresentation.primaryThreshold,
+                total: policyPresentation.primarySignerCount
+              })}</span
+            >
           {/if}
         </div>
         <p>

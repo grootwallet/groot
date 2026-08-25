@@ -771,6 +771,10 @@ export const dynamicCopy = {
     fr: 'Ouvrez une pièce disponible pour utiliser la clé de secours ou relancer son attente.',
     es: 'Abre una moneda disponible para usar la clave de respaldo o reiniciar su espera.'
   },
+  'Policy details unavailable': {
+    fr: 'Détails de la politique indisponibles',
+    es: 'Detalles de la política no disponibles'
+  },
   'Recovery access': { fr: 'Accès de récupération', es: 'Acceso de recuperación' },
   'Recovery key after wait': {
     fr: 'Clé de récupération après l’attente',
@@ -950,6 +954,14 @@ export const dynamicCopy = {
   'Your {key} can spend {count} coins': {
     fr: 'Votre {key} peut dépenser {count} pièces',
     es: 'Tu {key} puede gastar {count} monedas'
+  },
+  '{required} of {total} keys': {
+    fr: '{required} clés sur {total}',
+    es: '{required} de {total} claves'
+  },
+  '{required} of {total} primary keys': {
+    fr: '{required} clés principales sur {total}',
+    es: '{required} de {total} claves principales'
   },
   '1 coin can now be spent with the {key}': {
     fr: '1 pièce peut maintenant être dépensée avec la {key}',
