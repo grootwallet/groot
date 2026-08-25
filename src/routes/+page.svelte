@@ -498,7 +498,9 @@
           >{translate(
             $locale,
             maturitySummary.mature > 0
-              ? '{count} coins can now be spent with the {key}'
+              ? maturitySummary.mature === 1
+                ? '1 coin can now be spent with the {key}'
+                : '{count} coins can now be spent with the {key}'
               : maturitySummary.approaching > 0
                 ? '{key} unlocks soon for {count} coins'
                 : '{key} is still locked',

@@ -180,6 +180,20 @@
         selectedCoins.includes(coin.outpoint) && validPolicyMaturity(coin)?.state === 'mature'
     )
   );
+  const recoveryReadyCoins = $derived(
+    coins.filter((coin) => !coin.frozen && validPolicyMaturity(coin)?.state === 'mature')
+  );
+  const recoveryReadyKeyName = $derived(
+    (recoveryReadyCoins[0] ? validPolicyMaturity(recoveryReadyCoins[0]) : null)?.policyType ===
+      'inheritance'
+      ? 'heir key'
+      : 'recovery key'
+  );
+  const regularRequired = $derived(
+    wallet?.recoveryTemplate?.type === 'recovery'
+      ? wallet.recoveryTemplate.immediate.threshold
+      : (wallet?.threshold ?? 1)
+  );
   const proposalReadyCoins = $derived.by(() => {
     const reviewed = proposal;
     return reviewed
@@ -253,8 +267,12 @@
   const eligibleSignerSet = $derived.by(() => {
     if (proposal)
       return new Set(proposal.eligibleSignerFingerprints.map((item) => item.toLowerCase()));
-    if (!delayedSpendMode || wallet?.recoveryTemplate?.type !== 'recovery') return null;
-    const ids = new Set(wallet.recoveryTemplate.recovery.signerIds);
+    if (wallet?.recoveryTemplate?.type !== 'recovery') return null;
+    const ids = new Set(
+      delayedSpendMode
+        ? wallet.recoveryTemplate.recovery.signerIds
+        : wallet.recoveryTemplate.immediate.signerIds
+    );
     return new Set(
       wallet.cosigners
         .filter((item) => ids.has(item.id))
@@ -312,6 +330,14 @@
       });
   });
   function clearDraftError() {
+    error = '';
+  }
+  function activateDelayedSpend(candidate: Utxo) {
+    delayedSpendMode = true;
+    delayedSpendCoin = candidate;
+    renewalMode = false;
+    renewalCoin = null;
+    selectedCoins = [candidate.outpoint];
     error = '';
   }
   onDestroy(() => {
@@ -1089,10 +1115,45 @@
       current={progressStep}
     />{#if wallet && !proposal && !renewalMode && !delayedSpendMode}<SignerSummary
         signers={signerItems}
-        required={wallet.threshold}
+        required={regularRequired}
         signedFingerprints={[]}
         collecting={false}
       />{/if}{/if}
+  {#if !txid && !proposal && !renewalMode && !delayedSpendMode && recoveryReadyCoins.length}<section
+      class="recovery-key-option"
+      aria-live="polite"
+    >
+      <span><LockKeyhole size={17} /></span>
+      <div>
+        <strong
+          >{translate(
+            $locale,
+            recoveryReadyCoins.length === 1
+              ? 'Your {key} can spend 1 coin'
+              : 'Your {key} can spend {count} coins',
+            { key: recoveryReadyKeyName, count: recoveryReadyCoins.length }
+          )}</strong
+        ><small
+          >{translate(
+            $locale,
+            'Use the one-key recovery flow, or continue here with your normal 2-of-3 keys.'
+          )}</small
+        >
+      </div>
+      <Button
+        size="small"
+        variant="secondary"
+        onclick={recoveryReadyCoins.length === 1
+          ? () => activateDelayedSpend(recoveryReadyCoins[0])
+          : undefined}
+        href={recoveryReadyCoins.length === 1
+          ? `/multisig/send?coins=${encodeURIComponent(recoveryReadyCoins[0].outpoint)}&delayedSpend=1${typeof window !== 'undefined' && new URL(window.location.href).searchParams.get('fixture-policy-maturity') === '1' ? '&fixture-policy-maturity=1' : ''}`
+          : '/coins'}
+        >{translate($locale, recoveryReadyCoins.length === 1 ? 'Use {key}' : 'Choose a coin', {
+          key: recoveryReadyKeyName
+        })}</Button
+      >
+    </section>{/if}
   {#if delayedSpendMode && delayedSpendCoin && delayedSpendMaturity}<section
       class="policy-renewal-banner"
       aria-live="polite"

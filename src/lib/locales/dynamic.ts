@@ -699,6 +699,10 @@ export const dynamicCopy = {
       es: 'La recuperación asistida combinará tus claves con un servicio dedicado y apoyo guiado para beneficiarios. Aún no está disponible.'
     },
   'Available soon': { fr: 'Bientôt disponible', es: 'Disponible pronto' },
+  'Available since block {height}': {
+    fr: 'Disponible depuis le bloc {height}',
+    es: 'Disponible desde el bloque {height}'
+  },
   'Backup key is not available yet': {
     fr: 'La clé de secours n’est pas encore disponible',
     es: 'La clave de respaldo aún no está disponible'
@@ -710,8 +714,17 @@ export const dynamicCopy = {
     es: 'Elige una moneda cuya clave adicional esté lista.'
   },
   'Coin available': { fr: 'Pièce disponible', es: 'Moneda disponible' },
+  'Can spend this coin alone': {
+    fr: 'Peut dépenser seule cette pièce',
+    es: 'Puede gastar esta moneda por sí sola'
+  },
+  'Choose a coin': { fr: 'Choisir une pièce', es: 'Elegir una moneda' },
   'Coins are up to date': { fr: 'Les pièces sont à jour', es: 'Las monedas están actualizadas' },
   'Coming soon': { fr: 'Bientôt', es: 'Próximamente' },
+  'Confirmations, address and outpoint': {
+    fr: 'Confirmations, adresse et point de sortie',
+    es: 'Confirmaciones, dirección y punto de salida'
+  },
   'e.g. Emergency recovery': {
     fr: 'ex. Récupération d’urgence',
     es: 'p. ej. Recuperación de emergencia'
@@ -732,6 +745,14 @@ export const dynamicCopy = {
     fr: 'Elle peut maintenant déplacer seule cette pièce. Vos clés habituelles 2 sur 3 fonctionnent toujours.',
     es: 'Ahora puede mover esta moneda por sí sola. Tus claves habituales 2 de 3 también siguen funcionando.'
   },
+  'Keep using your normal keys, use the recovery key, or restart this coin’s wait.': {
+    fr: 'Continuez avec vos clés normales, utilisez la clé de récupération ou relancez l’attente de cette pièce.',
+    es: 'Sigue usando tus claves normales, usa la clave de recuperación o reinicia la espera de esta moneda.'
+  },
+  'Labels and existing public links': {
+    fr: 'Libellés et liens publics existants',
+    es: 'Etiquetas y enlaces públicos existentes'
+  },
   mature: { fr: 'disponible', es: 'disponible' },
   'Native SegWit · Miniscript': {
     fr: 'SegWit natif · Miniscript',
@@ -742,6 +763,7 @@ export const dynamicCopy = {
     es: 'Comisión de red · {rate} sat/vB'
   },
   'No action is required': { fr: 'Aucune action requise', es: 'No es necesario hacer nada' },
+  'Not available yet': { fr: 'Pas encore disponible', es: 'Aún no disponible' },
   'One coin goes to one address. The network fee is deducted from it.': {
     fr: 'Une pièce va vers une adresse. Les frais réseau en sont déduits.',
     es: 'Una moneda va a una dirección. La comisión de red se deduce de ella.'
@@ -763,6 +785,7 @@ export const dynamicCopy = {
     fr: 'Reporter l’accès de l’héritier',
     es: 'Posponer acceso del heredero'
   },
+  'Privacy & history': { fr: 'Confidentialité et historique', es: 'Privacidad e historial' },
   Protected: { fr: 'Protégée', es: 'Protegida' },
   'Protection timelines were refreshed.': {
     fr: 'Les calendriers de protection ont été actualisés.',
@@ -800,6 +823,7 @@ export const dynamicCopy = {
     es: 'Envía esta moneda con la {key}. La comisión se deduce automáticamente.'
   },
   'Send to': { fr: 'Envoyer à', es: 'Enviar a' },
+  'Spending access': { fr: 'Accès aux dépenses', es: 'Acceso para gastar' },
   'Signed by the {key}': { fr: 'Signé par la {key}', es: 'Firmado por la {key}' },
   'Spending them is safe with your normal keys. Any wallet change starts a fresh wait after confirmation.':
     {
@@ -812,6 +836,8 @@ export const dynamicCopy = {
     es: 'Sincroniza la cartera antes de usar la clave adicional.'
   },
   'Syncing…': { fr: 'Synchronisation…', es: 'Sincronizando…' },
+  'Technical details': { fr: 'Détails techniques', es: 'Detalles técnicos' },
+  Timeline: { fr: 'Calendrier', es: 'Cronología' },
   'The {key} is ready': { fr: 'La {key} est prête', es: 'La {key} está lista' },
   'The {key} signs alone. The fee is deducted from this coin.': {
     fr: 'La {key} signe seule. Les frais sont déduits de cette pièce.',
@@ -849,6 +875,10 @@ export const dynamicCopy = {
   'Use {key}': { fr: 'Utiliser la {key}', es: 'Usar la {key}' },
   'Use heir key': { fr: 'Utiliser la clé d’héritier', es: 'Usar clave de heredero' },
   'Use recovery key': { fr: 'Utiliser la clé de récupération', es: 'Usar clave de recuperación' },
+  'Use the one-key recovery flow, or continue here with your normal 2-of-3 keys.': {
+    fr: 'Utilisez le parcours de récupération à une clé, ou continuez ici avec vos clés normales 2 sur 3.',
+    es: 'Usa el flujo de recuperación con una clave o continúa aquí con tus claves normales 2 de 3.'
+  },
   'View coin': { fr: 'Voir la pièce', es: 'Ver moneda' },
   'View options': { fr: 'Voir les options', es: 'Ver opciones' },
   'Wait starts after confirmation': {
@@ -856,6 +886,7 @@ export const dynamicCopy = {
     es: 'La espera comienza tras la confirmación'
   },
   'What happens': { fr: 'Ce qui se passe', es: 'Qué sucede' },
+  'What this means': { fr: 'Ce que cela signifie', es: 'Qué significa' },
   'When it is available, choose that coin to send with the recovery or heir key.': {
     fr: 'Lorsqu’elle est disponible, choisissez cette pièce pour l’envoyer avec la clé de récupération ou d’héritier.',
     es: 'Cuando esté disponible, elige esa moneda para enviarla con la clave de recuperación o heredero.'
@@ -867,6 +898,26 @@ export const dynamicCopy = {
   'Where should this coin go?': {
     fr: 'Où envoyer cette pièce ?',
     es: '¿Adónde debe ir esta moneda?'
+  },
+  'Who can spend this coin now': {
+    fr: 'Qui peut dépenser cette pièce maintenant',
+    es: 'Quién puede gastar esta moneda ahora'
+  },
+  'Your {key} can spend 1 coin': {
+    fr: 'Votre {key} peut dépenser 1 pièce',
+    es: 'Tu {key} puede gastar 1 moneda'
+  },
+  'Your {key} can spend {count} coins': {
+    fr: 'Votre {key} peut dépenser {count} pièces',
+    es: 'Tu {key} puede gastar {count} monedas'
+  },
+  '1 coin can now be spent with the {key}': {
+    fr: '1 pièce peut maintenant être dépensée avec la {key}',
+    es: 'Ahora se puede gastar 1 moneda con la {key}'
+  },
+  'Address reused · review before spending': {
+    fr: 'Adresse réutilisée · vérifier avant de dépenser',
+    es: 'Dirección reutilizada · revisar antes de gastar'
   },
   'wsh · Miniscript · BIP48': { fr: 'wsh · Miniscript · BIP48', es: 'wsh · Miniscript · BIP48' },
   'wsh · sortedmulti · BIP48': { fr: 'wsh · sortedmulti · BIP48', es: 'wsh · sortedmulti · BIP48' },

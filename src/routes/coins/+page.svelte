@@ -539,251 +539,280 @@
           </div>
           {#if expanded.includes(utxo.outpoint)}
             <div class="coin-details" transition:slide={{ duration: 180 }}>
-              <dl>
-                <div>
-                  <dt>{translate($locale, 'Status')}</dt>
-                  <dd>
-                    {translate(
-                      $locale,
-                      utxo.confirmations
-                        ? formatConfirmationCount(utxo.confirmations, $locale)
-                        : `${t('unconfirmed', $locale)} · ${t('awaitingConfirmation', $locale)}`
-                    )}
-                  </dd>
-                </div>
-                {#if maturity}<div>
-                    <dt>{translate($locale, 'Extra key')}</dt>
-                    <dd>
-                      {maturityIs(maturity, MATURITY_UNCONFIRMED)
-                        ? translate($locale, 'Waiting for confirmation')
-                        : maturityIs(maturity, MATURITY_MATURE)
-                          ? translate($locale, '{key} can spend this coin', {
-                              key: translate($locale, extraKeyName(maturity))
+              {#if maturity}<section class="coin-policy-section">
+                  <div class="coin-detail-heading">
+                    <strong>{translate($locale, 'Spending access')}</strong>
+                    <small>{translate($locale, 'Who can spend this coin now')}</small>
+                  </div>
+                  <dl>
+                    <div>
+                      <dt>{translate($locale, extraKeyName(maturity))}</dt>
+                      <dd>
+                        {maturityIs(maturity, MATURITY_UNCONFIRMED)
+                          ? translate($locale, 'Waiting for confirmation')
+                          : maturityIs(maturity, MATURITY_MATURE)
+                            ? translate($locale, 'Can spend this coin alone')
+                            : maturityIs(maturity, MATURITY_APPROACHING)
+                              ? translate($locale, 'Available soon')
+                              : translate($locale, 'Not available yet')}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>{translate($locale, 'Timeline')}</dt>
+                      <dd>
+                        {!chainTipCurrent
+                          ? translate($locale, 'Paused · last verified at block {height}', {
+                              height: formatInteger(chainTip.height, $locale)
                             })
-                          : maturityIs(maturity, MATURITY_APPROACHING)
-                            ? translate($locale, '{key} available soon', {
-                                key: translate($locale, extraKeyName(maturity))
-                              })
-                            : translate($locale, 'Backup key is not available yet')}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>{translate($locale, 'Exact timeline')}</dt>
-                    <dd>
-                      {!chainTipCurrent
-                        ? translate($locale, 'Paused · last verified at block {height}', {
-                            height: formatInteger(chainTip.height, $locale)
-                          })
-                        : maturityIs(maturity, MATURITY_UNCONFIRMED)
-                          ? translate($locale, 'Starts after the first confirmation')
-                          : maturity.remainingBlocks === 0
-                            ? translate($locale, 'Extra key became available at block {height}', {
-                                height: formatInteger(
-                                  maturity.maturityHeight ?? chainTip.height,
-                                  $locale
-                                )
-                              })
-                            : translate($locale, '{count} blocks remaining', {
-                                count: formatInteger(maturity.remainingBlocks ?? 0, $locale)
-                              })}
-                    </dd>
-                  </div>
-                  {#if chainTipCurrent && maturity.approximateSecondsRemaining !== null && maturity.approximateSecondsRemaining > 0}{@const approximate =
-                      approximateBlockDuration(
-                        maturity.approximateSecondsRemaining
-                      )}{#if approximate}<div>
-                        <dt>{translate($locale, 'Approximate time')}</dt>
-                        <dd>
-                          ≈ {formatInteger(approximate.value, $locale)}
-                          {translate($locale, approximate.unit)}
-                        </dd>
-                      </div>{/if}{/if}
-                  <div class="coin-policy-explanation">
-                    <dt>{translate($locale, 'What changes')}</dt>
-                    <dd>
-                      {maturityIs(maturity, MATURITY_MATURE)
-                        ? translate(
-                            $locale,
-                            '{key} can now spend this coin alone. Your normal 2-of-3 keys still work.',
-                            { key: translate($locale, extraKeyName(maturity)) }
-                          )
-                        : translate(
-                            $locale,
-                            '{key} cannot spend this coin yet. Your normal 2-of-3 keys work now and remain available later.',
-                            { key: translate($locale, extraKeyName(maturity)) }
-                          )}
-                    </dd>
-                  </div>
+                          : maturityIs(maturity, MATURITY_UNCONFIRMED)
+                            ? translate($locale, 'Starts after the first confirmation')
+                            : maturity.remainingBlocks === 0
+                              ? translate($locale, 'Available since block {height}', {
+                                  height: formatInteger(
+                                    maturity.maturityHeight ?? chainTip.height,
+                                    $locale
+                                  )
+                                })
+                              : translate($locale, '{count} blocks remaining', {
+                                  count: formatInteger(maturity.remainingBlocks ?? 0, $locale)
+                                })}
+                        {#if chainTipCurrent && maturity.approximateSecondsRemaining !== null && maturity.approximateSecondsRemaining > 0}{@const approximate =
+                            approximateBlockDuration(
+                              maturity.approximateSecondsRemaining
+                            )}{#if approximate}<span class="coin-approximate-time"
+                              >≈ {formatInteger(approximate.value, $locale)}
+                              {translate($locale, approximate.unit)}</span
+                            >{/if}{/if}
+                      </dd>
+                    </div>
+                    <div class="coin-policy-explanation">
+                      <dt>{translate($locale, 'What this means')}</dt>
+                      <dd>
+                        {maturityIs(maturity, MATURITY_MATURE)
+                          ? translate(
+                              $locale,
+                              '{key} can now spend this coin alone. Your normal 2-of-3 keys still work.',
+                              { key: translate($locale, extraKeyName(maturity)) }
+                            )
+                          : translate(
+                              $locale,
+                              '{key} cannot spend this coin yet. Your normal 2-of-3 keys work now and remain available later.',
+                              { key: translate($locale, extraKeyName(maturity)) }
+                            )}
+                      </dd>
+                    </div>
+                  </dl>
                   {#if multisig && chainTipCurrent && maturityIs(maturity, MATURITY_MATURE)}<div
                       class="coin-policy-renewal"
                     >
                       <RefreshCw size={15} />
-                      <div>
+                      <div class="coin-policy-copy">
                         <strong>{translate($locale, 'No action is required')}</strong>
                         <small
                           >{translate(
                             $locale,
-                            'Your normal keys still work. You can spend with the extra key, or move this coin within the wallet to restart its wait.'
+                            'Keep using your normal keys, use the recovery key, or restart this coin’s wait.'
                           )}</small
                         >
                       </div>
-                      <Button
-                        variant="secondary"
-                        size="small"
-                        href={`/multisig/send?coins=${encodeURIComponent(utxo.outpoint)}&renewProtection=1${maturityFixtureSuffix}`}
-                        >{translate(
-                          $locale,
-                          maturity.policyType === 'inheritance'
-                            ? 'Postpone heir access'
-                            : 'Restart recovery wait'
-                        )}</Button
-                      ><Button
-                        variant="secondary"
-                        size="small"
-                        href={`/multisig/send?coins=${encodeURIComponent(utxo.outpoint)}&delayedSpend=1${maturityFixtureSuffix}`}
-                        >{translate(
-                          $locale,
-                          maturity.policyType === 'inheritance'
-                            ? 'Use heir key'
-                            : 'Use recovery key'
-                        )}</Button
-                      >
-                    </div>{/if}{/if}
-                <div>
-                  <dt>
-                    {translate($locale, 'Provenance')}
-                    <InsightTip
-                      label={translate($locale, 'About coin provenance')}
-                      text={translate(
+                      <div class="coin-policy-actions">
+                        <Button
+                          variant="secondary"
+                          size="small"
+                          href={`/multisig/send?coins=${encodeURIComponent(utxo.outpoint)}&renewProtection=1${maturityFixtureSuffix}`}
+                          >{translate(
+                            $locale,
+                            maturity.policyType === 'inheritance'
+                              ? 'Postpone heir access'
+                              : 'Restart recovery wait'
+                          )}</Button
+                        ><Button
+                          variant="secondary"
+                          size="small"
+                          href={`/multisig/send?coins=${encodeURIComponent(utxo.outpoint)}&delayedSpend=1${maturityFixtureSuffix}`}
+                          >{translate(
+                            $locale,
+                            maturity.policyType === 'inheritance'
+                              ? 'Use heir key'
+                              : 'Use recovery key'
+                          )}</Button
+                        >
+                      </div>
+                    </div>{/if}
+                </section>{/if}
+              <details class="coin-detail-group">
+                <summary>
+                  <span>
+                    <strong>{translate($locale, 'Privacy & history')}</strong>
+                    <small
+                      >{translate(
                         $locale,
-                        'The permanent labels inherited from this coin’s receive address or funding inputs.'
-                      )}
-                    />
-                  </dt>
-                  <dd>
-                    {translate(
-                      $locale,
-                      $discreetMode
-                        ? 'Hidden in discreet mode'
-                        : utxo.provenance.state === 'unknown'
-                          ? 'Source unknown'
-                          : utxo.provenance.labels.map((label) => label.text).join(' + ') ||
-                            utxo.label
-                    )}{translate(
-                      $locale,
-                      !$discreetMode && utxo.provenance.state === 'mixed' ? ' · Mixed' : ''
-                    )}
-                  </dd>
-                </div>
-                <div>
-                  <dt>
-                    {translate($locale, 'Privacy clusters')}
-                    <InsightTip
-                      label={translate($locale, 'About privacy clusters')}
-                      text={translate(
-                        $locale,
-                        'Groups already linked by transaction history. Spending across groups creates a new public link.'
-                      )}
-                    />
-                  </dt>
-                  <dd>
-                    {translate(
-                      $locale,
-                      $discreetMode
-                        ? 'Hidden in discreet mode'
-                        : `${utxo.provenance.clusterCount || 'Unknown'}${utxo.provenance.addressReused ? ' · Address reused' : ''}`
-                    )}
-                  </dd>
-                </div>
-                {#if !$discreetMode && utxo.provenance.sourceTransactionId}<div>
-                    <dt>{translate($locale, 'Source transaction')}</dt>
-                    <dd>
-                      <code>{compactAddress(utxo.provenance.sourceTransactionId, 18, 10)}</code>
-                    </dd>
-                  </div>{/if}{#if !$discreetMode && utxo.provenance.sourceIntentLabel}<div>
+                        utxo.provenance.addressReused
+                          ? 'Address reused · review before spending'
+                          : 'Labels and existing public links'
+                      )}</small
+                    >
+                  </span>
+                </summary>
+                <dl>
+                  <div>
                     <dt>
-                      {translate($locale, 'Source payment intent')}
+                      {translate($locale, 'Provenance')}
                       <InsightTip
-                        label={translate($locale, 'About source payment intent')}
+                        label={translate($locale, 'About coin provenance')}
                         text={translate(
                           $locale,
-                          'The permanent label of the payment that created this change. It can differ from the labels this coin inherited.'
-                        )}
-                      />
-                    </dt>
-                    <dd>{utxo.provenance.sourceIntentLabel.text}</dd>
-                  </div>{/if}{#if !$discreetMode && utxo.provenance.context === 'change'}<div>
-                    <dt>
-                      {translate($locale, 'Change lineage')}
-                      <InsightTip
-                        label={translate($locale, 'About change lineage')}
-                        text={translate(
-                          $locale,
-                          'How many wallet inputs were combined to create this change coin.'
+                          'The permanent labels inherited from this coin’s receive address or funding inputs.'
                         )}
                       />
                     </dt>
                     <dd>
                       {translate(
                         $locale,
-                        (utxo.provenance.sourceOutpoints?.length ?? 0) === 1
-                          ? '{count} wallet input'
-                          : '{count} wallet inputs',
-                        { count: utxo.provenance.sourceOutpoints?.length ?? 0 }
+                        $discreetMode
+                          ? 'Hidden in discreet mode'
+                          : utxo.provenance.state === 'unknown'
+                            ? 'Source unknown'
+                            : utxo.provenance.labels.map((label) => label.text).join(' + ') ||
+                              utxo.label
+                      )}{translate(
+                        $locale,
+                        !$discreetMode && utxo.provenance.state === 'mixed' ? ' · Mixed' : ''
                       )}
                     </dd>
-                  </div>{/if}
-                <div>
-                  <dt>{translate($locale, 'Address')}</dt>
-                  <dd>
-                    <code>{compactAddress(utxo.address)}</code><button
-                      aria-label={translate($locale, 'Copy address')}
-                      onclick={() => copy(utxo.address, 'Address', 'bitcoin-address')}
-                      ><Copy size={13} /></button
-                    >
-                  </dd>
-                </div>
-                <div>
-                  <dt>{translate($locale, 'Outpoint')}</dt>
-                  <dd>
-                    <code>{compactAddress(utxo.outpoint, 18, 10)}</code><button
-                      aria-label={translate($locale, 'Copy outpoint')}
-                      onclick={() => copy(utxo.outpoint, 'Outpoint', 'identifier')}
-                      ><Copy size={13} /></button
-                    >
-                  </dd>
-                </div>
-              </dl>
-              {#if reuse}
-                <div class="coin-reuse-details">
-                  <div class="coin-reuse-explanation">
-                    <AlertTriangle size={14} />
-                    <span>
-                      <strong
-                        >{translate(
-                          $locale,
-                          linkedCoins.length === 1
-                            ? 'This coin shares its address with 1 other coin.'
-                            : `This coin shares its address with ${linkedCoins.length} other coins.`
-                        )}</strong
-                      >
-                      {translate(
-                        $locale,
-                        'Spending them separately cannot undo their public link. Use a fresh labeled address\n                      for future payments.'
-                      )}
-                    </span>
                   </div>
-                  <ul aria-label={translate($locale, 'Coins linked by address reuse')}>
-                    {#each linkedCoins as linkedCoin (linkedCoin.outpoint)}
-                      <li>
-                        <span>{translate($locale, 'Linked coin')}</span>
-                        <strong><Amount value={linkedCoin.amount} hidden={$discreetMode} /></strong>
-                        <code>{compactAddress(linkedCoin.outpoint, 12, 8)}</code>
-                      </li>
-                    {/each}
-                  </ul>
-                </div>
-              {/if}
+                  <div>
+                    <dt>
+                      {translate($locale, 'Privacy clusters')}
+                      <InsightTip
+                        label={translate($locale, 'About privacy clusters')}
+                        text={translate(
+                          $locale,
+                          'Groups already linked by transaction history. Spending across groups creates a new public link.'
+                        )}
+                      />
+                    </dt>
+                    <dd>
+                      {translate(
+                        $locale,
+                        $discreetMode
+                          ? 'Hidden in discreet mode'
+                          : `${utxo.provenance.clusterCount || 'Unknown'}${utxo.provenance.addressReused ? ' · Address reused' : ''}`
+                      )}
+                    </dd>
+                  </div>
+                  {#if !$discreetMode && utxo.provenance.sourceIntentLabel}<div>
+                      <dt>
+                        {translate($locale, 'Source payment intent')}
+                        <InsightTip
+                          label={translate($locale, 'About source payment intent')}
+                          text={translate(
+                            $locale,
+                            'The permanent label of the payment that created this change. It can differ from the labels this coin inherited.'
+                          )}
+                        />
+                      </dt>
+                      <dd>{utxo.provenance.sourceIntentLabel.text}</dd>
+                    </div>{/if}{#if !$discreetMode && utxo.provenance.context === 'change'}<div>
+                      <dt>
+                        {translate($locale, 'Change lineage')}
+                        <InsightTip
+                          label={translate($locale, 'About change lineage')}
+                          text={translate(
+                            $locale,
+                            'How many wallet inputs were combined to create this change coin.'
+                          )}
+                        />
+                      </dt>
+                      <dd>
+                        {translate(
+                          $locale,
+                          (utxo.provenance.sourceOutpoints?.length ?? 0) === 1
+                            ? '{count} wallet input'
+                            : '{count} wallet inputs',
+                          { count: utxo.provenance.sourceOutpoints?.length ?? 0 }
+                        )}
+                      </dd>
+                    </div>{/if}
+                </dl>
+                {#if reuse}<div class="coin-reuse-details">
+                    <div class="coin-reuse-explanation">
+                      <AlertTriangle size={14} />
+                      <span>
+                        <strong
+                          >{translate(
+                            $locale,
+                            linkedCoins.length === 1
+                              ? 'This coin shares its address with 1 other coin.'
+                              : `This coin shares its address with ${linkedCoins.length} other coins.`
+                          )}</strong
+                        >
+                        {translate(
+                          $locale,
+                          'Spending them separately cannot undo their public link. Use a fresh labeled address\n                      for future payments.'
+                        )}
+                      </span>
+                    </div>
+                    <ul aria-label={translate($locale, 'Coins linked by address reuse')}>
+                      {#each linkedCoins as linkedCoin (linkedCoin.outpoint)}
+                        <li>
+                          <span>{translate($locale, 'Linked coin')}</span>
+                          <strong
+                            ><Amount value={linkedCoin.amount} hidden={$discreetMode} /></strong
+                          >
+                          <code>{compactAddress(linkedCoin.outpoint, 12, 8)}</code>
+                        </li>
+                      {/each}
+                    </ul>
+                  </div>{/if}
+              </details>
+              <details class="coin-detail-group">
+                <summary>
+                  <span>
+                    <strong>{translate($locale, 'Technical details')}</strong>
+                    <small>{translate($locale, 'Confirmations, address and outpoint')}</small>
+                  </span>
+                </summary>
+                <dl>
+                  <div>
+                    <dt>{translate($locale, 'Confirmations')}</dt>
+                    <dd>
+                      {translate(
+                        $locale,
+                        utxo.confirmations
+                          ? formatConfirmationCount(utxo.confirmations, $locale)
+                          : `${t('unconfirmed', $locale)} · ${t('awaitingConfirmation', $locale)}`
+                      )}
+                    </dd>
+                  </div>
+                  {#if !$discreetMode && utxo.provenance.sourceTransactionId}<div>
+                      <dt>{translate($locale, 'Source transaction')}</dt>
+                      <dd>
+                        <code>{compactAddress(utxo.provenance.sourceTransactionId, 18, 10)}</code>
+                      </dd>
+                    </div>{/if}
+                  <div>
+                    <dt>{translate($locale, 'Address')}</dt>
+                    <dd>
+                      <code>{compactAddress(utxo.address)}</code><button
+                        aria-label={translate($locale, 'Copy address')}
+                        onclick={() => copy(utxo.address, 'Address', 'bitcoin-address')}
+                        ><Copy size={13} /></button
+                      >
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>{translate($locale, 'Outpoint')}</dt>
+                    <dd>
+                      <code>{compactAddress(utxo.outpoint, 18, 10)}</code><button
+                        aria-label={translate($locale, 'Copy outpoint')}
+                        onclick={() => copy(utxo.outpoint, 'Outpoint', 'identifier')}
+                        ><Copy size={13} /></button
+                      >
+                    </dd>
+                  </div>
+                </dl>
+              </details>
               {#if multisig && !$discreetMode && utxo.provenance.context === 'received' && utxo.provenance.state === 'unknown' && !utxo.primaryLabel}
                 <div class="observed-receive-prompt">
                   <span><Tag size={15} /></span>

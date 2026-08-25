@@ -990,6 +990,9 @@ code {
 .policy-maturity-banner .stale-copy {
   color: var(--warning-text);
 }
+.policy-maturity-banner:not(.compact) {
+  margin-bottom: 14px;
+}
 .balance-card::after {
   content: '';
   position: absolute;
@@ -7831,13 +7834,33 @@ code {
   grid-column: 1 / -1;
 }
 
+.coin-policy-section {
+  display: grid;
+  gap: 12px;
+}
+.coin-detail-heading {
+  display: grid;
+  gap: 2px;
+}
+.coin-detail-heading strong {
+  color: var(--text);
+  font-size: 11px;
+}
+.coin-detail-heading small {
+  color: var(--muted);
+  font-size: 9px;
+}
+.coin-approximate-time {
+  color: var(--muted);
+}
+
 .coin-policy-explanation dd {
   max-width: 62ch;
   line-height: 1.45;
 }
 .coin-policy-renewal {
   display: grid;
-  grid-template-columns: 28px minmax(0, 1fr) auto;
+  grid-template-columns: 28px minmax(0, 1fr);
   align-items: center;
   gap: 9px;
   padding-top: 10px;
@@ -7850,7 +7873,7 @@ code {
   color: var(--link);
   background: var(--surface-icon);
 }
-.coin-policy-renewal > div {
+.coin-policy-renewal > .coin-policy-copy {
   min-width: 0;
   display: grid;
   gap: 1px;
@@ -7862,6 +7885,18 @@ code {
   color: var(--muted);
   font-size: 10px;
   line-height: 1.4;
+}
+.coin-policy-actions {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.coin-policy-actions .button {
+  width: 100%;
+  min-width: 0;
+  white-space: normal;
+  text-align: center;
 }
 .coin-main > span {
   color: var(--text-soft);
@@ -7949,6 +7984,35 @@ code {
   margin: 0;
   display: grid;
   gap: 11px;
+}
+.coin-detail-group {
+  border-top: 1px solid var(--border);
+  padding-top: 11px;
+}
+.coin-detail-group summary {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  color: var(--link);
+}
+.coin-detail-group summary::marker {
+  color: var(--muted);
+}
+.coin-detail-group summary span {
+  display: grid;
+  gap: 2px;
+  margin-left: 5px;
+}
+.coin-detail-group summary strong {
+  color: var(--text-soft);
+  font-size: 10px;
+}
+.coin-detail-group summary small {
+  color: var(--muted);
+  font-size: 9px;
+}
+.coin-detail-group[open] summary {
+  margin-bottom: 12px;
 }
 .coin-details dl > div {
   min-width: 0;
@@ -8443,6 +8507,41 @@ code {
   display: block;
   margin-top: 4px;
 }
+.send-stage-card > .selection-technical {
+  margin-bottom: 12px;
+}
+.recovery-key-option {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--danger) 34%, var(--border));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--danger) 6%, var(--panel));
+}
+.recovery-key-option > span {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 8px;
+  color: var(--link);
+  background: var(--surface-icon);
+}
+.recovery-key-option > div {
+  display: grid;
+  gap: 2px;
+}
+.recovery-key-option strong {
+  font-size: 11px;
+}
+.recovery-key-option small {
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.4;
+}
 .send-coin-picker .permanent-label-tags {
   margin-top: 0;
 }
@@ -8919,6 +9018,19 @@ code {
   .policy-maturity-panel-heading > .ready-badge {
     grid-column: 1 / -1;
     justify-self: start;
+  }
+
+  .coin-policy-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .recovery-key-option {
+    grid-template-columns: 30px minmax(0, 1fr);
+  }
+
+  .recovery-key-option .button {
+    grid-column: 1 / -1;
+    width: 100%;
   }
 
   .policy-maturity-stats {
