@@ -42,7 +42,11 @@
   import { toast } from '$lib/stores/toasts';
   import { coldcardPolicyFilename } from '$lib/transfer';
   import { useWalletShellContext } from '$lib/wallet/shell-context';
-  import { policyMaturitySummary, walletPolicyPresentation } from '$lib/wallet/policy';
+  import {
+    policyMaturitySummary,
+    validPolicyMaturity,
+    walletPolicyPresentation
+  } from '$lib/wallet/policy';
   import {
     matchingPolicyVerification,
     policyReadinessLabel,
@@ -59,6 +63,10 @@
     recordHardwareHealthCheck,
     setHardwareHealthChecks
   } from '$lib/hardware/health-check-state';
+  const MATURITY_MATURE = 'mature';
+  const MATURITY_APPROACHING = 'approaching';
+  const MATURITY_IMMATURE = 'immature';
+  const MATURITY_UNCONFIRMED = 'unconfirmed';
   const walletShell = useWalletShellContext();
   let wallet = $state<MultisigWallet | null>(null);
   let snapshot = $state<WalletSnapshot | null>(null);
@@ -85,6 +93,7 @@
   const maturitySummary = $derived(
     snapshot ? policyMaturitySummary(snapshot.utxos, snapshot.chainTip) : null
   );
+  const policyCoins = $derived(snapshot?.utxos.filter((coin) => validPolicyMaturity(coin)) ?? []);
   const delayedPolicyType = $derived(
     wallet?.policyType === 'inheritance' ? 'inheritance' : 'recovery'
   );
@@ -580,21 +589,29 @@
             >{translate($locale, 'Review coins')}</Button
           >
         </div>
-        <div class="policy-maturity-meta">
-          <span
-            ><ShieldCheck size={15} />{translate(
-              $locale,
-              maturitySummary.total === 1
-                ? 'Normal keys still work for 1 coin.'
-                : 'Normal keys still work for all {count} coins.',
-              { count: formatInteger(maturitySummary.total, $locale) }
-            )}</span
-          >
-          {#if maturitySummary.chainCurrent && maturitySummary.nextRemainingBlocks !== null}<span
-              ><Clock3 size={15} />{translate($locale, 'Next change in {count} blocks.', {
-                count: formatInteger(maturitySummary.nextRemainingBlocks, $locale)
-              })}</span
-            >{/if}
+        <div class="policy-maturity-facts">
+          <div class="info-banner">
+            <ShieldCheck size={16} />
+            <p>
+              {translate(
+                $locale,
+                maturitySummary.total === 1
+                  ? 'Normal keys still work for 1 coin.'
+                  : 'Normal keys still work for all {count} coins.',
+                { count: formatInteger(maturitySummary.total, $locale) }
+              )}
+            </p>
+          </div>
+          {#if maturitySummary.chainCurrent && maturitySummary.nextRemainingBlocks !== null}<div
+              class="info-banner"
+            >
+              <Clock3 size={16} />
+              <p>
+                {translate($locale, 'Next change in {count} blocks.', {
+                  count: formatInteger(maturitySummary.nextRemainingBlocks, $locale)
+                })}
+              </p>
+            </div>{/if}
         </div>
         <details class="policy-maturity-details">
           <summary>{translate($locale, 'How backup-key access works')}</summary>
@@ -610,6 +627,40 @@
                 'Open an available coin to use the backup key or restart its wait.'
               )}
             </p>{/if}
+          <div class="policy-access-coins">
+            <h3>{translate($locale, 'Coin timelines')}</h3>
+            <div>
+              {#each policyCoins as coin (coin.outpoint)}{@const maturity =
+                  validPolicyMaturity(coin)}
+                {#if maturity}<article>
+                    <span>
+                      <strong>{coin.label || translate($locale, 'Coin')}</strong>
+                      <small
+                        class="coin-status"
+                        class:policy-mature={maturity.state === MATURITY_MATURE}
+                        class:policy-approaching={maturity.state === MATURITY_APPROACHING}
+                        class:policy-immature={maturity.state === MATURITY_IMMATURE}
+                        class:pending={maturity.state === MATURITY_UNCONFIRMED}
+                        >{maturity.state === MATURITY_MATURE
+                          ? translate($locale, 'Backup key available')
+                          : maturity.state === MATURITY_APPROACHING &&
+                              maturity.remainingBlocks !== null
+                            ? translate($locale, 'Available in {count} blocks', {
+                                count: formatInteger(maturity.remainingBlocks, $locale)
+                              })
+                            : maturity.state === MATURITY_IMMATURE &&
+                                maturity.remainingBlocks !== null
+                              ? translate($locale, 'Waiting · {count} blocks', {
+                                  count: formatInteger(maturity.remainingBlocks, $locale)
+                                })
+                              : translate($locale, 'Wait starts after confirmation')}</small
+                      >
+                    </span>
+                    <Amount value={coin.amount} />
+                  </article>{/if}
+              {/each}
+            </div>
+          </div>
         </details>
       </section>
     {/if}

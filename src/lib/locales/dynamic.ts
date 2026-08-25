@@ -699,6 +699,10 @@ export const dynamicCopy = {
       es: 'La recuperación asistida combinará tus claves con un servicio dedicado y apoyo guiado para beneficiarios. Aún no está disponible.'
     },
   'Available soon': { fr: 'Bientôt disponible', es: 'Disponible pronto' },
+  'Available in {count} blocks': {
+    fr: 'Disponible dans {count} blocs',
+    es: 'Disponible en {count} bloques'
+  },
   'Available since block {height}': {
     fr: 'Disponible depuis le bloc {height}',
     es: 'Disponible desde el bloque {height}'
@@ -708,6 +712,10 @@ export const dynamicCopy = {
     es: 'La clave de respaldo aún no está disponible'
   },
   'Backup key protected': { fr: 'Clé de secours protégée', es: 'Clave de respaldo protegida' },
+  'Backup key available': {
+    fr: 'Clé de secours disponible',
+    es: 'Clave de respaldo disponible'
+  },
   'Backup keys protected': { fr: 'Clés de secours protégées', es: 'Claves de respaldo protegidas' },
   'Choose one coin whose extra key is ready.': {
     fr: 'Choisissez une pièce dont la clé supplémentaire est prête.',
@@ -720,6 +728,8 @@ export const dynamicCopy = {
   },
   'Choose a coin': { fr: 'Choisir une pièce', es: 'Elegir una moneda' },
   'Coins are up to date': { fr: 'Les pièces sont à jour', es: 'Las monedas están actualizadas' },
+  'Coin timelines': { fr: 'Calendriers des pièces', es: 'Cronogramas de las monedas' },
+  Coin: { fr: 'Pièce', es: 'Moneda' },
   'Coming soon': { fr: 'Bientôt', es: 'Próximamente' },
   'Confirmations, address and outpoint': {
     fr: 'Confirmations, adresse et point de sortie',
@@ -948,6 +958,10 @@ export const dynamicCopy = {
   'Wait starts after confirmation': {
     fr: 'L’attente commence après confirmation',
     es: 'La espera comienza tras la confirmación'
+  },
+  'Waiting · {count} blocks': {
+    fr: 'En attente · {count} blocs',
+    es: 'En espera · {count} bloques'
   },
   'What happens': { fr: 'Ce qui se passe', es: 'Qué sucede' },
   'What this means': { fr: 'Ce que cela signifie', es: 'Qué significa' },

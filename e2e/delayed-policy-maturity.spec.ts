@@ -53,11 +53,16 @@ test('shows security-accurate delayed-policy state across overview, coins, and p
   ).toBeVisible();
   await expect(page.getByText('Normal keys still work for all 4 coins.')).toBeVisible();
   await expect(page.getByText('Next change in 820 blocks.')).toBeVisible();
+  await expect(page.locator('.policy-maturity-facts .info-banner')).toHaveCount(2);
   await expect(page.locator('.policy-maturity-stats')).toHaveCount(0);
   await page.getByText('How backup-key access works').click();
   await expect(
     page.getByText('Open an available coin to use the backup key or restart its wait.')
   ).toBeVisible();
+  await expect(page.locator('.policy-access-coins article')).toHaveCount(4);
+  await expect(page.getByText('Backup key available', { exact: true })).toBeVisible();
+  await expect(page.getByText('Available in 820 blocks', { exact: true })).toBeVisible();
+  await expect(page.getByText('Waiting · 4,308 blocks', { exact: true })).toBeVisible();
   await expect(page.locator('body')).not.toContainText(/\bexpired\b/i);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true
