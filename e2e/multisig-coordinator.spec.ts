@@ -27,6 +27,12 @@ async function saveSetupDescriptor(page: Page, expectedFilename: string) {
   await expect(page.getByText('Descriptor backup saved', { exact: true })).toBeVisible();
 }
 
+async function revealInsight(page: Page, label: string, mobile: boolean) {
+  const trigger = page.getByRole('button', { name: label });
+  if (mobile) await trigger.click();
+  else await trigger.hover();
+}
+
 test('routes receive address creation through the selected wallet kind', async ({ page }) => {
   await page.goto('/multisig/receive');
   await expect(page).toHaveURL(/\/receive$/);
@@ -854,7 +860,7 @@ test('selects and freezes multisig coins before entering the send flow', async (
   await expect(page.getByLabel('Amount', { exact: true })).toHaveValue('2479700');
 });
 
-test('offers safe recipes and advanced M-of-N control', async ({ page }) => {
+test('offers safe recipes and advanced M-of-N control', async ({ page }, testInfo) => {
   await page.goto('/multisig/new');
   await expect(page.getByRole('heading', { name: 'Choose how this wallet spends' })).toBeVisible();
   await expect(page.getByLabel('Wallet name')).toHaveCount(0);
@@ -869,9 +875,18 @@ test('offers safe recipes and advanced M-of-N control', async ({ page }) => {
       )
     ).toBeGreaterThanOrEqual(15);
   }
+  await revealInsight(page, 'How Standard multisig works', testInfo.project.name === 'mobile');
+  await expect(
+    page.getByRole('tooltip').filter({ hasText: 'helper can never spend alone' })
+  ).toBeVisible();
   await page.getByRole('button', { name: 'Continue', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Standard multisig' })).toBeVisible();
   await expect(page.getByText('2 of 3', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('Assisted signing', { exact: true })).toBeVisible();
+  await revealInsight(page, 'About assisted signing', testInfo.project.name === 'mobile');
+  await expect(
+    page.getByRole('tooltip').filter({ hasText: 'owners can always sign together' })
+  ).toBeVisible();
   await page.getByRole('button', { name: /3 of 5/ }).click();
   await expect(page.locator('.policy-pill')).toHaveText('3 of 5');
   await page.getByRole('button', { name: /Custom/ }).click();
@@ -1555,13 +1570,18 @@ test('compiles and simulates guided Miniscript recovery policies', async ({ page
   await expect(page.getByText(/intentionally reduce theft resistance/)).toBeVisible();
 });
 
-test('creates a guided recovery descriptor from a visible template', async ({ page }) => {
+test('creates a guided recovery descriptor from a visible template', async ({ page }, testInfo) => {
   await page.goto('/multisig/new');
   await page.getByRole('button', { name: /^Recovery/ }).click();
   await expect(page.getByLabel('Wallet name')).toHaveCount(0);
   await page.getByRole('button', { name: 'Continue', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Recovery wallet' })).toBeVisible();
-  await expect(page.getByText(/4,320\s+blocks/)).toBeVisible();
+  await expect(page.getByText('4,320 blocks', { exact: true })).toBeVisible();
+  await expect(page.getByText('The delay starts separately for each received coin.')).toBeVisible();
+  await revealInsight(page, 'Recovery key spending authority', testInfo.project.name === 'mobile');
+  await expect(
+    page.getByRole('tooltip').filter({ hasText: 'can spend that matured coin by itself' })
+  ).toBeVisible();
   await expect(page.getByText('Four separate keys')).toBeVisible();
   await continueToSigners(page, 'Resilient vault');
   for (const key of [...keys, recoveryKey]) {
@@ -1587,13 +1607,20 @@ test('creates a guided recovery descriptor from a visible template', async ({ pa
   await expect(page.getByRole('heading', { name: 'Resilient vault' })).toBeVisible();
 });
 
-test('creates a guided inheritance descriptor with a distinct heir role', async ({ page }) => {
+test('creates a guided inheritance descriptor with a distinct heir role', async ({
+  page
+}, testInfo) => {
   await page.goto('/multisig/new');
   await page.getByRole('button', { name: /^Inheritance/ }).click();
   await expect(page.getByText('About one year', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Continue', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Inheritance wallet' })).toBeVisible();
-  await expect(page.getByText(/52,560\s+blocks/)).toBeVisible();
+  await expect(page.getByText('52,560 blocks', { exact: true })).toBeVisible();
+  await expect(page.getByText('The delay starts separately for each received coin.')).toBeVisible();
+  await revealInsight(page, 'Heir key spending authority', testInfo.project.name === 'mobile');
+  await expect(
+    page.getByRole('tooltip').filter({ hasText: 'can spend that matured coin by itself' })
+  ).toBeVisible();
   await continueToSigners(page, 'Family inheritance');
   for (const key of [...keys, { ...recoveryKey, label: 'Heir key' }]) {
     await page.getByRole('button', { name: 'Add a signer' }).click();

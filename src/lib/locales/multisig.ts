@@ -7,6 +7,70 @@ export const multisigCopy = {
   },
   'This wallet': { fr: 'Ce portefeuille', es: 'Esta cartera' },
   'This template': { fr: 'Ce modèle', es: 'Esta plantilla' },
+  'About this plan': { fr: 'À propos de ce plan', es: 'Acerca de este plan' },
+  'How Standard multisig works': {
+    fr: 'Fonctionnement de la multisignature standard',
+    es: 'Cómo funciona la multifirma estándar'
+  },
+  'How Recovery works': {
+    fr: 'Fonctionnement de la récupération',
+    es: 'Cómo funciona la recuperación'
+  },
+  'How Inheritance works': {
+    fr: 'Fonctionnement de l’héritage',
+    es: 'Cómo funciona la herencia'
+  },
+  'Standard 2-of-3 can also support assisted signing: the owners keep two keys and a trusted helper keeps one. Either owner plus the helper can sign, or the two owner keys can sign together. The helper can never spend alone.':
+    {
+      fr: 'Le standard 2 sur 3 permet aussi la signature assistée : les propriétaires conservent deux clés et une personne de confiance en conserve une. Un propriétaire et cette personne peuvent signer ensemble, ou les deux clés des propriétaires peuvent signer. La personne aidante ne peut jamais dépenser seule.',
+      es: 'El estándar 2 de 3 también permite la firma asistida: los propietarios conservan dos claves y una persona de confianza conserva una. Un propietario y esa persona pueden firmar juntos, o pueden firmar las dos claves de los propietarios. La persona asistente nunca puede gastar por sí sola.'
+    },
+  'The recovery key is a separate spending path. After each coin has aged 4,320 blocks, that key can spend the matured coin alone. Every new deposit starts its own delay.':
+    {
+      fr: 'La clé de récupération est un chemin de dépense distinct. Après que chaque pièce a atteint 4 320 blocs, cette clé peut dépenser seule la pièce arrivée à maturité. Chaque nouveau dépôt démarre son propre délai.',
+      es: 'La clave de recuperación es una ruta de gasto independiente. Cuando cada moneda alcanza 4.320 bloques, esa clave puede gastar por sí sola la moneda vencida. Cada nuevo depósito inicia su propio plazo.'
+    },
+  'The heir key is a separate spending path. After each coin has aged 52,560 blocks, that key can spend the matured coin alone. Every new deposit starts its own delay.':
+    {
+      fr: 'La clé d’héritier est un chemin de dépense distinct. Après que chaque pièce a atteint 52 560 blocs, cette clé peut dépenser seule la pièce arrivée à maturité. Chaque nouveau dépôt démarre son propre délai.',
+      es: 'La clave del heredero es una ruta de gasto independiente. Cuando cada moneda alcanza 52.560 bloques, esa clave puede gastar por sí sola la moneda vencida. Cada nuevo depósito inicia su propio plazo.'
+    },
+  'Assisted signing': { fr: 'Signature assistée', es: 'Firma asistida' },
+  'Two owner keys + one helper key. Any two sign; the helper never signs alone.': {
+    fr: 'Deux clés de propriétaire + une clé d’aide. Deux clés signent ; la personne aidante ne signe jamais seule.',
+    es: 'Dos claves de propietario + una clave de ayuda. Firman dos; la persona asistente nunca firma sola.'
+  },
+  'About assisted signing': {
+    fr: 'À propos de la signature assistée',
+    es: 'Acerca de la firma asistida'
+  },
+  'This uses the same standard 2-of-3 policy. Keep the two owner keys independent. A trusted helper can co-sign with either owner, while the owners can always sign together without the helper.':
+    {
+      fr: 'Cette configuration utilise la même politique standard 2 sur 3. Conservez les deux clés des propriétaires séparément. Une personne de confiance peut cosigner avec l’un des propriétaires, tandis que les propriétaires peuvent toujours signer ensemble sans elle.',
+      es: 'Esta configuración usa la misma política estándar 2 de 3. Mantén separadas las dos claves de los propietarios. Una persona de confianza puede firmar junto con cualquiera de ellos, mientras que los propietarios siempre pueden firmar juntos sin su ayuda.'
+    },
+  'Recovery key spending authority': {
+    fr: 'Pouvoir de dépense de la clé de récupération',
+    es: 'Autoridad de gasto de la clave de recuperación'
+  },
+  'Heir key spending authority': {
+    fr: 'Pouvoir de dépense de la clé d’héritier',
+    es: 'Autoridad de gasto de la clave del heredero'
+  },
+  'After a coin has aged 4,320 blocks, the recovery key can spend that matured coin by itself. It does not need either of the normal 2-of-3 signatures.':
+    {
+      fr: 'Après qu’une pièce a atteint 4 320 blocs, la clé de récupération peut dépenser seule cette pièce arrivée à maturité. Elle n’a besoin d’aucune des signatures du chemin normal 2 sur 3.',
+      es: 'Cuando una moneda alcanza 4.320 bloques, la clave de recuperación puede gastar por sí sola esa moneda vencida. No necesita ninguna de las firmas de la ruta normal 2 de 3.'
+    },
+  'After a coin has aged 52,560 blocks, the heir key can spend that matured coin by itself. It does not need either of the normal 2-of-3 signatures.':
+    {
+      fr: 'Après qu’une pièce a atteint 52 560 blocs, la clé d’héritier peut dépenser seule cette pièce arrivée à maturité. Elle n’a besoin d’aucune des signatures du chemin normal 2 sur 3.',
+      es: 'Cuando una moneda alcanza 52.560 bloques, la clave del heredero puede gastar por sí sola esa moneda vencida. No necesita ninguna de las firmas de la ruta normal 2 de 3.'
+    },
+  'The delay starts separately for each received coin.': {
+    fr: 'Le délai démarre séparément pour chaque pièce reçue.',
+    es: 'El plazo comienza por separado para cada moneda recibida.'
+  },
   'A descriptor is a public, watch-only recipe that defines the signing policy and derives every receive and change address. It cannot spend bitcoin, but it reveals the wallet’s complete address history, so keep it private and back it up.':
     {
       fr: 'Un descripteur est une recette publique en lecture seule qui définit la politique de signature et dérive chaque adresse de réception et de monnaie. Il ne peut pas dépenser de bitcoin, mais il révèle tout l’historique des adresses du portefeuille ; conservez-le donc en privé et sauvegardez-le.',

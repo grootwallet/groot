@@ -1316,6 +1316,26 @@
                 >{/if}</button
             >
           </div>
+          <div class="policy-choice-insight">
+            <span>{translate($locale, 'About this plan')}</span><InsightTip
+              label={translate(
+                $locale,
+                templateKind === 'standard'
+                  ? 'How Standard multisig works'
+                  : templateKind === 'recovery'
+                    ? 'How Recovery works'
+                    : 'How Inheritance works'
+              )}
+              text={translate(
+                $locale,
+                templateKind === 'standard'
+                  ? 'Standard 2-of-3 can also support assisted signing: the owners keep two keys and a trusted helper keeps one. Either owner plus the helper can sign, or the two owner keys can sign together. The helper can never spend alone.'
+                  : templateKind === 'recovery'
+                    ? 'The recovery key is a separate spending path. After each coin has aged 4,320 blocks, that key can spend the matured coin alone. Every new deposit starts its own delay.'
+                    : 'The heir key is a separate spending path. After each coin has aged 52,560 blocks, that key can spend the matured coin alone. Every new deposit starts its own delay.'
+              )}
+            />
+          </div>
           <div class="coordinator-actions">
             <Button variant="secondary" href="/settings"
               ><ArrowLeft size={16} />{translate($locale, 'Cancel')}</Button
@@ -1400,6 +1420,22 @@
                 ><em>{translate($locale, 'Advanced')}</em></button
               >
             </div>
+            {#if standardRecipe === '2of3'}<div class="assisted-signing-plan">
+                <Users size={16} /><span
+                  ><strong>{translate($locale, 'Assisted signing')}</strong><small
+                    >{translate(
+                      $locale,
+                      'Two owner keys + one helper key. Any two sign; the helper never signs alone.'
+                    )}</small
+                  ></span
+                ><InsightTip
+                  label={translate($locale, 'About assisted signing')}
+                  text={translate(
+                    $locale,
+                    'This uses the same standard 2-of-3 policy. Keep the two owner keys independent. A trusted helper can co-sign with either owner, while the owners can always sign together without the helper.'
+                  )}
+                />
+              </div>{/if}
             {#if standardRecipe === 'custom'}<div class="threshold-row custom-threshold">
                 <label class="field"
                   ><span>{translate($locale, 'Signatures required (M)')}</span><select
@@ -1435,17 +1471,38 @@
                     $locale,
                     templateKind === 'recovery' ? 'ABOUT 1 MONTH' : 'ABOUT 1 YEAR'
                   )}</b
-                ><strong
-                  >{translate(
-                    $locale,
-                    templateKind === 'recovery' ? '1 recovery key' : '1 heir key'
-                  )}</strong
+                ><span class="path-title"
+                  ><strong
+                    >{translate(
+                      $locale,
+                      templateKind === 'recovery' ? '1 recovery key' : '1 heir key'
+                    )}</strong
+                  ><InsightTip
+                    label={translate(
+                      $locale,
+                      templateKind === 'recovery'
+                        ? 'Recovery key spending authority'
+                        : 'Heir key spending authority'
+                    )}
+                    text={translate(
+                      $locale,
+                      templateKind === 'recovery'
+                        ? 'After a coin has aged 4,320 blocks, the recovery key can spend that matured coin by itself. It does not need either of the normal 2-of-3 signatures.'
+                        : 'After a coin has aged 52,560 blocks, the heir key can spend that matured coin by itself. It does not need either of the normal 2-of-3 signatures.'
+                    )}
+                  /></span
                 ><small
                   >{formatInteger(templateKind === 'recovery' ? 4_320 : 52_560, $locale)}
                   {translate($locale, 'blocks')}</small
                 ></span
               >
             </div>
+            <p class="policy-delay-note">
+              <Clock3 size={14} />{translate(
+                $locale,
+                'The delay starts separately for each received coin.'
+              )}
+            </p>
             <div class="recovery-separation">
               <ShieldCheck size={15} /><span
                 ><strong>{translate($locale, 'Four separate keys')}</strong><small
