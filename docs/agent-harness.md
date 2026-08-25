@@ -136,6 +136,18 @@ Current local status on 2026-08-24:
   certified**: cold-cache reset was not isolated from the shared BitBoxApp cache, and Testnet4,
   packaged-candidate, independent-review, and Whisper/BLE rows remain open.
   Original BitBox02 evidence is not inherited.
+- Packaged v0.4.28 Testnet4 testing with the original BitBox02 exposed that
+  HWI 3.2.0 may wait for device-password entry inside aggregate discovery,
+  before returning the locked device row. The former 30-second discovery
+  deadline failed after a successful unlock. ADR 0042 and the same-version
+  portable correction extend that cancelable discovery window to five minutes;
+  physical retesting is still required before recording a pass.
+- The following packaged BitBox02 Nova attempt completed discovery but returned
+  sanitized `hardware_unavailable` from initial account-key import. Repeating
+  the primary action unnecessarily repeated aggregate discovery. The corrective
+  candidate retains the selected capability, retries only typed HWI transient
+  reopen codes, and localizes the scan title; exact-model physical retesting is
+  still required.
 
 GitHub issue state is intentionally not duplicated as a large static list. The
 live tracker is <https://github.com/thibistaken/groot/issues>. At this snapshot,

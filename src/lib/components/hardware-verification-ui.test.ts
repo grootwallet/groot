@@ -113,7 +113,7 @@ describe('hardware receive verification UI', () => {
 
   it('bounds, coordinates, and cancels native HWI work', () => {
     expect(hardwareTransport).toContain(
-      'const DISCOVERY_TIMEOUT: Duration = Duration::from_secs(30)'
+      'const DISCOVERY_TIMEOUT: Duration = Duration::from_secs(5 * 60)'
     );
     expect(hardwareTransport).toContain(
       'static HWI_COORDINATOR: OnceLock<HardwareCoordinator> = OnceLock::new()'
@@ -245,6 +245,10 @@ describe('hardware receive verification UI', () => {
     expect(hardwareSetup).toContain('<strong>{translate($locale, errorTitle)}</strong>');
     expect(hardwareSetup).not.toContain(
       '<strong>Could not read the account key</strong><small>{error}</small>'
+    );
+    expect(hardwareSetup).toContain("? 'Try this signer again'");
+    expect(hardwareSetup).toContain(
+      'useDevice(lastAttemptedDevice, lastAttemptAllowedEmptyPassphrase)'
     );
   });
 

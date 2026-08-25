@@ -428,6 +428,9 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   await expect(
     page.getByRole('status', { name: 'Hardware wallet setup in progress' })
   ).toContainText('Scanning');
+  await expect(
+    page.getByRole('status', { name: 'Hardware wallet setup in progress' })
+  ).toContainText('Follow any unlock prompt on the signer. Keep other wallet apps closed.');
   await page.getByRole('button', { name: /Virtual Coldcard/ }).click();
   await expect(
     page.getByRole('status', { name: 'Hardware wallet setup in progress' })
@@ -659,6 +662,15 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   await page.getByLabel('App PIN', { exact: true }).fill('hardware-pin');
   await page.getByRole('button', { name: 'Save & test' }).click();
   await expect(page.getByText('Trusted remote server')).toBeVisible();
+});
+
+test('localizes hardware scan progress in French', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('groot-language', 'fr'));
+  await page.goto('/hardware/new');
+  await page.getByRole('button', { name: /Connecter par câble/ }).click();
+  await expect(
+    page.getByRole('status', { name: 'Configuration du portefeuille matériel en cours' })
+  ).toContainText('Recherche de tous les portefeuilles matériels USB…');
 });
 
 test('imports a public hardware backup without requiring a wallet name first', async ({ page }) => {

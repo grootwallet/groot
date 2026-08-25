@@ -66,6 +66,8 @@
   let pinErrorCode = $state<WalletErrorCode | ''>('');
   let pinDevice = $state<HardwareDevice | null>(null);
   let xpubOpen = $state(false);
+  let lastAttemptedDevice = $state<HardwareDevice | null>(null);
+  let lastAttemptAllowedEmptyPassphrase = $state(false);
   let isLedger = $derived(Boolean(signer?.deviceType?.toLowerCase().includes('ledger')));
   let isTrezor = $derived(Boolean(signer?.deviceType?.toLowerCase().includes('trezor')));
   let isBitBoxNova = $derived(
@@ -100,6 +102,8 @@
     scanOpen = true;
     busy = true;
     hardwareProgress = 'Scanning all USB hardware wallets…';
+    lastAttemptedDevice = null;
+    lastAttemptAllowedEmptyPassphrase = false;
     errorTitle = 'Could not scan hardware';
     error = '';
     try {
@@ -140,6 +144,8 @@
       return;
     }
     busy = true;
+    lastAttemptedDevice = device;
+    lastAttemptAllowedEmptyPassphrase = allowEmptyPassphrase;
     errorTitle = 'Could not read the account key';
     hardwareProgress = device.model.startsWith('ledger')
       ? 'Reading the public account key from Ledger…'
@@ -159,6 +165,8 @@
       standardWalletOpen = false;
       standardWalletDevice = null;
       step = 2;
+      lastAttemptedDevice = null;
+      lastAttemptAllowedEmptyPassphrase = false;
     } catch (cause) {
       error = localizedError(cause, $locale, 'Could not import the public account key.');
     } finally {
@@ -645,7 +653,7 @@
       detail={translate(
         $locale,
         hardwareProgress.startsWith('Scanning')
-          ? 'Keep the signer connected. Quit other wallet apps.'
+          ? 'Follow any unlock prompt on the signer. Keep other wallet apps closed.'
           : hardwareProgress.includes('Ledger')
             ? 'Keep Bitcoin Test open for Regtest and follow any prompt on the Ledger screen.'
             : 'Keep the signer connected and unlocked.'
@@ -666,8 +674,22 @@
   {#if error}<div class="hardware-inline-error" role="alert">
       <AlertTriangle size={18} /><span
         ><strong>{translate($locale, errorTitle)}</strong><small>{error}</small></span
-      ><Button variant="secondary" size="small" onclick={scan}
-        >{translate($locale, 'Scan again')}</Button
+      ><Button
+        variant="secondary"
+        size="small"
+        onclick={() => {
+          if (errorTitle === 'Could not read the account key' && lastAttemptedDevice) {
+            useDevice(lastAttemptedDevice, lastAttemptAllowedEmptyPassphrase);
+          } else {
+            scan();
+          }
+        }}
+        >{translate(
+          $locale,
+          errorTitle === 'Could not read the account key' && lastAttemptedDevice
+            ? 'Try this signer again'
+            : 'Scan again'
+        )}</Button
       >
     </div>{/if}
 </Modal>

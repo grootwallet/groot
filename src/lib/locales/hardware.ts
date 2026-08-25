@@ -1,9 +1,17 @@
 import type { CatalogSection } from './types';
 
 export const hardwareCopy = {
+  'Scanning all USB hardware wallets…': {
+    fr: 'Recherche de tous les portefeuilles matériels USB…',
+    es: 'Buscando todas las carteras físicas USB…'
+  },
   scan: { fr: 'analyser', es: 'buscar' },
   unlock: { fr: 'déverrouiller', es: 'desbloquear' },
   'Unlock & continue': { fr: 'Déverrouiller et continuer', es: 'Desbloquear y continuar' },
+  'Try this signer again': {
+    fr: 'Réessayer avec ce signataire',
+    es: 'Volver a intentar con este firmante'
+  },
   'Unlock and check your hardware device': {
     fr: 'Déverrouillez et vérifiez votre appareil matériel',
     es: 'Desbloquea y comprueba tu dispositivo físico'
