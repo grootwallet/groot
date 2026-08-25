@@ -875,6 +875,13 @@ test('offers safe recipes and advanced M-of-N control', async ({ page }, testInf
       )
     ).toBeGreaterThanOrEqual(15);
   }
+  for (const plan of ['Standard', 'Recovery', 'Inheritance']) {
+    await page.getByRole('button', { name: new RegExp(`^${plan}`) }).click();
+    const selectedMark = page.locator('.policy-kind-card.active .policy-kind-check svg');
+    await expect(selectedMark).toBeVisible();
+    await expect(selectedMark).toHaveCSS('stroke', 'rgb(255, 255, 255)');
+  }
+  await page.getByRole('button', { name: /^Standard/ }).click();
   await revealInsight(page, 'How Standard multisig works', testInfo.project.name === 'mobile');
   await expect(
     page.getByRole('tooltip').filter({ hasText: 'helper can never spend alone' })

@@ -8481,9 +8481,15 @@ code {
   height: 25px;
   display: grid;
   place-items: center;
-  color: var(--panel);
+  color: #fff;
   background: var(--policy-accent);
+  border: 2px solid color-mix(in srgb, #fff 82%, var(--policy-accent));
   border-radius: 50%;
+  box-shadow: 0 2px 7px color-mix(in srgb, var(--policy-accent) 28%, transparent);
+}
+.policy-kind-check svg {
+  color: #fff;
+  stroke: #fff;
 }
 .policy-choice-insight {
   min-height: 34px;

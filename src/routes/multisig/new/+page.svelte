@@ -1283,7 +1283,7 @@
                 ></span
               ><span class="policy-kind-meta">{translate($locale, 'No delay')}</span
               >{#if templateKind === 'standard'}<span class="policy-kind-check" aria-hidden="true"
-                  ><Check size={14} /></span
+                  ><Check size={16} strokeWidth={3} /></span
                 >{/if}</button
             >
             <button
@@ -1297,7 +1297,7 @@
                 ></span
               ><span class="policy-kind-meta">{translate($locale, 'About one month')}</span
               >{#if templateKind === 'recovery'}<span class="policy-kind-check" aria-hidden="true"
-                  ><Check size={14} /></span
+                  ><Check size={16} strokeWidth={3} /></span
                 >{/if}</button
             >
             <button
@@ -1312,7 +1312,7 @@
               ><span class="policy-kind-meta">{translate($locale, 'About one year')}</span
               >{#if templateKind === 'inheritance'}<span
                   class="policy-kind-check"
-                  aria-hidden="true"><Check size={14} /></span
+                  aria-hidden="true"><Check size={16} strokeWidth={3} /></span
                 >{/if}</button
             >
           </div>
