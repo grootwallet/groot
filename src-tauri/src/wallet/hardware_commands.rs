@@ -1321,8 +1321,9 @@ fn read_hardware_account_identity(
         ));
     }
 
-    let is_bitbox = device.device_type.eq_ignore_ascii_case("bitbox02");
-    if is_bitbox {
+    let is_bitbox_singlesig = device.device_type.eq_ignore_ascii_case("bitbox02")
+        && derivation_path == SINGLESIG_ACCOUNT_PATH;
+    if is_bitbox_singlesig {
         return read_bitbox_account_identity(hwi, &operation, device, derivation_path);
     }
 
@@ -1346,57 +1347,15 @@ fn read_bitbox_account_identity(
     device: &HwiDevice,
     derivation_path: &str,
 ) -> ApiResult<(String, String)> {
-    // HWI's compound getkeypool path regressed on physical Nova even though
-    // its direct getxpub path remains the previously certified operation. Read
-    // that account key on both sides of an exact-path fingerprint re-attestation
-    // under one exclusive lease. This restores the compatible operation without
-    // trusting the renderer, the earlier scan, or a partial device identity.
-    let before = read_bitbox_account_xpub(hwi, operation, device, derivation_path)?;
-    let encoded = hwi
-        .enumerate_in_operation(operation)
-        .map_err(hardware_api_error)?;
-    let discovered: Vec<HwiDevice> = serde_json::from_slice(&encoded).map_err(internal)?;
-    let matching = validate_discovered_devices(discovered)?
-        .into_iter()
-        .filter(|candidate| {
-            candidate.device_type.eq_ignore_ascii_case("bitbox02") && candidate.path == device.path
-        })
-        .collect::<Vec<_>>();
-    if matching.len() != 1 {
-        return Err(api_error(
-            "hardware_ambiguous",
-            "BitBox could not be re-attested on the selected connection. Keep only that signer connected and try again.",
-        ));
-    }
-    let fingerprint = matching[0]
-        .fingerprint
-        .as_deref()
-        .ok_or_else(|| missing_hardware_fingerprint("bitbox02"))?;
-    Fingerprint::from_str(fingerprint).map_err(|_| {
-        api_error(
-            "invalid_fingerprint",
-            "HWI returned an invalid fingerprint.",
-        )
-    })?;
-    let after = read_bitbox_account_xpub(hwi, operation, device, derivation_path)?;
-    if before != after {
-        return Err(unknown_hardware_signer());
-    }
-    Ok((fingerprint.to_ascii_lowercase(), after))
-}
-
-fn read_bitbox_account_xpub(
-    hwi: &HwiCli,
-    operation: &crate::hardware::HardwareOperation,
-    device: &HwiDevice,
-    derivation_path: &str,
-) -> ApiResult<String> {
+    // Physical Nova testing proved that a post-unlock enumeration can remain
+    // fingerprint-less. Use HWI's canonical BIP84 keypool form instead: it
+    // obtains the master fingerprint and account key from one open client,
+    // without depending on enumeration or the custom --path form.
     for attempt in 0..BITBOX_ACCOUNT_KEY_ATTEMPTS {
-        let output = match hwi.account_xpub_in_operation(
+        let output = match hwi.standard_singlesig_keypool_in_operation(
             operation,
             &device.device_type,
             &device.path,
-            derivation_path,
         ) {
             Ok(output) => output,
             Err(error)
@@ -1419,11 +1378,11 @@ fn read_bitbox_account_xpub(
             }
         };
         let retryable_response = bitbox_account_key_response_is_retryable(&output);
-        match parse_hwi_account_xpub(&output, &device.device_type) {
-            Ok(xpub) => return Ok(xpub),
+        match parse_hwi_account_keypool(&output, derivation_path, &device.device_type) {
+            Ok(identity) => return Ok(identity),
             Err(_) if retryable_response && attempt + 1 < BITBOX_ACCOUNT_KEY_ATTEMPTS => {
                 // HWI closes its aggregate-enumeration client immediately
-                // before this exact-path command. Nova can briefly report the
+                // before this selected-device command. Nova can briefly report the
                 // same HID path as busy/not ready during that handoff. Retry
                 // only those typed transient results; cancellation, identity,
                 // path, network, and descriptor failures remain terminal.
@@ -1432,7 +1391,7 @@ fn read_bitbox_account_xpub(
             Err(error) => return Err(error),
         }
     }
-    unreachable!("the bounded BitBox account-xpub loop always returns")
+    unreachable!("the bounded BitBox account-key loop always returns")
 }
 
 fn bitbox_account_key_response_is_retryable(output: &[u8]) -> bool {
@@ -2703,29 +2662,28 @@ mod health_check_tests {
 
     #[cfg(unix)]
     #[test]
-    fn initial_bitbox_import_reopens_the_same_path_after_transient_hid_handoff() {
+    fn initial_bitbox_import_uses_standard_same_client_keypool_after_transient_handoff() {
         use std::os::unix::fs::PermissionsExt as _;
 
         let expected = external_signer_from_seed(21);
-        let xpub_response =
-            serde_json::to_string(&serde_json::json!({ "xpub": expected.xpub })).unwrap();
-        let enumerate_response = serde_json::to_string(&serde_json::json!([{
-            "type": "bitbox02",
-            "model": "bitbox02_nova_btconly",
-            "path": "opaque-nova-path",
-            "fingerprint": expected.fingerprint
-        }]))
-        .unwrap();
+        let descriptor = format!(
+            "wpkh([{}/84h/1h/0h]{}/0/*)",
+            expected.fingerprint, expected.xpub
+        );
+        let keypool_response =
+            serde_json::to_string(&serde_json::json!([{ "desc": descriptor }])).unwrap();
         let suffix = format!("{}-{:?}", std::process::id(), std::thread::current().id());
         let script = std::env::temp_dir().join(format!("groot-bitbox-reopen-{suffix}"));
         let count = std::env::temp_dir().join(format!("groot-bitbox-reopen-count-{suffix}"));
-        let shell_xpub = xpub_response.replace('\'', "'\"'\"'");
-        let shell_enumerate = enumerate_response.replace('\'', "'\"'\"'");
+        let command_log =
+            std::env::temp_dir().join(format!("groot-bitbox-reopen-command-{suffix}"));
+        let shell_keypool = keypool_response.replace('\'', "'\"'\"'");
         std::fs::write(
             &script,
             format!(
-                "#!/bin/sh\nIFS= read -r command\ncase \"$command\" in *enumerate*) printf '%s\\n' '{shell_enumerate}' ;; *) value=0; if [ -f '{count}' ]; then IFS= read -r value < '{count}'; fi; value=$((value + 1)); printf '%s\\n' \"$value\" > '{count}'; if [ \"$value\" -eq 1 ]; then printf '%s\\n' '{{\"error\":\"unavailable action\",\"code\":-9}}'; elif [ \"$value\" -eq 2 ]; then printf '%s\\n' '{{\"error\":\"busy\",\"code\":-15}}'; else printf '%s\\n' '{shell_xpub}'; fi ;; esac\n",
-                count = count.display()
+                "#!/bin/sh\nIFS= read -r command\nprintf '%s\\n' \"$command\" >> '{command_log}'\nvalue=0\nif [ -f '{count}' ]; then IFS= read -r value < '{count}'; fi\nvalue=$((value + 1))\nprintf '%s\\n' \"$value\" > '{count}'\nif [ \"$value\" -eq 1 ]; then printf '%s\\n' '{{\"error\":\"unavailable action\",\"code\":-9}}'; elif [ \"$value\" -eq 2 ]; then printf '%s\\n' '{{\"error\":\"busy\",\"code\":-15}}'; else printf '%s\\n' '{shell_keypool}'; fi\n",
+                count = count.display(),
+                command_log = command_log.display()
             ),
         )
         .unwrap();
@@ -2740,7 +2698,19 @@ mod health_check_tests {
         let identity =
             read_hardware_account_identity(&hwi, &device, SINGLESIG_ACCOUNT_PATH, false).unwrap();
         assert_eq!(identity, (expected.fingerprint, expected.xpub));
-        assert_eq!(std::fs::read_to_string(&count).unwrap().trim(), "4");
+        assert_eq!(std::fs::read_to_string(&count).unwrap().trim(), "3");
+        let commands = std::fs::read_to_string(&command_log).unwrap();
+        assert!(commands
+            .lines()
+            .all(|command| command.contains("getkeypool")));
+        assert!(commands
+            .lines()
+            .all(|command| command.contains("--addr-type")));
+        assert!(commands.lines().all(|command| command.contains("wit")));
+        assert!(commands
+            .lines()
+            .all(|command| command.contains("--account")));
+        assert!(commands.lines().all(|command| !command.contains("--path")));
         assert!(bitbox_account_key_response_is_retryable(
             b"{\"error\":\"unavailable action\",\"code\":-9}"
         ));
@@ -2752,6 +2722,7 @@ mod health_check_tests {
         ));
         std::fs::remove_file(script).unwrap();
         std::fs::remove_file(count).unwrap();
+        std::fs::remove_file(command_log).unwrap();
     }
 
     #[test]

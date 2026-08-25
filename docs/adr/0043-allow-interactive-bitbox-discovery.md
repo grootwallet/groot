@@ -56,13 +56,15 @@ an endless scan when one backend stalls.
   acceptable. The retries remain inside the existing interactive lease. Cancellation, timeout, malformed
   output, wrong network/path, and incomplete or mismatched identity are never
   retried or accepted.
-- BitBox initial import uses the physically proven direct `getxpub` operation,
-  not `getkeypool`. Under one exclusive interactive lease, Groot reads the
-  exact-path account key, re-enumerates to obtain the fingerprint for that same
-  exact path, and reads the account key again. The fingerprint is accepted only
-  when exactly one BitBox row retains the selected path and both independently
-  parsed account keys are identical. Missing identity, path ambiguity, device
-  replacement, or any key mismatch fails closed.
+- A packaged Nova retest disproved the direct-`getxpub` re-attestation
+  candidate: HWI enumeration remained fingerprint-less after unlock, so it
+  could not provide the required master fingerprint. BitBox single-key import
+  instead uses HWI's canonical BIP84 keypool form (`wit`, account zero, first
+  receive range) without a custom path. HWI returns the fingerprint, exact
+  `m/84'/1'/0'` origin, and account key from one open client. Groot parses and
+  validates all three fields from that single response. Missing identity,
+  wrong origin or network, malformed output, and ambiguity still fail closed.
+  Multisig import retains the exact BIP48 keypool operation.
 - An account-key failure keeps a direct retry action for the selected
   capability instead of making another aggregate scan the primary recovery.
 - A returned path remains an opaque capability. Initial import, health,

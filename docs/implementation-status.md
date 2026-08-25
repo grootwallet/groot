@@ -82,11 +82,14 @@ prompt is explicit; the password remains entirely on-device.
 Packaged v0.4.29 Nova testing then showed that HWI's BitBox adapter can map its
 non-granular reconnect failure to the otherwise unsupported-action code. Groot
 includes that overloaded code only in bounded BitBox initial-import retries.
-Further physical evidence showed the compound `getkeypool` identity proof
-itself remained incompatible after successful Nova unlock. BitBox initial
-import now restores direct `getxpub` and binds it to a live exact-path
-fingerprint re-attestation plus an identical second account-key read under one
-exclusive lease; full live identity validation remains mandatory.
+Further physical evidence showed the custom-path `getkeypool` identity proof
+itself remained incompatible after successful Nova unlock. A subsequent
+packaged retest disproved the direct-`getxpub` re-attestation candidate because
+Nova enumeration remained fingerprint-less after unlock. BitBox single-key
+import now uses HWI's canonical BIP84 keypool form without `--path`, returning
+the live fingerprint, exact account origin, and account key from one open
+client; full live identity validation remains mandatory. Physical packaged
+retesting is still open.
 
 Hardware discovery row copy returned by Rust is cataloged in English, French,
 and Spanish. A source-contract test extracts every native device-status message

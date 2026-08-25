@@ -524,24 +524,6 @@ impl HwiCli {
         HardwareOperation::acquire(HardwareOperationKind::Discovery, DISCOVERY_TIMEOUT)
     }
 
-    pub fn enumerate_in_operation(
-        &self,
-        operation: &HardwareOperation,
-    ) -> Result<Vec<u8>, HardwareError> {
-        run_program_in_operation(
-            &self.program,
-            &self.source,
-            &[
-                "--chain".into(),
-                self.chain.as_hwi_argument().into(),
-                "enumerate".into(),
-            ],
-            operation,
-            self.home.as_deref(),
-            None,
-        )
-    }
-
     pub fn account_keypool_in_operation(
         &self,
         operation: &HardwareOperation,
@@ -563,6 +545,36 @@ impl HwiCli {
                 "getkeypool".into(),
                 "--path".into(),
                 keypool_path,
+                "0".into(),
+                "1".into(),
+            ],
+            operation,
+            self.home.as_deref(),
+            None,
+        )
+    }
+
+    pub fn standard_singlesig_keypool_in_operation(
+        &self,
+        operation: &HardwareOperation,
+        device_type: &str,
+        device_path: &str,
+    ) -> Result<Vec<u8>, HardwareError> {
+        run_program_in_operation(
+            &self.program,
+            &self.source,
+            &[
+                "--chain".into(),
+                self.chain.as_hwi_argument_for_device(device_type).into(),
+                "--device-type".into(),
+                device_type.into(),
+                "--device-path".into(),
+                device_path.into(),
+                "getkeypool".into(),
+                "--addr-type".into(),
+                "wit".into(),
+                "--account".into(),
+                "0".into(),
                 "0".into(),
                 "1".into(),
             ],
@@ -630,7 +642,18 @@ impl HwiCli {
 impl HardwareTransport for HwiCli {
     fn enumerate(&self) -> Result<Vec<u8>, HardwareError> {
         let operation = self.begin_discovery_operation()?;
-        self.enumerate_in_operation(&operation)
+        run_program_in_operation(
+            &self.program,
+            &self.source,
+            &[
+                "--chain".into(),
+                self.chain.as_hwi_argument().into(),
+                "enumerate".into(),
+            ],
+            &operation,
+            self.home.as_deref(),
+            None,
+        )
     }
 
     #[cfg(test)]
