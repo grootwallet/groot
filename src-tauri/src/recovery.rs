@@ -16,6 +16,67 @@ use std::{
 const MAX_STAGES: usize = 8;
 const MIN_DELAY_BLOCKS: u32 = 144;
 const MAX_DELAY_BLOCKS: u32 = 52_560;
+pub const EXPECTED_BLOCK_SECONDS: u64 = 600;
+pub const MIN_APPROACHING_BLOCKS: u32 = 1_008;
+const APPROACHING_DELAY_DIVISOR: u32 = 10;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MaturityState {
+    Unconfirmed,
+    Immature,
+    Approaching,
+    Mature,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MaturityCalculation {
+    pub state: MaturityState,
+    pub age_blocks: u32,
+    pub remaining_blocks: Option<u32>,
+    pub approaching_at_blocks: u32,
+    pub approximate_seconds_remaining: Option<u64>,
+}
+
+pub fn approaching_maturity_blocks(delay_blocks: u32) -> Result<u32, RecoveryError> {
+    validate_delay(delay_blocks)?;
+    Ok(delay_blocks
+        .min(MIN_APPROACHING_BLOCKS.max(delay_blocks.div_ceil(APPROACHING_DELAY_DIVISOR))))
+}
+
+pub fn calculate_maturity(
+    delay_blocks: u32,
+    confirmations: u32,
+) -> Result<MaturityCalculation, RecoveryError> {
+    validate_delay(delay_blocks)?;
+    let approaching_at_blocks = approaching_maturity_blocks(delay_blocks)?;
+    if confirmations == 0 {
+        return Ok(MaturityCalculation {
+            state: MaturityState::Unconfirmed,
+            age_blocks: 0,
+            remaining_blocks: None,
+            approaching_at_blocks,
+            approximate_seconds_remaining: None,
+        });
+    }
+    let remaining_blocks = delay_blocks.saturating_sub(confirmations);
+    let state = if remaining_blocks == 0 {
+        MaturityState::Mature
+    } else if remaining_blocks <= approaching_at_blocks {
+        MaturityState::Approaching
+    } else {
+        MaturityState::Immature
+    };
+    Ok(MaturityCalculation {
+        state,
+        age_blocks: confirmations,
+        remaining_blocks: Some(remaining_blocks),
+        approaching_at_blocks,
+        approximate_seconds_remaining: Some(
+            u64::from(remaining_blocks).saturating_mul(EXPECTED_BLOCK_SECONDS),
+        ),
+    })
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -440,6 +501,55 @@ pub fn analyze_template(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn maturity_boundaries_are_confirmation_exact() {
+        let unconfirmed = calculate_maturity(4_320, 0).unwrap();
+        assert_eq!(unconfirmed.state, MaturityState::Unconfirmed);
+        assert_eq!(unconfirmed.remaining_blocks, None);
+
+        let immature = calculate_maturity(4_320, 3_311).unwrap();
+        assert_eq!(immature.state, MaturityState::Immature);
+        assert_eq!(immature.remaining_blocks, Some(1_009));
+
+        let approaching = calculate_maturity(4_320, 3_312).unwrap();
+        assert_eq!(approaching.state, MaturityState::Approaching);
+        assert_eq!(approaching.remaining_blocks, Some(1_008));
+
+        let one_before = calculate_maturity(4_320, 4_319).unwrap();
+        assert_eq!(one_before.state, MaturityState::Approaching);
+        assert_eq!(one_before.remaining_blocks, Some(1));
+
+        let exact = calculate_maturity(4_320, 4_320).unwrap();
+        assert_eq!(exact.state, MaturityState::Mature);
+        assert_eq!(exact.remaining_blocks, Some(0));
+
+        let later = calculate_maturity(4_320, 5_000).unwrap();
+        assert_eq!(later.state, MaturityState::Mature);
+        assert_eq!(later.remaining_blocks, Some(0));
+    }
+
+    #[test]
+    fn approaching_window_is_proportional_with_a_one_week_floor() {
+        assert_eq!(approaching_maturity_blocks(144).unwrap(), 144);
+        assert_eq!(approaching_maturity_blocks(4_320).unwrap(), 1_008);
+        assert_eq!(approaching_maturity_blocks(52_560).unwrap(), 5_256);
+        assert_eq!(
+            calculate_maturity(52_560, 47_304)
+                .unwrap()
+                .approximate_seconds_remaining,
+            Some(5_256 * EXPECTED_BLOCK_SECONDS)
+        );
+    }
+
+    #[test]
+    fn maturity_rejects_hostile_delays() {
+        assert_eq!(calculate_maturity(0, 1), Err(RecoveryError::InvalidDelay));
+        assert_eq!(
+            calculate_maturity(52_561, u32::MAX),
+            Err(RecoveryError::InvalidDelay)
+        );
+    }
     use crate::multisig::{CosignerInput, CosignerSource, MULTISIG_ACCOUNT_PATH};
     use bdk_wallet::bitcoin::{
         bip32::{DerivationPath, Xpriv, Xpub},

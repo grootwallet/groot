@@ -6,6 +6,7 @@ use super::transaction_commands::{
 };
 use super::*;
 use crate::multisig::{CosignerInput, CosignerSource, MULTISIG_ACCOUNT_PATH};
+use crate::recovery::{SpendingPath, TimedSpendingPath};
 use bdk_bitcoind_rpc::bitcoincore_rpc::jsonrpc;
 use bdk_wallet::bitcoin::{
     bip32::{DerivationPath, Xpriv, Xpub},
@@ -38,10 +39,10 @@ struct TestKey {
     account_public: Xpub,
 }
 
-fn test_keys() -> Vec<TestKey> {
+fn test_keys_with_count(count: u8) -> Vec<TestKey> {
     let secp = Secp256k1::new();
     let path = DerivationPath::from_str(MULTISIG_ACCOUNT_PATH).unwrap();
-    (1_u8..=3)
+    (1_u8..=count)
         .map(|index| {
             let mut seed = [0_u8; 32];
             OsRng.fill_bytes(&mut seed);
@@ -55,6 +56,10 @@ fn test_keys() -> Vec<TestKey> {
             }
         })
         .collect()
+}
+
+fn test_keys() -> Vec<TestKey> {
+    test_keys_with_count(3)
 }
 
 fn descriptor(keys: &[TestKey], branch: u8, private_index: Option<usize>) -> String {
@@ -208,6 +213,151 @@ fn proposal_status(db: &Connection, proposal_id: &str) -> (String, Option<String
 
 #[test]
 #[ignore = "requires the isolated Bitcoin Core regtest harness"]
+fn funded_delayed_policy_tracks_each_coin_restarts_and_rearms_after_reorg() {
+    assert!(std::env::var_os("GROOT_RUN_REGTEST").is_some());
+    let rpc = Arc::new(rpc());
+    let keys = test_keys_with_count(4);
+    let cosigners = keys
+        .iter()
+        .enumerate()
+        .map(|(index, key)| CosignerInput {
+            id: format!("signer-{index}"),
+            label: format!("Signer {}", index + 1),
+            fingerprint: key.fingerprint.clone(),
+            xpub: key.account_public.to_string(),
+            derivation_path: MULTISIG_ACCOUNT_PATH.to_owned(),
+            source: CosignerSource::Virtual,
+            device_type: None,
+        })
+        .collect::<Vec<_>>();
+    let template = RecoveryTemplate::Recovery {
+        immediate: SpendingPath::new(2, ["signer-0", "signer-1", "signer-2"]),
+        recovery: TimedSpendingPath::new(144, 1, ["signer-3"]),
+    };
+    let analysis = analyze_template(&template, &cosigners).unwrap();
+    let policy = DelayedPolicyContext {
+        policy_type: "recovery".to_owned(),
+        delay_blocks: 144,
+    };
+    let database = TemporaryDatabase::new();
+    let mut db = Connection::open(&database.0).unwrap();
+    init_app_schema(&db).unwrap();
+    let mut wallet = Wallet::create(analysis.external_descriptor, analysis.internal_descriptor)
+        .network(Network::Regtest)
+        .create_wallet(&mut db)
+        .unwrap();
+    let first_address = wallet.reveal_next_address(KeychainKind::External).address;
+    wallet.persist(&mut db).unwrap();
+    let mining = rpc
+        .get_new_address(Some("groot delayed maturity"), None)
+        .unwrap()
+        .require_network(Network::Regtest)
+        .unwrap();
+    let first_txid = rpc
+        .call::<Txid>(
+            "sendtoaddress",
+            &[
+                serde_json::json!(first_address.to_string()),
+                serde_json::json!(0.001),
+            ],
+        )
+        .unwrap();
+    rpc.generate_to_address(11, &mining).unwrap();
+
+    let second_address = wallet.reveal_next_address(KeychainKind::External).address;
+    wallet.persist(&mut db).unwrap();
+    let second_txid = rpc
+        .call::<Txid>(
+            "sendtoaddress",
+            &[
+                serde_json::json!(second_address.to_string()),
+                serde_json::json!(0.001),
+            ],
+        )
+        .unwrap();
+    rpc.generate_to_address(133, &mining).unwrap();
+    sync(&mut wallet, &mut db, Arc::clone(&rpc));
+
+    let snapshot =
+        snapshot_from(&wallet, &db, Some(now().to_string()), true, Some(&policy)).unwrap();
+    let maturity_for = |txid: Txid| {
+        snapshot
+            .utxos
+            .iter()
+            .find(|coin| coin.outpoint.starts_with(&txid.to_string()))
+            .unwrap()
+            .policy_maturity
+            .as_ref()
+            .unwrap()
+    };
+    assert_eq!(maturity_for(first_txid).state, MaturityState::Mature);
+    assert_eq!(maturity_for(first_txid).remaining_blocks, Some(0));
+    assert_eq!(maturity_for(second_txid).state, MaturityState::Approaching);
+    assert_eq!(maturity_for(second_txid).remaining_blocks, Some(11));
+    enqueue_snapshot_notifications(&db, &snapshot).unwrap();
+    let initial = notifications::pending(&db).unwrap();
+    assert_eq!(initial.len(), 2);
+    notifications::acknowledge(
+        &mut db,
+        &initial
+            .iter()
+            .map(|item| item.id.clone())
+            .collect::<Vec<_>>(),
+    )
+    .unwrap();
+
+    drop(wallet);
+    drop(db);
+    let mut db = Connection::open(&database.0).unwrap();
+    init_app_schema(&db).unwrap();
+    let mut wallet = load_wallet(&mut db).unwrap();
+    let restarted = snapshot_from(&wallet, &db, None, true, Some(&policy)).unwrap();
+    enqueue_snapshot_notifications(&db, &restarted).unwrap();
+    assert!(notifications::pending(&db).unwrap().is_empty());
+
+    let height = rpc.get_block_count().unwrap();
+    let fork = rpc.get_block_hash(height - 11).unwrap();
+    rpc.invalidate_block(&fork).unwrap();
+    let competing_mining = rpc
+        .get_new_address(Some("groot delayed maturity reorg"), None)
+        .unwrap()
+        .require_network(Network::Regtest)
+        .unwrap();
+    mine_empty_block(&rpc, &competing_mining);
+    sync(&mut wallet, &mut db, Arc::clone(&rpc));
+    let regressed =
+        snapshot_from(&wallet, &db, Some(now().to_string()), true, Some(&policy)).unwrap();
+    assert_eq!(
+        regressed
+            .utxos
+            .iter()
+            .find(|coin| coin.outpoint.starts_with(&first_txid.to_string()))
+            .unwrap()
+            .policy_maturity
+            .as_ref()
+            .unwrap()
+            .state,
+        MaturityState::Approaching
+    );
+    enqueue_snapshot_notifications(&db, &regressed).unwrap();
+    assert!(notifications::pending(&db).unwrap().is_empty());
+
+    rpc.generate_to_address(11, &competing_mining).unwrap();
+    sync(&mut wallet, &mut db, Arc::clone(&rpc));
+    let rematured =
+        snapshot_from(&wallet, &db, Some(now().to_string()), true, Some(&policy)).unwrap();
+    enqueue_snapshot_notifications(&db, &rematured).unwrap();
+    let alerts = notifications::pending(&db).unwrap();
+    assert_eq!(alerts.len(), 1);
+    assert!(matches!(
+        alerts[0].event,
+        WalletNotification::PolicyMature { ref outpoint, .. }
+            if outpoint.starts_with(&first_txid.to_string())
+    ));
+}
+
+#[test]
+#[ignore = "requires the isolated Bitcoin Core regtest harness"]
 fn clean_storage_descriptor_recovery_restores_known_history_and_survives_reopen() {
     assert!(std::env::var_os("GROOT_RUN_REGTEST").is_some());
     let rpc = Arc::new(rpc());
@@ -320,8 +470,14 @@ fn clean_storage_descriptor_recovery_restores_known_history_and_survives_reopen(
     )
     .unwrap();
     finish_recovery_scan_record(&recovery_db, "clean-storage-run", "completed").unwrap();
-    let recovered_snapshot =
-        snapshot_from(&recovered, &recovery_db, Some(now().to_string()), true).unwrap();
+    let recovered_snapshot = snapshot_from(
+        &recovered,
+        &recovery_db,
+        Some(now().to_string()),
+        true,
+        None,
+    )
+    .unwrap();
     assert_eq!(recovered_snapshot.balance.total, 350_000);
     assert_eq!(recovered_snapshot.transactions.len(), 2);
     assert!(recovered_snapshot
@@ -338,7 +494,7 @@ fn clean_storage_descriptor_recovery_restores_known_history_and_survives_reopen(
     let mut reopened_db = Connection::open(&recovery_database.0).unwrap();
     init_app_schema(&reopened_db).unwrap();
     let reopened = load_wallet(&mut reopened_db).unwrap();
-    let reopened_snapshot = snapshot_from(&reopened, &reopened_db, None, true).unwrap();
+    let reopened_snapshot = snapshot_from(&reopened, &reopened_db, None, true, None).unwrap();
     assert_eq!(reopened_snapshot.balance.total, 350_000);
     assert_eq!(reopened_snapshot.transactions.len(), 2);
     assert_eq!(
@@ -487,6 +643,7 @@ fn funded_rbf_and_cpfp_cross_groot_proposal_boundaries() {
         &rbf.proposal_id,
         &replacement_txid,
         Some(now().to_string()),
+        None,
     )
     .unwrap();
     let replaced = snapshot
@@ -559,6 +716,7 @@ fn funded_rbf_and_cpfp_cross_groot_proposal_boundaries() {
         &cpfp.proposal_id,
         &child_txid,
         Some(now().to_string()),
+        None,
     )
     .unwrap();
     assert_eq!(

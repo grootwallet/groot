@@ -10,6 +10,44 @@ use bdk_wallet::bitcoin::NetworkKind;
 use std::{net::TcpListener, thread};
 
 #[test]
+fn chain_tip_observations_survive_restart_age_to_stale_and_reject_corruption() {
+    let db = Connection::open_in_memory().unwrap();
+    init_app_schema(&db).unwrap();
+    let unknown = chain_tip_dto(&db, 100, None).unwrap();
+    assert_eq!(unknown.status, "unknown");
+    assert!(unknown.observed_at.is_none());
+
+    let observed = now();
+    let recent = chain_tip_dto(&db, 100, Some(&observed.to_string())).unwrap();
+    assert_eq!(recent.status, "recent");
+    assert_eq!(
+        chain_tip_dto(&db, 100, None).unwrap().observed_at,
+        Some(observed.to_string())
+    );
+
+    db.execute(
+        "UPDATE groot_chain_observation SET observed_at=?1 WHERE singleton=1",
+        params![observed.saturating_sub(CHAIN_TIP_RECENT_SECONDS + 1)],
+    )
+    .unwrap();
+    assert_eq!(chain_tip_dto(&db, 100, None).unwrap().status, "stale");
+    assert_eq!(
+        chain_tip_dto(&db, 99, None).unwrap_err().code,
+        "wallet_corrupt"
+    );
+
+    db.execute(
+        "UPDATE groot_chain_observation SET height=100,observed_at=?1 WHERE singleton=1",
+        params![now().saturating_add(301)],
+    )
+    .unwrap();
+    assert_eq!(
+        chain_tip_dto(&db, 100, None).unwrap_err().code,
+        "wallet_corrupt"
+    );
+}
+
+#[test]
 fn pdf_backup_filename_is_bounded_and_path_free() {
     assert_eq!(
         validate_public_backup_pdf_filename("groot-policy-backup.pdf").unwrap(),
@@ -2424,6 +2462,11 @@ fn synced_snapshots_enqueue_received_and_first_confirmation_events_once() {
         utxos: vec![],
         receive_addresses: vec![],
         synced_at: Some("1".to_owned()),
+        chain_tip: ChainTipDto {
+            height: 1,
+            observed_at: Some("1".to_owned()),
+            status: "stale",
+        },
     };
 
     enqueue_snapshot_notifications(&db, &snapshot).unwrap();
@@ -2450,7 +2493,10 @@ fn synced_snapshots_enqueue_received_and_first_confirmation_events_once() {
         1
     );
 
-    let ids = events.iter().map(|event| event.id).collect::<Vec<_>>();
+    let ids = events
+        .iter()
+        .map(|event| event.id.clone())
+        .collect::<Vec<_>>();
     notifications::acknowledge(&mut db, &ids).unwrap();
     snapshot.transactions[0].confirmations = 0;
     snapshot.transactions[0].status = "pending".to_owned();
@@ -2513,7 +2559,7 @@ fn compact_filter_update_and_app_metadata_roll_back_at_every_commit_stage() {
         CompactFilterCommitStage::WalletPersisted,
     ] {
         let result =
-            apply_compact_filter_update_with_hook(&mut db, false, update.clone(), |stage| {
+            apply_compact_filter_update_with_hook(&mut db, false, update.clone(), None, |stage| {
                 if stage == failed_stage {
                     Err(api_error("injected_failure", "commit fault injection"))
                 } else {
@@ -2534,7 +2580,7 @@ fn compact_filter_update_and_app_metadata_roll_back_at_every_commit_stage() {
         assert!(!notifications::history_initialized(&db).unwrap());
     }
 
-    apply_compact_filter_update(&mut db, false, update).unwrap();
+    apply_compact_filter_update(&mut db, false, update, None).unwrap();
     drop(db);
     let mut restarted_db = Connection::open(&database).unwrap();
     init_app_schema(&restarted_db).unwrap();
@@ -2821,7 +2867,10 @@ fn restart_restores_proposals_frozen_coins_and_acknowledged_notifications() {
     assert_eq!(pending.len(), 1);
     notifications::acknowledge(
         &mut restarted_db,
-        &pending.iter().map(|event| event.id).collect::<Vec<_>>(),
+        &pending
+            .iter()
+            .map(|event| event.id.clone())
+            .collect::<Vec<_>>(),
     )
     .unwrap();
     assert!(notifications::pending(&restarted_db).unwrap().is_empty());

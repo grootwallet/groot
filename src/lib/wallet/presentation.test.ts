@@ -90,7 +90,8 @@ describe('pendingBalanceBreakdown', () => {
       transactions: [sent],
       utxos: [],
       receiveAddresses: [],
-      syncedAt: null
+      syncedAt: null,
+      chainTip: { height: 0, observedAt: null, status: 'unknown' }
     } satisfies import('./contracts').WalletSnapshot;
 
     expect(pendingBalanceBreakdown(snapshot)).toEqual({

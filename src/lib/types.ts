@@ -60,4 +60,15 @@ export type Utxo = {
   frozen: boolean;
   primaryLabel: PermanentLabel | null;
   provenance: ProvenanceSummary;
+  policyMaturity?: {
+    state: 'unconfirmed' | 'immature' | 'approaching' | 'mature';
+    policyType: 'recovery' | 'inheritance';
+    delayBlocks: number;
+    ageBlocks: number;
+    remainingBlocks: number | null;
+    approachingAtBlocks: number;
+    maturityHeight: number | null;
+    approximateSecondsRemaining: number | null;
+    delayedSpendSupported: false;
+  } | null;
 };

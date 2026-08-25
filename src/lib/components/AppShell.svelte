@@ -266,6 +266,35 @@
           }),
           tone: 'success'
         });
+      if (event.type === 'policy_approaching_maturity')
+        toast({
+          title: translate(
+            $locale,
+            event.policyType === 'inheritance'
+              ? 'Inheritance path approaching maturity'
+              : 'Recovery path approaching maturity'
+          ),
+          description: translate(
+            $locale,
+            '{count} blocks remain for one coin. Review its policy.',
+            {
+              count: event.remainingBlocks
+            }
+          )
+        });
+      if (event.type === 'policy_mature')
+        toast({
+          title: translate(
+            $locale,
+            event.policyType === 'inheritance'
+              ? 'Inheritance path matured'
+              : 'Recovery path matured'
+          ),
+          description: translate(
+            $locale,
+            'One coin now has an additional single-key path. The normal 2-of-3 path still works.'
+          )
+        });
       if (event.type === 'wallet_profile_updated')
         profiles = profiles.map((profile) =>
           profile.id === event.profile.id ? event.profile : profile

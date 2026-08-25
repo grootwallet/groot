@@ -53,7 +53,7 @@ import {
 } from './multisig-setup';
 
 type BackendError = { code?: string; message?: string };
-type NotificationEnvelope = { id: number; event: WalletEvent };
+type NotificationEnvelope = { id: string; event: WalletEvent };
 const NOTIFICATION_BATCH_SIZE = 256;
 const MAX_NOTIFICATION_BATCHES_PER_DRAIN = 32;
 
@@ -87,6 +87,10 @@ function normalizeSnapshot(snapshot: WalletSnapshot): WalletSnapshot {
   return {
     ...snapshot,
     syncedAt: normalizeTimestamp(snapshot.syncedAt),
+    chainTip: {
+      ...snapshot.chainTip,
+      observedAt: normalizeTimestamp(snapshot.chainTip.observedAt)
+    },
     receiveAddresses: snapshot.receiveAddresses.map(normalizeAddress),
     transactions: snapshot.transactions.map((transaction) => ({
       ...transaction,

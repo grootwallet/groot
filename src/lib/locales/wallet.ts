@@ -1,6 +1,112 @@
 import type { CatalogSection } from './types';
 
 export const walletCopy = {
+  'Recovery path approaching maturity': {
+    fr: 'Le chemin de récupération approche de la maturité',
+    es: 'La ruta de recuperación se acerca a la madurez'
+  },
+  'Inheritance path approaching maturity': {
+    fr: 'Le chemin d’héritage approche de la maturité',
+    es: 'La ruta de herencia se acerca a la madurez'
+  },
+  'Recovery path matured': {
+    fr: 'Chemin de récupération arrivé à maturité',
+    es: 'Ruta de recuperación madura'
+  },
+  'Inheritance path matured': {
+    fr: 'Chemin d’héritage arrivé à maturité',
+    es: 'Ruta de herencia madura'
+  },
+  '{count} blocks remain for one coin. Review its policy.': {
+    fr: 'Il reste {count} blocs pour une pièce. Vérifiez sa politique.',
+    es: 'Quedan {count} bloques para una moneda. Revisa su política.'
+  },
+  'One coin now has an additional single-key path. The normal 2-of-3 path still works.': {
+    fr: 'Une pièce dispose maintenant d’un chemin à clé unique supplémentaire. Le chemin normal 2 sur 3 fonctionne toujours.',
+    es: 'Una moneda dispone ahora de una ruta adicional de una sola clave. La ruta normal 2 de 3 sigue funcionando.'
+  },
+  '{count} coins have a matured delayed path': {
+    fr: '{count} pièces ont un chemin différé arrivé à maturité',
+    es: '{count} monedas tienen una ruta retrasada madura'
+  },
+  '{count} coins are approaching delayed-path maturity': {
+    fr: '{count} pièces approchent de la maturité du chemin différé',
+    es: '{count} monedas se acercan a la madurez de la ruta retrasada'
+  },
+  'Delayed paths are still immature': {
+    fr: 'Les chemins différés ne sont pas encore arrivés à maturité',
+    es: 'Las rutas retrasadas aún son inmaduras'
+  },
+  'Next change in {count} blocks · approximate time is secondary': {
+    fr: 'Prochain changement dans {count} blocs · le temps approximatif est secondaire',
+    es: 'Próximo cambio en {count} bloques · el tiempo aproximado es secundario'
+  },
+  'All confirmed delayed paths shown here are mature.': {
+    fr: 'Tous les chemins différés confirmés affichés ici sont matures.',
+    es: 'Todas las rutas retrasadas confirmadas que se muestran aquí están maduras.'
+  },
+  'Countdown paused until Groot verifies a recent chain tip. Saved coin states are shown as of the last sync.':
+    {
+      fr: 'Compte à rebours suspendu jusqu’à ce que Groot vérifie une pointe de chaîne récente. Les états enregistrés sont ceux de la dernière synchronisation.',
+      es: 'Cuenta atrás en pausa hasta que Groot verifique una punta de cadena reciente. Los estados guardados corresponden a la última sincronización.'
+    },
+  'Maturity adds an independent single-key path. The normal 2-of-3 path stays valid.': {
+    fr: 'La maturité ajoute un chemin indépendant à clé unique. Le chemin normal 2 sur 3 reste valide.',
+    es: 'La madurez añade una ruta independiente de una sola clave. La ruta normal 2 de 3 sigue siendo válida.'
+  },
+  'Review coins': { fr: 'Vérifier les pièces', es: 'Revisar monedas' },
+  'Each coin has its own delayed-path clock': {
+    fr: 'Chaque pièce a sa propre horloge de chemin différé',
+    es: 'Cada moneda tiene su propio reloj de ruta retrasada'
+  },
+  'Maturity adds a recovery or heir single-key path; it never removes the normal 2-of-3 path.': {
+    fr: 'La maturité ajoute un chemin à clé unique de récupération ou d’héritier ; elle ne supprime jamais le chemin normal 2 sur 3.',
+    es: 'La madurez añade una ruta de una sola clave de recuperación o heredero; nunca elimina la ruta normal 2 de 3.'
+  },
+  'Exact countdowns are paused because the last verified chain tip is stale or unavailable.': {
+    fr: 'Les comptes à rebours exacts sont suspendus car la dernière pointe de chaîne vérifiée est ancienne ou indisponible.',
+    es: 'Las cuentas atrás exactas están en pausa porque la última punta de cadena verificada está obsoleta o no disponible.'
+  },
+  'Delayed path mature': { fr: 'Chemin différé mature', es: 'Ruta retrasada madura' },
+  'Delayed path immature': { fr: 'Chemin différé immature', es: 'Ruta retrasada inmadura' },
+  '{count} blocks to maturity': {
+    fr: '{count} blocs avant maturité',
+    es: '{count} bloques hasta la madurez'
+  },
+  'Approaching maturity': { fr: 'Approche de la maturité', es: 'Acercándose a la madurez' },
+  'Delay not started': { fr: 'Délai non démarré', es: 'Retraso no iniciado' },
+  'Delayed spending path': { fr: 'Chemin de dépense différé', es: 'Ruta de gasto retrasada' },
+  'Unconfirmed · delay not started': {
+    fr: 'Non confirmée · délai non démarré',
+    es: 'Sin confirmar · retraso no iniciado'
+  },
+  'Mature · additional single-key path available': {
+    fr: 'Mature · chemin à clé unique supplémentaire disponible',
+    es: 'Madura · ruta adicional de una sola clave disponible'
+  },
+  Immature: { fr: 'Immature', es: 'Inmadura' },
+  Mature: { fr: 'Mature', es: 'Madura' },
+  'Exact block status': { fr: 'État exact en blocs', es: 'Estado exacto en bloques' },
+  'Paused · last verified at block {height}': {
+    fr: 'Suspendu · dernière vérification au bloc {height}',
+    es: 'En pausa · última verificación en el bloque {height}'
+  },
+  'Starts after the first confirmation': {
+    fr: 'Démarre après la première confirmation',
+    es: 'Comienza tras la primera confirmación'
+  },
+  'Mature at block {height}': { fr: 'Mature au bloc {height}', es: 'Madura en el bloque {height}' },
+  '{count} blocks remaining': { fr: '{count} blocs restants', es: '{count} bloques restantes' },
+  'Approximate time': { fr: 'Temps approximatif', es: 'Tiempo aproximado' },
+  days: { fr: 'jours', es: 'días' },
+  months: { fr: 'mois', es: 'meses' },
+  years: { fr: 'ans', es: 'años' },
+  'What changes': { fr: 'Ce qui change', es: 'Qué cambia' },
+  'The independent delayed key can spend alone after maturity. Groot still sends only through the normal 2-of-3 path.':
+    {
+      fr: 'La clé différée indépendante peut dépenser seule après maturité. Groot envoie toujours uniquement par le chemin normal 2 sur 3.',
+      es: 'La clave retrasada independiente puede gastar sola tras la madurez. Groot sigue enviando únicamente por la ruta normal 2 de 3.'
+    },
   'Automatic selection will leave them untouched.': {
     fr: 'La sélection automatique les laissera intactes.',
     es: 'La selección automática las dejará intactas.'

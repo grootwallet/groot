@@ -419,7 +419,24 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       transactions: emptyActivity || emptyWallet ? [] : structuredClone(this._transactions),
       utxos: emptyWallet ? [] : structuredClone(this._coins),
       receiveAddresses: structuredClone(this._addresses),
-      syncedAt: new Date().toISOString()
+      syncedAt:
+        typeof location !== 'undefined' &&
+        new URLSearchParams(location.search).has('fixture-stale-tip')
+          ? '2026-01-01T00:00:00.000Z'
+          : new Date().toISOString(),
+      chainTip: {
+        height: 250_000,
+        observedAt:
+          typeof location !== 'undefined' &&
+          new URLSearchParams(location.search).has('fixture-stale-tip')
+            ? '2026-01-01T00:00:00.000Z'
+            : new Date().toISOString(),
+        status:
+          typeof location !== 'undefined' &&
+          new URLSearchParams(location.search).has('fixture-stale-tip')
+            ? 'stale'
+            : 'recent'
+      }
     };
     if (emptyActivity && !this._emptyActivitySyncScheduled) {
       this._emptyActivitySyncScheduled = true;

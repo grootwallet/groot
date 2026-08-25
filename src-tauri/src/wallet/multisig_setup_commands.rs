@@ -1087,7 +1087,8 @@ pub async fn multisig_snapshot(app: AppHandle) -> ApiResult<WalletSnapshotDto> {
         require_unlocked(&app, &state)?;
         let mut db = open_multisig_db(&app)?;
         let wallet = load_wallet(&mut db)?;
-        snapshot_from(&wallet, &db, None, true)
+        let delayed_policy = selected_delayed_policy_context(&app)?;
+        snapshot_from(&wallet, &db, None, true, delayed_policy.as_ref())
     })
     .await
     .map_err(internal)?

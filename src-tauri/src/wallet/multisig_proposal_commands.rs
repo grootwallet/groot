@@ -598,7 +598,15 @@ pub fn multisig_proposal_broadcast(
     let transaction =
         finalized_multisig_proposal_transaction(&mut db, &metadata, &proposal_id, &reviewed_psbt)?;
     let txid = broadcast_transaction(&app, &state, &transaction)?;
-    let snapshot = commit_multisig_broadcast(&mut db, &transaction, &proposal_id, &txid, None)?;
+    let delayed_policy = delayed_policy_context(&metadata)?;
+    let snapshot = commit_multisig_broadcast(
+        &mut db,
+        &transaction,
+        &proposal_id,
+        &txid,
+        None,
+        delayed_policy.as_ref(),
+    )?;
     let (snapshot, sync_pending) = match sync_wallet_atomically(&app, &state, &mut db, true, None) {
         Ok(snapshot) => (snapshot, false),
         Err(_) => (snapshot, true),
@@ -788,6 +796,15 @@ pub async fn multisig_recovery_create(
             .first()
             .map(|path| path.threshold)
             .unwrap_or(2);
+        let policy_type = if analysis
+            .paths
+            .iter()
+            .any(|path| path.available_after_blocks == 52_560)
+        {
+            "inheritance"
+        } else {
+            recovery_policy_type(&template)
+        };
         let (id, dir) = prepare_profile_directory(&app)?;
         let result = (|| {
             let mut db = open_wallet_database(&dir.join("wallet.sqlite"))?;
@@ -814,7 +831,7 @@ pub async fn multisig_recovery_create(
                 external_descriptor: analysis.external_descriptor,
                 internal_descriptor: analysis.internal_descriptor,
                 created_at: now().to_string(),
-                policy_type: recovery_policy_type(&template).to_owned(),
+                policy_type: policy_type.to_owned(),
                 recovery_template: Some(template),
                 spending_paths: analysis.paths,
             };

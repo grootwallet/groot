@@ -1,6 +1,42 @@
 import type { CatalogSection } from './types';
 
 export const multisigCopy = {
+  'INHERITANCE TIMELINE': { fr: 'CALENDRIER D’HÉRITAGE', es: 'CRONOLOGÍA DE HERENCIA' },
+  'RECOVERY TIMELINE': { fr: 'CALENDRIER DE RÉCUPÉRATION', es: 'CRONOLOGÍA DE RECUPERACIÓN' },
+  'Per-coin maturity': { fr: 'Maturité par pièce', es: 'Madurez por moneda' },
+  'Each confirmed coin ages independently toward the delayed single-key path.': {
+    fr: 'Chaque pièce confirmée vieillit indépendamment vers le chemin différé à clé unique.',
+    es: 'Cada moneda confirmada envejece de forma independiente hacia la ruta retrasada de una sola clave.'
+  },
+  '{count} mature': { fr: '{count} matures', es: '{count} maduras' },
+  '{count} approaching': { fr: '{count} approchent', es: '{count} se acercan' },
+  'All immature': { fr: 'Toutes immatures', es: 'Todas inmaduras' },
+  'The normal 2-of-3 path remains available.': {
+    fr: 'Le chemin normal 2 sur 3 reste disponible.',
+    es: 'La ruta normal 2 de 3 sigue disponible.'
+  },
+  'Next transition in {count} blocks.': {
+    fr: 'Prochaine transition dans {count} blocs.',
+    es: 'Próxima transición en {count} bloques.'
+  },
+  'Countdowns are paused until a recent chain tip is verified.': {
+    fr: 'Les comptes à rebours sont suspendus jusqu’à la vérification d’une pointe de chaîne récente.',
+    es: 'Las cuentas atrás están en pausa hasta verificar una punta de cadena reciente.'
+  },
+  'How spending authority changes': {
+    fr: 'Comment l’autorité de dépense change',
+    es: 'Cómo cambia la autoridad de gasto'
+  },
+  'At maturity, the independent delayed key gains a second way to spend that coin alone. The coin does not expire, and the immediate 2-of-3 branch is unchanged.':
+    {
+      fr: 'À maturité, la clé différée indépendante obtient une deuxième façon de dépenser seule cette pièce. La pièce n’expire pas et la branche immédiate 2 sur 3 reste inchangée.',
+      es: 'Al madurar, la clave retrasada independiente obtiene una segunda forma de gastar esa moneda por sí sola. La moneda no caduca y la rama inmediata 2 de 3 no cambia.'
+    },
+  'Groot does not yet coordinate delayed-key spending. Send remains fail-closed on the reviewed 2-of-3 path.':
+    {
+      fr: 'Groot ne coordonne pas encore les dépenses par clé différée. L’envoi reste fermé par défaut sur le chemin 2 sur 3 vérifié.',
+      es: 'Groot aún no coordina el gasto con la clave retrasada. El envío permanece cerrado por defecto en la ruta 2 de 3 revisada.'
+    },
   '{subject} needs exactly {count} signers.': {
     fr: '{subject} nécessite exactement {count} signataires.',
     es: '{subject} necesita exactamente {count} firmantes.'

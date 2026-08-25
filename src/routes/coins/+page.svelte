@@ -17,12 +17,18 @@
   import { copyText } from '$lib/clipboard';
   import { shortSats } from '$lib/data';
   import Amount from '$lib/components/Amount.svelte';
-  import { addressReuseInsights, selectedCoinTotal } from '$lib/wallet/policy';
+  import {
+    addressReuseInsights,
+    approximateBlockDuration,
+    policyMaturitySummary,
+    selectedCoinTotal,
+    validPolicyMaturity
+  } from '$lib/wallet/policy';
   import { walletService } from '$lib/wallet';
   import { toast } from '$lib/stores/toasts';
   import { onMount } from 'svelte';
   import type { Transaction, Utxo } from '$lib/types';
-  import { formatConfirmationCount, locale, t } from '$lib/i18n';
+  import { formatConfirmationCount, formatInteger, locale, t } from '$lib/i18n';
   import { sortCoins, type CoinSortOrder } from '$lib/wallet/presentation';
   import WalletSkeleton from '$lib/components/WalletSkeleton.svelte';
   import { fade, fly, slide } from 'svelte/transition';
@@ -36,6 +42,9 @@
   import InsightTip from '$lib/components/InsightTip.svelte';
 
   const walletShell = useWalletShellContext();
+  const MATURITY_MATURE = 'mature' as const;
+  const MATURITY_APPROACHING = 'approaching' as const;
+  const MATURITY_UNCONFIRMED = 'unconfirmed' as const;
   let utxos = $state<Utxo[]>([]);
   let transactions = $state<Transaction[]>([]);
   let sortOrder = $state<CoinSortOrder>('newest');
@@ -52,7 +61,14 @@
   let claimBusy = $state(false);
   let loading = $state(true);
   let loadError = $state('');
+  let chainTip = $state<import('$lib/wallet').WalletSnapshot['chainTip']>({
+    height: 0,
+    observedAt: null,
+    status: 'unknown'
+  });
   const selectedTotal = $derived(selectedCoinTotal(utxos, selected));
+  const chainTipCurrent = $derived(chainTip.status === 'recent');
+  const maturitySummary = $derived(policyMaturitySummary(utxos, chainTip));
   const filteredUtxos = $derived(
     utxos.filter((coin) => {
       const needle = labelFilter.trim().toLocaleLowerCase();
@@ -79,6 +95,10 @@
       : utxo.provenance.context === 'change'
         ? 'Change'
         : 'Coin';
+  const maturityIs = (
+    maturity: NonNullable<Utxo['policyMaturity']>,
+    state: NonNullable<Utxo['policyMaturity']>['state']
+  ) => maturity.state === state;
   const freezeIntentCoins = $derived(
     freezeIntent ? utxos.filter((coin) => freezeIntent?.outpoints.includes(coin.outpoint)) : []
   );
@@ -97,6 +117,7 @@
         multisig = event.walletKind === 'multisig';
         utxos = event.snapshot.utxos;
         transactions = event.snapshot.transactions;
+        chainTip = event.snapshot.chainTip;
         selected = selected.filter((outpoint) =>
           utxos.some((coin) => coin.outpoint === outpoint && !coin.frozen)
         );
@@ -124,6 +145,7 @@
         : await walletService.snapshot();
       utxos = snapshot.utxos;
       transactions = snapshot.transactions;
+      chainTip = snapshot.chainTip;
     } catch (cause) {
       loadError = localizedError(cause, $locale, 'Coin data could not be read.');
       toast({ title: 'Could not load coins', description: loadError, tone: 'danger' });
@@ -257,6 +279,27 @@
     </div>
   </header>
 
+  {#if maturitySummary}
+    <section class="policy-maturity-banner compact" aria-live="polite">
+      <span class="policy-maturity-icon"><AlertTriangle size={17} /></span>
+      <div>
+        <strong>{translate($locale, 'Each coin has its own delayed-path clock')}</strong>
+        <small
+          >{translate(
+            $locale,
+            'Maturity adds a recovery or heir single-key path; it never removes the normal 2-of-3 path.'
+          )}</small
+        >
+        {#if !maturitySummary.chainCurrent}<small class="stale-copy"
+            >{translate(
+              $locale,
+              'Exact countdowns are paused because the last verified chain tip is stale or unavailable.'
+            )}</small
+          >{/if}
+      </div>
+    </section>
+  {/if}
+
   <section class="coin-toolbar" aria-live="polite">
     <div>
       {#key selected.length}<span class="coin-selection-count" in:fly={{ y: -4, duration: 140 }}
@@ -318,6 +361,7 @@
       {#each sortedUtxos as utxo (utxo.outpoint)}
         {@const reuse = reuseFor(utxo.outpoint)}
         {@const linkedCoins = linkedCoinsFor(utxo.outpoint)}
+        {@const maturity = validPolicyMaturity(utxo)}
         <article class="coin-row" class:frozen={utxo.frozen} class:reused={Boolean(reuse)}>
           <label class="coin-check"
             ><input
@@ -335,6 +379,20 @@
             <div class="coin-title">
               <strong>{coinKind(utxo)}</strong>{#if utxo.frozen}<span class="coin-status frozen"
                   >{translate($locale, 'Frozen')}</span
+                >{:else if maturity && maturityIs(maturity, MATURITY_MATURE)}<span
+                  class="coin-status policy-mature"
+                  >{translate($locale, 'Delayed path mature')}</span
+                >{:else if maturity && maturityIs(maturity, MATURITY_APPROACHING)}<span
+                  class="coin-status policy-approaching"
+                  >{chainTipCurrent && maturity.remainingBlocks !== null
+                    ? translate($locale, '{count} blocks to maturity', {
+                        count: formatInteger(maturity.remainingBlocks, $locale)
+                      })
+                    : translate($locale, 'Approaching maturity')}</span
+                >{:else if maturity && maturityIs(maturity, MATURITY_UNCONFIRMED)}<span
+                  class="coin-status pending">{translate($locale, 'Delay not started')}</span
+                >{:else if maturity}<span class="coin-status policy-immature"
+                  >{translate($locale, 'Delayed path immature')}</span
                 >{:else if utxo.provenance.state === 'mixed'}<span class="coin-status reused"
                   >{translate($locale, 'Mixed provenance')}</span
                 >{:else if utxo.provenance.state === 'unknown'}<span class="coin-status pending"
@@ -400,6 +458,61 @@
                     )}
                   </dd>
                 </div>
+                {#if maturity}<div>
+                    <dt>{translate($locale, 'Delayed spending path')}</dt>
+                    <dd>
+                      {translate(
+                        $locale,
+                        maturityIs(maturity, MATURITY_UNCONFIRMED)
+                          ? 'Unconfirmed · delay not started'
+                          : maturityIs(maturity, MATURITY_MATURE)
+                            ? 'Mature · additional single-key path available'
+                            : maturityIs(maturity, MATURITY_APPROACHING)
+                              ? 'Approaching maturity'
+                              : 'Immature'
+                      )}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>{translate($locale, 'Exact block status')}</dt>
+                    <dd>
+                      {!chainTipCurrent
+                        ? translate($locale, 'Paused · last verified at block {height}', {
+                            height: formatInteger(chainTip.height, $locale)
+                          })
+                        : maturityIs(maturity, MATURITY_UNCONFIRMED)
+                          ? translate($locale, 'Starts after the first confirmation')
+                          : maturity.remainingBlocks === 0
+                            ? translate($locale, 'Mature at block {height}', {
+                                height: formatInteger(
+                                  maturity.maturityHeight ?? chainTip.height,
+                                  $locale
+                                )
+                              })
+                            : translate($locale, '{count} blocks remaining', {
+                                count: formatInteger(maturity.remainingBlocks ?? 0, $locale)
+                              })}
+                    </dd>
+                  </div>
+                  {#if chainTipCurrent && maturity.approximateSecondsRemaining !== null && maturity.approximateSecondsRemaining > 0}{@const approximate =
+                      approximateBlockDuration(
+                        maturity.approximateSecondsRemaining
+                      )}{#if approximate}<div>
+                        <dt>{translate($locale, 'Approximate time')}</dt>
+                        <dd>
+                          ≈ {formatInteger(approximate.value, $locale)}
+                          {translate($locale, approximate.unit)}
+                        </dd>
+                      </div>{/if}{/if}
+                  <div class="coin-policy-explanation">
+                    <dt>{translate($locale, 'What changes')}</dt>
+                    <dd>
+                      {translate(
+                        $locale,
+                        'The independent delayed key can spend alone after maturity. Groot still sends only through the normal 2-of-3 path.'
+                      )}
+                    </dd>
+                  </div>{/if}
                 <div>
                   <dt>
                     {translate($locale, 'Provenance')}

@@ -597,7 +597,7 @@ pub(crate) fn prepare_persisted_multisig_acceleration(
     }
     let mut transaction = db.transaction().map_err(internal)?;
     let mut wallet = load_wallet_transaction(&mut transaction)?;
-    let original = snapshot_from(&wallet, &transaction, None, true)?
+    let original = snapshot_from(&wallet, &transaction, None, true, None)?
         .transactions
         .into_iter()
         .find(|transaction| transaction.id == txid.to_string())
@@ -656,7 +656,7 @@ pub fn tx_acceleration_prepare(
         return Ok(proposal);
     }
     let wallet = load_wallet(&mut db)?;
-    let original = snapshot_from(&wallet, &db, None, false)?
+    let original = snapshot_from(&wallet, &db, None, false, None)?
         .transactions
         .into_iter()
         .find(|transaction| transaction.id == txid.to_string())
@@ -824,7 +824,7 @@ pub fn tx_sign_and_broadcast(
     )
     .map_err(internal)?;
     record_replacement(&persisted, &proposal_id, &txid)?;
-    let snapshot = snapshot_from(&wallet, &persisted, None, false)?;
+    let snapshot = snapshot_from(&wallet, &persisted, None, false, None)?;
     notifications::enqueue(
         &persisted,
         &WalletNotification::TransactionBroadcast {

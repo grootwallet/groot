@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { Utxo } from '$lib/types';
 import { feeRate, sats, WalletError } from './contracts';
 import {
   addressPrefixForNetwork,
@@ -8,8 +9,11 @@ import {
   hasAddressPrefixForNetwork,
   normalizeCoinSelection,
   normalizePermanentLabel,
+  approximateBlockDuration,
+  policyMaturitySummary,
   recoveryWordCountIsValid,
-  selectedCoinTotal
+  selectedCoinTotal,
+  validPolicyMaturity
 } from './policy';
 
 describe('wallet invariants', () => {
@@ -222,5 +226,138 @@ describe('wallet invariants', () => {
     ];
 
     expect(addressReuseInsights(coins)).toEqual([]);
+  });
+
+  it('summarizes authoritative per-coin maturity without claiming stale data is current', () => {
+    const base: Omit<Utxo, 'outpoint' | 'policyMaturity'> = {
+      amount: 10,
+      confirmations: 1,
+      address: 'bcrt1qpolicy',
+      label: 'Policy coin',
+      frozen: false,
+      primaryLabel: null,
+      provenance: {
+        state: 'known',
+        context: 'received',
+        labels: [],
+        clusterCount: 1,
+        addressReused: false
+      }
+    };
+    const maturity = {
+      policyType: 'recovery' as const,
+      delayBlocks: 4_320,
+      ageBlocks: 3_500,
+      approachingAtBlocks: 1_008,
+      maturityHeight: 204_320,
+      approximateSecondsRemaining: 820 * 600,
+      delayedSpendSupported: false as const
+    };
+    expect(validPolicyMaturity({ ...base, outpoint: 'none:0' })).toBeNull();
+    const coins: Utxo[] = [
+      {
+        ...base,
+        outpoint: 'a:0',
+        policyMaturity: { ...maturity, state: 'approaching' as const, remainingBlocks: 820 }
+      },
+      {
+        ...base,
+        outpoint: 'b:0',
+        policyMaturity: { ...maturity, state: 'mature' as const, remainingBlocks: 0 }
+      },
+      {
+        ...base,
+        outpoint: 'c:0',
+        policyMaturity: {
+          ...maturity,
+          state: 'unconfirmed' as const,
+          ageBlocks: 0,
+          remainingBlocks: null,
+          maturityHeight: null,
+          approximateSecondsRemaining: null
+        }
+      }
+    ];
+    expect(
+      policyMaturitySummary(coins, { height: 200_000, observedAt: null, status: 'stale' })
+    ).toEqual({
+      total: 3,
+      unconfirmed: 1,
+      immature: 0,
+      approaching: 1,
+      mature: 1,
+      nextRemainingBlocks: 820,
+      chainCurrent: false
+    });
+    expect(
+      policyMaturitySummary(
+        [
+          {
+            ...base,
+            outpoint: 'd:0',
+            policyMaturity: {
+              ...maturity,
+              state: 'immature',
+              ageBlocks: 12,
+              remainingBlocks: 4_308,
+              approximateSecondsRemaining: 4_308 * 600
+            }
+          }
+        ],
+        { height: 200_000, observedAt: '1', status: 'recent' }
+      )
+    ).toEqual({
+      total: 1,
+      unconfirmed: 0,
+      immature: 1,
+      approaching: 0,
+      mature: 0,
+      nextRemainingBlocks: 4_308,
+      chainCurrent: true
+    });
+    expect(
+      policyMaturitySummary([coins[1]], {
+        height: 200_000,
+        observedAt: '1',
+        status: 'recent'
+      })
+    ).toMatchObject({ nextRemainingBlocks: null, chainCurrent: true });
+  });
+
+  it('rejects hostile maturity DTO values and formats time as secondary approximation', () => {
+    const hostile = {
+      outpoint: 'a:0',
+      amount: 1,
+      confirmations: 1,
+      address: 'a',
+      label: 'A',
+      frozen: false,
+      primaryLabel: null,
+      provenance: {
+        state: 'known' as const,
+        context: 'received' as const,
+        labels: [],
+        clusterCount: 1,
+        addressReused: false
+      },
+      policyMaturity: {
+        state: 'mature' as const,
+        policyType: 'recovery' as const,
+        delayBlocks: 4_320,
+        ageBlocks: 4_320,
+        remainingBlocks: 10,
+        approachingAtBlocks: 1_008,
+        maturityHeight: 10,
+        approximateSecondsRemaining: 0,
+        delayedSpendSupported: false as const
+      }
+    };
+    expect(
+      policyMaturitySummary([hostile], { height: 10, observedAt: null, status: 'recent' })
+    ).toBeNull();
+    expect(approximateBlockDuration(7 * 86_400)).toEqual({ value: 7, unit: 'days' });
+    expect(approximateBlockDuration(400 * 86_400)).toEqual({ value: 14, unit: 'months' });
+    expect(approximateBlockDuration(800 * 86_400)).toEqual({ value: 3, unit: 'years' });
+    expect(approximateBlockDuration(null)).toBeNull();
   });
 });

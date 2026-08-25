@@ -12,6 +12,11 @@ export type WalletSnapshot = {
   utxos: Utxo[];
   receiveAddresses: ReceiveAddress[];
   syncedAt: string | null;
+  chainTip: {
+    height: number;
+    observedAt: string | null;
+    status: 'recent' | 'stale' | 'unknown';
+  };
 };
 
 export type FeeEstimates = {

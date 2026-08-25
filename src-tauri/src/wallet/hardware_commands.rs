@@ -2005,7 +2005,7 @@ pub fn external_signer_proposal_broadcast(
     )
     .map_err(internal)?;
     record_replacement(&persisted, &proposal_id, &txid)?;
-    let snapshot = snapshot_from(&wallet, &persisted, None, false)?;
+    let snapshot = snapshot_from(&wallet, &persisted, None, false, None)?;
     notifications::enqueue(
         &persisted,
         &WalletNotification::TransactionBroadcast {

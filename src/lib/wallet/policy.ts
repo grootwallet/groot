@@ -2,6 +2,7 @@ import type { ReceiveAddress } from '$lib/types';
 import type { Utxo } from '$lib/types';
 import type { CoinSelection } from './contracts';
 import type { SupportedNetwork } from '$lib/config';
+import type { WalletSnapshot } from './contracts';
 
 export function addressPrefixForNetwork(network: SupportedNetwork): 'bcrt1' | 'tb1' {
   return network === 'regtest' ? 'bcrt1' : 'tb1';
@@ -89,4 +90,68 @@ export function addressReuseInsights(
   }
 
   return [...groups.values()].filter((group) => group.outpoints.length > 1);
+}
+
+export type PolicyMaturitySummary = {
+  total: number;
+  unconfirmed: number;
+  immature: number;
+  approaching: number;
+  mature: number;
+  nextRemainingBlocks: number | null;
+  chainCurrent: boolean;
+};
+
+export function validPolicyMaturity(coin: Utxo): NonNullable<Utxo['policyMaturity']> | null {
+  const value = coin.policyMaturity;
+  if (!value) return null;
+  const integers = [
+    value.delayBlocks,
+    value.ageBlocks,
+    value.approachingAtBlocks,
+    value.maturityHeight ?? 0,
+    value.remainingBlocks ?? 0,
+    value.approximateSecondsRemaining ?? 0
+  ];
+  if (
+    !integers.every((item) => Number.isSafeInteger(item) && item >= 0) ||
+    value.approachingAtBlocks > value.delayBlocks ||
+    (value.state === 'unconfirmed' && value.remainingBlocks !== null) ||
+    (value.state === 'mature' && value.remainingBlocks !== 0) ||
+    !(['unconfirmed', 'immature', 'approaching', 'mature'] as string[]).includes(value.state)
+  )
+    return null;
+  return value;
+}
+
+export function policyMaturitySummary(
+  coins: Utxo[],
+  chainTip: WalletSnapshot['chainTip']
+): PolicyMaturitySummary | null {
+  const maturities = coins.map(validPolicyMaturity).filter((value) => value !== null);
+  if (!maturities.length) return null;
+  const remaining = maturities
+    .map((value) => value.remainingBlocks)
+    .filter((value): value is number => value !== null && value > 0);
+  return {
+    total: maturities.length,
+    unconfirmed: maturities.filter((value) => value.state === 'unconfirmed').length,
+    immature: maturities.filter((value) => value.state === 'immature').length,
+    approaching: maturities.filter((value) => value.state === 'approaching').length,
+    mature: maturities.filter((value) => value.state === 'mature').length,
+    nextRemainingBlocks: remaining.length ? Math.min(...remaining) : null,
+    chainCurrent: chainTip.status === 'recent'
+  };
+}
+
+export function approximateBlockDuration(seconds: number | null): {
+  value: number;
+  unit: 'days' | 'months' | 'years';
+} | null {
+  if (!Number.isSafeInteger(seconds) || seconds === null || seconds < 0) return null;
+  const days = Math.ceil(seconds / 86_400);
+  if (days < 60) return { value: days, unit: 'days' };
+  const months = Math.ceil(days / 30.4375);
+  if (months < 24) return { value: months, unit: 'months' };
+  return { value: Math.ceil(months / 12), unit: 'years' };
 }

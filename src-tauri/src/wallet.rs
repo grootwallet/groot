@@ -79,7 +79,10 @@ use crate::proposal::{
     decode_psbt, discard_signer_signature, encode_psbt, hardware_signature_response,
     merge_signed_psbt, signature_progress,
 };
-use crate::recovery::{analyze_template, PolicyAnalysis, RecoveryError, RecoveryTemplate};
+use crate::recovery::{
+    analyze_template, calculate_maturity, MaturityState, PolicyAnalysis, RecoveryError,
+    RecoveryTemplate,
+};
 use crate::registry::{self, RegistryError, WalletKind, WalletProfile, WalletRegistry};
 use crate::secure_store::{self, SecureStoreError};
 use crate::session::WalletSessions;
@@ -1240,6 +1243,29 @@ pub struct UtxoDto {
     primary_label: Option<PermanentLabelDto>,
     provenance: ProvenanceSummaryDto,
     frozen: bool,
+    policy_maturity: Option<PolicyMaturityDto>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PolicyMaturityDto {
+    state: MaturityState,
+    policy_type: String,
+    delay_blocks: u32,
+    age_blocks: u32,
+    remaining_blocks: Option<u32>,
+    approaching_at_blocks: u32,
+    maturity_height: Option<u32>,
+    approximate_seconds_remaining: Option<u64>,
+    delayed_spend_supported: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChainTipDto {
+    height: u32,
+    observed_at: Option<String>,
+    status: &'static str,
 }
 
 #[derive(Serialize)]
@@ -1251,6 +1277,13 @@ pub struct WalletSnapshotDto {
     utxos: Vec<UtxoDto>,
     receive_addresses: Vec<ReceiveAddressDto>,
     synced_at: Option<String>,
+    chain_tip: ChainTipDto,
+}
+
+#[derive(Debug, Clone)]
+struct DelayedPolicyContext {
+    policy_type: String,
+    delay_blocks: u32,
 }
 
 #[derive(Serialize)]
@@ -2721,6 +2754,11 @@ fn init_app_schema(db: &Connection) -> ApiResult<()> {
             total_blocks INTEGER NOT NULL CHECK(total_blocks >= 0),
             started_at INTEGER NOT NULL,
             updated_at INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS groot_chain_observation (
+            singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
+            height INTEGER NOT NULL CHECK(height >= 0),
+            observed_at INTEGER NOT NULL CHECK(observed_at >= 0)
         );",
     )
     .map_err(internal)?;
@@ -3695,6 +3733,49 @@ fn recovery_policy_type(template: &RecoveryTemplate) -> &'static str {
     }
 }
 
+fn delayed_policy_context(wallet: &MultisigWalletDto) -> ApiResult<Option<DelayedPolicyContext>> {
+    let Some(template @ RecoveryTemplate::Recovery { .. }) = wallet.recovery_template.as_ref()
+    else {
+        return Ok(None);
+    };
+    let analysis = analyze_template(template, &wallet.cosigners).map_err(recovery_api_error)?;
+    if analysis.external_descriptor != wallet.external_descriptor
+        || analysis.internal_descriptor != wallet.internal_descriptor
+        || analysis.paths != wallet.spending_paths
+        || analysis.paths.len() != 2
+        || analysis.paths[0].available_after_blocks != 0
+        || analysis.paths[1].available_after_blocks == 0
+    {
+        return Err(api_error(
+            "wallet_corrupt",
+            "The delayed-policy metadata does not match the wallet descriptors.",
+        ));
+    }
+    let delay_blocks = analysis.paths[1].available_after_blocks;
+    let policy_type = if delay_blocks == 52_560 {
+        "inheritance"
+    } else {
+        "recovery"
+    };
+    if !wallet.policy_type.is_empty()
+        && wallet.policy_type != "recovery"
+        && wallet.policy_type != policy_type
+    {
+        return Err(api_error(
+            "wallet_corrupt",
+            "The delayed-policy type does not match its verified block delay.",
+        ));
+    }
+    Ok(Some(DelayedPolicyContext {
+        policy_type: policy_type.to_owned(),
+        delay_blocks,
+    }))
+}
+
+fn selected_delayed_policy_context(app: &AppHandle) -> ApiResult<Option<DelayedPolicyContext>> {
+    delayed_policy_context(&read_multisig_metadata(app)?)
+}
+
 fn validate_multisig_backup(encoded: &str) -> ApiResult<MultisigBackupDto> {
     if encoded.len() > 256 * 1024 {
         return Err(api_error(
@@ -4471,6 +4552,7 @@ fn commit_multisig_broadcast(
     proposal_id: &str,
     txid: &Txid,
     synced_at: Option<String>,
+    delayed_policy: Option<&DelayedPolicyContext>,
 ) -> ApiResult<WalletSnapshotDto> {
     let mut persisted = db.transaction().map_err(internal)?;
     let mut wallet = load_wallet_transaction(&mut persisted)?;
@@ -4490,7 +4572,7 @@ fn commit_multisig_broadcast(
     label_provenance::bind_broadcast_transaction(&persisted, proposal_id, &txid.to_string(), now())
         .map_err(internal)?;
     record_replacement(&persisted, proposal_id, txid)?;
-    let snapshot = snapshot_from(&wallet, &persisted, synced_at, true)?;
+    let snapshot = snapshot_from(&wallet, &persisted, synced_at, true, delayed_policy)?;
     notifications::enqueue(
         &persisted,
         &WalletNotification::TransactionBroadcast {
@@ -4963,7 +5045,18 @@ fn sync_wallet_with_core(
     wallet.apply_unconfirmed_txs(mempool.update);
     mark_observed_addresses(&wallet, &transaction)?;
     label_provenance::reconcile_wallet_outputs(&wallet, &transaction, now()).map_err(internal)?;
-    let snapshot = snapshot_from(&wallet, &transaction, Some(now().to_string()), multisig)?;
+    let delayed_policy = if multisig {
+        selected_delayed_policy_context(app)?
+    } else {
+        None
+    };
+    let snapshot = snapshot_from(
+        &wallet,
+        &transaction,
+        Some(now().to_string()),
+        multisig,
+        delayed_policy.as_ref(),
+    )?;
     enqueue_snapshot_notifications(&transaction, &snapshot)?;
     wallet.persist(&mut transaction).map_err(internal)?;
     drop(wallet);
@@ -5010,7 +5103,12 @@ fn sync_wallet_with_compact_filters(
             current.updated_at = now();
         }
     }
-    apply_compact_filter_update(db, multisig, update)
+    let delayed_policy = if multisig {
+        selected_delayed_policy_context(app)?
+    } else {
+        None
+    };
+    apply_compact_filter_update(db, multisig, update, delayed_policy.as_ref())
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -5027,14 +5125,16 @@ fn apply_compact_filter_update(
     db: &mut Connection,
     multisig: bool,
     update: Update,
+    delayed_policy: Option<&DelayedPolicyContext>,
 ) -> ApiResult<WalletSnapshotDto> {
-    apply_compact_filter_update_with_hook(db, multisig, update, |_| Ok(()))
+    apply_compact_filter_update_with_hook(db, multisig, update, delayed_policy, |_| Ok(()))
 }
 
 fn apply_compact_filter_update_with_hook<F>(
     db: &mut Connection,
     multisig: bool,
     update: Update,
+    delayed_policy: Option<&DelayedPolicyContext>,
     mut after_stage: F,
 ) -> ApiResult<WalletSnapshotDto>
 where
@@ -5048,7 +5148,13 @@ where
     after_stage(CompactFilterCommitStage::AddressesMarked)?;
     label_provenance::reconcile_wallet_outputs(&wallet, &transaction, now()).map_err(internal)?;
     after_stage(CompactFilterCommitStage::ProvenanceReconciled)?;
-    let snapshot = snapshot_from(&wallet, &transaction, Some(now().to_string()), multisig)?;
+    let snapshot = snapshot_from(
+        &wallet,
+        &transaction,
+        Some(now().to_string()),
+        multisig,
+        delayed_policy,
+    )?;
     after_stage(CompactFilterCommitStage::SnapshotBuilt)?;
     enqueue_snapshot_notifications(&transaction, &snapshot)?;
     after_stage(CompactFilterCommitStage::NotificationsEnqueued)?;
@@ -5503,11 +5609,13 @@ fn snapshot_from(
     db: &Connection,
     synced_at: Option<String>,
     multisig: bool,
+    delayed_policy: Option<&DelayedPolicyContext>,
 ) -> ApiResult<WalletSnapshotDto> {
     label_provenance::reconcile_wallet_outputs(wallet, db, now()).map_err(internal)?;
     let provenance_context = label_provenance::summary_context(db).map_err(internal)?;
     let balance = wallet.balance();
     let tip = wallet.latest_checkpoint().height();
+    let chain_tip = chain_tip_dto(db, tip, synced_at.as_deref())?;
     let addresses = address_rows(db, multisig)?;
 
     let mut transactions = Vec::new();
@@ -5663,6 +5771,35 @@ fn snapshot_from(
                 }
                 _ => label,
             });
+        let policy_maturity = delayed_policy
+            .map(|policy| {
+                let calculation = calculate_maturity(policy.delay_blocks, output_confirmations)
+                    .map_err(recovery_api_error)?;
+                let maturity_height = if output_confirmations == 0 {
+                    None
+                } else {
+                    tip.checked_sub(output_confirmations.saturating_sub(1))
+                        .and_then(|height| height.checked_add(policy.delay_blocks))
+                };
+                if output_confirmations > 0 && maturity_height.is_none() {
+                    return Err(api_error(
+                        "wallet_corrupt",
+                        "A coin's delayed-policy height is outside the supported range.",
+                    ));
+                }
+                Ok(PolicyMaturityDto {
+                    state: calculation.state,
+                    policy_type: policy.policy_type.clone(),
+                    delay_blocks: policy.delay_blocks,
+                    age_blocks: calculation.age_blocks,
+                    remaining_blocks: calculation.remaining_blocks,
+                    approaching_at_blocks: calculation.approaching_at_blocks,
+                    maturity_height,
+                    approximate_seconds_remaining: calculation.approximate_seconds_remaining,
+                    delayed_spend_supported: false,
+                })
+            })
+            .transpose()?;
         utxos.push(UtxoDto {
             outpoint: output.outpoint.to_string(),
             amount: output.txout.value.to_sat(),
@@ -5672,6 +5809,7 @@ fn snapshot_from(
             primary_label,
             provenance,
             frozen: frozen.contains(&output.outpoint.to_string()),
+            policy_maturity,
         });
     }
 
@@ -5689,7 +5827,55 @@ fn snapshot_from(
         transactions,
         utxos,
         receive_addresses: addresses,
-        synced_at,
+        synced_at: chain_tip.observed_at.clone(),
+        chain_tip,
+    })
+}
+
+const CHAIN_TIP_RECENT_SECONDS: u64 = 30 * 60;
+
+fn chain_tip_dto(db: &Connection, height: u32, synced_at: Option<&str>) -> ApiResult<ChainTipDto> {
+    if let Some(value) = synced_at {
+        let observed_at = value
+            .parse::<u64>()
+            .map_err(|_| api_error("wallet_corrupt", "The verified chain-tip time is invalid."))?;
+        db.execute(
+            "INSERT INTO groot_chain_observation(singleton,height,observed_at) VALUES(1,?1,?2)
+             ON CONFLICT(singleton) DO UPDATE SET height=excluded.height,observed_at=excluded.observed_at",
+            params![height, observed_at],
+        )
+        .map_err(internal)?;
+    }
+    let observation = db
+        .query_row(
+            "SELECT height,observed_at FROM groot_chain_observation WHERE singleton=1",
+            [],
+            |row| Ok((row.get::<_, u32>(0)?, row.get::<_, u64>(1)?)),
+        )
+        .optional()
+        .map_err(internal)?;
+    let Some((observed_height, observed_at)) = observation else {
+        return Ok(ChainTipDto {
+            height,
+            observed_at: None,
+            status: "unknown",
+        });
+    };
+    let current_time = now();
+    if observed_height != height || observed_at > current_time.saturating_add(300) {
+        return Err(api_error(
+            "wallet_corrupt",
+            "The saved chain-tip observation does not match the wallet state.",
+        ));
+    }
+    Ok(ChainTipDto {
+        height,
+        observed_at: Some(observed_at.to_string()),
+        status: if current_time.saturating_sub(observed_at) <= CHAIN_TIP_RECENT_SECONDS {
+            "recent"
+        } else {
+            "stale"
+        },
     })
 }
 
@@ -5714,6 +5900,27 @@ fn snapshot_notifications(snapshot: &WalletSnapshotDto) -> Vec<WalletNotificatio
 }
 
 fn enqueue_snapshot_notifications(db: &Connection, snapshot: &WalletSnapshotDto) -> ApiResult<()> {
+    let maturity_observations = snapshot
+        .utxos
+        .iter()
+        .filter_map(|coin| {
+            coin.policy_maturity.as_ref().map(|maturity| {
+                let rank = match maturity.state {
+                    MaturityState::Unconfirmed | MaturityState::Immature => 0,
+                    MaturityState::Approaching => 1,
+                    MaturityState::Mature => 2,
+                };
+                notifications::PolicyMaturityObservation {
+                    outpoint: coin.outpoint.clone(),
+                    rank,
+                    remaining_blocks: maturity.remaining_blocks,
+                    policy_type: maturity.policy_type.clone(),
+                }
+            })
+        })
+        .collect::<Vec<_>>();
+    notifications::reconcile_policy_maturity(db, &maturity_observations, now())
+        .map_err(internal)?;
     let events = snapshot_notifications(snapshot);
     if !notifications::history_initialized(db).map_err(internal)? {
         notifications::seed_history_in_transaction(db, &events, now()).map_err(internal)?;

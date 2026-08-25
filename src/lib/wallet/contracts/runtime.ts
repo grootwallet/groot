@@ -105,6 +105,17 @@ export type WalletEvent =
   | { type: 'first_confirmation'; txid: string; balance: Sats }
   | { type: 'transaction_broadcast'; txid: string; balance: Sats }
   | {
+      type: 'policy_approaching_maturity';
+      outpoint: string;
+      remainingBlocks: number;
+      policyType: 'recovery' | 'inheritance';
+    }
+  | {
+      type: 'policy_mature';
+      outpoint: string;
+      policyType: 'recovery' | 'inheritance';
+    }
+  | {
       type: 'wallet_updated';
       walletId: string;
       walletKind: WalletProfile['kind'];

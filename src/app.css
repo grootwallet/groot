@@ -936,6 +936,60 @@ code {
   font-size: 9px;
   line-height: 1.45;
 }
+
+.policy-maturity-banner {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid color-mix(in srgb, var(--focus) 28%, var(--border));
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--focus) 7%, var(--panel));
+}
+
+.policy-maturity-banner.approaching {
+  border-color: color-mix(in srgb, var(--warning-text) 42%, var(--border));
+  background: color-mix(in srgb, var(--warning-text) 8%, var(--panel));
+}
+
+.policy-maturity-banner.mature {
+  border-color: color-mix(in srgb, var(--danger) 38%, var(--border));
+  background: color-mix(in srgb, var(--danger) 7%, var(--panel));
+}
+
+.policy-maturity-banner.compact {
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+.policy-maturity-icon {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border-radius: 10px;
+  color: var(--focus);
+  background: color-mix(in srgb, var(--focus) 12%, var(--surface-icon));
+}
+
+.policy-maturity-banner > div {
+  display: grid;
+  gap: 3px;
+}
+
+.policy-maturity-banner strong,
+.policy-maturity-banner small {
+  display: block;
+}
+
+.policy-maturity-banner small {
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.policy-maturity-banner .stale-copy {
+  color: var(--warning-text);
+}
 .balance-card::after {
   content: '';
   position: absolute;
@@ -6559,6 +6613,109 @@ code {
   color: var(--text);
   font-size: 21px;
 }
+
+.policy-maturity-panel {
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--panel);
+}
+
+.policy-maturity-panel-heading {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
+}
+
+.policy-maturity-panel-heading > span:first-child {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border-radius: 11px;
+  color: var(--focus);
+  background: var(--surface-icon);
+}
+
+.policy-maturity-panel-heading h2,
+.policy-maturity-panel-heading p {
+  margin: 0;
+}
+
+.policy-maturity-panel-heading p:not(.eyebrow) {
+  margin-top: 4px;
+  color: var(--muted);
+}
+
+.ready-badge.danger {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 35%, var(--border));
+  background: color-mix(in srgb, var(--danger) 8%, var(--surface-control));
+}
+
+.policy-maturity-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.policy-maturity-stats > div {
+  display: grid;
+  gap: 2px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-inset);
+}
+
+.policy-maturity-stats strong {
+  font-size: 1.25rem;
+}
+
+.policy-maturity-stats span {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.policy-maturity-truth {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--focus) 7%, var(--surface-inset));
+}
+
+.policy-maturity-truth svg {
+  flex: 0 0 auto;
+  color: var(--focus);
+}
+
+.policy-maturity-truth strong {
+  display: block;
+  color: var(--text);
+}
+
+.policy-maturity-details {
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
+.policy-maturity-details summary {
+  cursor: pointer;
+  color: var(--text);
+  font-weight: 650;
+}
+
+.policy-maturity-details p {
+  margin: 10px 0 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
 .vault-actions {
   display: flex;
   flex-wrap: wrap;
@@ -7581,6 +7738,33 @@ code {
 .coin-status.pending {
   color: var(--muted) !important;
   background: var(--surface-icon);
+}
+
+.coin-status.policy-approaching {
+  color: var(--warning-text);
+  border-color: color-mix(in srgb, var(--warning-text) 34%, var(--border));
+  background: color-mix(in srgb, var(--warning-text) 7%, var(--surface-control));
+}
+
+.coin-status.policy-immature {
+  color: var(--muted);
+  border-color: color-mix(in srgb, var(--muted) 28%, var(--border));
+  background: color-mix(in srgb, var(--surface-control) 86%, var(--muted) 14%);
+}
+
+.coin-status.policy-mature {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 34%, var(--border));
+  background: color-mix(in srgb, var(--danger) 7%, var(--surface-control));
+}
+
+.coin-details dl > .coin-policy-explanation {
+  grid-column: 1 / -1;
+}
+
+.coin-policy-explanation dd {
+  max-width: 62ch;
+  line-height: 1.45;
 }
 .coin-main > span {
   color: var(--text-soft);
@@ -8614,6 +8798,34 @@ code {
     animation: none !important;
     outline: 2px solid var(--fr-blue);
     outline-offset: -2px;
+  }
+}
+
+@media (max-width: 700px) {
+  .policy-maturity-banner {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .policy-maturity-banner .button {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+
+  .policy-maturity-panel {
+    padding: 16px;
+  }
+
+  .policy-maturity-panel-heading {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .policy-maturity-panel-heading > .ready-badge {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+
+  .policy-maturity-stats {
+    grid-template-columns: 1fr;
   }
 }
 

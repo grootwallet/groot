@@ -47,6 +47,7 @@
   } from '$lib/hardware/health-check-state';
   import { latestActiveProposal } from '$lib/wallet/proposal-resume';
   import { pendingBalanceBreakdown, sortTransactionsNewestFirst } from '$lib/wallet/presentation';
+  import { policyMaturitySummary } from '$lib/wallet/policy';
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import type { Transaction } from '$lib/types';
@@ -100,6 +101,9 @@
   );
   const pendingBreakdown = $derived(
     snapshot ? pendingBalanceBreakdown(snapshot) : { incoming: 0, change: 0, outgoing: 0 }
+  );
+  const maturitySummary = $derived(
+    snapshot ? policyMaturitySummary(snapshot.utxos, snapshot.chainTip) : null
   );
   const pendingDescription = $derived(
     [
@@ -478,6 +482,55 @@
           verifyError = '';
           verifyOpen = true;
         }}>{translate($locale, 'Verify now')}</Button
+      >
+    </section>
+  {/if}
+  {#if multisigWallet && maturitySummary}
+    <section
+      class="policy-maturity-banner"
+      class:mature={maturitySummary.mature > 0}
+      class:approaching={maturitySummary.mature === 0 && maturitySummary.approaching > 0}
+      aria-live="polite"
+    >
+      <span class="policy-maturity-icon"><Clock3 size={18} /></span>
+      <div>
+        <strong
+          >{translate(
+            $locale,
+            maturitySummary.mature > 0
+              ? '{count} coins have a matured delayed path'
+              : maturitySummary.approaching > 0
+                ? '{count} coins are approaching delayed-path maturity'
+                : 'Delayed paths are still immature',
+            {
+              count:
+                maturitySummary.mature > 0 ? maturitySummary.mature : maturitySummary.approaching
+            }
+          )}</strong
+        ><small
+          >{maturitySummary.chainCurrent
+            ? maturitySummary.nextRemainingBlocks !== null
+              ? translate(
+                  $locale,
+                  'Next change in {count} blocks · approximate time is secondary',
+                  {
+                    count: formatInteger(maturitySummary.nextRemainingBlocks, $locale)
+                  }
+                )
+              : translate($locale, 'All confirmed delayed paths shown here are mature.')
+            : translate(
+                $locale,
+                'Countdown paused until Groot verifies a recent chain tip. Saved coin states are shown as of the last sync.'
+              )}</small
+        ><small
+          >{translate(
+            $locale,
+            'Maturity adds an independent single-key path. The normal 2-of-3 path stays valid.'
+          )}</small
+        >
+      </div>
+      <Button size="small" variant="secondary" href="/coins"
+        >{translate($locale, 'Review coins')}</Button
       >
     </section>
   {/if}

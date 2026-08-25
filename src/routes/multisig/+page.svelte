@@ -1,8 +1,9 @@
 <script lang="ts">
-  import { locale } from '$lib/i18n';
+  import { formatInteger, locale } from '$lib/i18n';
   import { translate, localizedError } from '$lib/i18n-catalog';
   import {
     ChevronRight,
+    Clock3,
     Cpu,
     Eye,
     FileKey,
@@ -41,6 +42,7 @@
   import { toast } from '$lib/stores/toasts';
   import { coldcardPolicyFilename } from '$lib/transfer';
   import { useWalletShellContext } from '$lib/wallet/shell-context';
+  import { policyMaturitySummary } from '$lib/wallet/policy';
   import {
     matchingPolicyVerification,
     policyReadinessLabel,
@@ -80,6 +82,14 @@
   let healthPinDevice = $state<HardwareDevice | null>(null);
   let healthPinError = $state('');
   let healthPinErrorCode = $state<WalletErrorCode | ''>('');
+  const maturitySummary = $derived(
+    snapshot ? policyMaturitySummary(snapshot.utxos, snapshot.chainTip) : null
+  );
+  const delayedPolicyType = $derived(
+    wallet?.spendingPaths?.some((path) => path.availableAfterBlocks === 52_560)
+      ? 'inheritance'
+      : 'recovery'
+  );
   onDestroy(() => {
     healthPinChallenge = '';
     healthPinPositions = '';
@@ -489,6 +499,86 @@
         ><Button href="/multisig/send">{translate($locale, 'Send')}</Button>
       </div>
     </section>
+    {#if maturitySummary}
+      <section class="policy-maturity-panel" aria-live="polite">
+        <div class="policy-maturity-panel-heading">
+          <span><Clock3 size={19} /></span>
+          <div>
+            <p class="eyebrow">
+              {translate(
+                $locale,
+                delayedPolicyType === 'inheritance' ? 'INHERITANCE TIMELINE' : 'RECOVERY TIMELINE'
+              )}
+            </p>
+            <h2>{translate($locale, 'Per-coin maturity')}</h2>
+            <p>
+              {translate(
+                $locale,
+                'Each confirmed coin ages independently toward the delayed single-key path.'
+              )}
+            </p>
+          </div>
+          <span
+            class="ready-badge"
+            class:attention={maturitySummary.approaching > 0}
+            class:danger={maturitySummary.mature > 0}
+            >{translate(
+              $locale,
+              maturitySummary.mature > 0
+                ? '{count} mature'
+                : maturitySummary.approaching > 0
+                  ? '{count} approaching'
+                  : 'All immature',
+              {
+                count:
+                  maturitySummary.mature > 0 ? maturitySummary.mature : maturitySummary.approaching
+              }
+            )}</span
+          >
+        </div>
+        <div class="policy-maturity-stats">
+          <div>
+            <strong>{maturitySummary.immature}</strong><span>{translate($locale, 'Immature')}</span>
+          </div>
+          <div>
+            <strong>{maturitySummary.approaching}</strong><span
+              >{translate($locale, 'Approaching maturity')}</span
+            >
+          </div>
+          <div>
+            <strong>{maturitySummary.mature}</strong><span>{translate($locale, 'Mature')}</span>
+          </div>
+        </div>
+        <div class="policy-maturity-truth">
+          <ShieldCheck size={17} />
+          <span>
+            <strong>{translate($locale, 'The normal 2-of-3 path remains available.')}</strong>
+            {#if maturitySummary.chainCurrent && maturitySummary.nextRemainingBlocks !== null}
+              {translate($locale, 'Next transition in {count} blocks.', {
+                count: formatInteger(maturitySummary.nextRemainingBlocks, $locale)
+              })}
+            {:else if !maturitySummary.chainCurrent}
+              {translate($locale, 'Countdowns are paused until a recent chain tip is verified.')}
+            {/if}
+          </span>
+        </div>
+        <details class="policy-maturity-details">
+          <summary>{translate($locale, 'How spending authority changes')}</summary>
+          <p>
+            {translate(
+              $locale,
+              'At maturity, the independent delayed key gains a second way to spend that coin alone. The coin does not expire, and the immediate 2-of-3 branch is unchanged.'
+            )}
+          </p>
+          <p>
+            {translate(
+              $locale,
+              'Groot does not yet coordinate delayed-key spending. Send remains fail-closed on the reviewed 2-of-3 path.'
+            )}
+          </p>
+        </details>
+      </section>
+    {/if}
     <div class="vault-grid">
       <section class="vault-cosigners">
         <div class="section-heading compact">

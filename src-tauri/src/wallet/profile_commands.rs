@@ -423,7 +423,7 @@ pub async fn wallet_snapshot(app: AppHandle) -> ApiResult<WalletSnapshotDto> {
         require_unlocked(&app, &state)?;
         let mut db = open_db(&app)?;
         let wallet = load_wallet(&mut db)?;
-        snapshot_from(&wallet, &db, None, false)
+        snapshot_from(&wallet, &db, None, false, None)
     })
     .await
     .map_err(internal)?
@@ -478,11 +478,11 @@ pub fn wallet_notifications_ack(
     app: AppHandle,
     state: State<'_, AppState>,
     multisig: bool,
-    ids: Vec<i64>,
+    ids: Vec<String>,
 ) -> ApiResult<()> {
     let _operation = operation_guard(&state)?;
     require_unlocked_for_background_sync(&app, &state)?;
-    if ids.len() > 1_000 || ids.iter().any(|id| *id <= 0) {
+    if ids.len() > 1_000 || ids.iter().any(|id| id.len() > 64) {
         return Err(api_error(
             "internal_error",
             "The notification acknowledgement is invalid.",
@@ -946,7 +946,18 @@ pub async fn wallet_full_rescan(
             let rpc = Arc::new(rpc_client(&app, &state)?);
             let mut wallet = load_wallet(&mut db)?;
             full_rescan_loaded_wallet(rpc, &mut wallet, &mut db, &settings, &run_id, &cancel)?;
-            let snapshot = snapshot_from(&wallet, &db, Some(now().to_string()), is_multisig)?;
+            let delayed_policy = if is_multisig {
+                selected_delayed_policy_context(&app)?
+            } else {
+                None
+            };
+            let snapshot = snapshot_from(
+                &wallet,
+                &db,
+                Some(now().to_string()),
+                is_multisig,
+                delayed_policy.as_ref(),
+            )?;
             enqueue_snapshot_notifications(&db, &snapshot)?;
             Ok(snapshot)
         })();
