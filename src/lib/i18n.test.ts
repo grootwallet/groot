@@ -57,6 +57,14 @@ describe('locale preferences', () => {
     expect(translate('es', 'Scanning all USB hardware wallets…')).toBe(
       'Buscando todas las carteras físicas USB…'
     );
+    expect(
+      translate(
+        'fr',
+        'BitBox may request its password again for this new secure connection. Enter it only on BitBox.'
+      )
+    ).toBe(
+      'BitBox peut redemander son mot de passe pour cette nouvelle connexion sécurisée. Saisissez-le uniquement sur BitBox.'
+    );
     expect(translate('en', 'Loading…')).toBe('Loading…');
     expect(translate('es', '{blocks} blocks · full block history', { blocks: '149.669' })).toBe(
       '149.669 bloques · historial completo de bloques'

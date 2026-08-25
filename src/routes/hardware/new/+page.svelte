@@ -656,7 +656,9 @@
           ? 'Follow any unlock prompt on the signer. Keep other wallet apps closed.'
           : hardwareProgress.includes('Ledger')
             ? 'Keep Bitcoin Test open for Regtest and follow any prompt on the Ledger screen.'
-            : 'Keep the signer connected and unlocked.'
+            : hardwareProgress.toLowerCase().includes('bitbox')
+              ? 'BitBox may request its password again for this new secure connection. Enter it only on BitBox.'
+              : 'Keep the signer connected and unlocked.'
       )}
       label={translate($locale, 'Hardware wallet setup in progress')}
     />{:else if devices.length || !error}<HardwareDeviceList

@@ -113,7 +113,7 @@ describe('hardware receive verification UI', () => {
 
   it('bounds, coordinates, and cancels native HWI work', () => {
     expect(hardwareTransport).toContain(
-      'const DISCOVERY_TIMEOUT: Duration = Duration::from_secs(5 * 60)'
+      'const DISCOVERY_TIMEOUT: Duration = Duration::from_secs(90)'
     );
     expect(hardwareTransport).toContain(
       'static HWI_COORDINATOR: OnceLock<HardwareCoordinator> = OnceLock::new()'
@@ -250,6 +250,10 @@ describe('hardware receive verification UI', () => {
     expect(hardwareSetup).toContain(
       'useDevice(lastAttemptedDevice, lastAttemptAllowedEmptyPassphrase)'
     );
+    expect(hardwareSetup).toContain(
+      "'BitBox may request its password again for this new secure connection. Enter it only on BitBox.'"
+    );
+    expect(hardwareDeviceList).toContain("if (device.status === 'detected') return 'Detected'");
   });
 
   it('shows saved signer names only after matching scanned fingerprints', () => {

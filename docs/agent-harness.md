@@ -140,7 +140,10 @@ Current local status on 2026-08-24:
   HWI 3.2.0 may wait for device-password entry inside aggregate discovery,
   before returning the locked device row. The former 30-second discovery
   deadline failed after a successful unlock. ADR 0043 and the same-version
-  portable correction extend that cancelable discovery window to five minutes;
+  portable correction first extended that cancelable discovery window to five
+  minutes; packaged Nova follow-up showed that this looked like an endless
+  scan, so discovery is now capped at 90 seconds while selected-device review
+  retains five minutes;
   physical retesting is still required before recording a pass.
 - The following packaged BitBox02 Nova attempt completed discovery but returned
   sanitized `hardware_unavailable` from initial account-key import. Repeating

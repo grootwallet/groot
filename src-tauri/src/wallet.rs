@@ -1657,7 +1657,7 @@ fn missing_hardware_xpub(
         }
         "bitbox02" => api_error(
             "hardware_unavailable",
-            "Could not read the BitBox account key. Keep it connected and unlocked, then try again.",
+            "BitBox may request its password again for this new secure connection. Check its screen, enter the password on BitBox if asked, and try again.",
         ),
         "trezor" | "keepkey" => {
             let safe_detail = hwi_message.unwrap_or_default().to_ascii_lowercase();
@@ -1737,9 +1737,9 @@ fn hardware_device_dto(device: HwiDevice) -> HardwareDeviceDto {
         ("ready", "Ready to import the public account key.", "import")
     } else if device_type == "bitbox02" {
         (
-            "needs_device_unlock",
-            "Select this signer, then unlock it on BitBox to continue.",
-            "unlock",
+            "detected",
+            "Detected. Continue to read and verify the public account key. BitBox may request its password again for the new secure connection.",
+            "import",
         )
     } else if device_type == "jade" {
         (

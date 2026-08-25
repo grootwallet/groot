@@ -1507,7 +1507,8 @@ fn hwi_response_codes_become_safe_actionable_errors() {
 
     let bitbox_xpub =
         missing_hardware_xpub("bitbox02", "m/48'/1'/0'/2'", Some(-13), None, "fallback");
-    assert!(bitbox_xpub.message.contains("connected and unlocked"));
+    assert!(bitbox_xpub.message.contains("password again"));
+    assert!(!bitbox_xpub.message.contains("m/48'"));
 
     let cancelled_xpub =
         missing_hardware_xpub("ledger", "m/84'/1'/0'", Some(-14), None, "fallback");
@@ -1655,9 +1656,9 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
         needs_passphrase_sent: false,
         warnings: vec![],
     });
-    assert_eq!(bitbox.status, "needs_device_unlock");
-    assert_eq!(bitbox.action, "unlock");
-    assert!(bitbox.message.contains("unlock it on BitBox"));
+    assert_eq!(bitbox.status, "detected");
+    assert_eq!(bitbox.action, "import");
+    assert!(bitbox.message.contains("password again"));
 
     let locked_nova = hardware_device_dto(HwiDevice {
         capability: "opaque-device".to_owned(),
@@ -1673,9 +1674,9 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
     });
     assert_eq!(locked_nova.label, "bitbox02_nova_multi");
     assert_eq!(locked_nova.model, "bitbox02");
-    assert_eq!(locked_nova.status, "needs_device_unlock");
-    assert_eq!(locked_nova.action, "unlock");
-    assert!(locked_nova.message.contains("unlock it on BitBox"));
+    assert_eq!(locked_nova.status, "detected");
+    assert_eq!(locked_nova.action, "import");
+    assert!(locked_nova.message.contains("password again"));
     assert!(!locked_nova.message.contains("sensitive-nova-path"));
 
     let ready_nova = hardware_device_dto(HwiDevice {

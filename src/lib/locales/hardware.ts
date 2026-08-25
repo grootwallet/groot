@@ -1,6 +1,7 @@
 import type { CatalogSection } from './types';
 
 export const hardwareCopy = {
+  bitbox: { fr: 'bitbox', es: 'bitbox' },
   'Scanning all USB hardware wallets…': {
     fr: 'Recherche de tous les portefeuilles matériels USB…',
     es: 'Buscando todas las carteras físicas USB…'
@@ -29,6 +30,21 @@ export const hardwareCopy = {
     fr: 'Sélectionnez ce signataire, puis déverrouillez-le sur BitBox pour continuer.',
     es: 'Selecciona este firmante y desbloquéalo en BitBox para continuar.'
   },
+  'Detected. Continue to read and verify the public account key. BitBox may request its password again for the new secure connection.':
+    {
+      fr: 'Détecté. Continuez pour lire et vérifier la clé publique du compte. BitBox peut redemander son mot de passe pour la nouvelle connexion sécurisée.',
+      es: 'Detectado. Continúa para leer y verificar la clave pública de la cuenta. BitBox puede volver a solicitar su contraseña para la nueva conexión segura.'
+    },
+  'BitBox may request its password again for this new secure connection. Enter it only on BitBox.':
+    {
+      fr: 'BitBox peut redemander son mot de passe pour cette nouvelle connexion sécurisée. Saisissez-le uniquement sur BitBox.',
+      es: 'BitBox puede volver a solicitar su contraseña para esta nueva conexión segura. Introdúcela únicamente en BitBox.'
+    },
+  'BitBox may request its password again for this new secure connection. Check its screen, enter the password on BitBox if asked, and try again.':
+    {
+      fr: 'BitBox peut redemander son mot de passe pour cette nouvelle connexion sécurisée. Vérifiez son écran, saisissez le mot de passe sur BitBox si demandé, puis réessayez.',
+      es: 'BitBox puede volver a solicitar su contraseña para esta nueva conexión segura. Comprueba su pantalla, introduce la contraseña en BitBox si se solicita y vuelve a intentarlo.'
+    },
   'Select this signer. Groot will ask Jade to unlock; enter your PIN on Jade when prompted.': {
     fr: 'Sélectionnez ce signataire. Groot demandera à Jade de se déverrouiller ; saisissez votre PIN sur Jade lorsqu’il vous le demande.',
     es: 'Selecciona este firmante. Groot pedirá a Jade que se desbloquee; introduce tu PIN en Jade cuando te lo pida.'
