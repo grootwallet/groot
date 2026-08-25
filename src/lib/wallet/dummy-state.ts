@@ -2,6 +2,7 @@ import { defaultConfig } from '$lib/config';
 import { receiveAddresses, transactions, utxos, wallet } from '$lib/data';
 import type { PolicyDraft } from '$lib/multisig/policy';
 import { descriptorPreview, MULTISIG_ACCOUNT_PATH } from '$lib/multisig/policy';
+import type { Utxo } from '$lib/types';
 import { addressPrefixForNetwork } from './policy';
 import type {
   CoreNodeConfig,
@@ -47,6 +48,34 @@ export const fixtureCosigners: PolicyDraft['cosigners'] = [
 
 export function fixtureAddressForNetwork(address: string): string {
   return address.replace(/^(tb1|bcrt1)/, addressPrefixForNetwork(defaultConfig.network));
+}
+
+function fixtureCoins(): Utxo[] {
+  const coins = structuredClone(utxos);
+  const maturityFixture =
+    typeof location !== 'undefined' &&
+    new URLSearchParams(location.search).has('fixture-policy-maturity');
+
+  if (!maturityFixture) return coins;
+
+  return [
+    ...coins,
+    {
+      ...structuredClone(coins[2]),
+      outpoint: 'fixture-unconfirmed-policy-output:0',
+      amount: 125_000,
+      confirmations: 0,
+      label: 'New payment',
+      primaryLabel: null,
+      provenance: {
+        state: 'known',
+        context: 'received',
+        labels: [],
+        clusterCount: 1,
+        addressReused: false
+      }
+    }
+  ];
 }
 
 export function fixtureMultisigWallet(): MultisigWallet {
@@ -159,7 +188,7 @@ export abstract class DummyWalletState {
           ? [this._profiles[0].id]
           : []
   );
-  protected _coins = structuredClone(utxos).map((coin, index) => ({
+  protected _coins = fixtureCoins().map((coin, index) => ({
     ...coin,
     confirmations:
       typeof location !== 'undefined' &&
@@ -168,7 +197,9 @@ export abstract class DummyWalletState {
           ? 4_320
           : index === 1
             ? 3_500
-            : 12
+            : index === 2
+              ? 12
+              : 0
         : coin.confirmations,
     address: fixtureAddressForNetwork(coin.address),
     policyMaturity:
@@ -180,14 +211,18 @@ export abstract class DummyWalletState {
                 ? ('mature' as const)
                 : index === 1
                   ? ('approaching' as const)
-                  : ('immature' as const),
+                  : index === 2
+                    ? ('immature' as const)
+                    : ('unconfirmed' as const),
             policyType: 'recovery' as const,
             delayBlocks: 4_320,
-            ageBlocks: index === 0 ? 4_320 : index === 1 ? 3_500 : 12,
-            remainingBlocks: index === 0 ? 0 : index === 1 ? 820 : 4_308,
+            ageBlocks: index === 0 ? 4_320 : index === 1 ? 3_500 : index === 2 ? 12 : 0,
+            remainingBlocks: index === 0 ? 0 : index === 1 ? 820 : index === 2 ? 4_308 : null,
             approachingAtBlocks: 1_008,
-            maturityHeight: index === 0 ? 250_000 : index === 1 ? 250_820 : 254_308,
-            approximateSecondsRemaining: index === 0 ? 0 : index === 1 ? 492_000 : 2_584_800,
+            maturityHeight:
+              index === 0 ? 250_000 : index === 1 ? 250_820 : index === 2 ? 254_308 : null,
+            approximateSecondsRemaining:
+              index === 0 ? 0 : index === 1 ? 492_000 : index === 2 ? 2_584_800 : null,
             delayedSpendSupported: false as const
           }
         : null

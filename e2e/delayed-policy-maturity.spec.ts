@@ -14,6 +14,8 @@ test('shows security-accurate delayed-policy state across overview, coins, and p
 
   await expect(page.getByText('Each coin has its own delayed-path clock')).toBeVisible();
   await expect(page.getByText('Delayed path mature', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('Delayed path immature', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('Delay not started', { exact: true }).first()).toBeVisible();
   await expect(page.getByText('820 blocks to maturity', { exact: true }).first()).toBeVisible();
   await page
     .locator('.coin-row')
