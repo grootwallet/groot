@@ -18,6 +18,7 @@
   import LocalTimestamp from '$lib/components/LocalTimestamp.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import HardwareActionPrompt from '$lib/components/HardwareActionPrompt.svelte';
+  import InsightTip from '$lib/components/InsightTip.svelte';
   import SignerPolicyReview from '$lib/components/SignerPolicyReview.svelte';
   import ColdcardPolicySetup from '$lib/components/ColdcardPolicySetup.svelte';
   import OverflowMenuButton from '$lib/components/OverflowMenuButton.svelte';
@@ -526,47 +527,74 @@
               {translate(
                 $locale,
                 delayedPolicyType === 'inheritance' ? 'Heir access' : 'Recovery access'
-              )}
+              )}<InsightTip
+                label={translate($locale, 'About backup-key access')}
+                text={translate(
+                  $locale,
+                  'Each coin starts its own wait after confirmation, so backup-key access can become available at different times.'
+                )}
+              />
             </h2>
             <p>
-              {translate(
-                $locale,
-                'No action is required. Review coins only if you want to use the backup key or restart a wait.'
-              )}
+              {#if !maturitySummary.chainCurrent}
+                {translate($locale, 'Recovery status is paused until the chain is current.')}
+              {:else if maturitySummary.mature === 1}
+                {translate($locale, 'No action is required. {key} is available for 1 coin.', {
+                  key: translate(
+                    $locale,
+                    delayedPolicyType === 'inheritance' ? 'Heir key' : 'Recovery key'
+                  )
+                })}
+              {:else if maturitySummary.mature > 1}
+                {translate(
+                  $locale,
+                  'No action is required. {key} is available for {count} coins.',
+                  {
+                    key: translate(
+                      $locale,
+                      delayedPolicyType === 'inheritance' ? 'Heir key' : 'Recovery key'
+                    ),
+                    count: formatInteger(maturitySummary.mature, $locale)
+                  }
+                )}
+              {:else if maturitySummary.approaching === 1}
+                {translate(
+                  $locale,
+                  'No action is required. {key} will be available for 1 coin soon.',
+                  {
+                    key: translate(
+                      $locale,
+                      delayedPolicyType === 'inheritance' ? 'Heir key' : 'Recovery key'
+                    )
+                  }
+                )}
+              {:else}
+                {translate(
+                  $locale,
+                  'No action is required. The backup key is still waiting for every coin.'
+                )}
+              {/if}
             </p>
           </div>
           <Button variant="secondary" size="small" href="/coins"
             >{translate($locale, 'Review coins')}</Button
           >
         </div>
-        <div class="policy-maturity-stats">
-          <div>
-            <span>{translate($locale, 'Protected')}</span><strong>{maturitySummary.immature}</strong
-            >
-          </div>
-          <div>
-            <span>{translate($locale, 'Available soon')}</span><strong
-              >{maturitySummary.approaching}</strong
-            >
-          </div>
-          <div>
-            <span>{translate($locale, 'Key available')}</span><strong
-              >{maturitySummary.mature}</strong
-            >
-          </div>
-        </div>
-        <div class="warning-box policy-maturity-truth">
-          <ShieldCheck size={17} />
-          <span>
-            <strong>{translate($locale, 'Your normal keys keep working for every coin.')}</strong>
-            {#if maturitySummary.chainCurrent && maturitySummary.nextRemainingBlocks !== null}
-              {translate($locale, 'Next transition in {count} blocks.', {
+        <div class="policy-maturity-meta">
+          <span
+            ><ShieldCheck size={15} />{translate(
+              $locale,
+              maturitySummary.total === 1
+                ? 'Normal keys still work for 1 coin.'
+                : 'Normal keys still work for all {count} coins.',
+              { count: formatInteger(maturitySummary.total, $locale) }
+            )}</span
+          >
+          {#if maturitySummary.chainCurrent && maturitySummary.nextRemainingBlocks !== null}<span
+              ><Clock3 size={15} />{translate($locale, 'Next change in {count} blocks.', {
                 count: formatInteger(maturitySummary.nextRemainingBlocks, $locale)
-              })}
-            {:else if !maturitySummary.chainCurrent}
-              {translate($locale, 'Countdowns are paused until a recent chain tip is verified.')}
-            {/if}
-          </span>
+              })}</span
+            >{/if}
         </div>
         <details class="policy-maturity-details">
           <summary>{translate($locale, 'How backup-key access works')}</summary>

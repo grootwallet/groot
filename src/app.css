@@ -6777,6 +6777,9 @@ code {
 }
 
 .policy-maturity-panel-heading h2 {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   font-size: 14px;
   font-weight: 650;
 }
@@ -6787,54 +6790,19 @@ code {
   background: color-mix(in srgb, var(--danger) 8%, var(--surface-control));
 }
 
-.policy-maturity-stats {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 9px;
-  background: var(--surface-inset);
-}
-
-.policy-maturity-stats > div {
+.policy-maturity-meta {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 9px 11px;
-  border-right: 1px solid var(--border);
-}
-
-.policy-maturity-stats > div:last-child {
-  border-right: 0;
-}
-
-.policy-maturity-stats strong {
-  color: var(--text);
-  font-size: 12px;
-}
-
-.policy-maturity-stats span {
+  gap: 8px 18px;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 11px;
 }
 
-.policy-maturity-truth {
-  display: flex;
+.policy-maturity-meta span {
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  margin: 0;
-  padding: 9px 11px;
-}
-
-.policy-maturity-truth svg {
-  flex: 0 0 auto;
-}
-
-.policy-maturity-truth strong {
-  margin-right: 4px;
-  color: inherit;
-  font-weight: 650;
+  gap: 6px;
 }
 
 .policy-maturity-details {
@@ -9098,19 +9066,6 @@ code {
   .recovery-key-option .button {
     grid-column: 1 / -1;
     width: 100%;
-  }
-
-  .policy-maturity-stats {
-    grid-template-columns: 1fr;
-  }
-
-  .policy-maturity-stats > div {
-    border-right: 0;
-    border-bottom: 1px solid var(--border);
-  }
-
-  .policy-maturity-stats > div:last-child {
-    border-bottom: 0;
   }
 }
 

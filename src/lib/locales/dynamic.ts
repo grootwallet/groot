@@ -737,6 +737,11 @@ export const dynamicCopy = {
     fr: 'Chaque pièce a son propre calendrier de protection.',
     es: 'Cada moneda tiene su propio calendario de protección.'
   },
+  'Each coin starts its own wait after confirmation, so backup-key access can become available at different times.':
+    {
+      fr: 'Chaque pièce commence sa propre attente après confirmation. L’accès par clé de secours peut donc devenir disponible à des moments différents.',
+      es: 'Cada moneda inicia su propia espera tras la confirmación, por lo que el acceso con la clave de respaldo puede habilitarse en momentos distintos.'
+    },
   'Each coin has its own wait before the backup key becomes available.': {
     fr: 'Chaque pièce a sa propre attente avant que la clé de secours soit disponible.',
     es: 'Cada moneda tiene su propia espera antes de que la clave de respaldo esté disponible.'
@@ -780,6 +785,10 @@ export const dynamicCopy = {
     fr: 'Clé de récupération après l’attente',
     es: 'Clave de recuperación tras la espera'
   },
+  'Recovery status is paused until the chain is current.': {
+    fr: 'L’état de récupération est suspendu jusqu’à ce que la chaîne soit à jour.',
+    es: 'El estado de recuperación está en pausa hasta que la cadena esté actualizada.'
+  },
   'Recovery access becomes available separately for each coin. Your normal keys keep working.': {
     fr: 'L’accès de récupération devient disponible séparément pour chaque pièce. Vos clés normales continuent de fonctionner.',
     es: 'El acceso de recuperación se habilita por separado para cada moneda. Tus claves normales siguen funcionando.'
@@ -798,6 +807,22 @@ export const dynamicCopy = {
     es: 'Comisión de red · {rate} sat/vB'
   },
   'No action is required': { fr: 'Aucune action requise', es: 'No es necesario hacer nada' },
+  'No action is required. {key} is available for 1 coin.': {
+    fr: 'Aucune action n’est requise. {key} est disponible pour 1 pièce.',
+    es: 'No es necesario hacer nada. {key} está disponible para 1 moneda.'
+  },
+  'No action is required. {key} is available for {count} coins.': {
+    fr: 'Aucune action n’est requise. {key} est disponible pour {count} pièces.',
+    es: 'No es necesario hacer nada. {key} está disponible para {count} monedas.'
+  },
+  'No action is required. {key} will be available for 1 coin soon.': {
+    fr: 'Aucune action n’est requise. {key} sera bientôt disponible pour 1 pièce.',
+    es: 'No es necesario hacer nada. {key} estará disponible pronto para 1 moneda.'
+  },
+  'No action is required. The backup key is still waiting for every coin.': {
+    fr: 'Aucune action n’est requise. La clé de secours est encore en attente pour chaque pièce.',
+    es: 'No es necesario hacer nada. La clave de respaldo sigue en espera para cada moneda.'
+  },
   'No action is required. Review coins only if you want to use the backup key or restart a wait.': {
     fr: 'Aucune action n’est requise. Consultez les pièces uniquement pour utiliser la clé de secours ou relancer une attente.',
     es: 'No es necesario hacer nada. Revisa las monedas solo si quieres usar la clave de respaldo o reiniciar una espera.'
@@ -934,6 +959,18 @@ export const dynamicCopy = {
     fr: 'Quand votre clé de secours devient disponible',
     es: 'Cuándo estará disponible tu clave de respaldo'
   },
+  'Normal keys still work for 1 coin.': {
+    fr: 'Les clés normales fonctionnent toujours pour 1 pièce.',
+    es: 'Las claves normales siguen funcionando para 1 moneda.'
+  },
+  'Normal keys still work for all {count} coins.': {
+    fr: 'Les clés normales fonctionnent toujours pour les {count} pièces.',
+    es: 'Las claves normales siguen funcionando para las {count} monedas.'
+  },
+  'Next change in {count} blocks.': {
+    fr: 'Prochain changement dans {count} blocs.',
+    es: 'Próximo cambio en {count} bloques.'
+  },
   'After its wait, the backup key can spend that coin alone. The coin does not expire, and your normal keys still work.':
     {
       fr: 'Après son délai, la clé de secours peut dépenser seule cette pièce. La pièce n’expire pas et vos clés normales fonctionnent toujours.',
@@ -966,6 +1003,10 @@ export const dynamicCopy = {
   '1 coin can now be spent with the {key}': {
     fr: '1 pièce peut maintenant être dépensée avec la {key}',
     es: 'Ahora se puede gastar 1 moneda con la {key}'
+  },
+  'About backup-key access': {
+    fr: 'À propos de l’accès par clé de secours',
+    es: 'Acerca del acceso con la clave de respaldo'
   },
   'Address reused · review before spending': {
     fr: 'Adresse réutilisée · vérifier avant de dépenser',

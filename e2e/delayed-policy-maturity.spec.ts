@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 
 test('shows security-accurate delayed-policy state across overview, coins, and policy', async ({
   page
-}) => {
+}, testInfo) => {
   await page.goto('/?fixture-policy-maturity=1');
   const overview = page.locator('.policy-maturity-banner');
   await expect(overview).toContainText('1 coin can now be spent with the Recovery key');
@@ -40,14 +40,20 @@ test('shows security-accurate delayed-policy state across overview, coins, and p
   await expect(page.getByText('2 of 3 primary keys + recovery key later')).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'Recovery access' })).toBeVisible();
   await expect(
-    page.getByText(
-      'No action is required. Review coins only if you want to use the backup key or restart a wait.'
-    )
+    page.getByText('No action is required. Recovery key is available for 1 coin.')
   ).toBeVisible();
+  const accessInsight = page.getByRole('button', { name: 'About backup-key access' });
+  if (testInfo.project.name === 'mobile') await accessInsight.click();
+  else await accessInsight.hover();
+  await expect(page.getByRole('tooltip')).toContainText(
+    'Each coin starts its own wait after confirmation'
+  );
   await expect(
     page.locator('.policy-maturity-panel').getByRole('link', { name: 'Review coins' })
   ).toBeVisible();
-  await expect(page.getByText('Your normal keys keep working for every coin.')).toBeVisible();
+  await expect(page.getByText('Normal keys still work for all 4 coins.')).toBeVisible();
+  await expect(page.getByText('Next change in 820 blocks.')).toBeVisible();
+  await expect(page.locator('.policy-maturity-stats')).toHaveCount(0);
   await page.getByText('How backup-key access works').click();
   await expect(
     page.getByText('Open an available coin to use the backup key or restart its wait.')
@@ -151,7 +157,7 @@ test('localizes maturity state without layout overflow', async ({ page }) => {
   ).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Accès de récupération' })).toBeVisible();
   await expect(
-    page.getByText('Vos clés normales continuent de fonctionner pour chaque pièce.')
+    page.getByText('Les clés normales fonctionnent toujours pour les 4 pièces.')
   ).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true
