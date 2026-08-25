@@ -1336,7 +1336,11 @@ fn read_hardware_account_identity(
             Err(error)
                 if is_bitbox
                     && attempt + 1 < BITBOX_ACCOUNT_KEY_ATTEMPTS
-                    && matches!(error, HardwareError::CommandFailed(Some(-3 | -12 | -15))) =>
+                    && matches!(
+                        error,
+                        HardwareError::CommandFailed(Some(code))
+                            if bitbox_account_key_code_is_retryable(code)
+                    ) =>
             {
                 std::thread::sleep(BITBOX_ACCOUNT_KEY_RETRY_DELAY);
                 continue;
@@ -1372,7 +1376,16 @@ fn bitbox_account_key_response_is_retryable(output: &[u8]) -> bool {
     serde_json::from_slice::<serde_json::Value>(output)
         .ok()
         .and_then(|value| value.get("code").and_then(serde_json::Value::as_i64))
-        .is_some_and(|code| matches!(code, -3 | -12 | -15))
+        .is_some_and(bitbox_account_key_code_is_retryable)
+}
+
+fn bitbox_account_key_code_is_retryable(code: i64) -> bool {
+    // HWI 3.2.0's BitBox adapter maps the vendor's non-granular generic
+    // reconnect failure to UnavailableAction (-9). Initial import requests
+    // only Groot's fixed BIP84/BIP48 paths, so retry that overloaded result
+    // only here, on the same selected capability. Parsing and complete live
+    // identity binding remain mandatory before any result is accepted.
+    matches!(code, -3 | -9 | -12 | -15)
 }
 
 #[cfg(test)]
@@ -2646,7 +2659,7 @@ mod health_check_tests {
         std::fs::write(
             &script,
             format!(
-                "#!/bin/sh\nvalue=0\nif [ -f '{count}' ]; then IFS= read -r value < '{count}'; fi\nvalue=$((value + 1))\nprintf '%s\\n' \"$value\" > '{count}'\nIFS= read -r command\nif [ \"$value\" -eq 1 ]; then printf '%s\\n' '{{\"error\":\"busy\",\"code\":-15}}'; else printf '%s\\n' '{shell_response}'; fi\n",
+                "#!/bin/sh\nvalue=0\nif [ -f '{count}' ]; then IFS= read -r value < '{count}'; fi\nvalue=$((value + 1))\nprintf '%s\\n' \"$value\" > '{count}'\nIFS= read -r command\nif [ \"$value\" -eq 1 ]; then printf '%s\\n' '{{\"error\":\"unavailable action\",\"code\":-9}}'; elif [ \"$value\" -eq 2 ]; then printf '%s\\n' '{{\"error\":\"busy\",\"code\":-15}}'; else printf '%s\\n' '{shell_response}'; fi\n",
                 count = count.display()
             ),
         )
@@ -2662,7 +2675,10 @@ mod health_check_tests {
         let identity =
             read_hardware_account_identity(&hwi, &device, SINGLESIG_ACCOUNT_PATH, false).unwrap();
         assert_eq!(identity, (expected.fingerprint, expected.xpub));
-        assert_eq!(std::fs::read_to_string(&count).unwrap().trim(), "2");
+        assert_eq!(std::fs::read_to_string(&count).unwrap().trim(), "3");
+        assert!(bitbox_account_key_response_is_retryable(
+            b"{\"error\":\"unavailable action\",\"code\":-9}"
+        ));
         assert!(bitbox_account_key_response_is_retryable(
             b"{\"error\":\"busy\",\"code\":-15}"
         ));

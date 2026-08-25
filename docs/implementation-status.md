@@ -79,6 +79,10 @@ isolation opens the selected account-key connection. The current bound is 90
 seconds for aggregate discovery and five minutes for selected-device review.
 Fingerprint-less BitBox rows are presented as detected, and the second password
 prompt is explicit; the password remains entirely on-device.
+Packaged v0.4.29 Nova testing then showed that HWI's BitBox adapter can map its
+non-granular reconnect failure to the otherwise unsupported-action code. Groot
+now includes that overloaded code only in the bounded fixed-path initial
+BitBox import retry; full live identity validation remains mandatory.
 
 Hardware discovery row copy returned by Rust is cataloged in English, French,
 and Spanish. A source-contract test extracts every native device-status message

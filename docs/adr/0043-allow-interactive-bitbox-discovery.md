@@ -17,8 +17,11 @@ The corrected packaged build then reached a fingerprint-less BitBox02 Nova row, 
 first exact-path account-key command still surfaced the sanitized
 `hardware_unavailable` result while the same HID path reopened immediately
 after the enumeration client closed. The visible evidence cannot distinguish
-HWI's raw transient codes, so the correction is deliberately limited to its
-documented disconnected, locked, and busy codes. The error action encouraged
+HWI's raw transient codes, so the initial correction was deliberately limited
+to its documented disconnected, locked, and busy codes. Packaged v0.4.29 Nova
+testing proved that allowlist incomplete: HWI's BitBox adapter deliberately
+maps the vendor's non-granular generic failure to its otherwise unsupported
+"unavailable action" code during the same reopen boundary. The error action encouraged
 another aggregate scan, recreating the same handoff instead of retrying the
 selected capability.
 
@@ -40,8 +43,10 @@ an endless scan when one backend stalls.
 - Only an explicit user scan starts discovery. Groot never retries a timed-out
   scan automatically.
 - Initial BitBox account-key import may reopen the same opaque path up to three
-  times when HWI returns only code `-3`, `-12`, or `-15`. The retries remain
-  inside the existing interactive lease. Cancellation, timeout, malformed
+  times when HWI returns only code `-3`, `-9`, `-12`, or `-15`. Code `-9` is
+  retryable only in this BitBox initial-import boundary, where Groot supplies a
+  fixed valid BIP84 or BIP48 path; it does not make an unsupported operation
+  acceptable. The retries remain inside the existing interactive lease. Cancellation, timeout, malformed
   output, wrong network/path, and incomplete or mismatched identity are never
   retried or accepted.
 - An account-key failure keeps a direct retry action for the selected
