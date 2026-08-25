@@ -24,7 +24,6 @@
   import MultisigDescriptorsModal from '$lib/components/MultisigDescriptorsModal.svelte';
   import TrezorPinModal from '$lib/components/TrezorPinModal.svelte';
   import {
-    isPrototypeWallet,
     walletService,
     WalletError,
     type CosignerHealthCheck,
@@ -443,22 +442,30 @@
           )}
         </p>
       </div>
-      <span class="policy-pill">{policyPresentation?.summary}</span>
     </header>
     <section class="vault-hero">
       <span><ShieldCheck size={22} /></span>
       <div class="vault-summary">
-        <small><Amount value={snapshot?.balance.total ?? 0} /></small><strong
-          >{policyPresentation?.summary}</strong
-        >
+        <strong class="vault-balance"><Amount value={snapshot?.balance.total ?? 0} /></strong>
+        <div class="vault-policy-tags" aria-label={translate($locale, 'Spending policy')}>
+          {#if policyPresentation?.delayed}
+            <span class="policy-pill">{translate($locale, '2 of 3 primary keys')}</span>
+            <span class="policy-pill delayed"
+              ><Clock3 size={12} />{translate(
+                $locale,
+                delayedPolicyType === 'inheritance'
+                  ? 'Heir key after wait'
+                  : 'Recovery key after wait'
+              )}</span
+            >
+          {:else}
+            <span class="policy-pill">{policyPresentation?.summary}</span>
+          {/if}
+        </div>
         <p>
           {translate($locale, 'Native SegWit ·')}
           {networkName(snapshot?.network ?? defaultConfig.network)}
         </p>
-        {#if isPrototypeWallet}<p class="prototype-hint">
-            {translate($locale, 'Ready-to-test demo wallet')} <span>·</span>
-            {translate($locale, 'PIN')} <code>{translate($locale, 'prototype-passphrase')}</code>
-          </p>{/if}
       </div>
       <div class="vault-actions">
         <div class="wallet-more" bind:this={moreRoot}>

@@ -6700,6 +6700,26 @@ code {
   flex-direction: column;
   gap: 4px;
 }
+.vault-policy-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.vault-policy-tags .policy-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 9px;
+  font-size: 10px;
+}
+.vault-policy-tags .policy-pill.delayed {
+  color: var(--focus);
+  border-color: color-mix(in srgb, var(--focus) 25%, var(--border));
+  background: color-mix(in srgb, var(--focus) 7%, var(--panel));
+}
+.vault-policy-tags svg {
+  flex: 0 0 auto;
+}
 .vault-hero small,
 .vault-hero p {
   color: var(--muted);
@@ -6709,7 +6729,7 @@ code {
 .vault-hero .formatted-amount small {
   margin-left: 0.28em;
 }
-.vault-hero strong {
+.vault-balance {
   color: var(--text);
   font-size: 21px;
 }

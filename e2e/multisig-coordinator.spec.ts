@@ -271,7 +271,8 @@ test('spends end-to-end from the ready-made demo wallet', async ({ page }) => {
   });
   await page.goto('/multisig');
   await expect(page.getByRole('heading', { name: 'Family wallet' })).toBeVisible();
-  await expect(page.getByText('Ready-to-test demo wallet')).toBeVisible();
+  await expect(page.locator('.vault-policy-tags .policy-pill')).toHaveText('2 of 3');
+  await expect(page.getByText('Ready-to-test demo wallet')).toHaveCount(0);
   await expect(page.getByText('2,481,240 sats')).toBeVisible();
   await page.getByRole('link', { name: 'Send', exact: true }).click();
   const paymentProgress = page.getByRole('navigation', { name: 'Payment progress' });

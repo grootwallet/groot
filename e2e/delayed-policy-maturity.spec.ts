@@ -35,6 +35,9 @@ test('shows security-accurate delayed-policy state across overview, coins, and p
   ).toBeVisible();
 
   await page.goto('/multisig?fixture-policy-maturity=1');
+  await expect(page.getByText('2 of 3 primary keys', { exact: true })).toBeVisible();
+  await expect(page.getByText('Recovery key after wait', { exact: true })).toBeVisible();
+  await expect(page.getByText('2 of 3 primary keys + recovery key later')).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'Recovery access' })).toBeVisible();
   await expect(
     page.getByText(

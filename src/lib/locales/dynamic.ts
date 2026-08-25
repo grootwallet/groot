@@ -754,6 +754,10 @@ export const dynamicCopy = {
     es: 'Cómo funciona el acceso con la clave de respaldo'
   },
   'Heir access': { fr: 'Accès de l’héritier', es: 'Acceso del heredero' },
+  'Heir key after wait': {
+    fr: 'Clé d’héritier après l’attente',
+    es: 'Clave del heredero tras la espera'
+  },
   'It can now move this coin by itself. Your usual 2-of-3 keys still work too.': {
     fr: 'Elle peut maintenant déplacer seule cette pièce. Vos clés habituelles 2 sur 3 fonctionnent toujours.',
     es: 'Ahora puede mover esta moneda por sí sola. Tus claves habituales 2 de 3 también siguen funcionando.'
@@ -768,6 +772,10 @@ export const dynamicCopy = {
     es: 'Abre una moneda disponible para usar la clave de respaldo o reiniciar su espera.'
   },
   'Recovery access': { fr: 'Accès de récupération', es: 'Acceso de recuperación' },
+  'Recovery key after wait': {
+    fr: 'Clé de récupération après l’attente',
+    es: 'Clave de recuperación tras la espera'
+  },
   'Recovery access becomes available separately for each coin. Your normal keys keep working.': {
     fr: 'L’accès de récupération devient disponible séparément pour chaque pièce. Vos clés normales continuent de fonctionner.',
     es: 'El acceso de recuperación se habilita por separado para cada moneda. Tus claves normales siguen funcionando.'
