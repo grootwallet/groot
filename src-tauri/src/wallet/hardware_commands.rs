@@ -4,6 +4,11 @@ use std::sync::{Condvar, OnceLock};
 const HARDWARE_SCAN_CACHE_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 const MAX_TARGET_DEVICE_TYPES: usize = 8;
 const MAX_DISCOVERED_DEVICES: usize = 64;
+const BITBOX_ACCOUNT_KEY_ATTEMPTS: usize = 3;
+#[cfg(not(test))]
+const BITBOX_ACCOUNT_KEY_RETRY_DELAY: Duration = Duration::from_millis(750);
+#[cfg(test)]
+const BITBOX_ACCOUNT_KEY_RETRY_DELAY: Duration = Duration::from_millis(5);
 const SUPPORTED_HWI_DEVICE_TYPES: &[&str] = &[
     "bitbox02",
     "coldcard",
@@ -1319,15 +1324,55 @@ fn read_hardware_account_identity(
     // Initial import must bind the fingerprint and account key returned by the
     // same open HWI client. A cached enumerate fingerprint plus a later xpub
     // would introduce a device-swap window before Groot has a saved identity.
-    let output = hwi
-        .account_keypool_in_operation(
+    let is_bitbox = device.device_type.eq_ignore_ascii_case("bitbox02");
+    for attempt in 0..BITBOX_ACCOUNT_KEY_ATTEMPTS {
+        let output = match hwi.account_keypool_in_operation(
             &operation,
             &device.device_type,
             &device.path,
             derivation_path,
-        )
-        .map_err(|error| hardware_xpub_api_error(error, &device.device_type, derivation_path))?;
-    parse_hwi_account_keypool(&output, derivation_path, &device.device_type)
+        ) {
+            Ok(output) => output,
+            Err(error)
+                if is_bitbox
+                    && attempt + 1 < BITBOX_ACCOUNT_KEY_ATTEMPTS
+                    && matches!(error, HardwareError::CommandFailed(Some(-3 | -12 | -15))) =>
+            {
+                std::thread::sleep(BITBOX_ACCOUNT_KEY_RETRY_DELAY);
+                continue;
+            }
+            Err(error) => {
+                return Err(hardware_xpub_api_error(
+                    error,
+                    &device.device_type,
+                    derivation_path,
+                ));
+            }
+        };
+        let retryable_response = bitbox_account_key_response_is_retryable(&output);
+        match parse_hwi_account_keypool(&output, derivation_path, &device.device_type) {
+            Ok(identity) => return Ok(identity),
+            Err(_)
+                if is_bitbox && retryable_response && attempt + 1 < BITBOX_ACCOUNT_KEY_ATTEMPTS =>
+            {
+                // HWI closes its aggregate-enumeration client immediately
+                // before this exact-path command. Nova can briefly report the
+                // same HID path as busy/not ready during that handoff. Retry
+                // only those typed transient results; cancellation, identity,
+                // path, network, and descriptor failures remain terminal.
+                std::thread::sleep(BITBOX_ACCOUNT_KEY_RETRY_DELAY);
+            }
+            Err(error) => return Err(error),
+        }
+    }
+    unreachable!("the bounded BitBox account-key loop always returns")
+}
+
+fn bitbox_account_key_response_is_retryable(output: &[u8]) -> bool {
+    serde_json::from_slice::<serde_json::Value>(output)
+        .ok()
+        .and_then(|value| value.get("code").and_then(serde_json::Value::as_i64))
+        .is_some_and(|code| matches!(code, -3 | -12 | -15))
 }
 
 #[cfg(test)]
@@ -2576,6 +2621,54 @@ mod health_check_tests {
             source: SignerSource::Usb,
             device_type: Some("trezor".to_owned()),
         }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn initial_bitbox_import_reopens_the_same_path_after_transient_hid_handoff() {
+        use std::os::unix::fs::PermissionsExt as _;
+
+        let expected = external_signer_from_seed(21);
+        let origin = SINGLESIG_ACCOUNT_PATH.trim_start_matches("m/");
+        let response = serde_json::to_string(&serde_json::json!([{
+            "desc": format!(
+                "wpkh([{}/{}]{}/0/*)",
+                expected.fingerprint, origin, expected.xpub
+            )
+        }]))
+        .unwrap();
+        let suffix = format!("{}-{:?}", std::process::id(), std::thread::current().id());
+        let script = std::env::temp_dir().join(format!("groot-bitbox-reopen-{suffix}"));
+        let count = std::env::temp_dir().join(format!("groot-bitbox-reopen-count-{suffix}"));
+        let shell_response = response.replace('\'', "'\"'\"'");
+        std::fs::write(
+            &script,
+            format!(
+                "#!/bin/sh\nvalue=0\nif [ -f '{count}' ]; then IFS= read -r value < '{count}'; fi\nvalue=$((value + 1))\nprintf '%s\\n' \"$value\" > '{count}'\nIFS= read -r command\nif [ \"$value\" -eq 1 ]; then printf '%s\\n' '{{\"error\":\"busy\",\"code\":-15}}'; else printf '%s\\n' '{shell_response}'; fi\n",
+                count = count.display()
+            ),
+        )
+        .unwrap();
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let hwi = HwiCli::for_test_program(script.clone());
+        let device = HwiDevice {
+            device_type: "bitbox02".to_owned(),
+            path: "opaque-nova-path".to_owned(),
+            ..HwiDevice::default()
+        };
+
+        let identity =
+            read_hardware_account_identity(&hwi, &device, SINGLESIG_ACCOUNT_PATH, false).unwrap();
+        assert_eq!(identity, (expected.fingerprint, expected.xpub));
+        assert_eq!(std::fs::read_to_string(&count).unwrap().trim(), "2");
+        assert!(bitbox_account_key_response_is_retryable(
+            b"{\"error\":\"busy\",\"code\":-15}"
+        ));
+        assert!(!bitbox_account_key_response_is_retryable(
+            b"{\"error\":\"cancelled\",\"code\":-14}"
+        ));
+        std::fs::remove_file(script).unwrap();
+        std::fs::remove_file(count).unwrap();
     }
 
     #[test]

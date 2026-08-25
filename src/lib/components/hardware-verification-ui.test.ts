@@ -246,6 +246,10 @@ describe('hardware receive verification UI', () => {
     expect(hardwareSetup).not.toContain(
       '<strong>Could not read the account key</strong><small>{error}</small>'
     );
+    expect(hardwareSetup).toContain("? 'Try this signer again'");
+    expect(hardwareSetup).toContain(
+      'useDevice(lastAttemptedDevice, lastAttemptAllowedEmptyPassphrase)'
+    );
   });
 
   it('shows saved signer names only after matching scanned fingerprints', () => {

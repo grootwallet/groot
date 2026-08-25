@@ -51,6 +51,12 @@ describe('locale preferences', () => {
   it('translates catalog copy and interpolates values without translating user data', () => {
     expect(translate('fr', 'Dismiss')).toBe('Fermer');
     expect(translate('es', 'Try again')).toBe('Intentar de nuevo');
+    expect(translate('fr', 'Scanning all USB hardware wallets…')).toBe(
+      'Recherche de tous les portefeuilles matériels USB…'
+    );
+    expect(translate('es', 'Scanning all USB hardware wallets…')).toBe(
+      'Buscando todas las carteras físicas USB…'
+    );
     expect(translate('en', 'Loading…')).toBe('Loading…');
     expect(translate('es', '{blocks} blocks · full block history', { blocks: '149.669' })).toBe(
       '149.669 bloques · historial completo de bloques'

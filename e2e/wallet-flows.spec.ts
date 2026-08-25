@@ -664,6 +664,15 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   await expect(page.getByText('Trusted remote server')).toBeVisible();
 });
 
+test('localizes hardware scan progress in French', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('groot-language', 'fr'));
+  await page.goto('/hardware/new');
+  await page.getByRole('button', { name: /Connecter par câble/ }).click();
+  await expect(
+    page.getByRole('status', { name: 'Configuration du portefeuille matériel en cours' })
+  ).toContainText('Recherche de tous les portefeuilles matériels USB…');
+});
+
 test('imports a public hardware backup without requiring a wallet name first', async ({ page }) => {
   await page.goto('/hardware/new');
   await expect(page.getByLabel('Wallet name')).toHaveValue('');
