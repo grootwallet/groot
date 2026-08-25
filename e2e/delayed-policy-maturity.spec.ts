@@ -36,6 +36,14 @@ test('shows security-accurate delayed-policy state across overview, coins, and p
 
   await page.goto('/multisig?fixture-policy-maturity=1');
   await expect(page.getByRole('heading', { name: 'Recovery access' })).toBeVisible();
+  await expect(
+    page.getByText(
+      'No action is required. Review coins only if you want to use the backup key or restart a wait.'
+    )
+  ).toBeVisible();
+  await expect(
+    page.locator('.policy-maturity-panel').getByRole('link', { name: 'Review coins' })
+  ).toBeVisible();
   await expect(page.getByText('Your normal keys keep working for every coin.')).toBeVisible();
   await page.getByText('How backup-key access works').click();
   await expect(

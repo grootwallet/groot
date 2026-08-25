@@ -512,26 +512,12 @@
             <p>
               {translate(
                 $locale,
-                'Each coin has its own wait before the backup key becomes available.'
+                'No action is required. Review coins only if you want to use the backup key or restart a wait.'
               )}
             </p>
           </div>
-          <span
-            class="ready-badge"
-            class:attention={maturitySummary.approaching > 0}
-            class:danger={maturitySummary.mature > 0}
-            >{translate(
-              $locale,
-              maturitySummary.mature > 0
-                ? '{count} can be spent'
-                : maturitySummary.approaching > 0
-                  ? '{count} available soon'
-                  : 'Backup keys protected',
-              {
-                count:
-                  maturitySummary.mature > 0 ? maturitySummary.mature : maturitySummary.approaching
-              }
-            )}</span
+          <Button variant="secondary" size="small" href="/coins"
+            >{translate($locale, 'Review coins')}</Button
           >
         </div>
         <div class="policy-maturity-stats">

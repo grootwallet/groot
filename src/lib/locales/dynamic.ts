@@ -786,6 +786,10 @@ export const dynamicCopy = {
     es: 'Comisión de red · {rate} sat/vB'
   },
   'No action is required': { fr: 'Aucune action requise', es: 'No es necesario hacer nada' },
+  'No action is required. Review coins only if you want to use the backup key or restart a wait.': {
+    fr: 'Aucune action n’est requise. Consultez les pièces uniquement pour utiliser la clé de secours ou relancer une attente.',
+    es: 'No es necesario hacer nada. Revisa las monedas solo si quieres usar la clave de respaldo o reiniciar una espera.'
+  },
   'Not available yet': { fr: 'Pas encore disponible', es: 'Aún no disponible' },
   'One coin goes to one address. The network fee is deducted from it.': {
     fr: 'Une pièce va vers une adresse. Les frais réseau en sont déduits.',

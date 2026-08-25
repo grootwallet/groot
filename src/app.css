@@ -9059,8 +9059,8 @@ code {
     grid-template-columns: auto minmax(0, 1fr);
   }
 
-  .policy-maturity-panel-heading > .ready-badge {
-    grid-column: 1 / -1;
+  .policy-maturity-panel-heading > .button {
+    grid-column: 2;
     justify-self: start;
   }
 
