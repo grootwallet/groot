@@ -1,6 +1,6 @@
 # ADR 0041: coordinate and bind hardware operations
 
-Status: accepted. ADR 0042 supersedes only the 30-second aggregate-discovery
+Status: accepted. ADR 0043 supersedes only the 30-second aggregate-discovery
 deadline; the coordination, capability, and identity-binding decisions remain
 in force.
 

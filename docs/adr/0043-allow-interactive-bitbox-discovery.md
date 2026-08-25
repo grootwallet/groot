@@ -1,4 +1,4 @@
-# ADR 0042: allow interactive BitBox discovery
+# ADR 0043: allow interactive BitBox discovery
 
 Status: accepted
 
