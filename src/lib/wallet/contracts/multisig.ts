@@ -30,6 +30,8 @@ export type MultisigProposal = PaymentProposal & {
   required: number;
   canFinalize: boolean;
   signedFingerprints: string[];
+  spendPath: 'primary' | 'delayed';
+  eligibleSignerFingerprints: string[];
   status: 'collecting' | 'ready' | 'broadcast' | 'cancelled';
   createdAt: string;
 };
@@ -56,6 +58,7 @@ export type MultisigSetupDraft = {
   version: 1;
   stage: MultisigSetupStage;
   templateKind: MultisigSetupTemplate;
+  recoveryDelayBlocks?: number;
   standardRecipe: MultisigSetupRecipe;
   customCosignerCount: number;
   name: string;

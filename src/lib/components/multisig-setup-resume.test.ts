@@ -17,8 +17,8 @@ describe('resumable multisig setup', () => {
     expect(setup).toContain("let policyStep = $state<'choose' | 'configure'>('choose')");
     expect(setup).toContain('Choose how this wallet spends');
     expect(setup).toContain("{translate($locale, 'Continue')}");
-    expect(setup).toContain('The delayed key never joins the immediate 2-of-3.');
-    expect(setup).toContain('The delay starts separately for each received coin.');
+    expect(setup).toContain('The backup key stays separate from the primary 2-of-3.');
+    expect(setup).toContain('The wait starts separately for each received coin.');
     expect(setup).toContain('Recovery key spending authority');
     expect(setup).toContain('Assisted signing');
     expect(setup).toContain('the helper never signs alone');

@@ -33,6 +33,7 @@
     type SavedFileResult
   } from '$lib/wallet';
   import { defaultConfig, networkName } from '$lib/config';
+  import { walletPolicyPresentation } from '$lib/wallet/policy';
 
   let wallet = $state<MultisigWallet | null>(null);
   let pin = $state('');
@@ -47,6 +48,7 @@
   let receivePrintQr = $state<PrintableQr | null>(null);
   let changePrintQr = $state<PrintableQr | null>(null);
   let loadedBackupName = $state('');
+  const policyPresentation = $derived(wallet ? walletPolicyPresentation(wallet) : null);
 
   onDestroy(() => {
     pin = '';
@@ -458,13 +460,19 @@
           <div>
             <dt>{translate($locale, 'Policy')}</dt>
             <dd>
-              {wallet.threshold} of {wallet.cosigners.length}
-              {translate($locale, 'signatures')}
+              {policyPresentation?.summary}
             </dd>
           </div>
           <div>
             <dt>{translate($locale, 'Script')}</dt>
-            <dd>{translate($locale, 'Native SegWit · sortedmulti')}</dd>
+            <dd>
+              {translate(
+                $locale,
+                policyPresentation?.delayed
+                  ? 'Native SegWit · Miniscript'
+                  : 'Native SegWit · sortedmulti'
+              )}
+            </dd>
           </div>
           <div>
             <dt>{translate($locale, 'Created')}</dt>

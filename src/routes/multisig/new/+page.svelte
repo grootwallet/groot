@@ -170,6 +170,7 @@
   let busy = $state(false);
   let error = $state('');
   let templateKind = $state<'standard' | 'recovery' | 'inheritance'>('standard');
+  let recoveryDelayBlocks = $state(4_320);
   let policyStep = $state<'choose' | 'configure'>('choose');
   let standardRecipe = $state<'2of3' | '3of5' | 'custom'>('2of3');
   let customCosignerCount = $state(3);
@@ -248,7 +249,7 @@
       recovery: {
         threshold: 1,
         signerIds: [cosigners[3].id],
-        availableAfterBlocks: templateKind === 'inheritance' ? 52_560 : 4_320
+        availableAfterBlocks: templateKind === 'inheritance' ? 52_560 : recoveryDelayBlocks
       }
     };
   });
@@ -304,6 +305,7 @@
       version: 1,
       stage,
       templateKind,
+      recoveryDelayBlocks,
       standardRecipe: recipeForDraft(),
       customCosignerCount,
       name,
@@ -403,7 +405,10 @@
       recovery: {
         threshold: 1,
         signerIds: [draft.cosigners[3].id],
-        availableAfterBlocks: draft.templateKind === 'inheritance' ? 52_560 : 4_320
+        availableAfterBlocks:
+          draft.templateKind === 'inheritance'
+            ? (draft.recoveryDelayBlocks ?? 52_560)
+            : (draft.recoveryDelayBlocks ?? 4_320)
       }
     };
     const analysis = await walletService.analyzeRecoveryPolicy(restoredTemplate, draft.cosigners);
@@ -423,6 +428,10 @@
     stage = draft.stage;
     policyStep = draft.stage === 'policy' ? 'configure' : 'choose';
     templateKind = draft.templateKind;
+    recoveryDelayBlocks =
+      draft.templateKind === 'inheritance'
+        ? (draft.recoveryDelayBlocks ?? 52_560)
+        : (draft.recoveryDelayBlocks ?? 4_320);
     standardRecipe = recipeFromDraft(draft.standardRecipe);
     customCosignerCount = draft.customCosignerCount;
     saved = draft.descriptorSaved;
@@ -1178,7 +1187,9 @@
       toast({
         title: 'Multisig wallet created',
         description: creation.networkSetupCopied
-          ? `${threshold} signatures are required to spend.`
+          ? templateKind === 'standard'
+            ? `${threshold} signatures are required to spend.`
+            : '2 of 3 primary keys work now. The recovery key becomes available after the chosen wait.'
           : 'Network setup was not copied. Configure it in Settings.',
         tone: creation.networkSetupCopied ? 'success' : 'default'
       });
@@ -1302,18 +1313,19 @@
             >
             <button
               class="policy-kind-card inheritance"
-              class:active={templateKind === 'inheritance'}
-              onclick={() => chooseTemplate('inheritance')}
+              type="button"
+              disabled
+              aria-describedby="assisted-recovery-description"
               ><span class="policy-kind-icon"><Clock3 size={21} /></span><span
                 class="policy-kind-copy"
-                ><strong>{translate($locale, 'Inheritance')}</strong><small
-                  >{translate($locale, '2 of 3 now, or one heir key later.')}</small
+                ><strong>{translate($locale, 'Assisted recovery')}</strong><small
+                  id="assisted-recovery-description"
+                  >{translate(
+                    $locale,
+                    'A recovery partner helps you or your heirs regain access.'
+                  )}</small
                 ></span
-              ><span class="policy-kind-meta">{translate($locale, 'About one year')}</span
-              >{#if templateKind === 'inheritance'}<span
-                  class="policy-kind-check"
-                  aria-hidden="true"><Check size={16} strokeWidth={3} /></span
-                >{/if}</button
+              ><span class="policy-kind-meta">{translate($locale, 'Coming soon')}</span></button
             >
           </div>
           <div class="policy-choice-insight">
@@ -1324,7 +1336,7 @@
                   ? 'How Standard multisig works'
                   : templateKind === 'recovery'
                     ? 'How Recovery works'
-                    : 'How Inheritance works'
+                    : 'How assisted recovery works'
               )}
               text={translate(
                 $locale,
@@ -1332,7 +1344,7 @@
                   ? 'Standard 2-of-3 can also support assisted signing: the owners keep two keys and a trusted helper keeps one. Either owner plus the helper can sign, or the two owner keys can sign together. The helper can never spend alone.'
                   : templateKind === 'recovery'
                     ? 'The recovery key is a separate spending path. After each coin has aged 4,320 blocks, that key can spend the matured coin alone. Every new deposit starts its own delay.'
-                    : 'The heir key is a separate spending path. After each coin has aged 52,560 blocks, that key can spend the matured coin alone. Every new deposit starts its own delay.'
+                    : 'Assisted recovery will combine your keys with a dedicated recovery service and guided beneficiary support. It is not available yet.'
               )}
             />
           </div>
@@ -1366,7 +1378,7 @@
                   templateKind === 'standard'
                     ? 'Name the wallet and choose its signature threshold.'
                     : templateKind === 'recovery'
-                      ? 'Three primary keys. One delayed recovery key.'
+                      ? 'Three primary keys. One backup recovery key.'
                       : 'Three primary keys. One delayed heir key.'
                 )}
               </p>
@@ -1376,7 +1388,7 @@
                 $locale,
                 templateKind === 'standard'
                   ? `${threshold} of ${requiredKeys}`
-                  : '2 of 3 + delayed key'
+                  : '2 of 3 + backup key'
               )}</span
             >
           </div>
@@ -1469,7 +1481,13 @@
                 ><b
                   >{translate(
                     $locale,
-                    templateKind === 'recovery' ? 'ABOUT 1 MONTH' : 'ABOUT 1 YEAR'
+                    templateKind === 'inheritance'
+                      ? 'ABOUT 1 YEAR'
+                      : recoveryDelayBlocks === 4_320
+                        ? 'ABOUT 1 MONTH'
+                        : recoveryDelayBlocks === 13_140
+                          ? 'ABOUT 3 MONTHS'
+                          : 'ABOUT 6 MONTHS'
                   )}</b
                 ><span class="path-title"
                   ><strong
@@ -1487,26 +1505,51 @@
                     text={translate(
                       $locale,
                       templateKind === 'recovery'
-                        ? 'After a coin has aged 4,320 blocks, the recovery key can spend that matured coin by itself. It does not need either of the normal 2-of-3 signatures.'
+                        ? 'After the chosen wait, the recovery key can spend that coin by itself. The normal 2-of-3 keys remain available.'
                         : 'After a coin has aged 52,560 blocks, the heir key can spend that matured coin by itself. It does not need either of the normal 2-of-3 signatures.'
                     )}
                   /></span
                 ><small
-                  >{formatInteger(templateKind === 'recovery' ? 4_320 : 52_560, $locale)}
+                  >{formatInteger(
+                    templateKind === 'recovery' ? recoveryDelayBlocks : 52_560,
+                    $locale
+                  )}
                   {translate($locale, 'blocks')}</small
                 ></span
               >
             </div>
+            {#if templateKind === 'recovery'}
+              <fieldset class="policy-recipes recovery-delay-options">
+                <legend>{translate($locale, 'Recovery key wait')}</legend>
+                {#each [{ blocks: 4_320, label: 'About 1 month', note: 'Recommended' }, { blocks: 13_140, label: 'About 3 months', note: 'More time' }, { blocks: 26_280, label: 'About 6 months', note: 'Longest' }] as option}
+                  <button
+                    type="button"
+                    class:active={recoveryDelayBlocks === option.blocks}
+                    onclick={() => (recoveryDelayBlocks = option.blocks)}
+                  >
+                    <span
+                      ><strong>{translate($locale, option.label)}</strong><small
+                        >{formatInteger(option.blocks, $locale)}
+                        {translate($locale, 'blocks')}</small
+                      ></span
+                    ><em>{translate($locale, option.note)}</em>
+                  </button>
+                {/each}
+              </fieldset>
+            {/if}
             <p class="policy-delay-note">
               <Clock3 size={14} />{translate(
                 $locale,
-                'The delay starts separately for each received coin.'
+                'The wait starts separately for each received coin.'
               )}
             </p>
             <div class="recovery-separation">
               <ShieldCheck size={15} /><span
                 ><strong>{translate($locale, 'Four separate keys')}</strong><small
-                  >{translate($locale, 'The delayed key never joins the immediate 2-of-3.')}</small
+                  >{translate(
+                    $locale,
+                    'The backup key stays separate from the primary 2-of-3.'
+                  )}</small
                 ></span
               >
             </div>{/if}
@@ -1673,8 +1716,19 @@
         )}
       </p>
       <div class="policy-summary">
-        <strong>{threshold} of {cosigners.length} {translate($locale, 'signatures')}</strong><span
-          >wsh · sortedmulti · BIP48</span
+        <strong
+          >{translate(
+            $locale,
+            templateKind === 'standard'
+              ? '{threshold} of {total} signatures'
+              : '2 of 3 primary keys + recovery key later',
+            { threshold, total: cosigners.length }
+          )}</strong
+        ><span
+          >{translate(
+            $locale,
+            templateKind === 'standard' ? 'wsh · sortedmulti · BIP48' : 'wsh · Miniscript · BIP48'
+          )}</span
         >
       </div>
       <div class="descriptor-toggle-row">
@@ -1818,8 +1872,19 @@
         {translate($locale, 'Complete each section before creating this coordinator.')}
       </p>
       <div class="policy-summary">
-        <strong>{threshold} of {cosigners.length} {translate($locale, 'signatures')}</strong><span
-          >wsh · sortedmulti · BIP48</span
+        <strong
+          >{translate(
+            $locale,
+            templateKind === 'standard'
+              ? '{threshold} of {total} signatures'
+              : '2 of 3 primary keys + recovery key later',
+            { threshold, total: cosigners.length }
+          )}</strong
+        ><span
+          >{translate(
+            $locale,
+            templateKind === 'standard' ? 'wsh · sortedmulti · BIP48' : 'wsh · Miniscript · BIP48'
+          )}</span
         >
       </div>
       <div class="backup-setup-sections">

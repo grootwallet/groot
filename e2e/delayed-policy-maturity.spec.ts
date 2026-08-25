@@ -12,14 +12,14 @@ test('shows security-accurate delayed-policy state across overview, coins, and p
 
   await expect(page.getByText('Each coin has its own protection timeline')).toBeVisible();
   await expect(page.getByText('Recovery key can spend', { exact: true }).first()).toBeVisible();
-  await expect(page.getByText('Recovery key locked', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('Backup key protected', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('Wait starts after confirmation', { exact: true })).toBeVisible();
   await expect(
-    page.getByText('Protection starts after confirmation', { exact: true })
+    page.getByText('Recovery key available in 820 blocks', { exact: true })
   ).toBeVisible();
-  await expect(page.getByText('Recovery key unlocks in 820 blocks', { exact: true })).toBeVisible();
   await page
     .locator('.coin-row')
-    .filter({ hasText: 'Recovery key unlocks in 820 blocks' })
+    .filter({ hasText: 'Recovery key available in 820 blocks' })
     .getByRole('button', { name: /Show details for/ })
     .click();
   await expect(page.getByText('820 blocks remaining', { exact: true }).first()).toBeVisible();
@@ -33,13 +33,13 @@ test('shows security-accurate delayed-policy state across overview, coins, and p
   ).toBeVisible();
 
   await page.goto('/multisig?fixture-policy-maturity=1');
-  await expect(page.getByRole('heading', { name: 'When the extra key can spend' })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'When your backup key becomes available' })
+  ).toBeVisible();
   await expect(page.getByText('The normal 2-of-3 path remains available.')).toBeVisible();
   await page.getByText('Why this changes your wallet security').click();
   await expect(
-    page.getByText(
-      'Groot does not yet coordinate delayed-key spending. Send remains fail-closed on the reviewed 2-of-3 path.'
-    )
+    page.getByText('When it is available, choose that coin to send with the recovery or heir key.')
   ).toBeVisible();
   await expect(page.locator('body')).not.toContainText(/\bexpired\b/i);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
@@ -51,7 +51,7 @@ test('renews one mature coin without merging another coin', async ({ page }) => 
   await page.goto('/coins?fixture-policy-maturity=1');
   const matureCoin = page.locator('.coin-row').filter({ hasText: 'Recovery key can spend' });
   await matureCoin.getByRole('button', { name: /Show details for/ }).click();
-  await matureCoin.getByRole('link', { name: 'Renew protection' }).click();
+  await matureCoin.getByRole('link', { name: 'Restart recovery wait' }).click();
 
   await expect(page).toHaveURL(/renewProtection=1/);
   await page.reload();
@@ -77,6 +77,29 @@ test('renews one mature coin without merging another coin', async ({ page }) => 
   await expect(page.getByRole('button', { name: 'Sign with device' })).toBeVisible();
 });
 
+test('spends one mature coin with only its recovery key', async ({ page }) => {
+  await page.goto('/coins?fixture-policy-maturity=1');
+  const matureCoin = page.locator('.coin-row').filter({ hasText: 'Recovery key can spend' });
+  await matureCoin.getByRole('button', { name: /Show details for/ }).click();
+  await expect(matureCoin.getByText('No action is required')).toBeVisible();
+  await matureCoin.getByRole('link', { name: 'Use recovery key' }).click();
+
+  await expect(page.getByRole('heading', { name: 'Use recovery key' })).toBeVisible();
+  await expect(page.getByText('The recovery key signs alone.')).toBeVisible();
+  await expect(page.getByText('Network fee · 7 sat/vB')).toBeVisible();
+  await page
+    .getByLabel('Bitcoin address')
+    .fill('bcrt1qrecoverydestination00000000000000000000000000');
+  await page.getByLabel(/Permanent label/).fill('Emergency recovery');
+  await page.getByRole('button', { name: 'Review recovery key payment' }).click();
+
+  await expect(page.getByText('Signed by the recovery key')).toBeVisible();
+  await page.getByText('View more details').click();
+  await expect(page.getByText('recovery key only')).toBeVisible();
+  await expect(page.getByText('Recovery key', { exact: true }).last()).toBeVisible();
+  await expect(page.locator('body')).not.toContainText('2 of 4');
+});
+
 test('pauses exact countdowns when the verified chain tip is stale', async ({ page }) => {
   await page.goto('/coins?fixture-policy-maturity=1&fixture-stale-tip=1');
   await expect(
@@ -84,7 +107,7 @@ test('pauses exact countdowns when the verified chain tip is stale', async ({ pa
       'Exact countdowns are paused because the last verified chain tip is stale or unavailable.'
     )
   ).toBeVisible();
-  await expect(page.getByText(/unlocks in .* blocks/)).toHaveCount(0);
+  await expect(page.getByText(/available in .* blocks/)).toHaveCount(0);
   const details = page.getByRole('button', { name: /Show details for/ }).first();
   await details.click();
   await expect(page.getByText(/Paused · last verified at block/).first()).toBeVisible();
@@ -95,7 +118,7 @@ test('localizes maturity state without layout overflow', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('groot-language', 'fr'));
   await page.goto('/multisig?fixture-policy-maturity=1');
   await expect(
-    page.getByRole('heading', { name: 'Quand la clé supplémentaire peut dépenser' })
+    page.getByRole('heading', { name: 'Quand votre clé de secours devient disponible' })
   ).toBeVisible();
   await expect(page.getByText('Le chemin normal 2 sur 3 reste disponible.')).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(

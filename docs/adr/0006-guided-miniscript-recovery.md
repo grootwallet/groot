@@ -1,6 +1,6 @@
 # ADR 0006: guided Miniscript recovery templates
 
-Status: accepted for V2 preview; funding remains gated.
+Status: superseded in part by ADR 0042 for guided Recovery creation and delayed-path coordinator spending.
 
 ## Context
 

@@ -59,6 +59,7 @@
   let selected = $state<string[]>([]);
   let expanded = $state<string[]>([]);
   let busy = $state(false);
+  let syncing = $state(false);
   let multisig = $state(false);
   let freezeIntent = $state<{ outpoints: string[]; frozen: boolean } | null>(null);
   let claimIntent = $state<string | null>(null);
@@ -126,6 +127,11 @@
       ? `/multisig/send?coins=${encodeURIComponent(renewalCoin.outpoint)}&renewProtection=1${maturityFixtureSuffix}`
       : ''
   );
+  const delayedSpendHref = $derived(
+    renewalCoin
+      ? `/multisig/send?coins=${encodeURIComponent(renewalCoin.outpoint)}&delayedSpend=1${maturityFixtureSuffix}`
+      : ''
+  );
   const extraKeyName = (maturity: NonNullable<Utxo['policyMaturity']>) =>
     maturity.policyType === 'inheritance' ? 'Heir key' : 'Recovery key';
 
@@ -169,11 +175,40 @@
       utxos = snapshot.utxos;
       transactions = snapshot.transactions;
       chainTip = snapshot.chainTip;
+      const requestedCoin = new URLSearchParams(location.search).get('coin');
+      if (requestedCoin && utxos.some((coin) => coin.outpoint === requestedCoin)) {
+        expanded = [requestedCoin];
+        requestAnimationFrame(() =>
+          document
+            .getElementById(`coin-${requestedCoin.replace(/[^a-zA-Z0-9_-]/g, '-')}`)
+            ?.scrollIntoView({ block: 'center' })
+        );
+      }
     } catch (cause) {
       loadError = localizedError(cause, $locale, 'Coin data could not be read.');
       toast({ title: 'Could not load coins', description: loadError, tone: 'danger' });
     } finally {
       loading = false;
+    }
+  }
+
+  async function syncNow() {
+    if (syncing) return;
+    syncing = true;
+    try {
+      const snapshot = multisig ? await walletService.syncMultisig() : await walletService.sync();
+      utxos = snapshot.utxos;
+      transactions = snapshot.transactions;
+      chainTip = snapshot.chainTip;
+      toast({
+        title: 'Coins are up to date',
+        description: 'Protection timelines were refreshed.',
+        tone: 'success'
+      });
+    } catch (cause) {
+      toast({ title: 'Sync failed', description: localizedError(cause, $locale), tone: 'danger' });
+    } finally {
+      syncing = false;
     }
   }
 
@@ -310,7 +345,7 @@
         <small
           >{translate(
             $locale,
-            'The recovery or heir key unlocks separately for each coin. Your normal 2-of-3 keys always remain available.'
+            'The recovery or heir key becomes available separately for each coin. Your normal 2-of-3 keys always remain available.'
           )}</small
         >
         {#if !maturitySummary.chainCurrent}<small class="stale-copy"
@@ -318,6 +353,12 @@
               $locale,
               'Exact countdowns are paused because the last verified chain tip is stale or unavailable.'
             )}</small
+          ><Button
+            variant="secondary"
+            size="small"
+            loading={syncing}
+            loadingLabel={translate($locale, 'Syncing…')}
+            onclick={syncNow}><RefreshCw size={14} />{translate($locale, 'Sync now')}</Button
           >{/if}
       </div>
     </section>
@@ -344,7 +385,19 @@
               variant="secondary"
               size="small"
               href={renewalHref}
-              ><RefreshCw size={15} />{translate($locale, 'Renew protection')}</Button
+              ><RefreshCw size={15} />{translate(
+                $locale,
+                renewalCoin.policyMaturity?.policyType === 'inheritance'
+                  ? 'Postpone heir access'
+                  : 'Restart recovery wait'
+              )}</Button
+            ><Button variant="secondary" size="small" href={delayedSpendHref}
+              >{translate(
+                $locale,
+                renewalCoin.policyMaturity?.policyType === 'inheritance'
+                  ? 'Use heir key'
+                  : 'Use recovery key'
+              )}</Button
             >{/if}<Button size="small" href={sendHref}
             >{translate($locale, 'Send selected coins')}</Button
           ></span
@@ -391,7 +444,12 @@
         {@const reuse = reuseFor(utxo.outpoint)}
         {@const linkedCoins = linkedCoinsFor(utxo.outpoint)}
         {@const maturity = validPolicyMaturity(utxo)}
-        <article class="coin-row" class:frozen={utxo.frozen} class:reused={Boolean(reuse)}>
+        <article
+          id={`coin-${utxo.outpoint.replace(/[^a-zA-Z0-9_-]/g, '-')}`}
+          class="coin-row"
+          class:frozen={utxo.frozen}
+          class:reused={Boolean(reuse)}
+        >
           <label class="coin-check"
             ><input
               type="checkbox"
@@ -416,20 +474,18 @@
                 >{:else if maturity && maturityIs(maturity, MATURITY_APPROACHING)}<span
                   class="coin-status policy-approaching"
                   >{chainTipCurrent && maturity.remainingBlocks !== null
-                    ? translate($locale, '{key} unlocks in {count} blocks', {
+                    ? translate($locale, '{key} available in {count} blocks', {
                         key: translate($locale, extraKeyName(maturity)),
                         count: formatInteger(maturity.remainingBlocks, $locale)
                       })
-                    : translate($locale, '{key} unlocks soon', {
+                    : translate($locale, '{key} available soon', {
                         key: translate($locale, extraKeyName(maturity))
                       })}</span
                 >{:else if maturity && maturityIs(maturity, MATURITY_UNCONFIRMED)}<span
                   class="coin-status pending"
-                  >{translate($locale, 'Protection starts after confirmation')}</span
+                  >{translate($locale, 'Wait starts after confirmation')}</span
                 >{:else if maturity}<span class="coin-status policy-immature"
-                  >{translate($locale, '{key} locked', {
-                    key: translate($locale, extraKeyName(maturity))
-                  })}</span
+                  >{translate($locale, 'Backup key protected')}</span
                 >{:else if utxo.provenance.state === 'mixed'}<span class="coin-status reused"
                   >{translate($locale, 'Mixed provenance')}</span
                 >{:else if utxo.provenance.state === 'unknown'}<span class="coin-status pending"
@@ -505,12 +561,10 @@
                               key: translate($locale, extraKeyName(maturity))
                             })
                           : maturityIs(maturity, MATURITY_APPROACHING)
-                            ? translate($locale, '{key} unlocks soon', {
+                            ? translate($locale, '{key} available soon', {
                                 key: translate($locale, extraKeyName(maturity))
                               })
-                            : translate($locale, '{key} is locked', {
-                                key: translate($locale, extraKeyName(maturity))
-                              })}
+                            : translate($locale, 'Backup key is not available yet')}
                     </dd>
                   </div>
                   <div>
@@ -523,7 +577,7 @@
                         : maturityIs(maturity, MATURITY_UNCONFIRMED)
                           ? translate($locale, 'Starts after the first confirmation')
                           : maturity.remainingBlocks === 0
-                            ? translate($locale, 'Extra key unlocked at block {height}', {
+                            ? translate($locale, 'Extra key became available at block {height}', {
                                 height: formatInteger(
                                   maturity.maturityHeight ?? chainTip.height,
                                   $locale
@@ -565,11 +619,11 @@
                     >
                       <RefreshCw size={15} />
                       <div>
-                        <strong>{translate($locale, 'Want the extra key locked again?')}</strong>
+                        <strong>{translate($locale, 'No action is required')}</strong>
                         <small
                           >{translate(
                             $locale,
-                            'Move only this coin within your wallet. Its protection restarts after confirmation.'
+                            'Your normal keys still work. You can spend with the extra key, or move this coin within the wallet to restart its wait.'
                           )}</small
                         >
                       </div>
@@ -577,7 +631,22 @@
                         variant="secondary"
                         size="small"
                         href={`/multisig/send?coins=${encodeURIComponent(utxo.outpoint)}&renewProtection=1${maturityFixtureSuffix}`}
-                        >{translate($locale, 'Renew protection')}</Button
+                        >{translate(
+                          $locale,
+                          maturity.policyType === 'inheritance'
+                            ? 'Postpone heir access'
+                            : 'Restart recovery wait'
+                        )}</Button
+                      ><Button
+                        variant="secondary"
+                        size="small"
+                        href={`/multisig/send?coins=${encodeURIComponent(utxo.outpoint)}&delayedSpend=1${maturityFixtureSuffix}`}
+                        >{translate(
+                          $locale,
+                          maturity.policyType === 'inheritance'
+                            ? 'Use heir key'
+                            : 'Use recovery key'
+                        )}</Button
                       >
                     </div>{/if}{/if}
                 <div>

@@ -2082,6 +2082,63 @@ fn descriptor_backup() -> MultisigBackupDto {
 }
 
 #[test]
+fn proposal_spend_path_is_additive_and_limits_eligible_signers() {
+    let mut wallet = descriptor_backup().wallet;
+    let template = RecoveryTemplate::Recovery {
+        immediate: SpendingPath::new(2, ["key-1", "key-2", "key-3"]),
+        recovery: TimedSpendingPath::new(4_320, 1, ["key-4"]),
+    };
+    let analysis = analyze_template(&template, &wallet.cosigners).unwrap();
+    wallet.external_descriptor = analysis.external_descriptor;
+    wallet.internal_descriptor = analysis.internal_descriptor;
+    wallet.policy_type = "recovery".to_owned();
+    wallet.spending_paths = analysis.paths;
+    wallet.recovery_template = Some(template);
+
+    let db = Connection::open_in_memory().unwrap();
+    init_app_schema(&db).unwrap();
+    db.execute(
+        "INSERT INTO groot_proposals (proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at, selection_strategy) VALUES ('legacy','bcrt1qtest','Legacy',1,1,1,'psbt','collecting',1,'manual')",
+        [],
+    )
+    .unwrap();
+    let primary = proposal_signing_context(&db, &wallet, "legacy").unwrap();
+    assert_eq!(primary.spend_path, ProposalSpendPath::Primary);
+    assert_eq!(primary.required, 2);
+    assert_eq!(primary.fingerprint_strings.len(), 3);
+
+    db.execute(
+        "INSERT INTO groot_proposals (proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at, selection_strategy) VALUES ('delayed','bcrt1qtest','Delayed',1,1,1,'psbt','collecting',1,'recovery_key')",
+        [],
+    )
+    .unwrap();
+    db.execute(
+        "INSERT INTO groot_proposal_spend_paths (proposal_id, spend_path) VALUES ('delayed','delayed')",
+        [],
+    )
+    .unwrap();
+    let delayed = proposal_signing_context(&db, &wallet, "delayed").unwrap();
+    assert_eq!(delayed.spend_path, ProposalSpendPath::Delayed);
+    assert_eq!(delayed.required, 1);
+    assert_eq!(
+        delayed.fingerprint_strings,
+        vec![wallet
+            .cosigners
+            .iter()
+            .find(|signer| signer.id == "key-4")
+            .unwrap()
+            .fingerprint
+            .clone()]
+    );
+
+    db.execute(
+        "UPDATE groot_proposal_spend_paths SET spend_path='hostile' WHERE proposal_id='delayed'",
+        [],
+    )
+    .unwrap_err();
+}
+
+#[test]
 fn legacy_hardware_profiles_are_explicitly_unsupported_without_current_lock_files() {
     let directory = std::env::temp_dir().join(format!("groot-legacy-status-{}", Uuid::new_v4()));
     fs::create_dir_all(&directory).unwrap();

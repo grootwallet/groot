@@ -1525,6 +1525,8 @@ pub struct MultisigProposalDto {
     required: usize,
     can_finalize: bool,
     signed_fingerprints: Vec<String>,
+    spend_path: String,
+    eligible_signer_fingerprints: Vec<String>,
     status: String,
     created_at: String,
     selection_impact: SelectionImpactDto,
@@ -2714,6 +2716,10 @@ fn init_app_schema(db: &Connection) -> ApiResult<()> {
             selection_strategy TEXT NOT NULL DEFAULT 'balanced',
             fee_difference_vs_private INTEGER
         );
+        CREATE TABLE IF NOT EXISTS groot_proposal_spend_paths (
+            proposal_id TEXT PRIMARY KEY REFERENCES groot_proposals(proposal_id) ON DELETE CASCADE,
+            spend_path TEXT NOT NULL CHECK(spend_path IN ('primary', 'delayed'))
+        );
         CREATE TABLE IF NOT EXISTS groot_frozen_coins (
             outpoint TEXT PRIMARY KEY,
             frozen_at INTEGER NOT NULL
@@ -3752,20 +3758,24 @@ fn delayed_policy_context(wallet: &MultisigWalletDto) -> ApiResult<Option<Delaye
         ));
     }
     let delay_blocks = analysis.paths[1].available_after_blocks;
-    let policy_type = if delay_blocks == 52_560 {
-        "inheritance"
-    } else {
-        "recovery"
+    let policy_type = match wallet.policy_type.as_str() {
+        "inheritance" if delay_blocks == 52_560 => "inheritance",
+        "inheritance" => {
+            return Err(api_error(
+                "wallet_corrupt",
+                "The legacy inheritance policy does not match its verified block delay.",
+            ))
+        }
+        "recovery" => "recovery",
+        "" if delay_blocks == 52_560 => "inheritance",
+        "" => "recovery",
+        _ => {
+            return Err(api_error(
+                "wallet_corrupt",
+                "The delayed-policy type is not supported.",
+            ))
+        }
     };
-    if !wallet.policy_type.is_empty()
-        && wallet.policy_type != "recovery"
-        && wallet.policy_type != policy_type
-    {
-        return Err(api_error(
-            "wallet_corrupt",
-            "The delayed-policy type does not match its verified block delay.",
-        ));
-    }
     Ok(Some(DelayedPolicyContext {
         policy_type: policy_type.to_owned(),
         delay_blocks,
@@ -3886,6 +3896,122 @@ fn multisig_fingerprints(
         .collect()
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ProposalSpendPath {
+    Primary,
+    Delayed,
+}
+
+impl ProposalSpendPath {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Primary => "primary",
+            Self::Delayed => "delayed",
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct ProposalSigningContext {
+    spend_path: ProposalSpendPath,
+    fingerprints: Vec<Fingerprint>,
+    fingerprint_strings: Vec<String>,
+    required: usize,
+}
+
+fn signer_fingerprints_for_ids(
+    metadata: &MultisigWalletDto,
+    signer_ids: &[String],
+) -> ApiResult<(Vec<Fingerprint>, Vec<String>)> {
+    let mut fingerprints = Vec::with_capacity(signer_ids.len());
+    let mut fingerprint_strings = Vec::with_capacity(signer_ids.len());
+    for signer_id in signer_ids {
+        let signer = metadata
+            .cosigners
+            .iter()
+            .find(|signer| signer.id == *signer_id)
+            .ok_or_else(|| {
+                api_error(
+                    "wallet_corrupt",
+                    "The wallet spending path references an unknown signer.",
+                )
+            })?;
+        let fingerprint = Fingerprint::from_str(signer.fingerprint.trim()).map_err(internal)?;
+        fingerprints.push(fingerprint);
+        fingerprint_strings.push(fingerprint.to_string());
+    }
+    Ok((fingerprints, fingerprint_strings))
+}
+
+fn proposal_signing_context(
+    db: &Connection,
+    metadata: &MultisigWalletDto,
+    proposal_id: &str,
+) -> ApiResult<ProposalSigningContext> {
+    let stored = db
+        .query_row(
+            "SELECT spend_path FROM groot_proposal_spend_paths WHERE proposal_id = ?1",
+            params![proposal_id],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(internal)?;
+    let spend_path = match stored.as_deref() {
+        None | Some("primary") => ProposalSpendPath::Primary,
+        Some("delayed") => ProposalSpendPath::Delayed,
+        Some(_) => {
+            return Err(api_error(
+                "wallet_corrupt",
+                "The saved proposal spending path is invalid.",
+            ))
+        }
+    };
+
+    let Some(RecoveryTemplate::Recovery {
+        immediate,
+        recovery,
+    }) = metadata.recovery_template.as_ref()
+    else {
+        if spend_path == ProposalSpendPath::Delayed {
+            return Err(api_error(
+                "wallet_corrupt",
+                "A delayed proposal is not valid for this wallet.",
+            ));
+        }
+        let fingerprints = multisig_fingerprints(metadata)?;
+        return Ok(ProposalSigningContext {
+            spend_path,
+            fingerprint_strings: fingerprints.iter().map(ToString::to_string).collect(),
+            fingerprints,
+            required: metadata.threshold,
+        });
+    };
+
+    delayed_policy_context(metadata)?.ok_or_else(|| {
+        api_error(
+            "wallet_corrupt",
+            "The delayed wallet policy could not be verified.",
+        )
+    })?;
+    let (required, signer_ids) = match spend_path {
+        ProposalSpendPath::Primary => (immediate.threshold, immediate.signer_ids.as_slice()),
+        ProposalSpendPath::Delayed => (recovery.threshold, recovery.signer_ids.as_slice()),
+    };
+    let (fingerprints, fingerprint_strings) = signer_fingerprints_for_ids(metadata, signer_ids)?;
+    if required == 0 || required > fingerprints.len() {
+        return Err(api_error(
+            "wallet_corrupt",
+            "The wallet spending path has an invalid signature threshold.",
+        ));
+    }
+    Ok(ProposalSigningContext {
+        spend_path,
+        fingerprints,
+        fingerprint_strings,
+        required,
+    })
+}
+
 fn add_multisig_global_xpubs(psbt: &mut Psbt, metadata: &MultisigWalletDto) -> ApiResult<()> {
     for cosigner in &metadata.cosigners {
         let xpub = Xpub::from_str(cosigner.xpub.trim()).map_err(internal)?;
@@ -3989,9 +4115,9 @@ fn proposal_dto(
     ) = row;
     let psbt = decode_psbt(&encoded).map_err(proposal_api_error)?;
     validate_proposal_fee(&psbt, fee)?;
-    let fingerprints = multisig_fingerprints(metadata)?;
-    let progress =
-        signature_progress(&psbt, &fingerprints, metadata.threshold).map_err(proposal_api_error)?;
+    let signing = proposal_signing_context(db, metadata, &proposal_id)?;
+    let progress = signature_progress(&psbt, &signing.fingerprints, signing.required)
+        .map_err(proposal_api_error)?;
     let (change, change_addresses) = proposal_change_details(wallet, &psbt, &recipient, amount)?;
     let (recipient_testnet_alias, change_testnet_aliases) =
         proposal_testnet_aliases(&recipient, &change_addresses);
@@ -4028,6 +4154,8 @@ fn proposal_dto(
         required: progress.required,
         can_finalize: progress.can_finalize,
         signed_fingerprints: progress.signed_fingerprints,
+        spend_path: signing.spend_path.as_str().to_owned(),
+        eligible_signer_fingerprints: signing.fingerprint_strings,
         status,
         created_at: created_at.to_string(),
         selection_impact,
@@ -5796,7 +5924,7 @@ fn snapshot_from(
                     approaching_at_blocks: calculation.approaching_at_blocks,
                     maturity_height,
                     approximate_seconds_remaining: calculation.approximate_seconds_remaining,
-                    delayed_spend_supported: false,
+                    delayed_spend_supported: true,
                 })
             })
             .transpose()?;
@@ -6197,6 +6325,45 @@ fn immediate_policy_paths(wallet: &Wallet) -> ApiResult<Vec<KeychainPolicyPath>>
     [KeychainKind::External, KeychainKind::Internal]
         .into_iter()
         .map(|keychain| immediate_policy_path(wallet, keychain).map(|path| (keychain, path)))
+        .collect()
+}
+
+fn delayed_policy_path(wallet: &Wallet, keychain: KeychainKind) -> ApiResult<PolicyPath> {
+    let policy = wallet
+        .policies(keychain)
+        .map_err(internal)?
+        .ok_or_else(|| api_error("wallet_corrupt", "The wallet spending policy is missing."))?;
+    let SatisfiableItem::Thresh { items, threshold } = &policy.item else {
+        return Err(api_error(
+            "wallet_corrupt",
+            "The delayed wallet spending policy is not selectable.",
+        ));
+    };
+    if *threshold != 1 || items.len() != 2 {
+        return Err(api_error(
+            "wallet_corrupt",
+            "The delayed wallet spending policy has an unexpected branch shape.",
+        ));
+    }
+    let candidates = items
+        .iter()
+        .enumerate()
+        .filter(|(_, item)| policy_contains_relative_timelock(&item.item))
+        .map(|(index, _)| index)
+        .collect::<Vec<_>>();
+    if candidates.len() != 1 {
+        return Err(api_error(
+            "wallet_corrupt",
+            "The delayed wallet spending branch is ambiguous.",
+        ));
+    }
+    Ok([(policy.id, vec![candidates[0]])].into_iter().collect())
+}
+
+fn delayed_policy_paths(wallet: &Wallet) -> ApiResult<Vec<KeychainPolicyPath>> {
+    [KeychainKind::External, KeychainKind::Internal]
+        .into_iter()
+        .map(|keychain| delayed_policy_path(wallet, keychain).map(|path| (keychain, path)))
         .collect()
 }
 

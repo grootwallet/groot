@@ -268,7 +268,7 @@
         });
       if (event.type === 'policy_approaching_maturity')
         toast({
-          title: translate($locale, '{key} unlocks soon', {
+          title: translate($locale, '{key} available soon', {
             key: translate(
               $locale,
               event.policyType === 'inheritance' ? 'Heir key' : 'Recovery key'
@@ -276,7 +276,11 @@
           }),
           description: translate($locale, '{count} blocks remain before it can spend one coin.', {
             count: event.remainingBlocks
-          })
+          }),
+          action: {
+            label: translate($locale, 'View coin'),
+            run: () => goto(`/coins?coin=${encodeURIComponent(event.outpoint)}`)
+          }
         });
       if (event.type === 'policy_mature')
         toast({
@@ -288,8 +292,12 @@
           }),
           description: translate(
             $locale,
-            'Your normal 2-of-3 keys still work. Review the coin or renew its protection.'
-          )
+            'Your normal 2-of-3 keys still work. No action is required.'
+          ),
+          action: {
+            label: translate($locale, 'View options'),
+            run: () => goto(`/coins?coin=${encodeURIComponent(event.outpoint)}`)
+          }
         });
       if (event.type === 'wallet_profile_updated')
         profiles = profiles.map((profile) =>

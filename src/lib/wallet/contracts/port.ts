@@ -265,6 +265,12 @@ export interface WalletMultisigPort {
     label: string,
     feeRate: FeeRate
   ): Promise<MultisigProposal>;
+  prepareMultisigDelayedSpend(
+    outpoint: string,
+    recipient: string,
+    label: string,
+    feeRate: FeeRate
+  ): Promise<MultisigProposal>;
   prepareMultisigAcceleration(
     txid: string,
     method: AccelerationMethod,

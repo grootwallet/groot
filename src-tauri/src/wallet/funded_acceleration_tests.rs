@@ -1,5 +1,6 @@
 use super::multisig_proposal_commands::{
-    build_policy_renewal, finalized_multisig_proposal_transaction, import_multisig_proposal_in_db,
+    build_delayed_policy_sweep, build_policy_renewal, finalized_multisig_proposal_transaction,
+    import_multisig_proposal_in_db,
 };
 use super::transaction_commands::{
     prepare_persisted_multisig_acceleration, validate_acceleration_rate,
@@ -235,6 +236,8 @@ fn funded_delayed_policy_tracks_each_coin_restarts_and_rearms_after_reorg() {
         recovery: TimedSpendingPath::new(144, 1, ["signer-3"]),
     };
     let analysis = analyze_template(&template, &cosigners).unwrap();
+    let public_external_descriptor = analysis.external_descriptor.clone();
+    let public_internal_descriptor = analysis.internal_descriptor.clone();
     let policy = DelayedPolicyContext {
         policy_type: "recovery".to_owned(),
         delay_blocks: 144,
@@ -410,6 +413,81 @@ fn funded_delayed_policy_tracks_each_coin_restarts_and_rearms_after_reorg() {
     assert_eq!(replacement.state, MaturityState::Approaching);
     assert_eq!(replacement.age_blocks, 1);
     assert_eq!(replacement.remaining_blocks, Some(143));
+
+    rpc.generate_to_address(143, &competing_mining).unwrap();
+    sync(&mut wallet, &mut db, Arc::clone(&rpc));
+    let matured =
+        snapshot_from(&wallet, &db, Some(now().to_string()), true, Some(&policy)).unwrap();
+    let delayed_outpoint = matured
+        .utxos
+        .iter()
+        .find(|coin| coin.outpoint.starts_with(&second_txid.to_string()))
+        .unwrap();
+    assert_eq!(
+        delayed_outpoint.policy_maturity.as_ref().unwrap().state,
+        MaturityState::Mature
+    );
+    let delayed_outpoint = delayed_outpoint.outpoint.parse::<OutPoint>().unwrap();
+    let destination = rpc
+        .get_new_address(Some("groot delayed key sweep"), None)
+        .unwrap()
+        .require_network(Network::Regtest)
+        .unwrap();
+    let mut delayed = build_delayed_policy_sweep(
+        &mut wallet,
+        delayed_outpoint,
+        &destination,
+        FeeRate::from_sat_per_vb(2).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(delayed.unsigned_tx.input.len(), 1);
+    assert_eq!(
+        delayed.unsigned_tx.input[0].previous_output,
+        delayed_outpoint
+    );
+    assert_eq!(delayed.unsigned_tx.output.len(), 1);
+    assert_eq!(
+        delayed.unsigned_tx.output[0].script_pubkey,
+        destination.script_pubkey()
+    );
+    let delayed_external = public_external_descriptor
+        .split('#')
+        .next()
+        .unwrap()
+        .replace(
+            &keys[3].account_public.to_string(),
+            &keys[3].account_private.to_string(),
+        );
+    let delayed_internal = public_internal_descriptor
+        .split('#')
+        .next()
+        .unwrap()
+        .replace(
+            &keys[3].account_public.to_string(),
+            &keys[3].account_private.to_string(),
+        );
+    let delayed_signer = Wallet::create(delayed_external, delayed_internal)
+        .network(Network::Regtest)
+        .create_wallet_no_persist()
+        .unwrap();
+    delayed_signer
+        .sign(
+            &mut delayed,
+            SignOptions {
+                trust_witness_utxo: true,
+                try_finalize: false,
+                ..SignOptions::default()
+            },
+        )
+        .unwrap();
+    assert!(wallet
+        .finalize_psbt(&mut delayed, SignOptions::default())
+        .unwrap());
+    let delayed_tx = delayed.extract_tx().unwrap();
+    let delayed_txid = broadcast_transaction_with_rpc(&rpc, &delayed_tx).unwrap();
+    assert_eq!(delayed_tx.input.len(), 1);
+    assert_eq!(delayed_tx.output.len(), 1);
+    assert_eq!(delayed_tx.compute_txid(), delayed_txid);
 }
 
 #[test]

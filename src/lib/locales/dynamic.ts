@@ -647,6 +647,248 @@ export const dynamicCopy = {
     fr: 'Politique du portefeuille vérifiée précédemment',
     es: 'Política de la cartera verificada anteriormente'
   },
+  '· Backup key available': {
+    fr: '· Clé de secours disponible',
+    es: '· Clave de respaldo disponible'
+  },
+  '{count} available soon': {
+    fr: '{count} bientôt disponible(s)',
+    es: '{count} disponible(s) pronto'
+  },
+  '{count} recovery-ready coins are being spent': {
+    fr: '{count} pièces prêtes pour la récupération sont dépensées',
+    es: 'Se gastan {count} monedas listas para recuperación'
+  },
+  '{count} selected coins already have their backup keys available': {
+    fr: '{count} pièces sélectionnées ont déjà leur clé de secours disponible',
+    es: '{count} monedas seleccionadas ya tienen disponible su clave de respaldo'
+  },
+  '{key} available in {count} blocks': {
+    fr: '{key} disponible dans {count} blocs',
+    es: '{key} disponible en {count} bloques'
+  },
+  '{key} available soon': { fr: '{key} bientôt disponible', es: '{key} disponible pronto' },
+  '{threshold} of {total} signatures': {
+    fr: '{threshold} signatures sur {total}',
+    es: '{threshold} de {total} firmas'
+  },
+  '2 of 3 + backup key': { fr: '2 sur 3 + clé de secours', es: '2 de 3 + clave de respaldo' },
+  '2 of 3 primary keys + recovery key later': {
+    fr: '2 clés principales sur 3 + clé de récupération plus tard',
+    es: '2 de 3 claves principales + clave de recuperación después'
+  },
+  '2 of 3 primary keys work now. The recovery key becomes available after the chosen wait.': {
+    fr: '2 clés principales sur 3 fonctionnent maintenant. La clé de récupération devient disponible après l’attente choisie.',
+    es: '2 de 3 claves principales funcionan ahora. La clave de recuperación estará disponible tras la espera elegida.'
+  },
+  'A recovery partner helps you or your heirs regain access.': {
+    fr: 'Un partenaire de récupération vous aide, vous ou vos héritiers, à retrouver l’accès.',
+    es: 'Un colaborador de recuperación te ayuda a ti o a tus herederos a recuperar el acceso.'
+  },
+  'ABOUT 3 MONTHS': { fr: 'ENV. 3 MOIS', es: 'APROX. 3 MESES' },
+  'ABOUT 6 MONTHS': { fr: 'ENV. 6 MOIS', es: 'APROX. 6 MESES' },
+  'After the chosen wait, the recovery key can spend that coin by itself. The normal 2-of-3 keys remain available.':
+    {
+      fr: 'Après l’attente choisie, la clé de récupération peut dépenser seule cette pièce. Les clés normales 2 sur 3 restent disponibles.',
+      es: 'Tras la espera elegida, la clave de recuperación puede gastar esa moneda por sí sola. Las claves normales 2 de 3 siguen disponibles.'
+    },
+  'Assisted recovery': { fr: 'Récupération assistée', es: 'Recuperación asistida' },
+  'Assisted recovery will combine your keys with a dedicated recovery service and guided beneficiary support. It is not available yet.':
+    {
+      fr: 'La récupération assistée combinera vos clés avec un service dédié et un accompagnement des bénéficiaires. Elle n’est pas encore disponible.',
+      es: 'La recuperación asistida combinará tus claves con un servicio dedicado y apoyo guiado para beneficiarios. Aún no está disponible.'
+    },
+  'Available soon': { fr: 'Bientôt disponible', es: 'Disponible pronto' },
+  'Backup key is not available yet': {
+    fr: 'La clé de secours n’est pas encore disponible',
+    es: 'La clave de respaldo aún no está disponible'
+  },
+  'Backup key protected': { fr: 'Clé de secours protégée', es: 'Clave de respaldo protegida' },
+  'Backup keys protected': { fr: 'Clés de secours protégées', es: 'Claves de respaldo protegidas' },
+  'Choose one coin whose extra key is ready.': {
+    fr: 'Choisissez une pièce dont la clé supplémentaire est prête.',
+    es: 'Elige una moneda cuya clave adicional esté lista.'
+  },
+  'Coin available': { fr: 'Pièce disponible', es: 'Moneda disponible' },
+  'Coins are up to date': { fr: 'Les pièces sont à jour', es: 'Las monedas están actualizadas' },
+  'Coming soon': { fr: 'Bientôt', es: 'Próximamente' },
+  'e.g. Emergency recovery': {
+    fr: 'ex. Récupération d’urgence',
+    es: 'p. ej. Recuperación de emergencia'
+  },
+  'Each confirmed coin has its own wait before the recovery or heir key becomes available.': {
+    fr: 'Chaque pièce confirmée a sa propre attente avant que la clé de récupération ou d’héritier soit disponible.',
+    es: 'Cada moneda confirmada tiene su propia espera antes de que la clave de recuperación o heredero esté disponible.'
+  },
+  'Extra key became available at block {height}': {
+    fr: 'La clé supplémentaire est devenue disponible au bloc {height}',
+    es: 'La clave adicional estuvo disponible en el bloque {height}'
+  },
+  'How assisted recovery works': {
+    fr: 'Fonctionnement de la récupération assistée',
+    es: 'Cómo funciona la recuperación asistida'
+  },
+  'It can now move this coin by itself. Your usual 2-of-3 keys still work too.': {
+    fr: 'Elle peut maintenant déplacer seule cette pièce. Vos clés habituelles 2 sur 3 fonctionnent toujours.',
+    es: 'Ahora puede mover esta moneda por sí sola. Tus claves habituales 2 de 3 también siguen funcionando.'
+  },
+  mature: { fr: 'disponible', es: 'disponible' },
+  'Native SegWit · Miniscript': {
+    fr: 'SegWit natif · Miniscript',
+    es: 'SegWit nativo · Miniscript'
+  },
+  'Network fee · {rate} sat/vB': {
+    fr: 'Frais réseau · {rate} sat/vB',
+    es: 'Comisión de red · {rate} sat/vB'
+  },
+  'No action is required': { fr: 'Aucune action requise', es: 'No es necesario hacer nada' },
+  'One coin goes to one address. The network fee is deducted from it.': {
+    fr: 'Une pièce va vers une adresse. Les frais réseau en sont déduits.',
+    es: 'Una moneda va a una dirección. La comisión de red se deduce de ella.'
+  },
+  'One recovery-ready coin is being spent': {
+    fr: 'Une pièce prête pour la récupération est dépensée',
+    es: 'Se gasta una moneda lista para recuperación'
+  },
+  'Only the extra key signs this payment.': {
+    fr: 'Seule la clé supplémentaire signe ce paiement.',
+    es: 'Solo la clave adicional firma este pago.'
+  },
+  'Payments normally use 2 of 3 primary keys. The separate backup key becomes available per coin after its wait.':
+    {
+      fr: 'Les paiements utilisent normalement 2 clés principales sur 3. La clé de secours séparée devient disponible pour chaque pièce après son attente.',
+      es: 'Los pagos normalmente usan 2 de 3 claves principales. La clave de respaldo separada estará disponible para cada moneda tras su espera.'
+    },
+  'Postpone heir access': {
+    fr: 'Reporter l’accès de l’héritier',
+    es: 'Posponer acceso del heredero'
+  },
+  Protected: { fr: 'Protégée', es: 'Protegida' },
+  'Protection timelines were refreshed.': {
+    fr: 'Les calendriers de protection ont été actualisés.',
+    es: 'Se actualizaron los plazos de protección.'
+  },
+  'Ready for the {key}': { fr: 'Prête pour la {key}', es: 'Lista para la {key}' },
+  'Recipient receives': { fr: 'Le destinataire reçoit', es: 'El destinatario recibe' },
+  'Recovery key unavailable': {
+    fr: 'Clé de récupération indisponible',
+    es: 'Clave de recuperación no disponible'
+  },
+  'Recovery key wait': {
+    fr: 'Attente de la clé de récupération',
+    es: 'Espera de la clave de recuperación'
+  },
+  'RECOVERY PAYMENT': { fr: 'PAIEMENT DE RÉCUPÉRATION', es: 'PAGO DE RECUPERACIÓN' },
+  'Recovery-key payment broadcast': {
+    fr: 'Paiement par clé de récupération diffusé',
+    es: 'Pago con clave de recuperación transmitido'
+  },
+  'Restart recovery wait': {
+    fr: 'Relancer l’attente de récupération',
+    es: 'Reiniciar espera de recuperación'
+  },
+  'Review {key} payment': {
+    fr: 'Vérifier le paiement avec la {key}',
+    es: 'Revisar pago con la {key}'
+  },
+  'Review once, then approve with the {key}.': {
+    fr: 'Vérifiez une fois, puis approuvez avec la {key}.',
+    es: 'Revísalo una vez y aprueba con la {key}.'
+  },
+  'Send this coin with the {key}. The fee is deducted automatically.': {
+    fr: 'Envoyez cette pièce avec la {key}. Les frais sont déduits automatiquement.',
+    es: 'Envía esta moneda con la {key}. La comisión se deduce automáticamente.'
+  },
+  'Send to': { fr: 'Envoyer à', es: 'Enviar a' },
+  'Signed by the {key}': { fr: 'Signé par la {key}', es: 'Firmado por la {key}' },
+  'Spending them is safe with your normal keys. Any wallet change starts a fresh wait after confirmation.':
+    {
+      fr: 'Vous pouvez les dépenser avec vos clés normales. Toute monnaie rendue démarre une nouvelle attente après confirmation.',
+      es: 'Puedes gastarlas con tus claves normales. Cualquier cambio inicia una nueva espera tras confirmarse.'
+    },
+  'Sync now': { fr: 'Synchroniser', es: 'Sincronizar ahora' },
+  'Sync the wallet before using the extra key.': {
+    fr: 'Synchronisez le portefeuille avant d’utiliser la clé supplémentaire.',
+    es: 'Sincroniza la cartera antes de usar la clave adicional.'
+  },
+  'Syncing…': { fr: 'Synchronisation…', es: 'Sincronizando…' },
+  'The {key} is ready': { fr: 'La {key} est prête', es: 'La {key} está lista' },
+  'The {key} signs alone. The fee is deducted from this coin.': {
+    fr: 'La {key} signe seule. Les frais sont déduits de cette pièce.',
+    es: 'La {key} firma sola. La comisión se deduce de esta moneda.'
+  },
+  'The backup key stays separate from the primary 2-of-3.': {
+    fr: 'La clé de secours reste séparée des 2 clés principales sur 3.',
+    es: 'La clave de respaldo permanece separada de las 2 de 3 claves principales.'
+  },
+  'The network fee is deducted from that coin, so the recipient gets the remainder.': {
+    fr: 'Les frais réseau sont déduits de cette pièce ; le destinataire reçoit le reste.',
+    es: 'La comisión de red se deduce de esa moneda; el destinatario recibe el resto.'
+  },
+  'The recovery or heir key becomes available separately for each coin. Your normal 2-of-3 keys always remain available.':
+    {
+      fr: 'La clé de récupération ou d’héritier devient disponible séparément pour chaque pièce. Vos clés normales 2 sur 3 restent toujours disponibles.',
+      es: 'La clave de recuperación o heredero estará disponible por separado para cada moneda. Tus claves normales 2 de 3 siempre siguen disponibles.'
+    },
+  'The wait starts separately for each received coin.': {
+    fr: 'L’attente commence séparément pour chaque pièce reçue.',
+    es: 'La espera comienza por separado para cada moneda recibida.'
+  },
+  'This coin already has its backup key available': {
+    fr: 'La clé de secours de cette pièce est déjà disponible',
+    es: 'Esta moneda ya tiene disponible su clave de respaldo'
+  },
+  'This sends one coin to the address you choose. No other wallet coins are combined.': {
+    fr: 'Une seule pièce est envoyée à l’adresse choisie. Aucune autre pièce du portefeuille n’est combinée.',
+    es: 'Esto envía una moneda a la dirección elegida. No se combina ninguna otra moneda de la cartera.'
+  },
+  'Three primary keys. One backup recovery key.': {
+    fr: 'Trois clés principales. Une clé de récupération de secours.',
+    es: 'Tres claves principales. Una clave de recuperación de respaldo.'
+  },
+  'Use {key}': { fr: 'Utiliser la {key}', es: 'Usar la {key}' },
+  'Use heir key': { fr: 'Utiliser la clé d’héritier', es: 'Usar clave de heredero' },
+  'Use recovery key': { fr: 'Utiliser la clé de récupération', es: 'Usar clave de recuperación' },
+  'View coin': { fr: 'Voir la pièce', es: 'Ver moneda' },
+  'View options': { fr: 'Voir les options', es: 'Ver opciones' },
+  'Wait starts after confirmation': {
+    fr: 'L’attente commence après confirmation',
+    es: 'La espera comienza tras la confirmación'
+  },
+  'What happens': { fr: 'Ce qui se passe', es: 'Qué sucede' },
+  'When it is available, choose that coin to send with the recovery or heir key.': {
+    fr: 'Lorsqu’elle est disponible, choisissez cette pièce pour l’envoyer avec la clé de récupération ou d’héritier.',
+    es: 'Cuando esté disponible, elige esa moneda para enviarla con la clave de recuperación o heredero.'
+  },
+  'When your backup key becomes available': {
+    fr: 'Quand votre clé de secours devient disponible',
+    es: 'Cuándo estará disponible tu clave de respaldo'
+  },
+  'Where should this coin go?': {
+    fr: 'Où envoyer cette pièce ?',
+    es: '¿Adónde debe ir esta moneda?'
+  },
+  'wsh · Miniscript · BIP48': { fr: 'wsh · Miniscript · BIP48', es: 'wsh · Miniscript · BIP48' },
+  'wsh · sortedmulti · BIP48': { fr: 'wsh · sortedmulti · BIP48', es: 'wsh · sortedmulti · BIP48' },
+  'Your normal 2-of-3 keys still work. No action is required.': {
+    fr: 'Vos clés normales 2 sur 3 fonctionnent toujours. Aucune action requise.',
+    es: 'Tus claves normales 2 de 3 siguen funcionando. No es necesario hacer nada.'
+  },
+  'Your normal keys approve this payment. Any wallet change begins a fresh wait after confirmation.':
+    {
+      fr: 'Vos clés normales approuvent ce paiement. Toute monnaie rendue commence une nouvelle attente après confirmation.',
+      es: 'Tus claves normales aprueban este pago. Cualquier cambio inicia una nueva espera tras confirmarse.'
+    },
+  'Your normal keys still work. You can spend with the extra key, or move this coin within the wallet to restart its wait.':
+    {
+      fr: 'Vos clés normales fonctionnent toujours. Vous pouvez dépenser avec la clé supplémentaire ou déplacer cette pièce dans le portefeuille pour relancer son attente.',
+      es: 'Tus claves normales siguen funcionando. Puedes gastar con la clave adicional o mover esta moneda dentro de la cartera para reiniciar su espera.'
+    },
+  'To make the extra key wait again, open that coin and choose the policy-specific restart action.':
+    {
+      fr: 'Pour remettre la clé supplémentaire en attente, ouvrez cette pièce et choisissez l’action de relance adaptée à la politique.',
+      es: 'Para que la clave adicional vuelva a esperar, abre esa moneda y elige la acción de reinicio específica de la política.'
+    },
   'Your bitcoin. Simply held.': {
     fr: 'Votre bitcoin. Détenu simplement.',
     es: 'Tu bitcoin. Custodiado con sencillez.'

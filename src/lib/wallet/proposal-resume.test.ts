@@ -43,6 +43,8 @@ function proposal(
     required: 1,
     canFinalize: status === 'ready',
     signedFingerprints: [],
+    spendPath: 'primary',
+    eligibleSignerFingerprints: ['f00dbabe'],
     status,
     createdAt
   };

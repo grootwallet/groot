@@ -3,6 +3,58 @@ import type { Utxo } from '$lib/types';
 import type { CoinSelection } from './contracts';
 import type { SupportedNetwork } from '$lib/config';
 import type { WalletSnapshot } from './contracts';
+import type { MultisigWallet } from './contracts';
+
+export type WalletPolicyPresentation = {
+  delayed: boolean;
+  primaryThreshold: number;
+  primarySignerCount: number;
+  delayedKeyLabel: 'Recovery key' | 'Heir key' | null;
+  summary: string;
+};
+
+export function walletPolicyPresentation(wallet: MultisigWallet): WalletPolicyPresentation {
+  const template = wallet.recoveryTemplate;
+  if (template?.type !== 'recovery') {
+    return {
+      delayed: false,
+      primaryThreshold: wallet.threshold,
+      primarySignerCount: wallet.cosigners.length,
+      delayedKeyLabel: null,
+      summary: `${wallet.threshold} of ${wallet.cosigners.length}`
+    };
+  }
+  const knownIds = new Set(wallet.cosigners.map((signer) => signer.id));
+  const immediateIds = [...new Set(template.immediate.signerIds)];
+  const delayedIds = [...new Set(template.recovery.signerIds)];
+  const valid =
+    immediateIds.length === template.immediate.signerIds.length &&
+    delayedIds.length === template.recovery.signerIds.length &&
+    immediateIds.every((id) => knownIds.has(id)) &&
+    delayedIds.every((id) => knownIds.has(id)) &&
+    immediateIds.every((id) => !delayedIds.includes(id)) &&
+    template.immediate.threshold > 0 &&
+    template.immediate.threshold <= immediateIds.length &&
+    template.recovery.threshold === 1 &&
+    delayedIds.length === 1;
+  if (!valid) {
+    return {
+      delayed: true,
+      primaryThreshold: 0,
+      primarySignerCount: 0,
+      delayedKeyLabel: null,
+      summary: 'Policy details unavailable'
+    };
+  }
+  const delayedKeyLabel = wallet.policyType === 'inheritance' ? 'Heir key' : 'Recovery key';
+  return {
+    delayed: true,
+    primaryThreshold: template.immediate.threshold,
+    primarySignerCount: immediateIds.length,
+    delayedKeyLabel,
+    summary: `${template.immediate.threshold} of ${immediateIds.length} primary keys + ${delayedKeyLabel.toLowerCase()} later`
+  };
+}
 
 export function addressPrefixForNetwork(network: SupportedNetwork): 'bcrt1' | 'tb1' {
   return network === 'regtest' ? 'bcrt1' : 'tb1';

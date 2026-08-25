@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Utxo } from '$lib/types';
-import { feeRate, sats, WalletError } from './contracts';
+import { feeRate, sats, WalletError, type MultisigWallet } from './contracts';
 import {
   addressPrefixForNetwork,
   addressReuseInsights,
@@ -13,10 +13,56 @@ import {
   policyMaturitySummary,
   recoveryWordCountIsValid,
   selectedCoinTotal,
-  validPolicyMaturity
+  validPolicyMaturity,
+  walletPolicyPresentation
 } from './policy';
 
 describe('wallet invariants', () => {
+  it('summarizes a standard multisig policy without a delayed key', () => {
+    expect(
+      walletPolicyPresentation({
+        threshold: 2,
+        cosigners: [{ id: 'key-0' }, { id: 'key-1' }, { id: 'key-2' }]
+      } as MultisigWallet)
+    ).toEqual({
+      delayed: false,
+      primaryThreshold: 2,
+      primarySignerCount: 3,
+      delayedKeyLabel: null,
+      summary: '2 of 3'
+    });
+  });
+
+  it('describes delayed key roles without pretending all four keys share one threshold', () => {
+    const wallet = {
+      threshold: 2,
+      policyType: 'recovery',
+      cosigners: [0, 1, 2, 3].map((index) => ({ id: `key-${index}` })),
+      recoveryTemplate: {
+        type: 'recovery',
+        immediate: { threshold: 2, signerIds: ['key-0', 'key-1', 'key-2'] },
+        recovery: { threshold: 1, signerIds: ['key-3'], availableAfterBlocks: 4_320 }
+      }
+    } as MultisigWallet;
+    expect(walletPolicyPresentation(wallet).summary).toBe(
+      '2 of 3 primary keys + recovery key later'
+    );
+    expect(
+      walletPolicyPresentation({
+        ...wallet,
+        policyType: 'inheritance'
+      }).delayedKeyLabel
+    ).toBe('Heir key');
+    expect(
+      walletPolicyPresentation({
+        ...wallet,
+        recoveryTemplate: {
+          ...wallet.recoveryTemplate!,
+          immediate: { threshold: 2, signerIds: ['key-0', 'missing'] }
+        }
+      } as MultisigWallet).summary
+    ).toBe('Policy details unavailable');
+  });
   it('uses the active network address prefix', () => {
     expect(addressPrefixForNetwork('regtest')).toBe('bcrt1');
     expect(addressPrefixForNetwork('signet')).toBe('tb1');

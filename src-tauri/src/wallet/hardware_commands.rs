@@ -1716,6 +1716,8 @@ pub(crate) fn external_proposal_dto(
         required: 1,
         can_finalize: progress.can_finalize,
         signed_fingerprints: progress.signed_fingerprints,
+        spend_path: "primary".to_owned(),
+        eligible_signer_fingerprints: vec![fingerprint.to_string()],
         status,
         created_at: created_at.to_string(),
         selection_impact,

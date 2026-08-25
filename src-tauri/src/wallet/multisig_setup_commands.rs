@@ -42,6 +42,8 @@ pub struct MultisigSetupDraft {
     version: u8,
     stage: MultisigSetupStage,
     template_kind: MultisigSetupTemplate,
+    #[serde(default)]
+    recovery_delay_blocks: Option<u32>,
     standard_recipe: MultisigSetupRecipe,
     custom_cosigner_count: usize,
     name: String,
@@ -52,6 +54,16 @@ pub struct MultisigSetupDraft {
     policy_verification_deferred: bool,
     policy_verifications: Vec<DraftPolicyVerification>,
     updated_at: u64,
+}
+
+fn setup_recovery_delay(draft: &MultisigSetupDraft) -> u32 {
+    draft.recovery_delay_blocks.unwrap_or({
+        if matches!(draft.template_kind, MultisigSetupTemplate::Inheritance) {
+            52_560
+        } else {
+            4_320
+        }
+    })
 }
 
 fn multisig_setup_draft_path(app: &AppHandle) -> ApiResult<PathBuf> {
@@ -87,11 +99,7 @@ fn preview_multisig_setup_draft(draft: &MultisigSetupDraft) -> ApiResult<Multisi
     let template = RecoveryTemplate::Recovery {
         immediate: crate::recovery::SpendingPath::new(2, signer_ids[..3].to_vec()),
         recovery: crate::recovery::TimedSpendingPath::new(
-            if matches!(draft.template_kind, MultisigSetupTemplate::Inheritance) {
-                52_560
-            } else {
-                4_320
-            },
+            setup_recovery_delay(draft),
             1,
             [signer_ids[3].clone()],
         ),
@@ -118,6 +126,14 @@ fn validate_multisig_setup_draft(
         return Err(api_error(
             "wallet_corrupt",
             "The saved multisig setup is invalid. Discard it and start again.",
+        ));
+    }
+    if !matches!(draft.template_kind, MultisigSetupTemplate::Standard)
+        && !(144..=52_560).contains(&setup_recovery_delay(draft))
+    {
+        return Err(api_error(
+            "wallet_corrupt",
+            "The saved recovery delay is outside the supported range.",
         ));
     }
     reject_virtual_cosigners(&draft.cosigners)?;
@@ -498,6 +514,7 @@ mod setup_draft_tests {
             version: 1,
             stage: MultisigSetupStage::Backup,
             template_kind: MultisigSetupTemplate::Standard,
+            recovery_delay_blocks: None,
             standard_recipe: MultisigSetupRecipe::TwoOfThree,
             custom_cosigner_count: 3,
             name: "Resumable wallet".to_owned(),
@@ -525,6 +542,31 @@ mod setup_draft_tests {
         ] {
             assert!(!encoded.contains(forbidden));
         }
+    }
+
+    #[test]
+    fn recovery_drafts_keep_legacy_defaults_and_accept_explicit_presets() {
+        let mut recovery = draft();
+        recovery.template_kind = MultisigSetupTemplate::Recovery;
+        recovery.cosigners = cosigners(4);
+        assert_eq!(setup_recovery_delay(&recovery), 4_320);
+        recovery.recovery_delay_blocks = Some(13_140);
+        assert_eq!(setup_recovery_delay(&recovery), 13_140);
+        assert!(validate_multisig_setup_draft(&recovery).is_ok());
+
+        recovery.recovery_delay_blocks = Some(143);
+        assert_eq!(
+            validate_multisig_setup_draft(&recovery).unwrap_err().code,
+            "wallet_corrupt"
+        );
+    }
+
+    #[test]
+    fn legacy_inheritance_drafts_keep_their_one_year_delay() {
+        let mut inheritance = draft();
+        inheritance.template_kind = MultisigSetupTemplate::Inheritance;
+        inheritance.cosigners = cosigners(4);
+        assert_eq!(setup_recovery_delay(&inheritance), 52_560);
     }
 
     #[test]

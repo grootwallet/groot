@@ -146,6 +146,8 @@
   let automaticStrategy = $state<AutomaticSelectionStrategy>('balanced');
   let renewalMode = $state(false),
     renewalCoin = $state<Utxo | null>(null);
+  let delayedSpendMode = $state(false),
+    delayedSpendCoin = $state<Utxo | null>(null);
   let selectionPreview = $state<CoinSelectionPreview | null>(null),
     selectionPreviewRevision = 0;
   let draftStep = $state<1 | 2>(1);
@@ -172,6 +174,22 @@
         proposal.selectionImpact.hasAddressReuse)
     )
   );
+  const selectedReadyCoins = $derived(
+    coins.filter(
+      (coin) =>
+        selectedCoins.includes(coin.outpoint) && validPolicyMaturity(coin)?.state === 'mature'
+    )
+  );
+  const proposalReadyCoins = $derived.by(() => {
+    const reviewed = proposal;
+    return reviewed
+      ? coins.filter(
+          (coin) =>
+            reviewed.selectedOutpoints.includes(coin.outpoint) &&
+            validPolicyMaturity(coin)?.state === 'mature'
+        )
+      : [];
+  });
   const showColdcardPolicyHelp = $derived(
     shouldShowColdcardPolicyHelp(wallet?.cosigners ?? [], devices, policyVerifications)
   );
@@ -199,9 +217,23 @@
   const renewalKeyName = $derived(
     renewalMaturity?.policyType === 'inheritance' ? 'Heir key' : 'Recovery key'
   );
+  const delayedSpendMaturity = $derived(
+    delayedSpendCoin ? validPolicyMaturity(delayedSpendCoin) : null
+  );
+  const delayedSpendKeyName = $derived(
+    delayedSpendMaturity?.policyType === 'inheritance' ? 'heir key' : 'recovery key'
+  );
   const renewalValid = $derived(
     renewalMode &&
       renewalCoin !== null &&
+      label.trim().length > 0 &&
+      label.trim().length <= 48 &&
+      customFeeValid
+  );
+  const delayedSpendValid = $derived(
+    delayedSpendMode &&
+      delayedSpendCoin !== null &&
+      addressValid &&
       label.trim().length > 0 &&
       label.trim().length <= 48 &&
       customFeeValid
@@ -218,14 +250,29 @@
       { count: signaturesRemaining }
     )
   );
+  const eligibleSignerSet = $derived.by(() => {
+    if (proposal)
+      return new Set(proposal.eligibleSignerFingerprints.map((item) => item.toLowerCase()));
+    if (!delayedSpendMode || wallet?.recoveryTemplate?.type !== 'recovery') return null;
+    const ids = new Set(wallet.recoveryTemplate.recovery.signerIds);
+    return new Set(
+      wallet.cosigners
+        .filter((item) => ids.has(item.id))
+        .map((item) => item.fingerprint.toLowerCase())
+    );
+  });
   const signerItems = $derived(
-    (wallet?.cosigners ?? []).map((signer) => ({
-      label: signer.label,
-      fingerprint: signer.fingerprint,
-      detail:
-        signer.deviceType ??
-        translate($locale, '{source} signer', { source: translate($locale, signer.source) })
-    }))
+    (wallet?.cosigners ?? [])
+      .filter(
+        (signer) => !eligibleSignerSet || eligibleSignerSet.has(signer.fingerprint.toLowerCase())
+      )
+      .map((signer) => ({
+        label: signer.label,
+        fingerprint: signer.fingerprint,
+        detail:
+          signer.deviceType ??
+          translate($locale, '{source} signer', { source: translate($locale, signer.source) })
+      }))
   );
   const hardwareDeviceIdentity = $derived(
     activeHardwareDevice ? `${activeHardwareDevice.label} ${activeHardwareDevice.model}` : ''
@@ -291,6 +338,7 @@
       const url = new URL(window.location.href),
         requested = url.searchParams.get('coins')?.split(',').filter(Boolean) ?? [],
         renewalRequested = url.searchParams.get('renewProtection') === '1',
+        delayedSpendRequested = url.searchParams.get('delayedSpend') === '1',
         method = url.searchParams.get('accelerate'),
         txid = url.searchParams.get('txid');
       selectedCoins = requested.filter((outpoint) =>
@@ -321,6 +369,24 @@
           description: translate($locale, 'Finish or cancel it before renewing another coin.'),
           tone: 'danger'
         });
+      } else if (delayedSpendRequested && proposals.length === 0 && selectedCoins.length === 1) {
+        const candidate = coins.find((coin) => coin.outpoint === selectedCoins[0]) ?? null;
+        const maturity = candidate ? validPolicyMaturity(candidate) : null;
+        if (candidate && maturity?.state === 'mature' && snapshotCurrent) {
+          delayedSpendMode = true;
+          delayedSpendCoin = candidate;
+        } else {
+          toast({
+            title: translate($locale, 'Recovery key unavailable'),
+            description: translate(
+              $locale,
+              snapshotCurrent
+                ? 'Choose one coin whose extra key is ready.'
+                : 'Sync the wallet before using the extra key.'
+            ),
+            tone: 'danger'
+          });
+        }
       }
       updateAvailable();
       try {
@@ -401,6 +467,23 @@
       );
     } catch (cause) {
       error = localizedError(cause, $locale, 'Could not prepare the protection renewal.');
+    } finally {
+      busy = false;
+    }
+  }
+  async function prepareDelayedSpend() {
+    if (!delayedSpendValid || !delayedSpendCoin) return;
+    busy = true;
+    error = '';
+    try {
+      proposal = await walletService.prepareMultisigDelayedSpend(
+        delayedSpendCoin.outpoint,
+        address,
+        label,
+        feeRate(selectedRateNumber)
+      );
+    } catch (cause) {
+      error = localizedError(cause, $locale, 'Could not prepare recovery-key payment.');
     } finally {
       busy = false;
     }
@@ -519,13 +602,28 @@
       return;
     }
     const signer = savedSignerForDevice(device);
+    if (
+      proposal &&
+      signer &&
+      !proposal.eligibleSignerFingerprints.some(
+        (fingerprint) => fingerprint.toLowerCase() === signer.fingerprint.toLowerCase()
+      )
+    ) {
+      deviceError = 'This payment needs a different wallet key.';
+      return;
+    }
     const profile = policyRegistrationProfile(device);
     if (!profile.supported && profile.registration === 'unsupported') {
       deviceError = `${profile.name} is not supported by Groot's pinned HWI release and is not physically certified.`;
       return;
     }
     const verification = signer ? matchingPolicyVerification(signer, policyVerifications) : null;
-    if (signer && profile.registration === 'file_once' && !verification) {
+    if (
+      signer &&
+      wallet?.recoveryTemplate?.type !== 'recovery' &&
+      profile.registration === 'file_once' &&
+      !verification
+    ) {
       coldcardSetupDevice = device;
       coldcardSetupError = '';
       deviceOpen = false;
@@ -534,6 +632,7 @@
     }
     if (
       signer &&
+      wallet?.recoveryTemplate?.type !== 'recovery' &&
       requiresInteractivePolicyVerification(device) &&
       (repeatsPolicyAuthorizationWhenSigning(device) || !verification)
     ) {
@@ -943,7 +1042,16 @@
   <header class="page-header">
     <div>
       <p class="eyebrow">{translate($locale, 'SEND')}</p>
-      <h1>{translate($locale, renewalMode ? 'Renew protection' : 'Send bitcoin')}</h1>
+      <h1>
+        {translate(
+          $locale,
+          renewalMode
+            ? 'Renew protection'
+            : delayedSpendMode
+              ? translate($locale, 'Use {key}', { key: delayedSpendKeyName })
+              : 'Send bitcoin'
+        )}
+      </h1>
       <p class="subtitle">
         {translate(
           $locale,
@@ -951,11 +1059,21 @@
             ? proposal
               ? 'Review the renewal, then approve it with your usual keys.'
               : 'Move this coin within your wallet to restart its protection.'
-            : !proposal && draftStep === 1
-              ? 'Name the payment and choose its recipient.'
-              : !proposal
-                ? 'Choose the amount, coins, and network fee.'
-                : `Review once, then collect ${wallet?.threshold ?? 'the required'} signatures.`
+            : delayedSpendMode
+              ? proposal
+                ? translate($locale, 'Review once, then approve with the {key}.', {
+                    key: delayedSpendKeyName
+                  })
+                : translate(
+                    $locale,
+                    'Send this coin with the {key}. The fee is deducted automatically.',
+                    { key: delayedSpendKeyName }
+                  )
+              : !proposal && draftStep === 1
+                ? 'Name the payment and choose its recipient.'
+                : !proposal
+                  ? 'Choose the amount, coins, and network fee.'
+                  : `Review once, then collect ${wallet?.threshold ?? 'the required'} signatures.`
         )}
       </p>
     </div>
@@ -967,15 +1085,48 @@
         >{translate($locale, 'Back')}</Button
       >{/if}
   </header>
-  {#if !txid && (!renewalMode || proposal)}<SendProgress
+  {#if !txid && ((!renewalMode && !delayedSpendMode) || proposal)}<SendProgress
       current={progressStep}
-    />{#if wallet && !proposal && !renewalMode}<SignerSummary
+    />{#if wallet && !proposal && !renewalMode && !delayedSpendMode}<SignerSummary
         signers={signerItems}
         required={wallet.threshold}
         signedFingerprints={[]}
         collecting={false}
       />{/if}{/if}
-  {#if renewalMode && renewalCoin && renewalMaturity}<section
+  {#if delayedSpendMode && delayedSpendCoin && delayedSpendMaturity}<section
+      class="policy-renewal-banner"
+      aria-live="polite"
+    >
+      <span><LockKeyhole size={18} /></span>
+      <div>
+        <strong>{translate($locale, 'The {key} is ready', { key: delayedSpendKeyName })}</strong>
+        <p>
+          {translate(
+            $locale,
+            'It can now move this coin by itself. Your usual 2-of-3 keys still work too.'
+          )}
+        </p>
+        <details>
+          <summary>{translate($locale, 'What happens')}</summary>
+          <ul>
+            <li>
+              {translate(
+                $locale,
+                'This sends one coin to the address you choose. No other wallet coins are combined.'
+              )}
+            </li>
+            <li>
+              {translate(
+                $locale,
+                'The network fee is deducted from that coin, so the recipient gets the remainder.'
+              )}
+            </li>
+            <li>{translate($locale, 'Only the extra key signs this payment.')}</li>
+          </ul>
+        </details>
+      </div>
+    </section>
+  {:else if renewalMode && renewalCoin && renewalMaturity}<section
       class="policy-renewal-banner"
       aria-live="polite"
     >
@@ -1018,7 +1169,14 @@
   {#if txid}<section class="empty-state success-state">
       <span class="empty-icon success"><Check size={25} /></span>
       <h2>
-        {translate($locale, renewalMode ? 'Protection renewal broadcast' : 'Transaction broadcast')}
+        {translate(
+          $locale,
+          renewalMode
+            ? 'Protection renewal broadcast'
+            : delayedSpendMode
+              ? 'Recovery-key payment broadcast'
+              : 'Transaction broadcast'
+        )}
       </h2>
       <p>
         {translate($locale, 'The signed transaction was accepted by the')}
@@ -1069,6 +1227,86 @@
         >{translate($locale, 'Review acceleration')}</Button
       >
     </form>
+  {:else if delayedSpendMode && delayedSpendCoin && !proposal}<form
+      class="form-card send-stage-card"
+      onsubmit={(event) => {
+        event.preventDefault();
+        prepareDelayedSpend();
+      }}
+      in:fly={{ x: 8, duration: 180 }}
+    >
+      <div class="send-stage-heading">
+        <span>{translate($locale, 'RECOVERY PAYMENT')}</span>
+        <h2>{translate($locale, 'Where should this coin go?')}</h2>
+        <p>
+          {translate($locale, 'The {key} signs alone. The fee is deducted from this coin.', {
+            key: delayedSpendKeyName
+          })}
+        </p>
+      </div>
+      <div class="renewal-coin-summary">
+        <span>{translate($locale, 'Coin available')}</span>
+        <strong><Amount value={delayedSpendCoin.amount} hidden={$discreetMode} /></strong>
+        <small>{translate($locale, 'Ready for the {key}', { key: delayedSpendKeyName })}</small>
+      </div>
+      <label class="field"
+        ><span>{translate($locale, 'Send to')}</span><input
+          aria-label={translate($locale, 'Bitcoin address')}
+          bind:value={address}
+          oninput={clearDraftError}
+          placeholder="{addressPrefixForNetwork(defaultConfig.network)}q…"
+        />{#if address && !addressValid}<em
+            >{translate($locale, 'Enter a valid')}
+            {networkName(defaultConfig.network)}
+            {translate($locale, 'address')}</em
+          >{/if}</label
+      >
+      <label class="field"
+        ><span>{translate($locale, 'Permanent label')}</span><input
+          bind:value={label}
+          oninput={clearDraftError}
+          placeholder={translate($locale, 'e.g. Emergency recovery')}
+          maxlength="48"
+        /><FieldCounter
+          value={label}
+          max={48}
+          hint={translate($locale, 'Required · cannot be changed')}
+        /></label
+      >
+      <details class="selection-technical">
+        <summary
+          >{translate($locale, 'Network fee · {rate} sat/vB', {
+            rate: selectedRateNumber || '—'
+          })}</summary
+        >
+        <FeeSelector
+          {estimates}
+          value={selectedRateNumber}
+          {estimatedFee}
+          error={feeEstimateError}
+          onchange={(rate) => {
+            selectedRate = rate;
+            clearDraftError();
+          }}
+        />
+      </details>
+      {#if error}<div class="hardware-inline-error send-form-error" role="alert">
+          <AlertTriangle size={18} /><span
+            ><strong>{translate($locale, 'Payment could not be prepared')}</strong><small
+              >{error}</small
+            ></span
+          >
+        </div>{/if}
+      <Button
+        type="submit"
+        size="large"
+        class="full"
+        disabled={!delayedSpendValid}
+        loading={busy}
+        loadingLabel={translate($locale, 'Preparing payment…')}
+        >{translate($locale, 'Review {key} payment', { key: delayedSpendKeyName })}</Button
+      >
+    </form>
   {:else if renewalMode && renewalCoin && !proposal}<form
       class="form-card send-stage-card"
       onsubmit={(event) => {
@@ -1106,16 +1344,23 @@
           hint={translate($locale, 'Required · cannot be changed or reused')}
         /></label
       >
-      <FeeSelector
-        {estimates}
-        value={selectedRateNumber}
-        {estimatedFee}
-        error={feeEstimateError}
-        onchange={(rate) => {
-          selectedRate = rate;
-          clearDraftError();
-        }}
-      />
+      <details class="selection-technical">
+        <summary
+          >{translate($locale, 'Network fee · {rate} sat/vB', {
+            rate: selectedRateNumber || '—'
+          })}</summary
+        >
+        <FeeSelector
+          {estimates}
+          value={selectedRateNumber}
+          {estimatedFee}
+          error={feeEstimateError}
+          onchange={(rate) => {
+            selectedRate = rate;
+            clearDraftError();
+          }}
+        />
+      </details>
       {#if error}<div class="hardware-inline-error send-form-error" role="alert">
           <AlertTriangle size={18} /><span
             ><strong>{translate($locale, 'Protection renewal could not be prepared')}</strong><small
@@ -1285,7 +1530,14 @@
                       $discreetMode
                         ? '•••••• · Provenance hidden'
                         : `${formatAmount(coin.amount, $denomination)} ${amountUnit($denomination)}${coin.provenance.state === 'unknown' ? ' · Source unknown' : ''}${coin.provenance.addressReused ? ' · Address reused' : ''}`
-                    )}{translate($locale, coin.frozen ? ' · Frozen' : '')}</small
+                    )}{translate(
+                      $locale,
+                      coin.frozen
+                        ? ' · Frozen'
+                        : validPolicyMaturity(coin)?.state === 'mature'
+                          ? ' · Backup key available'
+                          : ''
+                    )}</small
                   ></span
                 ></label
               >{/each}<button type="button" onclick={useAutomatic}
@@ -1340,6 +1592,23 @@
               >
             </details>{/if}
         </div>{/if}
+      {#if selectedReadyCoins.length}<div class="selection-review renewal-review">
+          <strong
+            >{translate(
+              $locale,
+              selectedReadyCoins.length === 1
+                ? 'This coin already has its backup key available'
+                : '{count} selected coins already have their backup keys available',
+              { count: selectedReadyCoins.length }
+            )}</strong
+          >
+          <span
+            >{translate(
+              $locale,
+              'Spending them is safe with your normal keys. Any wallet change starts a fresh wait after confirmation.'
+            )}</span
+          >
+        </div>{/if}
       <FeeSelector
         {estimates}
         value={selectedRateNumber}
@@ -1384,9 +1653,16 @@
         )}
       >
         <div class="review-amount">
-          <span>{translate($locale, renewalMode ? 'New protected coin' : 'You send')}</span><strong
-            ><Amount value={Number(proposal.amount)} /></strong
-          >
+          <span
+            >{translate(
+              $locale,
+              renewalMode
+                ? 'New protected coin'
+                : delayedSpendMode
+                  ? 'Recipient receives'
+                  : 'You send'
+            )}</span
+          ><strong><Amount value={Number(proposal.amount)} /></strong>
         </div>
         <dl class="details-list proposal-review-primary">
           <div>
@@ -1416,27 +1692,56 @@
             <dd><Amount value={Number(proposal.total)} /></dd>
           </div>
         </dl>
-        <div class:warning={proposalHasPrivacyWarning} class="selection-review">
-          <strong
-            >{proposal.selectionImpact.selectedInputCount}
-            {translate($locale, 'funding coin')}{translate(
-              $locale,
-              proposal.selectionImpact.selectedInputCount === 1 ? '' : 's'
-            )} · {proposal.selectionImpact.strategy.replace('_', ' ')}</strong
-          ><span
-            >{translate(
-              $locale,
-              proposalHasPrivacyWarning
-                ? `Review: ${proposal.selectionImpact.newClusterLinks} new cluster link${proposal.selectionImpact.newClusterLinks === 1 ? '' : 's'}; unknown or reused sources are called out.`
-                : 'No new cluster link, unknown provenance, or address-reuse warning.'
-            )}</span
-          >
-        </div>
+        {#if delayedSpendMode}<div class="selection-review renewal-review">
+            <strong
+              >{translate($locale, 'Signed by the {key}', { key: delayedSpendKeyName })}</strong
+            >
+            <span
+              >{translate(
+                $locale,
+                'One coin goes to one address. The network fee is deducted from it.'
+              )}</span
+            >
+          </div>{:else}<div class:warning={proposalHasPrivacyWarning} class="selection-review">
+            <strong
+              >{proposal.selectionImpact.selectedInputCount}
+              {translate($locale, 'funding coin')}{translate(
+                $locale,
+                proposal.selectionImpact.selectedInputCount === 1 ? '' : 's'
+              )} · {proposal.selectionImpact.strategy.replace('_', ' ')}</strong
+            ><span
+              >{translate(
+                $locale,
+                proposalHasPrivacyWarning
+                  ? `Review: ${proposal.selectionImpact.newClusterLinks} new cluster link${proposal.selectionImpact.newClusterLinks === 1 ? '' : 's'}; unknown or reused sources are called out.`
+                  : 'No new cluster link, unknown provenance, or address-reuse warning.'
+              )}</span
+            >
+          </div>{/if}
         {#if renewalMode}<div class="selection-review renewal-review">
             <strong>{translate($locale, 'Protection restarts after confirmation')}</strong><span
               >{translate(
                 $locale,
                 'Only this coin moves. The network fee is the only amount leaving your wallet.'
+              )}</span
+            >
+          </div>{/if}
+        {#if !renewalMode && !delayedSpendMode && proposalReadyCoins.length}<div
+            class="selection-review renewal-review"
+          >
+            <strong
+              >{translate(
+                $locale,
+                proposalReadyCoins.length === 1
+                  ? 'One recovery-ready coin is being spent'
+                  : '{count} recovery-ready coins are being spent',
+                { count: proposalReadyCoins.length }
+              )}</strong
+            >
+            <span
+              >{translate(
+                $locale,
+                'Your normal keys approve this payment. Any wallet change begins a fresh wait after confirmation.'
               )}</span
             >
           </div>{/if}
@@ -1455,7 +1760,11 @@
           </div>{/if}
         <TransactionReviewDetails
           {proposal}
-          policy={`${wallet?.threshold} of ${wallet?.cosigners.length}`}
+          policy={proposal.spendPath === 'delayed'
+            ? `${delayedSpendKeyName} only`
+            : wallet?.recoveryTemplate?.type === 'recovery'
+              ? '2 of 3 primary keys'
+              : `${wallet?.threshold} of ${wallet?.cosigners.length}`}
           onChangeAddress={() => (changeAddressOpen = true)}
         />
         {#if !proposal.canFinalize}<div class="psbt-actions">
@@ -1534,7 +1843,7 @@
       {#if wallet}<aside class="signer-side-panel">
           <SignerSummary
             signers={signerItems}
-            required={wallet.threshold}
+            required={proposal.required}
             signedFingerprints={proposal.signedFingerprints}
             collecting
             ondiscard={(signer) => {
@@ -1603,7 +1912,11 @@
       <TransactionReviewDetails
         {proposal}
         compact
-        policy={`${wallet?.threshold} of ${wallet?.cosigners.length}`}
+        policy={proposal.spendPath === 'delayed'
+          ? `${delayedSpendKeyName} only`
+          : wallet?.recoveryTemplate?.type === 'recovery'
+            ? '2 of 3 primary keys'
+            : `${wallet?.threshold} of ${wallet?.cosigners.length}`}
         changeAddressOverride={hardwareChangeAddress}
         onChangeAddress={() => (hardwareChangeAddressOpen = true)}
       />

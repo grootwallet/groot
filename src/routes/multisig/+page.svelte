@@ -42,7 +42,7 @@
   import { toast } from '$lib/stores/toasts';
   import { coldcardPolicyFilename } from '$lib/transfer';
   import { useWalletShellContext } from '$lib/wallet/shell-context';
-  import { policyMaturitySummary } from '$lib/wallet/policy';
+  import { policyMaturitySummary, walletPolicyPresentation } from '$lib/wallet/policy';
   import {
     matchingPolicyVerification,
     policyReadinessLabel,
@@ -86,10 +86,9 @@
     snapshot ? policyMaturitySummary(snapshot.utxos, snapshot.chainTip) : null
   );
   const delayedPolicyType = $derived(
-    wallet?.spendingPaths?.some((path) => path.availableAfterBlocks === 52_560)
-      ? 'inheritance'
-      : 'recovery'
+    wallet?.policyType === 'inheritance' ? 'inheritance' : 'recovery'
   );
+  const policyPresentation = $derived(wallet ? walletPolicyPresentation(wallet) : null);
   onDestroy(() => {
     healthPinChallenge = '';
     healthPinPositions = '';
@@ -444,13 +443,13 @@
           )}
         </p>
       </div>
-      <span class="policy-pill">{wallet.threshold} of {wallet.cosigners.length}</span>
+      <span class="policy-pill">{policyPresentation?.summary}</span>
     </header>
     <section class="vault-hero">
       <span><ShieldCheck size={22} /></span>
       <div class="vault-summary">
         <small><Amount value={snapshot?.balance.total ?? 0} /></small><strong
-          >{wallet.threshold} of {wallet.cosigners.length}</strong
+          >{policyPresentation?.summary}</strong
         >
         <p>
           {translate($locale, 'Native SegWit ·')}
@@ -510,11 +509,11 @@
                 delayedPolicyType === 'inheritance' ? 'INHERITANCE TIMELINE' : 'RECOVERY TIMELINE'
               )}
             </p>
-            <h2>{translate($locale, 'When the extra key can spend')}</h2>
+            <h2>{translate($locale, 'When your backup key becomes available')}</h2>
             <p>
               {translate(
                 $locale,
-                'Each confirmed coin has its own wait before the recovery or heir key can spend it.'
+                'Each confirmed coin has its own wait before the recovery or heir key becomes available.'
               )}
             </p>
           </div>
@@ -527,8 +526,8 @@
               maturitySummary.mature > 0
                 ? '{count} can be spent'
                 : maturitySummary.approaching > 0
-                  ? '{count} unlocking soon'
-                  : 'All extra keys locked',
+                  ? '{count} available soon'
+                  : 'Backup keys protected',
               {
                 count:
                   maturitySummary.mature > 0 ? maturitySummary.mature : maturitySummary.approaching
@@ -538,13 +537,12 @@
         </div>
         <div class="policy-maturity-stats">
           <div>
-            <strong>{maturitySummary.immature}</strong><span
-              >{translate($locale, 'Key locked')}</span
+            <strong>{maturitySummary.immature}</strong><span>{translate($locale, 'Protected')}</span
             >
           </div>
           <div>
             <strong>{maturitySummary.approaching}</strong><span
-              >{translate($locale, 'Unlocking soon')}</span
+              >{translate($locale, 'Available soon')}</span
             >
           </div>
           <div>
@@ -575,13 +573,13 @@
           <p>
             {translate(
               $locale,
-              'Groot does not yet coordinate delayed-key spending. Send remains fail-closed on the reviewed 2-of-3 path.'
+              'When it is available, choose that coin to send with the recovery or heir key.'
             )}
           </p>
           {#if maturitySummary.mature > 0}<p>
               {translate(
                 $locale,
-                'To lock the extra key again, choose Renew protection for that coin. Groot moves only that coin and starts a new wait after confirmation.'
+                'To make the extra key wait again, open that coin and choose the policy-specific restart action.'
               )}
             </p>{/if}
         </details>
@@ -593,11 +591,11 @@
           <div>
             <h2>{translate($locale, 'Signing keys')}</h2>
             <p>
-              {translate($locale, 'Sign with any')}
-              {wallet.threshold}
               {translate(
                 $locale,
-                'keys. Open a signer to inspect its identity, health, and\n              wallet-policy status.'
+                policyPresentation?.delayed
+                  ? 'Payments normally use 2 of 3 primary keys. The separate backup key becomes available per coin after its wait.'
+                  : `Sign with any ${wallet.threshold} keys. Open a signer to inspect its identity, health, and wallet-policy status.`
               )}
             </p>
           </div>

@@ -138,6 +138,7 @@ pub fn run() {
             wallet::multisig_setup_commands::multisig_address_discard,
             wallet::multisig_proposal_commands::multisig_tx_prepare,
             wallet::multisig_proposal_commands::multisig_policy_renewal_prepare,
+            wallet::multisig_proposal_commands::multisig_delayed_spend_prepare,
             wallet::multisig_proposal_commands::multisig_tx_max_spend,
             wallet::multisig_coin_selection_preview,
             wallet::multisig_proposal_commands::multisig_proposals,

@@ -655,6 +655,8 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
         required: 1,
         canFinalize: false,
         signedFingerprints: [],
+        spendPath: 'primary',
+        eligibleSignerFingerprints: [this._externalWallet?.signer.fingerprint ?? 'f00dbabe'],
         status: 'collecting',
         createdAt: new Date().toISOString()
       });
@@ -1680,6 +1682,8 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       required: this._multisig.threshold,
       canFinalize: false,
       signedFingerprints: [],
+      spendPath: 'primary',
+      eligibleSignerFingerprints: this._multisig.cosigners.map((key) => key.fingerprint),
       status: 'collecting',
       createdAt: new Date().toISOString()
     };
@@ -1716,6 +1720,36 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     this._multisigProposals.set(proposal.proposalId, proposal);
     return structuredClone(proposal);
   }
+  async prepareMultisigDelayedSpend(
+    outpoint: string,
+    recipient: string,
+    rawLabel: string,
+    selectedRate: ReturnType<typeof feeRate>
+  ) {
+    const coin = this._coins.find((candidate) => candidate.outpoint === outpoint);
+    const multisig = this._multisig;
+    const template = multisig?.recoveryTemplate;
+    if (!coin || coin.frozen || coin.policyMaturity?.state !== 'mature')
+      throw new WalletError('coin_unavailable', 'This coin is not ready for the extra key.');
+    if (!multisig || !template || template.type !== 'recovery')
+      throw new WalletError('internal_error', 'This wallet has no delayed spending key.');
+    const fee = Math.ceil(Number(selectedRate) * 220);
+    const proposal = await this.prepareMultisigPayment(
+      recipient,
+      rawLabel,
+      sats(coin.amount - fee),
+      selectedRate,
+      { mode: 'manual', outpoints: [outpoint] }
+    );
+    const eligible = multisig.cosigners
+      .filter((key) => template.recovery.signerIds.includes(key.id))
+      .map((key) => key.fingerprint);
+    proposal.spendPath = 'delayed';
+    proposal.eligibleSignerFingerprints = eligible;
+    proposal.required = template.recovery.threshold;
+    this._multisigProposals.set(proposal.proposalId, proposal);
+    return structuredClone(proposal);
+  }
   async prepareMultisigAcceleration(
     txid: string,
     method: import('./contracts').AccelerationMethod,
@@ -1734,6 +1768,8 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       required: this._multisig?.threshold ?? 2,
       canFinalize: false,
       signedFingerprints: [],
+      spendPath: 'primary',
+      eligibleSignerFingerprints: this._multisig?.cosigners.map((key) => key.fingerprint) ?? [],
       status: 'collecting',
       createdAt: new Date().toISOString()
     };
@@ -1877,9 +1913,15 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     if (!proposal || !this._multisig)
       throw new WalletError('proposal_not_found', 'Payment proposal was not found.');
     const next = fingerprint
-      ? this._multisig.cosigners.find((key) => key.fingerprint === fingerprint)
+      ? this._multisig.cosigners.find(
+          (key) =>
+            key.fingerprint === fingerprint &&
+            proposal.eligibleSignerFingerprints.includes(key.fingerprint)
+        )
       : this._multisig.cosigners.find(
-          (key) => !proposal.signedFingerprints.includes(key.fingerprint)
+          (key) =>
+            proposal.eligibleSignerFingerprints.includes(key.fingerprint) &&
+            !proposal.signedFingerprints.includes(key.fingerprint)
         );
     if (!next)
       throw new WalletError(

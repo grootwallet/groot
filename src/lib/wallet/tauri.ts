@@ -687,6 +687,19 @@ export class TauriWalletAdapter implements WalletPort {
       feeRate: Number(feeRate)
     });
   }
+  prepareMultisigDelayedSpend(
+    outpoint: string,
+    recipient: string,
+    label: string,
+    feeRate: FeeRate
+  ) {
+    return command<MultisigProposal>('multisig_delayed_spend_prepare', {
+      outpoint,
+      recipient,
+      label,
+      feeRate: Number(feeRate)
+    });
+  }
   prepareMultisigAcceleration(
     txid: string,
     method: import('./contracts').AccelerationMethod,
