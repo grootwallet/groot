@@ -120,3 +120,13 @@ bounded process. The narrow documented-argv exception exposes no device
 metadata and does not weaken the atomic fingerprint/account-key proof.
 Physical retesting
 remains required; automated fixtures do not prove vendor timing or USB behavior.
+
+A subsequent packaged retest failed for both BitBox models. Sanitized host
+inspection found that HWI's documented BitBoxApp cache contained an app Noise
+key but no paired-device public-key list. HWI 3.2.0 can still identify USB
+devices in that state, but its external-GUI mode deliberately refuses first
+pairing because it cannot safely present and confirm the pairing code. Groot
+therefore recognizes only HWI's fixed unpaired-device message, returns a stable
+`hardware_pairing_required` error without forwarding raw HWI text, and skips
+futile transient retries. The user must pair and open the exact device in
+BitBoxApp, fully quit BitBoxApp, and scan again in Groot.

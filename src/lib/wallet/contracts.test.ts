@@ -13,6 +13,7 @@ const remediationErrorCodes = [
   'invalid_payjoin_uri',
   'invalid_scan_settings',
   'hardware_timeout',
+  'hardware_pairing_required',
   'hardware_response_too_large',
   'hardware_command_failed',
   'hardware_io_error',

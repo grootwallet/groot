@@ -103,6 +103,12 @@ describe('locale preferences', () => {
 
   it('does not leak English native errors into non-English UI', () => {
     expect(localizedError({ code: 'invalid_credential' }, 'es')).toBe('Credencial incorrecta.');
+    expect(localizedError({ code: 'hardware_pairing_required' }, 'fr')).toBe(
+      'Associez cette BitBox dans BitBoxApp et vérifiez que BitBoxApp peut l’ouvrir. Quittez ensuite complètement BitBoxApp, puis relancez la recherche dans Groot.'
+    );
+    expect(localizedError({ code: 'hardware_pairing_required' }, 'es')).toBe(
+      'Empareja esta BitBox en BitBoxApp y comprueba que BitBoxApp puede abrirla. Después, cierra BitBoxApp por completo y vuelve a buscar en Groot.'
+    );
     expect(localizedError(new Error('Uncatalogued native detail'), 'fr')).toBe(
       'Une erreur est survenue. Réessayez.'
     );

@@ -1631,12 +1631,21 @@ fn missing_hardware_xpub(
     hwi_message: Option<&str>,
     fallback: &str,
 ) -> ApiError {
+    let safe_detail = hwi_message.unwrap_or_default().to_ascii_lowercase();
+    if device_type.eq_ignore_ascii_case("bitbox02")
+        && (safe_detail.contains("device not paired yet")
+            || safe_detail.contains("pair using the bitboxapp"))
+    {
+        return api_error(
+            "hardware_pairing_required",
+            "Pair this BitBox in BitBoxApp, confirm that BitBoxApp can open it, then fully quit BitBoxApp and scan again in Groot.",
+        );
+    }
     if matches!(code, Some(-3 | -12 | -14 | -15 | -8 | -9)) {
         return missing_hwi_value(code, fallback);
     }
     match device_type.to_ascii_lowercase().as_str() {
         "ledger" => {
-            let safe_detail = hwi_message.unwrap_or_default().to_ascii_lowercase();
             let message = if code == Some(-7) || safe_detail.contains("bad argument") {
                 "Ledger rejected this test-chain account path. Open the Bitcoin Test app—not the main Bitcoin app—then reconnect and try again."
             } else if code == Some(-13)

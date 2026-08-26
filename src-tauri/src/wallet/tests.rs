@@ -1510,6 +1510,21 @@ fn hwi_response_codes_become_safe_actionable_errors() {
     assert!(bitbox_xpub.message.contains("password again"));
     assert!(!bitbox_xpub.message.contains("m/48'"));
 
+    let bitbox_pairing = missing_hardware_xpub(
+        "bitbox02",
+        "m/84'/1'/0'",
+        Some(-3),
+        Some(
+            "Could not open client or get fingerprint information: Device not paired yet. Please pair using the BitBoxApp, then close the BitBoxApp and try again.",
+        ),
+        "fallback",
+    );
+    assert_eq!(bitbox_pairing.code, "hardware_pairing_required");
+    assert!(bitbox_pairing
+        .message
+        .contains("Pair this BitBox in BitBoxApp"));
+    assert!(!bitbox_pairing.message.contains("fingerprint"));
+
     let cancelled_xpub =
         missing_hardware_xpub("ledger", "m/84'/1'/0'", Some(-14), None, "fallback");
     assert!(cancelled_xpub.message.contains("cancelled"));

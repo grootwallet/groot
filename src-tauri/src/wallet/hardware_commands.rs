@@ -1461,10 +1461,22 @@ fn read_bitbox_account_identity(
 }
 
 fn bitbox_account_key_response_is_retryable(output: &[u8]) -> bool {
-    serde_json::from_slice::<serde_json::Value>(output)
-        .ok()
-        .and_then(|value| value.get("code").and_then(serde_json::Value::as_i64))
-        .is_some_and(bitbox_account_key_code_is_retryable)
+    let Ok(value) = serde_json::from_slice::<serde_json::Value>(output) else {
+        return false;
+    };
+    let pairing_required = value
+        .get("error")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_ascii_lowercase)
+        .is_some_and(|message| {
+            message.contains("device not paired yet")
+                || message.contains("pair using the bitboxapp")
+        });
+    !pairing_required
+        && value
+            .get("code")
+            .and_then(serde_json::Value::as_i64)
+            .is_some_and(bitbox_account_key_code_is_retryable)
 }
 
 fn bitbox_account_key_code_is_retryable(code: i64) -> bool {
@@ -2800,6 +2812,9 @@ mod health_check_tests {
         ));
         assert!(bitbox_account_key_response_is_retryable(
             b"{\"error\":\"busy\",\"code\":-15}"
+        ));
+        assert!(!bitbox_account_key_response_is_retryable(
+            b"{\"error\":\"Device not paired yet. Please pair using the BitBoxApp, then close the BitBoxApp and try again.\",\"code\":-3}"
         ));
         assert!(!bitbox_account_key_response_is_retryable(
             b"{\"error\":\"cancelled\",\"code\":-14}"

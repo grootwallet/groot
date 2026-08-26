@@ -483,6 +483,10 @@ const errorCategoryCopy = {
     fr: 'Le portefeuille matériel est indisponible. Vérifiez sa connexion et réessayez.',
     es: 'La cartera física no está disponible. Comprueba la conexión e inténtalo de nuevo.'
   },
+  hardware_pairing_required: {
+    fr: 'Associez cette BitBox dans BitBoxApp et vérifiez que BitBoxApp peut l’ouvrir. Quittez ensuite complètement BitBoxApp, puis relancez la recherche dans Groot.',
+    es: 'Empareja esta BitBox en BitBoxApp y comprueba que BitBoxApp puede abrirla. Después, cierra BitBoxApp por completo y vuelve a buscar en Groot.'
+  },
   hardware_busy: {
     fr: 'Le portefeuille matériel est occupé. Terminez l’autre opération et réessayez.',
     es: 'La cartera física está ocupada. Termina la otra operación e inténtalo de nuevo.'
