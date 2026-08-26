@@ -1,7 +1,17 @@
 <script lang="ts">
   import { locale } from '$lib/i18n';
   import { translate, localizedError } from '$lib/i18n-catalog';
-  import { Check, ChevronDown, ChevronRight, Copy, Plus, QrCode, Trash2 } from '@lucide/svelte';
+  import {
+    Check,
+    ChevronDown,
+    ChevronRight,
+    Copy,
+    Plus,
+    QrCode,
+    Shield,
+    ShieldCheck,
+    Trash2
+  } from '@lucide/svelte';
   import QRCode from 'qrcode';
   import { onMount, tick } from 'svelte';
   import Button from '$lib/components/Button.svelte';
@@ -320,7 +330,14 @@
       <article class:active={current?.id === address.id}>
         <button
           class="awaiting-select"
-          aria-label={translate($locale, 'View {label}', { label: address.label })}
+          aria-label={`${translate($locale, 'View {label}', { label: address.label })}${
+            externalSigner
+              ? `. ${translate(
+                  $locale,
+                  address.hardwareVerifiedAt ? 'Hardware verified' : 'Hardware not verified'
+                )}`
+              : ''
+          }`}
           onclick={() => {
             current = address;
             showDetails = false;
@@ -328,7 +345,17 @@
           ><span class="status-dot"></span><span
             ><strong>{address.label}</strong><small>{compactAddress(address.address)}</small></span
           ><span class="right-meta"
-            >{translate($locale, 'Awaiting')}<small
+            >{#if externalSigner}<span
+                class="address-verification-state"
+                class:verified={Boolean(address.hardwareVerifiedAt)}
+                >{#if address.hardwareVerifiedAt}<ShieldCheck size={12} />{translate(
+                    $locale,
+                    'Hardware verified'
+                  )}{:else}<Shield size={12} />{translate(
+                    $locale,
+                    'Hardware not verified'
+                  )}{/if}</span
+              >{:else}{translate($locale, 'Awaiting')}{/if}<small
               ><LocalTimestamp value={address.created} /></small
             ></span
           ></button

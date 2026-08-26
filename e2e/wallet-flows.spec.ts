@@ -464,6 +464,10 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   await expect(
     page.locator('.address-label').getByText('Not verified', { exact: true })
   ).toBeVisible();
+  const awaitingDeposit = page
+    .locator('.awaiting-addresses')
+    .getByRole('button', { name: /View Verified deposit/ });
+  await expect(awaitingDeposit.getByText('Hardware not verified', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Verify on device' }).click();
   await expect(
     page.getByRole('status', { name: 'Hardware device scan in progress' })
@@ -490,6 +494,8 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   await expect(hardwareApproval).toContainText('approve it on the device');
   const hardwareVerification = page.getByRole('button', { name: /Verified on hardware/ });
   await expect(hardwareVerification).toBeVisible();
+  await expect(awaitingDeposit.getByText('Hardware verified', { exact: true })).toBeVisible();
+  await expect(awaitingDeposit.getByText('Hardware not verified', { exact: true })).toHaveCount(0);
   await hardwareVerification.click();
   await expect(page.getByRole('tooltip')).toHaveText(
     'This exact address was shown on and matched by a saved hardware signer. The verification applies only to this address.'
@@ -498,7 +504,9 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
     true
   );
   await page.getByRole('button', { name: 'Show address details' }).click();
-  await expect(page.getByText('Hardware verified', { exact: true })).toBeVisible();
+  await expect(
+    page.locator('dl.optional-details dt').filter({ hasText: /^Hardware verified$/ })
+  ).toBeVisible();
   await expect(page.getByText('Signer fingerprint', { exact: true })).toBeVisible();
 
   await page.getByRole('link', { name: 'Overview' }).click();

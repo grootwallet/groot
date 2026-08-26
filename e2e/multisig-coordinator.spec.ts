@@ -143,6 +143,10 @@ test('keeps multisig receive verification disclosure visibly expandable', async 
       .filter({ hasText: /^Receive$/ })
       .click();
   else await page.getByRole('main').getByRole('link', { name: 'Receive' }).click();
+  const awaitingAddresses = page.locator('.awaiting-addresses');
+  await expect(
+    awaitingAddresses.getByText('Hardware not verified', { exact: true }).first()
+  ).toBeVisible();
   await page.evaluate(() => sessionStorage.setItem('fixture-hardware-review-rejected', '1'));
   await page.getByRole('button', { name: 'Verify on device' }).click();
   const dialog = page.getByRole('dialog', { name: 'Verify receive address' });
@@ -188,6 +192,9 @@ test('keeps multisig receive verification disclosure visibly expandable', async 
   await dialog.getByRole('button', { name: /^Trezor / }).click();
   await expect(dialog).toBeHidden();
   await expect(page.getByRole('button', { name: /Verified on hardware/ })).toBeVisible();
+  await expect(
+    awaitingAddresses.getByText('Hardware verified', { exact: true }).first()
+  ).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true
   );

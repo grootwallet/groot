@@ -1846,6 +1846,21 @@ code {
   font-size: 10px;
   text-transform: capitalize;
 }
+.address-verification-state {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: none;
+  white-space: nowrap;
+}
+.address-verification-state.verified {
+  color: var(--success);
+}
 .empty-state {
   border: 1px dashed var(--border-strong);
   border-radius: 12px;

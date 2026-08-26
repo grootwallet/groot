@@ -164,6 +164,10 @@ export const componentCopy = {
       es: 'La conexión actual de Ledger con Groot debe volver a autorizar esta política para cada solicitud de firma. Mantén esta referencia abierta hasta que Ledger llegue a la transacción.'
     },
   'Hardware verified': { fr: 'Vérifiée sur le matériel', es: 'Verificada en el dispositivo' },
+  'Hardware not verified': {
+    fr: 'Non vérifiée sur le matériel',
+    es: 'No verificada en el dispositivo'
+  },
   'I compared the threshold and every signer key': {
     fr: 'J’ai comparé le seuil et chaque clé de signataire',
     es: 'He comparado el umbral y cada clave de firmante'
