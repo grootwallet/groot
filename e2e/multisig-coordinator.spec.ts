@@ -644,6 +644,7 @@ test('shows signer details and runs honest health checks', async ({ page }) => {
   await expect(
     coldcardDialog.locator('.health-card').getByText('Signer matches this wallet.')
   ).toBeVisible();
+  await expect(coldcardDialog.locator('.health-heading strong')).toHaveCSS('font-size', '11px');
   await expect(coldcardDialog.getByText(/Last checked/)).toBeVisible();
   await coldcardDialog.getByRole('button', { name: 'Close' }).click();
 

@@ -7293,6 +7293,9 @@ code {
   flex-direction: column;
   gap: 2px;
 }
+.health-heading strong {
+  font-size: 11px;
+}
 .health-heading small {
   color: var(--muted);
   font-size: 9px;
