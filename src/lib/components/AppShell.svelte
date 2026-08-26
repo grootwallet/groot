@@ -31,6 +31,7 @@
   import { formatWalletCount, locale, t, type MessageKey } from '$lib/i18n';
   import { provideWalletShellContext } from '$lib/wallet/shell-context';
   import { multisigSetupSignerTarget, multisigSetupStageLabel } from '$lib/wallet/multisig-setup';
+  import { matchKeyboardShortcut, usesCommandModifier } from '$lib/keyboard-shortcuts';
   let { children } = $props();
   const nav: Array<{ href: string; label: MessageKey; icon: typeof LayoutGrid }> = [
     { href: '/', label: 'overview', icon: LayoutGrid },
@@ -69,6 +70,7 @@
   const startupStartedAt = Date.now();
   const minimumStartupGateMs = isPrototypeWallet ? 0 : 1_800;
   let navigationPending = $state(false);
+  let commandModifier = false;
   let selectedProfile = $derived(profiles.find((wallet) => wallet.id === selectedWalletId));
   let policyContext = $derived(
     selectedProfile?.kind === 'multisig' || page.url.pathname.startsWith('/multisig')
@@ -91,6 +93,52 @@
   );
   const sendHref = $derived(selectedProfile?.kind === 'multisig' ? '/multisig/send' : '/send');
   const showSetupResume = $derived(Boolean(multisigSetupDraft) && !onboardingRoute);
+
+  function handleKeyboardShortcut(event: KeyboardEvent) {
+    const primaryModifier = commandModifier
+      ? event.metaKey && !event.ctrlKey
+      : event.ctrlKey && !event.metaKey;
+    const target = event.target as HTMLElement | null;
+    if (
+      startupState !== 'ready' ||
+      onboardingRoute ||
+      lockedRoute ||
+      event.defaultPrevented ||
+      event.repeat ||
+      event.altKey ||
+      !primaryModifier ||
+      target?.closest('input, textarea, select, [contenteditable="true"]') ||
+      document.querySelector('[role="dialog"]')
+    )
+      return;
+
+    const shortcut = matchKeyboardShortcut(event);
+    if (!shortcut) return;
+
+    let destination: string;
+    switch (shortcut.id) {
+      case 'overview':
+        destination = '/';
+        break;
+      case 'activity':
+        destination = '/activity';
+        break;
+      case 'coins':
+        destination = '/coins';
+        break;
+      case 'settings':
+        destination = '/settings';
+        break;
+      case 'receive':
+        destination = receiveHref;
+        break;
+      case 'send':
+        destination = sendHref;
+        break;
+    }
+    event.preventDefault();
+    void goto(destination);
+  }
 
   async function refreshSetupDraft() {
     const generation = ++setupDraftReadGeneration;
@@ -235,6 +283,7 @@
 
   onMount(() => {
     initDenomination();
+    commandModifier = usesCommandModifier(navigator.platform);
     const unsubscribe = walletService.subscribe((event) => {
       if (event.type === 'payment_received')
         toast({
@@ -326,11 +375,13 @@
       if (document.visibilityState === 'visible') void liveSync?.runNow();
     };
     document.addEventListener('visibilitychange', wakeWhenVisible);
+    window.addEventListener('keydown', handleKeyboardShortcut);
     void resolveStartupRoute();
     return () => {
       unsubscribe();
       liveSync?.stop();
       document.removeEventListener('visibilitychange', wakeWhenVisible);
+      window.removeEventListener('keydown', handleKeyboardShortcut);
     };
   });
 </script>

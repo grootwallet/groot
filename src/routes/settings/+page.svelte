@@ -11,6 +11,7 @@
     HeartPulse,
     History,
     KeyRound,
+    Keyboard,
     LockKeyhole,
     Moon,
     Network,
@@ -51,6 +52,7 @@
   import type { CosignerDraft } from '$lib/multisig/policy';
   import { matchingDeviceForHealthCheck } from '$lib/hardware/health-check';
   import { amountUnit, denomination, formatAmount, setDenomination } from '$lib/denomination';
+  import { keyboardShortcuts, shortcutKeys, usesCommandModifier } from '$lib/keyboard-shortcuts';
   import {
     hardwareHealthChecks,
     hardwareHealthKey,
@@ -66,6 +68,7 @@
   let connected = $state<boolean | null>(null);
   let nodeStatus = $state<NodeStatus | null>(null);
   let theme = $state<'light' | 'dark'>('dark');
+  let commandModifier = $state(false);
   let profiles = $state<WalletProfile[]>([]);
   let selectedWalletId = $state<string | null>(null);
   let profileReadGeneration = 0;
@@ -202,6 +205,7 @@
     signerRenameError = $state(''),
     signerRenaming = $state(false);
   onMount(async () => {
+    commandModifier = usesCommandModifier(navigator.platform);
     const generation = ++profileReadGeneration;
     theme = document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
     const registry = await walletService.profiles();
@@ -1031,6 +1035,23 @@
             onclick={() => setDenomination('btc')}>BTC</button
           >
         </span>
+      </div>
+      <div class="setting-row keyboard-shortcut-row">
+        <span class="setting-icon"><Keyboard size={18} /></span><span
+          ><strong>{translate($locale, 'Keyboard shortcuts')}</strong><small
+            >{translate($locale, 'Navigate without leaving the keyboard.')}</small
+          ></span
+        >
+        <dl class="keyboard-shortcut-grid">
+          {#each keyboardShortcuts as shortcut}
+            <div>
+              <dt>{translate($locale, shortcut.label)}</dt>
+              <dd>
+                {#each shortcutKeys(shortcut, commandModifier) as key}<kbd>{key}</kbd>{/each}
+              </dd>
+            </div>
+          {/each}
+        </dl>
       </div>
     </div>
   </section>

@@ -3237,6 +3237,53 @@ code {
   font-size: 10px;
   line-height: 1.4;
 }
+.keyboard-shortcut-row {
+  align-items: start !important;
+  padding-block: 14px !important;
+}
+.keyboard-shortcut-grid {
+  width: 250px;
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 16px;
+}
+.keyboard-shortcut-grid > div {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.keyboard-shortcut-grid dt {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.keyboard-shortcut-grid dd {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.keyboard-shortcut-grid kbd {
+  min-width: 21px;
+  min-height: 21px;
+  padding: 1px 5px;
+  border: 1px solid var(--border-strong);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: var(--surface-control);
+  color: var(--text);
+  display: inline-grid;
+  place-items: center;
+  font-family: inherit;
+  font-size: 9px;
+  font-weight: 650;
+  line-height: 1;
+}
 .settings-list > button > svg:last-child {
   color: var(--muted-2);
 }
@@ -9974,6 +10021,14 @@ code {
   }
   .settings-page .settings-list > .language-setting-row {
     padding: 12px;
+  }
+  .settings-page .keyboard-shortcut-row {
+    grid-template-columns: 28px minmax(0, 1fr);
+  }
+  .settings-page .keyboard-shortcut-grid {
+    grid-column: 2 / -1;
+    width: 100%;
+    margin-top: 8px;
   }
   .settings-page .danger-zone > div {
     min-height: 0;

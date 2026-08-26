@@ -760,6 +760,45 @@ test('unlocks a Trezor before choosing its standard single-key wallet', async ({
   await expect(page.getByText('c0ffee03', { exact: true })).toBeVisible();
 });
 
+test('global keyboard shortcuts navigate safely and match the Settings reference', async ({
+  page
+}) => {
+  await page.goto('/');
+  const primary = (await page.evaluate(() => /Mac|iPhone|iPad|iPod/i.test(navigator.platform)))
+    ? 'Meta'
+    : 'Control';
+
+  await page.keyboard.press(`${primary}+2`);
+  await expect(page.getByRole('heading', { name: 'Activity' })).toBeVisible();
+  await page.keyboard.press(`${primary}+3`);
+  await expect(page.getByRole('heading', { name: 'Coins' })).toBeVisible();
+  await page.keyboard.press(`${primary}+4`);
+  await expect(page).toHaveURL(/\/settings$/);
+  await expect(page.getByRole('heading', { name: 'App appearance' })).toBeVisible();
+
+  const shortcuts = page.locator('.keyboard-shortcut-grid');
+  await expect(shortcuts).toBeVisible();
+  await expect(shortcuts.locator('dt')).toHaveText([
+    'Overview',
+    'Activity',
+    'Coins',
+    'Settings',
+    'Receive',
+    'Send'
+  ]);
+
+  await page.keyboard.press(`${primary}+Shift+R`);
+  await expect(page).toHaveURL(/\/receive$/);
+  await page.keyboard.press(`${primary}+Shift+S`);
+  await expect(page).toHaveURL(/\/send$/);
+
+  const labelInput = page.getByRole('textbox', { name: 'Payment label' });
+  await labelInput.focus();
+  await page.keyboard.press(`${primary}+2`);
+  await expect(page).toHaveURL(/\/send$/);
+  await expect(labelInput).toBeFocused();
+});
+
 test('overview, activity, UTXOs, and settings expose durable states', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible();

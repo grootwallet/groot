@@ -73,6 +73,11 @@ export const settingsCopy = {
       fr: 'Conservez-les ensemble. Les mots de récupération ne peuvent être réaffichés que dans le flux de sauvegarde natif authentifié ; la phrase secrète du portefeuille ne peut être ni affichée ni réinitialisée.',
       es: 'Guárdalos juntos. Las palabras de recuperación solo pueden volver a mostrarse en el flujo nativo de copia autenticado; la frase de contraseña de la cartera no se puede mostrar ni restablecer.'
     },
+  'Keyboard shortcuts': { fr: 'Raccourcis clavier', es: 'Atajos de teclado' },
+  'Navigate without leaving the keyboard.': {
+    fr: 'Naviguez sans quitter le clavier.',
+    es: 'Navega sin dejar el teclado.'
+  },
   compact_filters: { fr: 'filtres compacts', es: 'filtros compactos' },
   '· height {height}': { fr: '· hauteur {height}', es: '· altura {height}' },
   '· initial download active': {
