@@ -991,7 +991,7 @@ test('pending incoming transaction opens CPFP review without offering sender-sid
   page
 }) => {
   await page.goto('/activity');
-  await page.getByRole('button', { name: /Invoice #104/ }).click();
+  await page.locator('.tx-row').filter({ hasText: 'Invoice #104' }).click();
   await expect(page.getByRole('link', { name: 'Increase fee (RBF)' })).toHaveCount(0);
   await page.getByRole('link', { name: 'Spend output (CPFP)' }).click();
   await expect(page).toHaveURL(/accelerate=cpfp/);
@@ -1005,7 +1005,7 @@ test('CPFP success identifies the fee-only child instead of a zero-sat payment',
   page
 }) => {
   await page.goto('/activity');
-  await page.getByRole('button', { name: /Invoice #104/ }).click();
+  await page.locator('.tx-row').filter({ hasText: 'Invoice #104' }).click();
   await page.getByRole('link', { name: 'Spend output (CPFP)' }).click();
   await page.getByRole('button', { name: 'Continue to sign' }).click();
   await page.getByLabel('Wallet passphrase', { exact: true }).fill('prototype-passphrase');
@@ -1022,10 +1022,10 @@ test('confirmed outgoing and pending incoming transactions do not offer sender-s
   page
 }) => {
   await page.goto('/activity');
-  await page.getByRole('button', { name: /Hardware order/ }).click();
+  await page.locator('.tx-row').filter({ hasText: 'Hardware order' }).click();
   await expect(page.getByRole('link', { name: 'Increase fee (RBF)' })).toHaveCount(0);
   await page.getByRole('button', { name: 'Close' }).click();
-  await page.getByRole('button', { name: /Invoice #104/ }).click();
+  await page.locator('.tx-row').filter({ hasText: 'Invoice #104' }).click();
   await expect(page.getByRole('link', { name: 'Increase fee (RBF)' })).toHaveCount(0);
 });
 
@@ -1269,9 +1269,9 @@ test('coin control selects, freezes, and carries coins into send', async ({ page
   await expect(
     page.locator('.send-coin-picker').getByText('Savings', { exact: true }).first()
   ).toBeVisible();
-  await expect(page.locator('.send-coin-picker label').first().getByRole('listitem')).toHaveCount(
-    0
-  );
+  await expect(
+    page.locator('.send-coin-picker label').first().getByRole('listitem', { name: 'Savings' })
+  ).toBeVisible();
   await coinMode.click();
   await selectionPreview.getByRole('button', { name: 'Use privacy-first selection' }).click();
   await expect(
@@ -1473,7 +1473,7 @@ test('fee estimate failure never invents a send rate and preserves the custom pa
 
 test('fee estimate failure preserves explicit CPFP acceleration', async ({ page }) => {
   await page.goto('/activity?fixture-fee-estimates-unavailable=1');
-  await page.getByRole('button', { name: /Invoice #104/ }).click();
+  await page.locator('.tx-row').filter({ hasText: 'Invoice #104' }).click();
   await page.getByRole('link', { name: 'Spend output (CPFP)' }).click();
   await expect(page.getByRole('heading', { name: 'Enter a custom fee rate' })).toBeVisible();
   await expect(page.getByText(/will not invent one/)).toBeVisible();

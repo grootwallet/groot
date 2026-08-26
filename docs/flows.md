@@ -51,7 +51,7 @@ Deletion is device-local. It never implies that transaction history disappeared 
 
 ## Receive
 
-Opening Receive or Send first pauses and cancels automatic sync. Snapshot reads wait on a blocking worker rather than the native window thread, so the route remains responsive while an in-flight sync reaches its cancellation boundary.
+Opening Receive or Send first pauses and cancels automatic sync. Snapshot and proposal reads wait on a blocking worker rather than the native window thread, so the route remains responsive while an in-flight sync reaches its cancellation boundary.
 
 `unlock-scoped recent labels or typed full-history matches → choose one to five new/reused labels → recovery-gap check → atomic reveal+permanent assignments → QR/copy`
 

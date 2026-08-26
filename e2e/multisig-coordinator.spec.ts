@@ -884,9 +884,9 @@ test('selects and freezes multisig coins before entering the send flow', async (
   await expect(
     page.locator('.send-coin-picker').getByText('Savings', { exact: true }).first()
   ).toBeVisible();
-  await expect(page.locator('.send-coin-picker label').first().getByRole('listitem')).toHaveCount(
-    0
-  );
+  await expect(
+    page.locator('.send-coin-picker label').first().getByRole('listitem', { name: 'Savings' })
+  ).toBeVisible();
   await coinMode.click();
   await selectionPreview.getByRole('button', { name: 'Use privacy-first selection' }).click();
   await expect(

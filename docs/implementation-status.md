@@ -2,6 +2,8 @@
 
 This ledger prevents prototype UI from being mistaken for production wallet behavior. “Implemented” means wired through the real Tauri adapter; “browser fixture” means deterministic UI behavior only.
 
+v0.4.47 fixes the packaged Testnet4 freeze captured while automatic Core history sync owned the wallet-operation lock and an external-signer proposal read waited synchronously on the native window thread. External-signer proposal reads now use Tauri's blocking worker pool, and source-level scheduling coverage includes all three wallet proposal readers. The authoritative database was verified to retain the spendable unconfirmed output reported as unavailable by the interrupted UI load. No wallet, profile, proposal, registry, or network-settings format changes.
+
 v0.4.46 aligns the Privacy & history help controls directly beside their definition labels with consistent spacing and matching vertical bounds. The existing accessible hover, focus, and touch tooltip behavior is unchanged, and the compact layout remains aligned at desktop and mobile widths.
 
 v0.4.45 applies the shared accessible label-tag treatment across every wallet-label surface without changing persisted formats. Transaction rows and details, receive requests and address details, active-payment callouts, coin selectors and provenance, multisig coin timelines, and resumed recipient verification now preserve and display their complete authoritative label sets as tags. Signer, device, and wallet identities remain ordinary text. Desktop and mobile regressions cover transaction details and receive-address details, including discreet-mode masking.

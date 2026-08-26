@@ -85,7 +85,7 @@ test('renews one mature coin without merging another coin', async ({ page }) => 
   await page.getByText('How it works').click();
   await expect(page.getByText(/No other coin is combined/)).toBeVisible();
   await expect(page.getByText(/gets a fresh 4,320-block wait/)).toBeVisible();
-  await page.getByLabel('Permanent transaction label').fill('Renew savings protection');
+  await page.getByLabel('Transaction label').fill('Renew savings protection');
   await page.getByRole('button', { name: 'Review protection renewal' }).click();
 
   await expect(page.getByText('New protected coin')).toBeVisible();

@@ -1904,44 +1904,46 @@ pub(crate) fn load_external_proposal(
 }
 
 #[tauri::command]
-pub fn external_signer_proposals(
-    app: AppHandle,
-    state: State<'_, AppState>,
-) -> ApiResult<Vec<MultisigProposalDto>> {
-    let _operation = operation_guard(&state)?;
-    require_unlocked(&app, &state)?;
-    let metadata = read_external_signer_metadata(&app)?;
-    let mut db = open_db(&app)?;
-    let wallet = load_wallet(&mut db)?;
-    let mut statement = db.prepare(
-        "SELECT proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at, selection_strategy, fee_difference_vs_private FROM groot_proposals WHERE status IN ('collecting','ready') ORDER BY created_at DESC",
-    ).map_err(internal)?;
-    let rows = statement
-        .query_map([], |row| {
-            Ok((
-                row.get(0)?,
-                row.get(1)?,
-                row.get(2)?,
-                row.get(3)?,
-                row.get(4)?,
-                row.get(5)?,
-                row.get(6)?,
-                row.get(7)?,
-                row.get(8)?,
-                row.get(9)?,
-                row.get(10)?,
-            ))
+pub async fn external_signer_proposals(app: AppHandle) -> ApiResult<Vec<MultisigProposalDto>> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let _operation = operation_guard(&state)?;
+        require_unlocked(&app, &state)?;
+        let metadata = read_external_signer_metadata(&app)?;
+        let mut db = open_db(&app)?;
+        let wallet = load_wallet(&mut db)?;
+        let mut statement = db.prepare(
+            "SELECT proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at, selection_strategy, fee_difference_vs_private FROM groot_proposals WHERE status IN ('collecting','ready') ORDER BY created_at DESC",
+        ).map_err(internal)?;
+        let rows = statement
+            .query_map([], |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                    row.get(5)?,
+                    row.get(6)?,
+                    row.get(7)?,
+                    row.get(8)?,
+                    row.get(9)?,
+                    row.get(10)?,
+                ))
+            })
+            .map_err(internal)?;
+        rows.map(|row| {
+            external_proposal_dto(
+                row.map_err(internal)?,
+                &metadata.signer.fingerprint,
+                &wallet,
+                &db,
+            )
         })
-        .map_err(internal)?;
-    rows.map(|row| {
-        external_proposal_dto(
-            row.map_err(internal)?,
-            &metadata.signer.fingerprint,
-            &wallet,
-            &db,
-        )
+        .collect()
     })
-    .collect()
+    .await
+    .map_err(internal)?
 }
 
 pub(crate) fn import_external_proposal(
