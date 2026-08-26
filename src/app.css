@@ -2128,6 +2128,14 @@ code {
   border-radius: 7px;
   background: var(--surface-control);
 }
+.label-suggestions .tooltip-anchor {
+  flex: 0 1 min(180px, 25%);
+  min-width: 0;
+}
+.label-suggestions .tooltip-anchor button {
+  width: 100%;
+  max-width: 100%;
+}
 .label-token-field {
   display: flex;
   flex-wrap: wrap;

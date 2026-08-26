@@ -124,12 +124,9 @@ describe('locale preferences', () => {
       'Ce code PIN protège uniquement les données locales de Groot. Ce n’est pas une phrase secrète de signataire matériel et il ne fait pas partie de la sauvegarde de la graine d’un signataire.'
     );
     expect(
-      translate(
-        'es',
-        'The permanent labels inherited from this coin’s receive address or funding inputs.'
-      )
+      translate('es', 'The labels inherited from this coin’s receive address or funding inputs.')
     ).toBe(
-      'Las etiquetas permanentes heredadas de la dirección de recepción de esta moneda o de sus entradas de financiación.'
+      'Las etiquetas heredadas de la dirección de recepción de esta moneda o de sus entradas de financiación.'
     );
     expect(translate('fr', 'More information')).toBe('Plus d’informations');
   });

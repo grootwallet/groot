@@ -341,12 +341,12 @@
       claimIntent = null;
       claimLabel = '';
       toast({
-        title: 'Permanent label saved',
+        title: 'Label saved',
         description: 'The previously unlabeled received output now has known local provenance.',
         tone: 'success'
       });
     } catch (cause) {
-      claimError = localizedError(cause, $locale, 'The permanent label could not be saved.');
+      claimError = localizedError(cause, $locale, 'The label could not be saved.');
     } finally {
       claimBusy = false;
     }
@@ -724,7 +724,7 @@
                         label={translate($locale, 'About coin provenance')}
                         text={translate(
                           $locale,
-                          'The permanent labels inherited from this coin’s receive address or funding inputs.'
+                          'The labels inherited from this coin’s receive address or funding inputs.'
                         )}
                       />
                     </dt>
@@ -770,7 +770,7 @@
                           label={translate($locale, 'About source payment intent')}
                           text={translate(
                             $locale,
-                            'The permanent label of the payment that created this change. It can differ from the labels this coin inherited.'
+                            'The label of the payment that created this change. It can differ from the labels this coin inherited.'
                           )}
                         />
                       </dt>
@@ -880,7 +880,7 @@
                   <span><Tag size={15} /></span>
                   <div>
                     <strong>{translate($locale, 'No local label')}</strong>
-                    <small>{translate($locale, 'Assign its first permanent label once.')}</small>
+                    <small>{translate($locale, 'Assign its first label once.')}</small>
                   </div>
                   <Button
                     variant="secondary"
@@ -923,7 +923,7 @@
 
 <Modal
   open={!!claimIntent}
-  title={translate($locale, 'Add permanent label')}
+  title={translate($locale, 'Add label')}
   description={translate(
     $locale,
     'This received address has no local label. Assign it once; the assignment cannot be changed.'
@@ -935,7 +935,7 @@
     onsubmit={(event) => (event.preventDefault(), claimObservedReceiveAddress())}
   >
     <label class="field">
-      <span>{translate($locale, 'Permanent label')}</span>
+      <span>{translate($locale, 'Label')}</span>
       <input
         bind:value={claimLabel}
         maxlength="48"
@@ -958,7 +958,7 @@
         disabled={!claimLabel.trim() || claimBusy}
         loading={claimBusy}
         loadingLabel={translate($locale, 'Saving label…')}
-        >{translate($locale, 'Save permanent label')}</Button
+        >{translate($locale, 'Save label')}</Button
       >
     </div>
   </form>

@@ -231,9 +231,9 @@ export const attributeCopy = {
     fr: 'La protection par phrase secrète peut exposer plusieurs portefeuilles indépendants depuis le même appareil.',
     es: 'La protección con frase de contraseña puede mostrar varias carteras independientes del mismo dispositivo.'
   },
-  'Permanent receive record for this wallet.': {
-    fr: 'Enregistrement permanent de réception pour ce portefeuille.',
-    es: 'Registro permanente de recepción de esta cartera.'
+  'Saved receive record for this wallet.': {
+    fr: 'Enregistrement de réception sauvegardé pour ce portefeuille.',
+    es: 'Registro de recepción guardado para esta cartera.'
   },
   'Preparing acceleration…': {
     fr: 'Préparation de l’accélération…',

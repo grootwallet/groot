@@ -266,10 +266,10 @@ test('multisig receive and send cap manual label drafts at five', async ({ page 
   await page.goto('/multisig');
   await page.getByRole('main').getByRole('link', { name: 'Receive' }).click();
   await page.getByRole('button', { name: 'New receive address' }).click();
-  await page.getByLabel('Permanent label').fill('V1,V2,V3,V4,V5,V6;');
+  await page.getByLabel('Label', { exact: true }).fill('V1,V2,V3,V4,V5,V6;');
   await expect(page.locator('.label-token')).toHaveCount(5);
   await expect(page.getByRole('button', { name: 'Remove V6' })).toHaveCount(0);
-  await expect(page.getByLabel('Permanent label')).toHaveValue('');
+  await expect(page.getByLabel('Label', { exact: true })).toHaveValue('');
   await page.getByRole('button', { name: 'Cancel' }).click();
 
   await page.goto('/multisig');
@@ -572,7 +572,10 @@ test('surfaces partial and fully signed proposals on Overview', async ({ page })
   });
   await expect(partialProposal).toContainText('Signing in progress');
   await expect(partialProposal).toContainText('Overview resume test');
+  await expect(partialProposal).toHaveAttribute('href', /\/multisig\/send\?proposal=/);
   await partialProposal.click();
+  await expect(page).toHaveURL(/\/multisig\/send\?proposal=/);
+  await expect(page.getByLabel('Assigned labels')).toContainText('Overview resume test');
   await expect(
     page.getByRole('region', { name: 'Payment signers' }).getByText('1 of 2 collected')
   ).toBeVisible();
@@ -1312,7 +1315,7 @@ test('creates and verifies a simple 2-of-3 descriptor wallet', async ({ page }) 
   await expect(page.getByRole('img', { name: /QR code for/ })).toBeVisible();
   await page.getByRole('button', { name: 'New receive address' }).click();
   const receiveDialog = page.getByRole('dialog', { name: 'New receive address' });
-  await receiveDialog.getByLabel('Permanent label').fill('Vault deposit test');
+  await receiveDialog.getByLabel('Label', { exact: true }).fill('Vault deposit test');
   await receiveDialog.getByRole('button', { name: 'Generate address' }).click();
   await expect(
     page.locator('.receive-card').getByText('Vault deposit test', { exact: true })

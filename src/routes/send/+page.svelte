@@ -69,6 +69,7 @@
   import PermanentLabelTags from '$lib/components/PermanentLabelTags.svelte';
   import FeeSelector from '$lib/components/FeeSelector.svelte';
   import Amount from '$lib/components/Amount.svelte';
+  import Tooltip from '$lib/components/Tooltip.svelte';
   import {
     amountInputValue,
     amountUnit,
@@ -282,6 +283,7 @@
         });
       }
       const url = new URL(window.location.href);
+      const requestedProposalId = url.searchParams.get('proposal');
       const acceleration = url.searchParams.get('accelerate');
       const accelerationTxid = url.searchParams.get('txid');
       if (accelerationTxid && (acceleration === 'rbf' || acceleration === 'cpfp')) {
@@ -307,7 +309,10 @@
           step = 2;
         }
       } else if (externalSigner) {
-        const activeProposal = latestActiveProposal(await walletService.externalSignerProposals());
+        const proposals = await walletService.externalSignerProposals();
+        const activeProposal = requestedProposalId
+          ? (proposals.find((item) => item.proposalId === requestedProposalId) ?? null)
+          : latestActiveProposal(proposals);
         if (activeProposal) {
           externalProposal = activeProposal;
           proposal = activeProposal;
@@ -318,7 +323,10 @@
           step = activeProposal.canFinalize ? 3 : 2;
         }
       } else {
-        const activeProposal = (await walletService.paymentProposals())[0] ?? null;
+        const proposals = await walletService.paymentProposals();
+        const activeProposal = requestedProposalId
+          ? (proposals.find((item) => item.proposalId === requestedProposalId) ?? null)
+          : (proposals[0] ?? null);
         if (activeProposal) {
           proposal = activeProposal;
           address = activeProposal.recipient;
@@ -722,14 +730,18 @@
 
 {#snippet labelSuggestionPicker()}
   {#if !$discreetMode}<div class="label-suggestions">
-      {#each visibleSuggestions as suggestion}<button
-          type="button"
-          aria-label={translate($locale, 'Reuse {label}', { label: suggestion.text })}
-          onclick={() => {
-            selectedLabels = addPermanentLabel(selectedLabels, suggestion.text);
-            label = '';
-            armedLabelIndex = null;
-          }}>{suggestion.text}</button
+      {#each visibleSuggestions as suggestion}<Tooltip
+          text={suggestion.text}
+          truncatedSelector="button"
+          ><button
+            type="button"
+            aria-label={translate($locale, 'Reuse {label}', { label: suggestion.text })}
+            onclick={() => {
+              selectedLabels = addPermanentLabel(selectedLabels, suggestion.text);
+              label = '';
+              armedLabelIndex = null;
+            }}>{suggestion.text}</button
+          ></Tooltip
         >{/each}
     </div>{/if}
 {/snippet}
@@ -827,7 +839,7 @@
         <span>{translate($locale, 'STEP 1')}</span>
         <h2>{translate($locale, 'What is this payment for?')}</h2>
         <p>
-          {translate($locale, 'This permanent label helps you recognize the transaction later.')}
+          {translate($locale, 'Labels help you recognize the transaction later.')}
         </p>
       </div>
       <div class="field">

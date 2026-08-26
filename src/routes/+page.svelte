@@ -132,7 +132,13 @@
   const recentTransactions = $derived(
     sortTransactionsNewestFirst(snapshot?.transactions ?? []).slice(0, 3)
   );
-  const proposalHref = $derived(multisig ? '/multisig/send' : '/send');
+  const proposalHref = $derived(
+    activeProposal
+      ? `${multisig ? '/multisig/send' : '/send'}?proposal=${encodeURIComponent(activeProposal.proposalId)}`
+      : multisig
+        ? '/multisig/send'
+        : '/send'
+  );
   const proposalCanFinalize = $derived(
     Boolean(activeProposal && 'canFinalize' in activeProposal && activeProposal.canFinalize)
   );

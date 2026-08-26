@@ -42,7 +42,7 @@
 <Modal
   {open}
   title={translate($locale, address?.label ?? 'Address details')}
-  description={translate($locale, 'Permanent receive record for this wallet.')}
+  description={translate($locale, 'Saved receive record for this wallet.')}
   {onclose}
 >
   {#if address}
@@ -64,7 +64,7 @@
       <ReadableAddress address={address.address} {copied} oncopy={copy} />
       <dl>
         <div>
-          <dt>{translate($locale, 'Permanent labels')}</dt>
+          <dt>{translate($locale, 'Labels')}</dt>
           <dd>{labels.join(' · ')}</dd>
         </div>
         <div>

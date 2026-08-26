@@ -12,7 +12,6 @@ export const accessibilityCopy = {
   },
   'Account public key': { fr: 'Clé publique du compte', es: 'Clave pública de la cuenta' },
   'Add a signer': { fr: 'Ajouter un signataire', es: 'Añadir un firmante' },
-  'Add permanent label': { fr: 'Ajouter un libellé permanent', es: 'Añadir etiqueta permanente' },
   'Address shown on hardware': {
     fr: 'Adresse affichée sur le matériel',
     es: 'Dirección mostrada en el dispositivo'
@@ -217,7 +216,6 @@ export const accessibilityCopy = {
   'Payment progress': { fr: 'Progression du paiement', es: 'Progreso del pago' },
   'Payment signers': { fr: 'Signataires du paiement', es: 'Firmantes del pago' },
   'Assigned labels': { fr: 'Libellés attribués', es: 'Etiquetas asignadas' },
-  'Permanent labels': { fr: 'Libellés permanents', es: 'Etiquetas permanentes' },
   'Permanently delete this wallet?': {
     fr: 'Supprimer définitivement ce portefeuille ?',
     es: '¿Eliminar permanentemente esta cartera?'

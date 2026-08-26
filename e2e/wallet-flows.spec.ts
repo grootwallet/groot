@@ -459,7 +459,7 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   await page.getByRole('link', { name: 'Overview' }).click();
   await page.getByRole('link', { name: 'Receive', exact: true }).click();
   await page.getByRole('button', { name: 'New receive address' }).click();
-  await page.getByLabel('Permanent label').fill('Verified deposit');
+  await page.getByLabel('Label', { exact: true }).fill('Verified deposit');
   await page.getByRole('button', { name: 'Generate address' }).click();
   await expect(
     page.locator('.address-label').getByText('Not verified', { exact: true })
@@ -867,7 +867,7 @@ test('overview, activity, UTXOs, and settings expose durable states', async ({ p
   await expect(changeCoin.getByText('2 wallet inputs', { exact: true })).toBeVisible();
   await changeCoin.getByRole('button', { name: 'About source payment intent' }).hover();
   await expect(changeCoin.getByRole('tooltip')).toContainText(
-    'The permanent label of the payment that created this change.'
+    'The label of the payment that created this change.'
   );
   await changeCoin.getByRole('button', { name: 'About change lineage' }).hover();
   await expect(changeCoin.getByRole('tooltip')).toContainText(
@@ -1114,19 +1114,19 @@ test('receive keeps multiple labeled payment requests and discards them independ
   await addressDetails.getByRole('button', { name: 'Close' }).click();
   await page.getByRole('button', { name: 'New receive address' }).click();
   await expect(page.getByText('Previously used labels')).toHaveCount(0);
-  await expect(page.getByLabel('Permanent label')).toHaveValue('');
+  await expect(page.getByLabel('Label', { exact: true })).toHaveValue('');
   await expect(page.locator('.label-suggestions')).toBeVisible();
   expect(await page.locator('.label-suggestions button').count()).toBeLessThanOrEqual(4);
   const stableDialogHeight = (await page.getByRole('dialog').boundingBox())?.height;
-  await page.getByLabel('Permanent label').fill('A label that does not exist');
+  await page.getByLabel('Label', { exact: true }).fill('A label that does not exist');
   await expect(page.locator('.label-suggestions button')).toHaveCount(0);
   expect((await page.getByRole('dialog').boundingBox())?.height).toBeCloseTo(
     stableDialogHeight!,
     2
   );
-  await page.getByLabel('Permanent label').fill('');
+  await page.getByLabel('Label', { exact: true }).fill('');
   await page.getByRole('button', { name: 'Reuse Savings' }).click();
-  await expect(page.getByLabel('Permanent label')).toHaveValue('');
+  await expect(page.getByLabel('Label', { exact: true })).toHaveValue('');
   await expect(page.getByRole('button', { name: 'Remove Savings' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Reuse Savings' })).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
@@ -1135,22 +1135,29 @@ test('receive keeps multiple labeled payment requests and discards them independ
   await page.getByRole('button', { name: 'Remove Savings' }).click();
   await expect(page.getByRole('button', { name: 'Reuse Savings' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Generate address' })).toBeDisabled();
-  await page.getByLabel('Permanent label').fill('Invoice #205');
-  await page.getByLabel('Permanent label').press(',');
+  await page.getByLabel('Label', { exact: true }).fill('Invoice #205');
+  await page.getByLabel('Label', { exact: true }).press(',');
   await expect(page.getByRole('button', { name: 'Remove Invoice #205' })).toBeVisible();
-  await page.getByLabel('Permanent label').press('Backspace');
+  await page.getByLabel('Label', { exact: true }).press('Backspace');
   await expect(page.locator('.label-token-armed')).toHaveText('Invoice #205');
   await expect(page.getByRole('button', { name: 'Remove Invoice #205' })).toBeVisible();
-  await page.getByLabel('Permanent label').press('Backspace');
+  await page.getByLabel('Label', { exact: true }).press('Backspace');
   await expect(page.getByRole('button', { name: 'Remove Invoice #205' })).toHaveCount(0);
-  await page.getByLabel('Permanent label').fill('Invoice #205,Customer A,Q3;');
+  await page.getByLabel('Label', { exact: true }).fill('Invoice #205,Customer A,Q3;');
+  await page.getByLabel('Label', { exact: true }).fill('A deliberately long reusable label;');
   await page.getByRole('button', { name: 'Generate address' }).click();
   const currentAddressLabels = page.locator('.receive-card').getByLabel('Assigned labels');
   await expect(currentAddressLabels).toContainText('Invoice #205');
   await expect(currentAddressLabels).toContainText('Customer A');
   await expect(currentAddressLabels).toContainText('Q3');
+  await expect(currentAddressLabels).toContainText('A deliberately long reusable label');
   await page.getByRole('button', { name: 'New receive address' }).click();
   await expect(page.getByRole('button', { name: 'Reuse Invoice #205' })).toBeVisible();
+  const longSuggestion = page.getByRole('button', {
+    name: 'Reuse A deliberately long reusable label'
+  });
+  await longSuggestion.hover();
+  await expect(page.getByRole('tooltip')).toHaveText('A deliberately long reusable label');
   await page.getByRole('button', { name: 'Cancel' }).click();
   await expect(page.getByRole('img', { name: /QR code for/ })).toBeVisible();
   await page.getByRole('button', { name: 'Enlarge QR code' }).click();
@@ -1173,7 +1180,7 @@ test('receive keeps multiple labeled payment requests and discards them independ
   await page.getByRole('button', { name: 'Show address details' }).click();
   await expect(page.getByText("m/84'/1'/0'/0/9")).toBeVisible();
   await page.getByRole('button', { name: 'New receive address' }).click();
-  await page.getByLabel('Permanent label').fill('Invoice #206');
+  await page.getByLabel('Label', { exact: true }).fill('Invoice #206');
   await page.getByRole('button', { name: 'Generate address' }).click();
   await expect(page.getByText('3 active addresses')).toBeVisible();
   await expect(page.getByRole('button', { name: 'View Invoice #205' })).toBeVisible();
@@ -1188,14 +1195,14 @@ test('receive keeps multiple labeled payment requests and discards them independ
 test('single-key receive and send cap manual label drafts at five', async ({ page }) => {
   await page.goto('/receive');
   await page.getByRole('button', { name: 'New receive address' }).click();
-  await page.getByLabel('Permanent label').fill('R1,R2,R3,R4,R5,R6;');
+  await page.getByLabel('Label', { exact: true }).fill('R1,R2,R3,R4,R5,R6;');
   await expect(page.locator('.label-token')).toHaveCount(5);
   await expect(page.getByRole('button', { name: 'Remove R6' })).toHaveCount(0);
-  await expect(page.getByLabel('Permanent label')).toHaveValue('');
+  await expect(page.getByLabel('Label', { exact: true })).toHaveValue('');
   await expect(page.locator('.label-suggestions button')).toHaveCount(0);
   await page.getByRole('button', { name: 'Remove R5' }).click();
-  await page.getByLabel('Permanent label').fill('R6');
-  await page.getByLabel('Permanent label').press('Enter');
+  await page.getByLabel('Label', { exact: true }).fill('R6');
+  await page.getByLabel('Label', { exact: true }).press('Enter');
   await expect(page.getByRole('button', { name: 'Remove R6' })).toBeVisible();
   await page.getByRole('button', { name: 'Cancel' }).click();
 

@@ -310,9 +310,9 @@ export const dynamicCopy = {
     fr: 'Chaque paiement requiert toujours le nombre de signataires choisi.',
     es: 'Cada pago siempre requiere el número de firmantes elegido.'
   },
-  'Every receive address needs a permanent label.': {
-    fr: 'Chaque adresse de réception nécessite une étiquette permanente.',
-    es: 'Cada dirección de recepción necesita una etiqueta permanente.'
+  'Every receive address needs a label.': {
+    fr: 'Chaque adresse de réception nécessite un libellé.',
+    es: 'Cada dirección de recepción necesita una etiqueta.'
   },
   'Fee acceleration broadcast': {
     fr: 'Accélération des frais diffusée',

@@ -86,6 +86,7 @@
   import { fly } from 'svelte/transition';
   import { discreetMode } from '$lib/privacy';
   import PermanentLabelTags from '$lib/components/PermanentLabelTags.svelte';
+  import Tooltip from '$lib/components/Tooltip.svelte';
   import FeeSelector from '$lib/components/FeeSelector.svelte';
   import Amount from '$lib/components/Amount.svelte';
   import {
@@ -95,6 +96,7 @@
     formatAmount,
     parseAmountInput
   } from '$lib/denomination';
+  import { latestActiveProposal } from '$lib/wallet/proposal-resume';
   let wallet = $state<MultisigWallet | null>(null),
     proposal = $state<MultisigProposal | null>(null),
     estimates = $state<FeeEstimates | null>(null);
@@ -364,21 +366,25 @@
   });
   onMount(async () => {
     try {
-      const [snapshot, loadedWallet, proposals, verifications, verificationAddress] =
-        await Promise.all([
-          walletService.multisigSnapshot(),
-          walletService.multisigWallet(),
-          walletService.multisigProposals(),
-          walletService.multisigSignerPolicyVerifications(),
-          walletService.multisigPolicyVerificationAddress()
-        ]);
+      const [snapshot, loadedWallet, proposals] = await Promise.all([
+        walletService.multisigSnapshot(),
+        walletService.multisigWallet(),
+        walletService.multisigProposals()
+      ]);
       wallet = loadedWallet;
-      policyVerifications = verifications;
-      policyAddress = verificationAddress;
       coins = snapshot.utxos;
       labelSuggestions = snapshot.labelSuggestions;
+      void walletService
+        .multisigSignerPolicyVerifications()
+        .then((verifications) => (policyVerifications = verifications))
+        .catch(() => undefined);
+      void walletService
+        .multisigPolicyVerificationAddress()
+        .then((verificationAddress) => (policyAddress = verificationAddress))
+        .catch(() => undefined);
       const url = new URL(window.location.href),
         requested = url.searchParams.get('coins')?.split(',').filter(Boolean) ?? [],
+        requestedProposalId = url.searchParams.get('proposal'),
         renewalRequested = url.searchParams.get('renewProtection') === '1',
         delayedSpendRequested = url.searchParams.get('delayedSpend') === '1',
         method = url.searchParams.get('accelerate'),
@@ -435,6 +441,20 @@
           });
         }
       }
+      if (!txid || (method !== 'rbf' && method !== 'cpfp')) {
+        proposal = requestedProposalId
+          ? (proposals.find((item) => item.proposalId === requestedProposalId) ?? null)
+          : latestActiveProposal(proposals);
+        if (proposal) {
+          address = proposal.recipient;
+          selectedLabels = proposal.labels ?? [proposal.label];
+          label = '';
+          amount = String(proposal.amount);
+          draftStep = 2;
+        } else if (requestedProposalId) {
+          error = translate($locale, 'This saved payment is no longer available.');
+        }
+      }
       updateAvailable();
       try {
         estimates = await walletService.estimateFees();
@@ -461,7 +481,7 @@
           );
           accelerationRequest = null;
         }
-      } else proposal = proposals[0] ?? null;
+      }
     } catch (cause) {
       if (accelerationRequest) {
         feeEstimateError = localizedError(cause, $locale, 'Could not prepare fee acceleration.');
@@ -1147,15 +1167,19 @@
     <FieldCounter value={label} max={48} {hint} />
   </div>
   {#if !$discreetMode}<div class="label-suggestions">
-      {#each visibleSuggestions as suggestion}<button
-          type="button"
-          aria-label={translate($locale, 'Reuse {label}', { label: suggestion.text })}
-          onclick={() => {
-            selectedLabels = addPermanentLabel(selectedLabels, suggestion.text);
-            label = '';
-            armedLabelIndex = null;
-            clearDraftError();
-          }}>{suggestion.text}</button
+      {#each visibleSuggestions as suggestion}<Tooltip
+          text={suggestion.text}
+          truncatedSelector="button"
+          ><button
+            type="button"
+            aria-label={translate($locale, 'Reuse {label}', { label: suggestion.text })}
+            onclick={() => {
+              selectedLabels = addPermanentLabel(selectedLabels, suggestion.text);
+              label = '';
+              armedLabelIndex = null;
+              clearDraftError();
+            }}>{suggestion.text}</button
+          ></Tooltip
         >{/each}
     </div>{/if}
 {/snippet}
@@ -1420,7 +1444,7 @@
       >
       {@render labelTokenPicker(
         'delayed-spend-label-input',
-        translate($locale, 'Permanent label'),
+        translate($locale, 'Label'),
         translate($locale, 'e.g. Emergency recovery'),
         translate($locale, 'Required · cannot be changed')
       )}
@@ -1484,7 +1508,7 @@
       </div>
       {@render labelTokenPicker(
         'renewal-label-input',
-        translate($locale, 'Permanent transaction label'),
+        translate($locale, 'Transaction label'),
         translate($locale, 'e.g. Renew savings protection'),
         translate($locale, 'Required · cannot be changed; reuse is intentional')
       )}
@@ -1535,7 +1559,7 @@
         <span>{translate($locale, 'STEP 1')}</span>
         <h2>{translate($locale, 'What is this payment for?')}</h2>
         <p>
-          {translate($locale, 'This permanent label helps every signer recognize the transaction.')}
+          {translate($locale, 'Labels help every signer recognize the transaction.')}
         </p>
       </div>
       {@render labelTokenPicker(

@@ -12,7 +12,7 @@
     open,
     title = 'Recipient address',
     description = 'Verify the complete destination before signing.',
-    detail = 'Outgoing payment · permanent label',
+    detail = 'Outgoing payment · label',
     onclose
   } = $props<{
     address: string;

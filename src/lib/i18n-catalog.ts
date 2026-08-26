@@ -260,9 +260,9 @@ export const copyCatalog = {
   'PSBT copied': { fr: 'PSBT copiée', es: 'PSBT copiada' },
   'PSBT saved': { fr: 'PSBT enregistrée', es: 'PSBT guardada' },
   'Payment canceled': { fr: 'Paiement annulé', es: 'Pago cancelado' },
-  'Permanent label saved': {
-    fr: 'Libellé permanent enregistré',
-    es: 'Etiqueta permanente guardada'
+  'Label saved': {
+    fr: 'Libellé enregistré',
+    es: 'Etiqueta guardada'
   },
   'Policy status unavailable': {
     fr: 'État de la politique indisponible',
@@ -341,13 +341,13 @@ export const copyCatalog = {
     fr: 'L’adresse exacte de comparaison est dans le presse-papiers.',
     es: 'La dirección exacta de comparación está en el portapapeles.'
   },
-  'The permanent label is stored locally.': {
-    fr: 'Le libellé permanent est enregistré localement.',
-    es: 'La etiqueta permanente se guarda localmente.'
+  'The label is stored locally.': {
+    fr: 'Le libellé est enregistré localement.',
+    es: 'La etiqueta se guarda localmente.'
   },
-  'The permanent label is stored with the wallet.': {
-    fr: 'Le libellé permanent est enregistré avec le portefeuille.',
-    es: 'La etiqueta permanente se guarda con la cartera.'
+  'The label is stored with the wallet.': {
+    fr: 'Le libellé est enregistré avec le portefeuille.',
+    es: 'La etiqueta se guarda con la cartera.'
   },
   'The previously unlabeled received output now has known local provenance.': {
     fr: 'La sortie reçue auparavant sans libellé possède désormais une provenance locale connue.',

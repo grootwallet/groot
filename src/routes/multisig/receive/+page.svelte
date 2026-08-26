@@ -25,6 +25,7 @@
   import HardwareVerificationStatus from '$lib/components/HardwareVerificationStatus.svelte';
   import HardwareReceiveVerification from '$lib/components/HardwareReceiveVerification.svelte';
   import PermanentLabelTags from '$lib/components/PermanentLabelTags.svelte';
+  import Tooltip from '$lib/components/Tooltip.svelte';
   import { compactAddress } from '$lib/address-display';
   import { walletService, WalletError } from '$lib/wallet';
   import { awaitingPaymentAddresses } from '$lib/wallet/policy';
@@ -164,7 +165,7 @@
       showGenerate = false;
       toast({
         title: 'Receive address ready',
-        description: 'The permanent label is stored with the wallet.',
+        description: 'The label is stored with the wallet.',
         tone: 'success'
       });
     } catch (cause) {
@@ -353,7 +354,7 @@
         {translate(
           $locale,
           ready
-            ? 'Every receive address needs a permanent label.'
+            ? 'Every receive address needs a label.'
             : 'Confirming the selected wallet before deriving an address.'
         )}
       </p>
@@ -456,7 +457,7 @@
   title={translate($locale, 'New receive address')}
   description={translate(
     $locale,
-    'Assignments cannot be changed. Label text can be reused intentionally.'
+    'Add up to five labels for this address. You can reuse labels, but you cannot change them later.'
   )}
   onclose={() => {
     if (!busy) {
@@ -471,7 +472,7 @@
     }}
   >
     <div class="field">
-      <label for="multisig-receive-label-input">{translate($locale, 'Permanent label')}</label>
+      <label for="multisig-receive-label-input">{translate($locale, 'Label')}</label>
       <div class="label-token-field" aria-label={translate($locale, 'Selected labels')}>
         {#each selectedLabels as selected, index}<span
             class="label-token"
@@ -486,7 +487,7 @@
             ></span
           >{/each}<input
           id="multisig-receive-label-input"
-          aria-label={translate($locale, 'Permanent label')}
+          aria-label={translate($locale, 'Label')}
           value={label}
           oninput={(event) =>
             (event.currentTarget.value = updateLabelDraft(event.currentTarget.value))}
@@ -498,10 +499,14 @@
       <FieldCounter value={label} max={48} />
     </div>
     {#if !$discreetMode}<div class="label-suggestions">
-        {#each visibleSuggestions as suggestion}<button
-            type="button"
-            aria-label={translate($locale, 'Reuse {label}', { label: suggestion.text })}
-            onclick={() => addDraftLabel(suggestion.text)}>{suggestion.text}</button
+        {#each visibleSuggestions as suggestion}<Tooltip
+            text={suggestion.text}
+            truncatedSelector="button"
+            ><button
+              type="button"
+              aria-label={translate($locale, 'Reuse {label}', { label: suggestion.text })}
+              onclick={() => addDraftLabel(suggestion.text)}>{suggestion.text}</button
+            ></Tooltip
           >{/each}
       </div>{/if}{#if generateError}<p class="form-error" role="alert">{generateError}</p>{/if}
     <div class="modal-footer">

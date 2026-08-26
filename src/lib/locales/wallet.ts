@@ -342,9 +342,9 @@ export const walletCopy = {
   Address: { fr: 'Adresse', es: 'Dirección' },
   'Address reused': { fr: 'Adresse réutilisée', es: 'Dirección reutilizada' },
   'All sources': { fr: 'Toutes les sources', es: 'Todos los orígenes' },
-  'Assign its first permanent label once.': {
-    fr: 'Attribuez-lui une fois son premier libellé permanent.',
-    es: 'Asígnale una vez su primera etiqueta permanente.'
+  'Assign its first label once.': {
+    fr: 'Attribuez-lui une fois son premier libellé.',
+    es: 'Asígnale una vez su primera etiqueta.'
   },
   'Automatic selection remains the default': {
     fr: 'La sélection automatique reste la valeur par défaut',
@@ -367,6 +367,7 @@ export const walletCopy = {
   Frozen: { fr: 'Gelée', es: 'Congelada' },
   Known: { fr: 'Connue', es: 'Conocida' },
   Label: { fr: 'Libellé', es: 'Etiqueta' },
+  Labels: { fr: 'Libellés', es: 'Etiquetas' },
   'Linked coin': { fr: 'Pièce liée', es: 'Moneda vinculada' },
   Mixed: { fr: 'Mélangée', es: 'Mezclada' },
   'Mixed provenance': { fr: 'Provenance mélangée', es: 'Procedencia mezclada' },
@@ -376,11 +377,11 @@ export const walletCopy = {
     es: 'Aún no hay salidas disponibles para gastar'
   },
   Outpoint: { fr: 'Point de sortie', es: 'Punto de salida' },
-  'Permanent label': { fr: 'Libellé permanent', es: 'Etiqueta permanente' },
-  'Assignments cannot be changed. Label text can be reused intentionally.': {
-    fr: 'Les attributions ne peuvent pas être modifiées. Le texte d’un libellé peut être réutilisé volontairement.',
-    es: 'Las asignaciones no se pueden cambiar. El texto de una etiqueta puede reutilizarse intencionadamente.'
-  },
+  'Add up to five labels for this address. You can reuse labels, but you cannot change them later.':
+    {
+      fr: 'Ajoutez jusqu’à cinq libellés pour cette adresse. Vous pouvez les réutiliser, mais pas les modifier par la suite.',
+      es: 'Añade hasta cinco etiquetas para esta dirección. Puedes reutilizarlas, pero no cambiarlas después.'
+    },
   'Reuse {label}': { fr: 'Réutiliser {label}', es: 'Reutilizar {label}' },
   'Remove {label}': { fr: 'Retirer {label}', es: 'Quitar {label}' },
   'Selected labels': { fr: 'Libellés sélectionnés', es: 'Etiquetas seleccionadas' },
@@ -389,19 +390,19 @@ export const walletCopy = {
     es: 'Obligatoria · no se puede cambiar; la reutilización es intencionada'
   },
   'Privacy clusters': { fr: 'Groupes de confidentialité', es: 'Grupos de privacidad' },
-  'The permanent labels inherited from this coin’s receive address or funding inputs.': {
-    fr: 'Les libellés permanents hérités de l’adresse de réception de cette pièce ou de ses entrées de financement.',
-    es: 'Las etiquetas permanentes heredadas de la dirección de recepción de esta moneda o de sus entradas de financiación.'
+  'The labels inherited from this coin’s receive address or funding inputs.': {
+    fr: 'Les libellés hérités de l’adresse de réception de cette pièce ou de ses entrées de financement.',
+    es: 'Las etiquetas heredadas de la dirección de recepción de esta moneda o de sus entradas de financiación.'
   },
   'Groups already linked by transaction history. Spending across groups creates a new public link.':
     {
       fr: 'Groupes déjà reliés par l’historique des transactions. Dépenser depuis plusieurs groupes crée un nouveau lien public.',
       es: 'Grupos ya vinculados por el historial de transacciones. Gastar desde varios grupos crea un nuevo vínculo público.'
     },
-  'The permanent label of the payment that created this change. It can differ from the labels this coin inherited.':
+  'The label of the payment that created this change. It can differ from the labels this coin inherited.':
     {
-      fr: 'Le libellé permanent du paiement à l’origine de cette monnaie. Il peut différer des libellés hérités par cette pièce.',
-      es: 'La etiqueta permanente del pago que creó este cambio. Puede diferir de las etiquetas heredadas por esta moneda.'
+      fr: 'Le libellé du paiement à l’origine de cette monnaie. Il peut différer des libellés hérités par cette pièce.',
+      es: 'La etiqueta del pago que creó este cambio. Puede diferir de las etiquetas heredadas por esta moneda.'
     },
   'How many wallet inputs were combined to create this change coin.': {
     fr: 'Nombre d’entrées du portefeuille combinées pour créer cette pièce de monnaie.',
@@ -412,9 +413,13 @@ export const walletCopy = {
     fr: 'Le bitcoin reçu apparaîtra ici après synchronisation.',
     es: 'El bitcoin recibido aparecerá aquí después de sincronizar.'
   },
-  'Save permanent label': {
-    fr: 'Enregistrer le libellé permanent',
-    es: 'Guardar etiqueta permanente'
+  'Save label': {
+    fr: 'Enregistrer le libellé',
+    es: 'Guardar etiqueta'
+  },
+  'The label could not be saved.': {
+    fr: 'Le libellé n’a pas pu être enregistré.',
+    es: 'No se pudo guardar la etiqueta.'
   },
   selected: { fr: 'sélectionnées', es: 'seleccionadas' },
   'Send selected coins': {
@@ -467,9 +472,9 @@ export const walletCopy = {
     fr: 'Les adresses écartées restent surveillées.',
     es: 'Las direcciones descartadas siguen supervisándose.'
   },
-  'Generate a new address and give it a permanent label.': {
-    fr: 'Générez une nouvelle adresse et attribuez-lui un libellé permanent.',
-    es: 'Genera una nueva dirección y asígnale una etiqueta permanente.'
+  'Generate a new address and give it a label.': {
+    fr: 'Générez une nouvelle adresse et attribuez-lui un libellé.',
+    es: 'Genera una nueva dirección y asígnale una etiqueta.'
   },
   'Generate address': { fr: 'Générer une adresse', es: 'Generar dirección' },
   'Generating QR…': { fr: 'Génération du QR…', es: 'Generando QR…' },

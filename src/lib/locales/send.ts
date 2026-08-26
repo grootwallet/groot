@@ -50,9 +50,9 @@ export const sendCopy = {
     fr: '{key} peut dépenser maintenant',
     es: '{key} puede gastar ahora'
   },
-  'Permanent transaction label': {
-    fr: 'Libellé permanent de la transaction',
-    es: 'Etiqueta permanente de la transacción'
+  'Transaction label': {
+    fr: 'Libellé de la transaction',
+    es: 'Etiqueta de la transacción'
   },
   'e.g. Renew savings protection': {
     fr: 'p. ex. Renouveler la protection de l’épargne',
@@ -362,13 +362,17 @@ export const sendCopy = {
     fr: 'Cela ne révoque pas la signature.',
     es: 'Esto no revoca la firma.'
   },
-  'This permanent label helps you recognize the transaction later.': {
-    fr: 'Ce libellé permanent vous aide à reconnaître la transaction plus tard.',
-    es: 'Esta etiqueta permanente te ayuda a reconocer la transacción más adelante.'
+  'Labels help you recognize the transaction later.': {
+    fr: 'Les libellés vous aident à reconnaître la transaction plus tard.',
+    es: 'Las etiquetas te ayudan a reconocer la transacción más adelante.'
   },
-  'This permanent label helps every signer recognize the transaction.': {
-    fr: 'Ce libellé permanent aide chaque signataire à reconnaître la transaction.',
-    es: 'Esta etiqueta permanente ayuda a cada firmante a reconocer la transacción.'
+  'Labels help every signer recognize the transaction.': {
+    fr: 'Les libellés aident chaque signataire à reconnaître la transaction.',
+    es: 'Las etiquetas ayudan a cada firmante a reconocer la transacción.'
+  },
+  'This saved payment is no longer available.': {
+    fr: 'Ce paiement sauvegardé n’est plus disponible.',
+    es: 'Este pago guardado ya no está disponible.'
   },
   To: { fr: 'À', es: 'A' },
   Total: { fr: 'Total', es: 'Total' },

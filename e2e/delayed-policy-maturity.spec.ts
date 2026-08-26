@@ -183,7 +183,7 @@ test('spends one mature coin with only its recovery key', async ({ page }) => {
   await page
     .getByLabel('Bitcoin address')
     .fill('bcrt1qrecoverydestination00000000000000000000000000');
-  await page.getByLabel(/Permanent label/).fill('Emergency recovery');
+  await page.getByLabel('Label', { exact: true }).fill('Emergency recovery');
   await page.getByRole('button', { name: 'Review recovery key payment' }).click();
 
   await expect(page.getByText('Signed by the recovery key')).toBeVisible();
