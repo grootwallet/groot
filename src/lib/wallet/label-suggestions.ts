@@ -41,6 +41,21 @@ export function addPermanentLabel(labels: string[], value: string): string[] {
   return [...labels, text];
 }
 
+export function tokenizeLabelDraft(
+  labels: string[],
+  value: string,
+  commitTrailing = false
+): { labels: string[]; input: string } {
+  const parts = value.split(/[,;]/);
+  const completed = commitTrailing ? parts : parts.slice(0, -1);
+  let next = labels;
+  for (const part of completed) next = addPermanentLabel(next, part);
+  return {
+    labels: next,
+    input: commitTrailing ? '' : (parts.at(-1) ?? '')
+  };
+}
+
 export function permanentLabelsForSubmission(labels: string[], input: string): string[] {
   const inputKey = normalizedLabel(input);
   if (

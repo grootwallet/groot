@@ -2124,80 +2124,83 @@ code {
   border-radius: 7px;
   background: var(--surface-control);
 }
-.label-entry-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 10px;
-  align-items: end;
-}
-@media (max-width: 520px) {
-  .label-entry-row {
-    grid-template-columns: 1fr;
-  }
-  .label-add-button {
-    justify-self: start;
-    margin-bottom: 0;
-  }
-}
-.label-add-button,
-.label-add-inline {
-  min-height: 38px;
-  padding: 8px 12px;
-  color: var(--focus);
-  font: inherit;
-  font-weight: 700;
+.label-token-field {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  min-height: 44px;
+  padding: 6px 9px;
   border: 1px solid var(--control-border);
   border-radius: 8px;
   background: var(--surface-control);
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease;
 }
-.label-add-button {
-  margin-bottom: 1px;
+.label-token-field:focus-within {
+  border-color: var(--border-strong);
+  box-shadow: 0 0 0 2px rgba(36, 89, 169, 0.18);
 }
-.label-add-inline {
-  margin: 2px 0 10px;
+.field .label-token-field > input {
+  flex: 1 1 90px;
+  min-width: 90px;
+  min-height: 30px;
+  padding: 4px 3px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
-.label-add-button:disabled,
-.label-add-inline:disabled {
-  color: var(--muted);
-  cursor: not-allowed;
+.field .label-token-field > input:focus {
+  border: 0;
+  box-shadow: none;
+  outline: 0;
 }
-.selected-labels {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin: 8px 0 10px;
-}
-.selected-labels > span {
+.label-token {
   display: inline-flex;
-  gap: 7px;
+  gap: 5px;
   align-items: center;
   max-width: 100%;
-  padding: 7px 9px 7px 11px;
+  min-height: 30px;
+  padding: 4px 7px 4px 9px;
   overflow: hidden;
   color: var(--text);
-  font-size: 12px;
-  font-weight: 650;
+  font-size: 11px;
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
-  border: 1px solid var(--focus);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--focus) 10%, var(--surface-control));
+  border: 1px solid var(--control-border);
+  border-radius: 7px;
+  background: var(--surface-icon);
 }
-.selected-labels button {
+.label-token button {
   display: grid;
   flex: 0 0 auto;
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   padding: 0;
   color: var(--muted);
   border: 0;
-  border-radius: 50%;
+  border-radius: 5px;
   background: transparent;
+  opacity: 0;
+  transition: opacity 100ms ease;
   place-items: center;
 }
-.selected-labels button:hover {
+.label-token:hover button,
+.label-token:focus-within button {
+  opacity: 1;
+}
+.label-token button:hover,
+.label-token button:focus-visible {
   color: var(--text);
   background: var(--surface-icon);
+}
+@media (hover: none) {
+  .label-token button {
+    opacity: 0.72;
+  }
 }
 .label-suggestions button:hover,
 .label-suggestions button[aria-pressed='true'] {

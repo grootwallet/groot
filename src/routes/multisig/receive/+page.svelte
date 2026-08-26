@@ -29,8 +29,8 @@
   import { awaitingPaymentAddresses } from '$lib/wallet/policy';
   import {
     addPermanentLabel,
-    MAX_PERMANENT_LABELS,
     permanentLabelsForSubmission,
+    tokenizeLabelDraft,
     visibleLabelSuggestions
   } from '$lib/wallet/label-suggestions';
   import type { LabelSuggestion, ReceiveAddress } from '$lib/types';
@@ -175,6 +175,19 @@
       selectedLabels = next;
       label = '';
     }
+  }
+  function updateLabelDraft(value: string) {
+    const draft = tokenizeLabelDraft(selectedLabels, value);
+    selectedLabels = draft.labels;
+    label = draft.input;
+    generateError = '';
+  }
+  function handleLabelKeydown(event: KeyboardEvent) {
+    if (!label.trim() || !['Enter', 'Tab', ',', ';'].includes(event.key)) return;
+    if (event.key !== 'Tab') event.preventDefault();
+    const draft = tokenizeLabelDraft(selectedLabels, label, true);
+    selectedLabels = draft.labels;
+    label = draft.input;
   }
   function addressLabelText(address: ReceiveAddress): string {
     return (address.labels?.length ? address.labels : [address.label]).join(' · ');
@@ -433,40 +446,29 @@
       generate();
     }}
   >
-    <div class="label-entry-row">
-      <label class="field"
-        ><span>{translate($locale, 'Permanent label')}</span><input
-          bind:value={label}
-          oninput={() => (generateError = '')}
-          onkeydown={(event) => {
-            if (event.key === 'Enter' && label.trim()) {
-              event.preventDefault();
-              addDraftLabel();
-            }
-          }}
-          maxlength="48"
-          placeholder={translate($locale, 'e.g. Treasury deposit')}
-        /><FieldCounter value={label} max={48} /></label
-      ><button
-        type="button"
-        class="label-add-button"
-        disabled={!label.trim() || selectedLabels.length >= MAX_PERMANENT_LABELS}
-        onclick={() => addDraftLabel()}>{translate($locale, 'Add label')}</button
-      >
-    </div>
-    {#if selectedLabels.length}<div
-        class="selected-labels"
-        aria-label={translate($locale, 'Selected labels')}
-      >
-        {#each selectedLabels as selected}<span
+    <div class="field">
+      <label for="multisig-receive-label-input">{translate($locale, 'Permanent label')}</label>
+      <div class="label-token-field" aria-label={translate($locale, 'Selected labels')}>
+        {#each selectedLabels as selected}<span class="label-token"
             >{selected}<button
               type="button"
               aria-label={translate($locale, 'Remove {label}', { label: selected })}
               onclick={() => (selectedLabels = selectedLabels.filter((item) => item !== selected))}
               ><X size={13} /></button
             ></span
-          >{/each}
-      </div>{/if}{#if visibleSuggestions.length && !$discreetMode}<div class="label-suggestions">
+          >{/each}<input
+          id="multisig-receive-label-input"
+          aria-label={translate($locale, 'Permanent label')}
+          value={label}
+          oninput={(event) => updateLabelDraft(event.currentTarget.value)}
+          onkeydown={handleLabelKeydown}
+          maxlength="48"
+          placeholder={selectedLabels.length ? '' : translate($locale, 'e.g. Treasury deposit')}
+        />
+      </div>
+      <FieldCounter value={label} max={48} />
+    </div>
+    {#if visibleSuggestions.length && !$discreetMode}<div class="label-suggestions">
         {#each visibleSuggestions as suggestion}<button
             type="button"
             aria-label={translate($locale, 'Reuse {label}', { label: suggestion.text })}

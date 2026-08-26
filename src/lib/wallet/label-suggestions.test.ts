@@ -4,6 +4,7 @@ import {
   addPermanentLabel,
   MAX_PERMANENT_LABELS,
   permanentLabelsForSubmission,
+  tokenizeLabelDraft,
   visibleLabelSuggestions
 } from './label-suggestions';
 
@@ -63,5 +64,16 @@ describe('visibleLabelSuggestions', () => {
         'x'
       )
     ).toHaveLength(MAX_PERMANENT_LABELS);
+  });
+
+  it('tokenizes pasted separators and commits the trailing draft on enter or tab', () => {
+    expect(tokenizeLabelDraft([], 'Client, Quarterly; pending')).toEqual({
+      labels: ['Client', 'Quarterly'],
+      input: ' pending'
+    });
+    expect(tokenizeLabelDraft(['Client'], 'Quarterly', true)).toEqual({
+      labels: ['Client', 'Quarterly'],
+      input: ''
+    });
   });
 });

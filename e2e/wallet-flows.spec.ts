@@ -1124,8 +1124,11 @@ test('receive keeps multiple labeled payment requests and discards them independ
     true
   );
   await page.getByRole('button', { name: 'Remove Savings' }).click();
+  await expect(page.getByRole('button', { name: 'Reuse Savings' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Generate address' })).toBeDisabled();
   await page.getByLabel('Permanent label').fill('Invoice #205');
+  await page.getByLabel('Permanent label').press(',');
+  await expect(page.getByRole('button', { name: 'Remove Invoice #205' })).toBeVisible();
   await page.getByRole('button', { name: 'Generate address' }).click();
   await expect(
     page.locator('.receive-card').getByText('Invoice #205', { exact: true })
@@ -1270,7 +1273,8 @@ test('send reviews a proposal and rejects a wrong credential', async ({ page }) 
   );
   await page.getByLabel('Bitcoin address').fill('bcrt1qreceiver0000000000000000000000000000000');
   await page.getByLabel('Payment label').fill('Test payment');
-  await page.getByRole('button', { name: 'Add label' }).click();
+  await page.getByLabel('Payment label').press('Enter');
+  await expect(page.getByRole('button', { name: 'Remove Test payment' })).toBeVisible();
   await page.getByRole('button', { name: 'Continue to amount' }).click();
   await expect(paymentProgress.getByText('Amount & fee')).toBeVisible();
   await page.getByLabel('Amount', { exact: true }).fill('25000');

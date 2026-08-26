@@ -57,7 +57,7 @@ Opening Receive or Send first pauses and cancels automatic sync. Snapshot reads 
 
 Multiple unused addresses may await payment concurrently within the configured recovery gap. The prospective index is checked in the same transaction as reveal and label persistence; exceeding the gap reveals nothing, and the setting cannot be lowered below the already-required run. Each request may transition independently to `discarded` and remains monitored. Any observed payment transitions that address to `used`, after which discard is impossible.
 
-Suggestions never prefill a field. Choosing one adds a removable draft chip and removes it from the available suggestion list; up to twelve distinct labels may be selected before submission. Every submitted assignment remains immutable. Suggestions disappear with the unlocked wallet surface and come only from that profile's isolated database.
+Suggestions never prefill a field. Choosing one adds a removable token inside the input and removes it from the available suggestion list; removing the token restores the suggestion. Enter, Tab, comma, and semicolon commit typed text as an in-field token. Up to twelve distinct labels may be selected before submission. Every submitted assignment remains immutable. Suggestions disappear with the unlocked wallet surface and come only from that profile's isolated database.
 
 ## Single-key send
 

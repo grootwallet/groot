@@ -57,8 +57,8 @@
   import { latestActiveProposal } from '$lib/wallet/proposal-resume';
   import {
     addPermanentLabel,
-    MAX_PERMANENT_LABELS,
     permanentLabelsForSubmission,
+    tokenizeLabelDraft,
     visibleLabelSuggestions
   } from '$lib/wallet/label-suggestions';
   import { accelerationUnavailableTitle } from '$lib/wallet/acceleration-presentation';
@@ -681,31 +681,21 @@
         credentialError = message || 'The QR frame was rejected.';
     }
   }
+  function updateLabelDraft(value: string) {
+    const draft = tokenizeLabelDraft(selectedLabels, value);
+    selectedLabels = draft.labels;
+    label = draft.input;
+  }
+  function handleLabelKeydown(event: KeyboardEvent) {
+    if (!label.trim() || !['Enter', 'Tab', ',', ';'].includes(event.key)) return;
+    if (event.key !== 'Tab') event.preventDefault();
+    const draft = tokenizeLabelDraft(selectedLabels, label, true);
+    selectedLabels = draft.labels;
+    label = draft.input;
+  }
 </script>
 
 {#snippet labelSuggestionPicker()}
-  {#if label.trim()}<button
-      type="button"
-      class="label-add-inline"
-      disabled={selectedLabels.length >= MAX_PERMANENT_LABELS}
-      onclick={() => {
-        selectedLabels = addPermanentLabel(selectedLabels, label);
-        label = '';
-      }}>{translate($locale, 'Add label')}</button
-    >{/if}
-  {#if selectedLabels.length}<div
-      class="selected-labels"
-      aria-label={translate($locale, 'Selected labels')}
-    >
-      {#each selectedLabels as selected}<span
-          >{selected}<button
-            type="button"
-            aria-label={translate($locale, 'Remove {label}', { label: selected })}
-            onclick={() => (selectedLabels = selectedLabels.filter((item) => item !== selected))}
-            ><X size={13} /></button
-          ></span
-        >{/each}
-    </div>{/if}
   {#if visibleSuggestions.length && !$discreetMode}<div class="label-suggestions">
       {#each visibleSuggestions as suggestion}<button
           type="button"
@@ -814,18 +804,35 @@
           {translate($locale, 'This permanent label helps you recognize the transaction later.')}
         </p>
       </div>
-      <label class="field"
-        ><span>{translate($locale, 'Payment label')}</span><input
-          aria-label={translate($locale, 'Payment label')}
-          bind:value={label}
-          placeholder={translate($locale, 'e.g. Hardware purchase, Pay Alex, Test transaction')}
-          maxlength="48"
-        /><FieldCounter
+      <div class="field">
+        <label for="send-label-input">{translate($locale, 'Payment label')}</label>
+        <div class="label-token-field" aria-label={translate($locale, 'Selected labels')}>
+          {#each selectedLabels as selected}<span class="label-token"
+              >{selected}<button
+                type="button"
+                aria-label={translate($locale, 'Remove {label}', { label: selected })}
+                onclick={() =>
+                  (selectedLabels = selectedLabels.filter((item) => item !== selected))}
+                ><X size={13} /></button
+              ></span
+            >{/each}<input
+            id="send-label-input"
+            aria-label={translate($locale, 'Payment label')}
+            value={label}
+            oninput={(event) => updateLabelDraft(event.currentTarget.value)}
+            onkeydown={handleLabelKeydown}
+            placeholder={selectedLabels.length
+              ? ''
+              : translate($locale, 'e.g. Hardware purchase, Pay Alex, Test transaction')}
+            maxlength="48"
+          />
+        </div>
+        <FieldCounter
           value={label}
           max={48}
           hint={translate($locale, 'Required · cannot be changed')}
-        /></label
-      >
+        />
+      </div>
       {@render labelSuggestionPicker()}
       <label class="field"
         ><span>{translate($locale, 'Bitcoin address')}</span><input

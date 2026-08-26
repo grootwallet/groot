@@ -17,8 +17,8 @@ provenance. Existing releases and legacy columns nevertheless expect exactly one
   whitespace-collapsed reuse key. Assignments remain append-only and cannot be edited or removed.
 - The first submitted label remains the primary assignment and continues to populate legacy address
   and proposal label fields. Additional assignments live in a schema-v3 additive table.
-- Suggestions selected in the draft UI become removable chips and disappear from the available list.
-  Removing a chip before submission has no persisted effect.
+- Suggestions selected in the draft UI become removable in-field tokens and disappear from the
+  available list. Removing a token before submission restores its suggestion and has no persisted effect.
 - Provenance carries every receive-origin label. Multiple labels on one source cluster remain Known;
   Mixed means distinct public source clusters were actually joined.
 
