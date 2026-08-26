@@ -14,6 +14,7 @@
   import LocalTimestamp from './LocalTimestamp.svelte';
   import { discreetMode } from '$lib/privacy';
   import { denomination, setDenomination } from '$lib/denomination';
+  import PermanentLabelTags from './PermanentLabelTags.svelte';
 
   let {
     transaction,
@@ -34,6 +35,15 @@
   );
   let canSpendOutput = $derived(
     transaction?.status === 'pending' && (transaction.walletOutputAmount ?? 0) > 0
+  );
+  let transactionLabels = $derived(
+    transaction
+      ? transaction.direction === 'received' && transaction.provenance.labels.length
+        ? transaction.provenance.labels
+        : transaction.intentLabel
+          ? [transaction.intentLabel]
+          : [transaction.label]
+      : []
   );
 
   $effect(() => {
@@ -96,16 +106,11 @@
           hidden={$discreetMode}
         />
       </button>
-      <p>
-        {translate(
-          $locale,
-          $discreetMode
-            ? 'Label hidden'
-            : isSelfSpend
-              ? 'Self-spend · network fee'
-              : transaction.label
-        )}
-      </p>
+      {#if isSelfSpend}<p>{translate($locale, 'Self-spend · network fee')}</p>{:else}<div
+          class="detail-hero-labels"
+        >
+          <PermanentLabelTags labels={transactionLabels} hidden={$discreetMode} prominent />
+        </div>{/if}
     </div>
     <dl class="details-list">
       <div>
@@ -178,18 +183,11 @@
             )}
           </dt>
           <dd>
-            {translate(
-              $locale,
-              $discreetMode
-                ? 'Hidden in discreet mode'
-                : transaction.direction === 'sent'
-                  ? (transaction.intentLabel?.text ?? transaction.label)
-                  : transaction.provenance.state === 'unknown'
-                    ? 'Source unknown'
-                    : transaction.provenance.labels
-                        .map((label: { text: string }) => label.text)
-                        .join(' + ') || transaction.label
-            )}
+            {#if transaction.direction === 'received' && transaction.provenance.state === 'unknown'}
+              {translate($locale, $discreetMode ? 'Hidden in discreet mode' : 'Source unknown')}
+            {:else}
+              <PermanentLabelTags labels={transactionLabels} hidden={$discreetMode} prominent />
+            {/if}
           </dd>
         </div>
         {#if transaction.provenance.state === 'mixed'}<div>

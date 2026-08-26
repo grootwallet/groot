@@ -8,6 +8,7 @@
   import { fly } from 'svelte/transition';
   import WalletSkeleton from './WalletSkeleton.svelte';
   import { translate } from '$lib/i18n-catalog';
+  import PermanentLabelTags from './PermanentLabelTags.svelte';
   let {
     items,
     loading = false,
@@ -42,7 +43,15 @@
             />{/if}
         </span>
         <span class="tx-main"
-          ><strong>{$discreetMode ? translate($locale, 'Label hidden') : tx.label}</strong><small
+          ><PermanentLabelTags
+            labels={tx.direction === 'received' && tx.provenance.labels.length
+              ? tx.provenance.labels
+              : tx.intentLabel
+                ? [tx.intentLabel]
+                : [tx.label]}
+            hidden={$discreetMode}
+            prominent
+          /><small
             ><LocalTimestamp value={tx.date} />{' · '}{translate(
               $locale,
               tx.status === 'pending'

@@ -1106,6 +1106,19 @@ code {
   color: var(--muted);
   font-size: 9px;
 }
+.active-proposal-meta {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.active-proposal-meta .permanent-label-tags.prominent {
+  flex: 0 1 auto;
+  justify-content: flex-start;
+}
+.active-proposal-meta > small {
+  flex: 0 0 auto;
+}
 .active-proposal-action {
   display: inline-flex;
   align-items: center;
@@ -1445,6 +1458,9 @@ code {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.tx-main .permanent-label-tags.prominent {
+  justify-content: flex-start;
 }
 .tx-amount {
   text-align: right;
@@ -1809,6 +1825,10 @@ code {
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 340px;
+}
+.awaiting-select .permanent-label-tags.prominent,
+.address-history-row .permanent-label-tags.prominent {
+  justify-content: flex-start;
 }
 .awaiting-discard {
   border: 0;
@@ -2959,6 +2979,13 @@ code {
   color: var(--muted);
   margin: 6px 0 0;
   font-size: 11px;
+}
+.detail-hero-labels {
+  max-width: 100%;
+  margin-top: 8px;
+}
+.detail-hero-labels .permanent-label-tags.prominent {
+  justify-content: center;
 }
 .hash-box {
   width: 100%;
@@ -8586,6 +8613,16 @@ code {
 .address-detail-status small {
   color: var(--muted);
   font-size: 9px;
+}
+.address-detail-status .permanent-label-tags.prominent {
+  justify-content: flex-start;
+}
+.provenance-labels {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 .address-detail-view .readable-address-block {
   width: 100%;

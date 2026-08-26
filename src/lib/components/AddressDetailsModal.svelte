@@ -7,6 +7,7 @@
   import { copyText } from '$lib/clipboard';
   import { toast } from '$lib/stores/toasts';
   import type { ReceiveAddress } from '$lib/types';
+  import PermanentLabelTags from './PermanentLabelTags.svelte';
 
   let {
     address,
@@ -49,7 +50,7 @@
     <div class="address-detail-view">
       <div class="address-detail-status">
         <span class="status-dot" class:used={address.status === 'used'}></span><span
-          ><strong>{labels.join(' · ')}</strong><small
+          ><PermanentLabelTags {labels} prominent /><small
             >{translate(
               $locale,
               address.status === 'awaiting'
@@ -65,7 +66,7 @@
       <dl>
         <div>
           <dt>{translate($locale, 'Labels')}</dt>
-          <dd>{labels.join(' · ')}</dd>
+          <dd><PermanentLabelTags {labels} prominent /></dd>
         </div>
         <div>
           <dt>{translate($locale, 'Status')}</dt>

@@ -728,19 +728,24 @@
                         )}
                       />
                     </dt>
-                    <dd>
-                      {translate(
-                        $locale,
-                        $discreetMode
-                          ? 'Hidden in discreet mode'
-                          : utxo.provenance.state === 'unknown'
-                            ? 'Source unknown'
-                            : utxo.provenance.labels.map((label) => label.text).join(' + ') ||
-                              utxo.label
-                      )}{translate(
-                        $locale,
-                        !$discreetMode && utxo.provenance.state === 'mixed' ? ' · Mixed' : ''
-                      )}
+                    <dd class="provenance-labels">
+                      {#if utxo.provenance.state === 'unknown'}
+                        {translate(
+                          $locale,
+                          $discreetMode ? 'Hidden in discreet mode' : 'Source unknown'
+                        )}
+                      {:else}
+                        <PermanentLabelTags
+                          labels={utxo.provenance.labels.length
+                            ? utxo.provenance.labels
+                            : [utxo.label]}
+                          hidden={$discreetMode}
+                          prominent
+                        />
+                        {#if !$discreetMode && utxo.provenance.state === 'mixed'}<span
+                            class="coin-status reused">{translate($locale, 'Mixed')}</span
+                          >{/if}
+                      {/if}
                     </dd>
                   </div>
                   <div>
@@ -774,7 +779,12 @@
                           )}
                         />
                       </dt>
-                      <dd>{utxo.provenance.sourceIntentLabel.text}</dd>
+                      <dd>
+                        <PermanentLabelTags
+                          labels={[utxo.provenance.sourceIntentLabel]}
+                          prominent
+                        />
+                      </dd>
                     </div>{/if}{#if !$discreetMode && utxo.provenance.context === 'change'}<div>
                       <dt>
                         {translate($locale, 'Change lineage')}

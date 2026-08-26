@@ -979,16 +979,11 @@
                   onchange={(event) => toggleCoin(coin.outpoint, event.currentTarget.checked)}
                 /><span
                   ><span class="coin-picker-title-line"
-                    ><strong
-                      >{translate($locale, $discreetMode ? 'Label hidden' : coin.label)}</strong
-                    >{#if coin.provenance.state !== 'unknown'}<PermanentLabelTags
-                        labels={coin.provenance.labels.filter(
-                          (item) =>
-                            item.text.trim().toLocaleLowerCase() !==
-                            coin.label.trim().toLocaleLowerCase()
-                        )}
-                        hidden={$discreetMode}
-                      />{/if}</span
+                    ><PermanentLabelTags
+                      labels={coin.provenance.labels.length ? coin.provenance.labels : [coin.label]}
+                      hidden={$discreetMode}
+                      prominent
+                    /></span
                   ><small
                     >{translate(
                       $locale,
@@ -1698,6 +1693,7 @@
   open={addressOpen}
   address={proposal?.recipient ?? ''}
   label={translate($locale, proposal?.label ?? '')}
+  labels={proposal?.labels ?? (proposal ? [proposal.label] : [])}
   onclose={() => (addressOpen = false)}
 />
 <RecipientAddressModal
@@ -1716,6 +1712,7 @@
   open={hardwareAddressOpen}
   address={hardwareRecipient}
   label={translate($locale, proposal?.label ?? '')}
+  labels={proposal?.labels ?? (proposal ? [proposal.label] : [])}
   title={translate($locale, 'Address shown on hardware')}
   description={translate($locale, 'Compare this exact encoding with the hardware device.')}
   onclose={() => (hardwareAddressOpen = false)}

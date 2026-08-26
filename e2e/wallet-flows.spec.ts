@@ -779,11 +779,15 @@ test('overview, activity, UTXOs, and settings expose durable states', async ({ p
   await page.keyboard.press('Escape');
   const overviewTransaction = page.locator('.tx-row').first();
   await expect(overviewTransaction).toBeVisible();
+  await expect(overviewTransaction.getByRole('list', { name: 'Assigned labels' })).toBeVisible();
   await overviewTransaction.click();
   await expect(page.getByRole('heading', { name: 'Transaction details' })).toBeVisible();
   await expect(page.locator('.modal-layer')).not.toHaveAttribute('style', /opacity/);
   await expect(page.locator('.modal-layer')).toHaveCSS('opacity', '1');
   const overviewDetails = page.getByRole('dialog', { name: 'Transaction details' });
+  await expect(
+    overviewDetails.getByRole('list', { name: 'Assigned labels' }).first()
+  ).toBeVisible();
   await expect(overviewDetails.getByText('Transaction ID', { exact: true })).toBeHidden();
   await expect(overviewDetails.getByText('Inputs', { exact: true })).toBeHidden();
   await overviewDetails.getByText('View more details', { exact: true }).click();
@@ -814,6 +818,9 @@ test('overview, activity, UTXOs, and settings expose durable states', async ({ p
   await confirmedReceivedTransaction.click();
   const transactionDialog = page.getByRole('dialog', { name: 'Transaction details' });
   await expect(transactionDialog).toBeVisible();
+  await expect(
+    transactionDialog.getByRole('list', { name: 'Assigned labels' }).first()
+  ).toBeVisible();
   await expect(page.getByText('Confirmations', { exact: true })).toBeVisible();
   const transactionTime = transactionDialog.locator('time');
   await expect(transactionTime).not.toContainText('local time');
@@ -1108,6 +1115,7 @@ test('receive keeps multiple labeled payment requests and discards them independ
   await page.goto('/receive');
   await page.getByRole('button', { name: 'View details for Invoice #104' }).click();
   const addressDetails = page.getByRole('dialog', { name: 'Invoice #104' });
+  await expect(addressDetails.getByLabel('Assigned labels').first()).toContainText('Invoice #104');
   await expect(addressDetails.getByText('Payment received')).toBeVisible();
   await expect(addressDetails.getByText("m/84'/1'/0'/0/7", { exact: true })).toBeVisible();
   await expect(addressDetails.getByRole('button', { name: 'Copy exact address' })).toBeVisible();
@@ -1178,6 +1186,7 @@ test('receive keeps multiple labeled payment requests and discards them independ
   await expect(visualGroups.last()).toHaveClass(/edge/);
   await qrDialog.getByRole('button', { name: 'Close' }).click();
   await page.getByRole('button', { name: 'Show address details' }).click();
+  await expect(page.getByLabel('Assigned labels').first()).toContainText('Invoice #205');
   await expect(page.getByText("m/84'/1'/0'/0/9")).toBeVisible();
   await page.getByRole('button', { name: 'New receive address' }).click();
   await page.getByLabel('Label', { exact: true }).fill('Invoice #206');

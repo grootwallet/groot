@@ -5,10 +5,12 @@
   import ReadableAddress from './ReadableAddress.svelte';
   import { copyText } from '$lib/clipboard';
   import { toast } from '$lib/stores/toasts';
+  import PermanentLabelTags from './PermanentLabelTags.svelte';
 
   let {
     address,
     label,
+    labels = [],
     open,
     title = 'Recipient address',
     description = 'Verify the complete destination before signing.',
@@ -17,6 +19,7 @@
   } = $props<{
     address: string;
     label: string;
+    labels?: string[];
     open: boolean;
     title?: string;
     description?: string;
@@ -24,6 +27,7 @@
     onclose: () => void;
   }>();
   let copied = $state(false);
+  let visibleLabels = $derived(labels.length ? labels : [label]);
 
   async function copy() {
     try {
@@ -44,7 +48,9 @@
 <Modal {open} {title} {description} {onclose}>
   <div class="address-detail-view">
     <div class="address-detail-status">
-      <span class="status-dot"></span><span><strong>{label}</strong><small>{detail}</small></span>
+      <span class="status-dot"></span><span
+        ><PermanentLabelTags labels={visibleLabels} prominent /><small>{detail}</small></span
+      >
     </div>
     <ReadableAddress {address} {copied} oncopy={copy} />
     <p>

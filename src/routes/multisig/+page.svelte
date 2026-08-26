@@ -24,6 +24,7 @@
   import OverflowMenuButton from '$lib/components/OverflowMenuButton.svelte';
   import MultisigDescriptorsModal from '$lib/components/MultisigDescriptorsModal.svelte';
   import TrezorPinModal from '$lib/components/TrezorPinModal.svelte';
+  import PermanentLabelTags from '$lib/components/PermanentLabelTags.svelte';
   import {
     walletService,
     WalletError,
@@ -634,7 +635,10 @@
                   validPolicyMaturity(coin)}
                 {#if maturity}<article>
                     <span>
-                      <strong>{coin.label || translate($locale, 'Coin')}</strong>
+                      {#if coin.label}<PermanentLabelTags
+                          labels={[coin.label]}
+                          prominent
+                        />{:else}<strong>{translate($locale, 'Coin')}</strong>{/if}
                       <small
                         class="coin-status"
                         class:policy-mature={maturity.state === MATURITY_MATURE}

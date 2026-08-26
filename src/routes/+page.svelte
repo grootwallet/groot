@@ -56,6 +56,7 @@
   import OverflowMenuButton from '$lib/components/OverflowMenuButton.svelte';
   import WalletSkeleton from '$lib/components/WalletSkeleton.svelte';
   import LoadFailure from '$lib/components/LoadFailure.svelte';
+  import PermanentLabelTags from '$lib/components/PermanentLabelTags.svelte';
   import EmptyState from '$lib/components/EmptyState.svelte';
   import MultisigDescriptorsModal from '$lib/components/MultisigDescriptorsModal.svelte';
   import { useWalletShellContext } from '$lib/wallet/shell-context';
@@ -592,7 +593,13 @@
       >
         <span class="active-proposal-icon"><Clock3 size={17} /></span>
         <span class="active-proposal-copy"
-          ><strong>{proposalTitle}</strong><small>{proposalLabel} · {proposalProgress}</small></span
+          ><strong>{proposalTitle}</strong><span class="active-proposal-meta"
+            ><PermanentLabelTags
+              labels={activeProposal.labels ?? [activeProposal.label]}
+              hidden={$discreetMode}
+              prominent
+            /><small>{proposalProgress}</small></span
+          ></span
         >
         <span class="active-proposal-action"
           >{translate($locale, 'Resume')} <ChevronRight size={15} /></span

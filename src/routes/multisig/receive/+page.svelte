@@ -210,9 +210,6 @@
     selectedLabels = draft.labels;
     label = draft.input;
   }
-  function addressLabelText(address: ReceiveAddress): string {
-    return (address.labels?.length ? address.labels : [address.label]).join(' · ');
-  }
   async function copy() {
     if (!current) return;
     try {
@@ -403,7 +400,7 @@
             showDetails = false;
           }}
           ><span class="status-dot"></span><span
-            ><strong>{addressLabelText(address)}</strong><small
+            ><PermanentLabelTags labels={address.labels ?? [address.label]} prominent /><small
               >{compactAddress(address.address)}</small
             ></span
           ><span class="right-meta"
@@ -442,7 +439,7 @@
         aria-label={translate($locale, 'View details for {label}', { label: address.label })}
         onclick={() => (detailAddress = address)}
         ><span class="status-dot" class:used={address.status === 'used'}></span><span
-          ><strong>{addressLabelText(address)}</strong><small
+          ><PermanentLabelTags labels={address.labels ?? [address.label]} prominent /><small
             >{compactAddress(address.address)}</small
           ></span
         ><span class="right-meta"
