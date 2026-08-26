@@ -209,7 +209,7 @@ impl DescriptorRecord {
 }
 
 impl PublicDescriptorPair {
-    /// Parses public descriptor text emitted by Groot and common hardware-wallet workflows.
+    /// Parses public descriptor text emitted by Groot and common hardware-signer workflows.
     /// Accepted text is deliberately narrow: a checksummed multipath descriptor, an explicit
     /// receive/change pair, or a receive descriptor whose standard `/1/*` change branch can be
     /// reconstructed without ambiguity. BIP129 records remain handled by `DescriptorRecord`.

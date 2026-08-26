@@ -184,7 +184,7 @@
           <p>
             {translate(
               $locale,
-              'This removes local coordinator data only. Hardware-wallet keys are unchanged.'
+              'This removes local coordinator data only. Hardware-signer keys are unchanged.'
             )}
           </p>
         </div>

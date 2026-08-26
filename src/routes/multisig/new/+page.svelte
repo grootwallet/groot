@@ -1004,14 +1004,14 @@
       if (pinPurpose === 'health') {
         pinPurpose = 'import';
         toast({
-          title: 'Hardware wallet unlocked',
+          title: 'Hardware signer unlocked',
           description: 'Resuming the signer health check.',
           tone: 'success'
         });
         await runDraftHealthCheck();
       } else {
         toast({
-          title: 'Hardware wallet unlocked',
+          title: 'Hardware signer unlocked',
           description: 'Scanning again for its public fingerprint.',
           tone: 'success'
         });
@@ -1198,13 +1198,13 @@
       if (cause instanceof WalletError && cause.code === 'wallet_corrupt') {
         createErrorTitle = 'Hardware verification needs attention';
         error =
-          'Groot could not safely restore the saved verification. Open “Verify hardware wallet policies” and verify the signer again.';
+          'Groot could not safely restore the saved verification. Open “Verify hardware signer policies” and verify the signer again.';
       } else {
         createErrorTitle = 'Wallet could not be created';
         error = localizedError(
           cause,
           $locale,
-          'Try again. Your hardware-wallet keys and saved descriptor are unchanged.'
+          'Try again. Your hardware-signer keys and saved descriptor are unchanged.'
         );
       }
     } finally {
@@ -1984,7 +1984,7 @@
           </SetupTask>{/if}
         {#if interactivePolicySigners.length}<SetupTask
             step={interactivePolicyStep}
-            title={translate($locale, 'Verify hardware wallet policies')}
+            title={translate($locale, 'Verify hardware signer policies')}
             description={translate(
               $locale,
               'Recommended now, but optional during coordinator creation. Register the policy and prove its first receive address before first use.'
@@ -2049,7 +2049,7 @@
           title={translate($locale, 'Set the coordinator PIN')}
           description={translate(
             $locale,
-            'This PIN protects local Groot data. It is separate from every hardware-wallet credential.'
+            'This PIN protects local Groot data. It is separate from every hardware-signer credential.'
           )}
           state={pinAvailable ? 'current' : 'upcoming'}
           status={pinAvailable ? 'Current step' : 'Available after earlier steps'}
@@ -2135,7 +2135,7 @@
     <div class="warning-box">
       <AlertTriangle size={17} /><strong
         >{translate($locale, 'You will need to add this signer again.')}</strong
-      ><span>{translate($locale, 'Its hardware wallet and seed are not changed.')}</span>
+      ><span>{translate($locale, 'Its hardware signer and seed are not changed.')}</span>
     </div>
     <div class="modal-footer">
       <Button variant="secondary" onclick={() => (signerPendingRemoval = null)}

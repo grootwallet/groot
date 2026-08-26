@@ -978,7 +978,7 @@
                 profile.kind === 'multisig'
                   ? 'Multisig wallet'
                   : profile.kind === 'watch_only'
-                    ? 'Hardware wallet'
+                    ? 'Hardware signer'
                     : 'Software wallet'
               )}</small
             ></span

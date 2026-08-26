@@ -38,7 +38,7 @@ fn validated_target_device_types(device_types: Vec<String>) -> ApiResult<Vec<Str
     if device_types.is_empty() || device_types.len() > MAX_TARGET_DEVICE_TYPES {
         return Err(api_error(
             "invalid_hardware_request",
-            "Choose at least one supported hardware-wallet type.",
+            "Choose at least one supported hardware-signer type.",
         ));
     }
     let mut validated = Vec::with_capacity(device_types.len());
@@ -47,7 +47,7 @@ fn validated_target_device_types(device_types: Vec<String>) -> ApiResult<Vec<Str
         if !SUPPORTED_HWI_DEVICE_TYPES.contains(&device_type.as_str()) {
             return Err(api_error(
                 "invalid_hardware_request",
-                "The requested hardware-wallet type is not supported.",
+                "The requested hardware-signer type is not supported.",
             ));
         }
         if !validated.contains(&device_type) {
@@ -94,7 +94,7 @@ fn validate_discovered_devices(mut devices: Vec<HwiDevice>) -> ApiResult<Vec<Hwi
     if devices.len() > MAX_DISCOVERED_DEVICES {
         return Err(api_error(
             "hardware_response_too_large",
-            "HWI returned too many hardware-wallet records.",
+            "HWI returned too many hardware-signer records.",
         ));
     }
     let mut paths = std::collections::HashSet::new();
@@ -108,7 +108,7 @@ fn validate_discovered_devices(mut devices: Vec<HwiDevice>) -> ApiResult<Vec<Hwi
         {
             return Err(api_error(
                 "invalid_hardware_response",
-                "HWI returned an invalid hardware-wallet record.",
+                "HWI returned an invalid hardware-signer record.",
             ));
         }
         device.fingerprint = match device.fingerprint.take() {
@@ -117,7 +117,7 @@ fn validate_discovered_devices(mut devices: Vec<HwiDevice>) -> ApiResult<Vec<Hwi
                 Fingerprint::from_str(&fingerprint).map_err(|_| {
                     api_error(
                         "invalid_hardware_response",
-                        "HWI returned an invalid hardware-wallet identity.",
+                        "HWI returned an invalid hardware-signer identity.",
                     )
                 })?;
                 Some(fingerprint)
@@ -344,7 +344,7 @@ pub(super) fn recently_scanned_hardware_device(
     let scan = scans.as_ref().ok_or_else(|| {
         api_error(
             "hardware_scan_expired",
-            "Scan for hardware wallets again before continuing.",
+            "Scan for hardware signers again before continuing.",
         )
     })?;
     if scan.created_at.elapsed() > HARDWARE_SCAN_CACHE_TIMEOUT {
@@ -356,7 +356,7 @@ pub(super) fn recently_scanned_hardware_device(
     scan.devices.get(device_id).cloned().ok_or_else(|| {
         api_error(
             "hardware_unavailable",
-            "That hardware wallet was not present in the latest scan. Scan again.",
+            "That hardware signer was not present in the latest scan. Scan again.",
         )
     })
 }
@@ -369,7 +369,7 @@ fn require_unique_bitbox(state: &AppState, selected: &HwiDevice) -> ApiResult<()
     let scan = scans.as_ref().ok_or_else(|| {
         api_error(
             "hardware_scan_expired",
-            "Scan for hardware wallets again before continuing.",
+            "Scan for hardware signers again before continuing.",
         )
     })?;
     if scan.created_at.elapsed() > HARDWARE_SCAN_CACHE_TIMEOUT {
@@ -821,7 +821,7 @@ pub async fn hardware_prompt_pin(
         if response.success != Some(true) {
             return Err(missing_hwi_value(
                 response.code,
-                "The hardware wallet did not start its PIN matrix.",
+                "The hardware signer did not start its PIN matrix.",
             ));
         }
         Ok(PendingHardwarePin {
@@ -1125,7 +1125,7 @@ fn parse_hwi_account_xpub(output: &[u8], device_type: &str) -> ApiResult<String>
     if parsed.network.is_mainnet() {
         return Err(api_error(
             "wrong_network",
-            "The hardware wallet returned a mainnet account key for this non-mainnet wallet.",
+            "The hardware signer returned a mainnet account key for this non-mainnet wallet.",
         ));
     }
     Ok(xpub.to_owned())
@@ -1172,7 +1172,7 @@ fn parse_hwi_account_keypool(
     if derivation != expected_path {
         return Err(api_error(
             "invalid_derivation_path",
-            "The hardware wallet returned a different account path than Groot requested.",
+            "The hardware signer returned a different account path than Groot requested.",
         ));
     }
     Fingerprint::from_str(fingerprint).map_err(|_| {
@@ -1194,7 +1194,7 @@ fn parse_hwi_account_keypool(
     if parsed.network.is_mainnet() {
         return Err(api_error(
             "wrong_network",
-            "The hardware wallet returned a mainnet account key for this non-mainnet wallet.",
+            "The hardware signer returned a mainnet account key for this non-mainnet wallet.",
         ));
     }
     Ok((fingerprint.to_ascii_lowercase(), xpub.to_owned()))

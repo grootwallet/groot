@@ -1347,7 +1347,7 @@
   title={translate($locale, 'Sign with hardware')}
   description={translate(
     $locale,
-    'Use the same passphrase-protected hardware wallet whose fingerprint you imported.'
+    'Use the same passphrase-protected hardware signer whose fingerprint you imported.'
   )}
   onclose={closeHardwareScan}
   >{#if proposal}<section

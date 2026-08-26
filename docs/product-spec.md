@@ -24,7 +24,7 @@ The distributed macOS application includes Groot's exact reviewed Bitcoin Core H
 
 ## Onboarding
 
-The entry screen uses **Add wallet** as the umbrella for creating a Groot software wallet, connecting or importing an existing hardware wallet, and creating a multisig policy. **Recover software wallet** is a separate explicit action for the currently supported BIP39 recovery flow; public hardware-backup import remains under **Add wallet**.
+The entry screen uses **Add wallet** as the umbrella for creating a Groot software wallet, connecting or importing an existing hardware signer, and creating a multisig policy. **Recover software wallet** is a separate explicit action for the currently supported BIP39 recovery flow; public hardware-signer backup import remains under **Add wallet**.
 
 ### Create
 
@@ -188,7 +188,7 @@ Mainnet, Lightning, arbitrary custom Miniscript editing, editable labels, contac
 - The shared localization boundary covers all frontend product copy, including routes, modals, loading and error states, toasts, accessibility names, recurring statuses, and grammatical count labels. English source copy is the stable catalog key; the localization quality gate rejects uncatalogued rendered English. Native errors are localized by stable category or a localized safe fallback without changing wallet contracts or trusted Rust behavior.
 - Wallet names, permanent labels, addresses, descriptors, transaction data, and user-entered text remain byte-for-byte user or protocol data and are never translated.
 - A wallet may be software single-key, external-signer single-key, or descriptor multisig. Each profile has isolated storage, app credential, descriptor identity, proposals, labels, and node configuration.
-- External-signer wallets store public BIP84 descriptors only. Their Groot app PIN is distinct from any optional hardware-wallet seed passphrase.
+- External-signer wallets store public BIP84 descriptors only. Their Groot app PIN is distinct from any optional hardware-signer seed passphrase.
 - External-signer Overview exposes **Health check** in the wallet actions menu, and Settings exposes the same **Hardware signer identity & health** detail. Both entry points share the latest wallet-scoped result. Settings shows an honest **Checked**, **Attention**, or **Not checked** badge and, after an attempt, its locally formatted event time. An explicit aggregate scan supplies only an opaque path hint; under one exclusive lease the native health operation freshly reads and matches the device type, fingerprint, BIP84 derivation, and complete account xpub, revalidates the selected wallet, and atomically persists the result. The device path is never persisted, and the renderer cannot author a health result.
 - An unlocked external-signer wallet can export its checksummed public receive descriptor only after fresh app-PIN authentication. The native, user-mediated save path produces an importable watch-only backup; the UI warns that it cannot spend but reveals the wallet's complete activity. Importing that descriptor must reconstruct the same receive and change descriptors without access to the hardware seed.
 - USB, SD-card/file, manual descriptor, and QR-text public imports converge on the same Rust validation. Hardware passphrases must be selected on the device where supported. A Trezor may use a hidden passphrase wallet for one Groot profile and its seed-only standard wallet for another; selecting the standard wallet requires an explicit confirmation and binds the imported fingerprint to that signer.

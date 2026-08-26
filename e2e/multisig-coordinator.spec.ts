@@ -1011,7 +1011,7 @@ test('unlocks a detected Trezor with the bounded PIN-position flow', async ({ pa
   await expect(pin.getByRole('status', { name: 'Trezor unlock in progress' })).toContainText(
     'Waiting for Trezor'
   );
-  await expect(page.getByText('Hardware wallet unlocked')).toBeVisible();
+  await expect(page.getByText('Hardware signer unlocked')).toBeVisible();
   const rescanned = page.getByRole('dialog', { name: 'Connect hardware device' });
   await expect(rescanned).toBeVisible();
   const unlocked = rescanned.getByRole('button', { name: /Virtual Trezor One/ });
@@ -1263,7 +1263,7 @@ test('creates and verifies a simple 2-of-3 descriptor wallet', async ({ page }) 
   await expect(policyDialog).toBeHidden();
   await page
     .locator('.setup-task')
-    .filter({ hasText: 'Verify hardware wallet policies' })
+    .filter({ hasText: 'Verify hardware signer policies' })
     .getByRole('button', { name: /Finish hardware setup before first signature/ })
     .click();
   await expect(page.locator('.setup-task.current')).toContainText('Set the coordinator PIN');
@@ -1673,7 +1673,7 @@ test('confirms signer removal before changing the unfinished wallet', async ({ p
   await page.getByRole('button', { name: `Remove ${keys[0].label}` }).click();
   const dialog = page.getByRole('dialog', { name: 'Remove signer?' });
   await expect(dialog).toContainText(`Remove ${keys[0].label} from this unfinished wallet?`);
-  await expect(dialog).toContainText('Its hardware wallet and seed are not changed.');
+  await expect(dialog).toContainText('Its hardware signer and seed are not changed.');
   await expect(signerRow).toBeVisible();
 
   await dialog.getByRole('button', { name: 'Keep signer' }).click();

@@ -70,7 +70,7 @@
 
 <section
   class="signer-policy-review"
-  aria-label={translate($locale, 'Hardware wallet policy review')}
+  aria-label={translate($locale, 'Hardware signer policy review')}
 >
   <header>
     <span class:verified={!!verification}><ShieldCheck size={19} /></span>

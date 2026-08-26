@@ -958,7 +958,7 @@ pub async fn hardware_sign_multisig(
         let message = if signing_identity.device_type.eq_ignore_ascii_case("ledger") {
             "Ledger returned the PSBT without adding its signature. Keep Bitcoin Test open and approve the wallet policy and transaction on-device, then try again. No signatures were changed."
         } else {
-            "The hardware wallet returned the PSBT without adding its signature. Review any message on the device and try again. No signatures were changed."
+            "The hardware signer returned the PSBT without adding its signature. Review any message on the device and try again. No signatures were changed."
         };
         return Err(api_error("hardware_signature_missing", message));
     }

@@ -720,7 +720,7 @@
       pinOpen = false;
       pinDevice = null;
       toast({
-        title: 'Hardware wallet unlocked',
+        title: 'Hardware signer unlocked',
         description: 'Scanning again so you can select this signer.',
         tone: 'success'
       });

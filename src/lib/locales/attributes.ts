@@ -63,7 +63,7 @@ export const attributeCopy = {
     es: 'Compara cada valor siguiente con el dispositivo antes de aprobar.'
   },
   'Compare this exact encoding with the hardware device.': {
-    fr: 'Comparez cet encodage exact avec le portefeuille matériel.',
+    fr: 'Comparez cet encodage exact avec le signataire matériel.',
     es: 'Compara esta codificación exacta con el dispositivo físico.'
   },
   'Compare this exact wallet-controlled output with the hardware device.': {
@@ -153,17 +153,9 @@ export const attributeCopy = {
     fr: 'Configuration du signataire matériel en cours',
     es: 'Configuración del firmante físico en curso'
   },
-  'Hardware wallet import in progress': {
-    fr: 'Importation du portefeuille matériel en cours',
-    es: 'Importación de la cartera física en curso'
-  },
-  'Hardware wallet setup in progress': {
-    fr: 'Configuration du portefeuille matériel en cours',
-    es: 'Configuración de la cartera física en curso'
-  },
-  'Hardware wallet setup progress': {
-    fr: 'Progression de la configuration du portefeuille matériel',
-    es: 'Progreso de configuración de la cartera física'
+  'Hardware signer setup progress': {
+    fr: 'Progression de la configuration du signataire matériel',
+    es: 'Progreso de configuración del firmante físico'
   },
   'Internal wallet output · not the recipient': {
     fr: 'Sortie interne du portefeuille · pas le destinataire',
@@ -399,9 +391,9 @@ export const attributeCopy = {
     fr: 'Cela supprime définitivement les données du portefeuille de cet appareil.',
     es: 'Esto elimina permanentemente los datos de la cartera de este dispositivo.'
   },
-  'This PIN protects local Groot data. It is separate from every hardware-wallet credential.': {
-    fr: 'Ce code PIN protège les données locales de Groot. Il est distinct de chaque identifiant du portefeuille matériel.',
-    es: 'Este PIN protege los datos locales de Groot. Es independiente de las credenciales de cada cartera física.'
+  'This PIN protects local Groot data. It is separate from every hardware-signer credential.': {
+    fr: 'Ce code PIN protège les données locales de Groot. Il est distinct de chaque identifiant du signataire matériel.',
+    es: 'Este PIN protege los datos locales de Groot. Es independiente de las credenciales de cada firmante físico.'
   },
   'This public backup recovers every wallet address and coordinates signatures. It cannot spend, but it reveals wallet activity.':
     {
@@ -435,9 +427,9 @@ export const attributeCopy = {
     fr: 'Utilisez l’écran de l’appareil pour confirmer l’identité et le portefeuille protégé par phrase secrète.',
     es: 'Usa la pantalla del dispositivo para confirmar la identidad y la cartera con frase de contraseña.'
   },
-  'Use the same passphrase-protected hardware wallet whose fingerprint you imported.': {
-    fr: 'Utilisez le même portefeuille matériel protégé par phrase secrète dont vous avez importé l’empreinte.',
-    es: 'Usa la misma cartera física protegida con frase de contraseña cuya huella importaste.'
+  'Use the same passphrase-protected hardware signer whose fingerprint you imported.': {
+    fr: 'Utilisez le même signataire matériel protégé par phrase secrète dont vous avez importé l’empreinte.',
+    es: 'Usa el mismo firmante físico protegido con frase de contraseña cuya huella importaste.'
   },
   'Use your written 24 words for a private native proof, or reveal them securely first if you still need to make the backup.':
     {

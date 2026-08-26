@@ -363,7 +363,7 @@ describe('hardware receive verification UI', () => {
     expect(appCss).toMatch(/\.modal:focus-visible\s*\{\s*outline:\s*none;\s*\}/);
   });
 
-  it('refreshes the selected wallet before opening a newly created hardware wallet', () => {
+  it('refreshes the selected wallet before opening a newly created hardware-signer wallet', () => {
     const created = hardwareSetup.indexOf('await walletService.createExternalSignerWallet');
     const refreshed = hardwareSetup.indexOf('await walletShell.refreshProfiles()', created);
     const opened = hardwareSetup.indexOf("await goto('/')", refreshed);
@@ -420,7 +420,7 @@ describe('hardware receive verification UI', () => {
     );
   });
 
-  it('lets a single-key hardware wallet discard its local signature without canceling payment', () => {
+  it('lets a single-key hardware-signer wallet discard its local signature without canceling payment', () => {
     expect(singleKeySend).toContain('ondiscard={externalSigner');
     expect(singleKeySend).toContain('walletService.discardExternalSignerSignature(');
     expect(singleKeySend).toContain("title={translate($locale, 'Discard local signature?')}");

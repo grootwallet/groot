@@ -2,9 +2,9 @@ import type { CatalogSection } from './types';
 
 export const hardwareCopy = {
   bitbox: { fr: 'bitbox', es: 'bitbox' },
-  'Scanning all USB hardware wallets…': {
-    fr: 'Recherche de tous les portefeuilles matériels USB…',
-    es: 'Buscando todas las carteras físicas USB…'
+  'Scanning all USB hardware signers…': {
+    fr: 'Recherche de tous les signataires matériels USB…',
+    es: 'Buscando todos los firmantes físicos USB…'
   },
   scan: { fr: 'analyser', es: 'buscar' },
   unlock: { fr: 'déverrouiller', es: 'desbloquear' },
@@ -167,7 +167,7 @@ export const hardwareCopy = {
       es: 'Una semilla o frase de contraseña diferente produce una huella y direcciones completamente distintas. Nano S Plus no muestra esta huella, así que verifica tu primera dirección de recepción en Ledger antes de usar la cartera.'
     },
   'Account xpub': { fr: 'xpub du compte', es: 'xpub de la cuenta' },
-  'Add hardware wallet': { fr: 'Ajouter un portefeuille matériel', es: 'Añadir cartera física' },
+  'Add hardware signer': { fr: 'Ajouter un signataire matériel', es: 'Añadir firmante físico' },
   'Animated-QR scanners can be added without changing the parser': {
     fr: 'Les scanners QR animés peuvent être ajoutés sans modifier l’analyseur',
     es: 'Se pueden añadir escáneres QR animados sin cambiar el analizador'
@@ -177,15 +177,15 @@ export const hardwareCopy = {
       fr: 'Avant la connexion, initialisez et déverrouillez le signataire. Sélectionnez toute phrase secrète matérielle sur l’appareil. Groot importe uniquement des données publiques.',
       es: 'Antes de conectar, inicializa y desbloquea el firmante. Selecciona cualquier frase de contraseña en el dispositivo. Groot solo importa datos públicos.'
     },
-  'Compare it with the value shown by the hardware wallet or its trusted export. A different seed or passphrase produces a different wallet.':
+  'Compare it with the value shown by the hardware signer or its trusted export. A different seed or passphrase produces a different wallet.':
     {
-      fr: 'Comparez-la à la valeur affichée par le portefeuille matériel ou dans son export fiable. Une graine ou phrase secrète différente produit un autre portefeuille.',
-      es: 'Compárala con el valor mostrado por la cartera física o su exportación de confianza. Una semilla o frase de contraseña diferente produce otra cartera.'
+      fr: 'Comparez-la à la valeur affichée par le signataire matériel ou dans son export fiable. Une graine ou phrase secrète différente produit un autre portefeuille.',
+      es: 'Compárala con el valor mostrado por el firmante físico o su exportación de confianza. Una semilla o frase de contraseña diferente produce otra cartera.'
     },
-  'Compare the fingerprint with the original wallet or a trusted record when available. After setup, verify the first receive address on the hardware wallet before accepting funds.':
+  'Compare the fingerprint with the original wallet or a trusted record when available. After setup, verify the first receive address on the hardware signer before accepting funds.':
     {
-      fr: 'Comparez l’empreinte au portefeuille d’origine ou à une référence fiable si disponible. Après la configuration, vérifiez la première adresse de réception sur le portefeuille matériel avant d’accepter des fonds.',
-      es: 'Compara la huella con la cartera original o un registro de confianza cuando esté disponible. Tras la configuración, verifica la primera dirección de recepción en la cartera física antes de aceptar fondos.'
+      fr: 'Comparez l’empreinte au portefeuille d’origine ou à une référence fiable si disponible. Après la configuration, vérifiez la première adresse de réception sur le signataire matériel avant d’accepter des fonds.',
+      es: 'Compara la huella con la cartera original o un registro de confianza cuando esté disponible. Tras la configuración, verifica la primera dirección de recepción en el firmante físico antes de aceptar fondos.'
     },
   'Connect with cable': { fr: 'Connecter par câble', es: 'Conectar por cable' },
   'Descriptor or public export': {

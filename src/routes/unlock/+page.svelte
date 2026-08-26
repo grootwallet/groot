@@ -135,7 +135,7 @@
           <strong
             >{translate(
               $locale,
-              'This profile predates the current hardware-wallet storage format.'
+              'This profile predates the current hardware-signer storage format.'
             )}</strong
           >
           {translate(
@@ -164,7 +164,7 @@
                 )
               : translate(
                   $locale,
-                  'This app PIN protects local Groot data only. It is not a hardware-wallet passphrase and is not part of a signer seed backup.'
+                  'This app PIN protects local Groot data only. It is not a hardware-signer passphrase and is not part of a signer seed backup.'
                 )}
             bind:value={credential}
             placeholder={credentialPlaceholder}

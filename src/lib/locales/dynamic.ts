@@ -575,9 +575,9 @@ export const dynamicCopy = {
     fr: 'Cela modifie uniquement la sélection des pièces. Votre bitcoin reste dans ce portefeuille.',
     es: 'Esto solo cambia la selección de monedas. Tu bitcoin permanece en esta cartera.'
   },
-  'This hardware wallet is already in Groot': {
-    fr: 'Ce portefeuille matériel est déjà dans Groot',
-    es: 'Esta cartera física ya está en Groot'
+  'This hardware signer is already in Groot': {
+    fr: 'Ce signataire matériel est déjà dans Groot',
+    es: 'Este firmante físico ya está en Groot'
   },
   'This makes the coin available for payments again.': {
     fr: 'Cela rend la pièce à nouveau disponible pour les paiements.',

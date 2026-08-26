@@ -1615,10 +1615,10 @@ struct HwiAddress {
 fn missing_hwi_value(code: Option<i64>, value: &str) -> ApiError {
     let message = match code {
         Some(-3 | -12) => "Unlock the signer and quit other wallet apps, then try again.",
-        Some(-14) => "The action was cancelled on the hardware wallet.",
-        Some(-15) => "The hardware wallet is busy. Finish the current action and try again.",
-        Some(-8 | -9) => "This hardware wallet does not support the requested operation.",
-        Some(-1 | -2 | -4 | -7) => "Groot could not select the enumerated hardware wallet.",
+        Some(-14) => "The action was cancelled on the hardware signer.",
+        Some(-15) => "The hardware signer is busy. Finish the current action and try again.",
+        Some(-8 | -9) => "This hardware signer does not support the requested operation.",
+        Some(-1 | -2 | -4 | -7) => "Groot could not select the enumerated hardware signer.",
         _ => value,
     };
     api_error("hardware_unavailable", message)
@@ -6119,20 +6119,20 @@ pub(crate) mod profile_commands;
 
 fn hardware_api_error(error: HardwareError) -> ApiError {
     let message = match error {
-        HardwareError::InvalidArgument => "The hardware wallet request was rejected.",
+        HardwareError::InvalidArgument => "The hardware signer request was rejected.",
         HardwareError::Unavailable => bundled_hwi_unavailable_message(),
-        HardwareError::TimedOut => "The hardware wallet did not respond in time.",
-        HardwareError::Busy => "Another hardware-wallet action is already in progress.",
-        HardwareError::Cancelled => "The hardware-wallet action was cancelled.",
-        HardwareError::OutputTooLarge => "The hardware wallet returned an oversized response.",
+        HardwareError::TimedOut => "The hardware signer did not respond in time.",
+        HardwareError::Busy => "Another hardware-signer action is already in progress.",
+        HardwareError::Cancelled => "The hardware-signer action was cancelled.",
+        HardwareError::OutputTooLarge => "The hardware signer returned an oversized response.",
         HardwareError::CommandFailed(code) => match code {
             Some(-3 | -12) => "Unlock the signer and quit other wallet apps, then try again.",
-            Some(-14) => "The action was cancelled on the hardware wallet.",
-            Some(-15) => "The hardware wallet is busy. Close its companion app and try again.",
-            Some(-8 | -9) => "This hardware wallet does not support the requested operation.",
-            _ => "The hardware wallet rejected the request.",
+            Some(-14) => "The action was cancelled on the hardware signer.",
+            Some(-15) => "The hardware signer is busy. Close its companion app and try again.",
+            Some(-8 | -9) => "This hardware signer does not support the requested operation.",
+            _ => "The hardware signer rejected the request.",
         },
-        HardwareError::Io => "Communication with the hardware wallet failed.",
+        HardwareError::Io => "Communication with the hardware signer failed.",
     };
     api_error(error.code(), message)
 }
@@ -6207,7 +6207,7 @@ fn missing_hardware_fingerprint(device_type: &str) -> ApiError {
         "trezor" | "keepkey" => {
             "Unlock the device using Groot's PIN-matrix flow, then scan again."
         }
-        _ => "Unlock the hardware wallet and put it in its Bitcoin app, then scan again.",
+        _ => "Unlock the hardware signer and put it in its Bitcoin app, then scan again.",
     };
     api_error("hardware_unavailable", message)
 }

@@ -25,8 +25,8 @@ describe('Trezor PIN presentation', () => {
   it('normalizes transport labels to a human device brand', () => {
     expect(hardwareBrand(device('trezor_1', 'trezor_1'))).toBe('Trezor');
     expect(hardwareBrand(device('KeepKey #1', 'keepkey'))).toBe('KeepKey');
-    expect(hardwareBrand(device('Unknown', 'hid'))).toBe('hardware wallet');
-    expect(hardwareBrand(null)).toBe('hardware wallet');
+    expect(hardwareBrand(device('Unknown', 'hid'))).toBe('hardware signer');
+    expect(hardwareBrand(null)).toBe('hardware signer');
   });
 
   it('keeps HWI position values in spatial numpad order without using them as labels', () => {
@@ -55,11 +55,11 @@ describe('Trezor PIN presentation', () => {
     expect(trezorPinError('hardware_challenge_expired', 'raw').title).toBe('PIN matrix expired');
     expect(trezorPinError('hardware_unavailable', 'raw')).toEqual({
       title: 'Device disconnected',
-      detail: 'Reconnect the hardware wallet, then ask for a new layout.'
+      detail: 'Reconnect the hardware signer, then ask for a new layout.'
     });
     expect(trezorPinError('internal_error', 'USB unavailable').detail).toBe('USB unavailable');
     expect(trezorPinError('', '').detail).toBe(
-      'Reconnect the hardware wallet and start a new PIN matrix.'
+      'Reconnect the hardware signer and start a new PIN matrix.'
     );
   });
 

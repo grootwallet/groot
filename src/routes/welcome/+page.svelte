@@ -322,7 +322,7 @@
         <a class="wallet-type-card hardware" href="/hardware/new">
           <span class="wallet-type-icon"><Cpu size={20} /></span>
           <span class="wallet-type-copy"
-            ><strong>{translate($locale, 'Hardware wallet')}</strong><small
+            ><strong>{translate($locale, 'Hardware signer')}</strong><small
               >{translate($locale, 'Connect a device you already trust.')}</small
             ></span
           >

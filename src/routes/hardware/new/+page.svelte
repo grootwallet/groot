@@ -57,7 +57,7 @@
   let importSource = $state<ExternalSignerSource>('file');
   let standardWalletOpen = $state(false),
     standardWalletDevice = $state<HardwareDevice | null>(null);
-  let hardwareProgress = $state('Scanning all USB hardware wallets…');
+  let hardwareProgress = $state('Scanning all USB hardware signers…');
   let pinOpen = $state(false),
     pinBusy = $state(false),
     pinChallenge = $state(''),
@@ -101,7 +101,7 @@
     const generation = ++hardwareScanGeneration;
     scanOpen = true;
     busy = true;
-    hardwareProgress = 'Scanning all USB hardware wallets…';
+    hardwareProgress = 'Scanning all USB hardware signers…';
     lastAttemptedDevice = null;
     lastAttemptAllowedEmptyPassphrase = false;
     errorTitle = 'Could not scan hardware';
@@ -212,7 +212,7 @@
       pinOpen = false;
       pinDevice = null;
       toast({
-        title: 'Hardware wallet unlocked',
+        title: 'Hardware signer unlocked',
         description: 'Now choose its standard or hidden wallet.',
         tone: 'success'
       });
@@ -250,7 +250,7 @@
           file.name
             .replace(/\.[^.]+$/, '')
             .replace(/[-_]+/g, ' ')
-            .trim() || 'Recovered hardware wallet';
+            .trim() || 'Recovered hardware signer';
       }
       encoded = await readTransferFile(file);
       importSource = 'file';
@@ -282,7 +282,7 @@
       pin = '';
       confirmation = '';
       toast({
-        title: 'Hardware wallet added',
+        title: 'Hardware signer added',
         description: networkSetupCopied
           ? 'Only public descriptors are stored in Groot.'
           : 'Network setup was not copied. Configure it in Settings.',
@@ -305,7 +305,7 @@
   <header class="page-header">
     <div>
       <p class="eyebrow">{translate($locale, 'EXTERNAL SIGNER')}</p>
-      <h1>{translate($locale, 'Add hardware wallet')}</h1>
+      <h1>{translate($locale, 'Add hardware signer')}</h1>
       <p class="subtitle">
         {translate($locale, 'One key. Signing stays on your hardware device.')}
       </p>
@@ -318,7 +318,7 @@
     <SetupProgress
       steps={hardwareSteps}
       current={step}
-      label={translate($locale, 'Hardware wallet setup progress')}
+      label={translate($locale, 'Hardware signer setup progress')}
     />
   </div>
   {#if step === 1}
@@ -504,7 +504,7 @@
             <strong>{translate($locale, 'Review the public backup identity.')}</strong><span
               >{translate(
                 $locale,
-                'Compare the fingerprint with the original wallet or a trusted record when available.\n              After setup, verify the first receive address on the hardware wallet before accepting\n              funds.'
+                'Compare the fingerprint with the original wallet or a trusted record when available.\n              After setup, verify the first receive address on the hardware signer before accepting\n              funds.'
               )}</span
             >
           </p>
@@ -516,7 +516,7 @@
             <strong>{translate($locale, 'Verify the fingerprint.')}</strong><span
               >{translate(
                 $locale,
-                'Compare it with the value shown by the hardware wallet or its trusted export. A\n              different seed or passphrase produces a different wallet.'
+                'Compare it with the value shown by the hardware signer or its trusted export. A\n              different seed or passphrase produces a different wallet.'
               )}</span
             >
           </p>
@@ -594,7 +594,7 @@
               >{translate(
                 $locale,
                 errorCode === 'wallet_already_exists'
-                  ? 'This hardware wallet is already in Groot'
+                  ? 'This hardware signer is already in Groot'
                   : 'Could not create the wallet'
               )}</strong
             >
@@ -660,7 +660,7 @@
               ? 'BitBox may request its password again for this new secure connection. Enter it only on BitBox.'
               : 'Keep the signer connected and unlocked.'
       )}
-      label={translate($locale, 'Hardware wallet setup in progress')}
+      label={translate($locale, 'Hardware signer setup in progress')}
     />{:else if devices.length || !error}<HardwareDeviceList
       {devices}
       emptyMessage={translate(
@@ -728,7 +728,7 @@
   {#if busy}<HardwareActionPrompt
       title={translate($locale, 'Importing the Trezor standard wallet')}
       detail={translate($locale, 'Keep Trezor connected while Groot reads its public account key.')}
-      label={translate($locale, 'Hardware wallet import in progress')}
+      label={translate($locale, 'Hardware signer import in progress')}
     />{:else}<div class="split-actions">
       <Button
         variant="secondary"

@@ -1584,7 +1584,7 @@ fn hwi_response_codes_become_safe_actionable_errors() {
         ("jade", "enter your PIN on Jade"),
         ("coldcard", "enable USB communication"),
         ("trezor", "PIN-matrix"),
-        ("unknown", "Unlock the hardware wallet"),
+        ("unknown", "Unlock the hardware signer"),
     ] {
         let error = missing_hardware_fingerprint(device_type);
         assert_eq!(error.code, "hardware_unavailable");

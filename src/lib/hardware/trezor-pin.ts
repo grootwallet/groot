@@ -25,7 +25,7 @@ export function hardwareBrand(device: HardwareDevice | null): string {
   const identity = `${device?.label ?? ''} ${device?.model ?? ''}`.toLowerCase();
   if (identity.includes('trezor')) return 'Trezor';
   if (identity.includes('keepkey')) return 'KeepKey';
-  return 'hardware wallet';
+  return 'hardware signer';
 }
 
 export function trezorPinError(
@@ -48,11 +48,11 @@ export function trezorPinError(
   if (code === 'hardware_unavailable' || code === 'hardware_io_error') {
     return {
       title: 'Device disconnected',
-      detail: 'Reconnect the hardware wallet, then ask for a new layout.'
+      detail: 'Reconnect the hardware signer, then ask for a new layout.'
     };
   }
   return {
     title: 'Could not unlock the device',
-    detail: fallback || 'Reconnect the hardware wallet and start a new PIN matrix.'
+    detail: fallback || 'Reconnect the hardware signer and start a new PIN matrix.'
   };
 }

@@ -197,10 +197,10 @@ export const copyCatalog = {
     fr: 'Nom du signataire matériel mis à jour',
     es: 'Nombre del firmante físico actualizado'
   },
-  'Hardware wallet added': { fr: 'Portefeuille matériel ajouté', es: 'Cartera física añadida' },
-  'Hardware wallet unlocked': {
-    fr: 'Portefeuille matériel déverrouillé',
-    es: 'Cartera física desbloqueada'
+  'Hardware signer added': { fr: 'Signataire matériel ajouté', es: 'Firmante físico añadido' },
+  'Hardware signer unlocked': {
+    fr: 'Signataire matériel déverrouillé',
+    es: 'Firmante físico desbloqueado'
   },
   'Health check needs attention': {
     fr: 'Le contrôle d’état requiert votre attention',
@@ -480,8 +480,8 @@ const errorCategoryCopy = {
     es: 'La red no está disponible. Inténtalo cuando se restablezca la conexión.'
   },
   hardware_unavailable: {
-    fr: 'Le portefeuille matériel est indisponible. Vérifiez sa connexion et réessayez.',
-    es: 'La cartera física no está disponible. Comprueba la conexión e inténtalo de nuevo.'
+    fr: 'Le signataire matériel est indisponible. Vérifiez sa connexion et réessayez.',
+    es: 'El firmante físico no está disponible. Comprueba la conexión e inténtalo de nuevo.'
   },
   hardware_pairing_required: {
     fr: 'Associez cette BitBox dans BitBoxApp et vérifiez que BitBoxApp peut l’ouvrir. Quittez ensuite complètement BitBoxApp, puis relancez la recherche dans Groot.',
@@ -492,12 +492,12 @@ const errorCategoryCopy = {
     es: 'La firma USB y la visualización de direcciones no están disponibles para esta política Miniscript diferida con la versión HWI integrada en Groot. Usa el flujo PSBT sin conexión.'
   },
   hardware_busy: {
-    fr: 'Le portefeuille matériel est occupé. Terminez l’autre opération et réessayez.',
-    es: 'La cartera física está ocupada. Termina la otra operación e inténtalo de nuevo.'
+    fr: 'Le signataire matériel est occupé. Terminez l’autre opération et réessayez.',
+    es: 'El firmante físico está ocupado. Termina la otra operación e inténtalo de nuevo.'
   },
   hardware_timeout: {
-    fr: 'Le portefeuille matériel n’a pas répondu à temps.',
-    es: 'La cartera física no respondió a tiempo.'
+    fr: 'Le signataire matériel n’a pas répondu à temps.',
+    es: 'El firmante físico no respondió a tiempo.'
   },
   hardware_cancelled: {
     fr: 'L’opération matérielle a été annulée.',

@@ -505,9 +505,9 @@ export const multisigCopy = {
       fr: 'Cette sauvegarde publique ne peut pas signer de transactions. Toute personne qui la voit peut dériver les adresses du portefeuille et observer son activité. Conservez-la en privé et séparément d’un nombre suffisant d’appareils de signature.',
       es: 'Esta copia pública no puede firmar transacciones. Quien la vea puede derivar direcciones y observar la actividad de la cartera. Guárdala en privado y separada de suficientes dispositivos de firma.'
     },
-  'This removes local coordinator data only. Hardware-wallet keys are unchanged.': {
-    fr: 'Cela supprime uniquement les données locales du coordinateur. Les clés des portefeuilles matériels restent inchangées.',
-    es: 'Esto solo elimina los datos locales del coordinador. Las claves de las carteras físicas no cambian.'
+  'This removes local coordinator data only. Hardware-signer keys are unchanged.': {
+    fr: 'Cela supprime uniquement les données locales du coordinateur. Les clés des signataires matériels restent inchangées.',
+    es: 'Esto solo elimina los datos locales del coordinador. Las claves de los firmantes físicos no cambian.'
   },
   'This successful drill is available to the separate wallet-deletion flow for this app session.': {
     fr: 'Cet exercice réussi est disponible pour le flux distinct de suppression du portefeuille pendant cette session.',
@@ -755,9 +755,9 @@ export const multisigCopy = {
     fr: 'Initialisez ou restaurez uniquement avec les outils fiables du fabricant.',
     es: 'Inicializa o restaura solo con herramientas de confianza del fabricante.'
   },
-  'Its hardware wallet and seed are not changed.': {
-    fr: 'Son portefeuille matériel et sa graine ne sont pas modifiés.',
-    es: 'Su cartera física y su semilla no cambian.'
+  'Its hardware signer and seed are not changed.': {
+    fr: 'Son signataire matériel et sa graine ne sont pas modifiés.',
+    es: 'Su firmante físico y su semilla no cambian.'
   },
   'Keep devices in separate places.': {
     fr: 'Conservez les appareils dans des lieux distincts.',

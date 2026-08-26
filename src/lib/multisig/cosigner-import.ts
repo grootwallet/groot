@@ -101,7 +101,7 @@ export function parsePublicCosignerFile(
     throw new PublicCosignerImportError(
       'private_material',
       'This file may contain private key or recovery data.',
-      'For safety, Groot will not import it. Export a public XPUB file from the hardware wallet instead.'
+      'For safety, Groot will not import it. Export a public XPUB file from the hardware signer instead.'
     );
   }
 

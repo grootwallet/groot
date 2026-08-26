@@ -30,10 +30,10 @@ export const onboardingCopy = {
       fr: 'Cette phrase secrète BIP39 est requise avec vos 24 mots de récupération et déverrouille également Groot. Une phrase secrète différente ouvre un portefeuille différent.',
       es: 'Esta frase de contraseña BIP39 es necesaria junto con tus 24 palabras de recuperación y también desbloquea Groot. Una frase diferente abre una cartera diferente.'
     },
-  'This app PIN protects local Groot data only. It is not a hardware-wallet passphrase and is not part of a signer seed backup.':
+  'This app PIN protects local Groot data only. It is not a hardware-signer passphrase and is not part of a signer seed backup.':
     {
-      fr: 'Ce code PIN protège uniquement les données locales de Groot. Ce n’est pas une phrase secrète de portefeuille matériel et il ne fait pas partie de la sauvegarde de la graine d’un signataire.',
-      es: 'Este PIN solo protege los datos locales de Groot. No es una frase de contraseña de la cartera física ni forma parte de la copia de la semilla de un firmante.'
+      fr: 'Ce code PIN protège uniquement les données locales de Groot. Ce n’est pas une phrase secrète de signataire matériel et il ne fait pas partie de la sauvegarde de la graine d’un signataire.',
+      es: 'Este PIN solo protege los datos locales de Groot. No es una frase de contraseña del firmante físico ni forma parte de la copia de la semilla de un firmante.'
     },
   'Groot will not guess missing metadata or reset its app PIN. Because Regtest wallets are disposable, delete this test wallet and recreate or recover it from a public wallet backup. Its existing files remain untouched until you explicitly delete it.':
     {
@@ -53,9 +53,9 @@ export const onboardingCopy = {
     fr: 'Ce portefeuille Regtest jetable utilise un format de profil de test non pris en charge.',
     es: 'Esta cartera desechable de Regtest usa un formato de perfil de prueba no compatible.'
   },
-  'This profile predates the current hardware-wallet storage format.': {
-    fr: 'Ce profil est antérieur au format actuel de stockage des portefeuilles matériels.',
-    es: 'Este perfil es anterior al formato actual de almacenamiento de carteras físicas.'
+  'This profile predates the current hardware-signer storage format.': {
+    fr: 'Ce profil est antérieur au format actuel de stockage des signataires matériels.',
+    es: 'Este perfil es anterior al formato actual de almacenamiento de firmantes físicos.'
   },
   'Choose every word in order. This proves your written backup can reconstruct the wallet.': {
     fr: 'Choisissez chaque mot dans l’ordre. Cela prouve que votre sauvegarde écrite peut reconstruire le portefeuille.',
@@ -162,7 +162,7 @@ export const onboardingCopy = {
     fr: 'Je suis à l’abri des regards — afficher les mots',
     es: 'Estoy en privado — mostrar palabras'
   },
-  'Hardware wallet': { fr: 'Portefeuille matériel', es: 'Cartera física' },
+  'Hardware signer': { fr: 'Signataire matériel', es: 'Firmante físico' },
   'Keep it with your backup.': {
     fr: 'Conservez-le avec votre sauvegarde.',
     es: 'Guárdalo con tu copia de seguridad.'

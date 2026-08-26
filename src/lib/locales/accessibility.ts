@@ -167,9 +167,9 @@ export const accessibilityCopy = {
     fr: 'Modèle du signataire matériel',
     es: 'Modelo del firmante físico'
   },
-  'Hardware wallet policy review': {
-    fr: 'Vérification de la politique du portefeuille matériel',
-    es: 'Revisión de política de la cartera física'
+  'Hardware signer policy review': {
+    fr: 'Vérification de la politique du signataire matériel',
+    es: 'Revisión de la política del firmante físico'
   },
   'Import once before signing': {
     fr: 'Importer une fois avant de signer',
@@ -363,9 +363,9 @@ export const accessibilityCopy = {
     fr: 'Utiliser le portefeuille standard Trezor ?',
     es: '¿Usar la cartera estándar de Trezor?'
   },
-  'Verify hardware wallet policies': {
-    fr: 'Vérifier les politiques des portefeuilles matériels',
-    es: 'Verificar políticas de carteras físicas'
+  'Verify hardware signer policies': {
+    fr: 'Vérifier les politiques des signataires matériels',
+    es: 'Verificar las políticas de los firmantes físicos'
   },
   'Verify receive address': {
     fr: 'Vérifier l’adresse de réception',

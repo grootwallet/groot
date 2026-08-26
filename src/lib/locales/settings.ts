@@ -41,7 +41,7 @@ export const settingsCopy = {
   'Cancelling safely…': { fr: 'Annulation sécurisée…', es: 'Cancelando de forma segura…' },
   'Unnamed wallet': { fr: 'Portefeuille sans nom', es: 'Cartera sin nombre' },
   'Software wallet': { fr: 'Portefeuille logiciel', es: 'Cartera de software' },
-  'Hardware wallet': { fr: 'Portefeuille matériel', es: 'Cartera física' },
+  'Hardware signer': { fr: 'Signataire matériel', es: 'Firmante físico' },
   'Multisig wallet': { fr: 'Portefeuille multisig', es: 'Cartera multifirma' },
   '1 minute': { fr: '1 minute', es: '1 minuto' },
   '5 minutes': { fr: '5 minutes', es: '5 minutos' },

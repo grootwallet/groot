@@ -263,9 +263,9 @@ test('locked wallet can continue into hardware and multisig setup', async ({ pag
 
   await page.goto('/welcome?add=1');
   await page.getByRole('button', { name: 'Add wallet' }).click();
-  await page.getByRole('link', { name: /Hardware wallet/ }).click();
+  await page.getByRole('link', { name: /Hardware signer/ }).click();
   await expect(page).toHaveURL(/\/hardware\/new$/);
-  await expect(page.getByRole('heading', { name: 'Add hardware wallet' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Add hardware signer' })).toBeVisible();
   await expect(page.locator('.app-shell')).toHaveClass(/onboarding-shell/);
 
   await page.getByRole('link', { name: /Cancel/ }).click();
@@ -421,19 +421,19 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   test.setTimeout(60_000);
   await page.goto('/welcome?add=1');
   await page.getByRole('button', { name: 'Add wallet' }).click();
-  await page.getByRole('link', { name: /Hardware wallet/ }).click();
-  await expect(page.getByRole('heading', { name: 'Add hardware wallet' })).toBeVisible();
+  await page.getByRole('link', { name: /Hardware signer/ }).click();
+  await expect(page.getByRole('heading', { name: 'Add hardware signer' })).toBeVisible();
   await page.getByLabel('Wallet name').fill('Hardware savings');
   await page.getByRole('button', { name: /Connect with cable/ }).click();
   await expect(
-    page.getByRole('status', { name: 'Hardware wallet setup in progress' })
+    page.getByRole('status', { name: 'Hardware signer setup in progress' })
   ).toContainText('Scanning');
   await expect(
-    page.getByRole('status', { name: 'Hardware wallet setup in progress' })
+    page.getByRole('status', { name: 'Hardware signer setup in progress' })
   ).toContainText('Follow any unlock prompt on the signer. Keep other wallet apps closed.');
   await page.getByRole('button', { name: /Virtual Coldcard/ }).click();
   await expect(
-    page.getByRole('status', { name: 'Hardware wallet setup in progress' })
+    page.getByRole('status', { name: 'Hardware signer setup in progress' })
   ).toContainText('Reading the public account key');
   await expect(page.getByText('PUBLIC DATA REVIEW')).toBeVisible();
   await expect(page.getByText("m/84'/1'/0'")).toBeVisible();
@@ -669,8 +669,8 @@ test('localizes hardware scan progress in French', async ({ page }) => {
   await page.goto('/hardware/new');
   await page.getByRole('button', { name: /Connecter par câble/ }).click();
   await expect(
-    page.getByRole('status', { name: 'Configuration du portefeuille matériel en cours' })
-  ).toContainText('Recherche de tous les portefeuilles matériels USB…');
+    page.getByRole('status', { name: 'Configuration du signataire matériel en cours' })
+  ).toContainText('Recherche de tous les signataires matériels USB…');
 });
 
 test('imports a public hardware backup without requiring a wallet name first', async ({ page }) => {
@@ -692,7 +692,7 @@ test('imports a public hardware backup without requiring a wallet name first', a
   await expect(page.getByText("m/84'/1'/0'")).toBeVisible();
   await expect(page.getByText('Review the public backup identity.')).toBeVisible();
   await expect(
-    page.getByText(/verify the first receive address on the hardware wallet/)
+    page.getByText(/verify the first receive address on the hardware signer/)
   ).toBeVisible();
   await page.getByLabel('Reviewed wallet name').fill('Ledger recovery wallet');
   await expect(page.getByRole('heading', { name: 'Ledger recovery wallet' })).toBeVisible();
@@ -1440,7 +1440,7 @@ test('locked profiles use recovery-safe credential terms', async ({ page }) => {
       .click();
     await expect(page.getByLabel('App PIN', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'More information' }).click();
-    await expect(page.getByText(/not a hardware-wallet passphrase/)).toBeVisible();
+    await expect(page.getByText(/not a hardware-signer passphrase/)).toBeVisible();
     await expect(
       page.locator('.onboarding-card').getByRole('button', { name: /Everyday wallet/ })
     ).toHaveCount(0);

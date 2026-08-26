@@ -153,7 +153,7 @@ pub fn signature_progress(
     })
 }
 
-/// Reduce a PSBT returned by a directly connected hardware wallet to the only
+/// Reduce a PSBT returned by a directly connected hardware signer to the only
 /// fields Groot asked the signer to produce: partial signatures.
 ///
 /// The returned transaction and public PSBT metadata are deliberately ignored:

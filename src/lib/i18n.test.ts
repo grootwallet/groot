@@ -51,11 +51,11 @@ describe('locale preferences', () => {
   it('translates catalog copy and interpolates values without translating user data', () => {
     expect(translate('fr', 'Dismiss')).toBe('Fermer');
     expect(translate('es', 'Try again')).toBe('Intentar de nuevo');
-    expect(translate('fr', 'Scanning all USB hardware wallets…')).toBe(
-      'Recherche de tous les portefeuilles matériels USB…'
+    expect(translate('fr', 'Scanning all USB hardware signers…')).toBe(
+      'Recherche de tous les signataires matériels USB…'
     );
-    expect(translate('es', 'Scanning all USB hardware wallets…')).toBe(
-      'Buscando todas las carteras físicas USB…'
+    expect(translate('es', 'Scanning all USB hardware signers…')).toBe(
+      'Buscando todos los firmantes físicos USB…'
     );
     expect(
       translate(
@@ -118,10 +118,10 @@ describe('locale preferences', () => {
     expect(
       translate(
         'fr',
-        'This app PIN protects local Groot data only. It is not a hardware-wallet passphrase and is not part of a signer seed backup.'
+        'This app PIN protects local Groot data only. It is not a hardware-signer passphrase and is not part of a signer seed backup.'
       )
     ).toBe(
-      'Ce code PIN protège uniquement les données locales de Groot. Ce n’est pas une phrase secrète de portefeuille matériel et il ne fait pas partie de la sauvegarde de la graine d’un signataire.'
+      'Ce code PIN protège uniquement les données locales de Groot. Ce n’est pas une phrase secrète de signataire matériel et il ne fait pas partie de la sauvegarde de la graine d’un signataire.'
     );
     expect(
       translate(

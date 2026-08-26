@@ -17,7 +17,7 @@ export function coldcardPolicyFilename(walletName: string): string {
 }
 
 export function psbtFilename(proposalId: string): string {
-  // Short ASCII names are easier to identify on small hardware-wallet screens
+  // Short ASCII names are easier to identify on small hardware-signer screens
   // and stay compatible with conservative removable-media implementations.
   const identifier =
     proposalId

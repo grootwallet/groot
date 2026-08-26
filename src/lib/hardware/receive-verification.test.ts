@@ -72,7 +72,7 @@ describe('receive hardware-verification orchestration', () => {
       )
     ).toEqual({
       code: 'hardware_unavailable',
-      message: 'Le portefeuille matériel est indisponible. Vérifiez sa connexion et réessayez.'
+      message: 'Le signataire matériel est indisponible. Vérifiez sa connexion et réessayez.'
     });
   });
 
