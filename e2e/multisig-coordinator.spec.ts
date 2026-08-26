@@ -1594,6 +1594,24 @@ test('creates a guided recovery descriptor from a visible template', async ({ pa
   await expect(
     page.getByRole('tooltip').filter({ hasText: 'can spend that coin by itself' })
   ).toBeVisible();
+  if (testInfo.project.name === 'mobile') {
+    const tooltipBounds = await page
+      .getByRole('tooltip')
+      .filter({ hasText: 'can spend that coin by itself' })
+      .evaluate((tooltip) => {
+        const bounds = tooltip.getBoundingClientRect();
+        return {
+          left: bounds.left,
+          right: bounds.right,
+          bottom: bounds.bottom,
+          viewportWidth: window.innerWidth,
+          viewportHeight: window.innerHeight
+        };
+      });
+    expect(tooltipBounds.left).toBeGreaterThanOrEqual(12);
+    expect(tooltipBounds.right).toBeLessThanOrEqual(tooltipBounds.viewportWidth - 12);
+    expect(tooltipBounds.bottom).toBeLessThanOrEqual(tooltipBounds.viewportHeight);
+  }
   await expect(page.getByText('Four separate keys')).toBeVisible();
   await continueToSigners(page, 'Resilient vault');
   for (const key of [...keys, recoveryKey]) {
@@ -1626,7 +1644,10 @@ test('keeps assisted recovery honest and offers simple recovery waits', async ({
   await expect(assisted).toContainText('Coming soon');
   await page.getByRole('button', { name: /^Recovery/ }).click();
   await page.getByRole('button', { name: 'Continue', exact: true }).click();
-  await expect(page.getByRole('group', { name: 'Recovery key wait' })).toBeVisible();
+  const recoveryWait = page.getByRole('group', { name: 'Recovery key wait' });
+  await expect(recoveryWait).toBeVisible();
+  await expect(recoveryWait.locator('.recovery-delay-title')).toHaveCSS('font-size', '11px');
+  await expect(recoveryWait.getByRole('button').first()).toHaveCSS('border-radius', '14px');
   await page.getByRole('button', { name: /About 3 months/ }).click();
   await expect(page.getByText('13,140 blocks', { exact: true }).first()).toBeVisible();
   await expect(page.locator('body')).not.toContainText('About one year');

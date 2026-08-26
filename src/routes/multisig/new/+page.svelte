@@ -1519,8 +1519,14 @@
               >
             </div>
             {#if templateKind === 'recovery'}
-              <fieldset class="policy-recipes recovery-delay-options">
-                <legend>{translate($locale, 'Recovery key wait')}</legend>
+              <div
+                class="policy-recipes recovery-delay-options"
+                role="group"
+                aria-labelledby="recovery-delay-title"
+              >
+                <p id="recovery-delay-title" class="recovery-delay-title">
+                  {translate($locale, 'Recovery key wait')}
+                </p>
                 {#each [{ blocks: 4_320, label: 'About 1 month', note: 'Recommended' }, { blocks: 13_140, label: 'About 3 months', note: 'More time' }, { blocks: 26_280, label: 'About 6 months', note: 'Longest' }] as option}
                   <button
                     type="button"
@@ -1535,7 +1541,7 @@
                     ><em>{translate($locale, option.note)}</em>
                   </button>
                 {/each}
-              </fieldset>
+              </div>
             {/if}
             <p class="policy-delay-note">
               <Clock3 size={14} />{translate(

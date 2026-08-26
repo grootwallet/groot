@@ -4323,6 +4323,24 @@ code {
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
+.recovery-delay-options {
+  gap: 12px;
+  margin: 24px 0 18px;
+}
+.recovery-delay-title {
+  grid-column: 1 / -1;
+  margin: 0 0 2px;
+  color: var(--text-soft);
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.35;
+}
+.recovery-delay-options button {
+  min-height: 110px;
+  padding: 18px 20px;
+  border-color: color-mix(in srgb, var(--control-border) 76%, transparent);
+  border-radius: 14px;
+}
 .assisted-signing-plan {
   display: grid;
   grid-template-columns: 28px minmax(0, 1fr) 28px;
@@ -9187,6 +9205,22 @@ code {
 }
 
 @media (max-width: 760px) {
+  .insight-tip > span {
+    position: fixed;
+    left: 16px;
+    right: 16px;
+    bottom: calc(16px + env(safe-area-inset-bottom));
+    width: auto;
+    max-width: none;
+    padding: 14px 15px;
+    border-radius: 12px;
+    transform: translateY(6px);
+  }
+  .insight-tip:hover > span,
+  .insight-tip > button:focus-visible + span,
+  .insight-tip.open > span {
+    transform: translateY(0);
+  }
   .activity-controls {
     grid-template-columns: 1fr;
   }
@@ -9898,6 +9932,17 @@ code {
   }
   .policy-recipes em {
     margin-left: auto;
+  }
+  .recovery-delay-options {
+    gap: 10px;
+    margin: 22px 0 18px;
+  }
+  .recovery-delay-title {
+    margin-bottom: 4px;
+  }
+  .recovery-delay-options button {
+    min-height: 86px;
+    padding: 15px 16px;
   }
   .path-visual {
     grid-template-columns: 1fr;
