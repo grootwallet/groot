@@ -249,18 +249,7 @@ pub fn multisig_tx_prepare(
         params![proposal_id, address.to_string(), label, amount, fee, applied_fee_rate, encoded, created_at, selection_strategy, fee_difference_vs_private],
     ).map_err(internal)?;
     label_provenance::assign_payment_intent(&transaction, &label, &proposal_id, created_at, false)
-        .map_err(|error| {
-            if error.sqlite_error_code()
-                == Some(bdk_wallet::rusqlite::ErrorCode::ConstraintViolation)
-            {
-                api_error(
-                    "invalid_label",
-                    "Permanent labels cannot be reused for a different payment.",
-                )
-            } else {
-                internal(error)
-            }
-        })?;
+        .map_err(internal)?;
     wallet.persist(&mut transaction).map_err(internal)?;
     drop(wallet);
     transaction.commit().map_err(internal)?;
@@ -367,18 +356,7 @@ pub fn multisig_policy_renewal_prepare(
         params![proposal_id, destination_address, label, amount, fee, applied_fee_rate, encoded, created_at],
     ).map_err(internal)?;
     label_provenance::assign_payment_intent(&transaction, &label, &proposal_id, created_at, false)
-        .map_err(|error| {
-            if error.sqlite_error_code()
-                == Some(bdk_wallet::rusqlite::ErrorCode::ConstraintViolation)
-            {
-                api_error(
-                    "invalid_label",
-                    "Permanent labels cannot be reused for a different payment.",
-                )
-            } else {
-                internal(error)
-            }
-        })?;
+        .map_err(internal)?;
     wallet.persist(&mut transaction).map_err(internal)?;
     drop(wallet);
     transaction.commit().map_err(internal)?;
@@ -498,18 +476,7 @@ pub fn multisig_delayed_spend_prepare(
         )
         .map_err(internal)?;
     label_provenance::assign_payment_intent(&transaction, &label, &proposal_id, created_at, false)
-        .map_err(|error| {
-            if error.sqlite_error_code()
-                == Some(bdk_wallet::rusqlite::ErrorCode::ConstraintViolation)
-            {
-                api_error(
-                    "invalid_label",
-                    "Permanent labels cannot be reused for a different payment.",
-                )
-            } else {
-                internal(error)
-            }
-        })?;
+        .map_err(internal)?;
     wallet.persist(&mut transaction).map_err(internal)?;
     drop(wallet);
     transaction.commit().map_err(internal)?;

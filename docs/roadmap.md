@@ -64,7 +64,7 @@ Mainnet stays compile-time disabled until every checklist artifact is attached t
 
 ### Reusable organization tags
 
-Add reusable, searchable local tags as metadata that is explicitly separate from permanent provenance labels. A payment or receive address keeps one immutable, unique audit label; users may attach multiple reusable tags such as `pizza`, `Bob`, or `expenses` across addresses, payment intents, transactions, and coins. The implementation requires a normalized many-to-many Rust persistence model, bounded tag names/counts, atomic migrations, WalletPort DTOs, add/remove controls, autocomplete and search/filter surfaces, discreet-mode redaction, and tests proving tags cannot rewrite provenance, privacy clusters, signed proposals, or transaction review data.
+Add reusable, searchable local tags as optional metadata that is explicitly separate from permanent provenance-label assignments. A payment or receive address keeps one immutable audit-label assignment whose stable label entity may intentionally be reused; users may additionally attach multiple removable tags such as `pizza`, `Bob`, or `expenses` across addresses, payment intents, transactions, and coins. The implementation requires a normalized many-to-many Rust persistence model, bounded tag names/counts, atomic migrations, WalletPort DTOs, add/remove controls, autocomplete and search/filter surfaces, discreet-mode redaction, and tests proving tags cannot rewrite provenance assignments, privacy clusters, signed proposals, or transaction review data.
 
 ### 1. Existing wallet hardening
 

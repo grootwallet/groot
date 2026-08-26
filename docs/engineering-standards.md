@@ -23,6 +23,9 @@ Dependencies point inward. Routes never select adapters. Rust commands translate
 - Unsupported data must remain untouched until an explicit delete/reset action. The UI must identify the format incompatibility directly and must not present a missing verifier as a wrong PIN, corruption, or successful recovery.
 - Public-network wallet data defaults to fail-closed migration or backup recovery. Discarding it is never an agent decision.
 - Add fixtures for the last supported format and the first unsupported format. Any future compatibility window or migration removal is another breaking decision subject to the same gate.
+- Additive semantic migrations still advance their owning schema marker and require an idempotent
+  preservation test. Reusing a stable entity must not rewrite older entities or assignments merely
+  to make historical data look cleaner.
 
 ## Review rules
 

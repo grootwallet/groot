@@ -63,7 +63,7 @@ use crate::external_signer::{
 };
 use crate::hardware::{HardwareError, HardwareTransport, HwiChain, HwiCli};
 use crate::label_provenance::{
-    self, LabelOrigin, PermanentLabelDto, ProvenanceState, ProvenanceSummaryDto,
+    self, LabelOrigin, LabelSuggestionDto, PermanentLabelDto, ProvenanceState, ProvenanceSummaryDto,
 };
 use crate::multisig::{
     CosignerInput, CosignerSource, MultisigPreviewDto, MultisigWalletDto, PolicyError, PolicyInput,
@@ -1276,6 +1276,7 @@ pub struct WalletSnapshotDto {
     transactions: Vec<TransactionDto>,
     utxos: Vec<UtxoDto>,
     receive_addresses: Vec<ReceiveAddressDto>,
+    label_suggestions: Vec<LabelSuggestionDto>,
     synced_at: Option<String>,
     chain_tip: ChainTipDto,
 }
@@ -2621,7 +2622,7 @@ fn now() -> u64 {
 }
 
 fn normalize_label(label: &str) -> ApiResult<String> {
-    let label = label.trim();
+    let label = label.split_whitespace().collect::<Vec<_>>().join(" ");
     if label.is_empty() {
         return Err(api_error("invalid_label", "A permanent label is required."));
     }
@@ -2631,7 +2632,7 @@ fn normalize_label(label: &str) -> ApiResult<String> {
             "The permanent label must be 48 characters or fewer.",
         ));
     }
-    Ok(label.to_owned())
+    Ok(label)
 }
 
 fn validate_credential(credential: &str) -> ApiResult<()> {
@@ -4602,16 +4603,7 @@ fn persist_proposal(
         inherit_payment_intent,
     )
     .map(|_| ())
-    .map_err(|error| {
-        if error.sqlite_error_code() == Some(bdk_wallet::rusqlite::ErrorCode::ConstraintViolation) {
-            api_error(
-                "invalid_label",
-                "Permanent labels cannot be reused for a different payment.",
-            )
-        } else {
-            internal(error)
-        }
-    })
+    .map_err(internal)
 }
 
 fn persist_acceleration(
@@ -6009,6 +6001,7 @@ fn snapshot_from(
         transactions,
         utxos,
         receive_addresses: addresses,
+        label_suggestions: label_provenance::label_suggestions(db, 12).map_err(internal)?,
         synced_at: chain_tip.observed_at.clone(),
         chain_tip,
     })

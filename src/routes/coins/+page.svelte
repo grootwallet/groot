@@ -926,7 +926,7 @@
   title={translate($locale, 'Add permanent label')}
   description={translate(
     $locale,
-    'This received address has no local label. Assign its first label once; it cannot be changed or reused.'
+    'This received address has no local label. Assign it once; the assignment cannot be changed.'
   )}
   onclose={cancelObservedReceiveClaim}
 >

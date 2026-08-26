@@ -354,7 +354,7 @@ describe('hardware receive verification UI', () => {
     expect(coins).toContain("utxo.provenance.state === 'unknown'");
     expect(coins).toContain('!utxo.primaryLabel');
     expect(coins).toContain('walletService.claimObservedMultisigAddress');
-    expect(coins).toContain('it cannot be changed or reused');
+    expect(coins).toContain('the assignment cannot be changed');
     expect(coins).toContain('<FieldCounter value={claimLabel} max={48} />');
     expect(coins).not.toContain('{[...claimLabel].length}/48');
   });

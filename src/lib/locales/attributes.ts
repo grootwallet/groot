@@ -400,11 +400,10 @@ export const attributeCopy = {
       fr: 'Cette sauvegarde publique récupère toutes les adresses du portefeuille et coordonne les signatures. Elle ne peut pas dépenser, mais révèle l’activité du portefeuille.',
       es: 'Esta copia pública recupera todas las direcciones de la cartera y coordina firmas. No puede gastar, pero revela la actividad de la cartera.'
     },
-  'This received address has no local label. Assign its first label once; it cannot be changed or reused.':
-    {
-      fr: 'Cette adresse de réception n’a pas de libellé local. Attribuez-lui une fois son premier libellé ; il ne pourra être ni modifié ni réutilisé.',
-      es: 'Esta dirección recibida no tiene una etiqueta local. Asigna su primera etiqueta una sola vez; no se podrá cambiar ni reutilizar.'
-    },
+  'This received address has no local label. Assign it once; the assignment cannot be changed.': {
+    fr: 'Cette adresse de réception n’a pas de libellé local. Attribuez-la une seule fois ; l’attribution ne pourra pas être modifiée.',
+    es: 'Esta dirección recibida no tiene una etiqueta local. Asígnala una sola vez; la asignación no se podrá cambiar.'
+  },
   'This selects the seed-derived wallet with no hardware passphrase.': {
     fr: 'Cela sélectionne le portefeuille dérivé de la graine sans phrase secrète matérielle.',
     es: 'Esto selecciona la cartera derivada de la semilla sin frase de contraseña del dispositivo.'

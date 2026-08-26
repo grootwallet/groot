@@ -46,7 +46,7 @@
     type MultisigProposal,
     type PaymentProposal
   } from '$lib/wallet';
-  import type { Utxo } from '$lib/types';
+  import type { LabelSuggestion, Utxo } from '$lib/types';
   import { defaultConfig, networkName } from '$lib/config';
   import { addressPrefixForNetwork, hasAddressPrefixForNetwork } from '$lib/wallet/policy';
   import { compactAddress } from '$lib/address-display';
@@ -76,6 +76,7 @@
   let draftStep = $state<1 | 2>(1);
   let address = $state('');
   let label = $state('');
+  let labelSuggestions = $state<LabelSuggestion[]>([]);
   let amount = $state('');
   let speed = $state('medium');
   let customFee = $state('');
@@ -242,6 +243,7 @@
       }
       signerSummaryReady = true;
       coins = snapshot.utxos;
+      labelSuggestions = snapshot.labelSuggestions;
       const requested =
         new URL(window.location.href).searchParams.get('coins')?.split(',').filter(Boolean) ?? [];
       selectedCoins = requested.filter((outpoint) =>
@@ -669,6 +671,26 @@
   }
 </script>
 
+{#snippet labelSuggestionPicker()}
+  {#if labelSuggestions.length && !$discreetMode}<div class="label-suggestions">
+      <strong>{translate($locale, 'Previously used labels')}</strong>
+      <p>
+        {translate(
+          $locale,
+          'Choose one only for the same relationship. Reuse groups related activity in Groot, while spending can still create new public links.'
+        )}
+      </p>
+      <div>
+        {#each labelSuggestions as suggestion}<button
+            type="button"
+            aria-label={translate($locale, 'Reuse {label}', { label: suggestion.text })}
+            aria-pressed={label.trim().toLocaleLowerCase() === suggestion.text.toLocaleLowerCase()}
+            onclick={() => (label = suggestion.text)}>{suggestion.text}</button
+          >{/each}
+      </div>
+    </div>{/if}
+{/snippet}
+
 <div class="page narrow-page send-page">
   <header class="page-header">
     <div>
@@ -777,6 +799,7 @@
           hint={translate($locale, 'Required · cannot be changed')}
         /></label
       >
+      {@render labelSuggestionPicker()}
       <label class="field"
         ><span>{translate($locale, 'Bitcoin address')}</span><input
           aria-label={translate($locale, 'Bitcoin address')}

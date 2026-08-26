@@ -51,7 +51,7 @@
     type SignerPolicyVerification,
     type WalletErrorCode
   } from '$lib/wallet';
-  import type { Utxo } from '$lib/types';
+  import type { LabelSuggestion, Utxo } from '$lib/types';
   import { defaultConfig, networkName } from '$lib/config';
   import {
     addressPrefixForNetwork,
@@ -101,6 +101,7 @@
     feeEstimateError = $state(''),
     deviceError = $state(''),
     cancelError = $state('');
+  let labelSuggestions = $state<LabelSuggestion[]>([]);
   let discardError = $state(''),
     discardSigner = $state<{ label: string; fingerprint?: string | null } | null>(null);
   let busy = $state(false),
@@ -368,6 +369,7 @@
       policyVerifications = verifications;
       policyAddress = verificationAddress;
       coins = snapshot.utxos;
+      labelSuggestions = snapshot.labelSuggestions;
       const url = new URL(window.location.href),
         requested = url.searchParams.get('coins')?.split(',').filter(Boolean) ?? [],
         renewalRequested = url.searchParams.get('renewProtection') === '1',
@@ -1076,6 +1078,29 @@
   }
 </script>
 
+{#snippet labelSuggestionPicker()}
+  {#if labelSuggestions.length && !$discreetMode}<div class="label-suggestions">
+      <strong>{translate($locale, 'Previously used labels')}</strong>
+      <p>
+        {translate(
+          $locale,
+          'Choose one only for the same relationship. Reuse groups related activity in Groot, while spending can still create new public links.'
+        )}
+      </p>
+      <div>
+        {#each labelSuggestions as suggestion}<button
+            type="button"
+            aria-label={translate($locale, 'Reuse {label}', { label: suggestion.text })}
+            aria-pressed={label.trim().toLocaleLowerCase() === suggestion.text.toLocaleLowerCase()}
+            onclick={() => {
+              label = suggestion.text;
+              clearDraftError();
+            }}>{suggestion.text}</button
+          >{/each}
+      </div>
+    </div>{/if}
+{/snippet}
+
 <div class="page narrow-page send-page" class:signing-page={Boolean(proposal)}>
   <header class="page-header">
     <div>
@@ -1346,6 +1371,7 @@
           hint={translate($locale, 'Required · cannot be changed')}
         /></label
       >
+      {@render labelSuggestionPicker()}
       <details class="selection-technical">
         <summary
           >{translate($locale, 'Network fee · {rate} sat/vB', {
@@ -1414,9 +1440,10 @@
         /><FieldCounter
           value={label}
           max={48}
-          hint={translate($locale, 'Required · cannot be changed or reused')}
+          hint={translate($locale, 'Required · cannot be changed; reuse is intentional')}
         /></label
       >
+      {@render labelSuggestionPicker()}
       <details class="selection-technical">
         <summary
           >{translate($locale, 'Network fee · {rate} sat/vB', {
@@ -1484,6 +1511,7 @@
           hint={translate($locale, 'Required · cannot be changed')}
         /></label
       >
+      {@render labelSuggestionPicker()}
       <label class="field"
         ><span>{translate($locale, 'Bitcoin address')}</span><input
           aria-label={translate($locale, 'Bitcoin address')}

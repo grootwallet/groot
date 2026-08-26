@@ -58,10 +58,6 @@ export const sendCopy = {
     fr: 'p. ex. Renouveler la protection de l’épargne',
     es: 'p. ej. Renovar protección de ahorros'
   },
-  'Required · cannot be changed or reused': {
-    fr: 'Requis · non modifiable et non réutilisable',
-    es: 'Obligatoria · no se puede cambiar ni reutilizar'
-  },
   'Protection renewal could not be prepared': {
     fr: 'Le renouvellement de protection n’a pas pu être préparé',
     es: 'No se pudo preparar la renovación de protección'

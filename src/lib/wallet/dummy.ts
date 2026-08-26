@@ -419,6 +419,7 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       transactions: emptyActivity || emptyWallet ? [] : structuredClone(this._transactions),
       utxos: emptyWallet ? [] : structuredClone(this._coins),
       receiveAddresses: structuredClone(this._addresses),
+      labelSuggestions: structuredClone(this._labelSuggestionsByWallet.get(walletId) ?? []),
       syncedAt:
         typeof location !== 'undefined' &&
         new URLSearchParams(location.search).has('fixture-stale-tip')
@@ -480,6 +481,7 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       derivationPath: `m/84'/1'/0'/0/${id}`
     };
     this._addresses = [address, ...this._addresses];
+    this.recordLabelUsage(label, 'receive');
     return structuredClone(address);
   }
 
@@ -642,6 +644,7 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       }
     };
     this._proposals.set(proposal.proposalId, proposal);
+    this.recordLabelUsage(label, 'payment');
     if (
       this._profiles.find((profile) => profile.id === this._selectedWalletId)?.kind === 'watch_only'
     ) {
@@ -1547,19 +1550,10 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
         'The selected coin is not an unlabeled received output.'
       );
     }
-    if (
-      this._addresses.some(
-        (address) => address.label.trim().toLocaleLowerCase() === label.toLocaleLowerCase()
-      )
-    ) {
-      throw new WalletError(
-        'invalid_label',
-        'Permanent labels cannot be reused. Choose a unique label.'
-      );
-    }
+    const labelEntity = this.recordLabelUsage(label, 'receive');
     const permanentLabel = {
-      id: `receive-observed-${Date.now()}`,
-      text: label,
+      id: labelEntity?.id ?? `receive-observed-${Date.now()}`,
+      text: labelEntity?.text ?? label,
       origin: 'receive' as const
     };
     coin.label = label;
@@ -1688,6 +1682,7 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       createdAt: new Date().toISOString()
     };
     this._multisigProposals.set(proposal.proposalId, proposal);
+    this.recordLabelUsage(label, 'payment');
     return structuredClone(proposal);
   }
   async prepareMultisigPolicyRenewal(

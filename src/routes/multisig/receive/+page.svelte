@@ -16,15 +16,17 @@
   import { compactAddress } from '$lib/address-display';
   import { walletService, WalletError } from '$lib/wallet';
   import { awaitingPaymentAddresses } from '$lib/wallet/policy';
-  import type { ReceiveAddress } from '$lib/types';
+  import type { LabelSuggestion, ReceiveAddress } from '$lib/types';
   import type { MultisigWallet } from '$lib/wallet';
   import { copyText } from '$lib/clipboard';
   import { toast } from '$lib/stores/toasts';
+  import { discreetMode } from '$lib/privacy';
   import { useWalletShellContext } from '$lib/wallet/shell-context';
   const walletShell = useWalletShellContext();
   let label = $state('');
   let current = $state<ReceiveAddress | null>(null);
   let addresses = $state<ReceiveAddress[]>([]);
+  let labelSuggestions = $state<LabelSuggestion[]>([]);
   let qrDataUrl = $state('');
   let busy = $state(false);
   let ready = $state(false);
@@ -56,8 +58,10 @@
         event.type === 'wallet_updated' &&
         event.walletKind === 'multisig' &&
         event.walletId === walletShell.selectedWalletId()
-      )
+      ) {
         applyAddresses(event.snapshot.receiveAddresses);
+        labelSuggestions = event.snapshot.labelSuggestions;
+      }
     });
     void (async () => {
       try {
@@ -81,6 +85,7 @@
         if (!active) return;
         wallet = savedWallet;
         applyAddresses(state.receiveAddresses);
+        labelSuggestions = state.labelSuggestions;
         ready = true;
       } catch (cause) {
         if (!active) return;
@@ -350,7 +355,10 @@
 <Modal
   open={showGenerate}
   title={translate($locale, 'New receive address')}
-  description={translate($locale, 'Labels cannot be changed.')}
+  description={translate(
+    $locale,
+    'Assignments cannot be changed. Label text can be reused intentionally.'
+  )}
   onclose={() => {
     if (!busy) {
       showGenerate = false;
@@ -370,7 +378,24 @@
         maxlength="48"
         placeholder={translate($locale, 'e.g. Treasury deposit')}
       /><FieldCounter value={label} max={48} /></label
-    >{#if generateError}<p class="form-error" role="alert">{generateError}</p>{/if}
+    >{#if labelSuggestions.length && !$discreetMode}<div class="label-suggestions">
+        <strong>{translate($locale, 'Previously used labels')}</strong>
+        <p>
+          {translate(
+            $locale,
+            'Choose one only for the same relationship. Reuse groups related activity in Groot, while spending can still create new public links.'
+          )}
+        </p>
+        <div>
+          {#each labelSuggestions as suggestion}<button
+              type="button"
+              aria-label={translate($locale, 'Reuse {label}', { label: suggestion.text })}
+              aria-pressed={label.trim().toLocaleLowerCase() ===
+                suggestion.text.toLocaleLowerCase()}
+              onclick={() => (label = suggestion.text)}>{suggestion.text}</button
+            >{/each}
+        </div>
+      </div>{/if}{#if generateError}<p class="form-error" role="alert">{generateError}</p>{/if}
     <div class="modal-footer">
       <Button
         variant="secondary"

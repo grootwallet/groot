@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+Accepted; the normalized-text non-reuse clause is superseded by ADR 0045.
 
 ## Context
 

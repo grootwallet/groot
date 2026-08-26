@@ -530,16 +530,7 @@ pub fn address_create(
         &info.index.to_string(),
         created,
     )
-    .map_err(|error| {
-        if error.sqlite_error_code() == Some(bdk_wallet::rusqlite::ErrorCode::ConstraintViolation) {
-            api_error(
-                "invalid_label",
-                "Permanent labels cannot be reused. Choose a unique label.",
-            )
-        } else {
-            internal(error)
-        }
-    })?;
+    .map_err(internal)?;
     wallet.persist(&mut transaction).map_err(internal)?;
     transaction.commit().map_err(internal)?;
     Ok(ReceiveAddressDto {

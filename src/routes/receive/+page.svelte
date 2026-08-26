@@ -16,12 +16,14 @@
   import { walletService } from '$lib/wallet';
   import { useWalletShellContext } from '$lib/wallet/shell-context';
   import { awaitingPaymentAddresses } from '$lib/wallet/policy';
-  import type { ReceiveAddress } from '$lib/types';
+  import type { LabelSuggestion, ReceiveAddress } from '$lib/types';
   import { copyText } from '$lib/clipboard';
   import { toast } from '$lib/stores/toasts';
+  import { discreetMode } from '$lib/privacy';
   let label = $state('');
   let current = $state<ReceiveAddress | null>(null);
   let addresses = $state<ReceiveAddress[]>([]);
+  let labelSuggestions = $state<LabelSuggestion[]>([]);
   let qrDataUrl = $state('');
   let busy = $state(false);
   let showGenerate = $state(false);
@@ -53,6 +55,7 @@
       )
         return;
       applyAddresses(event.snapshot.receiveAddresses);
+      labelSuggestions = event.snapshot.labelSuggestions;
     })
   );
   $effect(() => {
@@ -77,6 +80,7 @@
     try {
       const snapshot = await walletService.snapshot();
       applyAddresses(snapshot.receiveAddresses);
+      labelSuggestions = snapshot.labelSuggestions;
       const shellWallets = walletShell.profiles();
       const shellSelectedWalletId = walletShell.selectedWalletId();
       const registry =
@@ -356,7 +360,10 @@
 <Modal
   open={showGenerate}
   title={translate($locale, 'New receive address')}
-  description={translate($locale, 'Labels cannot be changed.')}
+  description={translate(
+    $locale,
+    'Assignments cannot be changed. Label text can be reused intentionally.'
+  )}
   onclose={() => (showGenerate = false)}
 >
   <form
@@ -372,6 +379,24 @@
         maxlength="48"
       /><FieldCounter value={label} max={48} /></label
     >
+    {#if labelSuggestions.length && !$discreetMode}<div class="label-suggestions">
+        <strong>{translate($locale, 'Previously used labels')}</strong>
+        <p>
+          {translate(
+            $locale,
+            'Choose one only for the same relationship. Reuse groups related activity in Groot, while spending can still create new public links.'
+          )}
+        </p>
+        <div>
+          {#each labelSuggestions as suggestion}<button
+              type="button"
+              aria-label={translate($locale, 'Reuse {label}', { label: suggestion.text })}
+              aria-pressed={label.trim().toLocaleLowerCase() ===
+                suggestion.text.toLocaleLowerCase()}
+              onclick={() => (label = suggestion.text)}>{suggestion.text}</button
+            >{/each}
+        </div>
+      </div>{/if}
     <div class="modal-footer">
       <Button variant="secondary" onclick={() => (showGenerate = false)}
         >{translate($locale, 'Cancel')}</Button

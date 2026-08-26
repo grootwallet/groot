@@ -1105,6 +1105,17 @@ test('receive keeps multiple labeled payment requests and discards them independ
   await expect(addressDetails.getByRole('button', { name: 'Copy exact address' })).toBeVisible();
   await addressDetails.getByRole('button', { name: 'Close' }).click();
   await page.getByRole('button', { name: 'New receive address' }).click();
+  await expect(page.getByText('Previously used labels')).toBeVisible();
+  await expect(page.getByLabel('Permanent label')).toHaveValue('');
+  await page.getByRole('button', { name: 'Reuse Savings' }).click();
+  await expect(page.getByLabel('Permanent label')).toHaveValue('Savings');
+  await expect(
+    page.getByText(/Reuse groups related activity in Groot, while spending can still create/)
+  ).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true
+  );
+  await page.getByLabel('Permanent label').fill('');
   await expect(page.getByRole('button', { name: 'Generate address' })).toBeDisabled();
   await page.getByLabel('Permanent label').fill('Invoice #205');
   await page.getByRole('button', { name: 'Generate address' }).click();
@@ -1215,6 +1226,18 @@ test('discreet mode hides coin labels and amounts without leaking them through c
     page.getByRole('checkbox', { name: 'Select Coin with hidden labels', exact: true }).first()
   ).toBeVisible();
   await expect(page.getByPlaceholder('Filter labels')).toBeDisabled();
+
+  await page.goto('/send');
+  await expect(page.getByLabel('Payment label')).toBeVisible();
+  await expect(page.getByText('Previously used labels')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Reuse Savings' })).toHaveCount(0);
+
+  await page.goto('/receive');
+  await page.getByRole('button', { name: 'New receive address' }).click();
+  await expect(page.getByRole('dialog').getByText('Previously used labels')).toHaveCount(0);
+  await expect(page.getByRole('dialog').getByRole('button', { name: 'Reuse Savings' })).toHaveCount(
+    0
+  );
 });
 
 test('send reviews a proposal and rejects a wrong credential', async ({ page }) => {
@@ -1224,6 +1247,13 @@ test('send reviews a proposal and rejects a wrong credential', async ({ page }) 
   await expect(paymentProgress).toContainText('Amount & fee');
   await expect(paymentProgress).toContainText('Review & sign');
   await expect(page.getByRole('region', { name: 'Payment signers' })).toContainText('Groot app');
+  await expect(page.getByText('Previously used labels')).toBeVisible();
+  await expect(page.getByLabel('Payment label')).toHaveValue('');
+  await page.getByRole('button', { name: 'Reuse Savings' }).click();
+  await expect(page.getByLabel('Payment label')).toHaveValue('Savings');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true
+  );
   await page.getByLabel('Bitcoin address').fill('bcrt1qreceiver0000000000000000000000000000000');
   await page.getByLabel('Payment label').fill('Test payment');
   await page.getByRole('button', { name: 'Continue to amount' }).click();

@@ -45,7 +45,8 @@ If code and documentation disagree, stop and resolve the mismatch in the same ch
 - The user credential is both the BIP39 passphrase and app unlock/signing PIN. Wrong entry must return `invalid_credential`; it must never appear to open a different wallet.
 - The credential is not logged, persisted in plaintext, included in analytics, or retained by UI state after use.
 - Every revealed receive address gets a non-empty permanent label in the same atomic operation.
-- Labels cannot be edited or reused.
+- Permanent assignments and history cannot be edited or erased. Normalized label text may be
+  reused intentionally to group related activity.
 - Only an unused address currently awaiting payment can be discarded. Discard means retire from presentation, never stop monitoring.
 - Transaction review data must be derived from the actual unsigned transaction/PSBT, not recomputed only in the UI.
 - Amounts are integer satoshis; fee rates are positive sat/vB. Never use floating-point BTC for wallet accounting.

@@ -50,4 +50,41 @@ describe('DummyWalletAdapter wallet sessions', () => {
       network: expect.any(String)
     });
   });
+
+  it('scopes label suggestions to the selected unlocked wallet and records normalized reuse', async () => {
+    const adapter = new DummyWalletAdapter();
+    const registry = await adapter.profiles();
+    const singleKey = registry.wallets.find((wallet) => wallet.kind === 'single_key')!;
+    const multisig = registry.wallets.find((wallet) => wallet.kind === 'multisig')!;
+
+    const singleSnapshot = await adapter.snapshot();
+    expect(singleSnapshot.labelSuggestions.map((item) => item.text)).toContain('Savings');
+    expect(singleSnapshot.labelSuggestions.map((item) => item.text)).not.toContain(
+      'Family reserve'
+    );
+
+    const originalSavings = singleSnapshot.labelSuggestions.find(
+      (item) => item.text === 'Savings'
+    )!;
+    await adapter.createAddress('  Savings  ');
+    const reused = (await adapter.snapshot()).labelSuggestions.find(
+      (item) => item.text === 'Savings'
+    );
+    expect(reused).toMatchObject({
+      id: originalSavings.id,
+      assignmentCount: 2,
+      usedForReceive: true
+    });
+
+    await adapter.selectWallet(multisig.id);
+    await expect(adapter.multisigSnapshot()).rejects.toMatchObject({ code: 'wallet_locked' });
+    await adapter.unlock('prototype-passphrase');
+    const multisigSnapshot = await adapter.multisigSnapshot();
+    expect(multisigSnapshot.labelSuggestions.map((item) => item.text)).toEqual(['Family reserve']);
+
+    await adapter.selectWallet(singleKey.id);
+    expect((await adapter.snapshot()).labelSuggestions.map((item) => item.text)).toContain(
+      'Savings'
+    );
+  });
 });

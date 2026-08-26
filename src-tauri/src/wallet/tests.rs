@@ -552,7 +552,7 @@ fn pending_balance_includes_trusted_and_untrusted_outputs() {
 }
 
 #[test]
-fn observed_unlabeled_receive_output_accepts_one_permanent_label_only() {
+fn observed_unlabeled_receive_outputs_keep_one_assignment_and_may_reuse_label_text() {
     use bdk_wallet::bitcoin::{
         absolute::LockTime, hashes::Hash, transaction::Version, ScriptBuf, Sequence, TxOut, Witness,
     };
@@ -625,18 +625,23 @@ fn observed_unlabeled_receive_output_accepts_one_permanent_label_only() {
         .code,
         "invalid_label"
     );
-    assert_eq!(
-        claim_observed_receive_output(
-            &mut db,
-            &wallet,
-            &format!("{funding_txid}:1"),
-            "Policy verification funding",
-        )
-        .err()
+    let related = claim_observed_receive_output(
+        &mut db,
+        &wallet,
+        &format!("{funding_txid}:1"),
+        "  policy   verification FUNDING ",
+    )
+    .unwrap();
+    assert_eq!(related.id, 1);
+    assert_eq!(related.label, "policy verification FUNDING");
+    let first_assignment = label_provenance::label_for_subject(&db, "address", "0")
         .unwrap()
-        .code,
-        "invalid_label"
-    );
+        .unwrap();
+    let related_assignment = label_provenance::label_for_subject(&db, "address", "1")
+        .unwrap()
+        .unwrap();
+    assert_eq!(first_assignment.id, related_assignment.id);
+    assert_eq!(related_assignment.text, "Policy verification funding");
     assert_eq!(
         claim_observed_receive_output(
             &mut db,
@@ -2598,6 +2603,7 @@ fn synced_snapshots_enqueue_received_and_first_confirmation_events_once() {
         ],
         utxos: vec![],
         receive_addresses: vec![],
+        label_suggestions: vec![],
         synced_at: Some("1".to_owned()),
         chain_tip: ChainTipDto {
             height: 1,

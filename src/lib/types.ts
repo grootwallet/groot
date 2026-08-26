@@ -4,6 +4,14 @@ export type PermanentLabel = {
   origin: 'receive' | 'payment' | 'imported';
 };
 
+export type LabelSuggestion = {
+  id: string;
+  text: string;
+  assignmentCount: number;
+  usedForReceive: boolean;
+  usedForPayment: boolean;
+};
+
 export type ProvenanceSummary = {
   state: 'known' | 'mixed' | 'unknown';
   context: 'received' | 'change' | 'funding' | 'unknown';

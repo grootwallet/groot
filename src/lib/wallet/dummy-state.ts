@@ -2,7 +2,7 @@ import { defaultConfig } from '$lib/config';
 import { receiveAddresses, transactions, utxos, wallet } from '$lib/data';
 import type { PolicyDraft } from '$lib/multisig/policy';
 import { descriptorPreview, MULTISIG_ACCOUNT_PATH } from '$lib/multisig/policy';
-import type { Utxo } from '$lib/types';
+import type { LabelSuggestion, Utxo } from '$lib/types';
 import { addressPrefixForNetwork } from './policy';
 import type {
   CoreNodeConfig,
@@ -179,6 +179,46 @@ export abstract class DummyWalletState {
     fixtureDelayedPolicy !== null
       ? (this._multisigProfileId ?? this._profiles[0]?.id ?? null)
       : (this._profiles[0]?.id ?? null);
+  protected _labelSuggestionsByWallet = new Map<string, LabelSuggestion[]>([
+    [
+      'fixture-single',
+      [
+        {
+          id: 'receive-invoice-104',
+          text: 'Invoice #104',
+          assignmentCount: 1,
+          usedForReceive: true,
+          usedForPayment: false
+        },
+        {
+          id: 'payment-hardware-order',
+          text: 'Hardware order',
+          assignmentCount: 1,
+          usedForReceive: false,
+          usedForPayment: true
+        },
+        {
+          id: 'receive-savings',
+          text: 'Savings',
+          assignmentCount: 1,
+          usedForReceive: true,
+          usedForPayment: false
+        }
+      ]
+    ],
+    [
+      'fixture-multisig',
+      [
+        {
+          id: 'multisig-family-reserve',
+          text: 'Family reserve',
+          assignmentCount: 2,
+          usedForReceive: true,
+          usedForPayment: true
+        }
+      ]
+    ]
+  ]);
   protected _inactivityTimeoutMinutes = 5;
   protected _credentials = new Map<string, string>(
     this._profiles.map((profile) => [profile.id, prototypeCredential])
@@ -268,6 +308,34 @@ export abstract class DummyWalletState {
     address: fixtureAddressForNetwork(address.address)
   }));
   protected _balance = wallet.balance;
+
+  protected recordLabelUsage(text: string, kind: 'receive' | 'payment'): LabelSuggestion | null {
+    const walletId = this._selectedWalletId;
+    if (!walletId) return null;
+    const normalized = text.trim().replace(/\s+/g, ' ');
+    const key = normalized.toLocaleLowerCase();
+    const suggestions = this._labelSuggestionsByWallet.get(walletId) ?? [];
+    const existing = suggestions.find((item) => item.text.toLocaleLowerCase() === key);
+    const next: LabelSuggestion = existing
+      ? {
+          ...existing,
+          assignmentCount: existing.assignmentCount + 1,
+          usedForReceive: existing.usedForReceive || kind === 'receive',
+          usedForPayment: existing.usedForPayment || kind === 'payment'
+        }
+      : {
+          id: `fixture-label-${walletId}-${suggestions.length + 1}`,
+          text: normalized,
+          assignmentCount: 1,
+          usedForReceive: kind === 'receive',
+          usedForPayment: kind === 'payment'
+        };
+    this._labelSuggestionsByWallet.set(walletId, [
+      next,
+      ...suggestions.filter((item) => item.id !== next.id)
+    ]);
+    return next;
+  }
   protected _pendingBalance = wallet.pending;
   protected _nodeConfig: CoreNodeConfig = {
     backend: { type: 'local_core', url: 'http://127.0.0.1:18443' },

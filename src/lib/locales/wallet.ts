@@ -377,6 +377,24 @@ export const walletCopy = {
   },
   Outpoint: { fr: 'Point de sortie', es: 'Punto de salida' },
   'Permanent label': { fr: 'Libellé permanent', es: 'Etiqueta permanente' },
+  'Previously used labels': {
+    fr: 'Libellés déjà utilisés',
+    es: 'Etiquetas usadas anteriormente'
+  },
+  'Assignments cannot be changed. Label text can be reused intentionally.': {
+    fr: 'Les attributions ne peuvent pas être modifiées. Le texte d’un libellé peut être réutilisé volontairement.',
+    es: 'Las asignaciones no se pueden cambiar. El texto de una etiqueta puede reutilizarse intencionadamente.'
+  },
+  'Choose one only for the same relationship. Reuse groups related activity in Groot, while spending can still create new public links.':
+    {
+      fr: 'Choisissez-en un uniquement pour la même relation. La réutilisation regroupe l’activité associée dans Groot, mais une dépense peut toujours créer de nouveaux liens publics.',
+      es: 'Elige una solo para la misma relación. La reutilización agrupa la actividad relacionada en Groot, aunque un gasto todavía puede crear nuevos vínculos públicos.'
+    },
+  'Reuse {label}': { fr: 'Réutiliser {label}', es: 'Reutilizar {label}' },
+  'Required · cannot be changed; reuse is intentional': {
+    fr: 'Requis · non modifiable ; la réutilisation est volontaire',
+    es: 'Obligatoria · no se puede cambiar; la reutilización es intencionada'
+  },
   'Privacy clusters': { fr: 'Groupes de confidentialité', es: 'Grupos de privacidad' },
   'The permanent labels inherited from this coin’s receive address or funding inputs.': {
     fr: 'Les libellés permanents hérités de l’adresse de réception de cette pièce ou de ses entrées de financement.',

@@ -1,4 +1,4 @@
-import type { ReceiveAddress, Transaction, Utxo } from '$lib/types';
+import type { LabelSuggestion, ReceiveAddress, Transaction, Utxo } from '$lib/types';
 import type { SupportedNetwork } from '$lib/config';
 import { WalletError } from './errors';
 
@@ -11,6 +11,7 @@ export type WalletSnapshot = {
   transactions: Transaction[];
   utxos: Utxo[];
   receiveAddresses: ReceiveAddress[];
+  labelSuggestions: LabelSuggestion[];
   syncedAt: string | null;
   chainTip: {
     height: number;

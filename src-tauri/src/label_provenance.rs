@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 use crate::privacy_selection::CoinPrivacy;
 
-pub const SCHEMA_VERSION: u32 = 1;
+pub const SCHEMA_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LabelOrigin {
@@ -35,6 +35,16 @@ pub struct PermanentLabelDto {
     pub id: String,
     pub text: String,
     pub origin: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LabelSuggestionDto {
+    pub id: String,
+    pub text: String,
+    pub assignment_count: u32,
+    pub used_for_receive: bool,
+    pub used_for_payment: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -138,6 +148,18 @@ fn normalized_reuse_guard(text: &str) -> String {
         .collect::<Vec<_>>()
         .join(" ")
         .to_lowercase()
+}
+
+fn reusable_label_id(
+    db: &Connection,
+    text: &str,
+) -> Result<Option<String>, bdk_wallet::rusqlite::Error> {
+    db.query_row(
+        "SELECT label_id FROM groot_labels WHERE reuse_guard = ?1",
+        params![normalized_reuse_guard(text)],
+        |row| row.get(0),
+    )
+    .optional()
 }
 
 pub fn init_schema(db: &Connection) -> Result<(), bdk_wallet::rusqlite::Error> {
@@ -319,6 +341,14 @@ pub fn assign_new_label(
     subject_id: &str,
     created_at: u64,
 ) -> Result<String, bdk_wallet::rusqlite::Error> {
+    if let Some(label_id) = reusable_label_id(db, text)? {
+        db.execute(
+            "INSERT INTO groot_label_assignments(label_id, subject_kind, subject_id, assigned_at)
+             VALUES(?1, ?2, ?3, ?4)",
+            params![label_id, subject_kind, subject_id, created_at],
+        )?;
+        return Ok(label_id);
+    }
     let label_id = Uuid::new_v4().to_string();
     db.execute(
         "INSERT INTO groot_labels(label_id, text, reuse_guard, origin, created_at)
@@ -344,25 +374,8 @@ pub fn assign_payment_intent(
     text: &str,
     proposal_id: &str,
     created_at: u64,
-    inherit_existing: bool,
+    _inherit_existing: bool,
 ) -> Result<String, bdk_wallet::rusqlite::Error> {
-    if inherit_existing {
-        if let Some(label_id) = db
-            .query_row(
-                "SELECT label_id FROM groot_labels WHERE reuse_guard = ?1 AND origin = 'payment'",
-                params![normalized_reuse_guard(text)],
-                |row| row.get::<_, String>(0),
-            )
-            .optional()?
-        {
-            db.execute(
-                "INSERT INTO groot_label_assignments(label_id, subject_kind, subject_id, assigned_at)
-                 VALUES(?1, 'transaction_intent', ?2, ?3)",
-                params![label_id, proposal_id, created_at],
-            )?;
-            return Ok(label_id);
-        }
-    }
     assign_new_label(
         db,
         text,
@@ -373,13 +386,51 @@ pub fn assign_payment_intent(
     )
 }
 
+pub fn label_suggestions(
+    db: &Connection,
+    limit: u32,
+) -> Result<Vec<LabelSuggestionDto>, bdk_wallet::rusqlite::Error> {
+    let mut statement = db.prepare(
+        "SELECT label.label_id,
+                label.text,
+                COUNT(*) AS assignment_count,
+                MAX(CASE WHEN assignment.subject_kind = 'address' THEN 1 ELSE 0 END),
+                MAX(CASE WHEN assignment.subject_kind = 'transaction_intent' THEN 1 ELSE 0 END),
+                MAX(assignment.assigned_at) AS last_assigned_at
+         FROM groot_labels label
+         JOIN groot_label_assignments assignment ON assignment.label_id = label.label_id
+         WHERE assignment.subject_kind IN ('address', 'transaction_intent')
+         GROUP BY label.label_id, label.text
+         ORDER BY last_assigned_at DESC, label.created_at DESC, label.label_id
+         LIMIT ?1",
+    )?;
+    let suggestions = statement
+        .query_map(params![limit], |row| {
+            Ok(LabelSuggestionDto {
+                id: row.get(0)?,
+                text: row.get(1)?,
+                assignment_count: row.get(2)?,
+                used_for_receive: row.get::<_, bool>(3)?,
+                used_for_payment: row.get::<_, bool>(4)?,
+            })
+        })?
+        .collect();
+    suggestions
+}
+
 pub fn label_for_subject(
     db: &Connection,
     subject_kind: &str,
     subject_id: &str,
 ) -> Result<Option<PermanentLabelDto>, bdk_wallet::rusqlite::Error> {
     db.query_row(
-        "SELECT label.label_id, label.text, label.origin
+        "SELECT label.label_id, label.text,
+                CASE assignment.subject_kind
+                  WHEN 'address' THEN 'receive'
+                  WHEN 'transaction_intent' THEN 'payment'
+                  WHEN 'transaction' THEN 'payment'
+                  ELSE label.origin
+                END
          FROM groot_label_assignments assignment
          JOIN groot_labels label ON label.label_id = assignment.label_id
          WHERE assignment.subject_kind = ?1 AND assignment.subject_id = ?2",
@@ -403,7 +454,7 @@ pub fn payment_label_for_txid(
         return Ok(Some(label));
     }
     db.query_row(
-        "SELECT label.label_id, label.text, label.origin
+        "SELECT label.label_id, label.text, 'payment'
          FROM groot_proposals proposal
          JOIN groot_label_assignments assignment
            ON assignment.subject_kind = 'transaction_intent'
@@ -724,7 +775,7 @@ pub fn output_summary_with_context(
     )?;
     let labels = {
         let mut statement = db.prepare(
-            "SELECT label.label_id, label.text, label.origin
+            "SELECT label.label_id, label.text, 'receive'
              FROM groot_output_provenance provenance
              JOIN groot_labels label ON label.label_id = provenance.label_id
              WHERE provenance.outpoint = ?1 ORDER BY label.created_at, label.label_id",
@@ -790,7 +841,7 @@ pub fn funding_summary_with_context(
     for label_id in &derived.labels {
         if let Some(label) = db
             .query_row(
-                "SELECT label_id, text, origin FROM groot_labels WHERE label_id = ?1",
+                "SELECT label_id, text, 'receive' FROM groot_labels WHERE label_id = ?1",
                 params![label_id],
                 |row| {
                     Ok(PermanentLabelDto {
@@ -1166,7 +1217,7 @@ mod tests {
     }
 
     #[test]
-    fn new_labels_are_non_reusable_and_assign_to_one_exact_subject() {
+    fn normalized_label_text_reuses_one_entity_across_exact_immutable_assignments() {
         let db = database();
         init_schema(&db).unwrap();
         assign_new_label(
@@ -1178,18 +1229,31 @@ mod tests {
             10,
         )
         .unwrap();
-        assert!(assign_new_label(
+        let reused = assign_new_label(
             &db,
             " consulting   INCOME ",
             LabelOrigin::Payment,
             "transaction_intent",
             "proposal-1",
-            11
+            11,
         )
-        .is_err());
+        .unwrap();
         let label = label_for_subject(&db, "address", "1").unwrap().unwrap();
+        let payment = label_for_subject(&db, "transaction_intent", "proposal-1")
+            .unwrap()
+            .unwrap();
         assert_eq!(label.text, "Consulting income");
         assert_eq!(label.origin, "receive");
+        assert_eq!(reused, label.id);
+        assert_eq!(payment.id, label.id);
+        assert_eq!(payment.text, "Consulting income");
+        assert_eq!(payment.origin, "payment");
+        assert_eq!(
+            db.query_row("SELECT COUNT(*) FROM groot_labels", [], |row| row
+                .get::<_, u32>(0))
+                .unwrap(),
+            1
+        );
     }
 
     #[test]
@@ -1205,6 +1269,169 @@ mod tests {
                 .unwrap(),
             1
         );
+    }
+
+    #[test]
+    fn version_one_catalog_upgrades_additively_and_preserves_every_entity_and_assignment() {
+        let db = database();
+        init_schema(&db).unwrap();
+        db.execute("INSERT INTO groot_addresses VALUES(1, 'Savings', 10)", [])
+            .unwrap();
+        db.execute(
+            "INSERT INTO groot_proposals VALUES('proposal-1', 'Rent', 11, 'tx-1', 'broadcast')",
+            [],
+        )
+        .unwrap();
+        let first =
+            assign_new_label(&db, "Savings", LabelOrigin::Receive, "address", "1", 10).unwrap();
+        assign_payment_intent(&db, "Rent", "proposal-1", 11, false).unwrap();
+        let received = DerivedProvenance {
+            labels: BTreeSet::from([first.clone()]),
+            clusters: BTreeSet::new(),
+            state: ProvenanceState::Known,
+        };
+        materialize_output(
+            &db,
+            OutputMaterialization {
+                outpoint: "tx-0:0",
+                txid: "tx-0",
+                context: "received",
+                address_idx: Some(1),
+                provenance: &received,
+                clusters: &BTreeSet::from(["cluster-address-1".to_owned()]),
+                created_at: 10,
+            },
+        )
+        .unwrap();
+        bind_broadcast_transaction(&db, "proposal-1", "tx-1", 12).unwrap();
+        db.execute("UPDATE groot_label_schema SET version = 1", [])
+            .unwrap();
+
+        init_schema(&db).unwrap();
+
+        assert_eq!(
+            db.query_row("SELECT version FROM groot_label_schema", [], |row| row
+                .get::<_, u32>(0))
+                .unwrap(),
+            SCHEMA_VERSION
+        );
+        assert_eq!(
+            label_for_subject(&db, "address", "1").unwrap().unwrap().id,
+            first
+        );
+        assert_eq!(
+            db.query_row("SELECT COUNT(*) FROM groot_labels", [], |row| row
+                .get::<_, u32>(0))
+                .unwrap(),
+            2
+        );
+        assert_eq!(
+            db.query_row("SELECT COUNT(*) FROM groot_label_assignments", [], |row| {
+                row.get::<_, u32>(0)
+            })
+            .unwrap(),
+            3
+        );
+        assert_eq!(
+            db.query_row(
+                "SELECT label FROM groot_addresses WHERE idx = 1",
+                [],
+                |row| row.get::<_, String>(0)
+            )
+            .unwrap(),
+            "Savings"
+        );
+        assert_eq!(
+            db.query_row(
+                "SELECT label FROM groot_proposals WHERE proposal_id = 'proposal-1'",
+                [],
+                |row| row.get::<_, String>(0)
+            )
+            .unwrap(),
+            "Rent"
+        );
+        let preserved = output_summary(&db, "tx-0:0").unwrap();
+        assert_eq!(preserved.labels[0].id, first);
+        assert_eq!(preserved.cluster_count, 1);
+        assert_eq!(
+            payment_label_for_txid(&db, "tx-1").unwrap().unwrap().text,
+            "Rent"
+        );
+    }
+
+    #[test]
+    fn suggestions_are_recent_usage_summaries_without_mutating_assignments() {
+        let db = database();
+        init_schema(&db).unwrap();
+        assign_new_label(&db, "Savings", LabelOrigin::Receive, "address", "1", 10).unwrap();
+        assign_new_label(
+            &db,
+            " savings ",
+            LabelOrigin::Payment,
+            "transaction_intent",
+            "proposal-1",
+            12,
+        )
+        .unwrap();
+        assign_new_label(&db, "Gift", LabelOrigin::Receive, "address", "2", 11).unwrap();
+
+        let suggestions = label_suggestions(&db, 12).unwrap();
+        assert_eq!(suggestions.len(), 2);
+        assert_eq!(suggestions[0].text, "Savings");
+        assert_eq!(suggestions[0].assignment_count, 2);
+        assert!(suggestions[0].used_for_receive);
+        assert!(suggestions[0].used_for_payment);
+        assert_eq!(suggestions[1].text, "Gift");
+    }
+
+    #[test]
+    fn reused_label_groups_provenance_without_hiding_distinct_public_clusters() {
+        let db = database();
+        init_schema(&db).unwrap();
+        let label = assign_new_label(
+            &db,
+            "Family reserve",
+            LabelOrigin::Receive,
+            "address",
+            "1",
+            10,
+        )
+        .unwrap();
+        let reused = assign_new_label(
+            &db,
+            "family   RESERVE",
+            LabelOrigin::Receive,
+            "address",
+            "2",
+            11,
+        )
+        .unwrap();
+        assert_eq!(label, reused);
+        let provenance = DerivedProvenance {
+            labels: BTreeSet::from([label]),
+            clusters: BTreeSet::new(),
+            state: ProvenanceState::Known,
+        };
+        for (outpoint, cluster) in [("one:0", "cluster-one"), ("two:0", "cluster-two")] {
+            materialize_output(
+                &db,
+                OutputMaterialization {
+                    outpoint,
+                    txid: outpoint.split(':').next().unwrap(),
+                    context: "received",
+                    address_idx: None,
+                    provenance: &provenance,
+                    clusters: &BTreeSet::from([cluster.to_owned()]),
+                    created_at: 12,
+                },
+            )
+            .unwrap();
+        }
+
+        let summary = funding_summary(&db, &["one:0".to_owned(), "two:0".to_owned()]).unwrap();
+        assert_eq!(summary.labels.len(), 1);
+        assert_eq!(summary.labels[0].text, "Family reserve");
+        assert_eq!(summary.cluster_count, 2);
     }
 
     #[test]
