@@ -24,6 +24,7 @@
   import LocalTimestamp from '$lib/components/LocalTimestamp.svelte';
   import HardwareVerificationStatus from '$lib/components/HardwareVerificationStatus.svelte';
   import HardwareReceiveVerification from '$lib/components/HardwareReceiveVerification.svelte';
+  import PermanentLabelTags from '$lib/components/PermanentLabelTags.svelte';
   import { compactAddress } from '$lib/address-display';
   import { walletService, WalletError } from '$lib/wallet';
   import { awaitingPaymentAddresses } from '$lib/wallet/policy';
@@ -280,8 +281,12 @@
           />{:else}<QrCode size={154} />{/if}</button
       >
       <div class="address-label">
-        <span>{current.label}</span>{#if current.hardwareVerifiedAt}<HardwareVerificationStatus
-          />{:else}<small>{translate($locale, 'Not verified')}</small>{/if}
+        <PermanentLabelTags
+          labels={current.labels ?? [current.label]}
+          prominent
+        />{#if current.hardwareVerifiedAt}<HardwareVerificationStatus />{:else}<small
+            >{translate($locale, 'Not verified')}</small
+          >{/if}
       </div>
       <button class="address-box" onclick={copy}
         ><code>{current.address}</code>{#if copied}<Check size={17} />{:else}<Copy

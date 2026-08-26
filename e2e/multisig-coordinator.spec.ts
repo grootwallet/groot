@@ -315,10 +315,15 @@ test('spends end-to-end from the ready-made demo wallet', async ({ page }) => {
   await page.getByLabel('Payment label').press('Enter');
   await expect(page.getByRole('button', { name: 'Continue to amount' })).toBeDisabled();
   await page.getByLabel('Payment label').fill('Test purchase');
-  await page.getByLabel('Payment label').press('Enter');
+  await page.getByRole('button', { name: 'Continue to amount' }).click();
+  await page.getByRole('button', { name: 'Back' }).click();
+  await expect(page.getByLabel('Payment label')).toHaveValue('');
+  await expect(page.getByRole('button', { name: 'Remove Test purchase' })).toBeVisible();
+  await page.getByRole('button', { name: 'Continue to amount' }).click();
   await page.getByLabel('Amount', { exact: true }).fill('50000');
   await page.getByRole('button', { name: 'Review payment' }).click();
-  await expect(page.getByText('Test purchase', { exact: true })).toBeVisible();
+  const transactionReview = page.getByRole('region', { name: 'Transaction review' });
+  await expect(transactionReview.getByLabel('Assigned labels')).toContainText('Test purchase');
   await expect(page.getByRole('button', { name: '2 more signatures required' })).toBeDisabled();
   await expect(page.getByText('Fee rate', { exact: true })).toBeHidden();
   await page.getByText('View more details', { exact: true }).click();

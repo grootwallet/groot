@@ -711,6 +711,13 @@
     selectedLabels = draft.labels;
     label = draft.input;
   }
+  function continueToAmount() {
+    if (!intentValid) return;
+    selectedLabels = submissionLabels;
+    label = '';
+    armedLabelIndex = null;
+    draftStep = 2;
+  }
 </script>
 
 {#snippet labelSuggestionPicker()}
@@ -812,7 +819,7 @@
       class="form-card send-stage-card"
       onsubmit={(event) => {
         event.preventDefault();
-        if (intentValid) draftStep = 2;
+        continueToAmount();
       }}
       in:fly={{ x: 8, duration: 180 }}
     >
@@ -1077,7 +1084,7 @@
         </div>
         <div>
           <dt>{translate($locale, 'Label')}</dt>
-          <dd>{(proposal.labels ?? [proposal.label]).join(' · ')}</dd>
+          <dd><PermanentLabelTags labels={proposal.labels ?? [proposal.label]} prominent /></dd>
         </div>
         <div>
           <dt>{translate($locale, 'Network')}</dt>
@@ -1182,7 +1189,7 @@
           </div>
           <div>
             <dt>{translate($locale, 'Label')}</dt>
-            <dd>{(proposal.labels ?? [proposal.label]).join(' · ')}</dd>
+            <dd><PermanentLabelTags labels={proposal.labels ?? [proposal.label]} prominent /></dd>
           </div>
           <div>
             <dt>{translate($locale, 'Amount')}</dt>
@@ -1310,7 +1317,7 @@
           </div>
           <div>
             <dt>{translate($locale, 'Label')}</dt>
-            <dd>{(proposal.labels ?? [proposal.label]).join(' · ')}</dd>
+            <dd><PermanentLabelTags labels={proposal.labels ?? [proposal.label]} prominent /></dd>
           </div>
           <div>
             <dt>{translate($locale, 'Amount')}</dt>
@@ -1449,7 +1456,7 @@
         </div>
         <div>
           <dt>{translate($locale, 'Label')}</dt>
-          <dd>{(proposal.labels ?? [proposal.label]).join(' · ')}</dd>
+          <dd><PermanentLabelTags labels={proposal.labels ?? [proposal.label]} prominent /></dd>
         </div>
         <div>
           <dt>{translate($locale, 'Amount')}</dt>
@@ -1598,7 +1605,7 @@
     <dl class="details-list cancel-proposal-details">
       <div>
         <dt>{translate($locale, 'Payment')}</dt>
-        <dd>{(proposal.labels ?? [proposal.label]).join(' · ')}</dd>
+        <dd><PermanentLabelTags labels={proposal.labels ?? [proposal.label]} prominent /></dd>
       </div>
       <div>
         <dt>{translate($locale, 'Signature progress')}</dt>
@@ -1642,7 +1649,7 @@
     <dl class="details-list cancel-proposal-details">
       <div>
         <dt>{translate($locale, 'Payment')}</dt>
-        <dd>{(proposal.labels ?? [proposal.label]).join(' · ')}</dd>
+        <dd><PermanentLabelTags labels={proposal.labels ?? [proposal.label]} prominent /></dd>
       </div>
       <div>
         <dt>{translate($locale, 'Amount')}</dt>

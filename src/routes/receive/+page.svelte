@@ -23,6 +23,7 @@
   import LocalTimestamp from '$lib/components/LocalTimestamp.svelte';
   import HardwareVerificationStatus from '$lib/components/HardwareVerificationStatus.svelte';
   import HardwareReceiveVerification from '$lib/components/HardwareReceiveVerification.svelte';
+  import PermanentLabelTags from '$lib/components/PermanentLabelTags.svelte';
   import { compactAddress } from '$lib/address-display';
   import { walletService } from '$lib/wallet';
   import { useWalletShellContext } from '$lib/wallet/shell-context';
@@ -289,8 +290,8 @@
           >{/if}</button
       >
       <div class="address-label">
-        <span>{current.label}</span
-        >{#if externalSigner}{#if current.hardwareVerifiedAt}<HardwareVerificationStatus
+        <PermanentLabelTags labels={current.labels ?? [current.label]} prominent />
+        {#if externalSigner}{#if current.hardwareVerifiedAt}<HardwareVerificationStatus
             />{:else}<small>{translate($locale, 'Not verified')}</small>{/if}{:else}<small
             >{translate($locale, 'Awaiting payment')}</small
           >{/if}

@@ -854,7 +854,7 @@ test('overview, activity, UTXOs, and settings expose durable states', async ({ p
   await reusedCoin.getByText('Technical details', { exact: true }).click();
   await expect(reusedCoin.getByText('Outpoint', { exact: true })).toBeVisible();
   const changeCoin = page.locator('.coin-row').filter({ hasText: 'Mixed provenance' });
-  const inheritedLabels = changeCoin.getByRole('list', { name: 'Permanent labels' });
+  const inheritedLabels = changeCoin.getByRole('list', { name: 'Assigned labels' });
   await expect(inheritedLabels.getByRole('listitem', { name: 'Savings' })).toBeVisible();
   await expect(inheritedLabels.getByRole('listitem', { name: 'Refund' })).toBeVisible();
   await changeCoin.getByRole('button', { name: 'Show details for Savings, Refund' }).click();
@@ -1143,12 +1143,12 @@ test('receive keeps multiple labeled payment requests and discards them independ
   await expect(page.getByRole('button', { name: 'Remove Invoice #205' })).toBeVisible();
   await page.getByLabel('Permanent label').press('Backspace');
   await expect(page.getByRole('button', { name: 'Remove Invoice #205' })).toHaveCount(0);
-  await page.getByLabel('Permanent label').fill('Invoice #205');
-  await page.getByLabel('Permanent label').press('Enter');
+  await page.getByLabel('Permanent label').fill('Invoice #205,Customer A,Q3;');
   await page.getByRole('button', { name: 'Generate address' }).click();
-  await expect(
-    page.locator('.receive-card').getByText('Invoice #205', { exact: true })
-  ).toBeVisible();
+  const currentAddressLabels = page.locator('.receive-card').getByLabel('Assigned labels');
+  await expect(currentAddressLabels).toContainText('Invoice #205');
+  await expect(currentAddressLabels).toContainText('Customer A');
+  await expect(currentAddressLabels).toContainText('Q3');
   await page.getByRole('button', { name: 'New receive address' }).click();
   await expect(page.getByRole('button', { name: 'Reuse Invoice #205' })).toBeVisible();
   await page.getByRole('button', { name: 'Cancel' }).click();
@@ -1311,14 +1311,20 @@ test('send reviews a proposal and rejects a wrong credential', async ({ page }) 
   );
   await page.getByLabel('Bitcoin address').fill('bcrt1qreceiver0000000000000000000000000000000');
   await page.getByLabel('Payment label').fill('Test payment');
-  await page.getByLabel('Payment label').press('Enter');
-  await expect(page.getByRole('button', { name: 'Remove Test payment' })).toBeVisible();
   await page.getByRole('button', { name: 'Continue to amount' }).click();
   await expect(paymentProgress.getByText('Amount & fee')).toBeVisible();
+  await page.getByRole('button', { name: 'Back' }).click();
+  await expect(page.getByLabel('Payment label')).toHaveValue('');
+  await expect(page.getByRole('button', { name: 'Remove Savings' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Remove Test payment' })).toBeVisible();
+  await page.getByRole('button', { name: 'Continue to amount' }).click();
   await page.getByLabel('Amount', { exact: true }).fill('25000');
   await page.getByRole('button', { name: /Automatic selection/ }).click();
   await page.getByRole('button', { name: /Lower fee/ }).click();
   await page.getByRole('button', { name: 'Review payment' }).click();
+  const reviewLabels = page.locator('.details-list').first().getByLabel('Assigned labels');
+  await expect(reviewLabels).toContainText('Savings');
+  await expect(reviewLabels).toContainText('Test payment');
   await expect(page.getByText('25,000')).toBeVisible();
   await expect(page.getByText('Exact strategy comparison')).toBeVisible();
   await expect(

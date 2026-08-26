@@ -216,6 +216,7 @@ export const accessibilityCopy = {
   },
   'Payment progress': { fr: 'Progression du paiement', es: 'Progreso del pago' },
   'Payment signers': { fr: 'Signataires du paiement', es: 'Firmantes del pago' },
+  'Assigned labels': { fr: 'Libellés attribués', es: 'Etiquetas asignadas' },
   'Permanent labels': { fr: 'Libellés permanents', es: 'Etiquetas permanentes' },
   'Permanently delete this wallet?': {
     fr: 'Supprimer définitivement ce portefeuille ?',

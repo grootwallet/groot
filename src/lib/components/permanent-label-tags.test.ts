@@ -7,10 +7,15 @@ const fixtures = readFileSync(new URL('../data.ts', import.meta.url), 'utf8');
 
 describe('permanent label tags', () => {
   it('renders every unique authoritative label without deriving provenance in the UI', () => {
-    expect(component).toContain('new Map(labels.map((label) => [label.id, label]))');
-    expect(component).toContain('{#each uniqueLabels as label (label.id)}');
-    expect(component).toContain("aria-label={translate($locale, 'Permanent labels')}");
+    expect(component).toContain("typeof label === 'string' ? label : label.text");
+    expect(component).toContain('{#each uniqueLabels as label (label)}');
+    expect(component).toContain("aria-label={translate($locale, 'Assigned labels')}");
     expect(component).not.toMatch(/sourceOutpoints|context ===|state ===/);
+  });
+
+  it('accepts proposal label strings and can emphasize review tags', () => {
+    expect(component).toContain('labels: readonly (PermanentLabel | string)[]');
+    expect(component).toContain('class:prominent');
   });
 
   it('uses neutral copy instead of label text in discreet mode', () => {

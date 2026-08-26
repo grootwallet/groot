@@ -1652,9 +1652,9 @@ code {
   flex-direction: column;
   gap: 5px;
 }
-.address-label > span:first-child {
-  font-size: 15px;
-  font-weight: 600;
+.address-label > .permanent-label-tags {
+  align-self: center;
+  justify-content: center;
 }
 .address-label small {
   color: var(--accent);
@@ -8056,6 +8056,18 @@ code {
 }
 .permanent-label-tags-hidden {
   color: var(--muted) !important;
+}
+.permanent-label-tags.prominent {
+  justify-content: flex-end;
+}
+.permanent-label-tags.prominent .permanent-label-tag {
+  max-width: min(220px, 100%);
+  padding: 5px 8px;
+  border-radius: 6px;
+  font-size: 11px !important;
+}
+.address-label .permanent-label-tags.prominent {
+  justify-content: center;
 }
 .coin-status {
   flex: 0 0 auto;

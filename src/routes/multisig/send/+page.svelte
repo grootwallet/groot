@@ -476,10 +476,15 @@
   function submitIntentOnEnter(event: KeyboardEvent) {
     if (event.key !== 'Enter') return;
     event.preventDefault();
-    if (intentValid) {
-      error = '';
-      draftStep = 2;
-    }
+    continueToAmount();
+  }
+  function continueToAmount() {
+    if (!intentValid) return;
+    error = '';
+    selectedLabels = submissionLabels;
+    label = '';
+    armedLabelIndex = null;
+    draftStep = 2;
   }
   async function prepare() {
     if (!valid) return;
@@ -1522,10 +1527,7 @@
       class="form-card send-stage-card"
       onsubmit={(e) => {
         e.preventDefault();
-        if (intentValid) {
-          error = '';
-          draftStep = 2;
-        }
+        continueToAmount();
       }}
       in:fly={{ x: 8, duration: 180 }}
     >
@@ -1808,7 +1810,7 @@
           </div>
           <div>
             <dt>{translate($locale, 'Label')}</dt>
-            <dd>{(proposal.labels ?? [proposal.label]).join(' · ')}</dd>
+            <dd><PermanentLabelTags labels={proposal.labels ?? [proposal.label]} prominent /></dd>
           </div>
           <div>
             <dt>{translate($locale, 'Network')}</dt>
@@ -2025,7 +2027,7 @@
         </div>
         <div>
           <dt>{translate($locale, 'Label')}</dt>
-          <dd>{(proposal.labels ?? [proposal.label]).join(' · ')}</dd>
+          <dd><PermanentLabelTags labels={proposal.labels ?? [proposal.label]} prominent /></dd>
         </div>
         <div>
           <dt>{translate($locale, 'Amount')}</dt>
@@ -2334,7 +2336,7 @@
     <dl class="details-list cancel-proposal-details">
       <div>
         <dt>{translate($locale, 'Payment')}</dt>
-        <dd>{(proposal.labels ?? [proposal.label]).join(' · ')}</dd>
+        <dd><PermanentLabelTags labels={proposal.labels ?? [proposal.label]} prominent /></dd>
       </div>
       <div>
         <dt>{translate($locale, 'Amount')}</dt>
@@ -2428,7 +2430,7 @@
     <dl class="details-list cancel-proposal-details">
       <div>
         <dt>{translate($locale, 'Payment')}</dt>
-        <dd>{(proposal.labels ?? [proposal.label]).join(' · ')}</dd>
+        <dd><PermanentLabelTags labels={proposal.labels ?? [proposal.label]} prominent /></dd>
       </div>
       <div>
         <dt>{translate($locale, 'Amount')}</dt>
