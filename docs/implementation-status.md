@@ -2,6 +2,8 @@
 
 This ledger prevents prototype UI from being mistaken for production wallet behavior. “Implemented” means wired through the real Tauri adapter; “browser fixture” means deterministic UI behavior only.
 
+v0.4.41 polishes the shared Send/Receive label-token interaction without changing persisted data. Empty-input Backspace now selects the final token before a second press removes it, token removal floats over the token only on hover or focus without reserving awkward inline space, and the prior-label strip is limited to four calm single-row suggestions. Its height remains reserved while typed filtering has no match, preventing the receive modal and send flow from jumping.
+
 v0.4.40 replaces the detached multi-label chip row and separate Add action with one compact Wasabi-style token input across software and multisig Send/Receive. Selected labels remain inside the field, Enter/Tab/comma/semicolon commit typed text, hover or keyboard focus reveals removal, touch keeps removal available, and removing a reused token restores it to the suggestion list. The v0.4.39 schema-v3 persistence model is unchanged.
 
 v0.4.39 allows one to twelve immutable permanent labels on each new receive request or payment intent. Selected suggestions become removable chips and disappear from the suggestion list; the first label remains the rollback-compatible primary label while an additive schema-v3 table preserves the rest. Existing addresses, proposals, transactions, provenance, labels, and wallet databases remain intact. Change provenance is mixed only when distinct source clusters are joined, not merely because one source has several descriptive labels.

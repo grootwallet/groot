@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { LabelSuggestion } from '$lib/types';
 import {
   addPermanentLabel,
+  backspaceLabelDraft,
   MAX_PERMANENT_LABELS,
   permanentLabelsForSubmission,
   tokenizeLabelDraft,
@@ -25,9 +26,9 @@ describe('visibleLabelSuggestions', () => {
     suggestion('Old receive test archive')
   ];
 
-  it('shows only the ten most recently used labels while the field is empty', () => {
+  it('shows only the most recent compact suggestion set while the field is empty', () => {
     expect(visibleLabelSuggestions(history, '').map(({ text }) => text)).toEqual(
-      history.slice(0, 10).map(({ text }) => text)
+      history.slice(0, 4).map(({ text }) => text)
     );
   });
 
@@ -74,6 +75,17 @@ describe('visibleLabelSuggestions', () => {
     expect(tokenizeLabelDraft(['Client'], 'Quarterly', true)).toEqual({
       labels: ['Client', 'Quarterly'],
       input: ''
+    });
+  });
+
+  it('arms the last label before a second backspace removes it', () => {
+    expect(backspaceLabelDraft(['Client', 'Quarterly'], null)).toEqual({
+      labels: ['Client', 'Quarterly'],
+      armedIndex: 1
+    });
+    expect(backspaceLabelDraft(['Client', 'Quarterly'], 1)).toEqual({
+      labels: ['Client'],
+      armedIndex: null
     });
   });
 });

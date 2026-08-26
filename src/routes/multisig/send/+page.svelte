@@ -62,9 +62,11 @@
   import { accelerationUnavailableTitle } from '$lib/wallet/acceleration-presentation';
   import {
     addPermanentLabel,
+    backspaceLabelDraft,
     permanentLabelsForSubmission,
     tokenizeLabelDraft,
-    visibleLabelSuggestions
+    visibleLabelSuggestions,
+    VISIBLE_LABEL_SUGGESTION_LIMIT
   } from '$lib/wallet/label-suggestions';
   import {
     addressForHardwareDisplay,
@@ -108,9 +110,10 @@
     deviceError = $state(''),
     cancelError = $state('');
   let selectedLabels = $state<string[]>([]);
+  let armedLabelIndex = $state<number | null>(null);
   let labelSuggestions = $state<LabelSuggestion[]>([]);
   let visibleSuggestions = $derived(
-    visibleLabelSuggestions(labelSuggestions, label, 10, selectedLabels)
+    visibleLabelSuggestions(labelSuggestions, label, VISIBLE_LABEL_SUGGESTION_LIMIT, selectedLabels)
   );
   let submissionLabels = $derived(permanentLabelsForSubmission(selectedLabels, label));
   let discardError = $state(''),
@@ -1080,12 +1083,21 @@
     }
   }
   function updateLabelDraft(value: string) {
+    armedLabelIndex = null;
     const draft = tokenizeLabelDraft(selectedLabels, value);
     selectedLabels = draft.labels;
     label = draft.input;
     clearDraftError();
   }
   function handleLabelKeydown(event: KeyboardEvent) {
+    if (event.key === 'Backspace' && !label) {
+      event.preventDefault();
+      const result = backspaceLabelDraft(selectedLabels, armedLabelIndex);
+      selectedLabels = result.labels;
+      armedLabelIndex = result.armedIndex;
+      return;
+    }
+    armedLabelIndex = null;
     if (!label.trim() || !['Enter', 'Tab', ',', ';'].includes(event.key)) return;
     if (event.key !== 'Tab') event.preventDefault();
     const draft = tokenizeLabelDraft(selectedLabels, label, true);
@@ -1099,12 +1111,16 @@
   <div class="field">
     <label for={id}>{title}</label>
     <div class="label-token-field" aria-label={translate($locale, 'Selected labels')}>
-      {#each selectedLabels as selected}<span class="label-token"
-          >{selected}<button
+      {#each selectedLabels as selected, index}<span
+          class="label-token"
+          class:label-token-armed={index === armedLabelIndex}
+          ><span class="label-token-text">{selected}</span><button
             type="button"
             aria-label={translate($locale, 'Remove {label}', { label: selected })}
-            onclick={() => (selectedLabels = selectedLabels.filter((item) => item !== selected))}
-            ><X size={13} /></button
+            onclick={() => {
+              selectedLabels = selectedLabels.filter((item) => item !== selected);
+              armedLabelIndex = null;
+            }}><X size={13} /></button
           ></span
         >{/each}<input
         {id}
@@ -1118,13 +1134,14 @@
     </div>
     <FieldCounter value={label} max={48} {hint} />
   </div>
-  {#if visibleSuggestions.length && !$discreetMode}<div class="label-suggestions">
+  {#if !$discreetMode}<div class="label-suggestions">
       {#each visibleSuggestions as suggestion}<button
           type="button"
           aria-label={translate($locale, 'Reuse {label}', { label: suggestion.text })}
           onclick={() => {
             selectedLabels = addPermanentLabel(selectedLabels, suggestion.text);
             label = '';
+            armedLabelIndex = null;
             clearDraftError();
           }}>{suggestion.text}</button
         >{/each}

@@ -2107,13 +2107,17 @@ code {
 }
 .label-suggestions {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 8px;
+  min-height: 32px;
   margin: 6px 0 18px;
+  overflow: hidden;
 }
 .label-suggestions button {
+  flex: 0 1 auto;
+  min-width: 0;
   min-height: 30px;
-  max-width: 100%;
+  max-width: min(180px, 25%);
   padding: 7px 11px;
   overflow: hidden;
   color: var(--text);
@@ -2158,13 +2162,12 @@ code {
   outline: 0;
 }
 .label-token {
+  position: relative;
   display: inline-flex;
-  gap: 5px;
   align-items: center;
   max-width: 100%;
   min-height: 30px;
-  padding: 4px 7px 4px 9px;
-  overflow: hidden;
+  padding: 4px 9px;
   color: var(--text);
   font-size: 11px;
   font-weight: 600;
@@ -2173,33 +2176,54 @@ code {
   border: 1px solid var(--control-border);
   border-radius: 7px;
   background: var(--surface-icon);
+  transition:
+    border-color 100ms ease,
+    background 100ms ease;
+}
+.label-token-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.label-token-armed {
+  border-color: var(--focus);
+  background: color-mix(in srgb, var(--focus) 10%, var(--surface-icon));
 }
 .label-token button {
+  position: absolute;
+  top: -6px;
+  right: -6px;
   display: grid;
-  flex: 0 0 auto;
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   padding: 0;
-  color: var(--muted);
-  border: 0;
-  border-radius: 5px;
-  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--control-border);
+  border-radius: 50%;
+  background: var(--surface-control);
+  box-shadow: 0 1px 3px rgba(20, 24, 31, 0.18);
   opacity: 0;
-  transition: opacity 100ms ease;
+  transform: scale(0.88);
+  transition:
+    opacity 100ms ease,
+    transform 100ms ease;
   place-items: center;
 }
 .label-token:hover button,
 .label-token:focus-within button {
   opacity: 1;
+  transform: scale(1);
 }
 .label-token button:hover,
 .label-token button:focus-visible {
-  color: var(--text);
-  background: var(--surface-icon);
+  color: white;
+  border-color: var(--danger);
+  background: var(--danger);
 }
 @media (hover: none) {
   .label-token button {
-    opacity: 0.72;
+    opacity: 0.82;
+    transform: scale(1);
   }
 }
 .label-suggestions button:hover,

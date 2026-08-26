@@ -29,9 +29,11 @@
   import { awaitingPaymentAddresses } from '$lib/wallet/policy';
   import {
     addPermanentLabel,
+    backspaceLabelDraft,
     permanentLabelsForSubmission,
     tokenizeLabelDraft,
-    visibleLabelSuggestions
+    visibleLabelSuggestions,
+    VISIBLE_LABEL_SUGGESTION_LIMIT
   } from '$lib/wallet/label-suggestions';
   import type { LabelSuggestion, ReceiveAddress } from '$lib/types';
   import { copyText } from '$lib/clipboard';
@@ -39,11 +41,12 @@
   import { discreetMode } from '$lib/privacy';
   let label = $state('');
   let selectedLabels = $state<string[]>([]);
+  let armedLabelIndex = $state<number | null>(null);
   let current = $state<ReceiveAddress | null>(null);
   let addresses = $state<ReceiveAddress[]>([]);
   let labelSuggestions = $state<LabelSuggestion[]>([]);
   let visibleSuggestions = $derived(
-    visibleLabelSuggestions(labelSuggestions, label, 10, selectedLabels)
+    visibleLabelSuggestions(labelSuggestions, label, VISIBLE_LABEL_SUGGESTION_LIMIT, selectedLabels)
   );
   let submissionLabels = $derived(permanentLabelsForSubmission(selectedLabels, label));
   let qrDataUrl = $state('');
@@ -176,6 +179,7 @@
     }
   };
   function addDraftLabel(value = label) {
+    armedLabelIndex = null;
     const next = addPermanentLabel(selectedLabels, value);
     if (next.length !== selectedLabels.length) {
       selectedLabels = next;
@@ -183,11 +187,20 @@
     }
   }
   function updateLabelDraft(value: string) {
+    armedLabelIndex = null;
     const draft = tokenizeLabelDraft(selectedLabels, value);
     selectedLabels = draft.labels;
     label = draft.input;
   }
   function handleLabelKeydown(event: KeyboardEvent) {
+    if (event.key === 'Backspace' && !label) {
+      event.preventDefault();
+      const result = backspaceLabelDraft(selectedLabels, armedLabelIndex);
+      selectedLabels = result.labels;
+      armedLabelIndex = result.armedIndex;
+      return;
+    }
+    armedLabelIndex = null;
     if (!label.trim() || !['Enter', 'Tab', ',', ';'].includes(event.key)) return;
     if (event.key !== 'Tab') event.preventDefault();
     const draft = tokenizeLabelDraft(selectedLabels, label, true);
@@ -448,12 +461,16 @@
     <div class="field">
       <label for="receive-label-input">{translate($locale, 'Permanent label')}</label>
       <div class="label-token-field" aria-label={translate($locale, 'Selected labels')}>
-        {#each selectedLabels as selected}<span class="label-token"
-            >{selected}<button
+        {#each selectedLabels as selected, index}<span
+            class="label-token"
+            class:label-token-armed={index === armedLabelIndex}
+            ><span class="label-token-text">{selected}</span><button
               type="button"
               aria-label={translate($locale, 'Remove {label}', { label: selected })}
-              onclick={() => (selectedLabels = selectedLabels.filter((item) => item !== selected))}
-              ><X size={13} /></button
+              onclick={() => {
+                selectedLabels = selectedLabels.filter((item) => item !== selected);
+                armedLabelIndex = null;
+              }}><X size={13} /></button
             ></span
           >{/each}<input
           id="receive-label-input"
@@ -467,7 +484,7 @@
       </div>
       <FieldCounter value={label} max={48} />
     </div>
-    {#if visibleSuggestions.length && !$discreetMode}<div class="label-suggestions">
+    {#if !$discreetMode}<div class="label-suggestions">
         {#each visibleSuggestions as suggestion}<button
             type="button"
             aria-label={translate($locale, 'Reuse {label}', { label: suggestion.text })}

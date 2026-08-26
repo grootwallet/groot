@@ -1116,6 +1116,15 @@ test('receive keeps multiple labeled payment requests and discards them independ
   await expect(page.getByText('Previously used labels')).toHaveCount(0);
   await expect(page.getByLabel('Permanent label')).toHaveValue('');
   await expect(page.locator('.label-suggestions')).toBeVisible();
+  expect(await page.locator('.label-suggestions button').count()).toBeLessThanOrEqual(4);
+  const stableDialogHeight = (await page.getByRole('dialog').boundingBox())?.height;
+  await page.getByLabel('Permanent label').fill('A label that does not exist');
+  await expect(page.locator('.label-suggestions button')).toHaveCount(0);
+  expect((await page.getByRole('dialog').boundingBox())?.height).toBeCloseTo(
+    stableDialogHeight!,
+    2
+  );
+  await page.getByLabel('Permanent label').fill('');
   await page.getByRole('button', { name: 'Reuse Savings' }).click();
   await expect(page.getByLabel('Permanent label')).toHaveValue('');
   await expect(page.getByRole('button', { name: 'Remove Savings' })).toBeVisible();
@@ -1129,6 +1138,13 @@ test('receive keeps multiple labeled payment requests and discards them independ
   await page.getByLabel('Permanent label').fill('Invoice #205');
   await page.getByLabel('Permanent label').press(',');
   await expect(page.getByRole('button', { name: 'Remove Invoice #205' })).toBeVisible();
+  await page.getByLabel('Permanent label').press('Backspace');
+  await expect(page.locator('.label-token-armed')).toHaveText('Invoice #205');
+  await expect(page.getByRole('button', { name: 'Remove Invoice #205' })).toBeVisible();
+  await page.getByLabel('Permanent label').press('Backspace');
+  await expect(page.getByRole('button', { name: 'Remove Invoice #205' })).toHaveCount(0);
+  await page.getByLabel('Permanent label').fill('Invoice #205');
+  await page.getByLabel('Permanent label').press('Enter');
   await page.getByRole('button', { name: 'Generate address' }).click();
   await expect(
     page.locator('.receive-card').getByText('Invoice #205', { exact: true })

@@ -1,6 +1,6 @@
 import type { LabelSuggestion } from '$lib/types';
 
-export const VISIBLE_LABEL_SUGGESTION_LIMIT = 10;
+export const VISIBLE_LABEL_SUGGESTION_LIMIT = 4;
 export const MAX_PERMANENT_LABELS = 12;
 
 function normalizedLabel(value: string): string {
@@ -54,6 +54,16 @@ export function tokenizeLabelDraft(
     labels: next,
     input: commitTrailing ? '' : (parts.at(-1) ?? '')
   };
+}
+
+export function backspaceLabelDraft(
+  labels: string[],
+  armedIndex: number | null
+): { labels: string[]; armedIndex: number | null } {
+  const lastIndex = labels.length - 1;
+  if (lastIndex < 0) return { labels, armedIndex: null };
+  if (armedIndex !== lastIndex) return { labels, armedIndex: lastIndex };
+  return { labels: labels.slice(0, lastIndex), armedIndex: null };
 }
 
 export function permanentLabelsForSubmission(labels: string[], input: string): string[] {
