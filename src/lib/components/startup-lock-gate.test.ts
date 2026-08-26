@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const shell = readFileSync(new URL('./AppShell.svelte', import.meta.url), 'utf8');
+const brandLockup = readFileSync(new URL('./BrandLockup.svelte', import.meta.url), 'utf8');
 const appCss = readFileSync(new URL('../../app.css', import.meta.url), 'utf8');
 
 describe('startup wallet lock gate', () => {
@@ -24,6 +25,15 @@ describe('startup wallet lock gate', () => {
     expect(shell).toContain("startupState = 'failed'");
     expect(shell).toContain('Groot could not verify the wallet lock state.');
     expect(shell).toContain("{translate($locale, 'Retry')}</button");
+  });
+
+  it('holds the native launch mark briefly without slowing the browser prototype', () => {
+    expect(shell).toContain('const minimumStartupGateMs = isPrototypeWallet ? 0 : 1_800');
+    expect(shell).toContain('await holdStartupGate()');
+    expect(shell).toContain('<BrandLockup animated />');
+    expect(brandLockup).toContain('animation: brand-lockup-reveal 900ms');
+    expect(brandLockup).toContain('clip-path: inset(0 100% 0 0)');
+    expect(brandLockup).toContain('@media (prefers-reduced-motion: reduce)');
   });
 
   it('acknowledges route navigation immediately without overriding reduced motion', () => {

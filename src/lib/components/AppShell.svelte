@@ -66,6 +66,8 @@
   let profileReadGeneration = 0;
   let liveSync: LiveSyncController | undefined;
   let startupState = $state<'checking' | 'ready' | 'failed'>('checking');
+  const startupStartedAt = Date.now();
+  const minimumStartupGateMs = isPrototypeWallet ? 0 : 1_800;
   let navigationPending = $state(false);
   let selectedProfile = $derived(profiles.find((wallet) => wallet.id === selectedWalletId));
   let policyContext = $derived(
@@ -207,6 +209,7 @@
       await refreshSetupDraft();
       if (!(await walletService.exists())) {
         await goto('/welcome');
+        await holdStartupGate();
         startupState = 'ready';
         return;
       }
@@ -217,11 +220,17 @@
       } else if (selection.unlocked && lockedRoute) {
         await goto('/');
       }
+      await holdStartupGate();
       startupState = 'ready';
       if (!syncPausedRoute && !isPrototypeWallet) liveSync?.start();
     } catch {
       startupState = 'failed';
     }
+  }
+
+  async function holdStartupGate() {
+    const remaining = minimumStartupGateMs - (Date.now() - startupStartedAt);
+    if (remaining > 0) await new Promise((resolve) => setTimeout(resolve, remaining));
   }
 
   onMount(() => {
@@ -338,7 +347,7 @@
 >
   {#if startupState !== 'ready'}
     <div class="startup-gate" role="status" aria-live="polite">
-      <BrandLockup />
+      <BrandLockup animated />
       {#if startupState === 'failed'}
         <p>{translate($locale, 'Groot could not verify the wallet lock state.')}</p>
         <button class="button secondary" onclick={resolveStartupRoute}

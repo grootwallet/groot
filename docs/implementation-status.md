@@ -2,6 +2,8 @@
 
 This ledger prevents prototype UI from being mistaken for production wallet behavior. “Implemented” means wired through the real Tauri adapter; “browser fixture” means deterministic UI behavior only.
 
+v0.4.48 gives the native startup identity enough time to read without exposing wallet state early. The existing canonical SVG lockup now reveals once from left to right over 900 ms and remains on the trusted-session gate for about 1.8 seconds; reduced-motion users see the static vector mark for the same brief gate. Browser-prototype startup remains immediate, route navigation never replays the animation, and no wallet, profile, proposal, registry, or network-settings format changes.
+
 v0.4.47 fixes the packaged Testnet4 freeze captured while automatic Core history sync owned the wallet-operation lock and an external-signer proposal read waited synchronously on the native window thread. External-signer proposal reads now use Tauri's blocking worker pool, and source-level scheduling coverage includes all three wallet proposal readers. The authoritative database was verified to retain the spendable unconfirmed output reported as unavailable by the interrupted UI load. No wallet, profile, proposal, registry, or network-settings format changes.
 
 v0.4.46 aligns the Privacy & history help controls directly beside their definition labels with consistent spacing and matching vertical bounds. The existing accessible hover, focus, and touch tooltip behavior is unchanged, and the compact layout remains aligned at desktop and mobile widths.
