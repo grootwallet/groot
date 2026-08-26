@@ -60,6 +60,7 @@
   } from '$lib/wallet/policy';
   import { compactAddress } from '$lib/address-display';
   import { accelerationUnavailableTitle } from '$lib/wallet/acceleration-presentation';
+  import { visibleLabelSuggestions } from '$lib/wallet/label-suggestions';
   import {
     addressForHardwareDisplay,
     testnetAddressDisplayName
@@ -102,6 +103,7 @@
     deviceError = $state(''),
     cancelError = $state('');
   let labelSuggestions = $state<LabelSuggestion[]>([]);
+  let visibleSuggestions = $derived(visibleLabelSuggestions(labelSuggestions, label));
   let discardError = $state(''),
     discardSigner = $state<{ label: string; fingerprint?: string | null } | null>(null);
   let busy = $state(false),
@@ -1079,8 +1081,8 @@
 </script>
 
 {#snippet labelSuggestionPicker()}
-  {#if labelSuggestions.length && !$discreetMode}<div class="label-suggestions">
-      {#each labelSuggestions as suggestion}<button
+  {#if visibleSuggestions.length && !$discreetMode}<div class="label-suggestions">
+      {#each visibleSuggestions as suggestion}<button
           type="button"
           aria-label={translate($locale, 'Reuse {label}', { label: suggestion.text })}
           aria-pressed={label.trim().toLocaleLowerCase() === suggestion.text.toLocaleLowerCase()}

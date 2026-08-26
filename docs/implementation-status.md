@@ -118,7 +118,8 @@ v0.4.30 advances the normalized label schema from version 1 to version 2 without
 table or changing wallet, registry, secret-envelope, proposal, BDK, public-metadata, or descriptor-
 backup formats. Matching normalized text now reuses one stable wallet-scoped label entity across
 immutable receive-address and payment-intent assignments. The unlocked wallet snapshot exposes a
-bounded recent-use suggestion summary; Receive and every new Send intent require an explicit click
+complete recent-use-ordered suggestion candidates; Receive and every new Send intent display at
+most ten recent or typed full-history matches and require an explicit click
 or typed match and explain that reuse groups related activity without suppressing real onchain-
 cluster warnings. Existing label entities (including legacy duplicates), assignments, addresses,
 payments, proposals, provenance, clusters, Recovery/Inheritance policy data, and history remain

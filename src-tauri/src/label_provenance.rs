@@ -388,7 +388,7 @@ pub fn assign_payment_intent(
 
 pub fn label_suggestions(
     db: &Connection,
-    limit: u32,
+    limit: Option<u32>,
 ) -> Result<Vec<LabelSuggestionDto>, bdk_wallet::rusqlite::Error> {
     let mut statement = db.prepare(
         "SELECT label.label_id,
@@ -402,7 +402,7 @@ pub fn label_suggestions(
          WHERE assignment.subject_kind IN ('address', 'transaction_intent')
          GROUP BY label.label_id, label.text
          ORDER BY last_assigned_at DESC, label.created_at DESC, label.label_id
-         LIMIT ?1",
+         LIMIT COALESCE(?1, -1)",
     )?;
     let suggestions = statement
         .query_map(params![limit], |row| {
@@ -1375,13 +1375,40 @@ mod tests {
         .unwrap();
         assign_new_label(&db, "Gift", LabelOrigin::Receive, "address", "2", 11).unwrap();
 
-        let suggestions = label_suggestions(&db, 12).unwrap();
+        let suggestions = label_suggestions(&db, Some(12)).unwrap();
         assert_eq!(suggestions.len(), 2);
         assert_eq!(suggestions[0].text, "Savings");
         assert_eq!(suggestions[0].assignment_count, 2);
         assert!(suggestions[0].used_for_receive);
         assert!(suggestions[0].used_for_payment);
         assert_eq!(suggestions[1].text, "Gift");
+    }
+
+    #[test]
+    fn suggestions_can_return_complete_history_or_a_recent_limit() {
+        let db = database();
+        init_schema(&db).unwrap();
+        for index in 0..13 {
+            assign_new_label(
+                &db,
+                &format!("Label {index}"),
+                LabelOrigin::Receive,
+                "address",
+                &index.to_string(),
+                index,
+            )
+            .unwrap();
+        }
+
+        let recent = label_suggestions(&db, Some(10)).unwrap();
+        assert_eq!(recent.len(), 10);
+        assert_eq!(recent[0].text, "Label 12");
+        assert!(!recent.iter().any(|suggestion| suggestion.text == "Label 0"));
+
+        let complete = label_suggestions(&db, None).unwrap();
+        assert_eq!(complete.len(), 13);
+        assert_eq!(complete[0].text, "Label 12");
+        assert_eq!(complete.last().unwrap().text, "Label 0");
     }
 
     #[test]

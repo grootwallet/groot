@@ -16,6 +16,7 @@
   import { walletService } from '$lib/wallet';
   import { useWalletShellContext } from '$lib/wallet/shell-context';
   import { awaitingPaymentAddresses } from '$lib/wallet/policy';
+  import { visibleLabelSuggestions } from '$lib/wallet/label-suggestions';
   import type { LabelSuggestion, ReceiveAddress } from '$lib/types';
   import { copyText } from '$lib/clipboard';
   import { toast } from '$lib/stores/toasts';
@@ -24,6 +25,7 @@
   let current = $state<ReceiveAddress | null>(null);
   let addresses = $state<ReceiveAddress[]>([]);
   let labelSuggestions = $state<LabelSuggestion[]>([]);
+  let visibleSuggestions = $derived(visibleLabelSuggestions(labelSuggestions, label));
   let qrDataUrl = $state('');
   let busy = $state(false);
   let showGenerate = $state(false);
@@ -386,8 +388,8 @@
         maxlength="48"
       /><FieldCounter value={label} max={48} /></label
     >
-    {#if labelSuggestions.length && !$discreetMode}<div class="label-suggestions">
-        {#each labelSuggestions as suggestion}<button
+    {#if visibleSuggestions.length && !$discreetMode}<div class="label-suggestions">
+        {#each visibleSuggestions as suggestion}<button
             type="button"
             aria-label={translate($locale, 'Reuse {label}', { label: suggestion.text })}
             aria-pressed={label.trim().toLocaleLowerCase() === suggestion.text.toLocaleLowerCase()}

@@ -6001,7 +6001,7 @@ fn snapshot_from(
         transactions,
         utxos,
         receive_addresses: addresses,
-        label_suggestions: label_provenance::label_suggestions(db, 12).map_err(internal)?,
+        label_suggestions: label_provenance::label_suggestions(db, None).map_err(internal)?,
         synced_at: chain_tip.observed_at.clone(),
         chain_tip,
     })

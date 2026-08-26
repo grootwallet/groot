@@ -55,6 +55,7 @@
     testnetAddressDisplayName
   } from '$lib/wallet/hardware-display';
   import { latestActiveProposal } from '$lib/wallet/proposal-resume';
+  import { visibleLabelSuggestions } from '$lib/wallet/label-suggestions';
   import { accelerationUnavailableTitle } from '$lib/wallet/acceleration-presentation';
   import { discreetMode } from '$lib/privacy';
   import PermanentLabelTags from '$lib/components/PermanentLabelTags.svelte';
@@ -77,6 +78,7 @@
   let address = $state('');
   let label = $state('');
   let labelSuggestions = $state<LabelSuggestion[]>([]);
+  let visibleSuggestions = $derived(visibleLabelSuggestions(labelSuggestions, label));
   let amount = $state('');
   let speed = $state('medium');
   let customFee = $state('');
@@ -672,8 +674,8 @@
 </script>
 
 {#snippet labelSuggestionPicker()}
-  {#if labelSuggestions.length && !$discreetMode}<div class="label-suggestions">
-      {#each labelSuggestions as suggestion}<button
+  {#if visibleSuggestions.length && !$discreetMode}<div class="label-suggestions">
+      {#each visibleSuggestions as suggestion}<button
           type="button"
           aria-label={translate($locale, 'Reuse {label}', { label: suggestion.text })}
           aria-pressed={label.trim().toLocaleLowerCase() === suggestion.text.toLocaleLowerCase()}

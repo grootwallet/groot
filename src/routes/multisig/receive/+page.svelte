@@ -16,6 +16,7 @@
   import { compactAddress } from '$lib/address-display';
   import { walletService, WalletError } from '$lib/wallet';
   import { awaitingPaymentAddresses } from '$lib/wallet/policy';
+  import { visibleLabelSuggestions } from '$lib/wallet/label-suggestions';
   import type { LabelSuggestion, ReceiveAddress } from '$lib/types';
   import type { MultisigWallet } from '$lib/wallet';
   import { copyText } from '$lib/clipboard';
@@ -27,6 +28,7 @@
   let current = $state<ReceiveAddress | null>(null);
   let addresses = $state<ReceiveAddress[]>([]);
   let labelSuggestions = $state<LabelSuggestion[]>([]);
+  let visibleSuggestions = $derived(visibleLabelSuggestions(labelSuggestions, label));
   let qrDataUrl = $state('');
   let busy = $state(false);
   let ready = $state(false);
@@ -385,8 +387,8 @@
         maxlength="48"
         placeholder={translate($locale, 'e.g. Treasury deposit')}
       /><FieldCounter value={label} max={48} /></label
-    >{#if labelSuggestions.length && !$discreetMode}<div class="label-suggestions">
-        {#each labelSuggestions as suggestion}<button
+    >{#if visibleSuggestions.length && !$discreetMode}<div class="label-suggestions">
+        {#each visibleSuggestions as suggestion}<button
             type="button"
             aria-label={translate($locale, 'Reuse {label}', { label: suggestion.text })}
             aria-pressed={label.trim().toLocaleLowerCase() === suggestion.text.toLocaleLowerCase()}

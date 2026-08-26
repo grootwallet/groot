@@ -53,7 +53,7 @@ Deletion is device-local. It never implies that transaction history disappeared 
 
 Opening Receive or Send first pauses and cancels automatic sync. Snapshot reads wait on a blocking worker rather than the native window thread, so the route remains responsive while an in-flight sync reaches its cancellation boundary.
 
-`unlock-scoped prior-label suggestions → explicit new/reused label choice → recovery-gap check → atomic reveal+permanent assignment → QR/copy`
+`unlock-scoped recent labels or typed full-history matches → explicit new/reused label choice → recovery-gap check → atomic reveal+permanent assignment → QR/copy`
 
 Multiple unused addresses may await payment concurrently within the configured recovery gap. The prospective index is checked in the same transaction as reveal and label persistence; exceeding the gap reveals nothing, and the setting cannot be lowered below the already-required run. Each request may transition independently to `discarded` and remains monitored. Any observed payment transitions that address to `used`, after which discard is impossible.
 
@@ -65,7 +65,7 @@ The global sats/BTC preference applies to the amount field, balance, fees, revie
 
 `Intent: explicit new/reused permanent label+recipient → Amount & fee: amount+privacy strategy or exact coins+fee rate → persist Rust PSBT+assignment → Review funding privacy → Review & sign: authoritative review+credential → sign+broadcast → durable labeled success`
 
-Intent suggestions are read only from the selected unlocked profile and never preselect or overwrite input. Reusing normalized text binds the new immutable payment intent to the existing stable label entity. This records an intentional relationship for provenance and selection; it does not suppress warnings when the actual PSBT joins distinct public clusters.
+Intent suggestions are read only from the selected unlocked profile and never preselect or overwrite input. An empty field shows at most ten recent labels; typed input filters the complete wallet-scoped history with exact normalized matches first. Reusing normalized text binds the new immutable payment intent to the existing stable label entity. This records an intentional relationship for provenance and selection; it does not suppress warnings when the actual PSBT joins distinct public clusters.
 
 The review includes Rust-derived input/output counts and verified wallet-owned change. Review and signing fail closed if the recipient or fee differs from persisted intent or if any remaining output is not controlled by the selected wallet. Multisig PSBTs carry the policy's public account keys and origins so a hardware wallet can reconstruct the reviewed BIP48 policy. An older active proposal may receive that same deterministic public metadata only in the temporary device-signing copy; Groot removes it before merging so the persisted reviewed PSBT changes only when a valid new signature is added. A device that returns without its signature is reported as no signature added, never falsely as an already-used signer.
 
