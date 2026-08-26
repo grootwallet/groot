@@ -8369,9 +8369,9 @@ code {
   padding-bottom: 0;
   border-bottom: 0;
 }
-.coin-detail-group dt {
-  justify-content: space-between;
-  gap: 8px;
+.coin-detail-group dl dt {
+  justify-content: flex-start;
+  gap: 5px;
 }
 .coin-details dl > div {
   min-width: 0;
