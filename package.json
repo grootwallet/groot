@@ -1,7 +1,7 @@
 {
   "name": "groot-wallet",
   "private": true,
-  "version": "0.4.32",
+  "version": "0.4.33",
   "packageManager": "pnpm@11.13.1",
   "engines": {
     "node": "24.19.0",
