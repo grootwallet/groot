@@ -380,22 +380,12 @@
       /><FieldCounter value={label} max={48} /></label
     >
     {#if labelSuggestions.length && !$discreetMode}<div class="label-suggestions">
-        <strong>{translate($locale, 'Previously used labels')}</strong>
-        <p>
-          {translate(
-            $locale,
-            'Choose one only for the same relationship. Reuse groups related activity in Groot, while spending can still create new public links.'
-          )}
-        </p>
-        <div>
-          {#each labelSuggestions as suggestion}<button
-              type="button"
-              aria-label={translate($locale, 'Reuse {label}', { label: suggestion.text })}
-              aria-pressed={label.trim().toLocaleLowerCase() ===
-                suggestion.text.toLocaleLowerCase()}
-              onclick={() => (label = suggestion.text)}>{suggestion.text}</button
-            >{/each}
-        </div>
+        {#each labelSuggestions as suggestion}<button
+            type="button"
+            aria-label={translate($locale, 'Reuse {label}', { label: suggestion.text })}
+            aria-pressed={label.trim().toLocaleLowerCase() === suggestion.text.toLocaleLowerCase()}
+            onclick={() => (label = suggestion.text)}>{suggestion.text}</button
+          >{/each}
       </div>{/if}
     <div class="modal-footer">
       <Button variant="secondary" onclick={() => (showGenerate = false)}
