@@ -458,43 +458,51 @@ pub fn wallet_sync_status(
 }
 
 #[tauri::command]
-pub fn wallet_notifications(
+pub async fn wallet_notifications(
     app: AppHandle,
-    state: State<'_, AppState>,
     multisig: bool,
 ) -> ApiResult<Vec<notifications::NotificationEnvelope>> {
-    let _operation = operation_guard(&state)?;
-    require_unlocked_for_background_sync(&app, &state)?;
-    let db = if multisig {
-        open_multisig_db(&app)?
-    } else {
-        open_db(&app)?
-    };
-    notifications::pending(&db).map_err(internal)
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let _operation = operation_guard(&state)?;
+        require_unlocked_for_background_sync(&app, &state)?;
+        let db = if multisig {
+            open_multisig_db(&app)?
+        } else {
+            open_db(&app)?
+        };
+        notifications::pending(&db).map_err(internal)
+    })
+    .await
+    .map_err(internal)?
 }
 
 #[tauri::command]
-pub fn wallet_notifications_ack(
+pub async fn wallet_notifications_ack(
     app: AppHandle,
-    state: State<'_, AppState>,
     multisig: bool,
     ids: Vec<String>,
 ) -> ApiResult<()> {
-    let _operation = operation_guard(&state)?;
-    require_unlocked_for_background_sync(&app, &state)?;
-    if ids.len() > 1_000 || ids.iter().any(|id| id.len() > 64) {
-        return Err(api_error(
-            "internal_error",
-            "The notification acknowledgement is invalid.",
-        ));
-    }
-    let mut db = if multisig {
-        open_multisig_db(&app)?
-    } else {
-        open_db(&app)?
-    };
-    notifications::acknowledge(&mut db, &ids).map_err(internal)?;
-    Ok(())
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let _operation = operation_guard(&state)?;
+        require_unlocked_for_background_sync(&app, &state)?;
+        if ids.len() > 1_000 || ids.iter().any(|id| id.len() > 64) {
+            return Err(api_error(
+                "internal_error",
+                "The notification acknowledgement is invalid.",
+            ));
+        }
+        let mut db = if multisig {
+            open_multisig_db(&app)?
+        } else {
+            open_db(&app)?
+        };
+        notifications::acknowledge(&mut db, &ids).map_err(internal)?;
+        Ok(())
+    })
+    .await
+    .map_err(internal)?
 }
 
 #[tauri::command]

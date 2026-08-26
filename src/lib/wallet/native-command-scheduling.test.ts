@@ -29,6 +29,8 @@ describe('native command scheduling', () => {
   it.each([
     ['wallet_select', profileCommands],
     ['wallet_sync', profileCommands],
+    ['wallet_notifications', profileCommands],
+    ['wallet_notifications_ack', profileCommands],
     ['multisig_sync', multisigCommands],
     ['tx_proposals', transactionCommands],
     ['multisig_proposals', multisigProposalCommands],
