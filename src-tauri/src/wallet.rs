@@ -3763,6 +3763,36 @@ fn verified_recovery_policy_type(
     }
 }
 
+fn hwi_supports_multisig_policy(policy_type: &str) -> bool {
+    policy_type.is_empty() || policy_type == "standard"
+}
+
+fn hardware_policy_unsupported() -> ApiError {
+    api_error(
+        "hardware_policy_unsupported",
+        "USB hardware signing and address display are not available for this delayed Miniscript policy with Groot's pinned HWI release. Use the offline PSBT workflow.",
+    )
+}
+
+fn require_hwi_supported_multisig_policy(wallet: &MultisigWalletDto) -> ApiResult<()> {
+    if hwi_supports_multisig_policy(&wallet.policy_type) && wallet.recovery_template.is_none() {
+        Ok(())
+    } else {
+        Err(hardware_policy_unsupported())
+    }
+}
+
+fn reject_usb_cosigners_for_delayed_policy(cosigners: &[CosignerInput]) -> ApiResult<()> {
+    if cosigners
+        .iter()
+        .any(|cosigner| cosigner.source == CosignerSource::Usb)
+    {
+        Err(hardware_policy_unsupported())
+    } else {
+        Ok(())
+    }
+}
+
 fn delayed_policy_context(wallet: &MultisigWalletDto) -> ApiResult<Option<DelayedPolicyContext>> {
     let Some(template @ RecoveryTemplate::Recovery { .. }) = wallet.recovery_template.as_ref()
     else {

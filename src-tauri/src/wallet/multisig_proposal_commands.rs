@@ -866,6 +866,7 @@ pub async fn hardware_sign_multisig(
 ) -> ApiResult<MultisigProposalDto> {
     require_unlocked(&app, &state)?;
     let metadata = read_multisig_metadata(&app)?;
+    require_hwi_supported_multisig_policy(&metadata)?;
     let mut db = open_multisig_db(&app)?;
     let proposal = load_multisig_proposal(&mut db, &metadata, &proposal_id)?;
     if proposal.psbt != reviewed_psbt {
@@ -1171,6 +1172,7 @@ pub async fn multisig_recovery_create(
         let credential = Zeroizing::new(credential);
         validate_credential(credential.as_str())?;
         reject_virtual_cosigners(&cosigners)?;
+        reject_usb_cosigners_for_delayed_policy(&cosigners)?;
         let policy = PolicyInput {
             name: name.clone(),
             threshold: 2,

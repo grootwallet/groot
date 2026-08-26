@@ -136,3 +136,18 @@ import independently on an original BitBox02 and a Nova after the pairing state
 was repaired in BitBoxApp. This confirms the pairing diagnosis and the import
 path; it does not certify receive display, health, multisig registration, or
 signing on either model.
+
+The next receive-address check separated the models again. Nova completed the
+trusted BIP84 display, but the original BitBox02 was enumerated as ready and
+then returned an unlock-required result when `displayaddress` reopened the
+cached HID path. Groot correctly persisted no verification, but the dialog
+offered only another aggregate scan. For saved BitBox address display, Groot
+now keeps the preceding full account-identity proof and exclusive lease, then
+asks HWI to reopen the display connection by that freshly proven fingerprint.
+HWI 3.2.0 verifies the fingerprint before executing `displayaddress`; the
+fingerprint and descriptor remain in the private stdin command and no device
+path or wallet identifier enters process argv. A failed display retains the
+same address and selected signer behind an explicit interactive retry action.
+This is a candidate correction pending a separate packaged retest on the
+original BitBox02 and Nova; Nova's earlier pass is not inherited by the new
+invocation boundary.

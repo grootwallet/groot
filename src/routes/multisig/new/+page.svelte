@@ -2154,13 +2154,25 @@
   onclose={closeSignerPicker}
 >
   <div class="source-list">
-    <button onclick={scanHardware}
-      ><Cpu size={18} /><span
-        ><strong>{translate($locale, 'Connect hardware device')}</strong><small
-          >{translate($locale, 'Desktop · Bitcoin Core HWI')}</small
-        ></span
-      ><ChevronRight size={15} /></button
-    >
+    {#if templateKind === 'standard'}<button onclick={scanHardware}
+        ><Cpu size={18} /><span
+          ><strong>{translate($locale, 'Connect hardware device')}</strong><small
+            >{translate($locale, 'Desktop · Bitcoin Core HWI')}</small
+          ></span
+        ><ChevronRight size={15} /></button
+      >{:else}<div class="warning-box" role="note">
+        <AlertTriangle size={17} /><strong
+          >{translate(
+            $locale,
+            'USB hardware signing is not available for delayed policies yet.'
+          )}</strong
+        ><span
+          >{translate(
+            $locale,
+            'Groot’s pinned HWI release supports standard multisig only. Add public keys by file or manual entry and use the offline PSBT workflow.'
+          )}</span
+        >
+      </div>{/if}
     <label class="source-button"
       ><FileUp size={18} /><span
         ><strong>{translate($locale, 'Import public-key file')}</strong><small

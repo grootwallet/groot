@@ -868,5 +868,32 @@ export const multisigCopy = {
   'You will need to add this signer again.': {
     fr: 'Vous devrez ajouter à nouveau ce signataire.',
     es: 'Tendrás que volver a añadir este firmante.'
-  }
+  },
+  'USB hardware signing is not available for delayed policies yet.': {
+    fr: 'La signature matérielle USB n’est pas encore disponible pour les politiques différées.',
+    es: 'La firma con dispositivo USB todavía no está disponible para las políticas diferidas.'
+  },
+  'Groot’s pinned HWI release supports standard multisig only. Add public keys by file or manual entry and use the offline PSBT workflow.':
+    {
+      fr: 'La version HWI intégrée à Groot ne prend en charge que le multisignature standard. Ajoutez les clés publiques par fichier ou saisie manuelle et utilisez le flux PSBT hors ligne.',
+      es: 'La versión HWI integrada en Groot solo admite multifirma estándar. Añade las claves públicas mediante archivo o entrada manual y usa el flujo PSBT sin conexión.'
+    },
+  'Hardware address display is unavailable for this delayed policy.': {
+    fr: 'L’affichage de l’adresse sur un appareil matériel est indisponible pour cette politique différée.',
+    es: 'La visualización de la dirección en un dispositivo no está disponible para esta política diferida.'
+  },
+  'Verify the descriptor and address with an independent Miniscript-aware tool. Groot’s pinned HWI release cannot display this policy safely.':
+    {
+      fr: 'Vérifiez le descripteur et l’adresse avec un outil indépendant compatible avec Miniscript. La version HWI intégrée à Groot ne peut pas afficher cette politique en toute sécurité.',
+      es: 'Verifica el descriptor y la dirección con una herramienta independiente compatible con Miniscript. La versión HWI integrada en Groot no puede mostrar esta política de forma segura.'
+    },
+  'Use offline PSBT signing for this delayed policy.': {
+    fr: 'Utilisez la signature PSBT hors ligne pour cette politique différée.',
+    es: 'Usa la firma PSBT sin conexión para esta política diferida.'
+  },
+  'USB hardware signing is blocked because Groot’s pinned HWI release cannot execute this Miniscript policy safely.':
+    {
+      fr: 'La signature matérielle USB est bloquée, car la version HWI intégrée à Groot ne peut pas exécuter cette politique Miniscript en toute sécurité.',
+      es: 'La firma con dispositivo USB está bloqueada porque la versión HWI integrada en Groot no puede ejecutar esta política Miniscript de forma segura.'
+    }
 } as const satisfies CatalogSection;

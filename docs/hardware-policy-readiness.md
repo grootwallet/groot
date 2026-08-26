@@ -23,6 +23,19 @@ Every hardware signer has two independent states:
 
 Policy registration is optional while creating a watch-only coordinator. If any supported signer still needs setup, the user must explicitly choose **Finish hardware setup before first signature**. The signer remains visibly **Setup required** in Policy and in the signing picker.
 
+## Policy-family compatibility
+
+| Device family    | Standard `wsh(sortedmulti())`                                            | Delayed Recovery / Inheritance Miniscript                                                                                                                 |
+| ---------------- | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Ledger           | Supported subject to the exact-model matrix above                        | **Firmware candidate only.** Groot's pinned HWI 3.2.0 adapter does not expose the required Miniscript policy path.                                        |
+| BitBox02 / Nova  | Supported subject to separate exact-model evidence                       | **Firmware candidate only.** Current firmware can support Miniscript, but the pinned HWI adapter accepts only its standard multisig script configuration. |
+| Blockstream Jade | Supported subject to the exact-model matrix above                        | **Firmware candidate only.** Jade firmware has descriptor APIs, but pinned HWI does not use them for Groot's delayed descriptor.                          |
+| Coldcard         | Supported for standard policy-file setup subject to exact-model evidence | **Unsupported** by the reviewed HWI/firmware path.                                                                                                        |
+| Trezor           | Supported for standard multisig subject to exact-model evidence          | **Unsupported** by the reviewed HWI/firmware path.                                                                                                        |
+| Other families   | Unsupported until separately reviewed and certified                      | **Unsupported** until separately reviewed and certified.                                                                                                  |
+
+For delayed wallets, Groot permits bounded public-key import and offline PSBT exchange but blocks USB enrollment, policy registration, trusted address display, and signing before any device interaction. “Firmware candidate” is deliberately not a support or certification claim. See ADR 0044.
+
 Interactive evidence for Ledger, BitBox02, and Jade is descriptor- and fingerprint-bound and includes the device-returned first address. Coldcard evidence is an explicit acknowledgement of a file import and is intentionally stored under a different scope; it must never be described as cryptographic address verification. Trezor is never described as registered because it has no persistent registration step.
 
 ## Source boundary

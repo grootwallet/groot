@@ -79,6 +79,15 @@ Transaction kind is authoritative snapshot data, not a UI guess from labels or z
 
 ## Multisig setup
 
+For Standard policies, signer enrollment and device preparation follow the HWI
+flows below. For Recovery and legacy Inheritance, Groot explains that the
+pinned HWI release cannot execute the delayed Miniscript descriptor, omits USB
+enrollment, and accepts bounded public keys by file or manual entry. Receive
+omits hardware-display verification, and Send offers offline PSBT exchange
+instead of **Sign with device**. Rust repeats this gate before every HWI action.
+BitBox02, Ledger, and Jade are firmware candidates only until their exact
+adapter path and exact-model packaged Testnet4 campaign pass.
+
 Signer-specific discovery is scoped before HWI touches a device. A health or policy check scans only the selected signer’s saved device type. Single-key receive verification admits only that wallet’s saved signer; multisig receive verification admits any saved signer in that policy and excludes connected signers outside it. If multiple locked devices of the same eligible type cannot yet be distinguished, Groot asks the user to disconnect the extra device instead of choosing one.
 
 `name+recipe or advanced M-of-N → add 3–7 signers → Rust validation/descriptor preview → saved descriptor → signer policy registration when required → app PIN → persisted coordinator`

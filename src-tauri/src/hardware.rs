@@ -63,6 +63,14 @@ impl HardwareError {
     }
 }
 
+fn validate_master_fingerprint(fingerprint: &str) -> Result<(), HardwareError> {
+    if fingerprint.len() == 8 && fingerprint.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        Ok(())
+    } else {
+        Err(HardwareError::InvalidArgument)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum HardwareOperationKind {
     Discovery,
@@ -624,6 +632,34 @@ impl HwiCli {
         let mut arguments =
             self.device_command(device_type, device_path, "displayaddress", "--desc");
         arguments.push(descriptor.into());
+        run_program_in_operation(
+            &self.program,
+            &self.source,
+            &arguments,
+            operation,
+            self.home.as_deref(),
+            None,
+        )
+    }
+
+    pub fn display_bitbox_descriptor_address_in_operation(
+        &self,
+        operation: &HardwareOperation,
+        fingerprint: &str,
+        descriptor: &str,
+    ) -> Result<Vec<u8>, HardwareError> {
+        validate_master_fingerprint(fingerprint)?;
+        let arguments = [
+            "--chain".into(),
+            self.chain.as_hwi_argument_for_device("bitbox02").into(),
+            "--device-type".into(),
+            "bitbox02".into(),
+            "--fingerprint".into(),
+            fingerprint.to_ascii_lowercase(),
+            "displayaddress".into(),
+            "--desc".into(),
+            descriptor.into(),
+        ];
         run_program_in_operation(
             &self.program,
             &self.source,
@@ -1400,6 +1436,40 @@ mod tests {
             .enumerate()
             .unwrap();
         assert_eq!(output, b"--stdin\n");
+        std::fs::remove_file(script).unwrap();
+    }
+
+    #[test]
+    fn bitbox_display_reopens_by_fingerprint_without_a_cached_path() {
+        let script = test_script(
+            "bitbox-display-selector",
+            "IFS= read -r command\nprintf '%s\\n' \"$command\"",
+        );
+        let hwi = HwiCli::for_test_program(script.clone());
+        let operation = hwi.begin_interactive_operation().unwrap();
+        let output = hwi
+            .display_bitbox_descriptor_address_in_operation(
+                &operation,
+                "a1b2c3d4",
+                "wpkh([a1b2c3d4/84h/1h/0h]tpub-fixture/0/7)",
+            )
+            .unwrap();
+        let command = String::from_utf8(output).unwrap();
+        assert!(command.contains("--device-type"));
+        assert!(command.contains("bitbox02"));
+        assert!(command.contains("--fingerprint"));
+        assert!(command.contains("a1b2c3d4"));
+        assert!(command.contains("displayaddress"));
+        assert!(command.contains("--desc"));
+        assert!(!command.contains("--device-path"));
+        assert_eq!(
+            hwi.display_bitbox_descriptor_address_in_operation(
+                &operation,
+                "not-a-fingerprint",
+                "wpkh(fixture)",
+            ),
+            Err(HardwareError::InvalidArgument)
+        );
         std::fs::remove_file(script).unwrap();
     }
 

@@ -16,6 +16,9 @@ export type HardwarePolicyProfile = {
   firstSigningCopy: string;
 };
 
+export type MultisigPolicyFamily = 'standard' | 'delayed';
+export type HardwarePolicyCompatibility = 'supported' | 'firmware_candidate' | 'unsupported';
+
 const profiles: Record<PolicyReadinessKind, HardwarePolicyProfile> = {
   ledger: {
     kind: 'ledger',
@@ -103,6 +106,18 @@ export function policyReadinessKind(value: {
 
 export function policyRegistrationProfile(value: Parameters<typeof policyReadinessKind>[0]) {
   return profiles[policyReadinessKind(value)];
+}
+
+export function hardwarePolicyCompatibility(
+  value: Parameters<typeof policyReadinessKind>[0],
+  family: MultisigPolicyFamily
+): HardwarePolicyCompatibility {
+  const kind = policyReadinessKind(value);
+  if (family === 'standard') return profiles[kind].supported ? 'supported' : 'unsupported';
+  if (kind === 'ledger' || kind === 'bitbox02' || kind === 'bitbox_nova' || kind === 'jade') {
+    return 'firmware_candidate';
+  }
+  return 'unsupported';
 }
 
 export function requiresInteractivePolicyVerification(

@@ -328,6 +328,12 @@
     }
   }
 
+  async function retryVerificationDevice() {
+    const device = verificationDevice;
+    if (!device) return;
+    await verifyAddress(device, true);
+  }
+
   function closePin() {
     pinOpen = false;
     clearPinState();
@@ -472,6 +478,11 @@
         ><strong>{translate($locale, 'Device needs attention')}</strong><small>{verifyError}</small
         ></span
       >
+      {#if verificationDevice}
+        <Button variant="secondary" onclick={retryVerificationDevice}>
+          {translate($locale, 'Try this signer again')}
+        </Button>
+      {/if}
     </div>{/if}
 </Modal>
 

@@ -156,6 +156,15 @@ Current local status on 2026-08-24:
   fingerprint are not forwarded and the complete
   live identity proof remains mandatory; separate exact-model physical retests
   are still required.
+- After the BitBoxApp pairing state was repaired, packaged v0.4.29 initial
+  BIP84 import passed independently on the original BitBox02 and Nova. Nova
+  then passed BIP84 trusted receive display, while the original model was
+  enumerated as ready and failed unlock-required when the display command
+  reopened the cached HID path. No verification was persisted. The current
+  candidate keeps the full live identity proof but reopens saved BitBox address
+  display through HWI's exact fingerprint selector and provides a same-signer
+  interactive retry. Both exact models require packaged retesting on this new
+  boundary; the earlier Nova display pass is not inherited.
 
 GitHub issue state is intentionally not duplicated as a large static list. The
 live tracker is <https://github.com/thibistaken/groot/issues>. At this snapshot,

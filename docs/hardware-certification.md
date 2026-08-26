@@ -106,6 +106,20 @@ a way to dismiss the device screen.
 
 ## Per-device acceptance story
 
+### Delayed Recovery and Inheritance campaign
+
+Finish each exact model's Standard Testnet4 rows before opening delayed-policy
+certification. No device currently has a supported delayed-policy USB row under
+the pinned HWI 3.2.0 boundary. BitBox02 (original and Nova separately), Ledger,
+and Jade are future firmware candidates only. After a reviewed adapter exists,
+each exact model must independently prove descriptor registration or complete
+policy delivery, first-address equality, normal 2-of-3 signing, one mature
+delayed-key spend, protection renewal, rejection with an unchanged proposal,
+restart/reconnect, wrong-device rejection, hostile/foreign PSBT rejection, and
+relative-lock/reorg fail-closed behavior in the packaged Testnet4 app. Until
+then, only offline PSBT transport may be exercised, and it must not be recorded
+as USB hardware certification.
+
 ### Completed local checkpoint — BitBox02 Nova
 
 The exact-model BitBox02 Nova HWI 3.2.0 desktop USB campaign is recorded in the
@@ -123,6 +137,8 @@ open.
 ### Completed checkpoint — BitBox02
 
 On 2026-08-15, the original Bitcoin-only BitBox02, firmware 9.26.3, passed the Regtest receive-address comparison and an independent BIP48 2-of-3 flow: account-key import, policy registration, first-address review, explicit signing rejection with a retryable unchanged proposal, successful retry, one-signature restart persistence, threshold completion with Trezor Model One, and broadcast. It then passed wrong-device rejection without collecting a signature, USB interruption during signing with a clean retry, rejection of a signed PSBT from another proposal without changing signatures, and an independent BSMS descriptor-recovery test reproducing the same first receive address. The sanitized host record is macOS 26.1 Tahoe with HWI 2.3.1, tested 2026-08-15 in Europe/Andorra (UTC+2). This evidence applies only to the original Bitcoin-only BitBox02; it does not cover Nova. Do not publish addresses, fingerprints, xpubs, PSBTs, or device paths.
+
+Packaged Testnet4 v0.4.29 follow-up repaired the local BitBoxApp pairing state and then passed initial BIP84 import independently on the original Bitcoin-only BitBox02 and Nova. Nova subsequently passed one BIP84 trusted receive-address display. The original model was discovered as ready but returned an unlock-required failure when trusted display began; Groot persisted no verification. A candidate now reopens saved BitBox trusted display through HWI's exact freshly proven fingerprint and offers an in-place interactive retry, but both exact models require packaged retesting on that new boundary before either result is recorded as a pass.
 
 ### Completed BIP84 checkpoint — Blockstream Jade
 

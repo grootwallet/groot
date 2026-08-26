@@ -2098,6 +2098,35 @@ fn descriptor_backup() -> MultisigBackupDto {
 }
 
 #[test]
+fn delayed_policies_fail_closed_at_the_hwi_boundary() {
+    let mut standard = descriptor_backup().wallet;
+    assert!(require_hwi_supported_multisig_policy(&standard).is_ok());
+
+    standard.policy_type = "recovery".to_owned();
+    let error = require_hwi_supported_multisig_policy(&standard).unwrap_err();
+    assert_eq!(error.code, "hardware_policy_unsupported");
+
+    let mut usb = standard.cosigners.clone();
+    usb[0].source = CosignerSource::Usb;
+    assert_eq!(
+        reject_usb_cosigners_for_delayed_policy(&usb)
+            .unwrap_err()
+            .code,
+        "hardware_policy_unsupported"
+    );
+    let offline = standard
+        .cosigners
+        .iter()
+        .cloned()
+        .map(|mut signer| {
+            signer.source = CosignerSource::File;
+            signer
+        })
+        .collect::<Vec<_>>();
+    assert!(reject_usb_cosigners_for_delayed_policy(&offline).is_ok());
+}
+
+#[test]
 fn proposal_spend_path_is_additive_and_limits_eligible_signers() {
     let mut wallet = descriptor_backup().wallet;
     let template = RecoveryTemplate::Recovery {

@@ -96,7 +96,10 @@ test('renews one mature coin without merging another coin', async ({ page }) => 
   await expect(
     page.getByText(/Only this coin moves. The network fee is the only amount leaving your wallet/)
   ).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Sign with device' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Sign with device' })).not.toBeVisible();
+  await expect(page.getByText('Use offline PSBT signing for this delayed policy.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Save PSBT' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Import signed PSBT' })).toBeVisible();
 });
 
 test('keeps mature-coin selection calm and moves secondary actions into overflow', async ({

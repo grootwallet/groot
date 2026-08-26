@@ -43,6 +43,7 @@ export const WALLET_ERROR_CODES = [
   'invalid_payjoin_uri',
   'hardware_unavailable',
   'hardware_pairing_required',
+  'hardware_policy_unsupported',
   'hardware_timeout',
   'hardware_busy',
   'hardware_cancelled',

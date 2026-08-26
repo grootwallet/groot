@@ -2227,6 +2227,7 @@ pub async fn hardware_verify_multisig_address(
 ) -> ApiResult<ReceiveAddressDto> {
     let initiating_wallet_id = require_unlocked(&app, &state)?;
     let metadata = read_multisig_metadata(&app)?;
+    require_hwi_supported_multisig_policy(&metadata)?;
     let initiating_external_descriptor = metadata.external_descriptor.clone();
     let initiating_internal_descriptor = metadata.internal_descriptor.clone();
     let mut db = open_multisig_db(&app)?;
@@ -2255,14 +2256,27 @@ pub async fn hardware_verify_multisig_address(
             &device,
             &expected_signers,
         )?;
-        let displayed = hwi
-            .display_descriptor_address_in_operation(
+        let displayed = if identity.device_type.eq_ignore_ascii_case("bitbox02") {
+            // HWI's cached BitBox HID path can stop reopening after aggregate
+            // discovery even while the signer remains connected. Reopen the
+            // saved signer through HWI's exact fingerprint selector for the
+            // trusted-display command. The selector and descriptor stay in
+            // stdin, and the earlier full account identity proof remains
+            // mandatory under this same exclusive operation lease.
+            hwi.display_bitbox_descriptor_address_in_operation(
+                &operation,
+                &identity.fingerprint,
+                &descriptor,
+            )
+        } else {
+            hwi.display_descriptor_address_in_operation(
                 &operation,
                 &identity.device_type,
                 &device.path,
                 &descriptor,
             )
-            .map_err(|error| hardware_device_api_error(error, &identity.device_type))?;
+        }
+        .map_err(|error| hardware_device_api_error(error, &identity.device_type))?;
         Ok::<_, ApiError>((displayed, identity))
     })
     .await
@@ -2459,6 +2473,7 @@ pub async fn hardware_verify_multisig_policy(
 ) -> ApiResult<SignerPolicyVerificationDto> {
     let initiating_wallet_id = require_unlocked(&app, &state)?;
     let metadata = read_multisig_metadata(&app)?;
+    require_hwi_supported_multisig_policy(&metadata)?;
     let initiating_external_descriptor = metadata.external_descriptor.clone();
     let initiating_internal_descriptor = metadata.internal_descriptor.clone();
     let signer = metadata
@@ -2643,14 +2658,24 @@ pub async fn hardware_verify_external_address(
             .map_err(hardware_api_error)?;
         let identity =
             prove_live_external_signer_identity(&hwi, &operation, &device, &expected_signer)?;
-        let displayed = hwi
-            .display_descriptor_address_in_operation(
+        let displayed = if identity.device_type.eq_ignore_ascii_case("bitbox02") {
+            // A saved BitBox may need a fresh secure connection after the
+            // identity proof. Select that connection by the freshly proven
+            // fingerprint instead of reusing the discovery HID path.
+            hwi.display_bitbox_descriptor_address_in_operation(
+                &operation,
+                &identity.fingerprint,
+                &descriptor,
+            )
+        } else {
+            hwi.display_descriptor_address_in_operation(
                 &operation,
                 &identity.device_type,
                 &device.path,
                 &descriptor,
             )
-            .map_err(|error| hardware_device_api_error(error, &identity.device_type))?;
+        }
+        .map_err(|error| hardware_device_api_error(error, &identity.device_type))?;
         Ok::<_, ApiError>((displayed, identity))
     })
     .await

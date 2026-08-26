@@ -213,17 +213,30 @@
       <div class="receive-actions">
         <Button variant="secondary" onclick={copy}
           ><Copy size={16} />{translate($locale, 'Copy address')}</Button
-        ><HardwareReceiveVerification
-          address={current}
-          walletKind="multisig"
-          {eligibleDeviceTypes}
-          {eligibleFingerprints}
-          savedSigners={wallet?.cosigners ?? []}
-          onverified={applyVerifiedAddress}
-        /><Button variant="ghost-danger" onclick={() => requestDiscard(current!)}
+        >{#if !wallet?.recoveryTemplate}<HardwareReceiveVerification
+            address={current}
+            walletKind="multisig"
+            {eligibleDeviceTypes}
+            {eligibleFingerprints}
+            savedSigners={wallet?.cosigners ?? []}
+            onverified={applyVerifiedAddress}
+          />{/if}<Button variant="ghost-danger" onclick={() => requestDiscard(current!)}
           ><Trash2 size={16} />{translate($locale, 'Discard')}</Button
         >
       </div>
+      {#if wallet?.recoveryTemplate}<div class="warning-box" role="note">
+          <strong
+            >{translate(
+              $locale,
+              'Hardware address display is unavailable for this delayed policy.'
+            )}</strong
+          ><span
+            >{translate(
+              $locale,
+              'Verify the descriptor and address with an independent Miniscript-aware tool. Groot’s pinned HWI release cannot display this policy safely.'
+            )}</span
+          >
+        </div>{/if}
       <button class="insight-toggle" onclick={() => (showDetails = !showDetails)}
         >{translate($locale, showDetails ? 'Hide' : 'Show')}
         {translate($locale, 'address details')}

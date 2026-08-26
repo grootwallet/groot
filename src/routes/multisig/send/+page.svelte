@@ -1841,9 +1841,9 @@
           onChangeAddress={() => (changeAddressOpen = true)}
         />
         {#if !proposal.canFinalize}<div class="psbt-actions">
-            <Button variant="secondary" onclick={scan}
-              ><Cpu size={16} />{translate($locale, 'Sign with device')}</Button
-            ><Button variant="secondary" onclick={showPsbtQr}
+            {#if !wallet?.recoveryTemplate}<Button variant="secondary" onclick={scan}
+                ><Cpu size={16} />{translate($locale, 'Sign with device')}</Button
+              >{/if}<Button variant="secondary" onclick={showPsbtQr}
               ><QrCode size={16} />{translate($locale, 'Show unsigned QR')}</Button
             ><Button
               variant="secondary"
@@ -1861,6 +1861,19 @@
               loadingLabel={translate($locale, 'Saving PSBT…')}
               onclick={saveProposalPsbt}
               ><Download size={16} />{translate($locale, 'Save PSBT')}</Button
+            >
+          </div>{/if}
+        {#if !proposal.canFinalize && wallet?.recoveryTemplate}<div
+            class="selection-review"
+            role="note"
+          >
+            <strong
+              >{translate($locale, 'Use offline PSBT signing for this delayed policy.')}</strong
+            ><span
+              >{translate(
+                $locale,
+                'USB hardware signing is blocked because Groot’s pinned HWI release cannot execute this Miniscript policy safely.'
+              )}</span
             >
           </div>{/if}
         {#if proposal.canFinalize}<div class="ready-panel">

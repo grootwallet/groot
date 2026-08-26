@@ -487,6 +487,10 @@ const errorCategoryCopy = {
     fr: 'Associez cette BitBox dans BitBoxApp et vérifiez que BitBoxApp peut l’ouvrir. Quittez ensuite complètement BitBoxApp, puis relancez la recherche dans Groot.',
     es: 'Empareja esta BitBox en BitBoxApp y comprueba que BitBoxApp puede abrirla. Después, cierra BitBoxApp por completo y vuelve a buscar en Groot.'
   },
+  hardware_policy_unsupported: {
+    fr: 'La signature USB et l’affichage d’adresse ne sont pas disponibles pour cette politique Miniscript différée avec la version HWI intégrée à Groot. Utilisez le flux PSBT hors ligne.',
+    es: 'La firma USB y la visualización de direcciones no están disponibles para esta política Miniscript diferida con la versión HWI integrada en Groot. Usa el flujo PSBT sin conexión.'
+  },
   hardware_busy: {
     fr: 'Le portefeuille matériel est occupé. Terminez l’autre opération et réessayez.',
     es: 'La cartera física está ocupada. Termina la otra operación e inténtalo de nuevo.'

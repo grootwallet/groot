@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   matchingPolicyVerification,
+  hardwarePolicyCompatibility,
   policyReadinessKind,
   policyReadinessLabel,
   policyRegistrationProfile,
@@ -41,6 +42,16 @@ describe('hardware policy readiness', () => {
     expect(policyRegistrationProfile({ label: 'BitBox Nova' }).registration).toBe(
       'interactive_once'
     );
+  });
+
+  it('separates vendor firmware candidates from the pinned delayed-policy adapter boundary', () => {
+    for (const label of ['Ledger', 'BitBox02', 'BitBox Nova', 'Jade']) {
+      expect(hardwarePolicyCompatibility({ label }, 'standard')).toBe('supported');
+      expect(hardwarePolicyCompatibility({ label }, 'delayed')).toBe('firmware_candidate');
+    }
+    for (const label of ['Coldcard', 'Trezor One', 'unknown signer']) {
+      expect(hardwarePolicyCompatibility({ label }, 'delayed')).toBe('unsupported');
+    }
   });
 
   it('separates interactive verification, setup gates, and Ledger repeat authorization', () => {

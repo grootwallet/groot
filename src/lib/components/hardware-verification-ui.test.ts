@@ -172,6 +172,20 @@ describe('hardware receive verification UI', () => {
     );
   });
 
+  it('keeps delayed Miniscript policies outside the pinned HWI USB boundary', () => {
+    expect(multisigSetup).toContain(
+      "{#if templateKind === 'standard'}<button onclick={scanHardware}"
+    );
+    expect(multisigReceive).toContain(
+      '{#if !wallet?.recoveryTemplate}<HardwareReceiveVerification'
+    );
+    expect(multisigSend).toContain(
+      '{#if !wallet?.recoveryTemplate}<Button variant="secondary" onclick={scan}'
+    );
+    expect(multisigSetup).toContain('use the offline PSBT workflow');
+    expect(multisigSend).toContain('Use offline PSBT signing for this delayed policy.');
+  });
+
   it('centralizes the bounded PIN and retry presentation', () => {
     expect(verificationFlow).toContain('walletService.promptHardwarePin(device.id)');
     expect(verificationFlow).toContain('walletService.sendHardwarePin(pinChallenge, positions)');
@@ -230,6 +244,8 @@ describe('hardware receive verification UI', () => {
     );
     expect(verificationFlow).toContain("translate($locale, 'Device needs attention')");
     expect(verificationFlow).not.toContain('<p class="form-error" role="alert">{verifyError}</p>');
+    expect(verificationFlow).toContain('onclick={retryVerificationDevice}');
+    expect(verificationFlow).toContain("translate($locale, 'Try this signer again')");
   });
 
   it('uses signer terminology throughout the multisig receive flow', () => {
