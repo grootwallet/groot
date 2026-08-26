@@ -1185,6 +1185,28 @@ test('receive keeps multiple labeled payment requests and discards them independ
   await expect(page.getByText('2 active addresses')).toBeVisible();
 });
 
+test('single-key receive and send cap manual label drafts at five', async ({ page }) => {
+  await page.goto('/receive');
+  await page.getByRole('button', { name: 'New receive address' }).click();
+  await page.getByLabel('Permanent label').fill('R1,R2,R3,R4,R5,R6;');
+  await expect(page.locator('.label-token')).toHaveCount(5);
+  await expect(page.getByRole('button', { name: 'Remove R6' })).toHaveCount(0);
+  await expect(page.getByLabel('Permanent label')).toHaveValue('');
+  await expect(page.locator('.label-suggestions button')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Remove R5' }).click();
+  await page.getByLabel('Permanent label').fill('R6');
+  await page.getByLabel('Permanent label').press('Enter');
+  await expect(page.getByRole('button', { name: 'Remove R6' })).toBeVisible();
+  await page.getByRole('button', { name: 'Cancel' }).click();
+
+  await page.goto('/send');
+  await page.getByLabel('Payment label').fill('S1;S2;S3;S4;S5;S6;');
+  await expect(page.locator('.label-token')).toHaveCount(5);
+  await expect(page.getByRole('button', { name: 'Remove S6' })).toHaveCount(0);
+  await expect(page.getByLabel('Payment label')).toHaveValue('');
+  await expect(page.locator('.label-suggestions button')).toHaveCount(0);
+});
+
 test('coin control selects, freezes, and carries coins into send', async ({ page }) => {
   await page.goto('/coins');
   const first = page.getByRole('checkbox', { name: 'Select Savings', exact: true });

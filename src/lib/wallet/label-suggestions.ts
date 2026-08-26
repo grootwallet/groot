@@ -1,7 +1,7 @@
 import type { LabelSuggestion } from '$lib/types';
 
 export const VISIBLE_LABEL_SUGGESTION_LIMIT = 4;
-export const MAX_PERMANENT_LABELS = 12;
+export const MAX_MANUAL_PERMANENT_LABELS = 5;
 
 function normalizedLabel(value: string): string {
   return value.trim().replace(/\s+/g, ' ').toLocaleLowerCase();
@@ -13,6 +13,7 @@ export function visibleLabelSuggestions(
   limit = VISIBLE_LABEL_SUGGESTION_LIMIT,
   selectedLabels: string[] = []
 ): LabelSuggestion[] {
+  if (selectedLabels.length >= MAX_MANUAL_PERMANENT_LABELS) return [];
   const query = normalizedLabel(input);
   const selected = new Set(selectedLabels.map(normalizedLabel));
   const available = suggestions.filter(
@@ -35,7 +36,8 @@ export function visibleLabelSuggestions(
 
 export function addPermanentLabel(labels: string[], value: string): string[] {
   const text = value.trim().replace(/\s+/g, ' ');
-  if (!text || Array.from(text).length > 48 || labels.length >= MAX_PERMANENT_LABELS) return labels;
+  if (!text || Array.from(text).length > 48 || labels.length >= MAX_MANUAL_PERMANENT_LABELS)
+    return labels;
   const key = normalizedLabel(text);
   if (labels.some((label) => normalizedLabel(label) === key)) return labels;
   return [...labels, text];
@@ -70,10 +72,10 @@ export function permanentLabelsForSubmission(labels: string[], input: string): s
   const inputKey = normalizedLabel(input);
   if (
     inputKey &&
-    labels.length >= MAX_PERMANENT_LABELS &&
+    labels.length >= MAX_MANUAL_PERMANENT_LABELS &&
     !labels.some((label) => normalizedLabel(label) === inputKey)
   )
     return [];
   const combined = inputKey ? addPermanentLabel(labels, input) : labels;
-  return combined.length > 0 && combined.length <= MAX_PERMANENT_LABELS ? combined : [];
+  return combined.length > 0 && combined.length <= MAX_MANUAL_PERMANENT_LABELS ? combined : [];
 }

@@ -262,6 +262,25 @@ test('keeps multisig PSBT actions inside the review card', async ({ page }) => {
   }
 });
 
+test('multisig receive and send cap manual label drafts at five', async ({ page }) => {
+  await page.goto('/multisig');
+  await page.getByRole('main').getByRole('link', { name: 'Receive' }).click();
+  await page.getByRole('button', { name: 'New receive address' }).click();
+  await page.getByLabel('Permanent label').fill('V1,V2,V3,V4,V5,V6;');
+  await expect(page.locator('.label-token')).toHaveCount(5);
+  await expect(page.getByRole('button', { name: 'Remove V6' })).toHaveCount(0);
+  await expect(page.getByLabel('Permanent label')).toHaveValue('');
+  await page.getByRole('button', { name: 'Cancel' }).click();
+
+  await page.goto('/multisig');
+  await page.getByRole('main').getByRole('link', { name: 'Send', exact: true }).click();
+  await page.getByLabel('Payment label').fill('P1;P2;P3;P4;P5;P6;');
+  await expect(page.locator('.label-token')).toHaveCount(5);
+  await expect(page.getByRole('button', { name: 'Remove P6' })).toHaveCount(0);
+  await expect(page.getByLabel('Payment label')).toHaveValue('');
+  await expect(page.locator('.label-suggestions button')).toHaveCount(0);
+});
+
 test('spends end-to-end from the ready-made demo wallet', async ({ page }) => {
   test.setTimeout(60_000);
   await page.addInitScript(() => {

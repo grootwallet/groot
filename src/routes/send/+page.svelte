@@ -58,6 +58,7 @@
   import {
     addPermanentLabel,
     backspaceLabelDraft,
+    MAX_MANUAL_PERMANENT_LABELS,
     permanentLabelsForSubmission,
     tokenizeLabelDraft,
     visibleLabelSuggestions,
@@ -684,11 +685,16 @@
         credentialError = message || 'The QR frame was rejected.';
     }
   }
-  function updateLabelDraft(value: string) {
+  function updateLabelDraft(value: string): string {
     armedLabelIndex = null;
+    if (selectedLabels.length >= MAX_MANUAL_PERMANENT_LABELS) {
+      label = '';
+      return label;
+    }
     const draft = tokenizeLabelDraft(selectedLabels, value);
     selectedLabels = draft.labels;
     label = draft.input;
+    return label;
   }
   function handleLabelKeydown(event: KeyboardEvent) {
     if (event.key === 'Backspace' && !label) {
@@ -829,13 +835,14 @@
                 onclick={() => {
                   selectedLabels = selectedLabels.filter((item) => item !== selected);
                   armedLabelIndex = null;
-                }}><X size={13} /></button
+                }}><X size={11} /></button
               ></span
             >{/each}<input
             id="send-label-input"
             aria-label={translate($locale, 'Payment label')}
             value={label}
-            oninput={(event) => updateLabelDraft(event.currentTarget.value)}
+            oninput={(event) =>
+              (event.currentTarget.value = updateLabelDraft(event.currentTarget.value))}
             onkeydown={handleLabelKeydown}
             placeholder={selectedLabels.length
               ? ''

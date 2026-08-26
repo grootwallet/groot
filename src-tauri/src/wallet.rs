@@ -2641,7 +2641,9 @@ fn normalize_label(label: &str) -> ApiResult<String> {
     Ok(label)
 }
 
-const MAX_PERMANENT_LABELS: usize = 12;
+// Explicit receive and payment drafts stay intentionally compact. Existing persisted and
+// provenance-derived records may still expose more labels and remain fully readable.
+const MAX_PERMANENT_LABELS: usize = 5;
 
 fn normalize_labels(labels: Vec<String>) -> ApiResult<Vec<String>> {
     if labels.is_empty() || labels.len() > MAX_PERMANENT_LABELS {

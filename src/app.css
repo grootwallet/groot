@@ -2133,8 +2133,8 @@ code {
   flex-wrap: wrap;
   gap: 6px;
   align-items: center;
-  min-height: 44px;
-  padding: 6px 9px;
+  min-height: 40px;
+  padding: 5px 8px;
   border: 1px solid var(--control-border);
   border-radius: 8px;
   background: var(--surface-control);
@@ -2149,8 +2149,8 @@ code {
 .field .label-token-field > input {
   flex: 1 1 90px;
   min-width: 90px;
-  min-height: 30px;
-  padding: 4px 3px;
+  min-height: 28px;
+  padding: 3px;
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -2166,8 +2166,8 @@ code {
   display: inline-flex;
   align-items: center;
   max-width: 100%;
-  min-height: 30px;
-  padding: 4px 9px;
+  min-height: 28px;
+  padding: 3px 9px;
   color: var(--text);
   font-size: 11px;
   font-weight: 600;
@@ -2191,28 +2191,31 @@ code {
 }
 .label-token button {
   position: absolute;
-  top: -6px;
-  right: -6px;
-  display: grid;
+  top: -5px;
+  right: -5px;
+  display: flex;
   width: 16px;
   height: 16px;
+  align-items: center;
+  justify-content: center;
   padding: 0;
+  line-height: 0;
   color: var(--text);
   border: 1px solid var(--control-border);
   border-radius: 50%;
   background: var(--surface-control);
   box-shadow: 0 1px 3px rgba(20, 24, 31, 0.18);
   opacity: 0;
-  transform: scale(0.88);
-  transition:
-    opacity 100ms ease,
-    transform 100ms ease;
-  place-items: center;
+  transition: opacity 100ms ease;
+}
+.label-token button svg {
+  display: block;
+  width: 11px;
+  height: 11px;
 }
 .label-token:hover button,
 .label-token:focus-within button {
   opacity: 1;
-  transform: scale(1);
 }
 .label-token button:hover,
 .label-token button:focus-visible {
@@ -2223,7 +2226,6 @@ code {
 @media (hover: none) {
   .label-token button {
     opacity: 0.82;
-    transform: scale(1);
   }
 }
 .label-suggestions button:hover,

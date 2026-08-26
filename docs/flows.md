@@ -53,17 +53,17 @@ Deletion is device-local. It never implies that transaction history disappeared 
 
 Opening Receive or Send first pauses and cancels automatic sync. Snapshot reads wait on a blocking worker rather than the native window thread, so the route remains responsive while an in-flight sync reaches its cancellation boundary.
 
-`unlock-scoped recent labels or typed full-history matches → choose one to twelve new/reused labels → recovery-gap check → atomic reveal+permanent assignments → QR/copy`
+`unlock-scoped recent labels or typed full-history matches → choose one to five new/reused labels → recovery-gap check → atomic reveal+permanent assignments → QR/copy`
 
 Multiple unused addresses may await payment concurrently within the configured recovery gap. The prospective index is checked in the same transaction as reveal and label persistence; exceeding the gap reveals nothing, and the setting cannot be lowered below the already-required run. Each request may transition independently to `discarded` and remains monitored. Any observed payment transitions that address to `used`, after which discard is impossible.
 
-Suggestions never prefill a field. Choosing one adds a removable token inside the input and removes it from the available suggestion list; removing the token restores the suggestion. Enter, Tab, comma, and semicolon commit typed text as an in-field token. With empty draft text, Backspace first selects the final token and only a second Backspace removes it. Up to twelve distinct labels may be selected before submission. Every submitted assignment remains immutable. Suggestions disappear with the unlocked wallet surface and come only from that profile's isolated database.
+Suggestions never prefill a field. Choosing one adds a removable token inside the input and removes it from the available suggestion list; removing the token restores the suggestion. Enter, Tab, comma, and semicolon commit typed text as an in-field token. With empty draft text, Backspace first selects the final token and only a second Backspace removes it. Up to five distinct labels may be selected before submission; existing and provenance-derived records may display more. Every submitted assignment remains immutable. Suggestions disappear with the unlocked wallet surface and come only from that profile's isolated database.
 
 ## Single-key send
 
 The global sats/BTC preference applies to the amount field, balance, fees, review, errors, and success copy; BTC is always eight decimals while the wallet boundary remains integer satoshis. **Max** asks the native builder for an exact, non-persisted drain preview with the active fee choice and coin-selection policy. Single-key and multisig sends share Economy, Standard, Priority, and Custom fee choices. Fee provenance is shown once in plain language as **Bitcoin Core**; RPC method names stay hidden.
 
-`Intent: one to twelve explicit new/reused permanent labels+recipient → Amount & fee: amount+privacy strategy or exact coins+fee rate → persist Rust PSBT+assignments → Review funding privacy → Review & sign: authoritative review+credential → sign+broadcast → durable labeled success`
+`Intent: one to five explicit new/reused permanent labels+recipient → Amount & fee: amount+privacy strategy or exact coins+fee rate → persist Rust PSBT+assignments → Review funding privacy → Review & sign: authoritative review+credential → sign+broadcast → durable labeled success`
 
 Intent suggestions are read only from the selected unlocked profile and never preselect or overwrite input. A stable single-row strip shows at most four recent labels; typed input filters the complete wallet-scoped history with exact normalized matches first without resizing the surrounding flow when nothing matches. Reusing normalized text binds the new immutable payment intent to the existing stable label entity. This records an intentional relationship for provenance and selection; it does not suppress warnings when the actual PSBT joins distinct public clusters.
 

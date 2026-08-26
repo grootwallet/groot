@@ -2032,6 +2032,16 @@ fn labels_are_mandatory_and_bounded() {
 }
 
 #[test]
+fn explicit_label_drafts_are_limited_to_five() {
+    let five = (1..=5).map(|index| format!("Label {index}")).collect();
+    assert_eq!(normalize_labels(five).unwrap().len(), 5);
+    let six = (1..=6).map(|index| format!("Label {index}")).collect();
+    let error = normalize_labels(six).unwrap_err();
+    assert_eq!(error.code, "invalid_label");
+    assert!(error.message.contains("between 1 and 5"));
+}
+
+#[test]
 fn manual_selection_rejects_empty_malformed_duplicate_and_frozen_outpoints() {
     let outpoint = format!("{}:0", "00".repeat(32));
     let parsed = OutPoint::from_str(&outpoint).unwrap();

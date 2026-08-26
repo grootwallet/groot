@@ -61,11 +61,12 @@ ADR 0044.
 
 ## Rust command surface
 
-Receive-address and payment-proposal creation commands accept an ordered array of one to twelve
+Receive-address and payment-proposal creation commands accept an ordered array of one to five
 permanent labels. Schema v3 retains the first label in the existing primary assignment and legacy
 DTO field, and stores later labels in an additive assignment table. DTOs return both the primary
 field and complete ordered label set so older releases remain rollback-compatible without losing
-the additional table. See ADR 0046.
+the additional table. Existing and provenance-derived records may expose more than five labels; the
+cap applies only to new explicit drafts. See ADRs 0046 and 0047.
 
 The Tauri registration surface is grouped by ownership under `src-tauri/src/wallet/`: profile/node/recovery commands, hardware/external-signer commands, multisig setup/recovery commands, multisig proposal/signing commands, and single-key/acceleration transaction commands. `wallet.rs` retains shared authenticated persistence and transaction invariants; command modules remain thin orchestration over those helpers. The large wallet regression suite and manual performance harness are separate sibling test modules. Platform-native recovery UI keeps its cross-platform contract in `native_backup.rs` while macOS Objective-C bindings live in `native_backup/macos.rs`.
 

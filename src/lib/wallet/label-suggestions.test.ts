@@ -3,7 +3,7 @@ import type { LabelSuggestion } from '$lib/types';
 import {
   addPermanentLabel,
   backspaceLabelDraft,
-  MAX_PERMANENT_LABELS,
+  MAX_MANUAL_PERMANENT_LABELS,
   permanentLabelsForSubmission,
   tokenizeLabelDraft,
   visibleLabelSuggestions
@@ -61,10 +61,24 @@ describe('visibleLabelSuggestions', () => {
     ]);
     expect(
       addPermanentLabel(
-        Array.from({ length: MAX_PERMANENT_LABELS }, (_, i) => `${i}`),
+        Array.from({ length: MAX_MANUAL_PERMANENT_LABELS }, (_, i) => `${i}`),
         'x'
       )
-    ).toHaveLength(MAX_PERMANENT_LABELS);
+    ).toHaveLength(MAX_MANUAL_PERMANENT_LABELS);
+    expect(
+      permanentLabelsForSubmission(
+        Array.from({ length: MAX_MANUAL_PERMANENT_LABELS }, (_, i) => `${i}`),
+        'One too many'
+      )
+    ).toEqual([]);
+    expect(
+      visibleLabelSuggestions(
+        history,
+        '',
+        4,
+        Array.from({ length: MAX_MANUAL_PERMANENT_LABELS }, (_, i) => `${i}`)
+      )
+    ).toEqual([]);
   });
 
   it('tokenizes pasted separators and commits the trailing draft on enter or tab', () => {
