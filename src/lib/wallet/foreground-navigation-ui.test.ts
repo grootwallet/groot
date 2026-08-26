@@ -27,4 +27,16 @@ describe('foreground wallet navigation', () => {
     expect(multisigCommands).toContain('pub async fn multisig_snapshot(app: AppHandle)');
     expect(multisigCommands).toContain('pub async fn multisig_wallet(app: AppHandle)');
   });
+
+  it('does not expose a new wallet kind before native selection commits', () => {
+    const start = appShell.indexOf('async function selectWallet(walletId: string)');
+    const end = appShell.indexOf('provideWalletShellContext', start);
+    const selection = appShell.slice(start, end);
+    const nativeSelection = selection.indexOf('await walletService.selectWallet(walletId)');
+    const shellSelection = selection.indexOf('selectedWalletId = selection.profile.id');
+    expect(nativeSelection).toBeGreaterThan(-1);
+    expect(shellSelection).toBeGreaterThan(nativeSelection);
+    expect(selection).not.toContain('selectedWalletId = walletId');
+    expect(appShell).toContain("{#key `${selectedWalletId ?? 'none'}:${page.url.pathname}`}");
+  });
 });

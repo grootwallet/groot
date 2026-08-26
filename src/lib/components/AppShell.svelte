@@ -168,13 +168,11 @@
   async function selectWallet(walletId: string) {
     if (!walletId || walletId === selectedWalletId) return;
     await walletService.cancelHardwareOperations();
-    const previousWalletId = selectedWalletId;
     ++profileReadGeneration;
-    // Reflect the explicit choice immediately. The trusted adapter remains the
-    // authority, and a failed selection restores the prior shell state.
-    selectedWalletId = walletId;
     try {
       const selection = await walletService.selectWallet(walletId);
+      // Change the routed wallet context only after Rust has atomically selected
+      // the same profile. The keyed route then reloads against one wallet kind.
       selectedWalletId = selection.profile.id;
       await goto(selection.unlocked ? '/' : '/unlock');
       if (!isPrototypeWallet && selection.unlocked) {
@@ -183,7 +181,6 @@
         liveSync?.stop();
       }
     } catch (cause) {
-      if (selectedWalletId === walletId) selectedWalletId = previousWalletId;
       toast({
         title: 'Wallet not switched',
         description: localizedError(cause, $locale, 'Could not select this wallet.'),

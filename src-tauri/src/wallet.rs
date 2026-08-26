@@ -680,6 +680,9 @@ type ApiResult<T> = Result<T, ApiError>;
 
 const RPC_UNAVAILABLE_MESSAGE: &str = "Could not connect to Bitcoin Core. Check that the node is running and review the RPC address, authentication, and network settings.";
 const RPC_PERMISSION_MESSAGE: &str = "Bitcoin Core accepted the RPC credentials, but this user is missing a required RPC permission. Add Groot's documented RPC methods to the user's rpcwhitelist and restart Bitcoin Core.";
+const RECENT_CHECKPOINT_WINDOW: u32 = 2_016;
+const PERIODIC_CHECKPOINT_INTERVAL: u32 = 2_016;
+const CHECKPOINT_COMPACTION_THRESHOLD: u32 = 4_096;
 
 fn api_error(code: &'static str, message: impl ToString) -> ApiError {
     ApiError {
@@ -2973,6 +2976,7 @@ fn open_db(app: &AppHandle) -> ApiResult<Connection> {
     }
     let mut db = open_wallet_database(&path)?;
     init_app_schema(&db)?;
+    compact_persisted_checkpoints(&mut db)?;
     validate_selected_wallet_database_identity(app, &mut db, WalletKind::SingleKey)?;
     Ok(db)
 }
@@ -2987,8 +2991,40 @@ fn open_multisig_db(app: &AppHandle) -> ApiResult<Connection> {
     }
     let mut db = open_wallet_database(&path)?;
     init_app_schema(&db)?;
+    compact_persisted_checkpoints(&mut db)?;
     validate_selected_wallet_database_identity(app, &mut db, WalletKind::Multisig)?;
     Ok(db)
+}
+
+fn compact_persisted_checkpoints(db: &mut Connection) -> ApiResult<()> {
+    let (count, tip): (u32, Option<u32>) = db
+        .query_row(
+            "SELECT COUNT(*), MAX(block_height) FROM bdk_blocks",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .map_err(internal)?;
+    if count <= CHECKPOINT_COMPACTION_THRESHOLD {
+        return Ok(());
+    }
+    let Some(tip) = tip else {
+        return Ok(());
+    };
+    let keep_from = tip.saturating_sub(RECENT_CHECKPOINT_WINDOW.saturating_sub(1));
+    let transaction = db.transaction().map_err(internal)?;
+    transaction
+        .execute(
+            "DELETE FROM bdk_blocks
+             WHERE block_height < ?1
+               AND (block_height % ?2) != 0
+               AND NOT EXISTS (
+                   SELECT 1 FROM bdk_anchors
+                   WHERE bdk_anchors.block_height = bdk_blocks.block_height
+               )",
+            params![keep_from, PERIODIC_CHECKPOINT_INTERVAL],
+        )
+        .map_err(internal)?;
+    transaction.commit().map_err(internal)
 }
 
 fn validate_selected_wallet_database_identity(

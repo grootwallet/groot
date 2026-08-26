@@ -2557,6 +2557,56 @@ fn frozen_coin_schema_persists_and_corrupt_rows_fail_closed() {
 }
 
 #[test]
+fn persisted_checkpoints_are_bounded_without_dropping_transaction_anchors() {
+    let mut db = Connection::open_in_memory().unwrap();
+    db.execute_batch(
+        "CREATE TABLE bdk_blocks (
+            block_height INTEGER PRIMARY KEY NOT NULL,
+            block_hash TEXT NOT NULL
+        ) STRICT;
+        CREATE TABLE bdk_anchors (
+            block_height INTEGER NOT NULL
+        ) STRICT;",
+    )
+    .unwrap();
+    let transaction = db.transaction().unwrap();
+    {
+        let mut insert = transaction
+            .prepare("INSERT INTO bdk_blocks(block_height, block_hash) VALUES(?1, ?2)")
+            .unwrap();
+        for height in 0_u32..5_000 {
+            insert
+                .execute(params![height, format!("hash-{height}")])
+                .unwrap();
+        }
+    }
+    transaction
+        .execute("INSERT INTO bdk_anchors(block_height) VALUES(1234)", [])
+        .unwrap();
+    transaction.commit().unwrap();
+
+    compact_persisted_checkpoints(&mut db).unwrap();
+
+    let retained = db
+        .prepare("SELECT block_height FROM bdk_blocks ORDER BY block_height")
+        .unwrap()
+        .query_map([], |row| row.get::<_, u32>(0))
+        .unwrap()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    assert!(retained.len() <= RECENT_CHECKPOINT_WINDOW as usize + 3);
+    assert!(retained.contains(&0));
+    assert!(retained.contains(&1234));
+    assert!(retained.contains(&PERIODIC_CHECKPOINT_INTERVAL));
+    assert!(retained.contains(&4_999));
+    assert!(!retained.contains(&1));
+    assert_eq!(
+        retained.iter().filter(|height| **height >= 2_984).count(),
+        RECENT_CHECKPOINT_WINDOW as usize
+    );
+}
+
+#[test]
 fn synced_snapshots_enqueue_received_and_first_confirmation_events_once() {
     let mut db = Connection::open_in_memory().unwrap();
     init_app_schema(&db).unwrap();
