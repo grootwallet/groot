@@ -130,3 +130,9 @@ therefore recognizes only HWI's fixed unpaired-device message, returns a stable
 `hardware_pairing_required` error without forwarding raw HWI text, and skips
 futile transient retries. The user must pair and open the exact device in
 BitBoxApp, fully quit BitBoxApp, and scan again in Groot.
+
+Physical packaged v0.4.29 follow-up then passed initial BIP84 account-key
+import independently on an original BitBox02 and a Nova after the pairing state
+was repaired in BitBoxApp. This confirms the pairing diagnosis and the import
+path; it does not certify receive display, health, multisig registration, or
+signing on either model.
