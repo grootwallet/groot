@@ -124,6 +124,13 @@
     try {
       current = await walletService.createMultisigAddress(label);
       addresses = [current, ...addresses];
+      try {
+        const snapshot = await walletService.multisigSnapshot();
+        applyAddresses(snapshot.receiveAddresses);
+        labelSuggestions = snapshot.labelSuggestions;
+      } catch {
+        // Address creation already succeeded. A later wallet refresh will recover suggestions.
+      }
       label = '';
       showGenerate = false;
       toast({

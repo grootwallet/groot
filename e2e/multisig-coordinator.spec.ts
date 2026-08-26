@@ -1287,6 +1287,9 @@ test('creates and verifies a simple 2-of-3 descriptor wallet', async ({ page }) 
     page.locator('.receive-card').getByText('Vault deposit test', { exact: true })
   ).toBeVisible();
   await expect(page.getByText('Receive address ready')).toBeVisible();
+  await page.getByRole('button', { name: 'New receive address' }).click();
+  await expect(page.getByRole('button', { name: 'Reuse Vault deposit test' })).toBeVisible();
+  await page.getByRole('button', { name: 'Cancel' }).click();
 
   await page.getByRole('link', { name: 'Back to overview' }).click();
   await page

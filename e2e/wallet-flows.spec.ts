@@ -1120,9 +1120,14 @@ test('receive keeps multiple labeled payment requests and discards them independ
   await expect(
     page.locator('.receive-card').getByText('Invoice #205', { exact: true })
   ).toBeVisible();
+  await page.getByRole('button', { name: 'New receive address' }).click();
+  await expect(page.getByRole('button', { name: 'Reuse Invoice #205' })).toBeVisible();
+  await page.getByRole('button', { name: 'Cancel' }).click();
   await expect(page.getByRole('img', { name: /QR code for/ })).toBeVisible();
   await page.getByRole('button', { name: 'Enlarge QR code' }).click();
-  const qrDialog = page.getByRole('dialog');
+  const qrDialog = page
+    .getByRole('dialog')
+    .filter({ has: page.getByRole('img', { name: /Large QR code/ }) });
   await expect(qrDialog.getByRole('img', { name: /Large QR code/ })).toBeVisible();
   await expect(qrDialog.getByRole('button', { name: 'Copy exact address' })).toBeVisible();
   await expect(
@@ -1135,7 +1140,7 @@ test('receive keeps multiple labeled payment requests and discards them independ
   );
   await expect(visualGroups.first()).toHaveClass(/edge/);
   await expect(visualGroups.last()).toHaveClass(/edge/);
-  await page.getByRole('button', { name: 'Close' }).click();
+  await qrDialog.getByRole('button', { name: 'Close' }).click();
   await page.getByRole('button', { name: 'Show address details' }).click();
   await expect(page.getByText("m/84'/1'/0'/0/9")).toBeVisible();
   await page.getByRole('button', { name: 'New receive address' }).click();

@@ -115,6 +115,13 @@
     try {
       current = await walletService.createAddress(label);
       addresses = [current, ...addresses];
+      try {
+        const snapshot = await walletService.snapshot();
+        applyAddresses(snapshot.receiveAddresses);
+        labelSuggestions = snapshot.labelSuggestions;
+      } catch {
+        // Address creation already succeeded. A later wallet refresh will recover suggestions.
+      }
       label = '';
       showGenerate = false;
       await tick();
