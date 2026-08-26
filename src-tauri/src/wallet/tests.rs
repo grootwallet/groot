@@ -4,9 +4,12 @@ use super::profile_commands::*;
 use super::transaction_commands::*;
 use super::*;
 use crate::external_signer::{self, ExternalSignerInput, SignerSource, SINGLESIG_ACCOUNT_PATH};
+use crate::multisig::PolicyError;
 use crate::multisig::{CosignerInput, CosignerSource, MULTISIG_ACCOUNT_PATH};
 use crate::recovery::{SpendingPath, TimedSpendingPath};
+use crate::secure_store::SecureStoreError;
 use bdk_wallet::bitcoin::NetworkKind;
+use bdk_wallet::error::CreateTxError;
 use std::{net::TcpListener, thread};
 
 #[test]

@@ -22,7 +22,6 @@ use bdk_wallet::{
     },
     chain::{BlockId, ChainPosition, CheckPoint, ConfirmationBlockTime},
     descriptor::{policy::SatisfiableItem, Descriptor, DescriptorPublicKey},
-    error::CreateTxError,
     psbt::PsbtUtils,
     rusqlite::{
         config::DbConfig, params, Connection, OpenFlags, OptionalExtension,
@@ -53,20 +52,19 @@ use uuid::Uuid;
 use zeroize::{Zeroize, Zeroizing};
 
 use crate::auth::AuthThrottle;
-use crate::bsms::{BsmsError, DescriptorRecord, PublicDescriptorPair};
+use crate::bsms::{DescriptorRecord, PublicDescriptorPair};
 use crate::build_network::{
     DEFAULT_RPC_URL, IS_REGTEST, NAME as NETWORK_NAME, NETWORK, PARAMETERS,
 };
 use crate::external_signer::{
-    self, ExternalSignerError, ExternalSignerInput, ExternalSignerWallet, SignerSource,
-    SINGLESIG_ACCOUNT_PATH,
+    self, ExternalSignerInput, ExternalSignerWallet, SignerSource, SINGLESIG_ACCOUNT_PATH,
 };
 use crate::hardware::{HardwareError, HardwareTransport, HwiChain, HwiCli};
 use crate::label_provenance::{
     self, LabelOrigin, LabelSuggestionDto, PermanentLabelDto, ProvenanceState, ProvenanceSummaryDto,
 };
 use crate::multisig::{
-    CosignerInput, CosignerSource, MultisigPreviewDto, MultisigWalletDto, PolicyError, PolicyInput,
+    CosignerInput, CosignerSource, MultisigPreviewDto, MultisigWalletDto, PolicyInput,
     MULTISIG_ACCOUNT_PATH,
 };
 use crate::native_backup;
@@ -80,13 +78,16 @@ use crate::proposal::{
     merge_signed_psbt, signature_progress,
 };
 use crate::recovery::{
-    analyze_template, calculate_maturity, MaturityState, PolicyAnalysis, RecoveryError,
-    RecoveryTemplate,
+    analyze_template, calculate_maturity, MaturityState, PolicyAnalysis, RecoveryTemplate,
 };
 use crate::registry::{self, RegistryError, WalletKind, WalletProfile, WalletRegistry};
-use crate::secure_store::{self, SecureStoreError};
+use crate::secure_store;
 use crate::session::WalletSessions;
-use crate::ur_transport::{self, UrTransportError};
+use crate::ur_transport;
+
+#[path = "wallet/error_translation.rs"]
+mod error_translation;
+use error_translation::*;
 
 const MAX_PRIVATE_JSON_BYTES: u64 = 256 * 1024;
 const MAX_CREDENTIAL_BYTES: usize = 1_024;
@@ -211,8 +212,6 @@ pub struct ApiError {
 
 type ApiResult<T> = Result<T, ApiError>;
 
-const RPC_UNAVAILABLE_MESSAGE: &str = "Could not connect to Bitcoin Core. Check that the node is running and review the RPC address, authentication, and network settings.";
-const RPC_PERMISSION_MESSAGE: &str = "Bitcoin Core accepted the RPC credentials, but this user is missing a required RPC permission. Add Groot's documented RPC methods to the user's rpcwhitelist and restart Bitcoin Core.";
 const RECENT_CHECKPOINT_WINDOW: u32 = 2_016;
 const PERIODIC_CHECKPOINT_INTERVAL: u32 = 2_016;
 const CHECKPOINT_COMPACTION_THRESHOLD: u32 = 4_096;
@@ -233,34 +232,12 @@ fn wallet_already_exists(profile: &WalletProfile) -> ApiError {
     }
 }
 
-fn rpc_unavailable() -> ApiError {
-    api_error("network_unavailable", RPC_UNAVAILABLE_MESSAGE)
-}
-
-fn rpc_api_error(error: CoreRpcError) -> ApiError {
-    match error {
-        CoreRpcError::JsonRpc(jsonrpc::Error::Rpc(response))
-            if response.message.contains("not allowed to call method") =>
-        {
-            api_error("invalid_node_config", RPC_PERMISSION_MESSAGE)
-        }
-        _ => rpc_unavailable(),
-    }
-}
-
 fn get_blockchain_info(client: &Client) -> Result<GetBlockchainInfoResult, CoreRpcError> {
     // RpcApi::get_blockchain_info performs an extra getnetworkinfo call only
     // to decode pre-0.19 Core responses. Groot's supported Core versions use
     // the modern response, so calling the typed RPC directly preserves the
     // node's least-privilege whitelist.
     client.call("getblockchaininfo", &[])
-}
-
-fn compact_filter_unavailable() -> ApiError {
-    api_error(
-        "network_unavailable",
-        "Could not sync from the configured Bitcoin peers. Check the peer and proxy settings, then try again.",
-    )
 }
 
 fn internal(error: impl ToString) -> ApiError {
@@ -1502,31 +1479,6 @@ fn wallets_root(app: &AppHandle) -> ApiResult<PathBuf> {
     Ok(app_data_dir(app)?.join("wallets"))
 }
 
-fn registry_api_error(error: RegistryError) -> ApiError {
-    match error {
-        RegistryError::Missing => api_error("wallet_not_found", "No wallet exists on this device."),
-        RegistryError::UnknownSelection => {
-            api_error("wallet_not_found", "Select an available wallet first.")
-        }
-        RegistryError::InvalidName => api_error(
-            "invalid_wallet_name",
-            "Wallet names must contain 1 to 48 characters.",
-        ),
-        RegistryError::InvalidInactivityTimeout => api_error(
-            "invalid_inactivity_timeout",
-            "Automatic lock must be 1, 5, 15, 30, or 60 minutes.",
-        ),
-        RegistryError::Corrupt | RegistryError::UnsupportedVersion => api_error(
-            "wallet_corrupt",
-            "The wallet registry is corrupt or unsupported. No wallet was opened.",
-        ),
-        _ => api_error(
-            "internal_error",
-            "The wallet registry could not be updated.",
-        ),
-    }
-}
-
 fn descriptor_checksum(descriptor: &str) -> ApiResult<String> {
     descriptor
         .rsplit_once('#')
@@ -2002,33 +1954,6 @@ fn default_node_config() -> CoreNodeConfig {
     }
 }
 
-fn network_config_api_error(error: NetworkConfigError) -> ApiError {
-    let message = match error {
-        NetworkConfigError::InvalidUrl => "Enter a valid node URL and RPC username.",
-        NetworkConfigError::InsecureRemote => {
-            "Local nodes must use loopback. Remote nodes require HTTPS and username/password authentication."
-        }
-        NetworkConfigError::CredentialsInUrl => {
-            "Do not place RPC credentials in the URL. Use the protected credential fields."
-        }
-        NetworkConfigError::UnsupportedScheme => "This build supports Bitcoin Core RPC backends only.",
-        NetworkConfigError::UnknownPreset => "The selected backend preset is not recognized.",
-        NetworkConfigError::InvalidProxy => {
-            "Tor requires an HTTP v3 .onion RPC URL and a loopback SOCKS5 proxy such as 127.0.0.1:9050."
-        }
-        NetworkConfigError::InvalidPeerConfiguration => {
-            "Enter valid numeric IP:port peers and require no more peers than manual mode provides."
-        }
-        NetworkConfigError::InsufficientPeerDiversity => {
-            "Public test networks require at least two compact-filter peers."
-        }
-        NetworkConfigError::ProxyDnsLeak => {
-            "Tor compact-filter sync requires manual numeric peers with public discovery disabled to prevent local DNS leaks."
-        }
-    };
-    api_error("invalid_node_config", message)
-}
-
 fn read_node_config(app: &AppHandle) -> ApiResult<CoreNodeConfig> {
     read_node_config_for(app, selected_profile(app)?.id)
 }
@@ -2117,10 +2042,6 @@ fn build_rpc_client_with_credentials(
             transport,
         )))
     }
-}
-
-fn network_config_api_error_from_url(_: url::ParseError) -> ApiError {
-    network_config_api_error(NetworkConfigError::InvalidUrl)
 }
 
 fn load_node_auth_session(
@@ -3468,74 +3389,6 @@ fn parse_mnemonic_bytes(plaintext: Vec<u8>) -> ApiResult<Mnemonic> {
     mnemonic
 }
 
-fn policy_api_error(error: PolicyError) -> ApiError {
-    let message = match error {
-        PolicyError::InvalidName => "Enter a wallet name and labels for every signer.",
-        PolicyError::InvalidCosignerCount => "V1 requires between 3 and 7 signers.",
-        PolicyError::UnsafeThreshold => "At least 2 signatures are required and the threshold cannot exceed the number of signers.",
-        PolicyError::DuplicateFingerprint => "Every signer must have a unique master fingerprint.",
-        PolicyError::DuplicateXpub => "Every signer must have a unique account xpub.",
-        PolicyError::InvalidDescriptor => "A key or descriptor is invalid. Use a regtest BIP48 account tpub.",
-    };
-    api_error(error.code(), message)
-}
-
-fn bsms_api_error(error: BsmsError) -> ApiError {
-    let message = match error {
-        BsmsError::TooLarge => "BSMS descriptor records must be 256 KiB or smaller.",
-        BsmsError::PrivateMaterial => {
-            "A BSMS descriptor record must never contain private key material."
-        }
-        BsmsError::UnsupportedVersion => "Only the BIP129 BSMS 1.0 descriptor record is supported.",
-        BsmsError::UnsupportedPaths => {
-            "This wallet requires the standard BSMS receive/change paths /0/* and /1/*."
-        }
-        BsmsError::DescriptorMismatch => {
-            "The receive and change descriptors do not describe the same wallet."
-        }
-        BsmsError::InvalidEncoding | BsmsError::InvalidDescriptor => {
-            "Enter a valid public BSMS 1.0 descriptor record."
-        }
-    };
-    api_error(error.code(), message)
-}
-
-fn public_descriptor_api_error(error: BsmsError) -> ApiError {
-    let message = match error {
-        BsmsError::TooLarge => "Public descriptor backups must be 256 KiB or smaller.",
-        BsmsError::PrivateMaterial => {
-            "A public descriptor backup must never contain private key material."
-        }
-        BsmsError::UnsupportedVersion => "This descriptor backup version is not supported.",
-        BsmsError::UnsupportedPaths => {
-            "The backup must contain standard receive/change paths /0/* and /1/*."
-        }
-        BsmsError::DescriptorMismatch => {
-            "The receive and change descriptors do not describe the same wallet."
-        }
-        BsmsError::InvalidEncoding | BsmsError::InvalidDescriptor => {
-            "Enter a valid BSMS, Groot JSON, or public descriptor backup."
-        }
-    };
-    api_error(error.code(), message)
-}
-
-fn ur_api_error(error: UrTransportError) -> ApiError {
-    let message = match error {
-        UrTransportError::Empty => "Scan at least one crypto-psbt UR frame.",
-        UrTransportError::TooLarge | UrTransportError::TooManyFrames => {
-            "The animated QR payload exceeds Groot's safety limit."
-        }
-        UrTransportError::WrongType => "Scan a crypto-psbt UR, not a different QR payload type.",
-        UrTransportError::Incomplete => "Keep scanning. More animated QR frames are required.",
-        UrTransportError::InvalidPsbt => "The QR payload is not a valid PSBT.",
-        UrTransportError::InvalidFrame | UrTransportError::InvalidCbor => {
-            "The animated QR frame is malformed."
-        }
-    };
-    api_error(error.code(), message)
-}
-
 #[tauri::command]
 pub fn ur_encode_psbt(psbt: String, fragment_bytes: usize) -> ApiResult<Vec<String>> {
     ur_transport::encode_psbt(&psbt, fragment_bytes).map_err(ur_api_error)
@@ -3544,30 +3397,6 @@ pub fn ur_encode_psbt(psbt: String, fragment_bytes: usize) -> ApiResult<Vec<Stri
 #[tauri::command]
 pub fn ur_decode_psbt(frames: Vec<String>) -> ApiResult<String> {
     ur_transport::decode_psbt(&frames).map_err(ur_api_error)
-}
-
-fn external_signer_api_error(error: ExternalSignerError) -> ApiError {
-    let message = match error {
-        ExternalSignerError::TooLarge => "Signer imports must be 256 KiB or smaller.",
-        ExternalSignerError::PrivateMaterial => {
-            "Private keys, seeds, and recovery words must never be imported into Groot."
-        }
-        ExternalSignerError::InvalidFormat => {
-            "Use a BIP84 descriptor or a supported public-key JSON export."
-        }
-        ExternalSignerError::InvalidLabel => "Enter a signer label of 1 to 48 characters.",
-        ExternalSignerError::InvalidFingerprint => {
-            "The signer fingerprint must contain exactly 8 hexadecimal characters."
-        }
-        ExternalSignerError::InvalidDerivation => {
-            "Use the test-chain BIP84 account path m/84'/1'/0'."
-        }
-        ExternalSignerError::WrongNetwork => "Use a test-chain account tpub, not a mainnet xpub.",
-        ExternalSignerError::InvalidDescriptor => {
-            "The descriptor must be canonical public-only BIP84 single-sig."
-        }
-    };
-    api_error(error.code(), message)
 }
 
 fn reject_virtual_cosigners(cosigners: &[CosignerInput]) -> ApiResult<()> {
@@ -3581,45 +3410,6 @@ fn reject_virtual_cosigners(cosigners: &[CosignerInput]) -> ApiResult<()> {
         ));
     }
     Ok(())
-}
-
-fn proposal_api_error(error: crate::proposal::ProposalError) -> ApiError {
-    use crate::proposal::ProposalError;
-
-    let message = match error {
-        ProposalError::MalformedPsbt => "The PSBT is malformed.",
-        ProposalError::PsbtTooLarge => "The PSBT exceeds Groot's size limit.",
-        ProposalError::ProposalMismatch => {
-            "The PSBT does not match the transaction you reviewed. No signatures were changed."
-        }
-        ProposalError::UnknownSigner => {
-            "The PSBT contains a signature from an unknown signer. No signatures were changed."
-        }
-        ProposalError::UnsupportedSighash => {
-            "The PSBT uses an unsupported signature type. Groot accepts only SIGHASH_ALL. No signatures were changed."
-        }
-        ProposalError::InvalidSignature => {
-            "The PSBT contains an invalid signature. No signatures were changed."
-        }
-        ProposalError::PrematureFinalization => {
-            "The PSBT was finalized outside Groot. Import a partially signed PSBT instead."
-        }
-        ProposalError::NoInputs => "The PSBT has no transaction inputs.",
-        ProposalError::NoNewSignatures => {
-            "This signer has already signed this proposal. No signatures were changed."
-        }
-        ProposalError::SignatureNotFound => {
-            "This signer has no complete signature in the current proposal. No signatures were changed."
-        }
-        ProposalError::MergeFailed => {
-            "Groot could not safely merge the signed PSBT. No signatures were changed."
-        }
-    };
-    api_error(error.code(), message)
-}
-
-fn recovery_api_error(error: RecoveryError) -> ApiError {
-    api_error(error.code(), error)
 }
 
 fn read_multisig_metadata(app: &AppHandle) -> ApiResult<MultisigWalletDto> {
@@ -5121,22 +4911,6 @@ fn write_private_json(path: &Path, value: &impl Serialize) -> ApiResult<()> {
     result
 }
 
-fn secure_store_error(error: SecureStoreError) -> ApiError {
-    match error {
-        SecureStoreError::InvalidCredential => {
-            api_error("invalid_credential", "Incorrect passphrase / PIN.")
-        }
-        SecureStoreError::Corrupt => api_error(
-            "wallet_corrupt",
-            "The protected wallet secret is corrupt. Restore from your backup.",
-        ),
-        SecureStoreError::Unavailable => api_error(
-            "secure_storage_unavailable",
-            "Encrypted wallet storage is unavailable. Check access to Groot's application data and try again. The wallet stayed locked.",
-        ),
-    }
-}
-
 fn persist_secret_material(path: &Path, material: &[u8], credential: &str) -> ApiResult<()> {
     secure_store::store(path, material, credential).map_err(secure_store_error)
 }
@@ -6390,140 +6164,6 @@ fn enqueue_snapshot_notifications(db: &Connection, snapshot: &WalletSnapshotDto)
 #[path = "wallet/profile_commands.rs"]
 pub(crate) mod profile_commands;
 
-fn hardware_api_error(error: HardwareError) -> ApiError {
-    let message = match error {
-        HardwareError::InvalidArgument => "The hardware signer request was rejected.",
-        HardwareError::Unavailable => bundled_hwi_unavailable_message(),
-        HardwareError::TimedOut => "The hardware signer did not respond in time.",
-        HardwareError::Busy => "Another hardware-signer action is already in progress.",
-        HardwareError::Cancelled => "The hardware-signer action was cancelled.",
-        HardwareError::OutputTooLarge => "The hardware signer returned an oversized response.",
-        HardwareError::CommandFailed(code) => match code {
-            Some(-3 | -12) => "Unlock the signer and quit other wallet apps, then try again.",
-            Some(-14) => "The action was cancelled on the hardware signer.",
-            Some(-15) => "The hardware signer is busy. Close its companion app and try again.",
-            Some(-8 | -9) => "This hardware signer does not support the requested operation.",
-            _ => "The hardware signer rejected the request.",
-        },
-        HardwareError::Io => "Communication with the hardware signer failed.",
-    };
-    api_error(error.code(), message)
-}
-
-fn bundled_hwi_unavailable_message() -> &'static str {
-    #[cfg(target_os = "macos")]
-    if option_env!("GROOT_BUNDLED_HWI_RESOURCE").is_some() {
-        return "Groot's bundled hardware support could not be verified or started. Reinstall this Groot release, then scan again; do not install HWI separately.";
-    }
-    "Bitcoin Core HWI is not installed or could not be started."
-}
-
-fn hardware_device_api_error(error: HardwareError, device_type: &str) -> ApiError {
-    if device_type.eq_ignore_ascii_case("trezor") && matches!(error, HardwareError::TimedOut) {
-        return api_error(
-            error.code(),
-            "Trezor did not finish signing in time. If it remains on a loading screen, reconnect it, unlock it, scan again, and retry; the reviewed proposal and its signatures are unchanged.",
-        );
-    }
-    if device_type.eq_ignore_ascii_case("ledger") {
-        let message = match error {
-            HardwareError::CommandFailed(Some(-3)) => {
-                Some("Ledger disconnected. Reconnect it and try again.")
-            }
-            HardwareError::CommandFailed(Some(-12)) => {
-                Some("Unlock Ledger and open the wallet's Bitcoin app, then try again.")
-            }
-            HardwareError::CommandFailed(Some(-13)) => {
-                Some("Ledger could not register this wallet policy. Keep the Bitcoin app open and try again.")
-            }
-            HardwareError::CommandFailed(Some(-15)) => {
-                Some("Ledger is busy. Quit Ledger Live and try again.")
-            }
-            _ => None,
-        };
-        if let Some(message) = message {
-            return api_error(error.code(), message);
-        }
-    }
-    if device_type.eq_ignore_ascii_case("coldcard")
-        && matches!(error, HardwareError::CommandFailed(Some(-7)))
-    {
-        return api_error(
-            error.code(),
-            "Coldcard does not recognize this multisig wallet. Save the wallet policy in Groot, import it from Settings → Multisig Wallets → Import on Coldcard, verify the threshold and fingerprints, then try again.",
-        );
-    }
-    if device_type.eq_ignore_ascii_case("bitbox02")
-        && matches!(error, HardwareError::CommandFailed(Some(-8 | -9)))
-    {
-        return api_error(
-            error.code(),
-            "Finish the BitBox account name, policy, and address checks on-device.",
-        );
-    }
-    if device_type.eq_ignore_ascii_case("bitbox02")
-        && matches!(
-            error,
-            HardwareError::CommandFailed(None | Some(-3 | -12 | -13 | -15))
-        )
-    {
-        return api_error(
-            error.code(),
-            "Keep BitBox connected and unlocked. Quit BitBoxApp, then try again.",
-        );
-    }
-    hardware_api_error(error)
-}
-
-fn missing_hardware_fingerprint(device_type: &str) -> ApiError {
-    let message = match device_type.to_ascii_lowercase().as_str() {
-        "ledger" => {
-            "Unlock Ledger and open Bitcoin Test—not Bitcoin—for this Regtest wallet, then scan again."
-        }
-        "bitbox02" => "Unlock BitBox, then try again.",
-        "jade" => "Jade is still locked. Select it again and enter your PIN on Jade when prompted.",
-        "coldcard" => "Unlock Coldcard and enable USB communication, then scan again.",
-        "trezor" | "keepkey" => {
-            "Unlock the device using Groot's PIN-matrix flow, then scan again."
-        }
-        _ => "Unlock the hardware signer and put it in its Bitcoin app, then scan again.",
-    };
-    api_error("hardware_unavailable", message)
-}
-
-fn unknown_hardware_signer() -> ApiError {
-    api_error(
-        "unknown_signer",
-        "The connected device does not match any saved signer for this wallet.",
-    )
-}
-
-fn missing_hardware_psbt(device_type: &str, code: Option<i64>, fallback: &str) -> ApiError {
-    match code {
-        Some(code) => {
-            hardware_device_api_error(HardwareError::CommandFailed(Some(code)), device_type)
-        }
-        None => missing_hwi_value(None, fallback),
-    }
-}
-
-fn hardware_xpub_api_error(
-    error: HardwareError,
-    device_type: &str,
-    derivation_path: &str,
-) -> ApiError {
-    if device_type.eq_ignore_ascii_case("ledger")
-        && derivation_path.contains("/1'")
-        && matches!(error, HardwareError::CommandFailed(Some(-7 | -13)))
-    {
-        return api_error(
-            error.code(),
-            "Ledger is in the wrong app for this test-chain wallet. Quit Ledger Live, open Bitcoin Test—not Bitcoin—then reconnect and try again.",
-        );
-    }
-    hardware_device_api_error(error, device_type)
-}
-
 #[derive(Debug)]
 struct VerifiedHardwareIdentity {
     device_type: String,
@@ -6555,19 +6195,6 @@ pub(crate) mod hardware_commands;
 
 #[path = "wallet/multisig_setup_commands.rs"]
 pub(crate) mod multisig_setup_commands;
-
-fn create_tx_api_error(error: CreateTxError) -> ApiError {
-    match error {
-        CreateTxError::OutputBelowDustLimit(_) => api_error(
-            "invalid_amount",
-            "The recipient amount is below Bitcoin's dust limit.",
-        ),
-        CreateTxError::CoinSelection(_)
-        | CreateTxError::NoUtxosSelected
-        | CreateTxError::UnknownUtxo => api_error("insufficient_funds", error),
-        error => internal(error),
-    }
-}
 
 fn validate_manual_outpoints(values: &[String], frozen: &[OutPoint]) -> ApiResult<Vec<OutPoint>> {
     if values.is_empty() {
