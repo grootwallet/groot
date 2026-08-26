@@ -254,6 +254,11 @@ describe('hardware receive verification UI', () => {
     expect(policyReview).not.toContain('<p class="form-error" role="alert">{error}</p>');
     expect(policyReview).not.toContain('bind:checked={acknowledged}');
     expect(policyReview).toContain("translate($locale, 'Review on {device}'");
+    expect(policyReview).toContain(
+      '<ChevronRight class="policy-signer-details-chevron" size={15} aria-hidden="true" />'
+    );
+    expect(appCss).toContain('.policy-signer-details[open] .policy-signer-details-chevron');
+    expect(appCss).toContain('transform: rotate(90deg);');
   });
 
   it('uses signer terminology throughout the multisig receive flow', () => {

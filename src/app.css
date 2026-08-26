@@ -5736,7 +5736,7 @@ code {
 .policy-signer-details summary::-webkit-details-marker {
   display: none;
 }
-.policy-signer-details summary span {
+.policy-signer-details summary > span:first-child {
   display: grid;
   gap: 3px;
 }
@@ -5752,6 +5752,25 @@ code {
   font-size: 9px;
   font-style: normal;
   font-weight: 700;
+}
+.policy-signer-details .policy-signer-details-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+.policy-signer-details-chevron {
+  color: var(--muted);
+  transition:
+    transform 0.15s ease,
+    color 0.15s ease;
+}
+.policy-signer-details summary:hover .policy-signer-details-chevron,
+.policy-signer-details summary:focus-visible .policy-signer-details-chevron {
+  color: var(--link);
+}
+.policy-signer-details[open] .policy-signer-details-chevron {
+  transform: rotate(90deg);
 }
 .policy-signer-details[open] summary {
   border-bottom: 1px solid var(--border);

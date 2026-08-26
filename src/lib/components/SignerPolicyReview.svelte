@@ -1,7 +1,7 @@
 <script lang="ts">
   import { locale } from '$lib/i18n';
   import { translate } from '$lib/i18n-catalog';
-  import { AlertTriangle, Check, ShieldCheck } from '@lucide/svelte';
+  import { AlertTriangle, Check, ChevronRight, ShieldCheck } from '@lucide/svelte';
   import type { CosignerDraft } from '$lib/multisig/policy';
   import type {
     MultisigWallet,
@@ -167,11 +167,13 @@
         ><strong>{translate($locale, 'Signer key reference')}</strong><small
           >{translate($locale, 'Open while reviewing the values shown by the device.')}</small
         ></span
-      ><em
-        >{translate(
-          $locale,
-          signerDetailsOpen ? 'Hide' : signerDetailsReviewed ? 'Review again' : 'Review'
-        )}</em
+      ><span class="policy-signer-details-state"
+        ><em
+          >{translate(
+            $locale,
+            signerDetailsOpen ? 'Hide' : signerDetailsReviewed ? 'Review again' : 'Review'
+          )}</em
+        ><ChevronRight class="policy-signer-details-chevron" size={15} aria-hidden="true" /></span
       ></summary
     >
     <PolicySignerList signers={wallet.cosigners} currentFingerprint={signer.fingerprint} />
