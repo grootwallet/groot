@@ -590,40 +590,42 @@ pub fn multisig_tx_max_spend(
     Ok(MaxSpendDto { amount, fee })
 }
 #[tauri::command]
-pub fn multisig_proposals(
-    app: AppHandle,
-    state: State<'_, AppState>,
-) -> ApiResult<Vec<MultisigProposalDto>> {
-    let _operation = operation_guard(&state)?;
-    require_unlocked(&app, &state)?;
-    let metadata = read_multisig_metadata(&app)?;
-    let mut db = open_multisig_db(&app)?;
-    let wallet = load_wallet(&mut db)?;
-    let mut statement = db.prepare(
-        "SELECT proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at, selection_strategy, fee_difference_vs_private FROM groot_proposals WHERE status IN ('collecting','ready') ORDER BY created_at DESC",
-    ).map_err(internal)?;
-    let rows = statement
-        .query_map([], |row| {
-            Ok((
-                row.get(0)?,
-                row.get(1)?,
-                row.get(2)?,
-                row.get(3)?,
-                row.get(4)?,
-                row.get(5)?,
-                row.get(6)?,
-                row.get(7)?,
-                row.get(8)?,
-                row.get(9)?,
-                row.get(10)?,
-            ))
+pub async fn multisig_proposals(app: AppHandle) -> ApiResult<Vec<MultisigProposalDto>> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let _operation = operation_guard(&state)?;
+        require_unlocked(&app, &state)?;
+        let metadata = read_multisig_metadata(&app)?;
+        let mut db = open_multisig_db(&app)?;
+        let wallet = load_wallet(&mut db)?;
+        let mut statement = db.prepare(
+            "SELECT proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at, selection_strategy, fee_difference_vs_private FROM groot_proposals WHERE status IN ('collecting','ready') ORDER BY created_at DESC",
+        ).map_err(internal)?;
+        let rows = statement
+            .query_map([], |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                    row.get(5)?,
+                    row.get(6)?,
+                    row.get(7)?,
+                    row.get(8)?,
+                    row.get(9)?,
+                    row.get(10)?,
+                ))
+            })
+            .map_err(internal)?;
+        rows.map(|row| {
+            row.map_err(internal)
+                .and_then(|row| proposal_dto(row, &metadata, &wallet, &db))
         })
-        .map_err(internal)?;
-    rows.map(|row| {
-        row.map_err(internal)
-            .and_then(|row| proposal_dto(row, &metadata, &wallet, &db))
+        .collect()
     })
-    .collect()
+    .await
+    .map_err(internal)?
 }
 
 pub(crate) fn import_multisig_proposal(

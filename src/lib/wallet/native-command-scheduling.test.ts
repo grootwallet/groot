@@ -13,6 +13,10 @@ const multisigProposalCommands = readFileSync(
   new URL('../../../src-tauri/src/wallet/multisig_proposal_commands.rs', import.meta.url),
   'utf8'
 );
+const transactionCommands = readFileSync(
+  new URL('../../../src-tauri/src/wallet/transaction_commands.rs', import.meta.url),
+  'utf8'
+);
 
 function commandSource(source: string, command: string): string {
   const start = source.indexOf(`pub async fn ${command}`);
@@ -26,6 +30,8 @@ describe('native command scheduling', () => {
     ['wallet_select', profileCommands],
     ['wallet_sync', profileCommands],
     ['multisig_sync', multisigCommands],
+    ['tx_proposals', transactionCommands],
+    ['multisig_proposals', multisigProposalCommands],
     ['multisig_create', multisigProposalCommands],
     ['multisig_recovery_create', multisigProposalCommands],
     ['network_setup_adopt', profileCommands],
@@ -37,6 +43,14 @@ describe('native command scheduling', () => {
 
   it('node saving cancels automatic sync before waiting for the wallet-operation lock', () => {
     const source = commandSource(profileCommands, 'node_config_save');
+    expect(source.indexOf('cancel_foreground_sync(&state)?')).toBeGreaterThan(-1);
+    expect(source.indexOf('cancel_foreground_sync(&state)?')).toBeLessThan(
+      source.indexOf('operation_guard(&state)?')
+    );
+  });
+
+  it('network setup reuse cancels automatic sync before waiting for the wallet-operation lock', () => {
+    const source = commandSource(profileCommands, 'network_setup_adopt');
     expect(source.indexOf('cancel_foreground_sync(&state)?')).toBeGreaterThan(-1);
     expect(source.indexOf('cancel_foreground_sync(&state)?')).toBeLessThan(
       source.indexOf('operation_guard(&state)?')
