@@ -60,7 +60,12 @@
   } from '$lib/wallet/policy';
   import { compactAddress } from '$lib/address-display';
   import { accelerationUnavailableTitle } from '$lib/wallet/acceleration-presentation';
-  import { visibleLabelSuggestions } from '$lib/wallet/label-suggestions';
+  import {
+    addPermanentLabel,
+    MAX_PERMANENT_LABELS,
+    permanentLabelsForSubmission,
+    visibleLabelSuggestions
+  } from '$lib/wallet/label-suggestions';
   import {
     addressForHardwareDisplay,
     testnetAddressDisplayName
@@ -102,8 +107,12 @@
     feeEstimateError = $state(''),
     deviceError = $state(''),
     cancelError = $state('');
+  let selectedLabels = $state<string[]>([]);
   let labelSuggestions = $state<LabelSuggestion[]>([]);
-  let visibleSuggestions = $derived(visibleLabelSuggestions(labelSuggestions, label));
+  let visibleSuggestions = $derived(
+    visibleLabelSuggestions(labelSuggestions, label, 10, selectedLabels)
+  );
+  let submissionLabels = $derived(permanentLabelsForSubmission(selectedLabels, label));
   let discardError = $state(''),
     discardSigner = $state<{ label: string; fingerprint?: string | null } | null>(null);
   let busy = $state(false),
@@ -226,16 +235,13 @@
     addressValid = $derived(hasAddressPrefixForNetwork(address, defaultConfig.network)),
     valid = $derived(
       addressValid &&
-        label.trim().length > 0 &&
-        label.trim().length <= 48 &&
+        submissionLabels.length > 0 &&
         Number.isSafeInteger(amountSats) &&
         amountSats > 0 &&
         amountSats + estimatedFee <= available &&
         customFeeValid
     );
-  const intentValid = $derived(
-    addressValid && label.trim().length > 0 && label.trim().length <= 48
-  );
+  const intentValid = $derived(addressValid && submissionLabels.length > 0);
   const progressStep = $derived<1 | 2 | 3>(proposal ? 3 : draftStep);
   const renewalMaturity = $derived(renewalCoin ? validPolicyMaturity(renewalCoin) : null);
   const renewalKeyName = $derived(
@@ -248,18 +254,13 @@
     delayedSpendMaturity?.policyType === 'inheritance' ? 'heir key' : 'recovery key'
   );
   const renewalValid = $derived(
-    renewalMode &&
-      renewalCoin !== null &&
-      label.trim().length > 0 &&
-      label.trim().length <= 48 &&
-      customFeeValid
+    renewalMode && renewalCoin !== null && submissionLabels.length > 0 && customFeeValid
   );
   const delayedSpendValid = $derived(
     delayedSpendMode &&
       delayedSpendCoin !== null &&
       addressValid &&
-      label.trim().length > 0 &&
-      label.trim().length <= 48 &&
+      submissionLabels.length > 0 &&
       customFeeValid
   );
   const signaturesRemaining = $derived(
@@ -483,7 +484,7 @@
     try {
       proposal = await walletService.prepareMultisigPayment(
         address,
-        label,
+        submissionLabels,
         sats(amountSats),
         feeRate(selectedRateNumber),
         selection
@@ -504,7 +505,7 @@
     try {
       proposal = await walletService.prepareMultisigPolicyRenewal(
         renewalCoin.outpoint,
-        label,
+        submissionLabels,
         feeRate(selectedRateNumber)
       );
     } catch (cause) {
@@ -521,7 +522,7 @@
       proposal = await walletService.prepareMultisigDelayedSpend(
         delayedSpendCoin.outpoint,
         address,
-        label,
+        submissionLabels,
         feeRate(selectedRateNumber)
       );
     } catch (cause) {
@@ -1081,13 +1082,36 @@
 </script>
 
 {#snippet labelSuggestionPicker()}
+  {#if label.trim()}<button
+      type="button"
+      class="label-add-inline"
+      disabled={selectedLabels.length >= MAX_PERMANENT_LABELS}
+      onclick={() => {
+        selectedLabels = addPermanentLabel(selectedLabels, label);
+        label = '';
+        clearDraftError();
+      }}>{translate($locale, 'Add label')}</button
+    >{/if}
+  {#if selectedLabels.length}<div
+      class="selected-labels"
+      aria-label={translate($locale, 'Selected labels')}
+    >
+      {#each selectedLabels as selected}<span
+          >{selected}<button
+            type="button"
+            aria-label={translate($locale, 'Remove {label}', { label: selected })}
+            onclick={() => (selectedLabels = selectedLabels.filter((item) => item !== selected))}
+            ><X size={13} /></button
+          ></span
+        >{/each}
+    </div>{/if}
   {#if visibleSuggestions.length && !$discreetMode}<div class="label-suggestions">
       {#each visibleSuggestions as suggestion}<button
           type="button"
           aria-label={translate($locale, 'Reuse {label}', { label: suggestion.text })}
-          aria-pressed={label.trim().toLocaleLowerCase() === suggestion.text.toLocaleLowerCase()}
           onclick={() => {
-            label = suggestion.text;
+            selectedLabels = addPermanentLabel(selectedLabels, suggestion.text);
+            label = '';
             clearDraftError();
           }}>{suggestion.text}</button
         >{/each}
@@ -1771,7 +1795,7 @@
           </div>
           <div>
             <dt>{translate($locale, 'Label')}</dt>
-            <dd>{proposal.label}</dd>
+            <dd>{(proposal.labels ?? [proposal.label]).join(' · ')}</dd>
           </div>
           <div>
             <dt>{translate($locale, 'Network')}</dt>
@@ -1988,7 +2012,7 @@
         </div>
         <div>
           <dt>{translate($locale, 'Label')}</dt>
-          <dd>{proposal.label}</dd>
+          <dd>{(proposal.labels ?? [proposal.label]).join(' · ')}</dd>
         </div>
         <div>
           <dt>{translate($locale, 'Amount')}</dt>
@@ -2297,7 +2321,7 @@
     <dl class="details-list cancel-proposal-details">
       <div>
         <dt>{translate($locale, 'Payment')}</dt>
-        <dd>{proposal.label}</dd>
+        <dd>{(proposal.labels ?? [proposal.label]).join(' · ')}</dd>
       </div>
       <div>
         <dt>{translate($locale, 'Amount')}</dt>
@@ -2391,7 +2415,7 @@
     <dl class="details-list cancel-proposal-details">
       <div>
         <dt>{translate($locale, 'Payment')}</dt>
-        <dd>{proposal.label}</dd>
+        <dd>{(proposal.labels ?? [proposal.label]).join(' · ')}</dd>
       </div>
       <div>
         <dt>{translate($locale, 'Amount')}</dt>

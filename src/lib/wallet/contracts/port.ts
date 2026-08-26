@@ -103,7 +103,7 @@ export interface WalletSnapshotPort {
 }
 
 export interface WalletTransactionsPort {
-  createAddress(label: string): Promise<ReceiveAddress>;
+  createAddress(labels: string[]): Promise<ReceiveAddress>;
   discardAddress(id: number): Promise<void>;
   estimateFees(): Promise<FeeEstimates>;
   maxSpend(recipient: string, feeRate: FeeRate, coinSelection?: CoinSelection): Promise<MaxSpend>;
@@ -118,7 +118,7 @@ export interface WalletTransactionsPort {
   previewMultisigCoinSelection(outpoints: string[], amount: Sats): Promise<CoinSelectionPreview>;
   preparePayment(
     recipient: string,
-    label: string,
+    labels: string[],
     amount: Sats,
     feeRate: FeeRate,
     coinSelection?: CoinSelection
@@ -249,26 +249,26 @@ export interface WalletMultisigPort {
   multisigRecoveryDrillStatus(): Promise<boolean>;
   recoverMultisig(encodedBackup: string, credential: string): Promise<MultisigWallet>;
   deleteMultisig(credential: string, confirmation: string): Promise<void>;
-  createMultisigAddress(label: string): Promise<ReceiveAddress>;
+  createMultisigAddress(labels: string[]): Promise<ReceiveAddress>;
   claimObservedMultisigAddress(outpoint: string, label: string): Promise<ReceiveAddress>;
   discardMultisigAddress(id: number): Promise<void>;
   verifyMultisigAddress(deviceId: string, addressId: number): Promise<ReceiveAddress>;
   prepareMultisigPayment(
     recipient: string,
-    label: string,
+    labels: string[],
     amount: Sats,
     feeRate: FeeRate,
     coinSelection?: CoinSelection
   ): Promise<MultisigProposal>;
   prepareMultisigPolicyRenewal(
     outpoint: string,
-    label: string,
+    labels: string[],
     feeRate: FeeRate
   ): Promise<MultisigProposal>;
   prepareMultisigDelayedSpend(
     outpoint: string,
     recipient: string,
-    label: string,
+    labels: string[],
     feeRate: FeeRate
   ): Promise<MultisigProposal>;
   prepareMultisigAcceleration(

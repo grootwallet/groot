@@ -78,6 +78,7 @@ function normalizeTimestamp(value: string | null): string | null {
 function normalizeAddress(address: ReceiveAddress): ReceiveAddress {
   return {
     ...address,
+    labels: address.labels?.length ? address.labels : [address.label],
     created: normalizeTimestamp(address.created) ?? address.created,
     hardwareVerifiedAt: normalizeTimestamp(address.hardwareVerifiedAt ?? null)
   };
@@ -270,8 +271,8 @@ export class TauriWalletAdapter implements WalletPort {
   cancelSync() {
     return command<void>('wallet_sync_cancel');
   }
-  createAddress(label: string) {
-    return command<ReceiveAddress>('address_create', { label }).then(normalizeAddress);
+  createAddress(labels: string[]) {
+    return command<ReceiveAddress>('address_create', { labels }).then(normalizeAddress);
   }
   discardAddress(id: number) {
     return command<void>('address_discard', { id });
@@ -317,14 +318,14 @@ export class TauriWalletAdapter implements WalletPort {
   }
   preparePayment(
     recipient: string,
-    label: string,
+    labels: string[],
     amount: Sats,
     feeRate: FeeRate,
     coinSelection: CoinSelection = { mode: 'auto' }
   ) {
     return command<PaymentProposal>('tx_prepare', {
       recipient,
-      label,
+      labels,
       amount,
       feeRate,
       coinSelection
@@ -647,8 +648,8 @@ export class TauriWalletAdapter implements WalletPort {
     }
     return snapshot;
   }
-  createMultisigAddress(label: string) {
-    return command<ReceiveAddress>('multisig_address_create', { label }).then(normalizeAddress);
+  createMultisigAddress(labels: string[]) {
+    return command<ReceiveAddress>('multisig_address_create', { labels }).then(normalizeAddress);
   }
   claimObservedMultisigAddress(outpoint: string, label: string) {
     return command<ReceiveAddress>('multisig_address_claim_observed', { outpoint, label }).then(
@@ -666,37 +667,37 @@ export class TauriWalletAdapter implements WalletPort {
   }
   prepareMultisigPayment(
     recipient: string,
-    label: string,
+    labels: string[],
     amount: Sats,
     feeRate: FeeRate,
     coinSelection: CoinSelection = { mode: 'auto' }
   ) {
     return command<MultisigProposal>('multisig_tx_prepare', {
       recipient,
-      label,
+      labels,
       amount,
       feeRate,
       coinSelection
     });
   }
 
-  prepareMultisigPolicyRenewal(outpoint: string, label: string, feeRate: FeeRate) {
+  prepareMultisigPolicyRenewal(outpoint: string, labels: string[], feeRate: FeeRate) {
     return command<MultisigProposal>('multisig_policy_renewal_prepare', {
       outpoint,
-      label,
+      labels,
       feeRate: Number(feeRate)
     });
   }
   prepareMultisigDelayedSpend(
     outpoint: string,
     recipient: string,
-    label: string,
+    labels: string[],
     feeRate: FeeRate
   ) {
     return command<MultisigProposal>('multisig_delayed_spend_prepare', {
       outpoint,
       recipient,
-      label,
+      labels,
       feeRate: Number(feeRate)
     });
   }

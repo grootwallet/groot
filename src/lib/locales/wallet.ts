@@ -382,6 +382,8 @@ export const walletCopy = {
     es: 'Las asignaciones no se pueden cambiar. El texto de una etiqueta puede reutilizarse intencionadamente.'
   },
   'Reuse {label}': { fr: 'Réutiliser {label}', es: 'Reutilizar {label}' },
+  'Remove {label}': { fr: 'Retirer {label}', es: 'Quitar {label}' },
+  'Selected labels': { fr: 'Libellés sélectionnés', es: 'Etiquetas seleccionadas' },
   'Required · cannot be changed; reuse is intentional': {
     fr: 'Requis · non modifiable ; la réutilisation est volontaire',
     es: 'Obligatoria · no se puede cambiar; la reutilización es intencionada'

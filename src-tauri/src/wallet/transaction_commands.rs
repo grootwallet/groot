@@ -53,7 +53,7 @@ pub fn tx_prepare(
     app: AppHandle,
     state: State<'_, AppState>,
     recipient: String,
-    label: String,
+    labels: Vec<String>,
     amount: u64,
     fee_rate: f64,
     coin_selection: CoinSelectionInput,
@@ -62,7 +62,8 @@ pub fn tx_prepare(
     require_unlocked(&app, &state)?;
     crate::release_policy::validate_spend(NETWORK, 1, amount)
         .map_err(|_| api_error("invalid_amount", "This spend is blocked by release policy."))?;
-    let label = normalize_label(&label)?;
+    let labels = normalize_labels(labels)?;
+    let label = labels[0].clone();
     if amount == 0 {
         return Err(api_error(
             "invalid_amount",
@@ -196,6 +197,7 @@ pub fn tx_prepare(
         recipient,
         recipient_testnet_alias,
         label,
+        labels,
         amount,
         fee,
         fee_rate: actual_fee_rate,
@@ -443,6 +445,7 @@ pub(crate) fn summarize_payment_psbt(
         proposal_id: Uuid::new_v4().to_string(),
         recipient,
         recipient_testnet_alias,
+        labels: vec![label.clone()],
         label,
         amount,
         fee,

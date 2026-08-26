@@ -363,6 +363,11 @@ export const componentCopy = {
     fr: 'Le libellé est permanent. Les espaces ci-dessus sont uniquement visuels ; la copie utilise toujours l’adresse exacte.',
     es: 'La etiqueta es permanente. Los espacios superiores son solo visuales; al copiar siempre se usa la dirección exacta.'
   },
+  'The labels are permanent. Spaces above are visual only; copying always uses the exact address.':
+    {
+      fr: 'Les libellés sont permanents. Les espaces ci-dessus sont uniquement visuels ; la copie utilise toujours l’adresse exacte.',
+      es: 'Las etiquetas son permanentes. Los espacios superiores son solo visuales; al copiar siempre se usa la dirección exacta.'
+    },
   'This device': { fr: 'Cet appareil', es: 'Este dispositivo' },
   'Trezor disconnection required': {
     fr: 'Déconnexion de Trezor requise',

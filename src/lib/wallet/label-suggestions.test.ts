@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { LabelSuggestion } from '$lib/types';
-import { visibleLabelSuggestions } from './label-suggestions';
+import {
+  addPermanentLabel,
+  MAX_PERMANENT_LABELS,
+  permanentLabelsForSubmission,
+  visibleLabelSuggestions
+} from './label-suggestions';
 
 function suggestion(text: string): LabelSuggestion {
   return {
@@ -34,5 +39,29 @@ describe('visibleLabelSuggestions', () => {
 
   it('returns no chips when the typed value does not match history', () => {
     expect(visibleLabelSuggestions(history, 'unrelated')).toEqual([]);
+  });
+
+  it('removes already selected labels from the reusable suggestion list', () => {
+    expect(
+      visibleLabelSuggestions(history, '', 10, [' recent   11 ']).map(({ text }) => text)
+    ).not.toContain('Recent 11');
+  });
+
+  it('adds unique normalized labels and includes an unfinished field on submission', () => {
+    expect(addPermanentLabel(['Hardware'], '  Test   journey ')).toEqual([
+      'Hardware',
+      'Test journey'
+    ]);
+    expect(addPermanentLabel(['Hardware'], ' hardware ')).toEqual(['Hardware']);
+    expect(permanentLabelsForSubmission(['Hardware'], 'BitBox02')).toEqual([
+      'Hardware',
+      'BitBox02'
+    ]);
+    expect(
+      addPermanentLabel(
+        Array.from({ length: MAX_PERMANENT_LABELS }, (_, i) => `${i}`),
+        'x'
+      )
+    ).toHaveLength(MAX_PERMANENT_LABELS);
   });
 });

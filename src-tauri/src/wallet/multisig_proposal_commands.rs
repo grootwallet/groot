@@ -104,7 +104,7 @@ pub fn multisig_tx_prepare(
     app: AppHandle,
     state: State<'_, AppState>,
     recipient: String,
-    label: String,
+    labels: Vec<String>,
     amount: u64,
     fee_rate: f64,
     coin_selection: CoinSelectionInput,
@@ -113,7 +113,8 @@ pub fn multisig_tx_prepare(
     require_unlocked(&app, &state)?;
     crate::release_policy::validate_spend(NETWORK, 1, amount)
         .map_err(|_| api_error("invalid_amount", "This spend is blocked by release policy."))?;
-    let label = normalize_label(&label)?;
+    let labels = normalize_labels(labels)?;
+    let label = labels[0].clone();
     if amount == 0 {
         return Err(api_error(
             "invalid_amount",
@@ -248,8 +249,15 @@ pub fn multisig_tx_prepare(
         "INSERT INTO groot_proposals (proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at, selection_strategy, fee_difference_vs_private) VALUES (?1,?2,?3,?4,?5,?6,?7,'collecting',?8,?9,?10)",
         params![proposal_id, address.to_string(), label, amount, fee, applied_fee_rate, encoded, created_at, selection_strategy, fee_difference_vs_private],
     ).map_err(internal)?;
-    label_provenance::assign_payment_intent(&transaction, &label, &proposal_id, created_at, false)
-        .map_err(internal)?;
+    label_provenance::assign_labels(
+        &transaction,
+        &labels,
+        LabelOrigin::Payment,
+        "transaction_intent",
+        &proposal_id,
+        created_at,
+    )
+    .map_err(internal)?;
     wallet.persist(&mut transaction).map_err(internal)?;
     drop(wallet);
     transaction.commit().map_err(internal)?;
@@ -261,12 +269,13 @@ pub fn multisig_policy_renewal_prepare(
     app: AppHandle,
     state: State<'_, AppState>,
     outpoint: String,
-    label: String,
+    labels: Vec<String>,
     fee_rate: f64,
 ) -> ApiResult<MultisigProposalDto> {
     let _operation = operation_guard(&state)?;
     require_unlocked(&app, &state)?;
-    let label = normalize_label(&label)?;
+    let labels = normalize_labels(labels)?;
+    let label = labels[0].clone();
     let applied_fee_rate = fee_rate.ceil();
     let rate = FeeRate::from_sat_per_vb(applied_fee_rate as u64)
         .filter(|_| fee_rate.is_finite() && fee_rate > 0.0 && fee_rate <= 10_000.0)
@@ -355,8 +364,15 @@ pub fn multisig_policy_renewal_prepare(
         "INSERT INTO groot_proposals (proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at, selection_strategy, fee_difference_vs_private) VALUES (?1,?2,?3,?4,?5,?6,?7,'collecting',?8,'manual',NULL)",
         params![proposal_id, destination_address, label, amount, fee, applied_fee_rate, encoded, created_at],
     ).map_err(internal)?;
-    label_provenance::assign_payment_intent(&transaction, &label, &proposal_id, created_at, false)
-        .map_err(internal)?;
+    label_provenance::assign_labels(
+        &transaction,
+        &labels,
+        LabelOrigin::Payment,
+        "transaction_intent",
+        &proposal_id,
+        created_at,
+    )
+    .map_err(internal)?;
     wallet.persist(&mut transaction).map_err(internal)?;
     drop(wallet);
     transaction.commit().map_err(internal)?;
@@ -369,12 +385,13 @@ pub fn multisig_delayed_spend_prepare(
     state: State<'_, AppState>,
     outpoint: String,
     recipient: String,
-    label: String,
+    labels: Vec<String>,
     fee_rate: f64,
 ) -> ApiResult<MultisigProposalDto> {
     let _operation = operation_guard(&state)?;
     require_unlocked(&app, &state)?;
-    let label = normalize_label(&label)?;
+    let labels = normalize_labels(labels)?;
+    let label = labels[0].clone();
     let destination = Address::from_str(recipient.trim())
         .map_err(|_| {
             api_error(
@@ -475,8 +492,15 @@ pub fn multisig_delayed_spend_prepare(
             params![proposal_id],
         )
         .map_err(internal)?;
-    label_provenance::assign_payment_intent(&transaction, &label, &proposal_id, created_at, false)
-        .map_err(internal)?;
+    label_provenance::assign_labels(
+        &transaction,
+        &labels,
+        LabelOrigin::Payment,
+        "transaction_intent",
+        &proposal_id,
+        created_at,
+    )
+    .map_err(internal)?;
     wallet.persist(&mut transaction).map_err(internal)?;
     drop(wallet);
     transaction.commit().map_err(internal)?;

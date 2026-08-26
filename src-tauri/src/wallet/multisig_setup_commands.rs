@@ -1150,11 +1150,12 @@ pub async fn multisig_sync(app: AppHandle) -> ApiResult<WalletSnapshotDto> {
 pub fn multisig_address_create(
     app: AppHandle,
     state: State<'_, AppState>,
-    label: String,
+    labels: Vec<String>,
 ) -> ApiResult<ReceiveAddressDto> {
     let _operation = operation_guard(&state)?;
     require_unlocked(&app, &state)?;
-    let label = normalize_label(&label)?;
+    let labels = normalize_labels(labels)?;
+    let label = labels[0].clone();
     let mut db = open_multisig_db(&app)?;
     let mut transaction = db.transaction().map_err(internal)?;
     let mut wallet = Wallet::load()
@@ -1171,9 +1172,9 @@ pub fn multisig_address_create(
             params![info.index, info.address.to_string(), label, created],
         )
         .map_err(internal)?;
-    label_provenance::assign_new_label(
+    label_provenance::assign_labels(
         &transaction,
-        &label,
+        &labels,
         LabelOrigin::Receive,
         "address",
         &info.index.to_string(),
@@ -1187,6 +1188,7 @@ pub fn multisig_address_create(
         testnet_alias: regtest_testnet_address_alias(&info.address.to_string()),
         address: info.address.to_string(),
         label,
+        labels,
         created: created.to_string(),
         status: "awaiting".to_owned(),
         derivation_path: format!("{MULTISIG_ACCOUNT_PATH}/0/{}", info.index),
@@ -1269,6 +1271,7 @@ pub(crate) fn claim_observed_receive_output(
         id: index,
         testnet_alias: regtest_testnet_address_alias(&address.to_string()),
         address: address.to_string(),
+        labels: vec![label.clone()],
         label,
         created: created.to_string(),
         status: "used".to_owned(),

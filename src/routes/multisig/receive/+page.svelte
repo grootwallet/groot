@@ -10,7 +10,8 @@
     QrCode,
     Shield,
     ShieldCheck,
-    Trash2
+    Trash2,
+    X
   } from '@lucide/svelte';
   import QRCode from 'qrcode';
   import { goto } from '$app/navigation';
@@ -26,7 +27,12 @@
   import { compactAddress } from '$lib/address-display';
   import { walletService, WalletError } from '$lib/wallet';
   import { awaitingPaymentAddresses } from '$lib/wallet/policy';
-  import { visibleLabelSuggestions } from '$lib/wallet/label-suggestions';
+  import {
+    addPermanentLabel,
+    MAX_PERMANENT_LABELS,
+    permanentLabelsForSubmission,
+    visibleLabelSuggestions
+  } from '$lib/wallet/label-suggestions';
   import type { LabelSuggestion, ReceiveAddress } from '$lib/types';
   import type { MultisigWallet } from '$lib/wallet';
   import { copyText } from '$lib/clipboard';
@@ -35,10 +41,14 @@
   import { useWalletShellContext } from '$lib/wallet/shell-context';
   const walletShell = useWalletShellContext();
   let label = $state('');
+  let selectedLabels = $state<string[]>([]);
   let current = $state<ReceiveAddress | null>(null);
   let addresses = $state<ReceiveAddress[]>([]);
   let labelSuggestions = $state<LabelSuggestion[]>([]);
-  let visibleSuggestions = $derived(visibleLabelSuggestions(labelSuggestions, label));
+  let visibleSuggestions = $derived(
+    visibleLabelSuggestions(labelSuggestions, label, 10, selectedLabels)
+  );
+  let submissionLabels = $derived(permanentLabelsForSubmission(selectedLabels, label));
   let qrDataUrl = $state('');
   let busy = $state(false);
   let ready = $state(false);
@@ -131,11 +141,11 @@
       });
   });
   async function generate() {
-    if (busy || !ready || !label.trim()) return;
+    if (busy || !ready || !submissionLabels.length) return;
     busy = true;
     generateError = '';
     try {
-      current = await walletService.createMultisigAddress(label);
+      current = await walletService.createMultisigAddress(submissionLabels);
       addresses = [current, ...addresses];
       try {
         const snapshot = await walletService.multisigSnapshot();
@@ -145,6 +155,7 @@
         // Address creation already succeeded. A later wallet refresh will recover suggestions.
       }
       label = '';
+      selectedLabels = [];
       showGenerate = false;
       toast({
         title: 'Receive address ready',
@@ -157,6 +168,16 @@
     } finally {
       busy = false;
     }
+  }
+  function addDraftLabel(value = label) {
+    const next = addPermanentLabel(selectedLabels, value);
+    if (next.length !== selectedLabels.length) {
+      selectedLabels = next;
+      label = '';
+    }
+  }
+  function addressLabelText(address: ReceiveAddress): string {
+    return (address.labels?.length ? address.labels : [address.label]).join(' · ');
   }
   async function copy() {
     if (!current) return;
@@ -344,7 +365,9 @@
             showDetails = false;
           }}
           ><span class="status-dot"></span><span
-            ><strong>{address.label}</strong><small>{compactAddress(address.address)}</small></span
+            ><strong>{addressLabelText(address)}</strong><small
+              >{compactAddress(address.address)}</small
+            ></span
           ><span class="right-meta"
             >{#if supportsHardwareVerification}<span
                 class="address-verification-state"
@@ -381,7 +404,9 @@
         aria-label={translate($locale, 'View details for {label}', { label: address.label })}
         onclick={() => (detailAddress = address)}
         ><span class="status-dot" class:used={address.status === 'used'}></span><span
-          ><strong>{address.label}</strong><small>{compactAddress(address.address)}</small></span
+          ><strong>{addressLabelText(address)}</strong><small
+            >{compactAddress(address.address)}</small
+          ></span
         ><span class="right-meta"
           >{address.status}<small><LocalTimestamp value={address.created} /></small></span
         ><ChevronRight size={15} /></button
@@ -408,19 +433,44 @@
       generate();
     }}
   >
-    <label class="field"
-      ><span>{translate($locale, 'Permanent label')}</span><input
-        bind:value={label}
-        oninput={() => (generateError = '')}
-        maxlength="48"
-        placeholder={translate($locale, 'e.g. Treasury deposit')}
-      /><FieldCounter value={label} max={48} /></label
-    >{#if visibleSuggestions.length && !$discreetMode}<div class="label-suggestions">
+    <div class="label-entry-row">
+      <label class="field"
+        ><span>{translate($locale, 'Permanent label')}</span><input
+          bind:value={label}
+          oninput={() => (generateError = '')}
+          onkeydown={(event) => {
+            if (event.key === 'Enter' && label.trim()) {
+              event.preventDefault();
+              addDraftLabel();
+            }
+          }}
+          maxlength="48"
+          placeholder={translate($locale, 'e.g. Treasury deposit')}
+        /><FieldCounter value={label} max={48} /></label
+      ><button
+        type="button"
+        class="label-add-button"
+        disabled={!label.trim() || selectedLabels.length >= MAX_PERMANENT_LABELS}
+        onclick={() => addDraftLabel()}>{translate($locale, 'Add label')}</button
+      >
+    </div>
+    {#if selectedLabels.length}<div
+        class="selected-labels"
+        aria-label={translate($locale, 'Selected labels')}
+      >
+        {#each selectedLabels as selected}<span
+            >{selected}<button
+              type="button"
+              aria-label={translate($locale, 'Remove {label}', { label: selected })}
+              onclick={() => (selectedLabels = selectedLabels.filter((item) => item !== selected))}
+              ><X size={13} /></button
+            ></span
+          >{/each}
+      </div>{/if}{#if visibleSuggestions.length && !$discreetMode}<div class="label-suggestions">
         {#each visibleSuggestions as suggestion}<button
             type="button"
             aria-label={translate($locale, 'Reuse {label}', { label: suggestion.text })}
-            aria-pressed={label.trim().toLocaleLowerCase() === suggestion.text.toLocaleLowerCase()}
-            onclick={() => (label = suggestion.text)}>{suggestion.text}</button
+            onclick={() => addDraftLabel(suggestion.text)}>{suggestion.text}</button
           >{/each}
       </div>{/if}{#if generateError}<p class="form-error" role="alert">{generateError}</p>{/if}
     <div class="modal-footer">
@@ -433,7 +483,7 @@
         }}>{translate($locale, 'Cancel')}</Button
       ><Button
         type="submit"
-        disabled={!ready || busy || !label.trim()}
+        disabled={!ready || busy || !submissionLabels.length}
         loading={busy}
         loadingLabel={translate($locale, 'Generating address…')}
         >{translate($locale, 'Generate address')}</Button

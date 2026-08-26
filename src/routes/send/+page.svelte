@@ -55,7 +55,12 @@
     testnetAddressDisplayName
   } from '$lib/wallet/hardware-display';
   import { latestActiveProposal } from '$lib/wallet/proposal-resume';
-  import { visibleLabelSuggestions } from '$lib/wallet/label-suggestions';
+  import {
+    addPermanentLabel,
+    MAX_PERMANENT_LABELS,
+    permanentLabelsForSubmission,
+    visibleLabelSuggestions
+  } from '$lib/wallet/label-suggestions';
   import { accelerationUnavailableTitle } from '$lib/wallet/acceleration-presentation';
   import { discreetMode } from '$lib/privacy';
   import PermanentLabelTags from '$lib/components/PermanentLabelTags.svelte';
@@ -77,8 +82,12 @@
   let draftStep = $state<1 | 2>(1);
   let address = $state('');
   let label = $state('');
+  let selectedLabels = $state<string[]>([]);
   let labelSuggestions = $state<LabelSuggestion[]>([]);
-  let visibleSuggestions = $derived(visibleLabelSuggestions(labelSuggestions, label));
+  let visibleSuggestions = $derived(
+    visibleLabelSuggestions(labelSuggestions, label, 10, selectedLabels)
+  );
+  let submissionLabels = $derived(permanentLabelsForSubmission(selectedLabels, label));
   let amount = $state('');
   let speed = $state('medium');
   let customFee = $state('');
@@ -165,16 +174,13 @@
   const addressValid = $derived(hasAddressPrefixForNetwork(address, defaultConfig.network));
   const valid = $derived(
     addressValid &&
-      label.trim().length > 0 &&
-      label.trim().length <= 48 &&
+      submissionLabels.length > 0 &&
       Number.isSafeInteger(amountSats) &&
       amountSats > 0 &&
       amountSats + fee <= available &&
       selectedFeeRate > 0
   );
-  const intentValid = $derived(
-    addressValid && label.trim().length > 0 && label.trim().length <= 48
-  );
+  const intentValid = $derived(addressValid && submissionLabels.length > 0);
   const progressStep = $derived<1 | 2 | 3>(step === 1 ? draftStep : 3);
   const signerItems = $derived(
     externalSigner && externalWallet
@@ -284,7 +290,8 @@
             asFeeRate(Number(estimates.priority))
           );
           address = proposal.recipient;
-          label = proposal.label;
+          selectedLabels = proposal.labels ?? [proposal.label];
+          label = '';
           amount = String(proposal.amount);
           speed = 'fast';
           if (externalSigner)
@@ -301,7 +308,8 @@
           externalProposal = activeProposal;
           proposal = activeProposal;
           address = activeProposal.recipient;
-          label = activeProposal.label;
+          selectedLabels = activeProposal.labels ?? [activeProposal.label];
+          label = '';
           amount = String(activeProposal.amount);
           step = activeProposal.canFinalize ? 3 : 2;
         }
@@ -310,7 +318,8 @@
         if (activeProposal) {
           proposal = activeProposal;
           address = activeProposal.recipient;
-          label = activeProposal.label;
+          selectedLabels = activeProposal.labels ?? [activeProposal.label];
+          label = '';
           amount = String(activeProposal.amount);
           step = 2;
         }
@@ -345,7 +354,7 @@
     try {
       proposal = await walletService.preparePayment(
         address,
-        label,
+        submissionLabels,
         sats(amountSats),
         asFeeRate(selectedFeeRate),
         selection
@@ -392,7 +401,8 @@
         asFeeRate(Number(customFee))
       );
       address = proposal.recipient;
-      label = proposal.label;
+      selectedLabels = proposal.labels ?? [proposal.label];
+      label = '';
       amount = String(proposal.amount);
       if (externalSigner)
         externalProposal =
@@ -674,12 +684,36 @@
 </script>
 
 {#snippet labelSuggestionPicker()}
+  {#if label.trim()}<button
+      type="button"
+      class="label-add-inline"
+      disabled={selectedLabels.length >= MAX_PERMANENT_LABELS}
+      onclick={() => {
+        selectedLabels = addPermanentLabel(selectedLabels, label);
+        label = '';
+      }}>{translate($locale, 'Add label')}</button
+    >{/if}
+  {#if selectedLabels.length}<div
+      class="selected-labels"
+      aria-label={translate($locale, 'Selected labels')}
+    >
+      {#each selectedLabels as selected}<span
+          >{selected}<button
+            type="button"
+            aria-label={translate($locale, 'Remove {label}', { label: selected })}
+            onclick={() => (selectedLabels = selectedLabels.filter((item) => item !== selected))}
+            ><X size={13} /></button
+          ></span
+        >{/each}
+    </div>{/if}
   {#if visibleSuggestions.length && !$discreetMode}<div class="label-suggestions">
       {#each visibleSuggestions as suggestion}<button
           type="button"
           aria-label={translate($locale, 'Reuse {label}', { label: suggestion.text })}
-          aria-pressed={label.trim().toLocaleLowerCase() === suggestion.text.toLocaleLowerCase()}
-          onclick={() => (label = suggestion.text)}>{suggestion.text}</button
+          onclick={() => {
+            selectedLabels = addPermanentLabel(selectedLabels, suggestion.text);
+            label = '';
+          }}>{suggestion.text}</button
         >{/each}
     </div>{/if}
 {/snippet}
@@ -1013,7 +1047,7 @@
         </div>
         <div>
           <dt>{translate($locale, 'Label')}</dt>
-          <dd>{proposal.label}</dd>
+          <dd>{(proposal.labels ?? [proposal.label]).join(' · ')}</dd>
         </div>
         <div>
           <dt>{translate($locale, 'Network')}</dt>
@@ -1118,7 +1152,7 @@
           </div>
           <div>
             <dt>{translate($locale, 'Label')}</dt>
-            <dd>{proposal.label}</dd>
+            <dd>{(proposal.labels ?? [proposal.label]).join(' · ')}</dd>
           </div>
           <div>
             <dt>{translate($locale, 'Amount')}</dt>
@@ -1246,7 +1280,7 @@
           </div>
           <div>
             <dt>{translate($locale, 'Label')}</dt>
-            <dd>{proposal.label}</dd>
+            <dd>{(proposal.labels ?? [proposal.label]).join(' · ')}</dd>
           </div>
           <div>
             <dt>{translate($locale, 'Amount')}</dt>
@@ -1385,7 +1419,7 @@
         </div>
         <div>
           <dt>{translate($locale, 'Label')}</dt>
-          <dd>{proposal.label}</dd>
+          <dd>{(proposal.labels ?? [proposal.label]).join(' · ')}</dd>
         </div>
         <div>
           <dt>{translate($locale, 'Amount')}</dt>
@@ -1534,7 +1568,7 @@
     <dl class="details-list cancel-proposal-details">
       <div>
         <dt>{translate($locale, 'Payment')}</dt>
-        <dd>{proposal.label}</dd>
+        <dd>{(proposal.labels ?? [proposal.label]).join(' · ')}</dd>
       </div>
       <div>
         <dt>{translate($locale, 'Signature progress')}</dt>
@@ -1578,7 +1612,7 @@
     <dl class="details-list cancel-proposal-details">
       <div>
         <dt>{translate($locale, 'Payment')}</dt>
-        <dd>{proposal.label}</dd>
+        <dd>{(proposal.labels ?? [proposal.label]).join(' · ')}</dd>
       </div>
       <div>
         <dt>{translate($locale, 'Amount')}</dt>

@@ -20,6 +20,7 @@
     onclose: () => void;
   }>();
   let copied = $state(false);
+  let labels = $derived(address ? (address.labels?.length ? address.labels : [address.label]) : []);
 
   async function copy() {
     if (!address) return;
@@ -48,7 +49,7 @@
     <div class="address-detail-view">
       <div class="address-detail-status">
         <span class="status-dot" class:used={address.status === 'used'}></span><span
-          ><strong>{address.label}</strong><small
+          ><strong>{labels.join(' · ')}</strong><small
             >{translate(
               $locale,
               address.status === 'awaiting'
@@ -62,6 +63,10 @@
       </div>
       <ReadableAddress address={address.address} {copied} oncopy={copy} />
       <dl>
+        <div>
+          <dt>{translate($locale, 'Permanent labels')}</dt>
+          <dd>{labels.join(' · ')}</dd>
+        </div>
         <div>
           <dt>{translate($locale, 'Status')}</dt>
           <dd>{address.status}</dd>
@@ -91,7 +96,7 @@
       <p>
         {translate(
           $locale,
-          'The label is permanent. Spaces above are visual only; copying always uses the exact address.'
+          'The labels are permanent. Spaces above are visual only; copying always uses the exact address.'
         )}
       </p>
     </div>

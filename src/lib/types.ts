@@ -52,6 +52,7 @@ export type ReceiveAddress = {
   address: string;
   testnetAlias?: string | null;
   label: string;
+  labels?: string[];
   created: string;
   status: 'awaiting' | 'used' | 'discarded';
   derivationPath: string;

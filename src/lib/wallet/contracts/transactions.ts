@@ -59,6 +59,7 @@ export type PaymentProposal = {
   recipient: string;
   recipientTestnetAlias: string | null;
   label: string;
+  labels?: string[];
   amount: Sats;
   fee: Sats;
   feeRate: FeeRate;

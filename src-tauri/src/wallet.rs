@@ -1154,6 +1154,7 @@ pub struct ReceiveAddressDto {
     address: String,
     testnet_alias: Option<String>,
     label: String,
+    labels: Vec<String>,
     created: String,
     status: String,
     derivation_path: String,
@@ -1355,6 +1356,7 @@ pub struct PaymentProposalDto {
     recipient: String,
     recipient_testnet_alias: Option<String>,
     label: String,
+    labels: Vec<String>,
     amount: u64,
     fee: u64,
     fee_rate: f64,
@@ -1510,6 +1512,7 @@ pub struct MultisigProposalDto {
     recipient: String,
     recipient_testnet_alias: Option<String>,
     label: String,
+    labels: Vec<String>,
     amount: u64,
     fee: u64,
     fee_rate: f64,
@@ -2636,6 +2639,31 @@ fn normalize_label(label: &str) -> ApiResult<String> {
         ));
     }
     Ok(label)
+}
+
+const MAX_PERMANENT_LABELS: usize = 12;
+
+fn normalize_labels(labels: Vec<String>) -> ApiResult<Vec<String>> {
+    if labels.is_empty() || labels.len() > MAX_PERMANENT_LABELS {
+        return Err(api_error(
+            "invalid_label",
+            format!("Choose between 1 and {MAX_PERMANENT_LABELS} permanent labels."),
+        ));
+    }
+    let mut normalized = Vec::with_capacity(labels.len());
+    let mut seen = HashSet::with_capacity(labels.len());
+    for label in labels {
+        let label = normalize_label(&label)?;
+        let reuse_guard = label.to_lowercase();
+        if !seen.insert(reuse_guard) {
+            return Err(api_error(
+                "invalid_label",
+                "Each permanent label can be selected only once.",
+            ));
+        }
+        normalized.push(label);
+    }
+    Ok(normalized)
 }
 
 fn validate_credential(credential: &str) -> ApiResult<()> {
@@ -4216,11 +4244,17 @@ fn proposal_dto(
     let (inputs, fee_rate, locktime, rbf) = proposal_transaction_details(wallet, &psbt, fee)?;
     let selection_impact =
         selection_impact(db, wallet, &psbt, &strategy, fee_difference_vs_private)?;
+    let labels = label_provenance::labels_for_subject(db, "transaction_intent", &proposal_id)
+        .map_err(internal)?
+        .into_iter()
+        .map(|label| label.text)
+        .collect();
     Ok(MultisigProposalDto {
         proposal_id,
         recipient,
         recipient_testnet_alias,
         label,
+        labels,
         amount,
         fee,
         fee_rate,
@@ -4612,7 +4646,7 @@ fn persist_proposal(
     db: &Connection,
     proposal: &PaymentProposalDto,
     psbt: &Psbt,
-    inherit_payment_intent: bool,
+    _inherit_payment_intent: bool,
 ) -> ApiResult<()> {
     let created_at = now();
     db.execute(
@@ -4631,12 +4665,13 @@ fn persist_proposal(
         ],
     )
     .map_err(internal)?;
-    label_provenance::assign_payment_intent(
+    label_provenance::assign_labels(
         db,
-        &proposal.label,
+        &proposal.labels,
+        LabelOrigin::Payment,
+        "transaction_intent",
         &proposal.proposal_id,
         created_at,
-        inherit_payment_intent,
     )
     .map(|_| ())
     .map_err(internal)
@@ -4921,11 +4956,17 @@ fn load_payment_proposal_dto(
     let (inputs, fee_rate, locktime, rbf) = proposal_transaction_details(wallet, &psbt, fee)?;
     let selection_impact =
         selection_impact(db, wallet, &psbt, &strategy, fee_difference_vs_private)?;
+    let labels = label_provenance::labels_for_subject(db, "transaction_intent", &proposal_id)
+        .map_err(internal)?
+        .into_iter()
+        .map(|label| label.text)
+        .collect();
     Ok(PaymentProposalDto {
         proposal_id,
         recipient,
         recipient_testnet_alias,
         label,
+        labels,
         amount,
         fee,
         fee_rate,
@@ -5555,6 +5596,14 @@ fn address_rows(db: &Connection, multisig: bool) -> ApiResult<Vec<ReceiveAddress
                 testnet_alias: regtest_testnet_address_alias(&address),
                 address,
                 label: row.get(2)?,
+                labels: label_provenance::labels_for_subject(
+                    db,
+                    "address",
+                    &row.get::<_, u32>(0)?.to_string(),
+                )?
+                .into_iter()
+                .map(|label| label.text)
+                .collect(),
                 created: row.get::<_, u64>(3)?.to_string(),
                 status: row.get(4)?,
                 derivation_path: if multisig {

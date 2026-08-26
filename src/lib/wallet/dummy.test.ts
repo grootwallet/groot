@@ -21,7 +21,7 @@ describe('software payment proposals', () => {
     const adapter = new DummyWalletAdapter();
     const proposal = await adapter.preparePayment(
       'tb1qreceiver000000000000000000000000000000000',
-      'Saved software payment',
+      ['Saved software payment'],
       sats(1_000),
       feeRate(3)
     );

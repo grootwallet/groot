@@ -469,19 +469,21 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
 
   async cancelSync() {}
 
-  async createAddress(rawLabel: string): Promise<ReceiveAddress> {
-    const label = normalizePermanentLabel(rawLabel);
+  async createAddress(rawLabels: string[]): Promise<ReceiveAddress> {
+    const labels = rawLabels.map(normalizePermanentLabel);
+    const label = labels[0];
     const id = Math.max(8, ...this._addresses.map((address) => address.id)) + 1;
     const address: ReceiveAddress = {
       id,
       address: `${addressPrefixForNetwork(defaultConfig.network)}qdummy${id.toString().padStart(4, '0')}5n8k2r7v4cx9s6jlawephgzuqf5t8ul`,
       label,
+      labels,
       created: 'Just now',
       status: 'awaiting',
       derivationPath: `m/84'/1'/0'/0/${id}`
     };
     this._addresses = [address, ...this._addresses];
-    this.recordLabelUsage(label, 'receive');
+    labels.forEach((item) => this.recordLabelUsage(item, 'receive'));
     return structuredClone(address);
   }
 
@@ -586,14 +588,15 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
 
   async preparePayment(
     recipient: string,
-    rawLabel: string,
+    rawLabels: string[],
     amount: ReturnType<typeof sats>,
     selectedRate: ReturnType<typeof feeRate>,
     coinSelection: CoinSelection = { mode: 'auto' }
   ): Promise<PaymentProposal> {
     if (!hasAddressPrefixForNetwork(recipient, defaultConfig.network))
       throw new WalletError('invalid_address', 'Recipient must match the active Bitcoin network.');
-    const label = normalizePermanentLabel(rawLabel);
+    const labels = rawLabels.map(normalizePermanentLabel);
+    const label = labels[0];
     const fee = sats(Math.ceil(Number(selectedRate) * 141));
     const spendable = this._coins.filter(
       (coin) =>
@@ -616,6 +619,7 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       recipient,
       recipientTestnetAlias: null,
       label,
+      labels,
       amount,
       fee,
       feeRate: selectedRate,
@@ -644,7 +648,7 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       }
     };
     this._proposals.set(proposal.proposalId, proposal);
-    this.recordLabelUsage(label, 'payment');
+    labels.forEach((item) => this.recordLabelUsage(item, 'payment'));
     if (
       this._profiles.find((profile) => profile.id === this._selectedWalletId)?.kind === 'watch_only'
     ) {
@@ -691,7 +695,7 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     }
     const proposal = await this.preparePayment(
       fixtureAddressForNetwork(tx.address),
-      tx.label,
+      [tx.label],
       sats(Math.max(1, tx.amount)),
       selectedRate
     );
@@ -1538,8 +1542,8 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
   async syncMultisig() {
     return this.snapshot();
   }
-  async createMultisigAddress(label: string) {
-    return this.createAddress(label);
+  async createMultisigAddress(labels: string[]) {
+    return this.createAddress(labels);
   }
   async claimObservedMultisigAddress(outpoint: string, rawLabel: string) {
     const label = normalizePermanentLabel(rawLabel);
@@ -1613,7 +1617,7 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
   }
   async prepareMultisigPayment(
     recipient: string,
-    rawLabel: string,
+    rawLabels: string[],
     amount: ReturnType<typeof sats>,
     selectedRate: ReturnType<typeof feeRate>,
     coinSelection: CoinSelection = { mode: 'auto' }
@@ -1622,7 +1626,8 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       throw new WalletError('wallet_not_found', 'Create a multisig wallet first.');
     if (!hasAddressPrefixForNetwork(recipient, defaultConfig.network))
       throw new WalletError('invalid_address', 'Recipient must match the active Bitcoin network.');
-    const label = normalizePermanentLabel(rawLabel);
+    const labels = rawLabels.map(normalizePermanentLabel);
+    const label = labels[0];
     const fee = sats(Math.ceil(Number(selectedRate) * 220));
     const spendable = this._coins.filter(
       (coin) =>
@@ -1643,6 +1648,7 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     const proposal: MultisigProposal = {
       proposalId: crypto.randomUUID(),
       recipient,
+      labels,
       recipientTestnetAlias: null,
       label,
       amount,
@@ -1682,12 +1688,12 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       createdAt: new Date().toISOString()
     };
     this._multisigProposals.set(proposal.proposalId, proposal);
-    this.recordLabelUsage(label, 'payment');
+    labels.forEach((item) => this.recordLabelUsage(item, 'payment'));
     return structuredClone(proposal);
   }
   async prepareMultisigPolicyRenewal(
     outpoint: string,
-    rawLabel: string,
+    rawLabels: string[],
     selectedRate: ReturnType<typeof feeRate>
   ) {
     const coin = this._coins.find((candidate) => candidate.outpoint === outpoint);
@@ -1701,7 +1707,7 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     const fee = Math.ceil(Number(selectedRate) * 220);
     const proposal = await this.prepareMultisigPayment(
       fixtureAddressForNetwork('tb1qrenewedprotection0000000000000000000000'),
-      rawLabel,
+      rawLabels,
       sats(coin.amount - fee),
       selectedRate,
       { mode: 'manual', outpoints: [outpoint] }
@@ -1718,7 +1724,7 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
   async prepareMultisigDelayedSpend(
     outpoint: string,
     recipient: string,
-    rawLabel: string,
+    rawLabels: string[],
     selectedRate: ReturnType<typeof feeRate>
   ) {
     const coin = this._coins.find((candidate) => candidate.outpoint === outpoint);
@@ -1731,7 +1737,7 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     const fee = Math.ceil(Number(selectedRate) * 220);
     const proposal = await this.prepareMultisigPayment(
       recipient,
-      rawLabel,
+      rawLabels,
       sats(coin.amount - fee),
       selectedRate,
       { mode: 'manual', outpoints: [outpoint] }

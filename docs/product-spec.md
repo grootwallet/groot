@@ -86,23 +86,24 @@ A persisted global discreet mode hides wallet amounts across Overview and activi
 ## Receive
 
 1. User requests a new address.
-2. A non-empty label of at most 48 characters is mandatory.
-3. Address revelation and immutable label persistence are atomic.
+2. One to twelve distinct non-empty labels of at most 48 characters each are mandatory.
+3. Address revelation and every immutable label assignment are atomic.
 4. Multiple addresses may await payment concurrently, up to the configured recovery gap. Address revelation fails closed before it would create an index that a scan using that gap could miss; lowering the gap below the wallet's revealed receive/change requirement is rejected. The receive view lists every active payment request and lets the user inspect each address independently.
 5. Creating a new address never retires another awaiting address.
 6. Any awaiting address with no observed transaction may be discarded independently for privacy.
 7. A discarded address is retired from presentation but monitored forever.
 8. Any address with an observed transaction cannot be discarded.
-9. The unlocked wallet suggests its most recently assigned labels without selecting one. Choosing
-   or typing previously used normalized text intentionally reuses that stable label entity. The
-   new address assignment is still permanent and atomic; reuse expresses a relationship and does
-   not imply that separate addresses are already linked onchain.
+9. The unlocked wallet suggests its most recently assigned labels without preselecting one. Choosing
+   a suggestion adds a removable draft chip and removes it from the available list; typing previously
+   used normalized text intentionally reuses that stable label entity. Submitted address assignments
+   are permanent and atomic; reuse expresses a relationship and does not imply that separate addresses
+   are already linked onchain.
 
 ## Send
 
 Single-key and multisig payments use the same **Economy**, **Standard**, **Priority**, and **Custom** fee selector. Public-network presets come only from the connected Bitcoin Core node. When its current mempool is empty or fits comfortably within one block, the presets may correctly share the same current low rate instead of repeating stale high historical estimates. The UI names Bitcoin Core as the source without exposing RPC method names. The global **sats** or **BTC** display preference applies across balances, coins, activity, send flows, alerts, errors, and notifications. The `sats` unit is always lowercase and `BTC` is always uppercase. BTC always displays eight decimals; accounting and IPC remain integer satoshis.
 
-1. A labeled three-stage progress indicator keeps every send flow consistent: **Intent**, **Amount & fee**, and **Review & sign**. Intent asks for the mandatory permanent payment label first, then a network-valid recipient address, so the user names the purpose before choosing how to fund it. The selected unlocked wallet suggests at most ten recently used labels without prefilling one; typing filters its complete label history and ranks exact normalized matches first. Choosing a suggestion or typing matching normalized text intentionally groups the payment with that label entity; the proposal assignment remains immutable. Amount & fee contains the integer satoshi amount, coin selection, and fee rate. Separate onchain clusters remain separate until a transaction links them, and review continues to report that public link honestly.
+1. A labeled three-stage progress indicator keeps every send flow consistent: **Intent**, **Amount & fee**, and **Review & sign**. Intent asks for one to twelve mandatory permanent payment labels first, then a network-valid recipient address, so the user names the purpose before choosing how to fund it. The selected unlocked wallet suggests at most ten recently used labels without prefilling one; typing filters its complete label history and ranks exact normalized matches first. Choosing a suggestion adds a removable draft chip and removes that label from the available list. Choosing or typing matching normalized text intentionally groups the payment with that label entity; every submitted proposal assignment remains immutable. Amount & fee contains the integer satoshi amount, coin selection, and fee rate. Separate onchain clusters remain separate until a transaction links them, and review continues to report that public link honestly.
 2. Choose economy, standard, priority, or validated custom sat/vB rate.
 3. Use **Balanced** automatic coin selection by default, excluding frozen coins. **More private** prioritizes avoiding address reuse, unknown provenance, and new label/cluster merges; **Lower fee** prioritizes fewer, larger inputs. The user may instead select one or more unfrozen UTXOs exactly. Manual selection shows the funding labels and selected amount by default, while input weight stays in optional detail. If the chosen coins would link existing privacy groups and one group can fund the payment alone, Groot offers an explicit switch to **More private** automatic selection; it never rewrites the manual set silently. Review discloses the selected input count and warns before signing when the resulting funding set combines permanent labels, contains unknown provenance, or spends an address-reused coin. **Max** comes from a non-persisted native drain preview using the active fee rate and exact coin-selection policy; the webview never guesses the spendable amount.
 4. Prepare a real unsigned transaction in Rust and return its authoritative review summary, including every input outpoint, authenticated input amount and sequence, network, locktime, RBF state, output count, and effective fee rate estimated from the descriptor's signed satisfaction weight.

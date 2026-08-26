@@ -66,7 +66,7 @@ describe('DummyWalletAdapter wallet sessions', () => {
     const originalSavings = singleSnapshot.labelSuggestions.find(
       (item) => item.text === 'Savings'
     )!;
-    await adapter.createAddress('  Savings  ');
+    await adapter.createAddress(['  Savings  ']);
     const reused = (await adapter.snapshot()).labelSuggestions.find(
       (item) => item.text === 'Savings'
     );

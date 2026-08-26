@@ -1846,11 +1846,17 @@ pub(crate) fn external_proposal_dto(
     let (inputs, fee_rate, locktime, rbf) = proposal_transaction_details(wallet, &psbt, fee)?;
     let selection_impact =
         selection_impact(db, wallet, &psbt, &strategy, fee_difference_vs_private)?;
+    let labels = label_provenance::labels_for_subject(db, "transaction_intent", &proposal_id)
+        .map_err(internal)?
+        .into_iter()
+        .map(|label| label.text)
+        .collect();
     Ok(MultisigProposalDto {
         proposal_id,
         recipient,
         recipient_testnet_alias,
         label,
+        labels,
         amount,
         fee,
         fee_rate,
