@@ -674,7 +674,11 @@
                 $locale,
                 policyPresentation?.delayed
                   ? 'Payments normally use 2 of 3 primary keys. The separate backup key becomes available per coin after its wait.'
-                  : `Sign with any ${wallet.threshold} keys. Open a signer to inspect its identity, health, and wallet-policy status.`
+                  : translate(
+                      $locale,
+                      'Sign with any {count} keys. Open a signer to inspect its identity, health, and wallet-policy status.',
+                      { count: wallet.threshold }
+                    )
               )}
             </p>
           </div>

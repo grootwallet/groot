@@ -248,6 +248,14 @@ describe('hardware receive verification UI', () => {
     expect(verificationFlow).toContain("translate($locale, 'Try this signer again')");
   });
 
+  it('makes hardware policy review the verification step and uses the shared alert treatment', () => {
+    expect(policyReview).toContain('class="hardware-inline-error" role="alert" aria-live="polite"');
+    expect(policyReview).toContain("translate($locale, 'Device needs attention')");
+    expect(policyReview).not.toContain('<p class="form-error" role="alert">{error}</p>');
+    expect(policyReview).not.toContain('bind:checked={acknowledged}');
+    expect(policyReview).toContain("translate($locale, 'Review on {device}'");
+  });
+
   it('uses signer terminology throughout the multisig receive flow', () => {
     expect(verificationFlow).toContain('No compatible signer found');
     expect(verificationFlow).toContain('Connect and unlock a signer saved in this wallet policy');
@@ -335,9 +343,11 @@ describe('hardware receive verification UI', () => {
   });
 
   it('keeps BitBox policy guidance compact and device-local', () => {
-    expect(policyReview).toContain('Use a new BitBox account name');
-    expect(policyReview).toContain('It is separate from the Groot wallet name.');
-    expect(policyReview).toContain('Begin on BitBox');
+    expect(policyReview).toContain('Review on BitBox');
+    expect(policyReview).toContain('Enter a new device-local account name.');
+    expect(policyReview).toContain('script type, account path, every account xpub');
+    expect(policyReview).toContain('signer fingerprints remain a Groot reference');
+    expect(policyReview).toContain("translate($locale, 'Review on {device}'");
     expect(policyReview).not.toContain('Before you start on');
     expect(policyReview).not.toContain('Do not reuse the name of any existing');
   });

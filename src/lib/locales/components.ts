@@ -168,6 +168,11 @@ export const componentCopy = {
     fr: 'J’ai comparé le seuil et chaque clé de signataire',
     es: 'He comparado el umbral y cada clave de firmante'
   },
+  'Enter a new device-local account name. BitBox shows the script type, account path, every account xpub, and the first address; signer fingerprints remain a Groot reference.':
+    {
+      fr: 'Saisissez un nouveau nom de compte local à l’appareil. BitBox affiche le type de script, le chemin du compte, chaque xpub de compte et la première adresse ; les empreintes des signataires restent une référence dans Groot.',
+      es: 'Introduce un nombre de cuenta nuevo y local al dispositivo. BitBox muestra el tipo de script, la ruta de la cuenta, cada xpub de cuenta y la primera dirección; las huellas de los firmantes siguen siendo una referencia en Groot.'
+    },
   'I imported and verified this policy on': {
     fr: 'J’ai importé et vérifié cette politique sur',
     es: 'He importado y verificado esta política en'
@@ -296,6 +301,31 @@ export const componentCopy = {
   'Signer keys to compare': {
     fr: 'Clés de signataires à comparer',
     es: 'Claves de firmantes para comparar'
+  },
+  'Signer key reference': {
+    fr: 'Référence des clés de signature',
+    es: 'Referencia de claves de firma'
+  },
+  'Open while reviewing the values shown by the device.': {
+    fr: 'Ouvrez pendant la vérification des valeurs affichées par l’appareil.',
+    es: 'Ábrela mientras revisas los valores mostrados por el dispositivo.'
+  },
+  'First address reference': {
+    fr: 'Référence de la première adresse',
+    es: 'Referencia de la primera dirección'
+  },
+  'Compare this when it appears on the device.': {
+    fr: 'Comparez-la lorsqu’elle apparaît sur l’appareil.',
+    es: 'Compárala cuando aparezca en el dispositivo.'
+  },
+  '{device} shows this after policy approval.': {
+    fr: '{device} l’affiche après l’approbation de la politique.',
+    es: '{device} la muestra después de aprobar la política.'
+  },
+  'Review on BitBox': { fr: 'Vérification sur BitBox', es: 'Revisión en BitBox' },
+  'Review on {device}': {
+    fr: 'Vérifier sur {device}',
+    es: 'Revisar en {device}'
   },
   'Signer name': { fr: 'Nom du signataire', es: 'Nombre del firmante' },
   'signers · fingerprint, path, and public key': {

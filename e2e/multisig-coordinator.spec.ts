@@ -1307,9 +1307,13 @@ test('creates and verifies a simple 2-of-3 descriptor wallet', async ({ page }) 
   await expect(
     signingPolicyReview.getByText('Reject if any value differs on Ledger.')
   ).toBeVisible();
-  await signingPolicyReview.getByText('Signer keys to compare', { exact: true }).click();
-  await signingPolicyReview.getByLabel('I compared the threshold and every signer key').check();
-  await signingPolicyReview.getByRole('button', { name: 'Verify policy & first address' }).click();
+  await expect(
+    signingPolicyReview.getByText('Signer key reference', { exact: true })
+  ).toBeVisible();
+  await expect(
+    signingPolicyReview.getByLabel('I compared the threshold and every signer key')
+  ).toHaveCount(0);
+  await signingPolicyReview.getByRole('button', { name: 'Review on Ledger' }).click();
   await signingPolicyReview.getByRole('button', { name: 'Start Ledger review & signing' }).click();
   await expect(signingPolicyReview).toBeVisible();
   await expect(signingPolicyReview.getByText(/must authorize this policy again/)).toBeVisible();

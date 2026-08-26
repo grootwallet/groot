@@ -1,7 +1,7 @@
 <script lang="ts">
   import { locale } from '$lib/i18n';
   import { translate } from '$lib/i18n-catalog';
-  import { Check, ShieldCheck } from '@lucide/svelte';
+  import { AlertTriangle, Check, ShieldCheck } from '@lucide/svelte';
   import type { CosignerDraft } from '$lib/multisig/policy';
   import type {
     MultisigWallet,
@@ -45,7 +45,6 @@
     onshowtransaction?: () => void;
     onback?: () => void;
   }>();
-  let acknowledged = $state(false);
   let signerDetailsOpen = $state(false);
   let signerDetailsReviewed = $state(false);
   let addressCopied = $state(false);
@@ -137,11 +136,12 @@
     </div>
   {:else if isBitBox}
     <div class="policy-device-warning">
-      <strong>{translate($locale, 'Use a new BitBox account name')}</strong>
+      <strong>{translate($locale, 'Review on BitBox')}</strong>
       <p>
-        {translate($locale, 'It is separate from the Groot wallet name. Try “Groot')}
-        {wallet.threshold}of{wallet.cosigners.length}
-        {translate($locale, 'B”.')}
+        {translate(
+          $locale,
+          'Enter a new device-local account name. BitBox shows the script type, account path, every account xpub, and the first address; signer fingerprints remain a Groot reference.'
+        )}
       </p>
     </div>
   {:else if kind === 'jade'}
@@ -164,9 +164,8 @@
   >
     <summary
       ><span
-        ><strong>{translate($locale, 'Signer keys to compare')}</strong><small
-          >{wallet.cosigners.length}
-          {translate($locale, 'signers · fingerprint, path, and public key')}</small
+        ><strong>{translate($locale, 'Signer key reference')}</strong><small
+          >{translate($locale, 'Open while reviewing the values shown by the device.')}</small
         ></span
       ><em
         >{translate(
@@ -183,15 +182,14 @@
       <strong
         >{translate(
           $locale,
-          isBitBox ? 'Address shown after registration' : 'First address to verify'
+          isBitBox ? 'Address shown after registration' : 'First address reference'
         )}</strong
       ><small
-        >{translate(
-          $locale,
-          isBitBox
-            ? `${deviceName} shows this after policy approval.`
-            : 'Approve only if the device shows this exact address.'
-        )}</small
+        >{isBitBox
+          ? translate($locale, '{device} shows this after policy approval.', {
+              device: deviceName
+            })
+          : translate($locale, 'Compare this when it appears on the device.')}</small
       >
     </div>
     <ReadableAddress address={displayedAddress} copied={addressCopied} oncopy={copyAddress} />
@@ -212,37 +210,27 @@
       >{/if}
   </section>
 
-  <label class="policy-review-confirmation"
-    ><input type="checkbox" disabled={!signerDetailsReviewed} bind:checked={acknowledged} /><span
-      ><strong>{translate($locale, 'I compared the threshold and every signer key')}</strong><small
-        >{translate(
-          $locale,
-          signerDetailsReviewed
-            ? 'Reject the operation if even one character differs.'
-            : 'Open “Signer keys to compare” first.'
-        )}</small
-      ></span
-    ></label
-  >
-  {#if error}<p class="form-error" role="alert">{error}</p>{/if}
+  {#if error}<div class="hardware-inline-error" role="alert" aria-live="polite">
+      <AlertTriangle size={18} /><span
+        ><strong>{translate($locale, 'Device needs attention')}</strong><small>{error}</small></span
+      >
+    </div>{/if}
   <div class="modal-footer policy-review-actions">
     {#if onback}<Button variant="secondary" disabled={busy} onclick={onback}
         >{translate($locale, 'Back')}</Button
       >{/if}
     {#if action === 'verify'}<Button
-        disabled={!acknowledged}
         loading={busy}
         loadingLabel={translate($locale, 'Follow {device}…', { device: deviceName })}
         onclick={onverify}
-        ><Check size={15} />{translate(
-          $locale,
-          isBitBox ? 'Begin on BitBox' : 'Verify policy & first address'
-        )}</Button
+        ><Check size={15} />{translate($locale, 'Review on {device}', {
+          device: deviceName
+        })}</Button
       >
     {:else if busy}<Button onclick={onshowtransaction}
         >{deviceName} {translate($locale, 'policy approved — show transaction')}</Button
       >
-    {:else}<Button disabled={!acknowledged} onclick={oncontinue}
+    {:else}<Button onclick={oncontinue}
         >{translate($locale, 'Start')} {deviceName} {translate($locale, 'review & signing')}</Button
       >{/if}
   </div>

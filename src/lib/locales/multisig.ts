@@ -481,6 +481,11 @@ export const multisigCopy = {
     fr: 'Signer avec n’importe lesquelles des',
     es: 'Firmar con cualquiera de las'
   },
+  'Sign with any {count} keys. Open a signer to inspect its identity, health, and wallet-policy status.':
+    {
+      fr: 'Signez avec n’importe lesquelles des {count} clés. Ouvrez un signataire pour consulter son identité, son état et la politique du portefeuille.',
+      es: 'Firma con cualquiera de las {count} claves. Abre un firmante para consultar su identidad, estado y política de la cartera.'
+    },
   signature: { fr: 'signature', es: 'firma' },
   'Signing keys': { fr: 'Clés de signature', es: 'Claves de firma' },
   'Simulate UTXO age:': { fr: 'Simuler l’âge de l’UTXO :', es: 'Simular antigüedad del UTXO:' },
