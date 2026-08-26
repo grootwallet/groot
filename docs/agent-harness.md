@@ -148,10 +148,12 @@ Current local status on 2026-08-24:
 - Packaged v0.4.29 testing subsequently disproved transient retries, custom-path
   keypool, direct-`getxpub` re-attestation, and canonical BIP84 keypool over
   Groot's cached HID path. The last candidate failed on both original BitBox02
-  and Nova while Trezor and Ledger passed in the same package. Initial BitBox
-  single-key import now lets HWI rediscover and open the signer inside the
-  account-key subprocess, using a known fingerprint or requiring exactly one
-  fingerprint-less BitBox row. The HID path is not forwarded and the complete
+  and Nova while Trezor and Ledger passed in the same package. HWI-owned
+  rediscovery through global `--stdin` also failed on both BitBox models. The
+  last certified Nova build used HWI 3.2.0 with ordinary documented argv, so
+  initial BitBox single-key import now requires exactly one scanned BitBox row
+  and invokes only a fixed non-sensitive BIP84 argv command. The HID path and
+  fingerprint are not forwarded and the complete
   live identity proof remains mandatory; separate exact-model physical retests
   are still required.
 

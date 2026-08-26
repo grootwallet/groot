@@ -93,9 +93,13 @@ testing on both original BitBox02 and Nova disproved that correction while
 Trezor and Ledger passed. The remaining common boundary was Groot reopening
 the cached BitBox HID path after aggregate enumeration. BitBox single-key
 import now asks HWI to rediscover and open the device inside the account-key
-process, using the scanned fingerprint when available or requiring exactly one
-fingerprint-less BitBox row. The low-level path is not forwarded, and the same
-atomic identity validation remains mandatory. Physical packaged retesting is
+process. Physical testing disproved that candidate on both models as well.
+Source archaeology isolated the later global `--stdin` conversion as the
+remaining shared boundary from the last HWI 3.2.0 Nova pass. Initial BitBox
+single-key import now requires exactly one scanned BitBox row and invokes a
+fixed documented BIP84 argv command containing no path, fingerprint, address,
+descriptor, key, PSBT, password, or device identifier. The same atomic live
+identity validation remains mandatory. Physical packaged retesting is
 still open separately for original BitBox02 and Nova.
 
 Hardware discovery row copy returned by Rust is cataloged in English, French,

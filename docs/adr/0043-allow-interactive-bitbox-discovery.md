@@ -39,6 +39,15 @@ BitBox02 and a Nova, while Trezor and Ledger imports passed in the same package.
 The common failure boundary is therefore BitBox's post-enumeration direct-path
 reopen, not the test-chain derivation or aggregate multi-device filtering.
 
+Physical testing then disproved HWI-owned type/fingerprint rediscovery as well:
+both BitBox models still failed while Trezor and Ledger succeeded. Reviewing
+HWI 3.2.0's CLI and BitBox adapter showed why that candidate did not change the
+relevant lifecycle: `find_device` enumerates, closes that client, and opens a
+new BitBox client before the command. Groot's last physically successful Nova
+integration already used the same HWI release, cleared environment, and
+process-per-command isolation; the later global conversion from documented
+CLI argv to HWI's `--stdin` parser is the remaining shared regression boundary.
+
 A subsequent packaged Nova test showed two further UX problems. HWI closes the
 enumeration client before Groot opens the exact-path account-key client, and
 BitBox can request its password again for that new secure connection. Groot
@@ -56,15 +65,19 @@ an endless scan when one backend stalls.
   interactive operation may cancel it and excess discovery still fails busy.
 - Only an explicit user scan starts discovery. Groot never retries a timed-out
   scan automatically.
-- Initial BitBox account-key import lets HWI rediscover and open the signer
-  inside the selected account-key subprocess instead of reopening Groot's
-  cached low-level path. When discovery returned a fingerprint, Groot supplies
-  it as the exact selector. A fingerprint-less selection is allowed only when
-  the cached scan contains exactly one BitBox family row; otherwise it fails
-  ambiguous before starting the command. The account-key operation may retry
+- Initial BitBox single-key import requires exactly one BitBox family row in
+  the cached scan, regardless of whether discovery supplied a fingerprint;
+  otherwise it fails ambiguous before starting the command. It invokes HWI's
+  canonical BIP84 keypool request through ordinary CLI argv, matching HWI's
+  documented external integration and Groot's last physically certified Nova
+  invocation boundary. The argv is a fixed non-sensitive command containing
+  only chain, `bitbox02`, address type, account, and range. It never contains a
+  device path, fingerprint, address, descriptor, account key, PSBT, password,
+  or other device identifier. Every other HWI operation retains the private
+  stdin protocol. The account-key operation may retry
   up to three times when HWI returns only code `-3`, `-9`, `-12`, or `-15`. Code `-9` is
   retryable only in this BitBox initial-import boundary, where Groot supplies a
-  fixed valid BIP84 or BIP48 path; it does not make an unsupported operation
+  fixed valid BIP84 request; it does not make an unsupported operation
   acceptable. The retries remain inside the existing interactive lease. Cancellation, timeout, malformed
   output, wrong network/path, and incomplete or mismatched identity are never
   retried or accepted.
@@ -102,7 +115,8 @@ A locked BitBox02 has 90 seconds to complete the vendor password interaction
 before HWI returns its aggregate discovery record. A genuinely stalled scan is
 therefore bounded and cancelable without appearing to hang for five minutes.
 The selected-device connection still has five minutes for password entry and
-review. HWI now owns BitBox rediscovery and account-key extraction within that
-one bounded process, without weakening the atomic fingerprint/account-key
-proof or placing device metadata in process arguments. Physical retesting
+review. HWI owns BitBox rediscovery and account-key extraction within that one
+bounded process. The narrow documented-argv exception exposes no device
+metadata and does not weaken the atomic fingerprint/account-key proof.
+Physical retesting
 remains required; automated fixtures do not prove vendor timing or USB behavior.

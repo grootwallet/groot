@@ -361,8 +361,8 @@ pub(super) fn recently_scanned_hardware_device(
     })
 }
 
-fn require_unique_fingerprintless_bitbox(state: &AppState, selected: &HwiDevice) -> ApiResult<()> {
-    if !selected.device_type.eq_ignore_ascii_case("bitbox02") || selected.fingerprint.is_some() {
+fn require_unique_bitbox(state: &AppState, selected: &HwiDevice) -> ApiResult<()> {
+    if !selected.device_type.eq_ignore_ascii_case("bitbox02") {
         return Ok(());
     }
     let scans = state.recent_hardware_scan.lock().map_err(internal)?;
@@ -642,7 +642,7 @@ mod targeted_scan_tests {
     }
 
     #[test]
-    fn fingerprintless_bitbox_type_selection_requires_one_scanned_bitbox() {
+    fn bitbox_type_selection_requires_one_scanned_bitbox() {
         let state = AppState::default();
         let mut devices = [HwiDevice {
             device_type: "bitbox02".into(),
@@ -650,7 +650,7 @@ mod targeted_scan_tests {
             ..HwiDevice::default()
         }];
         remember_hardware_scan(&state, 7, &mut devices).unwrap();
-        assert!(require_unique_fingerprintless_bitbox(&state, &devices[0]).is_ok());
+        assert!(require_unique_bitbox(&state, &devices[0]).is_ok());
 
         let mut ambiguous = [
             devices[0].clone(),
@@ -662,14 +662,19 @@ mod targeted_scan_tests {
         ];
         remember_hardware_scan(&state, 8, &mut ambiguous).unwrap();
         assert_eq!(
-            require_unique_fingerprintless_bitbox(&state, &ambiguous[0])
+            require_unique_bitbox(&state, &ambiguous[0])
                 .unwrap_err()
                 .code,
             "hardware_ambiguous"
         );
 
         ambiguous[0].fingerprint = Some("a1b2c3d4".into());
-        assert!(require_unique_fingerprintless_bitbox(&state, &ambiguous[0]).is_ok());
+        assert_eq!(
+            require_unique_bitbox(&state, &ambiguous[0])
+                .unwrap_err()
+                .code,
+            "hardware_ambiguous"
+        );
     }
 
     #[test]
@@ -1410,19 +1415,14 @@ fn read_bitbox_account_identity(
     device: &HwiDevice,
     derivation_path: &str,
 ) -> ApiResult<(String, String)> {
-    // Both original BitBox02 and Nova testing proved that reopening the cached
-    // low-level HID path after aggregate discovery can fail even though the
-    // device remains connected and unlocked. Let HWI find and open BitBox in
-    // this same process instead. Prefer the scanned fingerprint when available;
-    // a fingerprint-less BitBox is accepted only when the scan contained one
-    // BitBox device (enforced before this function). The returned descriptor
-    // still binds the live master fingerprint and BIP84 account key atomically.
+    // The last physically certified Nova path used HWI's documented argv mode.
+    // The later global --stdin hardening is the shared regression boundary for
+    // both BitBox models. Invoke only this fixed, non-sensitive BIP84 command
+    // through argv and let HWI select the one scanned BitBox by type. The
+    // returned descriptor still binds the live fingerprint and account key
+    // atomically; paths, fingerprints, addresses, keys, and PSBTs stay off argv.
     for attempt in 0..BITBOX_ACCOUNT_KEY_ATTEMPTS {
-        let output = match hwi.standard_singlesig_keypool_in_operation(
-            operation,
-            &device.device_type,
-            device.fingerprint.as_deref(),
-        ) {
+        let output = match hwi.standard_bitbox_singlesig_keypool_in_operation(operation) {
             Ok(output) => output,
             Err(error)
                 if attempt + 1 < BITBOX_ACCOUNT_KEY_ATTEMPTS
@@ -1628,7 +1628,7 @@ pub async fn hardware_import_external_signer(
     let label = normalize_label(&label)?;
     let hwi = hwi_cli(&app)?;
     let device = recently_scanned_hardware_device(&state, &device_id)?;
-    require_unique_fingerprintless_bitbox(&state, &device)?;
+    require_unique_bitbox(&state, &device)?;
     tauri::async_runtime::spawn_blocking(move || {
         read_hardware_external_signer(
             &hwi,
@@ -2729,7 +2729,7 @@ mod health_check_tests {
 
     #[cfg(unix)]
     #[test]
-    fn initial_bitbox_import_lets_hwi_select_without_the_cached_device_path() {
+    fn initial_bitbox_import_uses_documented_public_argv_without_identifiers() {
         use std::os::unix::fs::PermissionsExt as _;
 
         let expected = external_signer_from_seed(21);
@@ -2748,7 +2748,7 @@ mod health_check_tests {
         std::fs::write(
             &script,
             format!(
-                "#!/bin/sh\nIFS= read -r command\nprintf '%s\\n' \"$command\" >> '{command_log}'\nvalue=0\nif [ -f '{count}' ]; then IFS= read -r value < '{count}'; fi\nvalue=$((value + 1))\nprintf '%s\\n' \"$value\" > '{count}'\nif [ \"$value\" -eq 1 ]; then printf '%s\\n' '{{\"error\":\"unavailable action\",\"code\":-9}}'; elif [ \"$value\" -eq 2 ]; then printf '%s\\n' '{{\"error\":\"busy\",\"code\":-15}}'; else printf '%s\\n' '{shell_keypool}'; fi\n",
+                "#!/bin/sh\nif [ \"$1\" = '--stdin' ]; then exit 91; fi\nprintf '%s\\n' \"$*\" >> '{command_log}'\nvalue=0\nif [ -f '{count}' ]; then IFS= read -r value < '{count}'; fi\nvalue=$((value + 1))\nprintf '%s\\n' \"$value\" > '{count}'\nif [ \"$value\" -eq 1 ]; then printf '%s\\n' '{{\"error\":\"unavailable action\",\"code\":-9}}'; elif [ \"$value\" -eq 2 ]; then printf '%s\\n' '{{\"error\":\"busy\",\"code\":-15}}'; else printf '%s\\n' '{shell_keypool}'; fi\n",
                 count = count.display(),
                 command_log = command_log.display()
             ),
@@ -2769,18 +2769,7 @@ mod health_check_tests {
             (expected.fingerprint.clone(), expected.xpub.clone())
         );
 
-        let known_device = HwiDevice {
-            fingerprint: Some(expected.fingerprint.clone()),
-            ..device
-        };
-        let known_identity =
-            read_hardware_account_identity(&hwi, &known_device, SINGLESIG_ACCOUNT_PATH, false)
-                .unwrap();
-        assert_eq!(
-            known_identity,
-            (expected.fingerprint.clone(), expected.xpub)
-        );
-        assert_eq!(std::fs::read_to_string(&count).unwrap().trim(), "4");
+        assert_eq!(std::fs::read_to_string(&count).unwrap().trim(), "3");
         let commands = std::fs::read_to_string(&command_log).unwrap();
         assert!(commands
             .lines()
@@ -2796,12 +2785,16 @@ mod health_check_tests {
         assert!(commands
             .lines()
             .all(|command| !command.contains("--device-path")));
-        let commands = commands.lines().collect::<Vec<_>>();
-        assert!(commands[..3]
-            .iter()
+        assert!(commands
+            .lines()
             .all(|command| !command.contains("--fingerprint")));
-        assert!(commands[3].contains("--fingerprint"));
-        assert!(commands[3].contains(&expected.fingerprint));
+        assert!(commands.lines().all(|command| !command.contains("--stdin")));
+        assert!(commands
+            .lines()
+            .all(|command| command.contains("--chain test")));
+        assert!(commands
+            .lines()
+            .all(|command| command.contains("--device-type bitbox02")));
         assert!(bitbox_account_key_response_is_retryable(
             b"{\"error\":\"unavailable action\",\"code\":-9}"
         ));

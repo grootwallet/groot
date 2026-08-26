@@ -63,14 +63,6 @@ impl HardwareError {
     }
 }
 
-fn validate_master_fingerprint(fingerprint: &str) -> Result<(), HardwareError> {
-    if fingerprint.len() == 8 && fingerprint.bytes().all(|byte| byte.is_ascii_hexdigit()) {
-        Ok(())
-    } else {
-        Err(HardwareError::InvalidArgument)
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum HardwareOperationKind {
     Discovery,
@@ -562,23 +554,15 @@ impl HwiCli {
         )
     }
 
-    pub fn standard_singlesig_keypool_in_operation(
+    pub fn standard_bitbox_singlesig_keypool_in_operation(
         &self,
         operation: &HardwareOperation,
-        device_type: &str,
-        device_fingerprint: Option<&str>,
     ) -> Result<Vec<u8>, HardwareError> {
-        let mut selector = vec![
+        let arguments = [
             "--chain".into(),
-            self.chain.as_hwi_argument_for_device(device_type).into(),
+            self.chain.as_hwi_argument_for_device("bitbox02").into(),
             "--device-type".into(),
-            device_type.into(),
-        ];
-        if let Some(fingerprint) = device_fingerprint {
-            validate_master_fingerprint(fingerprint)?;
-            selector.extend(["--fingerprint".into(), fingerprint.into()]);
-        }
-        selector.extend([
+            "bitbox02".into(),
             "getkeypool".into(),
             "--addr-type".into(),
             "wit".into(),
@@ -586,14 +570,13 @@ impl HwiCli {
             "0".into(),
             "0".into(),
             "1".into(),
-        ]);
-        run_program_in_operation(
+        ];
+        run_public_hwi_argv_in_operation(
             &self.program,
             &self.source,
-            &selector,
+            &arguments,
             operation,
             self.home.as_deref(),
-            None,
         )
     }
 
@@ -855,6 +838,30 @@ fn hwi_stdin_command(
     Ok(input)
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum HwiInvocationMode {
+    PrivateStdin,
+    PublicArgv,
+}
+
+fn run_public_hwi_argv_in_operation(
+    program: &Path,
+    source: &HwiSource,
+    arguments: &[String],
+    operation: &HardwareOperation,
+    home: Option<&Path>,
+) -> Result<Vec<u8>, HardwareError> {
+    run_program_in_operation_with_mode(
+        program,
+        source,
+        arguments,
+        operation,
+        home,
+        None,
+        HwiInvocationMode::PublicArgv,
+    )
+}
+
 fn run_program_in_operation(
     program: &Path,
     source: &HwiSource,
@@ -863,17 +870,52 @@ fn run_program_in_operation(
     home: Option<&Path>,
     extra_input: Option<&[u8]>,
 ) -> Result<Vec<u8>, HardwareError> {
+    run_program_in_operation_with_mode(
+        program,
+        source,
+        arguments,
+        operation,
+        home,
+        extra_input,
+        HwiInvocationMode::PrivateStdin,
+    )
+}
+
+fn run_program_in_operation_with_mode(
+    program: &Path,
+    source: &HwiSource,
+    arguments: &[String],
+    operation: &HardwareOperation,
+    home: Option<&Path>,
+    extra_input: Option<&[u8]>,
+    mode: HwiInvocationMode,
+) -> Result<Vec<u8>, HardwareError> {
     operation.remaining()?;
     if !program.is_absolute() {
         return Err(HardwareError::Unavailable);
     }
     let program = trusted_executable(program, source)?;
-    let mut input = hwi_stdin_command(arguments, extra_input)?;
+    validate_arguments(arguments)?;
+    if mode == HwiInvocationMode::PublicArgv && extra_input.is_some() {
+        return Err(HardwareError::InvalidArgument);
+    }
+    let mut input = match mode {
+        HwiInvocationMode::PrivateStdin => Some(hwi_stdin_command(arguments, extra_input)?),
+        HwiInvocationMode::PublicArgv => None,
+    };
     let mut command = Command::new(program);
-    // HWI 3.2.0 reparses all selectors and the command from stdin. Keeping argv
-    // fixed prevents process metadata from exposing device paths, fingerprints,
-    // addresses, descriptors, account keys, or PSBTs.
-    command.args(HWI_FIXED_ARGV).env_clear();
+    match mode {
+        HwiInvocationMode::PrivateStdin => {
+            // Sensitive selectors and payloads remain off process metadata.
+            command.args(HWI_FIXED_ARGV);
+        }
+        HwiInvocationMode::PublicArgv => {
+            // This mode is reserved for the fixed BitBox BIP84 import command.
+            // Its argv contains no path, fingerprint, address, key, or PSBT.
+            command.args(arguments);
+        }
+    }
+    command.env_clear();
     if let Some(home) = home {
         command.env("HOME", trusted_home(home)?);
     }
@@ -883,7 +925,11 @@ fn run_program_in_operation(
         command.process_group(0);
     }
     let mut child = command
-        .stdin(Stdio::piped())
+        .stdin(if input.is_some() {
+            Stdio::piped()
+        } else {
+            Stdio::null()
+        })
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
@@ -898,16 +944,18 @@ fn run_program_in_operation(
     thread::spawn(move || {
         let _ = stderr_tx.send(read_bounded(stderr));
     });
-    let write_result = child
-        .stdin
-        .take()
-        .ok_or(HardwareError::Io)
-        .and_then(|mut stdin| stdin.write_all(&input).map_err(|_| HardwareError::Io));
-    input.fill(0);
-    if let Err(error) = write_result {
-        terminate_process_tree(&mut child);
-        let _ = collect_pipes(&stdout_rx, &stderr_rx);
-        return Err(error);
+    if let Some(mut input) = input.take() {
+        let write_result = child
+            .stdin
+            .take()
+            .ok_or(HardwareError::Io)
+            .and_then(|mut stdin| stdin.write_all(&input).map_err(|_| HardwareError::Io));
+        input.fill(0);
+        if let Err(error) = write_result {
+            terminate_process_tree(&mut child);
+            let _ = collect_pipes(&stdout_rx, &stderr_rx);
+            return Err(error);
+        }
     }
     let status = loop {
         if let Some(status) = child.try_wait().map_err(|_| HardwareError::Io)? {
