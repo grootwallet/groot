@@ -22,7 +22,6 @@ export function createLiveSync(
   let enabled = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let active: Promise<boolean> | undefined;
-  let rerunRequested = false;
   let consecutiveFailures = 0;
 
   const clearTimer = () => {
@@ -76,10 +75,7 @@ export function createLiveSync(
       consecutiveFailures = (await pending) ? 0 : consecutiveFailures + 1;
     } finally {
       if (active === pending) active = undefined;
-      if (enabled && rerunRequested) {
-        rerunRequested = false;
-        void runNow();
-      } else if (enabled) schedule();
+      if (enabled) schedule();
     }
   };
 
@@ -87,18 +83,20 @@ export function createLiveSync(
     start() {
       if (enabled) return;
       enabled = true;
-      void runNow();
+      // Let the mounted route read its persisted snapshot before network work
+      // can take the serialized wallet-operation lock.
+      if (!active) schedule();
     },
     restart() {
       enabled = true;
       consecutiveFailures = 0;
       clearTimer();
-      if (active) rerunRequested = true;
-      else void runNow();
+      // A selection change cancels the previous sync. Once it drains, wait for
+      // the normal interval so the target wallet can paint cached state first.
+      if (!active) schedule();
     },
     stop() {
       enabled = false;
-      rerunRequested = false;
       clearTimer();
       if (active) void wallet.cancelSync().catch(() => undefined);
     },

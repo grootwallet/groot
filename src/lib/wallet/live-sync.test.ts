@@ -37,6 +37,27 @@ describe('live wallet sync', () => {
     }
   });
 
+  it('lets persisted route data load before the first automatic sync', async () => {
+    vi.useFakeTimers();
+    const wallet = {
+      exists: vi.fn().mockResolvedValue(true),
+      profiles: vi.fn().mockResolvedValue(registry('single_key')),
+      sync: vi.fn().mockResolvedValue(undefined),
+      cancelSync: vi.fn().mockResolvedValue(undefined),
+      syncMultisig: vi.fn().mockResolvedValue(undefined)
+    };
+    const controller = createLiveSync(wallet, 10_000);
+
+    controller.start();
+    await vi.advanceTimersByTimeAsync(9_999);
+    expect(wallet.sync).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(wallet.sync).toHaveBeenCalledOnce();
+
+    controller.stop();
+    vi.useRealTimers();
+  });
+
   it('does nothing without an existing wallet and cannot be wedged by error reporting', async () => {
     const error = new Error('offline');
     const onError = vi.fn(() => {
@@ -117,6 +138,7 @@ describe('live wallet sync', () => {
     };
     const controller = createLiveSync(wallet, 60_000);
     controller.start();
+    void controller.runNow();
     await started;
     const second = controller.runNow();
     const third = controller.runNow();
@@ -147,12 +169,14 @@ describe('live wallet sync', () => {
     };
     const controller = createLiveSync(wallet, 60_000);
     controller.start();
+    void controller.runNow();
     await started;
     controller.stop();
     expect(wallet.cancelSync).toHaveBeenCalledOnce();
   });
 
-  it('runs the newly selected wallet immediately after an active sync finishes', async () => {
+  it('defers the newly selected wallet sync until its cached route data can load', async () => {
+    vi.useFakeTimers();
     let release!: () => void;
     let markStarted!: () => void;
     const blocked = new Promise<void>((resolve) => {
@@ -176,10 +200,16 @@ describe('live wallet sync', () => {
     };
     const controller = createLiveSync(wallet, 60_000);
     controller.start();
+    const current = controller.runNow();
     await started;
     controller.restart();
     release();
-    await vi.waitFor(() => expect(wallet.sync).toHaveBeenCalledTimes(2));
+    await current;
+    await vi.advanceTimersByTimeAsync(59_999);
+    expect(wallet.sync).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(wallet.sync).toHaveBeenCalledTimes(2);
     controller.stop();
+    vi.useRealTimers();
   });
 });

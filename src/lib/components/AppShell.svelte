@@ -167,9 +167,14 @@
 
   async function selectWallet(walletId: string) {
     if (!walletId || walletId === selectedWalletId) return;
-    await walletService.cancelHardwareOperations();
+    const resumeAutomaticSync = !isPrototypeWallet && !syncPausedRoute;
+    // Stop and cancel automatic network work before native selection. The
+    // target route must get the wallet-operation lock for its cached snapshot
+    // before background sync is scheduled again.
+    liveSync?.stop();
     ++profileReadGeneration;
     try {
+      await walletService.cancelHardwareOperations();
       const selection = await walletService.selectWallet(walletId);
       // Change the routed wallet context only after Rust has atomically selected
       // the same profile. The keyed route then reloads against one wallet kind.
@@ -181,6 +186,7 @@
         liveSync?.stop();
       }
     } catch (cause) {
+      if (resumeAutomaticSync) liveSync?.restart();
       toast({
         title: 'Wallet not switched',
         description: localizedError(cause, $locale, 'Could not select this wallet.'),

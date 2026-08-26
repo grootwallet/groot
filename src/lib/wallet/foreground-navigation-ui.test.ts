@@ -39,4 +39,14 @@ describe('foreground wallet navigation', () => {
     expect(selection).not.toContain('selectedWalletId = walletId');
     expect(appShell).toContain("{#key `${selectedWalletId ?? 'none'}:${page.url.pathname}`}");
   });
+
+  it('stops automatic sync before selecting another wallet', () => {
+    const start = appShell.indexOf('async function selectWallet(walletId: string)');
+    const end = appShell.indexOf('provideWalletShellContext', start);
+    const selection = appShell.slice(start, end);
+    expect(selection.indexOf('liveSync?.stop()')).toBeGreaterThan(-1);
+    expect(selection.indexOf('liveSync?.stop()')).toBeLessThan(
+      selection.indexOf('await walletService.selectWallet(walletId)')
+    );
+  });
 });
