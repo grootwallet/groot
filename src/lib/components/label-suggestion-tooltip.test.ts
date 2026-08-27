@@ -11,16 +11,22 @@ const labelRoutes = [
 ].map((path) => readFileSync(new URL(path, import.meta.url), 'utf8'));
 
 describe('label suggestion tooltips', () => {
-  it('shows every suggestion full label instead of relying on overflow measurement', () => {
+  it('measures a dedicated ellipsis span before showing a suggestion tooltip', () => {
     for (const source of labelRoutes) {
       const suggestions = source.slice(source.indexOf('class="label-suggestions"'));
       expect(suggestions).toContain('text={suggestion.text}');
-      expect(suggestions).not.toContain('truncatedSelector="button"');
+      expect(suggestions).toContain('truncatedSelector=".label-suggestion-text"');
+      expect(suggestions).toContain('positionSelector="button"');
+      expect(suggestions).toContain('class="label-suggestion-text"');
     }
+    expect(appCss).toMatch(
+      /\.label-suggestion-text\s*\{[\s\S]*?overflow: hidden;[\s\S]*?text-overflow: ellipsis;/
+    );
   });
 
   it('anchors above the hovered control and clamps the tooltip inside the viewport', () => {
-    expect(tooltip).toContain('const rect = target.getBoundingClientRect()');
+    expect(tooltip).toContain('root.querySelector<HTMLElement>(positionSelector)');
+    expect(tooltip).toContain('const rect = positionTarget.getBoundingClientRect()');
     expect(tooltip).toContain('document.body.append(node)');
     expect(tooltip).toContain('use:portal');
     expect(tooltip).toContain('rect.left + rect.width / 2');

@@ -497,11 +497,15 @@
       <FieldCounter value={label} max={48} />
     </div>
     {#if !$discreetMode}<div class="label-suggestions">
-        {#each visibleSuggestions as suggestion}<Tooltip text={suggestion.text}
+        {#each visibleSuggestions as suggestion}<Tooltip
+            text={suggestion.text}
+            truncatedSelector=".label-suggestion-text"
+            positionSelector="button"
             ><button
               type="button"
               aria-label={translate($locale, 'Reuse {label}', { label: suggestion.text })}
-              onclick={() => addDraftLabel(suggestion.text)}>{suggestion.text}</button
+              onclick={() => addDraftLabel(suggestion.text)}
+              ><span class="label-suggestion-text">{suggestion.text}</span></button
             ></Tooltip
           >{/each}
       </div>{/if}{#if generateError}<p class="form-error" role="alert">{generateError}</p>{/if}

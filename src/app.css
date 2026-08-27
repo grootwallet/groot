@@ -2166,14 +2166,18 @@ code {
   min-height: 30px;
   max-width: min(180px, 25%);
   padding: 7px 11px;
-  overflow: hidden;
   color: var(--text);
   font-size: 11px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   border: 1px solid var(--control-border);
   border-radius: 7px;
   background: var(--surface-control);
+}
+.label-suggestion-text {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .label-suggestions .tooltip-anchor {
   flex: 0 1 min(180px, 25%);

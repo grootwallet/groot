@@ -1222,7 +1222,10 @@
     <FieldCounter value={label} max={48} {hint} />
   </div>
   {#if !$discreetMode}<div class="label-suggestions">
-      {#each visibleSuggestions as suggestion}<Tooltip text={suggestion.text}
+      {#each visibleSuggestions as suggestion}<Tooltip
+          text={suggestion.text}
+          truncatedSelector=".label-suggestion-text"
+          positionSelector="button"
           ><button
             type="button"
             aria-label={translate($locale, 'Reuse {label}', { label: suggestion.text })}
@@ -1231,7 +1234,7 @@
               label = '';
               armedLabelIndex = null;
               clearDraftError();
-            }}>{suggestion.text}</button
+            }}><span class="label-suggestion-text">{suggestion.text}</span></button
           ></Tooltip
         >{/each}
     </div>{/if}

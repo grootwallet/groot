@@ -782,7 +782,10 @@
 
 {#snippet labelSuggestionPicker()}
   {#if !$discreetMode}<div class="label-suggestions">
-      {#each visibleSuggestions as suggestion}<Tooltip text={suggestion.text}
+      {#each visibleSuggestions as suggestion}<Tooltip
+          text={suggestion.text}
+          truncatedSelector=".label-suggestion-text"
+          positionSelector="button"
           ><button
             type="button"
             aria-label={translate($locale, 'Reuse {label}', { label: suggestion.text })}
@@ -790,7 +793,7 @@
               selectedLabels = addPermanentLabel(selectedLabels, suggestion.text);
               label = '';
               armedLabelIndex = null;
-            }}>{suggestion.text}</button
+            }}><span class="label-suggestion-text">{suggestion.text}</span></button
           ></Tooltip
         >{/each}
     </div>{/if}

@@ -4,10 +4,12 @@
   let {
     text,
     truncatedSelector = '',
+    positionSelector = '',
     children
   } = $props<{
     text: string;
     truncatedSelector?: string;
+    positionSelector?: string;
     children: Snippet;
   }>();
   let root: HTMLSpanElement;
@@ -27,7 +29,14 @@
       open = false;
       return;
     }
-    const rect = target.getBoundingClientRect();
+    const positionTarget = positionSelector
+      ? root.querySelector<HTMLElement>(positionSelector)
+      : target;
+    if (!positionTarget) {
+      open = false;
+      return;
+    }
+    const rect = positionTarget.getBoundingClientRect();
     left = Math.max(138, Math.min(rect.left + rect.width / 2, window.innerWidth - 138));
     below = rect.top < 72;
     top = below ? rect.bottom + 8 : rect.top - 8;

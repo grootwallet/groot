@@ -1148,13 +1148,21 @@ test('overview and coins resolve empty wallets without lingering skeletons', asy
   expect(empty!.y - (toolbar!.y + toolbar!.height)).toBeGreaterThanOrEqual(13);
 });
 
-test('receive label suggestions expose aligned tooltips for every label', async ({ page }) => {
+test('receive label suggestions expose aligned tooltips only when truncated', async ({ page }) => {
   await page.goto('/receive');
   await page.getByRole('button', { name: 'New receive address' }).click();
-  const suggestion = page.getByRole('button', { name: 'Reuse Savings' });
+  const shortSuggestion = page.getByRole('button', { name: 'Reuse Savings' });
+  await shortSuggestion.hover();
+  await expect(page.getByRole('tooltip')).toHaveCount(0);
+  await page.getByLabel('Label', { exact: true }).fill('A deliberately long reusable label;');
+  await page.getByRole('button', { name: 'Generate address' }).click();
+  await page.getByRole('button', { name: 'New receive address' }).click();
+  const suggestion = page.getByRole('button', {
+    name: 'Reuse A deliberately long reusable label'
+  });
   await suggestion.hover();
   const tooltip = page.getByRole('tooltip');
-  await expect(tooltip).toHaveText('Savings');
+  await expect(tooltip).toHaveText('A deliberately long reusable label');
   const suggestionBox = await suggestion.boundingBox();
   const tooltipBox = await tooltip.boundingBox();
   expect(suggestionBox && tooltipBox).toBeTruthy();
