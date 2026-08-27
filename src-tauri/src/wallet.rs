@@ -108,13 +108,15 @@ const NODE_HEALTH_RETRY_DELAY: Duration = Duration::from_millis(200);
 
 #[path = "wallet/export_commands.rs"]
 mod export_commands;
+#[cfg(target_os = "macos")]
+use export_commands::PendingPdfExport;
+use export_commands::SavedFileReveal;
 #[cfg(test)]
 use export_commands::{
     consume_pending_pdf_export, consume_saved_file_token, validate_psbt_filename,
     validate_public_backup_filename, validate_public_backup_pdf_filename, write_public_export,
     PENDING_PDF_EXPORT_TIMEOUT, SAVED_FILE_REVEAL_TIMEOUT,
 };
-use export_commands::{PendingPdfExport, SavedFileReveal};
 pub use export_commands::{PendingPdfExportDto, SavedFileDto};
 
 #[tauri::command]
@@ -178,9 +180,7 @@ pub fn public_backup_pdf_prepare(
 
 #[cfg(any(target_os = "android", target_os = "ios"))]
 #[tauri::command]
-pub fn public_backup_pdf_prepare(
-    suggested_filename: String,
-) -> ApiResult<PendingPdfExportDto> {
+pub fn public_backup_pdf_prepare(suggested_filename: String) -> ApiResult<PendingPdfExportDto> {
     export_commands::public_backup_pdf_prepare(suggested_filename)
 }
 

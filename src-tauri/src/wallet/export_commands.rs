@@ -1,25 +1,30 @@
 use super::{api_error, internal, proposal_api_error, ApiResult, AppState};
 use crate::proposal::decode_psbt;
 use serde::Serialize;
+#[cfg(not(mobile))]
+use std::fs::{self, File};
 use std::{
     collections::HashMap,
-    fs::{self, File, OpenOptions},
+    fs::OpenOptions,
     io::Write,
     path::{Path, PathBuf},
     time::{Duration, Instant},
 };
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+use tauri::WebviewWindow;
 #[cfg(target_os = "macos")]
 use tauri::{webview::PageLoadEvent, WebviewUrl, WebviewWindowBuilder};
-#[cfg(any(target_os = "linux", target_os = "windows"))]
-use tauri::WebviewWindow;
 use tauri::{AppHandle, State};
 use tauri_plugin_dialog::DialogExt;
 use uuid::Uuid;
 
 const MAX_PUBLIC_BACKUP_BYTES: usize = 256 * 1024;
+#[cfg(any(target_os = "macos", test))]
 const MAX_PUBLIC_BACKUP_PDF_BYTES: usize = 32 * 1024 * 1024;
+#[cfg(any(target_os = "macos", test))]
 const MAX_PUBLIC_BACKUP_PDF_HTML_BYTES: usize = 2 * 1024 * 1024;
 pub(super) const SAVED_FILE_REVEAL_TIMEOUT: Duration = Duration::from_secs(10 * 60);
+#[cfg(any(target_os = "macos", test))]
 pub(super) const PENDING_PDF_EXPORT_TIMEOUT: Duration = Duration::from_secs(2 * 60);
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -37,6 +42,7 @@ pub struct PendingPdfExportDto {
     pub save_token: Option<String>,
 }
 
+#[cfg(any(target_os = "macos", test))]
 pub(super) struct PendingPdfExport {
     pub(super) path: PathBuf,
     pub(super) prepared_at: Instant,
@@ -64,6 +70,7 @@ pub(super) fn validate_public_backup_filename(value: &str) -> ApiResult<&str> {
     Ok(trimmed)
 }
 
+#[cfg(any(target_os = "macos", test))]
 pub(super) fn validate_public_backup_pdf_filename(value: &str) -> ApiResult<&str> {
     let trimmed = value.trim();
     if trimmed.is_empty()
@@ -304,6 +311,7 @@ pub(super) fn consume_saved_file_token(
     saved_files.remove(reveal_token)
 }
 
+#[cfg(any(target_os = "macos", test))]
 pub(super) fn consume_pending_pdf_export(
     pending_exports: &mut HashMap<String, PendingPdfExport>,
     save_token: &str,
@@ -574,9 +582,7 @@ pub fn public_backup_pdf_prepare(
 }
 
 #[cfg(any(target_os = "android", target_os = "ios"))]
-pub fn public_backup_pdf_prepare(
-    _suggested_filename: String,
-) -> ApiResult<PendingPdfExportDto> {
+pub fn public_backup_pdf_prepare(_suggested_filename: String) -> ApiResult<PendingPdfExportDto> {
     Err(api_error(
         "backup_export_failed",
         "Native PDF printing is not available on mobile.",

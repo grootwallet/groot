@@ -39,7 +39,7 @@ test('creates a 24-word wallet and clears onboarding secrets', async ({ page }) 
   ).toBeVisible();
   await expect(page.getByRole('button', { name: 'Recover software wallet' })).toBeVisible();
   await page.getByRole('button', { name: 'Add wallet' }).click();
-  await expect(page.locator('.wallet-type-card')).toHaveCount(5);
+  await expect(page.locator('.wallet-type-card')).toHaveCount(6);
   await expect(page.getByText('Create and back up your keys in Groot.')).toBeVisible();
   await expect(page.getByText('Connect a device you already trust.')).toBeVisible();
   await expect(
