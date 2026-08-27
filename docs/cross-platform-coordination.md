@@ -133,9 +133,12 @@ Secure Enclave wrapping cannot make the phone equivalent to an independent hardw
 - `pending-mobile-pairings/<uuid>.json`: encrypted staging payload containing the invitation,
   signer label, and words. Mobile can list only its opaque session ID; reproducing the exact
   response QR requires the same local PIN. Completion first atomically renames the file to a hidden
-  consuming tombstone. Startup restores an uncommitted tombstone, removes one whose wallet registry
-  commit is authoritative, and removes abandoned atomic-write temporary files. Explicit cancel is
-  idempotent and removes either state. A malformed UUID cannot select a filesystem path.
+  consuming tombstone bound to the newly allocated wallet UUID. Startup removes only that exact
+  unregistered partial profile before restoring an uncommitted tombstone, removes a tombstone whose
+  exact wallet/session registry commit is authoritative, and removes abandoned atomic-write
+  temporary files. A tombstone that claims another registered wallet fails closed. Explicit cancel
+  is operation-serialized, idempotent, and removes either staging state. A malformed UUID cannot
+  select a filesystem path.
 - Existing `wallet.json`, `secret.json`, registry v1, proposal SQLite schema, BSMS records, and PSBT
   formats are unchanged. Old profiles have no sidecar and report non-shared. No migration is needed.
 - BIP129 records remain standards-defined. `crypto-psbt` remains the interoperability format.
@@ -154,9 +157,10 @@ The isolated Bitcoin Core Regtest harness now passes the funded mobile review/si
 signature-only merge, second signature, finalization, and broadcast path, including the listed PSBT
 attack cases. Deterministic units pass response authentication, expiry, replay, substituted-token,
 volatile-desktop-restart, staged-response reopen, cancel, consuming-tombstone reconciliation,
-conflict, traversal, and orphan-temporary-file cases. Full command-process kill at every wallet
-registry/profile commit boundary, watch-only address equality, and clean mobile recovery remain open
-and must not be inferred from this evidence.
+exact orphan-profile cleanup, registered-wallet conflict, traversal, and orphan-temporary-file
+cases. Full external process-kill automation at every wallet registry/profile commit boundary,
+watch-only address equality, and clean mobile recovery remain open and must not be inferred from
+this evidence.
 
 iOS physical certification additionally requires camera denial/interruption/background/resume,
 safe-area and accessibility checks, passcode-required Keychain behavior, biometric enrollment

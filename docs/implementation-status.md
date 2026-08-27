@@ -98,15 +98,16 @@ bounded UR tests, authenticated/expiring/replay-safe desktop-response lifecycle
 tests, and a funded isolated-Core mobile-signature/desktop-merge/finalize/
 broadcast round trip are green. The funded test also rejects missing UTXOs,
 foreign input scripts, non-ALL sighashes, false change claims, and exact-revision
-mutation. Credential-gated staged-response resume, idempotent cancel,
-active/consuming two-phase reconciliation, conflict/traversal rejection, and
-orphan temporary-file cleanup now have deterministic Rust coverage and a wired
-mobile restart surface. This is not first-mainnet scope: the current mobile
-secret sidecar truthfully identifies its Argon2id/PIN protection as testnet-only,
-while process-kill testing at every complete profile/registry boundary, native
-iOS Keychain/Secure Enclave wrapping, native recovery entry/verification,
-physical camera/lifecycle testing, independent interoperability, and security
-review remain release blockers. See ADR 0048 and
+mutation. Credential-gated staged-response resume, operation-serialized
+idempotent cancel, wallet-UUID-bound active/consuming reconciliation, exact
+unregistered partial-profile cleanup, registered-wallet conflict/traversal
+rejection, and orphan temporary-file cleanup now have deterministic Rust
+coverage and a wired mobile restart surface. This is not first-mainnet scope:
+the current mobile secret sidecar truthfully identifies its Argon2id/PIN
+protection as testnet-only, while external process-kill automation at every
+profile/registry boundary, native iOS Keychain/Secure Enclave wrapping, native
+recovery entry/verification, physical camera/lifecycle testing, independent
+interoperability, and security review remain release blockers. See ADR 0048 and
 [`cross-platform-coordination.md`](cross-platform-coordination.md).
 
 | Capability                                                           | Browser fixture                                                                                                                                                                                                                                                                                                                                                                         | Rust/Tauri                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | Automated evidence                                                                                                                                                                                                                                                                                                                                                                                                                   | Release status                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |

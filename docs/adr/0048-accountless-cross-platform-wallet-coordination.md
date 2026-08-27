@@ -42,9 +42,12 @@ release its data-encryption key, and perform secp256k1 signing briefly in Rust-o
   wallet, proposal, and certification formats are not migrated or rewritten.
 - Keep desktop tokens in process memory only and expire invitations after 15 minutes. A response is
   accepted once. Mobile reproduces an interrupted response only by decrypting its local staging
-  file with the same PIN. Completion uses an active-to-consuming rename before wallet commit;
-  startup restores an uncommitted tombstone or removes a committed one. Cancellation idempotently
-  removes the exact active or consuming file.
+  file with the same PIN. Completion uses an active-to-consuming rename bound to the newly allocated
+  wallet UUID before creating its profile. Startup removes only that UUID's unregistered partial
+  profile before restoring an uncommitted tombstone, or removes a tombstone after the exact
+  session/wallet pair is committed. A claim against another registered wallet fails closed.
+  Cancellation is serialized with wallet operations and idempotently removes the exact active or
+  consuming file.
 - Reuse canonical `crypto-psbt` UR for transaction exchange. Mobile computes an exact PSBT revision
   digest, verifies every input against the paired descriptor and witness UTXO, verifies claimed
   change against derived scripts, permits only unfinalized SIGHASH_ALL, and signs only the exact

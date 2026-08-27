@@ -653,11 +653,12 @@ pub fn coordination_mobile_complete(
     }
     let pairing_session_id = envelope.session_id.clone();
     let pairing_directory = pending_mobile_pairings_directory(&app)?;
-    let (id, dir) = prepare_profile_directory(&app)?;
-    let consuming_path = match transition_mobile_pairing_to_consuming(&app, &pairing_session_id) {
+    let id = Uuid::new_v4();
+    let consuming_path = transition_mobile_pairing_to_consuming(&app, &pairing_session_id, id)?;
+    let dir = match prepare_profile_directory_with_id(&app, id) {
         Ok(path) => path,
         Err(error) => {
-            cleanup_failed_profile(&dir)?;
+            restore_consuming_mobile_pairing(&pairing_directory, &pairing_session_id, id)?;
             return Err(error);
         }
     };
@@ -718,7 +719,7 @@ pub fn coordination_mobile_complete(
     })();
     if let Err(error) = result {
         cleanup_failed_profile(&dir)?;
-        restore_consuming_mobile_pairing(&pairing_directory, &pairing_session_id)?;
+        restore_consuming_mobile_pairing(&pairing_directory, &pairing_session_id, id)?;
         return Err(error);
     }
     // The registry commit is authoritative. A cleanup failure must not report that wallet
@@ -1112,30 +1113,84 @@ fn pending_mobile_secret_path_in(directory: &Path, session_id: &str) -> ApiResul
     Ok(directory.join(format!("{session_id}.json")))
 }
 
-fn consuming_mobile_secret_path_in(directory: &Path, session_id: &str) -> ApiResult<PathBuf> {
+fn consuming_mobile_secret_path_in(
+    directory: &Path,
+    session_id: &str,
+    wallet_id: Uuid,
+) -> ApiResult<PathBuf> {
     Uuid::parse_str(session_id)
         .map_err(|_| invalid_payload("The pairing session identifier is invalid."))?;
-    Ok(directory.join(format!(".consuming-{session_id}.json")))
+    Ok(directory.join(format!(".consuming-{session_id}--{wallet_id}.json")))
 }
 
-fn transition_mobile_pairing_to_consuming(app: &AppHandle, session_id: &str) -> ApiResult<PathBuf> {
+fn parse_consuming_mobile_secret_name(name: &str) -> Option<(&str, Uuid)> {
+    let value = name.strip_prefix(".consuming-")?.strip_suffix(".json")?;
+    let (session_id, wallet_id) = value.split_once("--")?;
+    Uuid::parse_str(session_id).ok()?;
+    Some((session_id, Uuid::parse_str(wallet_id).ok()?))
+}
+
+fn consuming_mobile_secret_paths_for_session(
+    directory: &Path,
+    session_id: &str,
+) -> ApiResult<Vec<PathBuf>> {
+    Uuid::parse_str(session_id)
+        .map_err(|_| invalid_payload("The pairing session identifier is invalid."))?;
+    let entries = match fs::read_dir(directory) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(error) => return Err(internal(error)),
+    };
+    let mut paths = Vec::new();
+    for entry in entries {
+        let entry = entry.map_err(internal)?;
+        let Some(name) = entry.file_name().to_str().map(str::to_owned) else {
+            continue;
+        };
+        let Some((candidate, _)) = parse_consuming_mobile_secret_name(&name) else {
+            continue;
+        };
+        if candidate == session_id {
+            let metadata = fs::symlink_metadata(entry.path()).map_err(internal)?;
+            if metadata.file_type().is_symlink() || !metadata.is_file() {
+                return Err(api_error(
+                    "wallet_corrupt",
+                    "Mobile pairing recovery storage is not a regular file.",
+                ));
+            }
+            paths.push(entry.path());
+        }
+    }
+    paths.sort();
+    Ok(paths)
+}
+
+fn transition_mobile_pairing_to_consuming(
+    app: &AppHandle,
+    session_id: &str,
+    wallet_id: Uuid,
+) -> ApiResult<PathBuf> {
     let directory = pending_mobile_pairings_directory(app)?;
     let active = pending_mobile_secret_path_in(&directory, session_id)?;
-    let consuming = consuming_mobile_secret_path_in(&directory, session_id)?;
-    if consuming.exists() {
+    if !consuming_mobile_secret_paths_for_session(&directory, session_id)?.is_empty() {
         return Err(api_error(
             "pairing_in_progress",
             "This mobile pairing is already being completed.",
         ));
     }
+    let consuming = consuming_mobile_secret_path_in(&directory, session_id, wallet_id)?;
     fs::rename(&active, &consuming).map_err(internal)?;
     sync_private_directory(&directory)?;
     Ok(consuming)
 }
 
-fn restore_consuming_mobile_pairing(directory: &Path, session_id: &str) -> ApiResult<()> {
+fn restore_consuming_mobile_pairing(
+    directory: &Path,
+    session_id: &str,
+    wallet_id: Uuid,
+) -> ApiResult<()> {
     let active = pending_mobile_secret_path_in(directory, session_id)?;
-    let consuming = consuming_mobile_secret_path_in(directory, session_id)?;
+    let consuming = consuming_mobile_secret_path_in(directory, session_id, wallet_id)?;
     if !consuming.exists() {
         return Ok(());
     }
@@ -1159,8 +1214,10 @@ fn remove_file_if_present(path: &Path) -> ApiResult<bool> {
 
 fn cancel_mobile_pairing_storage(directory: &Path, session_id: &str) -> ApiResult<()> {
     let active = pending_mobile_secret_path_in(directory, session_id)?;
-    let consuming = consuming_mobile_secret_path_in(directory, session_id)?;
-    let changed = remove_file_if_present(&active)? | remove_file_if_present(&consuming)?;
+    let mut changed = remove_file_if_present(&active)?;
+    for consuming in consuming_mobile_secret_paths_for_session(directory, session_id)? {
+        changed |= remove_file_if_present(&consuming)?;
+    }
     if changed && directory.exists() {
         sync_private_directory(directory)?;
     }
@@ -1205,7 +1262,12 @@ pub(super) fn reconcile_mobile_pairing_storage(app: &AppHandle) -> ApiResult<()>
         return Ok(());
     }
     let registry = load_registry(app)?;
-    let mut committed_sessions = HashSet::new();
+    let registered_wallets = registry
+        .wallets
+        .iter()
+        .map(|profile| profile.id)
+        .collect::<HashSet<_>>();
+    let mut committed_pairings = HashSet::new();
     for profile in registry.wallets {
         let path = profile_directory(app, profile.id)?.join("coordination.json");
         if !path.is_file() {
@@ -1221,23 +1283,37 @@ pub(super) fn reconcile_mobile_pairing_storage(app: &AppHandle) -> ApiResult<()>
                         "The coordinated wallet has an invalid pairing session identifier.",
                     )
                 })?;
-                committed_sessions.insert(session_id);
+                committed_pairings.insert((session_id, profile.id));
             }
         }
     }
-    reconcile_mobile_pairing_directory(&directory, &committed_sessions)
+    reconcile_mobile_pairing_directory(
+        &directory,
+        &wallets_root(app)?,
+        &registered_wallets,
+        &committed_pairings,
+    )
 }
 
 fn reconcile_mobile_pairing_directory(
     directory: &Path,
-    committed_sessions: &HashSet<String>,
+    wallets_directory: &Path,
+    registered_wallets: &HashSet<Uuid>,
+    committed_pairings: &HashSet<(String, Uuid)>,
 ) -> ApiResult<()> {
     let entries = match fs::read_dir(directory) {
         Ok(entries) => entries,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
         Err(error) => return Err(internal(error)),
     };
-    let mut changed = false;
+    let committed_sessions = committed_pairings
+        .iter()
+        .map(|(session_id, _)| session_id.as_str())
+        .collect::<HashSet<_>>();
+    let mut active_sessions = HashSet::new();
+    let mut active_files = Vec::new();
+    let mut consuming_files = Vec::new();
+    let mut temporary_files = Vec::new();
     for entry in entries {
         let entry = entry.map_err(internal)?;
         let path = entry.path();
@@ -1248,15 +1324,12 @@ fn reconcile_mobile_pairing_directory(
         let active_session = name
             .strip_suffix(".json")
             .filter(|session| !name.starts_with('.') && Uuid::parse_str(session).is_ok());
-        let consuming_session = name
-            .strip_prefix(".consuming-")
-            .and_then(|value| value.strip_suffix(".json"))
-            .filter(|session| Uuid::parse_str(session).is_ok());
+        let consuming = parse_consuming_mobile_secret_name(&name);
         let secure_temporary = name
             .strip_prefix(".secure-")
             .and_then(|value| value.strip_suffix(".tmp"))
             .is_some_and(|value| Uuid::parse_str(value).is_ok());
-        if active_session.is_none() && consuming_session.is_none() && !secure_temporary {
+        if active_session.is_none() && consuming.is_none() && !secure_temporary {
             continue;
         }
         let metadata = fs::symlink_metadata(&path).map_err(internal)?;
@@ -1266,28 +1339,72 @@ fn reconcile_mobile_pairing_directory(
                 "Mobile pairing recovery storage is not a regular file.",
             ));
         }
-        if secure_temporary || active_session.is_some_and(|id| committed_sessions.contains(id)) {
-            fs::remove_file(path).map_err(internal)?;
-            changed = true;
-            continue;
-        }
-        if let Some(session_id) = consuming_session {
-            if committed_sessions.contains(session_id) {
-                fs::remove_file(path).map_err(internal)?;
-            } else {
-                let active = pending_mobile_secret_path_in(directory, session_id)?;
-                if active.exists() {
-                    return Err(api_error(
-                        "wallet_corrupt",
-                        "Conflicting mobile pairing recovery files were found.",
-                    ));
-                }
-                fs::rename(path, active).map_err(internal)?;
-            }
-            changed = true;
+        if secure_temporary {
+            temporary_files.push(path);
+        } else if let Some(session_id) = active_session {
+            active_sessions.insert(session_id.to_owned());
+            active_files.push((session_id.to_owned(), path));
+        } else if let Some((session_id, wallet_id)) = consuming {
+            consuming_files.push((session_id.to_owned(), wallet_id, path));
         }
     }
-    if changed {
+    let mut consuming_sessions = HashSet::new();
+    for (session_id, wallet_id, _) in &consuming_files {
+        if active_sessions.contains(session_id) || !consuming_sessions.insert(session_id.clone()) {
+            return Err(api_error(
+                "wallet_corrupt",
+                "Conflicting mobile pairing recovery files were found.",
+            ));
+        }
+        if registered_wallets.contains(wallet_id)
+            && !committed_pairings.contains(&(session_id.clone(), *wallet_id))
+        {
+            return Err(api_error(
+                "wallet_corrupt",
+                "A mobile pairing recovery file conflicts with a registered wallet.",
+            ));
+        }
+        let orphan = wallets_directory.join(wallet_id.to_string());
+        if !registered_wallets.contains(wallet_id) && orphan.exists() {
+            let metadata = fs::symlink_metadata(&orphan).map_err(internal)?;
+            if metadata.file_type().is_symlink() || !metadata.is_dir() {
+                return Err(api_error(
+                    "wallet_corrupt",
+                    "Interrupted mobile wallet storage is not a regular directory.",
+                ));
+            }
+        }
+    }
+    let mut pairing_changed = false;
+    for path in temporary_files {
+        fs::remove_file(path).map_err(internal)?;
+        pairing_changed = true;
+    }
+    for (session_id, path) in active_files {
+        if committed_sessions.contains(session_id.as_str()) {
+            fs::remove_file(path).map_err(internal)?;
+            pairing_changed = true;
+        }
+    }
+    let mut wallets_changed = false;
+    for (session_id, wallet_id, path) in consuming_files {
+        if committed_pairings.contains(&(session_id.clone(), wallet_id)) {
+            fs::remove_file(path).map_err(internal)?;
+        } else {
+            let orphan = wallets_directory.join(wallet_id.to_string());
+            if orphan.exists() {
+                fs::remove_dir_all(orphan).map_err(internal)?;
+                wallets_changed = true;
+            }
+            fs::rename(path, pending_mobile_secret_path_in(directory, &session_id)?)
+                .map_err(internal)?;
+        }
+        pairing_changed = true;
+    }
+    if wallets_changed && wallets_directory.exists() {
+        sync_private_directory(wallets_directory)?;
+    }
+    if pairing_changed {
         sync_private_directory(directory)?;
     }
     Ok(())
@@ -1644,17 +1761,24 @@ mod tests {
     #[test]
     fn interrupted_mobile_pairing_restores_or_cleans_from_the_committed_session_set() {
         let directory = TemporaryPairingDirectory::new();
+        let wallets = TemporaryPairingDirectory::new();
         let resumable = Uuid::new_v4().to_string();
         let committed = Uuid::new_v4().to_string();
         let committed_active = Uuid::new_v4().to_string();
+        let resumable_wallet = Uuid::new_v4();
+        let committed_wallet = Uuid::new_v4();
+        let committed_active_wallet = Uuid::new_v4();
         let temporary = Uuid::new_v4().to_string();
+        let orphan = wallets.0.join(resumable_wallet.to_string());
+        fs::create_dir(&orphan).unwrap();
+        fs::write(orphan.join("wallet.sqlite"), b"partial profile").unwrap();
         fs::write(
-            consuming_mobile_secret_path_in(&directory.0, &resumable).unwrap(),
+            consuming_mobile_secret_path_in(&directory.0, &resumable, resumable_wallet).unwrap(),
             b"resumable encrypted stage",
         )
         .unwrap();
         fs::write(
-            consuming_mobile_secret_path_in(&directory.0, &committed).unwrap(),
+            consuming_mobile_secret_path_in(&directory.0, &committed, committed_wallet).unwrap(),
             b"committed encrypted stage",
         )
         .unwrap();
@@ -1671,7 +1795,12 @@ mod tests {
 
         reconcile_mobile_pairing_directory(
             &directory.0,
-            &HashSet::from([committed.clone(), committed_active.clone()]),
+            &wallets.0,
+            &HashSet::from([committed_wallet, committed_active_wallet]),
+            &HashSet::from([
+                (committed.clone(), committed_wallet),
+                (committed_active.clone(), committed_active_wallet),
+            ]),
         )
         .unwrap();
 
@@ -1679,12 +1808,17 @@ mod tests {
             fs::read(pending_mobile_secret_path_in(&directory.0, &resumable).unwrap()).unwrap(),
             b"resumable encrypted stage"
         );
-        assert!(!consuming_mobile_secret_path_in(&directory.0, &resumable)
-            .unwrap()
-            .exists());
-        assert!(!consuming_mobile_secret_path_in(&directory.0, &committed)
-            .unwrap()
-            .exists());
+        assert!(!orphan.exists());
+        assert!(
+            !consuming_mobile_secret_path_in(&directory.0, &resumable, resumable_wallet)
+                .unwrap()
+                .exists()
+        );
+        assert!(
+            !consuming_mobile_secret_path_in(&directory.0, &committed, committed_wallet)
+                .unwrap()
+                .exists()
+        );
         assert!(
             !pending_mobile_secret_path_in(&directory.0, &committed_active)
                 .unwrap()
@@ -1705,13 +1839,14 @@ mod tests {
         let directory = TemporaryPairingDirectory::new();
         let active = Uuid::new_v4().to_string();
         let consuming = Uuid::new_v4().to_string();
+        let consuming_wallet = Uuid::new_v4();
         fs::write(
             pending_mobile_secret_path_in(&directory.0, &active).unwrap(),
             b"active",
         )
         .unwrap();
         fs::write(
-            consuming_mobile_secret_path_in(&directory.0, &consuming).unwrap(),
+            consuming_mobile_secret_path_in(&directory.0, &consuming, consuming_wallet).unwrap(),
             b"consuming",
         )
         .unwrap();
@@ -1733,19 +1868,51 @@ mod tests {
     #[test]
     fn conflicting_mobile_pairing_recovery_files_fail_without_mutation() {
         let directory = TemporaryPairingDirectory::new();
+        let wallets = TemporaryPairingDirectory::new();
         let session_id = Uuid::new_v4().to_string();
+        let wallet_id = Uuid::new_v4();
         let active = pending_mobile_secret_path_in(&directory.0, &session_id).unwrap();
-        let consuming = consuming_mobile_secret_path_in(&directory.0, &session_id).unwrap();
+        let consuming =
+            consuming_mobile_secret_path_in(&directory.0, &session_id, wallet_id).unwrap();
         fs::write(&active, b"active").unwrap();
         fs::write(&consuming, b"consuming").unwrap();
 
         assert_eq!(
-            reconcile_mobile_pairing_directory(&directory.0, &HashSet::new())
-                .unwrap_err()
-                .code,
+            reconcile_mobile_pairing_directory(
+                &directory.0,
+                &wallets.0,
+                &HashSet::new(),
+                &HashSet::new(),
+            )
+            .unwrap_err()
+            .code,
             "wallet_corrupt"
         );
         assert_eq!(fs::read(active).unwrap(), b"active");
+        assert_eq!(fs::read(consuming).unwrap(), b"consuming");
+    }
+
+    #[test]
+    fn consuming_pairing_cannot_claim_an_unrelated_registered_wallet() {
+        let directory = TemporaryPairingDirectory::new();
+        let wallets = TemporaryPairingDirectory::new();
+        let session_id = Uuid::new_v4().to_string();
+        let wallet_id = Uuid::new_v4();
+        let consuming =
+            consuming_mobile_secret_path_in(&directory.0, &session_id, wallet_id).unwrap();
+        fs::write(&consuming, b"consuming").unwrap();
+
+        assert_eq!(
+            reconcile_mobile_pairing_directory(
+                &directory.0,
+                &wallets.0,
+                &HashSet::from([wallet_id]),
+                &HashSet::new(),
+            )
+            .unwrap_err()
+            .code,
+            "wallet_corrupt"
+        );
         assert_eq!(fs::read(consuming).unwrap(), b"consuming");
     }
 

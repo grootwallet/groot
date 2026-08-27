@@ -1742,12 +1742,22 @@ fn migrate_directories_with_rollback(
 }
 
 fn prepare_profile_directory(app: &AppHandle) -> ApiResult<(Uuid, PathBuf)> {
-    ensure_registry_migrated(app)?;
     let id = Uuid::new_v4();
+    let directory = prepare_profile_directory_with_id(app, id)?;
+    Ok((id, directory))
+}
+
+fn prepare_profile_directory_with_id(app: &AppHandle, id: Uuid) -> ApiResult<PathBuf> {
+    ensure_registry_migrated(app)?;
     let directory = profile_directory(app, id)?;
     ensure_private_directory(&wallets_root(app)?)?;
+    if directory.exists() {
+        return Err(internal(
+            "The new wallet storage identity is already in use.",
+        ));
+    }
     ensure_private_directory(&directory)?;
-    Ok((id, directory))
+    Ok(directory)
 }
 
 fn open_wallet_database(path: &Path) -> ApiResult<Connection> {
