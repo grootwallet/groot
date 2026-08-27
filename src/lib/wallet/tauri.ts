@@ -822,6 +822,9 @@ export class TauriWalletAdapter implements WalletPort {
       credential
     });
   }
+  awaitFinalPairingPolicy(sessionId: string, credential: string) {
+    return command<void>('coordination_mobile_await_final', { sessionId, credential });
+  }
   acceptPairingOnMobile(invitationJson: string, signerLabel: string, credential: string) {
     return command<import('./contracts').PairingResponse>('coordination_mobile_accept', {
       invitationJson,

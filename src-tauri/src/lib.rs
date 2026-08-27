@@ -155,6 +155,7 @@ pub fn run() {
             wallet::coordination_commands::coordination_mobile_accept,
             wallet::coordination_commands::coordination_pending_mobile_pairings,
             wallet::coordination_commands::coordination_mobile_resume,
+            wallet::coordination_commands::coordination_mobile_await_final,
             wallet::coordination_commands::coordination_desktop_accept,
             wallet::coordination_commands::coordination_desktop_finalize,
             wallet::coordination_commands::coordination_mobile_complete,

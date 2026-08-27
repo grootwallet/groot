@@ -136,8 +136,9 @@ Secure Enclave wrapping cannot make the phone equivalent to an independent hardw
 - `mobile-signer.json`: secret-store envelope containing only the words for coordinated mobile
   profiles. The local PIN protects the envelope and is not seed material.
 - `pending-mobile-pairings/<uuid>.json`: encrypted staging payload containing the invitation,
-  signer label, and words. Mobile can list only its opaque session ID; reproducing the exact
-  response QR requires the same local PIN. Completion first atomically renames the file to a hidden
+  signer label, words, and whether desktop has accepted the phone response. Mobile can list only
+  its opaque session ID; resuming or advancing the flow requires the same local PIN. Older staged
+  records default to the response step, so no migration is required. Completion first atomically renames the file to a hidden
   consuming tombstone bound to the newly allocated wallet UUID. Startup removes only that exact
   unregistered partial profile before restoring an uncommitted tombstone, removes a tombstone whose
   exact wallet/session registry commit is authoritative, and removes abandoned atomic-write
@@ -149,10 +150,11 @@ Secure Enclave wrapping cannot make the phone equivalent to an independent hardw
 - BIP129 records remain standards-defined. `crypto-psbt` remains the interoperability format.
   Groot-specific UR type strings only carry animated bytes for invitation/encrypted BSMS/public
   wallet records; file/manual BIP129 fallback can be added without changing the payload.
-- Every multipart camera surface reads the declared UR fragment count and shows bounded scan
-  progress as a horizontal bar plus explicit `scanned of total` and percentage text. Presentation
-  stays below 100% until the native decoder accepts the complete payload; duplicate frames do not
-  advance it.
+- Every multipart camera surface reads the declared UR source-fragment count and shows bounded,
+  estimated scan progress as a horizontal bar plus the unique-frame count and percentage. Fountain
+  frames are not presented as `scanned of total`: redundant equations can legitimately outnumber
+  source fragments. Presentation stays below 100% until the native decoder accepts the complete
+  payload; duplicate frames do not advance it.
 - The encrypted phone response alone uses 160-byte UR fragments and a slower 1.4-second display
   cadence to reduce QR density on small screens. It can be enlarged full-screen without changing
   its encrypted payload, type, decoder bounds, or replay semantics. Other coordination and PSBT

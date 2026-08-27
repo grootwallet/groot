@@ -22,25 +22,42 @@
   let cameraActive = $state(false);
   let expectedParts = $state(0);
   let scanComplete = $state(false);
+  let processingFrames = false;
   let scanner: QrScanner | undefined;
   let stopped = false;
   const seen = new Set<string>();
+  const pendingFrames: string[] = [];
+  const estimatedFrameTarget = $derived(expectedParts > 0 ? expectedParts * 2 : 0);
   const progress = $derived(
     scanComplete
       ? 100
-      : expectedParts > 0
-        ? Math.min(99, Math.round((scanned / expectedParts) * 100))
+      : estimatedFrameTarget > 0
+        ? Math.min(99, Math.round((scanned / estimatedFrameTarget) * 100))
         : 0
   );
   const progressLabel = $derived(
     expectedParts > 0
-      ? translate($locale, '{scanned} of {total} frames · {progress}%', {
+      ? translate($locale, '{scanned} frames scanned · about {progress}%', {
           scanned,
-          total: expectedParts,
           progress
         })
       : ''
   );
+
+  async function processPendingFrames() {
+    if (processingFrames || stopped) return;
+    processingFrames = true;
+    try {
+      while (pendingFrames.length && !stopped && !scanComplete) {
+        const next = pendingFrames.shift();
+        if (!next) continue;
+        scanComplete = (await onframe(next)) === true;
+      }
+      if (scanComplete) scanner?.stop();
+    } finally {
+      processingFrames = false;
+    }
+  }
 
   async function acceptFrame(rawValue: string) {
     const frame = rawValue.trim().toLowerCase();
@@ -59,8 +76,8 @@
     scanned = seen.size;
     const multipart = frame.match(/^ur:[^/]+\/\d+-(\d+)\//);
     if (multipart) expectedParts = Math.max(expectedParts, Number(multipart[1]) || 0);
-    scanComplete = (await onframe(frame)) === true;
-    if (scanComplete) scanner?.stop();
+    pendingFrames.push(frame);
+    await processPendingFrames();
   }
 
   async function startCamera() {
@@ -142,7 +159,7 @@
           starting
             ? 'Requesting camera permission…'
             : scanned
-              ? `${scanned} unique frames scanned`
+              ? 'Keep the QR inside the square'
               : prompt
         )}</span
       >{:else}<CameraOff size={16} /><span
@@ -168,22 +185,26 @@
   .scanner {
     display: grid;
     gap: 0.75rem;
+    width: min(100%, 68dvh, 38rem);
+    margin-inline: auto;
   }
   .camera-frame {
     position: relative;
+    aspect-ratio: 1;
   }
   .scanner video {
     display: block;
     width: 100%;
-    min-height: 260px;
-    max-height: 55vh;
+    height: 100%;
+    min-height: 0;
+    aspect-ratio: 1;
     object-fit: cover;
     border-radius: 1rem;
     background: #05070a;
   }
   .scan-guide {
     position: absolute;
-    inset: 12% 18%;
+    inset: 12%;
     border: 2px solid color-mix(in srgb, var(--link) 75%, white);
     border-radius: 1rem;
     pointer-events: none;

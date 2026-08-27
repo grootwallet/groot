@@ -14,6 +14,7 @@ export const coordinationCopy = {
     fr: 'Les deux appareils doivent afficher',
     es: 'Ambos dispositivos deben mostrar'
   },
+  'Back to wallet': { fr: 'Retour au portefeuille', es: 'Volver a la cartera' },
   'Available on this phone': {
     fr: 'Disponible sur ce téléphone',
     es: 'Disponible en este teléfono'
@@ -62,6 +63,11 @@ export const coordinationCopy = {
     es: 'Confirma que el teléfono muestra los mismos dígitos'
   },
   'Create phone key': { fr: 'Créer la clé du téléphone', es: 'Crear clave del teléfono' },
+  Desktop: { fr: 'Ordinateur', es: 'Ordenador' },
+  'Desktop scanned this phone key': {
+    fr: 'L’ordinateur a scanné cette clé téléphone',
+    es: 'El ordenador escaneó esta clave del teléfono'
+  },
   'Creating one-time invitation': {
     fr: 'Création de l’invitation à usage unique',
     es: 'Creando invitación de un solo uso'
@@ -92,6 +98,10 @@ export const coordinationCopy = {
     fr: 'Terminer un jumelage interrompu',
     es: 'Terminar una vinculación interrumpida'
   },
+  'Finish shared wallet setup': {
+    fr: 'Terminer la configuration du portefeuille partagé',
+    es: 'Finalizar la configuración de la cartera compartida'
+  },
   'frame {current} of {total}': {
     fr: 'trame {current} sur {total}',
     es: 'fragmento {current} de {total}'
@@ -116,6 +126,7 @@ export const coordinationCopy = {
     fr: 'Importer le portefeuille en lecture seule',
     es: 'Importar cartera de solo lectura'
   },
+  Invitation: { fr: 'Invitation', es: 'Invitación' },
   'In Groot desktop open Settings → Export & verify → Show on phone.': {
     fr: 'Dans Groot sur ordinateur, ouvrez Réglages → Exporter et vérifier → Afficher sur le téléphone.',
     es: 'En Groot para ordenador, abre Ajustes → Exportar y verificar → Mostrar en el teléfono.'
@@ -179,6 +190,11 @@ export const coordinationCopy = {
     fr: 'Invitation de jumelage en cours',
     es: 'Invitación de vinculación en curso'
   },
+  'Pairing progress': { fr: 'Progression du jumelage', es: 'Progreso de vinculación' },
+  'Pairing progress could not be saved.': {
+    fr: 'La progression du jumelage n’a pas pu être enregistrée.',
+    es: 'No se pudo guardar el progreso de vinculación.'
+  },
   'Pairing resumed': { fr: 'Jumelage repris', es: 'Vinculación reanudada' },
   'Pending pairing cancelled. Scan a new invitation to restart.': {
     fr: 'Jumelage en attente annulé. Scannez une nouvelle invitation pour recommencer.',
@@ -194,6 +210,7 @@ export const coordinationCopy = {
     es: 'El teléfono aceptó la cartera'
   },
   'Phone name': { fr: 'Nom du téléphone', es: 'Nombre del teléfono' },
+  'Phone key': { fr: 'Clé téléphone', es: 'Clave del teléfono' },
   'Phone signer setup is waiting to finish': {
     fr: 'La configuration du signataire du téléphone doit être terminée',
     es: 'La configuración del firmante del teléfono está pendiente de finalizar'
@@ -225,6 +242,10 @@ export const coordinationCopy = {
     es: 'Devolver la política final al teléfono'
   },
   'Resume pairing': { fr: 'Reprendre le jumelage', es: 'Reanudar vinculación' },
+  'Enter the pairing PIN once. Groot does not retain it after the app restarts.': {
+    fr: 'Saisissez une fois le PIN du jumelage. Groot ne le conserve pas après le redémarrage de l’application.',
+    es: 'Introduce una vez el PIN de vinculación. Groot no lo conserva después de reiniciar la aplicación.'
+  },
   'Resume wallet pairing': {
     fr: 'Reprendre le jumelage du portefeuille',
     es: 'Reanudar la vinculación de la cartera'

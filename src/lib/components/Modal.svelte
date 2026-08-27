@@ -12,6 +12,7 @@
     onclose,
     attentionSignal = 0,
     dismissible = true,
+    wide = false,
     children
   } = $props();
   let dialog = $state<HTMLDivElement>();
@@ -111,6 +112,7 @@
     <div
       bind:this={dialog}
       class="modal"
+      class:modal-wide={wide}
       class:modal-attention={attentionActive}
       role="dialog"
       aria-modal="true"

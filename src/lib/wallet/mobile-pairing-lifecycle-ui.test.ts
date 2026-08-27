@@ -58,8 +58,23 @@ describe('mobile pairing lifecycle UI', () => {
     expect(routeSource).toContain('walletService.cancelPairing(selectedPendingSession)');
     expect(routeSource).toContain('pin = resumePin;');
     expect(routeSource).toContain("resumePin = '';");
+    expect(routeSource).toContain("stage = response.awaitingFinalPolicy ? 'final' : 'response';");
+    expect(routeSource).toContain('walletService.awaitFinalPairingPolicy(response.sessionId, pin)');
     expect(routeSource).toContain('role="status"');
     expect(routeSource).toContain('role="alert"');
+  });
+
+  it('shows one explicit pairing path with navigation and persistent step progress', () => {
+    expect(routeSource).toContain(
+      "import SetupProgress from '$lib/components/SetupProgress.svelte'"
+    );
+    expect(routeSource).toContain("translate($locale, 'Pairing progress')");
+    expect(routeSource).toContain('href="/"');
+    expect(routeSource).toContain("translate($locale, 'Back to wallet')");
+    expect(routeSource).toContain(
+      '{:else if pendingPairingsLoaded && pendingPairings.length === 0}'
+    );
+    expect(routeSource).toContain("translate($locale, 'Desktop scanned this phone key')");
   });
 
   it('shows the invitation-bound comparison code before creating the phone key', () => {
@@ -111,8 +126,14 @@ describe('mobile pairing lifecycle UI', () => {
     expect(scannerSource).toContain('scanComplete');
     expect(scannerSource).toContain('<progress max="100"');
     expect(scannerSource).toContain("translate($locale, 'QR scan progress')");
-    expect(scannerSource).toContain("'{scanned} of {total} frames · {progress}%'");
-    expect(scannerSource).toContain('total: expectedParts');
+    expect(scannerSource).toContain("'{scanned} frames scanned · about {progress}%'");
+    expect(scannerSource).toContain('expectedParts * 2');
+    expect(scannerSource).toContain('pendingFrames.push(frame)');
+    expect(scannerSource).toContain('await processPendingFrames()');
+    expect(scannerSource).toMatch(/\.camera-frame\s*\{[\s\S]*?aspect-ratio:\s*1/);
+    expect(scannerSource).toMatch(/\.scan-guide\s*\{[\s\S]*?inset:\s*12%/);
+    expect(scannerSource).toMatch(/\.scanner\s*\{[\s\S]*?38rem/);
+    expect(desktopRouteSource).toContain('wide={mobilePairScan && !mobileCandidate}');
     expect(desktopRouteSource).toContain('return true;');
     expect(routeSource).toContain('return true;');
   });

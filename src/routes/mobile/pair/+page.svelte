@@ -1,10 +1,11 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import { onDestroy, onMount } from 'svelte';
-  import { Check, LockKeyhole, ScanLine, ShieldCheck, Smartphone } from '@lucide/svelte';
+  import { ArrowLeft, Check, LockKeyhole, ScanLine, ShieldCheck, Smartphone } from '@lucide/svelte';
   import AnimatedUrQr from '$lib/components/AnimatedUrQr.svelte';
   import Button from '$lib/components/Button.svelte';
   import PasswordField from '$lib/components/PasswordField.svelte';
+  import SetupProgress from '$lib/components/SetupProgress.svelte';
   import UrQrScanner from '$lib/components/UrQrScanner.svelte';
   import { locale } from '$lib/i18n';
   import { localizedError, translate } from '$lib/i18n-catalog';
@@ -27,12 +28,35 @@
   let busy = $state(false);
   let error = $state('');
   let pendingPairings = $state<PendingMobilePairing[]>([]);
+  let pendingPairingsLoaded = $state(false);
   let selectedPendingSession = $state('');
   let resumePin = $state('');
   let resumeError = $state('');
   let resumeNotice = $state('');
   let pairingPage: HTMLDivElement;
   let keyboardActive = $state(false);
+  const pairingSteps = $derived([
+    translate($locale, 'Invitation'),
+    translate($locale, 'Phone key'),
+    translate($locale, 'Desktop'),
+    translate($locale, 'Wallet policy')
+  ]);
+  const pairingStep = $derived(
+    stage === 'invite'
+      ? pendingPairings.length > 0
+        ? 3
+        : 1
+      : stage === 'confirm'
+        ? 2
+        : stage === 'response'
+          ? 3
+          : 4
+  );
+  const pageTitle = $derived(
+    stage === 'invite' && pendingPairings.length === 0
+      ? translate($locale, 'Join a shared wallet')
+      : translate($locale, 'Finish shared wallet setup')
+  );
 
   function isTextEntry(element: Element | null): element is HTMLInputElement | HTMLTextAreaElement {
     return element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement;
@@ -51,13 +75,21 @@
     }, 0);
   }
 
-  onMount(async () => {
+  async function loadPendingPairings() {
+    pendingPairingsLoaded = false;
+    resumeError = '';
     try {
       pendingPairings = await walletService.pendingMobilePairings();
       selectedPendingSession = pendingPairings[0]?.sessionId ?? '';
     } catch (cause) {
       resumeError = localizedError(cause, $locale, 'Pending pairing could not be checked.');
+    } finally {
+      pendingPairingsLoaded = true;
     }
+  }
+
+  onMount(() => {
+    void loadPendingPairings();
   });
 
   onDestroy(() => {
@@ -76,7 +108,7 @@
       comparisonCode = response.comparisonCode;
       pin = resumePin;
       resumePin = '';
-      stage = 'response';
+      stage = response.awaitingFinalPolicy ? 'final' : 'response';
       toast({
         title: 'Pairing resumed',
         description: 'The same invitation-bound response is ready for desktop.',
@@ -164,6 +196,21 @@
     }
   }
 
+  async function awaitFinalPolicy() {
+    if (!response || !pin || busy) return;
+    busy = true;
+    error = '';
+    try {
+      await walletService.awaitFinalPairingPolicy(response.sessionId, pin);
+      response = { ...response, awaitingFinalPolicy: true };
+      stage = 'final';
+    } catch (cause) {
+      error = localizedError(cause, $locale, 'Pairing progress could not be saved.');
+    } finally {
+      busy = false;
+    }
+  }
+
   async function receiveFinal(frame: string) {
     finalFrames = [...finalFrames, frame];
     if (!pin) return;
@@ -195,8 +242,10 @@
 >
   <header class="page-header">
     <div>
+      <a class="back-link" href="/"><ArrowLeft size={16} />{translate($locale, 'Back to wallet')}</a
+      >
       <p class="eyebrow">{translate($locale, 'PHONE SIGNER')}</p>
-      <h1>{translate($locale, 'Join a shared wallet')}</h1>
+      <h1>{pageTitle}</h1>
       <p class="subtitle">
         {translate(
           $locale,
@@ -206,6 +255,12 @@
     </div>
   </header>
 
+  <SetupProgress
+    steps={pairingSteps}
+    current={pairingStep}
+    label={translate($locale, 'Pairing progress')}
+  />
+
   {#if stage === 'invite'}
     {#if pendingPairings.length > 0}
       <section class="pairing-card pending-card">
@@ -214,7 +269,7 @@
           <strong>{translate($locale, 'Finish an interrupted pairing')}</strong><small
             >{translate(
               $locale,
-              'Enter the same local PIN to restore the exact response QR. No key leaves this phone.'
+              'Enter the pairing PIN once. Groot does not retain it after the app restarts.'
             )}</small
           >
         </div>
@@ -249,22 +304,31 @@
       </section>
     {/if}
     {#if resumeNotice}<p class="inline-success" role="status">{resumeNotice}</p>{/if}
-    <section class="pairing-card">
-      <span class="step-icon"><ScanLine size={22} /></span>
-      <div>
-        <strong>{translate($locale, 'Scan the desktop invitation')}</strong><small
-          >{translate(
-            $locale,
-            'The invitation expires in 15 minutes and can add one phone.'
-          )}</small
+    {#if pendingPairingsLoaded && resumeError && pendingPairings.length === 0}
+      <section class="pairing-card" role="alert">
+        <p class="inline-error">{resumeError}</p>
+        <Button variant="secondary" class="full" onclick={loadPendingPairings}
+          >{translate($locale, 'Try again')}</Button
         >
-      </div>
-      <UrQrScanner
-        acceptedTypes={['groot-invite']}
-        prompt={translate($locale, 'Point the camera at the Groot desktop invitation')}
-        onframe={receiveInvitation}
-      />
-    </section>
+      </section>
+    {:else if pendingPairingsLoaded && pendingPairings.length === 0}
+      <section class="pairing-card">
+        <span class="step-icon"><ScanLine size={22} /></span>
+        <div>
+          <strong>{translate($locale, 'Scan the desktop invitation')}</strong><small
+            >{translate(
+              $locale,
+              'The invitation expires in 15 minutes and can add one phone.'
+            )}</small
+          >
+        </div>
+        <UrQrScanner
+          acceptedTypes={['groot-invite']}
+          prompt={translate($locale, 'Point the camera at the Groot desktop invitation')}
+          onframe={receiveInvitation}
+        />
+      </section>
+    {/if}
   {:else if stage === 'confirm'}
     <section class="pairing-card">
       <span class="step-icon"><Smartphone size={22} /></span>
@@ -334,8 +398,9 @@
       <div class="identity">
         <Check size={16} /><span>{response.fingerprint} · {response.xpubChecksum}</span>
       </div>
-      <Button class="full" onclick={() => (stage = 'final')}
-        >{translate($locale, 'Phone key added on desktop')}</Button
+      {#if error}<p class="inline-error" role="alert">{error}</p>{/if}
+      <Button class="full" loading={busy} onclick={awaitFinalPolicy}
+        >{translate($locale, 'Desktop scanned this phone key')}</Button
       >
     </section>
   {:else}

@@ -2295,6 +2295,7 @@
 <Modal
   open={mobilePairOpen}
   dismissible={false}
+  wide={mobilePairScan && !mobileCandidate}
   title={translate($locale, 'Add a Groot phone')}
   description={translate(
     $locale,

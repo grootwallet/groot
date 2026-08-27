@@ -42,6 +42,7 @@ pub struct PairingResponseDto {
     backup_verified: bool,
     comparison_code: String,
     frames: Vec<String>,
+    awaiting_final_policy: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -61,6 +62,8 @@ struct PendingMobileSecret {
     #[serde(default)]
     signer_label: String,
     backup_verified: bool,
+    #[serde(default)]
+    awaiting_final_policy: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -309,6 +312,7 @@ pub async fn coordination_mobile_accept(
             mnemonic: words.to_string(),
             signer_label: label.to_owned(),
             backup_verified: backup.verified,
+            awaiting_final_policy: false,
         };
         let staged = Zeroizing::new(serde_json::to_vec(&staged).map_err(internal)?);
         secure_store::store(
@@ -324,6 +328,7 @@ pub async fn coordination_mobile_accept(
             backup_verified: backup.verified,
             comparison_code: comparison_code(&invitation),
             frames,
+            awaiting_final_policy: false,
         })
     })
     .await
@@ -381,6 +386,38 @@ pub fn coordination_mobile_resume(
     pairing_response_from_staged(&staged)
 }
 
+#[tauri::command]
+pub fn coordination_mobile_await_final(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    session_id: String,
+    credential: String,
+) -> ApiResult<()> {
+    let _operation = operation_guard(&state)?;
+    let credential = Zeroizing::new(credential);
+    validate_credential(credential.as_str())?;
+    reconcile_mobile_pairing_storage(&app)?;
+    let staged_path = pending_mobile_secret_path(&app, &session_id)?;
+    let staged_bytes = Zeroizing::new(
+        secure_store::load(&staged_path, credential.as_str()).map_err(secure_store_error)?,
+    );
+    let mut staged: PendingMobileSecret = serde_json::from_slice(&staged_bytes)
+        .map_err(|_| api_error("wallet_corrupt", "The pending mobile signer is malformed."))?;
+    if staged.version != 1 || staged.invitation.session_id != session_id {
+        return Err(api_error(
+            "wallet_corrupt",
+            "The pending mobile signer does not match its pairing session.",
+        ));
+    }
+    staged
+        .invitation
+        .validate(now())
+        .map_err(coordination_api_error)?;
+    staged.awaiting_final_policy = true;
+    let staged = Zeroizing::new(serde_json::to_vec(&staged).map_err(internal)?);
+    secure_store::store(&staged_path, &staged, credential.as_str()).map_err(secure_store_error)
+}
+
 fn pairing_response_from_staged(staged: &PendingMobileSecret) -> ApiResult<PairingResponseDto> {
     let mnemonic = Mnemonic::parse(&staged.mnemonic).map_err(internal)?;
     let (fingerprint, account, xpub) =
@@ -410,7 +447,21 @@ fn pairing_response_from_staged(staged: &PendingMobileSecret) -> ApiResult<Pairi
         backup_verified: staged.backup_verified,
         comparison_code: comparison_code(&staged.invitation),
         frames,
+        awaiting_final_policy: staged.awaiting_final_policy,
     })
+}
+
+fn decode_public_wallet_record(bytes: &[u8]) -> ApiResult<PublicWalletRecord> {
+    let value: serde_json::Value = serde_json::from_slice(bytes)
+        .map_err(|_| invalid_payload("The encrypted wallet record is malformed."))?;
+    if value.get("version").and_then(serde_json::Value::as_u64) != Some(2) {
+        return Err(api_error(
+            "unsupported_coordination_version",
+            "This final wallet QR came from an incompatible Groot build. Update and restart both apps, then pair again.",
+        ));
+    }
+    serde_json::from_value(value)
+        .map_err(|_| invalid_payload("The encrypted wallet record is malformed."))
 }
 
 #[tauri::command]
@@ -589,8 +640,7 @@ pub fn coordination_mobile_complete(
     }
     let public_bytes = decrypt_bip129(&staged.invitation.token, &envelope.encrypted_record)
         .map_err(coordination_api_error)?;
-    let public: PublicWalletRecord = serde_json::from_slice(&public_bytes)
-        .map_err(|_| invalid_payload("The encrypted wallet record is malformed."))?;
+    let public = decode_public_wallet_record(&public_bytes)?;
     let descriptor = public.validate().map_err(coordination_api_error)?;
     if public.wallet_name != staged.invitation.wallet_name {
         return Err(coordination_api_error(
@@ -1951,6 +2001,7 @@ mod tests {
             mnemonic: mobile_mnemonic().to_string(),
             signer_label: "Recovered phone session".to_owned(),
             backup_verified: true,
+            awaiting_final_policy: true,
         };
         let first = pairing_response_from_staged(&staged).unwrap();
         let encoded = serde_json::to_vec(&staged).unwrap();
@@ -1961,6 +2012,27 @@ mod tests {
         assert_eq!(first.xpub_checksum, second.xpub_checksum);
         assert_eq!(first.comparison_code, second.comparison_code);
         assert_eq!(first.frames, second.frames);
+        assert!(first.awaiting_final_policy);
+        assert!(second.awaiting_final_policy);
+    }
+
+    #[test]
+    fn staged_mobile_response_defaults_legacy_pairings_to_the_response_step() {
+        let legacy = serde_json::json!({
+            "version": 1,
+            "invitation": invitation(1_900),
+            "mnemonic": mobile_mnemonic().to_string(),
+            "signerLabel": "Legacy phone session",
+            "backupVerified": true
+        });
+        let reopened: PendingMobileSecret = serde_json::from_value(legacy).unwrap();
+        assert!(!reopened.awaiting_final_policy);
+    }
+
+    #[test]
+    fn final_wallet_record_reports_an_incompatible_protocol_version() {
+        let error = decode_public_wallet_record(br#"{"version":1}"#).unwrap_err();
+        assert_eq!(error.code, "unsupported_coordination_version");
     }
 
     #[test]

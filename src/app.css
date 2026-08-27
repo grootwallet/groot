@@ -1979,6 +1979,9 @@ code {
   border-radius: 12px;
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
 }
+.modal.modal-wide {
+  width: min(680px, 100%);
+}
 .modal:focus-visible {
   outline: none;
 }
@@ -9911,6 +9914,9 @@ code {
     width: 100%;
     max-height: calc(100dvh - max(20px, env(safe-area-inset-top) + env(safe-area-inset-bottom)));
     border-radius: 14px;
+  }
+  .modal.modal-wide {
+    width: 100%;
   }
   .modal-header {
     padding: 17px 16px 13px;

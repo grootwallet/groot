@@ -25,6 +25,7 @@ export type PairingResponse = {
   backupVerified: boolean;
   comparisonCode: string;
   frames: string[];
+  awaitingFinalPolicy: boolean;
 };
 
 export type PendingMobilePairing = {
@@ -71,6 +72,7 @@ export interface WalletCoordinationPort {
   decodePairingInvitation(frames: string[]): Promise<DecodedPairingInvitation>;
   pendingMobilePairings(): Promise<PendingMobilePairing[]>;
   resumePairingOnMobile(sessionId: string, credential: string): Promise<PairingResponse>;
+  awaitFinalPairingPolicy(sessionId: string, credential: string): Promise<void>;
   acceptPairingOnMobile(
     invitationJson: string,
     signerLabel: string,
