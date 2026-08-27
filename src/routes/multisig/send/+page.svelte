@@ -1131,9 +1131,10 @@
       armedLabelIndex = result.armedIndex;
       return;
     }
+    if (event.key === 'Tab' && event.shiftKey) return;
     armedLabelIndex = null;
     if (!label.trim() || !['Enter', 'Tab', ',', ';'].includes(event.key)) return;
-    if (event.key !== 'Tab') event.preventDefault();
+    event.preventDefault();
     const draft = tokenizeLabelDraft(selectedLabels, label, true);
     selectedLabels = draft.labels;
     label = draft.input;
