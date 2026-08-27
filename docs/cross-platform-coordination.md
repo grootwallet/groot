@@ -158,9 +158,12 @@ signature-only merge, second signature, finalization, and broadcast path, includ
 attack cases. Deterministic units pass response authentication, expiry, replay, substituted-token,
 volatile-desktop-restart, staged-response reopen, cancel, consuming-tombstone reconciliation,
 exact orphan-profile cleanup, registered-wallet conflict, traversal, and orphan-temporary-file
-cases. Full external process-kill automation at every wallet registry/profile commit boundary,
-watch-only address equality, and clean mobile recovery remain open and must not be inferred from
-this evidence.
+cases. An isolated Regtest build also compiles, installs, launches, and survives a forced process
+relaunch in the iOS 26.1 simulator, with built camera/Local Network permission copy and status-safe
+onboarding layout verified. That does not exercise a physical camera, Keychain/Secure Enclave
+wrapping, biometric/passcode behavior, native recovery, or real-device lifecycle. Full external
+process-kill automation at every wallet registry/profile commit boundary, watch-only address
+equality, and clean mobile recovery remain open and must not be inferred from this evidence.
 
 iOS physical certification additionally requires camera denial/interruption/background/resume,
 safe-area and accessibility checks, passcode-required Keychain behavior, biometric enrollment

@@ -4,5 +4,7 @@
 <dict>
   <key>NSCameraUsageDescription</key>
   <string>Groot uses the camera only to scan wallet pairing and Bitcoin PSBT signing messages.</string>
+  <key>NSLocalNetworkUsageDescription</key>
+  <string>Groot Regtest Dev uses your local network only to reach its development server and Bitcoin nodes you configure.</string>
 </dict>
 </plist>

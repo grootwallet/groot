@@ -3814,8 +3814,8 @@ code {
   margin-left: 0;
 }
 .onboarding-brand {
-  height: 72px;
-  padding: 0 28px;
+  height: calc(72px + env(safe-area-inset-top));
+  padding: env(safe-area-inset-top) 28px 0;
   display: flex;
   align-items: center;
   gap: 9px;
@@ -10266,7 +10266,7 @@ code {
     bottom: calc(76px + env(safe-area-inset-bottom));
   }
   .onboarding-brand {
-    padding: 0 18px;
+    padding-inline: 18px;
   }
   .onboarding-card {
     padding: 30px 22px;

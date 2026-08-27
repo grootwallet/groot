@@ -45,7 +45,7 @@ use std::{
     },
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
-#[cfg(not(target_os = "macos"))]
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 use tauri::WebviewWindow;
 use tauri::{AppHandle, Manager, State};
 use uuid::Uuid;
@@ -167,13 +167,21 @@ pub async fn public_backup_pdf_save(
     export_commands::public_backup_pdf_save(app, state, save_token, markup).await
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 #[tauri::command]
 pub fn public_backup_pdf_prepare(
     window: WebviewWindow,
     suggested_filename: String,
 ) -> ApiResult<PendingPdfExportDto> {
     export_commands::public_backup_pdf_prepare(window, suggested_filename)
+}
+
+#[cfg(any(target_os = "android", target_os = "ios"))]
+#[tauri::command]
+pub fn public_backup_pdf_prepare(
+    suggested_filename: String,
+) -> ApiResult<PendingPdfExportDto> {
+    export_commands::public_backup_pdf_prepare(suggested_filename)
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -350,6 +358,7 @@ pub struct AppState {
     node_auth: Mutex<HashMap<Uuid, NodeAuthSession>>,
     authenticated_software_descriptors: Mutex<HashMap<Uuid, (String, String)>>,
     saved_files: Mutex<HashMap<String, SavedFileReveal>>,
+    #[cfg(target_os = "macos")]
     pending_pdf_exports: Mutex<HashMap<String, PendingPdfExport>>,
     recovery_scans: Mutex<HashMap<Uuid, ActiveRecoveryScan>>,
     runtime_auth_retry_at: Mutex<HashMap<Uuid, Instant>>,

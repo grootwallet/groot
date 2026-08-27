@@ -29,4 +29,29 @@ if [[ "${runtime_output}" != "Node v24.19.0 · pnpm 11.13.1" ]]; then
   exit 1
 fi
 
+IOS_CONFIG="${REPOSITORY_ROOT}/src-tauri/tauri.ios.conf.json"
+IOS_LAUNCHER="${REPOSITORY_ROOT}/scripts/dev/tauri-ios-regtest.sh"
+
+rg -Fq '"identifier": "app.groot.wallet.regtest.dev"' "${IOS_CONFIG}" || {
+  echo "The iOS development config must use the isolated Regtest bundle identifier." >&2
+  exit 1
+}
+rg -Fq '"beforeDevCommand": "pnpm dev:regtest"' "${IOS_CONFIG}" || {
+  echo "The iOS development config must launch the Regtest frontend." >&2
+  exit 1
+}
+rg -Fq 'export GROOT_BUILD_NETWORK=regtest' "${IOS_LAUNCHER}" || {
+  echo "The iOS development launcher must compile for Regtest." >&2
+  exit 1
+}
+
+if ios_usage_output="$(/bin/bash "${IOS_LAUNCHER}" 2>&1)"; then
+  echo "The iOS development launcher accepted a missing target." >&2
+  exit 1
+fi
+if [[ "${ios_usage_output}" != *"An explicit target is required"* ]]; then
+  echo "The iOS development launcher did not explain its explicit-target requirement." >&2
+  exit 1
+fi
+
 echo "Native development runtime launcher passed."

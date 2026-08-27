@@ -10,7 +10,9 @@ use std::{
 };
 #[cfg(target_os = "macos")]
 use tauri::{webview::PageLoadEvent, WebviewUrl, WebviewWindowBuilder};
-use tauri::{AppHandle, State, WebviewWindow};
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+use tauri::WebviewWindow;
+use tauri::{AppHandle, State};
 use tauri_plugin_dialog::DialogExt;
 use uuid::Uuid;
 
@@ -541,7 +543,7 @@ pub async fn public_backup_pdf_save(
     saved_file_result(&state, Some(saved_path))
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 pub fn public_backup_pdf_prepare(
     window: WebviewWindow,
     _suggested_filename: String,
@@ -551,6 +553,16 @@ pub fn public_backup_pdf_prepare(
         prepared: false,
         save_token: None,
     })
+}
+
+#[cfg(any(target_os = "android", target_os = "ios"))]
+pub fn public_backup_pdf_prepare(
+    _suggested_filename: String,
+) -> ApiResult<PendingPdfExportDto> {
+    Err(api_error(
+        "backup_export_failed",
+        "Native PDF printing is not available on mobile.",
+    ))
 }
 
 #[cfg(not(target_os = "macos"))]

@@ -1,0 +1,13 @@
+{
+  "productName": "Groot Regtest Dev",
+  "identifier": "app.groot.wallet.regtest.dev",
+  "build": {
+    "beforeDevCommand": "pnpm dev:regtest",
+    "beforeBuildCommand": "pnpm build:regtest"
+  },
+  "bundle": {
+    "iOS": {
+      "infoPlist": "Info.ios.plist"
+    }
+  }
+}
