@@ -527,7 +527,7 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   ).toBeVisible();
   const psbtDownload = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Save unsigned PSBT' }).click();
-  await expect((await psbtDownload).suggestedFilename()).toMatch(/^groot-[a-z0-9]{1,8}\.psbt$/);
+  await expect((await psbtDownload).suggestedFilename()).toMatch(/^groot-[a-z0-9]{1,6}-s0\.psbt$/);
   await expect(page.getByText('PSBT saved', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Show in Finder' })).toBeVisible();
   await page.getByRole('button', { name: 'Show in Finder' }).click();

@@ -341,7 +341,7 @@ test('spends end-to-end from the ready-made demo wallet', async ({ page }) => {
   const psbtDownload = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Save PSBT' }).click();
   const downloadedPsbt = await psbtDownload;
-  await expect(downloadedPsbt.suggestedFilename()).toMatch(/^groot-[a-z0-9]{1,8}\.psbt$/);
+  await expect(downloadedPsbt.suggestedFilename()).toMatch(/^groot-[a-z0-9]{1,6}-s0\.psbt$/);
   const savedChunks: Buffer[] = [];
   for await (const chunk of await downloadedPsbt.createReadStream())
     savedChunks.push(Buffer.from(chunk));

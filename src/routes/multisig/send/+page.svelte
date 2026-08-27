@@ -80,6 +80,7 @@
     repeatsPolicyAuthorizationWhenSigning,
     requiresInteractivePolicyVerification,
     requiresPolicySetup,
+    savedSignerCandidatesForDevice,
     shouldShowColdcardPolicyHelp
   } from '$lib/hardware/policy-readiness';
   import { hardwareDeviceDisplayName } from '$lib/hardware/discovery';
@@ -159,6 +160,8 @@
     coldcardSetupDevice = $state<HardwareDevice | null>(null);
   let accelerationRequest = $state<{ txid: string; method: 'rbf' | 'cpfp' } | null>(null);
   let hardwareAction = $state<'scan' | 'sign'>('scan');
+  let hardwareAttentionSignal = $state(0),
+    hardwareCancelRequested = $state(false);
   let hardwareScanGeneration = 0;
   let coins = $state<Utxo[]>([]),
     selectedCoins = $state<string[]>([]),
@@ -375,13 +378,17 @@
   });
   onMount(async () => {
     try {
-      const [snapshot, loadedWallet, proposals] = await Promise.all([
+      const [snapshot, loadedWallet, proposals, registry] = await Promise.all([
         walletService.multisigSnapshot(),
         walletService.multisigWallet(),
-        walletService.multisigProposals()
+        walletService.multisigProposals(),
+        walletService.profiles()
       ]);
       wallet = loadedWallet;
-      draftWalletId = walletShell.selectedWalletId() ?? '';
+      const selectedProfile = registry.wallets.find(
+        (profile) => profile.id === registry.selectedWalletId
+      );
+      draftWalletId = selectedProfile?.kind === 'multisig' ? selectedProfile.id : '';
       coins = snapshot.utxos;
       labelSuggestions = snapshot.labelSuggestions;
       void walletService
@@ -555,10 +562,10 @@
       kind: 'multisig',
       walletId: draftWalletId,
       address,
-      labels: submissionLabels,
+      labels: [...submissionLabels],
       amount,
       stage: draftStep,
-      selectedCoins,
+      selectedCoins: [...selectedCoins],
       automaticStrategy,
       selectedRate
     });
@@ -684,13 +691,12 @@
     );
   }
   function savedSignerForDevice(device: HardwareDevice) {
-    return (
-      wallet?.cosigners.find(
-        (signer) =>
-          device.fingerprint &&
-          signer.fingerprint.toLowerCase() === device.fingerprint.toLowerCase()
-      ) ?? null
+    const candidates = savedSignerCandidatesForDevice(
+      device,
+      wallet?.cosigners ?? [],
+      proposal?.eligibleSignerFingerprints ?? []
     );
+    return candidates.length === 1 ? candidates[0] : null;
   }
   function devicePolicyVerification(device: HardwareDevice) {
     const signer = savedSignerForDevice(device);
@@ -716,10 +722,28 @@
     }
   }
   function closeHardwareScan() {
-    if (busy && hardwareAction !== 'scan') return;
+    if (busy && hardwareAction !== 'scan') {
+      hardwareCancelRequested = true;
+      hardwareAttentionSignal += 1;
+      if (policyReviewOpen) {
+        policyReviewError =
+          'Reject or cancel the pending request on the device. Groot will close this dialog after the device responds.';
+      }
+      return;
+    }
     hardwareScanGeneration += 1;
     busy = false;
     deviceOpen = false;
+  }
+  function closePolicyReview() {
+    if (policyReviewBusy) {
+      if (busy && hardwareAction === 'sign') closeHardwareScan();
+      return;
+    }
+    policyReviewOpen = false;
+    policyReviewDevice = null;
+    policyReviewError = '';
+    deviceOpen = true;
   }
   async function handleHardware(device: HardwareDevice) {
     if (deviceHasSigned(device)) return;
@@ -732,6 +756,18 @@
       return;
     }
     const signer = savedSignerForDevice(device);
+    const signerCandidates = savedSignerCandidatesForDevice(
+      device,
+      wallet?.cosigners ?? [],
+      proposal?.eligibleSignerFingerprints ?? []
+    );
+    if (!device.fingerprint && !signer && requiresInteractivePolicyVerification(device)) {
+      deviceError =
+        signerCandidates.length > 1
+          ? 'More than one saved signer uses this device family. Unlock the intended device and rescan so Groot can bind its exact fingerprint.'
+          : 'Unlock this device and rescan so Groot can bind it to an eligible saved signer.';
+      return;
+    }
     if (
       proposal &&
       signer &&
@@ -835,6 +871,7 @@
     const reviewingPolicy = policyReviewOpen && policyReviewDevice?.id === device.id;
     activeHardwareDevice = device;
     hardwareAction = 'sign';
+    hardwareCancelRequested = false;
     busy = true;
     policyReviewBusy = true;
     deviceError = '';
@@ -861,11 +898,14 @@
     } catch (cause) {
       closeHardwareReviewOverlays();
       policyReviewOpen = false;
-      deviceOpen = true;
-      deviceError = localizedError(cause, $locale, 'Device signing failed.');
+      deviceOpen = !hardwareCancelRequested;
+      deviceError = hardwareCancelRequested
+        ? ''
+        : localizedError(cause, $locale, 'Device signing failed.');
     } finally {
       busy = false;
       policyReviewBusy = false;
+      hardwareCancelRequested = false;
     }
   }
   function showTransactionDuringSigning() {
@@ -1062,8 +1102,11 @@
     savingPsbt = true;
     error = '';
     try {
-      const signed = proposal.canFinalize;
-      const saved = await walletService.savePsbt(psbtFilename(proposal.proposalId), proposal.psbt);
+      const signed = proposal.signed > 0;
+      const saved = await walletService.savePsbt(
+        psbtFilename(proposal.proposalId, proposal.signed),
+        proposal.psbt
+      );
       if (saved.saved)
         toast({
           title: signed ? 'Signed PSBT saved' : 'PSBT saved',
@@ -1644,6 +1687,13 @@
       <Button type="submit" size="large" class="full" disabled={!intentValid}
         >{translate($locale, 'Continue to amount')}</Button
       >
+      {#if error}<div class="hardware-inline-error send-form-error" role="alert">
+          <AlertTriangle size={18} /><span
+            ><strong>{translate($locale, 'Could not save payment draft')}</strong><small
+              >{error}</small
+            ></span
+          >
+        </div>{/if}
     </form>
   {:else if !proposal}
     <form
@@ -2091,6 +2141,7 @@
   title={translate($locale, 'Sign with hardware')}
   description={translate($locale, 'Compare every value below with the device before approving.')}
   onclose={closeHardwareScan}
+  attentionSignal={hardwareAttentionSignal}
 >
   {#if proposal}
     <section
@@ -2177,19 +2228,27 @@
     <HardwareActionPrompt
       title={translate(
         $locale,
-        hardwareAction === 'sign' ? 'Check your hardware device' : 'Looking for hardware devices'
+        hardwareCancelRequested
+          ? 'Cancel on your hardware device'
+          : hardwareAction === 'sign'
+            ? 'Check your hardware device'
+            : 'Looking for hardware devices'
       )}
       detail={translate(
         $locale,
-        hardwareAction === 'sign'
-          ? 'Review the recipient, amount, fee, change, and wallet policy, then approve on the device.'
-          : 'Keep each signer connected and unlocked. Follow any instructions shown on the device.'
+        hardwareCancelRequested
+          ? 'Reject or cancel the pending request on the device. Groot will close this dialog after the device responds.'
+          : hardwareAction === 'sign'
+            ? 'Review the recipient, amount, fee, change, and wallet policy, then approve on the device.'
+            : 'Keep each signer connected and unlocked. Follow any instructions shown on the device.'
       )}
       label={translate(
         $locale,
-        hardwareAction === 'sign'
-          ? 'Waiting for hardware signature'
-          : 'Hardware device scan in progress'
+        hardwareCancelRequested
+          ? 'Waiting for hardware cancellation'
+          : hardwareAction === 'sign'
+            ? 'Waiting for hardware signature'
+            : 'Hardware device scan in progress'
       )}
     />
   {:else if devices.length === 0}
@@ -2271,14 +2330,8 @@
   open={policyReviewOpen}
   title={translate($locale, 'Review wallet policy')}
   description={translate($locale, 'Check the policy, signer keys, and first address.')}
-  onclose={() => {
-    if (!policyReviewBusy) {
-      policyReviewOpen = false;
-      policyReviewDevice = null;
-      policyReviewError = '';
-      deviceOpen = true;
-    }
-  }}
+  onclose={closePolicyReview}
+  attentionSignal={hardwareAttentionSignal}
 >
   {#if wallet && policyAddress && policyReviewDevice && savedSignerForDevice(policyReviewDevice)}{@const signer =
       savedSignerForDevice(policyReviewDevice)!}{@const verification = matchingPolicyVerification(

@@ -8,6 +8,7 @@ import {
   repeatsPolicyAuthorizationWhenSigning,
   requiresInteractivePolicyVerification,
   requiresPolicySetup,
+  savedSignerCandidatesForDevice,
   shouldShowColdcardPolicyHelp
 } from './policy-readiness';
 
@@ -84,5 +85,42 @@ describe('hardware policy readiness', () => {
     expect(matchingPolicyVerification({ fingerprint: 'f00dbabe' }, [coldcardEvidence])).toEqual(
       coldcardEvidence
     );
+  });
+
+  it('binds a fingerprint-less device only to one eligible saved signer of that family', () => {
+    const signers = [
+      { label: 'Ledger Nano S Plus', deviceType: 'ledger', fingerprint: 'AAAABBBB' },
+      { label: 'BitBox02', deviceType: 'bitbox02', fingerprint: 'CCCCDDDD' }
+    ];
+    expect(
+      savedSignerCandidatesForDevice(
+        { label: 'Ledger', deviceType: 'ledger', fingerprint: null },
+        signers,
+        ['aaaabbbb', 'ccccdddd']
+      )
+    ).toEqual([signers[0]]);
+    expect(
+      savedSignerCandidatesForDevice(
+        { label: 'Ledger', deviceType: 'ledger', fingerprint: 'AAAABBBB' },
+        signers,
+        ['ccccdddd']
+      )
+    ).toEqual([signers[0]]);
+  });
+
+  it('keeps a fingerprint-less same-family match ambiguous and filters ineligible signers', () => {
+    const signers = [
+      { label: 'Travel Ledger', deviceType: 'ledger', fingerprint: 'AAAABBBB' },
+      { label: 'Home Ledger', deviceType: 'ledger', fingerprint: 'CCCCDDDD' }
+    ];
+    const device = { label: 'Ledger', deviceType: 'ledger', fingerprint: null };
+    expect(savedSignerCandidatesForDevice(device, signers)).toEqual(signers);
+    expect(savedSignerCandidatesForDevice(device, signers, ['ccccdddd'])).toEqual([signers[1]]);
+    expect(
+      savedSignerCandidatesForDevice(
+        { label: 'Unknown', deviceType: 'unknown', fingerprint: null },
+        signers
+      )
+    ).toEqual([]);
   });
 });

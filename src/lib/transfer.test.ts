@@ -31,9 +31,11 @@ describe('air-gapped transfer validation', () => {
   });
 
   it('creates short hardware-signer-compatible PSBT filenames', () => {
-    expect(psbtFilename('a3c0ee90-7351-4a51-923f-9eea7c86ddb7')).toBe('groot-a3c0ee90.psbt');
-    expect(psbtFilename('ABC-123')).toBe('groot-abc123.psbt');
-    expect(psbtFilename('---')).toBe('groot-payment.psbt');
-    expect(psbtFilename('a3c0ee90-7351-4a51-923f-9eea7c86ddb7').length).toBeLessThanOrEqual(20);
+    expect(psbtFilename('a3c0ee90-7351-4a51-923f-9eea7c86ddb7', 0)).toBe('groot-a3c0ee-s0.psbt');
+    expect(psbtFilename('a3c0ee90-7351-4a51-923f-9eea7c86ddb7', 1)).toBe('groot-a3c0ee-s1.psbt');
+    expect(psbtFilename('a3c0ee90-7351-4a51-923f-9eea7c86ddb7', 2)).toBe('groot-a3c0ee-s2.psbt');
+    expect(psbtFilename('ABC-123', 1)).toBe('groot-abc123-s1.psbt');
+    expect(psbtFilename('---', Number.NaN)).toBe('groot-pay-s0.psbt');
+    expect(psbtFilename('a3c0ee90-7351-4a51-923f-9eea7c86ddb7', 2).length).toBeLessThanOrEqual(20);
   });
 });

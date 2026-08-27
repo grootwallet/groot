@@ -105,6 +105,7 @@
   let available = $state(0);
   let estimates = $state<FeeEstimates | null>(null);
   let feeEstimateError = $state('');
+  let draftError = $state('');
   let proposal = $state<PaymentProposal | null>(null);
   let txid = $state('');
   let sentAmount = $state(0);
@@ -141,6 +142,8 @@
     scannedFrames = $state<string[]>([]);
   let importError = $state('');
   let hardwareAction = $state<'scan' | 'sign'>('scan');
+  let hardwareAttentionSignal = $state(0),
+    hardwareCancelRequested = $state(false);
   const selection = $derived<CoinSelection>(
     selectedCoins.length
       ? { mode: 'manual', outpoints: selectedCoins }
@@ -398,10 +401,10 @@
       kind: 'single_key',
       walletId: draftWalletId,
       address,
-      labels: submissionLabels,
+      labels: [...submissionLabels],
       amount,
       stage: draftStep,
-      selectedCoins,
+      selectedCoins: [...selectedCoins],
       automaticStrategy,
       speed,
       customFee
@@ -564,7 +567,11 @@
     }
   }
   function closeHardwareScan() {
-    if (broadcasting && hardwareAction !== 'scan') return;
+    if (broadcasting && hardwareAction !== 'scan') {
+      hardwareCancelRequested = true;
+      hardwareAttentionSignal += 1;
+      return;
+    }
     hardwareScanGeneration += 1;
     broadcasting = false;
     deviceOpen = false;
@@ -572,6 +579,7 @@
   async function signHardware(device: HardwareDevice) {
     if (!proposal || !externalProposal) return;
     hardwareAction = 'sign';
+    hardwareCancelRequested = false;
     broadcasting = true;
     deviceError = '';
     try {
@@ -583,9 +591,13 @@
       deviceOpen = false;
       toast({ title: 'Hardware signature added', tone: 'success' });
     } catch (cause) {
-      deviceError = localizedError(cause, $locale, 'Hardware signing failed.');
+      deviceOpen = !hardwareCancelRequested;
+      deviceError = hardwareCancelRequested
+        ? ''
+        : localizedError(cause, $locale, 'Hardware signing failed.');
     } finally {
       broadcasting = false;
+      hardwareCancelRequested = false;
     }
   }
   async function importSigned() {
@@ -644,13 +656,15 @@
     savingPsbt = true;
     try {
       const saved = await walletService.savePsbt(
-        psbtFilename(externalProposal.proposalId),
+        psbtFilename(externalProposal.proposalId, externalProposal.signed),
         externalProposal.psbt
       );
       if (saved.saved)
         toast({
-          title: 'PSBT saved',
-          description: 'The unsigned transaction was saved to the selected file.',
+          title: externalProposal.signed ? 'Signed PSBT saved' : 'PSBT saved',
+          description: externalProposal.signed
+            ? 'The signed transaction was saved to the selected file.'
+            : 'The unsigned transaction was saved to the selected file.',
           tone: 'success',
           action:
             saved.revealToken && saved.revealLabel
@@ -771,6 +785,7 @@
   }
   async function continueToAmount() {
     if (!intentValid) return;
+    draftError = '';
     selectedLabels = submissionLabels;
     label = '';
     armedLabelIndex = null;
@@ -779,9 +794,11 @@
       await saveCurrentDraft();
     } catch (cause) {
       draftStep = 1;
+      draftError = localizedError(cause, $locale, 'Could not save payment draft.');
       toast({
         title: 'Could not save payment draft',
-        description: localizedError(cause, $locale)
+        description: draftError,
+        tone: 'danger'
       });
     }
   }
@@ -940,6 +957,7 @@
         ><span>{translate($locale, 'Bitcoin address')}</span><input
           aria-label={translate($locale, 'Bitcoin address')}
           bind:value={address}
+          oninput={() => (draftError = '')}
           placeholder="{addressPrefixForNetwork(defaultConfig.network)}q…"
         />{#if address && !addressValid}<em
             >{translate($locale, 'Enter a valid')}
@@ -950,6 +968,13 @@
       <Button type="submit" disabled={!intentValid} size="large" class="full"
         >{translate($locale, 'Continue to amount')}<ArrowRight size={17} /></Button
       >
+      {#if draftError}<div class="hardware-inline-error send-form-error" role="alert">
+          <AlertTriangle size={18} /><span
+            ><strong>{translate($locale, 'Could not save payment draft')}</strong><small
+              >{draftError}</small
+            ></span
+          >
+        </div>{/if}
     </form>
   {:else if step === 1}
     <form
@@ -1510,6 +1535,7 @@
     'Use the same passphrase-protected hardware signer whose fingerprint you imported.'
   )}
   onclose={closeHardwareScan}
+  attentionSignal={hardwareAttentionSignal}
   >{#if proposal}<section
       class="hardware-review"
       aria-label={translate($locale, 'Authoritative transaction details')}
@@ -1566,19 +1592,27 @@
     </section>{/if}{#if broadcasting}<HardwareActionPrompt
       title={translate(
         $locale,
-        hardwareAction === 'sign' ? 'Check your hardware device' : 'Looking for hardware devices'
+        hardwareCancelRequested
+          ? 'Cancel on your hardware device'
+          : hardwareAction === 'sign'
+            ? 'Check your hardware device'
+            : 'Looking for hardware devices'
       )}
       detail={translate(
         $locale,
-        hardwareAction === 'sign'
-          ? 'Review the recipient, amount, fee, and change, then approve the transaction on the device.'
-          : 'Keep the signer connected. Follow any unlock instructions shown by Groot or the device.'
+        hardwareCancelRequested
+          ? 'Reject or cancel the pending request on the device. Groot will close this dialog after the device responds.'
+          : hardwareAction === 'sign'
+            ? 'Review the recipient, amount, fee, and change, then approve the transaction on the device.'
+            : 'Keep the signer connected. Follow any unlock instructions shown by Groot or the device.'
       )}
       label={translate(
         $locale,
-        hardwareAction === 'sign'
-          ? 'Waiting for hardware signature'
-          : 'Hardware device scan in progress'
+        hardwareCancelRequested
+          ? 'Waiting for hardware cancellation'
+          : hardwareAction === 'sign'
+            ? 'Waiting for hardware signature'
+            : 'Hardware device scan in progress'
       )}
     />{:else}<HardwareDeviceList
       {devices}

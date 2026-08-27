@@ -139,6 +139,32 @@ export function repeatsPolicyAuthorizationWhenSigning(
   return policyRegistrationProfile(value).registration === 'interactive_per_signing';
 }
 
+export function savedSignerCandidatesForDevice<
+  T extends {
+    label: string;
+    fingerprint: string;
+    deviceType?: string | null;
+    model?: string | null;
+  }
+>(
+  device: Parameters<typeof policyReadinessKind>[0] & { fingerprint?: string | null },
+  signers: T[],
+  eligibleFingerprints: string[] = []
+): T[] {
+  if (device.fingerprint) {
+    return signers.filter(
+      (signer) => signer.fingerprint.toLowerCase() === device.fingerprint!.toLowerCase()
+    );
+  }
+  const eligible = new Set(eligibleFingerprints.map((fingerprint) => fingerprint.toLowerCase()));
+  const eligibleSigners = eligible.size
+    ? signers.filter((signer) => eligible.has(signer.fingerprint.toLowerCase()))
+    : signers;
+  const kind = policyReadinessKind(device);
+  if (kind === 'unknown') return [];
+  return eligibleSigners.filter((signer) => policyReadinessKind(signer) === kind);
+}
+
 export function shouldShowColdcardPolicyHelp(
   signers: Array<{ label: string; fingerprint: string; deviceType?: string | null }>,
   devices: Array<{ label: string; model?: string | null; connected: boolean }>,

@@ -16,15 +16,17 @@ export function coldcardPolicyFilename(walletName: string): string {
   return `${safeTransferFilename(walletName).slice(0, 20)}.txt`;
 }
 
-export function psbtFilename(proposalId: string): string {
+export function psbtFilename(proposalId: string, signatures: number): string {
   // Short ASCII names are easier to identify on small hardware-signer screens
-  // and stay compatible with conservative removable-media implementations.
+  // and stay compatible with conservative removable-media implementations. The
+  // signature suffix keeps unsigned, partial, and complete copies distinct.
   const identifier =
     proposalId
       .toLowerCase()
       .replace(/[^a-z0-9]/g, '')
-      .slice(0, 8) || 'payment';
-  return `groot-${identifier}.psbt`;
+      .slice(0, 6) || 'pay';
+  const signatureCount = Number.isSafeInteger(signatures) && signatures >= 0 ? signatures : 0;
+  return `groot-${identifier}-s${signatureCount}.psbt`;
 }
 
 export function validateTransferText(value: string): string {

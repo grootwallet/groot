@@ -119,6 +119,10 @@ Completing Send Intent persists one bounded public-only draft for the selected u
 
 After a PSBT, public-backup, or PDF backup file is saved on macOS, the success toast offers **Show in Finder**. The webview receives only a short-lived, single-use reveal token; the saved filesystem path remains inside the trusted Rust boundary.
 
+Saved PSBT filenames use the same short proposal identifier plus an explicit collected-signature suffix: `-s0`, `-s1`, or the corresponding higher count. Exporting the same proposal before signing, after a partial signature, and after threshold completion therefore creates distinguishable native save suggestions without placing recipient, label, wallet name, or signer identity in the filename.
+
+When a locked hardware signer has no discovery fingerprint, the signing UI may associate it with the active proposal only when exactly one eligible saved signer belongs to that device family. Multiple eligible same-family signers fail closed and require unlock plus rescan. Ledger's saved policy reference remains available while its policy and transaction decision is pending. If the user requests modal closure during an active device decision, Groot keeps the request visible, gives the modal attention feedback, and instructs the user to reject or cancel on-device; the modal closes after the terminal device response is drained.
+
 Transaction history details use the same progressive-disclosure pattern as transaction review. Status, amount, label, date, confirmations, fee, and destination remain immediately visible. Rust derives actual signed-transaction input/output counts, wallet-side input/output amounts, fee rate, locktime, and RBF state for **View more details**, alongside transaction IDs, block/replacement identifiers, self-spend classification, and explorer controls. Metadata unavailable for a legacy synthetic replacement is omitted rather than inferred in the webview.
 
 ## Activity and transaction details

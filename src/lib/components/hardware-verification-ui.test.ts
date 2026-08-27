@@ -464,8 +464,30 @@ describe('hardware receive verification UI', () => {
     expect(closeHelper).toContain('hardwareAddressOpen = false');
     expect(closeHelper).toContain('hardwareChangeAddressOpen = false');
     expect(signing.match(/closeHardwareReviewOverlays\(\)/g)).toHaveLength(2);
-    expect(signing).toMatch(
-      /catch \(cause\) \{\s*closeHardwareReviewOverlays\(\);\s*policyReviewOpen = false;\s*deviceOpen = true;/
+    expect(signing).toContain('deviceOpen = !hardwareCancelRequested');
+    expect(signing).toContain('deviceError = hardwareCancelRequested');
+  });
+
+  it('keeps locked signer matching fail-closed while allowing one eligible device family', () => {
+    expect(multisigSend).toContain('savedSignerCandidatesForDevice(');
+    expect(multisigSend).toContain('candidates.length === 1 ? candidates[0] : null');
+    expect(multisigSend).toContain(
+      'More than one saved signer uses this device family. Unlock the intended device and rescan'
     );
+    expect(multisigSend).toContain(
+      'Unlock this device and rescan so Groot can bind it to an eligible saved signer.'
+    );
+  });
+
+  it('turns hardware-signing close requests into visible on-device cancellation guidance', () => {
+    for (const route of [multisigSend, singleKeySend]) {
+      expect(route).toContain('hardwareCancelRequested = true');
+      expect(route).toContain('hardwareAttentionSignal += 1');
+      expect(route).toContain('attentionSignal={hardwareAttentionSignal}');
+      expect(route).toContain('Cancel on your hardware device');
+      expect(route).toContain('Waiting for hardware cancellation');
+    }
+    expect(multisigSend).toContain('onclose={closePolicyReview}');
+    expect(multisigSend).toContain('View policy reference');
   });
 });

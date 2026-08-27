@@ -14,6 +14,8 @@ describe('unfinished payment resume UI', () => {
     ['multisig', multisigSend]
   ])('saves, restores, and clears the %s payment draft at the proposal boundary', (_, source) => {
     expect(source).toContain('await walletService.paymentDraft()');
+    expect(source).toContain('labels: [...submissionLabels]');
+    expect(source).toContain('selectedCoins: [...selectedCoins]');
     expect(source).toContain('await saveCurrentDraft();');
     expect(source).toContain('walletService.savePaymentDraft({');
     expect(source).toContain('await walletService.clearPaymentDraft()');
