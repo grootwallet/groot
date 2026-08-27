@@ -21,7 +21,7 @@ use zeroize::{Zeroize, Zeroizing};
 use crate::{
     bsms::DescriptorRecord,
     build_network::{NAME as NETWORK_NAME, PARAMETERS},
-    multisig::MULTISIG_ACCOUNT_PATH,
+    multisig::{CosignerInput, PolicyInput, MULTISIG_ACCOUNT_PATH},
 };
 
 pub const MAX_COORDINATION_RECORD_BYTES: usize = 256 * 1024;
@@ -69,6 +69,7 @@ pub struct PublicWalletRecord {
     pub role: DeviceRole,
     pub descriptor_record: String,
     pub descriptor_checksum: String,
+    pub signers: Vec<CosignerInput>,
     pub mobile_signer_fingerprint: Option<String>,
     pub created_at: u64,
 }
@@ -133,7 +134,7 @@ impl PairingInvitation {
 
 impl PublicWalletRecord {
     pub fn validate(&self) -> Result<DescriptorRecord, CoordinationError> {
-        if self.version != 1 {
+        if self.version != 2 {
             return Err(CoordinationError::UnsupportedVersion);
         }
         if self.network != NETWORK_NAME {
@@ -161,6 +162,34 @@ impl PublicWalletRecord {
             })
         {
             return Err(CoordinationError::InvalidEncoding);
+        }
+        if self.signers.iter().any(|signer| {
+            signer.device_type.as_ref().is_some_and(|device_type| {
+                device_type.trim().is_empty()
+                    || device_type.len() > 64
+                    || !device_type
+                        .bytes()
+                        .all(|byte| byte.is_ascii_alphanumeric() || b"._-".contains(&byte))
+            })
+        }) {
+            return Err(CoordinationError::InvalidEncoding);
+        }
+        let (threshold, descriptor_keys) = record
+            .standard_policy()
+            .map_err(|_| CoordinationError::DescriptorMismatch)?;
+        let preview = PolicyInput {
+            name: self.wallet_name.clone(),
+            threshold,
+            cosigners: self.signers.clone(),
+        }
+        .preview()
+        .map_err(|_| CoordinationError::DescriptorMismatch)?;
+        if descriptor_keys.len() != self.signers.len()
+            || !record
+                .matches_descriptor_pair(&preview.external_descriptor, &preview.internal_descriptor)
+                .map_err(|_| CoordinationError::DescriptorMismatch)?
+        {
+            return Err(CoordinationError::DescriptorMismatch);
         }
         Ok(record)
     }
@@ -474,6 +503,7 @@ fn hex_decode(value: &str) -> Result<Vec<u8>, CoordinationError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::multisig::CosignerSource;
     use bdk_wallet::bitcoin::{bip32::DerivationPath, Network, NetworkKind};
     use bdk_wallet::miniscript::{Descriptor, DescriptorPublicKey};
     use bdk_wallet::{KeychainKind, Wallet};
@@ -499,7 +529,7 @@ mod tests {
     fn descriptor_record() -> String {
         let secp = Secp256k1::new();
         let path = DerivationPath::from_str(MULTISIG_ACCOUNT_PATH).unwrap();
-        let keys = (1_u8..=3)
+        let mut keys = (1_u8..=3)
             .map(|index| {
                 let master = Xpriv::new_master(NetworkKind::Test, &[index; 32]).unwrap();
                 let fingerprint = master.fingerprint(&secp);
@@ -507,6 +537,7 @@ mod tests {
                 (fingerprint, Xpub::from_priv(&secp, &account))
             })
             .collect::<Vec<_>>();
+        keys.sort_by_key(|(fingerprint, _)| fingerprint.to_string());
         let make = |branch| {
             let keys = keys
                 .iter()
@@ -533,15 +564,44 @@ mod tests {
     }
 
     fn public_wallet_record() -> PublicWalletRecord {
+        let descriptor_record = descriptor_record();
+        let descriptor = DescriptorRecord::parse(&descriptor_record).unwrap();
+        let (_, keys) = descriptor.standard_policy().unwrap();
+        let signers = keys
+            .into_iter()
+            .enumerate()
+            .map(|(index, key)| CosignerInput {
+                id: format!("signer-{index}"),
+                label: if index == 0 {
+                    "This phone".to_owned()
+                } else {
+                    format!("Hardware signer {index}")
+                },
+                fingerprint: key.fingerprint.to_string(),
+                xpub: key.xpub.to_string(),
+                derivation_path: key.derivation_path,
+                source: if index == 0 {
+                    CosignerSource::Qr
+                } else {
+                    CosignerSource::Usb
+                },
+                device_type: Some(if index == 0 {
+                    "groot-mobile".to_owned()
+                } else {
+                    "test-hardware".to_owned()
+                }),
+            })
+            .collect::<Vec<_>>();
         PublicWalletRecord {
-            version: 1,
+            version: 2,
             network: NETWORK_NAME.to_owned(),
             wallet_id: "wallet-1".to_owned(),
             wallet_name: "Family vault".to_owned(),
             role: DeviceRole::MobileCosigner,
-            descriptor_record: descriptor_record(),
+            descriptor_record,
             descriptor_checksum: "a1b2c3d4".to_owned(),
-            mobile_signer_fingerprint: Some("deadbeef".to_owned()),
+            mobile_signer_fingerprint: Some(signers[0].fingerprint.clone()),
+            signers,
             created_at: 1,
         }
     }
@@ -683,9 +743,13 @@ mod tests {
     #[test]
     fn public_wallet_record_rejects_substitution_and_malformed_identity() {
         let valid = public_wallet_record();
-        assert!(valid.validate().is_ok());
+        assert_eq!(valid.validate().map(|_| ()), Ok(()));
+        let round_trip: PublicWalletRecord =
+            serde_json::from_slice(&serde_json::to_vec(&valid).unwrap()).unwrap();
+        assert_eq!(round_trip.signers, valid.signers);
+        assert_eq!(round_trip, valid);
         let mutations: Vec<WalletRecordMutation> = vec![
-            Box::new(|value| value.version = 2),
+            Box::new(|value| value.version = 1),
             Box::new(|value| value.network = "wrong".to_owned()),
             Box::new(|value| value.wallet_id.clear()),
             Box::new(|value| value.wallet_id = "w".repeat(65)),
@@ -696,6 +760,10 @@ mod tests {
             Box::new(|value| value.descriptor_record = "not a descriptor".to_owned()),
             Box::new(|value| value.mobile_signer_fingerprint = Some("short".to_owned())),
             Box::new(|value| value.mobile_signer_fingerprint = Some("zzzzzzzz".to_owned())),
+            Box::new(|value| value.signers[0].label.clear()),
+            Box::new(|value| value.signers[0].device_type = Some("bad device".to_owned())),
+            Box::new(|value| value.signers[0].fingerprint = "deadbeef".to_owned()),
+            Box::new(|value| value.signers.pop().map(drop).unwrap()),
         ];
         for mutate in mutations {
             let mut value = valid.clone();

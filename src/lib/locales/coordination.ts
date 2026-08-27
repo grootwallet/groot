@@ -14,6 +14,30 @@ export const coordinationCopy = {
     fr: 'Les deux appareils doivent afficher',
     es: 'Ambos dispositivos deben mostrar'
   },
+  'Available on this phone': {
+    fr: 'Disponible sur ce téléphone',
+    es: 'Disponible en este teléfono'
+  },
+  'Managed on desktop': { fr: 'Géré sur l’ordinateur', es: 'Gestionado en el ordenador' },
+  'Connect on desktop': { fr: 'Connecter sur l’ordinateur', es: 'Conectar en el ordenador' },
+  'Signing key held by this phone': {
+    fr: 'Clé de signature détenue par ce téléphone',
+    es: 'Clave de firma guardada en este teléfono'
+  },
+  'Signer details received from desktop': {
+    fr: 'Détails du signataire reçus de l’ordinateur',
+    es: 'Detalles del firmante recibidos del ordenador'
+  },
+  'Device type': { fr: 'Type d’appareil', es: 'Tipo de dispositivo' },
+  'This phone holds this key. Its fingerprint and public account key match the wallet policy.': {
+    fr: 'Ce téléphone détient cette clé. Son empreinte et sa clé publique de compte correspondent à la politique du portefeuille.',
+    es: 'Este teléfono guarda esta clave. Su huella y clave pública de cuenta coinciden con la política de la cartera.'
+  },
+  'Identity and device details came from the authenticated desktop wallet policy. Connect and verify this signer on desktop.':
+    {
+      fr: 'L’identité et les détails de l’appareil proviennent de la politique authentifiée de l’ordinateur. Connectez et vérifiez ce signataire sur l’ordinateur.',
+      es: 'La identidad y los detalles del dispositivo proceden de la política autenticada del ordenador. Conecta y verifica este firmante en el ordenador.'
+    },
   'Cannot sign': { fr: 'Ne peut pas signer', es: 'No puede firmar' },
   'Cancel pending pairing': {
     fr: 'Annuler le jumelage en attente',

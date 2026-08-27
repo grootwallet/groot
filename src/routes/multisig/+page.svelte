@@ -39,6 +39,10 @@
     type WalletSnapshot
   } from '$lib/wallet';
   import type { CosignerDraft, CosignerSource } from '$lib/multisig/policy';
+  import {
+    DESKTOP_MANAGED_SIGNER_CONTEXT,
+    LOCAL_MOBILE_SIGNER_CONTEXT
+  } from '$lib/wallet/contracts/coordination';
   import { defaultConfig, networkName } from '$lib/config';
   import { shortSats } from '$lib/data';
   import Amount from '$lib/components/Amount.svelte';
@@ -190,7 +194,41 @@
   function openSigner(signer: CosignerDraft) {
     selectedSigner = signer;
   }
+  function signerDeviceContext(signer: CosignerDraft) {
+    if (coordination?.role !== 'mobile_cosigner') return null;
+    return signer.fingerprint.toLowerCase() === coordination.mobileSignerFingerprint?.toLowerCase()
+      ? LOCAL_MOBILE_SIGNER_CONTEXT
+      : DESKTOP_MANAGED_SIGNER_CONTEXT;
+  }
+  function signerAvailabilityLabel(
+    signer: CosignerDraft,
+    verification: SignerPolicyVerification | null
+  ) {
+    const context = signerDeviceContext(signer);
+    if (context === LOCAL_MOBILE_SIGNER_CONTEXT) return 'Available on this phone';
+    if (context === DESKTOP_MANAGED_SIGNER_CONTEXT) return 'Managed on desktop';
+    return policyReadinessLabel(signer, verification);
+  }
   function signerPolicyStatus(signer: CosignerDraft) {
+    const context = signerDeviceContext(signer);
+    if (context === LOCAL_MOBILE_SIGNER_CONTEXT)
+      return {
+        label: translate($locale, 'Available on this phone'),
+        description: translate(
+          $locale,
+          'This phone holds this key. Its fingerprint and public account key match the wallet policy.'
+        ),
+        attention: false
+      };
+    if (context === DESKTOP_MANAGED_SIGNER_CONTEXT)
+      return {
+        label: translate($locale, 'Managed on desktop'),
+        description: translate(
+          $locale,
+          'Identity and device details came from the authenticated desktop wallet policy. Connect and verify this signer on desktop.'
+        ),
+        attention: false
+      };
     const profile = policyRegistrationProfile(signer);
     const verification = matchingPolicyVerification(signer, policyVerifications);
     const label = translate($locale, policyReadinessLabel(signer, verification));
@@ -727,10 +765,11 @@
                   ></span
                 ><span
                   class="ready-badge"
-                  class:attention={(requiresPolicySetup(signer) && !verification) ||
-                    !policyRegistrationProfile(signer).supported ||
-                    latestHealth(signer)?.status === 'attention'}
-                  >{translate($locale, policyReadinessLabel(signer, verification))}</span
+                  class:attention={!signerDeviceContext(signer) &&
+                    ((requiresPolicySetup(signer) && !verification) ||
+                      !policyRegistrationProfile(signer).supported ||
+                      latestHealth(signer)?.status === 'attention')}
+                  >{translate($locale, signerAvailabilityLabel(signer, verification))}</span
                 ><ChevronRight class="row-chevron" size={16} /></button
               >
             </article>{/each}
@@ -775,11 +814,14 @@
   signer={healthPinOpen ? null : selectedSigner}
   health={selectedSigner ? latestHealth(selectedSigner) : null}
   policyStatus={selectedSigner ? signerPolicyStatus(selectedSigner) : null}
+  deviceContext={selectedSigner ? signerDeviceContext(selectedSigner) : null}
   {checking}
   onclose={() => (selectedSigner = null)}
   oncheck={runHealthCheck}
-  onpolicy={() => selectedSigner && openPolicyVerification(selectedSigner)}
-  onrename={renameSavedSigner}
+  onpolicy={selectedSigner && !signerDeviceContext(selectedSigner)
+    ? () => selectedSigner && openPolicyVerification(selectedSigner)
+    : undefined}
+  onrename={selectedSigner && !signerDeviceContext(selectedSigner) ? renameSavedSigner : undefined}
 />
 <TrezorPinModal
   open={healthPinOpen}

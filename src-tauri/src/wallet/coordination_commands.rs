@@ -516,13 +516,14 @@ pub fn coordination_desktop_finalize(
     .map_err(bsms_api_error)?;
     let profile = selected_profile_of_kind(&app, WalletKind::Multisig)?;
     let record = PublicWalletRecord {
-        version: 1,
+        version: 2,
         network: NETWORK_NAME.to_owned(),
         wallet_id: profile.id.to_string(),
         wallet_name: wallet.name,
         role: DeviceRole::MobileCosigner,
         descriptor_record: descriptor.encode(),
         descriptor_checksum: profile.descriptor_checksum.clone(),
+        signers: wallet.cosigners.clone(),
         mobile_signer_fingerprint: Some(mobile.fingerprint.clone()),
         created_at: now(),
     };
@@ -617,27 +618,25 @@ pub fn coordination_mobile_complete(
             CoordinationError::DescriptorMismatch,
         ));
     }
-    let cosigners = keys
-        .into_iter()
-        .enumerate()
-        .map(|(index, key)| CosignerInput {
-            id: if key.fingerprint == fingerprint {
-                format!("mobile-{fingerprint}")
-            } else {
-                format!("paired-{}", key.fingerprint)
-            },
-            label: if key.fingerprint == fingerprint {
-                "This phone".to_owned()
-            } else {
-                format!("Signer {}", index + 1)
-            },
-            fingerprint: key.fingerprint.to_string(),
-            xpub: key.xpub.to_string(),
-            derivation_path: key.derivation_path,
-            source: CosignerSource::Qr,
-            device_type: (key.fingerprint == fingerprint).then(|| MOBILE_DEVICE_TYPE.to_owned()),
+    let mobile_manifest_signer = public
+        .signers
+        .iter()
+        .find(|signer| {
+            signer
+                .fingerprint
+                .eq_ignore_ascii_case(&fingerprint.to_string())
         })
-        .collect::<Vec<_>>();
+        .ok_or_else(|| coordination_api_error(CoordinationError::DescriptorMismatch))?;
+    if mobile_manifest_signer.xpub != account_xpub.to_string()
+        || mobile_manifest_signer.derivation_path != MULTISIG_ACCOUNT_PATH
+        || mobile_manifest_signer.source != CosignerSource::Qr
+        || mobile_manifest_signer.device_type.as_deref() != Some(MOBILE_DEVICE_TYPE)
+    {
+        return Err(coordination_api_error(
+            CoordinationError::DescriptorMismatch,
+        ));
+    }
+    let cosigners = public.signers;
     let preview = PolicyInput {
         name: public.wallet_name,
         threshold,

@@ -34,6 +34,11 @@ release its data-encryption key, and perform secp256k1 signing briefly in Rust-o
 - Bind signer identity by exact master fingerprint, account xpub, origin, network, derivation path,
   and a recoverable legacy Bitcoin signed-message proof permitted by BIP129. Descriptor acceptance
   requires the exact key, not a fingerprint-only shortcut.
+- The version-2 final public wallet record carries a bounded manifest of every signer's public
+  display name, fingerprint, account xpub, BIP48 origin, import source, and device type. Mobile
+  accepts it only when normal multisig policy validation reconstructs the exact authenticated
+  descriptor. This transfers identity and provenance, not desktop-local health checks, hardware
+  connection state, policy-registration evidence, or certification claims.
 - Persist new state only in additive sidecars for new coordinated profiles:
   `coordination.json` is public role/custody metadata and `mobile-signer.json` is an encrypted secret
   payload. Pending mobile setup is a credential-encrypted, UUID-addressed staging file. An optional
@@ -77,6 +82,12 @@ at the BIP129 and BIP174/UR boundaries. Losing the phone does not lose the walle
 other signer backups remain sufficient. Recovering the phone signer requires its 24 words and does
 not require remembering a BIP39 passphrase; the replacement phone must be paired to the exact public
 descriptor and checked against the first address before it signs.
+
+The version-2 signer manifest changes only the ephemeral encrypted final-pairing record. Existing
+wallet, registry, backup, proposal, and coordination-sidecar formats are unchanged, and completed
+mobile wallets remain readable. A pairing between clients that disagree on this protocol version
+fails closed and must restart after both clients are updated; existing completed mobile wallets are
+not silently rewritten to invent metadata they never received.
 
 The PIN-only testnet envelope remains exposed to a compromised mobile OS after unlock and to offline
 credential guessing against a copied payload. Secure Enclave wrapping reduces offline extraction

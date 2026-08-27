@@ -55,10 +55,13 @@ evidence, recovery drills, interoperability evidence, and independent security r
    be added with existing flows. The phone waiting screen mirrors that expectation.
 8. Desktop creates the wallet only after the existing descriptor-backup and hardware-policy gates.
    It then emits `ur:groot-wallet`, containing an encrypted versioned public wallet record whose
-   payload includes the final BIP129 descriptor record.
+   payload includes the final BIP129 descriptor record and a bounded public signer manifest with
+   each desktop name, fingerprint, account xpub, BIP48 origin, import source, and device type.
 9. Mobile scans this second desktop QR, verifies MAC/version/network, exact account xpub inclusion,
-   M and N, BIP48 restrictions, descriptor checksum, and first derived address, then commits its
-   wallet and encrypted signer sidecar atomically.
+   M and N, BIP48 restrictions, descriptor checksum, first derived address, and that the complete
+   signer manifest reconstructs the exact descriptor. It then commits that metadata with its wallet
+   and encrypted signer sidecar atomically. Mobile shows its signer as available locally and the
+   others as managed on desktop; it does not import or imply desktop-only certification evidence.
 
 ### Fresh install and phone replacement
 

@@ -1,6 +1,11 @@
 import type { CosignerDraft } from '$lib/multisig/policy';
 import type { MultisigWallet } from './multisig';
 
+export const LOCAL_MOBILE_SIGNER_CONTEXT = 'local_mobile' as const;
+export const DESKTOP_MANAGED_SIGNER_CONTEXT = 'desktop_managed' as const;
+export type CoordinationSignerContext =
+  typeof LOCAL_MOBILE_SIGNER_CONTEXT | typeof DESKTOP_MANAGED_SIGNER_CONTEXT;
+
 export type PairingInvitation = {
   sessionId: string;
   expiresAt: number;

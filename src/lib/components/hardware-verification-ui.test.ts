@@ -236,6 +236,16 @@ describe('hardware receive verification UI', () => {
     expect(deviceDetails).toContain("'Signer matches this wallet.'");
   });
 
+  it('distinguishes phone-local and desktop-managed signers without inventing mobile certification', () => {
+    expect(multisigPolicy).toContain("coordination?.role !== 'mobile_cosigner'");
+    expect(multisigPolicy).toContain("'Available on this phone'");
+    expect(multisigPolicy).toContain("'Managed on desktop'");
+    expect(multisigPolicy).toContain('deviceContext={selectedSigner');
+    expect(deviceDetails).toContain('deviceContext?: CoordinationSignerContext | null');
+    expect(deviceDetails).toContain('{#if !deviceContext}<section class="health-card"');
+    expect(deviceDetails).toContain("translate($locale, 'Device type')");
+  });
+
   it('uses a deliberate retry status instead of an unstyled empty-list paragraph', () => {
     expect(emptyState).toContain('class="hardware-device-empty" role="status"');
     expect(emptyState).toContain('onclick={onretry}');

@@ -92,17 +92,24 @@ Coldcard and Trezor are unsupported for that family. See ADR 0044.
 The accountless cross-platform track is wired through Rust/Tauri for
 Regtest/Testnet4: desktop creates one-use BIP129 invitations, mobile returns an
 encrypted signed BIP48 key record, desktop returns the encrypted final
-descriptor, mobile signs exact reviewed `crypto-psbt` revisions, and public
-hardware-singlesig records import as watch-only. Reference-vector cryptography,
+descriptor plus a version-2 descriptor-bound public signer manifest, mobile
+signs exact reviewed `crypto-psbt` revisions, and public hardware-singlesig
+records import as watch-only. Mobile retains desktop signer names, fingerprints,
+account keys, derivations, import sources, and device types; it truthfully
+distinguishes its local key from desktop-managed signers without copying
+desktop-only health or certification evidence. Reference-vector cryptography,
 bounded UR tests, authenticated/expiring/replay-safe desktop-response lifecycle
-tests, and a funded isolated-Core mobile-signature/desktop-merge/finalize/
-broadcast round trip are green. The funded test also rejects missing UTXOs,
-foreign input scripts, non-ALL sighashes, false change claims, and exact-revision
-mutation. Credential-gated staged-response resume, operation-serialized
+tests, manifest substitution tests, and a funded isolated-Core mobile-signature/
+desktop-merge/finalize/broadcast round trip are green. The funded test also
+rejects missing UTXOs, foreign input scripts, non-ALL sighashes, false change
+claims, and exact-revision mutation. Credential-gated staged-response resume,
+operation-serialized
 idempotent cancel, wallet-UUID-bound active/consuming reconciliation, exact
 unregistered partial-profile cleanup, registered-wallet conflict/traversal
 rejection, and orphan temporary-file cleanup now have deterministic Rust
-coverage and a wired mobile restart surface. An isolated
+coverage and a wired mobile restart surface. The manifest changes only the
+encrypted pairing wire record: completed wallets remain readable, while mixed
+protocol versions fail closed and must restart pairing. An isolated
 `app.groot.wallet.regtest.dev` build compiles, signs, installs, and launches on
 an iPhone 13 mini in development mode; its built plist contains the camera and
 Regtest-development Local Network permission copy. Physical pairing has

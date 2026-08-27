@@ -17,6 +17,11 @@
     type CosignerSource
   } from '$lib/multisig/policy';
   import type { CosignerHealthCheck } from '$lib/wallet';
+  import {
+    DESKTOP_MANAGED_SIGNER_CONTEXT,
+    LOCAL_MOBILE_SIGNER_CONTEXT,
+    type CoordinationSignerContext
+  } from '$lib/wallet/contracts/coordination';
   import Button from './Button.svelte';
   import HardwareActionPrompt from './HardwareActionPrompt.svelte';
   import IdentifierDetailsModal from './IdentifierDetailsModal.svelte';
@@ -30,6 +35,7 @@
     onclose,
     oncheck,
     policyStatus = null,
+    deviceContext = null,
     onpolicy,
     onrename
   } = $props<{
@@ -45,6 +51,7 @@
       actionLabel?: string;
       verifiedAt?: string;
     } | null;
+    deviceContext?: CoordinationSignerContext | null;
     onpolicy?: () => void;
     onrename?: (label: string) => Promise<void> | void;
   }>();
@@ -65,9 +72,24 @@
   }
 
   function healthLabel() {
+    if (deviceContext === LOCAL_MOBILE_SIGNER_CONTEXT) return 'Available on this phone';
+    if (deviceContext === DESKTOP_MANAGED_SIGNER_CONTEXT) return 'Managed on desktop';
     if (health?.status === 'healthy') return 'Verified';
     if (health?.status === 'attention') return 'Attention';
     return 'Ready';
+  }
+
+  function connectionLabel() {
+    if (deviceContext === LOCAL_MOBILE_SIGNER_CONTEXT) return 'This phone';
+    if (deviceContext === DESKTOP_MANAGED_SIGNER_CONTEXT) return 'Connect on desktop';
+    return signer?.source === 'usb' || signer?.source === 'virtual'
+      ? 'Ready to check'
+      : 'USB connection needed';
+  }
+
+  function deviceTypeName(value: string) {
+    if (value === 'groot-mobile') return 'Groot mobile';
+    return value.replaceAll(/[-_]+/g, ' ').replaceAll(/\b\w/g, (letter) => letter.toUpperCase());
   }
 
   function startRenaming() {
@@ -118,9 +140,13 @@
           <strong>{translate($locale, sourceName(signer.source))}</strong><small
             >{translate(
               $locale,
-              signer.source === 'usb' || signer.source === 'virtual'
-                ? 'Ready to check'
-                : 'Connect signer to check'
+              deviceContext === LOCAL_MOBILE_SIGNER_CONTEXT
+                ? 'Signing key held by this phone'
+                : deviceContext === DESKTOP_MANAGED_SIGNER_CONTEXT
+                  ? 'Signer details received from desktop'
+                  : signer.source === 'usb' || signer.source === 'virtual'
+                    ? 'Ready to check'
+                    : 'Connect signer to check'
             )}</small
           >
         </div>
@@ -183,15 +209,14 @@
           <dt>{translate($locale, 'Key source')}</dt>
           <dd>{translate($locale, sourceName(signer.source))}</dd>
         </div>
+        {#if signer.deviceType}<div>
+            <dt>{translate($locale, 'Device type')}</dt>
+            <dd>{deviceTypeName(signer.deviceType)}</dd>
+          </div>{/if}
         <div>
           <dt>{translate($locale, 'Connection')}</dt>
           <dd>
-            {translate(
-              $locale,
-              signer.source === 'usb' || signer.source === 'virtual'
-                ? 'Ready to check'
-                : 'USB connection needed'
-            )}
+            {translate($locale, connectionLabel())}
           </dd>
         </div>
         <div class="public-key-detail">
@@ -225,44 +250,44 @@
           {/if}
         </section>
       {/if}
-      <section class="health-card" aria-live="polite">
-        <div class="health-heading">
-          <span
-            class:checked={health?.status === 'healthy'}
-            class:attention={health?.status === 'attention'}><CheckCircle2 size={18} /></span
-          >
-          <div>
-            <strong>{translate($locale, 'Signer check')}</strong><small
-              >{#if health}{translate($locale, 'Last checked')}
-                <LocalTimestamp value={health.checkedAt} />{:else}{translate(
-                  $locale,
-                  'Not\n                checked yet'
-                )}{/if}</small
+      {#if !deviceContext}<section class="health-card" aria-live="polite">
+          <div class="health-heading">
+            <span
+              class:checked={health?.status === 'healthy'}
+              class:attention={health?.status === 'attention'}><CheckCircle2 size={18} /></span
             >
+            <div>
+              <strong>{translate($locale, 'Signer check')}</strong><small
+                >{#if health}{translate($locale, 'Last checked')}
+                  <LocalTimestamp value={health.checkedAt} />{:else}{translate(
+                    $locale,
+                    'Not\n                checked yet'
+                  )}{/if}</small
+              >
+            </div>
           </div>
-        </div>
-        <div class="health-card-body">
-          {#if checking}
-            <HardwareActionPrompt
-              title={translate($locale, 'Checking signer')}
-              detail={translate($locale, 'Keep it connected and unlocked.')}
-              label={translate($locale, 'Checking signer')}
-            />
-          {:else}
-            <p>
-              {translate(
-                $locale,
-                health?.status === 'healthy'
-                  ? 'Signer matches this wallet.'
-                  : (health?.summary ?? 'Connect and unlock the signer to check it.')
-              )}
-            </p>
-            <Button variant="secondary" class="full" onclick={oncheck}
-              ><RefreshCw size={15} />{translate($locale, 'Check signer')}</Button
-            >
-          {/if}
-        </div>
-      </section>
+          <div class="health-card-body">
+            {#if checking}
+              <HardwareActionPrompt
+                title={translate($locale, 'Checking signer')}
+                detail={translate($locale, 'Keep it connected and unlocked.')}
+                label={translate($locale, 'Checking signer')}
+              />
+            {:else}
+              <p>
+                {translate(
+                  $locale,
+                  health?.status === 'healthy'
+                    ? 'Signer matches this wallet.'
+                    : (health?.summary ?? 'Connect and unlock the signer to check it.')
+                )}
+              </p>
+              <Button variant="secondary" class="full" onclick={oncheck}
+                ><RefreshCw size={15} />{translate($locale, 'Check signer')}</Button
+              >
+            {/if}
+          </div>
+        </section>{/if}
     </div>
   {/if}
 </Modal>
