@@ -249,7 +249,9 @@
     '/hardware/new',
     '/multisig/new',
     '/multisig/recover',
-    '/multisig/delete'
+    '/multisig/delete',
+    '/mobile/pair',
+    '/mobile/watch'
   ]);
 
   beforeNavigate(({ to }) => {
@@ -519,10 +521,13 @@
             run: () => goto(`/coins?coin=${encodeURIComponent(event.outpoint)}`)
           }
         });
-      if (event.type === 'wallet_profile_updated')
-        profiles = profiles.map((profile) =>
-          profile.id === event.profile.id ? event.profile : profile
-        );
+      if (event.type === 'wallet_profile_updated') {
+        const known = profiles.some((profile) => profile.id === event.profile.id);
+        profiles = known
+          ? profiles.map((profile) => (profile.id === event.profile.id ? event.profile : profile))
+          : [...profiles, event.profile];
+        selectedWalletId = event.profile.id;
+      }
     });
     liveSync = createLiveSync(walletService, 10_000, (cause) => {
       if (cause instanceof WalletError && cause.code === 'wallet_locked') {

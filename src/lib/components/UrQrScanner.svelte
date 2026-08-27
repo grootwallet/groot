@@ -140,7 +140,7 @@
   });
 </script>
 
-<div class="scanner">
+<div class="scanner" class:camera-active={cameraActive}>
   <div class="camera-frame" class:camera-inactive={!cameraActive}>
     <video
       bind:this={video}
@@ -187,6 +187,9 @@
     gap: 0.75rem;
     width: min(100%, 68dvh, 38rem);
     margin-inline: auto;
+  }
+  .scanner:not(.camera-active) {
+    width: 100%;
   }
   .camera-frame.camera-inactive {
     position: fixed;

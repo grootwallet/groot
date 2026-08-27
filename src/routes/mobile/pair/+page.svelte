@@ -416,15 +416,20 @@
     </section>
   {/if}
 
-  <a class="pairing-exit" href="/"><ArrowLeft size={16} />{translate($locale, 'Back to wallet')}</a>
+  <Button variant="secondary" class="full pairing-exit" href="/"
+    ><ArrowLeft size={16} />{translate($locale, 'Back to wallet')}</Button
+  >
 </div>
 
 <style>
   .pairing-page {
     padding-bottom: max(2rem, env(safe-area-inset-bottom));
   }
+  .pairing-page > .page-header {
+    margin-bottom: 0.85rem;
+  }
   .pairing-page :global(.setup-progress) {
-    margin-bottom: 1.25rem;
+    margin-bottom: 1rem;
   }
   .pairing-page.keyboard-active {
     padding-bottom: max(45dvh, env(safe-area-inset-bottom));
@@ -515,14 +520,7 @@
     color: var(--success);
     margin: 0 0 1rem;
   }
-  .pairing-exit {
-    min-height: 44px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.45rem;
+  .pairing-page :global(.pairing-exit) {
     margin-top: 1rem;
-    color: var(--muted);
-    text-decoration: none;
   }
 </style>

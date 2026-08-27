@@ -242,7 +242,7 @@ describe('hardware receive verification UI', () => {
     expect(multisigPolicy).toContain("'Managed on desktop'");
     expect(multisigPolicy).toContain('deviceContext={selectedSigner');
     expect(deviceDetails).toContain('deviceContext?: CoordinationSignerContext | null');
-    expect(deviceDetails).toContain('{#if !deviceContext}<section class="health-card"');
+    expect(deviceDetails).toContain('{#if !deviceContext && oncheck}<section class="health-card"');
     expect(deviceDetails).toContain("translate($locale, 'Device type')");
   });
 

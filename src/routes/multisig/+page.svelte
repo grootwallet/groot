@@ -817,7 +817,9 @@
   deviceContext={selectedSigner ? signerDeviceContext(selectedSigner) : null}
   {checking}
   onclose={() => (selectedSigner = null)}
-  oncheck={runHealthCheck}
+  oncheck={selectedSigner?.source === 'usb' && coordination?.role !== 'mobile_cosigner'
+    ? runHealthCheck
+    : undefined}
   onpolicy={selectedSigner && !signerDeviceContext(selectedSigner)
     ? () => selectedSigner && openPolicyVerification(selectedSigner)
     : undefined}

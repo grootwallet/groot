@@ -43,7 +43,7 @@
     health: CosignerHealthCheck | null;
     checking: boolean;
     onclose: () => void;
-    oncheck: () => void;
+    oncheck?: () => void;
     policyStatus?: {
       label: string;
       description: string;
@@ -250,7 +250,7 @@
           {/if}
         </section>
       {/if}
-      {#if !deviceContext}<section class="health-card" aria-live="polite">
+      {#if !deviceContext && oncheck}<section class="health-card" aria-live="polite">
           <div class="health-heading">
             <span
               class:checked={health?.status === 'healthy'}

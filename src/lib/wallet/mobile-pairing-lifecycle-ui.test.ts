@@ -40,6 +40,10 @@ const deviceDetailsSource = readFileSync(
   fileURLToPath(new URL('../components/DeviceDetailsModal.svelte', import.meta.url)),
   'utf8'
 );
+const multisigRouteSource = readFileSync(
+  fileURLToPath(new URL('../../routes/multisig/+page.svelte', import.meta.url)),
+  'utf8'
+);
 const coordinationCommandsSource = readFileSync(
   fileURLToPath(new URL('../../../src-tauri/src/wallet/coordination_commands.rs', import.meta.url)),
   'utf8'
@@ -110,6 +114,8 @@ describe('mobile pairing lifecycle UI', () => {
     expect(scannerSource).toContain('class:camera-inactive={!cameraActive}');
     expect(scannerSource).toContain('.camera-frame.camera-inactive');
     expect(scannerSource).toContain('class="scanner-retry full"');
+    expect(scannerSource).toContain('class:camera-active={cameraActive}');
+    expect(scannerSource).toContain('.scanner:not(.camera-active)');
     expect(scannerSource).toMatch(/\.camera-frame\s*\{[\s\S]*?position:\s*relative/);
     expect(appShellSource).toContain("document.addEventListener('focusin', centerMobileField)");
     expect(appShellSource).toContain("field.scrollIntoView({ block: 'center'");
@@ -125,6 +131,21 @@ describe('mobile pairing lifecycle UI', () => {
     expect(desktopRouteSource).toContain('desktop will show one final QR for the phone.');
     expect(routeSource).toContain('Finish wallet setup on desktop');
     expect(routeSource).toContain('It will show one final wallet QR next.');
+    expect(routeSource).toContain('class="full pairing-exit" href="/"');
+  });
+
+  it('refreshes the shell after mobile profile creation and keeps new profiles in navigation', () => {
+    expect(appShellSource).toContain("'/mobile/pair'");
+    expect(appShellSource).toContain("'/mobile/watch'");
+    expect(appShellSource).toContain('const known = profiles.some');
+    expect(appShellSource).toContain(': [...profiles, event.profile]');
+    expect(appShellSource).toContain('selectedWalletId = event.profile.id;');
+  });
+
+  it('keeps signing keys before backup actions and limits live checks to desktop USB signers', () => {
+    expect(appStyles).not.toMatch(/\.vault-backup-card\s*\{\s*order:\s*-1/);
+    expect(multisigRouteSource).toContain("selectedSigner?.source === 'usb'");
+    expect(multisigRouteSource).toContain("coordination?.role !== 'mobile_cosigner'");
   });
 
   it('limits V1 to one Groot phone and preserves a retry after wallet creation', () => {
