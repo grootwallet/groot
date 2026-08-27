@@ -111,6 +111,8 @@ describe('mobile pairing lifecycle UI', () => {
     expect(scannerSource).toContain('scanComplete');
     expect(scannerSource).toContain('<progress max="100"');
     expect(scannerSource).toContain("translate($locale, 'QR scan progress')");
+    expect(scannerSource).toContain("'{scanned} of {total} frames · {progress}%'");
+    expect(scannerSource).toContain('total: expectedParts');
     expect(desktopRouteSource).toContain('return true;');
     expect(routeSource).toContain('return true;');
   });

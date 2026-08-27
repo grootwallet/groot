@@ -89,6 +89,7 @@
   let mobileRuntime = false;
   let runtimeIdentity = $state<RuntimePlatform | null>(null);
   let startupFailure = $state('');
+  let checkingRuntime = $state(true);
   let backgroundLockRequired = false;
   let selectedProfile = $derived(profiles.find((wallet) => wallet.id === selectedWalletId));
   let policyContext = $derived(
@@ -332,8 +333,21 @@
   async function resolveStartupRoute() {
     startupState = 'checking';
     startupFailure = '';
+    checkingRuntime = true;
     try {
       const runtime = await walletService.runtimePlatform();
+      if (
+        !runtime.network ||
+        !runtime.version ||
+        !runtime.commit ||
+        !['regtest', 'signet', 'testnet4'].includes(runtime.network)
+      ) {
+        startupFailure = translate(
+          $locale,
+          'This Groot app contains mismatched components. Rebuild and reinstall the native app.'
+        );
+        throw new Error('incomplete runtime identity');
+      }
       runtimeIdentity = runtime;
       mobileRuntime = runtime.mobile;
       if (mobileRuntime && document.visibilityState !== 'visible') {
@@ -348,6 +362,7 @@
         );
         throw new Error('network build mismatch');
       }
+      checkingRuntime = false;
       await refreshSetupDraft();
       if (!(await walletService.exists())) {
         await goto('/welcome');
@@ -366,8 +381,14 @@
       startupState = 'ready';
       if (!syncPausedRoute && !isPrototypeWallet) liveSync?.start();
     } catch {
-      if (!startupFailure)
-        startupFailure = translate($locale, 'Groot could not verify the wallet lock state.');
+      if (!startupFailure) {
+        startupFailure = translate(
+          $locale,
+          checkingRuntime
+            ? 'Groot could not verify this app build. Rebuild and reinstall the native app.'
+            : 'Groot could not verify the wallet lock state.'
+        );
+      }
       startupState = 'failed';
     }
   }

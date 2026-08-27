@@ -150,8 +150,9 @@ Secure Enclave wrapping cannot make the phone equivalent to an independent hardw
   Groot-specific UR type strings only carry animated bytes for invitation/encrypted BSMS/public
   wallet records; file/manual BIP129 fallback can be added without changing the payload.
 - Every multipart camera surface reads the declared UR fragment count and shows bounded scan
-  progress. Presentation stays below 100% until the native decoder accepts the complete payload;
-  duplicate frames do not advance it.
+  progress as a horizontal bar plus explicit `scanned of total` and percentage text. Presentation
+  stays below 100% until the native decoder accepts the complete payload; duplicate frames do not
+  advance it.
 - The encrypted phone response alone uses 160-byte UR fragments and a slower 1.4-second display
   cadence to reduce QR density on small screens. It can be enlarged full-screen without changing
   its encrypted payload, type, decoder bounds, or replay semantics. Other coordination and PSBT

@@ -32,6 +32,15 @@
         ? Math.min(99, Math.round((scanned / expectedParts) * 100))
         : 0
   );
+  const progressLabel = $derived(
+    expectedParts > 0
+      ? translate($locale, '{scanned} of {total} frames · {progress}%', {
+          scanned,
+          total: expectedParts,
+          progress
+        })
+      : ''
+  );
 
   async function acceptFrame(rawValue: string) {
     const frame = rawValue.trim().toLowerCase();
@@ -145,7 +154,7 @@
       <progress max="100" value={progress} aria-label={translate($locale, 'QR scan progress')}
         >{progress}%</progress
       >
-      <span>{translate($locale, 'Scanning')} · {progress}%</span>
+      <span>{progressLabel}</span>
     </div>
   {/if}
   {#if !cameraActive}

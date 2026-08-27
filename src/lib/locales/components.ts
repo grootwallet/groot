@@ -168,6 +168,14 @@ export const componentCopy = {
     fr: 'Groot n’a pas pu vérifier l’état de verrouillage du portefeuille.',
     es: 'Groot no pudo verificar el estado de bloqueo de la cartera.'
   },
+  'Groot could not verify this app build. Rebuild and reinstall the native app.': {
+    fr: 'Groot n’a pas pu vérifier cette version de l’application. Recompilez et réinstallez l’application native.',
+    es: 'Groot no pudo verificar esta compilación. Vuelve a compilar e instalar la aplicación nativa.'
+  },
+  'This Groot app contains mismatched components. Rebuild and reinstall the native app.': {
+    fr: 'Cette application Groot contient des composants incompatibles. Recompilez et réinstallez l’application native.',
+    es: 'Esta aplicación Groot contiene componentes incompatibles. Vuelve a compilar e instalar la aplicación nativa.'
+  },
   'Groot v{version} · {commit}': {
     fr: 'Groot v{version} · {commit}',
     es: 'Groot v{version} · {commit}'

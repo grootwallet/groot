@@ -38,6 +38,8 @@ describe('startup wallet lock gate', () => {
   it('shows no wallet data when startup session verification fails', () => {
     expect(shell).toContain("startupState = 'failed'");
     expect(shell).toContain('Groot could not verify the wallet lock state.');
+    expect(shell).toContain('This Groot app contains mismatched components.');
+    expect(shell).toContain('Groot could not verify this app build.');
     expect(shell).toContain("{translate($locale, 'Retry')}</button");
   });
 
