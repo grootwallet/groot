@@ -55,7 +55,6 @@
     testnetAddressDisplayName
   } from '$lib/wallet/hardware-display';
   import { latestActiveProposal } from '$lib/wallet/proposal-resume';
-  import { clearPaymentDraft, paymentDraftFor, savePaymentDraft } from '$lib/wallet/payment-draft';
   import {
     addPermanentLabel,
     backspaceLabelDraft,
@@ -320,7 +319,7 @@
           ? (proposals.find((item) => item.proposalId === requestedProposalId) ?? null)
           : latestActiveProposal(proposals);
         if (activeProposal) {
-          if (draftWalletId) clearPaymentDraft(draftWalletId);
+          if (draftWalletId) await walletService.clearPaymentDraft();
           externalProposal = activeProposal;
           proposal = activeProposal;
           address = activeProposal.recipient;
@@ -335,7 +334,7 @@
           ? (proposals.find((item) => item.proposalId === requestedProposalId) ?? null)
           : (proposals[0] ?? null);
         if (activeProposal) {
-          if (draftWalletId) clearPaymentDraft(draftWalletId);
+          if (draftWalletId) await walletService.clearPaymentDraft();
           proposal = activeProposal;
           address = activeProposal.recipient;
           selectedLabels = activeProposal.labels ?? [activeProposal.label];
@@ -345,7 +344,7 @@
         }
       }
       if (!proposal && !accelerationRequest && draftWalletId) {
-        const savedDraft = paymentDraftFor(draftWalletId);
+        const savedDraft = await walletService.paymentDraft();
         if (savedDraft?.kind === 'single_key') {
           address = savedDraft.address;
           selectedLabels = savedDraft.labels;
@@ -388,14 +387,14 @@
   });
 
   onDestroy(() => {
-    saveCurrentDraft();
+    void saveCurrentDraft();
     hardwareScanGeneration += 1;
     passphrase = '';
   });
 
-  function saveCurrentDraft() {
+  async function saveCurrentDraft() {
     if (!draftWalletId || proposal || !addressValid || submissionLabels.length === 0) return;
-    savePaymentDraft({
+    await walletService.savePaymentDraft({
       kind: 'single_key',
       walletId: draftWalletId,
       address,
@@ -420,7 +419,7 @@
         asFeeRate(selectedFeeRate),
         selection
       );
-      if (draftWalletId) clearPaymentDraft(draftWalletId);
+      if (draftWalletId) await walletService.clearPaymentDraft();
       if (externalSigner)
         externalProposal =
           (await walletService.externalSignerProposals()).find(
@@ -770,13 +769,21 @@
     selectedLabels = draft.labels;
     label = draft.input;
   }
-  function continueToAmount() {
+  async function continueToAmount() {
     if (!intentValid) return;
     selectedLabels = submissionLabels;
     label = '';
     armedLabelIndex = null;
     draftStep = 2;
-    saveCurrentDraft();
+    try {
+      await saveCurrentDraft();
+    } catch (cause) {
+      draftStep = 1;
+      toast({
+        title: 'Could not save payment draft',
+        description: localizedError(cause, $locale)
+      });
+    }
   }
 </script>
 

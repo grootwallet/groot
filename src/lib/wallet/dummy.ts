@@ -55,11 +55,26 @@ import {
   fixtureMultisigWallet,
   prototypeCredential
 } from './dummy-state';
+import type { PaymentDraft } from './payment-draft';
 
 export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
   private multisigSetupDraftValue: import('./contracts').MultisigSetupDraft | null = null;
+  private paymentDrafts = new Map<string, PaymentDraft>();
   private multisigPolicyVerificationRecords: SignerPolicyVerification[] = [];
   private hardwareHealthCheckRecords = new Map<string, HardwareHealthCheckRecord>();
+  async paymentDraft() {
+    const draft = this._selectedWalletId ? this.paymentDrafts.get(this._selectedWalletId) : null;
+    return draft ? structuredClone(draft) : null;
+  }
+  async savePaymentDraft(draft: PaymentDraft) {
+    if (!this._selectedWalletId || draft.walletId !== this._selectedWalletId)
+      throw new WalletError('wallet_not_found', 'The payment draft belongs to another wallet.');
+    this.paymentDrafts.set(draft.walletId, structuredClone(draft));
+    return structuredClone(draft);
+  }
+  async clearPaymentDraft() {
+    if (this._selectedWalletId) this.paymentDrafts.delete(this._selectedWalletId);
+  }
   async exists() {
     return this._exists;
   }

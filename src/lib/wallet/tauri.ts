@@ -51,6 +51,7 @@ import {
   multisigVerificationTimestampForDisplay,
   multisigVerificationTimestampForStorage
 } from './multisig-setup';
+import type { PaymentDraft } from './payment-draft';
 
 type BackendError = { code?: string; message?: string };
 type NotificationEnvelope = { id: string; event: WalletEvent };
@@ -137,6 +138,16 @@ export class TauriWalletAdapter implements WalletPort {
   #notificationDrains = new Map<boolean, Promise<void>>();
   #hardwareListRequest: Promise<HardwareDevice[]> | null = null;
   #typedHardwareListRequests = new Map<string, Promise<HardwareDevice[]>>();
+
+  paymentDraft() {
+    return command<PaymentDraft | null>('payment_draft');
+  }
+  savePaymentDraft(draft: PaymentDraft) {
+    return command<PaymentDraft>('payment_draft_save', { draft });
+  }
+  clearPaymentDraft() {
+    return command<void>('payment_draft_clear');
+  }
 
   exists() {
     return command<boolean>('wallet_exists');

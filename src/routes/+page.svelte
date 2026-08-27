@@ -46,7 +46,7 @@
     setHardwareHealthChecks
   } from '$lib/hardware/health-check-state';
   import { latestActiveProposal } from '$lib/wallet/proposal-resume';
-  import { paymentDraftFor, type PaymentDraft } from '$lib/wallet/payment-draft';
+  import type { PaymentDraft } from '$lib/wallet/payment-draft';
   import { pendingBalanceBreakdown, sortTransactionsNewestFirst } from '$lib/wallet/presentation';
   import { policyMaturitySummary } from '$lib/wallet/policy';
   import { onMount } from 'svelte';
@@ -193,7 +193,7 @@
       syncSource = nextSyncSource;
       selectedProfile =
         registry.wallets.find((wallet) => wallet.id === registry.selectedWalletId) ?? null;
-      activeDraft = selectedProfile ? paymentDraftFor(selectedProfile.id) : null;
+      activeDraft = selectedProfile ? await walletService.paymentDraft() : null;
       multisig = selectedProfile?.kind === 'multisig';
       if (multisig) {
         const [nextSnapshot, nextWallet, proposals] = await Promise.all([

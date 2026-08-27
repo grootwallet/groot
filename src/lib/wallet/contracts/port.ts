@@ -52,6 +52,7 @@ import type {
   Sats,
   WalletSnapshot
 } from './transactions';
+import type { PaymentDraft } from '../payment-draft';
 
 export interface WalletProfilesPort {
   exists(): Promise<boolean>;
@@ -103,6 +104,9 @@ export interface WalletSnapshotPort {
 }
 
 export interface WalletTransactionsPort {
+  paymentDraft(): Promise<PaymentDraft | null>;
+  savePaymentDraft(draft: PaymentDraft): Promise<PaymentDraft>;
+  clearPaymentDraft(): Promise<void>;
   createAddress(labels: string[]): Promise<ReceiveAddress>;
   discardAddress(id: number): Promise<void>;
   estimateFees(): Promise<FeeEstimates>;

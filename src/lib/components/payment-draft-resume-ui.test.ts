@@ -13,14 +13,14 @@ describe('unfinished payment resume UI', () => {
     ['single-key', singleSend],
     ['multisig', multisigSend]
   ])('saves, restores, and clears the %s payment draft at the proposal boundary', (_, source) => {
-    expect(source).toContain('paymentDraftFor(draftWalletId)');
-    expect(source).toContain('saveCurrentDraft();');
-    expect(source).toContain('savePaymentDraft({');
-    expect(source).toContain('clearPaymentDraft(draftWalletId)');
+    expect(source).toContain('await walletService.paymentDraft()');
+    expect(source).toContain('await saveCurrentDraft();');
+    expect(source).toContain('walletService.savePaymentDraft({');
+    expect(source).toContain('await walletService.clearPaymentDraft()');
   });
 
-  it('offers the existing overview resume callout before a proposal exists', () => {
-    expect(overview).toContain('paymentDraftFor(selectedProfile.id)');
+  it('loads the restart-safe draft and offers the existing overview resume callout', () => {
+    expect(overview).toContain('await walletService.paymentDraft()');
     expect(overview).toContain("'Payment draft in progress'");
     expect(overview).toContain("'Recipient and labels saved'");
     expect(overview).toContain("activeDraft.kind === 'multisig' ? '/multisig/send' : '/send'");

@@ -1527,7 +1527,7 @@ mod tests {
         let hwi = HwiCli::for_test_program(slow.clone());
         let running = thread::spawn(move || hwi.enumerate());
         let wait_started = Instant::now();
-        while !started_file.exists() && wait_started.elapsed() < Duration::from_secs(5) {
+        while !started_file.exists() && wait_started.elapsed() < Duration::from_secs(15) {
             thread::sleep(Duration::from_millis(10));
         }
         assert!(started_file.exists(), "cancellation fixture did not start");

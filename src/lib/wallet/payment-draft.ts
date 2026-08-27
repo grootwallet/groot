@@ -22,22 +22,3 @@ export type MultisigPaymentDraft = PaymentDraftBase & {
 };
 
 export type PaymentDraft = SingleKeyPaymentDraft | MultisigPaymentDraft;
-
-const paymentDrafts = new Map<string, PaymentDraft>();
-
-function cloneDraft(draft: PaymentDraft): PaymentDraft {
-  return { ...draft, labels: [...draft.labels], selectedCoins: [...draft.selectedCoins] };
-}
-
-export function savePaymentDraft(draft: PaymentDraft): void {
-  paymentDrafts.set(draft.walletId, cloneDraft(draft));
-}
-
-export function paymentDraftFor(walletId: string): PaymentDraft | null {
-  const draft = paymentDrafts.get(walletId);
-  return draft ? cloneDraft(draft) : null;
-}
-
-export function clearPaymentDraft(walletId: string): void {
-  paymentDrafts.delete(walletId);
-}

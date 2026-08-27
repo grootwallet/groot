@@ -6577,6 +6577,9 @@ pub(crate) mod multisig_proposal_commands;
 #[path = "wallet/transaction_commands.rs"]
 pub(crate) mod transaction_commands;
 
+#[path = "wallet/payment_draft_commands.rs"]
+pub(crate) mod payment_draft_commands;
+
 #[tauri::command]
 pub fn wallet_delete(
     app: AppHandle,

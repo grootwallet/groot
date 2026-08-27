@@ -97,7 +97,6 @@
     parseAmountInput
   } from '$lib/denomination';
   import { latestActiveProposal } from '$lib/wallet/proposal-resume';
-  import { clearPaymentDraft, paymentDraftFor, savePaymentDraft } from '$lib/wallet/payment-draft';
   import { useWalletShellContext } from '$lib/wallet/shell-context';
 
   const walletShell = useWalletShellContext();
@@ -367,7 +366,7 @@
     error = '';
   }
   onDestroy(() => {
-    saveCurrentDraft();
+    void saveCurrentDraft();
     hardwareScanGeneration += 1;
     pin = '';
     imported = '';
@@ -457,7 +456,7 @@
           ? (proposals.find((item) => item.proposalId === requestedProposalId) ?? null)
           : latestActiveProposal(proposals);
         if (proposal) {
-          if (draftWalletId) clearPaymentDraft(draftWalletId);
+          if (draftWalletId) await walletService.clearPaymentDraft();
           address = proposal.recipient;
           selectedLabels = proposal.labels ?? [proposal.label];
           label = '';
@@ -468,7 +467,7 @@
         }
       }
       if (!proposal && !renewalMode && !delayedSpendMode && !accelerationRequest && draftWalletId) {
-        const savedDraft = paymentDraftFor(draftWalletId);
+        const savedDraft = await walletService.paymentDraft();
         if (savedDraft?.kind === 'multisig') {
           restoredPaymentDraft = true;
           address = savedDraft.address;
@@ -528,16 +527,21 @@
     event.preventDefault();
     continueToAmount();
   }
-  function continueToAmount() {
+  async function continueToAmount() {
     if (!intentValid) return;
     error = '';
     selectedLabels = submissionLabels;
     label = '';
     armedLabelIndex = null;
     draftStep = 2;
-    saveCurrentDraft();
+    try {
+      await saveCurrentDraft();
+    } catch (cause) {
+      draftStep = 1;
+      error = localizedError(cause, $locale, 'Could not save payment draft.');
+    }
   }
-  function saveCurrentDraft() {
+  async function saveCurrentDraft() {
     if (
       !draftWalletId ||
       proposal ||
@@ -547,7 +551,7 @@
       submissionLabels.length === 0
     )
       return;
-    savePaymentDraft({
+    await walletService.savePaymentDraft({
       kind: 'multisig',
       walletId: draftWalletId,
       address,
@@ -571,7 +575,7 @@
         feeRate(selectedRateNumber),
         selection
       );
-      if (draftWalletId) clearPaymentDraft(draftWalletId);
+      if (draftWalletId) await walletService.clearPaymentDraft();
     } catch (cause) {
       error =
         cause instanceof WalletError && cause.code === 'insufficient_funds'

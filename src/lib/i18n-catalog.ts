@@ -146,6 +146,10 @@ export const copyCatalog = {
     fr: 'Impossible d’enregistrer la PSBT',
     es: 'No se pudo guardar la PSBT'
   },
+  'Could not save payment draft': {
+    fr: 'Impossible d’enregistrer le brouillon de paiement',
+    es: 'No se pudo guardar el borrador de pago'
+  },
   'Could not show saved PSBT': {
     fr: 'Impossible d’afficher la PSBT enregistrée',
     es: 'No se pudo mostrar la PSBT guardada'
