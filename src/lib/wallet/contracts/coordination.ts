@@ -8,6 +8,11 @@ export type PairingInvitation = {
   frames: string[];
 };
 
+export type DecodedPairingInvitation = {
+  invitationJson: string;
+  comparisonCode: string;
+};
+
 export type PairingResponse = {
   sessionId: string;
   fingerprint: string;
@@ -58,7 +63,7 @@ export interface WalletCoordinationPort {
     signerCount: number
   ): Promise<PairingInvitation>;
   cancelPairing(sessionId: string): Promise<void>;
-  decodePairingInvitation(frames: string[]): Promise<string>;
+  decodePairingInvitation(frames: string[]): Promise<DecodedPairingInvitation>;
   pendingMobilePairings(): Promise<PendingMobilePairing[]>;
   resumePairingOnMobile(sessionId: string, credential: string): Promise<PairingResponse>;
   acceptPairingOnMobile(

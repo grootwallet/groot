@@ -1,6 +1,11 @@
 import type { CatalogSection } from './types';
 
 export const componentCopy = {
+  'Requesting camera permission…': {
+    fr: 'Demande d’autorisation pour la caméra…',
+    es: 'Solicitando permiso para la cámara…'
+  },
+  'Try camera again': { fr: 'Réessayer la caméra', es: 'Reintentar con la cámara' },
   '{label} copied': { fr: '{label} copié', es: '{label} copiado' },
   'Select and copy the {label} manually.': {
     fr: 'Sélectionnez et copiez manuellement {label}.',

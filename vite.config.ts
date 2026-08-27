@@ -7,7 +7,9 @@ export default defineConfig({
   plugins: [sveltekit()],
   envPrefix: ['VITE_', 'PUBLIC_'],
   server: {
-    host: tauriDevHost ?? '127.0.0.1',
+    // A physical phone needs the LAN address while desktop camera access needs a
+    // secure loopback origin. Bind both and advertise the LAN host only for HMR.
+    host: tauriDevHost ? '0.0.0.0' : '127.0.0.1',
     port: 5188,
     strictPort: true,
     hmr: tauriDevHost ? { protocol: 'ws', host: tauriDevHost, port: 5188 } : undefined

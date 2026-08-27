@@ -2,7 +2,8 @@
   import { locale } from '$lib/i18n';
   import { translate } from '$lib/i18n-catalog';
   import { Camera, CameraOff } from '@lucide/svelte';
-  import { onMount } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
+  import Button from './Button.svelte';
   import QrScanner from 'qr-scanner';
 
   let {
@@ -17,60 +18,74 @@
   let video: HTMLVideoElement;
   let error = $state('');
   let scanned = $state(0);
+  let starting = $state(false);
+  let scanner: QrScanner | undefined;
+  let stopped = false;
+  const seen = new Set<string>();
+
+  async function acceptFrame(rawValue: string) {
+    const frame = rawValue.trim().toLowerCase();
+    if (
+      !acceptedTypes.some((type: string) => frame.startsWith(`ur:${type.toLowerCase()}/`)) ||
+      seen.has(frame) ||
+      stopped
+    )
+      return;
+    if (seen.size >= 1024) {
+      error = 'Too many QR frames. Restart the scan.';
+      scanner?.stop();
+      return;
+    }
+    seen.add(frame);
+    scanned = seen.size;
+    await onframe(frame);
+  }
+
+  async function startCamera() {
+    if (starting || stopped) return;
+    starting = true;
+    error = '';
+    scanner?.destroy();
+    scanner = undefined;
+    try {
+      if (!window.isSecureContext) throw new Error('insecure_camera_origin');
+      if (!navigator.mediaDevices?.getUserMedia) throw new Error('camera_unavailable');
+      scanner = new QrScanner(
+        video,
+        (result) => {
+          void acceptFrame(result.data);
+        },
+        {
+          preferredCamera: 'environment',
+          maxScansPerSecond: 8,
+          highlightScanRegion: false,
+          highlightCodeOutline: true,
+          returnDetailedScanResult: true,
+          onDecodeError: () => {}
+        }
+      );
+      await scanner.start();
+    } catch (cause) {
+      const name = cause instanceof DOMException ? cause.name : '';
+      const message = cause instanceof Error ? cause.message : '';
+      error =
+        message === 'insecure_camera_origin'
+          ? 'Camera access requires Groot’s secure app connection. Reopen this scanner in the desktop app.'
+          : name === 'NotAllowedError'
+            ? 'Camera access was denied. Allow camera access for Groot, then try again.'
+            : 'No usable camera is available. Connect a camera, check its permission, then try again.';
+    } finally {
+      starting = false;
+    }
+  }
 
   onMount(() => {
-    let scanner: QrScanner | undefined;
-    let stopped = false;
-    const seen = new Set<string>();
+    void startCamera();
+  });
 
-    async function acceptFrame(rawValue: string) {
-      const frame = rawValue.trim().toLowerCase();
-      if (
-        !acceptedTypes.some((type: string) => frame.startsWith(`ur:${type.toLowerCase()}/`)) ||
-        seen.has(frame) ||
-        stopped
-      )
-        return;
-      if (seen.size >= 1024) {
-        error = 'Too many QR frames. Restart the scan.';
-        scanner?.stop();
-        return;
-      }
-      seen.add(frame);
-      scanned = seen.size;
-      await onframe(frame);
-    }
-
-    void (async () => {
-      try {
-        if (!navigator.mediaDevices?.getUserMedia) throw new Error('camera_unavailable');
-        scanner = new QrScanner(
-          video,
-          (result) => {
-            void acceptFrame(result.data);
-          },
-          {
-            preferredCamera: 'environment',
-            maxScansPerSecond: 8,
-            highlightScanRegion: false,
-            highlightCodeOutline: true,
-            returnDetailedScanResult: true,
-            onDecodeError: () => {}
-          }
-        );
-        await scanner.start();
-      } catch (cause) {
-        const name = cause instanceof DOMException ? cause.name : '';
-        error =
-          name === 'NotAllowedError'
-            ? 'Camera access was denied. Allow camera access for Groot, then reopen this scanner.'
-            : 'No usable camera is available. Connect a camera or import the signed PSBT file instead.';
-      }
-    })();
-    return () => {
-      stopped = true;
-      scanner?.destroy();
-    };
+  onDestroy(() => {
+    stopped = true;
+    scanner?.destroy();
   });
 </script>
 
@@ -84,9 +99,21 @@
   <div class="scan-guide" aria-hidden="true"></div>
   <div class="scan-status">
     {#if error}<CameraOff size={16} /><span>{error}</span>{:else}<Camera size={16} /><span
-        >{translate($locale, scanned ? `${scanned} unique frames scanned` : prompt)}</span
+        >{translate(
+          $locale,
+          starting
+            ? 'Requesting camera permission…'
+            : scanned
+              ? `${scanned} unique frames scanned`
+              : prompt
+        )}</span
       >{/if}
   </div>
+  {#if error}
+    <Button variant="secondary" class="scanner-retry" loading={starting} onclick={startCamera}
+      >{translate($locale, 'Try camera again')}</Button
+    >
+  {/if}
 </div>
 
 <style>

@@ -5,7 +5,15 @@
   import { lockModalScroll } from './modal-scroll-lock';
   import { onDestroy } from 'svelte';
   import { fly } from 'svelte/transition';
-  let { open, title, description = '', onclose, attentionSignal = 0, children } = $props();
+  let {
+    open,
+    title,
+    description = '',
+    onclose,
+    attentionSignal = 0,
+    dismissible = true,
+    children
+  } = $props();
   let dialog = $state<HTMLDivElement>();
   let documentTop = $state(-32);
   let attentionActive = $state(false);
@@ -17,9 +25,8 @@
     if (attentionTimer !== null) clearTimeout(attentionTimer);
   });
 
-  $effect(() => {
-    const signal = attentionSignal;
-    if (!open || !signal || typeof requestAnimationFrame === 'undefined') return;
+  function showAttention() {
+    if (!open || typeof requestAnimationFrame === 'undefined') return;
     if (attentionFrame !== null) cancelAnimationFrame(attentionFrame);
     if (attentionTimer !== null) clearTimeout(attentionTimer);
     attentionActive = false;
@@ -31,6 +38,20 @@
         attentionActive = false;
       }, 420);
     });
+  }
+
+  function requestClose() {
+    if (dismissible) {
+      onclose();
+      return;
+    }
+    showAttention();
+  }
+
+  $effect(() => {
+    const signal = attentionSignal;
+    if (!signal) return;
+    showAttention();
   });
 
   $effect(() => {
@@ -54,7 +75,7 @@
   function handleKeydown(event: KeyboardEvent) {
     if (event.key === 'Escape') {
       event.preventDefault();
-      onclose();
+      requestClose();
       return;
     }
     if (event.key !== 'Tab' || !dialog) return;
@@ -85,7 +106,7 @@
     class="modal-layer"
     style:--modal-document-top={`${documentTop}px`}
     role="presentation"
-    onclick={(e) => e.target === e.currentTarget && onclose()}
+    onclick={(e) => e.target === e.currentTarget && requestClose()}
   >
     <div
       bind:this={dialog}
@@ -103,7 +124,7 @@
           <h2>{title}</h2>
           {#if description}<p>{description}</p>{/if}
         </div>
-        <button class="icon-button" aria-label={translate($locale, 'Close')} onclick={onclose}
+        <button class="icon-button" aria-label={translate($locale, 'Close')} onclick={requestClose}
           ><X size={18} /></button
         >
       </header>

@@ -2285,6 +2285,7 @@
 </Modal>
 <Modal
   open={mobilePairOpen}
+  dismissible={false}
   title={translate($locale, 'Add a Groot phone')}
   description={translate(
     $locale,
@@ -2342,11 +2343,15 @@
         >{translate($locale, 'Codes match — add signer')}</Button
       >
     {:else if mobilePairError}<p class="form-error" role="alert">{mobilePairError}</p>{/if}
+    <Button variant="secondary" class="full" disabled={mobilePairBusy} onclick={cancelMobilePairing}
+      >{translate($locale, 'Cancel pairing')}</Button
+    >
   </div>
 </Modal>
 
 <Modal
   open={mobileFinalOpen}
+  dismissible={false}
   title={translate($locale, 'Return the final policy to the phone')}
   description={translate(
     $locale,

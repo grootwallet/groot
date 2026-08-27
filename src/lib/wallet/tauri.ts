@@ -799,7 +799,10 @@ export class TauriWalletAdapter implements WalletPort {
     return command<void>('coordination_pairing_cancel', { sessionId });
   }
   decodePairingInvitation(frames: string[]) {
-    return command<string>('coordination_decode_invitation', { frames });
+    return command<import('./contracts').DecodedPairingInvitation>(
+      'coordination_decode_invitation',
+      { frames }
+    );
   }
   pendingMobilePairings() {
     return command<import('./contracts').PendingMobilePairing[]>(

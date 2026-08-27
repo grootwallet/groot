@@ -89,14 +89,13 @@ fn format_words(words: &str) -> Result<String, String> {
         return Err("Native backup requires exactly 24 recovery words.".to_owned());
     }
 
-    Ok((0..8)
-        .map(|row| {
-            [row, row + 8, row + 16]
-                .into_iter()
-                .map(|index| format!("{:>2}. {:<8}", index + 1, words[index]))
-                .collect::<Vec<_>>()
-                .join("     ")
-        })
+    // Native iOS alerts use a proportional system font, so space-padded columns
+    // cannot align reliably. A sequential list remains unambiguous at every
+    // Dynamic Type size and lets the native alert scroll when necessary.
+    Ok(words
+        .iter()
+        .enumerate()
+        .map(|(index, word)| format!("{}. {}", index + 1, word))
         .collect::<Vec<_>>()
         .join("\n"))
 }
@@ -106,7 +105,7 @@ mod tests {
     use super::format_words;
 
     #[test]
-    fn recovery_words_are_formatted_as_an_eight_by_three_grid() {
+    fn recovery_words_are_formatted_as_an_unambiguous_sequential_list() {
         let words = (1..=24)
             .map(|index| format!("word{index}"))
             .collect::<Vec<_>>()
@@ -114,11 +113,11 @@ mod tests {
         let formatted = format_words(&words).expect("valid words");
         let rows = formatted.lines().collect::<Vec<_>>();
 
-        assert_eq!(rows.len(), 8);
-        assert!(rows[0].contains(" 1. word1"));
-        assert!(rows[0].contains(" 9. word9"));
-        assert!(rows[0].contains("17. word17"));
-        assert!(rows[7].contains("24. word24"));
+        assert_eq!(rows.len(), 24);
+        assert_eq!(rows[0], "1. word1");
+        assert_eq!(rows[8], "9. word9");
+        assert_eq!(rows[16], "17. word17");
+        assert_eq!(rows[23], "24. word24");
     }
 
     #[test]

@@ -10885,6 +10885,24 @@ code {
   gap: 1rem;
 }
 
+.mobile-pairing-flow > .warning-box {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 0.55rem;
+  row-gap: 0.15rem;
+  align-items: start;
+}
+
+.mobile-pairing-flow > .warning-box > svg {
+  grid-row: 1 / span 2;
+  margin-top: 0.1rem;
+}
+
+.mobile-pairing-flow > .warning-box > strong,
+.mobile-pairing-flow > .warning-box > span {
+  grid-column: 2;
+}
+
 .comparison-code {
   display: grid;
   justify-items: center;

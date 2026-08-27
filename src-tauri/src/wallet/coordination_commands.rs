@@ -27,6 +27,13 @@ pub struct PairingInvitationDto {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct DecodedPairingInvitationDto {
+    invitation_json: String,
+    comparison_code: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PairingResponseDto {
     session_id: String,
     fingerprint: String,
@@ -235,81 +242,90 @@ pub fn coordination_pairing_cancel(
 }
 
 #[tauri::command]
-pub fn coordination_decode_invitation(frames: Vec<String>) -> ApiResult<String> {
+pub fn coordination_decode_invitation(
+    frames: Vec<String>,
+) -> ApiResult<DecodedPairingInvitationDto> {
     let payload = coordination_transport::decode(CoordinationUrType::Invitation, &frames)
         .map_err(coordination_ur_api_error)?;
     let invitation: PairingInvitation = serde_json::from_slice(&payload)
         .map_err(|_| invalid_payload("The pairing invitation is malformed."))?;
     invitation.validate(now()).map_err(coordination_api_error)?;
-    serde_json::to_string(&invitation).map_err(internal)
+    Ok(DecodedPairingInvitationDto {
+        invitation_json: serde_json::to_string(&invitation).map_err(internal)?,
+        comparison_code: comparison_code(&invitation),
+    })
 }
 
 #[tauri::command]
-pub fn coordination_mobile_accept(
+pub async fn coordination_mobile_accept(
     app: AppHandle,
-    state: State<'_, AppState>,
     invitation_json: String,
     signer_label: String,
     credential: String,
 ) -> ApiResult<PairingResponseDto> {
-    let _operation = operation_guard(&state)?;
-    let credential = Zeroizing::new(credential);
-    validate_credential(credential.as_str())?;
-    let invitation: PairingInvitation = serde_json::from_str(&invitation_json)
-        .map_err(|_| invalid_payload("The pairing invitation is malformed."))?;
-    invitation.validate(now()).map_err(coordination_api_error)?;
-    let label = signer_label.trim();
-    if label.is_empty() || label.chars().count() > 48 {
-        return Err(api_error(
-            "invalid_label",
-            "The mobile signer name must contain 1 to 48 characters.",
-        ));
-    }
-    let mnemonic = generate_software_mnemonic(None)?;
-    let words = Zeroizing::new(mnemonic.to_string());
-    let backup = native_backup::present(&app, words.as_str()).map_err(internal)?;
-    if backup.cancelled {
-        return Err(api_error(
-            "onboarding_cancelled",
-            "Mobile signer recovery-word backup was cancelled.",
-        ));
-    }
-    let (fingerprint, account, xpub) =
-        derive_mobile_account(&mnemonic).map_err(coordination_api_error)?;
-    let record = KeyRecord::encode_signed(&invitation.token, fingerprint, &account, label)
-        .map_err(coordination_api_error)?;
-    let envelope = EncryptedEnvelope {
-        version: 1,
-        session_id: invitation.session_id.clone(),
-        encrypted_record: encrypt_bip129(&invitation.token, record.as_bytes())
-            .map_err(coordination_api_error)?,
-    };
-    let frames = encode_coordination(
-        CoordinationUrType::Bsms,
-        &serde_json::to_vec(&envelope).map_err(internal)?,
-    )?;
-    let staged = PendingMobileSecret {
-        version: 1,
-        invitation: invitation.clone(),
-        mnemonic: words.to_string(),
-        signer_label: label.to_owned(),
-        backup_verified: backup.verified,
-    };
-    let staged = Zeroizing::new(serde_json::to_vec(&staged).map_err(internal)?);
-    secure_store::store(
-        &pending_mobile_secret_path(&app, &invitation.session_id)?,
-        &staged,
-        credential.as_str(),
-    )
-    .map_err(secure_store_error)?;
-    Ok(PairingResponseDto {
-        session_id: invitation.session_id.clone(),
-        fingerprint: fingerprint.to_string(),
-        xpub_checksum: short_checksum(xpub.to_string().as_bytes()),
-        backup_verified: backup.verified,
-        comparison_code: comparison_code(&invitation),
-        frames,
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let _operation = operation_guard(&state)?;
+        let credential = Zeroizing::new(credential);
+        validate_credential(credential.as_str())?;
+        let invitation: PairingInvitation = serde_json::from_str(&invitation_json)
+            .map_err(|_| invalid_payload("The pairing invitation is malformed."))?;
+        invitation.validate(now()).map_err(coordination_api_error)?;
+        let label = signer_label.trim();
+        if label.is_empty() || label.chars().count() > 48 {
+            return Err(api_error(
+                "invalid_label",
+                "The mobile signer name must contain 1 to 48 characters.",
+            ));
+        }
+        let mnemonic = generate_software_mnemonic(None)?;
+        let words = Zeroizing::new(mnemonic.to_string());
+        let backup = native_backup::present(&app, words.as_str()).map_err(internal)?;
+        if backup.cancelled {
+            return Err(api_error(
+                "onboarding_cancelled",
+                "Mobile signer recovery-word backup was cancelled.",
+            ));
+        }
+        let (fingerprint, account, xpub) =
+            derive_mobile_account(&mnemonic).map_err(coordination_api_error)?;
+        let record = KeyRecord::encode_signed(&invitation.token, fingerprint, &account, label)
+            .map_err(coordination_api_error)?;
+        let envelope = EncryptedEnvelope {
+            version: 1,
+            session_id: invitation.session_id.clone(),
+            encrypted_record: encrypt_bip129(&invitation.token, record.as_bytes())
+                .map_err(coordination_api_error)?,
+        };
+        let frames = encode_coordination(
+            CoordinationUrType::Bsms,
+            &serde_json::to_vec(&envelope).map_err(internal)?,
+        )?;
+        let staged = PendingMobileSecret {
+            version: 1,
+            invitation: invitation.clone(),
+            mnemonic: words.to_string(),
+            signer_label: label.to_owned(),
+            backup_verified: backup.verified,
+        };
+        let staged = Zeroizing::new(serde_json::to_vec(&staged).map_err(internal)?);
+        secure_store::store(
+            &pending_mobile_secret_path(&app, &invitation.session_id)?,
+            &staged,
+            credential.as_str(),
+        )
+        .map_err(secure_store_error)?;
+        Ok(PairingResponseDto {
+            session_id: invitation.session_id.clone(),
+            fingerprint: fingerprint.to_string(),
+            xpub_checksum: short_checksum(xpub.to_string().as_bytes()),
+            backup_verified: backup.verified,
+            comparison_code: comparison_code(&invitation),
+            frames,
+        })
     })
+    .await
+    .map_err(internal)?
 }
 
 #[tauri::command]
@@ -1935,6 +1951,23 @@ mod tests {
         assert_eq!(first.xpub_checksum, second.xpub_checksum);
         assert_eq!(first.comparison_code, second.comparison_code);
         assert_eq!(first.frames, second.frames);
+    }
+
+    #[test]
+    fn decoded_invitation_exposes_the_same_comparison_code_as_desktop() {
+        let invitation = invitation(now().saturating_add(60));
+        let frames = encode_coordination(
+            CoordinationUrType::Invitation,
+            &serde_json::to_vec(&invitation).unwrap(),
+        )
+        .unwrap();
+
+        let decoded = coordination_decode_invitation(frames).unwrap();
+        assert_eq!(decoded.comparison_code, comparison_code(&invitation));
+        assert_eq!(
+            serde_json::from_str::<PairingInvitation>(&decoded.invitation_json).unwrap(),
+            invitation
+        );
     }
 
     fn regtest_dir() -> PathBuf {

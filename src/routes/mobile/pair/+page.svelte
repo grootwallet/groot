@@ -31,6 +31,36 @@
   let resumePin = $state('');
   let resumeError = $state('');
   let resumeNotice = $state('');
+  let pairingPage: HTMLDivElement;
+  let keyboardActive = $state(false);
+  let focusTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function isTextEntry(element: Element | null): element is HTMLInputElement | HTMLTextAreaElement {
+    return element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement;
+  }
+
+  function centerFocusedInput(event: FocusEvent) {
+    const input = event.target;
+    if (!(input instanceof HTMLInputElement || input instanceof HTMLTextAreaElement)) return;
+    keyboardActive = true;
+    if (focusTimer !== null) clearTimeout(focusTimer);
+    // Wait for iOS to finish presenting the keyboard before measuring the viewport.
+    focusTimer = setTimeout(() => {
+      focusTimer = null;
+      if (document.activeElement === input) {
+        input.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+      }
+    }, 320);
+  }
+
+  function finishInputFocus() {
+    if (focusTimer !== null) clearTimeout(focusTimer);
+    focusTimer = setTimeout(() => {
+      focusTimer = null;
+      keyboardActive =
+        isTextEntry(document.activeElement) && pairingPage.contains(document.activeElement);
+    }, 0);
+  }
 
   onMount(async () => {
     try {
@@ -42,6 +72,7 @@
   });
 
   onDestroy(() => {
+    if (focusTimer !== null) clearTimeout(focusTimer);
     pin = '';
     confirmation = '';
     resumePin = '';
@@ -101,7 +132,9 @@
   async function receiveInvitation(frame: string) {
     invitationFrames = [...invitationFrames, frame];
     try {
-      invitationJson = await walletService.decodePairingInvitation(invitationFrames);
+      const decoded = await walletService.decodePairingInvitation(invitationFrames);
+      invitationJson = decoded.invitationJson;
+      comparisonCode = decoded.comparisonCode;
       const invitation = JSON.parse(invitationJson) as {
         walletName: string;
         network: string;
@@ -161,7 +194,13 @@
   }
 </script>
 
-<div class="page narrow-page pairing-page">
+<div
+  bind:this={pairingPage}
+  class="page narrow-page pairing-page"
+  class:keyboard-active={keyboardActive}
+  onfocusin={centerFocusedInput}
+  onfocusout={finishInputFocus}
+>
   <header class="page-header">
     <div>
       <p class="eyebrow">{translate($locale, 'PHONE SIGNER')}</p>
@@ -250,6 +289,11 @@
           ></span
         >
       </div>
+      <div class="comparison" aria-label={translate($locale, 'Pairing comparison code')}>
+        <small>{translate($locale, 'Both devices must show')}</small><strong
+          >{comparisonCode}</strong
+        >
+      </div>
       <label class="field"
         ><span>{translate($locale, 'Phone name')}</span><input
           bind:value={signerLabel}
@@ -318,6 +362,13 @@
 <style>
   .pairing-page {
     padding-bottom: max(2rem, env(safe-area-inset-bottom));
+  }
+  .pairing-page.keyboard-active {
+    padding-bottom: max(45dvh, env(safe-area-inset-bottom));
+  }
+  .pairing-page :global(input:focus),
+  .pairing-page :global(textarea:focus) {
+    scroll-margin-block: 35dvh;
   }
   .pairing-card {
     display: grid;

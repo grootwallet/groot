@@ -19,6 +19,7 @@ export const coordinationCopy = {
     fr: 'Annuler le jumelage en attente',
     es: 'Cancelar vinculación pendiente'
   },
+  'Cancel pairing': { fr: 'Annuler le jumelage', es: 'Cancelar vinculación' },
   'Codes match — add signer': {
     fr: 'Les codes correspondent — ajouter le signataire',
     es: 'Los códigos coinciden — añadir firmante'
