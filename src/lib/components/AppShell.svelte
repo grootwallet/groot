@@ -86,6 +86,8 @@
   let desktopPlatform = false;
   let shortcutLockPending = false;
   let walletSelectionTask: Promise<void> | undefined;
+  let mobileRuntime = false;
+  let backgroundLockRequired = false;
   let selectedProfile = $derived(profiles.find((wallet) => wallet.id === selectedWalletId));
   let policyContext = $derived(
     selectedProfile?.kind === 'multisig' || page.url.pathname.startsWith('/multisig')
@@ -355,6 +357,46 @@
     if (remaining > 0) await new Promise((resolve) => setTimeout(resolve, remaining));
   }
 
+  function centerMobileField(event: FocusEvent) {
+    if (!mobileRuntime) return;
+    const field = event.target;
+    if (!(
+      field instanceof HTMLInputElement ||
+      field instanceof HTMLTextAreaElement ||
+      field instanceof HTMLSelectElement
+    ))
+      return;
+    const center = () => {
+      const viewport = window.visualViewport;
+      if (!viewport || document.activeElement !== field) return;
+      const rect = field.getBoundingClientRect();
+      const visibleCenter = viewport.offsetTop + viewport.height / 2;
+      const fieldCenter = rect.top + rect.height / 2;
+      window.scrollBy({ top: fieldCenter - visibleCenter, behavior: 'smooth' });
+    };
+    setTimeout(center, 120);
+    setTimeout(center, 420);
+  }
+
+  async function enforceMobileBackgroundLock() {
+    if (!mobileRuntime || !backgroundLockRequired) return;
+    startupState = 'checking';
+    liveSync?.stop();
+    try {
+      await Promise.allSettled([
+        walletService.cancelHardwareOperations(),
+        walletService.cancelSync(),
+        walletService.cancelFullRescan()
+      ]);
+      await walletService.lockAll();
+      backgroundLockRequired = false;
+      await goto('/unlock');
+      startupState = 'ready';
+    } catch {
+      startupState = 'failed';
+    }
+  }
+
   onMount(() => {
     initDenomination();
     commandModifier = usesCommandModifier(navigator.platform);
@@ -469,16 +511,33 @@
     );
     sessionMonitor.start();
     const wakeWhenVisible = () => {
-      if (document.visibilityState === 'visible') void liveSync?.runNow();
+      if (document.visibilityState !== 'visible') {
+        if (mobileRuntime) {
+          backgroundLockRequired = true;
+          void enforceMobileBackgroundLock();
+        }
+        return;
+      }
+      if (backgroundLockRequired) void enforceMobileBackgroundLock();
+      else void liveSync?.runNow();
     };
     document.addEventListener('visibilitychange', wakeWhenVisible);
+    document.addEventListener('focusin', centerMobileField);
     window.addEventListener('keydown', handleKeyboardShortcut);
+    void walletService.runtimePlatform().then((runtime) => {
+      mobileRuntime = runtime.mobile;
+      if (mobileRuntime && document.visibilityState !== 'visible') {
+        backgroundLockRequired = true;
+        void enforceMobileBackgroundLock();
+      }
+    });
     void resolveStartupRoute();
     return () => {
       unsubscribe();
       liveSync?.stop();
       sessionMonitor?.stop();
       document.removeEventListener('visibilitychange', wakeWhenVisible);
+      document.removeEventListener('focusin', centerMobileField);
       window.removeEventListener('keydown', handleKeyboardShortcut);
     };
   });
@@ -499,7 +558,10 @@
       <BrandLockup animated />
       {#if startupState === 'failed'}
         <p>{translate($locale, 'Groot could not verify the wallet lock state.')}</p>
-        <button class="button secondary" onclick={resolveStartupRoute}
+        <button
+          class="button secondary"
+          onclick={() =>
+            backgroundLockRequired ? enforceMobileBackgroundLock() : resolveStartupRoute()}
           >{translate($locale, 'Retry')}</button
         >
       {:else}

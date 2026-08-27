@@ -33,7 +33,6 @@
   let resumeNotice = $state('');
   let pairingPage: HTMLDivElement;
   let keyboardActive = $state(false);
-  let focusTimer: ReturnType<typeof setTimeout> | null = null;
 
   function isTextEntry(element: Element | null): element is HTMLInputElement | HTMLTextAreaElement {
     return element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement;
@@ -43,25 +42,10 @@
     const input = event.target;
     if (!(input instanceof HTMLInputElement || input instanceof HTMLTextAreaElement)) return;
     keyboardActive = true;
-    if (focusTimer !== null) clearTimeout(focusTimer);
-    // Wait for iOS to finish presenting the keyboard before measuring the viewport.
-    focusTimer = setTimeout(() => {
-      focusTimer = null;
-      if (document.activeElement === input) {
-        const viewport = window.visualViewport;
-        const rect = input.getBoundingClientRect();
-        const visibleTop = viewport?.offsetTop ?? 0;
-        const visibleHeight = viewport?.height ?? window.innerHeight;
-        const delta = rect.top + rect.height / 2 - (visibleTop + visibleHeight / 2);
-        window.scrollBy({ top: delta, behavior: 'smooth' });
-      }
-    }, 420);
   }
 
   function finishInputFocus() {
-    if (focusTimer !== null) clearTimeout(focusTimer);
-    focusTimer = setTimeout(() => {
-      focusTimer = null;
+    setTimeout(() => {
       keyboardActive =
         isTextEntry(document.activeElement) && pairingPage.contains(document.activeElement);
     }, 0);
@@ -77,7 +61,6 @@
   });
 
   onDestroy(() => {
-    if (focusTimer !== null) clearTimeout(focusTimer);
     pin = '';
     confirmation = '';
     resumePin = '';

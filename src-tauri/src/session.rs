@@ -55,6 +55,10 @@ impl WalletSessions {
         self.last_activity.remove(&wallet_id);
     }
 
+    pub(crate) fn lock_all(&mut self) {
+        self.last_activity.clear();
+    }
+
     pub(crate) fn is_unlocked(&self, wallet_id: Uuid) -> bool {
         self.last_activity.contains_key(&wallet_id)
     }
@@ -96,6 +100,20 @@ mod tests {
         sessions.lock(first);
         assert!(!sessions.is_unlocked(first));
         assert!(sessions.is_unlocked(second));
+    }
+
+    #[test]
+    fn lock_all_ends_every_wallet_session() {
+        let first = Uuid::new_v4();
+        let second = Uuid::new_v4();
+        let mut sessions = WalletSessions::default();
+        sessions.unlock(first);
+        sessions.unlock(second);
+
+        sessions.lock_all();
+
+        assert!(!sessions.is_unlocked(first));
+        assert!(!sessions.is_unlocked(second));
     }
 
     #[test]

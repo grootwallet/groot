@@ -27,6 +27,7 @@ import type {
   CoreNodeConfig,
   MnemonicPresentation,
   WalletProfileCompatibility,
+  RuntimePlatform,
   NodeStatus,
   NetworkSetupSource,
   PayjoinUriInspection,
@@ -56,6 +57,7 @@ import type { PaymentDraft } from '../payment-draft';
 import type { WalletCoordinationPort } from './coordination';
 
 export interface WalletProfilesPort {
+  runtimePlatform(): Promise<RuntimePlatform>;
   exists(): Promise<boolean>;
   profiles(): Promise<WalletRegistry>;
   profileCompatibility(): Promise<WalletProfileCompatibility>;
@@ -71,6 +73,7 @@ export interface WalletProfilesPort {
   recoverWallet(name: string, credential: string): Promise<void>;
   unlock(credential: string): Promise<void>;
   lock(): Promise<void>;
+  lockAll(): Promise<void>;
   deleteWallet(credential: string, confirmation: string): Promise<void>;
   resetRegtestWallet(confirmation: string): Promise<void>;
 }

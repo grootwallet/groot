@@ -94,6 +94,7 @@ pub(super) fn validate_psbt_filename(value: &str) -> ApiResult<&str> {
     Ok(trimmed)
 }
 
+#[cfg(not(mobile))]
 pub(super) fn write_public_export(path: &Path, content: &[u8]) -> ApiResult<()> {
     let parent = path
         .parent()
@@ -121,6 +122,23 @@ pub(super) fn write_public_export(path: &Path, content: &[u8]) -> ApiResult<()> 
         let _ = fs::remove_file(&temp);
     }
     result
+}
+
+// Mobile document pickers grant access to the selected file, not necessarily
+// to its parent directory. Write the user-selected public export directly so
+// iOS does not reject the desktop-only sibling-temp-file strategy.
+#[cfg(mobile)]
+pub(super) fn write_public_export(path: &Path, content: &[u8]) -> ApiResult<()> {
+    let mut options = OpenOptions::new();
+    options.write(true).create(true).truncate(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let mut file = options.open(path).map_err(internal)?;
+    file.write_all(content).map_err(internal)?;
+    file.sync_all().map_err(internal)
 }
 
 pub async fn public_backup_save(

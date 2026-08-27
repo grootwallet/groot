@@ -16,7 +16,7 @@
     X
   } from '@lucide/svelte';
   import QRCode from 'qrcode';
-  import { onDestroy } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import Button from '$lib/components/Button.svelte';
   import PasswordField from '$lib/components/PasswordField.svelte';
   import InsightTip from '$lib/components/InsightTip.svelte';
@@ -48,11 +48,15 @@
   let receivePrintQr = $state<PrintableQr | null>(null);
   let changePrintQr = $state<PrintableQr | null>(null);
   let loadedBackupName = $state('');
+  let mobileRuntime = $state(false);
   const policyPresentation = $derived(wallet ? walletPolicyPresentation(wallet) : null);
 
   onDestroy(() => {
     pin = '';
     backup = '';
+  });
+  onMount(() => {
+    void walletService.runtimePlatform().then((runtime) => (mobileRuntime = runtime.mobile));
   });
 
   $effect(() => {
@@ -283,11 +287,10 @@
         </p>
         <div class="backup-security-note">
           <ShieldCheck size={18} /><span
-            ><strong>{translate($locale, 'Re-authenticate this export')}</strong><small
-              >{translate($locale, 'Use')}
-              {wallet.name}{translate(
+            ><strong>{translate($locale, 'Confirm this export')}</strong><small
+              >{translate(
                 $locale,
-                '’s app PIN. This protects access to private financial metadata even\n              while the wallet screen is open. The exported descriptor is not encrypted: it cannot\n              spend, but it reveals addresses and should remain private.'
+                'Enter this wallet’s app PIN. The backup cannot spend, but it reveals every wallet address.'
               )}</small
             ></span
           >
@@ -338,9 +341,9 @@
           ><Button variant="secondary" onclick={saveBackupFile}
             ><Download size={15} />{translate($locale, 'Download')}
             {translate($locale, backupFormat === 'bsms' ? 'BSMS' : 'JSON')}</Button
-          ><Button variant="secondary" onclick={printBackup}
-            ><Printer size={15} />{translate($locale, 'Save PDF')}</Button
-          >
+          >{#if !mobileRuntime}<Button variant="secondary" onclick={printBackup}
+              ><Printer size={15} />{translate($locale, 'Save PDF')}</Button
+            >{/if}
         </div>
         {#if exportError}<p class="form-error" aria-live="polite">{exportError}</p>{/if}
         <div class="descriptor-qr-preview">

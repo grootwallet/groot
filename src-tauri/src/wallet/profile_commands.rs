@@ -417,6 +417,36 @@ pub fn wallet_lock(app: AppHandle, state: State<'_, AppState>) -> ApiResult<()> 
 }
 
 #[tauri::command]
+pub fn wallet_lock_all(state: State<'_, AppState>) -> ApiResult<()> {
+    let _operation = operation_guard(&state)?;
+    state.proposals.lock().map_err(internal)?.clear();
+    state.unlocked_wallets.lock().map_err(internal)?.lock_all();
+    *state.pending_mnemonic.lock().map_err(internal)? = None;
+    state.verified_recovery.lock().map_err(internal)?.clear();
+    state
+        .pending_hardware_pins
+        .lock()
+        .map_err(internal)?
+        .clear();
+    *state.recent_hardware_scan.lock().map_err(internal)? = None;
+    state.node_auth.lock().map_err(internal)?.clear();
+    state
+        .authenticated_software_descriptors
+        .lock()
+        .map_err(internal)?
+        .clear();
+    state.saved_files.lock().map_err(internal)?.clear();
+    #[cfg(target_os = "macos")]
+    state.pending_pdf_exports.lock().map_err(internal)?.clear();
+    state
+        .pending_policy_verifications
+        .lock()
+        .map_err(internal)?
+        .clear();
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn wallet_snapshot(app: AppHandle) -> ApiResult<WalletSnapshotDto> {
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
@@ -1002,6 +1032,16 @@ pub async fn node_config_save(
         cancel_foreground_sync(&state)?;
         let _operation = operation_guard(&state)?;
         require_unlocked(&app, &state)?;
+        #[cfg(mobile)]
+        if matches!(
+            config.backend,
+            crate::network::ChainBackend::LocalCore { .. }
+        ) {
+            return Err(api_error(
+                "invalid_node_config",
+                "A mobile device must connect to a remote Bitcoin Core node over TLS or Tor.",
+            ));
+        }
         config.validate().map_err(network_config_api_error)?;
         let credential = Zeroizing::new(credential);
         let password = Zeroizing::new(password);

@@ -69,6 +69,7 @@
   let awaiting = $derived(awaitingPaymentAddresses(addresses));
   let history = $derived(addresses.filter((address) => address.status !== 'awaiting'));
   let wallet = $state<MultisigWallet | null>(null);
+  let mobileCoordinator = $state(false);
   let supportsHardwareVerification = $derived(wallet !== null && !wallet.recoveryTemplate);
   let eligibleDeviceTypes = $derived([
     ...new Set(
@@ -107,12 +108,14 @@
           await goto('/receive', { replaceState: true });
           return;
         }
-        const [state, savedWallet] = await Promise.all([
+        const [state, savedWallet, coordination] = await Promise.all([
           walletService.multisigSnapshot(),
-          walletService.multisigWallet()
+          walletService.multisigWallet(),
+          walletService.coordinationStatus()
         ]);
         if (!active) return;
         wallet = savedWallet;
+        mobileCoordinator = coordination.role === 'mobile_cosigner';
         applyAddresses(state.receiveAddresses);
         labelSuggestions = state.labelSuggestions;
         ready = true;
@@ -269,6 +272,14 @@
     </div>
     <Button variant="secondary" href="/">{translate($locale, 'Back to overview')}</Button>
   </header>
+  {#if mobileCoordinator}<div class="warning-box" role="note">
+      <strong>{translate($locale, 'Receive labels stay on this phone')}</strong><span
+        >{translate(
+          $locale,
+          'Without optional sync, create receive requests on one device at a time. Desktop will detect payments, but it will not receive this label.'
+        )}</span
+      >
+    </div>{/if}
   {#if current}<section class="receive-card">
       <button
         class="qr-placeholder qr-button"

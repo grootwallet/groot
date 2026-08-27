@@ -502,6 +502,15 @@ export const walletCopy = {
     },
   RECEIVE: { fr: 'RECEVOIR', es: 'RECIBIR' },
   'Receive bitcoin': { fr: 'Recevoir du bitcoin', es: 'Recibir bitcoin' },
+  'Receive labels stay on this phone': {
+    fr: 'Les libellés de réception restent sur ce téléphone',
+    es: 'Las etiquetas de recepción permanecen en este teléfono'
+  },
+  'Without optional sync, create receive requests on one device at a time. Desktop will detect payments, but it will not receive this label.':
+    {
+      fr: 'Sans synchronisation facultative, créez les demandes de réception sur un seul appareil à la fois. L’ordinateur détectera les paiements, mais ne recevra pas ce libellé.',
+      es: 'Sin sincronización opcional, crea solicitudes de recepción en un solo dispositivo cada vez. El ordenador detectará los pagos, pero no recibirá esta etiqueta.'
+    },
   Type: { fr: 'Type', es: 'Tipo' },
   'Used and discarded addresses remain monitored.': {
     fr: 'Les adresses utilisées et écartées restent surveillées.',

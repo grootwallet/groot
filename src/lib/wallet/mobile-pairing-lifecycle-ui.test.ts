@@ -7,6 +7,7 @@ const routeSource = readFileSync(
   'utf8'
 );
 const appStyles = readFileSync(fileURLToPath(new URL('../../app.css', import.meta.url)), 'utf8');
+const appHtml = readFileSync(fileURLToPath(new URL('../../app.html', import.meta.url)), 'utf8');
 const desktopRouteSource = readFileSync(
   fileURLToPath(new URL('../../routes/multisig/new/+page.svelte', import.meta.url)),
   'utf8'
@@ -88,7 +89,9 @@ describe('mobile pairing lifecycle UI', () => {
     expect(scannerSource).toContain("error ? 'Try camera again' : 'Allow camera'");
     expect(scannerSource).toContain('class="camera-frame"');
     expect(scannerSource).toMatch(/\.camera-frame\s*\{[\s\S]*?position:\s*relative/);
-    expect(routeSource).toContain('window.visualViewport');
+    expect(appShellSource).toContain('window.visualViewport');
+    expect(appShellSource).toContain("document.addEventListener('focusin', centerMobileField)");
+    expect(appHtml).toContain('maximum-scale=1, user-scalable=no');
     expect(routeSource).toContain('font-size: 16px');
     expect(routeSource).toContain('class:keyboard-active={keyboardActive}');
     expect(routeSource).toContain('padding-bottom: max(45dvh');

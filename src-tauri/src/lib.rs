@@ -28,6 +28,31 @@ mod tor_rpc;
 pub mod ur_transport;
 mod wallet;
 
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RuntimePlatformDto {
+    platform: &'static str,
+    mobile: bool,
+}
+
+#[tauri::command]
+fn runtime_platform() -> RuntimePlatformDto {
+    #[cfg(target_os = "ios")]
+    let platform = "ios";
+    #[cfg(target_os = "android")]
+    let platform = "android";
+    #[cfg(target_os = "macos")]
+    let platform = "macos";
+    #[cfg(target_os = "windows")]
+    let platform = "windows";
+    #[cfg(target_os = "linux")]
+    let platform = "linux";
+    RuntimePlatformDto {
+        platform,
+        mobile: cfg!(mobile),
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -41,10 +66,12 @@ pub fn run() {
         })
         .manage(wallet::AppState::default())
         .invoke_handler(tauri::generate_handler![
+            runtime_platform,
             wallet::profile_commands::wallet_exists,
             wallet::ur_encode_psbt,
             wallet::ur_decode_psbt,
             wallet::profile_commands::wallet_lock,
+            wallet::profile_commands::wallet_lock_all,
             wallet::profile_commands::wallet_profiles,
             wallet::profile_commands::wallet_session,
             wallet::profile_commands::wallet_profile_compatibility,

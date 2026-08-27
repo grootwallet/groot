@@ -8,6 +8,8 @@ Groot is an onchain-only Bitcoin wallet and multisig coordinator for desktop, iO
 
 Cross-platform wallet coordination remains inside the trusted Rust boundary. BIP129 encryption/MAC and signed key-record verification, exact descriptor membership, mobile secret persistence, PSBT review derivation, and signing live in Rust. Svelte receives public role/identity DTOs and bounded UR frames only. `coordination.json` and `mobile-signer.json` are additive per-profile sidecars; existing profiles require no migration. ADR 0048 and [`cross-platform-coordination.md`](cross-platform-coordination.md) define the testnet-only platform gates.
 
+Node and sync-source settings remain local to each profile copy and are not pairing payload fields: desktop may use local Bitcoin Core while mobile uses independently authenticated remote TLS/Tor or compact-filter discovery. Mobile rejects a `local_core` save. Receive-request assignments and permanent labels likewise remain device-local in the accountless protocol; a future optional encrypted synchronization service must be separately specified and must not become an identity, authentication, custody, or pairing dependency.
+
 ## Stack
 
 - **Shell:** Tauri v2, using the shared Rust library entry point required by desktop and mobile.

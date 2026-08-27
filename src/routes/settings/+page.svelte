@@ -83,6 +83,7 @@
       (shortcut) => shortcut.id !== 'lock' || (!isPrototypeWallet && desktopPlatform)
     )
   );
+  let mobileRuntime = $state(false);
   let profiles = $state<WalletProfile[]>([]);
   let selectedWalletId = $state<string | null>(null);
   let profileReadGeneration = 0;
@@ -242,8 +243,12 @@
     );
     const generation = ++profileReadGeneration;
     theme = document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
-    const registry = await walletService.profiles();
+    const [registry, runtime] = await Promise.all([
+      walletService.profiles(),
+      walletService.runtimePlatform()
+    ]);
     if (generation !== profileReadGeneration) return;
+    mobileRuntime = runtime.mobile;
     profiles = registry.wallets;
     selectedWalletId = registry.selectedWalletId;
     inactivityTimeoutMinutes = registry.inactivityTimeoutMinutes;
@@ -445,6 +450,10 @@
             };
     nodePassword = '';
     nodeError = '';
+  }
+  function openNodeSettings() {
+    if (mobileRuntime && node.backend.type === 'local_core') setNodeLocation('remote_core');
+    nodeOpen = true;
   }
   async function saveNode() {
     busy = true;
@@ -1231,23 +1240,23 @@
           >
         </span>
       </div>
-      <div class="setting-row keyboard-shortcut-row">
-        <span class="setting-icon"><Keyboard size={18} /></span><span
-          ><strong>{translate($locale, 'Keyboard shortcuts')}</strong><small
-            >{translate($locale, 'Navigate and lock without leaving the keyboard.')}</small
-          ></span
-        >
-        <dl class="keyboard-shortcut-grid">
-          {#each displayedKeyboardShortcuts as shortcut}
-            <div>
-              <dt>{translate($locale, shortcut.label)}</dt>
-              <dd>
-                {#each shortcutKeys(shortcut, commandModifier) as key}<kbd>{key}</kbd>{/each}
-              </dd>
-            </div>
-          {/each}
-        </dl>
-      </div>
+      {#if !mobileRuntime}<div class="setting-row keyboard-shortcut-row">
+          <span class="setting-icon"><Keyboard size={18} /></span><span
+            ><strong>{translate($locale, 'Keyboard shortcuts')}</strong><small
+              >{translate($locale, 'Navigate and lock without leaving the keyboard.')}</small
+            ></span
+          >
+          <dl class="keyboard-shortcut-grid">
+            {#each displayedKeyboardShortcuts as shortcut}
+              <div>
+                <dt>{translate($locale, shortcut.label)}</dt>
+                <dd>
+                  {#each shortcutKeys(shortcut, commandModifier) as key}<kbd>{key}</kbd>{/each}
+                </dd>
+              </div>
+            {/each}
+          </dl>
+        </div>{/if}
     </div>
   </section>
   <section class="settings-group">
@@ -1265,13 +1274,19 @@
           ></span
         ><ChevronRight size={16} /></button
       >
-      <button onclick={() => (nodeOpen = true)}
+      <button onclick={openNodeSettings}
         ><span class="setting-icon"><Network size={18} /></span><span
           ><strong>{translate($locale, 'Fee and broadcast node')}</strong><small
             >{networkName(defaultConfig.network)}{' · '}{translate(
               $locale,
-              node.backend.type === 'local_core' ? 'This Mac' : 'Trusted remote server'
-            )}{' · '}<span class="selectable-text">{node.backend.url}</span></small
+              node.backend.type === 'local_core'
+                ? mobileRuntime
+                  ? 'Not configured on this phone'
+                  : 'This Mac'
+                : 'Trusted remote server'
+            )}{#if !(mobileRuntime && node.backend.type === 'local_core')}{' · '}<span
+                class="selectable-text">{node.backend.url}</span
+              >{/if}</small
           ></span
         ><ChevronRight size={16} /></button
       >
@@ -1977,10 +1992,10 @@
   onclose={() => (nodeOpen = false)}
 >
   <div class="theme-choice node-location">
-    <button
-      class:active={node.backend.type === 'local_core'}
-      onclick={() => setNodeLocation('local_core')}>{translate($locale, 'This Mac')}</button
-    ><button
+    {#if !mobileRuntime}<button
+        class:active={node.backend.type === 'local_core'}
+        onclick={() => setNodeLocation('local_core')}>{translate($locale, 'This Mac')}</button
+      >{/if}<button
       class:active={node.backend.type === 'remote_core' && !node.torProxy}
       onclick={() => setNodeLocation('remote_core')}>{translate($locale, 'Remote TLS')}</button
     ><button class:active={!!node.torProxy} onclick={() => setNodeLocation('tor')}

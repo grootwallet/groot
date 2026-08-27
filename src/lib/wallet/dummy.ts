@@ -62,6 +62,12 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
   private paymentDrafts = new Map<string, PaymentDraft>();
   private multisigPolicyVerificationRecords: SignerPolicyVerification[] = [];
   private hardwareHealthCheckRecords = new Map<string, HardwareHealthCheckRecord>();
+  async runtimePlatform() {
+    return {
+      platform: 'browser' as const,
+      mobile: typeof window !== 'undefined' && matchMedia('(max-width: 760px)').matches
+    };
+  }
   async paymentDraft() {
     const draft = this._selectedWalletId ? this.paymentDrafts.get(this._selectedWalletId) : null;
     return draft ? structuredClone(draft) : null;
@@ -209,6 +215,9 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
   }
   async lock() {
     if (this._selectedWalletId) this._unlockedWalletIds.delete(this._selectedWalletId);
+  }
+  async lockAll() {
+    this._unlockedWalletIds.clear();
   }
   async deleteWallet(credential: string, confirmation: string) {
     if (confirmation !== 'DELETE')

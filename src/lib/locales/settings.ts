@@ -31,6 +31,10 @@ export const settingsCopy = {
   Connected: { fr: 'Connecté', es: 'Conectado' },
   Offline: { fr: 'Hors ligne', es: 'Sin conexión' },
   'Trusted remote server': { fr: 'Serveur distant approuvé', es: 'Servidor remoto de confianza' },
+  'Not configured on this phone': {
+    fr: 'Non configuré sur ce téléphone',
+    es: 'No configurado en este teléfono'
+  },
   'Not checked': { fr: 'Non vérifié', es: 'Sin comprobar' },
   'Previous scan failed': { fr: 'Échec de l’analyse précédente', es: 'El escaneo anterior falló' },
   'Previous scan interrupted': {

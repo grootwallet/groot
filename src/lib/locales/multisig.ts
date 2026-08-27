@@ -419,6 +419,14 @@ export const multisigCopy = {
     fr: 'Réautoriser cet export',
     es: 'Volver a autenticar esta exportación'
   },
+  'Confirm this export': {
+    fr: 'Confirmer cette exportation',
+    es: 'Confirmar esta exportación'
+  },
+  'Enter this wallet’s app PIN. The backup cannot spend, but it reveals every wallet address.': {
+    fr: 'Saisissez le code PIN de ce portefeuille. La sauvegarde ne peut pas dépenser, mais elle révèle toutes les adresses du portefeuille.',
+    es: 'Introduce el PIN de esta cartera. La copia no puede gastar, pero revela todas las direcciones de la cartera.'
+  },
   'Ready-to-test demo wallet': {
     fr: 'Portefeuille de démonstration prêt à tester',
     es: 'Cartera de demostración lista para probar'

@@ -44,6 +44,10 @@ rg -Fq 'export GROOT_BUILD_NETWORK=regtest' "${IOS_LAUNCHER}" || {
   echo "The iOS development launcher must compile for Regtest." >&2
   exit 1
 }
+rg -Fq 'export PUBLIC_BITCOIN_NETWORK=regtest' "${IOS_LAUNCHER}" || {
+  echo "The iOS Regtest launcher must set the webview network to Regtest." >&2
+  exit 1
+}
 
 if ios_usage_output="$(/bin/bash "${IOS_LAUNCHER}" 2>&1)"; then
   echo "The iOS development launcher accepted a missing target." >&2

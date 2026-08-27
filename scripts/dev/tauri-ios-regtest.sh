@@ -20,6 +20,7 @@ if [[ ! -d "${REPOSITORY_ROOT}/src-tauri/gen/apple/groot.xcodeproj" ]]; then
 fi
 
 export GROOT_BUILD_NETWORK=regtest
+export PUBLIC_BITCOIN_NETWORK=regtest
 
 cd "${REPOSITORY_ROOT}"
 exec pnpm tauri ios dev "${1}" --config src-tauri/tauri.ios.conf.json

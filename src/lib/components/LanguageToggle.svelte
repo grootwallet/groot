@@ -95,13 +95,17 @@
 
   @media (max-width: 540px) {
     .language-control.labelled {
-      gap: 10px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      align-items: stretch;
+      gap: 12px;
     }
     .language-control-copy {
       gap: 10px;
     }
     .language-toggle button {
-      min-width: 29px;
+      flex: 1;
+      min-width: 0;
       padding-inline: 5px;
     }
   }

@@ -139,6 +139,10 @@ export class TauriWalletAdapter implements WalletPort {
   #hardwareListRequest: Promise<HardwareDevice[]> | null = null;
   #typedHardwareListRequests = new Map<string, Promise<HardwareDevice[]>>();
 
+  runtimePlatform() {
+    return command<import('./contracts').RuntimePlatform>('runtime_platform');
+  }
+
   paymentDraft() {
     return command<PaymentDraft | null>('payment_draft');
   }
@@ -206,6 +210,9 @@ export class TauriWalletAdapter implements WalletPort {
   }
   lock() {
     return command<void>('wallet_lock');
+  }
+  lockAll() {
+    return command<void>('wallet_lock_all');
   }
   deleteWallet(credential: string, confirmation: string) {
     return command<void>('wallet_delete', { credential, confirmation });
