@@ -10,6 +10,21 @@ use bdk_wallet::bitcoin::NetworkKind;
 use std::{net::TcpListener, thread};
 
 #[test]
+fn coldcard_policy_acknowledgement_is_serialized_before_authorization() {
+    let source = include_str!("../wallet.rs");
+    let command = source
+        .split("pub fn multisig_acknowledge_coldcard_policy")
+        .nth(1)
+        .unwrap()
+        .split("fn snapshot_from")
+        .next()
+        .unwrap();
+    let guard = command.find("operation_guard(&state)").unwrap();
+    let authorization = command.find("require_unlocked(&app, &state)").unwrap();
+    assert!(guard < authorization);
+}
+
+#[test]
 fn chain_tip_observations_survive_restart_age_to_stale_and_reject_corruption() {
     let db = Connection::open_in_memory().unwrap();
     init_app_schema(&db).unwrap();
@@ -3512,6 +3527,28 @@ fn public_exports_replace_symlinks_without_writing_through_them() {
         .unwrap()
         .file_type()
         .is_symlink());
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[cfg(unix)]
+#[test]
+fn public_exports_atomically_replace_regular_files_with_owner_only_permissions() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let root = std::env::temp_dir().join(format!("groot-export-test-{}", Uuid::new_v4()));
+    fs::create_dir_all(&root).unwrap();
+    let export = root.join("wallet.txt");
+    fs::write(&export, b"old backup").unwrap();
+    fs::set_permissions(&export, fs::Permissions::from_mode(0o644)).unwrap();
+
+    write_public_export(&export, b"replacement backup").unwrap();
+
+    let metadata = fs::symlink_metadata(&export).unwrap();
+    assert!(metadata.is_file());
+    assert!(!metadata.file_type().is_symlink());
+    assert_eq!(metadata.permissions().mode() & 0o777, 0o600);
+    assert_eq!(fs::read(&export).unwrap(), b"replacement backup");
+    assert_eq!(fs::read_dir(&root).unwrap().count(), 1);
     fs::remove_dir_all(root).unwrap();
 }
 
