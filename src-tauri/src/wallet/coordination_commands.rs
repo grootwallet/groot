@@ -8,6 +8,7 @@ use crate::{
 };
 
 const FRAGMENT_BYTES: usize = 220;
+const MOBILE_RESPONSE_FRAGMENT_BYTES: usize = 160;
 const MOBILE_DEVICE_TYPE: &str = "groot-mobile";
 
 #[derive(Debug, Clone)]
@@ -297,9 +298,10 @@ pub async fn coordination_mobile_accept(
             encrypted_record: encrypt_bip129(&invitation.token, record.as_bytes())
                 .map_err(coordination_api_error)?,
         };
-        let frames = encode_coordination(
+        let frames = encode_coordination_with_fragment(
             CoordinationUrType::Bsms,
             &serde_json::to_vec(&envelope).map_err(internal)?,
+            MOBILE_RESPONSE_FRAGMENT_BYTES,
         )?;
         let staged = PendingMobileSecret {
             version: 1,
@@ -396,9 +398,10 @@ fn pairing_response_from_staged(staged: &PendingMobileSecret) -> ApiResult<Pairi
         encrypted_record: encrypt_bip129(&staged.invitation.token, record.as_bytes())
             .map_err(coordination_api_error)?,
     };
-    let frames = encode_coordination(
+    let frames = encode_coordination_with_fragment(
         CoordinationUrType::Bsms,
         &serde_json::to_vec(&envelope).map_err(internal)?,
+        MOBILE_RESPONSE_FRAGMENT_BYTES,
     )?;
     Ok(PairingResponseDto {
         session_id: staged.invitation.session_id.clone(),
@@ -1093,7 +1096,15 @@ fn parse_owned_path(path: &DerivationPath) -> ApiResult<(KeychainKind, u32)> {
 }
 
 fn encode_coordination(payload_type: CoordinationUrType, payload: &[u8]) -> ApiResult<Vec<String>> {
-    coordination_transport::encode(payload_type, payload, FRAGMENT_BYTES)
+    encode_coordination_with_fragment(payload_type, payload, FRAGMENT_BYTES)
+}
+
+fn encode_coordination_with_fragment(
+    payload_type: CoordinationUrType,
+    payload: &[u8],
+    fragment_bytes: usize,
+) -> ApiResult<Vec<String>> {
+    coordination_transport::encode(payload_type, payload, fragment_bytes)
         .map_err(coordination_ur_api_error)
 }
 

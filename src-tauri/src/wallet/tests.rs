@@ -1714,7 +1714,7 @@ fn hwi_response_codes_become_safe_actionable_errors() {
     let locked_ledger = missing_hardware_fingerprint("ledger");
     assert_eq!(locked_ledger.code, "hardware_unavailable");
     assert!(locked_ledger.message.contains("Unlock Ledger"));
-    assert!(locked_ledger.message.contains("Bitcoin Test—not Bitcoin"));
+    assert!(locked_ledger.message.contains("Bitcoin Test, not Bitcoin"));
     assert!(!locked_ledger.message.contains("fingerprint"));
 
     for (device_type, expected) in [

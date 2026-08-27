@@ -15,7 +15,7 @@ typedef void (^GrootRecoveryCompletion)(BOOL confirmed);
   self.modalInPresentation = YES;
 
   UILabel *title = [[UILabel alloc] init];
-  title.text = @"Groot recovery words";
+  title.text = @"Bitcoin recovery words";
   title.font = [UIFont preferredFontForTextStyle:UIFontTextStyleTitle2];
   title.adjustsFontForContentSizeCategory = YES;
 
@@ -89,14 +89,14 @@ typedef void (^GrootRecoveryCompletion)(BOOL confirmed);
   content.translatesAutoresizingMaskIntoConstraints = NO;
   content.axis = UILayoutConstraintAxisVertical;
   content.alignment = UIStackViewAlignmentFill;
-  content.spacing = 14.0;
+  content.spacing = 12.0;
   [self.view addSubview:content];
 
   UILayoutGuide *safe = self.view.safeAreaLayoutGuide;
   [NSLayoutConstraint activateConstraints:@[
     [content.leadingAnchor constraintEqualToAnchor:safe.leadingAnchor constant:24.0],
     [content.trailingAnchor constraintEqualToAnchor:safe.trailingAnchor constant:-24.0],
-    [content.topAnchor constraintGreaterThanOrEqualToAnchor:safe.topAnchor constant:20.0],
+    [content.topAnchor constraintGreaterThanOrEqualToAnchor:safe.topAnchor constant:12.0],
     [content.bottomAnchor constraintLessThanOrEqualToAnchor:safe.bottomAnchor constant:-20.0],
     [content.centerYAnchor constraintEqualToAnchor:safe.centerYAnchor],
     [grid.heightAnchor constraintEqualToConstant:294.0],
@@ -173,7 +173,7 @@ extern "C" int groot_present_ios_recovery_words(const char *words_utf8) {
                                           dispatch_semaphore_signal(finished);
                                         }]];
     [privacy addAction:
-                 [UIAlertAction actionWithTitle:@"I'm private — reveal words"
+                 [UIAlertAction actionWithTitle:@"I'm private. Reveal words"
                                           style:UIAlertActionStyleDefault
                                         handler:^(__unused UIAlertAction *action) {
                                           dispatch_async(dispatch_get_main_queue(), ^{

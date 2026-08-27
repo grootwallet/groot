@@ -158,9 +158,9 @@ export const onboardingCopy = {
   Heads: { fr: 'Face', es: 'Cara' },
   'Hide words': { fr: 'Masquer les mots', es: 'Ocultar palabras' },
   'I wrote them down': { fr: 'Je les ai notés', es: 'Las he anotado' },
-  'I’m private — reveal words': {
-    fr: 'Je suis à l’abri des regards — afficher les mots',
-    es: 'Estoy en privado — mostrar palabras'
+  'I’m private. Reveal words': {
+    fr: 'Je suis à l’abri des regards. Afficher les mots',
+    es: 'Estoy en privado. Mostrar palabras'
   },
   'Hardware signer': { fr: 'Signataire matériel', es: 'Firmante físico' },
   'Keep it with your backup.': {

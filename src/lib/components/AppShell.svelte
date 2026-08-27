@@ -93,9 +93,13 @@
   let visibleNav = $derived(policyContext ? nav : nav.slice(0, 3));
   let mobileItems = $derived(policyContext ? nav : nav.slice(0, 3));
   let onboardingRoute = $derived(walletSetupRoutes.has(page.url.pathname));
+  let mobileSetupRoute = $derived(
+    page.url.pathname === '/mobile/pair' || page.url.pathname === '/mobile/watch'
+  );
   let lockedRoute = $derived(page.url.pathname === '/unlock');
   let syncPausedRoute = $derived(
     onboardingRoute ||
+      mobileSetupRoute ||
       lockedRoute ||
       page.url.pathname === '/settings' ||
       foregroundWalletRoutes.has(page.url.pathname)
@@ -581,7 +585,7 @@
       {/key}
     </main>
 
-    {#if !lockedRoute}<nav class="mobile-nav" class:policy-nav={policyContext}>
+    {#if !lockedRoute && !mobileSetupRoute}<nav class="mobile-nav" class:policy-nav={policyContext}>
         {#each mobileItems as item}
           <a
             href={item.href}

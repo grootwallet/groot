@@ -36,7 +36,7 @@ export function trezorPinError(
     return {
       title: 'PIN not accepted',
       detail:
-        'Check the attempts remaining on Trezor. Ask it for a fresh layout, then tap each blank Groot cell by location—not by the digit printed on Trezor.'
+        'Check the attempts remaining on Trezor. Ask it for a fresh layout, then tap each blank Groot cell by location, not by the digit printed on Trezor.'
     };
   }
   if (code === 'hardware_challenge_expired') {

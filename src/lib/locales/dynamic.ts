@@ -188,9 +188,9 @@ export const dynamicCopy = {
   used: { fr: 'utilisée', es: 'usada' },
   Uses: { fr: 'Utilise', es: 'Usa' },
   Wallet: { fr: 'Portefeuille', es: 'Cartera' },
-  'Wallet policy reviewed — show transaction': {
-    fr: 'Politique vérifiée — afficher la transaction',
-    es: 'Política revisada — mostrar transacción'
+  'Wallet policy reviewed. Show transaction': {
+    fr: 'Politique vérifiée. Afficher la transaction',
+    es: 'Política revisada. Mostrar transacción'
   },
   wallets: { fr: 'portefeuilles', es: 'carteras' },
   '· Address reused': { fr: '· Adresse réutilisée', es: '· Dirección reutilizada' },

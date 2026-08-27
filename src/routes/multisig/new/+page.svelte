@@ -156,6 +156,7 @@
   let mobilePairScan = $state(false);
   let mobilePairBusy = $state(false);
   let mobilePairError = $state('');
+  let mobilePairAccepted = $state(false);
   let mobileInvitation = $state<PairingInvitation | null>(null);
   let mobileResponseFrames = $state<string[]>([]);
   let mobileCandidate = $state<CosignerDraft | null>(null);
@@ -582,6 +583,7 @@
     mobilePairOpen = true;
     mobilePairBusy = true;
     mobilePairError = '';
+    mobilePairAccepted = false;
     mobilePairScan = false;
     mobileResponseFrames = [];
     mobileCandidate = null;
@@ -609,13 +611,18 @@
   function confirmMobileSigner() {
     if (!mobileCandidate) return;
     if (!appendCosigner(mobileCandidate, (message) => (mobilePairError = message))) return;
-    mobilePairOpen = false;
+    mobilePairAccepted = true;
     mobilePairScan = false;
     toast({
       title: 'Phone signer added',
-      description: 'Finish the other signers, then return the final wallet QR to the phone.',
+      description: 'Continue on desktop. The phone waits for the completed wallet policy.',
       tone: 'success'
     });
+  }
+
+  function continueAfterMobileSigner() {
+    mobilePairOpen = false;
+    mobilePairAccepted = false;
   }
 
   async function cancelMobilePairing() {
@@ -2294,7 +2301,19 @@
   onclose={cancelMobilePairing}
 >
   <div class="mobile-pairing-flow">
-    {#if mobilePairBusy}<HardwareActionPrompt
+    {#if mobilePairAccepted}
+      <div class="warning-box" role="status">
+        <ShieldCheck size={17} /><strong>{translate($locale, 'Phone key added')}</strong><span
+          >{translate(
+            $locale,
+            'Continue adding the remaining signers on desktop. The phone should stay on its waiting screen until this wallet is created.'
+          )}</span
+        >
+      </div>
+      <Button class="full" onclick={continueAfterMobileSigner}
+        >{translate($locale, 'Continue wallet setup')}</Button
+      >
+    {:else if mobilePairBusy}<HardwareActionPrompt
         title={translate($locale, 'Creating one-time invitation')}
         detail={translate($locale, 'Groot is generating a fresh 128-bit BIP129 token.')}
         label={translate($locale, 'Pairing invitation in progress')}
@@ -2313,12 +2332,12 @@
         ><span
           >{translate(
             $locale,
-            'On the fresh phone choose “Join from desktop,” scan this QR, and keep the response private.'
+            'On the fresh phone choose “Connect desktop app,” scan this QR, and keep the response private.'
           )}</span
         >
       </div>
       <Button class="full" onclick={() => (mobilePairScan = true)}
-        >{translate($locale, 'Scan phone response')}</Button
+        >{translate($locale, 'Scan phone QR code')}</Button
       >
     {:else if mobileInvitation && mobilePairScan && !mobileCandidate}
       {#if mobilePairError}<p class="form-error" role="alert">{mobilePairError}</p>{/if}
@@ -2340,12 +2359,15 @@
       </div>
       {#if mobilePairError}<p class="form-error" role="alert">{mobilePairError}</p>{/if}
       <Button class="full" onclick={confirmMobileSigner}
-        >{translate($locale, 'Codes match — add signer')}</Button
+        >{translate($locale, 'Codes match. Add signer')}</Button
       >
     {:else if mobilePairError}<p class="form-error" role="alert">{mobilePairError}</p>{/if}
-    <Button variant="secondary" class="full" disabled={mobilePairBusy} onclick={cancelMobilePairing}
-      >{translate($locale, 'Cancel pairing')}</Button
-    >
+    {#if !mobilePairAccepted}<Button
+        variant="secondary"
+        class="full"
+        disabled={mobilePairBusy}
+        onclick={cancelMobilePairing}>{translate($locale, 'Cancel pairing')}</Button
+      >{/if}
   </div>
 </Modal>
 

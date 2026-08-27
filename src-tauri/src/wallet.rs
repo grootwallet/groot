@@ -1300,12 +1300,12 @@ fn missing_hardware_xpub(
     match device_type.to_ascii_lowercase().as_str() {
         "ledger" => {
             let message = if code == Some(-7) || safe_detail.contains("bad argument") {
-                "Ledger rejected this test-chain account path. Open the Bitcoin Test app—not the main Bitcoin app—then reconnect and try again."
+                "Ledger rejected this test-chain account path. Open the Bitcoin Test app, not the main Bitcoin app, then reconnect and try again."
             } else if code == Some(-13)
                 || safe_detail.contains("technical problem")
                 || safe_detail.contains("device failure")
             {
-                "Ledger is in the wrong app for this Regtest wallet. Quit Ledger Live, open Bitcoin Test—not Bitcoin—then reconnect and try again."
+                "Ledger is in the wrong app for this Regtest wallet. Quit Ledger Live, open Bitcoin Test, not Bitcoin, then reconnect and try again."
             } else if safe_detail.contains("bitcoin test")
                 || safe_detail.contains("not in either the bitcoin")
             {
@@ -1313,7 +1313,7 @@ fn missing_hardware_xpub(
             } else if derivation_path.starts_with("m/48'") {
                 "Ledger did not return the Regtest multisig account key. Keep Ledger Live closed, open Bitcoin Test, try again, then approve the public-key export if Ledger asks."
             } else {
-                "Ledger did not return the Regtest BIP84 account key. Keep Ledger Live closed, open Bitcoin Test—not Bitcoin—reconnect, then try again."
+                "Ledger did not return the Regtest BIP84 account key. Keep Ledger Live closed, open Bitcoin Test, not Bitcoin, reconnect, then try again."
             };
             api_error("hardware_unavailable", message)
         }
@@ -1412,7 +1412,7 @@ fn hardware_device_dto(device: HwiDevice) -> HardwareDeviceDto {
     } else if device_type == "ledger" {
         (
             "needs_device_unlock",
-            "Select this signer, unlock Ledger, and open Bitcoin Test—not Bitcoin—to continue.",
+            "Select this signer, unlock Ledger, and open Bitcoin Test, not Bitcoin, to continue.",
             "unlock",
         )
     } else if device_type == "coldcard" {
@@ -6225,7 +6225,7 @@ fn hardware_device_api_error(error: HardwareError, device_type: &str) -> ApiErro
 fn missing_hardware_fingerprint(device_type: &str) -> ApiError {
     let message = match device_type.to_ascii_lowercase().as_str() {
         "ledger" => {
-            "Unlock Ledger and open Bitcoin Test—not Bitcoin—for this Regtest wallet, then scan again."
+            "Unlock Ledger and open Bitcoin Test, not Bitcoin, for this Regtest wallet, then scan again."
         }
         "bitbox02" => "Unlock BitBox, then try again.",
         "jade" => "Jade is still locked. Select it again and enter your PIN on Jade when prompted.",
@@ -6265,7 +6265,7 @@ fn hardware_xpub_api_error(
     {
         return api_error(
             error.code(),
-            "Ledger is in the wrong app for this test-chain wallet. Quit Ledger Live, open Bitcoin Test—not Bitcoin—then reconnect and try again.",
+            "Ledger is in the wrong app for this test-chain wallet. Quit Ledger Live, open Bitcoin Test, not Bitcoin, then reconnect and try again.",
         );
     }
     hardware_device_api_error(error, device_type)

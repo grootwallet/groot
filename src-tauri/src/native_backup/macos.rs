@@ -636,7 +636,7 @@ fn confirm_private_reveal(parent: &NSWindow, mtm: MainThreadMarker) -> bool {
 
     let reveal = unsafe {
         NSButton::buttonWithTitle_target_action(
-            &NSString::from_str("I'm private — reveal words"),
+            &NSString::from_str("I'm private. Reveal words"),
             Some(&root),
             Some(sel!(revealBackup:)),
             mtm,

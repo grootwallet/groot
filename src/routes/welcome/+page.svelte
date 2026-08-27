@@ -278,7 +278,11 @@
         onclick={returnToWallet}><X size={17} /></button
       >{/if}
   </header>
-  <main class="onboarding-card" class:wallet-choice-card={mode === 'choose'}>
+  <main
+    class="onboarding-card"
+    class:home-card={mode === 'home'}
+    class:wallet-choice-card={mode === 'choose'}
+  >
     {#if mode === 'home'}
       <span class="hero-mark"><BrandMark size={34} /></span>
       <h1>
@@ -346,7 +350,7 @@
         <a class="wallet-type-card multisig" href="/mobile/pair">
           <span class="wallet-type-icon"><Smartphone size={20} /></span>
           <span class="wallet-type-copy"
-            ><strong>{translate($locale, 'Join from desktop')}</strong><small
+            ><strong>{translate($locale, 'Connect desktop app')}</strong><small
               >{translate($locale, 'Add this phone as one signer in a shared wallet.')}</small
             ></span
           >
@@ -553,7 +557,7 @@
             </p>
           </div>
           <Button variant="secondary" class="full" onclick={() => (revealed = true)}
-            ><Eye size={16} />{translate($locale, 'I’m private — reveal words')}</Button
+            ><Eye size={16} />{translate($locale, 'I’m private. Reveal words')}</Button
           >
         </div>
       {/if}

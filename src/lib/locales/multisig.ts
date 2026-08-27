@@ -546,9 +546,9 @@ export const multisigCopy = {
   'WALLET BACKUP': { fr: 'SAUVEGARDE DU PORTEFEUILLE', es: 'COPIA DE LA CARTERA' },
   'WALLET DELETION': { fr: 'SUPPRESSION DU PORTEFEUILLE', es: 'ELIMINACIÓN DE LA CARTERA' },
   'WALLET POLICY': { fr: 'POLITIQUE DU PORTEFEUILLE', es: 'POLÍTICA DE LA CARTERA' },
-  'Watch-only descriptors — cannot spend bitcoin': {
-    fr: 'Descripteurs d’observation — ne peuvent pas dépenser de bitcoin',
-    es: 'Descriptores de solo lectura — no pueden gastar bitcoin'
+  'Watch-only descriptors. Cannot spend bitcoin': {
+    fr: 'Descripteurs d’observation. Ils ne peuvent pas dépenser de bitcoin',
+    es: 'Descriptores de solo lectura. No pueden gastar bitcoin'
   },
   wu: { fr: 'wu', es: 'wu' },
   '2 of 3 now; an emergency key after about one month.': {

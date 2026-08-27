@@ -12,6 +12,7 @@
     "dev": "vite",
     "dev:regtest": "vite --mode regtest",
     "dev:native:regtest": "bash scripts/dev/tauri-regtest.sh",
+    "build:native:macos:regtest-camera": "GROOT_BUILD_NETWORK=regtest tauri build --debug --bundles app --config src-tauri/tauri.macos-regtest-dev.conf.json",
     "dev:native:ios:regtest": "bash scripts/dev/tauri-ios-regtest.sh",
     "dev:native:signet": "GROOT_BUILD_NETWORK=signet tauri dev --config src-tauri/tauri.signet.conf.json",
     "dev:native:testnet4": "GROOT_BUILD_NETWORK=testnet4 tauri dev --config src-tauri/tauri.testnet4.conf.json",

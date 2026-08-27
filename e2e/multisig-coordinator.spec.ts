@@ -1360,7 +1360,7 @@ test('creates and verifies a simple 2-of-3 descriptor wallet', async ({ page }) 
   await expect(signingPolicyReview).toBeVisible();
   await expect(signingPolicyReview.getByText(/must authorize this policy again/)).toBeVisible();
   await signingPolicyReview
-    .getByRole('button', { name: 'Wallet policy reviewed — show transaction' })
+    .getByRole('button', { name: /wallet policy reviewed\. show transaction/i })
     .click();
   await expect(signingPolicyReview).toBeHidden();
   const hardwareSigning = page.getByRole('dialog', { name: 'Sign with hardware' });

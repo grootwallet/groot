@@ -39,12 +39,14 @@ test('creates a 24-word wallet and clears onboarding secrets', async ({ page }) 
   ).toBeVisible();
   await expect(page.getByRole('button', { name: 'Recover software wallet' })).toBeVisible();
   await page.getByRole('button', { name: 'Add wallet' }).click();
-  await expect(page.locator('.wallet-type-card')).toHaveCount(3);
+  await expect(page.locator('.wallet-type-card')).toHaveCount(5);
   await expect(page.getByText('Create and back up your keys in Groot.')).toBeVisible();
   await expect(page.getByText('Connect a device you already trust.')).toBeVisible();
   await expect(
     page.getByText('Custom spending, recovery, inheritance, or shared control.')
   ).toBeVisible();
+  await expect(page.getByText('Add this phone as one signer in a shared wallet.')).toBeVisible();
+  await expect(page.getByText('Import a hardware wallet without its signing key.')).toBeVisible();
   await chooseSoftwareWallet(page);
   const setupProgress = page.getByRole('navigation', { name: 'Software wallet setup progress' });
   await expect(setupProgress).toContainText('Generate');

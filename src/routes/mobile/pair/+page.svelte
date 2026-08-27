@@ -48,9 +48,14 @@
     focusTimer = setTimeout(() => {
       focusTimer = null;
       if (document.activeElement === input) {
-        input.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+        const viewport = window.visualViewport;
+        const rect = input.getBoundingClientRect();
+        const visibleTop = viewport?.offsetTop ?? 0;
+        const visibleHeight = viewport?.height ?? window.innerHeight;
+        const delta = rect.top + rect.height / 2 - (visibleTop + visibleHeight / 2);
+        window.scrollBy({ top: delta, behavior: 'smooth' });
       }
-    }, 320);
+    }, 420);
   }
 
   function finishInputFocus() {
@@ -324,8 +329,16 @@
       </div>
       <AnimatedUrQr
         frames={response.frames}
+        intervalMs={1400}
+        expandable
         label={translate($locale, 'Encrypted mobile signer QR')}
       />
+      <p class="qr-guidance">
+        {translate(
+          $locale,
+          'Turn up screen brightness, hold the phone steady, or tap the QR to enlarge it.'
+        )}
+      </p>
       <div class="comparison" aria-label={translate($locale, 'Pairing comparison code')}>
         <small>{translate($locale, 'Both devices must show')}</small><strong
           >{comparisonCode}</strong
@@ -335,17 +348,17 @@
         <Check size={16} /><span>{response.fingerprint} · {response.xpubChecksum}</span>
       </div>
       <Button class="full" onclick={() => (stage = 'final')}
-        >{translate($locale, 'Desktop accepted it')}</Button
+        >{translate($locale, 'Phone key added on desktop')}</Button
       >
     </section>
   {:else}
     <section class="pairing-card">
       <span class="step-icon"><ScanLine size={22} /></span>
       <div>
-        <strong>{translate($locale, 'Scan the final wallet policy')}</strong><small
+        <strong>{translate($locale, 'Finish wallet setup on desktop')}</strong><small
           >{translate(
             $locale,
-            'Compare the threshold and first address shown on desktop before completing.'
+            'Desktop must add the remaining signers and create the wallet. Keep this phone nearby, then scan the final wallet policy below.'
           )}</small
         >
       </div>
@@ -369,6 +382,11 @@
   .pairing-page :global(input:focus),
   .pairing-page :global(textarea:focus) {
     scroll-margin-block: 35dvh;
+  }
+  .pairing-page :global(input),
+  .pairing-page :global(textarea),
+  .pairing-page :global(select) {
+    font-size: 16px;
   }
   .pairing-card {
     display: grid;
@@ -431,6 +449,13 @@
     gap: 0.5rem;
     color: var(--muted);
     font-family: var(--font-mono);
+  }
+  .qr-guidance {
+    margin: -0.25rem 0 0;
+    color: var(--muted);
+    font-size: 0.82rem;
+    line-height: 1.45;
+    text-align: center;
   }
   .inline-error {
     color: var(--danger);

@@ -450,7 +450,7 @@
         <header>
           <p>{translate($locale, 'Groot · Public wallet backup')}</p>
           <h1>{wallet.name}</h1>
-          <strong>{translate($locale, 'Watch-only descriptors — cannot spend bitcoin')}</strong>
+          <strong>{translate($locale, 'Watch-only descriptors. Cannot spend bitcoin')}</strong>
         </header>
         <dl>
           <div>

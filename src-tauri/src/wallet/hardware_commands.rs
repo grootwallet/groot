@@ -956,7 +956,7 @@ pub async fn hardware_send_pin(
         if response.success != Some(true) {
             return Err(api_error(
                 "hardware_pin_rejected",
-                "Trezor did not accept that matrix entry. Check the remaining attempts on the device, then start a new matrix and tap positions—not PIN digits.",
+                "Trezor did not accept that matrix entry. Check the remaining attempts on the device, then start a new matrix and tap positions, not PIN digits.",
             ));
         }
         Ok(())

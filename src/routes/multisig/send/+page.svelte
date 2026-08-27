@@ -1706,7 +1706,7 @@
       <details class="selection-technical">
         <summary
           >{translate($locale, 'Network fee · {rate} sat/vB', {
-            rate: selectedRateNumber || '—'
+            rate: selectedRateNumber || translate($locale, 'Not available')
           })}</summary
         >
         <FeeSelector
@@ -1770,7 +1770,7 @@
       <details class="selection-technical">
         <summary
           >{translate($locale, 'Network fee · {rate} sat/vB', {
-            rate: selectedRateNumber || '—'
+            rate: selectedRateNumber || translate($locale, 'Not available')
           })}</summary
         >
         <FeeSelector

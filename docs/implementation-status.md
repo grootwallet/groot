@@ -106,16 +106,17 @@ coverage and a wired mobile restart surface. An isolated
 `app.groot.wallet.regtest.dev` build compiles, signs, installs, and launches on
 an iPhone 13 mini in development mode; its built plist contains the camera and
 Regtest-development Local Network permission copy. Physical pairing has
-exercised invitation scanning, comparison-code display, native recovery
-presentation, encrypted response generation, and forced relaunch/resume.
-Desktop response-camera capture, the revised native two-column recovery sheet,
-secure-storage protection, recovery verification, and complete lifecycle
-certification remain pending. This is not first-mainnet scope: the current
-mobile secret sidecar truthfully identifies its Argon2id/PIN protection as
-testnet-only, while external process-kill automation at every profile/registry
-boundary, native iOS Keychain/Secure Enclave wrapping, native recovery
-entry/verification, complete physical camera/lifecycle testing, independent
-interoperability, and security review remain release blockers. See ADR 0048 and
+exercised invitation scanning, comparison-code display, the revised native
+two-column recovery sheet, encrypted response generation, forced relaunch/resume,
+and desktop response-camera capture through an isolated signed macOS Regtest
+build. Secure-storage protection, recovery verification, final-policy return,
+PSBT signing, and complete lifecycle certification remain pending. This is not
+first-mainnet scope: the current mobile secret sidecar truthfully identifies its
+Argon2id/PIN protection as testnet-only, while external process-kill automation
+at every profile/registry boundary, native iOS Keychain/Secure Enclave wrapping,
+native recovery entry/verification, complete physical camera/lifecycle testing,
+independent interoperability, and security review remain release blockers. See
+ADR 0048 and
 [`cross-platform-coordination.md`](cross-platform-coordination.md).
 
 | Capability                                                           | Browser fixture                                                                                                                                                                                                                                                                                                                                                                         | Rust/Tauri                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | Automated evidence                                                                                                                                                                                                                                                                                                                                                                                                                   | Release status                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |

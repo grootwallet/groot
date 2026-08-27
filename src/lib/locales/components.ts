@@ -255,9 +255,9 @@ export const componentCopy = {
   },
   Outputs: { fr: 'Sorties', es: 'Salidas' },
   Path: { fr: 'Chemin', es: 'Ruta' },
-  'policy approved — show transaction': {
-    fr: 'politique approuvée — afficher la transaction',
-    es: 'política aprobada — mostrar transacción'
+  'policy approved. Show transaction': {
+    fr: 'politique approuvée. Afficher la transaction',
+    es: 'política aprobada. Mostrar transacción'
   },
   'policy, then compare the first address.': {
     fr: 'la politique, puis comparez la première adresse.',

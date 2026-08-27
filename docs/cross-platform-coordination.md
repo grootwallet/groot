@@ -39,7 +39,7 @@ evidence, recovery drills, interoperability evidence, and independent security r
 1. On desktop choose standard 2-of-3, name the wallet, and choose **Add a Groot phone**.
 2. Desktop creates a 15-minute invitation with a UUID, network, 2-of-3 parameters, BIP48 path, and
    fresh 128-bit BIP129 token. The invitation is shown as `ur:groot-invite`.
-3. On a fresh phone choose **Join from desktop** and scan. Mobile rejects wrong network, path,
+3. On a fresh phone choose **Connect desktop app** and scan. Mobile rejects wrong network, path,
    thresholds, version, bounds, or expiry.
 4. Mobile generates 256 bits of OS entropy and 24 BIP39 words. It displays those words through the
    native backup boundary. Seed derivation uses `mnemonic.to_seed("")`; the local PIN only protects
@@ -50,7 +50,8 @@ evidence, recovery drills, interoperability evidence, and independent security r
    plaintext, verifies the signed-message pubkey equals the exact account xpub, checks origin,
    network, uniqueness, expiry, and replay state, then shows fingerprint/xpub checksum.
 7. Both displays show the same six digits. The user explicitly confirms they match before adding
-   the signer. Two hardware signers can then be added with existing desktop flows.
+   the signer. Desktop then tells the user to continue adding the remaining signers while the phone
+   waits for the completed policy. Two hardware signers can then be added with existing flows.
 8. Desktop creates the wallet only after the existing descriptor-backup and hardware-policy gates.
    It then emits `ur:groot-wallet`, containing an encrypted versioned public wallet record whose
    payload includes the final BIP129 descriptor record.
@@ -144,6 +145,10 @@ Secure Enclave wrapping cannot make the phone equivalent to an independent hardw
 - BIP129 records remain standards-defined. `crypto-psbt` remains the interoperability format.
   Groot-specific UR type strings only carry animated bytes for invitation/encrypted BSMS/public
   wallet records; file/manual BIP129 fallback can be added without changing the payload.
+- The encrypted phone response alone uses 160-byte UR fragments and a slower 1.4-second display
+  cadence to reduce QR density on small screens. It can be enlarged full-screen without changing
+  its encrypted payload, type, decoder bounds, or replay semantics. Other coordination and PSBT
+  transports retain their existing framing parameters.
 
 ## Test and release gates
 
@@ -160,8 +165,11 @@ volatile-desktop-restart, staged-response reopen, cancel, consuming-tombstone re
 exact orphan-profile cleanup, registered-wallet conflict, traversal, and orphan-temporary-file
 cases. An isolated Regtest build also compiles, installs, launches, and survives a forced process
 relaunch in the iOS 26.1 simulator, with built camera/Local Network permission copy and status-safe
-onboarding layout verified. That does not exercise a physical camera, Keychain/Secure Enclave
-wrapping, biometric/passcode behavior, native recovery, or real-device lifecycle. Full external
+onboarding layout verified. A physical iPhone has scanned the desktop invitation, displayed the
+native two-column recovery sheet, survived relaunch into staged pairing, and returned its encrypted
+response to a camera-entitled isolated macOS Regtest build. That evidence does not cover
+Keychain/Secure Enclave wrapping, biometric/passcode behavior, clean written-word recovery, or the
+complete real-device lifecycle. Full external
 process-kill automation at every wallet registry/profile commit boundary, watch-only address
 equality, and clean mobile recovery remain open and must not be inferred from this evidence.
 

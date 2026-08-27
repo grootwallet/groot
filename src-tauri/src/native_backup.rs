@@ -63,7 +63,7 @@ pub fn present(app: &AppHandle, words: &str) -> Result<BackupOutcome, String> {
         .title("Check your surroundings")
         .kind(MessageDialogKind::Warning)
         .buttons(MessageDialogButtons::OkCancelCustom(
-            "I'm private — reveal words".to_owned(),
+            "I'm private. Reveal words".to_owned(),
             "Cancel".to_owned(),
         ))
         .blocking_show();

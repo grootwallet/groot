@@ -10275,35 +10275,42 @@ code {
     padding: 30px 22px;
     margin-block: 10px;
   }
+  .onboarding-card.home-card {
+    margin-block: auto;
+  }
   .onboarding-card.wallet-choice-card {
     width: min(470px, calc(100% - 36px));
-    padding: 30px 22px;
+    padding: 20px 18px 22px;
+  }
+  .onboarding-card.wallet-choice-card .wallet-choice-step {
+    display: none;
   }
   .onboarding-card.wallet-choice-card > h1 {
     font-size: 25px;
+    margin-top: 14px;
   }
   .onboarding-card.wallet-choice-card > p {
-    margin-bottom: 28px;
+    margin: 8px 0 18px;
   }
   .wallet-type-grid {
     grid-template-columns: 1fr;
   }
   .wallet-type-card {
-    min-height: 108px;
+    min-height: 96px;
     display: grid;
     grid-template-columns: 38px minmax(0, 1fr) auto;
     grid-template-rows: auto auto;
     align-items: start;
     column-gap: 13px;
     row-gap: 8px;
-    padding: 13px 14px;
+    padding: 12px 14px;
   }
   .wallet-type-icon {
     grid-row: 1 / 3;
     margin-top: 2px;
   }
   .wallet-type-copy {
-    grid-column: 2 / 4;
+    grid-column: 2;
     grid-row: 1;
     padding-right: 17px;
   }
@@ -10315,9 +10322,12 @@ code {
   .wallet-type-arrow {
     position: static;
     grid-column: 3;
-    grid-row: 2;
+    grid-row: 1 / 3;
     align-self: center;
     justify-self: end;
+  }
+  .onboarding-footer {
+    padding: 16px 18px max(16px, env(safe-area-inset-bottom));
   }
   .setup-progress-label {
     font-size: 10px;
