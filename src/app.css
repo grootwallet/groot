@@ -412,8 +412,11 @@ code {
   font-size: 10px;
   line-height: 1.4;
   overflow-wrap: anywhere;
-  transform: translateY(-50%);
+  transform: translate(-50%, -100%);
   pointer-events: none;
+}
+.ui-tooltip.below {
+  transform: translateX(-50%);
 }
 .unlock-wallet-picker {
   margin: -7px 0 18px;

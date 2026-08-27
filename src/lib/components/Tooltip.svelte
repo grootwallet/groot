@@ -14,6 +14,12 @@
   let open = $state(false);
   let left = $state(0);
   let top = $state(0);
+  let below = $state(false);
+
+  function portal(node: HTMLElement) {
+    document.body.append(node);
+    return { destroy: () => node.remove() };
+  }
 
   function show() {
     const target = truncatedSelector ? root.querySelector<HTMLElement>(truncatedSelector) : root;
@@ -21,9 +27,10 @@
       open = false;
       return;
     }
-    const rect = root.getBoundingClientRect();
-    left = Math.max(8, Math.min(rect.right + 8, window.innerWidth - 268));
-    top = rect.top + rect.height / 2;
+    const rect = target.getBoundingClientRect();
+    left = Math.max(138, Math.min(rect.left + rect.width / 2, window.innerWidth - 138));
+    below = rect.top < 72;
+    top = below ? rect.bottom + 8 : rect.top - 8;
     open = true;
   }
 </script>
@@ -38,7 +45,12 @@
   onfocusout={() => (open = false)}
 >
   {@render children()}
-  {#if open}<span class="ui-tooltip" role="tooltip" style:left={`${left}px`} style:top={`${top}px`}
-      >{text}</span
+  {#if open}<span
+      class="ui-tooltip"
+      class:below
+      role="tooltip"
+      use:portal
+      style:left={`${left}px`}
+      style:top={`${top}px`}>{text}</span
     >{/if}
 </span>

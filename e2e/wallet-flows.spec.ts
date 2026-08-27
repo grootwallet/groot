@@ -1148,6 +1148,19 @@ test('overview and coins resolve empty wallets without lingering skeletons', asy
   expect(empty!.y - (toolbar!.y + toolbar!.height)).toBeGreaterThanOrEqual(13);
 });
 
+test('receive label suggestions expose aligned tooltips for every label', async ({ page }) => {
+  await page.goto('/receive');
+  await page.getByRole('button', { name: 'New receive address' }).click();
+  const suggestion = page.getByRole('button', { name: 'Reuse Savings' });
+  await suggestion.hover();
+  const tooltip = page.getByRole('tooltip');
+  await expect(tooltip).toHaveText('Savings');
+  const suggestionBox = await suggestion.boundingBox();
+  const tooltipBox = await tooltip.boundingBox();
+  expect(suggestionBox && tooltipBox).toBeTruthy();
+  expect(suggestionBox!.y - (tooltipBox!.y + tooltipBox!.height)).toBeCloseTo(8, 0);
+});
+
 test('receive keeps multiple labeled payment requests and discards them independently', async ({
   page
 }) => {
