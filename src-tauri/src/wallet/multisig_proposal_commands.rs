@@ -7,6 +7,64 @@ pub struct MultisigCreationDto {
     network_setup_copied: bool,
 }
 
+fn validated_multisig_fee_rate(fee_rate: f64) -> ApiResult<(f64, FeeRate)> {
+    if !fee_rate.is_finite() || fee_rate <= 0.0 || fee_rate > 10_000.0 {
+        return Err(api_error(
+            "invalid_amount",
+            "Fee rate must be between 0 and 10,000 sat/vB.",
+        ));
+    }
+    let applied = fee_rate.ceil();
+    let rate = FeeRate::from_sat_per_vb(applied as u64)
+        .ok_or_else(|| api_error("invalid_amount", "Fee rate must be greater than zero."))?;
+    Ok((applied, rate))
+}
+
+fn require_reviewed_psbt_unchanged(
+    current: &str,
+    reviewed: &str,
+    mismatch_message: &'static str,
+) -> ApiResult<()> {
+    if current != reviewed {
+        return Err(api_error("proposal_mismatch", mismatch_message));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod validation_tests {
+    use super::*;
+
+    #[test]
+    fn multisig_fee_rate_validation_covers_boundaries_and_rounding() {
+        for invalid in [
+            f64::NAN,
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+            -1.0,
+            0.0,
+            10_000.1,
+        ] {
+            assert_eq!(
+                validated_multisig_fee_rate(invalid).unwrap_err().code,
+                "invalid_amount"
+            );
+        }
+        let (applied, rate) = validated_multisig_fee_rate(1.01).unwrap();
+        assert_eq!(applied, 2.0);
+        assert_eq!(rate.to_sat_per_vb_ceil(), 2);
+        assert_eq!(validated_multisig_fee_rate(10_000.0).unwrap().0, 10_000.0);
+    }
+
+    #[test]
+    fn reviewed_psbt_binding_accepts_only_the_exact_reviewed_bytes() {
+        assert!(require_reviewed_psbt_unchanged("psbt", "psbt", "mismatch").is_ok());
+        let error = require_reviewed_psbt_unchanged("changed", "reviewed", "mismatch").unwrap_err();
+        assert_eq!(error.code, "proposal_mismatch");
+        assert_eq!(error.message, "mismatch");
+    }
+}
+
 fn copy_network_setup_before_profile_commit(
     app: &AppHandle,
     state: &State<'_, AppState>,
@@ -121,12 +179,6 @@ pub fn multisig_tx_prepare(
             "Amount must be greater than zero.",
         ));
     }
-    if !fee_rate.is_finite() || fee_rate <= 0.0 || fee_rate > 10_000.0 {
-        return Err(api_error(
-            "invalid_amount",
-            "Fee rate must be between 0 and 10,000 sat/vB.",
-        ));
-    }
     let unchecked = Address::from_str(recipient.trim()).map_err(|_| {
         api_error(
             "invalid_address",
@@ -139,9 +191,7 @@ pub fn multisig_tx_prepare(
             format!("The address is not for {NETWORK_NAME}."),
         )
     })?;
-    let applied_fee_rate = fee_rate.ceil();
-    let rate = FeeRate::from_sat_per_vb(applied_fee_rate as u64)
-        .ok_or_else(|| api_error("invalid_amount", "Fee rate must be greater than zero."))?;
+    let (applied_fee_rate, rate) = validated_multisig_fee_rate(fee_rate)?;
     let metadata = read_multisig_metadata(&app)?;
     let uses_delayed_policy = delayed_policy_context(&metadata)?.is_some();
     let mut db = open_multisig_db(&app)?;
@@ -276,15 +326,7 @@ pub fn multisig_policy_renewal_prepare(
     require_unlocked(&app, &state)?;
     let labels = normalize_labels(labels)?;
     let label = labels[0].clone();
-    let applied_fee_rate = fee_rate.ceil();
-    let rate = FeeRate::from_sat_per_vb(applied_fee_rate as u64)
-        .filter(|_| fee_rate.is_finite() && fee_rate > 0.0 && fee_rate <= 10_000.0)
-        .ok_or_else(|| {
-            api_error(
-                "invalid_amount",
-                "Fee rate must be between 0 and 10,000 sat/vB.",
-            )
-        })?;
+    let (applied_fee_rate, rate) = validated_multisig_fee_rate(fee_rate)?;
     let selected = OutPoint::from_str(outpoint.trim()).map_err(|_| {
         api_error(
             "coin_unavailable",
@@ -406,15 +448,7 @@ pub fn multisig_delayed_spend_prepare(
                 format!("The address is not for {NETWORK_NAME}."),
             )
         })?;
-    let applied_fee_rate = fee_rate.ceil();
-    let rate = FeeRate::from_sat_per_vb(applied_fee_rate as u64)
-        .filter(|_| fee_rate.is_finite() && fee_rate > 0.0 && fee_rate <= 10_000.0)
-        .ok_or_else(|| {
-            api_error(
-                "invalid_amount",
-                "Fee rate must be between 0 and 10,000 sat/vB.",
-            )
-        })?;
+    let (applied_fee_rate, rate) = validated_multisig_fee_rate(fee_rate)?;
     let selected = OutPoint::from_str(outpoint.trim()).map_err(|_| {
         api_error(
             "coin_unavailable",
@@ -531,15 +565,7 @@ pub fn multisig_tx_max_spend(
                 format!("The address is not for {NETWORK_NAME}."),
             )
         })?;
-    let applied = fee_rate.ceil();
-    let rate = FeeRate::from_sat_per_vb(applied as u64)
-        .filter(|_| fee_rate.is_finite() && fee_rate > 0.0 && fee_rate <= 10_000.0)
-        .ok_or_else(|| {
-            api_error(
-                "invalid_amount",
-                "Fee rate must be between 0 and 10,000 sat/vB.",
-            )
-        })?;
+    let (_applied, rate) = validated_multisig_fee_rate(fee_rate)?;
     let uses_delayed_policy = selected_delayed_policy_context(&app)?.is_some();
     let mut db = open_multisig_db(&app)?;
     let mut transaction = db.transaction().map_err(internal)?;
@@ -718,12 +744,11 @@ pub(crate) fn finalized_multisig_proposal_transaction(
     reviewed_psbt: &str,
 ) -> ApiResult<Transaction> {
     let proposal = load_multisig_proposal(db, metadata, proposal_id)?;
-    if proposal.psbt != reviewed_psbt {
-        return Err(api_error(
-            "proposal_mismatch",
-            "The signed proposal changed after review. Reload it before broadcast.",
-        ));
-    }
+    require_reviewed_psbt_unchanged(
+        &proposal.psbt,
+        reviewed_psbt,
+        "The signed proposal changed after review. Reload it before broadcast.",
+    )?;
     if !proposal.can_finalize {
         return Err(api_error(
             "insufficient_signatures",
@@ -788,12 +813,11 @@ pub fn multisig_proposal_import(
     let metadata = read_multisig_metadata(&app)?;
     let mut db = open_multisig_db(&app)?;
     let current = load_multisig_proposal(&mut db, &metadata, &proposal_id)?;
-    if current.psbt != reviewed_psbt {
-        return Err(api_error(
-            "proposal_mismatch",
-            "The proposal changed after review. Reload it before importing a signature.",
-        ));
-    }
+    require_reviewed_psbt_unchanged(
+        &current.psbt,
+        &reviewed_psbt,
+        "The proposal changed after review. Reload it before importing a signature.",
+    )?;
     drop(db);
     import_multisig_proposal(&app, &proposal_id, &signed_psbt)
 }
@@ -811,12 +835,11 @@ pub fn multisig_proposal_discard_signature(
     let metadata = read_multisig_metadata(&app)?;
     let mut db = open_multisig_db(&app)?;
     let current = load_multisig_proposal(&mut db, &metadata, &proposal_id)?;
-    if current.psbt != reviewed_psbt {
-        return Err(api_error(
-            "proposal_mismatch",
-            "The proposal changed after review. Reload it before discarding a signature.",
-        ));
-    }
+    require_reviewed_psbt_unchanged(
+        &current.psbt,
+        &reviewed_psbt,
+        "The proposal changed after review. Reload it before discarding a signature.",
+    )?;
 
     let signer = Fingerprint::from_str(signer_fingerprint.trim()).map_err(|_| {
         api_error(
@@ -862,12 +885,11 @@ pub async fn hardware_sign_multisig(
     require_hwi_supported_multisig_policy(&metadata)?;
     let mut db = open_multisig_db(&app)?;
     let proposal = load_multisig_proposal(&mut db, &metadata, &proposal_id)?;
-    if proposal.psbt != reviewed_psbt {
-        return Err(api_error(
-            "proposal_mismatch",
-            "The proposal changed after review. Reload it before signing.",
-        ));
-    }
+    require_reviewed_psbt_unchanged(
+        &proposal.psbt,
+        &reviewed_psbt,
+        "The proposal changed after review. Reload it before signing.",
+    )?;
     let signing = proposal_signing_context(&db, &metadata, &proposal_id)?;
     let policy_verifications = signer_policy_verification_rows(&db)?;
     drop(db);

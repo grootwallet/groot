@@ -56,10 +56,6 @@ pub(super) fn registry_api_error(error: RegistryError) -> ApiError {
             "invalid_inactivity_timeout",
             "Automatic lock must be 1, 5, 15, 30, or 60 minutes.",
         ),
-        RegistryError::DuplicateIdentity => api_error(
-            "wallet_already_exists",
-            "This descriptor wallet already exists on this device.",
-        ),
         RegistryError::Corrupt | RegistryError::UnsupportedVersion => api_error(
             "wallet_corrupt",
             "The wallet registry is corrupt or unsupported. No wallet was opened.",

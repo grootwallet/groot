@@ -107,6 +107,32 @@ fn metadata(keys: &[TestKey]) -> MultisigWalletDto {
     }
 }
 
+#[test]
+fn multisig_policy_builders_fail_closed_without_spendable_policy_context() {
+    let keys = test_keys();
+    let metadata = metadata(&keys);
+    let mut wallet = Wallet::create(metadata.external_descriptor, metadata.internal_descriptor)
+        .network(Network::Regtest)
+        .create_wallet_no_persist()
+        .unwrap();
+    let destination = wallet.next_unused_address(KeychainKind::Internal).address;
+    let foreign = OutPoint::new(Txid::from_byte_array([0x51; 32]), 7);
+    let rate = FeeRate::from_sat_per_vb(2).unwrap();
+
+    assert_eq!(
+        build_policy_renewal(&mut wallet, foreign, rate)
+            .unwrap_err()
+            .code,
+        "wallet_corrupt"
+    );
+    assert_eq!(
+        build_delayed_policy_sweep(&mut wallet, foreign, &destination, rate)
+            .unwrap_err()
+            .code,
+        "wallet_corrupt"
+    );
+}
+
 fn regtest_dir() -> PathBuf {
     std::env::var_os("GROOT_REGTEST_DIR")
         .map(PathBuf::from)

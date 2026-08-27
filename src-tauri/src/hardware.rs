@@ -1556,6 +1556,9 @@ mod tests {
         let hwi = HwiCli::for_test_program(slow.clone());
         let running = thread::spawn(move || hwi.enumerate());
         let wait_started = Instant::now();
+        // The complete suite intentionally shares the global hardware coordinator.
+        // Coverage instrumentation can leave this fixture queued behind another
+        // process-control test for several seconds before its child is spawned.
         while !started_file.exists() && wait_started.elapsed() < Duration::from_secs(15) {
             thread::sleep(Duration::from_millis(10));
         }

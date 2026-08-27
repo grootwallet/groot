@@ -487,12 +487,7 @@ pub async fn wallet_notifications_ack(
         let state = app.state::<AppState>();
         let _operation = operation_guard(&state)?;
         require_unlocked_for_background_sync(&app, &state)?;
-        if ids.len() > 1_000 || ids.iter().any(|id| id.len() > 64) {
-            return Err(api_error(
-                "internal_error",
-                "The notification acknowledgement is invalid.",
-            ));
-        }
+        validate_notification_acknowledgements(&ids)?;
         let mut db = if multisig {
             open_multisig_db(&app)?
         } else {
@@ -503,6 +498,16 @@ pub async fn wallet_notifications_ack(
     })
     .await
     .map_err(internal)?
+}
+
+pub(crate) fn validate_notification_acknowledgements(ids: &[String]) -> ApiResult<()> {
+    if ids.len() > 1_000 || ids.iter().any(|id| id.len() > 64) {
+        return Err(api_error(
+            "internal_error",
+            "The notification acknowledgement is invalid.",
+        ));
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -797,19 +802,9 @@ pub fn recovery_scan_settings_save(
 ) -> ApiResult<RecoveryScanSettingsDto> {
     let _operation = operation_guard(&state)?;
     require_unlocked(&app, &state)?;
-    if !(MIN_RECOVERY_GAP_LIMIT..=MAX_RECOVERY_GAP_LIMIT).contains(&gap_limit) {
-        return Err(api_error(
-            "invalid_scan_settings",
-            "Gap limit must be between 20 and 1,000 addresses.",
-        ));
-    }
+    validate_recovery_gap_limit(gap_limit)?;
     let tip = checked_block_height(&rpc_client(&app, &state)?)?;
-    if u64::from(birthday_height) > tip {
-        return Err(api_error(
-            "invalid_scan_settings",
-            "Wallet birthday cannot be above the node's current block height.",
-        ));
-    }
+    validate_recovery_birthday(birthday_height, tip)?;
     let credential = Zeroizing::new(credential);
     check_auth_throttle(&app, &state)?;
     let verified = verify_selected_credential(&app, credential.as_str());
@@ -846,6 +841,26 @@ pub fn recovery_scan_settings_save(
         birthday_height,
         gap_limit,
     })
+}
+
+pub(crate) fn validate_recovery_gap_limit(gap_limit: u32) -> ApiResult<()> {
+    if !(MIN_RECOVERY_GAP_LIMIT..=MAX_RECOVERY_GAP_LIMIT).contains(&gap_limit) {
+        return Err(api_error(
+            "invalid_scan_settings",
+            "Gap limit must be between 20 and 1,000 addresses.",
+        ));
+    }
+    Ok(())
+}
+
+pub(crate) fn validate_recovery_birthday(birthday_height: u32, tip: u64) -> ApiResult<()> {
+    if u64::from(birthday_height) > tip {
+        return Err(api_error(
+            "invalid_scan_settings",
+            "Wallet birthday cannot be above the node's current block height.",
+        ));
+    }
+    Ok(())
 }
 
 #[tauri::command]

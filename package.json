@@ -29,7 +29,7 @@
     "test:unit": "vitest run",
     "test:coverage": "vitest run --coverage --coverage.provider=v8 --coverage.reporter=text --coverage.include=src/lib/wallet/policy.ts --coverage.include=src/lib/multisig/policy.ts --coverage.include=src/lib/descriptors.ts --coverage.thresholds.lines=100 --coverage.thresholds.functions=100 --coverage.thresholds.branches=100 --coverage.thresholds.statements=100",
     "test:coverage:rust": "bash scripts/quality/check-rust-coverage.sh",
-    "test:coverage:rust:all": "cargo llvm-cov --locked --manifest-path src-tauri/Cargo.toml --lib --summary-only --fail-under-lines 55 --fail-under-functions 51 --fail-under-regions 51",
+    "test:coverage:rust:all": "bash scripts/quality/check-rust-full-coverage.sh",
     "test:e2e": "playwright test",
     "test:acceptance": "playwright test",
     "test:integration:regtest": "bash scripts/regtest/test.sh",

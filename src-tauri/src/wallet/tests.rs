@@ -946,6 +946,47 @@ fn completed_sync_requires_a_persisted_chain_observation() {
 }
 
 #[test]
+fn recovery_scan_command_bounds_fail_closed_at_exact_edges() {
+    assert!(validate_recovery_gap_limit(MIN_RECOVERY_GAP_LIMIT).is_ok());
+    assert!(validate_recovery_gap_limit(MAX_RECOVERY_GAP_LIMIT).is_ok());
+    assert_eq!(
+        validate_recovery_gap_limit(MIN_RECOVERY_GAP_LIMIT - 1)
+            .unwrap_err()
+            .code,
+        "invalid_scan_settings"
+    );
+    assert_eq!(
+        validate_recovery_gap_limit(MAX_RECOVERY_GAP_LIMIT + 1)
+            .unwrap_err()
+            .code,
+        "invalid_scan_settings"
+    );
+    assert!(validate_recovery_birthday(500, 500).is_ok());
+    assert_eq!(
+        validate_recovery_birthday(501, 500).unwrap_err().code,
+        "invalid_scan_settings"
+    );
+}
+
+#[test]
+fn notification_acknowledgement_command_bounds_are_inclusive() {
+    let maximum = vec!["n".repeat(64); 1_000];
+    assert!(validate_notification_acknowledgements(&maximum).is_ok());
+    assert_eq!(
+        validate_notification_acknowledgements(&vec!["n".to_owned(); 1_001])
+            .unwrap_err()
+            .code,
+        "internal_error"
+    );
+    assert_eq!(
+        validate_notification_acknowledgements(&["n".repeat(65)])
+            .unwrap_err()
+            .code,
+        "internal_error"
+    );
+}
+
+#[test]
 fn recovery_scan_progress_is_persisted_and_terminal_transitions_are_guarded() {
     let db = Connection::open_in_memory().unwrap();
     init_app_schema(&db).unwrap();

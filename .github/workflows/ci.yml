@@ -97,4 +97,5 @@ jobs:
       - name: Enforce explicitly classified deterministic-core coverage
         run: bash ../scripts/quality/check-rust-coverage.sh
       - name: Prevent whole-library coverage regression
-        run: cargo llvm-cov --locked --lib --summary-only --fail-under-lines 55 --fail-under-functions 51 --fail-under-regions 51
+        working-directory: .
+        run: bash scripts/quality/check-rust-full-coverage.sh
