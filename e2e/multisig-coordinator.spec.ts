@@ -668,6 +668,11 @@ test('shows signer details and runs honest health checks', async ({ page }) => {
   await expect(
     xpubDialog.getByRole('button', { name: 'Copy exact Public account key (xpub)' })
   ).toBeVisible();
+  const xpubBounds = await xpubDialog.boundingBox();
+  const xpubViewport = page.viewportSize();
+  expect(xpubBounds && xpubViewport).toBeTruthy();
+  expect(xpubBounds!.y).toBeGreaterThanOrEqual(0);
+  expect(xpubBounds!.y + xpubBounds!.height).toBeLessThanOrEqual(xpubViewport!.height);
   await xpubDialog.getByRole('button', { name: 'Close' }).click();
   await expect(coldcardDialog.getByText('Not checked yet')).toBeVisible();
   await coldcardDialog.getByRole('button', { name: 'Check signer' }).click();

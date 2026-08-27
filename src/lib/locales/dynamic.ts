@@ -152,6 +152,7 @@ export const dynamicCopy = {
   Review: { fr: 'Vérifier', es: 'Revisar' },
   'Review:': { fr: 'Vérification :', es: 'Revisión:' },
   Scanning: { fr: 'Analyse', es: 'Escaneando' },
+  'QR scan progress': { fr: 'Progression du scan QR', es: 'Progreso del escaneo QR' },
   sent: { fr: 'envoyé', es: 'enviado' },
   'Sent to': { fr: 'Envoyé à', es: 'Enviado a' },
   Settings: { fr: 'Réglages', es: 'Ajustes' },

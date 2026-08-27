@@ -2,7 +2,7 @@
   import { locale } from '$lib/i18n';
   import { translate } from '$lib/i18n-catalog';
   import { X } from '@lucide/svelte';
-  import { lockModalScroll } from './modal-scroll-lock';
+  import { lockModalScroll, modalDocumentTop } from './modal-scroll-lock';
   import { onDestroy } from 'svelte';
   import { fly } from 'svelte/transition';
   let {
@@ -58,8 +58,8 @@
     if (!open || typeof document === 'undefined') return;
     const previousFocus =
       document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    documentTop = window.scrollY - 32;
-    const releaseScrollLock = lockModalScroll(document);
+    documentTop = modalDocumentTop(document, window.scrollY - 32);
+    const releaseScrollLock = lockModalScroll(document, documentTop);
     queueMicrotask(() => {
       const first = dialog?.querySelector<HTMLElement>(
         'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'

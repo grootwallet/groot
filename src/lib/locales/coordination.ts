@@ -234,10 +234,10 @@ export const coordinationCopy = {
     fr: 'Terminer la configuration sur l’ordinateur',
     es: 'Terminar la configuración en el ordenador'
   },
-  'Desktop must add the remaining signers and create the wallet. Keep this phone nearby, then scan the final wallet policy below.':
+  'Desktop is finishing setup. It will show one final wallet QR next. Keep this screen ready to scan it.':
     {
-      fr: 'L’ordinateur doit ajouter les autres signataires et créer le portefeuille. Gardez ce téléphone à proximité, puis scannez la politique finale ci-dessous.',
-      es: 'El ordenador debe añadir los firmantes restantes y crear la cartera. Mantén este teléfono cerca y escanea abajo la política final.'
+      fr: 'L’ordinateur termine la configuration. Il affichera ensuite un dernier QR du portefeuille. Gardez cet écran prêt à le scanner.',
+      es: 'El ordenador está terminando la configuración. A continuación mostrará un último QR de la cartera. Mantén esta pantalla lista para escanearlo.'
     },
   'Turn up screen brightness, hold the phone steady, or tap the QR to enlarge it.': {
     fr: 'Augmentez la luminosité, maintenez le téléphone immobile ou touchez le QR pour l’agrandir.',
@@ -247,10 +247,10 @@ export const coordinationCopy = {
     fr: 'Clé du téléphone ajoutée',
     es: 'Clave del teléfono añadida'
   },
-  'Continue adding the remaining signers on desktop. The phone should stay on its waiting screen until this wallet is created.':
+  'Keep the phone on its waiting screen. After you add the remaining signers and create the wallet, desktop will show one final QR for the phone.':
     {
-      fr: 'Continuez à ajouter les autres signataires sur l’ordinateur. Le téléphone doit rester sur son écran d’attente jusqu’à la création du portefeuille.',
-      es: 'Sigue añadiendo los firmantes restantes en el ordenador. El teléfono debe permanecer en espera hasta que se cree la cartera.'
+      fr: 'Gardez le téléphone sur son écran d’attente. Après l’ajout des autres signataires et la création du portefeuille, l’ordinateur affichera un dernier QR pour le téléphone.',
+      es: 'Mantén el teléfono en su pantalla de espera. Después de añadir los demás firmantes y crear la cartera, el ordenador mostrará un último QR para el teléfono.'
     },
   'Continue wallet setup': {
     fr: 'Continuer la configuration',
@@ -341,11 +341,10 @@ export const coordinationCopy = {
     fr: 'Ce téléphone détient un signataire ; l’ordinateur reste le coordinateur.',
     es: 'Este teléfono guarda un firmante; el ordenador sigue siendo el coordinador.'
   },
-  'This second encrypted QR commits the exact descriptor, threshold, signer set, and first address.':
-    {
-      fr: 'Ce second QR chiffré engage le descripteur, le seuil, les signataires et la première adresse exacts.',
-      es: 'Este segundo QR cifrado confirma el descriptor, el umbral, los firmantes y la primera dirección exactos.'
-    },
+  'Final phone step. This encrypted QR commits the wallet policy and first address.': {
+    fr: 'Dernière étape sur le téléphone. Ce QR chiffré engage la politique du portefeuille et la première adresse.',
+    es: 'Último paso en el teléfono. Este QR cifrado confirma la política de la cartera y la primera dirección.'
+  },
   'Transaction verified': { fr: 'Transaction vérifiée', es: 'Transacción verificada' },
   'Verified wallet change': {
     fr: 'Monnaie du portefeuille vérifiée',

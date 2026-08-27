@@ -3,15 +3,24 @@ type ScrollDocument = Pick<Document, 'body'>;
 type LockState = {
   count: number;
   previousOverflow: string;
+  documentTop: number;
 };
 
 const locks = new WeakMap<ScrollDocument, LockState>();
 
-export function lockModalScroll(document: ScrollDocument): () => void {
+export function modalDocumentTop(document: ScrollDocument, requestedTop: number): number {
+  return locks.get(document)?.documentTop ?? requestedTop;
+}
+
+export function lockModalScroll(document: ScrollDocument, documentTop = 0): () => void {
   const existing = locks.get(document);
   if (existing) existing.count += 1;
   else {
-    locks.set(document, { count: 1, previousOverflow: document.body.style.overflow });
+    locks.set(document, {
+      count: 1,
+      previousOverflow: document.body.style.overflow,
+      documentTop
+    });
     document.body.style.overflow = 'hidden';
   }
 

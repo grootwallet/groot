@@ -97,8 +97,19 @@ describe('mobile pairing lifecycle UI', () => {
   it('keeps pairing focused by hiding wallet navigation and explaining the desktop handoff', () => {
     expect(appShellSource).toContain("page.url.pathname === '/mobile/pair'");
     expect(appShellSource).toContain('!mobileSetupRoute');
-    expect(desktopRouteSource).toContain('Continue adding the remaining signers on desktop.');
+    expect(desktopRouteSource).toContain('desktop will show one final QR for the phone.');
     expect(routeSource).toContain('Finish wallet setup on desktop');
+    expect(routeSource).toContain('It will show one final wallet QR next.');
+  });
+
+  it('shows bounded multipart QR scan progress on desktop and mobile', () => {
+    expect(scannerSource).toContain('expectedParts');
+    expect(scannerSource).toContain('Math.min(99');
+    expect(scannerSource).toContain('scanComplete');
+    expect(scannerSource).toContain('<progress max="100"');
+    expect(scannerSource).toContain("translate($locale, 'QR scan progress')");
+    expect(desktopRouteSource).toContain('return true;');
+    expect(routeSource).toContain('return true;');
   });
 
   it('uses lower-density expandable phone-response QR frames at a readable cadence', () => {

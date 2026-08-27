@@ -267,9 +267,9 @@ export const componentCopy = {
     fr: 'Descripteur portable du portefeuille',
     es: 'Descriptor portátil de la cartera'
   },
-  'prefix. Rust verified that it decodes to the identical Bitcoin output script.': {
-    fr: '. Rust a vérifié qu’il correspond au même script de sortie Bitcoin.',
-    es: '. Rust verificó que corresponde al mismo script de salida de Bitcoin.'
+  'prefix for the same Bitcoin script.': {
+    fr: 'pour le même script Bitcoin.',
+    es: 'para el mismo script de Bitcoin.'
   },
   'Preparing QR…': { fr: 'Préparation du QR…', es: 'Preparando QR…' },
   'Priority fee': { fr: 'Frais prioritaires', es: 'Comisión prioritaria' },
@@ -419,11 +419,10 @@ export const componentCopy = {
     fr: 'Utiliser un nouveau nom de compte BitBox',
     es: 'Usar un nuevo nombre de cuenta BitBox'
   },
-  'Verification reference only. Do not fund this address directly; after the wallet is created, use Receive to create a permanently labeled payment request.':
-    {
-      fr: 'Référence de vérification uniquement. N’alimentez pas cette adresse directement ; après la création du portefeuille, utilisez Recevoir pour créer une demande de paiement avec un libellé permanent.',
-      es: 'Solo como referencia de verificación. No envíes fondos directamente a esta dirección; tras crear la cartera, usa Recibir para crear una solicitud de pago con etiqueta permanente.'
-    },
+  'Reference only. After setup, use Receive for payments.': {
+    fr: 'Référence uniquement. Après la configuration, utilisez Recevoir pour les paiements.',
+    es: 'Solo como referencia. Tras la configuración, usa Recibir para los pagos.'
+  },
   'Verified on hardware': { fr: 'Vérifiée sur le matériel', es: 'Verificada en el dispositivo' },
   'View completed step': { fr: 'Afficher l’étape terminée', es: 'Ver paso completado' },
   'View on mempool.space': { fr: 'Afficher sur mempool.space', es: 'Ver en mempool.space' },

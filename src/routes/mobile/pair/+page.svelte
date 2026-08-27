@@ -154,8 +154,10 @@
       signerCount = invitation.signerCount;
       stage = 'confirm';
       error = '';
+      return true;
     } catch {
       // Multipart UR decoding is expected to be incomplete until enough unique frames arrive.
+      return false;
     }
   }
 
@@ -192,9 +194,11 @@
         tone: 'success'
       });
       await goto('/multisig');
+      return true;
     } catch (cause) {
       const message = localizedError(cause, $locale, 'Waiting for the complete wallet QR.');
       if (!message.toLowerCase().includes('incomplete')) error = message;
+      return false;
     }
   }
 </script>
@@ -358,7 +362,7 @@
         <strong>{translate($locale, 'Finish wallet setup on desktop')}</strong><small
           >{translate(
             $locale,
-            'Desktop must add the remaining signers and create the wallet. Keep this phone nearby, then scan the final wallet policy below.'
+            'Desktop is finishing setup. It will show one final wallet QR next. Keep this screen ready to scan it.'
           )}</small
         >
       </div>

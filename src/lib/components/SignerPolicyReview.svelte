@@ -217,19 +217,13 @@
         oncopy={copyAddress}
       />{/if}
     <small class="policy-address-purpose">
-      {translate(
-        $locale,
-        'Verification reference only. Do not fund this address directly; after the wallet is created,\n      use Receive to create a permanently labeled payment request.'
-      )}
+      {translate($locale, 'Reference only. After setup, use Receive for payments.')}
     </small>
     {#if testnetAddressDevice}<small
         >{testnetAddressDevice}
         {translate($locale, 'displays the Regtest script with a')}
         <code>{translate($locale, 'tb1')}</code>
-        {translate(
-          $locale,
-          'prefix. Rust verified\n        that it decodes to the identical Bitcoin output script.'
-        )}</small
+        {translate($locale, 'prefix for the same Bitcoin script.')}</small
       >{/if}
   </section>
 

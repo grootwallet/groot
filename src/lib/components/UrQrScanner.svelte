@@ -11,7 +11,7 @@
     acceptedTypes = ['crypto-psbt'],
     prompt = 'Point the camera at a crypto-psbt QR'
   } = $props<{
-    onframe: (frame: string) => void | Promise<void>;
+    onframe: (frame: string) => boolean | void | Promise<boolean | void>;
     acceptedTypes?: string[];
     prompt?: string;
   }>();
@@ -20,9 +20,18 @@
   let scanned = $state(0);
   let starting = $state(false);
   let cameraActive = $state(false);
+  let expectedParts = $state(0);
+  let scanComplete = $state(false);
   let scanner: QrScanner | undefined;
   let stopped = false;
   const seen = new Set<string>();
+  const progress = $derived(
+    scanComplete
+      ? 100
+      : expectedParts > 0
+        ? Math.min(99, Math.round((scanned / expectedParts) * 100))
+        : 0
+  );
 
   async function acceptFrame(rawValue: string) {
     const frame = rawValue.trim().toLowerCase();
@@ -39,7 +48,10 @@
     }
     seen.add(frame);
     scanned = seen.size;
-    await onframe(frame);
+    const multipart = frame.match(/^ur:[^/]+\/\d+-(\d+)\//);
+    if (multipart) expectedParts = Math.max(expectedParts, Number(multipart[1]) || 0);
+    scanComplete = (await onframe(frame)) === true;
+    if (scanComplete) scanner?.stop();
   }
 
   async function startCamera() {
@@ -128,6 +140,14 @@
         >{translate($locale, 'Allow camera access to scan this QR.')}</span
       >{/if}
   </div>
+  {#if cameraActive && expectedParts > 0}
+    <div class="scan-progress" aria-live="polite">
+      <progress max="100" value={progress} aria-label={translate($locale, 'QR scan progress')}
+        >{progress}%</progress
+      >
+      <span>{translate($locale, 'Scanning')} · {progress}%</span>
+    </div>
+  {/if}
   {#if !cameraActive}
     <Button variant="secondary" class="scanner-retry" loading={starting} onclick={startCamera}
       >{translate($locale, error ? 'Try camera again' : 'Allow camera')}</Button
@@ -169,5 +189,19 @@
   .scan-status :global(svg) {
     flex: none;
     margin-top: 0.1rem;
+  }
+  .scan-progress {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.7rem;
+    color: var(--muted);
+    font-size: 0.75rem;
+    font-weight: 700;
+  }
+  .scan-progress progress {
+    width: 100%;
+    height: 0.45rem;
+    accent-color: var(--link);
   }
 </style>

@@ -602,9 +602,11 @@
     try {
       mobileCandidate = await walletService.acceptMobileSigner(mobileResponseFrames);
       mobilePairError = '';
+      return true;
     } catch (cause) {
       const message = localizedError(cause, $locale, 'Waiting for the complete phone response.');
       if (!message.toLowerCase().includes('incomplete')) mobilePairError = message;
+      return false;
     }
   }
 
@@ -2306,7 +2308,7 @@
         <ShieldCheck size={17} /><strong>{translate($locale, 'Phone key added')}</strong><span
           >{translate(
             $locale,
-            'Continue adding the remaining signers on desktop. The phone should stay on its waiting screen until this wallet is created.'
+            'Keep the phone on its waiting screen. After you add the remaining signers and create the wallet, desktop will show one final QR for the phone.'
           )}</span
         >
       </div>
@@ -2377,7 +2379,7 @@
   title={translate($locale, 'Return the final policy to the phone')}
   description={translate(
     $locale,
-    'This second encrypted QR commits the exact descriptor, threshold, signer set, and first address.'
+    'Final phone step. This encrypted QR commits the wallet policy and first address.'
   )}
   onclose={() => {}}
 >

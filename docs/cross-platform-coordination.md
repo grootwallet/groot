@@ -50,8 +50,9 @@ evidence, recovery drills, interoperability evidence, and independent security r
    plaintext, verifies the signed-message pubkey equals the exact account xpub, checks origin,
    network, uniqueness, expiry, and replay state, then shows fingerprint/xpub checksum.
 7. Both displays show the same six digits. The user explicitly confirms they match before adding
-   the signer. Desktop then tells the user to continue adding the remaining signers while the phone
-   waits for the completed policy. Two hardware signers can then be added with existing flows.
+   the signer. Desktop tells the user to keep the phone waiting and explicitly previews the final
+   phone QR that appears after the remaining signers and wallet PIN. Two hardware signers can then
+   be added with existing flows. The phone waiting screen mirrors that expectation.
 8. Desktop creates the wallet only after the existing descriptor-backup and hardware-policy gates.
    It then emits `ur:groot-wallet`, containing an encrypted versioned public wallet record whose
    payload includes the final BIP129 descriptor record.
@@ -145,6 +146,9 @@ Secure Enclave wrapping cannot make the phone equivalent to an independent hardw
 - BIP129 records remain standards-defined. `crypto-psbt` remains the interoperability format.
   Groot-specific UR type strings only carry animated bytes for invitation/encrypted BSMS/public
   wallet records; file/manual BIP129 fallback can be added without changing the payload.
+- Every multipart camera surface reads the declared UR fragment count and shows bounded scan
+  progress. Presentation stays below 100% until the native decoder accepts the complete payload;
+  duplicate frames do not advance it.
 - The encrypted phone response alone uses 160-byte UR fragments and a slower 1.4-second display
   cadence to reduce QR density on small screens. It can be enlarged full-screen without changing
   its encrypted payload, type, decoder bounds, or replay semantics. Other coordination and PSBT

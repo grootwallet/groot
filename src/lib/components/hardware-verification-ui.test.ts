@@ -364,10 +364,8 @@ describe('hardware receive verification UI', () => {
   });
 
   it('does not present a policy-verification address as a payment request', () => {
-    expect(policyReview).toContain(
-      'Verification reference only. Do not fund this address directly'
-    );
-    expect(policyReview).toContain('use Receive to create a permanently labeled payment request');
+    expect(policyReview).toContain('Reference only. After setup, use Receive for payments.');
+    expect(policyReview).not.toContain('Verification reference only. Do not fund');
   });
 
   it('offers a one-time label only for an unlabeled received multisig output', () => {
