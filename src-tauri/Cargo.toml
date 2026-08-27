@@ -13,6 +13,7 @@ name = "Groot"
 path = "src/main.rs"
 
 [build-dependencies]
+cc = "=1.2.67"
 tauri-build = { version = "=2.6.3", features = [] }
 
 [dependencies]

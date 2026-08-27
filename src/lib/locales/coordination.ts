@@ -164,6 +164,10 @@ export const coordinationCopy = {
     es: 'El teléfono aceptó la cartera'
   },
   'Phone name': { fr: 'Nom du téléphone', es: 'Nombre del teléfono' },
+  'Phone signer setup is waiting to finish': {
+    fr: 'La configuration du signataire du téléphone doit être terminée',
+    es: 'La configuración del firmante del teléfono está pendiente de finalizar'
+  },
   'PHONE SIGNER': { fr: 'SIGNATAIRE TÉLÉPHONE', es: 'FIRMANTE DEL TELÉFONO' },
   'Phone signer added': { fr: 'Signataire téléphone ajouté', es: 'Firmante del teléfono añadido' },
   'Point the camera at the encrypted phone response': {
@@ -191,6 +195,14 @@ export const coordinationCopy = {
     es: 'Devolver la política final al teléfono'
   },
   'Resume pairing': { fr: 'Reprendre le jumelage', es: 'Reanudar vinculación' },
+  'Resume wallet pairing': {
+    fr: 'Reprendre le jumelage du portefeuille',
+    es: 'Reanudar la vinculación de la cartera'
+  },
+  'Wallet pairing in progress': {
+    fr: 'Jumelage du portefeuille en cours',
+    es: 'Vinculación de cartera en curso'
+  },
   'Review the exact transaction on this phone. Signing never broadcasts or changes the desktop proposal.':
     {
       fr: 'Vérifiez la transaction exacte sur ce téléphone. La signature ne diffuse ni ne modifie jamais la proposition de l’ordinateur.',

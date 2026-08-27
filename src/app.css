@@ -1083,6 +1083,9 @@ code {
   border-color: color-mix(in srgb, var(--accent) 62%, var(--border));
   background: color-mix(in srgb, var(--accent) 12%, var(--panel));
 }
+.active-proposal-callout + .active-proposal-callout {
+  margin-top: 8px;
+}
 .active-proposal-icon {
   width: 32px;
   height: 32px;

@@ -1,6 +1,11 @@
 import type { CatalogSection } from './types';
 
 export const componentCopy = {
+  'Allow camera': { fr: 'Autoriser la caméra', es: 'Permitir cámara' },
+  'Allow camera access to scan this QR.': {
+    fr: 'Autorisez la caméra pour scanner ce QR.',
+    es: 'Permite el acceso a la cámara para escanear este QR.'
+  },
   'Requesting camera permission…': {
     fr: 'Demande d’autorisation pour la caméra…',
     es: 'Solicitando permiso para la cámara…'

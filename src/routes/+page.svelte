@@ -12,7 +12,8 @@
     FileKey,
     HeartPulse,
     RefreshCw,
-    ShieldCheck
+    ShieldCheck,
+    Smartphone
   } from '@lucide/svelte';
   import Button from '$lib/components/Button.svelte';
   import Modal from '$lib/components/Modal.svelte';
@@ -72,6 +73,7 @@
   let checkingSignerHealth = $state(false);
   let activeProposal = $state<MultisigProposal | PaymentProposal | null>(null);
   let activeDraft = $state<PaymentDraft | null>(null);
+  let pendingMobilePairingCount = $state(0);
   let selected = $state<Transaction | null>(null);
   let multisig = $state(false);
   let moreOpen = $state(false);
@@ -218,6 +220,7 @@
     loadError = '';
     initialDataLoading = true;
     try {
+      const pendingPairingsPromise = walletService.pendingMobilePairings().catch(() => []);
       const shellWallets = walletShell.profiles();
       const shellSelectedWalletId = walletShell.selectedWalletId();
       if (!shellWallets.length || !shellSelectedWalletId) {
@@ -272,6 +275,7 @@
             : ((proposals as PaymentProposal[])[0] ?? null);
       }
       if (activeProposal) activeDraft = null;
+      pendingMobilePairingCount = (await pendingPairingsPromise).length;
       initialDataLoading = false;
       if (syncSource.type === 'compact_filters' && !inheritedSyncObserved) void sync(false);
     } catch (cause) {
@@ -640,6 +644,24 @@
     <WalletSkeleton variant="balance" />
   {/if}
   {#if !loadError}
+    {#if pendingMobilePairingCount > 0}
+      <a
+        class="active-proposal-callout"
+        href="/mobile/pair"
+        aria-label={translate($locale, 'Resume wallet pairing')}
+      >
+        <span class="active-proposal-icon"><Smartphone size={17} /></span>
+        <span class="active-proposal-copy"
+          ><strong>{translate($locale, 'Wallet pairing in progress')}</strong><span
+            class="active-proposal-meta"
+            ><small>{translate($locale, 'Phone signer setup is waiting to finish')}</small></span
+          ></span
+        >
+        <span class="active-proposal-action"
+          >{translate($locale, 'Resume')} <ChevronRight size={15} /></span
+        >
+      </a>
+    {/if}
     {#if activeProposal}
       <a
         class="active-proposal-callout"

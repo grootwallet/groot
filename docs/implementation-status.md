@@ -103,17 +103,19 @@ idempotent cancel, wallet-UUID-bound active/consuming reconciliation, exact
 unregistered partial-profile cleanup, registered-wallet conflict/traversal
 rejection, and orphan temporary-file cleanup now have deterministic Rust
 coverage and a wired mobile restart surface. An isolated
-`app.groot.wallet.regtest.dev` build compiles, installs, launches, and survives a
-forced process relaunch in the iOS 26.1 simulator; its built plist contains the
-camera and Regtest-development Local Network permission copy, and the onboarding
-header clears the simulated status safe area. This is simulator evidence only,
-not camera, secure-storage, recovery, or physical-device certification. This is
-not first-mainnet scope: the current mobile secret sidecar truthfully identifies
-its Argon2id/PIN protection as testnet-only, while external process-kill
-automation at every profile/registry boundary, native iOS Keychain/Secure
-Enclave wrapping, native recovery entry/verification, physical camera/lifecycle
-testing, independent interoperability, and security review remain release
-blockers. See ADR 0048 and
+`app.groot.wallet.regtest.dev` build compiles, signs, installs, and launches on
+an iPhone 13 mini in development mode; its built plist contains the camera and
+Regtest-development Local Network permission copy. Physical pairing has
+exercised invitation scanning, comparison-code display, native recovery
+presentation, encrypted response generation, and forced relaunch/resume.
+Desktop response-camera capture, the revised native two-column recovery sheet,
+secure-storage protection, recovery verification, and complete lifecycle
+certification remain pending. This is not first-mainnet scope: the current
+mobile secret sidecar truthfully identifies its Argon2id/PIN protection as
+testnet-only, while external process-kill automation at every profile/registry
+boundary, native iOS Keychain/Secure Enclave wrapping, native recovery
+entry/verification, complete physical camera/lifecycle testing, independent
+interoperability, and security review remain release blockers. See ADR 0048 and
 [`cross-platform-coordination.md`](cross-platform-coordination.md).
 
 | Capability                                                           | Browser fixture                                                                                                                                                                                                                                                                                                                                                                         | Rust/Tauri                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | Automated evidence                                                                                                                                                                                                                                                                                                                                                                                                                   | Release status                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |

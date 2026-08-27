@@ -2088,6 +2088,7 @@ dependencies = [
  "bdk_wallet",
  "bip39",
  "block2",
+ "cc",
  "core-foundation",
  "jsonrpc",
  "libc",

@@ -24,7 +24,36 @@ pub fn recover(app: &AppHandle) -> Result<Option<Zeroizing<String>>, String> {
 
 #[cfg(target_os = "macos")]
 mod macos;
-#[cfg(not(target_os = "macos"))]
+
+#[cfg(target_os = "ios")]
+pub fn present(_app: &AppHandle, words: &str) -> Result<BackupOutcome, String> {
+    use std::ffi::c_char;
+
+    if words.split_whitespace().count() != 24 || words.as_bytes().contains(&0) {
+        return Err("Native backup requires exactly 24 recovery words.".to_owned());
+    }
+    let mut payload = Zeroizing::new(words.as_bytes().to_vec());
+    payload.push(0);
+    unsafe extern "C" {
+        fn groot_present_ios_recovery_words(words_utf8: *const c_char) -> i32;
+    }
+    // SAFETY: The Objective-C boundary copies this bounded, NUL-terminated UTF-8
+    // string before returning. The backing bytes remain alive for the call and
+    // are zeroized immediately afterward.
+    match unsafe { groot_present_ios_recovery_words(payload.as_ptr().cast()) } {
+        1 => Ok(BackupOutcome {
+            cancelled: false,
+            verified: false,
+        }),
+        0 => Ok(BackupOutcome {
+            cancelled: true,
+            verified: false,
+        }),
+        _ => Err("The native iOS recovery sheet could not be presented.".to_owned()),
+    }
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "ios")))]
 pub fn present(app: &AppHandle, words: &str) -> Result<BackupOutcome, String> {
     use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 
@@ -82,16 +111,15 @@ pub fn recover(_app: &AppHandle) -> Result<Option<Zeroizing<String>>, String> {
     Err("Native recovery-word entry is not yet available on this platform.".to_owned())
 }
 
-#[cfg(any(not(target_os = "macos"), test))]
+#[cfg(any(not(any(target_os = "macos", target_os = "ios")), test))]
 fn format_words(words: &str) -> Result<String, String> {
     let words = words.split_whitespace().collect::<Vec<_>>();
     if words.len() != 24 {
         return Err("Native backup requires exactly 24 recovery words.".to_owned());
     }
 
-    // Native iOS alerts use a proportional system font, so space-padded columns
-    // cannot align reliably. A sequential list remains unambiguous at every
-    // Dynamic Type size and lets the native alert scroll when necessary.
+    // Platforms without a dedicated native grid use a sequential list because
+    // their generic alert font cannot align space-padded columns reliably.
     Ok(words
         .iter()
         .enumerate()

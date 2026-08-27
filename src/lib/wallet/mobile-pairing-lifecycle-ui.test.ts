@@ -19,6 +19,14 @@ const scannerSource = readFileSync(
   fileURLToPath(new URL('../components/UrQrScanner.svelte', import.meta.url)),
   'utf8'
 );
+const overviewSource = readFileSync(
+  fileURLToPath(new URL('../../routes/+page.svelte', import.meta.url)),
+  'utf8'
+);
+const iosNativeSource = readFileSync(
+  fileURLToPath(new URL('../../../src-tauri/src/native_backup/ios.mm', import.meta.url)),
+  'utf8'
+);
 
 describe('mobile pairing lifecycle UI', () => {
   it('offers credential-gated resume and explicit cancellation for native staging', () => {
@@ -56,9 +64,26 @@ describe('mobile pairing lifecycle UI', () => {
 
   it('retries camera permission in place and centers focused phone inputs above the keyboard', () => {
     expect(scannerSource).toContain("name === 'NotAllowedError'");
-    expect(scannerSource).toContain("translate($locale, 'Try camera again')");
+    expect(scannerSource).toContain('navigator.mediaDevices.getUserMedia');
+    expect(scannerSource).toContain("error ? 'Try camera again' : 'Allow camera'");
+    expect(scannerSource).toContain('class="camera-frame"');
+    expect(scannerSource).toMatch(/\.camera-frame\s*\{[\s\S]*?position:\s*relative/);
     expect(routeSource).toContain("block: 'center'");
     expect(routeSource).toContain('class:keyboard-active={keyboardActive}');
     expect(routeSource).toContain('padding-bottom: max(45dvh');
+  });
+
+  it('surfaces staged pairing on overview before the user returns to the pairing route', () => {
+    expect(overviewSource).toContain('walletService.pendingMobilePairings()');
+    expect(overviewSource).toContain("translate($locale, 'Wallet pairing in progress')");
+    expect(overviewSource).toContain('href="/mobile/pair"');
+  });
+
+  it('keeps mobile recovery words native in a padded two-column non-scrolling grid', () => {
+    expect(iosNativeSource).toContain('groot_present_ios_recovery_words');
+    expect(iosNativeSource).toContain('makeColumn(0), makeColumn(12)');
+    expect(iosNativeSource).toContain('UIStackViewDistributionFillEqually');
+    expect(iosNativeSource).toContain('monospacedSystemFontOfSize:16.0');
+    expect(iosNativeSource).not.toContain('UIScrollView');
   });
 });
