@@ -53,6 +53,30 @@ pub fn present(_app: &AppHandle, words: &str) -> Result<BackupOutcome, String> {
     }
 }
 
+#[cfg(target_os = "ios")]
+pub fn recover(_app: &AppHandle) -> Result<Option<Zeroizing<String>>, String> {
+    use std::{ffi::CStr, os::raw::c_char};
+
+    const CAPACITY: usize = 512;
+    let mut output = Zeroizing::new(vec![0_u8; CAPACITY]);
+    unsafe extern "C" {
+        fn groot_recover_ios_mnemonic(output: *mut c_char, capacity: usize) -> i32;
+    }
+    // SAFETY: iOS writes at most `capacity - 1` UTF-8 bytes and a trailing NUL into this
+    // owned buffer. The buffer remains alive for the call and is zeroized after parsing.
+    match unsafe { groot_recover_ios_mnemonic(output.as_mut_ptr().cast(), output.len()) } {
+        1 => {
+            let value = CStr::from_bytes_until_nul(&output)
+                .map_err(|_| "The native iOS recovery phrase was malformed.".to_owned())?
+                .to_str()
+                .map_err(|_| "The native iOS recovery phrase was not valid UTF-8.".to_owned())?;
+            Ok(Some(Zeroizing::new(value.to_owned())))
+        }
+        0 => Ok(None),
+        _ => Err("The native iOS recovery sheet could not be presented.".to_owned()),
+    }
+}
+
 #[cfg(not(any(target_os = "macos", target_os = "ios")))]
 pub fn present(app: &AppHandle, words: &str) -> Result<BackupOutcome, String> {
     use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
@@ -106,7 +130,7 @@ pub fn verify(_app: &AppHandle, _words: &str) -> Result<bool, String> {
     Err("Recovery-word verification is not yet available on this platform.".to_owned())
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "ios")))]
 pub fn recover(_app: &AppHandle) -> Result<Option<Zeroizing<String>>, String> {
     Err("Native recovery-word entry is not yet available on this platform.".to_owned())
 }

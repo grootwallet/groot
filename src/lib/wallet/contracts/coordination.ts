@@ -32,6 +32,13 @@ export type PendingMobilePairing = {
   sessionId: string;
 };
 
+export type MobileRecoveryRecord = {
+  walletName: string;
+  threshold: number;
+  signerCount: number;
+  mobileSignerFingerprint: string;
+};
+
 export type MobilePsbtOutput = { address: string; amountSats: number };
 
 export type MobilePsbtReview = {
@@ -81,6 +88,9 @@ export interface WalletCoordinationPort {
   acceptMobileSigner(frames: string[]): Promise<CosignerDraft>;
   finalizePairingOnDesktop(sessionId: string): Promise<string[]>;
   completePairingOnMobile(frames: string[], credential: string): Promise<MultisigWallet>;
+  mobileRecoveryRecord(): Promise<string[]>;
+  inspectMobileRecoveryRecord(frames: string[]): Promise<MobileRecoveryRecord>;
+  recoverMobileSigner(frames: string[], credential: string): Promise<MultisigWallet>;
   reviewMobilePsbt(psbt: string): Promise<MobilePsbtReview>;
   signMobilePsbt(
     reviewedPsbt: string,

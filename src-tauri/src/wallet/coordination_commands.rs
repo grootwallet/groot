@@ -123,6 +123,22 @@ pub struct PendingMobilePairingDto {
     session_id: String,
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MobileRecoveryRecordDto {
+    wallet_name: String,
+    threshold: usize,
+    signer_count: usize,
+    mobile_signer_fingerprint: String,
+}
+
+#[derive(Debug)]
+struct ValidatedMobileWallet {
+    wallet: MultisigWalletDto,
+    fingerprint: Fingerprint,
+    descriptor_checksum: String,
+}
+
 #[tauri::command]
 pub fn coordination_status(app: AppHandle) -> ApiResult<CoordinationStatusDto> {
     let profile = selected_profile(&app)?;
@@ -615,6 +631,202 @@ pub fn coordination_desktop_finalize(
 }
 
 #[tauri::command]
+pub fn coordination_mobile_recovery_record(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> ApiResult<Vec<String>> {
+    let _operation = operation_guard(&state)?;
+    require_unlocked(&app, &state)?;
+    let profile = selected_profile_of_kind(&app, WalletKind::Multisig)?;
+    let metadata = read_coordination_metadata(&app, profile.id)?;
+    if metadata.role != DeviceRole::DesktopCoordinator {
+        return Err(api_error(
+            "unsupported_operation",
+            "Only the desktop coordinator can prepare a replacement-phone recovery record.",
+        ));
+    }
+    let wallet = read_multisig_metadata(&app)?;
+    let mobile_fingerprint = wallet
+        .cosigners
+        .iter()
+        .find(|signer| signer.device_type.as_deref() == Some(MOBILE_DEVICE_TYPE))
+        .ok_or_else(|| {
+            api_error(
+                "signing_unavailable",
+                "This wallet has no Groot mobile signer to recover.",
+            )
+        })?
+        .fingerprint
+        .clone();
+    if wallet
+        .cosigners
+        .iter()
+        .filter(|signer| signer.device_type.as_deref() == Some(MOBILE_DEVICE_TYPE))
+        .count()
+        != 1
+    {
+        return Err(coordination_api_error(
+            CoordinationError::DescriptorMismatch,
+        ));
+    }
+    let descriptor = DescriptorRecord::from_descriptor_pair(
+        &wallet.external_descriptor,
+        &wallet.internal_descriptor,
+        &first_multisig_address(&wallet)?,
+    )
+    .map_err(bsms_api_error)?;
+    let record = PublicWalletRecord {
+        version: 2,
+        network: NETWORK_NAME.to_owned(),
+        wallet_id: profile.id.to_string(),
+        wallet_name: wallet.name,
+        role: DeviceRole::MobileCosigner,
+        descriptor_record: descriptor.encode(),
+        descriptor_checksum: profile.descriptor_checksum,
+        signers: wallet.cosigners,
+        mobile_signer_fingerprint: Some(mobile_fingerprint),
+        created_at: now(),
+    };
+    record.validate().map_err(coordination_api_error)?;
+    encode_coordination(
+        CoordinationUrType::Wallet,
+        &serde_json::to_vec(&record).map_err(internal)?,
+    )
+}
+
+#[tauri::command]
+pub fn coordination_mobile_recovery_inspect(
+    state: State<'_, AppState>,
+    frames: Vec<String>,
+) -> ApiResult<MobileRecoveryRecordDto> {
+    let _operation = operation_guard(&state)?;
+    let payload = coordination_transport::decode(CoordinationUrType::Wallet, &frames)
+        .map_err(coordination_ur_api_error)?;
+    let public = decode_public_wallet_record(&payload)?;
+    if public.role != DeviceRole::MobileCosigner {
+        return Err(coordination_api_error(
+            CoordinationError::DescriptorMismatch,
+        ));
+    }
+    let descriptor = public.validate().map_err(coordination_api_error)?;
+    let (threshold, keys) = descriptor.standard_policy().map_err(bsms_api_error)?;
+    if keys.len() != public.signers.len() {
+        return Err(coordination_api_error(
+            CoordinationError::DescriptorMismatch,
+        ));
+    }
+    let mobile_signer_fingerprint = public
+        .mobile_signer_fingerprint
+        .clone()
+        .ok_or_else(|| coordination_api_error(CoordinationError::DescriptorMismatch))?;
+    if public
+        .signers
+        .iter()
+        .filter(|signer| signer.device_type.as_deref() == Some(MOBILE_DEVICE_TYPE))
+        .count()
+        != 1
+    {
+        return Err(coordination_api_error(
+            CoordinationError::DescriptorMismatch,
+        ));
+    }
+    Ok(MobileRecoveryRecordDto {
+        wallet_name: public.wallet_name,
+        threshold,
+        signer_count: public.signers.len(),
+        mobile_signer_fingerprint,
+    })
+}
+
+fn validate_mobile_wallet_record(
+    public: PublicWalletRecord,
+    mnemonic: &Mnemonic,
+) -> ApiResult<ValidatedMobileWallet> {
+    if public.role != DeviceRole::MobileCosigner {
+        return Err(coordination_api_error(
+            CoordinationError::DescriptorMismatch,
+        ));
+    }
+    let descriptor = public.validate().map_err(coordination_api_error)?;
+    let (fingerprint, _, account_xpub) =
+        derive_mobile_account(mnemonic).map_err(coordination_api_error)?;
+    if public.mobile_signer_fingerprint.as_deref() != Some(&fingerprint.to_string()) {
+        return Err(coordination_api_error(
+            CoordinationError::DescriptorMismatch,
+        ));
+    }
+    let (threshold, keys) = descriptor.standard_policy().map_err(bsms_api_error)?;
+    if keys.len() != public.signers.len()
+        || !keys.iter().any(|key| {
+            key.fingerprint == fingerprint
+                && key.xpub == account_xpub
+                && key.derivation_path == MULTISIG_ACCOUNT_PATH
+        })
+    {
+        return Err(coordination_api_error(
+            CoordinationError::DescriptorMismatch,
+        ));
+    }
+    let mobile_manifest_signer = public
+        .signers
+        .iter()
+        .find(|signer| {
+            signer
+                .fingerprint
+                .eq_ignore_ascii_case(&fingerprint.to_string())
+        })
+        .ok_or_else(|| coordination_api_error(CoordinationError::DescriptorMismatch))?;
+    if mobile_manifest_signer.xpub != account_xpub.to_string()
+        || mobile_manifest_signer.derivation_path != MULTISIG_ACCOUNT_PATH
+        || mobile_manifest_signer.source != CosignerSource::Qr
+        || mobile_manifest_signer.device_type.as_deref() != Some(MOBILE_DEVICE_TYPE)
+    {
+        return Err(coordination_api_error(
+            CoordinationError::DescriptorMismatch,
+        ));
+    }
+    let preview = PolicyInput {
+        name: public.wallet_name,
+        threshold,
+        cosigners: public.signers,
+    }
+    .preview()
+    .map_err(policy_api_error)?;
+    if !descriptor
+        .matches_descriptor_pair(&preview.external_descriptor, &preview.internal_descriptor)
+        .map_err(bsms_api_error)?
+    {
+        return Err(coordination_api_error(
+            CoordinationError::DescriptorMismatch,
+        ));
+    }
+    let wallet = MultisigWalletDto {
+        kind: "multisig".to_owned(),
+        name: preview.name,
+        threshold: preview.threshold,
+        cosigners: preview.cosigners,
+        external_descriptor: preview.external_descriptor,
+        internal_descriptor: preview.internal_descriptor,
+        created_at: now().to_string(),
+        policy_type: "standard".to_owned(),
+        recovery_template: None,
+        spending_paths: Vec::new(),
+    };
+    if first_multisig_address(&wallet)? != descriptor.first_address
+        || descriptor_checksum(&wallet.external_descriptor)? != public.descriptor_checksum
+    {
+        return Err(coordination_api_error(
+            CoordinationError::DescriptorMismatch,
+        ));
+    }
+    Ok(ValidatedMobileWallet {
+        wallet,
+        fingerprint,
+        descriptor_checksum: public.descriptor_checksum,
+    })
+}
+
+#[tauri::command]
 pub fn coordination_mobile_complete(
     app: AppHandle,
     state: State<'_, AppState>,
@@ -649,84 +861,25 @@ pub fn coordination_mobile_complete(
     let public_bytes = decrypt_bip129(&staged.invitation.token, &envelope.encrypted_record)
         .map_err(coordination_api_error)?;
     let public = decode_public_wallet_record(&public_bytes)?;
-    let descriptor = public.validate().map_err(coordination_api_error)?;
     if public.wallet_name != staged.invitation.wallet_name {
         return Err(coordination_api_error(
             CoordinationError::DescriptorMismatch,
         ));
     }
     let mnemonic = Mnemonic::parse(&staged.mnemonic).map_err(internal)?;
-    let (fingerprint, _, account_xpub) =
-        derive_mobile_account(&mnemonic).map_err(coordination_api_error)?;
-    if public.mobile_signer_fingerprint.as_deref() != Some(&fingerprint.to_string()) {
-        return Err(coordination_api_error(
-            CoordinationError::DescriptorMismatch,
-        ));
-    }
-    let (threshold, keys) = descriptor.standard_policy().map_err(bsms_api_error)?;
-    if threshold != staged.invitation.threshold
-        || keys.len() != staged.invitation.signer_count
-        || !keys.iter().any(|key| {
-            key.fingerprint == fingerprint
-                && key.xpub == account_xpub
-                && key.derivation_path == MULTISIG_ACCOUNT_PATH
-        })
+    let validated = validate_mobile_wallet_record(public, &mnemonic)?;
+    if validated.wallet.threshold != staged.invitation.threshold
+        || validated.wallet.cosigners.len() != staged.invitation.signer_count
     {
         return Err(coordination_api_error(
             CoordinationError::DescriptorMismatch,
         ));
     }
-    let mobile_manifest_signer = public
-        .signers
-        .iter()
-        .find(|signer| {
-            signer
-                .fingerprint
-                .eq_ignore_ascii_case(&fingerprint.to_string())
-        })
-        .ok_or_else(|| coordination_api_error(CoordinationError::DescriptorMismatch))?;
-    if mobile_manifest_signer.xpub != account_xpub.to_string()
-        || mobile_manifest_signer.derivation_path != MULTISIG_ACCOUNT_PATH
-        || mobile_manifest_signer.source != CosignerSource::Qr
-        || mobile_manifest_signer.device_type.as_deref() != Some(MOBILE_DEVICE_TYPE)
-    {
-        return Err(coordination_api_error(
-            CoordinationError::DescriptorMismatch,
-        ));
-    }
-    let cosigners = public.signers;
-    let preview = PolicyInput {
-        name: public.wallet_name,
-        threshold,
-        cosigners,
-    }
-    .preview()
-    .map_err(policy_api_error)?;
-    if !descriptor
-        .matches_descriptor_pair(&preview.external_descriptor, &preview.internal_descriptor)
-        .map_err(bsms_api_error)?
-    {
-        return Err(coordination_api_error(
-            CoordinationError::DescriptorMismatch,
-        ));
-    }
-    let wallet = MultisigWalletDto {
-        kind: "multisig".to_owned(),
-        name: preview.name,
-        threshold: preview.threshold,
-        cosigners: preview.cosigners,
-        external_descriptor: preview.external_descriptor,
-        internal_descriptor: preview.internal_descriptor,
-        created_at: now().to_string(),
-        policy_type: "standard".to_owned(),
-        recovery_template: None,
-        spending_paths: Vec::new(),
-    };
-    if first_multisig_address(&wallet)? != descriptor.first_address {
-        return Err(coordination_api_error(
-            CoordinationError::DescriptorMismatch,
-        ));
-    }
+    let ValidatedMobileWallet {
+        wallet,
+        fingerprint,
+        descriptor_checksum: expected_checksum,
+    } = validated;
     let pairing_session_id = envelope.session_id.clone();
     let pairing_directory = pending_mobile_pairings_directory(&app)?;
     let id = Uuid::new_v4();
@@ -762,12 +915,6 @@ pub fn coordination_mobile_complete(
         )
         .map_err(secure_store_error)?;
         write_private_json(&dir.join("wallet.json"), &wallet)?;
-        let checksum = descriptor_checksum(&wallet.external_descriptor)?;
-        if checksum != public.descriptor_checksum {
-            return Err(coordination_api_error(
-                CoordinationError::DescriptorMismatch,
-            ));
-        }
         write_private_json(
             &dir.join("coordination.json"),
             &CoordinationMetadata {
@@ -787,7 +934,7 @@ pub fn coordination_mobile_complete(
                 name: wallet.name.clone(),
                 network: NETWORK_NAME.to_owned(),
                 kind: WalletKind::Multisig,
-                descriptor_checksum: checksum,
+                descriptor_checksum: expected_checksum.clone(),
                 created_at: now(),
                 backup_verified: staged.backup_verified,
             },
@@ -806,6 +953,109 @@ pub fn coordination_mobile_complete(
     unlock_selected(&app, &state)?;
     reset_auth_throttle(&app, &state)?;
     Ok(wallet)
+}
+
+#[tauri::command]
+pub async fn coordination_mobile_recover(
+    app: AppHandle,
+    frames: Vec<String>,
+    credential: String,
+) -> ApiResult<MultisigWalletDto> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let _operation = operation_guard(&state)?;
+        let credential = Zeroizing::new(credential);
+        validate_credential(credential.as_str())?;
+        let payload = coordination_transport::decode(CoordinationUrType::Wallet, &frames)
+            .map_err(coordination_ur_api_error)?;
+        let public = decode_public_wallet_record(&payload)?;
+        let mnemonic_words = native_backup::recover(&app)
+            .map_err(internal)?
+            .ok_or_else(|| api_error("onboarding_cancelled", "Phone recovery was cancelled."))?;
+        if mnemonic_words.len() > MAX_MNEMONIC_INPUT_BYTES {
+            return Err(api_error(
+                "invalid_mnemonic",
+                "Enter a valid 24-word recovery phrase.",
+            ));
+        }
+        let mnemonic = Mnemonic::parse(mnemonic_words.trim())
+            .map_err(|_| api_error("invalid_mnemonic", "Enter a valid 24-word recovery phrase."))?;
+        if mnemonic.word_count() != 24 {
+            return Err(api_error(
+                "invalid_mnemonic",
+                "Groot requires exactly 24 recovery words.",
+            ));
+        }
+        let validated = validate_mobile_wallet_record(public, &mnemonic)?;
+        if load_registry(&app)?.wallets.iter().any(|profile| {
+            profile.descriptor_checksum == validated.descriptor_checksum
+                && profile.kind == WalletKind::Multisig
+        }) {
+            return Err(api_error(
+                "wallet_exists",
+                "This shared wallet is already on this device.",
+            ));
+        }
+        let id = Uuid::new_v4();
+        let dir = prepare_profile_directory_with_id(&app, id)?;
+        let result = (|| {
+            let mut db = open_wallet_database(&dir.join("wallet.sqlite"))?;
+            init_app_schema(&db)?;
+            Wallet::create(
+                validated.wallet.external_descriptor.clone(),
+                validated.wallet.internal_descriptor.clone(),
+            )
+            .network(NETWORK)
+            .create_wallet(&mut db)
+            .map_err(internal)?;
+            secure_store::store(
+                &dir.join("secret.json"),
+                format!("groot-multisig:{}", validated.wallet.external_descriptor).as_bytes(),
+                credential.as_str(),
+            )
+            .map_err(secure_store_error)?;
+            secure_store::store(
+                &dir.join("mobile-signer.json"),
+                mnemonic_words.as_bytes(),
+                credential.as_str(),
+            )
+            .map_err(secure_store_error)?;
+            write_private_json(&dir.join("wallet.json"), &validated.wallet)?;
+            write_private_json(
+                &dir.join("coordination.json"),
+                &CoordinationMetadata {
+                    version: 1,
+                    wallet_id: id.to_string(),
+                    role: DeviceRole::MobileCosigner,
+                    mobile_signer_fingerprint: Some(validated.fingerprint.to_string()),
+                    key_protection: "argon2id_pin_envelope_testnet_only".to_owned(),
+                    paired_at: now(),
+                    pairing_session_id: None,
+                },
+            )?;
+            commit_profile(
+                &app,
+                WalletProfile {
+                    id,
+                    name: validated.wallet.name.clone(),
+                    network: NETWORK_NAME.to_owned(),
+                    kind: WalletKind::Multisig,
+                    descriptor_checksum: validated.descriptor_checksum.clone(),
+                    created_at: now(),
+                    backup_verified: true,
+                },
+            )
+        })();
+        if let Err(error) = result {
+            cleanup_failed_profile(&dir)?;
+            return Err(error);
+        }
+        unlock_selected(&app, &state)?;
+        reset_auth_throttle(&app, &state)?;
+        Ok(validated.wallet)
+    })
+    .await
+    .map_err(internal)?
 }
 
 #[tauri::command]
@@ -1737,6 +1987,70 @@ mod tests {
             pairing_session_id: Some(Uuid::new_v4().to_string()),
         };
         (mnemonic, hardware, wallet, coordination)
+    }
+
+    fn mobile_public_wallet_record(wallet: &MultisigWalletDto) -> PublicWalletRecord {
+        let mobile = wallet
+            .cosigners
+            .iter()
+            .find(|signer| signer.device_type.as_deref() == Some(MOBILE_DEVICE_TYPE))
+            .unwrap();
+        let descriptor = DescriptorRecord::from_descriptor_pair(
+            &wallet.external_descriptor,
+            &wallet.internal_descriptor,
+            &first_multisig_address(wallet).unwrap(),
+        )
+        .unwrap();
+        PublicWalletRecord {
+            version: 2,
+            network: NETWORK_NAME.to_owned(),
+            wallet_id: Uuid::new_v4().to_string(),
+            wallet_name: wallet.name.clone(),
+            role: DeviceRole::MobileCosigner,
+            descriptor_record: descriptor.encode(),
+            descriptor_checksum: descriptor_checksum(&wallet.external_descriptor).unwrap(),
+            signers: wallet.cosigners.clone(),
+            mobile_signer_fingerprint: Some(mobile.fingerprint.clone()),
+            created_at: 1,
+        }
+    }
+
+    #[test]
+    fn phone_recovery_requires_the_exact_words_and_complete_wallet_policy() {
+        let (mnemonic, _, wallet, _) = coordinated_wallet();
+        let record = mobile_public_wallet_record(&wallet);
+
+        let restored = validate_mobile_wallet_record(record.clone(), &mnemonic).unwrap();
+        assert_eq!(
+            restored.wallet.external_descriptor,
+            wallet.external_descriptor
+        );
+        assert_eq!(restored.wallet.cosigners, wallet.cosigners);
+
+        let wrong_words = Mnemonic::from_entropy(&[19_u8; 32]).unwrap();
+        assert_eq!(
+            validate_mobile_wallet_record(record.clone(), &wrong_words)
+                .unwrap_err()
+                .code,
+            "wallet_policy_mismatch"
+        );
+
+        let mut substituted = record;
+        let mobile_index = substituted
+            .signers
+            .iter()
+            .position(|signer| signer.device_type.as_deref() == Some(MOBILE_DEVICE_TYPE))
+            .unwrap();
+        let replacement_xpub = substituted.signers[(mobile_index + 1) % substituted.signers.len()]
+            .xpub
+            .clone();
+        substituted.signers[mobile_index].xpub = replacement_xpub;
+        assert_eq!(
+            validate_mobile_wallet_record(substituted, &mnemonic)
+                .unwrap_err()
+                .code,
+            "wallet_policy_mismatch"
+        );
     }
 
     fn invitation(expires_at: u64) -> PairingInvitation {

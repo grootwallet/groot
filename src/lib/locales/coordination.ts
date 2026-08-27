@@ -450,5 +450,97 @@ export const coordinationCopy = {
     fr: 'Notez les 24 mots. Le PIN déverrouille uniquement ce téléphone.',
     es: 'Anota las 24 palabras. El PIN solo desbloquea este teléfono.'
   },
+  'Back to wallets': { fr: 'Retour aux portefeuilles', es: 'Volver a las carteras' },
+  'Enter 24 words and restore': {
+    fr: 'Saisir les 24 mots et restaurer',
+    es: 'Introducir las 24 palabras y restaurar'
+  },
+  'Exact match required': {
+    fr: 'Correspondance exacte requise',
+    es: 'Se requiere una coincidencia exacta'
+  },
+  'Groot restores only if the words reproduce this signer and the complete wallet policy.': {
+    fr: 'Groot restaure uniquement si les mots reproduisent ce signataire et la politique complète du portefeuille.',
+    es: 'Groot solo restaura si las palabras reproducen este firmante y la política completa de la cartera.'
+  },
+  'New local app PIN': {
+    fr: 'Nouveau PIN local de l’application',
+    es: 'Nuevo PIN local de la aplicación'
+  },
+  'On desktop, open the shared wallet menu and choose Restore Groot phone.': {
+    fr: 'Sur l’ordinateur, ouvrez le menu du portefeuille partagé et choisissez Restaurer le téléphone Groot.',
+    es: 'En el ordenador, abre el menú de la cartera compartida y elige Restaurar teléfono Groot.'
+  },
+  'Phone signer restored': {
+    fr: 'Signataire du téléphone restauré',
+    es: 'Firmante del teléfono restaurado'
+  },
+  'Point the camera at the desktop recovery QR': {
+    fr: 'Pointez la caméra vers le QR de récupération de l’ordinateur',
+    es: 'Apunta la cámara al QR de recuperación del ordenador'
+  },
+  'Rebuild the phone signer from its 24 words': {
+    fr: 'Reconstruire le signataire du téléphone avec ses 24 mots',
+    es: 'Reconstruir el firmante del teléfono con sus 24 palabras'
+  },
+  'Recover a shared wallet from desktop and its 24 words.': {
+    fr: 'Récupérez un portefeuille partagé depuis l’ordinateur et ses 24 mots.',
+    es: 'Recupera una cartera compartida desde el ordenador y sus 24 palabras.'
+  },
+  'Recovery QR unavailable': {
+    fr: 'QR de récupération indisponible',
+    es: 'QR de recuperación no disponible'
+  },
+  'Replacement phone': { fr: 'Téléphone de remplacement', es: 'Teléfono de reemplazo' },
+  'Replacement phone wallet record': {
+    fr: 'Enregistrement du portefeuille pour le téléphone de remplacement',
+    es: 'Registro de cartera para el teléfono de reemplazo'
+  },
+  'Restore a Groot phone': {
+    fr: 'Restaurer un téléphone Groot',
+    es: 'Restaurar un teléfono Groot'
+  },
+  'Restore a shared wallet': {
+    fr: 'Restaurer un portefeuille partagé',
+    es: 'Restaurar una cartera compartida'
+  },
+  'Restore Groot phone': {
+    fr: 'Restaurer le téléphone Groot',
+    es: 'Restaurar teléfono Groot'
+  },
+  'Restore phone signer': {
+    fr: 'Restaurer le signataire du téléphone',
+    es: 'Restaurar firmante del teléfono'
+  },
+  'Scan desktop recovery QR': {
+    fr: 'Scanner le QR de récupération de l’ordinateur',
+    es: 'Escanear QR de recuperación del ordenador'
+  },
+  'Scan the recovery QR from desktop, then enter this phone signer’s original 24 words.': {
+    fr: 'Scannez le QR de récupération de l’ordinateur, puis saisissez les 24 mots d’origine de ce signataire.',
+    es: 'Escanea el QR de recuperación del ordenador y después introduce las 24 palabras originales de este firmante.'
+  },
+  'Scan this public wallet record on the replacement phone, then enter the original 24 words there.':
+    {
+      fr: 'Scannez cet enregistrement public sur le téléphone de remplacement, puis saisissez-y les 24 mots d’origine.',
+      es: 'Escanea este registro público en el teléfono de reemplazo y después introduce allí las 24 palabras originales.'
+    },
+  'This QR cannot spend, but it reveals wallet addresses. The phone accepts it only when the words reproduce the exact signer and policy.':
+    {
+      fr: 'Ce QR ne peut pas dépenser, mais il révèle les adresses du portefeuille. Le téléphone l’accepte uniquement si les mots reproduisent exactement le signataire et la politique.',
+      es: 'Este QR no puede gastar, pero revela las direcciones de la cartera. El teléfono solo lo acepta si las palabras reproducen exactamente el firmante y la política.'
+    },
+  'Verifying recovery…': {
+    fr: 'Vérification de la récupération…',
+    es: 'Verificando recuperación…'
+  },
+  'Words stay on the phone': {
+    fr: 'Les mots restent sur le téléphone',
+    es: 'Las palabras permanecen en el teléfono'
+  },
+  '{wallet} matched the words and exact desktop policy.': {
+    fr: '{wallet} correspond aux mots et à la politique exacte de l’ordinateur.',
+    es: '{wallet} coincide con las palabras y la política exacta del ordenador.'
+  },
   '{count} inputs': { fr: '{count} entrées', es: '{count} entradas' }
 } as const satisfies CatalogSection;

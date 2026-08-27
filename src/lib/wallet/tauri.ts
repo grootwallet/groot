@@ -843,6 +843,18 @@ export class TauriWalletAdapter implements WalletPort {
   completePairingOnMobile(frames: string[], credential: string) {
     return command<MultisigWallet>('coordination_mobile_complete', { frames, credential });
   }
+  mobileRecoveryRecord() {
+    return command<string[]>('coordination_mobile_recovery_record');
+  }
+  inspectMobileRecoveryRecord(frames: string[]) {
+    return command<import('./contracts').MobileRecoveryRecord>(
+      'coordination_mobile_recovery_inspect',
+      { frames }
+    );
+  }
+  recoverMobileSigner(frames: string[], credential: string) {
+    return command<MultisigWallet>('coordination_mobile_recover', { frames, credential });
+  }
   reviewMobilePsbt(psbt: string) {
     return command<import('./contracts').MobilePsbtReview>('coordination_mobile_psbt_review', {
       psbt

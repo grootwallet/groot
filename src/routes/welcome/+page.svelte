@@ -12,6 +12,7 @@
     Network,
     ShieldCheck,
     Smartphone,
+    RotateCcw,
     X
   } from '@lucide/svelte';
   import Button from '$lib/components/Button.svelte';
@@ -358,6 +359,16 @@
             ></span
           >
           <span class="wallet-type-meta">{translate($locale, 'No account')}</span>
+          <ArrowRight class="wallet-type-arrow" size={17} />
+        </a>
+        <a class="wallet-type-card multisig" href="/mobile/recover">
+          <span class="wallet-type-icon"><RotateCcw size={20} /></span>
+          <span class="wallet-type-copy"
+            ><strong>{translate($locale, 'Restore phone signer')}</strong><small
+              >{translate($locale, 'Recover a shared wallet from desktop and its 24 words.')}</small
+            ></span
+          >
+          <span class="wallet-type-meta">{translate($locale, 'Replacement phone')}</span>
           <ArrowRight class="wallet-type-arrow" size={17} />
         </a>
         <a class="wallet-type-card hardware" href="/mobile/watch">

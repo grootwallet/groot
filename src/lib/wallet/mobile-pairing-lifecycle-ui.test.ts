@@ -6,6 +6,10 @@ const routeSource = readFileSync(
   fileURLToPath(new URL('../../routes/mobile/pair/+page.svelte', import.meta.url)),
   'utf8'
 );
+const recoveryRouteSource = readFileSync(
+  fileURLToPath(new URL('../../routes/mobile/recover/+page.svelte', import.meta.url)),
+  'utf8'
+);
 const appStyles = readFileSync(fileURLToPath(new URL('../../app.css', import.meta.url)), 'utf8');
 const appHtml = readFileSync(fileURLToPath(new URL('../../app.html', import.meta.url)), 'utf8');
 const desktopRouteSource = readFileSync(
@@ -137,6 +141,7 @@ describe('mobile pairing lifecycle UI', () => {
   it('refreshes the shell after mobile profile creation and keeps new profiles in navigation', () => {
     expect(appShellSource).toContain("'/mobile/pair'");
     expect(appShellSource).toContain("'/mobile/watch'");
+    expect(appShellSource).toContain("'/mobile/recover'");
     expect(appShellSource).toContain('const known = profiles.some');
     expect(appShellSource).toContain(': [...profiles, event.profile]');
     expect(appShellSource).toContain('selectedWalletId = event.profile.id;');
@@ -220,5 +225,19 @@ describe('mobile pairing lifecycle UI', () => {
     expect(iosNativeSource).toContain('monospacedSystemFontOfSize:16.0');
     expect(iosNativeSource).toContain('Bitcoin recovery words');
     expect(iosNativeSource).not.toContain('UIScrollView');
+  });
+
+  it('restores a replacement phone only through native words and exact public-policy validation', () => {
+    expect(multisigRouteSource).toContain('walletService.mobileRecoveryRecord()');
+    expect(multisigRouteSource).toContain("translate($locale, 'Restore Groot phone')");
+    expect(multisigRouteSource).toContain('<AnimatedUrQr');
+    expect(recoveryRouteSource).toContain('walletService.inspectMobileRecoveryRecord(nextFrames)');
+    expect(recoveryRouteSource).toContain('walletService.recoverMobileSigner(frames, pin)');
+    expect(recoveryRouteSource).not.toMatch(/mnemonic|recoveryWords|seed/i);
+    expect(iosNativeSource).toContain('groot_recover_ios_mnemonic');
+    expect(iosNativeSource).toContain('Enter exactly 24 words.');
+    expect(coordinationCommandsSource).toContain('validate_mobile_wallet_record');
+    expect(coordinationCommandsSource).toContain('descriptor.first_address');
+    expect(coordinationCommandsSource).toContain('derive_mobile_account(mnemonic)');
   });
 });

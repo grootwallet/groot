@@ -99,10 +99,16 @@ signs exact reviewed `crypto-psbt` revisions, and public hardware-singlesig
 records import as watch-only. Mobile retains desktop signer names, fingerprints,
 account keys, derivations, import sources, and device types; it truthfully
 distinguishes its local key from desktop-managed signers without copying
-desktop-only health or certification evidence. Reference-vector cryptography,
-bounded UR tests, authenticated/expiring/replay-safe desktop-response lifecycle
-tests, manifest substitution tests, and a funded isolated-Core mobile-signature/
-desktop-merge/finalize/broadcast round trip are green. The funded test also
+desktop-only health or certification evidence. Replacement-phone recovery is
+also wired: desktop re-presents a public version-2 wallet record, iOS collects
+the original 24 words without sending them through the webview, and Rust creates
+a new local profile only after the derived BIP48 signer and complete policy,
+network, checksum, and first address match. The replacement chooses a new local
+PIN; the BIP39 passphrase remains empty. Reference-vector cryptography, bounded
+UR tests, authenticated/expiring/replay-safe desktop-response lifecycle tests,
+manifest substitution tests, exact recovery-policy binding tests, and a funded
+isolated-Core mobile-signature/desktop-merge/finalize/broadcast round trip are
+green. The funded test also
 rejects missing UTXOs, foreign input scripts, non-ALL sighashes, false change
 claims, and exact-revision mutation. Credential-gated staged-response resume,
 operation-serialized
@@ -118,13 +124,14 @@ Regtest-development Local Network permission copy. Physical pairing has
 exercised invitation scanning, comparison-code display, the revised native
 two-column recovery sheet, encrypted response generation, forced relaunch/resume,
 and desktop response-camera capture through an isolated signed macOS Regtest
-build. Secure-storage protection, recovery verification, final-policy return,
-PSBT signing, and complete lifecycle certification remain pending. This is not
+build. Secure-storage protection, a clean replacement-phone recovery drill,
+final-policy return, PSBT signing, and complete lifecycle certification remain
+pending. This is not
 first-mainnet scope: the current mobile secret sidecar truthfully identifies its
 Argon2id/PIN protection as testnet-only, while external process-kill automation
 at every profile/registry boundary, native iOS Keychain/Secure Enclave wrapping,
-native recovery entry/verification, complete physical camera/lifecycle testing,
-independent interoperability, and security review remain release blockers. See
+complete physical camera/lifecycle testing, independent interoperability, and
+security review remain release blockers. See
 ADR 0048 and
 [`cross-platform-coordination.md`](cross-platform-coordination.md).
 

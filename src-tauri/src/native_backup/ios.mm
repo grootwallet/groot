@@ -1,10 +1,129 @@
 #import <UIKit/UIKit.h>
+#include <string.h>
 
 typedef void (^GrootRecoveryCompletion)(BOOL confirmed);
 
 @interface GrootRecoveryViewController : UIViewController
 @property(nonatomic, copy) NSArray<NSString *> *words;
 @property(nonatomic, copy) GrootRecoveryCompletion completion;
+@end
+
+typedef void (^GrootRecoveryEntryCompletion)(NSString *_Nullable words);
+
+@interface GrootRecoveryEntryViewController : UIViewController
+@property(nonatomic, strong) UITextView *entry;
+@property(nonatomic, strong) UILabel *errorLabel;
+@property(nonatomic, copy) GrootRecoveryEntryCompletion completion;
+@end
+
+@implementation GrootRecoveryEntryViewController
+
+- (void)viewDidLoad {
+  [super viewDidLoad];
+  self.view.backgroundColor = UIColor.systemBackgroundColor;
+  self.modalInPresentation = YES;
+
+  UILabel *title = [[UILabel alloc] init];
+  title.text = @"Restore phone signer";
+  title.font = [UIFont preferredFontForTextStyle:UIFontTextStyleTitle2];
+  title.adjustsFontForContentSizeCategory = YES;
+
+  UILabel *instruction = [[UILabel alloc] init];
+  instruction.text = @"Enter the 24 recovery words in order. They stay inside Groot’s native security boundary.";
+  instruction.font = [UIFont preferredFontForTextStyle:UIFontTextStyleSubheadline];
+  instruction.textColor = UIColor.secondaryLabelColor;
+  instruction.adjustsFontForContentSizeCategory = YES;
+  instruction.numberOfLines = 0;
+
+  self.entry = [[UITextView alloc] init];
+  self.entry.font = [UIFont monospacedSystemFontOfSize:17.0 weight:UIFontWeightRegular];
+  self.entry.backgroundColor = UIColor.secondarySystemBackgroundColor;
+  self.entry.layer.cornerRadius = 12.0;
+  self.entry.textContainerInset = UIEdgeInsetsMake(12.0, 12.0, 12.0, 12.0);
+  self.entry.autocapitalizationType = UITextAutocapitalizationTypeNone;
+  self.entry.autocorrectionType = UITextAutocorrectionTypeNo;
+  self.entry.spellCheckingType = UITextSpellCheckingTypeNo;
+  self.entry.smartQuotesType = UITextSmartQuotesTypeNo;
+  self.entry.smartDashesType = UITextSmartDashesTypeNo;
+  self.entry.textContentType = nil;
+  self.entry.accessibilityLabel = @"Twenty-four recovery words";
+
+  self.errorLabel = [[UILabel alloc] init];
+  self.errorLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleFootnote];
+  self.errorLabel.textColor = UIColor.systemRedColor;
+  self.errorLabel.adjustsFontForContentSizeCategory = YES;
+  self.errorLabel.numberOfLines = 0;
+  self.errorLabel.hidden = YES;
+
+  UIButton *cancel = [UIButton buttonWithType:UIButtonTypeSystem];
+  [cancel setTitle:@"Cancel" forState:UIControlStateNormal];
+  [cancel addTarget:self action:@selector(cancelRecovery) forControlEvents:UIControlEventTouchUpInside];
+  cancel.titleLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleHeadline];
+  cancel.layer.cornerRadius = 12.0;
+  cancel.backgroundColor = UIColor.secondarySystemBackgroundColor;
+
+  UIButton *confirm = [UIButton buttonWithType:UIButtonTypeSystem];
+  [confirm setTitle:@"Verify and restore" forState:UIControlStateNormal];
+  [confirm addTarget:self action:@selector(confirmRecovery) forControlEvents:UIControlEventTouchUpInside];
+  confirm.titleLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleHeadline];
+  confirm.layer.cornerRadius = 12.0;
+  confirm.backgroundColor = UIColor.systemBlueColor;
+  [confirm setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
+
+  UIStackView *actions = [[UIStackView alloc] initWithArrangedSubviews:@[ cancel, confirm ]];
+  actions.axis = UILayoutConstraintAxisVertical;
+  actions.distribution = UIStackViewDistributionFillEqually;
+  actions.spacing = 10.0;
+
+  UIStackView *content = [[UIStackView alloc]
+      initWithArrangedSubviews:@[ title, instruction, self.entry, self.errorLabel, actions ]];
+  content.translatesAutoresizingMaskIntoConstraints = NO;
+  content.axis = UILayoutConstraintAxisVertical;
+  content.alignment = UIStackViewAlignmentFill;
+  content.spacing = 14.0;
+  [self.view addSubview:content];
+
+  UILayoutGuide *safe = self.view.safeAreaLayoutGuide;
+  [NSLayoutConstraint activateConstraints:@[
+    [content.leadingAnchor constraintEqualToAnchor:safe.leadingAnchor constant:24.0],
+    [content.trailingAnchor constraintEqualToAnchor:safe.trailingAnchor constant:-24.0],
+    [content.topAnchor constraintEqualToAnchor:safe.topAnchor constant:20.0],
+    [content.bottomAnchor constraintLessThanOrEqualToAnchor:safe.bottomAnchor constant:-20.0],
+    [self.entry.heightAnchor constraintEqualToConstant:210.0],
+    [cancel.heightAnchor constraintEqualToConstant:48.0],
+    [confirm.heightAnchor constraintEqualToConstant:48.0]
+  ]];
+  [self.entry becomeFirstResponder];
+}
+
+- (void)finishWithWords:(NSString *_Nullable)words {
+  GrootRecoveryEntryCompletion completion = self.completion;
+  self.entry.text = @"";
+  [self dismissViewControllerAnimated:YES completion:^{
+    if (completion != nil) completion(words);
+  }];
+}
+
+- (void)cancelRecovery {
+  [self finishWithWords:nil];
+}
+
+- (void)confirmRecovery {
+  NSArray<NSString *> *parts = [self.entry.text
+      componentsSeparatedByCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+  parts = [parts filteredArrayUsingPredicate:
+                     [NSPredicate predicateWithBlock:^BOOL(NSString *word,
+                                                           NSDictionary<NSString *, id> *_) {
+                       return word.length > 0;
+                     }]];
+  if (parts.count != 24) {
+    self.errorLabel.text = @"Enter exactly 24 words.";
+    self.errorLabel.hidden = NO;
+    return;
+  }
+  [self finishWithWords:[parts componentsJoinedByString:@" "]];
+}
+
 @end
 
 @implementation GrootRecoveryViewController
@@ -197,6 +316,38 @@ extern "C" int groot_present_ios_recovery_words(const char *words_utf8) {
                                           });
                                         }]];
     [presenter presentViewController:privacy animated:YES completion:nil];
+  });
+  dispatch_semaphore_wait(finished, DISPATCH_TIME_FOREVER);
+  return result;
+}
+
+extern "C" int groot_recover_ios_mnemonic(char *output, size_t capacity) {
+  if (output == nullptr || capacity < 2 || NSThread.isMainThread) return -1;
+  output[0] = '\0';
+  dispatch_semaphore_t finished = dispatch_semaphore_create(0);
+  __block int result = -1;
+  dispatch_async(dispatch_get_main_queue(), ^{
+    UIViewController *presenter = GrootTopViewController();
+    if (presenter == nil) {
+      dispatch_semaphore_signal(finished);
+      return;
+    }
+    GrootRecoveryEntryViewController *recovery = [[GrootRecoveryEntryViewController alloc] init];
+    recovery.modalPresentationStyle = UIModalPresentationPageSheet;
+    recovery.completion = ^(NSString *_Nullable words) {
+      if (words == nil) {
+        result = 0;
+      } else {
+        NSData *utf8 = [words dataUsingEncoding:NSUTF8StringEncoding];
+        if (utf8 != nil && utf8.length < capacity) {
+          memcpy(output, utf8.bytes, utf8.length);
+          output[utf8.length] = '\0';
+          result = 1;
+        }
+      }
+      dispatch_semaphore_signal(finished);
+    };
+    [presenter presentViewController:recovery animated:YES completion:nil];
   });
   dispatch_semaphore_wait(finished, DISPATCH_TIME_FOREVER);
   return result;

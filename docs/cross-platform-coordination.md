@@ -68,12 +68,17 @@ evidence, recovery drills, interoperability evidence, and independent security r
 
 ### Fresh install and phone replacement
 
-A fresh install follows the same join flow. For replacement with the same signer, recover the exact
-24 words in the native recovery UI, derive the words-only BIP48 account, import the public descriptor,
-and require exact xpub/fingerprint/first-address equality. The old phone can be discarded after a
-funded recovery drill. If the 24 words are lost, the mobile key cannot be reconstructed; use the
-remaining threshold to migrate funds to a newly created wallet. Never silently substitute a new
-phone key into the old descriptor.
+A fresh install follows the same join flow. For replacement with the same signer, desktop opens the
+shared-wallet menu and chooses **Restore Groot phone**. Rust emits an unencrypted version-2 public
+wallet record as `ur:groot-wallet`; the record cannot spend, but reveals the wallet's descriptors and
+addresses. The replacement phone scans and validates that bounded public record before asking for a
+new local PIN. iOS then collects the exact 24 words in a native sheet: the words never enter the
+webview. Rust derives the words-only BIP48 account with an empty BIP39 passphrase and requires exact
+xpub, fingerprint, derivation, signer-manifest, descriptor-pair, descriptor-checksum, network, and
+first-address equality before atomically creating the profile. The new PIN protects only the new
+device envelope. The old phone can be discarded after a funded recovery drill. If the 24 words are
+lost, the mobile key cannot be reconstructed; use the remaining threshold to migrate funds to a
+newly created wallet. Never silently substitute a new phone key into the old descriptor.
 
 ### Hardware singlesig watch-only
 
@@ -180,11 +185,14 @@ cases. An isolated Regtest build also compiles, installs, launches, and survives
 relaunch in the iOS 26.1 simulator, with built camera/Local Network permission copy and status-safe
 onboarding layout verified. A physical iPhone has scanned the desktop invitation, displayed the
 native two-column recovery sheet, survived relaunch into staged pairing, and returned its encrypted
-response to a camera-entitled isolated macOS Regtest build. That evidence does not cover
+response to a camera-entitled isolated macOS Regtest build. The replacement-phone implementation
+now also provides a desktop public recovery QR and native iOS 24-word entry with exact Rust policy
+binding, but it has not completed a clean physical-device restore. The evidence does not cover
 Keychain/Secure Enclave wrapping, biometric/passcode behavior, clean written-word recovery, or the
 complete real-device lifecycle. Full external
 process-kill automation at every wallet registry/profile commit boundary, watch-only address
-equality, and clean mobile recovery remain open and must not be inferred from this evidence.
+equality, and a funded clean mobile recovery drill remain open and must not be inferred from this
+evidence.
 
 iOS physical certification additionally requires camera denial/interruption/background/resume,
 safe-area and accessibility checks, passcode-required Keychain behavior, biometric enrollment

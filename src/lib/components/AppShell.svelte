@@ -99,7 +99,9 @@
   let mobileItems = $derived(policyContext ? nav : nav.slice(0, 3));
   let onboardingRoute = $derived(walletSetupRoutes.has(page.url.pathname));
   let mobileSetupRoute = $derived(
-    page.url.pathname === '/mobile/pair' || page.url.pathname === '/mobile/watch'
+    page.url.pathname === '/mobile/pair' ||
+      page.url.pathname === '/mobile/watch' ||
+      page.url.pathname === '/mobile/recover'
   );
   let lockedRoute = $derived(page.url.pathname === '/unlock');
   let syncPausedRoute = $derived(
@@ -251,7 +253,8 @@
     '/multisig/recover',
     '/multisig/delete',
     '/mobile/pair',
-    '/mobile/watch'
+    '/mobile/watch',
+    '/mobile/recover'
   ]);
 
   beforeNavigate(({ to }) => {

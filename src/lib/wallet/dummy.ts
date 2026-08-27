@@ -2037,6 +2037,20 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
   ): ReturnType<WalletPort['completePairingOnMobile']> {
     throw new WalletError('unsupported_operation', 'Device pairing requires the native Groot app.');
   }
+  async mobileRecoveryRecord(): ReturnType<WalletPort['mobileRecoveryRecord']> {
+    throw new WalletError('unsupported_operation', 'Phone recovery requires the native Groot app.');
+  }
+  async inspectMobileRecoveryRecord(
+    _frames: string[]
+  ): ReturnType<WalletPort['inspectMobileRecoveryRecord']> {
+    throw new WalletError('unsupported_operation', 'Phone recovery requires the native Groot app.');
+  }
+  async recoverMobileSigner(
+    _frames: string[],
+    _credential: string
+  ): ReturnType<WalletPort['recoverMobileSigner']> {
+    throw new WalletError('unsupported_operation', 'Phone recovery requires the native Groot app.');
+  }
   async reviewMobilePsbt(_psbt: string): ReturnType<WalletPort['reviewMobilePsbt']> {
     throw new WalletError('unsupported_operation', 'Mobile signing requires the native Groot app.');
   }
