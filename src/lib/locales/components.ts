@@ -314,6 +314,10 @@ export const componentCopy = {
     fr: 'Ouvrez pendant la vérification des valeurs affichées par l’appareil.',
     es: 'Ábrela mientras revisas los valores mostrados por el dispositivo.'
   },
+  'Open the signer key reference below while Ledger shows each key.': {
+    fr: 'Ouvrez la référence des clés de signataire ci-dessous pendant que Ledger affiche chaque clé.',
+    es: 'Abre la referencia de claves de firmantes mientras Ledger muestra cada clave.'
+  },
   'First address reference': {
     fr: 'Référence de la première adresse',
     es: 'Referencia de la primera dirección'

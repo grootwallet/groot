@@ -1525,7 +1525,7 @@
         </div>
         <div>
           <dt>{translate($locale, 'Amount')}</dt>
-          <dd><Amount value={proposal.amount} /></dd>
+          <dd><Amount value={proposal.amount} interactive /></dd>
         </div>
         <div>
           <dt>{translate($locale, 'Network')}</dt>
@@ -1533,11 +1533,11 @@
         </div>
         <div>
           <dt>{translate($locale, 'Network fee')}</dt>
-          <dd><Amount value={proposal.fee} /></dd>
+          <dd><Amount value={proposal.fee} interactive /></dd>
         </div>
         <div>
           <dt>{translate($locale, 'Total')}</dt>
-          <dd><Amount value={proposal.total} /></dd>
+          <dd><Amount value={proposal.total} interactive /></dd>
         </div>
       </dl>
       {#if hardwareTestnetAddressDevice}<p class="verification-network-note">
@@ -1551,6 +1551,7 @@
         </p>{/if}<TransactionReviewDetails
         {proposal}
         compact
+        interactiveAmounts
         changeAddressOverride={hardwareChangeAddress}
         onChangeAddress={() => (hardwareChangeAddressOpen = true)}
       />

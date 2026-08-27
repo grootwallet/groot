@@ -5814,6 +5814,48 @@ code {
   border-radius: 9px;
   background: color-mix(in srgb, var(--fr-blue) 6%, var(--panel));
 }
+
+.policy-address-summary {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface-control);
+  color: var(--text);
+  padding: 0.85rem 1rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.policy-address-summary code {
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.policy-address-summary span {
+  color: var(--link);
+  font-size: 0.82rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.policy-address-summary:hover,
+.policy-address-summary:focus-visible {
+  border-color: var(--focus);
+  outline: none;
+}
+
+.policy-review-step,
+.hardware-review-step {
+  color: var(--link);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
 .policy-address-check > div:first-child {
   display: grid;
   gap: 3px;

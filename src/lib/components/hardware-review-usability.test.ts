@@ -1,0 +1,37 @@
+import { readFileSync } from 'node:fs';
+import { describe, expect, it } from 'vitest';
+
+const amount = readFileSync(new URL('./Amount.svelte', import.meta.url), 'utf8');
+const details = readFileSync(new URL('./TransactionReviewDetails.svelte', import.meta.url), 'utf8');
+const policy = readFileSync(new URL('./SignerPolicyReview.svelte', import.meta.url), 'utf8');
+const singleSend = readFileSync(new URL('../../routes/send/+page.svelte', import.meta.url), 'utf8');
+const multisigSend = readFileSync(
+  new URL('../../routes/multisig/send/+page.svelte', import.meta.url),
+  'utf8'
+);
+
+describe('hardware signing review usability', () => {
+  it('lets every hardware-review amount toggle the global sats/BTC denomination', () => {
+    expect(amount).toContain("setDenomination($denomination === 'sats' ? 'btc' : 'sats')");
+    expect(amount).toContain('{#if interactive && !hidden}');
+    expect(details).toContain('interactive={interactiveAmounts}');
+    for (const source of [singleSend, multisigSend]) {
+      expect(source).toMatch(/<Amount value=\{(?:Number\()?proposal\.fee\)?\} interactive \/>/);
+      expect(source).toContain('interactiveAmounts');
+    }
+  });
+
+  it('keeps the Ledger policy and transaction reviews as explicit reachable steps', () => {
+    expect(policy).toContain("'Step 1 of 2 · Wallet policy'");
+    expect(policy).toContain("'Wallet policy reviewed — show transaction'");
+    expect(multisigSend).toContain("'Step 2 of 2 · Transaction review'");
+    expect(multisigSend).toContain('showTransactionDuringSigning()');
+  });
+
+  it('starts with a compact first-address reference and expands on request', () => {
+    expect(policy).toContain('let addressExpanded = $state(false)');
+    expect(policy).toContain('<code>{compactAddress(displayedAddress)}</code>');
+    expect(policy).toContain('aria-expanded={addressExpanded}');
+    expect(policy).toContain('{#if addressExpanded}<ReadableAddress');
+  });
+});

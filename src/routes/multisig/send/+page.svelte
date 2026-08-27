@@ -2092,6 +2092,11 @@
       class="hardware-review"
       aria-label={translate($locale, 'Authoritative transaction details')}
     >
+      {#if busy && policyReviewDevice && requiresInteractivePolicyVerification(policyReviewDevice)}<p
+          class="hardware-review-step"
+        >
+          {translate($locale, 'Step 2 of 2 · Transaction review')}
+        </p>{/if}
       <strong>{translate($locale, 'Transaction to verify')}</strong>
       <dl class="hardware-review-primary">
         <div>
@@ -2111,7 +2116,7 @@
         </div>
         <div>
           <dt>{translate($locale, 'Amount')}</dt>
-          <dd><Amount value={Number(proposal.amount)} /></dd>
+          <dd><Amount value={Number(proposal.amount)} interactive /></dd>
         </div>
         <div>
           <dt>{translate($locale, 'Network')}</dt>
@@ -2119,11 +2124,11 @@
         </div>
         <div>
           <dt>{translate($locale, 'Network fee')}</dt>
-          <dd><Amount value={Number(proposal.fee)} /></dd>
+          <dd><Amount value={Number(proposal.fee)} interactive /></dd>
         </div>
         <div>
           <dt>{translate($locale, 'Total')}</dt>
-          <dd><Amount value={Number(proposal.total)} /></dd>
+          <dd><Amount value={Number(proposal.total)} interactive /></dd>
         </div>
       </dl>
       {#if hardwareTestnetAddressDevice}<p class="verification-network-note">
@@ -2138,6 +2143,7 @@
       <TransactionReviewDetails
         {proposal}
         compact
+        interactiveAmounts
         policy={proposal.spendPath === 'delayed'
           ? `${delayedSpendKeyName} only`
           : wallet?.recoveryTemplate?.type === 'recovery'

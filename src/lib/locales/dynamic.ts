@@ -51,6 +51,14 @@ export const dynamicCopy = {
   s: { fr: 's', es: 's' },
   sats: { fr: 'sats', es: 'sats' },
   sign: { fr: 'signer', es: 'firmar' },
+  'Step 1 of 2 · Wallet policy': {
+    fr: 'Étape 1 sur 2 · Politique du portefeuille',
+    es: 'Paso 1 de 2 · Política de la cartera'
+  },
+  'Step 2 of 2 · Transaction review': {
+    fr: 'Étape 2 sur 2 · Vérification de la transaction',
+    es: 'Paso 2 de 2 · Revisión de la transacción'
+  },
   wallet_already_exists: { fr: 'le portefeuille existe déjà', es: 'la cartera ya existe' },
   watch_only: { fr: 'observation seule', es: 'solo lectura' },
   ', then scan again.': { fr: ', puis relancez l’analyse.', es: ' y vuelve a escanear.' },
@@ -113,6 +121,7 @@ export const dynamicCopy = {
   healthy: { fr: 'sain', es: 'correcto' },
   heir: { fr: 'héritier', es: 'heredero' },
   Hide: { fr: 'Masquer', es: 'Ocultar' },
+  'Hide full address': { fr: 'Masquer l’adresse complète', es: 'Ocultar dirección completa' },
   higher: { fr: 'plus élevés', es: 'mayores' },
   inheritance: { fr: 'héritage', es: 'herencia' },
   interrupted: { fr: 'interrompu', es: 'interrumpido' },
@@ -147,6 +156,7 @@ export const dynamicCopy = {
   'Sent to': { fr: 'Envoyé à', es: 'Enviado a' },
   Settings: { fr: 'Réglages', es: 'Ajustes' },
   Show: { fr: 'Afficher', es: 'Mostrar' },
+  'Show full address': { fr: 'Afficher l’adresse complète', es: 'Mostrar dirección completa' },
   'shows this after policy approval.': {
     fr: 'affiche ceci après l’approbation de la politique.',
     es: 'muestra esto tras aprobar la política.'
@@ -178,6 +188,10 @@ export const dynamicCopy = {
   used: { fr: 'utilisée', es: 'usada' },
   Uses: { fr: 'Utilise', es: 'Usa' },
   Wallet: { fr: 'Portefeuille', es: 'Cartera' },
+  'Wallet policy reviewed — show transaction': {
+    fr: 'Politique vérifiée — afficher la transaction',
+    es: 'Política revisada — mostrar transacción'
+  },
   wallets: { fr: 'portefeuilles', es: 'carteras' },
   '· Address reused': { fr: '· Adresse réutilisée', es: '· Dirección reutilizada' },
   '· Already added as': { fr: '· Déjà ajouté comme', es: '· Ya añadido como' },

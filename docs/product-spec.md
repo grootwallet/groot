@@ -153,6 +153,8 @@ While the unlocked desktop app is running, one centralized foreground scheduler 
 
 Require the selected wallet credential, explicit typed confirmation, and a backup warning. Close handles, zeroize/clear in-memory keys, remove encrypted secret material and local wallet database, and return to onboarding. Multisig settings opens a dedicated deletion page that links to wallet-backup export, quotes the exact-name prompt, and makes a successful recovery test for the exact current descriptor an explicit prerequisite rather than a hidden disabled-button condition. Deletion affects only this device and cannot recall broadcast transactions or guarantee physical flash erasure.
 
+Ledger policy and signing review initially shortens the first-address reference to its prefix and suffix with an explicit complete grouped copy-safe expansion. During a signing request, the wallet-policy authorization is step 1 of 2; after device approval, the user explicitly confirms that review before advancing the same live request to the step-2 transaction reference. Hardware transaction-review amounts toggle the shared display between sats and BTC without changing proposal data.
+
 ## Multisig coordinator
 
 1. User names the wallet and chooses a recommended 2-of-3 or 3-of-5 recipe, or opens advanced M-of-N controls within the safe v1 envelope of 2–7 signatures and 3–7 signers. Groot does not offer 1-of-N because one stolen key could spend alone; users who want one key should create a single-key wallet.

@@ -19,6 +19,7 @@
   import LocalTimestamp from './LocalTimestamp.svelte';
   import PolicySignerList from './PolicySignerList.svelte';
   import ReadableAddress from './ReadableAddress.svelte';
+  import { compactAddress } from '$lib/address-display';
 
   let {
     wallet,
@@ -48,6 +49,7 @@
   let signerDetailsOpen = $state(false);
   let signerDetailsReviewed = $state(false);
   let addressCopied = $state(false);
+  let addressExpanded = $state(false);
   const kind = $derived(policyReadinessKind(signer));
   const isBitBox = $derived(kind === 'bitbox02' || kind === 'bitbox_nova');
   const deviceName = $derived(policyDeviceName(kind));
@@ -71,6 +73,9 @@
   class="signer-policy-review"
   aria-label={translate($locale, 'Hardware signer policy review')}
 >
+  {#if action === 'sign' && kind === 'ledger'}<p class="policy-review-step">
+      {translate($locale, 'Step 1 of 2 · Wallet policy')}
+    </p>{/if}
   <header>
     <span class:verified={!!verification}><ShieldCheck size={19} /></span>
     <div>
@@ -133,6 +138,9 @@
             "Groot's current Ledger connection must authorize this policy again for each signing\n          request. Keep this reference open until Ledger reaches the transaction."
           )}
         </p>{/if}
+      {#if action === 'sign'}<p>
+          {translate($locale, 'Open the signer key reference below while Ledger shows each key.')}
+        </p>{/if}
     </div>
   {:else if isBitBox}
     <div class="policy-device-warning">
@@ -194,7 +202,20 @@
           : translate($locale, 'Compare this when it appears on the device.')}</small
       >
     </div>
-    <ReadableAddress address={displayedAddress} copied={addressCopied} oncopy={copyAddress} />
+    <button
+      type="button"
+      class="policy-address-summary"
+      aria-expanded={addressExpanded}
+      onclick={() => (addressExpanded = !addressExpanded)}
+      ><code>{compactAddress(displayedAddress)}</code><span
+        >{translate($locale, addressExpanded ? 'Hide full address' : 'Show full address')}</span
+      ></button
+    >
+    {#if addressExpanded}<ReadableAddress
+        address={displayedAddress}
+        copied={addressCopied}
+        oncopy={copyAddress}
+      />{/if}
     <small class="policy-address-purpose">
       {translate(
         $locale,
@@ -230,7 +251,7 @@
         })}</Button
       >
     {:else if busy}<Button onclick={onshowtransaction}
-        >{deviceName} {translate($locale, 'policy approved — show transaction')}</Button
+        >{translate($locale, 'Wallet policy reviewed — show transaction')}</Button
       >
     {:else}<Button onclick={oncontinue}
         >{translate($locale, 'Start')} {deviceName} {translate($locale, 'review & signing')}</Button

@@ -10,13 +10,15 @@
     onChangeAddress,
     changeAddressOverride = null,
     policy = '',
-    compact = false
+    compact = false,
+    interactiveAmounts = false
   }: {
     proposal: PaymentProposal | MultisigProposal;
     onChangeAddress: () => void;
     changeAddressOverride?: string | null;
     policy?: string;
     compact?: boolean;
+    interactiveAmounts?: boolean;
   } = $props();
 
   const inputPaths = $derived([
@@ -33,6 +35,7 @@
       <dd>
         {proposal.inputs.length}{' · '}<Amount
           value={proposal.inputs.reduce((sum, input) => sum + Number(input.amount), 0)}
+          interactive={interactiveAmounts}
         />
       </dd>
     </div>
@@ -55,7 +58,7 @@
     </div>
     <div>
       <dt>{translate($locale, 'Change')}</dt>
-      <dd><Amount value={Number(proposal.change)} /></dd>
+      <dd><Amount value={Number(proposal.change)} interactive={interactiveAmounts} /></dd>
     </div>
     {#if proposal.changeAddresses[0]}
       <div>
