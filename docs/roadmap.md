@@ -28,11 +28,10 @@ Every stage is fail-closed: later work may proceed in parallel, but no stage is 
 
 ### Hardware execution order
 
-1. Close Trezor Model One's immediate automatic-lock routing regression on packaged candidate `101177a`; do not repeat the already-passed self-transfer, extended-review, or v0.4.57 BIP48 lifecycle rows.
-2. Rehearse the remaining exact first-release package rows—Coldcard Mk4, Trezor Model One BIP84, Ledger Nano S Plus BIP84, original BitBox02 BIP84, and original Jade—on the selected public test network and reviewed packaged HWI candidate.
-3. Complete Trezor Safe 3 and BitBox02 Nova public-network/package plus independent-review rows under their separate exact-model records. Whisper/BLE remains a later authenticated mobile-transport project.
-4. Repeat at least one complete 2-of-3 public-test-network spend and clean descriptor recovery test using two independently administered physical signer families.
-5. Treat Jade Plus, BitBox02 Nova, additional Ledger/Trezor models, and every other roadmap device as separate exact-model targets.
+1. Rehearse the remaining exact first-release package rows—Coldcard Mk4, Trezor Model One BIP84, Ledger Nano S Plus BIP84, original BitBox02 BIP84, and original Jade—on the selected public test network and reviewed packaged HWI candidate. Trezor Model One's BIP48 self-transfer, extended-review, and post-review automatic-lock regressions are complete and must not be repeated without a directly relevant code change.
+2. Complete Trezor Safe 3 and BitBox02 Nova public-network/package plus independent-review rows under their separate exact-model records. Whisper/BLE remains a later authenticated mobile-transport project.
+3. Repeat at least one complete 2-of-3 public-test-network spend and clean descriptor recovery test using two independently administered physical signer families.
+4. Treat Jade Plus, BitBox02 Nova, additional Ledger/Trezor models, and every other roadmap device as separate exact-model targets.
 
 Coldcard certification must name the exact model. The current user-reported completed target is **Coldcard Mk4**; the local record remains the source until a sanitized reviewer summary is produced. Passport, legacy Digital BitBox, BitBox02 Nova Whisper/BLE, and unlisted signer models are not first-release claims unless the checklist and threat model are explicitly expanded.
 

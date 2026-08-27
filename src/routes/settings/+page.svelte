@@ -2,6 +2,7 @@
   import { translate, localizedError } from '$lib/i18n-catalog';
   import {
     Check,
+    ChevronDown,
     ChevronRight,
     Clock3,
     Cpu,
@@ -74,6 +75,9 @@
   let profileReadGeneration = 0;
   let inactivityTimeoutMinutes = $state(5);
   let savingInactivityTimeout = $state(false);
+  let timeoutMenuOpen = $state(false);
+  let timeoutMenuRoot = $state<HTMLDivElement | null>(null);
+  let timeoutMenuTrigger = $state<HTMLButtonElement | null>(null);
   let selectedProfile = $derived(profiles.find((wallet) => wallet.id === selectedWalletId));
   let isSoftwareWallet = $derived(selectedProfile?.kind === 'single_key');
   let credentialLabel = $derived(
@@ -106,6 +110,13 @@
     { value: 30, label: '30 minutes' },
     { value: 60, label: '1 hour' }
   ];
+  let inactivityTimeoutLabel = $derived(
+    translate(
+      $locale,
+      timeoutOptions.find((option) => option.value === inactivityTimeoutMinutes)?.label ??
+        '5 minutes'
+    )
+  );
   let nodeOpen = $state(false),
     nodePassword = $state(''),
     walletCredential = $state(''),
@@ -250,6 +261,25 @@
     hardwareBackupContent = '';
     signerRenameDraft = '';
     if (scanPoll) clearTimeout(scanPoll);
+  });
+  onMount(() => {
+    const closeOutside = (event: PointerEvent) => {
+      if (timeoutMenuOpen && timeoutMenuRoot && !timeoutMenuRoot.contains(event.target as Node)) {
+        timeoutMenuOpen = false;
+      }
+    };
+    const closeEscape = (event: KeyboardEvent) => {
+      if (timeoutMenuOpen && event.key === 'Escape') {
+        timeoutMenuOpen = false;
+        timeoutMenuTrigger?.focus();
+      }
+    };
+    document.addEventListener('pointerdown', closeOutside);
+    document.addEventListener('keydown', closeEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOutside);
+      document.removeEventListener('keydown', closeEscape);
+    };
   });
   function setTheme(next: 'light' | 'dark') {
     theme = next;
@@ -475,6 +505,37 @@
     } finally {
       savingInactivityTimeout = false;
     }
+  }
+  function toggleTimeoutMenu() {
+    timeoutMenuOpen = !timeoutMenuOpen;
+    if (timeoutMenuOpen) {
+      requestAnimationFrame(() => {
+        timeoutMenuRoot
+          ?.querySelector<HTMLButtonElement>('[role="menuitemradio"][aria-checked="true"]')
+          ?.focus();
+      });
+    }
+  }
+  function chooseInactivityTimeout(minutes: number) {
+    timeoutMenuOpen = false;
+    timeoutMenuTrigger?.focus();
+    if (minutes !== inactivityTimeoutMinutes) void saveInactivityTimeout(minutes);
+  }
+  function handleTimeoutMenuKeydown(event: KeyboardEvent) {
+    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+    const items = Array.from(
+      timeoutMenuRoot?.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]') ?? []
+    );
+    if (items.length === 0) return;
+    event.preventDefault();
+    const current = Math.max(0, items.indexOf(document.activeElement as HTMLButtonElement));
+    const next =
+      event.key === 'Home'
+        ? 0
+        : event.key === 'End'
+          ? items.length - 1
+          : (current + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+    items[next]?.focus();
   }
   function openRename() {
     renameDraft = selectedProfile?.name ?? '';
@@ -853,7 +914,7 @@
   </section>
   <section class="settings-group immediate-security">
     <h2>{translate($locale, 'Security')}</h2>
-    <div class="settings-list">
+    <div class="settings-list" class:timeout-menu-open={timeoutMenuOpen}>
       <button onclick={lockNow}
         ><span class="setting-icon"><LockKeyhole size={18} /></span><span
           ><strong
@@ -871,16 +932,38 @@
               'One global setting; each unlocked wallet tracks its own inactivity.'
             )}</small
           ></span
-        ><select
-          class="timeout-choice"
-          aria-label={translate($locale, 'Automatic lock inactivity period')}
-          value={inactivityTimeoutMinutes}
-          disabled={savingInactivityTimeout}
-          onchange={(event) => saveInactivityTimeout(Number(event.currentTarget.value))}
-          >{#each timeoutOptions as option}<option value={option.value}
-              >{translate($locale, option.label)}</option
-            >{/each}</select
         >
+        <div class="timeout-control" bind:this={timeoutMenuRoot}>
+          <button
+            bind:this={timeoutMenuTrigger}
+            class="timeout-choice"
+            type="button"
+            aria-label={`${translate($locale, 'Automatic lock inactivity period')}: ${inactivityTimeoutLabel}`}
+            aria-haspopup="menu"
+            aria-expanded={timeoutMenuOpen}
+            disabled={savingInactivityTimeout}
+            onclick={toggleTimeoutMenu}
+            ><span>{inactivityTimeoutLabel}</span><span class:rotated={timeoutMenuOpen}
+              ><ChevronDown size={15} /></span
+            ></button
+          >{#if timeoutMenuOpen}<div
+              class="timeout-menu"
+              role="menu"
+              tabindex="-1"
+              aria-label={translate($locale, 'Automatic lock inactivity period')}
+              onkeydown={handleTimeoutMenuKeydown}
+            >
+              {#each timeoutOptions as option}<button
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={inactivityTimeoutMinutes === option.value}
+                  class:active={inactivityTimeoutMinutes === option.value}
+                  onclick={() => chooseInactivityTimeout(option.value)}
+                  ><span>{translate($locale, option.label)}</span
+                  >{#if inactivityTimeoutMinutes === option.value}<Check size={15} />{/if}</button
+                >{/each}
+            </div>{/if}
+        </div>
       </div>
     </div>
   </section>
