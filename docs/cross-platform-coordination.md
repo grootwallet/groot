@@ -48,7 +48,10 @@ evidence, recovery drills, interoperability evidence, and independent security r
    encrypts/MACs the five-line record, and shows `ur:groot-bsms`.
 6. Desktop scans, derives the BIP129 key from its invitation token, authenticates before releasing
    plaintext, verifies the signed-message pubkey equals the exact account xpub, checks origin,
-   network, uniqueness, expiry, and replay state, then shows fingerprint/xpub checksum.
+   network, uniqueness, expiry, and replay state, then shows the phone-key fingerprint. The
+   response must be accepted during the 15-minute invitation window. Once accepted, expiry no
+   longer races the remaining hardware setup; the final QR stays bound to the same in-memory
+   token, session, signer, and exact wallet policy.
 7. Both displays show the same six digits. The user explicitly confirms they match before adding
    the signer. Desktop tells the user to keep the phone waiting and explicitly previews the final
    phone QR that appears after the remaining signers and wallet PIN. Two hardware signers can then
@@ -107,7 +110,7 @@ phone key into the old descriptor.
 | Compromised desktop           | Mobile derives review from PSBT, verifies paired scripts/change, shows recipient/fee independently                                                 | A compromised desktop sees public wallet data and can deny service     |
 | Compromised phone             | Threshold prevents phone-only spend; key is released only after local auth and exact review                                                        | Fully compromised OS during signing may steal the phone key            |
 | Screenshot/camera leakage     | Setup copy requires privacy; tokens expire and are one-use; no secrets in normal signed PSBT QR                                                    | Recovery-word screenshots remain catastrophic; never permit them       |
-| Replay/stale PSBT             | One accepted setup response; 15-minute session; exact PSBT revision; desktop proposal CAS/status                                                   | A still-current proposal can be shown again; user must review it again |
+| Replay/stale PSBT             | One setup response accepted within 15 minutes; exact final-policy binding; exact PSBT revision; desktop proposal CAS/status                        | A still-current proposal can be shown again; user must review it again |
 | Signature injection           | Existing Groot signature-only merge, SIGHASH_ALL, allowed origin set, secp256k1 verification                                                       | Other valid cosigners retain their intended authority                  |
 | Phone/backup loss             | 2-of-3 remains spendable with the other two keys; clean migration path                                                                             | Losing both phone and words permanently loses that signer              |
 | Downgrade/cross-network       | Version/type/network/path checks; compile-time network parameters; no plaintext setup mode                                                         | Interoperability must retain these exact checks                        |

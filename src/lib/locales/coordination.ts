@@ -6,6 +6,14 @@ export const coordinationCopy = {
     es: 'Sin cuenta · vinculación cifrada con dos QR'
   },
   'Add a Groot phone': { fr: 'Ajouter un téléphone Groot', es: 'Añadir un teléfono Groot' },
+  'Create one words-only phone signer.': {
+    fr: 'Créez un signataire téléphonique récupérable avec ses mots.',
+    es: 'Crea un firmante en el teléfono recuperable con sus palabras.'
+  },
+  'One Groot phone signer per wallet in V1': {
+    fr: 'Un signataire téléphonique Groot par portefeuille dans la V1',
+    es: 'Un firmante de teléfono Groot por cartera en V1'
+  },
   'Add this phone as one signer in a shared wallet.': {
     fr: 'Ajoutez ce téléphone comme signataire d’un portefeuille partagé.',
     es: 'Añade este teléfono como firmante de una cartera compartida.'
@@ -49,6 +57,10 @@ export const coordinationCopy = {
     fr: 'Les codes correspondent. Ajouter le signataire',
     es: 'Los códigos coinciden. Añadir firmante'
   },
+  'Six digits match — add signer': {
+    fr: 'Les six chiffres correspondent — ajouter le signataire',
+    es: 'Los seis dígitos coinciden — añadir firmante'
+  },
   'Compare the six digits, then let desktop scan this response.': {
     fr: 'Comparez les six chiffres, puis laissez l’ordinateur scanner cette réponse.',
     es: 'Compara los seis dígitos y deja que el ordenador escanee esta respuesta.'
@@ -75,6 +87,26 @@ export const coordinationCopy = {
   'Phone key added on desktop': {
     fr: 'Clé du téléphone ajoutée sur l’ordinateur',
     es: 'Clave del teléfono añadida en el ordenador'
+  },
+  'Phone key fingerprint': {
+    fr: 'Empreinte de la clé du téléphone',
+    es: 'Huella de la clave del teléfono'
+  },
+  'Retry final phone QR': {
+    fr: 'Réessayer le QR final du téléphone',
+    es: 'Reintentar el QR final del teléfono'
+  },
+  'Save the wallet descriptor.': {
+    fr: 'Enregistrez le descripteur du portefeuille.',
+    es: 'Guarda el descriptor de la cartera.'
+  },
+  'Store signers separately.': {
+    fr: 'Conservez les signataires séparément.',
+    es: 'Guarda los firmantes por separado.'
+  },
+  'Verify keys on each signer.': {
+    fr: 'Vérifiez les clés sur chaque signataire.',
+    es: 'Verifica las claves en cada firmante.'
   },
   desktop_coordinator: { fr: 'coordinateur_ordinateur', es: 'coordinador_ordenador' },
   'Device role unavailable': {
@@ -413,6 +445,10 @@ export const coordinationCopy = {
   'Words-only recovery': {
     fr: 'Récupération avec les mots uniquement',
     es: 'Recuperación solo con palabras'
+  },
+  'Write down all 24 words. The PIN unlocks this phone only.': {
+    fr: 'Notez les 24 mots. Le PIN déverrouille uniquement ce téléphone.',
+    es: 'Anota las 24 palabras. El PIN solo desbloquea este teléfono.'
   },
   '{count} inputs': { fr: '{count} entrées', es: '{count} entradas' }
 } as const satisfies CatalogSection;

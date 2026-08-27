@@ -407,16 +407,13 @@
       field instanceof HTMLSelectElement
     ))
       return;
-    const center = () => {
-      const viewport = window.visualViewport;
-      if (!viewport || document.activeElement !== field) return;
-      const rect = field.getBoundingClientRect();
-      const visibleCenter = viewport.offsetTop + viewport.height / 2;
-      const fieldCenter = rect.top + rect.height / 2;
-      window.scrollBy({ top: fieldCenter - visibleCenter, behavior: 'smooth' });
-    };
-    setTimeout(center, 120);
-    setTimeout(center, 420);
+    // Let iOS finish resizing the visual viewport for the keyboard, then perform
+    // one centering move. Competing smooth-scroll timers can otherwise move the
+    // field into view and immediately pull it away again.
+    setTimeout(() => {
+      if (document.activeElement !== field) return;
+      field.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'smooth' });
+    }, 320);
   }
 
   async function enforceMobileBackgroundLock() {

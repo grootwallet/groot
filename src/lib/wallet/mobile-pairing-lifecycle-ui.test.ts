@@ -36,6 +36,10 @@ const animatedQrSource = readFileSync(
   fileURLToPath(new URL('../components/AnimatedUrQr.svelte', import.meta.url)),
   'utf8'
 );
+const deviceDetailsSource = readFileSync(
+  fileURLToPath(new URL('../components/DeviceDetailsModal.svelte', import.meta.url)),
+  'utf8'
+);
 const coordinationCommandsSource = readFileSync(
   fileURLToPath(new URL('../../../src-tauri/src/wallet/coordination_commands.rs', import.meta.url)),
   'utf8'
@@ -103,9 +107,12 @@ describe('mobile pairing lifecycle UI', () => {
     expect(scannerSource).toContain('navigator.mediaDevices.getUserMedia');
     expect(scannerSource).toContain("error ? 'Try camera again' : 'Allow camera'");
     expect(scannerSource).toContain('class="camera-frame"');
+    expect(scannerSource).toContain('class:camera-inactive={!cameraActive}');
+    expect(scannerSource).toContain('.camera-frame.camera-inactive');
+    expect(scannerSource).toContain('class="scanner-retry full"');
     expect(scannerSource).toMatch(/\.camera-frame\s*\{[\s\S]*?position:\s*relative/);
-    expect(appShellSource).toContain('window.visualViewport');
     expect(appShellSource).toContain("document.addEventListener('focusin', centerMobileField)");
+    expect(appShellSource).toContain("field.scrollIntoView({ block: 'center'");
     expect(appHtml).toContain('maximum-scale=1, user-scalable=no');
     expect(routeSource).toContain('font-size: 16px');
     expect(routeSource).toContain('class:keyboard-active={keyboardActive}');
@@ -118,6 +125,31 @@ describe('mobile pairing lifecycle UI', () => {
     expect(desktopRouteSource).toContain('desktop will show one final QR for the phone.');
     expect(routeSource).toContain('Finish wallet setup on desktop');
     expect(routeSource).toContain('It will show one final wallet QR next.');
+  });
+
+  it('limits V1 to one Groot phone and preserves a retry after wallet creation', () => {
+    expect(desktopRouteSource).toContain("signer.deviceType === 'groot-mobile'");
+    expect(desktopRouteSource).toContain('disabled={hasGrootPhoneSigner}');
+    expect(desktopRouteSource).toContain('One Groot phone signer per wallet in V1');
+    expect(desktopRouteSource).toContain(
+      'createdWalletNeedsFinalPolicy = Boolean(mobileSessionId)'
+    );
+    expect(desktopRouteSource).toContain('Retry final phone QR');
+    expect(desktopRouteSource).toContain('Do not create this wallet again.');
+  });
+
+  it('labels only the shared phone fingerprint instead of comparing unrelated xpub text', () => {
+    expect(routeSource).toContain("translate($locale, 'Phone key fingerprint')");
+    expect(desktopRouteSource).toContain("translate($locale, 'Phone key fingerprint')");
+    expect(desktopRouteSource).not.toContain('mobileCandidate.xpub.slice(-8)');
+  });
+
+  it('does not leave an empty signer-detail grid cell', () => {
+    expect(deviceDetailsSource).toContain('class="connection-detail"');
+    expect(appStyles).toContain('.device-details .connection-detail');
+    expect(appStyles).toMatch(
+      /\.device-details \.connection-detail\s*\{[\s\S]*?grid-column:\s*1 \/ -1/
+    );
   });
 
   it('shows bounded multipart QR scan progress on desktop and mobile', () => {

@@ -7815,6 +7815,9 @@ code {
 .device-details .public-key-detail {
   grid-column: 1 / -1;
 }
+.device-details .connection-detail {
+  grid-column: 1 / -1;
+}
 .public-key-detail dd {
   min-width: 0;
 }

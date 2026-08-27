@@ -96,6 +96,8 @@ export function validatePolicyDraft(draft: PolicyDraft): string[] {
     errors.push('Every signer must have a unique master fingerprint.');
   if (new Set(cosigners.map((cosigner) => cosigner.xpub)).size !== cosigners.length)
     errors.push('Every signer must have a unique account xpub.');
+  if (cosigners.filter((cosigner) => cosigner.deviceType === 'groot-mobile').length > 1)
+    errors.push('V1 supports one Groot phone signer per wallet.');
   return errors;
 }
 

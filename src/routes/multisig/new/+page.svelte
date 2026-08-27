@@ -203,6 +203,7 @@
   let discardingDraft = $state(false);
   let draftSaveError = $state('');
   let createErrorTitle = $state('');
+  let createdWalletNeedsFinalPolicy = $state(false);
   let hardwareScanGeneration = 0;
   let queuedDraft: MultisigSetupDraft | null = null;
   let draftSaveRunning = false;
@@ -213,6 +214,9 @@
     standardRecipe === '2of3' ? 3 : standardRecipe === '3of5' ? 5 : customCosignerCount
   );
   const requiredKeys = $derived(templateKind === 'standard' ? standardCosignerCount : 4);
+  const hasGrootPhoneSigner = $derived(
+    cosigners.some((signer) => signer.deviceType === 'groot-mobile')
+  );
   const errors = $derived([
     ...validatePolicyDraft(policy),
     ...(cosigners.length !== requiredKeys
@@ -579,6 +583,7 @@
   }
 
   async function startMobilePairing() {
+    if (hasGrootPhoneSigner) return;
     pickerOpen = false;
     mobilePairOpen = true;
     mobilePairBusy = true;
@@ -1257,6 +1262,7 @@
           )
         : await walletService.createMultisig(policy, credential, networkSetupSourceWalletId);
       hasDraft = false;
+      createdWalletNeedsFinalPolicy = Boolean(mobileSessionId);
       toast({
         title: 'Multisig wallet created',
         description: creation.networkSetupCopied
@@ -1267,8 +1273,18 @@
         tone: creation.networkSetupCopied ? 'success' : 'default'
       });
       if (mobileSessionId) {
-        mobileFinalFrames = await walletService.finalizePairingOnDesktop(mobileSessionId);
-        mobileFinalOpen = true;
+        try {
+          mobileFinalFrames = await walletService.finalizePairingOnDesktop(mobileSessionId);
+          mobileFinalOpen = true;
+          createdWalletNeedsFinalPolicy = false;
+        } catch (cause) {
+          createErrorTitle = 'Wallet created — phone pairing incomplete';
+          error = localizedError(
+            cause,
+            $locale,
+            'Retry the final QR. Do not create this wallet again.'
+          );
+        }
       } else {
         await goto('/multisig');
       }
@@ -1288,6 +1304,22 @@
     } finally {
       credential = '';
       confirmation = '';
+      busy = false;
+    }
+  }
+
+  async function retryFinalPolicyQr() {
+    if (!mobileSessionId || busy) return;
+    busy = true;
+    error = '';
+    try {
+      mobileFinalFrames = await walletService.finalizePairingOnDesktop(mobileSessionId);
+      mobileFinalOpen = true;
+      createdWalletNeedsFinalPolicy = false;
+    } catch (cause) {
+      createErrorTitle = 'Phone pairing still incomplete';
+      error = localizedError(cause, $locale, 'Could not prepare the final wallet QR.');
+    } finally {
       busy = false;
     }
   }
@@ -1766,16 +1798,10 @@
       <aside class="safety-panel">
         <ShieldCheck size={22} />
         <h2>{translate($locale, 'Before you continue')}</h2>
-        <p>
-          {translate(
-            $locale,
-            'Groot stores public descriptors only. It cannot spend without enough signatures.'
-          )}
-        </p>
         <ul>
-          <li>{translate($locale, 'Back up the wallet descriptor.')}</li>
-          <li>{translate($locale, 'Verify each fingerprint on its device.')}</li>
-          <li>{translate($locale, 'Keep devices in separate places.')}</li>
+          <li>{translate($locale, 'Save the wallet descriptor.')}</li>
+          <li>{translate($locale, 'Verify keys on each signer.')}</li>
+          <li>{translate($locale, 'Store signers separately.')}</li>
         </ul>
         <button class="hardware-help-card" onclick={() => openHardwareHelp()}
           ><CircleHelp size={17} /><span
@@ -1783,7 +1809,7 @@
               >{translate($locale, 'Coldcard, BitBox02, Ledger, Trezor, Jade')}</small
             ></span
           ><ChevronRight size={14} /></button
-        ><code>{MULTISIG_ACCOUNT_PATH}</code>
+        >
       </aside>
     </div>
   {:else if stage === 'review' && preview}
@@ -2180,17 +2206,26 @@
             ><small>{error}</small></span
           >
         </div>{/if}
-      <Button
-        class="full backup-create-action"
-        size="large"
-        disabled={!saved ||
-          !policyReadinessAcknowledged ||
-          !credential ||
-          credential !== confirmation}
-        loading={busy}
-        loadingLabel={translate($locale, 'Creating wallet…')}
-        onclick={create}>{translate($locale, 'Create wallet')}</Button
-      >
+      {#if createdWalletNeedsFinalPolicy}
+        <Button
+          class="full backup-create-action"
+          size="large"
+          loading={busy}
+          onclick={retryFinalPolicyQr}>{translate($locale, 'Retry final phone QR')}</Button
+        >
+      {:else}
+        <Button
+          class="full backup-create-action"
+          size="large"
+          disabled={!saved ||
+            !policyReadinessAcknowledged ||
+            !credential ||
+            credential !== confirmation}
+          loading={busy}
+          loadingLabel={translate($locale, 'Creating wallet…')}
+          onclick={create}>{translate($locale, 'Create wallet')}</Button
+        >
+      {/if}
     </section>
   {/if}
 </div>
@@ -2238,10 +2273,17 @@
   onclose={closeSignerPicker}
 >
   <div class="source-list">
-    {#if templateKind === 'standard'}<button onclick={startMobilePairing}
+    {#if templateKind === 'standard'}<button
+        disabled={hasGrootPhoneSigner}
+        onclick={startMobilePairing}
         ><Smartphone size={18} /><span
           ><strong>{translate($locale, 'Add a Groot phone')}</strong><small
-            >{translate($locale, 'Accountless · encrypted two-QR pairing')}</small
+            >{translate(
+              $locale,
+              hasGrootPhoneSigner
+                ? 'One Groot phone signer per wallet in V1'
+                : 'Accountless · encrypted two-QR pairing'
+            )}</small
           ></span
         ><ChevronRight size={15} /></button
       >{/if}
@@ -2297,10 +2339,7 @@
   dismissible={false}
   wide={mobilePairScan && !mobileCandidate}
   title={translate($locale, 'Add a Groot phone')}
-  description={translate(
-    $locale,
-    'The phone creates one BIP48 signer. Its 24 words use no BIP39 passphrase.'
-  )}
+  description={translate($locale, 'Create one words-only phone signer.')}
   onclose={cancelMobilePairing}
 >
   <div class="mobile-pairing-flow">
@@ -2352,7 +2391,7 @@
     {:else if mobileInvitation && mobileCandidate}
       <div class="device-scan paired-mobile">
         <Smartphone size={20} /><strong>{mobileCandidate.label}</strong><span
-          >{mobileCandidate.fingerprint} · {mobileCandidate.xpub.slice(-8)}</span
+          >{translate($locale, 'Phone key fingerprint')} {mobileCandidate.fingerprint}</span
         >
       </div>
       <div class="comparison-code">
@@ -2362,7 +2401,7 @@
       </div>
       {#if mobilePairError}<p class="form-error" role="alert">{mobilePairError}</p>{/if}
       <Button class="full" onclick={confirmMobileSigner}
-        >{translate($locale, 'Codes match. Add signer')}</Button
+        >{translate($locale, 'Six digits match — add signer')}</Button
       >
     {:else if mobilePairError}<p class="form-error" role="alert">{mobilePairError}</p>{/if}
     {#if !mobilePairAccepted}<Button

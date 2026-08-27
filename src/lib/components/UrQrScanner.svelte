@@ -141,7 +141,7 @@
 </script>
 
 <div class="scanner">
-  <div class="camera-frame">
+  <div class="camera-frame" class:camera-inactive={!cameraActive}>
     <video
       bind:this={video}
       muted
@@ -175,7 +175,7 @@
     </div>
   {/if}
   {#if !cameraActive}
-    <Button variant="secondary" class="scanner-retry" loading={starting} onclick={startCamera}
+    <Button class="scanner-retry full" loading={starting} onclick={startCamera}
       >{translate($locale, error ? 'Try camera again' : 'Allow camera')}</Button
     >
   {/if}
@@ -187,6 +187,14 @@
     gap: 0.75rem;
     width: min(100%, 68dvh, 38rem);
     margin-inline: auto;
+  }
+  .camera-frame.camera-inactive {
+    position: fixed;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    overflow: hidden;
+    pointer-events: none;
   }
   .camera-frame {
     position: relative;

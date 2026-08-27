@@ -41,6 +41,7 @@ pub enum CoordinationError {
     WrongDerivation,
     DescriptorMismatch,
     UnsupportedVersion,
+    ExpiredInvitation,
 }
 
 impl CoordinationError {
@@ -54,6 +55,7 @@ impl CoordinationError {
             Self::WrongDerivation => "unsupported_derivation",
             Self::DescriptorMismatch => "wallet_policy_mismatch",
             Self::UnsupportedVersion => "unsupported_coordination_version",
+            Self::ExpiredInvitation => "pairing_session_not_found",
             Self::InvalidEncoding | Self::InvalidKeyRecord => "invalid_coordination_payload",
         }
     }
@@ -108,6 +110,21 @@ pub struct KeyRecord {
 
 impl PairingInvitation {
     pub fn validate(&self, now: u64) -> Result<(), CoordinationError> {
+        self.validate_after_acceptance()?;
+        if self.expires_at <= now {
+            return Err(CoordinationError::ExpiredInvitation);
+        }
+        if self.expires_at.saturating_sub(now) > PAIRING_SESSION_SECONDS {
+            return Err(CoordinationError::InvalidEncoding);
+        }
+        Ok(())
+    }
+
+    /// Validate an invitation that has already produced an authenticated phone signer.
+    ///
+    /// Freshness gates accepting a new signer, not the subsequent hardware-wallet ceremony.
+    /// The final record remains bound to the one-time token, session, signer and exact policy.
+    pub fn validate_after_acceptance(&self) -> Result<(), CoordinationError> {
         if self.version != 1 {
             return Err(CoordinationError::UnsupportedVersion);
         }
@@ -123,8 +140,7 @@ impl PairingInvitation {
             || self.threshold > self.signer_count
             || self.signer_count > 7
             || self.derivation_path != MULTISIG_ACCOUNT_PATH
-            || self.expires_at <= now
-            || self.expires_at.saturating_sub(now) > PAIRING_SESSION_SECONDS
+            || self.expires_at == 0
         {
             return Err(CoordinationError::InvalidEncoding);
         }
@@ -173,6 +189,18 @@ impl PublicWalletRecord {
             })
         }) {
             return Err(CoordinationError::InvalidEncoding);
+        }
+        let mobile_signers = self
+            .signers
+            .iter()
+            .filter(|signer| signer.device_type.as_deref() == Some("groot-mobile"))
+            .collect::<Vec<_>>();
+        if matches!(self.role, DeviceRole::MobileCosigner)
+            && (mobile_signers.len() != 1
+                || self.mobile_signer_fingerprint.as_deref()
+                    != Some(mobile_signers[0].fingerprint.as_str()))
+        {
+            return Err(CoordinationError::DescriptorMismatch);
         }
         let (threshold, descriptor_keys) = record
             .standard_policy()
@@ -702,6 +730,10 @@ mod tests {
                 CoordinationError::UnsupportedVersion,
                 "unsupported_coordination_version",
             ),
+            (
+                CoordinationError::ExpiredInvitation,
+                "pairing_session_not_found",
+            ),
         ];
         for (error, expected) in cases {
             assert_eq!(error.code(), expected);
@@ -741,6 +773,17 @@ mod tests {
     }
 
     #[test]
+    fn authenticated_invitation_can_finish_after_its_acceptance_window() {
+        let accepted = invitation();
+        assert!(accepted.validate(1_901).is_err());
+        assert_eq!(accepted.validate_after_acceptance(), Ok(()));
+
+        let mut malformed = accepted;
+        malformed.token = "not-hex".to_owned();
+        assert!(malformed.validate_after_acceptance().is_err());
+    }
+
+    #[test]
     fn public_wallet_record_rejects_substitution_and_malformed_identity() {
         let valid = public_wallet_record();
         assert_eq!(valid.validate().map(|_| ()), Ok(()));
@@ -762,6 +805,7 @@ mod tests {
             Box::new(|value| value.mobile_signer_fingerprint = Some("zzzzzzzz".to_owned())),
             Box::new(|value| value.signers[0].label.clear()),
             Box::new(|value| value.signers[0].device_type = Some("bad device".to_owned())),
+            Box::new(|value| value.signers[1].device_type = Some("groot-mobile".to_owned())),
             Box::new(|value| value.signers[0].fingerprint = "deadbeef".to_owned()),
             Box::new(|value| value.signers.pop().map(drop).unwrap()),
         ];
@@ -771,6 +815,7 @@ mod tests {
             assert!(value.validate().is_err());
         }
         let mut without_mobile = valid;
+        without_mobile.role = DeviceRole::DesktopCoordinator;
         without_mobile.mobile_signer_fingerprint = None;
         assert!(without_mobile.validate().is_ok());
     }

@@ -213,7 +213,7 @@
             <dt>{translate($locale, 'Device type')}</dt>
             <dd>{deviceTypeName(signer.deviceType)}</dd>
           </div>{/if}
-        <div>
+        <div class="connection-detail">
           <dt>{translate($locale, 'Connection')}</dt>
           <dd>
             {translate($locale, connectionLabel())}

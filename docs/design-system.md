@@ -1,5 +1,7 @@
 # Groot design system
 
+Groot is easy by default, with optional insight and optional control. Primary flows keep only the copy and controls required for the next safe decision; technical detail remains available on demand instead of competing with the task.
+
 Status: canonical UI guidance for the current desktop/mobile application.
 
 The symbol, application icon, identity palette, and brand voice are canonical in [`brand-identity.md`](brand-identity.md). Naming and the wordmark remain provisional there. This document continues to own product layout, components, states, accessibility, and semantic color behavior.

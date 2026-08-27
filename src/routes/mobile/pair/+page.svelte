@@ -242,16 +242,7 @@
 >
   <header class="page-header">
     <div>
-      <a class="back-link" href="/"><ArrowLeft size={16} />{translate($locale, 'Back to wallet')}</a
-      >
-      <p class="eyebrow">{translate($locale, 'PHONE SIGNER')}</p>
       <h1>{pageTitle}</h1>
-      <p class="subtitle">
-        {translate(
-          $locale,
-          'No account or cloud connection. Keep both devices together until the two QR rounds finish.'
-        )}
-      </p>
     </div>
   </header>
 
@@ -340,7 +331,7 @@
           ><strong>{translate($locale, 'Words-only recovery')}</strong><small
             >{translate(
               $locale,
-              'The 24 words derive this BIP48 key with no BIP39 passphrase. Your app PIN only unlocks the encrypted copy on this phone.'
+              'Write down all 24 words. The PIN unlocks this phone only.'
             )}</small
           ></span
         >
@@ -396,7 +387,9 @@
         >
       </div>
       <div class="identity">
-        <Check size={16} /><span>{response.fingerprint} · {response.xpubChecksum}</span>
+        <Check size={16} /><span
+          >{translate($locale, 'Phone key fingerprint')} {response.fingerprint}</span
+        >
       </div>
       {#if error}<p class="inline-error" role="alert">{error}</p>{/if}
       <Button class="full" loading={busy} onclick={awaitFinalPolicy}
@@ -422,11 +415,16 @@
       />
     </section>
   {/if}
+
+  <a class="pairing-exit" href="/"><ArrowLeft size={16} />{translate($locale, 'Back to wallet')}</a>
 </div>
 
 <style>
   .pairing-page {
     padding-bottom: max(2rem, env(safe-area-inset-bottom));
+  }
+  .pairing-page :global(.setup-progress) {
+    margin-bottom: 1.25rem;
   }
   .pairing-page.keyboard-active {
     padding-bottom: max(45dvh, env(safe-area-inset-bottom));
@@ -516,5 +514,15 @@
   .inline-success {
     color: var(--success);
     margin: 0 0 1rem;
+  }
+  .pairing-exit {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    margin-top: 1rem;
+    color: var(--muted);
+    text-decoration: none;
   }
 </style>

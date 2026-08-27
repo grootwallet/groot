@@ -45,8 +45,10 @@ release its data-encryption key, and perform secp256k1 signing briefly in Rust-o
   pairing session ID in new mobile coordination sidecars lets startup distinguish a committed
   wallet from an interrupted pre-commit operation. Existing sidecars remain readable; registry,
   wallet, proposal, and certification formats are not migrated or rewritten.
-- Keep desktop tokens in process memory only and expire invitations after 15 minutes. A response is
-  accepted once. Mobile reproduces an interrupted response only by decrypting its local staging
+- Keep desktop tokens in process memory only and expire unaccepted invitations after 15 minutes. A
+  response is accepted once. After authenticated acceptance, the expiry no longer races the
+  remaining hardware ceremony; finalization still requires the same live desktop process, token,
+  session, signer, and exact policy. Mobile reproduces an interrupted response only by decrypting its local staging
   file with the same PIN. Completion uses an active-to-consuming rename bound to the newly allocated
   wallet UUID before creating its profile. Startup removes only that UUID's unregistered partial
   profile before restoring an uncommitted tombstone, or removes a tombstone after the exact

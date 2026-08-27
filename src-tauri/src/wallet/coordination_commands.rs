@@ -214,7 +214,9 @@ pub fn coordination_pairing_invitation(
     )?;
     let comparison_code = comparison_code(&invitation);
     let mut sessions = state.desktop_pairings.lock().map_err(internal)?;
-    sessions.retain(|_, session| session.invitation.expires_at > now());
+    sessions.retain(|_, session| {
+        session.accepted_signer.is_some() || session.invitation.expires_at > now()
+    });
     sessions.insert(
         session_id.clone(),
         PendingDesktopPairing {
@@ -375,7 +377,7 @@ pub fn coordination_mobile_resume(
     }
     staged
         .invitation
-        .validate(now())
+        .validate_after_acceptance()
         .map_err(coordination_api_error)?;
     if staged.signer_label.trim().is_empty() || staged.signer_label.chars().count() > 48 {
         return Err(api_error(
@@ -411,7 +413,7 @@ pub fn coordination_mobile_await_final(
     }
     staged
         .invitation
-        .validate(now())
+        .validate_after_acceptance()
         .map_err(coordination_api_error)?;
     staged.awaiting_final_policy = true;
     let staged = Zeroizing::new(serde_json::to_vec(&staged).map_err(internal)?);
@@ -536,7 +538,7 @@ pub fn coordination_desktop_finalize(
         .ok_or_else(session_missing)?;
     pending
         .invitation
-        .validate(now())
+        .validate_after_acceptance()
         .map_err(coordination_api_error)?;
     let mobile = pending.accepted_signer.ok_or_else(|| {
         api_error(
@@ -545,6 +547,11 @@ pub fn coordination_desktop_finalize(
         )
     })?;
     let wallet = read_multisig_metadata(&app)?;
+    let mobile_signer_count = wallet
+        .cosigners
+        .iter()
+        .filter(|signer| signer.device_type.as_deref() == Some(MOBILE_DEVICE_TYPE))
+        .count();
     let exact_mobile = wallet.cosigners.iter().any(|signer| {
         signer.fingerprint == mobile.fingerprint
             && signer.xpub == mobile.xpub
@@ -553,6 +560,7 @@ pub fn coordination_desktop_finalize(
     if wallet.name != pending.invitation.wallet_name
         || wallet.threshold != pending.invitation.threshold
         || wallet.cosigners.len() != pending.invitation.signer_count
+        || mobile_signer_count != 1
         || !exact_mobile
     {
         return Err(coordination_api_error(
@@ -631,7 +639,7 @@ pub fn coordination_mobile_complete(
     }
     staged
         .invitation
-        .validate(now())
+        .validate_after_acceptance()
         .map_err(coordination_api_error)?;
     if staged.invitation.session_id != envelope.session_id {
         return Err(coordination_api_error(
@@ -1565,6 +1573,9 @@ fn coordination_api_error(error: CoordinationError) -> ApiError {
             "The final policy does not exactly contain the invited signer and agreed policy."
         }
         CoordinationError::UnsupportedVersion => "This coordination version is unsupported.",
+        CoordinationError::ExpiredInvitation => {
+            "This pairing invitation expired. Ask desktop for a new QR."
+        }
         CoordinationError::InvalidEncoding | CoordinationError::InvalidKeyRecord => {
             "The coordination payload is malformed or unsupported."
         }
@@ -1796,7 +1807,7 @@ mod tests {
             accept_desktop_response(&mut sessions, &expired_frames, current_time)
                 .unwrap_err()
                 .code,
-            "invalid_coordination_payload"
+            "pairing_session_not_found"
         );
 
         let restarted = HashMap::new();

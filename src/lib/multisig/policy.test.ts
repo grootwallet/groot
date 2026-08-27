@@ -134,6 +134,29 @@ describe('multisig policy invariants', () => {
     expect(errors).toContain('Every signer must have a unique account xpub.');
   });
 
+  it('allows only one Groot phone signer in a V1 wallet', () => {
+    const errors = validatePolicyDraft({
+      name: 'Vault',
+      threshold: 2,
+      cosigners: [
+        cosigner({ deviceType: 'groot-mobile' }),
+        cosigner({
+          id: 'phone-two',
+          fingerprint: 'b1b2c3d4',
+          xpub: 'tpubD6NzVbkrYhZ4Y-public-regtest-key-2',
+          deviceType: 'groot-mobile'
+        }),
+        cosigner({
+          id: 'hardware',
+          fingerprint: 'c1b2c3d4',
+          xpub: 'tpubD6NzVbkrYhZ4Y-public-regtest-key-3',
+          deviceType: 'ledger'
+        })
+      ]
+    });
+    expect(errors).toContain('V1 supports one Groot phone signer per wallet.');
+  });
+
   it('identifies an existing signer independently of labels and import methods', () => {
     const existing = cosigner({ label: 'BitBox02', fingerprint: 'A1B2C3D4', source: 'usb' });
     expect(
