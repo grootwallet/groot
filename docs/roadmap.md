@@ -40,7 +40,7 @@ Coldcard certification must name the exact model. The current user-reported comp
 Implementation exists for the following items, but the distinction between code-complete and evidence-complete is mandatory:
 
 1. **Hardware matrix:** finish disposable Testnet4 certification for Coldcard Mk4, Trezor Model One, Ledger, BitBox02, and Jade using the local report template. BitBox02 Nova is a separate implementation/certification row and is not inferred from BitBox02. Include cable where supported plus file/UR interchange, address identity, rejection, reconnect, RBF, CPFP, wrong-device, and recovery evidence. This cannot be completed without the physical devices.
-2. **Interoperability:** public BIP129/BSMS records and bounded `crypto-psbt` UR v2 are implemented. Complete vendor vectors and round trips with at least two independent descriptor-aware wallets. Encrypted BIP129 signer rounds are deferred.
+2. **Interoperability:** public BIP129/BSMS records, BIP129 encrypted mobile signer/descriptor rounds, bounded coordination UR framing, and canonical `crypto-psbt` UR v2 are implemented for the Regtest/Testnet4 cross-platform track. The upstream BIP129 PBKDF2/HMAC/AES-CTR vector and funded isolated-Core mobile-signature/desktop-merge/finalize/broadcast path are automated. Complete two independent wallet round trips, native iOS Keychain/Secure Enclave wrapping, complete staging/restart drills, and physical camera/recovery evidence before any release claim.
 3. **Fee management:** Funded Regtest RBF/CPFP now covers Groot's production proposal, sequential-signature import, restart, rejection, broadcast-commit, replacement-lineage, and package-fee workflows plus the independent BDK/Core race/reorg matrix. Complete the Testnet4 replacement/package confirmation races and physical hardware signatures.
 4. **Recovery:** birthday/gap controls, asynchronous full scan, persisted progress, cancellation, restart-safe interruption, the 65-payment/121-address envelope, and clean file-backed descriptor recovery/reopen are implemented. Complete the independent human clean-storage drill and public-network rehearsal.
 5. **Remote Core:** direct TLS and hostname-preserving v3-onion SOCKS5 transport are implemented with bounded failure/no-fallback automation. Complete a real VPS TLS/Tor run for certificate hostname/expiry/revocation and network-level DNS evidence.
@@ -115,6 +115,7 @@ Add reusable, searchable local tags as optional metadata that is explicitly sepa
 ### 7. Mobile and air-gapped parity
 
 - Use descriptor/key QR import and PSBT QR/file round trips as the universal flow.
+- Run accountless desktop/mobile pairing as a separate Regtest/Testnet4 track: one words-only BIP48 phone cosigner, encrypted BIP129 setup rounds, exact-revision mobile PSBT signing, and hardware-singlesig watch-only import. Do not add it to the first-mainnet candidate until ADR 0048's native wrapping, recovery, interoperability, and physical-device gates pass.
 - Complete physical UR/camera certification after the implemented bounded-memory, frame-order, duplicate-frame, and malicious-payload tests.
 - Keep USB/HID desktop-specific; do not imply mobile USB support where the platform or device cannot provide it.
 - Verify camera permission, interruption, background/resume, and keyboard/safe-area behavior on iOS and Android.

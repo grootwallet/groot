@@ -4,7 +4,15 @@
   import QRCode from 'qrcode';
   import { onDestroy } from 'svelte';
 
-  let { frames, intervalMs = 1000 } = $props<{ frames: string[]; intervalMs?: number }>();
+  let {
+    frames,
+    intervalMs = 1000,
+    label = 'Animated QR'
+  } = $props<{
+    frames: string[];
+    intervalMs?: number;
+    label?: string;
+  }>();
   let image = $state('');
   let index = $state(0);
   let timer: ReturnType<typeof setInterval> | undefined;
@@ -47,7 +55,7 @@
 <div class="ur-qr" aria-live="polite">
   {#if image}<img
       src={image}
-      alt={translate($locale, 'Animated crypto-psbt QR frame {current} of {total}', {
+      alt={translate($locale, `${label} frame {current} of {total}`, {
         current: index + 1,
         total: frames.length
       })}

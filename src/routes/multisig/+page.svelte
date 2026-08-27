@@ -10,6 +10,7 @@
     FlaskConical,
     Plus,
     ShieldCheck,
+    Smartphone,
     Usb
   } from '@lucide/svelte';
   import { onDestroy, onMount } from 'svelte';
@@ -29,6 +30,7 @@
     walletService,
     WalletError,
     type CosignerHealthCheck,
+    type CoordinationStatus,
     type HardwareDevice,
     type MultisigWallet,
     type PolicyVerificationAddress,
@@ -71,6 +73,7 @@
   const walletShell = useWalletShellContext();
   let wallet = $state<MultisigWallet | null>(null);
   let snapshot = $state<WalletSnapshot | null>(null);
+  let coordination = $state<CoordinationStatus | null>(null);
   let selectedSigner = $state<CosignerDraft | null>(null);
   let showDescriptors = $state(false);
   let moreOpen = $state(false);
@@ -106,6 +109,15 @@
   onMount(async () => {
     wallet = await walletService.multisigWallet();
     if (!wallet) return;
+    try {
+      coordination = await walletService.coordinationStatus();
+    } catch (cause) {
+      toast({
+        title: 'Device role unavailable',
+        description: localizedError(cause, $locale),
+        tone: 'danger'
+      });
+    }
     try {
       const [nextPolicyVerifications, nextPolicyAddress] = await Promise.all([
         walletService.multisigSignerPolicyVerifications(),
@@ -449,7 +461,11 @@
         <p class="subtitle">
           {translate(
             $locale,
-            'A watch-only wallet whose spending policy is enforced by independent keys.'
+            coordination?.role === 'mobile_cosigner'
+              ? 'Shared wallet · this phone holds one software signer and can sign reviewed desktop PSBTs.'
+              : coordination?.role === 'desktop_coordinator'
+                ? 'Shared wallet · this desktop coordinates the policy and hardware signers.'
+                : 'A watch-only wallet whose spending policy is enforced by independent keys.'
           )}
         </p>
       </div>
@@ -525,7 +541,9 @@
             </div>{/if}
         </div>
         <Button variant="secondary" href="/multisig/receive">{translate($locale, 'Receive')}</Button
-        ><Button href="/multisig/send">{translate($locale, 'Send')}</Button>
+        >{#if coordination?.canSignOnThisDevice}<Button href="/mobile/sign"
+            ><Smartphone size={16} />{translate($locale, 'Sign desktop PSBT')}</Button
+          >{:else}<Button href="/multisig/send">{translate($locale, 'Send')}</Button>{/if}
       </div>
     </section>
     {#if maturitySummary}

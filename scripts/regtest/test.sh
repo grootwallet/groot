@@ -49,4 +49,5 @@ cargo test --locked --manifest-path "${PROJECT_DIR}/src-tauri/Cargo.toml" funded
 GROOT_RUN_REGTEST=1 cargo test --locked --manifest-path "${PROJECT_DIR}/src-tauri/Cargo.toml" funded_rbf_and_cpfp_cross_groot_proposal_boundaries --lib -- --ignored --nocapture --test-threads=1
 GROOT_RUN_REGTEST=1 cargo test --locked --manifest-path "${PROJECT_DIR}/src-tauri/Cargo.toml" clean_storage_descriptor_recovery_restores_known_history_and_survives_reopen --lib -- --ignored --nocapture --test-threads=1
 GROOT_RUN_REGTEST=1 cargo test --locked --manifest-path "${PROJECT_DIR}/src-tauri/Cargo.toml" funded_delayed_policy_tracks_each_coin_restarts_and_rearms_after_reorg --lib -- --ignored --nocapture --test-threads=1
+GROOT_RUN_REGTEST=1 cargo test --locked --manifest-path "${PROJECT_DIR}/src-tauri/Cargo.toml" funded_mobile_cosigner_round_trip_reviews_merges_finalizes_and_broadcasts --lib -- --ignored --nocapture --test-threads=1
 GROOT_RUN_REGTEST=1 cargo test --locked --manifest-path "${PROJECT_DIR}/src-tauri/Cargo.toml" --test regtest_multisig -- --ignored --nocapture --test-threads=1

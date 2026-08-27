@@ -53,6 +53,7 @@ import type {
   WalletSnapshot
 } from './transactions';
 import type { PaymentDraft } from '../payment-draft';
+import type { WalletCoordinationPort } from './coordination';
 
 export interface WalletProfilesPort {
   exists(): Promise<boolean>;
@@ -327,5 +328,6 @@ export interface WalletPort
     WalletTransactionsPort,
     WalletHardwarePort,
     WalletMultisigPort,
+    WalletCoordinationPort,
     WalletFileTransportPort,
     WalletEventsPort {}

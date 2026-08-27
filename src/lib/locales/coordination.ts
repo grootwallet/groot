@@ -1,0 +1,282 @@
+import type { CatalogSection } from './types';
+
+export const coordinationCopy = {
+  'Accountless · encrypted two-QR pairing': {
+    fr: 'Sans compte · jumelage chiffré par deux QR',
+    es: 'Sin cuenta · vinculación cifrada con dos QR'
+  },
+  'Add a Groot phone': { fr: 'Ajouter un téléphone Groot', es: 'Añadir un teléfono Groot' },
+  'Add this phone as one signer in a shared wallet.': {
+    fr: 'Ajoutez ce téléphone comme signataire d’un portefeuille partagé.',
+    es: 'Añade este teléfono como firmante de una cartera compartida.'
+  },
+  'Both devices must show': {
+    fr: 'Les deux appareils doivent afficher',
+    es: 'Ambos dispositivos deben mostrar'
+  },
+  'Cannot sign': { fr: 'Ne peut pas signer', es: 'No puede firmar' },
+  'Codes match — add signer': {
+    fr: 'Les codes correspondent — ajouter le signataire',
+    es: 'Los códigos coinciden — añadir firmante'
+  },
+  'Compare the six digits, then let desktop scan this response.': {
+    fr: 'Comparez les six chiffres, puis laissez l’ordinateur scanner cette réponse.',
+    es: 'Compara los seis dígitos y deja que el ordenador escanee esta respuesta.'
+  },
+  'Compare the threshold and first address shown on desktop before completing.': {
+    fr: 'Comparez le seuil et la première adresse affichés sur l’ordinateur avant de terminer.',
+    es: 'Compara el umbral y la primera dirección mostrados en el ordenador antes de terminar.'
+  },
+  'Confirm PIN': { fr: 'Confirmer le PIN', es: 'Confirmar PIN' },
+  'Confirm the phone shows the same digits': {
+    fr: 'Confirmez que le téléphone affiche les mêmes chiffres',
+    es: 'Confirma que el teléfono muestra los mismos dígitos'
+  },
+  'Create phone key': { fr: 'Créer la clé du téléphone', es: 'Crear clave del teléfono' },
+  'Creating one-time invitation': {
+    fr: 'Création de l’invitation à usage unique',
+    es: 'Creando invitación de un solo uso'
+  },
+  'Desktop accepted it': { fr: 'L’ordinateur l’a acceptée', es: 'El ordenador la aceptó' },
+  desktop_coordinator: { fr: 'coordinateur_ordinateur', es: 'coordinador_ordenador' },
+  'Device role unavailable': {
+    fr: 'Rôle de l’appareil indisponible',
+    es: 'Rol del dispositivo no disponible'
+  },
+  'Encrypted mobile signer QR': {
+    fr: 'QR chiffré du signataire mobile',
+    es: 'QR cifrado del firmante móvil'
+  },
+  Fee: { fr: 'Frais', es: 'Comisión' },
+  'Final shared wallet policy QR': {
+    fr: 'QR final de la politique du portefeuille partagé',
+    es: 'QR final de la política de la cartera compartida'
+  },
+  'Finish the other signers, then return the final wallet QR to the phone.': {
+    fr: 'Terminez les autres signataires, puis renvoyez le QR final du portefeuille au téléphone.',
+    es: 'Termina con los demás firmantes y devuelve al teléfono el QR final de la cartera.'
+  },
+  'frame {current} of {total}': {
+    fr: 'trame {current} sur {total}',
+    es: 'fragmento {current} de {total}'
+  },
+  'Groot is generating a fresh 128-bit BIP129 token.': {
+    fr: 'Groot génère un nouveau jeton BIP129 de 128 bits.',
+    es: 'Groot está generando un nuevo token BIP129 de 128 bits.'
+  },
+  'Groot phone invitation QR': {
+    fr: 'QR d’invitation du téléphone Groot',
+    es: 'QR de invitación del teléfono Groot'
+  },
+  'Import a desktop hardware wallet': {
+    fr: 'Importer un portefeuille matériel de l’ordinateur',
+    es: 'Importar una cartera física del ordenador'
+  },
+  'Import a hardware wallet without its signing key.': {
+    fr: 'Importez un portefeuille matériel sans sa clé de signature.',
+    es: 'Importa una cartera física sin su clave de firma.'
+  },
+  'Import watch-only wallet': {
+    fr: 'Importer le portefeuille en lecture seule',
+    es: 'Importar cartera de solo lectura'
+  },
+  'In Groot desktop open Settings → Export & verify → Show on phone.': {
+    fr: 'Dans Groot sur ordinateur, ouvrez Réglages → Exporter et vérifier → Afficher sur le téléphone.',
+    es: 'En Groot para ordenador, abre Ajustes → Exportar y verificar → Mostrar en el teléfono.'
+  },
+  'Join a shared wallet': {
+    fr: 'Rejoindre un portefeuille partagé',
+    es: 'Unirse a una cartera compartida'
+  },
+  'Join from desktop': { fr: 'Rejoindre depuis l’ordinateur', es: 'Unirse desde el ordenador' },
+  'Let desktop scan the signed PSBT. Groot did not broadcast it.': {
+    fr: 'Laissez l’ordinateur scanner la PSBT signée. Groot ne l’a pas diffusée.',
+    es: 'Deja que el ordenador escanee la PSBT firmada. Groot no la ha transmitido.'
+  },
+  'Let desktop scan this response': {
+    fr: 'Laissez l’ordinateur scanner cette réponse',
+    es: 'Deja que el ordenador escanee esta respuesta'
+  },
+  'Local app PIN': { fr: 'PIN local de l’application', es: 'PIN local de la aplicación' },
+  'Mobile key ready': { fr: 'Clé mobile prête', es: 'Clave móvil lista' },
+  mobile_cosigner: { fr: 'cosignataire_mobile', es: 'cofirmante_móvil' },
+  'No account': { fr: 'Aucun compte', es: 'Sin cuenta' },
+  'No account or cloud connection. Keep both devices together until the two QR rounds finish.': {
+    fr: 'Aucun compte ni connexion au cloud. Gardez les deux appareils ensemble jusqu’à la fin des deux échanges QR.',
+    es: 'Sin cuenta ni conexión a la nube. Mantén juntos ambos dispositivos hasta terminar los dos intercambios QR.'
+  },
+  'On desktop choose “Scan signed PSBT.” Desktop will reject any signature that does not match the exact reviewed proposal.':
+    {
+      fr: 'Sur l’ordinateur, choisissez « Scanner la PSBT signée ». Toute signature ne correspondant pas exactement à la proposition vérifiée sera refusée.',
+      es: 'En el ordenador, elige « Escanear PSBT firmada ». Se rechazará cualquier firma que no coincida exactamente con la propuesta revisada.'
+    },
+  'On the fresh phone choose “Join from desktop,” scan this QR, and keep the response private.': {
+    fr: 'Sur le nouveau téléphone, choisissez « Rejoindre depuis l’ordinateur », scannez ce QR et gardez la réponse privée.',
+    es: 'En el teléfono nuevo, elige « Unirse desde el ordenador », escanea este QR y mantén privada la respuesta.'
+  },
+  'On the phone choose “Watch desktop wallet.” This QR contains public descriptors only and cannot sign.':
+    {
+      fr: 'Sur le téléphone, choisissez « Surveiller le portefeuille de l’ordinateur ». Ce QR ne contient que des descripteurs publics et ne peut pas signer.',
+      es: 'En el teléfono, elige « Ver cartera del ordenador ». Este QR solo contiene descriptores públicos y no puede firmar.'
+    },
+  'On the phone, check the same threshold and first address. Pairing is not complete until the phone accepts this policy.':
+    {
+      fr: 'Sur le téléphone, vérifiez le même seuil et la première adresse. Le jumelage n’est terminé qu’après acceptation de cette politique.',
+      es: 'En el teléfono, comprueba el mismo umbral y la primera dirección. La vinculación no termina hasta aceptar esta política.'
+    },
+  'One phone, one invitation': {
+    fr: 'Un téléphone, une invitation',
+    es: 'Un teléfono, una invitación'
+  },
+  'Only Blockchain Commons crypto-psbt UR frames are accepted.': {
+    fr: 'Seules les trames UR crypto-psbt de Blockchain Commons sont acceptées.',
+    es: 'Solo se aceptan fragmentos UR crypto-psbt de Blockchain Commons.'
+  },
+  'Pairing comparison code': {
+    fr: 'Code de comparaison du jumelage',
+    es: 'Código de comparación de vinculación'
+  },
+  'Pairing invitation in progress': {
+    fr: 'Invitation de jumelage en cours',
+    es: 'Invitación de vinculación en curso'
+  },
+  'Phone accepted the wallet': {
+    fr: 'Le téléphone a accepté le portefeuille',
+    es: 'El teléfono aceptó la cartera'
+  },
+  'Phone name': { fr: 'Nom du téléphone', es: 'Nombre del teléfono' },
+  'PHONE SIGNER': { fr: 'SIGNATAIRE TÉLÉPHONE', es: 'FIRMANTE DEL TELÉFONO' },
+  'Phone signer added': { fr: 'Signataire téléphone ajouté', es: 'Firmante del teléfono añadido' },
+  'Point the camera at the encrypted phone response': {
+    fr: 'Pointez la caméra vers la réponse chiffrée du téléphone',
+    es: 'Apunta la cámara a la respuesta cifrada del teléfono'
+  },
+  'Point the camera at the final Groot wallet QR': {
+    fr: 'Pointez la caméra vers le QR final du portefeuille Groot',
+    es: 'Apunta la cámara al QR final de la cartera Groot'
+  },
+  'Point the camera at the Groot desktop invitation': {
+    fr: 'Pointez la caméra vers l’invitation de Groot sur ordinateur',
+    es: 'Apunta la cámara a la invitación de Groot para ordenador'
+  },
+  'Point the camera at the Groot watch-only wallet QR': {
+    fr: 'Pointez la caméra vers le QR Groot du portefeuille en lecture seule',
+    es: 'Apunta la cámara al QR de la cartera Groot de solo lectura'
+  },
+  'PSBT signed on this phone': {
+    fr: 'PSBT signée sur ce téléphone',
+    es: 'PSBT firmada en este teléfono'
+  },
+  'Return the final policy to the phone': {
+    fr: 'Renvoyer la politique finale au téléphone',
+    es: 'Devolver la política final al teléfono'
+  },
+  'Review the exact transaction on this phone. Signing never broadcasts or changes the desktop proposal.':
+    {
+      fr: 'Vérifiez la transaction exacte sur ce téléphone. La signature ne diffuse ni ne modifie jamais la proposition de l’ordinateur.',
+      es: 'Revisa la transacción exacta en este teléfono. Firmar nunca transmite ni cambia la propuesta del ordenador.'
+    },
+  'Scan phone response': {
+    fr: 'Scanner la réponse du téléphone',
+    es: 'Escanear respuesta del teléfono'
+  },
+  'Scan public wallet QR': {
+    fr: 'Scanner le QR public du portefeuille',
+    es: 'Escanear QR público de la cartera'
+  },
+  'Scan the desktop invitation': {
+    fr: 'Scanner l’invitation de l’ordinateur',
+    es: 'Escanear invitación del ordenador'
+  },
+  'Scan the final wallet policy': {
+    fr: 'Scanner la politique finale du portefeuille',
+    es: 'Escanear política final de la cartera'
+  },
+  'Scan the public descriptor from desktop. No hardware seed, signing key, or Groot account is transferred.':
+    {
+      fr: 'Scannez le descripteur public depuis l’ordinateur. Aucune graine matérielle, clé de signature ni compte Groot n’est transféré.',
+      es: 'Escanea el descriptor público del ordenador. No se transfiere ninguna semilla física, clave de firma ni cuenta Groot.'
+    },
+  'Scan unsigned PSBT from desktop': {
+    fr: 'Scanner la PSBT non signée depuis l’ordinateur',
+    es: 'Escanear PSBT sin firmar del ordenador'
+  },
+  'Shared wallet · this desktop coordinates the policy and hardware signers.': {
+    fr: 'Portefeuille partagé · cet ordinateur coordonne la politique et les signataires matériels.',
+    es: 'Cartera compartida · este ordenador coordina la política y los firmantes físicos.'
+  },
+  'Shared wallet · this phone holds one software signer and can sign reviewed desktop PSBTs.': {
+    fr: 'Portefeuille partagé · ce téléphone détient un signataire logiciel et peut signer les PSBT vérifiées sur l’ordinateur.',
+    es: 'Cartera compartida · este teléfono guarda un firmante de software y puede firmar PSBT revisadas en el ordenador.'
+  },
+  'Shared wallet paired': { fr: 'Portefeuille partagé jumelé', es: 'Cartera compartida vinculada' },
+  'Sign a desktop PSBT': {
+    fr: 'Signer une PSBT de l’ordinateur',
+    es: 'Firmar una PSBT del ordenador'
+  },
+  'Sign another PSBT': { fr: 'Signer une autre PSBT', es: 'Firmar otra PSBT' },
+  'Sign desktop PSBT': { fr: 'Signer la PSBT de l’ordinateur', es: 'Firmar PSBT del ordenador' },
+  'Sign this exact PSBT': { fr: 'Signer exactement cette PSBT', es: 'Firmar esta PSBT exacta' },
+  'Signature ready': { fr: 'Signature prête', es: 'Firma lista' },
+  'Signed crypto-psbt QR': { fr: 'QR crypto-psbt signé', es: 'QR crypto-psbt firmado' },
+  'The 24 words derive this BIP48 key with no BIP39 passphrase. Your app PIN only unlocks the encrypted copy on this phone.':
+    {
+      fr: 'Les 24 mots dérivent cette clé BIP48 sans phrase secrète BIP39. Le PIN de l’application déverrouille uniquement la copie chiffrée sur ce téléphone.',
+      es: 'Las 24 palabras derivan esta clave BIP48 sin frase de contraseña BIP39. El PIN de la aplicación solo desbloquea la copia cifrada en este teléfono.'
+    },
+  'The account xpub is encrypted and signed for this invitation.': {
+    fr: 'La xpub du compte est chiffrée et signée pour cette invitation.',
+    es: 'La xpub de la cuenta está cifrada y firmada para esta invitación.'
+  },
+  'The invitation expires in 15 minutes and can add one phone.': {
+    fr: 'L’invitation expire dans 15 minutes et permet d’ajouter un téléphone.',
+    es: 'La invitación caduca en 15 minutos y permite añadir un teléfono.'
+  },
+  'The phone creates one BIP48 signer. Its 24 words use no BIP39 passphrase.': {
+    fr: 'Le téléphone crée un signataire BIP48. Ses 24 mots n’utilisent aucune phrase secrète BIP39.',
+    es: 'El teléfono crea un firmante BIP48. Sus 24 palabras no usan frase de contraseña BIP39.'
+  },
+  'This copy derives receive and change addresses and reveals wallet activity. Spending still requires the hardware signer.':
+    {
+      fr: 'Cette copie dérive les adresses de réception et de monnaie et révèle l’activité du portefeuille. Dépenser exige toujours le signataire matériel.',
+      es: 'Esta copia deriva direcciones de recepción y cambio y revela la actividad. Gastar aún requiere el firmante físico.'
+    },
+  'This phone can monitor addresses but has no signing key.': {
+    fr: 'Ce téléphone peut surveiller les adresses mais ne possède aucune clé de signature.',
+    es: 'Este teléfono puede vigilar direcciones, pero no tiene clave de firma.'
+  },
+  'This phone holds one signer; desktop remains the coordinator.': {
+    fr: 'Ce téléphone détient un signataire ; l’ordinateur reste le coordinateur.',
+    es: 'Este teléfono guarda un firmante; el ordenador sigue siendo el coordinador.'
+  },
+  'This second encrypted QR commits the exact descriptor, threshold, signer set, and first address.':
+    {
+      fr: 'Ce second QR chiffré engage le descripteur, le seuil, les signataires et la première adresse exacts.',
+      es: 'Este segundo QR cifrado confirma el descriptor, el umbral, los firmantes y la primera dirección exactos.'
+    },
+  'Transaction verified': { fr: 'Transaction vérifiée', es: 'Transacción verificada' },
+  'Verified wallet change': {
+    fr: 'Monnaie du portefeuille vérifiée',
+    es: 'Cambio de cartera verificado'
+  },
+  'Verify before funding': { fr: 'Vérifier avant de financer', es: 'Verificar antes de depositar' },
+  'Watch desktop wallet': {
+    fr: 'Surveiller le portefeuille de l’ordinateur',
+    es: 'Ver cartera del ordenador'
+  },
+  'Watch-only': { fr: 'Lecture seule', es: 'Solo lectura' },
+  'WATCH-ONLY': { fr: 'LECTURE SEULE', es: 'SOLO LECTURA' },
+  'Watch-only wallet imported': {
+    fr: 'Portefeuille en lecture seule importé',
+    es: 'Cartera de solo lectura importada'
+  },
+  'Watch-only wallet QR': {
+    fr: 'QR du portefeuille en lecture seule',
+    es: 'QR de cartera de solo lectura'
+  },
+  'Words-only recovery': {
+    fr: 'Récupération avec les mots uniquement',
+    es: 'Recuperación solo con palabras'
+  },
+  '{count} inputs': { fr: '{count} entrées', es: '{count} entradas' }
+} as const satisfies CatalogSection;

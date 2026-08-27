@@ -17,6 +17,7 @@
     Plus,
     RefreshCw,
     ShieldCheck,
+    Smartphone,
     Trash2,
     Usb,
     Users
@@ -24,6 +25,8 @@
   import { goto } from '$app/navigation';
   import { onDestroy, onMount } from 'svelte';
   import Button from '$lib/components/Button.svelte';
+  import AnimatedUrQr from '$lib/components/AnimatedUrQr.svelte';
+  import UrQrScanner from '$lib/components/UrQrScanner.svelte';
   import { formatInteger, locale } from '$lib/i18n';
   import FieldCounter from '$lib/components/FieldCounter.svelte';
   import HardwareActionPrompt from '$lib/components/HardwareActionPrompt.svelte';
@@ -51,6 +54,7 @@
     type SignerPolicyVerification,
     type WalletErrorCode
   } from '$lib/wallet';
+  import type { PairingInvitation } from '$lib/wallet';
   import {
     findDuplicateCosigner,
     MULTISIG_ACCOUNT_PATH,
@@ -148,6 +152,16 @@
   let checkingSigner = $state(false);
   let healthChecks = $state<Record<string, CosignerHealthCheck>>({});
   let source = $state<CosignerSource>('manual');
+  let mobilePairOpen = $state(false);
+  let mobilePairScan = $state(false);
+  let mobilePairBusy = $state(false);
+  let mobilePairError = $state('');
+  let mobileInvitation = $state<PairingInvitation | null>(null);
+  let mobileResponseFrames = $state<string[]>([]);
+  let mobileCandidate = $state<CosignerDraft | null>(null);
+  let mobileSessionId = $state('');
+  let mobileFinalFrames = $state<string[]>([]);
+  let mobileFinalOpen = $state(false);
   let label = $state('');
   let fingerprint = $state('');
   let xpub = $state('');
@@ -561,6 +575,56 @@
     pickerOpen = false;
     keyError = '';
     keyOpen = true;
+  }
+
+  async function startMobilePairing() {
+    pickerOpen = false;
+    mobilePairOpen = true;
+    mobilePairBusy = true;
+    mobilePairError = '';
+    mobilePairScan = false;
+    mobileResponseFrames = [];
+    mobileCandidate = null;
+    try {
+      mobileInvitation = await walletService.createPairingInvitation(name, threshold, requiredKeys);
+      mobileSessionId = mobileInvitation.sessionId;
+    } catch (cause) {
+      mobilePairError = localizedError(cause, $locale, 'Could not create a phone invitation.');
+    } finally {
+      mobilePairBusy = false;
+    }
+  }
+
+  async function receiveMobileResponse(frame: string) {
+    mobileResponseFrames = [...mobileResponseFrames, frame];
+    try {
+      mobileCandidate = await walletService.acceptMobileSigner(mobileResponseFrames);
+      mobilePairError = '';
+    } catch (cause) {
+      const message = localizedError(cause, $locale, 'Waiting for the complete phone response.');
+      if (!message.toLowerCase().includes('incomplete')) mobilePairError = message;
+    }
+  }
+
+  function confirmMobileSigner() {
+    if (!mobileCandidate) return;
+    if (!appendCosigner(mobileCandidate, (message) => (mobilePairError = message))) return;
+    mobilePairOpen = false;
+    mobilePairScan = false;
+    toast({
+      title: 'Phone signer added',
+      description: 'Finish the other signers, then return the final wallet QR to the phone.',
+      tone: 'success'
+    });
+  }
+
+  async function cancelMobilePairing() {
+    const session = mobileSessionId;
+    mobilePairOpen = false;
+    mobileInvitation = null;
+    mobileCandidate = null;
+    mobileSessionId = '';
+    if (session) await walletService.cancelPairing(session).catch(() => {});
   }
 
   function duplicateSignerMessage(candidate: CosignerDraft): string | null {
@@ -1193,7 +1257,12 @@
           : 'Network setup was not copied. Configure it in Settings.',
         tone: creation.networkSetupCopied ? 'success' : 'default'
       });
-      await goto('/multisig');
+      if (mobileSessionId) {
+        mobileFinalFrames = await walletService.finalizePairingOnDesktop(mobileSessionId);
+        mobileFinalOpen = true;
+      } else {
+        await goto('/multisig');
+      }
     } catch (cause) {
       if (cause instanceof WalletError && cause.code === 'wallet_corrupt') {
         createErrorTitle = 'Hardware verification needs attention';
@@ -2160,6 +2229,13 @@
   onclose={closeSignerPicker}
 >
   <div class="source-list">
+    {#if templateKind === 'standard'}<button onclick={startMobilePairing}
+        ><Smartphone size={18} /><span
+          ><strong>{translate($locale, 'Add a Groot phone')}</strong><small
+            >{translate($locale, 'Accountless · encrypted two-QR pairing')}</small
+          ></span
+        ><ChevronRight size={15} /></button
+      >{/if}
     {#if templateKind === 'standard'}<button onclick={scanHardware}
         ><Cpu size={18} /><span
           ><strong>{translate($locale, 'Connect hardware device')}</strong><small
@@ -2206,6 +2282,95 @@
         ></span
       >
     </div>{/if}
+</Modal>
+<Modal
+  open={mobilePairOpen}
+  title={translate($locale, 'Add a Groot phone')}
+  description={translate(
+    $locale,
+    'The phone creates one BIP48 signer. Its 24 words use no BIP39 passphrase.'
+  )}
+  onclose={cancelMobilePairing}
+>
+  <div class="mobile-pairing-flow">
+    {#if mobilePairBusy}<HardwareActionPrompt
+        title={translate($locale, 'Creating one-time invitation')}
+        detail={translate($locale, 'Groot is generating a fresh 128-bit BIP129 token.')}
+        label={translate($locale, 'Pairing invitation in progress')}
+      />{:else if mobileInvitation && !mobilePairScan && !mobileCandidate}
+      <AnimatedUrQr
+        frames={mobileInvitation.frames}
+        label={translate($locale, 'Groot phone invitation QR')}
+      />
+      <div class="comparison-code">
+        <small>{translate($locale, 'Both devices must show')}</small><strong
+          >{mobileInvitation.comparisonCode}</strong
+        >
+      </div>
+      <div class="warning-box" role="note">
+        <ShieldCheck size={17} /><strong>{translate($locale, 'One phone, one invitation')}</strong
+        ><span
+          >{translate(
+            $locale,
+            'On the fresh phone choose “Join from desktop,” scan this QR, and keep the response private.'
+          )}</span
+        >
+      </div>
+      <Button class="full" onclick={() => (mobilePairScan = true)}
+        >{translate($locale, 'Scan phone response')}</Button
+      >
+    {:else if mobileInvitation && mobilePairScan && !mobileCandidate}
+      {#if mobilePairError}<p class="form-error" role="alert">{mobilePairError}</p>{/if}
+      <UrQrScanner
+        acceptedTypes={['groot-bsms']}
+        prompt={translate($locale, 'Point the camera at the encrypted phone response')}
+        onframe={receiveMobileResponse}
+      />
+    {:else if mobileInvitation && mobileCandidate}
+      <div class="device-scan paired-mobile">
+        <Smartphone size={20} /><strong>{mobileCandidate.label}</strong><span
+          >{mobileCandidate.fingerprint} · {mobileCandidate.xpub.slice(-8)}</span
+        >
+      </div>
+      <div class="comparison-code">
+        <small>{translate($locale, 'Confirm the phone shows the same digits')}</small><strong
+          >{mobileInvitation.comparisonCode}</strong
+        >
+      </div>
+      {#if mobilePairError}<p class="form-error" role="alert">{mobilePairError}</p>{/if}
+      <Button class="full" onclick={confirmMobileSigner}
+        >{translate($locale, 'Codes match — add signer')}</Button
+      >
+    {:else if mobilePairError}<p class="form-error" role="alert">{mobilePairError}</p>{/if}
+  </div>
+</Modal>
+
+<Modal
+  open={mobileFinalOpen}
+  title={translate($locale, 'Return the final policy to the phone')}
+  description={translate(
+    $locale,
+    'This second encrypted QR commits the exact descriptor, threshold, signer set, and first address.'
+  )}
+  onclose={() => {}}
+>
+  <div class="mobile-pairing-flow">
+    <AnimatedUrQr
+      frames={mobileFinalFrames}
+      label={translate($locale, 'Final shared wallet policy QR')}
+    />
+    <div class="warning-box" role="note">
+      <ShieldCheck size={17} /><strong>{translate($locale, 'Verify before funding')}</strong><span
+        >{translate(
+          $locale,
+          'On the phone, check the same threshold and first address. Pairing is not complete until the phone accepts this policy.'
+        )}</span
+      >
+    </div>
+    <Button class="full" onclick={() => goto('/multisig')}
+      >{translate($locale, 'Phone accepted the wallet')}</Button
+    >
+  </div>
 </Modal>
 <Modal
   open={policyReviewOpen}

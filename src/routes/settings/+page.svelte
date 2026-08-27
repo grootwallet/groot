@@ -26,6 +26,7 @@
     WalletCards
   } from '@lucide/svelte';
   import Button from '$lib/components/Button.svelte';
+  import AnimatedUrQr from '$lib/components/AnimatedUrQr.svelte';
   import FieldCounter from '$lib/components/FieldCounter.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import PasswordField from '$lib/components/PasswordField.svelte';
@@ -201,6 +202,7 @@
     hardwareBackupError = $state(''),
     hardwareBackup = $state(''),
     hardwareBackupContent = $state(''),
+    hardwareBackupFrames = $state<string[]>([]),
     exportingHardwareBackup = $state(false);
   let renameOpen = $state(false),
     renameDraft = $state(''),
@@ -352,6 +354,7 @@
     hardwareBackupPin = '';
     hardwareBackup = '';
     hardwareBackupContent = '';
+    hardwareBackupFrames = [];
     signerRenameDraft = '';
     if (scanPoll) clearTimeout(scanPoll);
   });
@@ -860,6 +863,7 @@
       const backup = await walletService.exportExternalSignerDescriptor(hardwareBackupPin);
       hardwareBackup = backup.descriptor;
       hardwareBackupContent = backup.content;
+      hardwareBackupFrames = await walletService.encodeWatchOnlyQr(backup.content);
       hardwareBackupPin = '';
       toast({
         title: 'Public descriptor ready',
@@ -1117,6 +1121,7 @@
             hardwareBackupOpen = true;
             hardwareBackup = '';
             hardwareBackupContent = '';
+            hardwareBackupFrames = [];
             hardwareBackupError = '';
           }}
           ><span class="setting-icon"><FileKey size={18} /></span><span
@@ -1594,6 +1599,7 @@
     hardwareBackupError = '';
     hardwareBackup = '';
     hardwareBackupContent = '';
+    hardwareBackupFrames = [];
   }}
 >
   {#if !hardwareBackup}
@@ -1639,6 +1645,18 @@
         >
       </div>
     </div>
+    {#if hardwareBackupFrames.length}
+      <AnimatedUrQr
+        frames={hardwareBackupFrames}
+        label={translate($locale, 'Watch-only wallet QR')}
+      />
+      <p class="settings-help">
+        {translate(
+          $locale,
+          'On the phone choose “Watch desktop wallet.” This QR contains public descriptors only and cannot sign.'
+        )}
+      </p>
+    {/if}
     {#if hardwareBackupError}<p class="form-error" role="alert">{hardwareBackupError}</p>{/if}
     <div class="modal-footer">
       <Button

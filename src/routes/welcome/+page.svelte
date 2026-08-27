@@ -11,6 +11,7 @@
     KeyRound,
     Network,
     ShieldCheck,
+    Smartphone,
     X
   } from '@lucide/svelte';
   import Button from '$lib/components/Button.svelte';
@@ -340,6 +341,26 @@
             ></span
           >
           <span class="wallet-type-meta">{translate($locale, 'Flexible security')}</span>
+          <ArrowRight class="wallet-type-arrow" size={17} />
+        </a>
+        <a class="wallet-type-card multisig" href="/mobile/pair">
+          <span class="wallet-type-icon"><Smartphone size={20} /></span>
+          <span class="wallet-type-copy"
+            ><strong>{translate($locale, 'Join from desktop')}</strong><small
+              >{translate($locale, 'Add this phone as one signer in a shared wallet.')}</small
+            ></span
+          >
+          <span class="wallet-type-meta">{translate($locale, 'No account')}</span>
+          <ArrowRight class="wallet-type-arrow" size={17} />
+        </a>
+        <a class="wallet-type-card hardware" href="/mobile/watch">
+          <span class="wallet-type-icon"><Eye size={20} /></span>
+          <span class="wallet-type-copy"
+            ><strong>{translate($locale, 'Watch desktop wallet')}</strong><small
+              >{translate($locale, 'Import a hardware wallet without its signing key.')}</small
+            ></span
+          >
+          <span class="wallet-type-meta">{translate($locale, 'Watch-only')}</span>
           <ArrowRight class="wallet-type-arrow" size={17} />
         </a>
       </div>

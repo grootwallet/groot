@@ -354,6 +354,7 @@ pub struct AppState {
     recovery_scans: Mutex<HashMap<Uuid, ActiveRecoveryScan>>,
     runtime_auth_retry_at: Mutex<HashMap<Uuid, Instant>>,
     pending_policy_verifications: Mutex<HashMap<String, SignerPolicyVerificationDto>>,
+    desktop_pairings: Mutex<HashMap<String, coordination_commands::PendingDesktopPairing>>,
     sync_status: Arc<Mutex<Option<WalletSyncStatusDto>>>,
 }
 
@@ -6280,6 +6281,8 @@ fn connected_hardware_identity(
 #[path = "wallet/hardware_commands.rs"]
 pub(crate) mod hardware_commands;
 
+#[path = "wallet/coordination_commands.rs"]
+pub(crate) mod coordination_commands;
 #[path = "wallet/multisig_setup_commands.rs"]
 pub(crate) mod multisig_setup_commands;
 

@@ -5,7 +5,15 @@
   import { onMount } from 'svelte';
   import QrScanner from 'qr-scanner';
 
-  let { onframe } = $props<{ onframe: (frame: string) => void | Promise<void> }>();
+  let {
+    onframe,
+    acceptedTypes = ['crypto-psbt'],
+    prompt = 'Point the camera at a crypto-psbt QR'
+  } = $props<{
+    onframe: (frame: string) => void | Promise<void>;
+    acceptedTypes?: string[];
+    prompt?: string;
+  }>();
   let video: HTMLVideoElement;
   let error = $state('');
   let scanned = $state(0);
@@ -17,7 +25,12 @@
 
     async function acceptFrame(rawValue: string) {
       const frame = rawValue.trim().toLowerCase();
-      if (!frame.startsWith('ur:crypto-psbt/') || seen.has(frame) || stopped) return;
+      if (
+        !acceptedTypes.some((type: string) => frame.startsWith(`ur:${type.toLowerCase()}/`)) ||
+        seen.has(frame) ||
+        stopped
+      )
+        return;
       if (seen.size >= 1024) {
         error = 'Too many QR frames. Restart the scan.';
         scanner?.stop();
@@ -71,10 +84,7 @@
   <div class="scan-guide" aria-hidden="true"></div>
   <div class="scan-status">
     {#if error}<CameraOff size={16} /><span>{error}</span>{:else}<Camera size={16} /><span
-        >{translate(
-          $locale,
-          scanned ? `${scanned} unique frames scanned` : 'Point the camera at a crypto-psbt QR'
-        )}</span
+        >{translate($locale, scanned ? `${scanned} unique frames scanned` : prompt)}</span
       >{/if}
   </div>
 </div>

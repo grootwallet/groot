@@ -779,6 +779,58 @@ export class TauriWalletAdapter implements WalletPort {
   cancelMultisigProposal(proposalId: string) {
     return command<void>('multisig_proposal_cancel', { proposalId });
   }
+  createPairingInvitation(walletName: string, threshold: number, signerCount: number) {
+    return command<import('./contracts').PairingInvitation>('coordination_pairing_invitation', {
+      walletName,
+      threshold,
+      signerCount
+    });
+  }
+  coordinationStatus() {
+    return command<import('./contracts').CoordinationStatus>('coordination_status');
+  }
+  encodeWatchOnlyQr(content: string) {
+    return command<string[]>('coordination_watch_only_encode', { content });
+  }
+  decodeWatchOnlyQr(frames: string[]) {
+    return command<string>('coordination_watch_only_decode', { frames });
+  }
+  cancelPairing(sessionId: string) {
+    return command<void>('coordination_pairing_cancel', { sessionId });
+  }
+  decodePairingInvitation(frames: string[]) {
+    return command<string>('coordination_decode_invitation', { frames });
+  }
+  acceptPairingOnMobile(invitationJson: string, signerLabel: string, credential: string) {
+    return command<import('./contracts').PairingResponse>('coordination_mobile_accept', {
+      invitationJson,
+      signerLabel,
+      credential
+    });
+  }
+  acceptMobileSigner(frames: string[]) {
+    return command<import('$lib/multisig/policy').CosignerDraft>('coordination_desktop_accept', {
+      frames
+    });
+  }
+  finalizePairingOnDesktop(sessionId: string) {
+    return command<string[]>('coordination_desktop_finalize', { sessionId });
+  }
+  completePairingOnMobile(frames: string[], credential: string) {
+    return command<MultisigWallet>('coordination_mobile_complete', { frames, credential });
+  }
+  reviewMobilePsbt(psbt: string) {
+    return command<import('./contracts').MobilePsbtReview>('coordination_mobile_psbt_review', {
+      psbt
+    });
+  }
+  signMobilePsbt(reviewedPsbt: string, revisionId: string, credential: string) {
+    return command<import('./contracts').SignedMobilePsbt>('coordination_mobile_sign_psbt', {
+      reviewedPsbt,
+      revisionId,
+      credential
+    });
+  }
   savePsbt(suggestedFilename: string, psbt: string) {
     return command<SavedFileResult>('psbt_file_save', { suggestedFilename, psbt });
   }

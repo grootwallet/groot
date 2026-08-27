@@ -6,6 +6,8 @@ Brand adoption and the intentionally stable storage namespace are recorded in [`
 
 Groot is an onchain-only Bitcoin wallet and multisig coordinator for desktop, iOS, and Android. The first functional build targets local regtest. Signet is the next remote integration network and Testnet4 is the final public-network rehearsal. Browser-only development uses deterministic dummy data; the Tauri composition root uses the real Rust adapter.
 
+Cross-platform wallet coordination remains inside the trusted Rust boundary. BIP129 encryption/MAC and signed key-record verification, exact descriptor membership, mobile secret persistence, PSBT review derivation, and signing live in Rust. Svelte receives public role/identity DTOs and bounded UR frames only. `coordination.json` and `mobile-signer.json` are additive per-profile sidecars; existing profiles require no migration. ADR 0048 and [`cross-platform-coordination.md`](cross-platform-coordination.md) define the testnet-only platform gates.
+
 ## Stack
 
 - **Shell:** Tauri v2, using the shared Rust library entry point required by desktop and mobile.

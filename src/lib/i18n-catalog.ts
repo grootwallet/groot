@@ -10,6 +10,7 @@ import { multisigCopy } from './locales/multisig';
 import { accessibilityCopy } from './locales/accessibility';
 import { attributeCopy } from './locales/attributes';
 import { dynamicCopy } from './locales/dynamic';
+import { coordinationCopy } from './locales/coordination';
 
 export type { MessageValues, Translation, CatalogSection } from './locales/types';
 
@@ -27,6 +28,7 @@ export const copyCatalog = {
   ...accessibilityCopy,
   ...attributeCopy,
   ...dynamicCopy,
+  ...coordinationCopy,
   Dismiss: { fr: 'Fermer', es: 'Cerrar' },
   Cancel: { fr: 'Annuler', es: 'Cancelar' },
   Back: { fr: 'Retour', es: 'Atrás' },

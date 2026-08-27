@@ -9,6 +9,8 @@ core_modules=(
   auth.rs
   bsms.rs
   build_network.rs
+  coordination.rs
+  coordination_transport.rs
   external_signer.rs
   multisig.rs
   notifications.rs

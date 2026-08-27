@@ -1,0 +1,1577 @@
+use super::*;
+use crate::{
+    coordination::{
+        decrypt_bip129, derive_mobile_account, encrypt_bip129, CoordinationError, DeviceRole,
+        KeyRecord, PairingInvitation, PublicWalletRecord, PAIRING_SESSION_SECONDS,
+    },
+    coordination_transport::{self, CoordinationUrError, CoordinationUrType},
+};
+
+const FRAGMENT_BYTES: usize = 220;
+const MOBILE_DEVICE_TYPE: &str = "groot-mobile";
+
+#[derive(Debug, Clone)]
+pub(super) struct PendingDesktopPairing {
+    invitation: PairingInvitation,
+    accepted_signer: Option<CosignerInput>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PairingInvitationDto {
+    session_id: String,
+    expires_at: u64,
+    comparison_code: String,
+    frames: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PairingResponseDto {
+    session_id: String,
+    fingerprint: String,
+    xpub_checksum: String,
+    backup_verified: bool,
+    comparison_code: String,
+    frames: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct EncryptedEnvelope {
+    version: u8,
+    session_id: String,
+    encrypted_record: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct PendingMobileSecret {
+    version: u8,
+    invitation: PairingInvitation,
+    mnemonic: String,
+    backup_verified: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CoordinationMetadata {
+    version: u8,
+    wallet_id: String,
+    role: DeviceRole,
+    mobile_signer_fingerprint: Option<String>,
+    key_protection: String,
+    paired_at: u64,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MobilePsbtReviewDto {
+    revision_id: String,
+    transaction_id: String,
+    input_count: usize,
+    recipients: Vec<MobileOutputDto>,
+    change: Vec<MobileOutputDto>,
+    fee_sats: u64,
+    already_signed_by: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MobileOutputDto {
+    address: String,
+    amount_sats: u64,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SignedMobilePsbtDto {
+    revision_id: String,
+    signer_fingerprint: String,
+    signed_psbt: String,
+    frames: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CoordinationStatusDto {
+    shared: bool,
+    role: Option<DeviceRole>,
+    can_sign_on_this_device: bool,
+    mobile_signer_fingerprint: Option<String>,
+    key_protection: Option<String>,
+}
+
+#[tauri::command]
+pub fn coordination_status(app: AppHandle) -> ApiResult<CoordinationStatusDto> {
+    let profile = selected_profile(&app)?;
+    if profile.kind != WalletKind::Multisig {
+        return Ok(CoordinationStatusDto {
+            shared: false,
+            role: None,
+            can_sign_on_this_device: false,
+            mobile_signer_fingerprint: None,
+            key_protection: None,
+        });
+    }
+    match read_coordination_metadata(&app, profile.id) {
+        Ok(metadata) => Ok(CoordinationStatusDto {
+            shared: true,
+            role: Some(metadata.role),
+            can_sign_on_this_device: metadata.role == DeviceRole::MobileCosigner,
+            mobile_signer_fingerprint: metadata.mobile_signer_fingerprint,
+            key_protection: Some(metadata.key_protection),
+        }),
+        Err(error) if error.code == "signing_unavailable" => Ok(CoordinationStatusDto {
+            shared: false,
+            role: None,
+            can_sign_on_this_device: false,
+            mobile_signer_fingerprint: None,
+            key_protection: None,
+        }),
+        Err(error) => Err(error),
+    }
+}
+
+#[tauri::command]
+pub fn coordination_watch_only_encode(content: String) -> ApiResult<Vec<String>> {
+    external_signer::parse_import(
+        &content,
+        "Hardware signer",
+        crate::external_signer::SignerSource::Qr,
+    )
+    .map_err(external_signer_api_error)?;
+    encode_coordination(CoordinationUrType::Wallet, content.as_bytes())
+}
+
+#[tauri::command]
+pub fn coordination_watch_only_decode(frames: Vec<String>) -> ApiResult<String> {
+    let payload = coordination_transport::decode(CoordinationUrType::Wallet, &frames)
+        .map_err(coordination_ur_api_error)?;
+    let content = String::from_utf8(payload)
+        .map_err(|_| invalid_payload("The watch-only wallet QR is not valid UTF-8."))?;
+    external_signer::parse_import(
+        &content,
+        "Hardware signer",
+        crate::external_signer::SignerSource::Qr,
+    )
+    .map_err(external_signer_api_error)?;
+    Ok(content)
+}
+
+#[tauri::command]
+pub fn coordination_pairing_invitation(
+    state: State<'_, AppState>,
+    wallet_name: String,
+    threshold: usize,
+    signer_count: usize,
+) -> ApiResult<PairingInvitationDto> {
+    let _operation = operation_guard(&state)?;
+    let mut token = [0_u8; 16];
+    OsRng.try_fill_bytes(&mut token).map_err(|_| {
+        api_error(
+            "entropy_unavailable",
+            "Secure operating-system randomness is unavailable. Pairing was not started.",
+        )
+    })?;
+    let session_id = Uuid::new_v4().to_string();
+    let invitation = PairingInvitation {
+        version: 1,
+        session_id: session_id.clone(),
+        network: NETWORK_NAME.to_owned(),
+        wallet_name: wallet_name.trim().to_owned(),
+        threshold,
+        signer_count,
+        derivation_path: MULTISIG_ACCOUNT_PATH.to_owned(),
+        token: encode_hex(&token),
+        expires_at: now().saturating_add(PAIRING_SESSION_SECONDS),
+    };
+    invitation.validate(now()).map_err(coordination_api_error)?;
+    let frames = encode_coordination(
+        CoordinationUrType::Invitation,
+        &serde_json::to_vec(&invitation).map_err(internal)?,
+    )?;
+    let comparison_code = comparison_code(&invitation);
+    let mut sessions = state.desktop_pairings.lock().map_err(internal)?;
+    sessions.retain(|_, session| session.invitation.expires_at > now());
+    sessions.insert(
+        session_id.clone(),
+        PendingDesktopPairing {
+            invitation: invitation.clone(),
+            accepted_signer: None,
+        },
+    );
+    Ok(PairingInvitationDto {
+        session_id,
+        expires_at: invitation.expires_at,
+        comparison_code,
+        frames,
+    })
+}
+
+#[tauri::command]
+pub fn coordination_pairing_cancel(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    session_id: String,
+) -> ApiResult<()> {
+    let _operation = operation_guard(&state)?;
+    state
+        .desktop_pairings
+        .lock()
+        .map_err(internal)?
+        .remove(&session_id);
+    if let Ok(path) = pending_mobile_secret_path(&app, &session_id) {
+        if path.exists() {
+            fs::remove_file(path).map_err(internal)?;
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn coordination_decode_invitation(frames: Vec<String>) -> ApiResult<String> {
+    let payload = coordination_transport::decode(CoordinationUrType::Invitation, &frames)
+        .map_err(coordination_ur_api_error)?;
+    let invitation: PairingInvitation = serde_json::from_slice(&payload)
+        .map_err(|_| invalid_payload("The pairing invitation is malformed."))?;
+    invitation.validate(now()).map_err(coordination_api_error)?;
+    serde_json::to_string(&invitation).map_err(internal)
+}
+
+#[tauri::command]
+pub fn coordination_mobile_accept(
+    app: AppHandle,
+    invitation_json: String,
+    signer_label: String,
+    credential: String,
+) -> ApiResult<PairingResponseDto> {
+    let credential = Zeroizing::new(credential);
+    validate_credential(credential.as_str())?;
+    let invitation: PairingInvitation = serde_json::from_str(&invitation_json)
+        .map_err(|_| invalid_payload("The pairing invitation is malformed."))?;
+    invitation.validate(now()).map_err(coordination_api_error)?;
+    let label = signer_label.trim();
+    if label.is_empty() || label.chars().count() > 48 {
+        return Err(api_error(
+            "invalid_label",
+            "The mobile signer name must contain 1 to 48 characters.",
+        ));
+    }
+    let mnemonic = generate_software_mnemonic(None)?;
+    let words = Zeroizing::new(mnemonic.to_string());
+    let backup = native_backup::present(&app, words.as_str()).map_err(internal)?;
+    if backup.cancelled {
+        return Err(api_error(
+            "onboarding_cancelled",
+            "Mobile signer recovery-word backup was cancelled.",
+        ));
+    }
+    let (fingerprint, account, xpub) =
+        derive_mobile_account(&mnemonic).map_err(coordination_api_error)?;
+    let record = KeyRecord::encode_signed(&invitation.token, fingerprint, &account, label)
+        .map_err(coordination_api_error)?;
+    let envelope = EncryptedEnvelope {
+        version: 1,
+        session_id: invitation.session_id.clone(),
+        encrypted_record: encrypt_bip129(&invitation.token, record.as_bytes())
+            .map_err(coordination_api_error)?,
+    };
+    let frames = encode_coordination(
+        CoordinationUrType::Bsms,
+        &serde_json::to_vec(&envelope).map_err(internal)?,
+    )?;
+    let staged = PendingMobileSecret {
+        version: 1,
+        invitation: invitation.clone(),
+        mnemonic: words.to_string(),
+        backup_verified: backup.verified,
+    };
+    let staged = Zeroizing::new(serde_json::to_vec(&staged).map_err(internal)?);
+    secure_store::store(
+        &pending_mobile_secret_path(&app, &invitation.session_id)?,
+        &staged,
+        credential.as_str(),
+    )
+    .map_err(secure_store_error)?;
+    Ok(PairingResponseDto {
+        session_id: invitation.session_id.clone(),
+        fingerprint: fingerprint.to_string(),
+        xpub_checksum: short_checksum(xpub.to_string().as_bytes()),
+        backup_verified: backup.verified,
+        comparison_code: comparison_code(&invitation),
+        frames,
+    })
+}
+
+#[tauri::command]
+pub fn coordination_desktop_accept(
+    state: State<'_, AppState>,
+    frames: Vec<String>,
+) -> ApiResult<CosignerInput> {
+    let _operation = operation_guard(&state)?;
+    let mut sessions = state.desktop_pairings.lock().map_err(internal)?;
+    accept_desktop_response(&mut sessions, &frames, now())
+}
+
+fn accept_desktop_response(
+    sessions: &mut HashMap<String, PendingDesktopPairing>,
+    frames: &[String],
+    current_time: u64,
+) -> ApiResult<CosignerInput> {
+    let envelope = decode_envelope(CoordinationUrType::Bsms, frames)?;
+    let pending = sessions
+        .get_mut(&envelope.session_id)
+        .ok_or_else(session_missing)?;
+    pending
+        .invitation
+        .validate(current_time)
+        .map_err(coordination_api_error)?;
+    if pending.accepted_signer.is_some() {
+        return Err(api_error(
+            "pairing_replay",
+            "A mobile signer response was already accepted for this session.",
+        ));
+    }
+    let plaintext = decrypt_bip129(&pending.invitation.token, &envelope.encrypted_record)
+        .map_err(coordination_api_error)?;
+    let record = KeyRecord::parse(
+        std::str::from_utf8(&plaintext)
+            .map_err(|_| invalid_payload("The signer record is not valid UTF-8."))?,
+    )
+    .map_err(coordination_api_error)?;
+    if record.token != pending.invitation.token {
+        return Err(coordination_api_error(
+            CoordinationError::AuthenticationFailed,
+        ));
+    }
+    let signer = CosignerInput {
+        id: format!("mobile-{}", record.fingerprint),
+        label: record.description,
+        fingerprint: record.fingerprint.to_string(),
+        xpub: record.account_xpub.to_string(),
+        derivation_path: record.derivation_path,
+        source: CosignerSource::Qr,
+        device_type: Some(MOBILE_DEVICE_TYPE.to_owned()),
+    };
+    signer.parse_for_validation().map_err(policy_api_error)?;
+    pending.accepted_signer = Some(signer.clone());
+    Ok(signer)
+}
+
+#[tauri::command]
+pub fn coordination_desktop_finalize(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    session_id: String,
+) -> ApiResult<Vec<String>> {
+    let _operation = operation_guard(&state)?;
+    require_unlocked(&app, &state)?;
+    let pending = state
+        .desktop_pairings
+        .lock()
+        .map_err(internal)?
+        .get(&session_id)
+        .cloned()
+        .ok_or_else(session_missing)?;
+    pending
+        .invitation
+        .validate(now())
+        .map_err(coordination_api_error)?;
+    let mobile = pending.accepted_signer.ok_or_else(|| {
+        api_error(
+            "pairing_incomplete",
+            "Validate the mobile signer response before finalizing the wallet.",
+        )
+    })?;
+    let wallet = read_multisig_metadata(&app)?;
+    let exact_mobile = wallet.cosigners.iter().any(|signer| {
+        signer.fingerprint == mobile.fingerprint
+            && signer.xpub == mobile.xpub
+            && signer.derivation_path == mobile.derivation_path
+    });
+    if wallet.name != pending.invitation.wallet_name
+        || wallet.threshold != pending.invitation.threshold
+        || wallet.cosigners.len() != pending.invitation.signer_count
+        || !exact_mobile
+    {
+        return Err(coordination_api_error(
+            CoordinationError::DescriptorMismatch,
+        ));
+    }
+    let descriptor = DescriptorRecord::from_descriptor_pair(
+        &wallet.external_descriptor,
+        &wallet.internal_descriptor,
+        &first_multisig_address(&wallet)?,
+    )
+    .map_err(bsms_api_error)?;
+    let profile = selected_profile_of_kind(&app, WalletKind::Multisig)?;
+    let record = PublicWalletRecord {
+        version: 1,
+        network: NETWORK_NAME.to_owned(),
+        wallet_id: profile.id.to_string(),
+        wallet_name: wallet.name,
+        role: DeviceRole::MobileCosigner,
+        descriptor_record: descriptor.encode(),
+        descriptor_checksum: profile.descriptor_checksum.clone(),
+        mobile_signer_fingerprint: Some(mobile.fingerprint.clone()),
+        created_at: now(),
+    };
+    record.validate().map_err(coordination_api_error)?;
+    let envelope = EncryptedEnvelope {
+        version: 1,
+        session_id,
+        encrypted_record: encrypt_bip129(
+            &pending.invitation.token,
+            &serde_json::to_vec(&record).map_err(internal)?,
+        )
+        .map_err(coordination_api_error)?,
+    };
+    write_private_json(
+        &coordination_metadata_path(&app, profile.id)?,
+        &CoordinationMetadata {
+            version: 1,
+            wallet_id: profile.id.to_string(),
+            role: DeviceRole::DesktopCoordinator,
+            mobile_signer_fingerprint: Some(mobile.fingerprint),
+            key_protection: "none_public_coordinator".to_owned(),
+            paired_at: now(),
+        },
+    )?;
+    encode_coordination(
+        CoordinationUrType::Wallet,
+        &serde_json::to_vec(&envelope).map_err(internal)?,
+    )
+}
+
+#[tauri::command]
+pub fn coordination_mobile_complete(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    frames: Vec<String>,
+    credential: String,
+) -> ApiResult<MultisigWalletDto> {
+    let _operation = operation_guard(&state)?;
+    let credential = Zeroizing::new(credential);
+    validate_credential(credential.as_str())?;
+    let envelope = decode_envelope(CoordinationUrType::Wallet, &frames)?;
+    let staged_path = pending_mobile_secret_path(&app, &envelope.session_id)?;
+    let staged_bytes = Zeroizing::new(
+        secure_store::load(&staged_path, credential.as_str()).map_err(secure_store_error)?,
+    );
+    let staged: PendingMobileSecret = serde_json::from_slice(&staged_bytes)
+        .map_err(|_| api_error("wallet_corrupt", "The pending mobile signer is malformed."))?;
+    staged
+        .invitation
+        .validate(now())
+        .map_err(coordination_api_error)?;
+    if staged.invitation.session_id != envelope.session_id {
+        return Err(coordination_api_error(
+            CoordinationError::AuthenticationFailed,
+        ));
+    }
+    let public_bytes = decrypt_bip129(&staged.invitation.token, &envelope.encrypted_record)
+        .map_err(coordination_api_error)?;
+    let public: PublicWalletRecord = serde_json::from_slice(&public_bytes)
+        .map_err(|_| invalid_payload("The encrypted wallet record is malformed."))?;
+    let descriptor = public.validate().map_err(coordination_api_error)?;
+    if public.wallet_name != staged.invitation.wallet_name {
+        return Err(coordination_api_error(
+            CoordinationError::DescriptorMismatch,
+        ));
+    }
+    let mnemonic = Mnemonic::parse(&staged.mnemonic).map_err(internal)?;
+    let (fingerprint, _, account_xpub) =
+        derive_mobile_account(&mnemonic).map_err(coordination_api_error)?;
+    if public.mobile_signer_fingerprint.as_deref() != Some(&fingerprint.to_string()) {
+        return Err(coordination_api_error(
+            CoordinationError::DescriptorMismatch,
+        ));
+    }
+    let (threshold, keys) = descriptor.standard_policy().map_err(bsms_api_error)?;
+    if threshold != staged.invitation.threshold
+        || keys.len() != staged.invitation.signer_count
+        || !keys.iter().any(|key| {
+            key.fingerprint == fingerprint
+                && key.xpub == account_xpub
+                && key.derivation_path == MULTISIG_ACCOUNT_PATH
+        })
+    {
+        return Err(coordination_api_error(
+            CoordinationError::DescriptorMismatch,
+        ));
+    }
+    let cosigners = keys
+        .into_iter()
+        .enumerate()
+        .map(|(index, key)| CosignerInput {
+            id: if key.fingerprint == fingerprint {
+                format!("mobile-{fingerprint}")
+            } else {
+                format!("paired-{}", key.fingerprint)
+            },
+            label: if key.fingerprint == fingerprint {
+                "This phone".to_owned()
+            } else {
+                format!("Signer {}", index + 1)
+            },
+            fingerprint: key.fingerprint.to_string(),
+            xpub: key.xpub.to_string(),
+            derivation_path: key.derivation_path,
+            source: CosignerSource::Qr,
+            device_type: (key.fingerprint == fingerprint).then(|| MOBILE_DEVICE_TYPE.to_owned()),
+        })
+        .collect::<Vec<_>>();
+    let preview = PolicyInput {
+        name: public.wallet_name,
+        threshold,
+        cosigners,
+    }
+    .preview()
+    .map_err(policy_api_error)?;
+    if !descriptor
+        .matches_descriptor_pair(&preview.external_descriptor, &preview.internal_descriptor)
+        .map_err(bsms_api_error)?
+    {
+        return Err(coordination_api_error(
+            CoordinationError::DescriptorMismatch,
+        ));
+    }
+    let wallet = MultisigWalletDto {
+        kind: "multisig".to_owned(),
+        name: preview.name,
+        threshold: preview.threshold,
+        cosigners: preview.cosigners,
+        external_descriptor: preview.external_descriptor,
+        internal_descriptor: preview.internal_descriptor,
+        created_at: now().to_string(),
+        policy_type: "standard".to_owned(),
+        recovery_template: None,
+        spending_paths: Vec::new(),
+    };
+    if first_multisig_address(&wallet)? != descriptor.first_address {
+        return Err(coordination_api_error(
+            CoordinationError::DescriptorMismatch,
+        ));
+    }
+    let (id, dir) = prepare_profile_directory(&app)?;
+    let result = (|| {
+        let mut db = open_wallet_database(&dir.join("wallet.sqlite"))?;
+        init_app_schema(&db)?;
+        Wallet::create(
+            wallet.external_descriptor.clone(),
+            wallet.internal_descriptor.clone(),
+        )
+        .network(NETWORK)
+        .create_wallet(&mut db)
+        .map_err(internal)?;
+        secure_store::store(
+            &dir.join("secret.json"),
+            format!("groot-multisig:{}", wallet.external_descriptor).as_bytes(),
+            credential.as_str(),
+        )
+        .map_err(secure_store_error)?;
+        // The PIN gates this local envelope. It is intentionally not a BIP39 passphrase.
+        secure_store::store(
+            &dir.join("mobile-signer.json"),
+            staged.mnemonic.as_bytes(),
+            credential.as_str(),
+        )
+        .map_err(secure_store_error)?;
+        write_private_json(&dir.join("wallet.json"), &wallet)?;
+        let checksum = descriptor_checksum(&wallet.external_descriptor)?;
+        if checksum != public.descriptor_checksum {
+            return Err(coordination_api_error(
+                CoordinationError::DescriptorMismatch,
+            ));
+        }
+        write_private_json(
+            &dir.join("coordination.json"),
+            &CoordinationMetadata {
+                version: 1,
+                wallet_id: id.to_string(),
+                role: DeviceRole::MobileCosigner,
+                mobile_signer_fingerprint: Some(fingerprint.to_string()),
+                key_protection: "argon2id_pin_envelope_testnet_only".to_owned(),
+                paired_at: now(),
+            },
+        )?;
+        commit_profile(
+            &app,
+            WalletProfile {
+                id,
+                name: wallet.name.clone(),
+                network: NETWORK_NAME.to_owned(),
+                kind: WalletKind::Multisig,
+                descriptor_checksum: checksum,
+                created_at: now(),
+                backup_verified: staged.backup_verified,
+            },
+        )
+    })();
+    if result.is_err() {
+        cleanup_failed_profile(&dir)?;
+    }
+    result?;
+    fs::remove_file(staged_path).map_err(internal)?;
+    unlock_selected(&app, &state)?;
+    reset_auth_throttle(&app, &state)?;
+    Ok(wallet)
+}
+
+#[tauri::command]
+pub fn coordination_mobile_psbt_review(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    psbt: String,
+) -> ApiResult<MobilePsbtReviewDto> {
+    let _operation = operation_guard(&state)?;
+    require_unlocked(&app, &state)?;
+    review_mobile_psbt(&app, &psbt)
+}
+
+#[tauri::command]
+pub fn coordination_mobile_sign_psbt(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    reviewed_psbt: String,
+    revision_id: String,
+    credential: String,
+) -> ApiResult<SignedMobilePsbtDto> {
+    let _operation = operation_guard(&state)?;
+    require_unlocked(&app, &state)?;
+    let profile = selected_profile_of_kind(&app, WalletKind::Multisig)?;
+    let coordination = read_coordination_metadata(&app, profile.id)?;
+    let wallet = read_multisig_metadata(&app)?;
+    let review = review_mobile_psbt_for(&wallet, &coordination, &reviewed_psbt)?;
+    if review.revision_id != revision_id {
+        return Err(api_error(
+            "proposal_mismatch",
+            "The PSBT changed after review. Scan it again before signing.",
+        ));
+    }
+    let credential = Zeroizing::new(credential);
+    check_auth_throttle(&app, &state)?;
+    let loaded = secure_store::load(
+        &profile_directory(&app, profile.id)?.join("mobile-signer.json"),
+        credential.as_str(),
+    )
+    .map_err(secure_store_error);
+    record_auth_result(&app, &state, &loaded)?;
+    let mut words = Zeroizing::new(String::from_utf8(loaded?).map_err(internal)?);
+    let mnemonic = Mnemonic::parse(words.as_str()).map_err(internal)?;
+    words.zeroize();
+    sign_mobile_psbt_for(&wallet, &mnemonic, &reviewed_psbt, revision_id)
+}
+
+fn sign_mobile_psbt_for(
+    wallet: &MultisigWalletDto,
+    mnemonic: &Mnemonic,
+    reviewed_psbt: &str,
+    revision_id: String,
+) -> ApiResult<SignedMobilePsbtDto> {
+    let reviewed = decode_psbt(reviewed_psbt).map_err(proposal_api_error)?;
+    if psbt_revision(&reviewed) != revision_id {
+        return Err(api_error(
+            "proposal_mismatch",
+            "The PSBT changed after review. Scan it again before signing.",
+        ));
+    }
+    let (fingerprint, account, account_xpub) =
+        derive_mobile_account(mnemonic).map_err(coordination_api_error)?;
+    let signer = wallet
+        .cosigners
+        .iter()
+        .find(|signer| signer.fingerprint == fingerprint.to_string())
+        .ok_or_else(|| coordination_api_error(CoordinationError::DescriptorMismatch))?;
+    if signer.xpub != account_xpub.to_string()
+        || signer.device_type.as_deref() != Some(MOBILE_DEVICE_TYPE)
+    {
+        return Err(coordination_api_error(
+            CoordinationError::DescriptorMismatch,
+        ));
+    }
+    let private = account.to_string();
+    let public_external = descriptor_without_checksum(&wallet.external_descriptor)?;
+    let public_internal = descriptor_without_checksum(&wallet.internal_descriptor)?;
+    let private_external =
+        public_external.replacen(&format!("]{}", signer.xpub), &format!("]{private}"), 1);
+    let private_internal =
+        public_internal.replacen(&format!("]{}", signer.xpub), &format!("]{private}"), 1);
+    if private_external == wallet.external_descriptor
+        || private_internal == wallet.internal_descriptor
+    {
+        return Err(coordination_api_error(
+            CoordinationError::DescriptorMismatch,
+        ));
+    }
+    let signing_wallet = Wallet::create(private_external, private_internal)
+        .network(NETWORK)
+        .create_wallet_no_persist()
+        .map_err(internal)?;
+    if signing_wallet
+        .public_descriptor(KeychainKind::External)
+        .to_string()
+        != wallet.external_descriptor
+        || signing_wallet
+            .public_descriptor(KeychainKind::Internal)
+            .to_string()
+            != wallet.internal_descriptor
+    {
+        return Err(coordination_api_error(
+            CoordinationError::DescriptorMismatch,
+        ));
+    }
+    let mut returned = reviewed.clone();
+    signing_wallet
+        .sign(
+            &mut returned,
+            SignOptions {
+                trust_witness_utxo: true,
+                try_finalize: false,
+                ..SignOptions::default()
+            },
+        )
+        .map_err(internal)?;
+    let signed = hardware_signature_response(&reviewed, returned).map_err(proposal_api_error)?;
+    let signed_psbt = encode_psbt(&signed);
+    let frames = ur_transport::encode_psbt(&signed_psbt, 220).map_err(ur_api_error)?;
+    Ok(SignedMobilePsbtDto {
+        revision_id,
+        signer_fingerprint: fingerprint.to_string(),
+        signed_psbt,
+        frames,
+    })
+}
+
+fn descriptor_without_checksum(descriptor: &str) -> ApiResult<&str> {
+    descriptor
+        .split_once('#')
+        .map(|(body, _)| body)
+        .ok_or_else(|| {
+            api_error(
+                "wallet_corrupt",
+                "The paired wallet descriptor is missing its checksum.",
+            )
+        })
+}
+
+fn review_mobile_psbt(app: &AppHandle, encoded: &str) -> ApiResult<MobilePsbtReviewDto> {
+    let profile = selected_profile_of_kind(app, WalletKind::Multisig)?;
+    let coordination = read_coordination_metadata(app, profile.id)?;
+    let metadata = read_multisig_metadata(app)?;
+    review_mobile_psbt_for(&metadata, &coordination, encoded)
+}
+
+fn review_mobile_psbt_for(
+    metadata: &MultisigWalletDto,
+    coordination: &CoordinationMetadata,
+    encoded: &str,
+) -> ApiResult<MobilePsbtReviewDto> {
+    if coordination.role != DeviceRole::MobileCosigner {
+        return Err(api_error(
+            "signing_unavailable",
+            "This device has a watch-only copy and cannot sign.",
+        ));
+    }
+    let psbt = decode_psbt(encoded).map_err(proposal_api_error)?;
+    if psbt.inputs.is_empty() || psbt.inputs.len() != psbt.unsigned_tx.input.len() {
+        return Err(api_error(
+            "malformed_psbt",
+            "The PSBT has no signable inputs.",
+        ));
+    }
+    if psbt.inputs.iter().any(|input| {
+        input.final_script_sig.is_some()
+            || input.final_script_witness.is_some()
+            || input.sighash_type.is_some_and(|value| {
+                value.ecdsa_hash_ty().ok() != Some(bdk_wallet::bitcoin::EcdsaSighashType::All)
+            })
+    }) {
+        return Err(api_error(
+            "unsupported_sighash",
+            "Groot mobile signs only unfinalized SIGHASH_ALL PSBTs.",
+        ));
+    }
+    let allowed = metadata
+        .cosigners
+        .iter()
+        .map(|signer| Fingerprint::from_str(&signer.fingerprint).map_err(internal))
+        .collect::<ApiResult<Vec<_>>>()?;
+    let progress =
+        signature_progress(&psbt, &allowed, metadata.threshold).map_err(proposal_api_error)?;
+    let signer_fingerprint = coordination
+        .mobile_signer_fingerprint
+        .as_deref()
+        .ok_or_else(|| api_error("wallet_corrupt", "Mobile signer identity is missing."))?;
+    let signer_fingerprint = Fingerprint::from_str(signer_fingerprint).map_err(internal)?;
+    let public_wallet = Wallet::create(
+        metadata.external_descriptor.clone(),
+        metadata.internal_descriptor.clone(),
+    )
+    .network(NETWORK)
+    .create_wallet_no_persist()
+    .map_err(internal)?;
+    let input_total = psbt
+        .inputs
+        .iter()
+        .map(|input| {
+            let output = input.witness_utxo.as_ref().ok_or_else(|| {
+                api_error(
+                    "malformed_psbt",
+                    "Every mobile-signing input must include its witness UTXO.",
+                )
+            })?;
+            let (keychain, index) =
+                owned_derivation(input.bip32_derivation.values(), signer_fingerprint)?;
+            if public_wallet
+                .peek_address(keychain, index)
+                .address
+                .script_pubkey()
+                != output.script_pubkey
+            {
+                return Err(api_error(
+                    "proposal_mismatch",
+                    "An input does not belong to the exact paired wallet policy.",
+                ));
+            }
+            Ok(output.value.to_sat())
+        })
+        .sum::<ApiResult<u64>>()?;
+    let output_total = psbt
+        .unsigned_tx
+        .output
+        .iter()
+        .map(|output| output.value.to_sat())
+        .sum::<u64>();
+    let fee_sats = input_total.checked_sub(output_total).ok_or_else(|| {
+        api_error(
+            "malformed_psbt",
+            "The PSBT outputs exceed its authenticated input values.",
+        )
+    })?;
+    let mut recipients = Vec::new();
+    let mut change = Vec::new();
+    for (index, output) in psbt.unsigned_tx.output.iter().enumerate() {
+        let item = MobileOutputDto {
+            address: Address::from_script(&output.script_pubkey, NETWORK)
+                .map_err(|_| {
+                    api_error(
+                        "malformed_psbt",
+                        "A PSBT output is invalid for this network.",
+                    )
+                })?
+                .to_string(),
+            amount_sats: output.value.to_sat(),
+        };
+        let owned = psbt.outputs[index]
+            .bip32_derivation
+            .values()
+            .find(|(fingerprint, _)| *fingerprint == signer_fingerprint);
+        if let Some((_, path)) = owned {
+            let (keychain, address_index) = parse_owned_path(path)?;
+            if public_wallet
+                .peek_address(keychain, address_index)
+                .address
+                .script_pubkey()
+                != output.script_pubkey
+            {
+                return Err(api_error(
+                    "proposal_mismatch",
+                    "An output falsely claims to be wallet change.",
+                ));
+            }
+            change.push(item);
+        } else {
+            recipients.push(item);
+        }
+    }
+    if recipients.is_empty() {
+        return Err(api_error(
+            "proposal_mismatch",
+            "The PSBT contains no independently reviewable recipient output.",
+        ));
+    }
+    Ok(MobilePsbtReviewDto {
+        revision_id: psbt_revision(&psbt),
+        transaction_id: psbt.unsigned_tx.compute_txid().to_string(),
+        input_count: psbt.inputs.len(),
+        recipients,
+        change,
+        fee_sats,
+        already_signed_by: progress.signed_fingerprints,
+    })
+}
+
+fn psbt_revision(psbt: &Psbt) -> String {
+    sha256::Hash::hash(&psbt.serialize()).to_string()
+}
+
+fn owned_derivation<'a>(
+    values: impl Iterator<Item = &'a (Fingerprint, DerivationPath)>,
+    fingerprint: Fingerprint,
+) -> ApiResult<(KeychainKind, u32)> {
+    let path = values
+        .filter(|(candidate, _)| *candidate == fingerprint)
+        .map(|(_, path)| path)
+        .next()
+        .ok_or_else(|| {
+            api_error(
+                "unknown_signer",
+                "The PSBT does not bind every input to this exact mobile signer.",
+            )
+        })?;
+    parse_owned_path(path)
+}
+
+fn parse_owned_path(path: &DerivationPath) -> ApiResult<(KeychainKind, u32)> {
+    let account = DerivationPath::from_str(MULTISIG_ACCOUNT_PATH).map_err(internal)?;
+    let suffix = path
+        .as_ref()
+        .strip_prefix(account.as_ref())
+        .ok_or_else(|| {
+            api_error(
+                "unsupported_derivation",
+                "The PSBT uses an unexpected signer path.",
+            )
+        })?;
+    let [branch, index] = suffix else {
+        return Err(api_error(
+            "unsupported_derivation",
+            "The PSBT signer path is incomplete.",
+        ));
+    };
+    let bdk_wallet::bitcoin::bip32::ChildNumber::Normal { index } = index else {
+        return Err(api_error(
+            "unsupported_derivation",
+            "The PSBT signer index must be a normal child.",
+        ));
+    };
+    let bdk_wallet::bitcoin::bip32::ChildNumber::Normal { index: branch } = branch else {
+        return Err(api_error(
+            "unsupported_derivation",
+            "The PSBT signer branch must be receive or change.",
+        ));
+    };
+    match branch {
+        0 => Ok((KeychainKind::External, *index)),
+        1 => Ok((KeychainKind::Internal, *index)),
+        _ => Err(api_error(
+            "unsupported_derivation",
+            "The PSBT signer branch must be receive or change.",
+        )),
+    }
+}
+
+fn encode_coordination(payload_type: CoordinationUrType, payload: &[u8]) -> ApiResult<Vec<String>> {
+    coordination_transport::encode(payload_type, payload, FRAGMENT_BYTES)
+        .map_err(coordination_ur_api_error)
+}
+
+fn decode_envelope(
+    payload_type: CoordinationUrType,
+    frames: &[String],
+) -> ApiResult<EncryptedEnvelope> {
+    let payload =
+        coordination_transport::decode(payload_type, frames).map_err(coordination_ur_api_error)?;
+    let envelope: EncryptedEnvelope = serde_json::from_slice(&payload)
+        .map_err(|_| invalid_payload("The encrypted pairing envelope is malformed."))?;
+    if envelope.version != 1 || Uuid::parse_str(&envelope.session_id).is_err() {
+        return Err(invalid_payload(
+            "The encrypted pairing envelope has an unsupported version or session.",
+        ));
+    }
+    Ok(envelope)
+}
+
+fn pending_mobile_secret_path(app: &AppHandle, session_id: &str) -> ApiResult<PathBuf> {
+    Uuid::parse_str(session_id)
+        .map_err(|_| invalid_payload("The pairing session identifier is invalid."))?;
+    let directory = app_data_dir(app)?.join("pending-mobile-pairings");
+    ensure_private_directory(&directory)?;
+    Ok(directory.join(format!("{session_id}.json")))
+}
+
+fn coordination_metadata_path(app: &AppHandle, wallet_id: Uuid) -> ApiResult<PathBuf> {
+    Ok(profile_directory(app, wallet_id)?.join("coordination.json"))
+}
+
+fn read_coordination_metadata(app: &AppHandle, wallet_id: Uuid) -> ApiResult<CoordinationMetadata> {
+    let encoded =
+        read_private_text(&coordination_metadata_path(app, wallet_id)?).map_err(|_| {
+            api_error(
+                "signing_unavailable",
+                "This wallet has no mobile signing identity on this device.",
+            )
+        })?;
+    serde_json::from_str(&encoded)
+        .map_err(|_| api_error("wallet_corrupt", "The coordination metadata is malformed."))
+}
+
+fn comparison_code(invitation: &PairingInvitation) -> String {
+    let digest = sha256::Hash::hash(
+        format!(
+            "groot-pairing-v1:{}:{}",
+            invitation.session_id, invitation.token
+        )
+        .as_bytes(),
+    )
+    .to_byte_array();
+    let value = u32::from_be_bytes(digest[..4].try_into().expect("four-byte prefix")) % 1_000_000;
+    format!("{value:06}")
+}
+
+fn short_checksum(value: &[u8]) -> String {
+    sha256::Hash::hash(value).to_string()[..8].to_owned()
+}
+
+fn encode_hex(bytes: &[u8]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut encoded = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        encoded.push(HEX[(byte >> 4) as usize] as char);
+        encoded.push(HEX[(byte & 0x0f) as usize] as char);
+    }
+    encoded
+}
+
+fn invalid_payload(message: impl Into<String>) -> ApiError {
+    api_error("invalid_coordination_payload", message.into())
+}
+
+fn session_missing() -> ApiError {
+    api_error(
+        "pairing_session_not_found",
+        "This one-time pairing session is missing, expired, or was cancelled.",
+    )
+}
+
+fn coordination_api_error(error: CoordinationError) -> ApiError {
+    let message = match error {
+        CoordinationError::TooLarge => "The coordination payload exceeds Groot's safety limit.",
+        CoordinationError::InvalidToken | CoordinationError::AuthenticationFailed => {
+            "The encrypted response does not authenticate to this one-time desktop invitation."
+        }
+        CoordinationError::InvalidSignature => {
+            "The mobile signer identity proof is invalid. Nothing was paired."
+        }
+        CoordinationError::WrongNetwork => "The coordination payload belongs to another network.",
+        CoordinationError::WrongDerivation => {
+            "Groot mobile V1 requires the compiled-network BIP48 native-SegWit account."
+        }
+        CoordinationError::DescriptorMismatch => {
+            "The final policy does not exactly contain the invited signer and agreed policy."
+        }
+        CoordinationError::UnsupportedVersion => "This coordination version is unsupported.",
+        CoordinationError::InvalidEncoding | CoordinationError::InvalidKeyRecord => {
+            "The coordination payload is malformed or unsupported."
+        }
+    };
+    api_error(error.code(), message)
+}
+
+fn coordination_ur_api_error(error: CoordinationUrError) -> ApiError {
+    let message = match error {
+        CoordinationUrError::TooLarge | CoordinationUrError::TooManyFrames => {
+            "The coordination QR exceeds Groot's bounded transport limits."
+        }
+        CoordinationUrError::WrongType => "Scan the QR requested by this exact step.",
+        CoordinationUrError::Empty
+        | CoordinationUrError::InvalidFrame
+        | CoordinationUrError::Incomplete
+        | CoordinationUrError::InvalidCbor => "The coordination QR is malformed or incomplete.",
+    };
+    api_error("invalid_coordination_qr", message)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bdk_bitcoind_rpc::{
+        bitcoincore_rpc::{jsonrpc, Auth, Client, RpcApi},
+        Emitter,
+    };
+    use bdk_wallet::bitcoin::{
+        bip32::{DerivationPath, Xpriv, Xpub},
+        secp256k1::Secp256k1,
+        Address, Amount, FeeRate, NetworkKind, Txid,
+    };
+    use bdk_wallet::rusqlite::Connection;
+    use std::{fs, path::PathBuf, sync::Arc};
+
+    struct HardwareKey {
+        fingerprint: String,
+        account_private: Xpriv,
+        account_public: Xpub,
+    }
+
+    struct TemporaryDatabase(PathBuf);
+
+    impl TemporaryDatabase {
+        fn new() -> Self {
+            Self(std::env::temp_dir().join(format!(
+                "groot-mobile-coordination-{}.sqlite",
+                Uuid::new_v4()
+            )))
+        }
+    }
+
+    impl Drop for TemporaryDatabase {
+        fn drop(&mut self) {
+            let _ = fs::remove_file(&self.0);
+            let _ = fs::remove_file(self.0.with_extension("sqlite-shm"));
+            let _ = fs::remove_file(self.0.with_extension("sqlite-wal"));
+        }
+    }
+
+    fn mobile_mnemonic() -> Mnemonic {
+        Mnemonic::from_entropy(&[7_u8; 32]).unwrap()
+    }
+
+    fn hardware_keys() -> Vec<HardwareKey> {
+        let secp = Secp256k1::new();
+        let path = DerivationPath::from_str(MULTISIG_ACCOUNT_PATH).unwrap();
+        [11_u8, 29]
+            .into_iter()
+            .map(|value| {
+                let master = Xpriv::new_master(NetworkKind::Test, &[value; 32]).unwrap();
+                let account_private = master.derive_priv(&secp, &path).unwrap();
+                HardwareKey {
+                    fingerprint: master.fingerprint(&secp).to_string(),
+                    account_public: Xpub::from_priv(&secp, &account_private),
+                    account_private,
+                }
+            })
+            .collect()
+    }
+
+    fn coordinated_wallet() -> (
+        Mnemonic,
+        Vec<HardwareKey>,
+        MultisigWalletDto,
+        CoordinationMetadata,
+    ) {
+        let mnemonic = mobile_mnemonic();
+        let (mobile_fingerprint, _, mobile_xpub) = derive_mobile_account(&mnemonic).unwrap();
+        let hardware = hardware_keys();
+        let mut cosigners = vec![CosignerInput {
+            id: format!("mobile-{mobile_fingerprint}"),
+            label: "This phone".to_owned(),
+            fingerprint: mobile_fingerprint.to_string(),
+            xpub: mobile_xpub.to_string(),
+            derivation_path: MULTISIG_ACCOUNT_PATH.to_owned(),
+            source: CosignerSource::Qr,
+            device_type: Some(MOBILE_DEVICE_TYPE.to_owned()),
+        }];
+        cosigners.extend(
+            hardware
+                .iter()
+                .enumerate()
+                .map(|(index, key)| CosignerInput {
+                    id: format!("hardware-{index}"),
+                    label: format!("Hardware signer {}", index + 1),
+                    fingerprint: key.fingerprint.clone(),
+                    xpub: key.account_public.to_string(),
+                    derivation_path: MULTISIG_ACCOUNT_PATH.to_owned(),
+                    source: CosignerSource::Virtual,
+                    device_type: Some("test-hardware".to_owned()),
+                }),
+        );
+        let preview = PolicyInput {
+            name: "Mobile coordinated wallet".to_owned(),
+            threshold: 2,
+            cosigners,
+        }
+        .preview()
+        .unwrap();
+        let wallet_id = Uuid::new_v4().to_string();
+        let wallet = MultisigWalletDto {
+            kind: "multisig".to_owned(),
+            name: preview.name,
+            threshold: preview.threshold,
+            cosigners: preview.cosigners,
+            external_descriptor: preview.external_descriptor,
+            internal_descriptor: preview.internal_descriptor,
+            created_at: "regtest".to_owned(),
+            policy_type: "standard".to_owned(),
+            recovery_template: None,
+            spending_paths: vec![],
+        };
+        let coordination = CoordinationMetadata {
+            version: 1,
+            wallet_id,
+            role: DeviceRole::MobileCosigner,
+            mobile_signer_fingerprint: Some(mobile_fingerprint.to_string()),
+            key_protection: "test-only".to_owned(),
+            paired_at: 1,
+        };
+        (mnemonic, hardware, wallet, coordination)
+    }
+
+    fn invitation(expires_at: u64) -> PairingInvitation {
+        PairingInvitation {
+            version: 1,
+            session_id: Uuid::new_v4().to_string(),
+            network: NETWORK_NAME.to_owned(),
+            wallet_name: "Mobile coordinated wallet".to_owned(),
+            threshold: 2,
+            signer_count: 3,
+            derivation_path: MULTISIG_ACCOUNT_PATH.to_owned(),
+            token: "00112233445566778899aabbccddeeff".to_owned(),
+            expires_at,
+        }
+    }
+
+    fn response_frames(invitation: &PairingInvitation) -> Vec<String> {
+        let mnemonic = mobile_mnemonic();
+        let (fingerprint, account, _) = derive_mobile_account(&mnemonic).unwrap();
+        let record =
+            KeyRecord::encode_signed(&invitation.token, fingerprint, &account, "This phone")
+                .unwrap();
+        let envelope = EncryptedEnvelope {
+            version: 1,
+            session_id: invitation.session_id.clone(),
+            encrypted_record: encrypt_bip129(&invitation.token, record.as_bytes()).unwrap(),
+        };
+        encode_coordination(
+            CoordinationUrType::Bsms,
+            &serde_json::to_vec(&envelope).unwrap(),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn desktop_pairing_response_is_authenticated_expiring_single_use_and_memory_only() {
+        let current_time = 1_000;
+        let active_invitation = invitation(current_time + 60);
+        let frames = response_frames(&active_invitation);
+        let mut sessions = HashMap::from([(
+            active_invitation.session_id.clone(),
+            PendingDesktopPairing {
+                invitation: active_invitation,
+                accepted_signer: None,
+            },
+        )]);
+
+        let signer = accept_desktop_response(&mut sessions, &frames, current_time).unwrap();
+        assert_eq!(signer.label, "This phone");
+        assert_eq!(signer.device_type.as_deref(), Some(MOBILE_DEVICE_TYPE));
+        assert_eq!(
+            accept_desktop_response(&mut sessions, &frames, current_time)
+                .unwrap_err()
+                .code,
+            "pairing_replay"
+        );
+
+        let expired = invitation(current_time);
+        let expired_frames = response_frames(&expired);
+        sessions.insert(
+            expired.session_id.clone(),
+            PendingDesktopPairing {
+                invitation: expired,
+                accepted_signer: None,
+            },
+        );
+        assert_eq!(
+            accept_desktop_response(&mut sessions, &expired_frames, current_time)
+                .unwrap_err()
+                .code,
+            "invalid_coordination_payload"
+        );
+
+        let restarted = HashMap::new();
+        let mut restarted = restarted;
+        assert_eq!(
+            accept_desktop_response(&mut restarted, &frames, current_time)
+                .unwrap_err()
+                .code,
+            "pairing_session_not_found"
+        );
+    }
+
+    #[test]
+    fn desktop_pairing_rejects_a_response_authenticated_with_another_invitation() {
+        let current_time = 1_000;
+        let expected = invitation(current_time + 60);
+        let mut substituted = expected.clone();
+        substituted.token = "ffeeddccbbaa99887766554433221100".to_owned();
+        let frames = response_frames(&substituted);
+        let mut sessions = HashMap::from([(
+            expected.session_id.clone(),
+            PendingDesktopPairing {
+                invitation: expected,
+                accepted_signer: None,
+            },
+        )]);
+        assert_eq!(
+            accept_desktop_response(&mut sessions, &frames, current_time)
+                .unwrap_err()
+                .code,
+            "pairing_authentication_failed"
+        );
+        assert!(sessions
+            .values()
+            .all(|pending| pending.accepted_signer.is_none()));
+    }
+
+    fn regtest_dir() -> PathBuf {
+        std::env::var_os("GROOT_REGTEST_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.regtest"))
+    }
+
+    fn rpc() -> Client {
+        let port = std::env::var("GROOT_RPC_PORT").unwrap_or_else(|_| "18443".to_owned());
+        let (username, password) = Auth::CookieFile(regtest_dir().join("regtest/.cookie"))
+            .get_user_pass()
+            .expect("read isolated Regtest cookie");
+        let mut builder = jsonrpc::minreq_http::MinreqHttpTransport::builder()
+            .url(&format!("http://127.0.0.1:{port}"))
+            .expect("Regtest RPC URL");
+        if let Some(username) = username {
+            builder = builder.basic_auth(username, password);
+        }
+        Client::from_jsonrpc(jsonrpc::Client::with_transport(builder.build()))
+    }
+
+    fn sync(wallet: &mut PersistedWallet<Connection>, db: &mut Connection, rpc: Arc<Client>) {
+        let mut emitter = Emitter::new(
+            rpc,
+            wallet.latest_checkpoint(),
+            0,
+            wallet
+                .transactions()
+                .filter(|transaction| transaction.chain_position.is_unconfirmed()),
+        );
+        while let Some(block) = emitter.next_block().expect("next Regtest block") {
+            wallet
+                .apply_block_connected_to(&block.block, block.block_height(), block.connected_to())
+                .expect("connect Regtest block");
+            wallet.persist(db).expect("persist Regtest block");
+        }
+        let mempool = emitter.mempool().expect("Regtest mempool");
+        wallet.apply_evicted_txs(mempool.evicted);
+        wallet.apply_unconfirmed_txs(mempool.update);
+        wallet.persist(db).expect("persist Regtest mempool");
+    }
+
+    fn hardware_sign(wallet: &MultisigWalletDto, key: &HardwareKey, psbt: &Psbt) -> Psbt {
+        let private = key.account_private.to_string();
+        let external = descriptor_without_checksum(&wallet.external_descriptor)
+            .unwrap()
+            .replacen(
+                &format!("]{}", key.account_public),
+                &format!("]{private}"),
+                1,
+            );
+        let internal = descriptor_without_checksum(&wallet.internal_descriptor)
+            .unwrap()
+            .replacen(
+                &format!("]{}", key.account_public),
+                &format!("]{private}"),
+                1,
+            );
+        let signer = Wallet::create(external, internal)
+            .network(Network::Regtest)
+            .create_wallet_no_persist()
+            .unwrap();
+        let mut returned = psbt.clone();
+        assert!(!signer
+            .sign(
+                &mut returned,
+                SignOptions {
+                    trust_witness_utxo: true,
+                    try_finalize: false,
+                    ..SignOptions::default()
+                },
+            )
+            .unwrap());
+        returned
+    }
+
+    #[test]
+    #[ignore = "requires the isolated Bitcoin Core regtest harness"]
+    fn funded_mobile_cosigner_round_trip_reviews_merges_finalizes_and_broadcasts() {
+        assert!(std::env::var_os("GROOT_RUN_REGTEST").is_some());
+        let (mnemonic, hardware, metadata, coordination) = coordinated_wallet();
+        let database = TemporaryDatabase::new();
+        let mut db = Connection::open(&database.0).unwrap();
+        let mut coordinator = Wallet::create(
+            metadata.external_descriptor.clone(),
+            metadata.internal_descriptor.clone(),
+        )
+        .network(Network::Regtest)
+        .create_wallet(&mut db)
+        .unwrap();
+        let receive = coordinator.reveal_next_address(KeychainKind::External);
+        coordinator.persist(&mut db).unwrap();
+
+        let rpc = Arc::new(rpc());
+        rpc.call::<Txid>(
+            "sendtoaddress",
+            &[
+                serde_json::json!(receive.address.to_string()),
+                serde_json::json!(0.01),
+            ],
+        )
+        .unwrap();
+        let mining: Address = rpc
+            .get_new_address(Some("Groot mobile coordination"), None)
+            .unwrap()
+            .require_network(Network::Regtest)
+            .unwrap();
+        rpc.generate_to_address(1, &mining).unwrap();
+        sync(&mut coordinator, &mut db, Arc::clone(&rpc));
+        assert_eq!(coordinator.balance().confirmed.to_sat(), 1_000_000);
+
+        let destination = rpc
+            .get_new_address(Some("Groot mobile destination"), None)
+            .unwrap()
+            .require_network(Network::Regtest)
+            .unwrap();
+        let mut builder = coordinator.build_tx();
+        builder
+            .add_recipient(destination.script_pubkey(), Amount::from_sat(250_000))
+            .fee_rate(FeeRate::from_sat_per_vb(2).unwrap());
+        let mut unsigned = builder.finish().unwrap();
+        let encoded = encode_psbt(&unsigned);
+        let review = review_mobile_psbt_for(&metadata, &coordination, &encoded).unwrap();
+        assert_eq!(review.input_count, 1);
+        assert_eq!(review.recipients.len(), 1);
+        assert_eq!(review.recipients[0].amount_sats, 250_000);
+        assert!(!review.change.is_empty());
+        assert!(review.fee_sats > 0);
+
+        let mut missing_utxo = unsigned.clone();
+        missing_utxo.inputs[0].witness_utxo = None;
+        assert_eq!(
+            review_mobile_psbt_for(&metadata, &coordination, &encode_psbt(&missing_utxo))
+                .unwrap_err()
+                .code,
+            "malformed_psbt"
+        );
+
+        let mut foreign_input = unsigned.clone();
+        foreign_input.inputs[0]
+            .witness_utxo
+            .as_mut()
+            .unwrap()
+            .script_pubkey = destination.script_pubkey();
+        assert_eq!(
+            review_mobile_psbt_for(&metadata, &coordination, &encode_psbt(&foreign_input))
+                .unwrap_err()
+                .code,
+            "proposal_mismatch"
+        );
+
+        let mut wrong_sighash = unsigned.clone();
+        wrong_sighash.inputs[0].sighash_type =
+            Some(bdk_wallet::bitcoin::psbt::PsbtSighashType::from(
+                bdk_wallet::bitcoin::EcdsaSighashType::Single,
+            ));
+        assert_eq!(
+            review_mobile_psbt_for(&metadata, &coordination, &encode_psbt(&wrong_sighash))
+                .unwrap_err()
+                .code,
+            "unsupported_sighash"
+        );
+
+        let recipient_index = unsigned
+            .unsigned_tx
+            .output
+            .iter()
+            .position(|output| output.script_pubkey == destination.script_pubkey())
+            .unwrap();
+        let mobile_fingerprint =
+            Fingerprint::from_str(coordination.mobile_signer_fingerprint.as_deref().unwrap())
+                .unwrap();
+        let (public_key, derivation) = unsigned.inputs[0]
+            .bip32_derivation
+            .iter()
+            .find(|(_, (fingerprint, _))| *fingerprint == mobile_fingerprint)
+            .map(|(public_key, derivation)| (*public_key, derivation.clone()))
+            .unwrap();
+        let mut false_change = unsigned.clone();
+        false_change.outputs[recipient_index]
+            .bip32_derivation
+            .insert(public_key, derivation);
+        assert_eq!(
+            review_mobile_psbt_for(&metadata, &coordination, &encode_psbt(&false_change))
+                .unwrap_err()
+                .code,
+            "proposal_mismatch"
+        );
+
+        let mut stale = unsigned.clone();
+        stale.unsigned_tx.output[recipient_index].value = Amount::from_sat(249_999);
+        assert_eq!(
+            sign_mobile_psbt_for(
+                &metadata,
+                &mnemonic,
+                &encode_psbt(&stale),
+                review.revision_id.clone(),
+            )
+            .unwrap_err()
+            .code,
+            "proposal_mismatch"
+        );
+
+        let signed =
+            sign_mobile_psbt_for(&metadata, &mnemonic, &encoded, review.revision_id.clone())
+                .unwrap();
+        assert_eq!(signed.revision_id, review.revision_id);
+        assert!(!signed.frames.is_empty());
+        let mobile_returned = decode_psbt(&signed.signed_psbt).unwrap();
+        let allowed = metadata
+            .cosigners
+            .iter()
+            .map(|signer| Fingerprint::from_str(&signer.fingerprint).unwrap())
+            .collect::<Vec<_>>();
+        let progress = merge_signed_psbt(&mut unsigned, mobile_returned, &allowed, 2).unwrap();
+        assert_eq!(progress.signed, 1);
+        assert!(!progress.can_finalize);
+
+        let hardware_returned = hardware_sign(&metadata, &hardware[0], &unsigned);
+        let progress = merge_signed_psbt(&mut unsigned, hardware_returned, &allowed, 2).unwrap();
+        assert_eq!(progress.signed, 2);
+        assert!(progress.can_finalize);
+        assert!(coordinator
+            .finalize_psbt(&mut unsigned, SignOptions::default())
+            .unwrap());
+        let transaction = unsigned.extract_tx().unwrap();
+        let txid = rpc.send_raw_transaction(&transaction).unwrap();
+        assert_eq!(txid, transaction.compute_txid());
+        assert!(rpc.get_mempool_entry(&txid).is_ok());
+    }
+
+    #[test]
+    fn mobile_review_fails_closed_for_watch_only_and_revision_substitution() {
+        let (mnemonic, _, metadata, mut coordination) = coordinated_wallet();
+        coordination.role = DeviceRole::MobileWatchOnly;
+        assert_eq!(
+            review_mobile_psbt_for(&metadata, &coordination, "not-a-psbt")
+                .unwrap_err()
+                .code,
+            "signing_unavailable"
+        );
+
+        let empty = Psbt::from_unsigned_tx(Transaction {
+            version: bdk_wallet::bitcoin::transaction::Version::TWO,
+            lock_time: bdk_wallet::bitcoin::absolute::LockTime::ZERO,
+            input: vec![],
+            output: vec![],
+        })
+        .unwrap();
+        assert_eq!(
+            sign_mobile_psbt_for(
+                &metadata,
+                &mnemonic,
+                &encode_psbt(&empty),
+                "stale-revision".to_owned(),
+            )
+            .unwrap_err()
+            .code,
+            "proposal_mismatch"
+        );
+    }
+}

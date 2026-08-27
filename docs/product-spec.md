@@ -15,6 +15,7 @@ The distributed macOS application includes Groot's exact reviewed Bitcoin Core H
 - Descriptor-first Miniscript multisig using native-SegWit `wsh(sortedmulti())` in coordinator v1.
 - Default coordinator policy is 2-of-3 with BIP48 test-network account origins.
 - A Groot-generated software wallet uses one BIP39 wallet passphrase: it is required with the 24 recovery words and also unlocks/signs in Groot. Hardware-only and multisig wallets instead use a device-local app PIN that is never part of a signer seed or hardware passphrase.
+- A Groot mobile BIP48 multisig cosigner is recovered from its 24 words with an empty BIP39 passphrase. Its device-local app PIN gates the encrypted phone copy only; it never alters BIP39/BIP32 derivation. Accountless cross-platform setup and signing are Regtest/Testnet4-only until [`cross-platform-coordination.md`](cross-platform-coordination.md) passes its native iOS and physical certification gates.
 - Explicit local verifier rejects an incorrect credential before wallet loading.
 - Signet is the first remote integration network.
 - Regtest creates deterministic high-volume histories in automated tests.

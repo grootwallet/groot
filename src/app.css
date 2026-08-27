@@ -10879,3 +10879,31 @@ code {
 .wallet-more {
   z-index: 40;
 }
+
+.mobile-pairing-flow {
+  display: grid;
+  gap: 1rem;
+}
+
+.comparison-code {
+  display: grid;
+  justify-items: center;
+  gap: 0.25rem;
+  padding: 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 0.8rem;
+}
+
+.comparison-code small {
+  color: var(--muted);
+}
+
+.comparison-code strong {
+  font-size: 1.65rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.18em;
+}
+
+.paired-mobile span {
+  font-family: var(--font-mono);
+}

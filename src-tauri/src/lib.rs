@@ -5,6 +5,8 @@ mod auth;
 pub mod bsms;
 mod build_network;
 mod compact_filters;
+pub mod coordination;
+pub mod coordination_transport;
 mod direct_rpc;
 pub mod external_signer;
 mod hardware;
@@ -114,6 +116,18 @@ pub fn run() {
             wallet::hardware_commands::multisig_policy_verification_address,
             wallet::hardware_commands::multisig_draft_policy_verification_address,
             wallet::multisig_setup_commands::multisig_preview,
+            wallet::coordination_commands::coordination_pairing_invitation,
+            wallet::coordination_commands::coordination_pairing_cancel,
+            wallet::coordination_commands::coordination_decode_invitation,
+            wallet::coordination_commands::coordination_mobile_accept,
+            wallet::coordination_commands::coordination_desktop_accept,
+            wallet::coordination_commands::coordination_desktop_finalize,
+            wallet::coordination_commands::coordination_mobile_complete,
+            wallet::coordination_commands::coordination_mobile_psbt_review,
+            wallet::coordination_commands::coordination_mobile_sign_psbt,
+            wallet::coordination_commands::coordination_status,
+            wallet::coordination_commands::coordination_watch_only_encode,
+            wallet::coordination_commands::coordination_watch_only_decode,
             wallet::multisig_setup_commands::multisig_setup_draft,
             wallet::multisig_setup_commands::multisig_setup_draft_save,
             wallet::multisig_setup_commands::multisig_setup_draft_discard,
