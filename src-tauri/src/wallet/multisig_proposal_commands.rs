@@ -892,9 +892,7 @@ pub async fn hardware_sign_multisig(
     let expected_signers =
         hardware_commands::saved_cosigner_candidates_for_device(&eligible_cosigners, &device)?;
     let (signed, signing_identity) = tauri::async_runtime::spawn_blocking(move || {
-        let operation = hwi
-            .begin_interactive_operation()
-            .map_err(hardware_api_error)?;
+        let operation = hwi.begin_signing_operation().map_err(hardware_api_error)?;
         let identity = hardware_commands::prove_live_cosigner_identity_for_candidates(
             &hwi,
             &operation,

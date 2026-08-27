@@ -28,9 +28,11 @@ const DEFAULT_TIMEOUT: Duration = Duration::from_secs(90);
 // password during aggregate discovery itself, before Groot has a capability
 // that could start a separate interactive request. Ninety seconds preserves a
 // human unlock window while ensuring an aggregate backend stall cannot look
-// indefinite. Selected-device review retains the longer five-minute window.
+// indefinite. Selected-device review retains the longer five-minute window,
+// while transaction signing allows ten minutes for full on-device review.
 const DISCOVERY_TIMEOUT: Duration = Duration::from_secs(90);
 const USER_REVIEW_TIMEOUT: Duration = Duration::from_secs(5 * 60);
+const SIGNING_REVIEW_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 const HWI_DIGEST_HEX_BYTES: usize = 64;
 const HWI_FIXED_ARGV: &[&str] = &["--stdin"];
 static HWI_COORDINATOR: OnceLock<HardwareCoordinator> = OnceLock::new();
@@ -526,6 +528,10 @@ impl HwiCli {
 
     pub fn begin_interactive_operation(&self) -> Result<HardwareOperation, HardwareError> {
         HardwareOperation::acquire(HardwareOperationKind::Interactive, USER_REVIEW_TIMEOUT)
+    }
+
+    pub fn begin_signing_operation(&self) -> Result<HardwareOperation, HardwareError> {
+        HardwareOperation::acquire(HardwareOperationKind::Interactive, SIGNING_REVIEW_TIMEOUT)
     }
 
     fn begin_discovery_operation(&self) -> Result<HardwareOperation, HardwareError> {
@@ -1677,6 +1683,9 @@ mod tests {
         assert_eq!(DISCOVERY_TIMEOUT, Duration::from_secs(90));
         assert_eq!(DISCOVERY_TIMEOUT, DEFAULT_TIMEOUT);
         assert!(DISCOVERY_TIMEOUT < USER_REVIEW_TIMEOUT);
+        assert_eq!(USER_REVIEW_TIMEOUT, Duration::from_secs(5 * 60));
+        assert_eq!(SIGNING_REVIEW_TIMEOUT, Duration::from_secs(10 * 60));
+        assert!(USER_REVIEW_TIMEOUT < SIGNING_REVIEW_TIMEOUT);
     }
 
     #[test]

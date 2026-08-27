@@ -995,6 +995,17 @@ fn proposal_review_rejects_any_non_recipient_output_not_owned_by_the_wallet() {
         proposal_change_details(&wallet, &psbt, &recipient.to_string(), 10_000).unwrap();
     assert_eq!(change_total, 5_000);
     assert_eq!(addresses, vec![change.to_string()]);
+    assert_eq!(
+        proposal_recipient_wallet_details(&wallet, &psbt, &recipient.to_string(), 10_000).unwrap(),
+        (false, vec![])
+    );
+    let mut self_transfer = psbt.clone();
+    self_transfer.unsigned_tx.output[0].script_pubkey = funding.script_pubkey();
+    assert_eq!(
+        proposal_recipient_wallet_details(&wallet, &self_transfer, &funding.to_string(), 10_000)
+            .unwrap(),
+        (true, vec![])
+    );
     let (inputs, actual_rate, locktime, rbf) =
         proposal_transaction_details(&wallet, &psbt, 1_000).unwrap();
     assert_eq!(inputs.len(), 1);
@@ -1504,6 +1515,13 @@ fn hwi_response_codes_become_safe_actionable_errors() {
         .message
         .contains("register this wallet policy"));
     assert!(!ledger_policy.message.contains("Trezor"));
+
+    let trezor_timeout = hardware_device_api_error(HardwareError::TimedOut, "trezor");
+    assert_eq!(trezor_timeout.code, "hardware_timeout");
+    assert!(trezor_timeout.message.contains("reconnect it"));
+    assert!(trezor_timeout
+        .message
+        .contains("proposal and its signatures are unchanged"));
 
     let ledger = missing_hardware_xpub("ledger", "m/48'/1'/0'/2'", None, None, "fallback");
     assert_eq!(ledger.code, "hardware_unavailable");
@@ -3009,6 +3027,8 @@ fn restart_restores_proposals_frozen_coins_and_acknowledged_notifications() {
                 proposal_id: proposal_id.clone(),
                 recipient: "bcrt1qrestartfixture".into(),
                 recipient_testnet_alias: None,
+                recipient_is_wallet_owned: false,
+                recipient_derivation_paths: vec![],
                 label: "Restart fixture".into(),
                 labels: vec!["Restart fixture".into()],
                 amount: 10,
@@ -3265,6 +3285,8 @@ fn prepared_wallet_proposal_and_acceleration_roll_back_as_one_unit() {
         proposal_id: "atomic-proposal".into(),
         recipient: "bcrt1qatomicfixture".into(),
         recipient_testnet_alias: None,
+        recipient_is_wallet_owned: false,
+        recipient_derivation_paths: vec![],
         label: "Atomic fixture".into(),
         labels: vec!["Atomic fixture".into()],
         amount: 10,

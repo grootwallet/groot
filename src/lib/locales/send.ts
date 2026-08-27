@@ -1,6 +1,21 @@
 import type { CatalogSection } from './types';
 
 export const sendCopy = {
+  'Self-transfer': { fr: 'Transfert interne', es: 'Transferencia interna' },
+  'Self-transfer recipient': {
+    fr: 'Destinataire interne',
+    es: 'Destinatario interno'
+  },
+  'This recipient belongs to this wallet. The network fee is the only amount leaving the wallet.': {
+    fr: 'Ce destinataire appartient à ce portefeuille. Seuls les frais de réseau quittent le portefeuille.',
+    es: 'Este destinatario pertenece a esta cartera. Solo la comisión de red sale de la cartera.'
+  },
+  'Receive path': { fr: 'Chemin de réception', es: 'Ruta de recepción' },
+  'Receive paths': { fr: 'Chemins de réception', es: 'Rutas de recepción' },
+  'Your session expired. Unlock this wallet before using a hardware signer.': {
+    fr: "Votre session a expiré. Déverrouillez ce portefeuille avant d'utiliser un signataire matériel.",
+    es: 'Tu sesión ha caducado. Desbloquea esta cartera antes de usar un firmante físico.'
+  },
   'Renew protection': { fr: 'Renouveler la protection', es: 'Renovar protección' },
   'Move this coin within your wallet to restart its protection.': {
     fr: 'Déplacez cette pièce dans votre portefeuille pour redémarrer sa protection.',

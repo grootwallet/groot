@@ -24,9 +24,19 @@
   const inputPaths = $derived([
     ...new Set(proposal.inputs.flatMap((input) => input.derivationPaths ?? []))
   ]);
+  const recipientPaths = $derived([...new Set(proposal.recipientDerivationPaths ?? [])]);
   const changePaths = $derived([...new Set(proposal.changeDerivationPaths?.flat() ?? [])]);
 </script>
 
+{#if proposal.recipientIsWalletOwned}<aside class="self-transfer-notice">
+    <strong>{translate($locale, 'Self-transfer')}</strong>
+    <span
+      >{translate(
+        $locale,
+        'This recipient belongs to this wallet. The network fee is the only amount leaving the wallet.'
+      )}</span
+    >
+  </aside>{/if}
 <details class:hardware-review-details={compact} class:proposal-review-details={!compact}>
   <summary>{translate($locale, 'View more details')}</summary>
   <dl class:details-list={!compact}>
@@ -52,6 +62,14 @@
       <dt>{translate($locale, 'Outputs')}</dt>
       <dd>{proposal.outputCount}</dd>
     </div>
+    {#if recipientPaths.length}<div>
+        <dt>
+          {translate($locale, recipientPaths.length === 1 ? 'Receive path' : 'Receive paths')}
+        </dt>
+        <dd class="derivation-paths">
+          {#each recipientPaths as path}<code>{path}</code>{/each}
+        </dd>
+      </div>{/if}
     <div>
       <dt>{translate($locale, 'Fee rate')}</dt>
       <dd>{proposal.feeRate} {translate($locale, 'sat/vB')}</dd>

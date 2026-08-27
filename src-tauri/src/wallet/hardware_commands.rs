@@ -1840,6 +1840,8 @@ pub(crate) fn external_proposal_dto(
     let fingerprint = fingerprint.parse().map_err(internal)?;
     let progress = signature_progress(&psbt, &[fingerprint], 1).map_err(proposal_api_error)?;
     let (change, change_addresses) = proposal_change_details(wallet, &psbt, &recipient, amount)?;
+    let (recipient_is_wallet_owned, recipient_derivation_paths) =
+        proposal_recipient_wallet_details(wallet, &psbt, &recipient, amount)?;
     let (recipient_testnet_alias, change_testnet_aliases) =
         proposal_testnet_aliases(&recipient, &change_addresses);
     let change_derivation_paths = proposal_change_derivation_paths(&psbt, &change_addresses)?;
@@ -1855,6 +1857,8 @@ pub(crate) fn external_proposal_dto(
         proposal_id,
         recipient,
         recipient_testnet_alias,
+        recipient_is_wallet_owned,
+        recipient_derivation_paths,
         label,
         labels,
         amount,
@@ -2084,9 +2088,7 @@ pub async fn hardware_sign_external(
     let hwi = hwi_cli(&app)?;
     let device = recently_scanned_hardware_device(&state, &device_id)?;
     let signed = tauri::async_runtime::spawn_blocking(move || {
-        let operation = hwi
-            .begin_interactive_operation()
-            .map_err(hardware_api_error)?;
+        let operation = hwi.begin_signing_operation().map_err(hardware_api_error)?;
         let identity =
             prove_live_external_signer_identity(&hwi, &operation, &device, &expected_signer)?;
         let output = hwi

@@ -125,6 +125,8 @@ When a locked hardware signer has no discovery fingerprint, the signing UI may a
 
 Transaction history details use the same progressive-disclosure pattern as transaction review. Status, amount, label, date, confirmations, fee, and destination remain immediately visible. Rust derives actual signed-transaction input/output counts, wallet-side input/output amounts, fee rate, locktime, and RBF state for **View more details**, alongside transaction IDs, block/replacement identifiers, self-spend classification, and explorer controls. Metadata unavailable for a legacy synthetic replacement is omitted rather than inferred in the webview.
 
+When Rust proves that the proposal recipient output belongs to the selected wallet, Review & sign labels the destination **Self-transfer**, states that only the network fee leaves the wallet, and exposes the recipient output's PSBT key-origin path with the input/change paths. The renderer never infers wallet ownership.
+
 ## Activity and transaction details
 
 Search matches the transaction title, payment-intent label, and inherited provenance labels. Direction filters combine with deterministic latest/earliest and largest/smallest sorting without changing wallet state. Time sorting keeps active pending transactions above confirmed history for **Latest first** and below it for **Earliest first**, then orders each group by its timestamp; this prevents a miner-supplied block timestamp from placing a newly seen mempool payment below older confirmed activity.

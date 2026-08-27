@@ -702,7 +702,36 @@
     const signer = savedSignerForDevice(device);
     return signer ? matchingPolicyVerification(signer, policyVerifications) : null;
   }
+  async function redirectExpiredHardwareSession(cause?: unknown): Promise<boolean> {
+    if (cause && (!(cause instanceof WalletError) || cause.code !== 'wallet_locked')) return false;
+    hardwareScanGeneration += 1;
+    busy = false;
+    pinBusy = false;
+    deviceOpen = false;
+    pinOpen = false;
+    policyReviewOpen = false;
+    coldcardSetupOpen = false;
+    deviceError = '';
+    toast({
+      title: 'Wallet locked',
+      description: 'Your session expired. Unlock this wallet before using a hardware signer.'
+    });
+    await goto('/unlock');
+    return true;
+  }
+  async function hardwareSessionIsUnlocked(): Promise<boolean> {
+    try {
+      if ((await walletService.session()).unlocked) return true;
+      await redirectExpiredHardwareSession();
+      return false;
+    } catch (cause) {
+      if (await redirectExpiredHardwareSession(cause)) return false;
+      deviceError = localizedError(cause, $locale, 'Could not verify the wallet session.');
+      return false;
+    }
+  }
   async function scan() {
+    if (!(await hardwareSessionIsUnlocked())) return;
     const generation = ++hardwareScanGeneration;
     deviceOpen = true;
     activeHardwareDevice = null;
@@ -715,6 +744,7 @@
       devices = discovered;
     } catch (cause) {
       if (generation !== hardwareScanGeneration) return;
+      if (await redirectExpiredHardwareSession(cause)) return;
       devices = [];
       deviceError = localizedError(cause, $locale, 'Could not find hardware.');
     } finally {
@@ -825,6 +855,7 @@
       deviceOpen = false;
       pinOpen = true;
     } catch (cause) {
+      if (await redirectExpiredHardwareSession(cause)) return;
       const message = localizedError(cause, $locale, 'Could not start the PIN matrix.');
       if (retrying) {
         pinErrorCode = cause instanceof WalletError ? cause.code : 'internal_error';
@@ -854,6 +885,7 @@
       });
       await scan();
     } catch (cause) {
+      if (await redirectExpiredHardwareSession(cause)) return;
       pinChallenge = '';
       pinErrorCode = cause instanceof WalletError ? cause.code : 'internal_error';
       pinError = localizedError(cause, $locale, 'Trezor did not accept that matrix entry.');
@@ -896,6 +928,7 @@
         tone: 'success'
       });
     } catch (cause) {
+      if (await redirectExpiredHardwareSession(cause)) return;
       closeHardwareReviewOverlays();
       policyReviewOpen = false;
       deviceOpen = !hardwareCancelRequested;
@@ -2156,7 +2189,12 @@
       <strong>{translate($locale, 'Transaction to verify')}</strong>
       <dl class="hardware-review-primary">
         <div>
-          <dt>{translate($locale, 'Recipient')}</dt>
+          <dt>
+            {translate(
+              $locale,
+              proposal.recipientIsWalletOwned ? 'Self-transfer recipient' : 'Recipient'
+            )}
+          </dt>
           <dd>
             <button
               type="button"

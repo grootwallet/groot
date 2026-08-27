@@ -1355,6 +1355,8 @@ pub struct PaymentProposalDto {
     proposal_id: String,
     recipient: String,
     recipient_testnet_alias: Option<String>,
+    recipient_is_wallet_owned: bool,
+    recipient_derivation_paths: Vec<String>,
     label: String,
     labels: Vec<String>,
     amount: u64,
@@ -1511,6 +1513,8 @@ pub struct MultisigProposalDto {
     proposal_id: String,
     recipient: String,
     recipient_testnet_alias: Option<String>,
+    recipient_is_wallet_owned: bool,
+    recipient_derivation_paths: Vec<String>,
     label: String,
     labels: Vec<String>,
     amount: u64,
@@ -4240,6 +4244,8 @@ fn proposal_dto(
     let progress = signature_progress(&psbt, &signing.fingerprints, signing.required)
         .map_err(proposal_api_error)?;
     let (change, change_addresses) = proposal_change_details(wallet, &psbt, &recipient, amount)?;
+    let (recipient_is_wallet_owned, recipient_derivation_paths) =
+        proposal_recipient_wallet_details(wallet, &psbt, &recipient, amount)?;
     let (recipient_testnet_alias, change_testnet_aliases) =
         proposal_testnet_aliases(&recipient, &change_addresses);
     let change_derivation_paths = proposal_change_derivation_paths(&psbt, &change_addresses)?;
@@ -4255,6 +4261,8 @@ fn proposal_dto(
         proposal_id,
         recipient,
         recipient_testnet_alias,
+        recipient_is_wallet_owned,
+        recipient_derivation_paths,
         label,
         labels,
         amount,
@@ -4334,6 +4342,53 @@ fn proposal_change_details(
         ));
     }
     Ok((change, change_addresses))
+}
+
+fn proposal_recipient_wallet_details(
+    wallet: &Wallet,
+    psbt: &Psbt,
+    recipient: &str,
+    amount: u64,
+) -> ApiResult<(bool, Vec<String>)> {
+    let recipient_script = Address::from_str(recipient)
+        .map_err(|_| internal("The stored proposal recipient is invalid."))?
+        .require_network(NETWORK)
+        .map_err(|_| internal("The stored proposal recipient is on the wrong network."))?
+        .script_pubkey();
+    let self_spend = amount == 0;
+    let output_indexes = psbt
+        .unsigned_tx
+        .output
+        .iter()
+        .enumerate()
+        .filter_map(|(index, output)| {
+            (output.script_pubkey == recipient_script
+                && (self_spend || output.value.to_sat() == amount))
+                .then_some(index)
+        })
+        .collect::<Vec<_>>();
+    if output_indexes.len() != 1 {
+        return Err(api_error(
+            "proposal_mismatch",
+            "The stored proposal recipient does not match exactly one transaction output.",
+        ));
+    }
+    if wallet.derivation_of_spk(recipient_script).is_none() {
+        return Ok((false, Vec::new()));
+    }
+    let output = psbt
+        .outputs
+        .get(output_indexes[0])
+        .ok_or_else(|| internal("The proposal recipient output is missing PSBT metadata."))?;
+    Ok((
+        true,
+        unique_derivation_paths(
+            output
+                .bip32_derivation
+                .values()
+                .map(|(_, path)| path.to_string()),
+        ),
+    ))
 }
 
 fn proposal_change_derivation_paths(
@@ -4952,6 +5007,8 @@ fn load_payment_proposal_dto(
     let psbt = decode_psbt(&encoded).map_err(proposal_api_error)?;
     validate_proposal_fee(&psbt, fee)?;
     let (change, change_addresses) = proposal_change_details(wallet, &psbt, &recipient, amount)?;
+    let (recipient_is_wallet_owned, recipient_derivation_paths) =
+        proposal_recipient_wallet_details(wallet, &psbt, &recipient, amount)?;
     let (recipient_testnet_alias, change_testnet_aliases) =
         proposal_testnet_aliases(&recipient, &change_addresses);
     let change_derivation_paths = proposal_change_derivation_paths(&psbt, &change_addresses)?;
@@ -4967,6 +5024,8 @@ fn load_payment_proposal_dto(
         proposal_id,
         recipient,
         recipient_testnet_alias,
+        recipient_is_wallet_owned,
+        recipient_derivation_paths,
         label,
         labels,
         amount,
@@ -6226,6 +6285,12 @@ fn bundled_hwi_unavailable_message() -> &'static str {
 }
 
 fn hardware_device_api_error(error: HardwareError, device_type: &str) -> ApiError {
+    if device_type.eq_ignore_ascii_case("trezor") && matches!(error, HardwareError::TimedOut) {
+        return api_error(
+            error.code(),
+            "Trezor did not finish signing in time. If it remains on a loading screen, reconnect it, unlock it, scan again, and retry; the reviewed proposal and its signatures are unchanged.",
+        );
+    }
     if device_type.eq_ignore_ascii_case("ledger") {
         let message = match error {
             HardwareError::CommandFailed(Some(-3)) => {

@@ -34,4 +34,23 @@ describe('hardware signing review usability', () => {
     expect(policy).toContain('aria-expanded={addressExpanded}');
     expect(policy).toContain('{#if addressExpanded}<ReadableAddress');
   });
+
+  it('marks wallet-owned recipients and shows their Rust-derived receive paths', () => {
+    expect(details).toContain('proposal.recipientIsWalletOwned');
+    expect(details).toContain("'Self-transfer'");
+    expect(details).toContain('proposal.recipientDerivationPaths');
+    expect(details).toContain("'Receive path'");
+    for (const source of [singleSend, multisigSend]) {
+      expect(source).toContain("proposal.recipientIsWalletOwned ? 'Self-transfer recipient'");
+    }
+  });
+
+  it('checks the wallet session before hardware discovery and routes an expired session to unlock', () => {
+    for (const source of [singleSend, multisigSend]) {
+      expect(source).toContain('if ((await walletService.session()).unlocked) return true');
+      expect(source).toContain("cause.code !== 'wallet_locked'");
+      expect(source).toContain("await goto('/unlock')");
+      expect(source).toContain('if (!(await hardwareSessionIsUnlocked())) return');
+    }
+  });
 });

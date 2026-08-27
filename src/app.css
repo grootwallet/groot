@@ -2874,6 +2874,24 @@ code {
 .proposal-review-details {
   border-bottom: 1px solid var(--border);
 }
+.self-transfer-notice {
+  display: grid;
+  gap: 3px;
+  margin: 10px 0;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--success) 35%, var(--border));
+  border-radius: 8px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--success) 8%, var(--surface-inset));
+  font-size: 10px;
+  line-height: 1.45;
+}
+.self-transfer-notice > strong {
+  font-size: 11px;
+}
+.self-transfer-notice > span {
+  color: var(--muted);
+}
 .proposal-review-details > summary {
   min-height: 45px;
   display: list-item;

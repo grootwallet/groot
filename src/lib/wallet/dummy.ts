@@ -629,10 +629,15 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     const inputs = (selectedOutpoints.length ? selectedOutpoints : ['fixture-auto-input:0']).map(
       (outpoint) => ({ outpoint, amount: sats(available), sequence: 0xfffffffd })
     );
+    const walletRecipient = this._addresses.find((address) => address.address === recipient);
     const proposal: PaymentProposal = {
       proposalId: crypto.randomUUID(),
       recipient,
       recipientTestnetAlias: null,
+      recipientIsWalletOwned: Boolean(walletRecipient),
+      recipientDerivationPaths: walletRecipient?.derivationPath
+        ? [walletRecipient.derivationPath]
+        : [],
       label,
       labels,
       amount,
@@ -1660,11 +1665,16 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     const inputs = (selectedOutpoints.length ? selectedOutpoints : ['fixture-auto-input:0']).map(
       (outpoint) => ({ outpoint, amount: sats(available), sequence: 0xfffffffd })
     );
+    const walletRecipient = this._addresses.find((address) => address.address === recipient);
     const proposal: MultisigProposal = {
       proposalId: crypto.randomUUID(),
       recipient,
       labels,
       recipientTestnetAlias: null,
+      recipientIsWalletOwned: Boolean(walletRecipient),
+      recipientDerivationPaths: walletRecipient?.derivationPath
+        ? [walletRecipient.derivationPath]
+        : [],
       label,
       amount,
       fee,

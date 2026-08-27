@@ -545,7 +545,32 @@
     importError = durableError;
     credentialError = durableError;
   }
+  async function redirectExpiredHardwareSession(cause?: unknown): Promise<boolean> {
+    if (cause && (!(cause instanceof WalletError) || cause.code !== 'wallet_locked')) return false;
+    hardwareScanGeneration += 1;
+    broadcasting = false;
+    deviceOpen = false;
+    deviceError = '';
+    toast({
+      title: 'Wallet locked',
+      description: 'Your session expired. Unlock this wallet before using a hardware signer.'
+    });
+    await goto('/unlock');
+    return true;
+  }
+  async function hardwareSessionIsUnlocked(): Promise<boolean> {
+    try {
+      if ((await walletService.session()).unlocked) return true;
+      await redirectExpiredHardwareSession();
+      return false;
+    } catch (cause) {
+      if (await redirectExpiredHardwareSession(cause)) return false;
+      deviceError = localizedError(cause, $locale, 'Could not verify the wallet session.');
+      return false;
+    }
+  }
   async function scanHardware() {
+    if (!(await hardwareSessionIsUnlocked())) return;
     const generation = ++hardwareScanGeneration;
     clearSigningTransportError();
     deviceOpen = true;
@@ -560,6 +585,7 @@
       devices = discovered;
     } catch (cause) {
       if (generation !== hardwareScanGeneration) return;
+      if (await redirectExpiredHardwareSession(cause)) return;
       devices = [];
       deviceError = localizedError(cause, $locale, 'Could not find hardware.');
     } finally {
@@ -591,6 +617,7 @@
       deviceOpen = false;
       toast({ title: 'Hardware signature added', tone: 'success' });
     } catch (cause) {
+      if (await redirectExpiredHardwareSession(cause)) return;
       deviceOpen = !hardwareCancelRequested;
       deviceError = hardwareCancelRequested
         ? ''
@@ -1543,7 +1570,12 @@
       <strong>{translate($locale, 'Transaction to verify')}</strong>
       <dl class="hardware-review-primary">
         <div>
-          <dt>{translate($locale, 'Recipient')}</dt>
+          <dt>
+            {translate(
+              $locale,
+              proposal.recipientIsWalletOwned ? 'Self-transfer recipient' : 'Recipient'
+            )}
+          </dt>
           <dd>
             <button
               type="button"
