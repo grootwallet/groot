@@ -2065,6 +2065,30 @@ code {
   font-size: 10px;
   color: var(--muted);
 }
+.available-balance-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+}
+.available-balance-summary > span {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+}
+.frozen-balance-guidance a {
+  color: var(--link);
+  font-weight: 650;
+  text-decoration: none;
+}
+.frozen-balance-guidance a:hover {
+  text-decoration: underline;
+}
+.frozen-balance-guidance a:focus-visible {
+  border-radius: 3px;
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
 .field > em {
   font-size: 10px;
   color: var(--danger);

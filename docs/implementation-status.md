@@ -2,6 +2,8 @@
 
 This ledger prevents prototype UI from being mistaken for production wallet behavior. “Implemented” means wired through the real Tauri adapter; “browser fixture” means deterministic UI behavior only.
 
+v0.4.50 makes frozen funds explicit on both single-key and multisig Send amount steps. When any wallet coin is frozen, the spendable balance is followed by the frozen amount and a **Review frozen coins** link to Coins, where unfreezing remains an explicit confirmed action. Groot never silently changes coin eligibility. No persisted format changes.
+
 v0.4.49 adds a deliberately small, navigation-only desktop shortcut set and a platform-aware reference under Settings → App appearance. Command on Apple platforms and Ctrl elsewhere opens Overview, Activity, Coins, Settings, Receive, or Send; shortcuts cannot submit, sign, broadcast, discard, or lock, and remain inert during startup, onboarding, lock, text entry, and dialogs. The shared shortcut definition drives both behavior and presentation. No persisted format changes.
 
 v0.4.48 gives the native startup identity enough time to read without exposing wallet state early. The existing canonical SVG lockup now reveals once from left to right over 900 ms and remains on the trusted-session gate for about 1.8 seconds; reduced-motion users see the static vector mark for the same brief gate. Browser-prototype startup remains immediate, route navigation never replays the animation, and no wallet, profile, proposal, registry, or network-settings format changes.

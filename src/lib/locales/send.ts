@@ -112,6 +112,11 @@ export const sendCopy = {
     fr: '{strategy} · les pièces gelées restent intactes',
     es: '{strategy} · las monedas congeladas no se modifican'
   },
+  frozen: { fr: 'gelés', es: 'congelados' },
+  'Review frozen coins': {
+    fr: 'Examiner les pièces gelées',
+    es: 'Revisar monedas congeladas'
+  },
   '{count} more signature required': {
     fr: 'Encore {count} signature requise',
     es: 'Se necesita {count} firma más'

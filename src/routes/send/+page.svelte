@@ -155,6 +155,9 @@
           : 'Balanced'
     )
   );
+  const frozenAmount = $derived(
+    coins.filter((coin) => coin.frozen).reduce((total, coin) => total + coin.amount, 0)
+  );
   const proposalHasPrivacyWarning = $derived(
     Boolean(
       proposal &&
@@ -923,9 +926,15 @@
             onclick={useMaxAmount}>{translate($locale, 'Max')}</button
           >
         </div>
-        <small
-          >{translate($locale, 'Available:')}
-          <Amount value={available} hidden={$discreetMode} /></small
+        <small class="available-balance-summary"
+          ><span
+            >{translate($locale, 'Available:')}
+            <Amount value={available} hidden={$discreetMode} /></span
+          >{#if frozenAmount > 0}<span class="frozen-balance-guidance"
+              ><Amount value={frozenAmount} hidden={$discreetMode} />
+              {translate($locale, 'frozen')} ·
+              <a href="/coins">{translate($locale, 'Review frozen coins')}</a></span
+            >{/if}</small
         ></label
       >
       <div class="coin-control-field">
