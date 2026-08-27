@@ -8,6 +8,7 @@ export type WalletShellContext = {
   selectedWalletId: () => string | null;
   refreshProfiles: () => Promise<void>;
   selectWallet: (walletId: string) => Promise<void>;
+  beginHardwareReview: () => () => void;
 };
 
 export function provideWalletShellContext(context: WalletShellContext) {

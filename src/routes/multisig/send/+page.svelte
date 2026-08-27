@@ -900,6 +900,7 @@
   }
   async function sign(device: HardwareDevice) {
     if (!proposal) return;
+    const releaseHardwareReview = walletShell.beginHardwareReview();
     const reviewingPolicy = policyReviewOpen && policyReviewDevice?.id === device.id;
     activeHardwareDevice = device;
     hardwareAction = 'sign';
@@ -936,6 +937,7 @@
         ? ''
         : localizedError(cause, $locale, 'Device signing failed.');
     } finally {
+      releaseHardwareReview();
       busy = false;
       policyReviewBusy = false;
       hardwareCancelRequested = false;

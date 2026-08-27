@@ -25,6 +25,8 @@ The generated words remain hidden until the user confirms their surroundings are
 
 `wallet selector → choose profile → reuse its unexpired session or unlock that profile → kind-appropriate home`
 
+The app shell observes the native session independently of network sync and immediately replaces authenticated route content with the selected wallet's unlock screen after expiry. A hardware transaction already under active device review retains its separate bounded review window; once that review returns, an elapsed idle deadline locks the wallet without changing the proposal or collected signatures.
+
 Each profile owns a UUID-isolated directory and unlock session. Switching never lets one wallet authorize another, but it also does not revoke the wallet being left. Returning before that wallet's independent inactivity deadline opens it directly; an expired or never-unlocked wallet shows its own credential screen. The duration is one global preference for every wallet, defaults to five minutes, and is configurable under **Settings → Security → Automatic lock**. Activity in one wallet does not refresh another. Background polling does not count as activity. Deleting the selected profile chooses another remaining profile and returns to that profile's unlock state, or returns to onboarding if no wallets remain.
 
 Desktop exposes the selector in the persistent sidebar. Mobile exposes it beside Overview's overflow action; both use the same shell-owned registry and selection flow, and their popup menus stay inside the visible viewport.

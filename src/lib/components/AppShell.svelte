@@ -24,6 +24,7 @@
   import { afterNavigate, beforeNavigate, goto } from '$app/navigation';
   import { isPrototypeWallet, walletService, WalletError } from '$lib/wallet';
   import { createLiveSync, type LiveSyncController } from '$lib/wallet/live-sync';
+  import { createSessionMonitor, type SessionMonitorController } from '$lib/wallet/session-monitor';
   import { toast } from '$lib/stores/toasts';
   import { denomination, formatAmount, initDenomination } from '$lib/denomination';
   import { fade } from 'svelte/transition';
@@ -66,6 +67,8 @@
   let setupDraftReadGeneration = 0;
   let profileReadGeneration = 0;
   let liveSync: LiveSyncController | undefined;
+  let sessionMonitor: SessionMonitorController | undefined;
+  let activeHardwareReviews = 0;
   let startupState = $state<'checking' | 'ready' | 'failed'>('checking');
   const startupStartedAt = Date.now();
   const minimumStartupGateMs = isPrototypeWallet ? 0 : 1_800;
@@ -244,11 +247,21 @@
       });
     }
   }
+  function beginHardwareReview() {
+    activeHardwareReviews += 1;
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      activeHardwareReviews = Math.max(0, activeHardwareReviews - 1);
+    };
+  }
   provideWalletShellContext({
     profiles: () => profiles,
     selectedWalletId: () => selectedWalletId,
     refreshProfiles,
-    selectWallet
+    selectWallet,
+    beginHardwareReview
   });
 
   async function resolveStartupRoute() {
@@ -371,6 +384,23 @@
         void goto('/unlock');
       }
     });
+    sessionMonitor = createSessionMonitor(
+      walletService,
+      async (selection) => {
+        if (selection.profile.id !== selectedWalletId || lockedRoute) return;
+        liveSync?.stop();
+        await goto('/unlock');
+      },
+      () =>
+        startupState !== 'ready' ||
+        isPrototypeWallet ||
+        onboardingRoute ||
+        lockedRoute ||
+        navigationPending ||
+        !selectedWalletId ||
+        activeHardwareReviews > 0
+    );
+    sessionMonitor.start();
     const wakeWhenVisible = () => {
       if (document.visibilityState === 'visible') void liveSync?.runNow();
     };
@@ -380,6 +410,7 @@
     return () => {
       unsubscribe();
       liveSync?.stop();
+      sessionMonitor?.stop();
       document.removeEventListener('visibilitychange', wakeWhenVisible);
       window.removeEventListener('keydown', handleKeyboardShortcut);
     };

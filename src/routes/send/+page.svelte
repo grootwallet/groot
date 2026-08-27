@@ -604,6 +604,7 @@
   }
   async function signHardware(device: HardwareDevice) {
     if (!proposal || !externalProposal) return;
+    const releaseHardwareReview = walletShell.beginHardwareReview();
     hardwareAction = 'sign';
     hardwareCancelRequested = false;
     broadcasting = true;
@@ -623,6 +624,7 @@
         ? ''
         : localizedError(cause, $locale, 'Hardware signing failed.');
     } finally {
+      releaseHardwareReview();
       broadcasting = false;
       hardwareCancelRequested = false;
     }

@@ -53,4 +53,11 @@ describe('hardware signing review usability', () => {
       expect(source).toContain('if (!(await hardwareSessionIsUnlocked())) return');
     }
   });
+
+  it('defers automatic lock only while an actual hardware transaction review is pending', () => {
+    for (const source of [singleSend, multisigSend]) {
+      expect(source).toContain('const releaseHardwareReview = walletShell.beginHardwareReview()');
+      expect(source).toContain('releaseHardwareReview()');
+    }
+  });
 });
