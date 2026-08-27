@@ -4,12 +4,18 @@ import { describe, expect, it } from 'vitest';
 const shell = readFileSync(new URL('./AppShell.svelte', import.meta.url), 'utf8');
 const brandLockup = readFileSync(new URL('./BrandLockup.svelte', import.meta.url), 'utf8');
 const appCss = readFileSync(new URL('../../app.css', import.meta.url), 'utf8');
+const unlockRoute = readFileSync(
+  new URL('../../routes/unlock/+page.svelte', import.meta.url),
+  'utf8'
+);
 
 describe('startup wallet lock gate', () => {
   it('resolves the trusted session before mounting authenticated route content', () => {
     expect(shell).toContain(
       "let startupState = $state<'checking' | 'ready' | 'failed'>('checking')"
     );
+    expect(shell).toContain('const runtime = await walletService.runtimePlatform()');
+    expect(shell).toContain('runtime.network !== defaultConfig.network');
     expect(shell).toContain('const selection = await walletService.session()');
     expect(shell).toContain("await goto('/unlock')");
 
@@ -19,6 +25,14 @@ describe('startup wallet lock gate', () => {
     expect(gate).toBeGreaterThan(-1);
     expect(authenticatedBranch).toBeGreaterThan(gate);
     expect(routeContent).toBeGreaterThan(authenticatedBranch);
+  });
+
+  it('shows native build identity and keeps wallet creation reachable while locked', () => {
+    expect(shell).toContain('runtimeIdentity?.network ?? defaultConfig.network');
+    expect(shell).toContain("'Groot v{version} · {commit}'");
+    expect(unlockRoute).toContain('href="/welcome?add=1"');
+    expect(unlockRoute).toContain("translate($locale, 'Add another wallet')");
+    expect(unlockRoute).toContain("'Groot v{version} · {commit} · {network}'");
   });
 
   it('shows no wallet data when startup session verification fails', () => {

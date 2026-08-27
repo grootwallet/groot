@@ -1,7 +1,7 @@
 <script lang="ts">
   import { locale } from '$lib/i18n';
   import { translate, localizedError } from '$lib/i18n-catalog';
-  import { LockKeyhole, Trash2 } from '@lucide/svelte';
+  import { LockKeyhole, Plus, Trash2 } from '@lucide/svelte';
   import { afterNavigate, goto } from '$app/navigation';
   import { onDestroy, onMount } from 'svelte';
   import { fly } from 'svelte/transition';
@@ -12,7 +12,11 @@
   import { isPrototypeWallet, walletService } from '$lib/wallet';
   import { page } from '$app/state';
   import { useWalletShellContext } from '$lib/wallet/shell-context';
-  import type { WalletProfile, WalletProfileCompatibility } from '$lib/wallet/contracts';
+  import type {
+    RuntimePlatform,
+    WalletProfile,
+    WalletProfileCompatibility
+  } from '$lib/wallet/contracts';
   const walletShell = useWalletShellContext();
 
   let credential = $state('');
@@ -24,6 +28,7 @@
   let profiles = $state<WalletProfile[]>([]);
   let selectedWalletId = $state<string | null>(null);
   let compatibility = $state<WalletProfileCompatibility | null>(null);
+  let runtimeIdentity = $state<RuntimePlatform | null>(null);
   let selectedProfile = $derived(profiles.find((wallet) => wallet.id === selectedWalletId));
   let isSoftwareWallet = $derived(selectedProfile?.kind === 'single_key');
   let credentialLabel = $derived(
@@ -48,6 +53,7 @@
   }
 
   onMount(async () => {
+    runtimeIdentity = await walletService.runtimePlatform();
     if (!(await walletService.exists())) {
       await goto('/welcome');
       return;
@@ -184,6 +190,9 @@
           >
         </form>
       {/if}
+      <Button href="/welcome?add=1" variant="secondary" size="large" class="full locked-add-wallet"
+        ><Plus size={16} />{translate($locale, 'Add another wallet')}</Button
+      >
       {#if defaultConfig.network === 'regtest'}<button
           class="locked-reset"
           onclick={() => (showReset = true)}
@@ -193,6 +202,13 @@
   {/key}
   <footer class="onboarding-footer">
     {translate($locale, 'Keys stay on this device · Open source')}
+    {#if runtimeIdentity}<span
+        >{translate($locale, 'Groot v{version} · {commit} · {network}', {
+          version: runtimeIdentity.version,
+          commit: runtimeIdentity.commit,
+          network: runtimeIdentity.network
+        })}</span
+      >{/if}
   </footer>
 </div>
 

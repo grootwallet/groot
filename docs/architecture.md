@@ -10,6 +10,13 @@ Cross-platform wallet coordination remains inside the trusted Rust boundary. BIP
 
 Node and sync-source settings remain local to each profile copy and are not pairing payload fields: desktop may use local Bitcoin Core while mobile uses independently authenticated remote TLS/Tor or compact-filter discovery. Mobile rejects a `local_core` save. Receive-request assignments and permanent labels likewise remain device-local in the accountless protocol; a future optional encrypted synchronization service must be separately specified and must not become an identity, authentication, custody, or pairing dependency.
 
+Before mounting wallet routes, the shell reads the native runtime identity—platform, compiled network,
+package version, and abbreviated source commit—through `WalletPort`. Rust's compiled network is the
+display authority. A web bundle built for a different network fails closed instead of presenting a
+plausible but incorrect badge or allowing wallet actions. Desktop shell metadata and mobile
+onboarding/settings footers expose the build identity so physical test reports can name the exact
+binary under observation.
+
 ## Stack
 
 - **Shell:** Tauri v2, using the shared Rust library entry point required by desktop and mobile.

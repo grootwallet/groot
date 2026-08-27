@@ -33,6 +33,9 @@ mod wallet;
 struct RuntimePlatformDto {
     platform: &'static str,
     mobile: bool,
+    network: &'static str,
+    version: &'static str,
+    commit: &'static str,
 }
 
 #[tauri::command]
@@ -50,6 +53,9 @@ fn runtime_platform() -> RuntimePlatformDto {
     RuntimePlatformDto {
         platform,
         mobile: cfg!(mobile),
+        network: build_network::NAME,
+        version: env!("CARGO_PKG_VERSION"),
+        commit: env!("GROOT_BUILD_COMMIT"),
     }
 }
 
@@ -211,4 +217,18 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running Groot");
+}
+
+#[cfg(test)]
+mod runtime_tests {
+    use super::*;
+
+    #[test]
+    fn runtime_identity_uses_the_compiled_package_and_network() {
+        let identity = runtime_platform();
+        assert_eq!(identity.network, build_network::NAME);
+        assert_eq!(identity.version, env!("CARGO_PKG_VERSION"));
+        assert!(!identity.commit.is_empty());
+        assert_ne!(identity.network, "mainnet");
+    }
 }

@@ -4593,6 +4593,25 @@ code {
   font-size: 8px;
   padding: 26px;
 }
+.onboarding-footer span {
+  display: block;
+  margin-top: 5px;
+  font-variant-numeric: tabular-nums;
+}
+.locked-add-wallet {
+  display: none;
+  width: 100%;
+  margin-top: 10px;
+}
+.sidebar-build-identity {
+  display: block;
+  margin-top: 8px;
+  color: var(--muted-2);
+  font-size: 8px;
+  line-height: 1.35;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
 .prototype-hint {
   width: fit-content;
   max-width: 100%;
@@ -9804,6 +9823,9 @@ code {
   .acceleration-review-summary > .details-list,
   .acceleration-quote-details {
     grid-template-columns: 1fr;
+  }
+  .locked-add-wallet {
+    display: flex;
   }
   .insight-tip-popover {
     padding: 14px 15px;

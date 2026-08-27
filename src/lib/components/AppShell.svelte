@@ -28,7 +28,7 @@
   import { toast } from '$lib/stores/toasts';
   import { denomination, formatAmount, initDenomination } from '$lib/denomination';
   import { fade } from 'svelte/transition';
-  import type { MultisigSetupDraft, WalletProfile } from '$lib/wallet/contracts';
+  import type { MultisigSetupDraft, RuntimePlatform, WalletProfile } from '$lib/wallet/contracts';
   import { formatWalletCount, locale, t, type MessageKey } from '$lib/i18n';
   import { provideWalletShellContext } from '$lib/wallet/shell-context';
   import { multisigSetupSignerTarget, multisigSetupStageLabel } from '$lib/wallet/multisig-setup';
@@ -87,6 +87,8 @@
   let shortcutLockPending = false;
   let walletSelectionTask: Promise<void> | undefined;
   let mobileRuntime = false;
+  let runtimeIdentity = $state<RuntimePlatform | null>(null);
+  let startupFailure = $state('');
   let backgroundLockRequired = false;
   let selectedProfile = $derived(profiles.find((wallet) => wallet.id === selectedWalletId));
   let policyContext = $derived(
@@ -329,7 +331,23 @@
 
   async function resolveStartupRoute() {
     startupState = 'checking';
+    startupFailure = '';
     try {
+      const runtime = await walletService.runtimePlatform();
+      runtimeIdentity = runtime;
+      mobileRuntime = runtime.mobile;
+      if (mobileRuntime && document.visibilityState !== 'visible') {
+        backgroundLockRequired = true;
+        await enforceMobileBackgroundLock();
+        return;
+      }
+      if (runtime.network !== defaultConfig.network) {
+        startupFailure = translate(
+          $locale,
+          'The native and web network builds do not match. Restart Groot with the correct network build.'
+        );
+        throw new Error('network build mismatch');
+      }
       await refreshSetupDraft();
       if (!(await walletService.exists())) {
         await goto('/welcome');
@@ -348,6 +366,8 @@
       startupState = 'ready';
       if (!syncPausedRoute && !isPrototypeWallet) liveSync?.start();
     } catch {
+      if (!startupFailure)
+        startupFailure = translate($locale, 'Groot could not verify the wallet lock state.');
       startupState = 'failed';
     }
   }
@@ -524,13 +544,6 @@
     document.addEventListener('visibilitychange', wakeWhenVisible);
     document.addEventListener('focusin', centerMobileField);
     window.addEventListener('keydown', handleKeyboardShortcut);
-    void walletService.runtimePlatform().then((runtime) => {
-      mobileRuntime = runtime.mobile;
-      if (mobileRuntime && document.visibilityState !== 'visible') {
-        backgroundLockRequired = true;
-        void enforceMobileBackgroundLock();
-      }
-    });
     void resolveStartupRoute();
     return () => {
       unsubscribe();
@@ -557,7 +570,7 @@
     <div class="startup-gate" role="status" aria-live="polite">
       <BrandLockup animated />
       {#if startupState === 'failed'}
-        <p>{translate($locale, 'Groot could not verify the wallet lock state.')}</p>
+        <p>{startupFailure}</p>
         <button
           class="button secondary"
           onclick={() =>
@@ -604,7 +617,16 @@
         <div class="preference-toggles">
           <ThemeToggle /><DiscreetModeToggle />
         </div>
-        <NetworkStatus network={defaultConfig.network} locked={lockedRoute} />
+        <NetworkStatus
+          network={runtimeIdentity?.network ?? defaultConfig.network}
+          locked={lockedRoute}
+        />
+        {#if runtimeIdentity}<small class="sidebar-build-identity"
+            >{translate($locale, 'Groot v{version} · {commit}', {
+              version: runtimeIdentity.version,
+              commit: runtimeIdentity.commit
+            })}</small
+          >{/if}
       </div>
     </aside>
 
@@ -666,7 +688,7 @@
 
     {#if lockedRoute}<div class="locked-mobile-utilities">
         <ThemeToggle /><DiscreetModeToggle /><NetworkStatus
-          network={defaultConfig.network}
+          network={runtimeIdentity?.network ?? defaultConfig.network}
           locked
         />
       </div>{/if}

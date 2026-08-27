@@ -249,6 +249,10 @@ export const settingsCopy = {
     es: '· Se usa en las pantallas de firma y verificación'
   },
   'Add wallet': { fr: 'Ajouter un portefeuille', es: 'Añadir cartera' },
+  'Add another wallet': {
+    fr: 'Ajouter un autre portefeuille',
+    es: 'Añadir otra cartera'
+  },
   'Address gap limit': {
     fr: 'Limite d’écart des adresses',
     es: 'Límite de intervalo de direcciones'

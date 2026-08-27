@@ -84,6 +84,9 @@
     )
   );
   let mobileRuntime = $state(false);
+  let runtimeVersion = $state(APP_VERSION);
+  let runtimeCommit = $state('unknown');
+  let runtimeNetwork = $state(defaultConfig.network);
   let profiles = $state<WalletProfile[]>([]);
   let selectedWalletId = $state<string | null>(null);
   let profileReadGeneration = 0;
@@ -249,6 +252,9 @@
     ]);
     if (generation !== profileReadGeneration) return;
     mobileRuntime = runtime.mobile;
+    runtimeVersion = runtime.version;
+    runtimeCommit = runtime.commit;
+    runtimeNetwork = runtime.network;
     profiles = registry.wallets;
     selectedWalletId = registry.selectedWalletId;
     inactivityTimeoutMinutes = registry.inactivityTimeoutMinutes;
@@ -1367,7 +1373,13 @@
         >
       </div>
     </section>{/if}
-  <p class="version">Groot {APP_VERSION} · BDK {networkName(defaultConfig.network)}</p>
+  <p class="version">
+    {translate($locale, 'Groot v{version} · {commit} · BDK {network}', {
+      version: runtimeVersion,
+      commit: runtimeCommit,
+      network: networkName(runtimeNetwork)
+    })}
+  </p>
 </div>
 
 <Modal

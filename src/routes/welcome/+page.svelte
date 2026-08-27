@@ -29,6 +29,7 @@
     MIN_SUPPLEMENTAL_DICE_ROLLS,
     walletService,
     type NetworkSetupSource,
+    type RuntimePlatform,
     type SupplementalEntropyInput
   } from '$lib/wallet';
   import { goto } from '$app/navigation';
@@ -63,6 +64,7 @@
   let supplementalOutcomes = $state('');
   let networkSetupSource = $state<NetworkSetupSource | null>(null);
   let reuseNetworkSetup = $state(true);
+  let runtimeIdentity = $state<RuntimePlatform | null>(null);
   const softwareSteps = ['Generate', 'Back up', 'Protect'];
   let passphraseError = $derived(
     utf8ByteLength(passphrase) > MAX_WALLET_PASSPHRASE_BYTES
@@ -80,6 +82,7 @@
   );
 
   onMount(async () => {
+    runtimeIdentity = await walletService.runtimePlatform();
     hasExistingWallet = await walletService.exists();
     if (hasExistingWallet && page.url.searchParams.get('add') !== '1') await goto('/unlock');
     if (hasExistingWallet) {
@@ -801,5 +804,12 @@
   </main>
   <footer class="onboarding-footer">
     {translate($locale, 'Keys stay on this device · Open source')}
+    {#if runtimeIdentity}<span
+        >{translate($locale, 'Groot v{version} · {commit} · {network}', {
+          version: runtimeIdentity.version,
+          commit: runtimeIdentity.commit,
+          network: runtimeIdentity.network
+        })}</span
+      >{/if}
   </footer>
 </div>

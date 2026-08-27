@@ -1,4 +1,4 @@
-import { defaultConfig, transactionExplorerUrl } from '$lib/config';
+import { APP_VERSION, defaultConfig, transactionExplorerUrl } from '$lib/config';
 import type { ReceiveAddress, Transaction } from '$lib/types';
 import {
   addressPrefixForNetwork,
@@ -65,7 +65,10 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
   async runtimePlatform() {
     return {
       platform: 'browser' as const,
-      mobile: typeof window !== 'undefined' && matchMedia('(max-width: 760px)').matches
+      mobile: typeof window !== 'undefined' && matchMedia('(max-width: 760px)').matches,
+      network: defaultConfig.network,
+      version: APP_VERSION,
+      commit: 'prototype'
     };
   }
   async paymentDraft() {
