@@ -126,11 +126,16 @@ Secure Enclave wrapping cannot make the phone equivalent to an independent hardw
 ## Persistence and compatibility
 
 - `coordination.json` v1: wallet UUID, device role, mobile fingerprint, truthful key-protection
-  identifier, pairing time. Public metadata, owner-only file permissions.
+  identifier, pairing time, and an optional one-time pairing session ID used only to reconcile an
+  interrupted mobile commit. Public metadata, owner-only file permissions.
 - `mobile-signer.json`: secret-store envelope containing only the words for coordinated mobile
   profiles. The local PIN protects the envelope and is not seed material.
-- `pending-mobile-pairings/<uuid>.json`: encrypted staging payload containing invitation and words;
-  removed after commit/cancel. A malformed UUID cannot select a filesystem path.
+- `pending-mobile-pairings/<uuid>.json`: encrypted staging payload containing the invitation,
+  signer label, and words. Mobile can list only its opaque session ID; reproducing the exact
+  response QR requires the same local PIN. Completion first atomically renames the file to a hidden
+  consuming tombstone. Startup restores an uncommitted tombstone, removes one whose wallet registry
+  commit is authoritative, and removes abandoned atomic-write temporary files. Explicit cancel is
+  idempotent and removes either state. A malformed UUID cannot select a filesystem path.
 - Existing `wallet.json`, `secret.json`, registry v1, proposal SQLite schema, BSMS records, and PSBT
   formats are unchanged. Old profiles have no sidecar and report non-shared. No migration is needed.
 - BIP129 records remain standards-defined. `crypto-psbt` remains the interoperability format.
@@ -148,8 +153,10 @@ address equality; and clean recovery/migration drills.
 The isolated Bitcoin Core Regtest harness now passes the funded mobile review/sign, desktop
 signature-only merge, second signature, finalization, and broadcast path, including the listed PSBT
 attack cases. Deterministic units pass response authentication, expiry, replay, substituted-token,
-and volatile-desktop-restart cases. Staging-file process-kill/cancel cleanup, full watch-only address
-equality, and clean mobile recovery remain open and must not be inferred from this evidence.
+volatile-desktop-restart, staged-response reopen, cancel, consuming-tombstone reconciliation,
+conflict, traversal, and orphan-temporary-file cases. Full command-process kill at every wallet
+registry/profile commit boundary, watch-only address equality, and clean mobile recovery remain open
+and must not be inferred from this evidence.
 
 iOS physical certification additionally requires camera denial/interruption/background/resume,
 safe-area and accessibility checks, passcode-required Keychain behavior, biometric enrollment

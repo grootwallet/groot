@@ -50,6 +50,8 @@ struct PendingMobileSecret {
     version: u8,
     invitation: PairingInvitation,
     mnemonic: String,
+    #[serde(default)]
+    signer_label: String,
     backup_verified: bool,
 }
 
@@ -62,6 +64,8 @@ pub struct CoordinationMetadata {
     mobile_signer_fingerprint: Option<String>,
     key_protection: String,
     paired_at: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pairing_session_id: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -100,6 +104,12 @@ pub struct CoordinationStatusDto {
     can_sign_on_this_device: bool,
     mobile_signer_fingerprint: Option<String>,
     key_protection: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PendingMobilePairingDto {
+    session_id: String,
 }
 
 #[tauri::command]
@@ -221,12 +231,7 @@ pub fn coordination_pairing_cancel(
         .lock()
         .map_err(internal)?
         .remove(&session_id);
-    if let Ok(path) = pending_mobile_secret_path(&app, &session_id) {
-        if path.exists() {
-            fs::remove_file(path).map_err(internal)?;
-        }
-    }
-    Ok(())
+    cancel_mobile_pairing_storage(&pending_mobile_pairings_directory(&app)?, &session_id)
 }
 
 #[tauri::command]
@@ -242,10 +247,12 @@ pub fn coordination_decode_invitation(frames: Vec<String>) -> ApiResult<String> 
 #[tauri::command]
 pub fn coordination_mobile_accept(
     app: AppHandle,
+    state: State<'_, AppState>,
     invitation_json: String,
     signer_label: String,
     credential: String,
 ) -> ApiResult<PairingResponseDto> {
+    let _operation = operation_guard(&state)?;
     let credential = Zeroizing::new(credential);
     validate_credential(credential.as_str())?;
     let invitation: PairingInvitation = serde_json::from_str(&invitation_json)
@@ -285,6 +292,7 @@ pub fn coordination_mobile_accept(
         version: 1,
         invitation: invitation.clone(),
         mnemonic: words.to_string(),
+        signer_label: label.to_owned(),
         backup_verified: backup.verified,
     };
     let staged = Zeroizing::new(serde_json::to_vec(&staged).map_err(internal)?);
@@ -300,6 +308,88 @@ pub fn coordination_mobile_accept(
         xpub_checksum: short_checksum(xpub.to_string().as_bytes()),
         backup_verified: backup.verified,
         comparison_code: comparison_code(&invitation),
+        frames,
+    })
+}
+
+#[tauri::command]
+pub fn coordination_pending_mobile_pairings(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> ApiResult<Vec<PendingMobilePairingDto>> {
+    let _operation = operation_guard(&state)?;
+    reconcile_mobile_pairing_storage(&app)?;
+    active_mobile_pairing_sessions(&pending_mobile_pairings_directory(&app)?).map(|sessions| {
+        sessions
+            .into_iter()
+            .map(|session_id| PendingMobilePairingDto { session_id })
+            .collect()
+    })
+}
+
+#[tauri::command]
+pub fn coordination_mobile_resume(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    session_id: String,
+    credential: String,
+) -> ApiResult<PairingResponseDto> {
+    let _operation = operation_guard(&state)?;
+    let credential = Zeroizing::new(credential);
+    validate_credential(credential.as_str())?;
+    reconcile_mobile_pairing_storage(&app)?;
+    let staged_path = pending_mobile_secret_path(&app, &session_id)?;
+    let staged_bytes = Zeroizing::new(
+        secure_store::load(&staged_path, credential.as_str()).map_err(secure_store_error)?,
+    );
+    let staged: PendingMobileSecret = serde_json::from_slice(&staged_bytes)
+        .map_err(|_| api_error("wallet_corrupt", "The pending mobile signer is malformed."))?;
+    if staged.version != 1 || staged.invitation.session_id != session_id {
+        return Err(api_error(
+            "wallet_corrupt",
+            "The pending mobile signer does not match its pairing session.",
+        ));
+    }
+    staged
+        .invitation
+        .validate(now())
+        .map_err(coordination_api_error)?;
+    if staged.signer_label.trim().is_empty() || staged.signer_label.chars().count() > 48 {
+        return Err(api_error(
+            "wallet_corrupt",
+            "The pending mobile signer name is missing or malformed.",
+        ));
+    }
+    pairing_response_from_staged(&staged)
+}
+
+fn pairing_response_from_staged(staged: &PendingMobileSecret) -> ApiResult<PairingResponseDto> {
+    let mnemonic = Mnemonic::parse(&staged.mnemonic).map_err(internal)?;
+    let (fingerprint, account, xpub) =
+        derive_mobile_account(&mnemonic).map_err(coordination_api_error)?;
+    let record = KeyRecord::encode_signed(
+        &staged.invitation.token,
+        fingerprint,
+        &account,
+        &staged.signer_label,
+    )
+    .map_err(coordination_api_error)?;
+    let envelope = EncryptedEnvelope {
+        version: 1,
+        session_id: staged.invitation.session_id.clone(),
+        encrypted_record: encrypt_bip129(&staged.invitation.token, record.as_bytes())
+            .map_err(coordination_api_error)?,
+    };
+    let frames = encode_coordination(
+        CoordinationUrType::Bsms,
+        &serde_json::to_vec(&envelope).map_err(internal)?,
+    )?;
+    Ok(PairingResponseDto {
+        session_id: staged.invitation.session_id.clone(),
+        fingerprint: fingerprint.to_string(),
+        xpub_checksum: short_checksum(xpub.to_string().as_bytes()),
+        backup_verified: staged.backup_verified,
+        comparison_code: comparison_code(&staged.invitation),
         frames,
     })
 }
@@ -436,6 +526,7 @@ pub fn coordination_desktop_finalize(
             mobile_signer_fingerprint: Some(mobile.fingerprint),
             key_protection: "none_public_coordinator".to_owned(),
             paired_at: now(),
+            pairing_session_id: None,
         },
     )?;
     encode_coordination(
@@ -461,6 +552,12 @@ pub fn coordination_mobile_complete(
     );
     let staged: PendingMobileSecret = serde_json::from_slice(&staged_bytes)
         .map_err(|_| api_error("wallet_corrupt", "The pending mobile signer is malformed."))?;
+    if staged.version != 1 {
+        return Err(api_error(
+            "wallet_corrupt",
+            "The pending mobile signer version is unsupported.",
+        ));
+    }
     staged
         .invitation
         .validate(now())
@@ -554,7 +651,16 @@ pub fn coordination_mobile_complete(
             CoordinationError::DescriptorMismatch,
         ));
     }
+    let pairing_session_id = envelope.session_id.clone();
+    let pairing_directory = pending_mobile_pairings_directory(&app)?;
     let (id, dir) = prepare_profile_directory(&app)?;
+    let consuming_path = match transition_mobile_pairing_to_consuming(&app, &pairing_session_id) {
+        Ok(path) => path,
+        Err(error) => {
+            cleanup_failed_profile(&dir)?;
+            return Err(error);
+        }
+    };
     let result = (|| {
         let mut db = open_wallet_database(&dir.join("wallet.sqlite"))?;
         init_app_schema(&db)?;
@@ -594,6 +700,7 @@ pub fn coordination_mobile_complete(
                 mobile_signer_fingerprint: Some(fingerprint.to_string()),
                 key_protection: "argon2id_pin_envelope_testnet_only".to_owned(),
                 paired_at: now(),
+                pairing_session_id: Some(pairing_session_id.clone()),
             },
         )?;
         commit_profile(
@@ -609,11 +716,16 @@ pub fn coordination_mobile_complete(
             },
         )
     })();
-    if result.is_err() {
+    if let Err(error) = result {
         cleanup_failed_profile(&dir)?;
+        restore_consuming_mobile_pairing(&pairing_directory, &pairing_session_id)?;
+        return Err(error);
     }
-    result?;
-    fs::remove_file(staged_path).map_err(internal)?;
+    // The registry commit is authoritative. A cleanup failure must not report that wallet
+    // creation failed and invite a duplicate retry; startup reconciliation removes the tombstone.
+    if let Ok(true) = remove_file_if_present(&consuming_path) {
+        let _ = sync_private_directory(&pairing_directory);
+    }
     unlock_selected(&app, &state)?;
     reset_auth_throttle(&app, &state)?;
     Ok(wallet)
@@ -984,12 +1096,209 @@ fn decode_envelope(
     Ok(envelope)
 }
 
+fn pending_mobile_pairings_directory(app: &AppHandle) -> ApiResult<PathBuf> {
+    Ok(app_data_dir(app)?.join("pending-mobile-pairings"))
+}
+
 fn pending_mobile_secret_path(app: &AppHandle, session_id: &str) -> ApiResult<PathBuf> {
+    let directory = pending_mobile_pairings_directory(app)?;
+    ensure_private_directory(&directory)?;
+    pending_mobile_secret_path_in(&directory, session_id)
+}
+
+fn pending_mobile_secret_path_in(directory: &Path, session_id: &str) -> ApiResult<PathBuf> {
     Uuid::parse_str(session_id)
         .map_err(|_| invalid_payload("The pairing session identifier is invalid."))?;
-    let directory = app_data_dir(app)?.join("pending-mobile-pairings");
-    ensure_private_directory(&directory)?;
     Ok(directory.join(format!("{session_id}.json")))
+}
+
+fn consuming_mobile_secret_path_in(directory: &Path, session_id: &str) -> ApiResult<PathBuf> {
+    Uuid::parse_str(session_id)
+        .map_err(|_| invalid_payload("The pairing session identifier is invalid."))?;
+    Ok(directory.join(format!(".consuming-{session_id}.json")))
+}
+
+fn transition_mobile_pairing_to_consuming(app: &AppHandle, session_id: &str) -> ApiResult<PathBuf> {
+    let directory = pending_mobile_pairings_directory(app)?;
+    let active = pending_mobile_secret_path_in(&directory, session_id)?;
+    let consuming = consuming_mobile_secret_path_in(&directory, session_id)?;
+    if consuming.exists() {
+        return Err(api_error(
+            "pairing_in_progress",
+            "This mobile pairing is already being completed.",
+        ));
+    }
+    fs::rename(&active, &consuming).map_err(internal)?;
+    sync_private_directory(&directory)?;
+    Ok(consuming)
+}
+
+fn restore_consuming_mobile_pairing(directory: &Path, session_id: &str) -> ApiResult<()> {
+    let active = pending_mobile_secret_path_in(directory, session_id)?;
+    let consuming = consuming_mobile_secret_path_in(directory, session_id)?;
+    if !consuming.exists() {
+        return Ok(());
+    }
+    if active.exists() {
+        return Err(api_error(
+            "wallet_corrupt",
+            "Conflicting mobile pairing recovery files were found.",
+        ));
+    }
+    fs::rename(consuming, active).map_err(internal)?;
+    sync_private_directory(directory)
+}
+
+fn remove_file_if_present(path: &Path) -> ApiResult<bool> {
+    match fs::remove_file(path) {
+        Ok(()) => Ok(true),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(internal(error)),
+    }
+}
+
+fn cancel_mobile_pairing_storage(directory: &Path, session_id: &str) -> ApiResult<()> {
+    let active = pending_mobile_secret_path_in(directory, session_id)?;
+    let consuming = consuming_mobile_secret_path_in(directory, session_id)?;
+    let changed = remove_file_if_present(&active)? | remove_file_if_present(&consuming)?;
+    if changed && directory.exists() {
+        sync_private_directory(directory)?;
+    }
+    Ok(())
+}
+
+fn active_mobile_pairing_sessions(directory: &Path) -> ApiResult<Vec<String>> {
+    let entries = match fs::read_dir(directory) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(error) => return Err(internal(error)),
+    };
+    let mut sessions = Vec::new();
+    for entry in entries {
+        let entry = entry.map_err(internal)?;
+        let name = match entry.file_name().into_string() {
+            Ok(name) => name,
+            Err(_) => continue,
+        };
+        let Some(session_id) = name.strip_suffix(".json") else {
+            continue;
+        };
+        if name.starts_with('.') || Uuid::parse_str(session_id).is_err() {
+            continue;
+        }
+        let metadata = fs::symlink_metadata(entry.path()).map_err(internal)?;
+        if metadata.file_type().is_symlink() || !metadata.is_file() {
+            return Err(api_error(
+                "wallet_corrupt",
+                "Mobile pairing storage is not a regular file.",
+            ));
+        }
+        sessions.push(session_id.to_owned());
+    }
+    sessions.sort();
+    Ok(sessions)
+}
+
+pub(super) fn reconcile_mobile_pairing_storage(app: &AppHandle) -> ApiResult<()> {
+    let directory = pending_mobile_pairings_directory(app)?;
+    if !directory.exists() {
+        return Ok(());
+    }
+    let registry = load_registry(app)?;
+    let mut committed_sessions = HashSet::new();
+    for profile in registry.wallets {
+        let path = profile_directory(app, profile.id)?.join("coordination.json");
+        if !path.is_file() {
+            continue;
+        }
+        let metadata: CoordinationMetadata = serde_json::from_str(&read_private_text(&path)?)
+            .map_err(|_| api_error("wallet_corrupt", "The coordination metadata is malformed."))?;
+        if metadata.role == DeviceRole::MobileCosigner {
+            if let Some(session_id) = metadata.pairing_session_id {
+                Uuid::parse_str(&session_id).map_err(|_| {
+                    api_error(
+                        "wallet_corrupt",
+                        "The coordinated wallet has an invalid pairing session identifier.",
+                    )
+                })?;
+                committed_sessions.insert(session_id);
+            }
+        }
+    }
+    reconcile_mobile_pairing_directory(&directory, &committed_sessions)
+}
+
+fn reconcile_mobile_pairing_directory(
+    directory: &Path,
+    committed_sessions: &HashSet<String>,
+) -> ApiResult<()> {
+    let entries = match fs::read_dir(directory) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(internal(error)),
+    };
+    let mut changed = false;
+    for entry in entries {
+        let entry = entry.map_err(internal)?;
+        let path = entry.path();
+        let name = match entry.file_name().into_string() {
+            Ok(name) => name,
+            Err(_) => continue,
+        };
+        let active_session = name
+            .strip_suffix(".json")
+            .filter(|session| !name.starts_with('.') && Uuid::parse_str(session).is_ok());
+        let consuming_session = name
+            .strip_prefix(".consuming-")
+            .and_then(|value| value.strip_suffix(".json"))
+            .filter(|session| Uuid::parse_str(session).is_ok());
+        let secure_temporary = name
+            .strip_prefix(".secure-")
+            .and_then(|value| value.strip_suffix(".tmp"))
+            .is_some_and(|value| Uuid::parse_str(value).is_ok());
+        if active_session.is_none() && consuming_session.is_none() && !secure_temporary {
+            continue;
+        }
+        let metadata = fs::symlink_metadata(&path).map_err(internal)?;
+        if metadata.file_type().is_symlink() || !metadata.is_file() {
+            return Err(api_error(
+                "wallet_corrupt",
+                "Mobile pairing recovery storage is not a regular file.",
+            ));
+        }
+        if secure_temporary || active_session.is_some_and(|id| committed_sessions.contains(id)) {
+            fs::remove_file(path).map_err(internal)?;
+            changed = true;
+            continue;
+        }
+        if let Some(session_id) = consuming_session {
+            if committed_sessions.contains(session_id) {
+                fs::remove_file(path).map_err(internal)?;
+            } else {
+                let active = pending_mobile_secret_path_in(directory, session_id)?;
+                if active.exists() {
+                    return Err(api_error(
+                        "wallet_corrupt",
+                        "Conflicting mobile pairing recovery files were found.",
+                    ));
+                }
+                fs::rename(path, active).map_err(internal)?;
+            }
+            changed = true;
+        }
+    }
+    if changed {
+        sync_private_directory(directory)?;
+    }
+    Ok(())
+}
+
+fn sync_private_directory(directory: &Path) -> ApiResult<()> {
+    #[cfg(unix)]
+    File::open(directory)
+        .and_then(|value| value.sync_all())
+        .map_err(internal)?;
+    Ok(())
 }
 
 fn coordination_metadata_path(app: &AppHandle, wallet_id: Uuid) -> ApiResult<PathBuf> {
@@ -1107,6 +1416,8 @@ mod tests {
 
     struct TemporaryDatabase(PathBuf);
 
+    struct TemporaryPairingDirectory(PathBuf);
+
     impl TemporaryDatabase {
         fn new() -> Self {
             Self(std::env::temp_dir().join(format!(
@@ -1121,6 +1432,21 @@ mod tests {
             let _ = fs::remove_file(&self.0);
             let _ = fs::remove_file(self.0.with_extension("sqlite-shm"));
             let _ = fs::remove_file(self.0.with_extension("sqlite-wal"));
+        }
+    }
+
+    impl TemporaryPairingDirectory {
+        fn new() -> Self {
+            let path = std::env::temp_dir()
+                .join(format!("groot-mobile-pairing-lifecycle-{}", Uuid::new_v4()));
+            fs::create_dir_all(&path).unwrap();
+            Self(path)
+        }
+    }
+
+    impl Drop for TemporaryPairingDirectory {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
         }
     }
 
@@ -1204,6 +1530,7 @@ mod tests {
             mobile_signer_fingerprint: Some(mobile_fingerprint.to_string()),
             key_protection: "test-only".to_owned(),
             paired_at: 1,
+            pairing_session_id: Some(Uuid::new_v4().to_string()),
         };
         (mnemonic, hardware, wallet, coordination)
     }
@@ -1312,6 +1639,135 @@ mod tests {
         assert!(sessions
             .values()
             .all(|pending| pending.accepted_signer.is_none()));
+    }
+
+    #[test]
+    fn interrupted_mobile_pairing_restores_or_cleans_from_the_committed_session_set() {
+        let directory = TemporaryPairingDirectory::new();
+        let resumable = Uuid::new_v4().to_string();
+        let committed = Uuid::new_v4().to_string();
+        let committed_active = Uuid::new_v4().to_string();
+        let temporary = Uuid::new_v4().to_string();
+        fs::write(
+            consuming_mobile_secret_path_in(&directory.0, &resumable).unwrap(),
+            b"resumable encrypted stage",
+        )
+        .unwrap();
+        fs::write(
+            consuming_mobile_secret_path_in(&directory.0, &committed).unwrap(),
+            b"committed encrypted stage",
+        )
+        .unwrap();
+        fs::write(
+            pending_mobile_secret_path_in(&directory.0, &committed_active).unwrap(),
+            b"committed active stage",
+        )
+        .unwrap();
+        fs::write(
+            directory.0.join(format!(".secure-{temporary}.tmp")),
+            b"interrupted atomic write",
+        )
+        .unwrap();
+
+        reconcile_mobile_pairing_directory(
+            &directory.0,
+            &HashSet::from([committed.clone(), committed_active.clone()]),
+        )
+        .unwrap();
+
+        assert_eq!(
+            fs::read(pending_mobile_secret_path_in(&directory.0, &resumable).unwrap()).unwrap(),
+            b"resumable encrypted stage"
+        );
+        assert!(!consuming_mobile_secret_path_in(&directory.0, &resumable)
+            .unwrap()
+            .exists());
+        assert!(!consuming_mobile_secret_path_in(&directory.0, &committed)
+            .unwrap()
+            .exists());
+        assert!(
+            !pending_mobile_secret_path_in(&directory.0, &committed_active)
+                .unwrap()
+                .exists()
+        );
+        assert!(!directory
+            .0
+            .join(format!(".secure-{temporary}.tmp"))
+            .exists());
+        assert_eq!(
+            active_mobile_pairing_sessions(&directory.0).unwrap(),
+            vec![resumable]
+        );
+    }
+
+    #[test]
+    fn mobile_pairing_cancel_is_idempotent_bounded_and_removes_either_lifecycle_state() {
+        let directory = TemporaryPairingDirectory::new();
+        let active = Uuid::new_v4().to_string();
+        let consuming = Uuid::new_v4().to_string();
+        fs::write(
+            pending_mobile_secret_path_in(&directory.0, &active).unwrap(),
+            b"active",
+        )
+        .unwrap();
+        fs::write(
+            consuming_mobile_secret_path_in(&directory.0, &consuming).unwrap(),
+            b"consuming",
+        )
+        .unwrap();
+
+        cancel_mobile_pairing_storage(&directory.0, &active).unwrap();
+        cancel_mobile_pairing_storage(&directory.0, &active).unwrap();
+        cancel_mobile_pairing_storage(&directory.0, &consuming).unwrap();
+        assert!(active_mobile_pairing_sessions(&directory.0)
+            .unwrap()
+            .is_empty());
+        assert_eq!(
+            cancel_mobile_pairing_storage(&directory.0, "../wallet")
+                .unwrap_err()
+                .code,
+            "invalid_coordination_payload"
+        );
+    }
+
+    #[test]
+    fn conflicting_mobile_pairing_recovery_files_fail_without_mutation() {
+        let directory = TemporaryPairingDirectory::new();
+        let session_id = Uuid::new_v4().to_string();
+        let active = pending_mobile_secret_path_in(&directory.0, &session_id).unwrap();
+        let consuming = consuming_mobile_secret_path_in(&directory.0, &session_id).unwrap();
+        fs::write(&active, b"active").unwrap();
+        fs::write(&consuming, b"consuming").unwrap();
+
+        assert_eq!(
+            reconcile_mobile_pairing_directory(&directory.0, &HashSet::new())
+                .unwrap_err()
+                .code,
+            "wallet_corrupt"
+        );
+        assert_eq!(fs::read(active).unwrap(), b"active");
+        assert_eq!(fs::read(consuming).unwrap(), b"consuming");
+    }
+
+    #[test]
+    fn staged_mobile_response_is_recreated_exactly_after_restart() {
+        let invitation = invitation(1_900);
+        let staged = PendingMobileSecret {
+            version: 1,
+            invitation: invitation.clone(),
+            mnemonic: mobile_mnemonic().to_string(),
+            signer_label: "Recovered phone session".to_owned(),
+            backup_verified: true,
+        };
+        let first = pairing_response_from_staged(&staged).unwrap();
+        let encoded = serde_json::to_vec(&staged).unwrap();
+        let reopened: PendingMobileSecret = serde_json::from_slice(&encoded).unwrap();
+        let second = pairing_response_from_staged(&reopened).unwrap();
+        assert_eq!(first.session_id, second.session_id);
+        assert_eq!(first.fingerprint, second.fingerprint);
+        assert_eq!(first.xpub_checksum, second.xpub_checksum);
+        assert_eq!(first.comparison_code, second.comparison_code);
+        assert_eq!(first.frames, second.frames);
     }
 
     fn regtest_dir() -> PathBuf {

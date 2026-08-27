@@ -36,10 +36,15 @@ release its data-encryption key, and perform secp256k1 signing briefly in Rust-o
   requires the exact key, not a fingerprint-only shortcut.
 - Persist new state only in additive sidecars for new coordinated profiles:
   `coordination.json` is public role/custody metadata and `mobile-signer.json` is an encrypted secret
-  payload. Pending mobile setup is a credential-encrypted, UUID-addressed staging file. Existing
-  registry, wallet, proposal, and certification formats are not migrated or rewritten.
+  payload. Pending mobile setup is a credential-encrypted, UUID-addressed staging file. An optional
+  pairing session ID in new mobile coordination sidecars lets startup distinguish a committed
+  wallet from an interrupted pre-commit operation. Existing sidecars remain readable; registry,
+  wallet, proposal, and certification formats are not migrated or rewritten.
 - Keep desktop tokens in process memory only and expire invitations after 15 minutes. A response is
-  accepted once. Cancellation removes the in-memory session and exact pending staging file.
+  accepted once. Mobile reproduces an interrupted response only by decrypting its local staging
+  file with the same PIN. Completion uses an active-to-consuming rename before wallet commit;
+  startup restores an uncommitted tombstone or removes a committed one. Cancellation idempotently
+  removes the exact active or consuming file.
 - Reuse canonical `crypto-psbt` UR for transaction exchange. Mobile computes an exact PSBT revision
   digest, verifies every input against the paired descriptor and witness UTXO, verifies claimed
   change against derived scripts, permits only unfinalized SIGHASH_ALL, and signs only the exact

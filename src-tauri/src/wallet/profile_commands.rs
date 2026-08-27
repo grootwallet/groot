@@ -36,6 +36,7 @@ pub(crate) fn profile_compatibility_for(
 
 #[tauri::command]
 pub fn wallet_exists(app: AppHandle) -> ApiResult<bool> {
+    super::coordination_commands::reconcile_mobile_pairing_storage(&app)?;
     let registry = load_registry(&app)?;
     Ok(registered_wallets_exist(&registry))
 }

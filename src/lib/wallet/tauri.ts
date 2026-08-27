@@ -801,6 +801,17 @@ export class TauriWalletAdapter implements WalletPort {
   decodePairingInvitation(frames: string[]) {
     return command<string>('coordination_decode_invitation', { frames });
   }
+  pendingMobilePairings() {
+    return command<import('./contracts').PendingMobilePairing[]>(
+      'coordination_pending_mobile_pairings'
+    );
+  }
+  resumePairingOnMobile(sessionId: string, credential: string) {
+    return command<import('./contracts').PairingResponse>('coordination_mobile_resume', {
+      sessionId,
+      credential
+    });
+  }
   acceptPairingOnMobile(invitationJson: string, signerLabel: string, credential: string) {
     return command<import('./contracts').PairingResponse>('coordination_mobile_accept', {
       invitationJson,

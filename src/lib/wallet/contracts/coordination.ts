@@ -17,6 +17,10 @@ export type PairingResponse = {
   frames: string[];
 };
 
+export type PendingMobilePairing = {
+  sessionId: string;
+};
+
 export type MobilePsbtOutput = { address: string; amountSats: number };
 
 export type MobilePsbtReview = {
@@ -55,6 +59,8 @@ export interface WalletCoordinationPort {
   ): Promise<PairingInvitation>;
   cancelPairing(sessionId: string): Promise<void>;
   decodePairingInvitation(frames: string[]): Promise<string>;
+  pendingMobilePairings(): Promise<PendingMobilePairing[]>;
+  resumePairingOnMobile(sessionId: string, credential: string): Promise<PairingResponse>;
   acceptPairingOnMobile(
     invitationJson: string,
     signerLabel: string,

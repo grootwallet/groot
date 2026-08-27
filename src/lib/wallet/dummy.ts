@@ -1989,6 +1989,15 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
   ): ReturnType<WalletPort['decodePairingInvitation']> {
     throw new WalletError('unsupported_operation', 'Device pairing requires the native Groot app.');
   }
+  async pendingMobilePairings(): ReturnType<WalletPort['pendingMobilePairings']> {
+    return [];
+  }
+  async resumePairingOnMobile(
+    _sessionId: string,
+    _credential: string
+  ): ReturnType<WalletPort['resumePairingOnMobile']> {
+    throw new WalletError('unsupported_operation', 'Device pairing requires the native Groot app.');
+  }
   async acceptPairingOnMobile(
     _invitationJson: string,
     _signerLabel: string,

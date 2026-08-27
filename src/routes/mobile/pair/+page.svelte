@@ -1,6 +1,6 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
-  import { onDestroy } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import { Check, LockKeyhole, ScanLine, ShieldCheck, Smartphone } from '@lucide/svelte';
   import AnimatedUrQr from '$lib/components/AnimatedUrQr.svelte';
   import Button from '$lib/components/Button.svelte';
@@ -9,7 +9,7 @@
   import { locale } from '$lib/i18n';
   import { localizedError, translate } from '$lib/i18n-catalog';
   import { toast } from '$lib/stores/toasts';
-  import { walletService, type PairingResponse } from '$lib/wallet';
+  import { walletService, type PairingResponse, type PendingMobilePairing } from '$lib/wallet';
 
   let stage = $state<'invite' | 'confirm' | 'response' | 'final'>('invite');
   let invitationFrames = $state<string[]>([]);
@@ -26,11 +26,77 @@
   let finalFrames = $state<string[]>([]);
   let busy = $state(false);
   let error = $state('');
+  let pendingPairings = $state<PendingMobilePairing[]>([]);
+  let selectedPendingSession = $state('');
+  let resumePin = $state('');
+  let resumeError = $state('');
+  let resumeNotice = $state('');
+
+  onMount(async () => {
+    try {
+      pendingPairings = await walletService.pendingMobilePairings();
+      selectedPendingSession = pendingPairings[0]?.sessionId ?? '';
+    } catch (cause) {
+      resumeError = localizedError(cause, $locale, 'Pending pairing could not be checked.');
+    }
+  });
 
   onDestroy(() => {
     pin = '';
     confirmation = '';
+    resumePin = '';
   });
+
+  async function resumePendingPairing() {
+    if (!selectedPendingSession || !resumePin) return;
+    busy = true;
+    resumeError = '';
+    resumeNotice = '';
+    try {
+      response = await walletService.resumePairingOnMobile(selectedPendingSession, resumePin);
+      comparisonCode = response.comparisonCode;
+      pin = resumePin;
+      resumePin = '';
+      stage = 'response';
+      toast({
+        title: 'Pairing resumed',
+        description: 'The same invitation-bound response is ready for desktop.',
+        tone: 'success'
+      });
+    } catch (cause) {
+      resumeError = localizedError(cause, $locale, 'The pending pairing could not be resumed.');
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function cancelPendingPairing() {
+    if (!selectedPendingSession) return;
+    busy = true;
+    resumeError = '';
+    resumeNotice = '';
+    try {
+      await walletService.cancelPairing(selectedPendingSession);
+      pendingPairings = pendingPairings.filter(
+        (pairing) => pairing.sessionId !== selectedPendingSession
+      );
+      selectedPendingSession = pendingPairings[0]?.sessionId ?? '';
+      resumePin = '';
+      resumeNotice = translate(
+        $locale,
+        'Pending pairing cancelled. Scan a new invitation to restart.'
+      );
+      toast({
+        title: 'Pending pairing cancelled',
+        description: 'The staged phone key was removed.',
+        tone: 'success'
+      });
+    } catch (cause) {
+      resumeError = localizedError(cause, $locale, 'The pending pairing could not be cancelled.');
+    } finally {
+      busy = false;
+    }
+  }
 
   async function receiveInvitation(frame: string) {
     invitationFrames = [...invitationFrames, frame];
@@ -110,6 +176,48 @@
   </header>
 
   {#if stage === 'invite'}
+    {#if pendingPairings.length > 0}
+      <section class="pairing-card pending-card">
+        <span class="step-icon"><LockKeyhole size={22} /></span>
+        <div>
+          <strong>{translate($locale, 'Finish an interrupted pairing')}</strong><small
+            >{translate(
+              $locale,
+              'Enter the same local PIN to restore the exact response QR. No key leaves this phone.'
+            )}</small
+          >
+        </div>
+        {#if pendingPairings.length > 1}
+          <label class="field"
+            ><span>{translate($locale, 'Pending session')}</span><select
+              bind:value={selectedPendingSession}
+              disabled={busy}
+            >
+              {#each pendingPairings as pairing}
+                <option value={pairing.sessionId}>{pairing.sessionId.slice(0, 8)}</option>
+              {/each}
+            </select></label
+          >
+        {/if}
+        <PasswordField bind:value={resumePin} label={translate($locale, 'Local app PIN')} />
+        {#if resumeError}<p class="inline-error" role="alert">{resumeError}</p>{/if}
+        <div class="pending-actions">
+          <Button
+            class="full"
+            loading={busy}
+            disabled={!selectedPendingSession || !resumePin}
+            onclick={resumePendingPairing}>{translate($locale, 'Resume pairing')}</Button
+          >
+          <Button
+            variant="secondary"
+            class="full"
+            disabled={busy || !selectedPendingSession}
+            onclick={cancelPendingPairing}>{translate($locale, 'Cancel pending pairing')}</Button
+          >
+        </div>
+      </section>
+    {/if}
+    {#if resumeNotice}<p class="inline-success" role="status">{resumeNotice}</p>{/if}
     <section class="pairing-card">
       <span class="step-icon"><ScanLine size={22} /></span>
       <div>
@@ -219,6 +327,13 @@
     border-radius: 1rem;
     background: var(--surface);
   }
+  .pending-card {
+    margin-bottom: 1rem;
+  }
+  .pending-actions {
+    display: grid;
+    gap: 0.65rem;
+  }
   .pairing-card > div:first-of-type {
     display: grid;
     gap: 0.25rem;
@@ -269,5 +384,9 @@
   .inline-error {
     color: var(--danger);
     margin: 0;
+  }
+  .inline-success {
+    color: var(--success);
+    margin: 0 0 1rem;
   }
 </style>

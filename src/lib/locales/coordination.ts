@@ -15,6 +15,10 @@ export const coordinationCopy = {
     es: 'Ambos dispositivos deben mostrar'
   },
   'Cannot sign': { fr: 'Ne peut pas signer', es: 'No puede firmar' },
+  'Cancel pending pairing': {
+    fr: 'Annuler le jumelage en attente',
+    es: 'Cancelar vinculación pendiente'
+  },
   'Codes match — add signer': {
     fr: 'Les codes correspondent — ajouter le signataire',
     es: 'Los códigos coinciden — añadir firmante'
@@ -55,6 +59,10 @@ export const coordinationCopy = {
   'Finish the other signers, then return the final wallet QR to the phone.': {
     fr: 'Terminez les autres signataires, puis renvoyez le QR final du portefeuille au téléphone.',
     es: 'Termina con los demás firmantes y devuelve al teléfono el QR final de la cartera.'
+  },
+  'Finish an interrupted pairing': {
+    fr: 'Terminer un jumelage interrompu',
+    es: 'Terminar una vinculación interrumpida'
   },
   'frame {current} of {total}': {
     fr: 'trame {current} sur {total}',
@@ -140,6 +148,16 @@ export const coordinationCopy = {
     fr: 'Invitation de jumelage en cours',
     es: 'Invitación de vinculación en curso'
   },
+  'Pairing resumed': { fr: 'Jumelage repris', es: 'Vinculación reanudada' },
+  'Pending pairing cancelled. Scan a new invitation to restart.': {
+    fr: 'Jumelage en attente annulé. Scannez une nouvelle invitation pour recommencer.',
+    es: 'Vinculación pendiente cancelada. Escanea una nueva invitación para volver a empezar.'
+  },
+  'Pending pairing cancelled': {
+    fr: 'Jumelage en attente annulé',
+    es: 'Vinculación pendiente cancelada'
+  },
+  'Pending session': { fr: 'Session en attente', es: 'Sesión pendiente' },
   'Phone accepted the wallet': {
     fr: 'Le téléphone a accepté le portefeuille',
     es: 'El teléfono aceptó la cartera'
@@ -171,6 +189,7 @@ export const coordinationCopy = {
     fr: 'Renvoyer la politique finale au téléphone',
     es: 'Devolver la política final al teléfono'
   },
+  'Resume pairing': { fr: 'Reprendre le jumelage', es: 'Reanudar vinculación' },
   'Review the exact transaction on this phone. Signing never broadcasts or changes the desktop proposal.':
     {
       fr: 'Vérifiez la transaction exacte sur ce téléphone. La signature ne diffuse ni ne modifie jamais la proposition de l’ordinateur.',
@@ -231,6 +250,18 @@ export const coordinationCopy = {
   'The invitation expires in 15 minutes and can add one phone.': {
     fr: 'L’invitation expire dans 15 minutes et permet d’ajouter un téléphone.',
     es: 'La invitación caduca en 15 minutos y permite añadir un teléfono.'
+  },
+  'The same invitation-bound response is ready for desktop.': {
+    fr: 'La même réponse liée à l’invitation est prête pour l’ordinateur.',
+    es: 'La misma respuesta vinculada a la invitación está lista para el ordenador.'
+  },
+  'The staged phone key was removed.': {
+    fr: 'La clé de téléphone préparée a été supprimée.',
+    es: 'Se eliminó la clave de teléfono preparada.'
+  },
+  'Enter the same local PIN to restore the exact response QR. No key leaves this phone.': {
+    fr: 'Saisissez le même PIN local pour restaurer exactement le QR de réponse. Aucune clé ne quitte ce téléphone.',
+    es: 'Introduce el mismo PIN local para restaurar exactamente el QR de respuesta. Ninguna clave sale de este teléfono.'
   },
   'The phone creates one BIP48 signer. Its 24 words use no BIP39 passphrase.': {
     fr: 'Le téléphone crée un signataire BIP48. Ses 24 mots n’utilisent aucune phrase secrète BIP39.',
