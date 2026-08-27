@@ -55,6 +55,7 @@
     testnetAddressDisplayName
   } from '$lib/wallet/hardware-display';
   import { latestActiveProposal } from '$lib/wallet/proposal-resume';
+  import { clearPaymentDraft, paymentDraftFor, savePaymentDraft } from '$lib/wallet/payment-draft';
   import {
     addPermanentLabel,
     backspaceLabelDraft,
@@ -84,6 +85,7 @@
 
   let step = $state(1);
   let draftStep = $state<1 | 2>(1);
+  let draftWalletId = '';
   let address = $state('');
   let label = $state('');
   let selectedLabels = $state<string[]>([]);
@@ -251,6 +253,7 @@
       externalSigner =
         registry.wallets.find((profile) => profile.id === registry.selectedWalletId)?.kind ===
         'watch_only';
+      draftWalletId = registry.selectedWalletId ?? '';
       try {
         externalWallet = await walletService.externalSignerWallet();
         externalSigner = true;
@@ -317,6 +320,7 @@
           ? (proposals.find((item) => item.proposalId === requestedProposalId) ?? null)
           : latestActiveProposal(proposals);
         if (activeProposal) {
+          if (draftWalletId) clearPaymentDraft(draftWalletId);
           externalProposal = activeProposal;
           proposal = activeProposal;
           address = activeProposal.recipient;
@@ -331,12 +335,37 @@
           ? (proposals.find((item) => item.proposalId === requestedProposalId) ?? null)
           : (proposals[0] ?? null);
         if (activeProposal) {
+          if (draftWalletId) clearPaymentDraft(draftWalletId);
           proposal = activeProposal;
           address = activeProposal.recipient;
           selectedLabels = activeProposal.labels ?? [activeProposal.label];
           label = '';
           amount = String(activeProposal.amount);
           step = 2;
+        }
+      }
+      if (!proposal && !accelerationRequest && draftWalletId) {
+        const savedDraft = paymentDraftFor(draftWalletId);
+        if (savedDraft?.kind === 'single_key') {
+          address = savedDraft.address;
+          selectedLabels = savedDraft.labels;
+          label = '';
+          amount = savedDraft.amount;
+          draftStep = savedDraft.stage;
+          speed = savedDraft.speed;
+          customFee = savedDraft.customFee;
+          automaticStrategy = savedDraft.automaticStrategy;
+          if (!requested.length) {
+            selectedCoins = savedDraft.selectedCoins.filter((outpoint) =>
+              snapshot.utxos.some((coin) => coin.outpoint === outpoint && !coin.frozen)
+            );
+          }
+          available = snapshot.utxos
+            .filter(
+              (coin) =>
+                !coin.frozen && (!selectedCoins.length || selectedCoins.includes(coin.outpoint))
+            )
+            .reduce((total, coin) => total + coin.amount, 0);
         }
       }
     } catch (cause) {
@@ -359,9 +388,26 @@
   });
 
   onDestroy(() => {
+    saveCurrentDraft();
     hardwareScanGeneration += 1;
     passphrase = '';
   });
+
+  function saveCurrentDraft() {
+    if (!draftWalletId || proposal || !addressValid || submissionLabels.length === 0) return;
+    savePaymentDraft({
+      kind: 'single_key',
+      walletId: draftWalletId,
+      address,
+      labels: submissionLabels,
+      amount,
+      stage: draftStep,
+      selectedCoins,
+      automaticStrategy,
+      speed,
+      customFee
+    });
+  }
 
   async function prepare() {
     if (!valid) return;
@@ -374,6 +420,7 @@
         asFeeRate(selectedFeeRate),
         selection
       );
+      if (draftWalletId) clearPaymentDraft(draftWalletId);
       if (externalSigner)
         externalProposal =
           (await walletService.externalSignerProposals()).find(
@@ -729,6 +776,7 @@
     label = '';
     armedLabelIndex = null;
     draftStep = 2;
+    saveCurrentDraft();
   }
 </script>
 

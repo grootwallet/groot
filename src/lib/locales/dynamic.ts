@@ -457,6 +457,14 @@ export const dynamicCopy = {
   'Payment intent': { fr: 'Intention de paiement', es: 'Intención de pago' },
   'Payment ready to broadcast': { fr: 'Paiement prêt à diffuser', es: 'Pago listo para difundir' },
   'Payment ready to sign': { fr: 'Paiement prêt à signer', es: 'Pago listo para firmar' },
+  'Payment draft in progress': {
+    fr: 'Brouillon de paiement en cours',
+    es: 'Borrador de pago en curso'
+  },
+  'Recipient and labels saved': {
+    fr: 'Destinataire et libellés enregistrés',
+    es: 'Destinatario y etiquetas guardados'
+  },
   'Payment received': { fr: 'Paiement reçu', es: 'Pago recibido' },
   'Payment sent': { fr: 'Paiement envoyé', es: 'Pago enviado' },
   'Payment sent.': { fr: 'Paiement envoyé.', es: 'Pago enviado.' },

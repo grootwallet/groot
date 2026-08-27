@@ -2,6 +2,8 @@
 
 This ledger prevents prototype UI from being mistaken for production wallet behavior. “Implemented” means wired through the real Tauri adapter; “browser fixture” means deterministic UI behavior only.
 
+v0.4.52 preserves a completed Send intent across in-app route changes for software, external-signer, and multisig wallets. Returning from Coins resumes the same Intent or Amount & fee stage with recipient, permanent labels, amount, fee choice, and still-eligible manual selection restored; Overview exposes the existing resume callout before a PSBT exists. Drafts are volatile, wallet-scoped renderer state, contain no credentials or hardware state, clear when an authoritative proposal is prepared, and disappear when the app process ends. No persisted format changes.
+
 v0.4.51 keeps keyboard focus inside every tokenizing payment/receive label input when plain Tab commits a typed label. Blank Tab continues normal forward navigation, Shift+Tab continues normal reverse navigation without committing the draft, and Enter/comma/semicolon retain their existing commit behavior. No persisted format changes.
 
 v0.4.50 makes frozen funds explicit on both single-key and multisig Send amount steps. When any wallet coin is frozen, the spendable balance is followed by the frozen amount and a **Review frozen coins** link to Coins, where unfreezing remains an explicit confirmed action. Groot never silently changes coin eligibility. No persisted format changes.

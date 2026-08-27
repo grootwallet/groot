@@ -97,6 +97,10 @@
     parseAmountInput
   } from '$lib/denomination';
   import { latestActiveProposal } from '$lib/wallet/proposal-resume';
+  import { clearPaymentDraft, paymentDraftFor, savePaymentDraft } from '$lib/wallet/payment-draft';
+  import { useWalletShellContext } from '$lib/wallet/shell-context';
+
+  const walletShell = useWalletShellContext();
   let wallet = $state<MultisigWallet | null>(null),
     proposal = $state<MultisigProposal | null>(null),
     estimates = $state<FeeEstimates | null>(null);
@@ -169,6 +173,8 @@
   let selectionPreview = $state<CoinSelectionPreview | null>(null),
     selectionPreviewRevision = 0;
   let draftStep = $state<1 | 2>(1);
+  let draftWalletId = '';
+  let restoredPaymentDraft = false;
   const selection = $derived<CoinSelection>(
     selectedCoins.length
       ? { mode: 'manual', outpoints: selectedCoins }
@@ -361,6 +367,7 @@
     error = '';
   }
   onDestroy(() => {
+    saveCurrentDraft();
     hardwareScanGeneration += 1;
     pin = '';
     imported = '';
@@ -375,6 +382,7 @@
         walletService.multisigProposals()
       ]);
       wallet = loadedWallet;
+      draftWalletId = walletShell.selectedWalletId() ?? '';
       coins = snapshot.utxos;
       labelSuggestions = snapshot.labelSuggestions;
       void walletService
@@ -449,6 +457,7 @@
           ? (proposals.find((item) => item.proposalId === requestedProposalId) ?? null)
           : latestActiveProposal(proposals);
         if (proposal) {
+          if (draftWalletId) clearPaymentDraft(draftWalletId);
           address = proposal.recipient;
           selectedLabels = proposal.labels ?? [proposal.label];
           label = '';
@@ -458,10 +467,28 @@
           error = translate($locale, 'This saved payment is no longer available.');
         }
       }
+      if (!proposal && !renewalMode && !delayedSpendMode && !accelerationRequest && draftWalletId) {
+        const savedDraft = paymentDraftFor(draftWalletId);
+        if (savedDraft?.kind === 'multisig') {
+          restoredPaymentDraft = true;
+          address = savedDraft.address;
+          selectedLabels = savedDraft.labels;
+          label = '';
+          amount = savedDraft.amount;
+          draftStep = savedDraft.stage;
+          selectedRate = savedDraft.selectedRate;
+          automaticStrategy = savedDraft.automaticStrategy;
+          if (!requested.length) {
+            selectedCoins = savedDraft.selectedCoins.filter((outpoint) =>
+              coins.some((coin) => coin.outpoint === outpoint && !coin.frozen)
+            );
+          }
+        }
+      }
       updateAvailable();
       try {
         estimates = await walletService.estimateFees();
-        selectedRate = Number(estimates.standard);
+        if (!restoredPaymentDraft) selectedRate = Number(estimates.standard);
       } catch (cause) {
         feeEstimateError = localizedError(
           cause,
@@ -508,6 +535,29 @@
     label = '';
     armedLabelIndex = null;
     draftStep = 2;
+    saveCurrentDraft();
+  }
+  function saveCurrentDraft() {
+    if (
+      !draftWalletId ||
+      proposal ||
+      renewalMode ||
+      delayedSpendMode ||
+      !addressValid ||
+      submissionLabels.length === 0
+    )
+      return;
+    savePaymentDraft({
+      kind: 'multisig',
+      walletId: draftWalletId,
+      address,
+      labels: submissionLabels,
+      amount,
+      stage: draftStep,
+      selectedCoins,
+      automaticStrategy,
+      selectedRate
+    });
   }
   async function prepare() {
     if (!valid) return;
@@ -521,6 +571,7 @@
         feeRate(selectedRateNumber),
         selection
       );
+      if (draftWalletId) clearPaymentDraft(draftWalletId);
     } catch (cause) {
       error =
         cause instanceof WalletError && cause.code === 'insufficient_funds'

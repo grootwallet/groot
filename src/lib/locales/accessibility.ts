@@ -484,6 +484,10 @@ export const accessibilityCopy = {
     fr: 'Reprendre le paiement, {label}, {progress}',
     es: 'Reanudar el pago, {label}, {progress}'
   },
+  'Resume payment draft, {label}': {
+    fr: 'Reprendre le brouillon de paiement, {label}',
+    es: 'Reanudar el borrador de pago, {label}'
+  },
   'Verified on hardware. {explanation}': {
     fr: 'Vérifié sur le matériel. {explanation}',
     es: 'Verificado en el dispositivo. {explanation}'

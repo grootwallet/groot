@@ -46,6 +46,7 @@
     setHardwareHealthChecks
   } from '$lib/hardware/health-check-state';
   import { latestActiveProposal } from '$lib/wallet/proposal-resume';
+  import { paymentDraftFor, type PaymentDraft } from '$lib/wallet/payment-draft';
   import { pendingBalanceBreakdown, sortTransactionsNewestFirst } from '$lib/wallet/presentation';
   import { policyMaturitySummary } from '$lib/wallet/policy';
   import { onMount } from 'svelte';
@@ -69,6 +70,7 @@
   let signerDetailsOpen = $state(false);
   let checkingSignerHealth = $state(false);
   let activeProposal = $state<MultisigProposal | PaymentProposal | null>(null);
+  let activeDraft = $state<PaymentDraft | null>(null);
   let selected = $state<Transaction | null>(null);
   let multisig = $state(false);
   let moreOpen = $state(false);
@@ -191,6 +193,7 @@
       syncSource = nextSyncSource;
       selectedProfile =
         registry.wallets.find((wallet) => wallet.id === registry.selectedWalletId) ?? null;
+      activeDraft = selectedProfile ? paymentDraftFor(selectedProfile.id) : null;
       multisig = selectedProfile?.kind === 'multisig';
       if (multisig) {
         const [nextSnapshot, nextWallet, proposals] = await Promise.all([
@@ -226,6 +229,7 @@
             ? latestActiveProposal(proposals as MultisigProposal[])
             : ((proposals as PaymentProposal[])[0] ?? null);
       }
+      if (activeProposal) activeDraft = null;
       initialDataLoading = false;
       if (syncSource.type === 'compact_filters') void sync(false);
     } catch (cause) {
@@ -599,6 +603,29 @@
               hidden={$discreetMode}
               prominent
             /><small>{proposalProgress}</small></span
+          ></span
+        >
+        <span class="active-proposal-action"
+          >{translate($locale, 'Resume')} <ChevronRight size={15} /></span
+        >
+      </a>
+    {:else if activeDraft}
+      <a
+        class="active-proposal-callout"
+        href={activeDraft.kind === 'multisig' ? '/multisig/send' : '/send'}
+        aria-label={translate($locale, 'Resume payment draft, {label}', {
+          label: $discreetMode ? 'Label hidden' : activeDraft.labels.join(', ')
+        })}
+      >
+        <span class="active-proposal-icon"><Clock3 size={17} /></span>
+        <span class="active-proposal-copy"
+          ><strong>{translate($locale, 'Payment draft in progress')}</strong><span
+            class="active-proposal-meta"
+            ><PermanentLabelTags
+              labels={activeDraft.labels}
+              hidden={$discreetMode}
+              prominent
+            /><small>{translate($locale, 'Recipient and labels saved')}</small></span
           ></span
         >
         <span class="active-proposal-action"
