@@ -257,31 +257,33 @@ fn same_cosigner_identity(left: &CosignerInput, right: &CosignerInput) -> bool {
         && left.device_type == right.device_type
 }
 
-fn recently_scanned_saved_hardware_device(
-    state: &AppState,
+fn discover_saved_hardware_device(
+    hwi: &HwiCli,
     device_type: &str,
     fingerprint: &str,
-) -> ApiResult<Option<HwiDevice>> {
-    let scans = state.recent_hardware_scan.lock().map_err(internal)?;
-    let Some(scan) = scans.as_ref() else {
-        return Ok(None);
-    };
-    if scan.created_at.elapsed() > HARDWARE_SCAN_CACHE_TIMEOUT {
-        return Ok(None);
-    }
-    // A cached scan is stored in a HashMap. Sort the ephemeral paths only to
-    // make selection deterministic if HWI exposed duplicate matching entries.
-    let mut devices: Vec<_> = scan.devices.values().cloned().collect();
-    devices.sort_by(|left, right| left.path.cmp(&right.path));
-    saved_hwi_device(devices, device_type, fingerprint)
+) -> ApiResult<HwiDevice> {
+    let (_, discovered) = discover_hardware_singleflight(hwi)?;
+    saved_hwi_device(discovered, device_type, fingerprint)?.ok_or_else(|| {
+        api_error(
+            "hardware_unavailable",
+            "The saved hardware signer was not found. Keep that signer connected and unlocked, then try again.",
+        )
+    })
 }
 
 fn remember_hardware_scan(
     state: &AppState,
+    request_epoch: u64,
     generation: u64,
     devices: &mut [HwiDevice],
 ) -> ApiResult<()> {
     let mut scans = state.recent_hardware_scan.lock().map_err(internal)?;
+    if state.hardware_scan_epoch.load(Ordering::SeqCst) != request_epoch {
+        return Err(api_error(
+            "hardware_scan_superseded",
+            "A newer hardware scan replaced this result. Use the latest scan.",
+        ));
+    }
     let prior_capabilities = scans
         .as_ref()
         .filter(|scan| scan.generation == Some(generation))
@@ -313,6 +315,14 @@ fn remember_hardware_scan(
 
 fn remember_hardware_devices(state: &AppState, devices: &mut [HwiDevice]) -> ApiResult<()> {
     let mut scans = state.recent_hardware_scan.lock().map_err(internal)?;
+    remember_hardware_devices_in_scan(&mut scans, devices);
+    Ok(())
+}
+
+fn remember_hardware_devices_in_scan(
+    scans: &mut Option<RecentHardwareScan>,
+    devices: &mut [HwiDevice],
+) {
     let scan = scans.get_or_insert_with(|| RecentHardwareScan {
         devices: HashMap::new(),
         created_at: Instant::now(),
@@ -333,7 +343,32 @@ fn remember_hardware_devices(state: &AppState, devices: &mut [HwiDevice]) -> Api
     }
     scan.created_at = Instant::now();
     scan.generation = None;
+}
+
+fn remember_discovered_hardware_devices(
+    state: &AppState,
+    request_epoch: u64,
+    devices: &mut [HwiDevice],
+) -> ApiResult<()> {
+    let mut scans = state.recent_hardware_scan.lock().map_err(internal)?;
+    if state.hardware_scan_epoch.load(Ordering::SeqCst) != request_epoch {
+        return Err(api_error(
+            "hardware_scan_superseded",
+            "A newer hardware scan replaced this result. Use the latest scan.",
+        ));
+    }
+    remember_hardware_devices_in_scan(&mut scans, devices);
     Ok(())
+}
+
+fn forget_hardware_scan(state: &AppState) -> ApiResult<u64> {
+    let mut scans = state.recent_hardware_scan.lock().map_err(internal)?;
+    let request_epoch = state
+        .hardware_scan_epoch
+        .fetch_add(1, Ordering::SeqCst)
+        .wrapping_add(1);
+    *scans = None;
+    Ok(request_epoch)
 }
 
 pub(super) fn recently_scanned_hardware_device(
@@ -398,12 +433,13 @@ pub async fn hardware_list(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> ApiResult<Vec<HardwareDeviceDto>> {
+    let request_epoch = forget_hardware_scan(&state)?;
     let hwi = hwi_cli(&app)?;
     let (generation, mut devices) =
         tauri::async_runtime::spawn_blocking(move || discover_hardware_singleflight(&hwi))
             .await
             .map_err(internal)??;
-    remember_hardware_scan(&state, generation, &mut devices)?;
+    remember_hardware_scan(&state, request_epoch, generation, &mut devices)?;
     Ok(devices.into_iter().map(hardware_device_dto).collect())
 }
 
@@ -414,6 +450,7 @@ pub async fn hardware_list_for_device_types(
     device_types: Vec<String>,
 ) -> ApiResult<Vec<HardwareDeviceDto>> {
     let device_types = validated_target_device_types(device_types)?;
+    let request_epoch = forget_hardware_scan(&state)?;
     let hwi = hwi_cli(&app)?;
     let devices = tauri::async_runtime::spawn_blocking(move || {
         let (generation, discovered) = discover_hardware_singleflight(&hwi)?;
@@ -426,7 +463,7 @@ pub async fn hardware_list_for_device_types(
     .await
     .map_err(internal)??;
     let (generation, mut all_devices, mut devices) = devices;
-    remember_hardware_scan(&state, generation, &mut all_devices)?;
+    remember_hardware_scan(&state, request_epoch, generation, &mut all_devices)?;
     let capabilities = all_devices
         .iter()
         .map(|device| (device.path.clone(), device.capability.clone()))
@@ -479,30 +516,17 @@ pub async fn hardware_find_saved_device(
     // This command resolves only an opaque path hint. The following health,
     // display, or signing command must freshly prove the complete account
     // identity and perform its action under one exclusive native lease.
-    let cached_device = recently_scanned_saved_hardware_device(&state, &device_type, &fingerprint)?;
+    let request_epoch = forget_hardware_scan(&state)?;
     let hwi = hwi_cli(&app)?;
     let requested_type = device_type.clone();
     let requested_fingerprint = fingerprint.clone();
     let device = tauri::async_runtime::spawn_blocking(move || {
-        let device = if let Some(device) = cached_device {
-            device
-        } else {
-            let (_, discovered) = discover_hardware_singleflight(&hwi)?;
-            saved_hwi_device(discovered, &requested_type, &requested_fingerprint)?.ok_or_else(
-                || {
-                    api_error(
-                        "hardware_unavailable",
-                        "The saved hardware signer was not found. Keep that signer connected and unlocked, then try again.",
-                    )
-                },
-            )?
-        };
-        Ok::<_, ApiError>(device)
+        discover_saved_hardware_device(&hwi, &requested_type, &requested_fingerprint)
     })
     .await
     .map_err(internal)??;
     let mut remembered = [device];
-    remember_hardware_devices(&state, &mut remembered)?;
+    remember_discovered_hardware_devices(&state, request_epoch, &mut remembered)?;
     let device = remembered
         .into_iter()
         .next()
@@ -514,6 +538,9 @@ pub async fn hardware_find_saved_device(
 mod targeted_scan_tests {
     use super::*;
     use std::thread;
+
+    #[cfg(unix)]
+    static FAKE_HWI_TEST_LOCK: Mutex<()> = Mutex::new(());
 
     #[cfg(unix)]
     fn fake_hwi() -> (HwiCli, PathBuf, PathBuf) {
@@ -575,6 +602,7 @@ mod targeted_scan_tests {
     #[cfg(unix)]
     #[test]
     fn three_or_seven_family_requests_and_concurrent_callers_each_use_one_enumerate() {
+        let _guard = FAKE_HWI_TEST_LOCK.lock().unwrap();
         let (hwi, program, count) = fake_hwi();
         let three = vec!["jade".into(), "ledger".into(), "trezor".into()];
         let (_, discovered) = discover_hardware_singleflight(&hwi).unwrap();
@@ -604,6 +632,20 @@ mod targeted_scan_tests {
         std::fs::remove_file(count).unwrap();
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn each_saved_device_rescan_performs_fresh_enumeration() {
+        let _guard = FAKE_HWI_TEST_LOCK.lock().unwrap();
+        let (hwi, program, count) = fake_hwi();
+
+        discover_saved_hardware_device(&hwi, "jade", "a1b2c3d4").unwrap();
+        discover_saved_hardware_device(&hwi, "jade", "a1b2c3d4").unwrap();
+
+        assert_eq!(std::fs::read_to_string(&count).unwrap().trim(), "2");
+        std::fs::remove_file(program).unwrap();
+        std::fs::remove_file(count).unwrap();
+    }
+
     #[test]
     fn scan_capabilities_are_opaque_redeemable_and_stable_only_within_one_flight() {
         let state = AppState::default();
@@ -612,7 +654,8 @@ mod targeted_scan_tests {
             path: "private-native-path".into(),
             ..HwiDevice::default()
         }];
-        remember_hardware_scan(&state, 42, &mut first).unwrap();
+        let first_epoch = forget_hardware_scan(&state).unwrap();
+        remember_hardware_scan(&state, first_epoch, 42, &mut first).unwrap();
         let first_capability = first[0].capability.clone();
         assert!(!first_capability.is_empty());
         assert_ne!(first_capability, first[0].path);
@@ -628,7 +671,7 @@ mod targeted_scan_tests {
             path: first[0].path.clone(),
             ..HwiDevice::default()
         }];
-        remember_hardware_scan(&state, 42, &mut coalesced).unwrap();
+        remember_hardware_scan(&state, first_epoch, 42, &mut coalesced).unwrap();
         assert_eq!(coalesced[0].capability, first_capability);
 
         let mut later = [HwiDevice {
@@ -636,9 +679,35 @@ mod targeted_scan_tests {
             path: first[0].path.clone(),
             ..HwiDevice::default()
         }];
-        remember_hardware_scan(&state, 43, &mut later).unwrap();
+        let later_epoch = forget_hardware_scan(&state).unwrap();
+        remember_hardware_scan(&state, later_epoch, 43, &mut later).unwrap();
         assert_ne!(later[0].capability, first_capability);
         assert!(recently_scanned_hardware_device(&state, &first_capability).is_err());
+
+        forget_hardware_scan(&state).unwrap();
+        assert!(recently_scanned_hardware_device(&state, &later[0].capability).is_err());
+    }
+
+    #[test]
+    fn newer_explicit_scan_rejects_a_late_older_cache_write() {
+        let state = AppState::default();
+        let older_epoch = forget_hardware_scan(&state).unwrap();
+        let newer_epoch = forget_hardware_scan(&state).unwrap();
+        let mut older = vec![HwiDevice {
+            device_type: "jade".to_owned(),
+            model: "Jade".to_owned(),
+            path: "usb:older".to_owned(),
+            fingerprint: Some("a1b2c3d4".to_owned()),
+            ..HwiDevice::default()
+        }];
+
+        let error = remember_hardware_scan(&state, older_epoch, 1, &mut older).unwrap_err();
+        assert_eq!(error.code, "hardware_scan_superseded");
+
+        let mut newer = older.clone();
+        newer[0].path = "usb:newer".to_owned();
+        remember_hardware_scan(&state, newer_epoch, 2, &mut newer).unwrap();
+        assert!(recently_scanned_hardware_device(&state, &newer[0].capability).is_ok());
     }
 
     #[test]
@@ -649,7 +718,8 @@ mod targeted_scan_tests {
             path: "private-bitbox-path".into(),
             ..HwiDevice::default()
         }];
-        remember_hardware_scan(&state, 7, &mut devices).unwrap();
+        let first_epoch = forget_hardware_scan(&state).unwrap();
+        remember_hardware_scan(&state, first_epoch, 7, &mut devices).unwrap();
         assert!(require_unique_bitbox(&state, &devices[0]).is_ok());
 
         let mut ambiguous = [
@@ -660,7 +730,8 @@ mod targeted_scan_tests {
                 ..HwiDevice::default()
             },
         ];
-        remember_hardware_scan(&state, 8, &mut ambiguous).unwrap();
+        let second_epoch = forget_hardware_scan(&state).unwrap();
+        remember_hardware_scan(&state, second_epoch, 8, &mut ambiguous).unwrap();
         assert_eq!(
             require_unique_bitbox(&state, &ambiguous[0])
                 .unwrap_err()

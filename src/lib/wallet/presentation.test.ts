@@ -134,6 +134,18 @@ describe('sortTransactionsNewestFirst', () => {
       'confirmed'
     ]);
   });
+
+  it('places a locally broadcast payment first when pending timestamps tie', () => {
+    const incoming = transaction('incoming', '2026-08-28T20:18:00Z');
+    const outgoing = transaction('outgoing', '2026-08-28T20:18:00Z');
+    outgoing.direction = 'sent';
+    outgoing.intentLabel = { id: 'payment-label', text: 'To jade', origin: 'payment' };
+
+    expect(sortTransactionsNewestFirst([incoming, outgoing]).map(({ id }) => id)).toEqual([
+      'outgoing',
+      'incoming'
+    ]);
+  });
 });
 
 describe('sortTransactions', () => {
@@ -166,6 +178,22 @@ describe('sortTransactions', () => {
     expect(sortTransactions([futureBlockTime, pending], 'oldest').map(({ id }) => id)).toEqual([
       'confirmed',
       'pending'
+    ]);
+  });
+
+  it('orders equal-time pending activity around the known local payment intent', () => {
+    const incoming = transaction('incoming', '2026-08-28T20:18:00Z');
+    const outgoing = transaction('outgoing', '2026-08-28T20:18:00Z');
+    outgoing.direction = 'sent';
+    outgoing.intentLabel = { id: 'payment-label', text: 'To jade', origin: 'payment' };
+
+    expect(sortTransactions([incoming, outgoing], 'newest').map(({ id }) => id)).toEqual([
+      'outgoing',
+      'incoming'
+    ]);
+    expect(sortTransactions([incoming, outgoing], 'oldest').map(({ id }) => id)).toEqual([
+      'incoming',
+      'outgoing'
     ]);
   });
 

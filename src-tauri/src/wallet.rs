@@ -40,7 +40,7 @@ use std::{
     path::{Path, PathBuf},
     str::FromStr,
     sync::{
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
         Arc, Mutex, MutexGuard,
     },
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
@@ -346,6 +346,7 @@ pub struct AppState {
     verified_recovery: Mutex<HashMap<Uuid, String>>,
     pending_hardware_pins: Mutex<HashMap<String, PendingHardwarePin>>,
     recent_hardware_scan: Mutex<Option<RecentHardwareScan>>,
+    hardware_scan_epoch: AtomicU64,
     node_auth: Mutex<HashMap<Uuid, NodeAuthSession>>,
     authenticated_software_descriptors: Mutex<HashMap<Uuid, (String, String)>>,
     saved_files: Mutex<HashMap<String, SavedFileReveal>>,
@@ -5158,6 +5159,7 @@ fn mark_observed_addresses(wallet: &Wallet, db: &Connection) -> ApiResult<()> {
 fn confirmations(
     position: &ChainPosition<ConfirmationBlockTime>,
     tip: u32,
+    fallback_first_seen: Option<u64>,
 ) -> (u32, Option<u32>, String) {
     match position {
         ChainPosition::Confirmed { anchor, .. } => (
@@ -5165,10 +5167,25 @@ fn confirmations(
             Some(anchor.block_id.height),
             anchor.confirmation_time.to_string(),
         ),
-        ChainPosition::Unconfirmed { first_seen, .. } => {
-            (0, None, first_seen.unwrap_or_else(now).to_string())
-        }
+        ChainPosition::Unconfirmed { first_seen, .. } => (
+            0,
+            None,
+            first_seen
+                .or(fallback_first_seen)
+                .unwrap_or_else(now)
+                .to_string(),
+        ),
     }
+}
+
+fn transaction_observed_at(db: &Connection, txid: &str) -> ApiResult<Option<u64>> {
+    db.query_row(
+        "SELECT MIN(created_at) FROM groot_notifications
+         WHERE txid = ?1 AND kind IN ('payment_received','transaction_broadcast')",
+        params![txid],
+        |row| row.get(0),
+    )
+    .map_err(internal)
 }
 
 fn address_metadata(db: &Connection, index: u32) -> Option<(String, String)> {
@@ -5587,8 +5604,9 @@ fn snapshot_from(
                 .checked_sub(transaction_fee.unwrap_or(Amount::ZERO))
                 .unwrap_or(Amount::ZERO)
         };
-        let (confirmations, block, date) = confirmations(&tx.chain_position, tip);
         let txid = tx.tx_node.txid.to_string();
+        let observed_at = transaction_observed_at(db, &txid)?;
+        let (confirmations, block, date) = confirmations(&tx.chain_position, tip, observed_at);
         let intent_label = (!is_received)
             .then(|| label_provenance::payment_label_for_txid(db, &txid).map_err(internal))
             .transpose()?
@@ -5684,7 +5702,7 @@ fn snapshot_from(
         values
     };
     for output in wallet.list_unspent() {
-        let (output_confirmations, _, _) = confirmations(&output.chain_position, tip);
+        let (output_confirmations, _, _) = confirmations(&output.chain_position, tip, None);
         let address = Address::from_script(&output.txout.script_pubkey, NETWORK)
             .map(|address| address.to_string())
             .unwrap_or_else(|_| "Unknown".to_owned());

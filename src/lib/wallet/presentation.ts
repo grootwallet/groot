@@ -55,6 +55,7 @@ export function sortTransactionsNewestFirst(items: readonly Transaction[]): Tran
       (left, right) =>
         comparePendingStatus(left.transaction, right.transaction, 'newest') ||
         right.timestamp - left.timestamp ||
+        compareLocalPaymentIntent(left.transaction, right.transaction, 'newest') ||
         left.index - right.index
     )
     .map(({ transaction }) => transaction);
@@ -77,13 +78,26 @@ export function sortTransactions(
       if (order === 'newest' || order === 'oldest') {
         comparison =
           comparePendingStatus(left.transaction, right.transaction, order) ||
-          compareTimestamp(left.timestamp, right.timestamp, order);
+          compareTimestamp(left.timestamp, right.timestamp, order) ||
+          compareLocalPaymentIntent(left.transaction, right.transaction, order);
       } else if (order === 'largest')
         comparison = right.transaction.amount - left.transaction.amount;
       else comparison = left.transaction.amount - right.transaction.amount;
       return comparison || left.index - right.index;
     })
     .map(({ transaction }) => transaction);
+}
+
+function compareLocalPaymentIntent(
+  left: Transaction,
+  right: Transaction,
+  order: 'newest' | 'oldest'
+): number {
+  const leftIsLocalPayment = left.direction === 'sent' && left.intentLabel !== null;
+  const rightIsLocalPayment = right.direction === 'sent' && right.intentLabel !== null;
+  if (leftIsLocalPayment === rightIsLocalPayment) return 0;
+  if (order === 'newest') return leftIsLocalPayment ? -1 : 1;
+  return leftIsLocalPayment ? 1 : -1;
 }
 
 function comparePendingStatus(

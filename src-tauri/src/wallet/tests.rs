@@ -10,6 +10,36 @@ use bdk_wallet::bitcoin::NetworkKind;
 use std::{net::TcpListener, thread};
 
 #[test]
+fn transaction_observation_time_is_stable_across_snapshot_refreshes() {
+    let db = Connection::open_in_memory().unwrap();
+    init_app_schema(&db).unwrap();
+    assert_eq!(transaction_observed_at(&db, "unseen").unwrap(), None);
+
+    notifications::enqueue(
+        &db,
+        &WalletNotification::PaymentReceived {
+            txid: "funding".to_owned(),
+            amount: 100_000,
+            balance: 100_000,
+        },
+        42,
+    )
+    .unwrap();
+    notifications::enqueue(
+        &db,
+        &WalletNotification::FirstConfirmation {
+            txid: "funding".to_owned(),
+            balance: 100_000,
+        },
+        84,
+    )
+    .unwrap();
+
+    assert_eq!(transaction_observed_at(&db, "funding").unwrap(), Some(42));
+    assert_eq!(transaction_observed_at(&db, "funding").unwrap(), Some(42));
+}
+
+#[test]
 fn coldcard_policy_acknowledgement_is_serialized_before_authorization() {
     let source = include_str!("../wallet.rs");
     let command = source
