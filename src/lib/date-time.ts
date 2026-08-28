@@ -4,6 +4,9 @@ export type TimestampPresentation = {
   detail: string;
 };
 
+export type SyncAge =
+  { unit: 'never' | 'now'; value: 0 } | { unit: 'minute' | 'hour' | 'day'; value: number };
+
 export function parseTimestamp(value: string): Date | null {
   const trimmed = value.trim();
   if (!trimmed) return null;
@@ -14,6 +17,19 @@ export function parseTimestamp(value: string): Date | null {
     : new Date(trimmed);
 
   return Number.isNaN(date.getTime()) ? null : date;
+}
+
+export function syncAge(value: string | null, currentTime = Date.now()): SyncAge {
+  if (!value) return { unit: 'never', value: 0 };
+  const timestamp = parseTimestamp(value);
+  if (!timestamp) return { unit: 'never', value: 0 };
+  const elapsedSeconds = Math.max(0, Math.floor((currentTime - timestamp.getTime()) / 1_000));
+  if (elapsedSeconds < 60) return { unit: 'now', value: 0 };
+  const elapsedMinutes = Math.floor(elapsedSeconds / 60);
+  if (elapsedMinutes < 60) return { unit: 'minute', value: elapsedMinutes };
+  const elapsedHours = Math.floor(elapsedMinutes / 60);
+  if (elapsedHours < 24) return { unit: 'hour', value: elapsedHours };
+  return { unit: 'day', value: Math.floor(elapsedHours / 24) };
 }
 
 function readableDate(date: Date, timeZone: string, includeSeconds = true) {

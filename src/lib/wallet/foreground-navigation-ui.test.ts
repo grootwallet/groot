@@ -28,12 +28,17 @@ describe('foreground wallet navigation', () => {
     expect(appShell).toContain('foregroundWalletRoutes.has(page.url.pathname)');
   });
 
-  it('cancels any native sync before navigation or an automatic-lock route change', () => {
+  it('keeps scans alive across read-only routes and cancels before exclusive routes or lock', () => {
     const navigationStart = appShell.indexOf('beforeNavigate(({ to }) =>');
     const navigationEnd = appShell.indexOf('afterNavigate(({ from }) =>', navigationStart);
-    expect(appShell.slice(navigationStart, navigationEnd)).toContain(
-      'walletService.cancelSync().catch(() => undefined)'
-    );
+    const navigation = appShell.slice(navigationStart, navigationEnd);
+    expect(navigation).toContain('routeCancelsSync(to.url.pathname)');
+    expect(navigation).toContain('walletService.cancelSync().catch(() => undefined)');
+    const cancellationPolicyStart = appShell.indexOf('const routeCancelsSync =');
+    const cancellationPolicyEnd = appShell.indexOf('const active =', cancellationPolicyStart);
+    const cancellationPolicy = appShell.slice(cancellationPolicyStart, cancellationPolicyEnd);
+    expect(cancellationPolicy).not.toContain("'/activity'");
+    expect(cancellationPolicy).not.toContain("'/coins'");
 
     const monitorStart = appShell.indexOf('sessionMonitor = createSessionMonitor(');
     const monitorEnd = appShell.indexOf('sessionMonitor.start()', monitorStart);
@@ -58,6 +63,16 @@ describe('foreground wallet navigation', () => {
     expect(overview).toContain("syncStatus.source === 'bitcoin_core'");
     expect(overview).toContain("'Scanning Bitcoin Core history'");
     expect(overview).toContain("'Wallet sync progress'");
+    expect(overview).toContain('syncStatusIsActive(syncStatus)');
+    expect(overview).toContain('startSyncStatusPolling()');
+    expect(overview).toContain('syncAge(snapshot?.syncedAt ?? null, syncClock)');
+  });
+
+  it('does not start a second compact-filter scan after reattaching to an inherited scan', () => {
+    expect(overview).toContain('if (syncStatusIsActive(syncStatus)) inheritedSyncObserved = true;');
+    expect(overview).toContain(
+      "if (syncSource.type === 'compact_filters' && !inheritedSyncObserved) void sync(false);"
+    );
   });
 
   it('runs contended snapshot reads away from the native window thread', () => {

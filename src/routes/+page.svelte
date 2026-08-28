@@ -62,6 +62,7 @@
   import MultisigDescriptorsModal from '$lib/components/MultisigDescriptorsModal.svelte';
   import { useWalletShellContext } from '$lib/wallet/shell-context';
   import { fly } from 'svelte/transition';
+  import { presentLocalTimestamp, syncAge } from '$lib/date-time';
   const walletShell = useWalletShellContext();
   let syncing = $state(false);
   let snapshot = $state<WalletSnapshot | null>(null);
@@ -88,6 +89,35 @@
   let syncSource = $state<WalletSyncSource | null>(null);
   let syncStatus = $state<WalletSyncStatus | null>(null);
   let syncPollToken = 0;
+  let inheritedSyncObserved = false;
+  let syncClock = $state(Date.now());
+  const syncStatusIsActive = (status: WalletSyncStatus | null) =>
+    Boolean(
+      status && ['connecting', 'syncing', 'checking_matches', 'applying'].includes(status.state)
+    );
+  let syncInProgress = $derived(syncing || syncStatusIsActive(syncStatus));
+  let syncAgeValue = $derived(syncAge(snapshot?.syncedAt ?? null, syncClock));
+  let syncButtonLabel = $derived.by(() => {
+    if (
+      syncInProgress &&
+      syncStatus?.progressPercent !== null &&
+      syncStatus?.progressPercent !== undefined
+    )
+      return `${syncStatus.progressPercent}%`;
+    if (syncInProgress) return translate($locale, 'Syncing');
+    if (syncAgeValue.unit === 'never') return translate($locale, 'Never synced');
+    if (syncAgeValue.unit === 'now') return translate($locale, 'Updated now');
+    if (syncAgeValue.unit === 'minute')
+      return translate($locale, 'Updated {count} min ago', { count: syncAgeValue.value });
+    if (syncAgeValue.unit === 'hour')
+      return translate($locale, 'Updated {count} h ago', { count: syncAgeValue.value });
+    return translate($locale, 'Updated {count} d ago', { count: syncAgeValue.value });
+  });
+  let syncButtonTitle = $derived(
+    snapshot?.syncedAt
+      ? presentLocalTimestamp(snapshot.syncedAt).detail
+      : translate($locale, 'This wallet has not completed a sync yet.')
+  );
   let hardwareSignerDetails = $derived.by<CosignerDraft | null>(() =>
     hardwareSignerWallet
       ? {
@@ -172,6 +202,18 @@
     activeProposal ? ($discreetMode ? 'Label hidden' : activeProposal.label) : ''
   );
   onMount(loadSnapshot);
+  onMount(() => {
+    syncClock = Date.now();
+    const clock = window.setInterval(() => (syncClock = Date.now()), 30_000);
+    void (async () => {
+      const status = await refreshSyncStatus();
+      if (syncStatusIsActive(status)) startSyncStatusPolling();
+    })();
+    return () => {
+      window.clearInterval(clock);
+      ++syncPollToken;
+    };
+  });
   async function loadSnapshot() {
     loadError = '';
     initialDataLoading = true;
@@ -231,7 +273,7 @@
       }
       if (activeProposal) activeDraft = null;
       initialDataLoading = false;
-      if (syncSource.type === 'compact_filters') void sync(false);
+      if (syncSource.type === 'compact_filters' && !inheritedSyncObserved) void sync(false);
     } catch (cause) {
       if (cause instanceof WalletError && cause.code === 'wallet_locked') {
         await goto('/unlock');
@@ -272,21 +314,28 @@
   async function refreshSyncStatus() {
     try {
       syncStatus = await walletService.syncStatus();
+      if (syncStatusIsActive(syncStatus)) inheritedSyncObserved = true;
+      return syncStatus;
     } catch {
       /* The sync result remains authoritative. */
+      return null;
     }
   }
   async function pollSyncStatus(token: number) {
-    while (syncing && token === syncPollToken) {
+    while (token === syncPollToken) {
       await refreshSyncStatus();
+      if (!syncing && !syncStatusIsActive(syncStatus)) return;
       await new Promise((resolve) => setTimeout(resolve, 250));
     }
   }
-  const sync = async (showToast = true) => {
-    if (syncing) return;
-    syncing = true;
+  function startSyncStatusPolling() {
     const token = ++syncPollToken;
     void pollSyncStatus(token);
+  }
+  const sync = async (showToast = true) => {
+    if (syncInProgress) return;
+    syncing = true;
+    startSyncStatusPolling();
     try {
       const [nextSnapshot] = await Promise.all([
         multisig ? walletService.syncMultisig() : walletService.sync(),
@@ -412,18 +461,15 @@
       <p class="eyebrow">{translate($locale, 'WALLET')}</p>
       <h1>{translate($locale, 'Overview')}</h1>
     </div>
-    <button class="sync-button" disabled={syncing} onclick={() => sync(true)}
-      ><RefreshCw size={15} class={syncing ? 'spin' : ''} />{translate(
-        $locale,
-        syncing && syncStatus?.progressPercent !== null && syncStatus?.progressPercent !== undefined
-          ? `${syncStatus.progressPercent}%`
-          : syncing
-            ? 'Syncing'
-            : 'Updated now'
-      )}</button
+    <button
+      class="sync-button"
+      disabled={syncInProgress}
+      title={syncButtonTitle}
+      onclick={() => sync(true)}
+      ><RefreshCw size={15} class={syncInProgress ? 'spin' : ''} />{syncButtonLabel}</button
     >
   </header>
-  {#if syncStatus && (syncing || syncStatus.state === 'failed')}
+  {#if syncStatus && (syncInProgress || syncStatus.state === 'failed')}
     <section class:failed={syncStatus.state === 'failed'} class="sync-progress" aria-live="polite">
       <div>
         <strong

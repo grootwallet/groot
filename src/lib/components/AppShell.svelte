@@ -52,6 +52,11 @@
     '/multisig/receive',
     '/multisig/send'
   ]);
+  const routeCancelsSync = (pathname: string) =>
+    walletSetupRoutes.has(pathname) ||
+    pathname === '/unlock' ||
+    pathname === '/settings' ||
+    foregroundWalletRoutes.has(pathname);
   const active = (href: string) =>
     href === '/multisig'
       ? page.url.pathname === href ||
@@ -202,7 +207,7 @@
   beforeNavigate(({ to }) => {
     navigationPending = Boolean(to && to.url.href !== page.url.href);
     void walletService.cancelHardwareOperations();
-    if (navigationPending && !isPrototypeWallet)
+    if (navigationPending && to && routeCancelsSync(to.url.pathname) && !isPrototypeWallet)
       void walletService.cancelSync().catch(() => undefined);
     if (to && foregroundWalletRoutes.has(to.url.pathname)) liveSync?.stop();
   });

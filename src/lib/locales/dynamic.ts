@@ -641,6 +641,23 @@ export const dynamicCopy = {
     es: 'Desbloquea y vuelve a escanear'
   },
   'Updated now': { fr: 'Mis à jour maintenant', es: 'Actualizado ahora' },
+  'Never synced': { fr: 'Jamais synchronisé', es: 'Nunca sincronizado' },
+  'This wallet has not completed a sync yet.': {
+    fr: 'Ce portefeuille n’a pas encore terminé de synchronisation.',
+    es: 'Esta cartera aún no ha completado una sincronización.'
+  },
+  'Updated {count} min ago': {
+    fr: 'Mis à jour il y a {count} min',
+    es: 'Actualizado hace {count} min'
+  },
+  'Updated {count} h ago': {
+    fr: 'Mis à jour il y a {count} h',
+    es: 'Actualizado hace {count} h'
+  },
+  'Updated {count} d ago': {
+    fr: 'Mis à jour il y a {count} j',
+    es: 'Actualizado hace {count} d'
+  },
   'USB connection needed': { fr: 'Connexion USB requise', es: 'Se necesita conexión USB' },
   'Use this Ledger wallet': {
     fr: 'Utiliser ce portefeuille Ledger',
