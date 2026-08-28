@@ -265,6 +265,14 @@ export const dynamicCopy = {
     fr: 'Synchronisation par filtres compacts arrêtée',
     es: 'Sincronización por filtros compactos detenida'
   },
+  'Scanning Bitcoin Core history': {
+    fr: 'Analyse de l’historique Bitcoin Core',
+    es: 'Analizando el historial de Bitcoin Core'
+  },
+  'Wallet sync stopped': {
+    fr: 'Synchronisation du portefeuille arrêtée',
+    es: 'Sincronización de la cartera detenida'
+  },
   'Compare the complete address above, then approve it on the device.': {
     fr: 'Comparez l’adresse complète ci-dessus, puis approuvez-la sur l’appareil.',
     es: 'Compara la dirección completa de arriba y apruébala en el dispositivo.'

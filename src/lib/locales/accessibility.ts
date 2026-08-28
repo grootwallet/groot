@@ -74,6 +74,10 @@ export const accessibilityCopy = {
     fr: 'Progression du téléchargement des filtres compacts',
     es: 'Progreso de descarga de filtros compactos'
   },
+  'Wallet sync progress': {
+    fr: 'Progression de la synchronisation du portefeuille',
+    es: 'Progreso de sincronización de la cartera'
+  },
   'Connect Bitcoin Core': { fr: 'Connecter Bitcoin Core', es: 'Conectar Bitcoin Core' },
   'Connect hardware signer': {
     fr: 'Connecter un signataire matériel',

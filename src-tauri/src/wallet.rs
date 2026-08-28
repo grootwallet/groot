@@ -438,6 +438,40 @@ fn update_compact_filter_sync_status(
     }
 }
 
+fn core_sync_progress_percent(start_height: u32, current_height: u32, target_height: u32) -> u8 {
+    if target_height <= start_height {
+        return 100;
+    }
+    let completed = current_height
+        .clamp(start_height, target_height)
+        .saturating_sub(start_height);
+    let total = target_height.saturating_sub(start_height);
+    u8::try_from(u64::from(completed) * 100 / u64::from(total)).unwrap_or(100)
+}
+
+fn update_core_sync_status(
+    status: &Arc<Mutex<Option<WalletSyncStatusDto>>>,
+    start_height: u32,
+    current_height: u32,
+    target_height: u32,
+) {
+    let Ok(mut status) = status.lock() else {
+        return;
+    };
+    let Some(current) = status.as_mut() else {
+        return;
+    };
+    if current.source != "bitcoin_core" || current.state != "syncing" {
+        return;
+    }
+    let percent = core_sync_progress_percent(start_height, current_height, target_height);
+    current.chain_height = Some(target_height);
+    if current.progress_percent != Some(percent) {
+        current.progress_percent = Some(percent);
+        current.updated_at = now();
+    }
+}
+
 fn finish_sync_status(
     state: &State<'_, AppState>,
     wallet_id: Uuid,
@@ -4881,10 +4915,17 @@ fn sync_wallet_with_core(
 ) -> ApiResult<WalletSnapshotDto> {
     ensure_foreground_sync_not_cancelled(cancel)?;
     let rpc = Arc::new(rpc_client(app, state)?);
-    checked_block_height(rpc.as_ref())?;
-    let mut transaction = db.transaction().map_err(internal)?;
-    let mut wallet = load_wallet_transaction(&mut transaction)?;
+    let target_height = u32::try_from(checked_block_height(rpc.as_ref())?)
+        .map_err(|_| internal("The node height exceeds the supported sync range."))?;
+    let mut wallet = load_wallet(db)?;
     let wallet_tip = wallet.latest_checkpoint();
+    let start_height = wallet_tip.height();
+    update_core_sync_status(
+        &state.sync_status,
+        start_height,
+        start_height,
+        target_height,
+    );
     let mut emitter = Emitter::new(
         rpc,
         wallet_tip,
@@ -4902,11 +4943,25 @@ fn sync_wallet_with_core(
         wallet
             .apply_block_connected_to(&block.block, block.block_height(), block.connected_to())
             .map_err(internal)?;
+        update_core_sync_status(
+            &state.sync_status,
+            start_height,
+            block.block_height(),
+            target_height,
+        );
     }
     ensure_foreground_sync_not_cancelled(cancel)?;
     let mempool = emitter.mempool().map_err(internal)?;
     wallet.apply_evicted_txs(mempool.evicted);
     wallet.apply_unconfirmed_txs(mempool.update);
+    update_core_sync_status(
+        &state.sync_status,
+        start_height,
+        target_height,
+        target_height,
+    );
+    ensure_foreground_sync_not_cancelled(cancel)?;
+    let transaction = db.transaction().map_err(internal)?;
     mark_observed_addresses(&wallet, &transaction)?;
     label_provenance::reconcile_wallet_outputs(&wallet, &transaction, now()).map_err(internal)?;
     let delayed_policy = if multisig {
@@ -4922,7 +4977,11 @@ fn sync_wallet_with_core(
         delayed_policy.as_ref(),
     )?;
     enqueue_snapshot_notifications(&transaction, &snapshot)?;
-    wallet.persist(&mut transaction).map_err(internal)?;
+    if let Some(changeset) = wallet.take_staged() {
+        changeset
+            .persist_to_sqlite(&transaction)
+            .map_err(internal)?;
+    }
     drop(wallet);
     transaction.commit().map_err(internal)?;
     Ok(snapshot)

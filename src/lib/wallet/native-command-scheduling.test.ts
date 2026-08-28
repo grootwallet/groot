@@ -21,6 +21,10 @@ const hardwareCommands = readFileSync(
   new URL('../../../src-tauri/src/wallet/hardware_commands.rs', import.meta.url),
   'utf8'
 );
+const walletCore = readFileSync(
+  new URL('../../../src-tauri/src/wallet.rs', import.meta.url),
+  'utf8'
+);
 
 function commandSource(source: string, command: string): string {
   const start = source.indexOf(`pub async fn ${command}`);
@@ -39,6 +43,8 @@ describe('native command scheduling', () => {
     ['tx_proposals', transactionCommands],
     ['multisig_proposals', multisigProposalCommands],
     ['external_signer_proposals', hardwareCommands],
+    ['hardware_health_checks', hardwareCommands],
+    ['multisig_signer_policy_verifications', hardwareCommands],
     ['multisig_create', multisigProposalCommands],
     ['multisig_recovery_create', multisigProposalCommands],
     ['network_setup_adopt', profileCommands],
@@ -70,5 +76,13 @@ describe('native command scheduling', () => {
     expect(source.indexOf('cancel_foreground_sync(&state)?')).toBeLessThan(
       source.indexOf('operation_guard(&state)?')
     );
+  });
+
+  it('keeps the Core network scan outside the short SQLite write transaction', () => {
+    const start = walletCore.indexOf('fn sync_wallet_with_core(');
+    const end = walletCore.indexOf('fn sync_wallet_with_compact_filters(', start);
+    const source = walletCore.slice(start, end);
+    expect(source.indexOf('emitter.mempool()')).toBeGreaterThan(-1);
+    expect(source.indexOf('emitter.mempool()')).toBeLessThan(source.indexOf('db.transaction()'));
   });
 });

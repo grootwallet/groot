@@ -300,6 +300,11 @@
           tone: 'success'
         });
     } catch (cause) {
+      if (cause instanceof WalletError && cause.code === 'sync_cancelled') return;
+      if (cause instanceof WalletError && cause.code === 'wallet_locked') {
+        await goto('/unlock');
+        return;
+      }
       if (showToast)
         toast({
           title: 'Sync failed',
@@ -418,25 +423,25 @@
       )}</button
     >
   </header>
-  {#if syncSource?.type === 'compact_filters' && syncStatus && (syncing || syncStatus.state === 'failed')}
-    <section
-      class:failed={syncStatus.state === 'failed'}
-      class="compact-filter-progress"
-      aria-live="polite"
-    >
+  {#if syncStatus && (syncing || syncStatus.state === 'failed')}
+    <section class:failed={syncStatus.state === 'failed'} class="sync-progress" aria-live="polite">
       <div>
         <strong
           >{translate(
             $locale,
-            syncStatus.state === 'connecting'
-              ? 'Connecting to filter peers'
-              : syncStatus.state === 'checking_matches'
-                ? 'Checking matching blocks'
-                : syncStatus.state === 'applying'
-                  ? 'Saving verified wallet state'
-                  : syncStatus.state === 'failed'
-                    ? 'Compact-filter sync stopped'
-                    : 'Downloading and checking compact filters'
+            syncStatus.source === 'bitcoin_core'
+              ? syncStatus.state === 'failed'
+                ? 'Wallet sync stopped'
+                : 'Scanning Bitcoin Core history'
+              : syncStatus.state === 'connecting'
+                ? 'Connecting to filter peers'
+                : syncStatus.state === 'checking_matches'
+                  ? 'Checking matching blocks'
+                  : syncStatus.state === 'applying'
+                    ? 'Saving verified wallet state'
+                    : syncStatus.state === 'failed'
+                      ? 'Compact-filter sync stopped'
+                      : 'Downloading and checking compact filters'
           )}</strong
         ><small
           >{syncStatus.state === 'failed'
@@ -469,8 +474,12 @@
       {#if syncStatus.progressPercent !== null && syncStatus.state !== 'failed'}<progress
           max="100"
           value={syncStatus.progressPercent}
-          aria-label={translate($locale, 'Compact-filter download progress')}
-          >{syncStatus.progressPercent}%</progress
+          aria-label={translate(
+            $locale,
+            syncStatus.source === 'bitcoin_core'
+              ? 'Wallet sync progress'
+              : 'Compact-filter download progress'
+          )}>{syncStatus.progressPercent}%</progress
         >{/if}
     </section>
   {/if}

@@ -26,7 +26,7 @@
     selectedCoinTotal,
     validPolicyMaturity
   } from '$lib/wallet/policy';
-  import { walletService } from '$lib/wallet';
+  import { walletService, WalletError } from '$lib/wallet';
   import { toast } from '$lib/stores/toasts';
   import { onMount } from 'svelte';
   import type { Transaction, Utxo } from '$lib/types';
@@ -42,6 +42,7 @@
   import Modal from '$lib/components/Modal.svelte';
   import PermanentLabelTags from '$lib/components/PermanentLabelTags.svelte';
   import InsightTip from '$lib/components/InsightTip.svelte';
+  import { goto } from '$app/navigation';
 
   const walletShell = useWalletShellContext();
   const MATURITY_MATURE = 'mature' as const;
@@ -215,6 +216,10 @@
         );
       }
     } catch (cause) {
+      if (cause instanceof WalletError && cause.code === 'wallet_locked') {
+        await goto('/unlock');
+        return;
+      }
       loadError = localizedError(cause, $locale, 'Coin data could not be read.');
       toast({ title: 'Could not load coins', description: loadError, tone: 'danger' });
     } finally {
@@ -236,6 +241,11 @@
         tone: 'success'
       });
     } catch (cause) {
+      if (cause instanceof WalletError && cause.code === 'sync_cancelled') return;
+      if (cause instanceof WalletError && cause.code === 'wallet_locked') {
+        await goto('/unlock');
+        return;
+      }
       toast({ title: 'Sync failed', description: localizedError(cause, $locale), tone: 'danger' });
     } finally {
       syncing = false;

@@ -202,6 +202,8 @@
   beforeNavigate(({ to }) => {
     navigationPending = Boolean(to && to.url.href !== page.url.href);
     void walletService.cancelHardwareOperations();
+    if (navigationPending && !isPrototypeWallet)
+      void walletService.cancelSync().catch(() => undefined);
     if (to && foregroundWalletRoutes.has(to.url.pathname)) liveSync?.stop();
   });
 
@@ -389,6 +391,7 @@
       async (selection) => {
         if (selection.profile.id !== selectedWalletId || lockedRoute) return;
         liveSync?.stop();
+        await walletService.cancelSync().catch(() => undefined);
         await goto('/unlock');
       },
       () =>

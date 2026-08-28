@@ -1101,8 +1101,17 @@ fn read_hardware_health_checks(db: &Connection) -> ApiResult<Vec<HardwareHealthC
 }
 
 #[tauri::command]
-pub fn hardware_health_checks(app: AppHandle) -> ApiResult<Vec<HardwareHealthCheckRecordDto>> {
-    read_hardware_health_checks(&open_hardware_health_db(&app)?)
+pub async fn hardware_health_checks(
+    app: AppHandle,
+) -> ApiResult<Vec<HardwareHealthCheckRecordDto>> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let _operation = operation_guard(&state)?;
+        require_unlocked(&app, &state)?;
+        read_hardware_health_checks(&open_hardware_health_db(&app)?)
+    })
+    .await
+    .map_err(internal)?
 }
 
 fn parse_hwi_account_xpub(output: &[u8], device_type: &str) -> ApiResult<String> {
@@ -2338,22 +2347,27 @@ pub async fn hardware_verify_multisig_address(
 }
 
 #[tauri::command]
-pub fn multisig_signer_policy_verifications(
+pub async fn multisig_signer_policy_verifications(
     app: AppHandle,
-    state: State<'_, AppState>,
 ) -> ApiResult<Vec<SignerPolicyVerificationDto>> {
-    require_unlocked(&app, &state)?;
-    let metadata = read_multisig_metadata(&app)?;
-    let known = metadata
-        .cosigners
-        .iter()
-        .map(|cosigner| cosigner.fingerprint.to_ascii_lowercase())
-        .collect::<std::collections::HashSet<_>>();
-    let db = open_multisig_db(&app)?;
-    Ok(signer_policy_verification_rows(&db)?
-        .into_iter()
-        .filter(|verification| known.contains(&verification.signer_fingerprint))
-        .collect())
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let _operation = operation_guard(&state)?;
+        require_unlocked(&app, &state)?;
+        let metadata = read_multisig_metadata(&app)?;
+        let known = metadata
+            .cosigners
+            .iter()
+            .map(|cosigner| cosigner.fingerprint.to_ascii_lowercase())
+            .collect::<std::collections::HashSet<_>>();
+        let db = open_multisig_db(&app)?;
+        Ok(signer_policy_verification_rows(&db)?
+            .into_iter()
+            .filter(|verification| known.contains(&verification.signer_fingerprint))
+            .collect())
+    })
+    .await
+    .map_err(internal)?
 }
 
 pub(crate) fn policy_verification_address(

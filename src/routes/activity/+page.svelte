@@ -5,13 +5,14 @@
   import TxList from '$lib/components/TxList.svelte';
   import type { Transaction } from '$lib/types';
   import { toast } from '$lib/stores/toasts';
-  import { walletService } from '$lib/wallet';
+  import { walletService, WalletError } from '$lib/wallet';
   import { sortTransactions, type TransactionSortOrder } from '$lib/wallet/presentation';
   import { onMount } from 'svelte';
   import { Activity } from '@lucide/svelte';
   import LoadFailure from '$lib/components/LoadFailure.svelte';
   import EmptyState from '$lib/components/EmptyState.svelte';
   import { useWalletShellContext } from '$lib/wallet/shell-context';
+  import { goto } from '$app/navigation';
   const walletShell = useWalletShellContext();
   let selected = $state<Transaction | null>(null);
   let transactions = $state<Transaction[]>([]);
@@ -57,6 +58,10 @@
         : await walletService.snapshot();
       transactions = snapshot.transactions;
     } catch (cause) {
+      if (cause instanceof WalletError && cause.code === 'wallet_locked') {
+        await goto('/unlock');
+        return;
+      }
       loadError = localizedError(cause, $locale, 'Transaction history could not be read.');
       toast({ title: 'Could not load transactions', description: loadError, tone: 'danger' });
     } finally {

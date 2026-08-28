@@ -366,6 +366,16 @@ fn core_fee_estimator_uses_rpc_and_never_falls_back() {
 }
 
 #[test]
+fn core_sync_progress_is_relative_to_the_persisted_wallet_tip() {
+    assert_eq!(core_sync_progress_percent(20, 20, 120), 0);
+    assert_eq!(core_sync_progress_percent(20, 70, 120), 50);
+    assert_eq!(core_sync_progress_percent(20, 120, 120), 100);
+    assert_eq!(core_sync_progress_percent(20, 130, 120), 100);
+    assert_eq!(core_sync_progress_percent(20, 10, 120), 0);
+    assert_eq!(core_sync_progress_percent(120, 120, 120), 100);
+}
+
+#[test]
 fn direct_rpc_auth_timeout_tls_and_chain_fail_closed() {
     let unauthorized = serve_one_http_response(Some(
         b"HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
