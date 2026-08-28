@@ -347,6 +347,11 @@ pub(crate) fn acceleration_error(error: impl ToString) -> ApiError {
             "transaction_not_replaceable",
             "This transaction did not signal replace-by-fee. Use CPFP when it has a spendable wallet output.",
         )
+    } else if lower.contains("fee rate too low") {
+        api_error(
+            "fee_rate_too_low",
+            "Choose a fee rate above the original transaction's replacement minimum.",
+        )
     } else if lower.contains("fee") || lower.contains("insufficient") {
         api_error("insufficient_funds", message)
     } else {

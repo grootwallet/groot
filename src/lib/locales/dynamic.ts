@@ -240,9 +240,9 @@ export const dynamicCopy = {
     fr: 'Annulez sur votre appareil matériel',
     es: 'Cancela en tu dispositivo físico'
   },
-  'Check the address on your Coldcard': {
-    fr: 'Vérifiez l’adresse sur votre Coldcard',
-    es: 'Comprueba la dirección en tu Coldcard'
+  'Compare on Coldcard': {
+    fr: 'Comparez sur Coldcard',
+    es: 'Compara en Coldcard'
   },
   'Check your hardware device': {
     fr: 'Vérifiez votre appareil matériel',
@@ -277,14 +277,13 @@ export const dynamicCopy = {
     fr: 'Comparez l’adresse complète ci-dessus, puis approuvez-la sur l’appareil.',
     es: 'Compara la dirección completa de arriba y apruébala en el dispositivo.'
   },
-  'Coldcard returns the displayed address automatically. It has no approve or reject step. Groot checks the returned address exactly; compare it with the address above while it remains on screen.':
-    {
-      fr: 'Coldcard renvoie automatiquement l’adresse affichée. Il n’y a aucune étape d’approbation ou de refus. Groot vérifie exactement l’adresse renvoyée ; comparez-la avec l’adresse ci-dessus tant qu’elle reste à l’écran.',
-      es: 'Coldcard devuelve automáticamente la dirección mostrada. No hay ningún paso de aprobación o rechazo. Groot comprueba exactamente la dirección devuelta; compárala con la dirección superior mientras permanezca en pantalla.'
-    },
-  "Compare the exact address below with the complete address on the signer's trusted display.": {
-    fr: 'Comparez exactement l’adresse ci-dessous avec l’adresse complète sur l’écran fiable du signataire.',
-    es: 'Compara exactamente la dirección inferior con la dirección completa en la pantalla fiable del firmante.'
+  'Coldcard has no approval step. Compare the address while Groot verifies it automatically.': {
+    fr: 'Coldcard n’a aucune étape d’approbation. Comparez l’adresse pendant que Groot la vérifie automatiquement.',
+    es: 'Coldcard no tiene ningún paso de aprobación. Compara la dirección mientras Groot la verifica automáticamente.'
+  },
+  "Compare this exact address with the one on your signer's display.": {
+    fr: 'Comparez exactement cette adresse avec celle affichée par votre signataire.',
+    es: 'Compara exactamente esta dirección con la que muestra tu firmante.'
   },
   'Complete the one-time policy-file import before signing.': {
     fr: 'Terminez l’importation unique du fichier de politique avant de signer.',

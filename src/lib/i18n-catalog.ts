@@ -516,6 +516,10 @@ const errorCategoryCopy = {
     fr: 'Le portefeuille ne dispose pas de fonds suffisants pour ce paiement et ses frais.',
     es: 'La cartera no tiene fondos suficientes para este pago y su comisión.'
   },
+  fee_rate_too_low: {
+    fr: 'Choisissez un taux supérieur au minimum de remplacement de la transaction initiale.',
+    es: 'Elige una tasa superior al mínimo de reemplazo de la transacción original.'
+  },
   rate_limited: {
     fr: 'Trop de tentatives. Attendez avant de réessayer.',
     es: 'Demasiados intentos. Espera antes de volver a intentarlo.'

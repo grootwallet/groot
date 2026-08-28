@@ -378,7 +378,7 @@
     $locale,
     comparison.deviceName
       ? `${comparison.deviceName} displays the Regtest output with a testnet prefix. Compare the exact address below.`
-      : "Compare the exact address below with the complete address on the signer's trusted display."
+      : "Compare this exact address with the one on your signer's display."
   )}
   onclose={closeVerification}
   attentionSignal={modalAttentionSignal}
@@ -398,7 +398,7 @@
           ? 'Cancel on your hardware device'
           : verificationAction !== 'scan'
             ? coldcardReturnsAddressAutomatically
-              ? 'Check the address on your Coldcard'
+              ? 'Compare on Coldcard'
               : verificationAction === 'unlock'
                 ? 'Unlock and check your hardware device'
                 : 'Check your hardware device'
@@ -412,7 +412,7 @@
           ? 'Reject or cancel the pending request on the device. Groot will close this dialog after the device responds.'
           : verificationAction !== 'scan'
             ? coldcardReturnsAddressAutomatically
-              ? 'Coldcard returns the displayed address automatically. It has no approve or reject step. Groot checks the returned address exactly; compare it with the address above while it remains on screen.'
+              ? 'Coldcard has no approval step. Compare the address while Groot verifies it automatically.'
               : verificationAction === 'unlock'
                 ? 'Complete the login or unlock on-device, then compare the complete address above and approve it.'
                 : 'Compare the complete address above, then approve it on the device.'

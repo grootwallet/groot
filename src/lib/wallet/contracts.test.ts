@@ -9,6 +9,7 @@ import {
 const remediationErrorCodes = [
   'invalid_coin',
   'coin_unavailable',
+  'fee_rate_too_low',
   'invalid_signature',
   'invalid_payjoin_uri',
   'invalid_scan_settings',
@@ -29,6 +30,7 @@ describe('wallet error contract', () => {
 
   it('maps only allowlisted backend error codes across the IPC boundary', () => {
     expect(walletErrorCode('invalid_credential')).toBe('invalid_credential');
+    expect(walletErrorCode('fee_rate_too_low')).toBe('fee_rate_too_low');
     expect(walletErrorCode('attacker_controlled_code')).toBe('internal_error');
     expect(walletErrorCode(null)).toBe('internal_error');
     expect(new Set(WALLET_ERROR_CODES).size).toBe(WALLET_ERROR_CODES.length);

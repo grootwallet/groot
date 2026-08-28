@@ -160,7 +160,7 @@ describe('hardware receive verification UI', () => {
 
   it('treats Coldcard address display as an automatic return without approval controls', () => {
     expect(verificationFlow).toContain('coldcardReturnsAddressAutomatically');
-    expect(verificationFlow).toContain('Coldcard returns the displayed address automatically');
+    expect(verificationFlow).toContain('Coldcard has no approval step');
     expect(verificationFlow).toContain('Waiting for Coldcard address display');
   });
 

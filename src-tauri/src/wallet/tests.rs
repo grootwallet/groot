@@ -1189,6 +1189,10 @@ fn acceleration_rates_and_error_classes_fail_closed() {
         "transaction_not_replaceable"
     );
     assert_eq!(
+        acceleration_error("Fee rate too low: required 2 sat/vb").code,
+        "fee_rate_too_low"
+    );
+    assert_eq!(
         acceleration_error("insufficient fee").code,
         "insufficient_funds"
     );
