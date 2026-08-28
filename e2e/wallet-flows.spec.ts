@@ -362,6 +362,7 @@ test('creates, switches, unlocks, and deletes isolated wallet profiles', async (
       .locator('.wallet-manager')
       .getByRole('button', { name: /Add wallet/ })
       .click();
+    await expect(page).toHaveURL(/\/welcome\?add=1$/);
   } else {
     await page
       .getByRole('complementary')
