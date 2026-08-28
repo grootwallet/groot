@@ -158,6 +158,7 @@ pub fn run() {
             wallet::coordination_commands::coordination_mobile_await_final,
             wallet::coordination_commands::coordination_desktop_accept,
             wallet::coordination_commands::coordination_desktop_finalize,
+            wallet::coordination_commands::coordination_mobile_final_inspect,
             wallet::coordination_commands::coordination_mobile_complete,
             wallet::coordination_commands::coordination_mobile_recovery_record,
             wallet::coordination_commands::coordination_mobile_recovery_inspect,

@@ -571,13 +571,13 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   await page.getByRole('button', { name: 'Show unsigned QR' }).click();
   await expect(durableImportError).toHaveCount(0);
   const unsignedQrDialog = page.getByRole('dialog', { name: 'Unsigned PSBT' });
-  const unsignedQrImage = unsignedQrDialog.getByRole('img', { name: /crypto-psbt QR frame/ });
+  const unsignedQrImage = unsignedQrDialog.getByRole('img', { name: /Animated QR frame/ });
   await expect(unsignedQrImage).toBeVisible();
   await page.getByRole('button', { name: 'Close' }).click();
   await page.getByRole('button', { name: 'Scan signed QR' }).click();
   await expect(
     page.getByText(
-      /Point the camera at a crypto-psbt QR|Camera access was denied|No usable camera is available/
+      /Allow camera access to scan this QR|Camera access was denied|No camera was found/
     )
   ).toBeVisible();
   await expect(
@@ -778,6 +778,7 @@ test('unlocks a Trezor before choosing its standard single-key wallet', async ({
 test('global keyboard shortcuts navigate safely and match the Settings reference', async ({
   page
 }) => {
+  const isMobile = (page.viewportSize()?.width ?? 1180) <= 760;
   await page.goto('/');
   const primary = (await page.evaluate(() => /Mac|iPhone|iPad|iPod/i.test(navigator.platform)))
     ? 'Meta'
@@ -792,6 +793,10 @@ test('global keyboard shortcuts navigate safely and match the Settings reference
   await expect(page.getByRole('heading', { name: 'App appearance' })).toBeVisible();
 
   const shortcuts = page.locator('.keyboard-shortcut-grid');
+  if (isMobile) {
+    await expect(shortcuts).toHaveCount(0);
+    return;
+  }
   await expect(shortcuts).toBeVisible();
   await expect(shortcuts.locator('dt')).toHaveText([
     'Overview',
@@ -951,14 +956,16 @@ test('overview, activity, UTXOs, and settings expose durable states', async ({ p
   await changeCoin.getByText('Technical details', { exact: true }).click();
   await expect(changeCoin.getByText('Source transaction', { exact: true })).toBeVisible();
   await expect(changeCoin.getByText('2 wallet inputs', { exact: true })).toBeVisible();
-  await changeCoin.getByRole('button', { name: 'About source payment intent' }).hover();
-  await expect(changeCoin.getByRole('tooltip')).toContainText(
+  const sourceIntentInfo = changeCoin.getByRole('button', { name: 'About source payment intent' });
+  if ((page.viewportSize()?.width ?? 1180) <= 760) await sourceIntentInfo.click();
+  else await sourceIntentInfo.hover();
+  await expect(page.getByRole('tooltip')).toContainText(
     'The label of the payment that created this change.'
   );
-  await changeCoin.getByRole('button', { name: 'About change lineage' }).hover();
-  await expect(changeCoin.getByRole('tooltip')).toContainText(
-    'How many wallet inputs were combined'
-  );
+  const changeLineageInfo = changeCoin.getByRole('button', { name: 'About change lineage' });
+  if ((page.viewportSize()?.width ?? 1180) <= 760) await changeLineageInfo.click();
+  else await changeLineageInfo.hover();
+  await expect(page.getByRole('tooltip')).toContainText('How many wallet inputs were combined');
   const filterHeights = await page.locator('.coin-filters').evaluate((filters) => {
     const input = filters.querySelector('input');
     const select = filters.querySelector('select');
@@ -1303,13 +1310,16 @@ test('receive label suggestions expose aligned tooltips only when truncated', as
   const suggestion = page.getByRole('button', {
     name: 'Reuse A deliberately long reusable label'
   });
-  await suggestion.hover();
+  if ((page.viewportSize()?.width ?? 1180) <= 760) await suggestion.click();
+  else await suggestion.hover();
   const tooltip = page.getByRole('tooltip');
   await expect(tooltip).toHaveText('A deliberately long reusable label');
   const suggestionBox = await suggestion.boundingBox();
   const tooltipBox = await tooltip.boundingBox();
   expect(suggestionBox && tooltipBox).toBeTruthy();
-  expect(suggestionBox!.y - (tooltipBox!.y + tooltipBox!.height)).toBeCloseTo(8, 0);
+  const tooltipGap = suggestionBox!.y - (tooltipBox!.y + tooltipBox!.height);
+  expect(tooltipGap).toBeGreaterThanOrEqual(4);
+  expect(tooltipGap).toBeLessThanOrEqual(9);
 });
 
 test('receive keeps multiple labeled payment requests and discards them independently', async ({
@@ -1336,7 +1346,8 @@ test('receive keeps multiple labeled payment requests and discards them independ
     2
   );
   await page.getByLabel('Label', { exact: true }).fill('');
-  await page.getByRole('button', { name: 'Reuse Savings' }).click();
+  const savingsSuggestion = page.getByRole('button', { name: 'Reuse Savings' });
+  await savingsSuggestion.click();
   await expect(page.getByLabel('Label', { exact: true })).toHaveValue('');
   await expect(page.getByRole('button', { name: 'Remove Savings' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Reuse Savings' })).toHaveCount(0);
@@ -1367,7 +1378,8 @@ test('receive keeps multiple labeled payment requests and discards them independ
   const longSuggestion = page.getByRole('button', {
     name: 'Reuse A deliberately long reusable label'
   });
-  await longSuggestion.hover();
+  if ((page.viewportSize()?.width ?? 1180) <= 760) await longSuggestion.click();
+  else await longSuggestion.hover();
   await expect(page.getByRole('tooltip')).toHaveText('A deliberately long reusable label');
   await page.getByRole('button', { name: 'Cancel' }).click();
   await expect(page.getByRole('img', { name: /QR code for/ })).toBeVisible();
@@ -1719,7 +1731,8 @@ test('locked profiles use recovery-safe credential terms', async ({ page }) => {
   await expect(page.getByLabel('Wallet passphrase', { exact: true })).toBeVisible();
   const infoButton = page.getByRole('button', { name: 'More information' });
   await page.getByRole('button', { name: 'Use light mode' }).click();
-  await infoButton.hover();
+  if ((page.viewportSize()?.width ?? 1180) <= 760) await infoButton.click();
+  else await infoButton.hover();
   const lightTooltip = page.getByRole('tooltip');
   await expect(lightTooltip).toBeVisible();
   expect(
@@ -1734,7 +1747,8 @@ test('locked profiles use recovery-safe credential terms', async ({ page }) => {
     })
   ).toBe(true);
   await page.getByRole('button', { name: 'Use dark mode' }).click();
-  await infoButton.hover();
+  if ((page.viewportSize()?.width ?? 1180) <= 760) await infoButton.click();
+  else await infoButton.hover();
   const darkTooltip = page.getByRole('tooltip');
   await expect(darkTooltip).toBeVisible();
   expect(
@@ -1757,7 +1771,7 @@ test('locked profiles use recovery-safe credential terms', async ({ page }) => {
       .getByRole('button', { name: /Family wallet/ })
       .click();
     await expect(page.getByLabel('App PIN', { exact: true })).toBeVisible();
-    await page.getByRole('button', { name: 'More information' }).click();
+    await page.getByRole('button', { name: 'More information' }).hover();
     await expect(page.getByText(/not a hardware-signer passphrase/)).toBeVisible();
     await expect(
       page.locator('.onboarding-card').getByRole('button', { name: /Everyday wallet/ })

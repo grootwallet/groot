@@ -99,7 +99,13 @@ signs exact reviewed `crypto-psbt` revisions, and public hardware-singlesig
 records import as watch-only. Mobile retains desktop signer names, fingerprints,
 account keys, derivations, import sources, and device types; it truthfully
 distinguishes its local key from desktop-managed signers without copying
-desktop-only health or certification evidence. Replacement-phone recovery is
+desktop-only health or certification evidence. Every mobile credential field is
+cleared after each native attempt; interrupted pairing re-authenticates
+independently for response recovery, desktop acknowledgement, and final-policy
+acceptance. Mobile signing derives and signs the authenticated PSBT inputs
+directly, erases the scoped extended private keys on drop, and no longer
+serializes an xprv or private descriptor into ordinary strings or a temporary
+BDK wallet. Replacement-phone recovery is
 also wired: desktop re-presents a public version-2 wallet record, iOS collects
 the original 24 words without sending them through the webview, and Rust creates
 a new local profile only after the derived BIP48 signer and complete policy,

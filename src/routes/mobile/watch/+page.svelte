@@ -54,6 +54,8 @@
     } catch (cause) {
       error = localizedError(cause, $locale, 'The watch-only wallet could not be imported.');
     } finally {
+      pin = '';
+      confirmation = '';
       busy = false;
     }
   }

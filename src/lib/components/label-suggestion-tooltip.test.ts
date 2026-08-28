@@ -34,4 +34,11 @@ describe('label suggestion tooltips', () => {
     expect(appCss).toMatch(/\.ui-tooltip\s*\{[\s\S]*?translate\(-50%, -100%\)/);
     expect(appCss).toMatch(/\.ui-tooltip\.below\s*\{[\s\S]*?translateX\(-50%\)/);
   });
+
+  it('opens by tap on coarse pointers and closes when the user taps elsewhere', () => {
+    expect(tooltip).toContain("matchMedia('(hover: hover) and (pointer: fine)')");
+    expect(tooltip).toContain('if (!finePointer)');
+    expect(tooltip).toContain('event.stopPropagation()');
+    expect(tooltip).toContain("document.addEventListener('pointerdown', closeOutside)");
+  });
 });

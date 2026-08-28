@@ -25,6 +25,7 @@
   let confirmation = $state('');
   let response = $state<PairingResponse | null>(null);
   let finalFrames = $state<string[]>([]);
+  let finalSessionId = $state('');
   let busy = $state(false);
   let error = $state('');
   let pendingPairings = $state<PendingMobilePairing[]>([]);
@@ -106,8 +107,6 @@
     try {
       response = await walletService.resumePairingOnMobile(selectedPendingSession, resumePin);
       comparisonCode = response.comparisonCode;
-      pin = resumePin;
-      resumePin = '';
       stage = response.awaitingFinalPolicy ? 'final' : 'response';
       toast({
         title: 'Pairing resumed',
@@ -117,6 +116,7 @@
     } catch (cause) {
       resumeError = localizedError(cause, $locale, 'The pending pairing could not be resumed.');
     } finally {
+      resumePin = '';
       busy = false;
     }
   }
@@ -132,7 +132,6 @@
         (pairing) => pairing.sessionId !== selectedPendingSession
       );
       selectedPendingSession = pendingPairings[0]?.sessionId ?? '';
-      resumePin = '';
       resumeNotice = translate(
         $locale,
         'Pending pairing cancelled. Scan a new invitation to restart.'
@@ -145,6 +144,7 @@
     } catch (cause) {
       resumeError = localizedError(cause, $locale, 'The pending pairing could not be cancelled.');
     } finally {
+      resumePin = '';
       busy = false;
     }
   }
@@ -192,6 +192,8 @@
     } catch (cause) {
       error = localizedError(cause, $locale, 'The mobile signer could not be created.');
     } finally {
+      pin = '';
+      confirmation = '';
       busy = false;
     }
   }
@@ -207,28 +209,41 @@
     } catch (cause) {
       error = localizedError(cause, $locale, 'Pairing progress could not be saved.');
     } finally {
+      pin = '';
       busy = false;
     }
   }
 
   async function receiveFinal(frame: string) {
     finalFrames = [...finalFrames, frame];
-    if (!pin) return;
+    try {
+      finalSessionId = await walletService.inspectFinalPairingOnMobile(finalFrames);
+      error = '';
+      return true;
+    } catch (cause) {
+      const message = localizedError(cause, $locale, 'Waiting for the complete wallet QR.');
+      if (!message.toLowerCase().includes('incomplete')) error = message;
+      return false;
+    }
+  }
+
+  async function completePairing() {
+    if (!finalSessionId || !pin || busy) return;
+    busy = true;
+    error = '';
     try {
       await walletService.completePairingOnMobile(finalFrames, pin);
-      pin = '';
-      confirmation = '';
       toast({
         title: 'Shared wallet paired',
         description: 'This phone holds one signer; desktop remains the coordinator.',
         tone: 'success'
       });
       await goto('/multisig');
-      return true;
     } catch (cause) {
-      const message = localizedError(cause, $locale, 'Waiting for the complete wallet QR.');
-      if (!message.toLowerCase().includes('incomplete')) error = message;
-      return false;
+      error = localizedError(cause, $locale, 'The final wallet policy could not be accepted.');
+    } finally {
+      pin = '';
+      busy = false;
     }
   }
 </script>
@@ -391,8 +406,9 @@
           >{translate($locale, 'Phone key fingerprint')} {response.fingerprint}</span
         >
       </div>
+      <PasswordField bind:value={pin} label={translate($locale, 'Local app PIN')} />
       {#if error}<p class="inline-error" role="alert">{error}</p>{/if}
-      <Button class="full" loading={busy} onclick={awaitFinalPolicy}
+      <Button class="full" loading={busy} disabled={!pin} onclick={awaitFinalPolicy}
         >{translate($locale, 'Desktop scanned this phone key')}</Button
       >
     </section>
@@ -413,6 +429,12 @@
         prompt={translate($locale, 'Point the camera at the final Groot wallet QR')}
         onframe={receiveFinal}
       />
+      {#if finalSessionId}
+        <PasswordField bind:value={pin} label={translate($locale, 'Local app PIN')} />
+        <Button class="full" loading={busy} disabled={!pin} onclick={completePairing}
+          >{translate($locale, 'Accept wallet policy')}</Button
+        >
+      {/if}
     </section>
   {/if}
 

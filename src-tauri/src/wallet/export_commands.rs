@@ -1,15 +1,15 @@
 use super::{api_error, internal, proposal_api_error, ApiResult, AppState};
 use crate::proposal::decode_psbt;
 use serde::Serialize;
-#[cfg(not(mobile))]
-use std::fs::{self, File};
 use std::{
     collections::HashMap,
-    fs::OpenOptions,
+    fs::{self, File, OpenOptions},
     io::Write,
     path::{Path, PathBuf},
     time::{Duration, Instant},
 };
+#[cfg(target_os = "ios")]
+use tauri::Manager;
 #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
 use tauri::WebviewWindow;
 #[cfg(target_os = "macos")]
@@ -101,7 +101,6 @@ pub(super) fn validate_psbt_filename(value: &str) -> ApiResult<&str> {
     Ok(trimmed)
 }
 
-#[cfg(not(mobile))]
 pub(super) fn write_public_export(path: &Path, content: &[u8]) -> ApiResult<()> {
     let parent = path
         .parent()
@@ -131,21 +130,58 @@ pub(super) fn write_public_export(path: &Path, content: &[u8]) -> ApiResult<()> 
     result
 }
 
-// Mobile document pickers grant access to the selected file, not necessarily
-// to its parent directory. Write the user-selected public export directly so
-// iOS does not reject the desktop-only sibling-temp-file strategy.
-#[cfg(mobile)]
-pub(super) fn write_public_export(path: &Path, content: &[u8]) -> ApiResult<()> {
-    let mut options = OpenOptions::new();
-    options.write(true).create(true).truncate(true);
-    #[cfg(unix)]
+fn save_public_file(
+    app: &AppHandle,
+    filename: &str,
+    filter_name: &str,
+    extensions: &[&str],
+    content: &[u8],
+) -> ApiResult<Option<PathBuf>> {
+    #[cfg(desktop)]
     {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
+        let selected = app
+            .dialog()
+            .file()
+            .set_file_name(filename)
+            .add_filter(filter_name, extensions)
+            .blocking_save_file();
+        let Some(selected) = selected else {
+            return Ok(None);
+        };
+        let path = selected.into_path().map_err(internal)?;
+        write_public_export(&path, content)?;
+        Ok(Some(path))
     }
-    let mut file = options.open(path).map_err(internal)?;
-    file.write_all(content).map_err(internal)?;
-    file.sync_all().map_err(internal)
+
+    #[cfg(target_os = "ios")]
+    {
+        // UIDocumentPicker exports an existing source file instead of granting
+        // desktop-style access to a selected file's parent directory. Prepare
+        // the complete owner-only file atomically inside Groot's document
+        // directory before opening the picker; never truncate the returned URL.
+        let source = app.path().document_dir().map_err(internal)?.join(filename);
+        write_public_export(&source, content)?;
+        let selected = app
+            .dialog()
+            .file()
+            .set_file_name(filename)
+            .add_filter(filter_name, extensions)
+            .blocking_save_file();
+        let _ = fs::remove_file(&source);
+        let Some(selected) = selected else {
+            return Ok(None);
+        };
+        selected.into_path().map(Some).map_err(internal)
+    }
+
+    #[cfg(target_os = "android")]
+    {
+        let _ = (app, filename, filter_name, extensions, content);
+        Err(api_error(
+            "unsupported_operation",
+            "Native public-file export is not yet certified for Android. Use copy or QR export.",
+        ))
+    }
 }
 
 pub async fn public_backup_save(
@@ -169,18 +205,13 @@ pub async fn public_backup_save(
         } else {
             "json"
         };
-        let selected = app
-            .dialog()
-            .file()
-            .set_file_name(&filename)
-            .add_filter("Groot public backup", &[extension])
-            .blocking_save_file();
-        let Some(selected) = selected else {
-            return Ok(None);
-        };
-        let path = selected.into_path().map_err(internal)?;
-        write_public_export(&path, content.as_bytes())?;
-        Ok(Some(path))
+        save_public_file(
+            &app,
+            &filename,
+            "Groot public backup",
+            &[extension],
+            content.as_bytes(),
+        )
     })
     .await
     .map_err(internal)??;
@@ -197,18 +228,13 @@ pub async fn psbt_file_save(
     let content = psbt.trim().to_owned();
     decode_psbt(&content).map_err(proposal_api_error)?;
     let saved_path = tauri::async_runtime::spawn_blocking(move || {
-        let selected = app
-            .dialog()
-            .file()
-            .set_file_name(&filename)
-            .add_filter("Partially signed Bitcoin transaction", &["psbt"])
-            .blocking_save_file();
-        let Some(selected) = selected else {
-            return Ok(None);
-        };
-        let path = selected.into_path().map_err(internal)?;
-        write_public_export(&path, content.as_bytes())?;
-        Ok(Some(path))
+        save_public_file(
+            &app,
+            &filename,
+            "Partially signed Bitcoin transaction",
+            &["psbt"],
+            content.as_bytes(),
+        )
     })
     .await
     .map_err(internal)??;

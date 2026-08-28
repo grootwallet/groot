@@ -87,6 +87,7 @@ export interface WalletCoordinationPort {
   ): Promise<PairingResponse>;
   acceptMobileSigner(frames: string[]): Promise<CosignerDraft>;
   finalizePairingOnDesktop(sessionId: string): Promise<string[]>;
+  inspectFinalPairingOnMobile(frames: string[]): Promise<string>;
   completePairingOnMobile(frames: string[], credential: string): Promise<MultisigWallet>;
   mobileRecoveryRecord(): Promise<string[]>;
   inspectMobileRecoveryRecord(frames: string[]): Promise<MobileRecoveryRecord>;

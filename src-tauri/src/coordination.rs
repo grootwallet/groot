@@ -18,6 +18,23 @@ use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use zeroize::{Zeroize, Zeroizing};
 
+pub struct MobileAccount(pub(crate) Xpriv);
+
+impl std::ops::Deref for MobileAccount {
+    type Target = Xpriv;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl Drop for MobileAccount {
+    fn drop(&mut self) {
+        self.0.private_key.non_secure_erase();
+        self.0.chain_code = [0_u8; 32].into();
+    }
+}
+
 use crate::{
     bsms::DescriptorRecord,
     build_network::{NAME as NETWORK_NAME, PARAMETERS},
@@ -306,18 +323,22 @@ impl KeyRecord {
 
 pub fn derive_mobile_account(
     mnemonic: &bip39::Mnemonic,
-) -> Result<(Fingerprint, Xpriv, Xpub), CoordinationError> {
+) -> Result<(Fingerprint, MobileAccount, Xpub), CoordinationError> {
     // Multisig recovery is intentionally words-only. The local app PIN never enters BIP39.
     let seed = Zeroizing::new(mnemonic.to_seed(""));
-    let master = Xpriv::new_master(PARAMETERS.extended_key_network, seed.as_ref())
-        .map_err(|_| CoordinationError::InvalidKeyRecord)?;
+    let master = MobileAccount(
+        Xpriv::new_master(PARAMETERS.extended_key_network, seed.as_ref())
+            .map_err(|_| CoordinationError::InvalidKeyRecord)?,
+    );
     let secp = Secp256k1::new();
     let fingerprint = master.fingerprint(&secp);
     let path = DerivationPath::from_str(MULTISIG_ACCOUNT_PATH)
         .map_err(|_| CoordinationError::WrongDerivation)?;
-    let account = master
-        .derive_priv(&secp, &path)
-        .map_err(|_| CoordinationError::WrongDerivation)?;
+    let account = MobileAccount(
+        master
+            .derive_priv(&secp, &path)
+            .map_err(|_| CoordinationError::WrongDerivation)?,
+    );
     let xpub = Xpub::from_priv(&secp, &account);
     Ok((fingerprint, account, xpub))
 }

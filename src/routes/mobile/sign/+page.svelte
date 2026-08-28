@@ -47,6 +47,7 @@
     } catch (cause) {
       error = localizedError(cause, $locale, 'The PSBT was not signed.');
     } finally {
+      pin = '';
       busy = false;
     }
   }

@@ -2,7 +2,7 @@ use super::*;
 use crate::{
     coordination::{
         decrypt_bip129, derive_mobile_account, encrypt_bip129, CoordinationError, DeviceRole,
-        KeyRecord, PairingInvitation, PublicWalletRecord, PAIRING_SESSION_SECONDS,
+        KeyRecord, MobileAccount, PairingInvitation, PublicWalletRecord, PAIRING_SESSION_SECONDS,
     },
     coordination_transport::{self, CoordinationUrError, CoordinationUrType},
 };
@@ -827,6 +827,15 @@ fn validate_mobile_wallet_record(
 }
 
 #[tauri::command]
+pub fn coordination_mobile_final_inspect(
+    state: State<'_, AppState>,
+    frames: Vec<String>,
+) -> ApiResult<String> {
+    let _operation = operation_guard(&state)?;
+    Ok(decode_envelope(CoordinationUrType::Wallet, &frames)?.session_id)
+}
+
+#[tauri::command]
 pub fn coordination_mobile_complete(
     app: AppHandle,
     state: State<'_, AppState>,
@@ -1130,48 +1139,8 @@ fn sign_mobile_psbt_for(
             CoordinationError::DescriptorMismatch,
         ));
     }
-    let private = account.to_string();
-    let public_external = descriptor_without_checksum(&wallet.external_descriptor)?;
-    let public_internal = descriptor_without_checksum(&wallet.internal_descriptor)?;
-    let private_external =
-        public_external.replacen(&format!("]{}", signer.xpub), &format!("]{private}"), 1);
-    let private_internal =
-        public_internal.replacen(&format!("]{}", signer.xpub), &format!("]{private}"), 1);
-    if private_external == wallet.external_descriptor
-        || private_internal == wallet.internal_descriptor
-    {
-        return Err(coordination_api_error(
-            CoordinationError::DescriptorMismatch,
-        ));
-    }
-    let signing_wallet = Wallet::create(private_external, private_internal)
-        .network(NETWORK)
-        .create_wallet_no_persist()
-        .map_err(internal)?;
-    if signing_wallet
-        .public_descriptor(KeychainKind::External)
-        .to_string()
-        != wallet.external_descriptor
-        || signing_wallet
-            .public_descriptor(KeychainKind::Internal)
-            .to_string()
-            != wallet.internal_descriptor
-    {
-        return Err(coordination_api_error(
-            CoordinationError::DescriptorMismatch,
-        ));
-    }
     let mut returned = reviewed.clone();
-    signing_wallet
-        .sign(
-            &mut returned,
-            SignOptions {
-                trust_witness_utxo: true,
-                try_finalize: false,
-                ..SignOptions::default()
-            },
-        )
-        .map_err(internal)?;
+    sign_mobile_inputs(&mut returned, &account, fingerprint)?;
     let signed = hardware_signature_response(&reviewed, returned).map_err(proposal_api_error)?;
     let signed_psbt = encode_psbt(&signed);
     let frames = ur_transport::encode_psbt(&signed_psbt, 220).map_err(ur_api_error)?;
@@ -1183,6 +1152,83 @@ fn sign_mobile_psbt_for(
     })
 }
 
+fn sign_mobile_inputs(
+    psbt: &mut Psbt,
+    account: &MobileAccount,
+    fingerprint: Fingerprint,
+) -> ApiResult<()> {
+    let secp = Secp256k1::new();
+    let signatures = {
+        let mut cache = bdk_wallet::bitcoin::sighash::SighashCache::new(&psbt.unsigned_tx);
+        psbt.inputs
+            .iter()
+            .enumerate()
+            .map(|(input_index, input)| {
+                let mut matching = input
+                    .bip32_derivation
+                    .iter()
+                    .filter(|(_, (candidate, _))| *candidate == fingerprint);
+                let (expected_public, (_, path)) = matching.next().ok_or_else(|| {
+                    api_error(
+                        "unknown_signer",
+                        "The PSBT does not bind every input to this exact mobile signer.",
+                    )
+                })?;
+                if matching.next().is_some() {
+                    return Err(api_error(
+                        "unknown_signer",
+                        "The PSBT ambiguously binds an input to the mobile signer.",
+                    ));
+                }
+                let (keychain, index) = parse_owned_path(path)?;
+                let branch = match keychain {
+                    KeychainKind::External => 0,
+                    KeychainKind::Internal => 1,
+                };
+                let relative = DerivationPath::from(vec![
+                    bdk_wallet::bitcoin::bip32::ChildNumber::Normal { index: branch },
+                    bdk_wallet::bitcoin::bip32::ChildNumber::Normal { index },
+                ]);
+                let child = MobileAccount(
+                    account
+                        .derive_priv(&secp, &relative)
+                        .map_err(|_| coordination_api_error(CoordinationError::WrongDerivation))?,
+                );
+                if child.private_key.public_key(&secp) != *expected_public {
+                    return Err(coordination_api_error(
+                        CoordinationError::DescriptorMismatch,
+                    ));
+                }
+                let (message, sighash_type) =
+                    psbt.sighash_ecdsa(input_index, &mut cache).map_err(|_| {
+                        proposal_api_error(crate::proposal::ProposalError::InvalidSignature)
+                    })?;
+                if sighash_type != bdk_wallet::bitcoin::EcdsaSighashType::All {
+                    return Err(api_error(
+                        "unsupported_sighash",
+                        "Groot mobile signs only unfinalized SIGHASH_ALL PSBTs.",
+                    ));
+                }
+                Ok((
+                    input_index,
+                    bdk_wallet::bitcoin::PublicKey::new(*expected_public),
+                    bdk_wallet::bitcoin::ecdsa::Signature {
+                        signature: secp.sign_ecdsa(&message, &child.private_key),
+                        sighash_type,
+                    },
+                ))
+            })
+            .collect::<ApiResult<Vec<_>>>()?
+    };
+    for (input_index, public_key, signature) in signatures {
+        psbt.inputs[input_index]
+            .partial_sigs
+            .insert(public_key, signature);
+    }
+    Ok(())
+}
+
+#[cfg(test)]
 fn descriptor_without_checksum(descriptor: &str) -> ApiResult<&str> {
     descriptor
         .split_once('#')
@@ -2450,6 +2496,79 @@ mod tests {
             )
             .unwrap());
         returned
+    }
+
+    #[test]
+    fn mobile_signing_adds_only_the_expected_signatures_without_private_descriptors() {
+        use bdk_wallet::bitcoin::{
+            absolute::LockTime, hashes::Hash, transaction::Version, OutPoint, ScriptBuf, Sequence,
+            Transaction, TxIn, TxOut, Witness,
+        };
+
+        let (mnemonic, hardware, metadata, coordination) = coordinated_wallet();
+        let mut coordinator = Wallet::create(
+            metadata.external_descriptor.clone(),
+            metadata.internal_descriptor.clone(),
+        )
+        .network(Network::Regtest)
+        .create_wallet_no_persist()
+        .unwrap();
+        let receive = coordinator.reveal_next_address(KeychainKind::External);
+        let funding = Transaction {
+            version: Version::TWO,
+            lock_time: LockTime::ZERO,
+            input: vec![TxIn {
+                previous_output: OutPoint::new(Txid::from_byte_array([61_u8; 32]), 0),
+                script_sig: ScriptBuf::new(),
+                sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
+                witness: Witness::new(),
+            }],
+            output: vec![TxOut {
+                value: Amount::from_sat(150_000),
+                script_pubkey: receive.address.script_pubkey(),
+            }],
+        };
+        coordinator.apply_unconfirmed_txs([(funding, 1)]);
+
+        let secp = Secp256k1::new();
+        let destination_key = hardware[0]
+            .account_private
+            .derive_priv(&secp, &DerivationPath::from_str("m/0/7").unwrap())
+            .unwrap();
+        let destination = Address::p2wpkh(
+            &bdk_wallet::bitcoin::CompressedPublicKey(
+                destination_key.private_key.public_key(&secp),
+            ),
+            Network::Regtest,
+        );
+        let mut builder = coordinator.build_tx();
+        builder
+            .add_recipient(destination.script_pubkey(), Amount::from_sat(50_000))
+            .fee_rate(FeeRate::from_sat_per_vb(2).unwrap());
+        let unsigned = builder.finish().unwrap();
+        let encoded = encode_psbt(&unsigned);
+        let review = review_mobile_psbt_for(&metadata, &coordination, &encoded).unwrap();
+
+        let signed =
+            sign_mobile_psbt_for(&metadata, &mnemonic, &encoded, review.revision_id).unwrap();
+        let returned = decode_psbt(&signed.signed_psbt).unwrap();
+        let mobile_fingerprint =
+            Fingerprint::from_str(coordination.mobile_signer_fingerprint.as_deref().unwrap())
+                .unwrap();
+        assert!(returned.inputs.iter().all(|input| {
+            input.partial_sigs.len() == 1
+                && input.partial_sigs.keys().all(|public_key| {
+                    input
+                        .bip32_derivation
+                        .get(&public_key.inner)
+                        .is_some_and(|(fingerprint, _)| *fingerprint == mobile_fingerprint)
+                })
+        }));
+        assert!(returned.inputs.iter().all(|input| {
+            input.partial_sigs.values().all(|signature| {
+                signature.sighash_type == bdk_wallet::bitcoin::EcdsaSighashType::All
+            })
+        }));
     }
 
     #[test]

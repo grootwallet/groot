@@ -840,6 +840,9 @@ export class TauriWalletAdapter implements WalletPort {
   finalizePairingOnDesktop(sessionId: string) {
     return command<string[]>('coordination_desktop_finalize', { sessionId });
   }
+  inspectFinalPairingOnMobile(frames: string[]) {
+    return command<string>('coordination_mobile_final_inspect', { frames });
+  }
   completePairingOnMobile(frames: string[], credential: string) {
     return command<MultisigWallet>('coordination_mobile_complete', { frames, credential });
   }

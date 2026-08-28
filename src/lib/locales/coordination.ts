@@ -237,6 +237,10 @@ export const coordinationCopy = {
     es: 'Vinculación pendiente cancelada'
   },
   'Pending session': { fr: 'Session en attente', es: 'Sesión pendiente' },
+  'Accept wallet policy': {
+    fr: 'Accepter la politique du portefeuille',
+    es: 'Aceptar la política de la cartera'
+  },
   'Phone accepted the wallet': {
     fr: 'Le téléphone a accepté le portefeuille',
     es: 'El teléfono aceptó la cartera'

@@ -10,6 +10,14 @@ const recoveryRouteSource = readFileSync(
   fileURLToPath(new URL('../../routes/mobile/recover/+page.svelte', import.meta.url)),
   'utf8'
 );
+const signingRouteSource = readFileSync(
+  fileURLToPath(new URL('../../routes/mobile/sign/+page.svelte', import.meta.url)),
+  'utf8'
+);
+const watchRouteSource = readFileSync(
+  fileURLToPath(new URL('../../routes/mobile/watch/+page.svelte', import.meta.url)),
+  'utf8'
+);
 const appStyles = readFileSync(fileURLToPath(new URL('../../app.css', import.meta.url)), 'utf8');
 const appHtml = readFileSync(fileURLToPath(new URL('../../app.html', import.meta.url)), 'utf8');
 const desktopRouteSource = readFileSync(
@@ -68,12 +76,30 @@ describe('mobile pairing lifecycle UI', () => {
       'walletService.resumePairingOnMobile(selectedPendingSession, resumePin)'
     );
     expect(routeSource).toContain('walletService.cancelPairing(selectedPendingSession)');
-    expect(routeSource).toContain('pin = resumePin;');
+    expect(routeSource).not.toContain('pin = resumePin;');
     expect(routeSource).toContain("resumePin = '';");
     expect(routeSource).toContain("stage = response.awaitingFinalPolicy ? 'final' : 'response';");
     expect(routeSource).toContain('walletService.awaitFinalPairingPolicy(response.sessionId, pin)');
+    expect(routeSource).toContain('walletService.inspectFinalPairingOnMobile(finalFrames)');
     expect(routeSource).toContain('role="status"');
     expect(routeSource).toContain('role="alert"');
+  });
+
+  it('clears every mobile credential after success or failure and re-authenticates each pairing step', () => {
+    expect(routeSource).toMatch(/resumePendingPairing[\s\S]*?finally\s*\{[\s\S]*?resumePin = '';/);
+    expect(routeSource).toMatch(/cancelPendingPairing[\s\S]*?finally\s*\{[\s\S]*?resumePin = '';/);
+    expect(routeSource).toMatch(
+      /createSigner[\s\S]*?finally\s*\{[\s\S]*?pin = '';[\s\S]*?confirmation = '';/
+    );
+    expect(routeSource).toMatch(/awaitFinalPolicy[\s\S]*?finally\s*\{[\s\S]*?pin = '';/);
+    expect(routeSource).toMatch(/completePairing[\s\S]*?finally\s*\{[\s\S]*?pin = '';/);
+    expect(signingRouteSource).toMatch(/async function sign[\s\S]*?finally\s*\{[\s\S]*?pin = '';/);
+    expect(recoveryRouteSource).toMatch(
+      /async function recover[\s\S]*?finally\s*\{[\s\S]*?pin = '';[\s\S]*?confirmation = '';/
+    );
+    expect(watchRouteSource).toMatch(
+      /async function create[\s\S]*?finally\s*\{[\s\S]*?pin = '';[\s\S]*?confirmation = '';/
+    );
   });
 
   it('shows one explicit pairing path with navigation and persistent step progress', () => {

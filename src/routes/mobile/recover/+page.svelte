@@ -55,6 +55,8 @@
     } catch (cause) {
       error = localizedError(cause, $locale, 'The phone signer could not be restored.');
     } finally {
+      pin = '';
+      confirmation = '';
       busy = false;
     }
   }
