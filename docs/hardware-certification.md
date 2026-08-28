@@ -140,6 +140,15 @@ BitBox02 evidence is not inherited.
 Testnet4, packaged-candidate, independent-review, and Whisper/BLE rows remain
 open.
 
+Packaged v0.4.65 Testnet4 later passed a focused Bitcoin Core sync-lifecycle
+regression while this Nova-named watch-only profile was selected: the initial
+history scan survived Activity/Overview navigation, completed without a
+progress restart, retained a truthful last-successful-sync age across repeat
+sync and app restart, and showed the corrected warning spacing. This is not
+hardware evidence because the signer is not contacted during descriptor sync;
+it does not close Nova receive, health, policy, signing, pairing-cache,
+Whisper/BLE, or independent-review rows.
+
 ### Completed checkpoint — BitBox02
 
 On 2026-08-15, the original Bitcoin-only BitBox02, firmware 9.26.3, passed the Regtest receive-address comparison and an independent BIP48 2-of-3 flow: account-key import, policy registration, first-address review, explicit signing rejection with a retryable unchanged proposal, successful retry, one-signature restart persistence, threshold completion with Trezor Model One, and broadcast. It then passed wrong-device rejection without collecting a signature, USB interruption during signing with a clean retry, rejection of a signed PSBT from another proposal without changing signatures, and an independent BSMS descriptor-recovery test reproducing the same first receive address. The sanitized host record is macOS 26.1 Tahoe with HWI 2.3.1, tested 2026-08-15 in Europe/Andorra (UTC+2). This evidence applies only to the original Bitcoin-only BitBox02; it does not cover Nova. Do not publish addresses, fingerprints, xpubs, PSBTs, or device paths.
