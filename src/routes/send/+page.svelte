@@ -56,8 +56,8 @@
   } from '$lib/wallet/hardware-display';
   import { latestActiveProposal } from '$lib/wallet/proposal-resume';
   import {
+    isCurrentMaxSpendResponse,
     matchingMaxSpendFee,
-    sameMaxSpendRequest,
     validatedMaxSpendQuote,
     type MaxSpendQuote
   } from '$lib/wallet/max-spend-quote';
@@ -114,6 +114,8 @@
   let draftError = $state('');
   let proposal = $state<PaymentProposal | null>(null);
   let maxSpendQuote = $state<MaxSpendQuote | null>(null);
+  let maxSpendActive = $state(false);
+  let maxSpendRequestRevision = 0;
   let txid = $state('');
   let sentAmount = $state(0);
   let balanceSyncPending = $state(false);
@@ -457,11 +459,12 @@
     }
   }
 
-  async function useMaxAmount() {
-    if (!addressValid || selectedFeeRate <= 0) return;
+  async function useMaxAmount(requestedFeeRate = selectedFeeRate) {
+    if (!addressValid || requestedFeeRate <= 0) return;
+    const requestRevision = ++maxSpendRequestRevision;
     const request = {
       recipient: address,
-      feeRate: selectedFeeRate,
+      feeRate: requestedFeeRate,
       coinSelection:
         selection.mode === 'manual'
           ? { mode: 'manual' as const, outpoints: [...selection.outpoints] }
@@ -474,7 +477,7 @@
         request.coinSelection
       );
       if (
-        !sameMaxSpendRequest(request, {
+        !isCurrentMaxSpendResponse(requestRevision, maxSpendRequestRevision, request, {
           recipient: address,
           feeRate: selectedFeeRate,
           coinSelection: selection
@@ -484,6 +487,7 @@
       const quote = validatedMaxSpendQuote(maximum, request);
       if (!quote) throw new Error('Native maximum-spend quote was invalid.');
       maxSpendQuote = quote;
+      maxSpendActive = true;
       amount = amountInputValue(quote.amount, $denomination);
     } catch (cause) {
       toast({
@@ -492,6 +496,17 @@
         tone: 'danger'
       });
     }
+  }
+
+  function updateFeeRate(rate: number) {
+    const refreshMaximum = maxSpendActive;
+    const match = Object.entries(fees).find(([, value]) => value === rate);
+    if (match) speed = match[0];
+    else {
+      speed = 'custom';
+      customFee = rate ? String(rate) : '';
+    }
+    if (refreshMaximum && Number.isFinite(rate) && rate > 0) void useMaxAmount(rate);
   }
 
   async function prepareCustomAcceleration() {
@@ -1070,11 +1085,16 @@
           <input
             aria-label={translate($locale, 'Amount')}
             bind:value={amount}
+            oninput={() => {
+              maxSpendRequestRevision += 1;
+              maxSpendActive = false;
+              maxSpendQuote = null;
+            }}
             inputmode={$denomination === 'btc' ? 'decimal' : 'numeric'}
             placeholder="0"
           /><b>{translate($locale, $denomination === 'btc' ? 'BTC' : 'sats')}</b><button
             type="button"
-            onclick={useMaxAmount}>{translate($locale, 'Max')}</button
+            onclick={() => void useMaxAmount()}>{translate($locale, 'Max')}</button
           >
         </div>
         <small class="available-balance-summary"
@@ -1210,14 +1230,7 @@
         value={selectedFeeRate}
         estimatedFee={fee}
         error={feeEstimateError}
-        onchange={(rate) => {
-          const match = Object.entries(fees).find(([, value]) => value === rate);
-          if (match) speed = match[0];
-          else {
-            speed = 'custom';
-            customFee = rate ? String(rate) : '';
-          }
-        }}
+        onchange={updateFeeRate}
       />
       <div class="split-actions">
         <Button variant="secondary" size="large" onclick={() => (draftStep = 1)}

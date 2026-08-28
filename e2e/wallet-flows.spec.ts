@@ -1349,6 +1349,11 @@ test('coin control selects, freezes, and carries coins into send', async ({ page
   await page.getByRole('button', { name: 'Max' }).click();
   await expect(page.getByLabel('Amount', { exact: true })).toHaveValue('2480260');
   await expect(page.getByRole('button', { name: 'Review payment' })).toBeEnabled();
+  await page.getByRole('button', { name: 'Custom' }).click();
+  await page.getByLabel('Custom fee rate').fill('3');
+  await expect(page.getByLabel('Amount', { exact: true })).toHaveValue('2480820');
+  await expect(page.getByText('Estimated fee 420 sats')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Review payment' })).toBeEnabled();
 });
 
 test('discreet mode hides coin labels and amounts without leaking them through controls', async ({

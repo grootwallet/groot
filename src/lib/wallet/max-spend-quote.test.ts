@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { feeRate, sats, type CoinSelection, type Sats } from './contracts';
 import {
+  isCurrentMaxSpendResponse,
   matchingMaxSpendFee,
   sameMaxSpendRequest,
   validatedMaxSpendQuote
@@ -62,6 +63,11 @@ describe('maximum-spend quote', () => {
 
     expect(sameMaxSpendRequest(first, same)).toBe(true);
     expect(sameMaxSpendRequest(first, reordered)).toBe(false);
+  });
+
+  it('rejects a late response after a manual amount edit cancels its revision', () => {
+    expect(isCurrentMaxSpendResponse(4, 4, request, request)).toBe(true);
+    expect(isCurrentMaxSpendResponse(4, 5, request, request)).toBe(false);
   });
 
   it('accepts branded fee-rate inputs without changing integer accounting', () => {

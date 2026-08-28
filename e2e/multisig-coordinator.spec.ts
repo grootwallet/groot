@@ -896,6 +896,11 @@ test('selects and freezes multisig coins before entering the send flow', async (
   await page.getByRole('button', { name: 'Max' }).click();
   await expect(page.getByLabel('Amount', { exact: true })).toHaveValue('2479707');
   await expect(page.getByRole('button', { name: 'Review payment' })).toBeEnabled();
+  await page.getByRole('button', { name: 'Custom' }).click();
+  await page.getByLabel('Custom fee rate').fill('3');
+  await expect(page.getByLabel('Amount', { exact: true })).toHaveValue('2480583');
+  await expect(page.getByText('Estimated fee 657 sats')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Review payment' })).toBeEnabled();
 });
 
 test('offers safe recipes and advanced M-of-N control', async ({ page }, testInfo) => {

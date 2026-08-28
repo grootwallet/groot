@@ -36,6 +36,15 @@ export function sameMaxSpendRequest(left: MaxSpendRequest, right: MaxSpendReques
   );
 }
 
+export function isCurrentMaxSpendResponse(
+  responseRevision: number,
+  currentRevision: number,
+  request: MaxSpendRequest,
+  currentRequest: MaxSpendRequest
+): boolean {
+  return responseRevision === currentRevision && sameMaxSpendRequest(request, currentRequest);
+}
+
 export function validatedMaxSpendQuote(
   maximum: MaxSpend,
   request: MaxSpendRequest

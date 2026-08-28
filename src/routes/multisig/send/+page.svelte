@@ -61,8 +61,8 @@
   import { compactAddress } from '$lib/address-display';
   import { accelerationUnavailableTitle } from '$lib/wallet/acceleration-presentation';
   import {
+    isCurrentMaxSpendResponse,
     matchingMaxSpendFee,
-    sameMaxSpendRequest,
     validatedMaxSpendQuote,
     type MaxSpendQuote
   } from '$lib/wallet/max-spend-quote';
@@ -175,6 +175,8 @@
     available = $state(0);
   let automaticStrategy = $state<AutomaticSelectionStrategy>('balanced');
   let maxSpendQuote = $state<MaxSpendQuote | null>(null);
+  let maxSpendActive = $state(false);
+  let maxSpendRequestRevision = 0;
   let renewalMode = $state(false),
     renewalCoin = $state<Utxo | null>(null);
   let delayedSpendMode = $state(false),
@@ -640,12 +642,13 @@
       busy = false;
     }
   }
-  async function useMaxAmount() {
-    if (!addressValid || selectedRateNumber <= 0) return;
+  async function useMaxAmount(requestedFeeRate = selectedRateNumber) {
+    if (!addressValid || requestedFeeRate <= 0) return;
+    const requestRevision = ++maxSpendRequestRevision;
     error = '';
     const request = {
       recipient: address,
-      feeRate: selectedRateNumber,
+      feeRate: requestedFeeRate,
       coinSelection:
         selection.mode === 'manual'
           ? { mode: 'manual' as const, outpoints: [...selection.outpoints] }
@@ -658,7 +661,7 @@
         request.coinSelection
       );
       if (
-        !sameMaxSpendRequest(request, {
+        !isCurrentMaxSpendResponse(requestRevision, maxSpendRequestRevision, request, {
           recipient: address,
           feeRate: selectedRateNumber,
           coinSelection: selection
@@ -668,10 +671,17 @@
       const quote = validatedMaxSpendQuote(maximum, request);
       if (!quote) throw new Error('Native maximum-spend quote was invalid.');
       maxSpendQuote = quote;
+      maxSpendActive = true;
       amount = amountInputValue(quote.amount, $denomination);
     } catch (cause) {
       error = localizedError(cause, $locale, 'Maximum amount could not be calculated.');
     }
+  }
+  function updatePaymentFeeRate(rate: number) {
+    const refreshMaximum = maxSpendActive;
+    selectedRate = rate;
+    clearDraftError();
+    if (refreshMaximum && Number.isFinite(rate) && rate > 0) void useMaxAmount(rate);
   }
   async function prepareCustomAcceleration() {
     const request = accelerationRequest;
@@ -1789,12 +1799,17 @@
           <input
             aria-label={translate($locale, 'Amount')}
             bind:value={amount}
-            oninput={clearDraftError}
+            oninput={() => {
+              maxSpendRequestRevision += 1;
+              maxSpendActive = false;
+              maxSpendQuote = null;
+              clearDraftError();
+            }}
             inputmode={$denomination === 'btc' ? 'decimal' : 'numeric'}
             placeholder="0"
           /><b>{translate($locale, $denomination === 'btc' ? 'BTC' : 'sats')}</b><button
             type="button"
-            onclick={useMaxAmount}>{translate($locale, 'Max')}</button
+            onclick={() => void useMaxAmount()}>{translate($locale, 'Max')}</button
           >
         </div>
         <small class="available-balance-summary"
@@ -1951,10 +1966,7 @@
         value={selectedRateNumber}
         {estimatedFee}
         error={feeEstimateError}
-        onchange={(rate) => {
-          selectedRate = rate;
-          clearDraftError();
-        }}
+        onchange={updatePaymentFeeRate}
       />
       {#if error}<div class="hardware-inline-error send-form-error" role="alert">
           <AlertTriangle size={18} /><span
