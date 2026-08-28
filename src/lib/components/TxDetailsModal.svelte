@@ -15,6 +15,7 @@
   import { discreetMode } from '$lib/privacy';
   import { denomination, setDenomination } from '$lib/denomination';
   import PermanentLabelTags from './PermanentLabelTags.svelte';
+  import { walletService } from '$lib/wallet';
 
   let {
     transaction,
@@ -24,6 +25,7 @@
   let showAddress = $state(false);
   let showMore = $state(false);
   let addressCopied = $state(false);
+  let explorerError = $state('');
   let explorerUrl = $derived(
     transaction ? transactionExplorerUrl(defaultConfig.network, transaction.id) : null
   );
@@ -73,6 +75,22 @@
       toast({ title: 'Copy failed', tone: 'danger' });
     }
   }
+
+  async function openExplorer() {
+    if (!transaction || !explorerUrl) return;
+    explorerError = '';
+    try {
+      await walletService.openTransactionExplorer(transaction.id);
+    } catch (cause) {
+      explorerError =
+        cause instanceof Error ? cause.message : 'The system browser could not open the explorer.';
+      toast({
+        title: translate($locale, 'Could not open explorer'),
+        description: explorerError,
+        tone: 'danger'
+      });
+    }
+  }
 </script>
 
 <Modal open={!!transaction} title={translate($locale, 'Transaction details')} {onclose}>
@@ -112,6 +130,27 @@
           <PermanentLabelTags labels={transactionLabels} hidden={$discreetMode} prominent />
         </div>{/if}
     </div>
+    {#if transaction.replaces}<aside class="info-banner transaction-lineage">
+        <strong>{translate($locale, 'Fee increase replacement')}</strong>
+        <span
+          >{translate(
+            $locale,
+            'This transaction accelerates and replaces the earlier transaction.'
+          )}</span
+        >
+        <code>{compactAddress(transaction.replaces)}</code>
+      </aside>{:else if transaction.status === 'replaced' && transaction.replacedBy}<aside
+        class="info-banner transaction-lineage"
+      >
+        <strong>{translate($locale, 'Replaced by a fee increase')}</strong>
+        <span
+          >{translate(
+            $locale,
+            'This earlier transaction is retained for history and is not counted in the balance.'
+          )}</span
+        >
+        <code>{compactAddress(transaction.replacedBy)}</code>
+      </aside>{/if}
     <dl class="details-list">
       <div>
         <dt>{translate($locale, 'Date')}</dt>
@@ -214,6 +253,10 @@
             <dt>{translate($locale, 'Replaced by')}</dt>
             <dd><code>{transaction.replacedBy}</code></dd>
           </div>{/if}
+        {#if transaction.replaces}<div>
+            <dt>{translate($locale, 'Replaces')}</dt>
+            <dd><code>{transaction.replaces}</code></dd>
+          </div>{/if}
         {#if transaction.block}<div>
             <dt>{translate($locale, 'Block')}</dt>
             <dd>{transaction.block}</dd>
@@ -230,9 +273,9 @@
       >
       {#if explorerUrl}
         <div class="explorer-panel">
-          <a class="explorer-link" href={explorerUrl} target="_blank" rel="noopener noreferrer"
-            >{translate($locale, 'View on mempool.space')} <ExternalLink size={14} /></a
-          >
+          <button class="explorer-link" type="button" onclick={openExplorer}
+            >{translate($locale, 'View on mempool.space')} <ExternalLink size={14} /></button
+          >{#if explorerError}<p class="form-error" role="alert">{explorerError}</p>{/if}
           <p class="explorer-privacy">
             {translate($locale, 'Opening this shares the transaction lookup with mempool.space.')}
           </p>

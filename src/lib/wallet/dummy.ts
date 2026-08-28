@@ -1,4 +1,4 @@
-import { defaultConfig } from '$lib/config';
+import { defaultConfig, transactionExplorerUrl } from '$lib/config';
 import type { ReceiveAddress, Transaction } from '$lib/types';
 import {
   addressPrefixForNetwork,
@@ -722,7 +722,65 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       selectedRate
     );
     this._accelerations.set(proposal.proposalId, { originalTxid: txid, method });
+    if (method === 'rbf') {
+      const quote = await this.quoteRbf(txid, selectedRate);
+      proposal.fee = quote.estimatedReplacementFee;
+      proposal.feeRate = quote.resultingEffectiveFeeRate;
+      proposal.total = sats(Number(proposal.amount) + Number(proposal.fee));
+      proposal.acceleration = {
+        method,
+        originalTxid: txid,
+        originalFeeRate: quote.originalEffectiveFeeRate,
+        minimumFeeRate: quote.minimumFeeRate,
+        targetFeeRate: quote.targetFeeRate,
+        incrementalFee: quote.incrementalFee,
+        recommendationSource: quote.recommendationSource
+      };
+    }
     return proposal;
+  }
+
+  async quoteRbf(txid: string, selectedRate?: ReturnType<typeof feeRate>) {
+    const tx = this._transactions.find((item) => item.id === txid);
+    if (!tx || tx.status !== 'pending' || tx.rbf !== true)
+      throw new WalletError('transaction_not_replaceable', 'This transaction is not replaceable.');
+    const originalRate = tx.feeRate ?? 1;
+    const minimum = Math.ceil((originalRate + 1) * 250) / 250;
+    const target = selectedRate ?? feeRate(Math.max(5, minimum + 1));
+    if (target < minimum)
+      throw new WalletError('fee_rate_too_low', `Choose at least ${minimum} sat/vB.`);
+    const vsize = 152;
+    const originalFee = sats(tx.fee ?? Math.ceil(originalRate * vsize));
+    const replacementFee = sats(Math.ceil(Number(target) * vsize));
+    return {
+      method: 'rbf' as const,
+      originalTxid: txid,
+      originalFee,
+      originalVsize: vsize,
+      originalEffectiveFeeRate: feeRate(Math.round((originalFee / vsize) * 1000) / 1000),
+      minimumFeeRate: feeRate(minimum),
+      targetFeeRate: feeRate(Number(target)),
+      estimatedReplacementFee: replacementFee,
+      incrementalFee: sats(replacementFee - originalFee),
+      resultingEffectiveFeeRate: feeRate(replacementFee / vsize),
+      replacementVsize: vsize,
+      recommendationSource: selectedRate ? ('custom' as const) : ('replacement_fallback' as const)
+    };
+  }
+
+  async openTransactionExplorer(txid: string) {
+    const url = transactionExplorerUrl(defaultConfig.network, txid);
+    if (!url || typeof window === 'undefined' || !window.open(url, '_blank', 'noopener,noreferrer'))
+      throw new WalletError(
+        'internal_error',
+        'The browser could not open the transaction explorer.'
+      );
+  }
+  async exportLabels() {
+    return { saved: true, recordCount: 6 };
+  }
+  async importLabels() {
+    return { importedCount: 2, unchangedCount: 1, ignoredCount: 1, spendabilityChangeCount: 0 };
   }
 
   async signAndBroadcast(proposalId: string, credential: string) {
@@ -731,7 +789,9 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       throw new WalletError('wallet_not_found', 'Payment proposal was not found or expired.');
     if (!this._selectedWalletId || credential !== this._credentials.get(this._selectedWalletId))
       throw new WalletError('invalid_credential', 'Incorrect passphrase / PIN.');
-    const txid = '0a7bf3d7a98d8bc981975320eba8e9b8ac1aa92145dcf018e48c3c2f8c19e2aa';
+    const txid = this._accelerations.has(proposalId)
+      ? '1b8cf4e8a09c7d12883143f9ab3fdf1d5f25a4784a96b35ec2e7a6c120437bad'
+      : '0a7bf3d7a98d8bc981975320eba8e9b8ac1aa92145dcf018e48c3c2f8c19e2aa';
     this.#recordFixtureBroadcast(proposalId, proposal, txid);
     this._balance = Math.max(0, this._balance - Number(proposal.total));
     this.#emit({ type: 'transaction_broadcast', txid, balance: sats(this._balance) });
@@ -1970,11 +2030,10 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
 
   #recordFixtureBroadcast(proposalId: string, proposal: PaymentProposal, txid: string) {
     const acceleration = this._accelerations.get(proposalId);
-    if (!acceleration) return;
-    const original = this._transactions.find(
-      (transaction) => transaction.id === acceleration.originalTxid
-    );
-    if (acceleration.method === 'rbf' && original) {
+    const original = acceleration
+      ? this._transactions.find((transaction) => transaction.id === acceleration.originalTxid)
+      : undefined;
+    if (acceleration?.method === 'rbf' && original) {
       original.status = 'replaced';
       original.confirmations = 0;
       original.block = undefined;
@@ -1982,7 +2041,7 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     }
     const replacement: Transaction = {
       id: txid,
-      kind: acceleration.method === 'cpfp' ? 'self_spend' : 'payment',
+      kind: acceleration?.method === 'cpfp' ? 'self_spend' : 'payment',
       direction: 'sent',
       amount: Number(proposal.amount),
       fee: Number(proposal.fee),
@@ -2009,13 +2068,14 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
         labels: [],
         clusterCount: 0,
         addressReused: false
-      }
+      },
+      replaces: acceleration?.method === 'rbf' ? original?.id : undefined
     };
     this._transactions = [
       replacement,
       ...this._transactions.filter((transaction) => transaction.id !== txid)
     ];
-    this._accelerations.delete(proposalId);
+    if (acceleration) this._accelerations.delete(proposalId);
   }
 
   subscribe(listener: (event: WalletEvent) => void) {

@@ -14,6 +14,24 @@ describe('dummy acceleration proposals', () => {
     expect(resumed).toEqual(first);
     expect(cpfp.proposalId).not.toBe(first.proposalId);
   });
+
+  it('keeps a 2.5 sat/vB target distinct from its whole-satoshi effective rate', async () => {
+    const adapter = new DummyWalletAdapter();
+    const quote = await adapter.quoteRbf(pendingTransactionId, feeRate(2.5));
+
+    expect(quote.targetFeeRate).toBe(2.5);
+    expect(quote.estimatedReplacementFee).toBe(380);
+    expect(quote.resultingEffectiveFeeRate).toBe(2.5);
+    expect(quote.recommendationSource).toBe('custom');
+  });
+
+  it('opens with a deterministic replacement-only default above the exact minimum', async () => {
+    const adapter = new DummyWalletAdapter();
+    const quote = await adapter.quoteRbf(pendingTransactionId);
+
+    expect(quote.targetFeeRate).toBeGreaterThan(quote.minimumFeeRate);
+    expect(quote.recommendationSource).toBe('replacement_fallback');
+  });
 });
 
 describe('software payment proposals', () => {

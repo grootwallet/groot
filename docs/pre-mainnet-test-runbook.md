@@ -148,6 +148,28 @@ Follow [`hardware-certification.md`](hardware-certification.md) for each model. 
 
 BitBox02 Nova begins as a separate certification record, not a pass/fail alias for BitBox02. HWI 3.2.0 desktop USB is enabled only to run that Regtest campaign; record sanitized exact-model enumeration, pairing, identity, address, registration, signing, health, negative, restart, recovery, and broadcast outcomes without inheriting original BitBox02 evidence. For release review, create a separate summary from [`hardware-certification-summary-template.md`](hardware-certification-summary-template.md) without fingerprints, device paths, addresses, xpubs, or PSBTs; the sensitive local report remains gitignored.
 
+### Safe mutated-PSBT row
+
+Use only a disposable test-chain proposal and an already signed exported copy. Keep the original untouched. The local helper accepts explicit regular files of at most 1 MiB, refuses symlinks, same paths, existing outputs, unsigned PSBTs, malformed maps, and trailing data, then changes exactly one non-structural byte inside the first partial signature. It preserves binary versus base64 encoding, creates the output owner-only, and prints no file path, transaction identifier, address, or PSBT content.
+
+```sh
+node scripts/hardware/mutate-signed-psbt.mjs \
+  --input /absolute/disposable/signed-copy.psbt \
+  --output /absolute/disposable/hostile-one-byte.psbt
+```
+
+Before import, record only the visible proposal state: recipient/amount/fee review unchanged and signature count. Import the hostile output and require `invalid_signature` (or the documented localized equivalent), no signature-count/proposal change, and no new history/broadcast state. Quit Groot completely, reopen the same exact package, unlock, and require that unchanged state again. Finally import the untouched original copy and require its valid signature to advance exactly once. Delete both disposable copies after the local record is complete. Never attach either file or any identifier to an issue, screenshot, log, or certification summary. This helper is not product UI and must not be wired into the application.
+
+### Independent clean-profile recovery row
+
+1. Quit Groot and confirm no Groot process remains. Preserve the funded source profile in place; do not delete, rename, or edit it.
+2. Copy the complete encrypted application-data/profile set to a distinct owner-only recovery location. Never point two processes at one profile and never test against a production/funded-mainnet profile.
+3. Launch the exact candidate package against the distinct clean location using the existing bounded test-data override. A wrong credential must fail closed; the correct credential must unlock the intended wallet, not create a different wallet.
+4. Run recovery from a safe known birthday and gap. Compare the first receive address on the physical signer, then reconcile balance, confirmed/pending history, permanent labels, and replacement lineage. Record only pass/fail and sanitized counts; no addresses, transaction IDs, public keys, PSBTs, credentials, or paths.
+5. Quit the recovered profile completely, retain or discard only the disposable copy according to the local evidence policy, then reopen the original source profile and confirm it is byte/logically unchanged and still unlocks to the same wallet state.
+
+The recovered copy proves functional recovery for that exact model/package/environment. It is not independent review unless a separate reviewer performs and signs off the run.
+
 ## 4. Remote Bitcoin Core over TLS
 
 Use a dedicated least-privilege RPC user, a valid hostname certificate, firewall allow-list/VPN, and a disposable test-chain node. Avoid literal passwords in shell history:

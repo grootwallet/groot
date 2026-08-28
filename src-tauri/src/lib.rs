@@ -31,6 +31,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             let lock = process_lock::ProcessLock::acquire_for_app(app.handle())?;
             app.manage(lock);
@@ -157,6 +158,10 @@ pub fn run() {
             wallet::coin_selection_preview,
             wallet::transaction_commands::tx_acceleration_prepare,
             wallet::transaction_commands::multisig_acceleration_prepare,
+            wallet::transaction_commands::rbf_acceleration_quote,
+            wallet::explorer_commands::transaction_explorer_open,
+            wallet::label_interchange::bip329_labels_export,
+            wallet::label_interchange::bip329_labels_import,
             wallet::transaction_commands::tx_sign_and_broadcast,
             wallet::wallet_delete,
             wallet::wallet_reset_regtest,

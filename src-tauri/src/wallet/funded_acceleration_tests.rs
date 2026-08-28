@@ -3,7 +3,7 @@ use super::multisig_proposal_commands::{
     import_multisig_proposal_in_db,
 };
 use super::transaction_commands::{
-    prepare_persisted_multisig_acceleration, validate_acceleration_rate,
+    prepare_persisted_multisig_acceleration, validate_acceleration_rate, AccelerationRatePolicy,
 };
 use super::*;
 use crate::multisig::{CosignerInput, CosignerSource, MULTISIG_ACCOUNT_PATH};
@@ -694,15 +694,19 @@ fn funded_rbf_and_cpfp_cross_groot_proposal_boundaries() {
     let original_txid = broadcast_transaction_with_rpc(&rpc, &original_tx).unwrap();
     sync(&mut wallet, &mut db, Arc::clone(&rpc));
 
-    let (applied, rate) = validate_acceleration_rate(5.0).unwrap();
+    let incremental_fee = rpc.get_network_info().unwrap().incremental_fee.to_sat();
+    let (applied, rate) = validate_acceleration_rate("5").unwrap();
     let rbf = prepare_persisted_multisig_acceleration(
         &mut db,
         &metadata,
         original_txid,
         AccelerationMethod::Rbf,
         None,
-        applied,
-        rate,
+        AccelerationRatePolicy {
+            applied,
+            rate,
+            rbf_quote_request: Some(("5".to_owned(), incremental_fee, Some(5.0))),
+        },
     )
     .unwrap();
     let resumed = prepare_persisted_multisig_acceleration(
@@ -711,8 +715,11 @@ fn funded_rbf_and_cpfp_cross_groot_proposal_boundaries() {
         original_txid,
         AccelerationMethod::Rbf,
         None,
-        applied,
-        rate,
+        AccelerationRatePolicy {
+            applied,
+            rate,
+            rbf_quote_request: Some(("5".to_owned(), incremental_fee, Some(5.0))),
+        },
     )
     .unwrap();
     assert_eq!(resumed.proposal_id, rbf.proposal_id);
@@ -807,15 +814,18 @@ fn funded_rbf_and_cpfp_cross_groot_proposal_boundaries() {
     );
 
     let parent_fee = rpc.get_mempool_entry(&replacement_txid).unwrap().fees.base;
-    let (applied, rate) = validate_acceleration_rate(9.0).unwrap();
+    let (applied, rate) = validate_acceleration_rate("9").unwrap();
     let cpfp = prepare_persisted_multisig_acceleration(
         &mut db,
         &metadata,
         replacement_txid,
         AccelerationMethod::Cpfp,
         Some(parent_fee),
-        applied,
-        rate,
+        AccelerationRatePolicy {
+            applied,
+            rate,
+            rbf_quote_request: None,
+        },
     )
     .unwrap();
     let first = import_multisig_proposal_in_db(

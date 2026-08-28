@@ -1934,7 +1934,7 @@ pub(crate) fn external_proposal_dto(
         .map(|label| label.text)
         .collect();
     Ok(MultisigProposalDto {
-        proposal_id,
+        proposal_id: proposal_id.clone(),
         recipient,
         recipient_testnet_alias,
         recipient_is_wallet_owned,
@@ -1970,6 +1970,7 @@ pub(crate) fn external_proposal_dto(
         status,
         created_at: created_at.to_string(),
         selection_impact,
+        acceleration: super::load_acceleration_review(db, &proposal_id, fee, fee_rate)?,
     })
 }
 

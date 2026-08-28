@@ -134,6 +134,7 @@ export interface WalletTransactionsPort {
     method: AccelerationMethod,
     feeRate: FeeRate
   ): Promise<PaymentProposal>;
+  quoteRbf(txid: string, feeRate?: FeeRate): Promise<import('./transactions').AccelerationQuote>;
   signAndBroadcast(proposalId: string, credential: string): Promise<BroadcastResult>;
 }
 
@@ -309,6 +310,9 @@ export interface WalletFileTransportPort {
   revealSavedFile(revealToken: string): Promise<void>;
   encodePsbtUr(psbt: string, fragmentBytes?: number): Promise<string[]>;
   decodePsbtUr(frames: string[]): Promise<string>;
+  openTransactionExplorer(txid: string): Promise<void>;
+  exportLabels(): Promise<import('./transactions').LabelExportResult>;
+  importLabels(): Promise<import('./transactions').LabelImportResult | null>;
 }
 
 export interface WalletEventsPort {

@@ -353,7 +353,17 @@ export class TauriWalletAdapter implements WalletPort {
     method: import('./contracts').AccelerationMethod,
     feeRate: FeeRate
   ) {
-    return command<PaymentProposal>('tx_acceleration_prepare', { txid, method, feeRate });
+    return command<PaymentProposal>('tx_acceleration_prepare', {
+      txid,
+      method,
+      feeRate: String(feeRate)
+    });
+  }
+  quoteRbf(txid: string, feeRate?: FeeRate) {
+    return command<import('./contracts').AccelerationQuote>('rbf_acceleration_quote', {
+      txid,
+      feeRate: feeRate == null ? null : String(feeRate)
+    });
   }
   async signAndBroadcast(proposalId: string, credential: string) {
     const result = await command<BroadcastResult>('tx_sign_and_broadcast', {
@@ -364,6 +374,15 @@ export class TauriWalletAdapter implements WalletPort {
     this.#last = result.snapshot;
     await this.#drainNotifications(false);
     return result;
+  }
+  openTransactionExplorer(txid: string) {
+    return command<void>('transaction_explorer_open', { txid });
+  }
+  exportLabels() {
+    return command<import('./contracts').LabelExportResult>('bip329_labels_export');
+  }
+  importLabels() {
+    return command<import('./contracts').LabelImportResult | null>('bip329_labels_import');
   }
   cancelHardwareOperations() {
     this.#hardwareListRequest = null;
@@ -717,7 +736,11 @@ export class TauriWalletAdapter implements WalletPort {
     method: import('./contracts').AccelerationMethod,
     feeRate: FeeRate
   ) {
-    return command<MultisigProposal>('multisig_acceleration_prepare', { txid, method, feeRate });
+    return command<MultisigProposal>('multisig_acceleration_prepare', {
+      txid,
+      method,
+      feeRate: String(feeRate)
+    });
   }
   multisigProposals() {
     return command<MultisigProposal[]>('multisig_proposals');

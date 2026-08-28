@@ -2,6 +2,8 @@
 
 Status: planned product direction. Guided descriptors exist on test networks; delayed-branch funded spending, family workflows, cosigner services, and insurance are not production capabilities.
 
+BIP329 JSONL is an optional, separate portability artifact for representable public labels and coin spendability. It is not a wallet backup: it contains no descriptors, keys, seed, credential, proposal, or complete Groot-only history, and cannot recover funds. Recovery drills first restore the canonical wallet/profile or public descriptor backup and prove exact wallet identity; only then may they import a trusted label file through its atomic exact-wallet boundary.
+
 ## Product outcome
 
 Help a user choose, verify, rehearse, and maintain a recovery or inheritance plan that the intended people can actually execute. The product must work for a technical owner helping parents, a less-technical spouse or beneficiary, geographically distributed co-signers, and a company surviving staff or signer loss.

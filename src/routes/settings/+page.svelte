@@ -22,6 +22,7 @@
     ShieldCheck,
     Sun,
     Trash2,
+    Upload,
     WalletCards
   } from '@lucide/svelte';
   import Button from '$lib/components/Button.svelte';
@@ -226,6 +227,10 @@
     signerRenameDraft = $state(''),
     signerRenameError = $state(''),
     signerRenaming = $state(false);
+  let labelInterchangeOpen = $state(false),
+    labelInterchangeBusy = $state(false),
+    labelInterchangeResult = $state(''),
+    labelInterchangeError = $state('');
   onMount(async () => {
     commandModifier = usesCommandModifier(navigator.platform);
     desktopPlatform = isDesktopPlatform(
@@ -262,6 +267,57 @@
     scanDraft = { ...scan };
     scanStatus = await walletService.recoveryScanStatus();
   });
+
+  async function exportLabels() {
+    labelInterchangeBusy = true;
+    labelInterchangeError = '';
+    try {
+      const result = await walletService.exportLabels();
+      if (!result.saved) return;
+      labelInterchangeResult = translate($locale, 'Saved {count} BIP329 label records.', {
+        count: result.recordCount
+      });
+      toast({ title: 'Labels exported', description: labelInterchangeResult, tone: 'success' });
+    } catch (cause) {
+      labelInterchangeError = localizedError(cause, $locale, 'Could not export wallet labels.');
+      toast({
+        title: 'Could not export labels',
+        description: labelInterchangeError,
+        tone: 'danger'
+      });
+    } finally {
+      labelInterchangeBusy = false;
+    }
+  }
+
+  async function importLabels() {
+    labelInterchangeBusy = true;
+    labelInterchangeError = '';
+    try {
+      const result = await walletService.importLabels();
+      if (!result) return;
+      labelInterchangeResult = translate(
+        $locale,
+        'Imported {imported}; {unchanged} already present; {ignored} unsupported; {spendability} coin settings changed.',
+        {
+          imported: result.importedCount,
+          unchanged: result.unchangedCount,
+          ignored: result.ignoredCount,
+          spendability: result.spendabilityChangeCount
+        }
+      );
+      toast({ title: 'Labels imported', description: labelInterchangeResult, tone: 'success' });
+    } catch (cause) {
+      labelInterchangeError = localizedError(cause, $locale, 'Could not import wallet labels.');
+      toast({
+        title: 'Could not import labels',
+        description: labelInterchangeError,
+        tone: 'danger'
+      });
+    } finally {
+      labelInterchangeBusy = false;
+    }
+  }
   onDestroy(() => {
     destroyed = true;
     deleteCredential = '';
@@ -1048,6 +1104,20 @@
             ></span
           ><ChevronRight size={16} /></button
         >{/if}
+      <button
+        onclick={() => {
+          labelInterchangeOpen = true;
+          labelInterchangeError = '';
+        }}
+        ><span class="setting-icon"><Upload size={18} /></span><span
+          ><strong>{translate($locale, 'Import or export wallet labels')}</strong><small
+            >{translate(
+              $locale,
+              'Use the BIP329 JSONL format with another compatible wallet.'
+            )}</small
+          ></span
+        ><ChevronRight size={16} /></button
+      >
     </div>
   </section>
   <section class="settings-group wallet-manager mobile-wallet-manager">
@@ -1258,6 +1328,50 @@
     </section>{/if}
   <p class="version">Groot {APP_VERSION} · BDK {networkName(defaultConfig.network)}</p>
 </div>
+
+<Modal
+  open={labelInterchangeOpen}
+  title={translate($locale, 'BIP329 wallet labels')}
+  description={translate(
+    $locale,
+    'Move compatible labels without changing this wallet’s keys or descriptors.'
+  )}
+  onclose={() => {
+    if (!labelInterchangeBusy) labelInterchangeOpen = false;
+  }}
+>
+  <div class="warning-box">
+    <strong>{translate($locale, 'Private financial metadata.')}</strong>
+    {translate(
+      $locale,
+      'The file can expose labels, addresses, transaction references, public account keys, and relationships in your wallet history. Store and transfer it privately, then delete copies you no longer need.'
+    )}
+  </div>
+  <p>
+    {translate(
+      $locale,
+      'Import is additive and atomic. Existing permanent labels are never overwritten; a conflict leaves the wallet unchanged.'
+    )}
+  </p>
+  {#if labelInterchangeResult}<div class="ready-panel" role="status">
+      <Check size={18} />
+      <div>
+        <strong>{translate($locale, 'Last label operation')}</strong><small
+          >{labelInterchangeResult}</small
+        >
+      </div>
+    </div>{/if}
+  {#if labelInterchangeError}<p class="form-error" role="alert">{labelInterchangeError}</p>{/if}
+  <div class="modal-footer">
+    <Button variant="secondary" disabled={labelInterchangeBusy} onclick={importLabels}
+      ><Upload size={15} />{translate($locale, 'Import JSONL')}</Button
+    ><Button
+      loading={labelInterchangeBusy}
+      loadingLabel={translate($locale, 'Working…')}
+      onclick={exportLabels}><Download size={15} />{translate($locale, 'Export JSONL')}</Button
+    >
+  </div>
+</Modal>
 
 <Modal
   open={renameOpen}

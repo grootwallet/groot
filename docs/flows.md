@@ -259,4 +259,16 @@ Newest source transaction is the default. Sorting is presentation-only and never
 
 An explicit scan performs one aggregate HWI enumeration, then Rust filters the validated result to the saved signer. Unrelated families may be observed by HWI but are never offered for the wallet or used as identity. The opaque ephemeral path is not persisted and is only a hint. The native health operation opens that path and freshly checks the saved type, fingerprint, BIP84 derivation, and full account xpub under one lease.
 
+## RBF replacement and label interchange
+
+`pending wallet-originated replaceable transaction → Rust quotes exact minimum and safe default → user keeps/edits decimal target → Rust returns applied target, whole-satoshi effective rate, and persisted replacement PSBT → normal review/sign/broadcast → replacement links backward and original links forward`
+
+Confirmed, non-replaceable, below-minimum, insufficient-value, stale-node-policy, and confirmation-race states fail explicitly without changing lineage. Hardware review and thresholds remain unchanged.
+
+`Settings → Import or export wallet labels → privacy warning → native JSONL picker → Rust BIP329 validation/export → durable inline result + toast`
+
+Export orders the representable permanent label subset deterministically. Import preflights the entire bounded file, appends only new immutable assignments, treats duplicates as unchanged, and commits label plus coin-spendability changes atomically. Cancellation changes nothing; foreign-wallet/network, private-material, schema, signer-name, spendability, and capacity conflicts change nothing. The file creates no live phone/desktop synchronization state.
+
+`Transaction details → privacy disclosure → View on mempool.space → Rust validates txid and constructs allowlisted public-test-network URL → OS browser or durable failure`
+
 `Overview → More wallet actions → Health check` and `Settings → Hardware signer identity & health` open the same public identity detail used by multisig signers. Groot requires the physical device and an explicit recent scan, then uses exact-path HWI `getkeypool` to obtain a single response containing the live fingerprint, requested BIP84 derivation, and full account xpub. Rust compares all fields with authoritative saved metadata, revalidates the selected wallet, and persists the result atomically. Overview and Settings mirror that native wallet-scoped result, which survives app restart; no result history is retained. The Settings row labels that state **Checked**, **Attention**, or **Not checked** and shows the locally formatted time of the latest attempt when one exists. A health result does not replace receive-address verification or an end-to-end signing test.

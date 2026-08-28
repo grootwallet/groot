@@ -1171,15 +1171,21 @@ fn proposal_review_rejects_any_non_recipient_output_not_owned_by_the_wallet() {
 
 #[test]
 fn acceleration_rates_and_error_classes_fail_closed() {
-    for invalid in [f64::NAN, f64::INFINITY, -1.0, 0.0, 10_000.1] {
+    for invalid in ["NaN", "inf", "-1", "0", "10000.1"] {
         assert_eq!(
             validate_acceleration_rate(invalid).unwrap_err().code,
             "invalid_amount"
         );
     }
-    let (applied, rate) = validate_acceleration_rate(1.01).unwrap();
-    assert_eq!(applied, 2.0);
-    assert_eq!(rate.to_sat_per_vb_floor(), 2);
+    let (applied, rate) = validate_acceleration_rate("1.01").unwrap();
+    assert_eq!(applied, 1.012);
+    assert_eq!(rate.to_sat_per_kwu(), 253);
+    let (applied, rate) = validate_acceleration_rate("2.5").unwrap();
+    assert_eq!(applied, 2.5);
+    assert_eq!(rate.to_sat_per_kwu(), 625);
+    let (applied, rate) = validate_acceleration_rate("2.501").unwrap();
+    assert_eq!(applied, 2.504);
+    assert_eq!(rate.to_sat_per_kwu(), 626);
     assert_eq!(
         acceleration_error("transaction confirmed").code,
         "transaction_confirmed"
@@ -2757,6 +2763,7 @@ fn synced_snapshots_enqueue_received_and_first_confirmation_events_once() {
         label: "Test deposit".to_owned(),
         block: (confirmations > 0).then_some(1),
         replaced_by: None,
+        replaces: None,
         input_count: Some(1),
         output_count: Some(1),
         fee_rate: None,
@@ -2929,6 +2936,7 @@ fn transaction_dto_serializes_authoritative_detail_fields() {
         label: "Self-spend".to_owned(),
         block: None,
         replaced_by: None,
+        replaces: None,
         input_count: Some(1),
         output_count: Some(1),
         fee_rate: Some(5.03),
@@ -2986,6 +2994,7 @@ fn replacement_history_marks_or_restores_the_original_without_affecting_the_repl
         label: "Original payment".to_owned(),
         block: Some(101),
         replaced_by: None,
+        replaces: None,
         input_count: Some(1),
         output_count: Some(2),
         fee_rate: Some(2.5),
@@ -3158,6 +3167,7 @@ fn restart_restores_proposals_frozen_coins_and_acknowledged_notifications() {
                     has_address_reuse: false,
                     fee_difference_vs_private: None,
                 },
+                acceleration: None,
             },
             &psbt,
             false,
@@ -3416,6 +3426,7 @@ fn prepared_wallet_proposal_and_acceleration_roll_back_as_one_unit() {
             has_address_reuse: false,
             fee_difference_vs_private: None,
         },
+        acceleration: None,
     };
     let original = TransactionDto {
         id: "11".repeat(32),
@@ -3430,6 +3441,7 @@ fn prepared_wallet_proposal_and_acceleration_roll_back_as_one_unit() {
         label: "Original".into(),
         block: None,
         replaced_by: None,
+        replaces: None,
         input_count: Some(1),
         output_count: Some(2),
         fee_rate: Some(1.0),

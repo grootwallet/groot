@@ -217,6 +217,7 @@ pub fn tx_prepare(
         rbf,
         network: NETWORK_NAME,
         selection_impact,
+        acceleration: None,
     };
     persist_prepared_state(&mut transaction, &mut wallet, &proposal, &psbt, None)?;
     drop(wallet);
@@ -321,17 +322,272 @@ pub fn tx_max_spend(
     Ok(MaxSpendDto { amount, fee })
 }
 
-pub(crate) fn validate_acceleration_rate(fee_rate: f64) -> ApiResult<(f64, FeeRate)> {
-    if !fee_rate.is_finite() || fee_rate <= 0.0 || fee_rate > 10_000.0 {
+pub(crate) fn validate_acceleration_rate(fee_rate: &str) -> ApiResult<(f64, FeeRate)> {
+    let value = fee_rate.trim();
+    let (whole, fraction) = value.split_once('.').unwrap_or((value, ""));
+    if whole.is_empty()
+        || !whole.bytes().all(|byte| byte.is_ascii_digit())
+        || !fraction.bytes().all(|byte| byte.is_ascii_digit())
+        || fraction.len() > 8
+    {
         return Err(api_error(
             "invalid_amount",
             "Fee rate must be between 0 and 10,000 sat/vB.",
         ));
     }
-    let applied = fee_rate.ceil();
-    let rate = FeeRate::from_sat_per_vb(applied as u64)
-        .ok_or_else(|| api_error("invalid_amount", "Fee rate must be greater than zero."))?;
+    let whole = whole.parse::<u64>().map_err(|_| {
+        api_error(
+            "invalid_amount",
+            "Fee rate must be between 0 and 10,000 sat/vB.",
+        )
+    })?;
+    let scale = 10_u64
+        .checked_pow(fraction.len() as u32)
+        .ok_or_else(|| api_error("invalid_amount", "Fee rate has too much precision."))?;
+    let fractional = if fraction.is_empty() {
+        0
+    } else {
+        fraction.parse::<u64>().map_err(|_| {
+            api_error(
+                "invalid_amount",
+                "Fee rate must be between 0 and 10,000 sat/vB.",
+            )
+        })?
+    };
+    let scaled = whole
+        .checked_mul(scale)
+        .and_then(|value| value.checked_add(fractional))
+        .ok_or_else(|| api_error("invalid_amount", "Fee rate is too large."))?;
+    if scaled == 0 || scaled > 10_000_u64.saturating_mul(scale) {
+        return Err(api_error(
+            "invalid_amount",
+            "Fee rate must be between 0 and 10,000 sat/vB.",
+        ));
+    }
+    // Bitcoin's FeeRate stores integer sat/kwu, so one exact step is 0.004 sat/vB.
+    // Round upward to that protocol precision instead of silently rounding to a whole sat/vB.
+    let sat_per_kwu = scaled
+        .checked_mul(250)
+        .ok_or_else(|| api_error("invalid_amount", "Fee rate is too large."))?
+        .div_ceil(scale);
+    let rate = FeeRate::from_sat_per_kwu(sat_per_kwu);
+    let applied = sat_per_kwu as f64 / 250.0;
     Ok((applied, rate))
+}
+
+fn replacement_vsize(wallet: &Wallet, psbt: &Psbt) -> ApiResult<u64> {
+    let mut satisfaction_weight = Weight::ZERO;
+    for (index, input) in psbt.unsigned_tx.input.iter().enumerate() {
+        let utxo = psbt.get_utxo_for(index).ok_or_else(|| {
+            api_error(
+                "proposal_mismatch",
+                "A replacement input is missing its previous output.",
+            )
+        })?;
+        let (keychain, _) = wallet
+            .derivation_of_spk(utxo.script_pubkey)
+            .ok_or_else(|| {
+                api_error(
+                    "proposal_mismatch",
+                    "A replacement input is not controlled by this wallet.",
+                )
+            })?;
+        let _ = input;
+        satisfaction_weight = satisfaction_weight
+            .checked_add(
+                wallet
+                    .public_descriptor(keychain)
+                    .max_weight_to_satisfy()
+                    .map_err(internal)?,
+            )
+            .ok_or_else(|| internal("The replacement weight overflowed."))?;
+    }
+    psbt.unsigned_tx
+        .weight()
+        .checked_add(satisfaction_weight)
+        .map(Weight::to_vbytes_ceil)
+        .filter(|vsize| *vsize > 0)
+        .ok_or_else(|| internal("The replacement has an invalid signed size."))
+}
+
+fn rbf_candidate(wallet: &mut Wallet, txid: Txid, rate: FeeRate) -> ApiResult<(Psbt, u64, u64)> {
+    let mut builder = wallet.build_fee_bump(txid).map_err(acceleration_error)?;
+    builder.fee_rate(rate);
+    let psbt = builder.finish().map_err(acceleration_error)?;
+    let fee = psbt
+        .fee_amount()
+        .ok_or_else(|| internal("Unable to calculate the replacement fee."))?
+        .to_sat();
+    let vsize = replacement_vsize(wallet, &psbt)?;
+    Ok((psbt, fee, vsize))
+}
+
+fn quote_rbf(
+    wallet: &mut Wallet,
+    txid: Txid,
+    requested_rate: Option<&str>,
+    core_incremental_fee_per_kvb: u64,
+    core_priority_rate: Option<f64>,
+) -> ApiResult<(AccelerationQuoteDto, Psbt)> {
+    let original = wallet.get_tx(txid).ok_or_else(|| {
+        api_error(
+            "acceleration_unavailable",
+            "Transaction was not found in this wallet.",
+        )
+    })?;
+    if original.chain_position.is_confirmed() {
+        return Err(api_error(
+            "transaction_confirmed",
+            "Confirmed transactions cannot be accelerated.",
+        ));
+    }
+    let original_tx = original.tx_node.tx.clone();
+    let original_fee = wallet
+        .calculate_fee(&original_tx)
+        .map_err(acceleration_error)?
+        .to_sat();
+    let original_vsize = original_tx.weight().to_vbytes_ceil();
+    let original_rate = Amount::from_sat(original_fee) / original_tx.weight();
+    let bdk_increment = FeeRate::BROADCAST_MIN.to_sat_per_kwu();
+    let core_increment = core_incremental_fee_per_kvb.div_ceil(4);
+    let mut minimum_kwu = original_rate
+        .to_sat_per_kwu()
+        .saturating_add(bdk_increment.max(core_increment));
+    let (minimum_psbt, minimum_fee, minimum_vsize) = loop {
+        let rate = FeeRate::from_sat_per_kwu(minimum_kwu);
+        match rbf_candidate(wallet, txid, rate) {
+            Ok((psbt, fee, vsize)) => {
+                let core_incremental_fee = core_incremental_fee_per_kvb
+                    .saturating_mul(vsize)
+                    .div_ceil(1_000);
+                if fee > original_fee && fee >= original_fee.saturating_add(core_incremental_fee) {
+                    break (psbt, fee, vsize);
+                }
+            }
+            Err(error) if error.code == "fee_rate_too_low" => {}
+            Err(error) => return Err(error),
+        }
+        minimum_kwu = minimum_kwu.saturating_add(1);
+        if minimum_kwu > 2_500_000 {
+            return Err(api_error(
+                "acceleration_unavailable",
+                "The replacement minimum exceeds Groot's fee-rate limit.",
+            ));
+        }
+    };
+    let minimum_rate = minimum_kwu as f64 / 250.0;
+    let (target_rate, target, source) = if let Some(requested) = requested_rate {
+        let (applied, rate) = validate_acceleration_rate(requested)?;
+        if rate.to_sat_per_kwu() < minimum_kwu {
+            return Err(api_error(
+                "fee_rate_too_low",
+                format!("Choose at least {minimum_rate:.3} sat/vB for this replacement."),
+            ));
+        }
+        (applied, rate, "custom".to_owned())
+    } else {
+        let safe_kwu = minimum_kwu.saturating_add(250);
+        let core_kwu = core_priority_rate
+            .filter(|rate| rate.is_finite() && *rate > 0.0 && *rate <= 10_000.0)
+            .map(|rate| (rate * 250.0).ceil() as u64)
+            .unwrap_or(0);
+        let target_kwu = safe_kwu.max(core_kwu);
+        (
+            target_kwu as f64 / 250.0,
+            FeeRate::from_sat_per_kwu(target_kwu),
+            if core_kwu >= safe_kwu {
+                "bitcoin_core"
+            } else {
+                "replacement_fallback"
+            }
+            .to_owned(),
+        )
+    };
+    let (psbt, replacement_fee, replacement_vsize) =
+        if target == FeeRate::from_sat_per_kwu(minimum_kwu) {
+            (minimum_psbt, minimum_fee, minimum_vsize)
+        } else {
+            rbf_candidate(wallet, txid, target)?
+        };
+    let effective = ((replacement_fee as f64 / replacement_vsize as f64) * 100.0).round() / 100.0;
+    Ok((
+        AccelerationQuoteDto {
+            method: AccelerationMethod::Rbf,
+            original_txid: txid.to_string(),
+            original_fee,
+            original_vsize,
+            original_effective_fee_rate: ((original_fee as f64 / original_vsize as f64) * 1000.0)
+                .round()
+                / 1000.0,
+            minimum_fee_rate: minimum_rate,
+            target_fee_rate: target_rate,
+            estimated_replacement_fee: replacement_fee,
+            incremental_fee: replacement_fee.saturating_sub(original_fee),
+            resulting_effective_fee_rate: effective,
+            replacement_vsize,
+            recommendation_source: source,
+        },
+        psbt,
+    ))
+}
+
+fn core_replacement_policy(
+    app: &AppHandle,
+    state: &State<'_, AppState>,
+) -> ApiResult<(u64, Option<f64>)> {
+    let client = rpc_client(app, state)?;
+    checked_chain_identity(&client)?;
+    let incremental_fee = client
+        .get_network_info()
+        .map_err(|_| {
+            api_error(
+                "fee_estimate_unavailable",
+                "Bitcoin Core replacement policy is unavailable. Check the node and try again.",
+            )
+        })?
+        .incremental_fee
+        .to_sat();
+    if incremental_fee == 0 {
+        return Err(api_error(
+            "fee_estimate_unavailable",
+            "Bitcoin Core returned an invalid replacement policy.",
+        ));
+    }
+    let priority = if IS_REGTEST {
+        Some(5.0)
+    } else {
+        profile_commands::estimate_core_fee(&client, 2, EstimateMode::Economical).ok()
+    };
+    Ok((incremental_fee, priority))
+}
+
+#[tauri::command]
+pub fn rbf_acceleration_quote(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    txid: String,
+    fee_rate: Option<String>,
+) -> ApiResult<AccelerationQuoteDto> {
+    let _operation = operation_guard(&state)?;
+    require_unlocked(&app, &state)?;
+    let txid = Txid::from_str(&txid)
+        .map_err(|_| api_error("acceleration_unavailable", "Enter a valid transaction ID."))?;
+    let (incremental_fee, priority) = core_replacement_policy(&app, &state)?;
+    let profile = selected_profile(&app)?;
+    let mut db = match profile.kind {
+        WalletKind::Multisig => open_multisig_db(&app)?,
+        WalletKind::SingleKey | WalletKind::WatchOnly => open_db(&app)?,
+    };
+    let mut transaction = db.transaction().map_err(internal)?;
+    let mut wallet = load_wallet_transaction(&mut transaction)?;
+    let (quote, _) = quote_rbf(
+        &mut wallet,
+        txid,
+        fee_rate.as_deref(),
+        incremental_fee,
+        priority,
+    )?;
+    Ok(quote)
 }
 
 pub(crate) fn acceleration_error(error: impl ToString) -> ApiError {
@@ -480,6 +736,7 @@ pub(crate) fn summarize_payment_psbt(
         rbf,
         network: NETWORK_NAME,
         selection_impact,
+        acceleration: None,
     })
 }
 
@@ -603,14 +860,19 @@ pub(crate) fn build_acceleration_psbt(
     }
 }
 
+pub(crate) struct AccelerationRatePolicy {
+    pub(crate) applied: f64,
+    pub(crate) rate: FeeRate,
+    pub(crate) rbf_quote_request: Option<(String, u64, Option<f64>)>,
+}
+
 pub(crate) fn prepare_persisted_multisig_acceleration(
     db: &mut Connection,
     metadata: &MultisigWalletDto,
     txid: Txid,
     method: AccelerationMethod,
     parent_fee: Option<Amount>,
-    applied_fee_rate: f64,
-    fee_rate: FeeRate,
+    rate_policy: AccelerationRatePolicy,
 ) -> ApiResult<MultisigProposalDto> {
     if let Some(proposal_id) = active_acceleration_proposal_id(db, &txid, method)? {
         return load_multisig_proposal(db, metadata, &proposal_id);
@@ -627,17 +889,42 @@ pub(crate) fn prepare_persisted_multisig_acceleration(
                 "Transaction was not found in this wallet.",
             )
         })?;
-    let mut psbt = build_acceleration_psbt(&mut wallet, txid, method, parent_fee, fee_rate)?;
+    let mut quote = None;
+    let mut psbt =
+        if let Some((requested, incremental_fee, priority)) = rate_policy.rbf_quote_request {
+            let (rbf_quote, psbt) = quote_rbf(
+                &mut wallet,
+                txid,
+                Some(&requested),
+                incremental_fee,
+                priority,
+            )?;
+            quote = Some(rbf_quote);
+            psbt
+        } else {
+            build_acceleration_psbt(&mut wallet, txid, method, parent_fee, rate_policy.rate)?
+        };
     add_multisig_global_xpubs(&mut psbt, metadata)?;
     enforce_change_recovery_gap(&transaction, &wallet, &psbt)?;
-    let proposal = summarize_payment_psbt(
+    let mut proposal = summarize_payment_psbt(
         &transaction,
         &wallet,
         &psbt,
-        applied_fee_rate,
+        rate_policy.applied,
         matches!(method, AccelerationMethod::Cpfp),
         acceleration_label(method, &original),
     )?;
+    if let Some(quote) = quote {
+        proposal.acceleration = Some(AccelerationReviewDto {
+            method,
+            original_txid: quote.original_txid,
+            original_fee_rate: quote.original_effective_fee_rate,
+            minimum_fee_rate: quote.minimum_fee_rate,
+            target_fee_rate: quote.target_fee_rate,
+            incremental_fee: quote.incremental_fee,
+            recommendation_source: quote.recommendation_source,
+        });
+    }
     persist_prepared_state(
         &mut transaction,
         &mut wallet,
@@ -655,13 +942,13 @@ pub fn tx_acceleration_prepare(
     state: State<'_, AppState>,
     txid: String,
     method: AccelerationMethod,
-    fee_rate: f64,
+    fee_rate: String,
 ) -> ApiResult<PaymentProposalDto> {
     let _operation = operation_guard(&state)?;
     require_unlocked(&app, &state)?;
     let txid = Txid::from_str(&txid)
         .map_err(|_| api_error("acceleration_unavailable", "Enter a valid transaction ID."))?;
-    let (applied, rate) = validate_acceleration_rate(fee_rate)?;
+    let (applied, rate) = validate_acceleration_rate(&fee_rate)?;
     let mut db = open_db(&app)?;
     if let Some(proposal_id) = active_acceleration_proposal_id(&db, &txid, method)? {
         let wallet = load_wallet(&mut db)?;
@@ -694,9 +981,23 @@ pub fn tx_acceleration_prepare(
     drop(wallet);
     let mut transaction = db.transaction().map_err(internal)?;
     let mut wallet = load_wallet_transaction(&mut transaction)?;
-    let psbt = build_acceleration_psbt(&mut wallet, txid, method, parent_fee, rate)?;
+    let mut quote = None;
+    let psbt = if method == AccelerationMethod::Rbf {
+        let (incremental_fee, priority) = core_replacement_policy(&app, &state)?;
+        let (rbf_quote, psbt) = quote_rbf(
+            &mut wallet,
+            txid,
+            Some(&fee_rate),
+            incremental_fee,
+            priority,
+        )?;
+        quote = Some(rbf_quote);
+        psbt
+    } else {
+        build_acceleration_psbt(&mut wallet, txid, method, parent_fee, rate)?
+    };
     enforce_change_recovery_gap(&transaction, &wallet, &psbt)?;
-    let proposal = summarize_payment_psbt(
+    let mut proposal = summarize_payment_psbt(
         &transaction,
         &wallet,
         &psbt,
@@ -704,6 +1005,17 @@ pub fn tx_acceleration_prepare(
         matches!(method, AccelerationMethod::Cpfp),
         acceleration_label(method, &original),
     )?;
+    if let Some(quote) = quote {
+        proposal.acceleration = Some(AccelerationReviewDto {
+            method,
+            original_txid: quote.original_txid,
+            original_fee_rate: quote.original_effective_fee_rate,
+            minimum_fee_rate: quote.minimum_fee_rate,
+            target_fee_rate: quote.target_fee_rate,
+            incremental_fee: quote.incremental_fee,
+            recommendation_source: quote.recommendation_source,
+        });
+    }
     persist_prepared_state(
         &mut transaction,
         &mut wallet,
@@ -731,13 +1043,13 @@ pub fn multisig_acceleration_prepare(
     state: State<'_, AppState>,
     txid: String,
     method: AccelerationMethod,
-    fee_rate: f64,
+    fee_rate: String,
 ) -> ApiResult<MultisigProposalDto> {
     let _operation = operation_guard(&state)?;
     require_unlocked(&app, &state)?;
     let txid = Txid::from_str(&txid)
         .map_err(|_| api_error("acceleration_unavailable", "Enter a valid transaction ID."))?;
-    let (applied, rate) = validate_acceleration_rate(fee_rate)?;
+    let (applied, rate) = validate_acceleration_rate(&fee_rate)?;
     let metadata = read_multisig_metadata(&app)?;
     let mut db = open_multisig_db(&app)?;
     let wallet = load_wallet(&mut db)?;
@@ -747,8 +1059,23 @@ pub fn multisig_acceleration_prepare(
         None
     };
     drop(wallet);
+    let quote = if method == AccelerationMethod::Rbf {
+        let (incremental_fee, priority) = core_replacement_policy(&app, &state)?;
+        Some((fee_rate, incremental_fee, priority))
+    } else {
+        None
+    };
     prepare_persisted_multisig_acceleration(
-        &mut db, &metadata, txid, method, parent_fee, applied, rate,
+        &mut db,
+        &metadata,
+        txid,
+        method,
+        parent_fee,
+        AccelerationRatePolicy {
+            applied,
+            rate,
+            rbf_quote_request: quote,
+        },
     )
 }
 

@@ -1038,6 +1038,90 @@ test('renames the selected wallet from settings without changing its identity', 
   }
 });
 
+test('BIP329 label interchange discloses privacy and keeps durable results', async ({ page }) => {
+  await page.goto('/settings');
+  await page.getByRole('button', { name: 'Import or export wallet labels' }).click();
+  const dialog = page.getByRole('dialog', { name: 'BIP329 wallet labels' });
+  await expect(dialog.getByText('Private financial metadata.')).toBeVisible();
+  await expect(dialog).toContainText(
+    'labels, addresses, transaction references, public account keys'
+  );
+  await expect(dialog).toContainText('additive and atomic');
+
+  await dialog.getByRole('button', { name: 'Export JSONL' }).click();
+  await expect(dialog.getByRole('status')).toContainText('Saved 6 BIP329 label records.');
+  await dialog.getByRole('button', { name: 'Import JSONL' }).click();
+  await expect(dialog.getByRole('status')).toContainText(
+    'Imported 2; 1 already present; 1 unsupported; 0 coin settings changed.'
+  );
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true
+  );
+});
+
+test('RBF starts at a safe quote, preserves a decimal target, and records both-way lineage', async ({
+  page
+}) => {
+  await page.goto('/send');
+  await page.getByLabel('Bitcoin address').fill('bcrt1qreceiver0000000000000000000000000000000');
+  await page.getByLabel('Payment label').fill('RBF target fixture');
+  await page.getByRole('button', { name: 'Continue to amount' }).click();
+  await page.getByLabel('Amount', { exact: true }).fill('10000');
+  await page.getByRole('button', { name: 'Custom' }).click();
+  await page.getByLabel('Custom fee rate').fill('1');
+  await page.getByRole('button', { name: 'Review payment' }).click();
+  await page.getByRole('button', { name: 'Continue to sign' }).click();
+  await page.getByLabel('Wallet passphrase', { exact: true }).fill('prototype-passphrase');
+  await page.getByRole('button', { name: /Sign & broadcast/ }).click();
+  await page.getByRole('link', { name: 'View transaction' }).click();
+
+  await page.locator('.tx-row').filter({ hasText: 'RBF target fixture' }).first().click();
+  await page.getByRole('link', { name: 'Increase fee (RBF)' }).click();
+  await expect(page.getByRole('heading', { name: 'Review replacement fee' })).toBeVisible();
+  await expect(page.getByText('Original effective rate', { exact: true })).toBeVisible();
+  await expect(page.getByText('Exact replacement minimum', { exact: true })).toBeVisible();
+  await expect(page.getByText('Selected target', { exact: true })).toBeVisible();
+  await expect(page.getByText('Estimated replacement fee', { exact: true })).toBeVisible();
+  await expect(page.getByText('Incremental fee', { exact: true })).toBeVisible();
+  await expect(page.getByText('Resulting effective rate', { exact: true })).toBeVisible();
+  const rate = page.getByLabel('Custom acceleration fee rate');
+  await expect(rate).not.toHaveValue('0');
+  await rate.fill('2.5');
+  await rate.blur();
+  await expect(rate).toHaveValue('2.5');
+  await expect(
+    page.locator('.acceleration-quote-details > div').filter({ hasText: 'Selected target' })
+  ).toContainText('2.5 sat/vB');
+  await expect(
+    page
+      .locator('.acceleration-quote-details > div')
+      .filter({ hasText: 'Resulting effective rate' })
+  ).toContainText('2.5 sat/vB');
+  await page.getByRole('button', { name: 'Review acceleration' }).click();
+  const review = page.locator('.acceleration-review-summary');
+  await expect(review).toContainText('Fee increase replacement');
+  await expect(review).toContainText('2.5 sat/vB');
+  await page.getByRole('button', { name: 'Continue to sign' }).click();
+  await page.getByLabel('Wallet passphrase', { exact: true }).fill('prototype-passphrase');
+  await page.getByRole('button', { name: /Sign & broadcast/ }).click();
+  await page.getByRole('link', { name: 'View transaction' }).click();
+
+  const replacement = page.locator('.tx-row').filter({ hasText: 'Fee increase · replacement' });
+  await expect(replacement).toBeVisible();
+  await replacement.click();
+  await expect(
+    page.getByText('This transaction accelerates and replaces the earlier transaction.')
+  ).toBeVisible();
+  await page.getByRole('button', { name: 'Close' }).click();
+  const original = page.locator('.tx-row.replaced').filter({ hasText: 'RBF target fixture' });
+  await expect(original).toBeVisible();
+  await original.click();
+  await expect(page.getByText('Replaced by a fee increase')).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true
+  );
+});
+
 test('pending incoming transaction opens CPFP review without offering sender-side RBF', async ({
   page
 }) => {

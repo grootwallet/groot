@@ -431,6 +431,51 @@ export const sendCopy = {
     fr: 'Vous devrez préparer et signer à nouveau ce paiement.',
     es: 'Tendrás que preparar y firmar este pago de nuevo.'
   },
+  'Default is a replacement-only fallback one sat/vB above the exact minimum; it is not a general fee estimate.':
+    {
+      fr: 'La valeur par défaut est un repli réservé au remplacement, un sat/vB au-dessus du minimum exact ; ce n’est pas une estimation générale des frais.',
+      es: 'El valor predeterminado es una alternativa exclusiva para el reemplazo, un sat/vB por encima del mínimo exacto; no es una estimación general de comisión.'
+    },
+  'Default uses Bitcoin Core because it is above the safe replacement minimum.': {
+    fr: 'La valeur par défaut utilise Bitcoin Core car elle dépasse le minimum de remplacement sûr.',
+    es: 'El valor predeterminado usa Bitcoin Core porque supera el mínimo de reemplazo seguro.'
+  },
+  'Estimated replacement fee': {
+    fr: 'Frais de remplacement estimés',
+    es: 'Comisión de reemplazo estimada'
+  },
+  'Exact replacement minimum': {
+    fr: 'Minimum de remplacement exact',
+    es: 'Mínimo exacto de reemplazo'
+  },
+  'Groot checked this transaction and Bitcoin Core’s replacement policy. Edit the target before creating the replacement.':
+    {
+      fr: 'Groot a vérifié cette transaction et la politique de remplacement de Bitcoin Core. Modifiez la cible avant de créer le remplacement.',
+      es: 'Groot comprobó esta transacción y la política de reemplazo de Bitcoin Core. Edita el objetivo antes de crear el reemplazo.'
+    },
+  'Incremental fee': { fr: 'Frais supplémentaires', es: 'Comisión incremental' },
+  Minimum: { fr: 'Minimum', es: 'Mínimo' },
+  'Minimum {rate} sat/vB · rounded up only to 0.004 sat/vB precision': {
+    fr: 'Minimum {rate} sat/vB · arrondi supérieur uniquement à la précision de 0,004 sat/vB',
+    es: 'Mínimo {rate} sat/vB · redondeo superior solo a precisión de 0,004 sat/vB'
+  },
+  'Original effective rate': { fr: 'Taux effectif initial', es: 'Tasa efectiva original' },
+  'Replacement fee': { fr: 'Frais de remplacement', es: 'Comisión de reemplazo' },
+  'Resulting effective rate': { fr: 'Taux effectif obtenu', es: 'Tasa efectiva resultante' },
+  'Review replacement fee': {
+    fr: 'Vérifier les frais de remplacement',
+    es: 'Revisar comisión de reemplazo'
+  },
+  'sat/vB · rounded up only to 0.004 sat/vB precision': {
+    fr: 'sat/vB · arrondi supérieur uniquement à la précision de 0,004 sat/vB',
+    es: 'sat/vB · redondeo superior solo a precisión de 0,004 sat/vB'
+  },
+  'Selected target': { fr: 'Cible sélectionnée', es: 'Objetivo seleccionado' },
+  'Whole-satoshi fee construction can make the resulting effective rate differ slightly from the selected target.':
+    {
+      fr: 'La construction des frais en satoshis entiers peut faire légèrement différer le taux effectif obtenu de la cible sélectionnée.',
+      es: 'La construcción de la comisión en satoshis enteros puede hacer que la tasa efectiva resultante difiera ligeramente del objetivo seleccionado.'
+    },
   'Your proposal will stay saved.': {
     fr: 'Votre proposition restera enregistrée.',
     es: 'Tu propuesta seguirá guardada.'

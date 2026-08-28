@@ -77,6 +77,40 @@ export type PaymentProposal = {
   rbf: boolean;
   network: SupportedNetwork;
   selectionImpact: SelectionImpact;
+  acceleration?: AccelerationReview | null;
+};
+
+export type AccelerationReview = {
+  method: AccelerationMethod;
+  originalTxid: string;
+  originalFeeRate: FeeRate;
+  minimumFeeRate: FeeRate;
+  targetFeeRate: FeeRate;
+  incrementalFee: Sats;
+  recommendationSource: 'bitcoin_core' | 'replacement_fallback' | 'custom' | 'legacy';
+};
+
+export type AccelerationQuote = {
+  method: 'rbf';
+  originalTxid: string;
+  originalFee: Sats;
+  originalVsize: number;
+  originalEffectiveFeeRate: FeeRate;
+  minimumFeeRate: FeeRate;
+  targetFeeRate: FeeRate;
+  estimatedReplacementFee: Sats;
+  incrementalFee: Sats;
+  resultingEffectiveFeeRate: FeeRate;
+  replacementVsize: number;
+  recommendationSource: 'bitcoin_core' | 'replacement_fallback' | 'custom';
+};
+
+export type LabelExportResult = { saved: boolean; recordCount: number };
+export type LabelImportResult = {
+  importedCount: number;
+  unchangedCount: number;
+  ignoredCount: number;
+  spendabilityChangeCount: number;
 };
 
 export type BroadcastResult = {

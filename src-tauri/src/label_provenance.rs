@@ -431,6 +431,61 @@ pub fn assign_labels(
     Ok(label_ids)
 }
 
+pub fn append_imported_label(
+    db: &Connection,
+    text: &str,
+    subject_kind: &str,
+    subject_id: &str,
+    created_at: u64,
+) -> Result<bool, bdk_wallet::rusqlite::Error> {
+    let existing = labels_for_subject(db, subject_kind, subject_id)?;
+    let normalized = normalized_reuse_guard(text);
+    if existing
+        .iter()
+        .any(|label| normalized_reuse_guard(&label.text) == normalized)
+    {
+        return Ok(false);
+    }
+    if existing.len() >= 12 {
+        return Err(bdk_wallet::rusqlite::Error::InvalidQuery);
+    }
+    if existing.is_empty() {
+        assign_new_label(
+            db,
+            text,
+            LabelOrigin::Imported,
+            subject_kind,
+            subject_id,
+            created_at,
+        )?;
+        return Ok(true);
+    }
+    let label_id = if let Some(label_id) = reusable_label_id(db, text)? {
+        label_id
+    } else {
+        let label_id = Uuid::new_v4().to_string();
+        db.execute(
+            "INSERT INTO groot_labels(label_id, text, reuse_guard, origin, created_at)
+             VALUES(?1, ?2, ?3, 'imported', ?4)",
+            params![label_id, text, normalized, created_at],
+        )?;
+        label_id
+    };
+    db.execute(
+        "INSERT INTO groot_additional_label_assignments
+         (label_id, subject_kind, subject_id, assigned_at, position)
+         VALUES(?1, ?2, ?3, ?4, ?5)",
+        params![
+            label_id,
+            subject_kind,
+            subject_id,
+            created_at,
+            existing.len() as i64
+        ],
+    )?;
+    Ok(true)
+}
+
 #[cfg(test)]
 pub fn assign_payment_intent(
     db: &Connection,
@@ -689,7 +744,13 @@ fn materialize_output(
         "DELETE FROM groot_output_provenance WHERE outpoint = ?1",
         params![outpoint],
     )?;
-    for label_id in &provenance.labels {
+    let mut effective_labels = provenance.labels.clone();
+    effective_labels.extend(
+        labels_for_subject(db, "output", outpoint)?
+            .into_iter()
+            .map(|label| label.id),
+    );
+    for label_id in &effective_labels {
         db.execute(
             "INSERT INTO groot_output_provenance(outpoint, label_id) VALUES(?1, ?2)",
             params![outpoint, label_id],

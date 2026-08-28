@@ -814,6 +814,7 @@ pub struct TransactionDto {
     provenance: ProvenanceSummaryDto,
     block: Option<u32>,
     replaced_by: Option<String>,
+    replaces: Option<String>,
     input_count: Option<usize>,
     output_count: Option<usize>,
     fee_rate: Option<f64>,
@@ -961,6 +962,36 @@ pub struct PaymentProposalDto {
     rbf: bool,
     network: &'static str,
     selection_impact: SelectionImpactDto,
+    acceleration: Option<AccelerationReviewDto>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AccelerationReviewDto {
+    method: AccelerationMethod,
+    original_txid: String,
+    original_fee_rate: f64,
+    minimum_fee_rate: f64,
+    target_fee_rate: f64,
+    incremental_fee: u64,
+    recommendation_source: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AccelerationQuoteDto {
+    method: AccelerationMethod,
+    original_txid: String,
+    original_fee: u64,
+    original_vsize: u64,
+    original_effective_fee_rate: f64,
+    minimum_fee_rate: f64,
+    target_fee_rate: f64,
+    estimated_replacement_fee: u64,
+    incremental_fee: u64,
+    resulting_effective_fee_rate: f64,
+    replacement_vsize: u64,
+    recommendation_source: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -1031,7 +1062,7 @@ pub struct BroadcastResultDto {
     sync_pending: bool,
 }
 
-#[derive(Debug, Clone, Copy, Deserialize)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum AccelerationMethod {
     Rbf,
@@ -1128,6 +1159,7 @@ pub struct MultisigProposalDto {
     status: String,
     created_at: String,
     selection_impact: SelectionImpactDto,
+    acceleration: Option<AccelerationReviewDto>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -2380,6 +2412,10 @@ fn init_app_schema(db: &Connection) -> ApiResult<()> {
             original_date TEXT NOT NULL,
             original_address TEXT,
             original_label TEXT NOT NULL,
+            original_fee_rate REAL,
+            minimum_fee_rate REAL,
+            target_fee_rate REAL,
+            recommendation_source TEXT,
             created_at INTEGER NOT NULL
         );
         CREATE TABLE IF NOT EXISTS groot_recovery_scans (
@@ -2402,6 +2438,29 @@ fn init_app_schema(db: &Connection) -> ApiResult<()> {
         );",
     )
     .map_err(internal)?;
+    for (column, definition) in [
+        ("original_fee_rate", "REAL"),
+        ("minimum_fee_rate", "REAL"),
+        ("target_fee_rate", "REAL"),
+        ("recommendation_source", "TEXT"),
+    ] {
+        let exists = db
+            .prepare("PRAGMA table_info(groot_accelerations)")
+            .map_err(internal)?
+            .query_map([], |row| row.get::<_, String>(1))
+            .map_err(internal)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(internal)?
+            .iter()
+            .any(|name| name == column);
+        if !exists {
+            db.execute(
+                &format!("ALTER TABLE groot_accelerations ADD COLUMN {column} {definition}"),
+                [],
+            )
+            .map_err(internal)?;
+        }
+    }
     let has_proposal_label = db
         .prepare("PRAGMA table_info(groot_proposals)")
         .map_err(internal)?
@@ -3844,6 +3903,7 @@ fn proposal_dto(
         .into_iter()
         .map(|label| label.text)
         .collect();
+    let acceleration = load_acceleration_review(db, &proposal_id, fee, fee_rate)?;
     Ok(MultisigProposalDto {
         proposal_id,
         recipient,
@@ -3881,6 +3941,7 @@ fn proposal_dto(
         status,
         created_at: created_at.to_string(),
         selection_impact,
+        acceleration,
     })
 }
 
@@ -4323,17 +4384,19 @@ fn persist_proposal(
 
 fn persist_acceleration(
     db: &Connection,
-    proposal_id: &str,
+    proposal: &PaymentProposalDto,
     method: AccelerationMethod,
     original: &TransactionDto,
 ) -> ApiResult<()> {
+    let review = proposal.acceleration.as_ref();
     db.execute(
         "INSERT INTO groot_accelerations (
             proposal_id, method, original_txid, original_kind, original_direction,
-            original_amount, original_fee, original_date, original_address, original_label, created_at
-         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+            original_amount, original_fee, original_date, original_address, original_label,
+            original_fee_rate, minimum_fee_rate, target_fee_rate, recommendation_source, created_at
+         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
         params![
-            proposal_id,
+            proposal.proposal_id,
             method.as_str(),
             original.id,
             original.kind,
@@ -4343,6 +4406,10 @@ fn persist_acceleration(
             original.date,
             original.address,
             original.label,
+            review.map(|value| value.original_fee_rate),
+            review.map(|value| value.minimum_fee_rate),
+            review.map(|value| value.target_fee_rate),
+            review.map(|value| value.recommendation_source.as_str()),
             now(),
         ],
     )
@@ -4359,7 +4426,7 @@ fn persist_prepared_state<'db>(
 ) -> ApiResult<()> {
     persist_proposal(transaction, proposal, psbt, acceleration.is_some())?;
     if let Some((method, original)) = acceleration {
-        persist_acceleration(transaction, &proposal.proposal_id, method, original)?;
+        persist_acceleration(transaction, proposal, method, original)?;
     }
     wallet.persist(transaction).map_err(internal)?;
     Ok(())
@@ -4508,6 +4575,7 @@ fn apply_replacement_history(
                 provenance: ProvenanceSummaryDto::unknown("funding"),
                 block: None,
                 input_count: None,
+                replaces: None,
                 output_count: None,
                 fee_rate: None,
                 wallet_input_amount: None,
@@ -4525,13 +4593,22 @@ fn apply_replacement_history(
             label_provenance::payment_label_for_txid(db, &replacement.id).map_err(internal)?;
         replacement.provenance =
             label_provenance::transaction_funding_summary(db, &replacement.id).map_err(internal)?;
+        let original_txid = replacement.id.clone();
+        let replacement_txid = replacement.replaced_by.clone();
         if let Some(existing) = transactions.iter_mut().find(|tx| tx.id == replacement.id) {
             existing.status = "replaced".to_owned();
             existing.confirmations = 0;
             existing.block = None;
-            existing.replaced_by = replacement.replaced_by;
+            existing.replaced_by = replacement_txid.clone();
         } else {
             transactions.push(replacement);
+        }
+        if let Some(replacement_txid) = replacement_txid.as_deref() {
+            if let Some(replacement_tx) =
+                transactions.iter_mut().find(|tx| tx.id == replacement_txid)
+            {
+                replacement_tx.replaces = Some(original_txid);
+            }
         }
     }
     transactions.sort_by_key(|transaction| {
@@ -4559,6 +4636,41 @@ fn load_single_proposal(db: &Connection, proposal_id: &str) -> ApiResult<Pending
         amount,
         fee,
     })
+}
+
+fn load_acceleration_review(
+    db: &Connection,
+    proposal_id: &str,
+    replacement_fee: u64,
+    resulting_fee_rate: f64,
+) -> ApiResult<Option<AccelerationReviewDto>> {
+    db.query_row(
+        "SELECT method, original_txid, original_fee, original_fee_rate,
+                minimum_fee_rate, target_fee_rate, recommendation_source
+         FROM groot_accelerations WHERE proposal_id = ?1",
+        params![proposal_id],
+        |row| {
+            let method = match row.get::<_, String>(0)?.as_str() {
+                "rbf" => AccelerationMethod::Rbf,
+                "cpfp" => AccelerationMethod::Cpfp,
+                _ => return Err(bdk_wallet::rusqlite::Error::InvalidQuery),
+            };
+            let original_fee = row.get::<_, Option<u64>>(2)?.unwrap_or(0);
+            Ok(AccelerationReviewDto {
+                method,
+                original_txid: row.get(1)?,
+                original_fee_rate: row.get::<_, Option<f64>>(3)?.unwrap_or(0.0),
+                minimum_fee_rate: row.get::<_, Option<f64>>(4)?.unwrap_or(0.0),
+                target_fee_rate: row.get::<_, Option<f64>>(5)?.unwrap_or(resulting_fee_rate),
+                incremental_fee: replacement_fee.saturating_sub(original_fee),
+                recommendation_source: row
+                    .get::<_, Option<String>>(6)?
+                    .unwrap_or_else(|| "legacy".to_owned()),
+            })
+        },
+    )
+    .optional()
+    .map_err(internal)
 }
 
 fn load_payment_proposal_dto(
@@ -4608,7 +4720,7 @@ fn load_payment_proposal_dto(
         .map(|label| label.text)
         .collect();
     Ok(PaymentProposalDto {
-        proposal_id,
+        proposal_id: proposal_id.clone(),
         recipient,
         recipient_testnet_alias,
         recipient_is_wallet_owned,
@@ -4635,6 +4747,7 @@ fn load_payment_proposal_dto(
         rbf,
         network: NETWORK_NAME,
         selection_impact,
+        acceleration: load_acceleration_review(db, &proposal_id, fee, fee_rate)?,
     })
 }
 
@@ -5673,6 +5786,7 @@ fn snapshot_from(
             provenance,
             block,
             replaced_by: None,
+            replaces: None,
             input_count: Some(transaction.input.len()),
             output_count: Some(transaction.output.len()),
             fee_rate,
@@ -6278,6 +6392,8 @@ pub fn multisig_coin_selection_preview(
 #[path = "wallet/multisig_proposal_commands.rs"]
 pub(crate) mod multisig_proposal_commands;
 
+pub(crate) mod explorer_commands;
+pub(crate) mod label_interchange;
 #[path = "wallet/transaction_commands.rs"]
 pub(crate) mod transaction_commands;
 

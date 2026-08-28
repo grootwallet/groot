@@ -140,6 +140,12 @@ Passing dummy, simulator, or unit tests is not physical-device, operating-system
 
 ## Residual risks requiring explicit user/release acceptance
 
+### BIP329 and native explorer boundary
+
+- A hostile BIP329 file may attempt oversized parsing, cross-wallet/network assignment, immutable-history overwrite, contradictory coin state, signer relabeling, or private-key injection. Rust limits the file/line/record sizes, validates schema and types, binds address/transaction/output/xpub references to the selected wallet, rejects private extended-key prefixes and conflicts, and commits only after full preflight in one SQLite transaction. Malformed, foreign, and conflicting fixtures plus duplicate-idempotence and rollback are required release tests.
+- A valid BIP329 export itself is sensitive public metadata: labels, addresses, transaction/output references, public account keys, and their relationships can reveal wallet history. Native user mediation and a disclosure reduce accidental exposure but cannot revoke a copied file or authenticate its source. It is never treated as a wallet backup or synchronization authority.
+- A compromised renderer may try to open an arbitrary native URL. The command accepts only a txid, parses it, and constructs an exact Testnet4/Signet mempool.space HTTPS path; Regtest and every other host/network fail closed. Opening the legitimate explorer still discloses the queried transaction and host/network metadata to a third party.
+
 - No software can make key cracking literally impossible or prove that an opaque platform/hardware entropy chain is uncompromised. The claim is conditional computational infeasibility under standard cryptographic and OS-CSPRNG assumptions.
 - A privileged compromised host can capture a hot software key, substitute public transaction intent, manipulate native UI, or deny service. Hardware multisig across independently administered devices reduces key-extraction risk but does not make the coordinator display trustworthy.
 - Users can approve a wrong full address or malicious hardware display, lose or expose words/passphrases/descriptors, create correlated signer backups, or choose recovery scan parameters that omit history.

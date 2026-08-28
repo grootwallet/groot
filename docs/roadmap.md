@@ -163,7 +163,8 @@ V2 exposes reviewed templates, not an unrestricted script editor. Every template
 - Taproot/Miniscript policies only after interoperability and hardware support are standardized and independently reviewed.
 - Optional full-node and remote Esplora backends with identical descriptor semantics.
 - Collaborative wallet invitations only with authenticated descriptor exchange; no cloud custody.
-- BIP329 label import/export without weakening immutable-label rules.
+- Extend the implemented BIP329 address/transaction/output/public-signer interchange only when a standard record has an exact semantic match; do not add proprietary records for Groot-only intent, policy, cluster, or replacement history.
+- Design cross-platform coordination between a phone key and desktop hardware signers as a separate authenticated protocol and threat model. BIP329 metadata files are a portability foundation, not synchronization.
 - Wallet health dashboard: backup age, descriptor verification, node status, signer firmware evidence, and recovery-test reminders.
 - Batch payments, payment URI/QR requests, address book, and watch-only wallet promotion only after intent-review and privacy design.
 - Payjoin V2 sender/receiver sessions remain gated by ADR 0031's durable-state, transport, proposal-review, fallback-consent, interoperability, and denial-of-service evidence. URI parsing alone is not protocol support.

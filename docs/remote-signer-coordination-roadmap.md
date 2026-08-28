@@ -2,6 +2,8 @@
 
 Status: proposed first post-release paid add-on. No hosted relay or remote coordination capability is implemented today.
 
+BIP329 label interchange is implemented as an explicit user-mediated JSONL file for compatible public metadata. It can help a future phone key and desktop coordinator share human context, but it does not authenticate a peer, convey signing authority, synchronize proposals, resolve concurrent edits, or transport PSBTs. Those properties remain future work and require a separate protocol, threat model, and ADR.
+
 ## Outcome
 
 Let independently controlled Groot devices coordinate a multisig proposal across distance without giving Groot or a relay custody, signing authority, readable wallet data, or a privileged recovery role. Standard PSBT file/QR exchange remains the universal fallback.

@@ -423,6 +423,31 @@ export const componentCopy = {
   },
   'Wallet policy': { fr: 'Politique du portefeuille', es: 'Política de la cartera' },
   'with signer': { fr: 'avec le signataire', es: 'con el firmante' },
+  'Could not open explorer': {
+    fr: 'Impossible d’ouvrir l’explorateur',
+    es: 'No se pudo abrir el explorador'
+  },
+  'Fee increase · replacement': {
+    fr: 'Hausse des frais · remplacement',
+    es: 'Aumento de comisión · reemplazo'
+  },
+  'Fee increase replacement': {
+    fr: 'Remplacement par hausse des frais',
+    es: 'Reemplazo por aumento de comisión'
+  },
+  'Replaced by a fee increase': {
+    fr: 'Remplacée par une hausse des frais',
+    es: 'Reemplazada por un aumento de comisión'
+  },
+  Replaces: { fr: 'Remplace', es: 'Reemplaza' },
+  'This earlier transaction is retained for history and is not counted in the balance.': {
+    fr: 'Cette transaction antérieure est conservée dans l’historique et n’est pas comptée dans le solde.',
+    es: 'Esta transacción anterior se conserva en el historial y no se cuenta en el saldo.'
+  },
+  'This transaction accelerates and replaces the earlier transaction.': {
+    fr: 'Cette transaction accélère et remplace la transaction antérieure.',
+    es: 'Esta transacción acelera y reemplaza la transacción anterior.'
+  },
   'You will need to add the signers again.': {
     fr: 'Vous devrez ajouter à nouveau les signataires.',
     es: 'Tendrás que volver a añadir los firmantes.'

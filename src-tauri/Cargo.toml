@@ -1,6 +1,6 @@
 [package]
 name = "groot"
-version = "0.4.69"
+version = "0.4.70"
 description = "Groot, a minimal onchain Bitcoin wallet"
 edition = "2021"
 
@@ -36,6 +36,7 @@ uuid = { version = "=1.24.0", features = ["v4"] }
 zeroize = "=1.9.0"
 tauri-plugin-clipboard-manager = "=2.3.2"
 tauri-plugin-dialog = "=2.7.2"
+tauri-plugin-opener = "=2.5.4"
 url = "=2.5.8"
 # Enables the platform-native TLS verifier for the already-transitive, pinned
 # minreq transport. ADR 0020 records why the legacy rustls backend is forbidden.

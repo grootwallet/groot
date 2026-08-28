@@ -37,6 +37,41 @@
       )}</span
     >
   </aside>{/if}
+{#if proposal.acceleration?.method === 'rbf'}<aside class="info-banner acceleration-review-summary">
+    <strong>{translate($locale, 'Fee increase replacement')}</strong>
+    <dl class="details-list">
+      <div>
+        <dt>{translate($locale, 'Original effective rate')}</dt>
+        <dd>{proposal.acceleration.originalFeeRate} {translate($locale, 'sat/vB')}</dd>
+      </div>
+      <div>
+        <dt>{translate($locale, 'Exact replacement minimum')}</dt>
+        <dd>{proposal.acceleration.minimumFeeRate} {translate($locale, 'sat/vB')}</dd>
+      </div>
+      <div>
+        <dt>{translate($locale, 'Selected target')}</dt>
+        <dd>{proposal.acceleration.targetFeeRate} {translate($locale, 'sat/vB')}</dd>
+      </div>
+      <div>
+        <dt>{translate($locale, 'Replacement fee')}</dt>
+        <dd><Amount value={proposal.fee} /></dd>
+      </div>
+      <div>
+        <dt>{translate($locale, 'Incremental fee')}</dt>
+        <dd><Amount value={proposal.acceleration.incrementalFee} /></dd>
+      </div>
+      <div>
+        <dt>{translate($locale, 'Resulting effective rate')}</dt>
+        <dd>{proposal.feeRate} {translate($locale, 'sat/vB')}</dd>
+      </div>
+    </dl>
+    <span
+      >{translate(
+        $locale,
+        'Whole-satoshi fee construction can make the resulting effective rate differ slightly from the selected target.'
+      )}</span
+    >
+  </aside>{/if}
 <details class:hardware-review-details={compact} class:proposal-review-details={!compact}>
   <summary>{translate($locale, 'View more details')}</summary>
   <dl class:details-list={!compact}>

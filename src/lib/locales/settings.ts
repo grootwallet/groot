@@ -418,6 +418,62 @@ export const settingsCopy = {
   },
   'WALLET SETTINGS': { fr: 'RÉGLAGES DU PORTEFEUILLE', es: 'AJUSTES DE LA CARTERA' },
   Wallets: { fr: 'Portefeuilles', es: 'Carteras' },
+  'BIP329 wallet labels': {
+    fr: 'Libellés de portefeuille BIP329',
+    es: 'Etiquetas BIP329 de la cartera'
+  },
+  'Could not export labels': {
+    fr: 'Impossible d’exporter les libellés',
+    es: 'No se pudieron exportar las etiquetas'
+  },
+  'Could not import labels': {
+    fr: 'Impossible d’importer les libellés',
+    es: 'No se pudieron importar las etiquetas'
+  },
+  'Export JSONL': { fr: 'Exporter JSONL', es: 'Exportar JSONL' },
+  'Import JSONL': { fr: 'Importer JSONL', es: 'Importar JSONL' },
+  'Import or export wallet labels': {
+    fr: 'Importer ou exporter les libellés du portefeuille',
+    es: 'Importar o exportar etiquetas de la cartera'
+  },
+  'Import is additive and atomic. Existing permanent labels are never overwritten; a conflict leaves the wallet unchanged.':
+    {
+      fr: 'L’import est additif et atomique. Les libellés permanents existants ne sont jamais remplacés ; un conflit laisse le portefeuille inchangé.',
+      es: 'La importación es aditiva y atómica. Las etiquetas permanentes existentes nunca se sobrescriben; un conflicto deja la cartera sin cambios.'
+    },
+  'Imported {imported}; {unchanged} already present; {ignored} unsupported; {spendability} coin settings changed.':
+    {
+      fr: '{imported} importés ; {unchanged} déjà présents ; {ignored} non pris en charge ; {spendability} réglages de pièces modifiés.',
+      es: '{imported} importadas; {unchanged} ya presentes; {ignored} no compatibles; {spendability} ajustes de monedas modificados.'
+    },
+  'Labels exported': { fr: 'Libellés exportés', es: 'Etiquetas exportadas' },
+  'Labels imported': { fr: 'Libellés importés', es: 'Etiquetas importadas' },
+  'Last label operation': {
+    fr: 'Dernière opération sur les libellés',
+    es: 'Última operación de etiquetas'
+  },
+  'Move compatible labels without changing this wallet’s keys or descriptors.': {
+    fr: 'Déplacez les libellés compatibles sans modifier les clés ni les descripteurs de ce portefeuille.',
+    es: 'Transfiere etiquetas compatibles sin cambiar las claves ni los descriptores de esta cartera.'
+  },
+  'Private financial metadata.': {
+    fr: 'Métadonnées financières privées.',
+    es: 'Metadatos financieros privados.'
+  },
+  'Saved {count} BIP329 label records.': {
+    fr: '{count} enregistrements de libellés BIP329 enregistrés.',
+    es: 'Se guardaron {count} registros de etiquetas BIP329.'
+  },
+  'The file can expose labels, addresses, transaction references, public account keys, and relationships in your wallet history. Store and transfer it privately, then delete copies you no longer need.':
+    {
+      fr: 'Le fichier peut révéler des libellés, adresses, références de transaction, clés de compte publiques et relations dans l’historique du portefeuille. Stockez-le et transférez-le de manière privée, puis supprimez les copies inutiles.',
+      es: 'El archivo puede revelar etiquetas, direcciones, referencias de transacciones, claves públicas de cuenta y relaciones del historial. Guárdalo y transfiérelo de forma privada, y elimina las copias que ya no necesites.'
+    },
+  'Use the BIP329 JSONL format with another compatible wallet.': {
+    fr: 'Utilisez le format JSONL BIP329 avec un autre portefeuille compatible.',
+    es: 'Usa el formato JSONL BIP329 con otra cartera compatible.'
+  },
+  'Working…': { fr: 'Traitement…', es: 'Procesando…' },
   'Without it, your bitcoin cannot be recovered.': {
     fr: 'Sans elle, votre bitcoin ne peut pas être récupéré.',
     es: 'Sin ella, tu bitcoin no se puede recuperar.'

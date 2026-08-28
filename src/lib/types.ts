@@ -36,6 +36,7 @@ export type Transaction = {
   label: string;
   block?: number;
   replacedBy?: string | null;
+  replaces?: string | null;
   inputCount?: number | null;
   outputCount?: number | null;
   feeRate?: number | null;

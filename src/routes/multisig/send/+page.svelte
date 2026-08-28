@@ -44,6 +44,7 @@
     type CoinSelection,
     type CoinSelectionPreview,
     type FeeEstimates,
+    type AccelerationQuote,
     type HardwareDevice,
     type MultisigProposal,
     type MultisigWallet,
@@ -165,6 +166,7 @@
     coldcardSetupError = $state(''),
     coldcardSetupDevice = $state<HardwareDevice | null>(null);
   let accelerationRequest = $state<{ txid: string; method: 'rbf' | 'cpfp' } | null>(null);
+  let rbfQuote = $state<AccelerationQuote | null>(null);
   let hardwareAction = $state<'scan' | 'sign'>('scan');
   let hardwareAttentionSignal = $state(0),
     hardwareCancelRequested = $state(false);
@@ -526,7 +528,10 @@
       }
       if (txid && (method === 'rbf' || method === 'cpfp')) {
         accelerationRequest = { txid, method };
-        if (estimates) {
+        if (method === 'rbf') {
+          rbfQuote = await walletService.quoteRbf(txid);
+          selectedRate = Number(rbfQuote.targetFeeRate);
+        } else if (estimates) {
           proposal = await walletService.prepareMultisigAcceleration(
             txid,
             method,
@@ -689,6 +694,10 @@
     busy = true;
     feeEstimateError = '';
     try {
+      if (request.method === 'rbf') {
+        rbfQuote = await walletService.quoteRbf(request.txid, feeRate(selectedRateNumber));
+        selectedRate = Number(rbfQuote.targetFeeRate);
+      }
       proposal = await walletService.prepareMultisigAcceleration(
         request.txid,
         request.method,
@@ -1560,11 +1569,20 @@
     >
       <div class="send-stage-heading">
         <span>{translate($locale, 'FEE ACCELERATION')}</span>
-        <h2>{translate($locale, 'Enter a custom fee rate')}</h2>
+        <h2>
+          {translate(
+            $locale,
+            accelerationRequest.method === 'rbf'
+              ? 'Review replacement fee'
+              : 'Enter a custom fee rate'
+          )}
+        </h2>
         <p>
           {translate(
             $locale,
-            'Bitcoin Core has no usable estimate. Groot will not invent one; choose the sat/vB rate\n          every signer will review.'
+            accelerationRequest.method === 'rbf'
+              ? 'Groot checked this transaction and Bitcoin Core’s replacement policy. Edit the target before creating the replacement.'
+              : 'Bitcoin Core has no usable estimate. Groot will not invent one; choose the sat/vB rate\n          every signer will review.'
           )}
         </p>
       </div>
@@ -1574,13 +1592,68 @@
           <input
             aria-label={translate($locale, 'Custom acceleration fee rate')}
             bind:value={selectedRate}
+            onblur={async () => {
+              if (accelerationRequest?.method !== 'rbf' || !customFeeValid) return;
+              try {
+                rbfQuote = await walletService.quoteRbf(
+                  accelerationRequest.txid,
+                  feeRate(selectedRateNumber)
+                );
+                selectedRate = Number(rbfQuote.targetFeeRate);
+                feeEstimateError = '';
+              } catch (cause) {
+                feeEstimateError = localizedError(cause, $locale);
+              }
+            }}
             inputmode="decimal"
             placeholder="0"
           /><b>{translate($locale, 'sat/vB')}</b>
         </div>
-        <small>{translate($locale, 'Required · greater than 0 and at most 10,000 sat/vB')}</small
+        <small
+          >{#if rbfQuote}{translate(
+              $locale,
+              'Minimum {rate} sat/vB · rounded up only to 0.004 sat/vB precision',
+              { rate: rbfQuote.minimumFeeRate }
+            )}{:else}{translate(
+              $locale,
+              'Required · greater than 0 and at most 10,000 sat/vB'
+            )}{/if}</small
         ></label
-      >{#if feeEstimateError}<p class="form-error" role="alert">{feeEstimateError}</p>{/if}<Button
+      >{#if rbfQuote}<dl class="details-list acceleration-quote-details">
+          <div>
+            <dt>{translate($locale, 'Original effective rate')}</dt>
+            <dd>{rbfQuote.originalEffectiveFeeRate} {translate($locale, 'sat/vB')}</dd>
+          </div>
+          <div>
+            <dt>{translate($locale, 'Exact replacement minimum')}</dt>
+            <dd>{rbfQuote.minimumFeeRate} {translate($locale, 'sat/vB')}</dd>
+          </div>
+          <div>
+            <dt>{translate($locale, 'Selected target')}</dt>
+            <dd>{rbfQuote.targetFeeRate} {translate($locale, 'sat/vB')}</dd>
+          </div>
+          <div>
+            <dt>{translate($locale, 'Estimated replacement fee')}</dt>
+            <dd><Amount value={rbfQuote.estimatedReplacementFee} /></dd>
+          </div>
+          <div>
+            <dt>{translate($locale, 'Incremental fee')}</dt>
+            <dd><Amount value={rbfQuote.incrementalFee} /></dd>
+          </div>
+          <div>
+            <dt>{translate($locale, 'Resulting effective rate')}</dt>
+            <dd>{rbfQuote.resultingEffectiveFeeRate} {translate($locale, 'sat/vB')}</dd>
+          </div>
+        </dl>
+        <p class="field-note">
+          {translate(
+            $locale,
+            rbfQuote.recommendationSource === 'bitcoin_core'
+              ? 'Default uses Bitcoin Core because it is above the safe replacement minimum.'
+              : 'Default is a replacement-only fallback one sat/vB above the exact minimum; it is not a general fee estimate.'
+          )}
+        </p>{/if}
+      {#if feeEstimateError}<p class="form-error" role="alert">{feeEstimateError}</p>{/if}<Button
         type="submit"
         size="large"
         class="full"

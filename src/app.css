@@ -3134,6 +3134,32 @@ code {
   font-size: 11px;
   margin: 0;
 }
+.acceleration-review-summary {
+  display: block;
+  align-items: initial;
+}
+.acceleration-review-summary > strong,
+.acceleration-review-summary > span {
+  display: block;
+}
+.acceleration-review-summary > .details-list,
+.acceleration-quote-details {
+  border-top: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 18px;
+  margin-top: 8px;
+  width: 100%;
+}
+.acceleration-review-summary > .details-list > div,
+.acceleration-quote-details > div {
+  border-top: 1px solid var(--border);
+}
+.acceleration-review-summary > span {
+  font-size: 11px;
+  line-height: 1.45;
+  margin-top: 9px;
+}
 .coin-list {
   margin-top: 18px;
   border: 1px solid var(--border);
@@ -9626,6 +9652,10 @@ code {
 }
 
 @media (max-width: 760px) {
+  .acceleration-review-summary > .details-list,
+  .acceleration-quote-details {
+    grid-template-columns: 1fr;
+  }
   .insight-tip > span {
     position: fixed;
     left: 16px;
