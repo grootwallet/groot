@@ -261,7 +261,7 @@ An explicit scan performs one aggregate HWI enumeration, then Rust filters the v
 
 ## RBF replacement and label interchange
 
-`pending wallet-originated replaceable transaction → Rust quotes exact minimum and safe default → user keeps/edits decimal target → Rust returns applied target, whole-satoshi effective rate, and persisted replacement PSBT → normal review/sign/broadcast → replacement links backward and original links forward`
+`pending wallet-originated replaceable transaction → Rust quotes exact minimum and safe default → user keeps/edits decimal target → Rust returns applied target, whole-satoshi effective rate, and persisted replacement PSBT → normal review/sign/broadcast → transaction details show earlier transaction — fee increased → newer transaction, with compact IDs and optional accounting insight → replacement links backward and original links forward`
 
 Confirmed, non-replaceable, below-minimum, insufficient-value, stale-node-policy, and confirmation-race states fail explicitly without changing lineage. Hardware review and thresholds remain unchanged.
 

@@ -33,4 +33,17 @@ describe('transaction acceleration actions', () => {
       /\.transaction-acceleration-actions \.button > svg\s*\{[^}]*flex: 0 0 auto/s
     );
   });
+
+  it('presents replacement lineage as a compact visual journey with optional explanation', () => {
+    expect(component).toContain('class="transaction-lineage-journey"');
+    expect(component).toContain("'Earlier transaction'");
+    expect(component).toContain("'Newer transaction'");
+    expect(component).toContain("'Why are both shown?'");
+    expect(component).toContain('compactIdentifier(transaction.replaces ?? transaction.id, 8, 6)');
+    expect(component).toContain(
+      'compactIdentifier(transaction.replacedBy ?? transaction.id, 8, 6)'
+    );
+    expect(component).toContain('compactIdentifier(transaction.id)');
+    expect(appCss).toMatch(/\.transaction-lineage-journey\s*\{[^}]*grid-template-columns/s);
+  });
 });

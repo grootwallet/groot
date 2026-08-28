@@ -3134,6 +3134,114 @@ code {
   font-size: 11px;
   margin: 0;
 }
+.transaction-lineage {
+  margin-bottom: 14px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface-inset);
+}
+.transaction-lineage-heading {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+}
+.transaction-lineage-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  color: var(--link);
+  background: var(--surface-icon);
+}
+.transaction-lineage-heading strong {
+  display: block;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.35;
+}
+.transaction-lineage-heading p {
+  max-width: 48ch;
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+.transaction-lineage-journey {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(82px, 0.7fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+}
+.transaction-lineage-stop {
+  min-width: 0;
+}
+.transaction-lineage-stop > span,
+.transaction-lineage-stop > code,
+.transaction-lineage-stop > small {
+  display: block;
+}
+.transaction-lineage-stop > span {
+  color: var(--muted);
+  font-size: 10px;
+}
+.transaction-lineage-stop > code {
+  margin-top: 3px;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.transaction-lineage-stop > small {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 9px;
+}
+.transaction-lineage-stop.current {
+  text-align: right;
+}
+.transaction-lineage-stop.current > code {
+  color: var(--link);
+}
+.transaction-lineage-connector {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  color: var(--link);
+}
+.transaction-lineage-connector > span {
+  grid-column: 1 / -1;
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: 9px;
+  text-align: center;
+}
+.transaction-lineage-connector > i {
+  height: 1px;
+  background: var(--link);
+}
+.transaction-lineage-insight {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.transaction-lineage-insight summary {
+  width: max-content;
+  color: var(--link);
+  font-size: 9px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.transaction-lineage-insight p {
+  margin: 7px 0 0;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.5;
+}
 .acceleration-review-summary {
   display: block;
   align-items: initial;
@@ -9652,6 +9760,13 @@ code {
 }
 
 @media (max-width: 760px) {
+  .transaction-lineage {
+    padding: 12px;
+  }
+  .transaction-lineage-journey {
+    grid-template-columns: minmax(0, 1fr) 68px minmax(0, 1fr);
+    gap: 5px;
+  }
   .acceleration-review-summary > .details-list,
   .acceleration-quote-details {
     grid-template-columns: 1fr;

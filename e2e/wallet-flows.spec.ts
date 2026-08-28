@@ -1109,14 +1109,24 @@ test('RBF starts at a safe quote, preserves a decimal target, and records both-w
   const replacement = page.locator('.tx-row').filter({ hasText: 'Fee increase · replacement' });
   await expect(replacement).toBeVisible();
   await replacement.click();
-  await expect(
-    page.getByText('This transaction accelerates and replaces the earlier transaction.')
-  ).toBeVisible();
+  const replacementLineage = page.locator('.transaction-lineage');
+  await expect(replacementLineage).toContainText('Fee increased');
+  await expect(replacementLineage).toContainText('Earlier transaction');
+  await expect(replacementLineage).toContainText('This transaction');
+  await expect(replacementLineage).toContainText('Replaced');
+  await expect(replacementLineage).toContainText('Current');
+  await expect(replacementLineage.locator('code')).toHaveCount(2);
+  await expect(replacementLineage.locator('code').first()).toContainText('…');
+  await replacementLineage.getByText('Why are both shown?', { exact: true }).click();
+  await expect(replacementLineage).toContainText('Only the newer transaction can confirm.');
   await page.getByRole('button', { name: 'Close' }).click();
   const original = page.locator('.tx-row.replaced').filter({ hasText: 'RBF target fixture' });
   await expect(original).toBeVisible();
   await original.click();
-  await expect(page.getByText('Replaced by a fee increase')).toBeVisible();
+  const originalLineage = page.locator('.transaction-lineage');
+  await expect(originalLineage).toContainText('This transaction');
+  await expect(originalLineage).toContainText('Newer transaction');
+  await expect(originalLineage).toContainText('Replacement');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true
   );

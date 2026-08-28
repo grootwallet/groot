@@ -1,7 +1,7 @@
 <script lang="ts">
   import { locale } from '$lib/i18n';
   import { translate } from '$lib/i18n-catalog';
-  import { ArrowUp, Copy, ExternalLink, Layers } from '@lucide/svelte';
+  import { ArrowRight, ArrowUp, Copy, ExternalLink, Layers } from '@lucide/svelte';
   import Modal from './Modal.svelte';
   import Button from './Button.svelte';
   import { copyText } from '$lib/clipboard';
@@ -9,7 +9,7 @@
   import Amount from './Amount.svelte';
   import { toast } from '$lib/stores/toasts';
   import type { Transaction } from '$lib/types';
-  import { compactAddress } from '$lib/address-display';
+  import { compactAddress, compactIdentifier } from '$lib/address-display';
   import ReadableAddress from './ReadableAddress.svelte';
   import LocalTimestamp from './LocalTimestamp.svelte';
   import { discreetMode } from '$lib/privacy';
@@ -130,27 +130,69 @@
           <PermanentLabelTags labels={transactionLabels} hidden={$discreetMode} prominent />
         </div>{/if}
     </div>
-    {#if transaction.replaces}<aside class="info-banner transaction-lineage">
-        <strong>{translate($locale, 'Fee increase replacement')}</strong>
-        <span
-          >{translate(
-            $locale,
-            'This transaction accelerates and replaces the earlier transaction.'
-          )}</span
-        >
-        <code>{compactAddress(transaction.replaces)}</code>
-      </aside>{:else if transaction.status === 'replaced' && transaction.replacedBy}<aside
-        class="info-banner transaction-lineage"
-      >
-        <strong>{translate($locale, 'Replaced by a fee increase')}</strong>
-        <span
-          >{translate(
-            $locale,
-            'This earlier transaction is retained for history and is not counted in the balance.'
-          )}</span
-        >
-        <code>{compactAddress(transaction.replacedBy)}</code>
-      </aside>{/if}
+    {#if transaction.replaces || (transaction.status === 'replaced' && transaction.replacedBy)}
+      <aside class="transaction-lineage" aria-label={translate($locale, 'Transaction history')}>
+        <div class="transaction-lineage-heading">
+          <span class="transaction-lineage-icon" aria-hidden="true"><ArrowUp size={16} /></span>
+          <div>
+            <strong>{translate($locale, 'Fee increased')}</strong>
+            <p>
+              {translate(
+                $locale,
+                transaction.replaces
+                  ? 'This is the newer transaction. It replaces an earlier version with a higher fee.'
+                  : 'A newer transaction replaced this version with a higher fee.'
+              )}
+            </p>
+          </div>
+        </div>
+        <div class="transaction-lineage-journey">
+          <div class="transaction-lineage-stop earlier">
+            <span
+              >{translate(
+                $locale,
+                transaction.replaces ? 'Earlier transaction' : 'This transaction'
+              )}</span
+            >
+            <code>{compactIdentifier(transaction.replaces ?? transaction.id, 8, 6)}</code>
+            <small>
+              {#if !transaction.replaces && transaction.feeRate != null}
+                {transaction.feeRate} {translate($locale, 'sat/vB')} ·
+              {/if}
+              {translate($locale, 'Replaced')}
+            </small>
+          </div>
+          <div class="transaction-lineage-connector" aria-hidden="true">
+            <span>{translate($locale, 'Fee increased')}</span>
+            <i></i><ArrowRight size={14} />
+          </div>
+          <div class="transaction-lineage-stop current">
+            <span
+              >{translate(
+                $locale,
+                transaction.replaces ? 'This transaction' : 'Newer transaction'
+              )}</span
+            >
+            <code>{compactIdentifier(transaction.replacedBy ?? transaction.id, 8, 6)}</code>
+            <small>
+              {#if transaction.replaces && transaction.feeRate != null}
+                {transaction.feeRate} {translate($locale, 'sat/vB')} ·
+              {/if}
+              {translate($locale, transaction.replaces ? 'Current' : 'Replacement')}
+            </small>
+          </div>
+        </div>
+        <details class="transaction-lineage-insight">
+          <summary>{translate($locale, 'Why are both shown?')}</summary>
+          <p>
+            {translate(
+              $locale,
+              'Only the newer transaction can confirm. Groot keeps the earlier version as history and excludes it from balance totals.'
+            )}
+          </p>
+        </details>
+      </aside>
+    {/if}
     <dl class="details-list">
       <div>
         <dt>{translate($locale, 'Date')}</dt>
@@ -251,11 +293,11 @@
           </div>{/if}
         {#if transaction.status === 'replaced' && transaction.replacedBy}<div>
             <dt>{translate($locale, 'Replaced by')}</dt>
-            <dd><code>{transaction.replacedBy}</code></dd>
+            <dd class="mono"><code>{compactIdentifier(transaction.replacedBy)}</code></dd>
           </div>{/if}
         {#if transaction.replaces}<div>
             <dt>{translate($locale, 'Replaces')}</dt>
-            <dd><code>{transaction.replaces}</code></dd>
+            <dd class="mono"><code>{compactIdentifier(transaction.replaces)}</code></dd>
           </div>{/if}
         {#if transaction.block}<div>
             <dt>{translate($locale, 'Block')}</dt>
@@ -267,9 +309,9 @@
           </div>{/if}
       </dl>
       <button class="hash-box" onclick={copyTxid}
-        ><span>{translate($locale, 'Transaction ID')}</span><code>{transaction.id}</code><Copy
-          size={16}
-        /></button
+        ><span>{translate($locale, 'Transaction ID')}</span><code
+          >{compactIdentifier(transaction.id)}</code
+        ><Copy size={16} /></button
       >
       {#if explorerUrl}
         <div class="explorer-panel">

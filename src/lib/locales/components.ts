@@ -435,6 +435,34 @@ export const componentCopy = {
     fr: 'Remplacement par hausse des frais',
     es: 'Reemplazo por aumento de comisión'
   },
+  'Fee increased': { fr: 'Frais augmentés', es: 'Comisión aumentada' },
+  'Transaction history': {
+    fr: 'Historique de la transaction',
+    es: 'Historial de la transacción'
+  },
+  'This is the newer transaction. It replaces an earlier version with a higher fee.': {
+    fr: 'Ceci est la nouvelle transaction. Elle remplace une version antérieure avec des frais plus élevés.',
+    es: 'Esta es la transacción nueva. Reemplaza una versión anterior con una comisión más alta.'
+  },
+  'A newer transaction replaced this version with a higher fee.': {
+    fr: 'Une nouvelle transaction a remplacé cette version avec des frais plus élevés.',
+    es: 'Una transacción nueva reemplazó esta versión con una comisión más alta.'
+  },
+  'Earlier transaction': { fr: 'Transaction antérieure', es: 'Transacción anterior' },
+  'This transaction': { fr: 'Cette transaction', es: 'Esta transacción' },
+  'Newer transaction': { fr: 'Nouvelle transaction', es: 'Transacción nueva' },
+  Replaced: { fr: 'Remplacée', es: 'Reemplazada' },
+  Current: { fr: 'Actuelle', es: 'Actual' },
+  Replacement: { fr: 'Remplacement', es: 'Reemplazo' },
+  'Why are both shown?': {
+    fr: 'Pourquoi les deux sont-elles affichées ?',
+    es: '¿Por qué se muestran ambas?'
+  },
+  'Only the newer transaction can confirm. Groot keeps the earlier version as history and excludes it from balance totals.':
+    {
+      fr: 'Seule la nouvelle transaction peut être confirmée. Groot conserve la version antérieure dans l’historique et l’exclut des totaux du solde.',
+      es: 'Solo la transacción nueva puede confirmarse. Groot conserva la versión anterior en el historial y la excluye de los totales del saldo.'
+    },
   'Replaced by a fee increase': {
     fr: 'Remplacée par une hausse des frais',
     es: 'Reemplazada por un aumento de comisión'
