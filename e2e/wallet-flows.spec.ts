@@ -794,6 +794,7 @@ test('global keyboard shortcuts navigate safely and match the Settings reference
     'Receive',
     'Send'
   ]);
+  await expect(shortcuts.getByText('Lock wallet', { exact: true })).toHaveCount(0);
 
   await page.keyboard.press(`${primary}+Shift+R`);
   await expect(page).toHaveURL(/\/receive$/);
@@ -805,6 +806,11 @@ test('global keyboard shortcuts navigate safely and match the Settings reference
   await page.keyboard.press(`${primary}+2`);
   await expect(page).toHaveURL(/\/send$/);
   await expect(labelInput).toBeFocused();
+
+  await page.getByRole('heading', { name: 'Send bitcoin' }).click();
+  await expect(labelInput).not.toBeFocused();
+  await page.keyboard.press(`${primary}+L`);
+  await expect(page).toHaveURL(/\/send$/);
 });
 
 test('overview, activity, UTXOs, and settings expose durable states', async ({ page }) => {

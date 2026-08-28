@@ -74,9 +74,15 @@ export const settingsCopy = {
       es: 'Guárdalos juntos. Las palabras de recuperación solo pueden volver a mostrarse en el flujo nativo de copia autenticado; la frase de contraseña de la cartera no se puede mostrar ni restablecer.'
     },
   'Keyboard shortcuts': { fr: 'Raccourcis clavier', es: 'Atajos de teclado' },
-  'Navigate without leaving the keyboard.': {
-    fr: 'Naviguez sans quitter le clavier.',
-    es: 'Navega sin dejar el teclado.'
+  'Navigate and lock without leaving the keyboard.': {
+    fr: 'Naviguez et verrouillez sans quitter le clavier.',
+    es: 'Navega y bloquea sin dejar el teclado.'
+  },
+  'Lock wallet': { fr: 'Verrouiller le portefeuille', es: 'Bloquear cartera' },
+  'Wallet not locked': { fr: 'Portefeuille non verrouillé', es: 'Cartera no bloqueada' },
+  'Could not lock this wallet.': {
+    fr: 'Impossible de verrouiller ce portefeuille.',
+    es: 'No se pudo bloquear esta cartera.'
   },
   compact_filters: { fr: 'filtres compacts', es: 'filtros compactos' },
   '· height {height}': { fr: '· hauteur {height}', es: '· altura {height}' },

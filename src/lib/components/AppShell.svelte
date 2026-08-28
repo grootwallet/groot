@@ -32,7 +32,11 @@
   import { formatWalletCount, locale, t, type MessageKey } from '$lib/i18n';
   import { provideWalletShellContext } from '$lib/wallet/shell-context';
   import { multisigSetupSignerTarget, multisigSetupStageLabel } from '$lib/wallet/multisig-setup';
-  import { matchKeyboardShortcut, usesCommandModifier } from '$lib/keyboard-shortcuts';
+  import {
+    isDesktopPlatform,
+    matchKeyboardShortcut,
+    usesCommandModifier
+  } from '$lib/keyboard-shortcuts';
   let { children } = $props();
   const nav: Array<{ href: string; label: MessageKey; icon: typeof LayoutGrid }> = [
     { href: '/', label: 'overview', icon: LayoutGrid },
@@ -79,6 +83,9 @@
   const minimumStartupGateMs = isPrototypeWallet ? 0 : 1_800;
   let navigationPending = $state(false);
   let commandModifier = false;
+  let desktopPlatform = false;
+  let shortcutLockPending = false;
+  let walletSelectionTask: Promise<void> | undefined;
   let selectedProfile = $derived(profiles.find((wallet) => wallet.id === selectedWalletId));
   let policyContext = $derived(
     selectedProfile?.kind === 'multisig' || page.url.pathname.startsWith('/multisig')
@@ -123,6 +130,13 @@
     const shortcut = matchKeyboardShortcut(event);
     if (!shortcut) return;
 
+    if (shortcut.id === 'lock') {
+      if (isPrototypeWallet || !desktopPlatform || navigationPending || shortcutLockPending) return;
+      event.preventDefault();
+      void lockSelectedWallet();
+      return;
+    }
+
     let destination: string;
     switch (shortcut.id) {
       case 'overview':
@@ -146,6 +160,31 @@
     }
     event.preventDefault();
     void goto(destination);
+  }
+
+  async function lockSelectedWallet() {
+    shortcutLockPending = true;
+    const resumeAutomaticSync = !syncPausedRoute;
+    liveSync?.stop();
+    try {
+      // A wallet switch that began before this shortcut must settle first so
+      // the native lock always applies to the wallet selected at lock time.
+      await walletSelectionTask?.catch(() => undefined);
+      liveSync?.stop();
+      await walletService.cancelHardwareOperations();
+      await walletService.cancelSync().catch(() => undefined);
+      await walletService.lock();
+      await goto('/unlock');
+    } catch (cause) {
+      if (resumeAutomaticSync) liveSync?.restart();
+      toast({
+        title: 'Wallet not locked',
+        description: localizedError(cause, $locale, 'Could not lock this wallet.'),
+        tone: 'danger'
+      });
+    } finally {
+      shortcutLockPending = false;
+    }
   }
 
   async function refreshSetupDraft() {
@@ -226,7 +265,18 @@
   });
 
   async function selectWallet(walletId: string) {
-    if (!walletId || walletId === selectedWalletId) return;
+    if (shortcutLockPending || walletSelectionTask || !walletId || walletId === selectedWalletId)
+      return;
+    const task = performWalletSelection(walletId);
+    walletSelectionTask = task;
+    try {
+      await task;
+    } finally {
+      if (walletSelectionTask === task) walletSelectionTask = undefined;
+    }
+  }
+
+  async function performWalletSelection(walletId: string) {
     const resumeAutomaticSync = !isPrototypeWallet && !syncPausedRoute;
     // Stop and cancel automatic network work before native selection. The
     // target route must get the wallet-operation lock for its cached snapshot
@@ -246,7 +296,7 @@
         liveSync?.stop();
       }
     } catch (cause) {
-      if (resumeAutomaticSync) liveSync?.restart();
+      if (resumeAutomaticSync && !shortcutLockPending) liveSync?.restart();
       toast({
         title: 'Wallet not switched',
         description: localizedError(cause, $locale, 'Could not select this wallet.'),
@@ -304,6 +354,11 @@
   onMount(() => {
     initDenomination();
     commandModifier = usesCommandModifier(navigator.platform);
+    desktopPlatform = isDesktopPlatform(
+      navigator.platform,
+      navigator.userAgent,
+      navigator.maxTouchPoints
+    );
     const unsubscribe = walletService.subscribe((event) => {
       if (event.type === 'payment_received')
         toast({

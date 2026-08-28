@@ -35,7 +35,7 @@
   import { toast } from '$lib/stores/toasts';
   import { formatInteger, locale, t } from '$lib/i18n';
   import { APP_VERSION, defaultConfig, networkName } from '$lib/config';
-  import { walletService, WalletError } from '$lib/wallet';
+  import { isPrototypeWallet, walletService, WalletError } from '$lib/wallet';
   import { goto } from '$app/navigation';
   import { onDestroy, onMount } from 'svelte';
   import { useWalletShellContext } from '$lib/wallet/shell-context';
@@ -53,7 +53,12 @@
   import type { CosignerDraft } from '$lib/multisig/policy';
   import { matchingDeviceForHealthCheck } from '$lib/hardware/health-check';
   import { amountUnit, denomination, formatAmount, setDenomination } from '$lib/denomination';
-  import { keyboardShortcuts, shortcutKeys, usesCommandModifier } from '$lib/keyboard-shortcuts';
+  import {
+    isDesktopPlatform,
+    keyboardShortcuts,
+    shortcutKeys,
+    usesCommandModifier
+  } from '$lib/keyboard-shortcuts';
   import {
     hardwareHealthChecks,
     hardwareHealthKey,
@@ -70,6 +75,12 @@
   let nodeStatus = $state<NodeStatus | null>(null);
   let theme = $state<'light' | 'dark'>('dark');
   let commandModifier = $state(false);
+  let desktopPlatform = $state(false);
+  let displayedKeyboardShortcuts = $derived(
+    keyboardShortcuts.filter(
+      (shortcut) => shortcut.id !== 'lock' || (!isPrototypeWallet && desktopPlatform)
+    )
+  );
   let profiles = $state<WalletProfile[]>([]);
   let selectedWalletId = $state<string | null>(null);
   let profileReadGeneration = 0;
@@ -217,6 +228,11 @@
     signerRenaming = $state(false);
   onMount(async () => {
     commandModifier = usesCommandModifier(navigator.platform);
+    desktopPlatform = isDesktopPlatform(
+      navigator.platform,
+      navigator.userAgent,
+      navigator.maxTouchPoints
+    );
     const generation = ++profileReadGeneration;
     theme = document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
     const registry = await walletService.profiles();
@@ -1122,11 +1138,11 @@
       <div class="setting-row keyboard-shortcut-row">
         <span class="setting-icon"><Keyboard size={18} /></span><span
           ><strong>{translate($locale, 'Keyboard shortcuts')}</strong><small
-            >{translate($locale, 'Navigate without leaving the keyboard.')}</small
+            >{translate($locale, 'Navigate and lock without leaving the keyboard.')}</small
           ></span
         >
         <dl class="keyboard-shortcut-grid">
-          {#each keyboardShortcuts as shortcut}
+          {#each displayedKeyboardShortcuts as shortcut}
             <div>
               <dt>{translate($locale, shortcut.label)}</dt>
               <dd>
