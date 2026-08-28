@@ -678,16 +678,24 @@ fn regtest_hardware_alias_must_decode_to_the_identical_output_script() {
     assert_eq!(hardware_alias, "tb1qf6n3a54f4nqc5976hjl556ukfdas8xsntw0gvt");
     assert!(hardware_display_matches_expected_address(
         regtest,
-        &hardware_alias
+        &hardware_alias,
+        "ledger",
+        false
     ));
-    assert!(hardware_display_matches_expected_address(regtest, regtest));
+    assert!(hardware_display_matches_expected_address(
+        regtest, regtest, "coldcard", false
+    ));
 
     let other = regtest_testnet_address_alias("bcrt1q5spdlkwvajjz9t0nvsqygmeaagxts4sqxy3a7t")
         .expect("valid different Regtest address");
-    assert!(!hardware_display_matches_expected_address(regtest, &other));
+    assert!(!hardware_display_matches_expected_address(
+        regtest, &other, "ledger", false
+    ));
     assert!(!hardware_display_matches_expected_address(
         regtest,
-        "not-an-address"
+        "not-an-address",
+        "ledger",
+        false
     ));
 
     let change = "bcrt1q5spdlkwvajjz9t0nvsqygmeaagxts4sqxy3a7t".to_owned();
@@ -697,8 +705,95 @@ fn regtest_hardware_alias_must_decode_to_the_identical_output_script() {
     assert_eq!(change_aliases.len(), 1);
     assert!(hardware_display_matches_expected_address(
         &change,
-        change_aliases[0].as_deref().expect("change alias")
+        change_aliases[0].as_deref().expect("change alias"),
+        "ledger",
+        false
     ));
+}
+
+#[test]
+fn testnet4_coldcard_regtest_encoding_must_be_bip84_scoped_and_script_identical() {
+    let regtest = "bcrt1qf6n3a54f4nqc5976hjl556ukfdas8xsnf8k9mz";
+    let testnet4 = address_network_alias(regtest, Network::Regtest, Network::Testnet4)
+        .expect("valid Testnet4 address");
+    assert_eq!(
+        hardware_display_address_alias_for_network(Network::Testnet4, &testnet4, true).as_deref(),
+        Some(regtest)
+    );
+    assert_eq!(
+        hardware_display_address_alias_for_network(Network::Testnet4, &testnet4, false),
+        None
+    );
+    assert_eq!(
+        hardware_display_address_alias_for_network(Network::Signet, &testnet4, true),
+        None
+    );
+
+    assert!(hardware_display_matches_expected_address_for_network(
+        Network::Testnet4,
+        &testnet4,
+        regtest,
+        "coldcard",
+        true
+    ));
+    assert!(!hardware_display_matches_expected_address_for_network(
+        Network::Testnet4,
+        &testnet4,
+        regtest,
+        "coldcard",
+        false
+    ));
+    assert!(!hardware_display_matches_expected_address_for_network(
+        Network::Testnet4,
+        &testnet4,
+        regtest,
+        "ledger",
+        true
+    ));
+    assert!(!hardware_display_matches_expected_address_for_network(
+        Network::Signet,
+        &testnet4,
+        regtest,
+        "coldcard",
+        true
+    ));
+    assert!(!hardware_display_matches_expected_address_for_network(
+        Network::Testnet4,
+        &testnet4,
+        "bcrt1q5spdlkwvajjz9t0nvsqygmeaagxts4sqxy3a7t",
+        "coldcard",
+        true
+    ));
+    assert!(!hardware_display_matches_expected_address_for_network(
+        Network::Testnet4,
+        &testnet4,
+        "not-an-address",
+        "coldcard",
+        true
+    ));
+    let mainnet = address_network_alias(regtest, Network::Regtest, Network::Bitcoin)
+        .expect("valid mainnet address");
+    assert!(!hardware_display_matches_expected_address_for_network(
+        Network::Testnet4,
+        &testnet4,
+        &mainnet,
+        "coldcard",
+        true
+    ));
+}
+
+#[test]
+fn compiled_network_exposes_a_hardware_display_alias_only_for_testnet4() {
+    let regtest = "bcrt1qf6n3a54f4nqc5976hjl556ukfdas8xsnf8k9mz";
+    let testnet4 = address_network_alias(regtest, Network::Regtest, Network::Testnet4)
+        .expect("valid Testnet4 address");
+    let alias = hardware_display_address_alias(&testnet4, true);
+    if NETWORK == Network::Testnet4 {
+        assert_eq!(alias.as_deref(), Some(regtest));
+    } else {
+        assert_eq!(alias, None);
+    }
+    assert_eq!(hardware_display_address_alias(&testnet4, false), None);
 }
 
 #[test]

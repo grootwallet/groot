@@ -2299,7 +2299,8 @@ pub async fn hardware_verify_multisig_address(
             "The device did not return the displayed address.",
         )
     })?;
-    if !hardware_display_matches_expected_address(&expected, &actual) {
+    if !hardware_display_matches_expected_address(&expected, &actual, &identity.device_type, false)
+    {
         return Err(api_error(
             "hardware_address_mismatch",
             "The address returned by the device does not match this wallet.",
@@ -2516,7 +2517,8 @@ pub async fn hardware_verify_multisig_policy(
         .address
         .clone()
         .ok_or_else(|| missing_policy_address(&identity.device_type, response))?;
-    if !hardware_display_matches_expected_address(&expected, &actual) {
+    if !hardware_display_matches_expected_address(&expected, &actual, &identity.device_type, false)
+    {
         return Err(api_error(
             "hardware_address_mismatch",
             "The first address returned by the device does not match this wallet policy.",
@@ -2588,7 +2590,8 @@ pub async fn hardware_verify_multisig_draft_policy(
         .address
         .clone()
         .ok_or_else(|| missing_policy_address(&identity.device_type, response))?;
-    if !hardware_display_matches_expected_address(&expected, &actual) {
+    if !hardware_display_matches_expected_address(&expected, &actual, &identity.device_type, false)
+    {
         return Err(api_error(
             "hardware_address_mismatch",
             "The first address returned by the device does not match this wallet policy.",
@@ -2698,7 +2701,7 @@ pub async fn hardware_verify_external_address(
             "The device did not return the displayed address.",
         )
     })?;
-    if !hardware_display_matches_expected_address(&expected, &actual) {
+    if !hardware_display_matches_expected_address(&expected, &actual, &identity.device_type, true) {
         return Err(api_error(
             "hardware_address_mismatch",
             "The address returned by the device does not match this wallet.",

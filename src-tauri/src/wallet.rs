@@ -678,6 +678,7 @@ pub struct ReceiveAddressDto {
     id: u32,
     address: String,
     testnet_alias: Option<String>,
+    hardware_display_alias: Option<String>,
     label: String,
     labels: Vec<String>,
     created: String,
@@ -691,11 +692,37 @@ fn regtest_testnet_address_alias(address: &str) -> Option<String> {
     if !IS_REGTEST {
         return None;
     }
+    address_network_alias(address, Network::Regtest, Network::Testnet)
+}
+
+fn hardware_display_address_alias(
+    address: &str,
+    allow_testnet4_coldcard_alias: bool,
+) -> Option<String> {
+    hardware_display_address_alias_for_network(NETWORK, address, allow_testnet4_coldcard_alias)
+}
+
+fn hardware_display_address_alias_for_network(
+    network: Network,
+    address: &str,
+    allow_testnet4_coldcard_alias: bool,
+) -> Option<String> {
+    if network != Network::Testnet4 || !allow_testnet4_coldcard_alias {
+        return None;
+    }
+    address_network_alias(address, Network::Testnet4, Network::Regtest)
+}
+
+fn address_network_alias(
+    address: &str,
+    expected_network: Network,
+    alias_network: Network,
+) -> Option<String> {
     let address = Address::from_str(address)
         .ok()?
-        .require_network(Network::Regtest)
+        .require_network(expected_network)
         .ok()?;
-    Address::from_script(&address.script_pubkey(), Network::Testnet)
+    Address::from_script(&address.script_pubkey(), alias_network)
         .ok()
         .map(|alias| alias.to_string())
 }
@@ -713,22 +740,49 @@ fn proposal_testnet_aliases(
     )
 }
 
-fn hardware_display_matches_expected_address(expected: &str, actual: &str) -> bool {
+fn hardware_display_matches_expected_address(
+    expected: &str,
+    actual: &str,
+    device_type: &str,
+    allow_testnet4_coldcard_alias: bool,
+) -> bool {
+    hardware_display_matches_expected_address_for_network(
+        NETWORK,
+        expected,
+        actual,
+        device_type,
+        allow_testnet4_coldcard_alias,
+    )
+}
+
+fn hardware_display_matches_expected_address_for_network(
+    network: Network,
+    expected: &str,
+    actual: &str,
+    device_type: &str,
+    allow_testnet4_coldcard_alias: bool,
+) -> bool {
     if actual == expected {
         return true;
     }
-    if !IS_REGTEST {
-        return false;
-    }
+    let (expected_network, actual_network) = match network {
+        Network::Regtest => (Network::Regtest, Network::Testnet),
+        Network::Testnet4
+            if allow_testnet4_coldcard_alias && device_type.eq_ignore_ascii_case("coldcard") =>
+        {
+            (Network::Testnet4, Network::Regtest)
+        }
+        _ => return false,
+    };
     let Some(expected) = Address::from_str(expected)
         .ok()
-        .and_then(|address| address.require_network(Network::Regtest).ok())
+        .and_then(|address| address.require_network(expected_network).ok())
     else {
         return false;
     };
     let Some(actual) = Address::from_str(actual)
         .ok()
-        .and_then(|address| address.require_network(Network::Testnet).ok())
+        .and_then(|address| address.require_network(actual_network).ok())
     else {
         return false;
     };
@@ -5180,6 +5234,7 @@ fn address_rows(db: &Connection, multisig: bool) -> ApiResult<Vec<ReceiveAddress
             Ok(ReceiveAddressDto {
                 id: row.get(0)?,
                 testnet_alias: regtest_testnet_address_alias(&address),
+                hardware_display_alias: hardware_display_address_alias(&address, !multisig),
                 address,
                 label: row.get(2)?,
                 labels: label_provenance::labels_for_subject(

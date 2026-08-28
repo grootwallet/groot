@@ -9,21 +9,37 @@ export function testnetAddressDisplayName(deviceIdentity: string) {
 export type HardwareAddressComparison = {
   address: string;
   deviceName: string | null;
+  usesRegtestEncoding: boolean;
 };
 
 export function hardwareAddressComparison(
   canonical: string,
   testnetAlias: string | null | undefined,
-  deviceIdentity: string
+  deviceIdentity: string,
+  hardwareDisplayAlias?: string | null
 ): HardwareAddressComparison {
+  const normalized = deviceIdentity.toLowerCase();
+  if (hardwareDisplayAlias && normalized.includes('coldcard')) {
+    return {
+      address: hardwareDisplayAlias,
+      deviceName: 'Coldcard',
+      usesRegtestEncoding: true
+    };
+  }
   const deviceName = testnetAlias ? testnetAddressDisplayName(deviceIdentity) : null;
-  return { address: deviceName ? testnetAlias! : canonical, deviceName };
+  return {
+    address: deviceName ? testnetAlias! : canonical,
+    deviceName,
+    usesRegtestEncoding: false
+  };
 }
 
 export function addressForHardwareDisplay(
   canonical: string,
   testnetAlias: string | null | undefined,
-  deviceIdentity: string
+  deviceIdentity: string,
+  hardwareDisplayAlias?: string | null
 ) {
-  return hardwareAddressComparison(canonical, testnetAlias, deviceIdentity).address;
+  return hardwareAddressComparison(canonical, testnetAlias, deviceIdentity, hardwareDisplayAlias)
+    .address;
 }

@@ -545,6 +545,7 @@ pub fn address_create(
     Ok(ReceiveAddressDto {
         id: info.index,
         testnet_alias: regtest_testnet_address_alias(&info.address.to_string()),
+        hardware_display_alias: hardware_display_address_alias(&info.address.to_string(), true),
         address: info.address.to_string(),
         label,
         labels,

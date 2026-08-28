@@ -65,7 +65,12 @@
     `${savedDeviceIdentity ?? ''} ${verificationDevice?.label ?? ''} ${verificationDevice?.model ?? ''}`
   );
   const comparison = $derived(
-    hardwareAddressComparison(address.address, address.testnetAlias, verificationDeviceIdentity)
+    hardwareAddressComparison(
+      address.address,
+      address.testnetAlias,
+      verificationDeviceIdentity,
+      address.hardwareDisplayAlias
+    )
   );
   const isMultisig = $derived(walletKind === 'multisig');
 
@@ -370,7 +375,9 @@
   description={translate(
     $locale,
     comparison.deviceName
-      ? `${comparison.deviceName} displays the Regtest output with a testnet prefix. Compare the exact address below.`
+      ? comparison.usesRegtestEncoding
+        ? `${comparison.deviceName} displays the Testnet4 output with a Regtest prefix. Compare the exact address below.`
+        : `${comparison.deviceName} displays the Regtest output with a testnet prefix. Compare the exact address below.`
       : "Compare the exact address below with the complete address on the signer's trusted display."
   )}
   onclose={closeVerification}

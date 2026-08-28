@@ -266,6 +266,8 @@ fn validate_multisig_setup_draft(
             || !hardware_display_matches_expected_address(
                 &address.canonical_address,
                 &verification.displayed_address,
+                &verification.device_type,
+                false,
             )
         {
             return Err(api_error(
@@ -1186,6 +1188,7 @@ pub fn multisig_address_create(
     Ok(ReceiveAddressDto {
         id: info.index,
         testnet_alias: regtest_testnet_address_alias(&info.address.to_string()),
+        hardware_display_alias: None,
         address: info.address.to_string(),
         label,
         labels,
@@ -1270,6 +1273,7 @@ pub(crate) fn claim_observed_receive_output(
     Ok(ReceiveAddressDto {
         id: index,
         testnet_alias: regtest_testnet_address_alias(&address.to_string()),
+        hardware_display_alias: None,
         address: address.to_string(),
         labels: vec![label.clone()],
         label,

@@ -107,6 +107,10 @@ export const dynamicCopy = {
     fr: 'affiche la sortie Regtest avec un préfixe testnet. Comparez exactement l’adresse ci-dessous.',
     es: 'muestra la salida de Regtest con un prefijo de testnet. Compara exactamente la dirección inferior.'
   },
+  'displays the Testnet4 output with a Regtest prefix. Compare the exact address below.': {
+    fr: 'affiche la sortie Testnet4 avec un préfixe Regtest. Comparez exactement l’adresse ci-dessous.',
+    es: 'muestra la salida de Testnet4 con un prefijo de Regtest. Compara exactamente la dirección inferior.'
+  },
   emergency: { fr: 'urgence', es: 'emergencia' },
   failed: { fr: 'échec', es: 'falló' },
   Frame: { fr: 'Image', es: 'Fotograma' },
