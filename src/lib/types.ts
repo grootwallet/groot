@@ -51,7 +51,6 @@ export type ReceiveAddress = {
   id: number;
   address: string;
   testnetAlias?: string | null;
-  hardwareDisplayAlias?: string | null;
   label: string;
   labels?: string[];
   created: string;

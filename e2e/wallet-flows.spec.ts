@@ -493,9 +493,13 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
     page.locator('.address-label').getByText('Not verified', { exact: true })
   ).toBeVisible();
   await verificationDialog.getByRole('button', { name: /^Travel signing key / }).click();
-  const hardwareApproval = page.getByRole('status', { name: 'Waiting for hardware approval' });
-  await expect(hardwareApproval).toContainText('Check your hardware device');
-  await expect(hardwareApproval).toContainText('approve it on the device');
+  const hardwareApproval = page.getByRole('status', {
+    name: 'Waiting for Coldcard address display'
+  });
+  await expect(hardwareApproval).toContainText('Check the address on your Coldcard');
+  await expect(hardwareApproval).toContainText(
+    'Coldcard returns the displayed address automatically'
+  );
   const hardwareVerification = page.getByRole('button', { name: /Verified on hardware/ });
   await expect(hardwareVerification).toBeVisible();
   await expect(awaitingDeposit.getByText('Hardware verified', { exact: true })).toBeVisible();

@@ -236,6 +236,24 @@ impl HardwareOperation {
             .filter(|remaining| !remaining.is_zero())
             .ok_or(HardwareError::TimedOut)
     }
+
+    pub fn complete_if_active<T, E>(
+        &self,
+        complete: impl FnOnce() -> Result<T, E>,
+    ) -> Result<Result<T, E>, HardwareError> {
+        let coordinator = hardware_coordinator();
+        let state = coordinator.state.lock().map_err(|_| HardwareError::Io)?;
+        if !state
+            .active
+            .as_ref()
+            .is_some_and(|active| active.id == self.id)
+            || self.cancelled.load(Ordering::Acquire)
+        {
+            return Err(HardwareError::Cancelled);
+        }
+        self.remaining()?;
+        Ok(complete())
+    }
 }
 
 impl Drop for HardwareOperation {
@@ -1548,6 +1566,44 @@ mod tests {
         std::fs::remove_file(slow).unwrap();
         std::fs::remove_file(fast).unwrap();
         std::fs::remove_file(started_file).unwrap();
+    }
+
+    #[test]
+    fn final_completion_requires_an_active_uncancelled_lease() {
+        let hwi = HwiCli::for_test_program(PathBuf::from("/usr/bin/false"));
+        let operation = hwi.begin_interactive_operation().unwrap();
+        let completed = AtomicBool::new(false);
+        assert_eq!(
+            operation.complete_if_active(|| {
+                completed.store(true, Ordering::Release);
+                Ok::<_, HardwareError>(())
+            }),
+            Ok(Ok(()))
+        );
+        assert!(completed.load(Ordering::Acquire));
+        drop(operation);
+
+        let operation = hwi.begin_interactive_operation().unwrap();
+        let cancelled = Arc::clone(&operation.cancelled);
+        let cancellation = thread::spawn(cancel_hardware_operations_and_wait);
+        let wait_started = Instant::now();
+        while !cancelled.load(Ordering::Acquire) && wait_started.elapsed() < Duration::from_secs(5)
+        {
+            thread::sleep(Duration::from_millis(10));
+        }
+        assert!(cancelled.load(Ordering::Acquire));
+
+        let completed_after_cancel = AtomicBool::new(false);
+        assert_eq!(
+            operation.complete_if_active(|| {
+                completed_after_cancel.store(true, Ordering::Release);
+                Ok::<_, HardwareError>(())
+            }),
+            Err(HardwareError::Cancelled)
+        );
+        assert!(!completed_after_cancel.load(Ordering::Acquire));
+        drop(operation);
+        assert_eq!(cancellation.join().unwrap(), Ok(()));
     }
 
     #[cfg(unix)]

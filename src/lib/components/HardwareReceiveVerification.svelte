@@ -65,14 +65,12 @@
     `${savedDeviceIdentity ?? ''} ${verificationDevice?.label ?? ''} ${verificationDevice?.model ?? ''}`
   );
   const comparison = $derived(
-    hardwareAddressComparison(
-      address.address,
-      address.testnetAlias,
-      verificationDeviceIdentity,
-      address.hardwareDisplayAlias
-    )
+    hardwareAddressComparison(address.address, address.testnetAlias, verificationDeviceIdentity)
   );
   const isMultisig = $derived(walletKind === 'multisig');
+  const coldcardReturnsAddressAutomatically = $derived(
+    verificationDevice ? isColdcard(verificationDevice) : false
+  );
 
   onDestroy(() => {
     hardwareScanGeneration += 1;
@@ -110,7 +108,7 @@
   }
 
   function closeVerification() {
-    if (verifyBusy && verificationAction !== 'scan') {
+    if (verifyBusy && verificationAction !== 'scan' && !coldcardReturnsAddressAutomatically) {
       cancelRequested = true;
       modalAttentionSignal += 1;
       return;
@@ -148,6 +146,10 @@
 
   function isTrezor(device: HardwareDevice) {
     return `${device.label} ${device.model}`.toLowerCase().includes('trezor');
+  }
+
+  function isColdcard(device: HardwareDevice) {
+    return `${device.label} ${device.model}`.toLowerCase().includes('coldcard');
   }
 
   async function runScan(afterPin: boolean) {
@@ -375,9 +377,7 @@
   description={translate(
     $locale,
     comparison.deviceName
-      ? comparison.usesRegtestEncoding
-        ? `${comparison.deviceName} displays the Testnet4 output with a Regtest prefix. Compare the exact address below.`
-        : `${comparison.deviceName} displays the Regtest output with a testnet prefix. Compare the exact address below.`
+      ? `${comparison.deviceName} displays the Regtest output with a testnet prefix. Compare the exact address below.`
       : "Compare the exact address below with the complete address on the signer's trusted display."
   )}
   onclose={closeVerification}
@@ -397,9 +397,11 @@
         cancelRequested
           ? 'Cancel on your hardware device'
           : verificationAction !== 'scan'
-            ? verificationAction === 'unlock'
-              ? 'Unlock and check your hardware device'
-              : 'Check your hardware device'
+            ? coldcardReturnsAddressAutomatically
+              ? 'Check the address on your Coldcard'
+              : verificationAction === 'unlock'
+                ? 'Unlock and check your hardware device'
+                : 'Check your hardware device'
             : isMultisig
               ? 'Looking for a wallet signer'
               : 'Looking for your saved signer'
@@ -409,9 +411,11 @@
         cancelRequested
           ? 'Reject or cancel the pending request on the device. Groot will close this dialog after the device responds.'
           : verificationAction !== 'scan'
-            ? verificationAction === 'unlock'
-              ? 'Complete the login or unlock on-device, then compare the complete address above and approve it.'
-              : 'Compare the complete address above, then approve it on the device.'
+            ? coldcardReturnsAddressAutomatically
+              ? 'Coldcard returns the displayed address automatically. It has no approve or reject step. Groot checks the returned address exactly; compare it with the address above while it remains on screen.'
+              : verificationAction === 'unlock'
+                ? 'Complete the login or unlock on-device, then compare the complete address above and approve it.'
+                : 'Compare the complete address above, then approve it on the device.'
             : isMultisig
               ? 'Groot checks only signer types saved in this wallet policy and ignores other connected device families.'
               : 'Groot checks only this saved signer type and ignores other connected device families.'
@@ -421,9 +425,11 @@
         cancelRequested
           ? 'Waiting for hardware cancellation'
           : verificationAction !== 'scan'
-            ? verificationAction === 'unlock'
-              ? 'Waiting for hardware unlock and approval'
-              : 'Waiting for hardware approval'
+            ? coldcardReturnsAddressAutomatically
+              ? 'Waiting for Coldcard address display'
+              : verificationAction === 'unlock'
+                ? 'Waiting for hardware unlock and approval'
+                : 'Waiting for hardware approval'
             : 'Hardware device scan in progress'
       )}
     />

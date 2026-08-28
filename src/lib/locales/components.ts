@@ -239,10 +239,6 @@ export const componentCopy = {
     fr: 'sur Regtest alors que Groot utilise normalement',
     es: 'en Regtest mientras que Groot normalmente usa'
   },
-  'on Testnet4 while Groot normally uses': {
-    fr: 'sur Testnet4 alors que Groot utilise normalement',
-    es: 'en Testnet4 mientras Groot normalmente usa'
-  },
   'Opening this shares the transaction lookup with mempool.space.': {
     fr: 'Ouvrir ce lien partage la recherche de transaction avec mempool.space.',
     es: 'Abrirlo comparte la consulta de la transacción con mempool.space.'

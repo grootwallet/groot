@@ -33,16 +33,9 @@
     {#if comparison.deviceName}
       <p class="verification-network-note">
         {comparison.deviceName}
-        {translate($locale, 'shows')}
-        {#if comparison.usesRegtestEncoding}
-          <code>{translate($locale, 'bcrt1')}</code>
-          {translate($locale, 'on Testnet4 while Groot normally uses')}
-          <code>{translate($locale, 'tb1')}</code>
-        {:else}
-          <code>{translate($locale, 'tb1')}</code>
-          {translate($locale, 'on Regtest while Groot normally uses')}
-          <code>{translate($locale, 'bcrt1')}</code>
-        {/if}{translate(
+        {translate($locale, 'shows')} <code>{translate($locale, 'tb1')}</code>
+        {translate($locale, 'on Regtest while Groot normally uses')}
+        <code>{translate($locale, 'bcrt1')}</code>{translate(
           $locale,
           '. The prefix and six-character checksum differ; Rust verified that both\n        decode to the identical Bitcoin output script.'
         )}

@@ -158,6 +158,12 @@ describe('hardware receive verification UI', () => {
     expect(verificationFlow).toContain('finishVerificationClose(false)');
   });
 
+  it('treats Coldcard address display as an automatic return without approval controls', () => {
+    expect(verificationFlow).toContain('coldcardReturnsAddressAutomatically');
+    expect(verificationFlow).toContain('Coldcard returns the displayed address automatically');
+    expect(verificationFlow).toContain('Waiting for Coldcard address display');
+  });
+
   it('keeps one shared verification component in both receive flows', () => {
     for (const route of [singleKeyReceive, multisigReceive]) {
       expect(route).toContain('<HardwareReceiveVerification');

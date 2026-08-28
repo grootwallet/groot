@@ -31,26 +31,26 @@ The current campaign, reconciled 2026-08-28, supersedes the hardware-status stat
 ## Interactive trusted-display cancellation — HWI 3.2.0 source audit
 
 The exact packaged HWI 3.2.0 adapters have no common remote-cancel command for an
-in-flight address display. Each adapter blocks in its vendor address call and
-maps a device rejection to `ActionCanceledError`; its `close()` method only
-closes or stops the host transport. Transport closure must therefore never be
-presented as proof that the device exited its trusted-display screen.
+in-flight address display. Jade, Ledger, Trezor, and BitBox02 block for a vendor
+decision and map rejection to a host error. Coldcard is explicitly different:
+firmware returns the displayed address immediately and offers display/dismiss,
+not an approve/reject authorization decision.
 
-| Family   | HWI 3.2.0 address operation                                     | HWI `close()` behavior     | Groot v0.4.28 rule                                                                  | Current physical evidence                                                                                      |
-| -------- | --------------------------------------------------------------- | -------------------------- | ----------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| Jade     | `get_receive_address`                                           | Serial disconnect          | Keep the modal open after Groot close; wait for rejection on Jade and drain reply   | **PASS:** packaged Testnet4 Jade Classic rejection closed both device prompt and modal; unchanged retry passed |
-| Ledger   | `get_wallet_address(..., display=true)`                         | Stop client transport      | Same conservative on-device rejection rule                                          | **PASS:** packaged Testnet4 Nano S Plus rejection closed both device prompt and modal; unchanged retry passed  |
-| Trezor   | `btc.get_address(..., show_display=True)`                       | Close client transport     | Same conservative on-device rejection rule                                          | Focused regression required separately for Model One and Safe 3                                                |
-| BitBox02 | `btc_address(..., display=True)`                                | Close HID transport        | Same conservative on-device rejection rule                                          | **PASS:** original BitBox02 packaged v0.4.31; focused Nova regression remains separate                         |
-| Coldcard | `show_address` / `show_p2sh_address`, then blocking `send_recv` | Close USB device transport | Same conservative on-device rejection rule for HWI USB; file workflows are separate | Focused close/reject/retry regression required on Mk4                                                          |
+| Family   | HWI 3.2.0 address operation                                       | HWI `close()` behavior     | Groot v0.4.28 rule                                                                  | Current physical evidence                                                                                      |
+| -------- | ----------------------------------------------------------------- | -------------------------- | ----------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Jade     | `get_receive_address`                                             | Serial disconnect          | Keep the modal open after Groot close; wait for rejection on Jade and drain reply   | **PASS:** packaged Testnet4 Jade Classic rejection closed both device prompt and modal; unchanged retry passed |
+| Ledger   | `get_wallet_address(..., display=true)`                           | Stop client transport      | Same conservative on-device rejection rule                                          | **PASS:** packaged Testnet4 Nano S Plus rejection closed both device prompt and modal; unchanged retry passed  |
+| Trezor   | `btc.get_address(..., show_display=True)`                         | Close client transport     | Same conservative on-device rejection rule                                          | Focused regression required separately for Model One and Safe 3                                                |
+| BitBox02 | `btc_address(..., display=True)`                                  | Close HID transport        | Same conservative on-device rejection rule                                          | **PASS:** original BitBox02 packaged v0.4.31; focused Nova regression remains separate                         |
+| Coldcard | `show_address` / `show_p2sh_address`; address returns immediately | Close USB device transport | Compare exact returned address; no fictional approve/reject or rejection-drain step | Mk4 firmware 5.6.1 behavior physically observed; corrected packaged equality retest remains open               |
 
 This table is a protocol/source claim, not inherited physical evidence. The
 source references are the tagged HWI 3.2.0 adapters under
 [`hwilib/devices`](https://github.com/bitcoin-core/HWI/tree/3.2.0/hwilib/devices).
-Every exact model must still prove: start trusted display, request close in
-Groot, observe that Groot remains bound to the operation, reject on-device,
-observe both device and modal exit, confirm no verification persisted, then
-approve a fresh unchanged retry.
+Every exact model with an address decision must still prove close, rejection,
+no-persistence, and unchanged retry. Coldcard instead proves canonical network
+selection, exact returned/displayed equality, host cancellation without a fake
+on-device rejection instruction, restart persistence, and repeat verification.
 
 ## Local preflight
 
@@ -158,7 +158,7 @@ The sealed packaged v0.4.57 follow-up resumed that standard-wallet campaign afte
 
 The packaged v0.4.57 Trezor Model One follow-up then completed the standard BIP48 Testnet4 transaction campaign: PIN unlock, complete on-device recipient/amount/fee/locktime review, one accepted Trezor signature, local signature discard, unchanged re-signing, full Groot restart persistence, independent Ledger threshold completion, fully signed PSBT export, modal-close attention behavior, finalization, and broadcast all passed. One deliberately slow first review exceeded Groot's five-minute host deadline and left Trezor on a loading screen until reconnect; a later hardware action begun after idle-session expiry showed an inline lock error instead of routing to unlock. The transaction was a wallet-owned recipient, and Trezor correctly displayed recipient and change derivation paths while Groot did not identify the self-transfer. The packaged v0.4.58 focused retest then passed authoritative self-transfer classification and disclosure, preserved the exact active device review for more than six minutes without an error or proposal/signature mutation, and accepted the Trezor signature after that extended review. Candidate `101177a` subsequently kept the active Trezor review open beyond the configured one-minute idle deadline, accepted the signature, routed immediately to the lock screen when review finished, and restored the same proposal with one signature after unlock. This closes the focused Model One automatic-lock regression without repeating or broadening the other model and transport rows. No address, transaction identifier, fingerprint, xpub, device path, PSBT, or credential is retained.
 
-On 2026-08-28, the reviewer installed and verified Coldcard Mk4 firmware 5.6.1, then used packaged Groot v0.4.59 for a Testnet4 BIP84 single-key import. USB unlock, public account-key extraction, on-device master-fingerprint comparison, wallet creation, and saved-identity health check passed. Receive-address display reached the physical device, but Groot rejected the response because the Regtest-configured Coldcard returned the script-equivalent `bcrt1` encoding while the Testnet4 wallet stored `tb1`; no address-verification evidence was persisted. v0.4.60 adds an external-signer BIP84-only identical-output-script encoding boundary and exact `bcrt1` host comparison alias; multisig and policy verification remain unchanged. The physical rejection/retry/no-persistence/success retest remains open and must be recorded before this row passes. No address, fingerprint, account key, device path, or other identifier is retained.
+On 2026-08-28, the reviewer installed and verified Coldcard Mk4 firmware 5.6.1, then used packaged Groot v0.4.59 for a Testnet4 BIP84 single-key import. USB unlock, public account-key extraction, on-device master-fingerprint comparison, wallet creation, and saved-identity health check passed. The first address attempt returned `bcrt1` because the Mk4 was configured for Regtest; v0.4.60 incorrectly treated that configuration mismatch as a compatibility encoding. After the reviewer switched the Mk4 to Testnet4, the physical device displayed the canonical `tb1` address matching Groot and confirmed that Coldcard address display has no approve/reject decision. v0.4.60 still presented its synthetic `bcrt1` alias in the comparison modal, so that package is not certification evidence. v0.4.61 removes the alias, requires exact Testnet4 equality, and adds accurate display-and-dismiss instructions. The packaged v0.4.61 exact-address, restart, and repeat-verification retest remains open. No address, fingerprint, account key, device path, or other identifier is retained.
 
 ### Completed BIP84 checkpoint — Blockstream Jade
 

@@ -2256,41 +2256,42 @@ pub async fn hardware_verify_multisig_address(
     let hwi = hwi_cli(&app)?;
     let device = recently_scanned_hardware_device(&state, &device_id)?;
     let expected_signers = saved_cosigner_candidates_for_device(&metadata.cosigners, &device)?;
-    let (displayed, identity) = tauri::async_runtime::spawn_blocking(move || {
-        let operation = hwi
-            .begin_interactive_operation()
-            .map_err(hardware_api_error)?;
-        let identity = prove_live_cosigner_identity_for_candidates(
-            &hwi,
-            &operation,
-            &device,
-            &expected_signers,
-        )?;
-        let displayed = if identity.device_type.eq_ignore_ascii_case("bitbox02") {
-            // HWI's cached BitBox HID path can stop reopening after aggregate
-            // discovery even while the signer remains connected. Reopen the
-            // saved signer through HWI's exact fingerprint selector for the
-            // trusted-display command. The selector and descriptor stay in
-            // stdin, and the earlier full account identity proof remains
-            // mandatory under this same exclusive operation lease.
-            hwi.display_bitbox_descriptor_address_in_operation(
+    let (displayed, identity, hardware_operation) =
+        tauri::async_runtime::spawn_blocking(move || {
+            let operation = hwi
+                .begin_interactive_operation()
+                .map_err(hardware_api_error)?;
+            let identity = prove_live_cosigner_identity_for_candidates(
+                &hwi,
                 &operation,
-                &identity.fingerprint,
-                &descriptor,
-            )
-        } else {
-            hwi.display_descriptor_address_in_operation(
-                &operation,
-                &identity.device_type,
-                &device.path,
-                &descriptor,
-            )
-        }
-        .map_err(|error| hardware_device_api_error(error, &identity.device_type))?;
-        Ok::<_, ApiError>((displayed, identity))
-    })
-    .await
-    .map_err(internal)??;
+                &device,
+                &expected_signers,
+            )?;
+            let displayed = if identity.device_type.eq_ignore_ascii_case("bitbox02") {
+                // HWI's cached BitBox HID path can stop reopening after aggregate
+                // discovery even while the signer remains connected. Reopen the
+                // saved signer through HWI's exact fingerprint selector for the
+                // trusted-display command. The selector and descriptor stay in
+                // stdin, and the earlier full account identity proof remains
+                // mandatory under this same exclusive operation lease.
+                hwi.display_bitbox_descriptor_address_in_operation(
+                    &operation,
+                    &identity.fingerprint,
+                    &descriptor,
+                )
+            } else {
+                hwi.display_descriptor_address_in_operation(
+                    &operation,
+                    &identity.device_type,
+                    &device.path,
+                    &descriptor,
+                )
+            }
+            .map_err(|error| hardware_device_api_error(error, &identity.device_type))?;
+            Ok::<_, ApiError>((displayed, identity, operation))
+        })
+        .await
+        .map_err(internal)??;
     let response: HwiAddress = serde_json::from_slice(&displayed).map_err(internal)?;
     let actual = response.address.ok_or_else(|| {
         drop(response.error);
@@ -2299,8 +2300,7 @@ pub async fn hardware_verify_multisig_address(
             "The device did not return the displayed address.",
         )
     })?;
-    if !hardware_display_matches_expected_address(&expected, &actual, &identity.device_type, false)
-    {
+    if !hardware_display_matches_expected_address(&expected, &actual) {
         return Err(api_error(
             "hardware_address_mismatch",
             "The address returned by the device does not match this wallet.",
@@ -2330,7 +2330,11 @@ pub async fn hardware_verify_multisig_address(
             "The receive address changed during hardware verification. Verify it again.",
         ));
     }
-    record_address_verification(&mut db, address_id, &identity, &actual, true)
+    hardware_operation
+        .complete_if_active(|| {
+            record_address_verification(&mut db, address_id, &identity, &actual, true)
+        })
+        .map_err(hardware_api_error)?
 }
 
 #[tauri::command]
@@ -2517,8 +2521,7 @@ pub async fn hardware_verify_multisig_policy(
         .address
         .clone()
         .ok_or_else(|| missing_policy_address(&identity.device_type, response))?;
-    if !hardware_display_matches_expected_address(&expected, &actual, &identity.device_type, false)
-    {
+    if !hardware_display_matches_expected_address(&expected, &actual) {
         return Err(api_error(
             "hardware_address_mismatch",
             "The first address returned by the device does not match this wallet policy.",
@@ -2590,8 +2593,7 @@ pub async fn hardware_verify_multisig_draft_policy(
         .address
         .clone()
         .ok_or_else(|| missing_policy_address(&identity.device_type, response))?;
-    if !hardware_display_matches_expected_address(&expected, &actual, &identity.device_type, false)
-    {
+    if !hardware_display_matches_expected_address(&expected, &actual) {
         return Err(api_error(
             "hardware_address_mismatch",
             "The first address returned by the device does not match this wallet policy.",
@@ -2665,34 +2667,35 @@ pub async fn hardware_verify_external_address(
     let expected_signer = metadata.signer;
     let hwi = hwi_cli(&app)?;
     let device = recently_scanned_hardware_device(&state, &device_id)?;
-    let (displayed, identity) = tauri::async_runtime::spawn_blocking(move || {
-        let operation = hwi
-            .begin_interactive_operation()
-            .map_err(hardware_api_error)?;
-        let identity =
-            prove_live_external_signer_identity(&hwi, &operation, &device, &expected_signer)?;
-        let displayed = if identity.device_type.eq_ignore_ascii_case("bitbox02") {
-            // A saved BitBox may need a fresh secure connection after the
-            // identity proof. Select that connection by the freshly proven
-            // fingerprint instead of reusing the discovery HID path.
-            hwi.display_bitbox_descriptor_address_in_operation(
-                &operation,
-                &identity.fingerprint,
-                &descriptor,
-            )
-        } else {
-            hwi.display_descriptor_address_in_operation(
-                &operation,
-                &identity.device_type,
-                &device.path,
-                &descriptor,
-            )
-        }
-        .map_err(|error| hardware_device_api_error(error, &identity.device_type))?;
-        Ok::<_, ApiError>((displayed, identity))
-    })
-    .await
-    .map_err(internal)??;
+    let (displayed, identity, hardware_operation) =
+        tauri::async_runtime::spawn_blocking(move || {
+            let operation = hwi
+                .begin_interactive_operation()
+                .map_err(hardware_api_error)?;
+            let identity =
+                prove_live_external_signer_identity(&hwi, &operation, &device, &expected_signer)?;
+            let displayed = if identity.device_type.eq_ignore_ascii_case("bitbox02") {
+                // A saved BitBox may need a fresh secure connection after the
+                // identity proof. Select that connection by the freshly proven
+                // fingerprint instead of reusing the discovery HID path.
+                hwi.display_bitbox_descriptor_address_in_operation(
+                    &operation,
+                    &identity.fingerprint,
+                    &descriptor,
+                )
+            } else {
+                hwi.display_descriptor_address_in_operation(
+                    &operation,
+                    &identity.device_type,
+                    &device.path,
+                    &descriptor,
+                )
+            }
+            .map_err(|error| hardware_device_api_error(error, &identity.device_type))?;
+            Ok::<_, ApiError>((displayed, identity, operation))
+        })
+        .await
+        .map_err(internal)??;
     let response: HwiAddress = serde_json::from_slice(&displayed).map_err(internal)?;
     let actual = response.address.ok_or_else(|| {
         drop(response.error);
@@ -2701,7 +2704,7 @@ pub async fn hardware_verify_external_address(
             "The device did not return the displayed address.",
         )
     })?;
-    if !hardware_display_matches_expected_address(&expected, &actual, &identity.device_type, true) {
+    if !hardware_display_matches_expected_address(&expected, &actual) {
         return Err(api_error(
             "hardware_address_mismatch",
             "The address returned by the device does not match this wallet.",
@@ -2735,7 +2738,11 @@ pub async fn hardware_verify_external_address(
             "The receive address changed during hardware verification. Verify it again.",
         ));
     }
-    record_address_verification(&mut db, address_id, &identity, &actual, false)
+    hardware_operation
+        .complete_if_active(|| {
+            record_address_verification(&mut db, address_id, &identity, &actual, false)
+        })
+        .map_err(hardware_api_error)?
 }
 
 #[cfg(test)]

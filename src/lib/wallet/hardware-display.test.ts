@@ -24,22 +24,11 @@ describe('hardware transaction address display', () => {
     );
   });
 
-  it('uses the Rust-supplied Regtest encoding only for Coldcard on Testnet4', () => {
-    expect(
-      hardwareAddressComparison('tb1-canonical', null, 'Coldcard MK4', 'bcrt1-script-bound-alias')
-    ).toEqual({
-      address: 'bcrt1-script-bound-alias',
-      deviceName: 'Coldcard',
-      usesRegtestEncoding: true
+  it('keeps Coldcard on the canonical compiled-network address', () => {
+    expect(hardwareAddressComparison('tb1-canonical', null, 'Coldcard MK4')).toEqual({
+      address: 'tb1-canonical',
+      deviceName: null
     });
-    expect(
-      addressForHardwareDisplay(
-        'tb1-canonical',
-        null,
-        'Ledger Nano S Plus',
-        'bcrt1-script-bound-alias'
-      )
-    ).toBe('tb1-canonical');
   });
 
   it('names the exact device display used in comparison copy', () => {
@@ -54,13 +43,11 @@ describe('hardware transaction address display', () => {
       hardwareAddressComparison('bcrt1-canonical', 'tb1-script-bound-alias', 'bitbox02_btconly')
     ).toEqual({
       address: 'tb1-script-bound-alias',
-      deviceName: 'BitBox02',
-      usesRegtestEncoding: false
+      deviceName: 'BitBox02'
     });
     expect(hardwareAddressComparison('bcrt1-canonical', null, 'bitbox02_btconly')).toEqual({
       address: 'bcrt1-canonical',
-      deviceName: null,
-      usesRegtestEncoding: false
+      deviceName: null
     });
   });
 });

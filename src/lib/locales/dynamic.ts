@@ -107,10 +107,6 @@ export const dynamicCopy = {
     fr: 'affiche la sortie Regtest avec un préfixe testnet. Comparez exactement l’adresse ci-dessous.',
     es: 'muestra la salida de Regtest con un prefijo de testnet. Compara exactamente la dirección inferior.'
   },
-  'displays the Testnet4 output with a Regtest prefix. Compare the exact address below.': {
-    fr: 'affiche la sortie Testnet4 avec un préfixe Regtest. Comparez exactement l’adresse ci-dessous.',
-    es: 'muestra la salida de Testnet4 con un prefijo de Regtest. Compara exactamente la dirección inferior.'
-  },
   emergency: { fr: 'urgence', es: 'emergencia' },
   failed: { fr: 'échec', es: 'falló' },
   Frame: { fr: 'Image', es: 'Fotograma' },
@@ -244,6 +240,10 @@ export const dynamicCopy = {
     fr: 'Annulez sur votre appareil matériel',
     es: 'Cancela en tu dispositivo físico'
   },
+  'Check the address on your Coldcard': {
+    fr: 'Vérifiez l’adresse sur votre Coldcard',
+    es: 'Comprueba la dirección en tu Coldcard'
+  },
   'Check your hardware device': {
     fr: 'Vérifiez votre appareil matériel',
     es: 'Comprueba tu dispositivo físico'
@@ -269,6 +269,11 @@ export const dynamicCopy = {
     fr: 'Comparez l’adresse complète ci-dessus, puis approuvez-la sur l’appareil.',
     es: 'Compara la dirección completa de arriba y apruébala en el dispositivo.'
   },
+  'Coldcard returns the displayed address automatically. It has no approve or reject step. Groot checks the returned address exactly; compare it with the address above while it remains on screen.':
+    {
+      fr: 'Coldcard renvoie automatiquement l’adresse affichée. Il n’y a aucune étape d’approbation ou de refus. Groot vérifie exactement l’adresse renvoyée ; comparez-la avec l’adresse ci-dessus tant qu’elle reste à l’écran.',
+      es: 'Coldcard devuelve automáticamente la dirección mostrada. No hay ningún paso de aprobación o rechazo. Groot comprueba exactamente la dirección devuelta; compárala con la dirección superior mientras permanezca en pantalla.'
+    },
   "Compare the exact address below with the complete address on the signer's trusted display.": {
     fr: 'Comparez exactement l’adresse ci-dessous avec l’adresse complète sur l’écran fiable du signataire.',
     es: 'Compara exactamente la dirección inferior con la dirección completa en la pantalla fiable del firmante.'
@@ -656,6 +661,10 @@ export const dynamicCopy = {
   'Waiting for hardware approval': {
     fr: 'En attente de l’approbation matérielle',
     es: 'Esperando aprobación del dispositivo'
+  },
+  'Waiting for Coldcard address display': {
+    fr: 'En attente de l’affichage de l’adresse sur Coldcard',
+    es: 'Esperando que Coldcard muestre la dirección'
   },
   'Waiting for hardware cancellation': {
     fr: 'En attente de l’annulation sur l’appareil',
