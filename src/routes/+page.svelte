@@ -11,6 +11,7 @@
     EyeOff,
     FileKey,
     HeartPulse,
+    Network,
     RefreshCw,
     ShieldCheck,
     Smartphone
@@ -29,6 +30,7 @@
     walletService,
     WalletError,
     type CosignerHealthCheck,
+    type CoreNodeConfig,
     type ExternalSignerWallet,
     type MultisigProposal,
     type MultisigWallet,
@@ -90,6 +92,8 @@
   let initialDataLoading = $state(true);
   let syncSource = $state<WalletSyncSource | null>(null);
   let syncStatus = $state<WalletSyncStatus | null>(null);
+  let mobileRuntime = $state(false);
+  let nodeConfig = $state<CoreNodeConfig | null>(null);
   let syncPollToken = 0;
   let inheritedSyncObserved = false;
   let syncClock = $state(Date.now());
@@ -119,6 +123,11 @@
     snapshot?.syncedAt
       ? presentLocalTimestamp(snapshot.syncedAt).detail
       : translate($locale, 'This wallet has not completed a sync yet.')
+  );
+  const mobileSyncSetupRequired = $derived(
+    mobileRuntime &&
+      syncSource?.type === 'bitcoin_core' &&
+      nodeConfig?.backend.type === 'local_core'
   );
   let hardwareSignerDetails = $derived.by<CosignerDraft | null>(() =>
     hardwareSignerWallet
@@ -229,13 +238,17 @@
           return;
         }
       }
-      const [registry, nextSyncSource] = await Promise.all([
+      const [registry, nextSyncSource, runtime, nextNodeConfig] = await Promise.all([
         shellWallets.length && shellSelectedWalletId
           ? Promise.resolve({ wallets: shellWallets, selectedWalletId: shellSelectedWalletId })
           : walletService.profiles(),
-        walletService.syncSource()
+        walletService.syncSource(),
+        walletService.runtimePlatform(),
+        walletService.nodeConfig()
       ]);
       syncSource = nextSyncSource;
+      mobileRuntime = runtime.mobile;
+      nodeConfig = nextNodeConfig;
       selectedProfile =
         registry.wallets.find((wallet) => wallet.id === registry.selectedWalletId) ?? null;
       activeDraft = selectedProfile ? await walletService.paymentDraft() : null;
@@ -337,6 +350,10 @@
     void pollSyncStatus(token);
   }
   const sync = async (showToast = true) => {
+    if (mobileSyncSetupRequired) {
+      await goto('/settings#network-services');
+      return;
+    }
     if (syncInProgress) return;
     syncing = true;
     startSyncStatusPolling();
@@ -468,11 +485,35 @@
     <button
       class="sync-button"
       disabled={syncInProgress}
-      title={syncButtonTitle}
+      title={mobileSyncSetupRequired
+        ? translate(
+            $locale,
+            'Choose a trusted remote Bitcoin Core node or compact filters before refreshing this wallet.'
+          )
+        : syncButtonTitle}
       onclick={() => sync(true)}
-      ><RefreshCw size={15} class={syncInProgress ? 'spin' : ''} />{syncButtonLabel}</button
+      >{#if mobileSyncSetupRequired}<Network size={15} />{:else}<RefreshCw
+          size={15}
+          class={syncInProgress ? 'spin' : ''}
+        />{/if}{mobileSyncSetupRequired
+        ? translate($locale, 'Set up sync')
+        : syncButtonLabel}</button
     >
   </header>
+  {#if mobileSyncSetupRequired}
+    <section class="sync-setup-notice" aria-live="polite">
+      <Network size={18} /><span
+        ><strong>{translate($locale, 'Set up wallet sync')}</strong><small
+          >{translate(
+            $locale,
+            'Choose a trusted remote Bitcoin Core node or compact filters before refreshing this wallet.'
+          )}</small
+        ></span
+      ><Button size="small" variant="secondary" href="/settings#network-services"
+        >{translate($locale, 'Configure sync')}</Button
+      >
+    </section>
+  {/if}
   {#if syncStatus && (syncInProgress || syncStatus.state === 'failed')}
     <section class:failed={syncStatus.state === 'failed'} class="sync-progress" aria-live="polite">
       <div>

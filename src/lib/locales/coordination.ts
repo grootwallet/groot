@@ -1,6 +1,28 @@
 import type { CatalogSection } from './types';
 
 export const coordinationCopy = {
+  'Check phone key': { fr: 'Vérifier la clé du téléphone', es: 'Comprobar clave del teléfono' },
+  'Encrypted signing key stored on this phone.': {
+    fr: 'Clé de signature chiffrée stockée sur ce téléphone.',
+    es: 'Clave de firma cifrada guardada en este teléfono.'
+  },
+  'Enter the app PIN to decrypt this phone key and prove it matches the wallet policy.': {
+    fr: 'Saisissez le code PIN de l’app pour déchiffrer cette clé et prouver qu’elle correspond à la politique du portefeuille.',
+    es: 'Introduce el PIN de la app para descifrar esta clave y demostrar que coincide con la política de la cartera.'
+  },
+  'Enter the app PIN to prove this phone key still matches the wallet.': {
+    fr: 'Saisissez le code PIN de l’app pour prouver que cette clé correspond toujours au portefeuille.',
+    es: 'Introduce el PIN de la app para demostrar que esta clave aún coincide con la cartera.'
+  },
+  'Phone key check': {
+    fr: 'Contrôle de la clé du téléphone',
+    es: 'Comprobación de la clave del teléfono'
+  },
+  'Phone key verified': { fr: 'Clé du téléphone vérifiée', es: 'Clave del teléfono verificada' },
+  'The encrypted key on this phone matches the wallet policy.': {
+    fr: 'La clé chiffrée de ce téléphone correspond à la politique du portefeuille.',
+    es: 'La clave cifrada de este teléfono coincide con la política de la cartera.'
+  },
   'Accountless · encrypted two-QR pairing': {
     fr: 'Sans compte · jumelage chiffré par deux QR',
     es: 'Sin cuenta · vinculación cifrada con dos QR'

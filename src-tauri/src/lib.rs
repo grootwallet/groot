@@ -164,6 +164,7 @@ pub fn run() {
             wallet::coordination_commands::coordination_mobile_recovery_inspect,
             wallet::coordination_commands::coordination_mobile_recover,
             wallet::coordination_commands::coordination_mobile_psbt_review,
+            wallet::coordination_commands::coordination_mobile_signer_check,
             wallet::coordination_commands::coordination_mobile_sign_psbt,
             wallet::coordination_commands::coordination_status,
             wallet::coordination_commands::coordination_watch_only_encode,

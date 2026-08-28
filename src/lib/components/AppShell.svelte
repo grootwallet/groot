@@ -656,8 +656,11 @@
       </div>
     </aside>
 
-    <a class="mobile-brand" href="/" aria-label={translate($locale, 'Groot home')}
-      ><BrandLockup /></a
+    <a
+      class="mobile-brand"
+      class:locked-brand={lockedRoute}
+      href="/"
+      aria-label={translate($locale, 'Groot home')}><BrandLockup /></a
     >
 
     <main class="main">

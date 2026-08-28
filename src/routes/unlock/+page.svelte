@@ -120,86 +120,91 @@
 </script>
 
 <div class="onboarding-overlay unlock-overlay">
-  {#key selectedWalletId}
-    <main class="onboarding-card" in:fly={{ y: 6, duration: 260, opacity: 0 }}>
-      <span class="setup-step">{translate($locale, 'WALLET LOCKED')}</span>
-      <span class="sign-icon"><LockKeyhole size={25} /></span>
-      <h1>{translate($locale, selectedProfile?.name ?? 'Unlock wallet')}</h1>
-      <p>
-        {#if compatibility && !compatibility.supported}
-          {translate(
-            $locale,
-            'This disposable Regtest wallet uses an unsupported test-profile format.'
-          )}
-        {:else if isSoftwareWallet}{translate(
-            $locale,
-            'Enter this wallet’s passphrase to continue.'
-          )}{:else}{translate($locale, 'Enter this\n          wallet’s app PIN to continue.')}{/if}
-      </p>
-      {#if compatibility && !compatibility.supported}
-        <div class="warning-box">
-          <strong
-            >{translate(
+  <div class="locked-wallet-stack">
+    {#key selectedWalletId}
+      <main class="onboarding-card" in:fly={{ y: 6, duration: 260, opacity: 0 }}>
+        <span class="setup-step">{translate($locale, 'WALLET LOCKED')}</span>
+        <span class="sign-icon"><LockKeyhole size={25} /></span>
+        <h1>{translate($locale, selectedProfile?.name ?? 'Unlock wallet')}</h1>
+        <p>
+          {#if compatibility && !compatibility.supported}
+            {translate(
               $locale,
-              'This profile predates the current hardware-signer storage format.'
-            )}</strong
+              'This disposable Regtest wallet uses an unsupported test-profile format.'
+            )}
+          {:else if isSoftwareWallet}{translate(
+              $locale,
+              'Enter this wallet’s passphrase to continue.'
+            )}{:else}{translate(
+              $locale,
+              'Enter this\n          wallet’s app PIN to continue.'
+            )}{/if}
+        </p>
+        {#if compatibility && !compatibility.supported}
+          <div class="warning-box">
+            <strong
+              >{translate(
+                $locale,
+                'This profile predates the current hardware-signer storage format.'
+              )}</strong
+            >
+            {translate(
+              $locale,
+              'Groot will not guess missing metadata or reset its app PIN. Because Regtest wallets are disposable,\n          delete this test wallet and recreate or recover it from a public wallet backup. Its existing\n          files remain untouched until you explicitly delete it.'
+            )}
+          </div>
+        {/if}
+        {#if isPrototypeWallet}<p class="prototype-hint">
+            {translate($locale, 'UI prototype PIN:')}
+            <code>{translate($locale, 'prototype-passphrase')}</code>
+          </p>{/if}
+        {#if compatibility?.supported !== false}
+          <form
+            onsubmit={(event) => {
+              event.preventDefault();
+              unlock();
+            }}
           >
-          {translate(
-            $locale,
-            'Groot will not guess missing metadata or reset its app PIN. Because Regtest wallets are disposable,\n          delete this test wallet and recreate or recover it from a public wallet backup. Its existing\n          files remain untouched until you explicitly delete it.'
-          )}
-        </div>
-      {/if}
-      {#if isPrototypeWallet}<p class="prototype-hint">
-          {translate($locale, 'UI prototype PIN:')}
-          <code>{translate($locale, 'prototype-passphrase')}</code>
-        </p>{/if}
-      {#if compatibility?.supported !== false}
-        <form
-          onsubmit={(event) => {
-            event.preventDefault();
-            unlock();
-          }}
-        >
-          <PasswordField
-            label={credentialLabel}
-            tooltip={isSoftwareWallet
-              ? translate(
-                  $locale,
-                  'This BIP39 passphrase is required with your 24 recovery words and also unlocks Groot. A different passphrase opens a different wallet.'
-                )
-              : translate(
-                  $locale,
-                  'This app PIN protects local Groot data only. It is not a hardware-signer passphrase and is not part of a signer seed backup.'
-                )}
-            bind:value={credential}
-            placeholder={credentialPlaceholder}
-            autocomplete="current-password"
-            {error}
-            oninput={() => (error = '')}
-            onkeydown={submitCredentialOnEnter}
-          />
-          <Button
-            type="submit"
-            size="large"
-            class="full"
-            disabled={!credential}
-            loading={busy}
-            loadingLabel={translate($locale, 'Unlocking wallet…')}
-            >{translate($locale, 'Unlock wallet')}</Button
-          >
-        </form>
-      {/if}
-      <Button href="/welcome?add=1" variant="secondary" size="large" class="full locked-add-wallet"
-        ><Plus size={16} />{translate($locale, 'Add another wallet')}</Button
-      >
-      {#if defaultConfig.network === 'regtest'}<button
-          class="locked-reset"
-          onclick={() => (showReset = true)}
-          ><Trash2 size={14} />{translate($locale, 'Delete this regtest wallet')}</button
-        >{/if}
-    </main>
-  {/key}
+            <PasswordField
+              label={credentialLabel}
+              tooltip={isSoftwareWallet
+                ? translate(
+                    $locale,
+                    'This BIP39 passphrase is required with your 24 recovery words and also unlocks Groot. A different passphrase opens a different wallet.'
+                  )
+                : translate(
+                    $locale,
+                    'This app PIN protects local Groot data only. It is not a hardware-signer passphrase and is not part of a signer seed backup.'
+                  )}
+              bind:value={credential}
+              placeholder={credentialPlaceholder}
+              autocomplete="current-password"
+              {error}
+              oninput={() => (error = '')}
+              onkeydown={submitCredentialOnEnter}
+            />
+            <Button
+              type="submit"
+              size="large"
+              class="full"
+              disabled={!credential}
+              loading={busy}
+              loadingLabel={translate($locale, 'Unlocking wallet…')}
+              >{translate($locale, 'Unlock wallet')}</Button
+            >
+          </form>
+        {/if}
+        {#if defaultConfig.network === 'regtest'}<button
+            class="locked-reset"
+            onclick={() => (showReset = true)}
+            ><Trash2 size={14} />{translate($locale, 'Delete this regtest wallet')}</button
+          >{/if}
+      </main>
+    {/key}
+    <Button href="/welcome?add=1" variant="secondary" size="large" class="full locked-add-wallet"
+      ><Plus size={16} />{translate($locale, 'Add another wallet')}</Button
+    >
+  </div>
   <footer class="onboarding-footer">
     {translate($locale, 'Keys stay on this device · Open source')}
     {#if runtimeIdentity}<span

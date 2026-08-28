@@ -769,7 +769,7 @@ test('unlocks a Trezor before choosing its standard single-key wallet', async ({
   await expect(unlocked.getByText('Choose wallet')).toBeVisible();
   await unlocked.click();
   const standard = page.getByRole('dialog', { name: 'Use Trezor standard wallet?' });
-  await expect(standard.getByText(/add it to Groot as a separate wallet/)).toBeVisible();
+  await expect(standard.getByText('Your hidden wallet is unchanged.')).toBeVisible();
   await standard.getByRole('button', { name: 'Use standard wallet' }).click();
 
   await expect(page.getByText('PUBLIC DATA REVIEW')).toBeVisible();

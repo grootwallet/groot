@@ -32,6 +32,13 @@ describe('startup wallet lock gate', () => {
     expect(shell).toContain("'Groot v{version} · {commit}'");
     expect(unlockRoute).toContain('href="/welcome?add=1"');
     expect(unlockRoute).toContain("translate($locale, 'Add another wallet')");
+    const lockedCardClose = unlockRoute.indexOf('</main>');
+    const addWalletAction = unlockRoute.indexOf('href="/welcome?add=1"');
+    expect(addWalletAction).toBeGreaterThan(lockedCardClose);
+    expect(shell).toContain('class:locked-brand={lockedRoute}');
+    expect(appCss).toMatch(
+      /\.locked-mobile-utilities\s*\{[\s\S]*?bottom:\s*max\(58px,[\s\S]*?left:\s*50%;/
+    );
     expect(unlockRoute).toContain("'Groot v{version} · {commit} · {network}'");
   });
 

@@ -62,6 +62,7 @@
   let renaming = $state(false);
 
   function sourceName(source: CosignerSource) {
+    if (deviceContext === LOCAL_MOBILE_SIGNER_CONTEXT) return 'Phone key';
     return {
       usb: 'USB hardware',
       qr: 'QR import',
@@ -129,7 +130,12 @@
 <Modal
   open={!!signer}
   title={translate($locale, signer?.label ?? 'Signer details')}
-  description={translate($locale, 'Public signer identity. No private keys stored.')}
+  description={translate(
+    $locale,
+    deviceContext === LOCAL_MOBILE_SIGNER_CONTEXT
+      ? 'Encrypted signing key stored on this phone.'
+      : 'Public signer identity. No private keys stored.'
+  )}
   {onclose}
 >
   {#if signer}
@@ -250,14 +256,22 @@
           {/if}
         </section>
       {/if}
-      {#if !deviceContext && oncheck}<section class="health-card" aria-live="polite">
+      {#if deviceContext !== DESKTOP_MANAGED_SIGNER_CONTEXT && oncheck}<section
+          class="health-card"
+          aria-live="polite"
+        >
           <div class="health-heading">
             <span
               class:checked={health?.status === 'healthy'}
               class:attention={health?.status === 'attention'}><CheckCircle2 size={18} /></span
             >
             <div>
-              <strong>{translate($locale, 'Signer check')}</strong><small
+              <strong
+                >{translate(
+                  $locale,
+                  deviceContext === LOCAL_MOBILE_SIGNER_CONTEXT ? 'Phone key check' : 'Signer check'
+                )}</strong
+              ><small
                 >{#if health}{translate($locale, 'Last checked')}
                   <LocalTimestamp value={health.checkedAt} />{:else}{translate(
                     $locale,
@@ -278,12 +292,20 @@
                 {translate(
                   $locale,
                   health?.status === 'healthy'
-                    ? 'Signer matches this wallet.'
-                    : (health?.summary ?? 'Connect and unlock the signer to check it.')
+                    ? deviceContext === LOCAL_MOBILE_SIGNER_CONTEXT
+                      ? health.summary
+                      : 'Signer matches this wallet.'
+                    : (health?.summary ??
+                        (deviceContext === LOCAL_MOBILE_SIGNER_CONTEXT
+                          ? 'Enter the app PIN to prove this phone key still matches the wallet.'
+                          : 'Connect and unlock the signer to check it.'))
                 )}
               </p>
               <Button variant="secondary" class="full" onclick={oncheck}
-                ><RefreshCw size={15} />{translate($locale, 'Check signer')}</Button
+                ><RefreshCw size={15} />{translate(
+                  $locale,
+                  deviceContext === LOCAL_MOBILE_SIGNER_CONTEXT ? 'Check phone key' : 'Check signer'
+                )}</Button
               >
             {/if}
           </div>

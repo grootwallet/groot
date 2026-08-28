@@ -75,6 +75,13 @@ describe('foreground wallet navigation', () => {
     );
   });
 
+  it('routes mobile wallets to network setup before attempting an unavailable local-node sync', () => {
+    expect(overview).toContain("syncSource?.type === 'bitcoin_core'");
+    expect(overview).toContain("nodeConfig?.backend.type === 'local_core'");
+    expect(overview).toContain("await goto('/settings#network-services')");
+    expect(overview).toContain("translate($locale, 'Set up wallet sync')");
+  });
+
   it('runs contended snapshot reads away from the native window thread', () => {
     expect(profileCommands).toContain('pub async fn wallet_snapshot(app: AppHandle)');
     expect(multisigCommands).toContain('pub async fn multisig_snapshot(app: AppHandle)');

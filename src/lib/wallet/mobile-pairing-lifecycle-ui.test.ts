@@ -145,7 +145,8 @@ describe('mobile pairing lifecycle UI', () => {
     expect(scannerSource).toContain('.camera-frame.camera-inactive');
     expect(scannerSource).toContain('class="scanner-retry full"');
     expect(scannerSource).toContain('class:camera-active={cameraActive}');
-    expect(scannerSource).toContain('.scanner:not(.camera-active)');
+    expect(scannerSource).toMatch(/\.scanner\s*\{[\s\S]*?width:\s*100%/);
+    expect(scannerSource).toContain('.scanner.camera-active');
     expect(scannerSource).toMatch(/\.camera-frame\s*\{[\s\S]*?position:\s*relative/);
     expect(appShellSource).toContain("document.addEventListener('focusin', centerMobileField)");
     expect(appShellSource).toContain("field.scrollIntoView({ block: 'center'");
@@ -202,6 +203,13 @@ describe('mobile pairing lifecycle UI', () => {
     expect(appStyles).toMatch(
       /\.device-details \.connection-detail\s*\{[\s\S]*?grid-column:\s*1 \/ -1/
     );
+  });
+
+  it('keeps the mobile policy actions aligned to both card edges', () => {
+    expect(appStyles).toMatch(
+      /\.vault-actions\s*\{[\s\S]*?grid-template-columns:\s*46px minmax\(0, 0\.8fr\) minmax\(0, 1\.8fr\);[\s\S]*?width:\s*100%;[\s\S]*?justify-content:\s*stretch;/
+    );
+    expect(appStyles).toContain('.vault-actions > .wallet-more > button');
   });
 
   it('shows bounded multipart QR scan progress on desktop and mobile', () => {

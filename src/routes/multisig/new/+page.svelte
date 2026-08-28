@@ -2580,7 +2580,7 @@
   title={translate($locale, 'Use Trezor standard wallet?')}
   description={translate(
     $locale,
-    'Passphrase protection can expose several independent wallets from the same device.'
+    'This selects the seed-derived wallet with no hardware passphrase.'
   )}
   onclose={() => {
     standardWalletOpen = false;
@@ -2591,22 +2591,11 @@
   <div class="credential-warning">
     <ShieldCheck size={17} />
     <p>
-      <strong>{translate($locale, 'No hardware passphrase for this signer')}</strong><span
-        >{translate(
-          $locale,
-          'This imports the key derived from the device seed alone. It does not disable, change, or\n        reveal any hidden passphrase wallet you may use elsewhere.'
-        )}</span
+      <strong>{translate($locale, 'Your hidden wallet is unchanged.')}</strong><span
+        >{translate($locale, 'Confirm this standard wallet to continue.')}</span
       >
     </p>
   </div>
-  <p class="policy-guidance">
-    {translate($locale, 'Choose this only if you intentionally want the Trezor')}
-    <strong>{translate($locale, 'standard wallet')}</strong>
-    {translate(
-      $locale,
-      'in this multisig\n    policy. Enabling or choosing a passphrase later opens a different hidden wallet; it does not change\n    this signer. The imported fingerprint is permanently bound to this policy.'
-    )}
-  </p>
   {#if hardwareBusy}<HardwareActionPrompt
       title={translate($locale, 'Importing the Trezor standard wallet')}
       detail={translate(

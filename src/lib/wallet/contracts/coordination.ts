@@ -93,6 +93,7 @@ export interface WalletCoordinationPort {
   inspectMobileRecoveryRecord(frames: string[]): Promise<MobileRecoveryRecord>;
   recoverMobileSigner(frames: string[], credential: string): Promise<MultisigWallet>;
   reviewMobilePsbt(psbt: string): Promise<MobilePsbtReview>;
+  checkMobileSigner(credential: string): Promise<import('./hardware').CosignerHealthCheck>;
   signMobilePsbt(
     reviewedPsbt: string,
     revisionId: string,

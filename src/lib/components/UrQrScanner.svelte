@@ -185,11 +185,11 @@
   .scanner {
     display: grid;
     gap: 0.75rem;
-    width: min(100%, 68dvh, 38rem);
+    width: 100%;
     margin-inline: auto;
   }
-  .scanner:not(.camera-active) {
-    width: 100%;
+  .scanner.camera-active {
+    width: min(100%, 68dvh, 38rem);
   }
   .camera-frame.camera-inactive {
     position: fixed;

@@ -1079,6 +1079,72 @@ pub fn coordination_mobile_psbt_review(
 }
 
 #[tauri::command]
+pub fn coordination_mobile_signer_check(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    credential: String,
+) -> ApiResult<CosignerHealthDto> {
+    let _operation = operation_guard(&state)?;
+    require_unlocked(&app, &state)?;
+    let profile = selected_profile_of_kind(&app, WalletKind::Multisig)?;
+    let coordination = read_coordination_metadata(&app, profile.id)?;
+    if coordination.role != DeviceRole::MobileCosigner {
+        return Err(api_error(
+            "signing_unavailable",
+            "This device does not hold the phone signer for this wallet.",
+        ));
+    }
+    let expected_fingerprint = coordination
+        .mobile_signer_fingerprint
+        .as_deref()
+        .ok_or_else(|| {
+            api_error(
+                "signing_unavailable",
+                "The phone signer identity is missing.",
+            )
+        })?;
+    let wallet = read_multisig_metadata(&app)?;
+    let credential = Zeroizing::new(credential);
+    check_auth_throttle(&app, &state)?;
+    let loaded = secure_store::load(
+        &profile_directory(&app, profile.id)?.join("mobile-signer.json"),
+        credential.as_str(),
+    )
+    .map_err(secure_store_error);
+    record_auth_result(&app, &state, &loaded)?;
+    let mut words = Zeroizing::new(String::from_utf8(loaded?).map_err(internal)?);
+    let mnemonic = Mnemonic::parse(words.as_str()).map_err(internal)?;
+    words.zeroize();
+    if !mobile_signer_matches_wallet(&wallet, expected_fingerprint, &mnemonic)? {
+        return Err(coordination_api_error(
+            CoordinationError::DescriptorMismatch,
+        ));
+    }
+    Ok(CosignerHealthDto {
+        status: "healthy",
+        checked_at: now().to_string(),
+        summary: "Phone key matches this wallet.".to_owned(),
+    })
+}
+
+fn mobile_signer_matches_wallet(
+    wallet: &MultisigWalletDto,
+    expected_fingerprint: &str,
+    mnemonic: &Mnemonic,
+) -> ApiResult<bool> {
+    let (fingerprint, _, account_xpub) =
+        derive_mobile_account(mnemonic).map_err(coordination_api_error)?;
+    let fingerprint = fingerprint.to_string();
+    Ok(fingerprint.eq_ignore_ascii_case(expected_fingerprint)
+        && wallet.cosigners.iter().any(|signer| {
+            signer.fingerprint.eq_ignore_ascii_case(&fingerprint)
+                && signer.xpub == account_xpub.to_string()
+                && signer.derivation_path == MULTISIG_ACCOUNT_PATH
+                && signer.device_type.as_deref() == Some(MOBILE_DEVICE_TYPE)
+        }))
+}
+
+#[tauri::command]
 pub fn coordination_mobile_sign_psbt(
     app: AppHandle,
     state: State<'_, AppState>,
@@ -2755,5 +2821,22 @@ mod tests {
             .code,
             "proposal_mismatch"
         );
+    }
+
+    #[test]
+    fn phone_key_health_check_is_bound_to_the_saved_wallet_identity() {
+        let (mnemonic, _, mut wallet, coordination) = coordinated_wallet();
+        let expected = coordination.mobile_signer_fingerprint.as_deref().unwrap();
+        assert!(mobile_signer_matches_wallet(&wallet, expected, &mnemonic).unwrap());
+        assert!(!mobile_signer_matches_wallet(&wallet, "00000000", &mnemonic).unwrap());
+
+        let foreign_xpub = wallet.cosigners[0].xpub.clone();
+        let local = wallet
+            .cosigners
+            .iter_mut()
+            .find(|signer| signer.device_type.as_deref() == Some(MOBILE_DEVICE_TYPE))
+            .unwrap();
+        local.xpub = foreign_xpub;
+        assert!(!mobile_signer_matches_wallet(&wallet, expected, &mnemonic).unwrap());
     }
 }

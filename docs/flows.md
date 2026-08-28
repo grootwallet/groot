@@ -242,8 +242,11 @@ Passport Core uses QR or microSD. Trezor Model One host passphrase entry is unav
 3. Open **Settings → Wallet activity sync** and explicitly choose Bitcoin Core or compact filters.
 4. Compact filters disclose confirmed-only behavior. Public discovery requires at least two peers. Manual mode accepts numeric `IP:port` peers and never falls back; adding a loopback Tor proxy also disables discovery so DNS cannot escape locally.
 5. Open **Settings → Fee and broadcast node** to configure Bitcoin Core independently. Choosing compact filters never changes this service and never silently uses it for wallet discovery.
-6. On wallet overview startup, compact-filter mode shows sanitized connection/scan/apply progress. Failure leaves the prior balance visible and names the last verified block height. In the pinned engine, public filters are memory-only and download again after app restart; wallet checkpoints and history remain in SQLite.
-7. Test Core authentication and availability separately. Groot reports full/pruned history, prune height, IBD, disk use, and filter-index state. The health test retries a bounded transient transport interruption but fails immediately for the wrong chain or a missing required RPC permission. Core RPC activity sync does not require `blockfilterindex`; a pruned node must retain all blocks needed after the wallet checkpoint. Consecutive background-sync failures back off instead of continuously contending with manual checks. A compact-filter refresh fails visibly if its selected peers cannot reach a verified tip.
+6. A phone whose wallet still points to the unavailable local-Core default shows **Set up wallet sync** on Overview and routes directly to **Network services** instead of attempting a sync that cannot succeed. Choose a trusted remote Core node or compact filters there.
+7. On wallet overview startup, compact-filter mode shows sanitized connection/scan/apply progress. Failure leaves the prior balance visible and names the last verified block height. In the pinned engine, public filters are memory-only and download again after app restart; wallet checkpoints and history remain in SQLite.
+8. Test Core authentication and availability separately. Groot reports full/pruned history, prune height, IBD, disk use, and filter-index state. The health test retries a bounded transient transport interruption but fails immediately for the wrong chain or a missing required RPC permission. Core RPC activity sync does not require `blockfilterindex`; a pruned node must retain all blocks needed after the wallet checkpoint. Consecutive background-sync failures back off instead of continuously contending with manual checks. A compact-filter refresh fails visibly if its selected peers cannot reach a verified tip.
+
+The frontend/native sync-source boundary maps the public camel-case contract to Rust's snake-case tagged-enum fields. Compact-filter peer count, discovery mode, peer addresses, and optional Tor proxy therefore round-trip exactly instead of being rejected as missing command arguments.
 
 The later recovery, durable-cache, direct-P2P-broadcast, adversarial-peer, public-network, and platform work is explicitly gated by [`compact-filter-deferred-work.md`](compact-filter-deferred-work.md). None is an implicit fallback from this flow.
 
@@ -256,6 +259,8 @@ Payjoin V2 BIP21 requests are parsed and network-checked only inside Rust. Until
 Newest source transaction is the default. Sorting is presentation-only and never changes selection, freeze state, labels, or spend eligibility. Date sorting leaves coins without a known source-transaction timestamp after dated coins.
 
 ## External-signer health check
+
+For a coordinated phone signer, **Policy → Signing keys → Phone key → Check phone key** requests the local app PIN. Rust decrypts the protected mnemonic, derives the BIP48 account identity, and compares the fingerprint, full account xpub, path, device type, and authenticated mobile-cosigner role with the saved wallet policy. The mnemonic and derived private material never cross into the webview.
 
 An explicit scan performs one aggregate HWI enumeration, then Rust filters the validated result to the saved signer. Unrelated families may be observed by HWI but are never offered for the wallet or used as identity. The opaque ephemeral path is not persisted and is only a hint. The native health operation opens that path and freshly checks the saved type, fingerprint, BIP84 derivation, and full account xpub under one lease.
 

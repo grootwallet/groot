@@ -1265,7 +1265,7 @@
         </div>{/if}
     </div>
   </section>
-  <section class="settings-group">
+  <section class="settings-group" id="network-services">
     <h2>{translate($locale, 'Network services')}</h2>
     <div class="settings-list">
       <button onclick={openSyncSource}
@@ -1715,10 +1715,7 @@
 <Modal
   open={syncOpen}
   title={translate($locale, 'Wallet activity sync')}
-  description={translate(
-    $locale,
-    'Choose how this wallet discovers transactions. Fee estimation and broadcast continue to use the separately configured Bitcoin Core service.'
-  )}
+  description={translate($locale, 'Choose where this wallet gets transaction activity.')}
   onclose={() => {
     if (syncSaving) return;
     syncOpen = false;
@@ -1737,11 +1734,11 @@
     >
   </div>
   {#if syncSourceType === 'compact_filters'}
-    <div class="warning-box">
+    <div class="warning-box sync-source-warning">
       <strong>{translate($locale, 'Confirmed activity only.')}</strong>
       {translate(
         $locale,
-        'BIP157/158 peers provide public filters and matching blocks.\n      Groot validates them locally; pending incoming payments are not discoverable through this source.\n      This build keeps the public chain index in memory, so filters are downloaded again after an app\n      restart; wallet history and checkpoints remain durable.'
+        'Pending incoming payments appear after confirmation. Groot validates filters and matching blocks on this phone.'
       )}
     </div>
     <label class="field"
@@ -1797,13 +1794,22 @@
         ></label
       >{/if}
   {:else}
-    <div class="warning-box">
-      <strong>{translate($locale, 'Bitcoin Core activity sync.')}</strong>
+    <div class="warning-box sync-source-warning">
+      <strong>{translate($locale, 'Uses your Bitcoin Core connection.')}</strong>
       {translate(
         $locale,
-        'Groot uses the RPC node below for confirmed blocks\n      and mempool changes. It does not require Core’s block-filter index. A pruned node can sync while\n      it still retains every block newer than this wallet’s checkpoint; an older rescan needs an archival\n      node or a reindex/re-download with enough history.'
+        'Includes confirmed activity and mempool changes. Fee estimates and broadcast use this connection too.'
       )}
     </div>
+    <Button
+      variant="secondary"
+      class="full sync-source-configure"
+      onclick={() => {
+        syncOpen = false;
+        syncCredential = '';
+        openNodeSettings();
+      }}>{translate($locale, 'Configure Bitcoin Core')}</Button
+    >
   {/if}
   <PasswordField
     label={credentialLabel}
@@ -1999,7 +2005,7 @@
   title={translate($locale, 'Connect Bitcoin Core')}
   description={translate(
     $locale,
-    'Each wallet keeps isolated, encrypted RPC credentials. Use direct TLS or a local Tor SOCKS proxy remotely.'
+    'Used for activity sync, fee estimates, and broadcast. Credentials are encrypted for this wallet.'
   )}
   onclose={() => (nodeOpen = false)}
 >

@@ -20,6 +20,7 @@
   import DeviceDetailsModal from '$lib/components/DeviceDetailsModal.svelte';
   import LocalTimestamp from '$lib/components/LocalTimestamp.svelte';
   import Modal from '$lib/components/Modal.svelte';
+  import PasswordField from '$lib/components/PasswordField.svelte';
   import HardwareActionPrompt from '$lib/components/HardwareActionPrompt.svelte';
   import InsightTip from '$lib/components/InsightTip.svelte';
   import SignerPolicyReview from '$lib/components/SignerPolicyReview.svelte';
@@ -104,6 +105,10 @@
   let healthPinDevice = $state<HardwareDevice | null>(null);
   let healthPinError = $state('');
   let healthPinErrorCode = $state<WalletErrorCode | ''>('');
+  let phoneCheckOpen = $state(false);
+  let phoneCheckCredential = $state('');
+  let phoneCheckError = $state('');
+  let phoneCheckBusy = $state(false);
   const maturitySummary = $derived(
     snapshot ? policyMaturitySummary(snapshot.utxos, snapshot.chainTip) : null
   );
@@ -115,6 +120,7 @@
   onDestroy(() => {
     healthPinChallenge = '';
     healthPinPositions = '';
+    phoneCheckCredential = '';
   });
   onMount(async () => {
     wallet = await walletService.multisigWallet();
@@ -337,6 +343,36 @@
       toast({ title: 'Health check needs attention', description: summary, tone: 'danger' });
     } finally {
       checking = false;
+    }
+  }
+  function openPhoneHealthCheck() {
+    phoneCheckCredential = '';
+    phoneCheckError = '';
+    phoneCheckOpen = true;
+  }
+  async function runPhoneHealthCheck() {
+    if (!selectedSigner || !phoneCheckCredential || phoneCheckBusy) return;
+    const signer = selectedSigner;
+    phoneCheckBusy = true;
+    phoneCheckError = '';
+    try {
+      const result = await walletService.checkMobileSigner(phoneCheckCredential);
+      await saveHardwareHealthCheck(signer.fingerprint, result);
+      phoneCheckCredential = '';
+      phoneCheckOpen = false;
+      toast({
+        title: translate($locale, 'Phone key verified'),
+        description: translate(
+          $locale,
+          'The encrypted key on this phone matches the wallet policy.'
+        ),
+        tone: 'success'
+      });
+    } catch (cause) {
+      phoneCheckError = localizedError(cause, $locale, 'The phone key could not be verified.');
+      phoneCheckCredential = '';
+    } finally {
+      phoneCheckBusy = false;
     }
   }
   async function startHealthPin(device: HardwareDevice) {
@@ -855,20 +891,59 @@
 </div>
 
 <DeviceDetailsModal
-  signer={healthPinOpen ? null : selectedSigner}
+  signer={healthPinOpen || phoneCheckOpen ? null : selectedSigner}
   health={selectedSigner ? latestHealth(selectedSigner) : null}
   policyStatus={selectedSigner ? signerPolicyStatus(selectedSigner) : null}
   deviceContext={selectedSigner ? signerDeviceContext(selectedSigner) : null}
   {checking}
   onclose={() => (selectedSigner = null)}
-  oncheck={selectedSigner?.source === 'usb' && coordination?.role !== 'mobile_cosigner'
-    ? runHealthCheck
-    : undefined}
+  oncheck={selectedSigner && signerDeviceContext(selectedSigner) === LOCAL_MOBILE_SIGNER_CONTEXT
+    ? openPhoneHealthCheck
+    : selectedSigner?.source === 'usb' && coordination?.role !== 'mobile_cosigner'
+      ? runHealthCheck
+      : undefined}
   onpolicy={selectedSigner && !signerDeviceContext(selectedSigner)
     ? () => selectedSigner && openPolicyVerification(selectedSigner)
     : undefined}
   onrename={selectedSigner && !signerDeviceContext(selectedSigner) ? renameSavedSigner : undefined}
 />
+<Modal
+  open={phoneCheckOpen}
+  title={translate($locale, 'Check phone key')}
+  description={translate(
+    $locale,
+    'Enter the app PIN to decrypt this phone key and prove it matches the wallet policy.'
+  )}
+  onclose={() => {
+    if (phoneCheckBusy) return;
+    phoneCheckOpen = false;
+    phoneCheckCredential = '';
+    phoneCheckError = '';
+  }}
+>
+  <PasswordField
+    label={translate($locale, 'App PIN')}
+    bind:value={phoneCheckCredential}
+    autocomplete="current-password"
+    error={phoneCheckError}
+    oninput={() => (phoneCheckError = '')}
+  />
+  <div class="modal-footer">
+    <Button
+      variant="secondary"
+      onclick={() => {
+        phoneCheckOpen = false;
+        phoneCheckCredential = '';
+        phoneCheckError = '';
+      }}>{translate($locale, 'Cancel')}</Button
+    ><Button
+      disabled={!phoneCheckCredential}
+      loading={phoneCheckBusy}
+      loadingLabel={translate($locale, 'Checking…')}
+      onclick={runPhoneHealthCheck}>{translate($locale, 'Check phone key')}</Button
+    >
+  </div>
+</Modal>
 <TrezorPinModal
   open={healthPinOpen}
   busy={healthPinBusy}

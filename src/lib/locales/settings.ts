@@ -1,6 +1,30 @@
 import type { CatalogSection } from './types';
 
 export const settingsCopy = {
+  'Choose where this wallet gets transaction activity.': {
+    fr: 'Choisissez la source de l’activité de ce portefeuille.',
+    es: 'Elige de dónde obtiene actividad esta cartera.'
+  },
+  'Configure Bitcoin Core': { fr: 'Configurer Bitcoin Core', es: 'Configurar Bitcoin Core' },
+  'Includes confirmed activity and mempool changes. Fee estimates and broadcast use this connection too.':
+    {
+      fr: 'Inclut l’activité confirmée et les changements de la mempool. Les frais et la diffusion utilisent aussi cette connexion.',
+      es: 'Incluye actividad confirmada y cambios de mempool. Las comisiones y la difusión también usan esta conexión.'
+    },
+  'Pending incoming payments appear after confirmation. Groot validates filters and matching blocks on this phone.':
+    {
+      fr: 'Les paiements entrants en attente apparaissent après confirmation. Groot valide les filtres et les blocs correspondants sur ce téléphone.',
+      es: 'Los pagos entrantes pendientes aparecen tras confirmarse. Groot valida los filtros y bloques coincidentes en este teléfono.'
+    },
+  'Used for activity sync, fee estimates, and broadcast. Credentials are encrypted for this wallet.':
+    {
+      fr: 'Utilisé pour l’activité, les frais et la diffusion. Les identifiants sont chiffrés pour ce portefeuille.',
+      es: 'Se usa para actividad, comisiones y difusión. Las credenciales están cifradas para esta cartera.'
+    },
+  'Uses your Bitcoin Core connection.': {
+    fr: 'Utilise votre connexion Bitcoin Core.',
+    es: 'Usa tu conexión de Bitcoin Core.'
+  },
   '{walletName} · Local display name only': {
     fr: '{walletName} · Nom d’affichage local uniquement',
     es: '{walletName} · Solo nombre de visualización local'
@@ -35,6 +59,16 @@ export const settingsCopy = {
     fr: 'Non configuré sur ce téléphone',
     es: 'No configurado en este teléfono'
   },
+  'Set up sync': { fr: 'Configurer la synchro', es: 'Configurar sincronización' },
+  'Set up wallet sync': {
+    fr: 'Configurer la synchronisation du portefeuille',
+    es: 'Configurar la sincronización de la cartera'
+  },
+  'Choose a trusted remote Bitcoin Core node or compact filters before refreshing this wallet.': {
+    fr: 'Choisissez un nœud Bitcoin Core distant approuvé ou des filtres compacts avant d’actualiser ce portefeuille.',
+    es: 'Elige un nodo Bitcoin Core remoto de confianza o filtros compactos antes de actualizar esta cartera.'
+  },
+  'Configure sync': { fr: 'Configurer la synchronisation', es: 'Configurar sincronización' },
   'Not checked': { fr: 'Non vérifié', es: 'Sin comprobar' },
   'Previous scan failed': { fr: 'Échec de l’analyse précédente', es: 'El escaneo anterior falló' },
   'Previous scan interrupted': {

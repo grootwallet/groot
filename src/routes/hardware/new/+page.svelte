@@ -754,19 +754,10 @@
     <ShieldCheck size={17} />
     <p>
       <strong>{translate($locale, 'Your hidden wallet is unchanged.')}</strong><span
-        >{translate(
-          $locale,
-          'The same Trezor can use a passphrase-derived wallet elsewhere and its standard wallet here.\n        They have different fingerprints and addresses.'
-        )}</span
+        >{translate($locale, 'Confirm this standard wallet to continue.')}</span
       >
     </p>
   </div>
-  <p>
-    {translate(
-      $locale,
-      'Review the imported public identity in the next step. You can enable or choose a Trezor\n    passphrase later, but that opens a different hidden wallet; add it to Groot as a separate wallet\n    while this standard wallet remains unchanged.'
-    )}
-  </p>
   {#if busy}<HardwareActionPrompt
       title={translate($locale, 'Importing the Trezor standard wallet')}
       detail={translate($locale, 'Keep Trezor connected while Groot reads its public account key.')}

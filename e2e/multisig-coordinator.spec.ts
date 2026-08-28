@@ -1075,9 +1075,7 @@ test('explicitly selects a Trezor standard wallet without changing hidden wallet
   await standard.click();
 
   const choice = page.getByRole('dialog', { name: 'Use Trezor standard wallet?' });
-  await expect(choice).toContainText(
-    'It does not disable, change, or reveal any hidden passphrase wallet you may use elsewhere.'
-  );
+  await expect(choice).toContainText('Your hidden wallet is unchanged.');
   await choice.getByRole('button', { name: 'Use standard wallet' }).click();
   await expect(
     choice.getByRole('status', { name: 'Hardware signer import in progress' })

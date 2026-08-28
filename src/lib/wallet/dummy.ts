@@ -2059,6 +2059,12 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
   async reviewMobilePsbt(_psbt: string): ReturnType<WalletPort['reviewMobilePsbt']> {
     throw new WalletError('unsupported_operation', 'Mobile signing requires the native Groot app.');
   }
+  async checkMobileSigner(_credential: string): ReturnType<WalletPort['checkMobileSigner']> {
+    throw new WalletError(
+      'unsupported_operation',
+      'Phone key checks require the native Groot app.'
+    );
+  }
   async signMobilePsbt(
     _reviewedPsbt: string,
     _revisionId: string,

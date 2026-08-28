@@ -55,6 +55,39 @@ import type { PaymentDraft } from './payment-draft';
 
 type BackendError = { code?: string; message?: string };
 type NotificationEnvelope = { id: string; event: WalletEvent };
+export type NativeWalletSyncSource =
+  | { type: 'bitcoin_core' }
+  | {
+      type: 'compact_filters';
+      peers: string[];
+      required_peers: number;
+      discover_peers: boolean;
+      tor_proxy?: string | null;
+    };
+
+export function toNativeWalletSyncSource(source: WalletSyncSource): NativeWalletSyncSource {
+  return source.type === 'bitcoin_core'
+    ? source
+    : {
+        type: source.type,
+        peers: source.peers,
+        required_peers: source.requiredPeers,
+        discover_peers: source.discoverPeers,
+        tor_proxy: source.torProxy ?? null
+      };
+}
+
+export function fromNativeWalletSyncSource(source: NativeWalletSyncSource): WalletSyncSource {
+  return source.type === 'bitcoin_core'
+    ? source
+    : {
+        type: source.type,
+        peers: source.peers,
+        requiredPeers: source.required_peers,
+        discoverPeers: source.discover_peers,
+        torProxy: source.tor_proxy ?? null
+      };
+}
 const NOTIFICATION_BATCH_SIZE = 256;
 const MAX_NOTIFICATION_BATCHES_PER_DRAIN = 32;
 
@@ -236,13 +269,16 @@ export class TauriWalletAdapter implements WalletPort {
     return command<NodeStatus>('node_connection_test');
   }
   syncSource() {
-    return command<WalletSyncSource>('wallet_sync_source');
+    return command<NativeWalletSyncSource>('wallet_sync_source').then(fromNativeWalletSyncSource);
   }
   syncStatus() {
     return command<WalletSyncStatus | null>('wallet_sync_status');
   }
   saveSyncSource(source: WalletSyncSource, credential: string) {
-    return command<WalletSyncSource>('wallet_sync_source_save', { source, credential });
+    return command<NativeWalletSyncSource>('wallet_sync_source_save', {
+      source: toNativeWalletSyncSource(source),
+      credential
+    }).then(fromNativeWalletSyncSource);
   }
   inspectPayjoinUri(value: string) {
     return command<PayjoinUriInspection>('payjoin_uri_inspect', { value });
@@ -862,6 +898,9 @@ export class TauriWalletAdapter implements WalletPort {
     return command<import('./contracts').MobilePsbtReview>('coordination_mobile_psbt_review', {
       psbt
     });
+  }
+  checkMobileSigner(credential: string) {
+    return command<CosignerHealthCheck>('coordination_mobile_signer_check', { credential });
   }
   signMobilePsbt(reviewedPsbt: string, revisionId: string, credential: string) {
     return command<import('./contracts').SignedMobilePsbt>('coordination_mobile_sign_psbt', {

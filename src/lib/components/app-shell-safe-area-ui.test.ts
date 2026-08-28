@@ -12,4 +12,13 @@ describe('app shell safe areas', () => {
       /@media \(max-width: 760px\)[\s\S]*?\.onboarding-brand\s*\{[\s\S]*?padding-inline:\s*18px;/
     );
   });
+
+  it('extends each mobile navigation target through the bottom safe area', () => {
+    expect(styles).toMatch(
+      /\.mobile-nav\s*\{[\s\S]*?height:\s*calc\(56px \+ env\(safe-area-inset-bottom\)\);[\s\S]*?padding:\s*0;/
+    );
+    expect(styles).toMatch(
+      /\.mobile-nav a\s*\{[\s\S]*?height:\s*calc\(56px \+ env\(safe-area-inset-bottom\)\);[\s\S]*?padding:\s*4px 2px calc\(3px \+ env\(safe-area-inset-bottom\)\);/
+    );
+  });
 });
