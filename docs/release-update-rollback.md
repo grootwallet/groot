@@ -5,7 +5,7 @@ Groot currently has no in-app updater and mainnet remains disabled. This procedu
 ## Produce and verify
 
 1. Build from the exact reviewed commit and compare unsigned hashes on two clean machines.
-2. Sign/notarize the platform package and retain its SBOM and provenance attestation.
+2. Sign/notarize the platform package and retain its freshly generated SBOM and provenance attestation. The SBOM must name the exact commit and lockfile digests and embed the packaged executable's SHA-256; it is release evidence, not a committed source file.
 3. Create the bounded schema-v1 JSON manifest accepted by `verify-update-bundle.mjs`. It binds product, stable channel, exact semantic version, full commit, artifact basename, SHA-256, minimum supported version, and explicit rollback allowlist.
 4. Sign the exact manifest bytes with the offline Ed25519 release key. Publish the artifact, manifest, detached signature, and pinned public key through authenticated release infrastructure.
 5. Before distribution, run the verifier with absolute paths. It rejects symlinks, unbounded/empty inputs, schema expansion, artifact substitution, digest mismatch, and invalid signatures.

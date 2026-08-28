@@ -1,14 +1,22 @@
 #!/usr/bin/env node
 
 import { execFileSync } from 'node:child_process';
-import { readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import {
+  createReadStream,
+  lstatSync,
+  readFileSync,
+  readdirSync,
+  statSync,
+  writeFileSync
+} from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repoRoot = resolve(fileURLToPath(new URL('../../', import.meta.url)));
-const output = process.argv[2];
-if (!output) {
-  console.error('usage: generate-sbom.mjs /path/to/groot.cdx.json');
+const [output, artifact] = process.argv.slice(2);
+if (!output || process.argv.length > 4) {
+  console.error('usage: generate-sbom.mjs /path/to/groot.cdx.json [/path/to/built-artifact]');
   process.exit(2);
 }
 
@@ -147,6 +155,30 @@ const appVersion = packageManifest.version;
 if (typeof appVersion !== 'string' || !/^0\.\d+\.\d+$/.test(appVersion)) {
   throw new Error('package.json must contain a pre-1.0 semantic version');
 }
+let artifactEvidence;
+if (artifact) {
+  const artifactPath = resolve(artifact);
+  const artifactStat = lstatSync(artifactPath);
+  if (artifactStat.isSymbolicLink() || !artifactStat.isFile() || artifactStat.size === 0) {
+    throw new Error('The release artifact must be a non-empty regular file, not a symlink.');
+  }
+  const artifactSha256 = await new Promise((resolveDigest, reject) => {
+    const hash = createHash('sha256');
+    createReadStream(artifactPath)
+      .on('data', (chunk) => hash.update(chunk))
+      .on('error', reject)
+      .on('end', () => resolveDigest(hash.digest('hex')));
+  });
+  artifactEvidence = {
+    filename: basename(artifactPath),
+    sha256: artifactSha256
+  };
+}
+
+const lockSha256 = (path) =>
+  createHash('sha256')
+    .update(readFileSync(join(repoRoot, path)))
+    .digest('hex');
 const appRef = `pkg:cargo/groot@${appVersion}`;
 const sbom = {
   bomFormat: 'CycloneDX',
@@ -159,11 +191,19 @@ const sbom = {
       name: 'Groot',
       version: appVersion,
       purl: appRef,
+      ...(artifactEvidence
+        ? { hashes: [{ alg: 'SHA-256', content: artifactEvidence.sha256 }] }
+        : {}),
       properties: [
         { name: 'groot:commit', value: commit },
         { name: 'groot:rust-target', value: host },
+        { name: 'groot:cargo-lock-sha256', value: lockSha256('src-tauri/Cargo.lock') },
+        { name: 'groot:pnpm-lock-sha256', value: lockSha256('pnpm-lock.yaml') },
         { name: 'groot:npm-installed-package-count', value: String(installedNodePackages.size) },
-        { name: 'groot:pnpm-lock-package-count', value: String(lockedNodePackages.size) }
+        { name: 'groot:pnpm-lock-package-count', value: String(lockedNodePackages.size) },
+        ...(artifactEvidence
+          ? [{ name: 'groot:artifact-filename', value: artifactEvidence.filename }]
+          : [])
       ]
     }
   },

@@ -23,6 +23,8 @@ const source = resolve(process.env.GROOT_HWI_SOURCE ?? '/opt/homebrew/bin/hwi');
 const stageDirectory = join(tauriRoot, 'target', 'groot-hwi-stage');
 const stagedHwi = join(stageDirectory, 'hwi');
 const app = join(tauriRoot, 'target', 'release', 'bundle', 'macos', 'Groot Testnet4.app');
+const executable = join(app, 'Contents', 'MacOS', 'Groot');
+const sbom = join(tauriRoot, 'target', 'release', 'groot-testnet4.cdx.json');
 
 const digest = (path) => createHash('sha256').update(readFileSync(path)).digest('hex');
 const fail = (message) => {
@@ -32,6 +34,11 @@ const fail = (message) => {
 if (process.platform !== 'darwin' || process.arch !== 'arm64') {
   fail('the reviewed HWI artifact is certified only for macOS arm64');
 }
+const worktreeStatus = execFileSync('git', ['status', '--porcelain=v1', '--untracked-files=all'], {
+  cwd: repoRoot,
+  encoding: 'utf8'
+});
+if (worktreeStatus.trim()) fail('package builds require a clean tracked and untracked worktree');
 const sourceLink = lstatSync(source);
 if (sourceLink.isSymbolicLink() || !sourceLink.isFile()) fail('HWI source must be a regular file');
 if ((statSync(source).mode & 0o111) === 0) fail('HWI source is not executable');
@@ -80,7 +87,17 @@ try {
     stdio: 'inherit'
   });
   const result = verifyPackagedHwi(app, { manifestPath });
+  rmSync(sbom, { force: true });
+  execFileSync(
+    process.execPath,
+    [join(repoRoot, 'scripts/release/generate-sbom.mjs'), sbom, executable],
+    {
+      cwd: repoRoot,
+      stdio: 'inherit'
+    }
+  );
   console.log(`Testnet4 portable app: ${result.app}`);
+  console.log(`Testnet4 portable SBOM: ${sbom}`);
 } finally {
   rmSync(stageDirectory, { recursive: true, force: true });
 }

@@ -29,7 +29,7 @@ cargo build --locked --release --manifest-path src-tauri/Cargo.toml
 pnpm tauri build --no-bundle
 
 install -m 0755 src-tauri/target/release/Groot "$release_out/Groot"
-node scripts/release/generate-sbom.mjs "$release_out/groot.cdx.json"
+node scripts/release/generate-sbom.mjs "$release_out/groot.cdx.json" "$release_out/Groot"
 (
   cd "$release_out"
   shasum -a 256 Groot groot.cdx.json > SHA256SUMS

@@ -18,7 +18,7 @@
     "build:regtest": "vite build --mode regtest",
     "build:signet": "vite build --mode signet",
     "build:testnet4": "vite build --mode testnet4",
-    "build:native:signet": "GROOT_BUILD_NETWORK=signet tauri build --config src-tauri/tauri.signet.conf.json",
+    "build:native:signet": "node scripts/release/build-signet.mjs",
     "build:native:testnet4": "node scripts/release/build-testnet4-portable.mjs",
     "brand:icons": "bash scripts/brand/generate_app_icons.sh",
     "format": "prettier --write .",

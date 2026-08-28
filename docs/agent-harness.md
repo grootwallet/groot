@@ -48,7 +48,7 @@ runtime and reuses the saved isolated certification profile.
 | Native networks          | `pnpm network:check-builds`                                                               | Every permitted compile-time native network builds.                                                                                                                                                                  |
 | Real Core Regtest        | `pnpm test:integration:regtest`                                                           | Disposable Bitcoin Core sync, transaction, multisig, and recovery integration. It is not physical-device evidence.                                                                                                   |
 | Rust coverage            | `pnpm test:coverage:rust` and `pnpm test:coverage:rust:all`                               | Classified deterministic-core and whole-library coverage floors.                                                                                                                                                     |
-| SBOM/license evidence    | `pnpm test:sbom`                                                                          | Deterministic CycloneDX inventory, lockfile integrity, and dependency-license evidence.                                                                                                                              |
+| SBOM/license evidence    | `pnpm test:sbom`                                                                          | Deterministic CycloneDX inventory, exact commit/lockfile identity, artifact-hash binding, and dependency-license evidence.                                                                                           |
 | Full local suite         | `pnpm test:full`                                                                          | Standard validation, frontend policy coverage, classified Rust coverage, and browser acceptance.                                                                                                                     |
 
 `pnpm validate` is mandatory before handoff but is not the entire CI workflow.
@@ -57,6 +57,12 @@ browser acceptance in Chromium and WebKit, strict Rust formatting/lint/docs,
 the native-network build matrix, all-feature Rust tests, isolated real-Core
 Regtest, RustSec audit, and both Rust coverage gates. The canonical commands and
 pinned GitHub Actions are in `.github/workflows/ci.yml`.
+
+Native Signet and Testnet4 package commands require a clean tracked and
+untracked worktree, then generate a fresh target-specific SBOM after the
+executable exists. `pnpm release:unsigned` does the same for the unsigned
+release evidence set. These generated files bind the exact commit and lockfiles
+to the built executable digest and remain untracked build artifacts.
 
 Real-Core integration scripts create disposable isolated data. Never redirect
 them to the funded physical-certification profile. Do not recreate or replace a
