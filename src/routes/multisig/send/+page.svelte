@@ -61,6 +61,12 @@
   import { compactAddress } from '$lib/address-display';
   import { accelerationUnavailableTitle } from '$lib/wallet/acceleration-presentation';
   import {
+    matchingMaxSpendFee,
+    sameMaxSpendRequest,
+    validatedMaxSpendQuote,
+    type MaxSpendQuote
+  } from '$lib/wallet/max-spend-quote';
+  import {
     addPermanentLabel,
     backspaceLabelDraft,
     MAX_MANUAL_PERMANENT_LABELS,
@@ -168,6 +174,7 @@
     showCoins = $state(false),
     available = $state(0);
   let automaticStrategy = $state<AutomaticSelectionStrategy>('balanced');
+  let maxSpendQuote = $state<MaxSpendQuote | null>(null);
   let renewalMode = $state(false),
     renewalCoin = $state<Utxo | null>(null);
   let delayedSpendMode = $state(false),
@@ -248,7 +255,15 @@
       Number.isFinite(selectedRateNumber) && selectedRateNumber > 0 && selectedRateNumber <= 10_000
     );
   const amountSats = $derived(parseAmountInput(amount, $denomination)),
-    estimatedFee = $derived(Math.ceil(selectedRateNumber * 220)),
+    quotedMaxFee = $derived(
+      matchingMaxSpendFee(maxSpendQuote, {
+        recipient: address,
+        feeRate: selectedRateNumber,
+        coinSelection: selection,
+        amount: amountSats
+      })
+    ),
+    estimatedFee = $derived(quotedMaxFee ?? Math.ceil(selectedRateNumber * 220)),
     addressValid = $derived(hasAddressPrefixForNetwork(address, defaultConfig.network)),
     valid = $derived(
       addressValid &&
@@ -628,13 +643,32 @@
   async function useMaxAmount() {
     if (!addressValid || selectedRateNumber <= 0) return;
     error = '';
+    const request = {
+      recipient: address,
+      feeRate: selectedRateNumber,
+      coinSelection:
+        selection.mode === 'manual'
+          ? { mode: 'manual' as const, outpoints: [...selection.outpoints] }
+          : { mode: 'auto' as const, strategy: selection.strategy }
+    };
     try {
       const maximum = await walletService.maxMultisigSpend(
-        address,
-        feeRate(selectedRateNumber),
-        selection
+        request.recipient,
+        feeRate(request.feeRate),
+        request.coinSelection
       );
-      amount = amountInputValue(maximum.amount, $denomination);
+      if (
+        !sameMaxSpendRequest(request, {
+          recipient: address,
+          feeRate: selectedRateNumber,
+          coinSelection: selection
+        })
+      )
+        return;
+      const quote = validatedMaxSpendQuote(maximum, request);
+      if (!quote) throw new Error('Native maximum-spend quote was invalid.');
+      maxSpendQuote = quote;
+      amount = amountInputValue(quote.amount, $denomination);
     } catch (cause) {
       error = localizedError(cause, $locale, 'Maximum amount could not be calculated.');
     }

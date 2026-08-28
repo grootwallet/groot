@@ -582,7 +582,9 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
         (coinSelection.mode === 'auto' || coinSelection.outpoints.includes(coin.outpoint))
     );
     const available = spendable.reduce((total, coin) => total + coin.amount, 0);
-    const fee = sats(Math.ceil(Number(selectedRate) * 141));
+    // Keep the fixture's authoritative drain fee distinct from the form's ordinary estimate so
+    // browser acceptance catches callers that discard the native maximum-spend quote.
+    const fee = sats(Math.ceil(Number(selectedRate) * 140));
     return { amount: sats(Math.max(0, available - fee)), fee };
   }
 
@@ -597,7 +599,7 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
         (coinSelection.mode === 'auto' || coinSelection.outpoints.includes(coin.outpoint))
     );
     const available = spendable.reduce((total, coin) => total + coin.amount, 0);
-    const fee = sats(Math.ceil(Number(selectedRate) * 220));
+    const fee = sats(Math.ceil(Number(selectedRate) * 219));
     return { amount: sats(Math.max(0, available - fee)), fee };
   }
 

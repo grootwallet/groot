@@ -56,6 +56,12 @@
   } from '$lib/wallet/hardware-display';
   import { latestActiveProposal } from '$lib/wallet/proposal-resume';
   import {
+    matchingMaxSpendFee,
+    sameMaxSpendRequest,
+    validatedMaxSpendQuote,
+    type MaxSpendQuote
+  } from '$lib/wallet/max-spend-quote';
+  import {
     addPermanentLabel,
     backspaceLabelDraft,
     MAX_MANUAL_PERMANENT_LABELS,
@@ -107,6 +113,7 @@
   let feeEstimateError = $state('');
   let draftError = $state('');
   let proposal = $state<PaymentProposal | null>(null);
+  let maxSpendQuote = $state<MaxSpendQuote | null>(null);
   let txid = $state('');
   let sentAmount = $state(0);
   let balanceSyncPending = $state(false);
@@ -181,8 +188,18 @@
   const customFeeValid = $derived(
     Number.isFinite(Number(customFee)) && Number(customFee) > 0 && Number(customFee) <= 10_000
   );
-  const fee = $derived(Number(proposal?.fee ?? Math.max(0, Math.round(selectedFeeRate * 141))));
   const amountSats = $derived(parseAmountInput(amount, $denomination));
+  const quotedMaxFee = $derived(
+    matchingMaxSpendFee(maxSpendQuote, {
+      recipient: address,
+      feeRate: selectedFeeRate,
+      coinSelection: selection,
+      amount: amountSats
+    })
+  );
+  const fee = $derived(
+    Number(proposal?.fee ?? quotedMaxFee ?? Math.max(0, Math.round(selectedFeeRate * 141)))
+  );
   const addressValid = $derived(hasAddressPrefixForNetwork(address, defaultConfig.network));
   const valid = $derived(
     addressValid &&
@@ -442,9 +459,32 @@
 
   async function useMaxAmount() {
     if (!addressValid || selectedFeeRate <= 0) return;
+    const request = {
+      recipient: address,
+      feeRate: selectedFeeRate,
+      coinSelection:
+        selection.mode === 'manual'
+          ? { mode: 'manual' as const, outpoints: [...selection.outpoints] }
+          : { mode: 'auto' as const, strategy: selection.strategy }
+    };
     try {
-      const maximum = await walletService.maxSpend(address, asFeeRate(selectedFeeRate), selection);
-      amount = amountInputValue(maximum.amount, $denomination);
+      const maximum = await walletService.maxSpend(
+        request.recipient,
+        asFeeRate(request.feeRate),
+        request.coinSelection
+      );
+      if (
+        !sameMaxSpendRequest(request, {
+          recipient: address,
+          feeRate: selectedFeeRate,
+          coinSelection: selection
+        })
+      )
+        return;
+      const quote = validatedMaxSpendQuote(maximum, request);
+      if (!quote) throw new Error('Native maximum-spend quote was invalid.');
+      maxSpendQuote = quote;
+      amount = amountInputValue(quote.amount, $denomination);
     } catch (cause) {
       toast({
         title: 'Maximum unavailable',

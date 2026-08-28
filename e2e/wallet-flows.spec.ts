@@ -1347,7 +1347,8 @@ test('coin control selects, freezes, and carries coins into send', async ({ page
   ).toBeVisible();
   await expect(page.locator('.coin-mode')).toContainText('More private');
   await page.getByRole('button', { name: 'Max' }).click();
-  await expect(page.getByLabel('Amount', { exact: true })).toHaveValue('2480253');
+  await expect(page.getByLabel('Amount', { exact: true })).toHaveValue('2480260');
+  await expect(page.getByRole('button', { name: 'Review payment' })).toBeEnabled();
 });
 
 test('discreet mode hides coin labels and amounts without leaking them through controls', async ({

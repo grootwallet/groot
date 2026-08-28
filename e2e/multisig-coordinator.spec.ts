@@ -894,7 +894,8 @@ test('selects and freezes multisig coins before entering the send flow', async (
   ).toBeVisible();
   await expect(page.locator('.coin-mode')).toContainText('More private');
   await page.getByRole('button', { name: 'Max' }).click();
-  await expect(page.getByLabel('Amount', { exact: true })).toHaveValue('2479700');
+  await expect(page.getByLabel('Amount', { exact: true })).toHaveValue('2479707');
+  await expect(page.getByRole('button', { name: 'Review payment' })).toBeEnabled();
 });
 
 test('offers safe recipes and advanced M-of-N control', async ({ page }, testInfo) => {
