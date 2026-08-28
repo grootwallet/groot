@@ -415,6 +415,23 @@ describe('hardware receive verification UI', () => {
     expect(normalizedSetup).toContain("'Keep the signer connected and unlocked.'");
   });
 
+  it('gives Coldcard users an on-device fingerprint comparison guide', () => {
+    const normalizedSetup = hardwareSetup.replace(/\s+/g, ' ');
+    expect(normalizedSetup).toContain(
+      "let isColdcard = $derived(Boolean(signer?.deviceType?.toLowerCase().includes('coldcard')))"
+    );
+    expect(normalizedSetup).toContain('See Coldcard fingerprint steps');
+    expect(normalizedSetup).toContain(
+      'On Coldcard, return to the main menu and select Advanced/Tools.'
+    );
+    expect(normalizedSetup).toContain('Select View Identity.');
+    expect(normalizedSetup).toContain('8-character Master Key Fingerprint (XFP)');
+    expect(normalizedSetup).toContain(
+      "isFileImport ? 'Use this public backup' : 'Fingerprint matches'"
+    );
+    expect(appCss).toContain('.coldcard-fingerprint-guide ol');
+  });
+
   it('reserves the signer summary while the send wallet identity loads', () => {
     expect(singleKeySend).toContain('loading={!signerSummaryReady}');
     expect(singleKeySend).not.toContain('step < 4 && signerSummaryReady');

@@ -5328,6 +5328,20 @@ code {
 .verification-details[open] summary svg {
   transform: rotate(180deg);
 }
+.coldcard-fingerprint-guide {
+  margin: -6px 0 18px;
+  border: 1px solid var(--border);
+}
+.coldcard-fingerprint-guide ol {
+  margin: 0;
+  padding: 11px 28px 13px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.55;
+}
+.coldcard-fingerprint-guide li + li {
+  margin-top: 5px;
+}
 .verification-network-note {
   margin: 0;
   padding: 11px 11px 0;

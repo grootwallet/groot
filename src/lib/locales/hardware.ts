@@ -182,6 +182,35 @@ export const hardwareCopy = {
       fr: 'Comparez-la à la valeur affichée par le signataire matériel ou dans son export fiable. Une graine ou phrase secrète différente produit un autre portefeuille.',
       es: 'Compárala con el valor mostrado por el firmante físico o su exportación de confianza. Una semilla o frase de contraseña diferente produce otra cartera.'
     },
+  'Compare this Coldcard fingerprint.': {
+    fr: 'Comparez cette empreinte Coldcard.',
+    es: 'Compara esta huella de Coldcard.'
+  },
+  'Coldcard Mk4 can show this value on its own screen. Check it before continuing.': {
+    fr: 'Coldcard Mk4 peut afficher cette valeur sur son propre écran. Vérifiez-la avant de continuer.',
+    es: 'Coldcard Mk4 puede mostrar este valor en su propia pantalla. Compruébalo antes de continuar.'
+  },
+  'See Coldcard fingerprint steps': {
+    fr: 'Voir les étapes pour l’empreinte Coldcard',
+    es: 'Ver los pasos de la huella de Coldcard'
+  },
+  'On Coldcard, return to the main menu and select Advanced/Tools.': {
+    fr: 'Sur Coldcard, revenez au menu principal et sélectionnez Advanced/Tools.',
+    es: 'En Coldcard, vuelve al menú principal y selecciona Advanced/Tools.'
+  },
+  'Select View Identity.': {
+    fr: 'Sélectionnez View Identity.',
+    es: 'Selecciona View Identity.'
+  },
+  'Compare the 8-character Master Key Fingerprint (XFP) with Groot’s Fingerprint above. Letter case does not matter.':
+    {
+      fr: 'Comparez la Master Key Fingerprint (XFP) de 8 caractères avec l’empreinte affichée ci-dessus par Groot. La casse des lettres n’a pas d’importance.',
+      es: 'Compara la Master Key Fingerprint (XFP) de 8 caracteres con la huella que Groot muestra arriba. Las mayúsculas y minúsculas no importan.'
+    },
+  'If any character differs, go back and do not create this wallet.': {
+    fr: 'Si un caractère diffère, revenez en arrière et ne créez pas ce portefeuille.',
+    es: 'Si algún carácter no coincide, vuelve atrás y no crees esta cartera.'
+  },
   'Compare the fingerprint with the original wallet or a trusted record when available. After setup, verify the first receive address on the hardware signer before accepting funds.':
     {
       fr: 'Comparez l’empreinte au portefeuille d’origine ou à une référence fiable si disponible. Après la configuration, vérifiez la première adresse de réception sur le signataire matériel avant d’accepter des fonds.',

@@ -437,6 +437,10 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   ).toContainText('Reading the public account key');
   await expect(page.getByText('PUBLIC DATA REVIEW')).toBeVisible();
   await expect(page.getByText("m/84'/1'/0'")).toBeVisible();
+  await expect(page.getByText('Compare this Coldcard fingerprint.')).toBeVisible();
+  await page.getByText('See Coldcard fingerprint steps').click();
+  await expect(page.getByText(/select Advanced\/Tools/)).toBeVisible();
+  await expect(page.getByText(/8-character Master Key Fingerprint/)).toBeVisible();
   await page.getByRole('button', { name: 'Fingerprint matches' }).click();
   await page.getByLabel('App PIN', { exact: true }).fill('hardware-pin');
   await page.getByLabel('Confirm app PIN', { exact: true }).fill('hardware-pin');

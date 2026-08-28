@@ -7,6 +7,7 @@
     ArrowRight,
     Cable,
     Check,
+    ChevronDown,
     FileUp,
     HelpCircle,
     Network,
@@ -70,6 +71,7 @@
   let lastAttemptAllowedEmptyPassphrase = $state(false);
   let isLedger = $derived(Boolean(signer?.deviceType?.toLowerCase().includes('ledger')));
   let isTrezor = $derived(Boolean(signer?.deviceType?.toLowerCase().includes('trezor')));
+  let isColdcard = $derived(Boolean(signer?.deviceType?.toLowerCase().includes('coldcard')));
   let isBitBoxNova = $derived(
     Boolean(
       signer?.deviceType?.toLowerCase().includes('bitbox') &&
@@ -509,6 +511,46 @@
             >
           </p>
         </div>
+      {:else if isColdcard}
+        <div class="credential-warning">
+          <ShieldCheck size={17} />
+          <p>
+            <strong>{translate($locale, 'Compare this Coldcard fingerprint.')}</strong><span
+              >{translate(
+                $locale,
+                'Coldcard Mk4 can show this value on its own screen. Check it before continuing.'
+              )}</span
+            >
+          </p>
+        </div>
+        <details class="verification-details coldcard-fingerprint-guide">
+          <summary
+            ><span>{translate($locale, 'See Coldcard fingerprint steps')}</span><ChevronDown
+              size={14}
+            /></summary
+          >
+          <ol>
+            <li>
+              {translate(
+                $locale,
+                'On Coldcard, return to the main menu and select Advanced/Tools.'
+              )}
+            </li>
+            <li>{translate($locale, 'Select View Identity.')}</li>
+            <li>
+              {translate(
+                $locale,
+                'Compare the 8-character Master Key Fingerprint (XFP) with Groot’s Fingerprint above. Letter case does not matter.'
+              )}
+            </li>
+            <li>
+              {translate(
+                $locale,
+                'If any character differs, go back and do not create this wallet.'
+              )}
+            </li>
+          </ol>
+        </details>
       {:else}
         <div class="credential-warning">
           <ShieldCheck size={17} />
