@@ -69,8 +69,8 @@ fn is_retained_rbf_transaction(db: &Connection, txid: &str) -> ApiResult<bool> {
             AND proposal.status = 'broadcast'
             AND proposal.txid = acceleration.replacement_txid
            WHERE acceleration.method = 'rbf'
-             AND acceleration.original_txid = ?1
              AND acceleration.replacement_txid IS NOT NULL
+             AND (?1 = acceleration.original_txid OR ?1 = acceleration.replacement_txid)
          )",
         params![txid],
         |row| row.get(0),
@@ -85,8 +85,9 @@ fn is_retained_rbf_output(db: &Connection, outpoint: &str, txid: &str) -> ApiRes
            FROM groot_output_lineage lineage
            JOIN groot_accelerations acceleration
              ON acceleration.method = 'rbf'
-            AND acceleration.original_txid = lineage.source_txid
             AND acceleration.replacement_txid IS NOT NULL
+            AND (lineage.source_txid = acceleration.original_txid
+                 OR lineage.source_txid = acceleration.replacement_txid)
            JOIN groot_proposals proposal
              ON proposal.proposal_id = acceleration.proposal_id
             AND proposal.status = 'broadcast'
@@ -173,10 +174,18 @@ fn collect_export_records(
         .map_err(internal)?;
     let mut outputs = db
         .prepare(
-            "SELECT provenance.outpoint, label.text
-             FROM groot_output_provenance provenance
-             JOIN groot_labels label ON label.label_id = provenance.label_id
-             ORDER BY provenance.outpoint, label.text, label.label_id",
+            "SELECT assignment.outpoint, label.text
+             FROM (
+               SELECT label_id, outpoint FROM groot_output_provenance
+               UNION ALL
+               SELECT label_id, subject_id AS outpoint
+               FROM groot_label_assignments WHERE subject_kind = 'output'
+               UNION ALL
+               SELECT label_id, subject_id AS outpoint
+               FROM groot_additional_label_assignments WHERE subject_kind = 'output'
+             ) assignment
+             JOIN groot_labels label ON label.label_id = assignment.label_id
+             ORDER BY assignment.outpoint, label.text, label.label_id",
         )
         .map_err(internal)?;
     let output_rows = outputs
@@ -425,7 +434,9 @@ fn import_records(
                         "An imported transaction reference is invalid.",
                     )
                 })?;
-                if wallet.get_tx(txid).is_none() {
+                if wallet.get_tx(txid).is_none()
+                    && !is_retained_rbf_transaction(&transaction, &txid.to_string())?
+                {
                     return Err(api_error(
                         "backup_mismatch",
                         "An imported transaction does not belong to this wallet.",
@@ -450,7 +461,13 @@ fn import_records(
                         .get(outpoint.vout as usize)
                         .is_some_and(|output| wallet.is_mine(output.script_pubkey.clone()))
                 });
-                if !owned {
+                if !owned
+                    && !is_retained_rbf_output(
+                        &transaction,
+                        &outpoint.to_string(),
+                        &outpoint.txid.to_string(),
+                    )?
+                {
                     return Err(api_error(
                         "backup_mismatch",
                         "An imported output does not belong to this wallet.",
@@ -819,7 +836,8 @@ mod tests {
         let (mut db, _) = label_wallet("rbf label export");
         let original_txid = "11".repeat(32);
         let replacement_txid = "22".repeat(32);
-        let outpoint = format!("{original_txid}:1");
+        let original_outpoint = format!("{original_txid}:1");
+        let replacement_outpoint = format!("{replacement_txid}:1");
         label_provenance::assign_new_label(
             &db,
             "Original payment",
@@ -829,25 +847,55 @@ mod tests {
             1,
         )
         .unwrap();
-        let output_label_id = label_provenance::assign_new_label(
+        label_provenance::assign_new_label(
+            &db,
+            "Replacement payment",
+            LabelOrigin::Payment,
+            "transaction",
+            &replacement_txid,
+            2,
+        )
+        .unwrap();
+        let original_output_label_id = label_provenance::assign_new_label(
             &db,
             "Original change",
             LabelOrigin::Imported,
             "output",
-            &outpoint,
+            &original_outpoint,
             1,
+        )
+        .unwrap();
+        let replacement_output_label_id = label_provenance::assign_new_label(
+            &db,
+            "Replacement change",
+            LabelOrigin::Imported,
+            "output",
+            &replacement_outpoint,
+            2,
         )
         .unwrap();
         db.execute(
             "INSERT INTO groot_output_lineage
              (outpoint, source_txid, context, provenance_state, address_reused)
              VALUES (?1, ?2, 'change', 'known', 0)",
-            params![outpoint, original_txid],
+            params![original_outpoint, original_txid],
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO groot_output_lineage
+             (outpoint, source_txid, context, provenance_state, address_reused)
+             VALUES (?1, ?2, 'change', 'known', 0)",
+            params![replacement_outpoint, replacement_txid],
         )
         .unwrap();
         db.execute(
             "INSERT INTO groot_output_provenance(outpoint, label_id) VALUES (?1, ?2)",
-            params![outpoint, output_label_id],
+            params![original_outpoint, original_output_label_id],
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO groot_output_provenance(outpoint, label_id) VALUES (?1, ?2)",
+            params![replacement_outpoint, replacement_output_label_id],
         )
         .unwrap();
         db.execute(
@@ -874,12 +922,98 @@ mod tests {
         assert!(records
             .iter()
             .any(|record| { record.record_type == "tx" && record.reference == original_txid }));
+        assert!(records
+            .iter()
+            .any(|record| { record.record_type == "tx" && record.reference == replacement_txid }));
         assert!(records.iter().any(|record| {
             record.record_type == "output"
-                && record.reference == outpoint
+                && record.reference == original_outpoint
+                && record.spendable.is_none()
+        }));
+        assert!(records.iter().any(|record| {
+            record.record_type == "output"
+                && record.reference == replacement_outpoint
                 && record.spendable.is_none()
         }));
         drop(wallet);
+
+        let imported = import_records(
+            &mut db,
+            &[
+                Bip329Record {
+                    record_type: "tx".to_owned(),
+                    reference: replacement_txid.clone(),
+                    label: "Imported replacement context".to_owned(),
+                    spendable: None,
+                },
+                Bip329Record {
+                    record_type: "output".to_owned(),
+                    reference: replacement_outpoint.clone(),
+                    label: "Imported replacement coin".to_owned(),
+                    spendable: None,
+                },
+            ],
+            0,
+            &[],
+        )
+        .unwrap();
+        assert_eq!(imported.imported_count, 2);
+        let wallet = load_wallet(&mut db).unwrap();
+        let records = collect_export_records(&db, &wallet, &[]).unwrap();
+        assert!(records.iter().any(|record| {
+            record.record_type == "tx"
+                && record.reference == replacement_txid
+                && record.label == "Imported replacement context"
+        }));
+        assert!(records.iter().any(|record| {
+            record.record_type == "output"
+                && record.reference == replacement_outpoint
+                && record.label == "Imported replacement coin"
+        }));
+        drop(wallet);
+
+        let orphan_output_txid = "33".repeat(32);
+        let orphan_outpoint = format!("{orphan_output_txid}:0");
+        let orphan_output_label_id = label_provenance::assign_new_label(
+            &db,
+            "Orphan output",
+            LabelOrigin::Imported,
+            "output",
+            &orphan_outpoint,
+            3,
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO groot_output_lineage
+             (outpoint, source_txid, context, provenance_state, address_reused)
+             VALUES (?1, ?2, 'change', 'known', 0)",
+            params![orphan_outpoint, orphan_output_txid],
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO groot_output_provenance(outpoint, label_id) VALUES (?1, ?2)",
+            params![orphan_outpoint, orphan_output_label_id],
+        )
+        .unwrap();
+        let wallet = load_wallet(&mut db).unwrap();
+        let error = collect_export_records(&db, &wallet, &[]).unwrap_err();
+        assert_eq!(error.code, "wallet_corrupt");
+        assert_eq!(
+            error.message,
+            "An output label no longer matches a wallet-owned output."
+        );
+        drop(wallet);
+        db.execute(
+            "DELETE FROM groot_label_assignments
+             WHERE subject_kind = 'output' AND subject_id = ?1",
+            params![orphan_outpoint],
+        )
+        .unwrap();
+        db.execute(
+            "DELETE FROM groot_output_lineage WHERE outpoint = ?1",
+            params![orphan_outpoint],
+        )
+        .unwrap();
 
         let orphan_txid = "33".repeat(32);
         label_provenance::assign_new_label(
