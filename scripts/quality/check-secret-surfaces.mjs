@@ -53,10 +53,33 @@ if (browserClipboardUsers.length !== 1 || browserClipboardUsers[0] !== 'src/lib/
   fail('browser clipboard writes must be classified by src/lib/clipboard.ts');
 }
 
-const capability = JSON.parse(read('src-tauri/capabilities/default.json'));
+// Tauri merges the permissions of every file under src-tauri/capabilities/,
+// so the gate must inspect the same merged set rather than one named file.
+const capabilitiesDir = fileURLToPath(new URL('src-tauri/capabilities/', root));
+const capabilityFiles = readdirSync(capabilitiesDir, { withFileTypes: true })
+  .filter((entry) => entry.isFile() && extname(entry.name) === '.json')
+  .map((entry) => entry.name)
+  .sort();
+if (capabilityFiles.length === 0) fail('src-tauri/capabilities must contain at least one file');
+const mergedPermissions = new Set();
+for (const name of capabilityFiles) {
+  let parsed;
+  try {
+    parsed = JSON.parse(readFileSync(join(capabilitiesDir, name), 'utf8'));
+  } catch {
+    fail(`capability ${name} is not valid JSON`);
+  }
+  if (!Array.isArray(parsed.permissions)) fail(`capability ${name} has no permissions array`);
+  for (const permission of parsed.permissions) mergedPermissions.add(permission);
+}
 const expectedPermissions = ['core:default', 'clipboard-manager:allow-write-text'];
-if (JSON.stringify(capability.permissions) !== JSON.stringify(expectedPermissions)) {
-  fail('desktop capabilities must remain core defaults plus clipboard write-only');
+if (
+  mergedPermissions.size !== expectedPermissions.length ||
+  !expectedPermissions.every((permission) => mergedPermissions.has(permission))
+) {
+  fail(
+    `merged capabilities [${[...mergedPermissions].sort().join(', ')}] must equal [${expectedPermissions.join(', ')}]`
+  );
 }
 
 const tauriConfig = JSON.parse(read('src-tauri/tauri.conf.json'));
