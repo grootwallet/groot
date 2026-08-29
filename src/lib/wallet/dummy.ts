@@ -637,6 +637,7 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       recipient,
       recipientTestnetAlias: null,
       recipientIsWalletOwned: Boolean(walletRecipient),
+      walletControlledOutputAmount: walletRecipient ? amount : null,
       recipientDerivationPaths: walletRecipient?.derivationPath
         ? [walletRecipient.derivationPath]
         : [],
@@ -1739,6 +1740,7 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       labels,
       recipientTestnetAlias: null,
       recipientIsWalletOwned: Boolean(walletRecipient),
+      walletControlledOutputAmount: walletRecipient ? amount : null,
       recipientDerivationPaths: walletRecipient?.derivationPath
         ? [walletRecipient.derivationPath]
         : [],

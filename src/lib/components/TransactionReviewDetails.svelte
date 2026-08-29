@@ -36,6 +36,18 @@
         'This recipient belongs to this wallet. The network fee is the only amount leaving the wallet.'
       )}</span
     >
+    {#if proposal.walletControlledOutputAmount != null}<div class="self-transfer-consolidating">
+        <span>
+          <strong>{translate($locale, 'Consolidating')}</strong>
+          <small
+            >{translate(
+              $locale,
+              'Total staying within this wallet. Compare this amount with the hardware signer.'
+            )}</small
+          >
+        </span>
+        <Amount value={proposal.walletControlledOutputAmount} interactive={interactiveAmounts} />
+      </div>{/if}
   </aside>{/if}
 {#if proposal.acceleration?.method === 'rbf'}<aside class="info-banner acceleration-review-summary">
     <strong>{translate($locale, 'Fee increase replacement')}</strong>

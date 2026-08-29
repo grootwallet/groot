@@ -465,6 +465,7 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   await page.getByRole('button', { name: 'New receive address' }).click();
   await page.getByLabel('Label', { exact: true }).fill('Verified deposit');
   await page.getByRole('button', { name: 'Generate address' }).click();
+  const selfTransferAddress = await page.locator('.receive-card .address-box code').innerText();
   await expect(
     page.locator('.address-label').getByText('Not verified', { exact: true })
   ).toBeVisible();
@@ -517,17 +518,23 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
 
   await page.getByRole('link', { name: 'Overview' }).click();
   await page.getByRole('link', { name: 'Send', exact: true }).click();
-  await page.getByLabel('Bitcoin address').fill('bcrt1qreceiver0000000000000000000000000000000');
+  await page.getByLabel('Bitcoin address').fill(selfTransferAddress);
   await page.getByLabel('Payment label').fill('Hardware test payment');
   await page.getByRole('button', { name: 'Continue to amount' }).click();
   await page.getByLabel('Amount', { exact: true }).fill('1200');
   await page.getByRole('button', { name: 'Review payment' }).click();
+  const consolidationReview = page.locator('.self-transfer-consolidating');
+  await expect(consolidationReview.getByText('Consolidating', { exact: true })).toBeVisible();
+  await expect(consolidationReview).toContainText(/1,200 sats|0\.00001200 BTC/);
   await expect(page.getByText('Fee rate', { exact: true })).toBeHidden();
   await page.getByText('View more details', { exact: true }).click();
   await expect(page.getByText('Fee rate', { exact: true })).toBeVisible();
   await expect(page.getByText('Transaction inputs', { exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Continue to sign' }).click();
   await expect(page.getByRole('heading', { name: 'Sign on your hardware' })).toBeVisible();
+  await expect(page.locator('.self-transfer-consolidating')).toContainText(
+    /1,200 sats|0\.00001200 BTC/
+  );
   await expect(
     page.locator('.send-signers').getByText('Travel signing key', { exact: true })
   ).toBeVisible();
@@ -920,6 +927,25 @@ test('overview, activity, UTXOs, and settings expose durable states', async ({ p
   await expect(changeCoin.locator('dt').filter({ hasText: 'Source payment intent' })).toBeVisible();
   await expect(changeCoin.getByText('Hardware order', { exact: true })).toBeVisible();
   await expect(changeCoin.locator('dt').filter({ hasText: 'Change lineage' })).toBeVisible();
+  await expect(changeCoin.locator('.provenance-labels')).toHaveCSS('justify-content', 'flex-start');
+  const privacyRows = changeCoin.locator('.coin-detail-group').first().locator('dl > div');
+  const privacyLayout = await privacyRows.evaluateAll((rows) =>
+    rows.map((row) => {
+      const term = row.querySelector('dt')?.getBoundingClientRect();
+      const value = row.querySelector('dd')?.getBoundingClientRect();
+      return {
+        termLeft: term?.left ?? 0,
+        termRight: term?.right ?? 0,
+        valueLeft: value?.left ?? 0
+      };
+    })
+  );
+  if ((page.viewportSize()?.width ?? 1180) <= 760) {
+    for (const row of privacyLayout) expect(row.valueLeft).toBeCloseTo(row.termLeft, 0);
+  } else {
+    for (const row of privacyLayout)
+      expect(row.valueLeft - row.termRight).toBeGreaterThanOrEqual(23);
+  }
   await changeCoin.getByText('Technical details', { exact: true }).click();
   await expect(changeCoin.getByText('Source transaction', { exact: true })).toBeVisible();
   await expect(changeCoin.getByText('2 wallet inputs', { exact: true })).toBeVisible();

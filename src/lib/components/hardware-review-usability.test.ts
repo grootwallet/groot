@@ -38,6 +38,11 @@ describe('hardware signing review usability', () => {
   it('marks wallet-owned recipients and shows their Rust-derived receive paths', () => {
     expect(details).toContain('proposal.recipientIsWalletOwned');
     expect(details).toContain("'Self-transfer'");
+    expect(details).toContain('proposal.walletControlledOutputAmount != null');
+    expect(details).toContain("'Consolidating'");
+    expect(details).toContain(
+      '<Amount value={proposal.walletControlledOutputAmount} interactive={interactiveAmounts} />'
+    );
     expect(details).toContain('proposal.recipientDerivationPaths');
     expect(details).toContain("'Receive path'");
     for (const source of [singleSend, multisigSend]) {

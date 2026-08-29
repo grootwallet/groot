@@ -1096,12 +1096,20 @@ fn proposal_review_rejects_any_non_recipient_output_not_owned_by_the_wallet() {
         proposal_recipient_wallet_details(&wallet, &psbt, &recipient.to_string(), 10_000).unwrap(),
         (false, vec![])
     );
+    assert_eq!(
+        proposal_wallet_controlled_output_amount(&wallet, &psbt, false).unwrap(),
+        None
+    );
     let mut self_transfer = psbt.clone();
     self_transfer.unsigned_tx.output[0].script_pubkey = funding.script_pubkey();
     assert_eq!(
         proposal_recipient_wallet_details(&wallet, &self_transfer, &funding.to_string(), 10_000)
             .unwrap(),
         (true, vec![])
+    );
+    assert_eq!(
+        proposal_wallet_controlled_output_amount(&wallet, &self_transfer, true).unwrap(),
+        Some(15_000)
     );
     let (inputs, actual_rate, locktime, rbf) =
         proposal_transaction_details(&wallet, &psbt, 1_000).unwrap();
@@ -3204,6 +3212,7 @@ fn restart_restores_proposals_frozen_coins_and_acknowledged_notifications() {
                 recipient: "bcrt1qrestartfixture".into(),
                 recipient_testnet_alias: None,
                 recipient_is_wallet_owned: false,
+                wallet_controlled_output_amount: None,
                 recipient_derivation_paths: vec![],
                 label: "Restart fixture".into(),
                 labels: vec!["Restart fixture".into()],
@@ -3463,6 +3472,7 @@ fn prepared_wallet_proposal_and_acceleration_roll_back_as_one_unit() {
         recipient: "bcrt1qatomicfixture".into(),
         recipient_testnet_alias: None,
         recipient_is_wallet_owned: false,
+        wallet_controlled_output_amount: None,
         recipient_derivation_paths: vec![],
         label: "Atomic fixture".into(),
         labels: vec!["Atomic fixture".into()],

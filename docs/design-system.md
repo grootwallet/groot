@@ -101,7 +101,7 @@ Transaction-review action grids respond to the width of their own card, not only
 - Recovery words, credentials, descriptors, disabled actions, overlays, navigation, modals, and mobile controls must meet the same contrast requirements in both themes. Theme selection is applied before first paint.
 - Toast: broadcast, received payment, first confirmation, copy, creation, deletion, connectivity, and recoverable failure.
 
-- A Rust-proven wallet-owned recipient adds one calm, always-visible **Self-transfer** status above the technical disclosure. It says that only the network fee leaves the wallet and is never inferred from labels, matching text, or renderer-side address scanning.
+- A Rust-proven wallet-owned recipient adds one calm, always-visible **Self-transfer** status above the technical disclosure. It says that only the network fee leaves the wallet and includes the Rust-derived **Consolidating** total of all wallet-controlled PSBT outputs for direct hardware-signer comparison. Neither ownership nor that total is inferred from labels, matching text, renderer-side address scanning, or renderer arithmetic.
 
 ## Voice
 

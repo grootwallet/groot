@@ -2901,6 +2901,32 @@ code {
 .self-transfer-notice > span {
   color: var(--muted);
 }
+.self-transfer-consolidating {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  margin-top: 6px;
+  padding-top: 8px;
+  border-top: 1px solid color-mix(in srgb, var(--success) 25%, var(--border));
+}
+.self-transfer-consolidating > span {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+.self-transfer-consolidating strong {
+  font-size: 10px;
+}
+.self-transfer-consolidating small {
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.4;
+}
+.self-transfer-consolidating > :last-child {
+  justify-self: end;
+  font-weight: 700;
+}
 .proposal-review-details > summary {
   min-height: 45px;
   display: list-item;
@@ -8746,6 +8772,9 @@ code {
   gap: 10px;
   align-items: start;
 }
+.coin-detail-group dl > div {
+  column-gap: 24px;
+}
 .coin-details dt {
   display: flex;
   align-items: center;
@@ -8986,7 +9015,7 @@ code {
 .provenance-labels {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: flex-start;
   gap: 6px;
   flex-wrap: wrap;
 }

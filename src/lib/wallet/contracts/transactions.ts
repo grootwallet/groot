@@ -59,6 +59,7 @@ export type PaymentProposal = {
   recipient: string;
   recipientTestnetAlias: string | null;
   recipientIsWalletOwned?: boolean;
+  walletControlledOutputAmount?: Sats | null;
   recipientDerivationPaths?: string[];
   label: string;
   labels?: string[];

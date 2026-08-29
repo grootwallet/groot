@@ -171,7 +171,7 @@ Policy-wallet creation uses four focused stages: **Policy → Signers → Verify
 
 ## Multisig payment target flow
 
-When Rust proves that the recipient output belongs to the selected wallet, every proposal and hardware review labels it **Self-transfer**, states that only the network fee leaves the wallet, and exposes its receive key-origin path alongside the input and change paths. The renderer never infers this from labels or address text.
+When Rust proves that the recipient output belongs to the selected wallet, every proposal and hardware review labels it **Self-transfer**, states that only the network fee leaves the wallet, and exposes its receive key-origin path alongside the input and change paths. Rust sums every wallet-controlled PSBT output and presents the result as **Consolidating** so the user can compare Groot directly with the hardware signer. The renderer never infers ownership or calculates this total from labels, address text, amount, or change.
 
 This flow is implemented for regtest; see `docs/implementation-status.md` for certification limits.
 

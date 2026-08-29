@@ -2,6 +2,7 @@ import type { CatalogSection } from './types';
 
 export const sendCopy = {
   'Self-transfer': { fr: 'Transfert interne', es: 'Transferencia interna' },
+  Consolidating: { fr: 'Consolidation', es: 'Consolidación' },
   'Self-transfer recipient': {
     fr: 'Destinataire interne',
     es: 'Destinatario interno'
@@ -9,6 +10,10 @@ export const sendCopy = {
   'This recipient belongs to this wallet. The network fee is the only amount leaving the wallet.': {
     fr: 'Ce destinataire appartient à ce portefeuille. Seuls les frais de réseau quittent le portefeuille.',
     es: 'Este destinatario pertenece a esta cartera. Solo la comisión de red sale de la cartera.'
+  },
+  'Total staying within this wallet. Compare this amount with the hardware signer.': {
+    fr: 'Total restant dans ce portefeuille. Comparez ce montant avec le signataire matériel.',
+    es: 'Total que permanece en esta cartera. Compara este importe con el firmante físico.'
   },
   'Receive path': { fr: 'Chemin de réception', es: 'Ruta de recepción' },
   'Receive paths': { fr: 'Chemins de réception', es: 'Rutas de recepción' },

@@ -955,6 +955,7 @@ pub struct PaymentProposalDto {
     recipient: String,
     recipient_testnet_alias: Option<String>,
     recipient_is_wallet_owned: bool,
+    wallet_controlled_output_amount: Option<u64>,
     recipient_derivation_paths: Vec<String>,
     label: String,
     labels: Vec<String>,
@@ -1143,6 +1144,7 @@ pub struct MultisigProposalDto {
     recipient: String,
     recipient_testnet_alias: Option<String>,
     recipient_is_wallet_owned: bool,
+    wallet_controlled_output_amount: Option<u64>,
     recipient_derivation_paths: Vec<String>,
     label: String,
     labels: Vec<String>,
@@ -3903,6 +3905,8 @@ fn proposal_dto(
     let (change, change_addresses) = proposal_change_details(wallet, &psbt, &recipient, amount)?;
     let (recipient_is_wallet_owned, recipient_derivation_paths) =
         proposal_recipient_wallet_details(wallet, &psbt, &recipient, amount)?;
+    let wallet_controlled_output_amount =
+        proposal_wallet_controlled_output_amount(wallet, &psbt, recipient_is_wallet_owned)?;
     let (recipient_testnet_alias, change_testnet_aliases) =
         proposal_testnet_aliases(&recipient, &change_addresses);
     let change_derivation_paths = proposal_change_derivation_paths(&psbt, &change_addresses)?;
@@ -3920,6 +3924,7 @@ fn proposal_dto(
         recipient,
         recipient_testnet_alias,
         recipient_is_wallet_owned,
+        wallet_controlled_output_amount,
         recipient_derivation_paths,
         label,
         labels,
@@ -4048,6 +4053,26 @@ fn proposal_recipient_wallet_details(
                 .map(|(_, path)| path.to_string()),
         ),
     ))
+}
+
+fn proposal_wallet_controlled_output_amount(
+    wallet: &Wallet,
+    psbt: &Psbt,
+    recipient_is_wallet_owned: bool,
+) -> ApiResult<Option<u64>> {
+    if !recipient_is_wallet_owned {
+        return Ok(None);
+    }
+    psbt.unsigned_tx
+        .output
+        .iter()
+        .filter(|output| wallet.is_mine(output.script_pubkey.clone()))
+        .try_fold(0_u64, |total, output| {
+            total
+                .checked_add(output.value.to_sat())
+                .ok_or_else(|| internal("The wallet-controlled output total overflowed."))
+        })
+        .map(Some)
 }
 
 fn proposal_change_derivation_paths(
@@ -4787,6 +4812,8 @@ fn load_payment_proposal_dto(
     let (change, change_addresses) = proposal_change_details(wallet, &psbt, &recipient, amount)?;
     let (recipient_is_wallet_owned, recipient_derivation_paths) =
         proposal_recipient_wallet_details(wallet, &psbt, &recipient, amount)?;
+    let wallet_controlled_output_amount =
+        proposal_wallet_controlled_output_amount(wallet, &psbt, recipient_is_wallet_owned)?;
     let (recipient_testnet_alias, change_testnet_aliases) =
         proposal_testnet_aliases(&recipient, &change_addresses);
     let change_derivation_paths = proposal_change_derivation_paths(&psbt, &change_addresses)?;
@@ -4803,6 +4830,7 @@ fn load_payment_proposal_dto(
         recipient,
         recipient_testnet_alias,
         recipient_is_wallet_owned,
+        wallet_controlled_output_amount,
         recipient_derivation_paths,
         label,
         labels,

@@ -175,6 +175,8 @@ pub fn tx_prepare(
     let recipient = address.to_string();
     let (recipient_is_wallet_owned, recipient_derivation_paths) =
         proposal_recipient_wallet_details(&wallet, &psbt, &recipient, amount)?;
+    let wallet_controlled_output_amount =
+        proposal_wallet_controlled_output_amount(&wallet, &psbt, recipient_is_wallet_owned)?;
     let (recipient_testnet_alias, change_testnet_aliases) =
         proposal_testnet_aliases(&recipient, &change_addresses);
     let change_derivation_paths = proposal_change_derivation_paths(&psbt, &change_addresses)?;
@@ -199,6 +201,7 @@ pub fn tx_prepare(
         recipient,
         recipient_testnet_alias,
         recipient_is_wallet_owned,
+        wallet_controlled_output_amount,
         recipient_derivation_paths,
         label,
         labels,
@@ -703,6 +706,8 @@ pub(crate) fn summarize_payment_psbt(
     let (change, change_addresses) = proposal_change_details(wallet, psbt, &recipient, amount)?;
     let (recipient_is_wallet_owned, recipient_derivation_paths) =
         proposal_recipient_wallet_details(wallet, psbt, &recipient, amount)?;
+    let wallet_controlled_output_amount =
+        proposal_wallet_controlled_output_amount(wallet, psbt, recipient_is_wallet_owned)?;
     let (recipient_testnet_alias, change_testnet_aliases) =
         proposal_testnet_aliases(&recipient, &change_addresses);
     let change_derivation_paths = proposal_change_derivation_paths(psbt, &change_addresses)?;
@@ -713,6 +718,7 @@ pub(crate) fn summarize_payment_psbt(
         recipient,
         recipient_testnet_alias,
         recipient_is_wallet_owned,
+        wallet_controlled_output_amount,
         recipient_derivation_paths,
         labels: vec![label.clone()],
         label,

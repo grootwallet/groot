@@ -48,6 +48,28 @@ describe('software payment proposals', () => {
     await adapter.cancelPaymentProposal(proposal.proposalId);
     expect(await adapter.paymentProposals()).toEqual([]);
   });
+
+  it('exposes a wallet-controlled output total only for a wallet-owned recipient', async () => {
+    const adapter = new DummyWalletAdapter();
+    const internal = await adapter.createAddress(['Internal destination']);
+    const selfTransfer = await adapter.preparePayment(
+      internal.address,
+      ['Self-transfer fixture'],
+      sats(3_000),
+      feeRate(1)
+    );
+    const external = await adapter.preparePayment(
+      'tb1qreceiver000000000000000000000000000000000',
+      ['External fixture'],
+      sats(3_000),
+      feeRate(1)
+    );
+
+    expect(selfTransfer.recipientIsWalletOwned).toBe(true);
+    expect(selfTransfer.walletControlledOutputAmount).toBe(3_000);
+    expect(external.recipientIsWalletOwned).toBe(false);
+    expect(external.walletControlledOutputAmount).toBeNull();
+  });
 });
 
 describe('deferred backup verification', () => {
