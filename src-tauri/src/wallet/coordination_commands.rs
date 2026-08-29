@@ -140,7 +140,10 @@ struct ValidatedMobileWallet {
 }
 
 #[tauri::command]
-pub fn coordination_status(app: AppHandle) -> ApiResult<CoordinationStatusDto> {
+pub fn coordination_status(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> ApiResult<CoordinationStatusDto> {
     let profile = selected_profile(&app)?;
     if profile.kind != WalletKind::Multisig {
         return Ok(CoordinationStatusDto {
@@ -151,6 +154,10 @@ pub fn coordination_status(app: AppHandle) -> ApiResult<CoordinationStatusDto> {
             key_protection: None,
         });
     }
+    // Coordination metadata is wallet-scoped private data: like descriptors
+    // and cosigner metadata, it is only revealed for the unlocked selected
+    // wallet, never while the wallet is locked.
+    require_unlocked(&app, &state)?;
     match read_coordination_metadata(&app, profile.id) {
         Ok(metadata) => Ok(CoordinationStatusDto {
             shared: true,
@@ -378,11 +385,13 @@ pub fn coordination_mobile_resume(
     let _operation = operation_guard(&state)?;
     let credential = Zeroizing::new(credential);
     validate_credential(credential.as_str())?;
+    let session_uuid = staging_session_uuid(&session_id)?;
+    check_staging_auth_throttle(&state, session_uuid)?;
     reconcile_mobile_pairing_storage(&app)?;
     let staged_path = pending_mobile_secret_path(&app, &session_id)?;
-    let staged_bytes = Zeroizing::new(
-        secure_store::load(&staged_path, credential.as_str()).map_err(secure_store_error)?,
-    );
+    let staging = secure_store::load(&staged_path, credential.as_str());
+    record_staging_attempt(&state, session_uuid, &staging)?;
+    let staged_bytes = Zeroizing::new(staging.map_err(secure_store_error)?);
     let staged: PendingMobileSecret = serde_json::from_slice(&staged_bytes)
         .map_err(|_| api_error("wallet_corrupt", "The pending mobile signer is malformed."))?;
     if staged.version != 1 || staged.invitation.session_id != session_id {
@@ -414,11 +423,13 @@ pub fn coordination_mobile_await_final(
     let _operation = operation_guard(&state)?;
     let credential = Zeroizing::new(credential);
     validate_credential(credential.as_str())?;
+    let session_uuid = staging_session_uuid(&session_id)?;
+    check_staging_auth_throttle(&state, session_uuid)?;
     reconcile_mobile_pairing_storage(&app)?;
     let staged_path = pending_mobile_secret_path(&app, &session_id)?;
-    let staged_bytes = Zeroizing::new(
-        secure_store::load(&staged_path, credential.as_str()).map_err(secure_store_error)?,
-    );
+    let staging = secure_store::load(&staged_path, credential.as_str());
+    record_staging_attempt(&state, session_uuid, &staging)?;
+    let staged_bytes = Zeroizing::new(staging.map_err(secure_store_error)?);
     let mut staged: PendingMobileSecret = serde_json::from_slice(&staged_bytes)
         .map_err(|_| api_error("wallet_corrupt", "The pending mobile signer is malformed."))?;
     if staged.version != 1 || staged.invitation.session_id != session_id {
@@ -846,10 +857,12 @@ pub fn coordination_mobile_complete(
     let credential = Zeroizing::new(credential);
     validate_credential(credential.as_str())?;
     let envelope = decode_envelope(CoordinationUrType::Wallet, &frames)?;
+    let session_uuid = staging_session_uuid(&envelope.session_id)?;
+    check_staging_auth_throttle(&state, session_uuid)?;
     let staged_path = pending_mobile_secret_path(&app, &envelope.session_id)?;
-    let staged_bytes = Zeroizing::new(
-        secure_store::load(&staged_path, credential.as_str()).map_err(secure_store_error)?,
-    );
+    let staging = secure_store::load(&staged_path, credential.as_str());
+    record_staging_attempt(&state, session_uuid, &staging)?;
+    let staged_bytes = Zeroizing::new(staging.map_err(secure_store_error)?);
     let staged: PendingMobileSecret = serde_json::from_slice(&staged_bytes)
         .map_err(|_| api_error("wallet_corrupt", "The pending mobile signer is malformed."))?;
     if staged.version != 1 {
@@ -1547,6 +1560,90 @@ fn pending_mobile_pairings_directory(app: &AppHandle) -> ApiResult<PathBuf> {
     Ok(app_data_dir(app)?.join("pending-mobile-pairings"))
 }
 
+fn staging_session_uuid(session_id: &str) -> ApiResult<Uuid> {
+    Uuid::parse_str(session_id)
+        .map_err(|_| invalid_payload("The pairing session identifier is invalid."))
+}
+
+/// Process-local PIN throttle for the encrypted pending-mobile-pairing
+/// staging envelope. The durable per-wallet throttle cannot serve these
+/// commands because the wallet profile does not exist yet; the staging
+/// envelope itself is a passphrase oracle, so online attempts get the same
+/// bounded backoff policy, keyed by the pairing session and measured on a
+/// monotonic clock. A successful clear or an abandoned process resets it.
+fn check_staging_auth_throttle(state: &AppState, session: Uuid) -> ApiResult<()> {
+    let retry_at = state
+        .staging_auth_retry_at
+        .lock()
+        .map_err(internal)?
+        .get(&session)
+        .copied();
+    if let Some(retry_at) = retry_at {
+        let now_instant = Instant::now();
+        if now_instant < retry_at {
+            let remaining = retry_at.duration_since(now_instant).as_secs().max(1);
+            return Err(api_error(
+                "rate_limited",
+                format!("Too many incorrect attempts. Try again in {remaining} seconds."),
+            ));
+        }
+        state
+            .staging_auth_retry_at
+            .lock()
+            .map_err(internal)?
+            .remove(&session);
+    }
+    Ok(())
+}
+
+/// Count only credential failures: a corrupt or unavailable staging envelope
+/// is not a guessing oracle and must not lock out its owner.
+fn record_staging_attempt(
+    state: &AppState,
+    session: Uuid,
+    result: &Result<Vec<u8>, crate::secure_store::SecureStoreError>,
+) -> ApiResult<()> {
+    if result.is_ok() {
+        state
+            .staging_auth_failures
+            .lock()
+            .map_err(internal)?
+            .remove(&session);
+        state
+            .staging_auth_retry_at
+            .lock()
+            .map_err(internal)?
+            .remove(&session);
+        return Ok(());
+    }
+    if !matches!(
+        result,
+        Err(crate::secure_store::SecureStoreError::InvalidCredential)
+    ) {
+        return Ok(());
+    }
+    let failures = {
+        let mut map = state.staging_auth_failures.lock().map_err(internal)?;
+        let entry = map.entry(session).or_insert(0);
+        let mut throttle = AuthThrottle::restore(*entry, 0);
+        let delay = throttle.failed(now());
+        *entry = throttle.snapshot().0;
+        if delay.is_zero() {
+            None
+        } else {
+            Instant::now().checked_add(delay)
+        }
+    };
+    if let Some(retry_at) = failures {
+        state
+            .staging_auth_retry_at
+            .lock()
+            .map_err(internal)?
+            .insert(session, retry_at);
+    }
+    Ok(())
+}
+
 fn pending_mobile_secret_path(app: &AppHandle, session_id: &str) -> ApiResult<PathBuf> {
     let directory = pending_mobile_pairings_directory(app)?;
     ensure_private_directory(&directory)?;
@@ -1973,6 +2070,41 @@ mod tests {
     };
     use bdk_wallet::rusqlite::Connection;
     use std::{fs, path::PathBuf, sync::Arc};
+
+    #[test]
+    fn staging_pin_attempts_are_throttled_per_session_and_reset_on_success() {
+        let state = AppState::default();
+        let session = Uuid::new_v4();
+        let other = Uuid::new_v4();
+        let wrong: Result<Vec<u8>, SecureStoreError> = Err(SecureStoreError::InvalidCredential);
+
+        for attempt in 0..4 {
+            check_staging_auth_throttle(&state, session).unwrap_or_else(|error| {
+                panic!("attempt {attempt} must not be rate limited: {}", error.code)
+            });
+            record_staging_attempt(&state, session, &wrong).unwrap();
+        }
+        record_staging_attempt(&state, session, &wrong).unwrap();
+        let error = check_staging_auth_throttle(&state, session).unwrap_err();
+        assert_eq!(error.code, "rate_limited");
+        // Sessions are independent: another pairing session is unaffected.
+        check_staging_auth_throttle(&state, other).unwrap();
+
+        let ok: Result<Vec<u8>, SecureStoreError> = Ok(vec![1]);
+        record_staging_attempt(&state, session, &ok).unwrap();
+        check_staging_auth_throttle(&state, session).unwrap();
+    }
+
+    #[test]
+    fn staging_pin_corruption_is_not_a_guessing_oracle() {
+        let state = AppState::default();
+        let session = Uuid::new_v4();
+        for _ in 0..10 {
+            let corrupt: Result<Vec<u8>, SecureStoreError> = Err(SecureStoreError::Corrupt);
+            record_staging_attempt(&state, session, &corrupt).unwrap();
+            check_staging_auth_throttle(&state, session).unwrap();
+        }
+    }
 
     struct HardwareKey {
         fingerprint: String,

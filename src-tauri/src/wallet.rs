@@ -362,6 +362,8 @@ pub struct AppState {
     pending_pdf_exports: Mutex<HashMap<String, PendingPdfExport>>,
     recovery_scans: Mutex<HashMap<Uuid, ActiveRecoveryScan>>,
     runtime_auth_retry_at: Mutex<HashMap<Uuid, Instant>>,
+    staging_auth_failures: Mutex<HashMap<Uuid, u32>>,
+    staging_auth_retry_at: Mutex<HashMap<Uuid, Instant>>,
     pending_policy_verifications: Mutex<HashMap<String, SignerPolicyVerificationDto>>,
     desktop_pairings: Mutex<HashMap<String, coordination_commands::PendingDesktopPairing>>,
     sync_status: Arc<Mutex<Option<WalletSyncStatusDto>>>,
