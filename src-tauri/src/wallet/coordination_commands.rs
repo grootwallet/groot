@@ -53,12 +53,26 @@ struct EncryptedEnvelope {
     encrypted_record: String,
 }
 
+fn serialize_mc<S: serde::Serializer>(
+    words: &Zeroizing<String>,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    serializer.serialize_str(words.as_str())
+}
+
+fn deserialize_mc<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Zeroizing<String>, D::Error> {
+    String::deserialize(deserializer).map(Zeroizing::new)
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct PendingMobileSecret {
     version: u8,
     invitation: PairingInvitation,
-    mnemonic: String,
+    #[serde(serialize_with = "serialize_mc", deserialize_with = "deserialize_mc")]
+    mnemonic: Zeroizing<String>,
     #[serde(default)]
     signer_label: String,
     backup_verified: bool,
@@ -334,7 +348,7 @@ pub async fn coordination_mobile_accept(
         let staged = PendingMobileSecret {
             version: 1,
             invitation: invitation.clone(),
-            mnemonic: words.to_string(),
+            mnemonic: Zeroizing::new(words.to_string()),
             signer_label: label.to_owned(),
             backup_verified: backup.verified,
             awaiting_final_policy: false,
@@ -448,7 +462,7 @@ pub fn coordination_mobile_await_final(
 }
 
 fn pairing_response_from_staged(staged: &PendingMobileSecret) -> ApiResult<PairingResponseDto> {
-    let mnemonic = Mnemonic::parse(&staged.mnemonic).map_err(internal)?;
+    let mnemonic = Mnemonic::parse(staged.mnemonic.as_str()).map_err(internal)?;
     let (fingerprint, account, xpub) =
         derive_mobile_account(&mnemonic).map_err(coordination_api_error)?;
     let record = KeyRecord::encode_signed(
@@ -888,7 +902,7 @@ pub fn coordination_mobile_complete(
             CoordinationError::DescriptorMismatch,
         ));
     }
-    let mnemonic = Mnemonic::parse(&staged.mnemonic).map_err(internal)?;
+    let mnemonic = Mnemonic::parse(staged.mnemonic.as_str()).map_err(internal)?;
     let validated = validate_mobile_wallet_record(public, &mnemonic)?;
     if validated.wallet.threshold != staged.invitation.threshold
         || validated.wallet.cosigners.len() != staged.invitation.signer_count
@@ -1401,13 +1415,23 @@ fn review_mobile_psbt_for(
             }
             Ok(output.value.to_sat())
         })
-        .sum::<ApiResult<u64>>()?;
+        .try_fold(0_u64, |total, value| {
+            value.and_then(|value| {
+                total
+                    .checked_add(value)
+                    .ok_or_else(|| api_error("malformed_psbt", "The PSBT input total overflowed."))
+            })
+        })?;
     let output_total = psbt
         .unsigned_tx
         .output
         .iter()
         .map(|output| output.value.to_sat())
-        .sum::<u64>();
+        .try_fold(0_u64, |total, value| {
+            total
+                .checked_add(value)
+                .ok_or_else(|| api_error("malformed_psbt", "The PSBT output total overflowed."))
+        })?;
     let fee_sats = input_total.checked_sub(output_total).ok_or_else(|| {
         api_error(
             "malformed_psbt",
@@ -2567,7 +2591,7 @@ mod tests {
         let staged = PendingMobileSecret {
             version: 1,
             invitation: invitation.clone(),
-            mnemonic: mobile_mnemonic().to_string(),
+            mnemonic: Zeroizing::new(mobile_mnemonic().to_string()),
             signer_label: "Recovered phone session".to_owned(),
             backup_verified: true,
             awaiting_final_policy: true,

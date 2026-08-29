@@ -418,10 +418,11 @@ fn derive_bip129_key(token: &[u8]) -> [u8; 32] {
 }
 
 fn bip129_mac(key: &[u8; 32], token: &[u8], plaintext: &[u8]) -> [u8; 32] {
-    let hmac_key = sha256::Hash::hash(key).to_byte_array();
+    let mut hmac_key = sha256::Hash::hash(key).to_byte_array();
     let mut engine = hmac::HmacEngine::<sha256::Hash>::new(&hmac_key);
     engine.input(hex_encode(token).as_bytes());
     engine.input(plaintext);
+    hmac_key.zeroize();
     hmac::Hmac::<sha256::Hash>::from_engine(engine).to_byte_array()
 }
 
