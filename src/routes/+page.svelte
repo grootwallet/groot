@@ -49,7 +49,7 @@
   import type { PaymentDraft } from '$lib/wallet/payment-draft';
   import { pendingBalanceBreakdown, sortTransactionsNewestFirst } from '$lib/wallet/presentation';
   import { policyMaturitySummary } from '$lib/wallet/policy';
-  import { onMount } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import type { Transaction } from '$lib/types';
   import { discreetMode, setDiscreetMode } from '$lib/privacy';
@@ -202,6 +202,10 @@
     activeProposal ? ($discreetMode ? 'Label hidden' : activeProposal.label) : ''
   );
   onMount(loadSnapshot);
+
+  onDestroy(() => {
+    verifyCredential = '';
+  });
   onMount(() => {
     syncClock = Date.now();
     const clock = window.setInterval(() => (syncClock = Date.now()), 30_000);
