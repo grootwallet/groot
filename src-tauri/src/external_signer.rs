@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::str::FromStr;
 
-pub use crate::build_network::SINGLESIG_ACCOUNT_PATH;
+pub use crate::build_network::{PARAMETERS, SINGLESIG_ACCOUNT_PATH};
 pub const MAX_IMPORT_BYTES: usize = 256 * 1024;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -79,7 +79,7 @@ impl ExternalSignerInput {
         }
         let xpub =
             Xpub::from_str(self.xpub.trim()).map_err(|_| ExternalSignerError::InvalidFormat)?;
-        if xpub.network.is_mainnet() {
+        if xpub.network != PARAMETERS.extended_key_network {
             return Err(ExternalSignerError::WrongNetwork);
         }
         descriptors(self)?;
@@ -260,7 +260,7 @@ mod tests {
     use bdk_wallet::bitcoin::{bip32::Xpriv, NetworkKind};
 
     fn test_xpub() -> String {
-        let master = Xpriv::new_master(NetworkKind::Test, &[7_u8; 64]).unwrap();
+        let master = Xpriv::new_master(PARAMETERS.extended_key_network, &[7_u8; 64]).unwrap();
         let derived = master
             .derive_priv(
                 &Secp256k1::new(),
@@ -392,9 +392,17 @@ mod tests {
             Err(ExternalSignerError::InvalidFormat)
         );
 
-        let main = Xpriv::new_master(NetworkKind::Main, &[9_u8; 64]).unwrap();
+        // The wrong-network assertion must hold on every compiled network:
+        // an opposite-kind extended key is always rejected, while the
+        // compiled-network key in `valid` continues to pass. This keeps the
+        // regression honest if a future mainnet build ever enables it.
+        let wrong_kind = match PARAMETERS.extended_key_network {
+            NetworkKind::Main => NetworkKind::Test,
+            NetworkKind::Test => NetworkKind::Main,
+        };
+        let wrong = Xpriv::new_master(wrong_kind, &[9_u8; 64]).unwrap();
         candidate = valid;
-        candidate.xpub = Xpub::from_priv(&Secp256k1::new(), &main).to_string();
+        candidate.xpub = Xpub::from_priv(&Secp256k1::new(), &wrong).to_string();
         assert_eq!(candidate.validate(), Err(ExternalSignerError::WrongNetwork));
     }
 
