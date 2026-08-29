@@ -10,6 +10,7 @@ describe('transaction details denomination', () => {
       "import { denomination, setDenomination } from '$lib/denomination'"
     );
     expect(component).toContain('class="detail-amount"');
+    expect(component).toContain("class:replaced={transaction.status === 'replaced'}");
     expect(component).toContain("setDenomination($denomination === 'btc' ? 'sats' : 'btc')");
     expect(component).toContain('Show transaction amount in sats');
     expect(component).toContain('Show transaction amount in BTC');
@@ -17,5 +18,6 @@ describe('transaction details denomination', () => {
 
   it('keeps a visible keyboard focus treatment on the amount control', () => {
     expect(appCss).toMatch(/\.detail-hero \.detail-amount:focus-visible\s*\{/);
+    expect(appCss).toMatch(/\.detail-hero \.detail-amount\.replaced\s*\{/);
   });
 });

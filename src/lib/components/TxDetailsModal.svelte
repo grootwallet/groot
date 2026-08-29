@@ -103,6 +103,7 @@
       <button
         class="detail-amount"
         class:positive={transaction.direction === 'received'}
+        class:replaced={transaction.status === 'replaced'}
         type="button"
         aria-label={translate(
           $locale,

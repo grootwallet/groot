@@ -1347,7 +1347,7 @@
       'The file can expose labels, addresses, transaction references, public account keys, and relationships in your wallet history. Store and transfer it privately, then delete copies you no longer need.'
     )}
   </div>
-  <p>
+  <p class="modal-supporting-copy">
     {translate(
       $locale,
       'Import is additive and atomic. Existing permanent labels are never overwritten; a conflict leaves the wallet unchanged.'

@@ -1047,6 +1047,7 @@ test('BIP329 label interchange discloses privacy and keeps durable results', asy
     'labels, addresses, transaction references, public account keys'
   );
   await expect(dialog).toContainText('additive and atomic');
+  await expect(dialog.locator('.modal-supporting-copy')).toContainText('additive and atomic');
 
   await dialog.getByRole('button', { name: 'Export JSONL' }).click();
   await expect(dialog.getByRole('status')).toContainText('Saved 6 BIP329 label records.');
@@ -1108,7 +1109,9 @@ test('RBF starts at a safe quote, preserves a decimal target, and records both-w
 
   const replacement = page.locator('.tx-row').filter({ hasText: 'Fee increase · replacement' });
   await expect(replacement).toBeVisible();
+  await expect(replacement).not.toHaveClass(/replaced/);
   await replacement.click();
+  await expect(page.locator('.detail-amount')).not.toHaveClass(/replaced/);
   const replacementLineage = page.locator('.transaction-lineage');
   await expect(replacementLineage).toContainText('Fee increased');
   await expect(replacementLineage).toContainText('Earlier transaction');
@@ -1123,6 +1126,7 @@ test('RBF starts at a safe quote, preserves a decimal target, and records both-w
   const original = page.locator('.tx-row.replaced').filter({ hasText: 'RBF target fixture' });
   await expect(original).toBeVisible();
   await original.click();
+  await expect(page.locator('.detail-amount')).toHaveClass(/replaced/);
   const originalLineage = page.locator('.transaction-lineage');
   await expect(originalLineage).toContainText('This transaction');
   await expect(originalLineage).toContainText('Newer transaction');

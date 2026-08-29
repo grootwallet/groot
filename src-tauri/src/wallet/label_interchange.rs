@@ -59,6 +59,47 @@ fn signer_labels(app: &AppHandle, profile: &WalletProfile) -> ApiResult<Vec<(Str
     }
 }
 
+fn is_retained_rbf_transaction(db: &Connection, txid: &str) -> ApiResult<bool> {
+    db.query_row(
+        "SELECT EXISTS(
+           SELECT 1
+           FROM groot_accelerations acceleration
+           JOIN groot_proposals proposal
+             ON proposal.proposal_id = acceleration.proposal_id
+            AND proposal.status = 'broadcast'
+            AND proposal.txid = acceleration.replacement_txid
+           WHERE acceleration.method = 'rbf'
+             AND acceleration.original_txid = ?1
+             AND acceleration.replacement_txid IS NOT NULL
+         )",
+        params![txid],
+        |row| row.get(0),
+    )
+    .map_err(internal)
+}
+
+fn is_retained_rbf_output(db: &Connection, outpoint: &str, txid: &str) -> ApiResult<bool> {
+    db.query_row(
+        "SELECT EXISTS(
+           SELECT 1
+           FROM groot_output_lineage lineage
+           JOIN groot_accelerations acceleration
+             ON acceleration.method = 'rbf'
+            AND acceleration.original_txid = lineage.source_txid
+            AND acceleration.replacement_txid IS NOT NULL
+           JOIN groot_proposals proposal
+             ON proposal.proposal_id = acceleration.proposal_id
+            AND proposal.status = 'broadcast'
+            AND proposal.txid = acceleration.replacement_txid
+           WHERE lineage.outpoint = ?1
+             AND lineage.source_txid = ?2
+         )",
+        params![outpoint, txid],
+        |row| row.get(0),
+    )
+    .map_err(internal)
+}
+
 fn collect_export_records(
     db: &Connection,
     wallet: &Wallet,
@@ -103,7 +144,7 @@ fn collect_export_records(
             ("addr", address)
         } else {
             let txid = Txid::from_str(&subject).map_err(internal)?;
-            if wallet.get_tx(txid).is_none() {
+            if wallet.get_tx(txid).is_none() && !is_retained_rbf_transaction(db, &subject)? {
                 return Err(api_error(
                     "wallet_corrupt",
                     "A transaction label no longer matches wallet history.",
@@ -154,7 +195,7 @@ fn collect_export_records(
                 .get(parsed.vout as usize)
                 .is_some_and(|output| wallet.is_mine(output.script_pubkey.clone()))
         });
-        if !owned {
+        if !owned && !is_retained_rbf_output(db, &outpoint, &parsed.txid.to_string())? {
             return Err(api_error(
                 "wallet_corrupt",
                 "An output label no longer matches a wallet-owned output.",
@@ -770,6 +811,90 @@ mod tests {
                 .unwrap()
                 .len(),
             1
+        );
+    }
+
+    #[test]
+    fn export_keeps_completed_rbf_label_history_but_rejects_orphans() {
+        let (mut db, _) = label_wallet("rbf label export");
+        let original_txid = "11".repeat(32);
+        let replacement_txid = "22".repeat(32);
+        let outpoint = format!("{original_txid}:1");
+        label_provenance::assign_new_label(
+            &db,
+            "Original payment",
+            LabelOrigin::Payment,
+            "transaction",
+            &original_txid,
+            1,
+        )
+        .unwrap();
+        let output_label_id = label_provenance::assign_new_label(
+            &db,
+            "Original change",
+            LabelOrigin::Imported,
+            "output",
+            &outpoint,
+            1,
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO groot_output_lineage
+             (outpoint, source_txid, context, provenance_state, address_reused)
+             VALUES (?1, ?2, 'change', 'known', 0)",
+            params![outpoint, original_txid],
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO groot_output_provenance(outpoint, label_id) VALUES (?1, ?2)",
+            params![outpoint, output_label_id],
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO groot_proposals
+             (proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at, txid)
+             VALUES ('rbf-export', 'bcrt1qfixture', 'Miner fee increase', 100, 5, 2,
+                     'fixture', 'broadcast', 2, ?1)",
+            params![replacement_txid],
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO groot_accelerations
+             (proposal_id, method, original_txid, replacement_txid, original_kind,
+              original_direction, original_amount, original_fee, original_date,
+              original_address, original_label, created_at)
+             VALUES ('rbf-export', 'rbf', ?1, ?2, 'payment', 'sent', 100, 2, '1',
+                     'bcrt1qfixture', 'Original payment', 2)",
+            params![original_txid, replacement_txid],
+        )
+        .unwrap();
+
+        let wallet = load_wallet(&mut db).unwrap();
+        let records = collect_export_records(&db, &wallet, &[]).unwrap();
+        assert!(records
+            .iter()
+            .any(|record| { record.record_type == "tx" && record.reference == original_txid }));
+        assert!(records.iter().any(|record| {
+            record.record_type == "output"
+                && record.reference == outpoint
+                && record.spendable.is_none()
+        }));
+        drop(wallet);
+
+        let orphan_txid = "33".repeat(32);
+        label_provenance::assign_new_label(
+            &db,
+            "Orphan",
+            LabelOrigin::Imported,
+            "transaction",
+            &orphan_txid,
+            3,
+        )
+        .unwrap();
+        let wallet = load_wallet(&mut db).unwrap();
+        assert_eq!(
+            collect_export_records(&db, &wallet, &[]).unwrap_err().code,
+            "wallet_corrupt"
         );
     }
 
