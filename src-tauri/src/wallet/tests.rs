@@ -3032,6 +3032,66 @@ fn replacement_history_marks_or_restores_the_original_without_affecting_the_repl
 }
 
 #[test]
+fn replacement_history_keeps_a_canonical_original_counted_when_it_wins_the_race() {
+    let db = Connection::open_in_memory().unwrap();
+    init_app_schema(&db).unwrap();
+    let original_txid = "11".repeat(32);
+    let replacement_txid = "22".repeat(32);
+    db.execute(
+        "INSERT INTO groot_proposals
+         (proposal_id, recipient, label, amount, fee, fee_rate, psbt, status, created_at, txid)
+         VALUES ('rbf-race', 'bcrt1qfixture', 'Miner fee increase', 100, 5, 2,
+                 'fixture', 'broadcast', 2, ?1)",
+        params![replacement_txid],
+    )
+    .unwrap();
+    db.execute(
+        "INSERT INTO groot_accelerations
+         (proposal_id, method, original_txid, replacement_txid, original_kind,
+          original_direction, original_amount, original_fee, original_date,
+          original_address, original_label, created_at)
+         VALUES ('rbf-race', 'rbf', ?1, ?2, 'payment', 'sent', 100, 2, '1',
+                 'bcrt1qfixture', 'Original payment', 2)",
+        params![original_txid, replacement_txid],
+    )
+    .unwrap();
+    let mut transactions = vec![TransactionDto {
+        id: original_txid.clone(),
+        kind: "payment".to_owned(),
+        direction: "sent".to_owned(),
+        amount: 100,
+        fee: Some(2),
+        status: "confirmed".to_owned(),
+        confirmations: 42,
+        date: "3".to_owned(),
+        address: Some("bcrt1qfixture".to_owned()),
+        label: "Original payment".to_owned(),
+        block: Some(101),
+        replaced_by: None,
+        replaces: None,
+        input_count: Some(1),
+        output_count: Some(2),
+        fee_rate: Some(1.0),
+        wallet_input_amount: Some(200),
+        wallet_output_amount: Some(98),
+        locktime: Some(100),
+        rbf: Some(true),
+        intent_label: None,
+        provenance: ProvenanceSummaryDto::unknown("funding"),
+    }];
+
+    apply_replacement_history(&db, &mut transactions).unwrap();
+
+    assert_eq!(transactions.len(), 1);
+    assert_eq!(transactions[0].id, original_txid);
+    assert_eq!(transactions[0].status, "confirmed");
+    assert_eq!(transactions[0].confirmations, 42);
+    assert_eq!(transactions[0].block, Some(101));
+    assert_eq!(transactions[0].replaced_by, None);
+    assert_eq!(transactions[0].replaces, None);
+}
+
+#[test]
 fn acceleration_drafts_resume_once_and_legacy_duplicates_are_cancelled() {
     let db = Connection::open_in_memory().unwrap();
     init_app_schema(&db).unwrap();

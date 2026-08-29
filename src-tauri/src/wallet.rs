@@ -4595,20 +4595,25 @@ fn apply_replacement_history(
             label_provenance::transaction_funding_summary(db, &replacement.id).map_err(internal)?;
         let original_txid = replacement.id.clone();
         let replacement_txid = replacement.replaced_by.clone();
-        if let Some(existing) = transactions.iter_mut().find(|tx| tx.id == replacement.id) {
-            existing.status = "replaced".to_owned();
-            existing.confirmations = 0;
-            existing.block = None;
-            existing.replaced_by = replacement_txid.clone();
-        } else {
-            transactions.push(replacement);
-        }
-        if let Some(replacement_txid) = replacement_txid.as_deref() {
-            if let Some(replacement_tx) =
-                transactions.iter_mut().find(|tx| tx.id == replacement_txid)
-            {
-                replacement_tx.replaces = Some(original_txid);
+        let canonical_replacement = replacement_txid.as_deref().and_then(|txid| {
+            transactions
+                .iter()
+                .position(|transaction| transaction.id == txid)
+        });
+        if let Some(replacement_position) = canonical_replacement {
+            if let Some(existing) = transactions.iter_mut().find(|tx| tx.id == original_txid) {
+                existing.status = "replaced".to_owned();
+                existing.confirmations = 0;
+                existing.block = None;
+                existing.replaced_by = replacement_txid;
+            } else {
+                transactions.push(replacement);
             }
+            transactions[replacement_position].replaces = Some(original_txid);
+        } else if !transactions.iter().any(|tx| tx.id == original_txid) {
+            // Keep durable history when neither conflict is currently canonical. If the
+            // original is canonical, it won the race and must remain normally counted.
+            transactions.push(replacement);
         }
     }
     transactions.sort_by_key(|transaction| {
