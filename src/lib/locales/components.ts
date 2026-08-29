@@ -437,6 +437,22 @@ export const componentCopy = {
   },
   'Fee increased': { fr: 'Frais augmentés', es: 'Comisión aumentada' },
   Confirmed: { fr: 'Confirmée', es: 'Confirmada' },
+  'Confirmed with the higher fee.': {
+    fr: 'Confirmé avec les frais plus élevés.',
+    es: 'Confirmado con la comisión más alta.'
+  },
+  'The original payment confirmed first.': {
+    fr: 'Le paiement original a été confirmé en premier.',
+    es: 'El pago original se confirmó primero.'
+  },
+  'Waiting for confirmation.': {
+    fr: 'En attente de confirmation.',
+    es: 'Esperando confirmación.'
+  },
+  'View fee increase details': {
+    fr: 'Afficher les détails de la hausse des frais',
+    es: 'Ver detalles del aumento de comisión'
+  },
   'This payment confirmed through a newer transaction with a higher fee.': {
     fr: 'Ce paiement a été confirmé par une nouvelle transaction avec des frais plus élevés.',
     es: 'Este pago se confirmó mediante una nueva transacción con una comisión más alta.'

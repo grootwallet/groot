@@ -34,14 +34,16 @@ describe('transaction acceleration actions', () => {
     );
   });
 
-  it('presents replacement lineage as a compact visual journey with optional explanation', () => {
+  it('keeps the replacement journey behind one optional-insight disclosure', () => {
+    expect(component).toContain('class="transaction-lineage-details"');
+    expect(component).toContain("'View fee increase details'");
     expect(component).toContain('class="transaction-lineage-journey"');
     expect(component).toContain("'Earlier transaction'");
     expect(component).toContain("'Higher-fee replacement'");
-    expect(component).toContain("'Why are both shown?'");
     expect(component).toContain('compactIdentifier(transaction.rbfHistory.originalTxid, 8, 6)');
     expect(component).toContain('compactIdentifier(transaction.rbfHistory.replacementTxid, 8, 6)');
     expect(component).toContain('compactIdentifier(transaction.id)');
+    expect(appCss).toMatch(/\.transaction-lineage-details > summary\s*\{/s);
     expect(appCss).toMatch(/\.transaction-lineage-journey\s*\{[^}]*grid-template-columns/s);
   });
 });

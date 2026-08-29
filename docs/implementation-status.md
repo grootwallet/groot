@@ -2,7 +2,9 @@
 
 This ledger prevents prototype UI from being mistaken for production wallet behavior. “Implemented” means wired through the real Tauri adapter; “browser fixture” means deterministic UI behavior only.
 
-v0.4.74 models an RBF conflict set as one payment row in Overview and Activity while preserving its complete visual lineage in transaction details. The canonical replacement is the representative when it wins; a confirmed original is the representative if it wins the race; and the broadcast replacement represents the payment while pending. An additive Rust-owned DTO carries both transaction references, available authoritative fee rates, and the honest outcome without changing persisted profile, wallet, proposal, registry, backup, or interchange formats. No migration is required.
+v0.4.75 makes the v0.4.74 RBF detail treatment progressive: the default card contains only **Fee increased** and a short honest outcome, while one **View fee increase details** disclosure reveals the full visual journey, identifiers, fee rates, and accounting explanation. The Rust DTO and every persisted profile, wallet, proposal, registry, backup, and interchange format are unchanged; no migration is required.
+
+v0.4.74 models an RBF conflict set as one payment row in Overview and Activity while preserving its complete visual lineage in transaction details. The canonical replacement is the representative when it wins; a confirmed original is the representative if it wins the race; and the broadcast replacement represents the payment while pending. An additive Rust-owned DTO carries both transaction references, available authoritative fee rates, and the honest outcome without changing persisted profile, wallet, proposal, registry, backup, or interchange formats.
 
 v0.4.73 reconciled persisted RBF broadcast intent with BDK's later canonical graph, but its original-winner presentation removed the useful detail timeline and its replacement-winner path still exposed the superseded version as a second accounting row. v0.4.74 supersedes that presentation model.
 

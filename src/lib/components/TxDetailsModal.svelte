@@ -94,19 +94,10 @@
 
   function lineageDescription(history: NonNullable<Transaction['rbfHistory']>) {
     if (history.outcome === 'replacement_confirmed')
-      return translate(
-        $locale,
-        'This payment confirmed through a newer transaction with a higher fee.'
-      );
+      return translate($locale, 'Confirmed with the higher fee.');
     if (history.outcome === 'original_confirmed')
-      return translate(
-        $locale,
-        'A higher-fee replacement was broadcast, but the original transaction confirmed first.'
-      );
-    return translate(
-      $locale,
-      'A higher-fee replacement was broadcast and is awaiting confirmation.'
-    );
+      return translate($locale, 'The original payment confirmed first.');
+    return translate($locale, 'Waiting for confirmation.');
   }
 
   function originalLineageStatus(history: NonNullable<Transaction['rbfHistory']>) {
@@ -188,35 +179,35 @@
             </p>
           </div>
         </div>
-        <div class="transaction-lineage-journey">
-          <div class="transaction-lineage-stop earlier">
-            <span>{translate($locale, 'Earlier transaction')}</span>
-            <code>{compactIdentifier(transaction.rbfHistory.originalTxid, 8, 6)}</code>
-            <small>
-              {#if transaction.rbfHistory.originalFeeRate != null}
-                {transaction.rbfHistory.originalFeeRate} {translate($locale, 'sat/vB')} ·
-              {/if}
-              {originalLineageStatus(transaction.rbfHistory)}
-            </small>
+        <details class="transaction-lineage-details">
+          <summary>{translate($locale, 'View fee increase details')}</summary>
+          <div class="transaction-lineage-journey">
+            <div class="transaction-lineage-stop earlier">
+              <span>{translate($locale, 'Earlier transaction')}</span>
+              <code>{compactIdentifier(transaction.rbfHistory.originalTxid, 8, 6)}</code>
+              <small>
+                {#if transaction.rbfHistory.originalFeeRate != null}
+                  {transaction.rbfHistory.originalFeeRate} {translate($locale, 'sat/vB')} ·
+                {/if}
+                {originalLineageStatus(transaction.rbfHistory)}
+              </small>
+            </div>
+            <div class="transaction-lineage-connector" aria-hidden="true">
+              <span>{translate($locale, 'Fee increased')}</span>
+              <i></i><ArrowRight size={14} />
+            </div>
+            <div class="transaction-lineage-stop current">
+              <span>{translate($locale, 'Higher-fee replacement')}</span>
+              <code>{compactIdentifier(transaction.rbfHistory.replacementTxid, 8, 6)}</code>
+              <small>
+                {#if transaction.rbfHistory.replacementFeeRate != null}
+                  {transaction.rbfHistory.replacementFeeRate} {translate($locale, 'sat/vB')} ·
+                {/if}
+                {replacementLineageStatus(transaction.rbfHistory)}
+              </small>
+            </div>
           </div>
-          <div class="transaction-lineage-connector" aria-hidden="true">
-            <span>{translate($locale, 'Fee increased')}</span>
-            <i></i><ArrowRight size={14} />
-          </div>
-          <div class="transaction-lineage-stop current">
-            <span>{translate($locale, 'Higher-fee replacement')}</span>
-            <code>{compactIdentifier(transaction.rbfHistory.replacementTxid, 8, 6)}</code>
-            <small>
-              {#if transaction.rbfHistory.replacementFeeRate != null}
-                {transaction.rbfHistory.replacementFeeRate} {translate($locale, 'sat/vB')} ·
-              {/if}
-              {replacementLineageStatus(transaction.rbfHistory)}
-            </small>
-          </div>
-        </div>
-        <details class="transaction-lineage-insight">
-          <summary>{translate($locale, 'Why are both shown?')}</summary>
-          <p>
+          <p class="transaction-lineage-insight">
             {lineageInsight(transaction.rbfHistory)}
           </p>
         </details>

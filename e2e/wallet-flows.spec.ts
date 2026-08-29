@@ -1115,13 +1115,17 @@ test('RBF starts safely and presents one payment row with durable lineage', asyn
   await expect(page.locator('.detail-amount')).not.toHaveClass(/replaced/);
   const replacementLineage = page.locator('.transaction-lineage');
   await expect(replacementLineage).toContainText('Fee increased');
+  await expect(replacementLineage).toContainText('Waiting for confirmation.');
+  const journey = replacementLineage.locator('.transaction-lineage-journey');
+  await expect(journey).not.toBeVisible();
+  await replacementLineage.getByText('View fee increase details', { exact: true }).click();
+  await expect(journey).toBeVisible();
   await expect(replacementLineage).toContainText('Earlier transaction');
   await expect(replacementLineage).toContainText('Higher-fee replacement');
   await expect(replacementLineage).toContainText('Replaced');
   await expect(replacementLineage).toContainText('Broadcast');
   await expect(replacementLineage.locator('code')).toHaveCount(2);
   await expect(replacementLineage.locator('code').first()).toContainText('…');
-  await replacementLineage.getByText('Why are both shown?', { exact: true }).click();
   await expect(replacementLineage).toContainText(
     'The payment is counted once while the higher-fee replacement awaits confirmation.'
   );
