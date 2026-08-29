@@ -55,6 +55,26 @@ fn coldcard_policy_acknowledgement_is_serialized_before_authorization() {
 }
 
 #[test]
+fn wallet_exists_reconciles_pairing_storage_only_under_the_operation_lock() {
+    // The startup poll must not race coordination_mobile_complete: an
+    // unguarded reconcile could delete a profile directory or restore a
+    // tombstone while completion is actively writing it.
+    let source = include_str!("profile_commands.rs");
+    let command = source
+        .split("pub fn wallet_exists")
+        .nth(1)
+        .unwrap()
+        .split("pub(crate) fn registered_wallets_exist")
+        .next()
+        .unwrap();
+    let guard = command.find("operation_guard(&state)").unwrap();
+    let reconcile = command
+        .find("reconcile_mobile_pairing_storage(&app)")
+        .unwrap();
+    assert!(guard < reconcile);
+}
+
+#[test]
 fn chain_tip_observations_survive_restart_age_to_stale_and_reject_corruption() {
     let db = Connection::open_in_memory().unwrap();
     init_app_schema(&db).unwrap();

@@ -47,7 +47,12 @@ pub(crate) fn profile_compatibility_for(
 }
 
 #[tauri::command]
-pub fn wallet_exists(app: AppHandle) -> ApiResult<bool> {
+pub fn wallet_exists(app: AppHandle, state: State<'_, AppState>) -> ApiResult<bool> {
+    // Pairing-storage reconciliation can delete or restore staging state. It
+    // must run under the same serialized operation lock as
+    // `coordination_mobile_complete`, never concurrently with an in-flight
+    // completion that is actively writing the same profile directory.
+    let _operation = operation_guard(&state)?;
     super::coordination_commands::reconcile_mobile_pairing_storage(&app)?;
     let registry = load_registry(&app)?;
     Ok(registered_wallets_exist(&registry))
