@@ -799,6 +799,16 @@ fn validated_hardware_verification_metadata(
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct RbfHistoryDto {
+    original_txid: String,
+    replacement_txid: String,
+    original_fee_rate: Option<f64>,
+    replacement_fee_rate: Option<f64>,
+    outcome: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TransactionDto {
     id: String,
     kind: String,
@@ -822,6 +832,7 @@ pub struct TransactionDto {
     wallet_output_amount: Option<u64>,
     locktime: Option<u32>,
     rbf: Option<bool>,
+    rbf_history: Option<RbfHistoryDto>,
 }
 
 #[derive(Serialize)]
@@ -4550,11 +4561,16 @@ fn apply_replacement_history(
 ) -> ApiResult<()> {
     let mut statement = db
         .prepare(
-            "SELECT original_txid, replacement_txid, original_kind, original_direction,
-                    original_amount, original_fee, original_date, original_address, original_label
-             FROM groot_accelerations
-             WHERE method = 'rbf' AND replacement_txid IS NOT NULL
-             ORDER BY created_at DESC",
+            "SELECT acceleration.original_txid, acceleration.replacement_txid,
+                    acceleration.original_kind, acceleration.original_direction,
+                    acceleration.original_amount, acceleration.original_fee,
+                    acceleration.original_date, acceleration.original_address,
+                    acceleration.original_label, acceleration.original_fee_rate,
+                    proposal.fee_rate, proposal.created_at, proposal.fee
+             FROM groot_accelerations acceleration
+             JOIN groot_proposals proposal ON proposal.proposal_id = acceleration.proposal_id
+             WHERE acceleration.method = 'rbf' AND acceleration.replacement_txid IS NOT NULL
+             ORDER BY acceleration.created_at DESC",
         )
         .map_err(internal)?;
     let replacements = statement
@@ -4565,10 +4581,10 @@ fn apply_replacement_history(
                 kind: row.get(2)?,
                 direction: row.get(3)?,
                 amount: row.get(4)?,
-                fee: row.get(5)?,
+                fee: row.get(12)?,
                 status: "replaced".to_owned(),
                 confirmations: 0,
-                date: row.get(6)?,
+                date: row.get::<_, u64>(11)?.to_string(),
                 address: row.get(7)?,
                 label: row.get(8)?,
                 intent_label: None,
@@ -4582,6 +4598,13 @@ fn apply_replacement_history(
                 wallet_output_amount: None,
                 locktime: None,
                 rbf: None,
+                rbf_history: Some(RbfHistoryDto {
+                    original_txid: row.get(0)?,
+                    replacement_txid: row.get(1)?,
+                    original_fee_rate: row.get(9)?,
+                    replacement_fee_rate: row.get(10)?,
+                    outcome: "replacement_broadcast".to_owned(),
+                }),
             })
         })
         .map_err(internal)?
@@ -4595,24 +4618,75 @@ fn apply_replacement_history(
             label_provenance::transaction_funding_summary(db, &replacement.id).map_err(internal)?;
         let original_txid = replacement.id.clone();
         let replacement_txid = replacement.replaced_by.clone();
-        let canonical_replacement = replacement_txid.as_deref().and_then(|txid| {
+        let original_position = transactions
+            .iter()
+            .position(|transaction| transaction.id == original_txid);
+        let replacement_position = replacement_txid.as_deref().and_then(|txid| {
             transactions
                 .iter()
                 .position(|transaction| transaction.id == txid)
         });
-        if let Some(replacement_position) = canonical_replacement {
-            if let Some(existing) = transactions.iter_mut().find(|tx| tx.id == original_txid) {
-                existing.status = "replaced".to_owned();
-                existing.confirmations = 0;
-                existing.block = None;
-                existing.replaced_by = replacement_txid;
-            } else {
-                transactions.push(replacement);
+        let original_confirmed =
+            original_position.is_some_and(|position| transactions[position].status == "confirmed");
+
+        if original_confirmed {
+            let mut history = replacement
+                .rbf_history
+                .take()
+                .expect("RBF history is constructed above");
+            history.outcome = "original_confirmed".to_owned();
+            if let Some(position) = original_position {
+                history.original_fee_rate = transactions[position]
+                    .fee_rate
+                    .or(history.original_fee_rate);
+                transactions[position].rbf_history = Some(history);
             }
-            transactions[replacement_position].replaces = Some(original_txid);
-        } else if !transactions.iter().any(|tx| tx.id == original_txid) {
-            // Keep durable history when neither conflict is currently canonical. If the
-            // original is canonical, it won the race and must remain normally counted.
+            if let Some(txid) = replacement_txid.as_deref() {
+                transactions.retain(|transaction| transaction.id != txid);
+            }
+        } else if let Some(position) = replacement_position {
+            let mut history = replacement
+                .rbf_history
+                .take()
+                .expect("RBF history is constructed above");
+            history.outcome = if transactions[position].status == "confirmed" {
+                "replacement_confirmed".to_owned()
+            } else {
+                "replacement_broadcast".to_owned()
+            };
+            history.replacement_fee_rate = transactions[position]
+                .fee_rate
+                .or(history.replacement_fee_rate);
+            if let Some(original_position) = original_position {
+                history.original_fee_rate = transactions[original_position]
+                    .fee_rate
+                    .or(history.original_fee_rate);
+            }
+            transactions[position].replaces = Some(original_txid.clone());
+            transactions[position].rbf_history = Some(history);
+            transactions.retain(|transaction| transaction.id != original_txid);
+        } else if let Some(position) = original_position {
+            let mut history = replacement
+                .rbf_history
+                .take()
+                .expect("RBF history is constructed above");
+            history.outcome = "replacement_broadcast".to_owned();
+            history.original_fee_rate = transactions[position]
+                .fee_rate
+                .or(history.original_fee_rate);
+            transactions[position].rbf_history = Some(history);
+        } else {
+            // Broadcast persistence can precede the replacement appearing in BDK's graph.
+            // Present one pending payment row for the replacement and keep the original
+            // exclusively inside its lineage instead of double-counting the payment.
+            replacement.id = replacement_txid.expect("completed RBF rows have a replacement id");
+            replacement.status = "pending".to_owned();
+            replacement.replaces = Some(original_txid);
+            replacement.replaced_by = None;
+            replacement.fee_rate = replacement
+                .rbf_history
+                .as_ref()
+                .and_then(|history| history.replacement_fee_rate);
             transactions.push(replacement);
         }
     }
@@ -5804,6 +5878,7 @@ fn snapshot_from(
                     .iter()
                     .any(|input| input.sequence.is_rbf()),
             ),
+            rbf_history: None,
         });
     }
     apply_replacement_history(db, &mut transactions)?;

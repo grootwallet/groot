@@ -25,7 +25,7 @@
         class="tx-row"
         class:pending={tx.status === 'pending'}
         class:replaced={tx.status === 'replaced'}
-        class:replacement={Boolean(tx.replaces)}
+        class:replacement={Boolean(tx.rbfHistory)}
         onclick={() => onselect(tx)}
         in:fly={{ y: 5, duration: 180, delay: Math.min(index * 24, 96) }}
       >
@@ -35,7 +35,7 @@
           class:pending={tx.status === 'pending'}
           class:replaced={tx.status === 'replaced'}
         >
-          {#if tx.replaces}<Replace size={17} />{:else if tx.status === 'pending'}<Clock3
+          {#if tx.rbfHistory}<Replace size={17} />{:else if tx.status === 'pending'}<Clock3
               size={17}
             />{:else if tx.status === 'replaced'}<Replace
               size={17}
@@ -53,16 +53,20 @@
             hidden={$discreetMode}
             prominent
           /><small
-            ><LocalTimestamp value={tx.date} />{' · '}{translate(
-              $locale,
-              tx.replaces
-                ? 'Fee increase · replacement'
-                : tx.status === 'pending'
-                  ? t('unconfirmed', $locale)
-                  : tx.status === 'replaced'
-                    ? t('replaced', $locale)
+            ><LocalTimestamp value={tx.date} />{' · '}{tx.rbfHistory
+              ? `${translate($locale, 'Fee increased')} · ${
+                  tx.status === 'pending'
+                    ? t('awaitingConfirmation', $locale)
                     : formatConfirmationCount(tx.confirmations, $locale)
-            )}</small
+                }`
+              : translate(
+                  $locale,
+                  tx.status === 'pending'
+                    ? t('unconfirmed', $locale)
+                    : tx.status === 'replaced'
+                      ? t('replaced', $locale)
+                      : formatConfirmationCount(tx.confirmations, $locale)
+                )}</small
           ></span
         >
         <span

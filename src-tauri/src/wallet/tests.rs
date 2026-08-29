@@ -2771,6 +2771,7 @@ fn synced_snapshots_enqueue_received_and_first_confirmation_events_once() {
         wallet_output_amount: Some(42),
         locktime: Some(0),
         rbf: Some(false),
+        rbf_history: None,
         intent_label: None,
         provenance: ProvenanceSummaryDto::unknown("received"),
     };
@@ -2944,6 +2945,7 @@ fn transaction_dto_serializes_authoritative_detail_fields() {
         wallet_output_amount: Some(63_468),
         locktime: Some(126),
         rbf: Some(true),
+        rbf_history: None,
         intent_label: None,
         provenance: ProvenanceSummaryDto::unknown("funding"),
     })
@@ -2959,7 +2961,7 @@ fn transaction_dto_serializes_authoritative_detail_fields() {
 }
 
 #[test]
-fn replacement_history_marks_or_restores_the_original_without_affecting_the_replacement() {
+fn replacement_history_collapses_a_confirmed_replacement_into_one_payment_row() {
     let db = Connection::open_in_memory().unwrap();
     init_app_schema(&db).unwrap();
     let original_txid = "11".repeat(32);
@@ -3002,31 +3004,30 @@ fn replacement_history_marks_or_restores_the_original_without_affecting_the_repl
         wallet_output_amount: Some(95),
         locktime: Some(100),
         rbf: Some(true),
+        rbf_history: None,
         intent_label: None,
         provenance: ProvenanceSummaryDto::unknown("funding"),
     }];
 
     apply_replacement_history(&db, &mut transactions).unwrap();
 
-    assert_eq!(transactions.len(), 2);
+    assert_eq!(transactions.len(), 1);
     assert_eq!(transactions[0].id, replacement_txid);
-    let original = transactions
-        .iter()
-        .find(|transaction| transaction.id == original_txid)
-        .unwrap();
-    assert_eq!(original.status, "replaced");
-    assert_eq!(original.confirmations, 0);
-    assert_eq!(
-        original.replaced_by.as_deref(),
-        Some(transactions[0].id.as_str())
-    );
     assert_eq!(transactions[0].status, "confirmed");
     assert_eq!(
-        acceleration_label(AccelerationMethod::Rbf, original),
+        transactions[0].replaces.as_deref(),
+        Some(original_txid.as_str())
+    );
+    let history = transactions[0].rbf_history.as_ref().unwrap();
+    assert_eq!(history.original_txid, original_txid);
+    assert_eq!(history.replacement_txid, transactions[0].id);
+    assert_eq!(history.outcome, "replacement_confirmed");
+    assert_eq!(
+        acceleration_label(AccelerationMethod::Rbf, &transactions[0]),
         "Original payment"
     );
     assert_eq!(
-        acceleration_label(AccelerationMethod::Cpfp, original),
+        acceleration_label(AccelerationMethod::Cpfp, &transactions[0]),
         "Fee acceleration"
     );
 }
@@ -3076,6 +3077,7 @@ fn replacement_history_keeps_a_canonical_original_counted_when_it_wins_the_race(
         wallet_output_amount: Some(98),
         locktime: Some(100),
         rbf: Some(true),
+        rbf_history: None,
         intent_label: None,
         provenance: ProvenanceSummaryDto::unknown("funding"),
     }];
@@ -3089,6 +3091,10 @@ fn replacement_history_keeps_a_canonical_original_counted_when_it_wins_the_race(
     assert_eq!(transactions[0].block, Some(101));
     assert_eq!(transactions[0].replaced_by, None);
     assert_eq!(transactions[0].replaces, None);
+    let history = transactions[0].rbf_history.as_ref().unwrap();
+    assert_eq!(history.original_txid, original_txid);
+    assert_eq!(history.replacement_txid, replacement_txid);
+    assert_eq!(history.outcome, "original_confirmed");
 }
 
 #[test]
@@ -3509,6 +3515,7 @@ fn prepared_wallet_proposal_and_acceleration_roll_back_as_one_unit() {
         wallet_output_amount: Some(1),
         locktime: Some(0),
         rbf: Some(true),
+        rbf_history: None,
         intent_label: None,
         provenance: ProvenanceSummaryDto::unknown("funding"),
     };

@@ -91,6 +91,52 @@
       });
     }
   }
+
+  function lineageDescription(history: NonNullable<Transaction['rbfHistory']>) {
+    if (history.outcome === 'replacement_confirmed')
+      return translate(
+        $locale,
+        'This payment confirmed through a newer transaction with a higher fee.'
+      );
+    if (history.outcome === 'original_confirmed')
+      return translate(
+        $locale,
+        'A higher-fee replacement was broadcast, but the original transaction confirmed first.'
+      );
+    return translate(
+      $locale,
+      'A higher-fee replacement was broadcast and is awaiting confirmation.'
+    );
+  }
+
+  function originalLineageStatus(history: NonNullable<Transaction['rbfHistory']>) {
+    return history.outcome === 'original_confirmed'
+      ? translate($locale, 'Confirmed')
+      : translate($locale, 'Replaced');
+  }
+
+  function replacementLineageStatus(history: NonNullable<Transaction['rbfHistory']>) {
+    if (history.outcome === 'replacement_confirmed') return translate($locale, 'Confirmed');
+    if (history.outcome === 'original_confirmed') return translate($locale, 'Did not confirm');
+    return translate($locale, 'Broadcast');
+  }
+
+  function lineageInsight(history: NonNullable<Transaction['rbfHistory']>) {
+    if (history.outcome === 'replacement_confirmed')
+      return translate(
+        $locale,
+        'The payment is counted once through the confirmed replacement. The earlier version remains only as history.'
+      );
+    if (history.outcome === 'original_confirmed')
+      return translate(
+        $locale,
+        'The payment is counted once through the original transaction, which confirmed before its replacement.'
+      );
+    return translate(
+      $locale,
+      'The payment is counted once while the higher-fee replacement awaits confirmation.'
+    );
+  }
 </script>
 
 <Modal open={!!transaction} title={translate($locale, 'Transaction details')} {onclose}>
@@ -131,36 +177,26 @@
           <PermanentLabelTags labels={transactionLabels} hidden={$discreetMode} prominent />
         </div>{/if}
     </div>
-    {#if transaction.replaces || (transaction.status === 'replaced' && transaction.replacedBy)}
+    {#if transaction.rbfHistory}
       <aside class="transaction-lineage" aria-label={translate($locale, 'Transaction history')}>
         <div class="transaction-lineage-heading">
           <span class="transaction-lineage-icon" aria-hidden="true"><ArrowUp size={16} /></span>
           <div>
             <strong>{translate($locale, 'Fee increased')}</strong>
             <p>
-              {translate(
-                $locale,
-                transaction.replaces
-                  ? 'This is the newer transaction. It replaces an earlier version with a higher fee.'
-                  : 'A newer transaction replaced this version with a higher fee.'
-              )}
+              {lineageDescription(transaction.rbfHistory)}
             </p>
           </div>
         </div>
         <div class="transaction-lineage-journey">
           <div class="transaction-lineage-stop earlier">
-            <span
-              >{translate(
-                $locale,
-                transaction.replaces ? 'Earlier transaction' : 'This transaction'
-              )}</span
-            >
-            <code>{compactIdentifier(transaction.replaces ?? transaction.id, 8, 6)}</code>
+            <span>{translate($locale, 'Earlier transaction')}</span>
+            <code>{compactIdentifier(transaction.rbfHistory.originalTxid, 8, 6)}</code>
             <small>
-              {#if !transaction.replaces && transaction.feeRate != null}
-                {transaction.feeRate} {translate($locale, 'sat/vB')} ·
+              {#if transaction.rbfHistory.originalFeeRate != null}
+                {transaction.rbfHistory.originalFeeRate} {translate($locale, 'sat/vB')} ·
               {/if}
-              {translate($locale, 'Replaced')}
+              {originalLineageStatus(transaction.rbfHistory)}
             </small>
           </div>
           <div class="transaction-lineage-connector" aria-hidden="true">
@@ -168,28 +204,20 @@
             <i></i><ArrowRight size={14} />
           </div>
           <div class="transaction-lineage-stop current">
-            <span
-              >{translate(
-                $locale,
-                transaction.replaces ? 'This transaction' : 'Newer transaction'
-              )}</span
-            >
-            <code>{compactIdentifier(transaction.replacedBy ?? transaction.id, 8, 6)}</code>
+            <span>{translate($locale, 'Higher-fee replacement')}</span>
+            <code>{compactIdentifier(transaction.rbfHistory.replacementTxid, 8, 6)}</code>
             <small>
-              {#if transaction.replaces && transaction.feeRate != null}
-                {transaction.feeRate} {translate($locale, 'sat/vB')} ·
+              {#if transaction.rbfHistory.replacementFeeRate != null}
+                {transaction.rbfHistory.replacementFeeRate} {translate($locale, 'sat/vB')} ·
               {/if}
-              {translate($locale, transaction.replaces ? 'Current' : 'Replacement')}
+              {replacementLineageStatus(transaction.rbfHistory)}
             </small>
           </div>
         </div>
         <details class="transaction-lineage-insight">
           <summary>{translate($locale, 'Why are both shown?')}</summary>
           <p>
-            {translate(
-              $locale,
-              'Only the newer transaction can confirm. Groot keeps the earlier version as history and excludes it from balance totals.'
-            )}
+            {lineageInsight(transaction.rbfHistory)}
           </p>
         </details>
       </aside>

@@ -263,7 +263,7 @@ An explicit scan performs one aggregate HWI enumeration, then Rust filters the v
 
 `pending wallet-originated replaceable transaction → Rust quotes exact minimum and safe default → user keeps/edits decimal target → Rust returns applied target, whole-satoshi effective rate, and persisted replacement PSBT → normal review/sign/broadcast → transaction details show earlier transaction — fee increased → newer transaction, with compact IDs and optional accounting insight → active replacement keeps its normal sent amount; superseded original is struck through and excluded → replacement links backward and original links forward`
 
-Confirmed, non-replaceable, below-minimum, insufficient-value, stale-node-policy, and confirmation-race states fail explicitly without changing lineage. If a replacement was broadcast but the canonical chain later selects the original, Activity restores the original as the single normal counted payment instead of permanently striking it through. Hardware review and thresholds remain unchanged.
+Confirmed, non-replaceable, below-minimum, insufficient-value, stale-node-policy, and confirmation-race states fail explicitly without changing lineage. Overview and Activity collapse a completed RBF conflict set into one normal payment row: the canonical replacement when it wins, the confirmed original if it wins the race, or the broadcast replacement while pending. Opening that row always shows the original-to-replacement journey and its honest outcome. Hardware review and thresholds remain unchanged.
 
 `Settings → Import or export wallet labels → privacy warning → native JSONL picker → Rust BIP329 validation/export → durable inline result + toast`
 

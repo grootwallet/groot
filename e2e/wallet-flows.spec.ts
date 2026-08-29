@@ -1060,9 +1060,7 @@ test('BIP329 label interchange discloses privacy and keeps durable results', asy
   );
 });
 
-test('RBF starts at a safe quote, preserves a decimal target, and records both-way lineage', async ({
-  page
-}) => {
+test('RBF starts safely and presents one payment row with durable lineage', async ({ page }) => {
   await page.goto('/send');
   await page.getByLabel('Bitcoin address').fill('bcrt1qreceiver0000000000000000000000000000000');
   await page.getByLabel('Payment label').fill('RBF target fixture');
@@ -1107,7 +1105,10 @@ test('RBF starts at a safe quote, preserves a decimal target, and records both-w
   await page.getByRole('button', { name: /Sign & broadcast/ }).click();
   await page.getByRole('link', { name: 'View transaction' }).click();
 
-  const replacement = page.locator('.tx-row').filter({ hasText: 'Fee increase · replacement' });
+  const paymentRows = page.locator('.tx-row').filter({ hasText: 'RBF target fixture' });
+  await expect(paymentRows).toHaveCount(1);
+  const replacement = paymentRows.first();
+  await expect(replacement).toContainText('Fee increased');
   await expect(replacement).toBeVisible();
   await expect(replacement).not.toHaveClass(/replaced/);
   await replacement.click();
@@ -1115,22 +1116,19 @@ test('RBF starts at a safe quote, preserves a decimal target, and records both-w
   const replacementLineage = page.locator('.transaction-lineage');
   await expect(replacementLineage).toContainText('Fee increased');
   await expect(replacementLineage).toContainText('Earlier transaction');
-  await expect(replacementLineage).toContainText('This transaction');
+  await expect(replacementLineage).toContainText('Higher-fee replacement');
   await expect(replacementLineage).toContainText('Replaced');
-  await expect(replacementLineage).toContainText('Current');
+  await expect(replacementLineage).toContainText('Broadcast');
   await expect(replacementLineage.locator('code')).toHaveCount(2);
   await expect(replacementLineage.locator('code').first()).toContainText('…');
   await replacementLineage.getByText('Why are both shown?', { exact: true }).click();
-  await expect(replacementLineage).toContainText('Only the newer transaction can confirm.');
+  await expect(replacementLineage).toContainText(
+    'The payment is counted once while the higher-fee replacement awaits confirmation.'
+  );
   await page.getByRole('button', { name: 'Close' }).click();
-  const original = page.locator('.tx-row.replaced').filter({ hasText: 'RBF target fixture' });
-  await expect(original).toBeVisible();
-  await original.click();
-  await expect(page.locator('.detail-amount')).toHaveClass(/replaced/);
-  const originalLineage = page.locator('.transaction-lineage');
-  await expect(originalLineage).toContainText('This transaction');
-  await expect(originalLineage).toContainText('Newer transaction');
-  await expect(originalLineage).toContainText('Replacement');
+  await expect(
+    page.locator('.tx-row.replaced').filter({ hasText: 'RBF target fixture' })
+  ).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true
   );

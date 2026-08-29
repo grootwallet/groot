@@ -2057,6 +2057,16 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       walletOutputAmount: Number(proposal.change),
       locktime: proposal.locktime,
       rbf: proposal.rbf,
+      rbfHistory:
+        acceleration?.method === 'rbf' && original
+          ? {
+              originalTxid: original.id,
+              replacementTxid: txid,
+              originalFeeRate: original.feeRate,
+              replacementFeeRate: Number(proposal.feeRate),
+              outcome: 'replacement_broadcast'
+            }
+          : undefined,
       intentLabel: original?.intentLabel ?? {
         id: `payment-${proposalId}`,
         text: proposal.label,
@@ -2073,7 +2083,11 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     };
     this._transactions = [
       replacement,
-      ...this._transactions.filter((transaction) => transaction.id !== txid)
+      ...this._transactions.filter(
+        (transaction) =>
+          transaction.id !== txid &&
+          !(acceleration?.method === 'rbf' && transaction.id === original?.id)
+      )
     ];
     if (acceleration) this._accelerations.delete(proposalId);
   }

@@ -787,16 +787,32 @@ fn funded_rbf_and_cpfp_cross_groot_proposal_boundaries() {
         None,
     )
     .unwrap();
-    let replaced = snapshot
+    assert_eq!(
+        snapshot
+            .transactions
+            .iter()
+            .filter(|transaction| {
+                transaction.id == original_txid.to_string()
+                    || transaction.id == replacement_txid.to_string()
+            })
+            .count(),
+        1,
+        "an RBF conflict set is one payment row"
+    );
+    let representative = snapshot
         .transactions
         .iter()
-        .find(|transaction| transaction.id == original_txid.to_string())
+        .find(|transaction| transaction.id == replacement_txid.to_string())
         .unwrap();
-    assert_eq!(replaced.status, "replaced");
+    assert_eq!(representative.status, "pending");
     assert_eq!(
-        replaced.replaced_by.as_deref(),
-        Some(replacement_txid.to_string().as_str())
+        representative.replaces.as_deref(),
+        Some(original_txid.to_string().as_str())
     );
+    let history = representative.rbf_history.as_ref().unwrap();
+    assert_eq!(history.original_txid, original_txid.to_string());
+    assert_eq!(history.replacement_txid, replacement_txid.to_string());
+    assert_eq!(history.outcome, "replacement_broadcast");
     assert_eq!(
         proposal_status(&db, &rbf.proposal_id),
         ("broadcast".to_owned(), Some(replacement_txid.to_string()))

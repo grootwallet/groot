@@ -436,6 +436,25 @@ export const componentCopy = {
     es: 'Reemplazo por aumento de comisión'
   },
   'Fee increased': { fr: 'Frais augmentés', es: 'Comisión aumentada' },
+  Confirmed: { fr: 'Confirmée', es: 'Confirmada' },
+  'This payment confirmed through a newer transaction with a higher fee.': {
+    fr: 'Ce paiement a été confirmé par une nouvelle transaction avec des frais plus élevés.',
+    es: 'Este pago se confirmó mediante una nueva transacción con una comisión más alta.'
+  },
+  'A higher-fee replacement was broadcast, but the original transaction confirmed first.': {
+    fr: 'Un remplacement avec des frais plus élevés a été diffusé, mais la transaction originale a été confirmée en premier.',
+    es: 'Se transmitió un reemplazo con una comisión más alta, pero la transacción original se confirmó primero.'
+  },
+  'A higher-fee replacement was broadcast and is awaiting confirmation.': {
+    fr: 'Un remplacement avec des frais plus élevés a été diffusé et attend une confirmation.',
+    es: 'Se transmitió un reemplazo con una comisión más alta y está esperando confirmación.'
+  },
+  'Higher-fee replacement': {
+    fr: 'Remplacement avec frais plus élevés',
+    es: 'Reemplazo con comisión más alta'
+  },
+  'Did not confirm': { fr: 'Non confirmée', es: 'No se confirmó' },
+  Broadcast: { fr: 'Diffusée', es: 'Transmitida' },
   'Transaction history': {
     fr: 'Historique de la transaction',
     es: 'Historial de la transacción'
@@ -463,6 +482,20 @@ export const componentCopy = {
       fr: 'Seule la nouvelle transaction peut être confirmée. Groot conserve la version antérieure dans l’historique et l’exclut des totaux du solde.',
       es: 'Solo la transacción nueva puede confirmarse. Groot conserva la versión anterior en el historial y la excluye de los totales del saldo.'
     },
+  'The payment is counted once through the confirmed replacement. The earlier version remains only as history.':
+    {
+      fr: 'Le paiement est compté une seule fois via le remplacement confirmé. La version antérieure reste uniquement dans l’historique.',
+      es: 'El pago se cuenta una sola vez mediante el reemplazo confirmado. La versión anterior queda solo en el historial.'
+    },
+  'The payment is counted once through the original transaction, which confirmed before its replacement.':
+    {
+      fr: 'Le paiement est compté une seule fois via la transaction originale, confirmée avant son remplacement.',
+      es: 'El pago se cuenta una sola vez mediante la transacción original, que se confirmó antes que su reemplazo.'
+    },
+  'The payment is counted once while the higher-fee replacement awaits confirmation.': {
+    fr: 'Le paiement est compté une seule fois pendant que le remplacement avec des frais plus élevés attend une confirmation.',
+    es: 'El pago se cuenta una sola vez mientras el reemplazo con una comisión más alta espera confirmación.'
+  },
   'Replaced by a fee increase': {
     fr: 'Remplacée par une hausse des frais',
     es: 'Reemplazada por un aumento de comisión'

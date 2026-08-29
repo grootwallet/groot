@@ -1,5 +1,5 @@
 export const SUPPORTED_NETWORKS = ['signet', 'testnet4', 'regtest'] as const;
-export const APP_VERSION = '0.4.73';
+export const APP_VERSION = '0.4.74';
 export type SupportedNetwork = (typeof SUPPORTED_NETWORKS)[number];
 
 export type AppConfig = {

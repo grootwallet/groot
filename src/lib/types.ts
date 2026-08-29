@@ -44,6 +44,13 @@ export type Transaction = {
   walletOutputAmount?: number | null;
   locktime?: number | null;
   rbf?: boolean | null;
+  rbfHistory?: {
+    originalTxid: string;
+    replacementTxid: string;
+    originalFeeRate?: number | null;
+    replacementFeeRate?: number | null;
+    outcome: 'replacement_broadcast' | 'replacement_confirmed' | 'original_confirmed';
+  } | null;
   intentLabel: PermanentLabel | null;
   provenance: ProvenanceSummary;
 };
