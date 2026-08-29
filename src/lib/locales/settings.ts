@@ -51,6 +51,35 @@ export const settingsCopy = {
     fr: 'Filtres compacts P2P · activité confirmée uniquement',
     es: 'Filtros compactos P2P · solo actividad confirmada'
   },
+  'Experimental P2P compact filters · confirmed activity only': {
+    fr: 'Filtres compacts P2P expérimentaux · activité confirmée uniquement',
+    es: 'Filtros compactos P2P experimentales · solo actividad confirmada'
+  },
+  'Experimental compact filters are unavailable on mobile · switch to Bitcoin Core': {
+    fr: 'Les filtres compacts expérimentaux sont indisponibles sur mobile · passez à Bitcoin Core',
+    es: 'Los filtros compactos experimentales no están disponibles en móvil · cambia a Bitcoin Core'
+  },
+  'Compact filters · Experimental': {
+    fr: 'Filtres compacts · Expérimental',
+    es: 'Filtros compactos · Experimental'
+  },
+  'Experimental test-network feature.': {
+    fr: 'Fonction expérimentale sur réseau de test.',
+    es: 'Función experimental de red de pruebas.'
+  },
+  'Confirmed activity only. The initial scan may repeat after interruption; do not rely on this source for recovery.':
+    {
+      fr: 'Activité confirmée uniquement. L’analyse initiale peut recommencer après une interruption ; n’utilisez pas cette source pour la récupération.',
+      es: 'Solo actividad confirmada. El análisis inicial puede repetirse tras una interrupción; no uses esta fuente para recuperación.'
+    },
+  'Compact filters are unavailable on mobile.': {
+    fr: 'Les filtres compacts sont indisponibles sur mobile.',
+    es: 'Los filtros compactos no están disponibles en móvil.'
+  },
+  'Their initial scan is not yet durably resumable. Configure Bitcoin Core to continue.': {
+    fr: 'Leur analyse initiale ne peut pas encore reprendre durablement. Configurez Bitcoin Core pour continuer.',
+    es: 'Su análisis inicial todavía no se puede reanudar de forma duradera. Configura Bitcoin Core para continuar.'
+  },
   Check: { fr: 'Tester', es: 'Comprobar' },
   Connected: { fr: 'Connecté', es: 'Conectado' },
   Offline: { fr: 'Hors ligne', es: 'Sin conexión' },
@@ -67,6 +96,10 @@ export const settingsCopy = {
   'Choose a trusted remote Bitcoin Core node or compact filters before refreshing this wallet.': {
     fr: 'Choisissez un nœud Bitcoin Core distant approuvé ou des filtres compacts avant d’actualiser ce portefeuille.',
     es: 'Elige un nodo Bitcoin Core remoto de confianza o filtros compactos antes de actualizar esta cartera.'
+  },
+  'Configure a trusted remote Bitcoin Core node before refreshing this wallet on mobile.': {
+    fr: 'Configurez un nœud Bitcoin Core distant approuvé avant d’actualiser ce portefeuille sur mobile.',
+    es: 'Configura un nodo Bitcoin Core remoto de confianza antes de actualizar esta cartera en el móvil.'
   },
   'Configure sync': { fr: 'Configurer la synchronisation', es: 'Configurar sincronización' },
   'Not checked': { fr: 'Non vérifié', es: 'Sin comprobar' },

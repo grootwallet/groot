@@ -2,6 +2,13 @@
 
 This is the canonical remaining-work checklist for Issue #7 after the deterministic Regtest certification on `codex/compact-filter-adversarial-certification`. Merging that branch makes the implemented test-network foundation available; it does **not** by itself close Issue #7 or authorize mainnet.
 
+## Current product exposure
+
+- Compact filters are labeled **Experimental** and exposed only by desktop test-network builds.
+- iOS and Android hide the selector, do not auto-start an existing compact-filter source, exclude compact-filter network setups from reuse, and reject save/adopt/sync attempts at the native boundary.
+- A mobile wallet previously configured with compact filters remains format-compatible and is routed to Bitcoin Core setup; no source is silently rewritten.
+- Promotion to mobile requires all four foundations together: a reviewed Kyoto version or fork with durable bounded storage, an authenticated height-and-hash birthday checkpoint in pairing/recovery, atomic resumable partial progress, and measured physical-device lifecycle/resource evidence.
+
 ## Implemented foundation
 
 - Explicit per-wallet confirmed-only compact-filter discovery, separate from the configured Core fee, mempool, recovery, and broadcast service.
@@ -16,7 +23,7 @@ These are architectural choices, not routine follow-up patches:
 
 1. **Kyoto adversarial-test boundary.** Prefer an upstream Kyoto test API or a reviewed upgrade that exposes deterministic post-handshake message injection. A narrowly maintained fork is the second choice. Adding another P2P parser or weakening Kyoto's verified-update boundary requires its own ADR, dependency review, and threat-model update.
 2. **Durable public-chain index.** Pinned `bip157` 0.6.3 ignores `data_dir`, so headers, filter headers, and filters are memory-only. Before claiming a durable cache, select and review an upstream version/fork that persists it; define versioning, atomic replacement, owner-only permissions, corruption recovery, bounded growth, eviction, and migration behavior.
-3. **Compact-filter recovery.** The current recovery scan intentionally uses Core. A compact-filter recovery design needs a trusted birthday checkpoint containing both height and block hash, gap-limit discovery, resumable progress, cancellation, restart semantics, and a decision about how checkpoints are obtained without creating a trusted central service. There must be no silent Core fallback.
+3. **Authenticated scan start and resumability.** The current recovery scan intentionally uses Core, and a newly paired compact-filter wallet may begin at genesis. Define an authenticated pairing/recovery checkpoint containing both height and block hash, its desktop-to-phone transcript binding, gap-limit discovery, atomic partial-progress persistence, cancellation/restart semantics, and a decision about how checkpoints are obtained without creating a trusted central service. There must be no silent Core fallback and no promotion while interruption can repeat an all-or-nothing initial scan.
 4. **Broadcast transport.** Current broadcast is authenticated Core RPC; compact filters affect activity discovery only. If direct P2P broadcast becomes part of Issue #7, specify success semantics (submission versus relay observation), peer fan-out, Tor stream isolation, rebroadcast, rejection handling, privacy leakage, and explicit fallback consent before implementation. Do not silently fall back from P2P/Tor to Core or direct networking.
 
 Record the selected outcomes in a new ADR or a superseding amendment before code changes. Dependency changes must follow the exact-pin and supply-chain rules in `engineering-standards.md`.
@@ -31,6 +38,7 @@ Record the selected outcomes in a new ADR or a superseding amendment before code
 - [ ] Withheld headers, filters, and matching blocks terminate within bounded deadlines without partial persistence.
 - [ ] If durable cache support is selected: truncated, substituted, oversized, incompatible-version, and corrupt cache cases recover safely or fail closed; disk growth is measured and bounded.
 - [ ] If compact-filter recovery is selected: single-key, external-signer, and multisig birthday/gap scans pass funding, restart, cancellation, reorg, and clean-storage recovery tests.
+- [ ] A fresh paired wallet begins at the authenticated height-and-hash checkpoint, persists bounded verified progress, resumes after force-quit/network loss/OS suspension without rescanning committed ranges, and never advances from an unverified height-only hint.
 
 Each adversarial test must assert both sides of the boundary: the peer/library result and the reopened Groot SQLite checkpoint, balance, history, provenance, and notification baseline.
 
@@ -46,6 +54,7 @@ Run Signet first and Testnet4 second using `public-network-rehearsal.md`. Use fr
 - [ ] Exercise local archival Core, local pruned Core, and authenticated remote archival Core as the separate fee/broadcast/recovery service. Record prune height, wallet checkpoint, whether required blocks remain available, IBD state, disk use, and filter-index state. Groot's Core RPC scan does not require `blockfilterindex`; Bitcoin Core's own BIP157 peer service does.
 - [ ] Certify foreground, suspend/resume, network change, interruption, retry, low-storage, and app-restart behavior on packaged macOS desktop.
 - [ ] Repeat lifecycle, secure-storage, memory, background-time, and network-permission checks separately on physical iOS and Android devices before claiming those platforms.
+- [ ] On physical iOS and Android, record initial and incremental transferred bytes, peak resident memory, persistent disk delta, temporary disk peak, elapsed time, battery impact, thermal state, and behavior under constrained storage for Signet and Testnet4.
 
 Never place peer IPs, wallet addresses, descriptors, xpubs, fingerprints, transaction IDs, RPC credentials, or Tor identifiers in committed evidence. Keep sensitive raw captures local and commit only a sanitized summary.
 
@@ -62,4 +71,4 @@ Issue #7 can be marked complete only when:
 - [ ] `pnpm validate`, strict Rust checks, the isolated funded Regtest harness, and relevant public-network smoke tests are green on the final commit.
 - [ ] `architecture.md`, `flows.md`, `implementation-status.md`, `testing.md`, the applicable ADRs, threat model, and release checklist all describe the same boundary.
 
-Branch merge and issue closure are separate decisions. Until this checklist is complete, compact-filter synchronization remains an optional confirmed-only test-network feature with Core retained for fee estimation, mempool-dependent operations, recovery, and broadcast.
+Branch merge and issue closure are separate decisions. Until this checklist is complete, compact-filter synchronization remains an experimental desktop-only confirmed-activity test-network feature with Core retained for mobile sync, fee estimation, mempool-dependent operations, recovery, and broadcast.

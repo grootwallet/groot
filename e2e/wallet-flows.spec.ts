@@ -1245,23 +1245,34 @@ test('recovery scan and private network controls preserve explicit safety choice
 
   await page.getByRole('button', { name: /Wallet activity sync/ }).click();
   const syncSource = page.getByRole('dialog', { name: 'Wallet activity sync' });
-  await syncSource.getByRole('button', { name: 'Compact filters' }).click();
-  await expect(syncSource.getByText('Confirmed activity only.')).toBeVisible();
-  await syncSource.getByLabel('Peer selection').selectOption({ label: 'Manual peers only' });
-  await expect(
-    syncSource.getByText('Manual mode never falls back to DNS seeds or public peers.')
-  ).toBeVisible();
-  await syncSource
-    .getByLabel('Manual peers · one numeric IP:port per line')
-    .fill('127.0.0.1:18444');
-  await syncSource.getByLabel('Optional local Tor SOCKS5 proxy').fill('127.0.0.1:9050');
-  await syncSource.getByLabel('Wallet passphrase', { exact: true }).fill('prototype-passphrase');
-  await syncSource.getByRole('button', { name: 'Save source' }).click();
-  await expect(
-    page.getByRole('button', {
-      name: /Wallet activity sync.*P2P compact filters.*confirmed activity only/
-    })
-  ).toBeVisible();
+  const mobileRuntime = (page.viewportSize()?.width ?? 1280) <= 760;
+  if (mobileRuntime) {
+    await expect(
+      syncSource.getByRole('button', { name: 'Compact filters · Experimental' })
+    ).toHaveCount(0);
+    await expect(
+      syncSource.getByRole('button', { name: 'Bitcoin Core', exact: true })
+    ).toBeVisible();
+    await syncSource.getByRole('button', { name: 'Cancel' }).click();
+  } else {
+    await syncSource.getByRole('button', { name: 'Compact filters · Experimental' }).click();
+    await expect(syncSource.getByText('Experimental test-network feature.')).toBeVisible();
+    await syncSource.getByLabel('Peer selection').selectOption({ label: 'Manual peers only' });
+    await expect(
+      syncSource.getByText('Manual mode never falls back to DNS seeds or public peers.')
+    ).toBeVisible();
+    await syncSource
+      .getByLabel('Manual peers · one numeric IP:port per line')
+      .fill('127.0.0.1:18444');
+    await syncSource.getByLabel('Optional local Tor SOCKS5 proxy').fill('127.0.0.1:9050');
+    await syncSource.getByLabel('Wallet passphrase', { exact: true }).fill('prototype-passphrase');
+    await syncSource.getByRole('button', { name: 'Save source' }).click();
+    await expect(
+      page.getByRole('button', {
+        name: /Wallet activity sync.*P2P compact filters.*confirmed activity only/
+      })
+    ).toBeVisible();
+  }
 
   await page.getByRole('button', { name: /Fee and broadcast node/ }).click();
   await page.getByRole('button', { name: 'Tor onion' }).click();

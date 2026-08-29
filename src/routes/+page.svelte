@@ -126,8 +126,8 @@
   );
   const mobileSyncSetupRequired = $derived(
     mobileRuntime &&
-      syncSource?.type === 'bitcoin_core' &&
-      nodeConfig?.backend.type === 'local_core'
+      (syncSource?.type === 'compact_filters' ||
+        (syncSource?.type === 'bitcoin_core' && nodeConfig?.backend.type === 'local_core'))
   );
   let hardwareSignerDetails = $derived.by<CosignerDraft | null>(() =>
     hardwareSignerWallet
@@ -290,7 +290,8 @@
       if (activeProposal) activeDraft = null;
       pendingMobilePairingCount = (await pendingPairingsPromise).length;
       initialDataLoading = false;
-      if (syncSource.type === 'compact_filters' && !inheritedSyncObserved) void sync(false);
+      if (syncSource.type === 'compact_filters' && !mobileRuntime && !inheritedSyncObserved)
+        void sync(false);
     } catch (cause) {
       if (cause instanceof WalletError && cause.code === 'wallet_locked') {
         await goto('/unlock');
@@ -488,7 +489,7 @@
       title={mobileSyncSetupRequired
         ? translate(
             $locale,
-            'Choose a trusted remote Bitcoin Core node or compact filters before refreshing this wallet.'
+            'Configure a trusted remote Bitcoin Core node before refreshing this wallet on mobile.'
           )
         : syncButtonTitle}
       onclick={() => sync(true)}
@@ -506,7 +507,7 @@
         ><strong>{translate($locale, 'Set up wallet sync')}</strong><small
           >{translate(
             $locale,
-            'Choose a trusted remote Bitcoin Core node or compact filters before refreshing this wallet.'
+            'Configure a trusted remote Bitcoin Core node before refreshing this wallet on mobile.'
           )}</small
         ></span
       ><Button size="small" variant="secondary" href="/settings#network-services"

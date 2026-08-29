@@ -158,7 +158,11 @@
     networkReuseError = $state(''),
     networkReusing = $state(false);
   let reusableNetworkSetups = $derived(
-    networkSetupSources.filter((source) => source.walletId !== selectedWalletId)
+    networkSetupSources.filter(
+      (source) =>
+        source.walletId !== selectedWalletId &&
+        (!mobileRuntime || source.syncSource.type === 'bitcoin_core')
+    )
   );
   let syncSource = $state<WalletSyncSource>({ type: 'bitcoin_core' });
   let syncOpen = $state(false),
@@ -530,7 +534,7 @@
     }
   }
   function openSyncSource() {
-    syncSourceType = syncSource.type;
+    syncSourceType = mobileRuntime ? 'bitcoin_core' : syncSource.type;
     if (syncSource.type === 'compact_filters') {
       syncDiscoverPeers = syncSource.discoverPeers;
       syncPeers = syncSource.peers.join('\n');
@@ -1274,7 +1278,9 @@
             >{translate(
               $locale,
               syncSource.type === 'compact_filters'
-                ? 'P2P compact filters · confirmed activity only'
+                ? mobileRuntime
+                  ? 'Experimental compact filters are unavailable on mobile · switch to Bitcoin Core'
+                  : 'Experimental P2P compact filters · confirmed activity only'
                 : 'Bitcoin Core RPC · confirmed and mempool activity'
             )}</small
           ></span
@@ -1727,18 +1733,27 @@
     <button
       class:active={syncSourceType === 'bitcoin_core'}
       onclick={() => (syncSourceType = 'bitcoin_core')}>Bitcoin Core</button
-    ><button
-      class:active={syncSourceType === 'compact_filters'}
-      onclick={() => (syncSourceType = 'compact_filters')}
-      >{translate($locale, 'Compact filters')}</button
-    >
+    >{#if !mobileRuntime}<button
+        class:active={syncSourceType === 'compact_filters'}
+        onclick={() => (syncSourceType = 'compact_filters')}
+        >{translate($locale, 'Compact filters · Experimental')}</button
+      >{/if}
   </div>
-  {#if syncSourceType === 'compact_filters'}
+  {#if mobileRuntime && syncSource.type === 'compact_filters'}
     <div class="warning-box sync-source-warning">
-      <strong>{translate($locale, 'Confirmed activity only.')}</strong>
+      <strong>{translate($locale, 'Compact filters are unavailable on mobile.')}</strong>
       {translate(
         $locale,
-        'Pending incoming payments appear after confirmation. Groot validates filters and matching blocks on this phone.'
+        'Their initial scan is not yet durably resumable. Configure Bitcoin Core to continue.'
+      )}
+    </div>
+  {/if}
+  {#if syncSourceType === 'compact_filters'}
+    <div class="warning-box sync-source-warning">
+      <strong>{translate($locale, 'Experimental test-network feature.')}</strong>
+      {translate(
+        $locale,
+        'Confirmed activity only. The initial scan may repeat after interruption; do not rely on this source for recovery.'
       )}
     </div>
     <label class="field"

@@ -5236,6 +5236,12 @@ fn sync_wallet_with_compact_filters(
     source: &WalletSyncSource,
     cancel: Option<&AtomicBool>,
 ) -> ApiResult<WalletSnapshotDto> {
+    if cfg!(any(target_os = "ios", target_os = "android")) {
+        return Err(api_error(
+            "invalid_node_config",
+            "Compact-filter sync is experimental and unavailable on mobile. Configure Bitcoin Core instead.",
+        ));
+    }
     let config = source
         .validate(NETWORK)
         .map_err(network_config_api_error)?

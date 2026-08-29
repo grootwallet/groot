@@ -21,6 +21,18 @@ pub struct NetworkSetupSource {
     sync_source: WalletSyncSource,
 }
 
+fn ensure_sync_source_supported_on_platform(source: &WalletSyncSource) -> ApiResult<()> {
+    if cfg!(any(target_os = "ios", target_os = "android"))
+        && matches!(source, WalletSyncSource::CompactFilters { .. })
+    {
+        return Err(api_error(
+            "invalid_node_config",
+            "Compact-filter sync is experimental and unavailable on mobile. Configure Bitcoin Core instead.",
+        ));
+    }
+    Ok(())
+}
+
 pub(crate) fn profile_compatibility_for(
     profile: &WalletProfile,
     directory: &Path,
@@ -98,10 +110,12 @@ pub fn network_setup_sources(
             if !credentials_ready {
                 return None;
             }
+            let sync_source = read_sync_source_for(&app, profile.id).ok()?;
+            ensure_sync_source_supported_on_platform(&sync_source).ok()?;
             Some(NetworkSetupSource {
                 wallet_id: profile.id.to_string(),
                 wallet_name: profile.name,
-                sync_source: read_sync_source_for(&app, profile.id).ok()?,
+                sync_source,
             })
         })
         .collect())
@@ -794,6 +808,7 @@ pub fn wallet_sync_source_save(
 ) -> ApiResult<WalletSyncSource> {
     let _operation = operation_guard(&state)?;
     require_unlocked(&app, &state)?;
+    ensure_sync_source_supported_on_platform(&source)?;
     source.validate(NETWORK).map_err(network_config_api_error)?;
     let credential = Zeroizing::new(credential);
     check_auth_throttle(&app, &state)?;
@@ -1153,6 +1168,7 @@ pub async fn network_setup_adopt(
 
         let config = read_node_config_for(&app, source)?;
         let sync_source = read_sync_source_for(&app, source)?;
+        ensure_sync_source_supported_on_platform(&sync_source)?;
         let client = match config.auth {
             RpcAuthMode::Cookie => candidate_rpc_client(&config, "")?,
             RpcAuthMode::UserPass => {
@@ -1259,6 +1275,7 @@ pub(super) fn adopt_network_setup_for_new_profile(
 
     let config = read_node_config_for(app, source)?;
     let sync_source = read_sync_source_for(app, source)?;
+    ensure_sync_source_supported_on_platform(&sync_source)?;
     let password = match config.auth {
         RpcAuthMode::Cookie => {
             checked_node_status(&candidate_rpc_client(&config, "")?, config.clone())?;

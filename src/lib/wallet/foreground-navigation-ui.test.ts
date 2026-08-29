@@ -11,6 +11,14 @@ const multisigCommands = readFileSync(
   'utf8'
 );
 const overview = readFileSync(new URL('../../routes/+page.svelte', import.meta.url), 'utf8');
+const settings = readFileSync(
+  new URL('../../routes/settings/+page.svelte', import.meta.url),
+  'utf8'
+);
+const walletCore = readFileSync(
+  new URL('../../../src-tauri/src/wallet.rs', import.meta.url),
+  'utf8'
+);
 const activity = readFileSync(
   new URL('../../routes/activity/+page.svelte', import.meta.url),
   'utf8'
@@ -68,18 +76,34 @@ describe('foreground wallet navigation', () => {
     expect(overview).toContain('syncAge(snapshot?.syncedAt ?? null, syncClock)');
   });
 
-  it('does not start a second compact-filter scan after reattaching to an inherited scan', () => {
+  it('does not start a second compact-filter scan after reattaching and never auto-starts one on mobile', () => {
     expect(overview).toContain('if (syncStatusIsActive(syncStatus)) inheritedSyncObserved = true;');
-    expect(overview).toContain(
-      "if (syncSource.type === 'compact_filters' && !inheritedSyncObserved) void sync(false);"
-    );
+    expect(overview).toContain("syncSource.type === 'compact_filters' && !mobileRuntime");
+    expect(overview).toContain('!inheritedSyncObserved');
   });
 
-  it('routes mobile wallets to network setup before attempting an unavailable local-node sync', () => {
+  it('routes mobile wallets to Bitcoin Core setup instead of attempting local or compact-filter sync', () => {
     expect(overview).toContain("syncSource?.type === 'bitcoin_core'");
+    expect(overview).toContain("syncSource?.type === 'compact_filters'");
     expect(overview).toContain("nodeConfig?.backend.type === 'local_core'");
     expect(overview).toContain("await goto('/settings#network-services')");
     expect(overview).toContain("translate($locale, 'Set up wallet sync')");
+    expect(overview).toContain(
+      'Configure a trusted remote Bitcoin Core node before refreshing this wallet on mobile.'
+    );
+  });
+
+  it('hides experimental compact filters on mobile and rejects hidden native entry points', () => {
+    expect(settings).toContain("syncSourceType = mobileRuntime ? 'bitcoin_core' : syncSource.type");
+    expect(settings).toContain('{#if !mobileRuntime}<button');
+    expect(settings).toContain('Compact filters · Experimental');
+    expect(settings).toContain("!mobileRuntime || source.syncSource.type === 'bitcoin_core'");
+    expect(profileCommands).toContain('ensure_sync_source_supported_on_platform(&source)?');
+    expect(profileCommands).toContain('ensure_sync_source_supported_on_platform(&sync_source)?');
+    expect(walletCore).toContain('if cfg!(any(target_os = "ios", target_os = "android"))');
+    expect(walletCore).toContain(
+      'Compact-filter sync is experimental and unavailable on mobile. Configure Bitcoin Core instead.'
+    );
   });
 
   it('runs contended snapshot reads away from the native window thread', () => {
