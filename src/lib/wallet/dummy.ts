@@ -777,7 +777,12 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       );
   }
   async exportLabels() {
-    return { saved: true, recordCount: 6 };
+    return {
+      saved: true,
+      recordCount: 6,
+      revealToken: 'fixture-label-export-reveal',
+      revealLabel: 'Show in Finder'
+    };
   }
   async importLabels() {
     return { importedCount: 2, unchangedCount: 1, ignoredCount: 1, spendabilityChangeCount: 0 };

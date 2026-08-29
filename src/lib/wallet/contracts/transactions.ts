@@ -105,7 +105,12 @@ export type AccelerationQuote = {
   recommendationSource: 'bitcoin_core' | 'replacement_fallback' | 'custom';
 };
 
-export type LabelExportResult = { saved: boolean; recordCount: number };
+export type LabelExportResult = {
+  saved: boolean;
+  recordCount: number;
+  revealToken: string | null;
+  revealLabel: string | null;
+};
 export type LabelImportResult = {
   importedCount: number;
   unchangedCount: number;

@@ -130,7 +130,7 @@ The main multisig proposal review uses the same hierarchy: amount, recipient, pe
 
 During proposal collection on desktop, signer state sits in a separate side panel with one vertically stacked card per signer. The three-step progress indicator remains above the workspace and describes flow position only; signer cards describe threshold progress only. Narrow layouts return to one content column and keep the compact signer list separate from the step indicator.
 
-Saving an unsigned PSBT, descriptor backup, PDF backup, or device-policy file on macOS adds a compact **Show in Finder** action to the success toast. The action uses a short-lived, single-use native reveal capability and never exposes the selected filesystem path to the webview.
+Saving an unsigned PSBT, descriptor backup, PDF backup, BIP329 label file, or device-policy file on macOS adds a compact **Show in Finder** action to the success toast. The action uses a short-lived, single-use native reveal capability and never exposes the selected filesystem path to the webview.
 
 Importing or returning a PSBT must increase the set of policy signers that validly signed every input. A duplicate signature, unchanged PSBT, or signature covering only a subset of inputs is rejected as **no new signatures** without mutating the persisted proposal or its existing valid signatures.
 

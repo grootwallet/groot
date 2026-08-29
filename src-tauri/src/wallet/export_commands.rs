@@ -188,7 +188,10 @@ pub async fn psbt_file_save(
     saved_file_result(&state, saved_path)
 }
 
-fn saved_file_result(state: &AppState, saved_path: Option<PathBuf>) -> ApiResult<SavedFileDto> {
+pub(super) fn saved_file_result(
+    state: &AppState,
+    saved_path: Option<PathBuf>,
+) -> ApiResult<SavedFileDto> {
     let Some(path) = saved_path else {
         return Ok(SavedFileDto {
             saved: false,

@@ -277,7 +277,28 @@
       labelInterchangeResult = translate($locale, 'Saved {count} BIP329 label records.', {
         count: result.recordCount
       });
-      toast({ title: 'Labels exported', description: labelInterchangeResult, tone: 'success' });
+      toast({
+        title: 'Labels exported',
+        description: labelInterchangeResult,
+        tone: 'success',
+        action:
+          result.revealToken && result.revealLabel
+            ? {
+                label: result.revealLabel,
+                run: async () => {
+                  try {
+                    await walletService.revealSavedFile(result.revealToken!);
+                  } catch (cause) {
+                    toast({
+                      title: 'Could not show saved labels',
+                      description: localizedError(cause, $locale),
+                      tone: 'danger'
+                    });
+                  }
+                }
+              }
+            : undefined
+      });
     } catch (cause) {
       labelInterchangeError = localizedError(cause, $locale, 'Could not export wallet labels.');
       toast({

@@ -23,6 +23,8 @@ struct Bip329Record {
 pub struct LabelExportResultDto {
     saved: bool,
     record_count: usize,
+    reveal_token: Option<String>,
+    reveal_label: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -627,13 +629,18 @@ pub async fn bip329_labels_export(app: AppHandle) -> ApiResult<LabelExportResult
             return Ok(LabelExportResultDto {
                 saved: false,
                 record_count: 0,
+                reveal_token: None,
+                reveal_label: None,
             });
         };
         let path = selected.into_path().map_err(internal)?;
         export_commands::write_public_export(&path, &content)?;
+        let saved_file = export_commands::saved_file_result(&state, Some(path))?;
         Ok(LabelExportResultDto {
-            saved: true,
+            saved: saved_file.saved,
             record_count: records.len(),
+            reveal_token: saved_file.reveal_token,
+            reveal_label: saved_file.reveal_label,
         })
     })
     .await
@@ -746,6 +753,22 @@ mod tests {
             encoded,
             b"{\"type\":\"addr\",\"ref\":\"tb1qfixture\",\"label\":\"Savings\"}\n"
         );
+    }
+
+    #[test]
+    fn export_result_exposes_only_the_opaque_saved_file_capability() {
+        let result = serde_json::to_value(LabelExportResultDto {
+            saved: true,
+            record_count: 20,
+            reveal_token: Some("opaque-token".to_owned()),
+            reveal_label: Some("Show in Finder".to_owned()),
+        })
+        .unwrap();
+        assert_eq!(result["saved"], true);
+        assert_eq!(result["recordCount"], 20);
+        assert_eq!(result["revealToken"], "opaque-token");
+        assert_eq!(result["revealLabel"], "Show in Finder");
+        assert!(result.get("path").is_none());
     }
 
     #[test]

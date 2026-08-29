@@ -1051,6 +1051,9 @@ test('BIP329 label interchange discloses privacy and keeps durable results', asy
 
   await dialog.getByRole('button', { name: 'Export JSONL' }).click();
   await expect(dialog.getByRole('status')).toContainText('Saved 6 BIP329 label records.');
+  await expect(page.getByRole('button', { name: 'Show in Finder' })).toBeVisible();
+  await page.getByRole('button', { name: 'Show in Finder' }).click();
+  await expect(page.getByText('Labels exported', { exact: true })).toHaveCount(0);
   await dialog.getByRole('button', { name: 'Import JSONL' }).click();
   await expect(dialog.getByRole('status')).toContainText(
     'Imported 2; 1 already present; 1 unsupported; 0 coin settings changed.'

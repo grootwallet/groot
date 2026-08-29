@@ -119,7 +119,7 @@ The send surface includes a compact public signer summary throughout the flow. S
 
 Completing Send Intent persists one bounded public-only draft for the selected unlocked wallet before Groot enters Amount & fee. The same draft resumes after route navigation or a full app restart and unlock, with selected coins revalidated against the current snapshot. It contains no credential, private key, PSBT, device path, or hardware prompt state. Preparing an authoritative proposal clears the draft and transfers continuity to the existing exact-PSBT proposal lifecycle.
 
-After a PSBT, public-backup, or PDF backup file is saved on macOS, the success toast offers **Show in Finder**. The webview receives only a short-lived, single-use reveal token; the saved filesystem path remains inside the trusted Rust boundary.
+After a PSBT, public-backup, PDF backup, or BIP329 label file is saved on macOS, the success toast offers **Show in Finder**. The webview receives only a short-lived, single-use reveal token; the saved filesystem path remains inside the trusted Rust boundary.
 
 Saved PSBT filenames use the same short proposal identifier plus an explicit collected-signature suffix: `-s0`, `-s1`, or the corresponding higher count. Exporting the same proposal before signing, after a partial signature, and after threshold completion therefore creates distinguishable native save suggestions without placing recipient, label, wallet name, or signer identity in the filename.
 

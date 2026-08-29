@@ -447,6 +447,10 @@ export const settingsCopy = {
       es: '{imported} importadas; {unchanged} ya presentes; {ignored} no compatibles; {spendability} ajustes de monedas modificados.'
     },
   'Labels exported': { fr: 'Libellés exportés', es: 'Etiquetas exportadas' },
+  'Could not show saved labels': {
+    fr: 'Impossible d’afficher les libellés enregistrés',
+    es: 'No se pudieron mostrar las etiquetas guardadas'
+  },
   'Labels imported': { fr: 'Libellés importés', es: 'Etiquetas importadas' },
   'Last label operation': {
     fr: 'Dernière opération sur les libellés',
