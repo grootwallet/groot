@@ -15,6 +15,7 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
+use zeroize::Zeroizing;
 
 const MAX_ARGUMENT_BYTES: usize = 384 * 1024;
 const MAX_STDIN_BYTES: usize = MAX_ARGUMENT_BYTES + 1024;
@@ -783,19 +784,19 @@ impl HardwareTransport for HwiCli {
         pin_positions: &[u8],
     ) -> Result<Vec<u8>, HardwareError> {
         let arguments = self.device_command_without_value(device_type, device_path, "--stdin");
-        let mut input = pin_command_input(pin_positions)?;
+        // Zeroizing drops the PIN buffer on every return path, including a
+        // failed operation-lease acquisition before the process is spawned.
+        let input = Zeroizing::new(pin_command_input(pin_positions)?);
         let operation =
             HardwareOperation::acquire(HardwareOperationKind::Interactive, DEFAULT_TIMEOUT)?;
-        let result = run_program_in_operation(
+        run_program_in_operation(
             &self.program,
             &self.source,
             &arguments,
             &operation,
             self.home.as_deref(),
-            Some(&input),
-        );
-        input.fill(0);
-        result
+            Some(input.as_slice()),
+        )
     }
 }
 
@@ -959,8 +960,13 @@ fn run_program_in_operation_with_mode(
     if mode == HwiInvocationMode::PublicArgv && extra_input.is_some() {
         return Err(HardwareError::InvalidArgument);
     }
+    // Zeroizing drops the sensitive stdin command (Trezor PIN positions,
+    // selectors, PSBTs) on every return path, including spawn and pipe
+    // failures before the write below.
     let mut input = match mode {
-        HwiInvocationMode::PrivateStdin => Some(hwi_stdin_command(arguments, extra_input)?),
+        HwiInvocationMode::PrivateStdin => {
+            Some(Zeroizing::new(hwi_stdin_command(arguments, extra_input)?))
+        }
         HwiInvocationMode::PublicArgv => None,
     };
     let mut command = Command::new(program);
@@ -1004,13 +1010,12 @@ fn run_program_in_operation_with_mode(
     thread::spawn(move || {
         let _ = stderr_tx.send(read_bounded(stderr));
     });
-    if let Some(mut input) = input.take() {
+    if let Some(input) = input.take() {
         let write_result = child
             .stdin
             .take()
             .ok_or(HardwareError::Io)
             .and_then(|mut stdin| stdin.write_all(&input).map_err(|_| HardwareError::Io));
-        input.fill(0);
         if let Err(error) = write_result {
             terminate_process_tree(&mut child);
             let _ = collect_pipes(&stdout_rx, &stderr_rx);
