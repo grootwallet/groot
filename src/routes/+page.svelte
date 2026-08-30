@@ -674,7 +674,8 @@
         >{translate($locale, 'Configure sync')}</Button
       >
     </section>
-  {:else if initialHistoryRequired}
+  {/if}
+  {#if initialHistoryRequired}
     <section class="initial-history-scan" aria-live="polite">
       <div>
         <strong
