@@ -2076,6 +2076,7 @@ fn coordination_ur_api_error(error: CoordinationUrError) -> ApiError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::secure_store::SecureStoreError;
     use bdk_bitcoind_rpc::{
         bitcoincore_rpc::{jsonrpc, Auth, Client, RpcApi},
         Emitter,
