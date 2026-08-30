@@ -39,7 +39,7 @@
     "test:secret-surfaces": "node --test scripts/quality/check-secret-surfaces.test.mjs && node scripts/quality/check-secret-surfaces.mjs",
     "test:supply-chain": "node scripts/quality/check-supply-chain.mjs",
     "test:sbom": "bash scripts/quality/check-sbom.sh",
-    "test:brand": "bash scripts/quality/check-brand-identity.sh",
+    "test:brand": "node --test scripts/quality/check-brand-identity.test.mjs && bash scripts/quality/check-brand-identity.sh",
     "test:versions": "node scripts/quality/check-version-surfaces.mjs",
     "test:localization": "node scripts/quality/check-localization.mjs",
     "test:agent-scaffolding": "bash scripts/quality/check-agent-scaffolding.sh",

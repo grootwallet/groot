@@ -8,7 +8,58 @@ fail() {
   exit 1
 }
 
-contains_fixed() { rg -F -- "$1" "$2" >/dev/null; }
+run_search() {
+  local status
+  if "$@" >/dev/null; then
+    return 0
+  else
+    status=$?
+  fi
+  if [[ "${status}" == 1 ]]; then
+    return 1
+  fi
+  fail "brand identity search failed"
+}
+
+if command -v rg >/dev/null 2>&1; then
+  contains_fixed() { run_search rg -F -- "$1" "$2"; }
+  contains_regex() {
+    local pattern="$1"
+    shift
+    run_search rg -n --hidden --no-ignore -- "${pattern}" "$@"
+  }
+  contains_deprecated_brand() {
+    run_search rg -n --hidden --no-ignore 'Satchel' src e2e static src-tauri/Info.plist src-tauri/tauri.conf.json src-tauri/capabilities/default.json src-tauri/app-icon.svg \
+      --glob '!e2e/branding.spec.ts'
+  }
+elif command -v grep >/dev/null 2>&1 && command -v find >/dev/null 2>&1; then
+  contains_fixed() { run_search grep -F -- "$1" "$2"; }
+  contains_regex() {
+    local pattern="$1"
+    shift
+    run_search grep -RInE -- "${pattern}" "$@"
+  }
+  contains_deprecated_brand() {
+    if run_search grep -RIn -- 'Satchel' src static; then
+      return 0
+    fi
+    if run_search grep -n -- 'Satchel' src-tauri/Info.plist src-tauri/tauri.conf.json src-tauri/capabilities/default.json src-tauri/app-icon.svg; then
+      return 0
+    fi
+    if ! find e2e -type f ! -path 'e2e/branding.spec.ts' -print >/dev/null; then
+      fail "brand identity file discovery failed"
+    fi
+    local file
+    while IFS= read -r -d '' file; do
+      if run_search grep -n -- 'Satchel' "${file}"; then
+        return 0
+      fi
+    done < <(find e2e -type f ! -path 'e2e/branding.spec.ts' -print0)
+    return 1
+  }
+else
+  fail "ripgrep or system grep/find are required"
+fi
 
 contains_fixed '"productName": "Groot"' src-tauri/tauri.conf.json || fail "Tauri product name is not Groot"
 contains_fixed '"mainBinaryName": "Groot"' src-tauri/tauri.conf.json || fail "native application binary name is not Groot"
@@ -25,14 +76,13 @@ contains_fixed 'translate(219 219) scale(4.578)' assets/brand/app-icon-layered-s
 contains_fixed '<rect width="1024" height="1024" fill="#102A4C"/>' assets/brand/app-icon-layers/01-background.svg || fail "Apple icon background layer is missing or masked"
 contains_fixed 'translate(219 219) scale(4.578)' assets/brand/app-icon-layers/02-control.svg || fail "Apple icon foreground layer padding changed"
 
-if rg -n '<rect[^>]+rx=' assets/brand/app-icon-layered-source.svg assets/brand/app-icon-layers >/dev/null; then
+if contains_regex '<rect[^>]+rx=' assets/brand/app-icon-layered-source.svg assets/brand/app-icon-layers; then
   fail "modern Apple icon artwork must remain square and unmasked"
 fi
 
 cmp -s assets/brand/app-icon-legacy-source.svg src-tauri/icons/macos-icon-source.svg || fail "macOS fallback mirror is stale; run pnpm brand:icons"
 
-if rg -n 'Satchel' src e2e static src-tauri/Info.plist src-tauri/tauri.conf.json src-tauri/capabilities/default.json src-tauri/app-icon.svg \
-  --glob '!src-tauri/target/**' --glob '!e2e/branding.spec.ts' >/dev/null; then
+if contains_deprecated_brand; then
   fail "a current user-facing surface still contains Satchel"
 fi
 
