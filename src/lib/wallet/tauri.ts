@@ -53,7 +53,7 @@ import {
 } from './multisig-setup';
 import type { PaymentDraft } from './payment-draft';
 
-type BackendError = { code?: string; message?: string };
+type BackendError = { code?: string; message?: string; existingWalletId?: string };
 type NotificationEnvelope = { id: string; event: WalletEvent };
 export type NativeWalletSyncSource =
   | { type: 'bitcoin_core' }
@@ -98,7 +98,8 @@ async function command<T>(name: string, args?: Record<string, unknown>): Promise
     const backend = error as BackendError;
     throw new WalletError(
       walletErrorCode(backend?.code),
-      backend?.message ?? (typeof error === 'string' ? error : 'The wallet command failed.')
+      backend?.message ?? (typeof error === 'string' ? error : 'The wallet command failed.'),
+      typeof backend?.existingWalletId === 'string' ? backend.existingWalletId : null
     );
   }
 }

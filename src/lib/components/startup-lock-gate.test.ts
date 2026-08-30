@@ -8,6 +8,7 @@ const unlockRoute = readFileSync(
   new URL('../../routes/unlock/+page.svelte', import.meta.url),
   'utf8'
 );
+const buildScript = readFileSync(new URL('../../../src-tauri/build.rs', import.meta.url), 'utf8');
 
 describe('startup wallet lock gate', () => {
   it('resolves the trusted session before mounting authenticated route content', () => {
@@ -48,6 +49,28 @@ describe('startup wallet lock gate', () => {
     expect(shell).toContain('This Groot app contains mismatched components.');
     expect(shell).toContain('Groot could not verify this app build.');
     expect(shell).toContain("{translate($locale, 'Retry')}</button");
+  });
+
+  it('shows the native version and commit before wallet unlock', () => {
+    const runtime = shell.indexOf('const runtime = await walletService.runtimePlatform()');
+    const session = shell.indexOf('const selection = await walletService.session()');
+    expect(runtime).toBeGreaterThan(-1);
+    expect(session).toBeGreaterThan(runtime);
+    expect(shell).toContain('runtime.version !== APP_VERSION');
+    expect(shell).toContain('class="sidebar-build-identity"');
+    expect(shell).toContain("'Groot v{version} · {commit}'");
+    expect(shell).toContain("commit.endsWith('-dirty') ? '-dirty' : ''");
+    expect(buildScript).toContain(
+      'GROOT_BUILD_COMMIT does not match the checked-out repository commit'
+    );
+    expect(buildScript).toContain('A release build requires an exact repository commit identity');
+    expect(buildScript).toContain('A release build requires a clean source checkout');
+    expect(buildScript).toContain('watch_repository_sources();');
+    expect(buildScript).toContain('"ls-files",');
+    expect(buildScript).toContain('"--others",');
+    expect(buildScript).toContain('"--exclude-standard",');
+    expect(buildScript).toContain('"src-tauri/capabilities"');
+    expect(buildScript).toContain('directories.insert(encoded.into_owned())');
   });
 
   it('holds the native launch mark briefly without slowing the browser prototype', () => {

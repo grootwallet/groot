@@ -188,9 +188,9 @@ export const componentCopy = {
     fr: 'Groot v{version} · {commit} · BDK {network}',
     es: 'Groot v{version} · {commit} · BDK {network}'
   },
-  'The native and web network builds do not match. Restart Groot with the correct network build.': {
-    fr: 'Les versions réseau native et web ne correspondent pas. Redémarrez Groot avec la bonne version réseau.',
-    es: 'Las compilaciones de red nativa y web no coinciden. Reinicia Groot con la compilación de red correcta.'
+  'The native and web app builds do not match. Restart Groot with the correct build.': {
+    fr: 'Les versions native et web de l’application ne correspondent pas. Redémarrez Groot avec la bonne version.',
+    es: 'Las versiones nativa y web de la aplicación no coinciden. Reinicia Groot con la versión correcta.'
   },
   "Groot's current Ledger connection must authorize this policy again for each signing request. Keep this reference open until Ledger reaches the transaction.":
     {

@@ -51,6 +51,7 @@
     error = $state(''),
     errorTitle = $state('Could not scan hardware'),
     errorCode = $state<WalletErrorCode | ''>('');
+  let existingWalletId = $state<string | null>(null);
   let pin = $state(''),
     confirmation = $state(''),
     signer = $state<ExternalSigner | null>(null),
@@ -267,6 +268,7 @@
     busy = true;
     error = '';
     errorCode = '';
+    existingWalletId = null;
     try {
       let networkSetupCopied = true;
       await walletService.createExternalSignerWallet(
@@ -294,10 +296,22 @@
       await goto('/');
     } catch (cause) {
       errorCode = cause instanceof WalletError ? cause.code : 'internal_error';
+      existingWalletId = cause instanceof WalletError ? cause.existingWalletId : null;
       error = localizedError(cause, $locale, 'Could not create the wallet.');
     } finally {
       pin = '';
       confirmation = '';
+      busy = false;
+    }
+  }
+
+  async function openExistingWallet() {
+    if (!existingWalletId || busy) return;
+    busy = true;
+    try {
+      if (walletShell.selectedWalletId() === existingWalletId) await goto('/');
+      else await walletShell.selectWallet(existingWalletId);
+    } finally {
       busy = false;
     }
   }
@@ -649,10 +663,10 @@
               )}</small
             >
           </span>
-          {#if errorCode === 'wallet_already_exists'}<Button
+          {#if errorCode === 'wallet_already_exists' && existingWalletId}<Button
               variant="secondary"
               size="small"
-              onclick={() => goto('/')}>{translate($locale, 'Open wallet')}</Button
+              onclick={openExistingWallet}>{translate($locale, 'Open wallet')}</Button
             >{/if}
         </div>
       {/if}
@@ -662,6 +676,7 @@
           onclick={() => {
             error = '';
             errorCode = '';
+            existingWalletId = null;
             step = 2;
           }}>{translate($locale, 'Back')}</Button
         ><Button

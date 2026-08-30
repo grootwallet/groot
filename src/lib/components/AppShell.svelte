@@ -19,7 +19,7 @@
   import ThemeToggle from './ThemeToggle.svelte';
   import DiscreetModeToggle from './DiscreetModeToggle.svelte';
   import ResumeSetupNotice from './ResumeSetupNotice.svelte';
-  import { defaultConfig } from '$lib/config';
+  import { APP_VERSION, defaultConfig } from '$lib/config';
   import { onMount } from 'svelte';
   import { afterNavigate, beforeNavigate, goto } from '$app/navigation';
   import { isPrototypeWallet, walletService, WalletError } from '$lib/wallet';
@@ -119,6 +119,10 @@
   );
   const sendHref = $derived(selectedProfile?.kind === 'multisig' ? '/multisig/send' : '/send');
   const showSetupResume = $derived(Boolean(multisigSetupDraft) && !onboardingRoute);
+  const shortCommit = (commit: string) =>
+    commit === 'unknown'
+      ? commit
+      : `${commit.slice(0, 8)}${commit.endsWith('-dirty') ? '-dirty' : ''}`;
 
   function handleKeyboardShortcut(event: KeyboardEvent) {
     const primaryModifier = commandModifier
@@ -360,12 +364,12 @@
         await enforceMobileBackgroundLock();
         return;
       }
-      if (runtime.network !== defaultConfig.network) {
+      if (runtime.network !== defaultConfig.network || runtime.version !== APP_VERSION) {
         startupFailure = translate(
           $locale,
-          'The native and web network builds do not match. Restart Groot with the correct network build.'
+          'The native and web app builds do not match. Restart Groot with the correct build.'
         );
-        throw new Error('network build mismatch');
+        throw new Error('native/web build mismatch');
       }
       checkingRuntime = false;
       await refreshSetupDraft();
@@ -650,7 +654,7 @@
         {#if runtimeIdentity}<small class="sidebar-build-identity"
             >{translate($locale, 'Groot v{version} · {commit}', {
               version: runtimeIdentity.version,
-              commit: runtimeIdentity.commit
+              commit: shortCommit(runtimeIdentity.commit)
             })}</small
           >{/if}
       </div>

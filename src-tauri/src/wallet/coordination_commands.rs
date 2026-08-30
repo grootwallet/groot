@@ -974,6 +974,7 @@ pub fn coordination_mobile_complete(
                 created_at: now(),
                 backup_verified: staged.backup_verified,
             },
+            &wallet.external_descriptor,
         )
     })();
     if let Err(error) = result {
@@ -1023,15 +1024,6 @@ pub async fn coordination_mobile_recover(
             ));
         }
         let validated = validate_mobile_wallet_record(public, &mnemonic)?;
-        if load_registry(&app)?.wallets.iter().any(|profile| {
-            profile.descriptor_checksum == validated.descriptor_checksum
-                && profile.kind == WalletKind::Multisig
-        }) {
-            return Err(api_error(
-                "wallet_exists",
-                "This shared wallet is already on this device.",
-            ));
-        }
         let id = Uuid::new_v4();
         let dir = prepare_profile_directory_with_id(&app, id)?;
         let result = (|| {
@@ -1080,6 +1072,7 @@ pub async fn coordination_mobile_recover(
                     created_at: now(),
                     backup_verified: true,
                 },
+                &validated.wallet.external_descriptor,
             )
         })();
         if let Err(error) = result {

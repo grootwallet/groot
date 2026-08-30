@@ -1,3 +1,4 @@
+use serde::Serialize;
 use tauri::Manager as _;
 
 pub mod airgap;
@@ -28,7 +29,7 @@ mod tor_rpc;
 pub mod ur_transport;
 mod wallet;
 
-#[derive(serde::Serialize)]
+#[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct RuntimePlatformDto {
     platform: &'static str,
@@ -40,16 +41,17 @@ struct RuntimePlatformDto {
 
 #[tauri::command]
 fn runtime_platform() -> RuntimePlatformDto {
-    #[cfg(target_os = "ios")]
-    let platform = "ios";
-    #[cfg(target_os = "android")]
-    let platform = "android";
-    #[cfg(target_os = "macos")]
-    let platform = "macos";
-    #[cfg(target_os = "windows")]
-    let platform = "windows";
-    #[cfg(target_os = "linux")]
-    let platform = "linux";
+    let platform = if cfg!(target_os = "ios") {
+        "ios"
+    } else if cfg!(target_os = "android") {
+        "android"
+    } else if cfg!(target_os = "macos") {
+        "macos"
+    } else if cfg!(target_os = "windows") {
+        "windows"
+    } else {
+        "linux"
+    };
     RuntimePlatformDto {
         platform,
         mobile: cfg!(mobile),
@@ -230,11 +232,18 @@ mod runtime_tests {
     use super::*;
 
     #[test]
-    fn runtime_identity_uses_the_compiled_package_and_network() {
+    fn runtime_identity_is_native_public_build_metadata() {
         let identity = runtime_platform();
         assert_eq!(identity.network, build_network::NAME);
         assert_eq!(identity.version, env!("CARGO_PKG_VERSION"));
-        assert!(!identity.commit.is_empty());
+        let commit = identity
+            .commit
+            .strip_suffix("-dirty")
+            .unwrap_or(identity.commit);
+        assert!(
+            identity.commit == "unknown"
+                || (commit.len() == 40 && commit.bytes().all(|byte| byte.is_ascii_hexdigit()))
+        );
         assert_ne!(identity.network, "mainnet");
     }
 }
