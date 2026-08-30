@@ -44,7 +44,7 @@ On the combined mobile candidate:
 - `cargo test --locked --all-features`: 395 library tests passed, 8 intentionally ignored; two adversarial-input tests passed; four harness-only tests were ignored by that command;
 - `cargo check --locked --target aarch64-apple-ios --all-features` passed;
 - `pnpm test:acceptance`: 167 passed, 3 intentional platform skips;
-- `pnpm test:integration:regtest` covers compact filters, RBF/CPFP, descriptor recovery, delayed policies, real 2-of-3 signing/broadcast, and the funded mobile-cosigner review/sign/finalize/broadcast round trip. The harness uses an explicit bounded 30-second test RPC timeout for large fixture scans.
+- `pnpm test:integration:regtest` covers compact filters, RBF/CPFP, descriptor recovery, delayed policies, real 2-of-3 signing/broadcast, and the funded mobile-cosigner review/sign/finalize/broadcast round trip. The descriptor suite runs on its own disposable Core node so its 30-second resource assertion is not distorted by state accumulated in preceding tests; test RPC calls also have an explicit bounded 30-second timeout.
 
 ## Remaining release work
 
