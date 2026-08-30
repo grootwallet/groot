@@ -194,7 +194,12 @@ process-kill automation at every wallet registry/profile commit boundary, watch-
 equality, and a funded clean mobile recovery drill remain open and must not be inferred from this
 evidence.
 
-iOS physical certification additionally requires camera denial/interruption/background/resume,
+The native iOS word-entry sheet forces the Apple system keyboard via secure text entry (third-party
+keyboards receive no keystrokes), rejects paste/cut/copy so the words never touch the general
+pasteboard, scrubs the UTF-8 handoff buffer after transfer to Rust, keeps the words out of the
+accessibility tree, and hides the displayed grid while the screen is captured, mirrored, or
+recorded. These behaviors are compile-verified for the iOS target but not yet physically
+reviewed. iOS physical certification additionally requires camera denial/interruption/background/resume,
 safe-area and accessibility checks, passcode-required Keychain behavior, biometric enrollment
 change, phone lock during sign, process kill at each commit boundary, reinstall/restore, loss of
 device wrapper, written-word restore, and two independent wallet interoperability runs.

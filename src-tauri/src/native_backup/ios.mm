@@ -6,12 +6,31 @@ typedef void (^GrootRecoveryCompletion)(BOOL confirmed);
 @interface GrootRecoveryViewController : UIViewController
 @property(nonatomic, copy) NSArray<NSString *> *words;
 @property(nonatomic, copy) GrootRecoveryCompletion completion;
+@property(nonatomic, strong) UIStackView *grid;
+@property(nonatomic, strong) UILabel *captureShield;
 @end
 
 typedef void (^GrootRecoveryEntryCompletion)(NSString *_Nullable words);
 
+@interface GrootSecureRecoveryTextView : UITextView
+@end
+
+@implementation GrootSecureRecoveryTextView
+
+- (BOOL)canPerformAction:(SEL)action withSender:(id)sender {
+  // Recovery words must be typed by hand. Copy/cut keep them off the general
+  // pasteboard here, and rejecting paste keeps the field from becoming a
+  // copy-then-paste workflow that leaves the words world-readable.
+  if (action == @selector(paste:) || action == @selector(cut:) || action == @selector(copy:)) {
+    return NO;
+  }
+  return [super canPerformAction:action withSender:sender];
+}
+
+@end
+
 @interface GrootRecoveryEntryViewController : UIViewController
-@property(nonatomic, strong) UITextView *entry;
+@property(nonatomic, strong) GrootSecureRecoveryTextView *entry;
 @property(nonatomic, strong) UILabel *errorLabel;
 @property(nonatomic, copy) GrootRecoveryEntryCompletion completion;
 @end
@@ -35,7 +54,7 @@ typedef void (^GrootRecoveryEntryCompletion)(NSString *_Nullable words);
   instruction.adjustsFontForContentSizeCategory = YES;
   instruction.numberOfLines = 0;
 
-  self.entry = [[UITextView alloc] init];
+  self.entry = [[GrootSecureRecoveryTextView alloc] init];
   self.entry.font = [UIFont monospacedSystemFontOfSize:17.0 weight:UIFontWeightRegular];
   self.entry.backgroundColor = UIColor.secondarySystemBackgroundColor;
   self.entry.layer.cornerRadius = 12.0;
@@ -46,6 +65,10 @@ typedef void (^GrootRecoveryEntryCompletion)(NSString *_Nullable words);
   self.entry.smartQuotesType = UITextSmartQuotesTypeNo;
   self.entry.smartDashesType = UITextSmartDashesTypeNo;
   self.entry.textContentType = nil;
+  // Secure entry forces the Apple system keyboard: third-party keyboard
+  // extensions receive no keystrokes for secure fields. 24-word entry stays
+  // masked, matching the on-device boundary of a hardware signer.
+  self.entry.secureTextEntry = YES;
   self.entry.accessibilityLabel = @"Twenty-four recovery words";
 
   self.errorLabel = [[UILabel alloc] init];
@@ -158,19 +181,30 @@ typedef void (^GrootRecoveryEntryCompletion)(NSString *_Nullable words);
       word.font = [UIFont monospacedSystemFontOfSize:16.0 weight:UIFontWeightRegular];
       word.adjustsFontSizeToFitWidth = YES;
       word.minimumScaleFactor = 0.82;
-      word.accessibilityLabel =
-          [NSString stringWithFormat:@"Word %ld, %@", (long)index + 1, self.words[index]];
+      // Keep the seed itself out of the accessibility tree: assistive
+      // services must not be able to extract all 24 words programmatically.
+      word.accessibilityLabel = [NSString stringWithFormat:@"Word %ld", (long)index + 1];
       [column addArrangedSubview:word];
     }
     return column;
   };
 
-  UIStackView *grid =
+  self.grid =
       [[UIStackView alloc] initWithArrangedSubviews:@[ makeColumn(0), makeColumn(12) ]];
-  grid.axis = UILayoutConstraintAxisHorizontal;
-  grid.alignment = UIStackViewAlignmentFill;
-  grid.distribution = UIStackViewDistributionFillEqually;
-  grid.spacing = 18.0;
+  self.grid.axis = UILayoutConstraintAxisHorizontal;
+  self.grid.alignment = UIStackViewAlignmentFill;
+  self.grid.distribution = UIStackViewDistributionFillEqually;
+  self.grid.spacing = 18.0;
+
+  // Screen recording, mirroring, or other screen capture must not carry the
+  // words: hide the grid while the screen is captured and shield it with a
+  // neutral notice instead.
+  self.captureShield = [[UILabel alloc] init];
+  self.captureShield.text = @"Words hidden while this screen is being shared or recorded.";
+  self.captureShield.font = [UIFont preferredFontForTextStyle:UIFontTextStyleSubheadline];
+  self.captureShield.textColor = UIColor.secondaryLabelColor;
+  self.captureShield.numberOfLines = 0;
+  self.captureShield.textAlignment = NSTextAlignmentCenter;
 
   UILabel *warning = [[UILabel alloc] init];
   warning.text = @"Groot cannot recover these words for you.";
@@ -204,7 +238,7 @@ typedef void (^GrootRecoveryEntryCompletion)(NSString *_Nullable words);
   actions.spacing = 10.0;
 
   UIStackView *content = [[UIStackView alloc]
-      initWithArrangedSubviews:@[ title, instruction, grid, warning, actions ]];
+      initWithArrangedSubviews:@[ title, instruction, self.grid, self.captureShield, warning, actions ]];
   content.translatesAutoresizingMaskIntoConstraints = NO;
   content.axis = UILayoutConstraintAxisVertical;
   content.alignment = UIStackViewAlignmentFill;
@@ -212,16 +246,39 @@ typedef void (^GrootRecoveryEntryCompletion)(NSString *_Nullable words);
   [self.view addSubview:content];
 
   UILayoutGuide *safe = self.view.safeAreaLayoutGuide;
+  // The shield reserves the same area as the grid so the layout never jumps.
   [NSLayoutConstraint activateConstraints:@[
     [content.leadingAnchor constraintEqualToAnchor:safe.leadingAnchor constant:24.0],
     [content.trailingAnchor constraintEqualToAnchor:safe.trailingAnchor constant:-24.0],
     [content.topAnchor constraintGreaterThanOrEqualToAnchor:safe.topAnchor constant:12.0],
     [content.bottomAnchor constraintLessThanOrEqualToAnchor:safe.bottomAnchor constant:-20.0],
     [content.centerYAnchor constraintEqualToAnchor:safe.centerYAnchor],
-    [grid.heightAnchor constraintEqualToConstant:294.0],
+    [self.grid.heightAnchor constraintEqualToConstant:294.0],
+    [self.captureShield.heightAnchor constraintEqualToConstant:294.0],
     [cancel.heightAnchor constraintEqualToConstant:48.0],
     [confirm.heightAnchor constraintEqualToConstant:48.0]
   ]];
+  [NSNotificationCenter.defaultCenter addObserver:self
+                                         selector:@selector(screenCaptureChanged:)
+                                             name:UIScreenCapturedDidChangeNotification
+                                           object:nil];
+  [self applyCaptureVisibility];
+}
+
+- (void)screenCaptureChanged:(NSNotification *)notification {
+  [self applyCaptureVisibility];
+}
+
+- (void)applyCaptureVisibility {
+  // Scene-scoped screen (mainScreen is deprecated): before presentation the
+  // view has no window, which safely defaults to uncaptured.
+  BOOL captured = self.view.window.windowScene.screen.isCaptured;
+  self.grid.hidden = captured;
+  self.captureShield.hidden = !captured;
+}
+
+- (void)dealloc {
+  [NSNotificationCenter.defaultCenter removeObserver:self];
 }
 
 - (void)finish:(BOOL)confirmed {
@@ -338,11 +395,14 @@ extern "C" int groot_recover_ios_mnemonic(char *output, size_t capacity) {
       if (words == nil) {
         result = 0;
       } else {
-        NSData *utf8 = [words dataUsingEncoding:NSUTF8StringEncoding];
+        NSMutableData *utf8 = [[words dataUsingEncoding:NSUTF8StringEncoding] mutableCopy];
         if (utf8 != nil && utf8.length < capacity) {
           memcpy(output, utf8.bytes, utf8.length);
           output[utf8.length] = '\0';
           result = 1;
+        }
+        if (utf8 != nil) {
+          memset(utf8.mutableBytes, 0, utf8.length);
         }
       }
       dispatch_semaphore_signal(finished);
