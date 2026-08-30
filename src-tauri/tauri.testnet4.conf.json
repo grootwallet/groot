@@ -7,7 +7,7 @@
   },
   "bundle": {
     "resources": {
-      "target/groot-hwi-stage/hwi": "hwi"
+      ".release-stage/hwi": "hwi"
     }
   }
 }

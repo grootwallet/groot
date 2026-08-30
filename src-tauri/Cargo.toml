@@ -1,6 +1,6 @@
 [package]
 name = "groot"
-version = "0.4.82"
+version = "0.4.92"
 description = "Groot, a minimal onchain Bitcoin wallet"
 edition = "2021"
 
@@ -75,3 +75,11 @@ debug-assertions = false
 
 [profile.test.package.bip157]
 debug-assertions = false
+
+# Release bundles keep symbols out of the shipped executable and use ThinLTO to
+# remove duplicated cross-crate code without selecting size-first optimization
+# that could slow wallet, network, or cryptographic operations at runtime.
+[profile.release]
+codegen-units = 1
+lto = "thin"
+strip = "symbols"

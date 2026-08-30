@@ -5,7 +5,13 @@ import { chmodSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { verifyPackagedHwi } from './verify-packaged-hwi.mjs';
+import {
+  validateCompiledTeamId,
+  validateProductionSignatureMetadata,
+  verifyPackagedHwi
+} from './verify-packaged-hwi.mjs';
+
+const macTest = process.platform === 'darwin' ? test : test.skip;
 
 const digest = (path) => createHash('sha256').update(readFileSync(path)).digest('hex');
 
@@ -18,7 +24,10 @@ function fixture() {
   mkdirSync(macos, { recursive: true });
   const executable = join(macos, 'Groot');
   const hwi = join(resources, 'hwi');
-  writeFileSync(executable, '#!/bin/sh\nexit 0\n');
+  writeFileSync(
+    executable,
+    '#!/bin/sh\n# GROOT_COMPILED_MACOS_SIGNING_TEAM_ID:ABCDEFGHIJ\nexit 0\n'
+  );
   chmodSync(executable, 0o755);
   writeFileSync(hwi, '#!/bin/sh\nprintf "hwi 3.2.0\\n"\n');
   chmodSync(hwi, 0o755);
@@ -35,6 +44,11 @@ function fixture() {
 </dict></plist>\n`
   );
   const manifestPath = join(root, 'manifest.json');
+  const hwiEntitlements = join(root, 'hwi-entitlements.plist');
+  writeFileSync(
+    hwiEntitlements,
+    '<?xml version="1.0" encoding="UTF-8"?><plist version="1.0"><dict><key>com.apple.security.cs.disable-library-validation</key><true/></dict></plist>\n'
+  );
   writeFileSync(
     manifestPath,
     `${JSON.stringify({
@@ -44,22 +58,41 @@ function fixture() {
       version: '3.2.0'
     })}\n`
   );
-  execFileSync('codesign', ['--force', '--sign', '-', '--timestamp=none', hwi]);
+  execFileSync('codesign', [
+    '--force',
+    '--sign',
+    '-',
+    '--timestamp=none',
+    '--options',
+    'runtime',
+    '--entitlements',
+    hwiEntitlements,
+    hwi
+  ]);
   chmodSync(hwi, 0o755);
   // Signing changes executable bytes, so record the final reviewed artifact.
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
   manifest.artifact.sha256 = digest(hwi);
   writeFileSync(manifestPath, `${JSON.stringify(manifest)}\n`);
-  execFileSync('codesign', ['--force', '--sign', '-', '--timestamp=none', app]);
-  return { root, app, hwi, manifestPath };
+  execFileSync('codesign', [
+    '--force',
+    '--sign',
+    '-',
+    '--timestamp=none',
+    '--options',
+    'runtime',
+    app
+  ]);
+  return { root, app, hwi, manifestPath, hwiEntitlements };
 }
 
-test('accepts a sealed app with the exact reviewed HWI and pre-1.0 version', () => {
+macTest('accepts a sealed app with the exact reviewed HWI and pre-1.0 version', () => {
   const value = fixture();
   try {
     const result = verifyPackagedHwi(value.app, {
       manifestPath: value.manifestPath,
-      expectedAppVersion: '0.4.8'
+      expectedAppVersion: '0.4.8',
+      requireProductionSigning: false
     });
     assert.equal(result.version, 'hwi 3.2.0');
     assert.equal(result.appVersion, '0.4.8');
@@ -68,7 +101,7 @@ test('accepts a sealed app with the exact reviewed HWI and pre-1.0 version', () 
   }
 });
 
-test('rejects an HWI changed after the app was sealed', () => {
+macTest('rejects an HWI changed after the app was sealed', () => {
   const value = fixture();
   try {
     writeFileSync(value.hwi, '#!/bin/sh\nprintf "hwi 3.2.0\\n"\n# changed\n');
@@ -86,18 +119,120 @@ test('rejects an HWI changed after the app was sealed', () => {
   }
 });
 
-test('rejects a package whose visible version is not the release version', () => {
+macTest('rejects a package whose visible version is not the release version', () => {
   const value = fixture();
   try {
     assert.throws(
       () =>
         verifyPackagedHwi(value.app, {
           manifestPath: value.manifestPath,
-          expectedAppVersion: '0.4.9'
+          expectedAppVersion: '0.4.9',
+          requireProductionSigning: false
         }),
       /CFBundleShortVersionString is 0\.4\.8, expected 0\.4\.9/
     );
   } finally {
     rmSync(value.root, { recursive: true, force: true });
   }
+});
+
+macTest(
+  'rejects production verification without hardened runtime and reviewed entitlements',
+  () => {
+    const value = fixture();
+    try {
+      execFileSync('codesign', ['--force', '--sign', '-', '--timestamp=none', value.hwi]);
+      const manifest = JSON.parse(readFileSync(value.manifestPath, 'utf8'));
+      manifest.artifact.sha256 = digest(value.hwi);
+      writeFileSync(value.manifestPath, `${JSON.stringify(manifest)}\n`);
+      execFileSync('codesign', ['--force', '--sign', '-', '--timestamp=none', value.app]);
+      assert.throws(
+        () =>
+          verifyPackagedHwi(value.app, {
+            manifestPath: value.manifestPath,
+            expectedAppVersion: '0.4.8',
+            expectedTeamId: 'ABCDEFGHIJ'
+          }),
+        /hardened runtime|Developer ID team/
+      );
+    } finally {
+      rmSync(value.root, { recursive: true, force: true });
+    }
+  }
+);
+
+test('production signing policy requires matching team, timestamps, and helper-only entitlement', () => {
+  const signature = (team) =>
+    `flags=0x10000(runtime)\nAuthority=Developer ID Application: Groot (${team})\nTeamIdentifier=${team}\nTimestamp=Sep 3, 2026 at 10:00:00`;
+  const entitlement =
+    '<plist><dict><key>com.apple.security.cs.disable-library-validation</key><true/></dict></plist>';
+  assert.doesNotThrow(() =>
+    validateProductionSignatureMetadata(
+      signature('ABCDEFGHIJ'),
+      signature('ABCDEFGHIJ'),
+      '<plist><dict/></plist>',
+      entitlement,
+      'ABCDEFGHIJ'
+    )
+  );
+  assert.throws(
+    () =>
+      validateProductionSignatureMetadata(
+        signature('ABCDEFGHIJ'),
+        signature('ABCDEFGHIJ'),
+        '<plist><dict/></plist>',
+        entitlement
+      ),
+    /requires the expected 10-character Developer ID team/
+  );
+  assert.throws(
+    () =>
+      validateProductionSignatureMetadata(
+        signature('ABCDEFGHIJ'),
+        signature('KLMNOPQRST'),
+        '<plist><dict/></plist>',
+        entitlement,
+        'ABCDEFGHIJ'
+      ),
+    /matching Developer ID team/
+  );
+  assert.throws(
+    () =>
+      validateProductionSignatureMetadata(
+        signature('ABCDEFGHIJ').replace('Developer ID Application', 'Apple Development'),
+        signature('ABCDEFGHIJ'),
+        '<plist><dict/></plist>',
+        entitlement,
+        'ABCDEFGHIJ'
+      ),
+    /Developer ID Application certificates/
+  );
+  assert.throws(
+    () =>
+      validateProductionSignatureMetadata(
+        signature('ABCDEFGHIJ'),
+        signature('ABCDEFGHIJ'),
+        entitlement,
+        entitlement,
+        'ABCDEFGHIJ'
+      ),
+    /Groot must not disable library validation/
+  );
+});
+
+test('production verification binds the runtime-compiled Team ID requirement', () => {
+  assert.doesNotThrow(() =>
+    validateCompiledTeamId(
+      Buffer.from('prefix GROOT_COMPILED_MACOS_SIGNING_TEAM_ID:ABCDEFGHIJ suffix'),
+      'ABCDEFGHIJ'
+    )
+  );
+  assert.throws(
+    () =>
+      validateCompiledTeamId(
+        Buffer.from('GROOT_COMPILED_MACOS_SIGNING_TEAM_ID:REHEARSAL_ONLY'),
+        'ABCDEFGHIJ'
+      ),
+    /not compiled with the expected Developer ID team requirement/
+  );
 });

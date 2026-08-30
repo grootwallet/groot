@@ -19,6 +19,7 @@ const walletCore = readFileSync(
   new URL('../../../src-tauri/src/wallet.rs', import.meta.url),
   'utf8'
 );
+const unlock = readFileSync(new URL('../../routes/unlock/+page.svelte', import.meta.url), 'utf8');
 const activity = readFileSync(
   new URL('../../routes/activity/+page.svelte', import.meta.url),
   'utf8'
@@ -26,6 +27,12 @@ const activity = readFileSync(
 const coins = readFileSync(new URL('../../routes/coins/+page.svelte', import.meta.url), 'utf8');
 
 describe('foreground wallet navigation', () => {
+  it('focuses the selected wallet credential after the locked route finishes loading', () => {
+    expect(unlock).toContain("credentialForm?.querySelector<HTMLInputElement>('input')?.focus()");
+    expect(unlock).toContain('bind:this={credentialForm}');
+    expect(unlock.indexOf('await tick()')).toBeLessThan(unlock.indexOf('.focus()'));
+  });
+
   it('cancels automatic sync before entering receive and send routes', () => {
     for (const route of ['/receive', '/send', '/multisig/receive', '/multisig/send']) {
       expect(appShell).toContain(`'${route}'`);
@@ -80,25 +87,65 @@ describe('foreground wallet navigation', () => {
     expect(activity).toContain("cause.code === 'wallet_locked'");
   });
 
-  it('shows native Bitcoin Core scan progress on Overview', () => {
+  it('keeps automatic sync compact and reserves detailed progress for manual refresh', () => {
     expect(overview).toContain("syncStatus.source === 'bitcoin_core'");
     expect(overview).toContain("'Scanning Bitcoin Core history'");
     expect(overview).toContain("'Wallet sync progress'");
+    expect(overview).toContain('let manualSyncDetailsVisible = $state(false)');
+    expect(overview).toContain('manualSyncDetailsVisible = manual');
+    expect(overview).toContain('if (manual) await walletShell.pauseAutomaticSync()');
+    expect(overview).toContain('if (manual) walletShell.resumeAutomaticSync()');
+    expect(overview).toContain('void sync(false)');
+    expect(overview).toContain(
+      'onclick={() => (initialHistoryRequired ? openInitialScan() : sync(true))}'
+    );
+    expect(overview).toContain(
+      "{#if manualSyncDetailsVisible && syncStatus && (syncInProgress || syncStatus.state === 'failed')}"
+    );
+    expect(overview).toContain(
+      "if (syncStatus?.state !== 'failed') manualSyncDetailsVisible = false"
+    );
     expect(overview).toContain('syncStatusIsActive(syncStatus)');
     expect(overview).toContain('startSyncStatusPolling()');
+    expect(overview).toContain('if (!syncing && !syncStatusIsActive(syncStatus)) return;');
+    expect(unlock).toContain('walletShell.requestUnlockSync(selectedWalletId)');
+    expect(overview).toContain('walletShell.consumeUnlockSync(selectedProfile.id)');
+    expect(overview).not.toContain('setTimeout(resolve, 1_000)');
     expect(overview).toContain('syncAge(snapshot?.syncedAt ?? null, syncClock)');
+    expect(overview).toContain("status.failureCode === 'invalid_node_config'");
+    expect(overview).toContain("status.failureCode === 'node_syncing'");
+    expect(overview).toContain("status.failureCode === 'node_history_unavailable'");
+    expect(overview).toContain("status.failureCode === 'internal_error'");
+    expect(overview).toContain('syncFailureDescription(syncStatus)');
+  });
+
+  it('gives coin freezing exclusive ownership before applying its local state', () => {
+    const start = coins.indexOf('async function confirmFrozenState()');
+    const end = coins.indexOf('function beginObservedReceiveClaim', start);
+    const mutation = coins.slice(start, end);
+    expect(mutation.indexOf('await walletShell.pauseAutomaticSync()')).toBeGreaterThan(-1);
+    expect(mutation.indexOf('await walletShell.pauseAutomaticSync()')).toBeLessThan(
+      mutation.indexOf('walletService.setCoinFrozen.bind(walletService)')
+    );
+    expect(mutation.indexOf('utxos = utxos.map')).toBeLessThan(
+      mutation.indexOf('walletShell.resumeAutomaticSync()')
+    );
   });
 
   it('requires an explicit first-scan start and presents resumable recovery progress', () => {
-    expect(overview).toContain(
-      "initialScanMode = $state<'new' | 'birthday' | 'full' | null>(null)"
-    );
+    expect(overview).toContain("initialScanMode = $state<'new' | 'birthday' | 'full'>('new')");
+    expect(overview).toContain('let showManualScanOptions = $state(false)');
+    expect(overview).toContain('let showAdvancedScanOptions = $state(false)');
     expect(overview).toContain("'New wallet · no earlier activity'");
     expect(overview).toContain("'Existing wallet · use a birthday block'");
     expect(overview).toContain("'Full history · safest'");
+    expect(overview).toContain("'Address discovery options'");
+    expect(overview).toContain('!snapshot?.syncedAt && nodeReady');
+    expect(overview).toContain("href={nodeReady ? undefined : '/settings'}");
     expect(overview).toContain('walletService.fullRescan(credential)');
     expect(overview).toContain('recoveryStatus.processedBlocks');
-    expect(overview).toContain("'Not verified yet'");
+    expect(overview).toContain('<Amount value={0} hidden={$discreetMode} />');
+    expect(overview).toContain("'Never synced'");
   });
 
   it('does not start a second compact-filter scan after reattaching and never auto-starts one on mobile', () => {
@@ -128,6 +175,27 @@ describe('foreground wallet navigation', () => {
     expect(walletCore).toContain('if cfg!(any(target_os = "ios", target_os = "android"))');
     expect(walletCore).toContain(
       'Compact-filter sync is experimental and unavailable on mobile. Configure Bitcoin Core instead.'
+    );
+  });
+
+  it('opens a newly created mainnet wallet without querying cross-wallet setup reuse', () => {
+    expect(overview).toContain("const isMainnet = defaultConfig.network === 'mainnet'");
+    expect(overview).toContain(
+      'isMainnet ? Promise.resolve([]) : walletService.networkSetupSources()'
+    );
+    expect(overview).toMatch(/nodeReady\s*=\s*\n\s*isMainnet\s*\|\|/);
+    expect(
+      overview.indexOf('if (isMainnet) await walletService.testNodeConnection()')
+    ).toBeLessThan(overview.indexOf('walletService.paymentDraft()'));
+    expect(
+      overview.indexOf('if (isMainnet) await walletService.testNodeConnection()')
+    ).toBeLessThan(overview.indexOf('walletService.snapshot()'));
+  });
+
+  it('does not start a second post-unlock scan after reattaching to an inherited scan', () => {
+    expect(overview).toContain('if (syncStatusIsActive(syncStatus)) inheritedSyncObserved = true;');
+    expect(overview).toMatch(
+      /walletShell\.consumeUnlockSync\(selectedProfile\.id\)[\s\S]*!inheritedSyncObserved/
     );
   });
 

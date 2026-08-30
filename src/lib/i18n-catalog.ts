@@ -317,6 +317,18 @@ export const copyCatalog = {
     fr: 'Sélectionnez et copiez l’adresse manuellement.',
     es: 'Selecciona y copia la dirección manualmente.'
   },
+  'Incoming payments and receive addresses refreshed.': {
+    fr: 'Les paiements entrants et les adresses de réception ont été actualisés.',
+    es: 'Se actualizaron los pagos entrantes y las direcciones de recepción.'
+  },
+  'Refresh payments': {
+    fr: 'Actualiser les paiements',
+    es: 'Actualizar pagos'
+  },
+  'Refreshing payments…': {
+    fr: 'Actualisation des paiements…',
+    es: 'Actualizando pagos…'
+  },
   'Setup discarded': { fr: 'Configuration abandonnée', es: 'Configuración descartada' },
   'Signature added': { fr: 'Signature ajoutée', es: 'Firma añadida' },
   'Signed PSBT file loaded': {
@@ -499,6 +511,10 @@ export const copyCatalog = {
     fr: 'Portefeuille existant · utiliser un bloc de naissance',
     es: 'Cartera existente · usar un bloque de nacimiento'
   },
+  'Existing wallet options': {
+    fr: 'Options pour un portefeuille existant',
+    es: 'Opciones para una cartera existente'
+  },
   'First wallet-history scan': {
     fr: 'Première analyse de l’historique',
     es: 'Primer escaneo del historial'
@@ -506,6 +522,18 @@ export const copyCatalog = {
   'Full history · safest': {
     fr: 'Historique complet · le plus sûr',
     es: 'Historial completo · lo más seguro'
+  },
+  'Hide existing-wallet options': {
+    fr: 'Masquer les options du portefeuille existant',
+    es: 'Ocultar opciones de cartera existente'
+  },
+  'Address discovery options': {
+    fr: 'Options de découverte des adresses',
+    es: 'Opciones de descubrimiento de direcciones'
+  },
+  'Hide address discovery options': {
+    fr: 'Masquer les options de découverte des adresses',
+    es: 'Ocultar opciones de descubrimiento de direcciones'
   },
   'If uncertain, choose full history instead of guessing.': {
     fr: 'En cas de doute, choisissez l’historique complet plutôt que d’estimer.',
@@ -597,6 +625,14 @@ const errorCategoryCopy = {
     fr: 'Le réseau est indisponible. Réessayez lorsque la connexion est rétablie.',
     es: 'La red no está disponible. Inténtalo cuando se restablezca la conexión.'
   },
+  node_syncing: {
+    fr: 'Bitcoin Core est encore en cours de synchronisation. Attendez qu’il ait atteint le dernier bloc vérifié du portefeuille, puis réessayez.',
+    es: 'Bitcoin Core aún se está sincronizando. Espera a que alcance el último bloque verificado de la cartera e inténtalo de nuevo.'
+  },
+  node_history_unavailable: {
+    fr: 'Bitcoin Core ne conserve plus les blocs nécessaires. Choisissez une date de création située dans l’historique conservé ou connectez un nœud d’archive.',
+    es: 'Bitcoin Core ya no conserva los bloques necesarios. Elige un bloque de nacimiento dentro del historial conservado o conecta un nodo de archivo.'
+  },
   hardware_unavailable: {
     fr: 'Le signataire matériel est indisponible. Vérifiez sa connexion et réessayez.',
     es: 'El firmante físico no está disponible. Comprueba la conexión e inténtalo de nuevo.'
@@ -625,6 +661,10 @@ const errorCategoryCopy = {
   invalid_address: {
     fr: 'L’adresse Bitcoin n’est pas valide pour ce réseau.',
     es: 'La dirección de Bitcoin no es válida para esta red.'
+  },
+  invalid_payment_request: {
+    fr: 'Le code QR n’est pas une demande de paiement Bitcoin valide pour ce réseau.',
+    es: 'El código QR no es una solicitud de pago de Bitcoin válida para esta red.'
   },
   insufficient_funds: {
     fr: 'Le portefeuille ne dispose pas de fonds suffisants pour ce paiement et ses frais.',

@@ -42,6 +42,7 @@ import type {
   CoreNodeConfig,
   NodeStatus,
   PayjoinUriInspection,
+  PaymentRequestInspection,
   WalletSyncSource,
   WalletSyncStatus
 } from './contracts';
@@ -180,6 +181,12 @@ export class TauriWalletAdapter implements WalletPort {
   paymentDraft() {
     return command<PaymentDraft | null>('payment_draft');
   }
+  diagnostics() {
+    return command<import('./contracts').DiagnosticRecord[]>('diagnostics_list');
+  }
+  exportDiagnostics(format: 'json' | 'csv') {
+    return command<import('./contracts').SavedFileResult>('diagnostics_export', { format });
+  }
   savePaymentDraft(draft: PaymentDraft) {
     return command<PaymentDraft>('payment_draft_save', { draft });
   }
@@ -219,8 +226,8 @@ export class TauriWalletAdapter implements WalletPort {
     });
     return { mode: 'native', backupVerified };
   }
-  cancelOnboarding() {
-    return command<void>('wallet_cancel_onboarding');
+  cancelOnboarding(preserveMainnetAdmission = false) {
+    return command<void>('wallet_cancel_onboarding', { preserveMainnetAdmission });
   }
   createWallet(name: string, credential: string, _backupVerified: boolean) {
     return command<void>('wallet_create', { name, credential });
@@ -257,6 +264,16 @@ export class TauriWalletAdapter implements WalletPort {
   nodeConfig() {
     return command<CoreNodeConfig>('node_config');
   }
+  admitMainnetCore(
+    config: CoreNodeConfig,
+    password: string,
+    purpose: 'open_existing_wallet' | 'create_new_wallet'
+  ) {
+    return command<NodeStatus>('mainnet_core_admit', { config, password, purpose });
+  }
+  clearMainnetCoreAdmission() {
+    return command<void>('mainnet_core_admission_clear');
+  }
   networkSetupSources() {
     return command<import('./contracts').NetworkSetupSource[]>('network_setup_sources');
   }
@@ -283,6 +300,9 @@ export class TauriWalletAdapter implements WalletPort {
   }
   inspectPayjoinUri(value: string) {
     return command<PayjoinUriInspection>('payjoin_uri_inspect', { value });
+  }
+  inspectPaymentRequest(value: string) {
+    return command<PaymentRequestInspection>('payment_request_inspect', { value });
   }
   recoveryScanSettings() {
     return command<import('./contracts').RecoveryScanSettings>('recovery_scan_settings');
@@ -318,9 +338,9 @@ export class TauriWalletAdapter implements WalletPort {
     await this.#drainNotifications(false);
     return snapshot;
   }
-  async sync() {
+  async sync(automatic = false) {
     const walletId = this.#selectedWalletId;
-    const snapshot = normalizeSnapshot(await command<WalletSnapshot>('wallet_sync'));
+    const snapshot = normalizeSnapshot(await command<WalletSnapshot>('wallet_sync', { automatic }));
     if (walletId && walletId === this.#selectedWalletId) {
       this.#last = snapshot;
       await this.#drainNotifications(false);
@@ -361,7 +381,7 @@ export class TauriWalletAdapter implements WalletPort {
   maxSpend(recipient: string, feeRate: FeeRate, coinSelection: CoinSelection = { mode: 'auto' }) {
     return command<import('./contracts').MaxSpend>('tx_max_spend', {
       recipient,
-      feeRate,
+      feeRate: String(feeRate),
       coinSelection
     });
   }
@@ -372,7 +392,7 @@ export class TauriWalletAdapter implements WalletPort {
   ) {
     return command<import('./contracts').MaxSpend>('multisig_tx_max_spend', {
       recipient,
-      feeRate,
+      feeRate: String(feeRate),
       coinSelection
     });
   }
@@ -387,7 +407,7 @@ export class TauriWalletAdapter implements WalletPort {
       recipient,
       labels,
       amount,
-      feeRate,
+      feeRate: String(feeRate),
       coinSelection
     });
   }
@@ -414,6 +434,12 @@ export class TauriWalletAdapter implements WalletPort {
       feeRate: feeRate == null ? null : String(feeRate)
     });
   }
+  quoteCpfp(txid: string, feeRate?: FeeRate) {
+    return command<import('./contracts').CpfpAccelerationQuote>('cpfp_acceleration_quote', {
+      txid,
+      feeRate: feeRate == null ? null : String(feeRate)
+    });
+  }
   async signAndBroadcast(proposalId: string, credential: string) {
     const result = await command<BroadcastResult>('tx_sign_and_broadcast', {
       proposalId,
@@ -433,10 +459,10 @@ export class TauriWalletAdapter implements WalletPort {
   importLabels() {
     return command<import('./contracts').LabelImportResult | null>('bip329_labels_import');
   }
-  cancelHardwareOperations() {
+  cancelHardwareOperations(preserveMainnetAdmission = false) {
     this.#hardwareListRequest = null;
     this.#typedHardwareListRequests.clear();
-    return command<void>('hardware_cancel_operations');
+    return command<void>('hardware_cancel_operations', { preserveMainnetAdmission });
   }
   listHardwareDevices() {
     if (this.#hardwareListRequest) return this.#hardwareListRequest;
@@ -717,9 +743,11 @@ export class TauriWalletAdapter implements WalletPort {
     await this.#drainNotifications(true);
     return snapshot;
   }
-  async syncMultisig() {
+  async syncMultisig(automatic = false) {
     const walletId = this.#selectedWalletId;
-    const snapshot = normalizeSnapshot(await command<WalletSnapshot>('multisig_sync'));
+    const snapshot = normalizeSnapshot(
+      await command<WalletSnapshot>('multisig_sync', { automatic })
+    );
     if (walletId && walletId === this.#selectedWalletId) {
       this.#last = snapshot;
       await this.#drainNotifications(true);
@@ -755,7 +783,7 @@ export class TauriWalletAdapter implements WalletPort {
       recipient,
       labels,
       amount,
-      feeRate,
+      feeRate: String(feeRate),
       coinSelection
     });
   }
@@ -764,7 +792,7 @@ export class TauriWalletAdapter implements WalletPort {
     return command<MultisigProposal>('multisig_policy_renewal_prepare', {
       outpoint,
       labels,
-      feeRate: Number(feeRate)
+      feeRate: String(feeRate)
     });
   }
   prepareMultisigDelayedSpend(
@@ -777,7 +805,7 @@ export class TauriWalletAdapter implements WalletPort {
       outpoint,
       recipient,
       labels,
-      feeRate: Number(feeRate)
+      feeRate: String(feeRate)
     });
   }
   prepareMultisigAcceleration(

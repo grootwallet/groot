@@ -31,6 +31,7 @@ import type {
   NodeStatus,
   NetworkSetupSource,
   PayjoinUriInspection,
+  PaymentRequestInspection,
   RecoveryScanSettings,
   RecoveryScanStatus,
   SupplementalEntropyInput,
@@ -66,7 +67,7 @@ export interface WalletProfilesPort {
   session(): Promise<WalletSelection>;
   selectWallet(walletId: string): Promise<WalletSelection>;
   generateMnemonic(supplementalEntropy?: SupplementalEntropyInput): Promise<MnemonicPresentation>;
-  cancelOnboarding(): Promise<void>;
+  cancelOnboarding(preserveMainnetAdmission?: boolean): Promise<void>;
   createWallet(name: string, credential: string, backupVerified: boolean): Promise<void>;
   verifyBackup(credential: string): Promise<boolean>;
   revealAndVerifyBackup(credential: string): Promise<boolean>;
@@ -79,6 +80,12 @@ export interface WalletProfilesPort {
 }
 
 export interface WalletNetworkPort {
+  admitMainnetCore(
+    config: CoreNodeConfig,
+    password: string,
+    purpose: 'open_existing_wallet' | 'create_new_wallet'
+  ): Promise<NodeStatus>;
+  clearMainnetCoreAdmission(): Promise<void>;
   networkSetupSources(): Promise<NetworkSetupSource[]>;
   adoptNetworkSetup(sourceWalletId: string, credential: string): Promise<NodeStatus>;
   nodeConfig(): Promise<CoreNodeConfig>;
@@ -88,6 +95,7 @@ export interface WalletNetworkPort {
   syncStatus(): Promise<WalletSyncStatus | null>;
   saveSyncSource(source: WalletSyncSource, credential: string): Promise<WalletSyncSource>;
   inspectPayjoinUri(value: string): Promise<PayjoinUriInspection>;
+  inspectPaymentRequest(value: string): Promise<PaymentRequestInspection>;
   recoveryScanSettings(): Promise<RecoveryScanSettings>;
   saveRecoveryScanSettings(
     birthdayHeight: number,
@@ -101,10 +109,10 @@ export interface WalletNetworkPort {
 
 export interface WalletSnapshotPort {
   snapshot(): Promise<WalletSnapshot>;
-  sync(): Promise<WalletSnapshot>;
+  sync(automatic?: boolean): Promise<WalletSnapshot>;
   cancelSync(): Promise<void>;
   multisigSnapshot(): Promise<WalletSnapshot>;
-  syncMultisig(): Promise<WalletSnapshot>;
+  syncMultisig(automatic?: boolean): Promise<WalletSnapshot>;
 }
 
 export interface WalletTransactionsPort {
@@ -139,11 +147,15 @@ export interface WalletTransactionsPort {
     feeRate: FeeRate
   ): Promise<PaymentProposal>;
   quoteRbf(txid: string, feeRate?: FeeRate): Promise<import('./transactions').AccelerationQuote>;
+  quoteCpfp(
+    txid: string,
+    feeRate?: FeeRate
+  ): Promise<import('./transactions').CpfpAccelerationQuote>;
   signAndBroadcast(proposalId: string, credential: string): Promise<BroadcastResult>;
 }
 
 export interface WalletHardwarePort {
-  cancelHardwareOperations(): Promise<void>;
+  cancelHardwareOperations(preserveMainnetAdmission?: boolean): Promise<void>;
   listHardwareDevices(): Promise<HardwareDevice[]>;
   listHardwareDevicesForTypes(deviceTypes: string[]): Promise<HardwareDevice[]>;
   findSavedHardwareDevice(signer: {
@@ -323,6 +335,11 @@ export interface WalletEventsPort {
   subscribe(listener: (event: WalletEvent) => void): () => void;
 }
 
+export interface WalletDiagnosticsPort {
+  diagnostics(): Promise<import('./runtime').DiagnosticRecord[]>;
+  exportDiagnostics(format: 'json' | 'csv'): Promise<SavedFileResult>;
+}
+
 export interface WalletPort
   extends
     WalletProfilesPort,
@@ -333,4 +350,5 @@ export interface WalletPort
     WalletMultisigPort,
     WalletCoordinationPort,
     WalletFileTransportPort,
+    WalletDiagnosticsPort,
     WalletEventsPort {}

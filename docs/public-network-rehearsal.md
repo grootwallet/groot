@@ -11,10 +11,10 @@ This runbook produces network-specific desktop builds without enabling mainnet. 
 If Bitcoin Core uses `rpcwhitelist`, Groot's RPC user must allow the following methods:
 
 ```ini
-rpcwhitelist=groot-testnet4:getblockchaininfo,getblockcount,getblockhash,getblock,getrawmempool,getrawtransaction,getmempoolentry,getindexinfo,estimatesmartfee,sendrawtransaction
+rpcwhitelist=groot-testnet4:getblockchaininfo,getblockcount,getblockhash,getblock,getrawmempool,getrawtransaction,getmempoolentry,getmempoolinfo,getindexinfo,estimatesmartfee,sendrawtransaction
 ```
 
-Use the network-specific username in place of `groot-testnet4` where appropriate. Keep `rpcwhitelistdefault=1` and bind RPC only to the intended interface. Groot deliberately calls the modern typed `getblockchaininfo` response directly instead of adding the dependency's compatibility-only `getnetworkinfo` probe, so the list above remains least privilege. A whitelist rejection becomes a stable permission message; Core's raw RPC response is never displayed.
+Use the network-specific username in place of `groot-testnet4` where appropriate. Keep `rpcwhitelistdefault=1` and bind RPC only to the intended interface. Groot deliberately calls the modern typed `getblockchaininfo` response directly instead of adding the dependency's compatibility-only `getnetworkinfo` probe. RBF reads Core's authoritative incremental-relay replacement policy through the read-only `getmempoolinfo` method. The list above remains least privilege. A whitelist rejection becomes a stable permission message; Core's raw RPC response is never displayed.
 
 ## Launch
 
@@ -42,6 +42,7 @@ Use fresh, non-sensitive test wallets and record only sanitized results:
 4. Exercise wrong-network recipient, wrong-chain Core, stale/unreachable Core, invalid credentials, fee-estimation failure, and rejected broadcast. Each must fail closed without mutating the persisted proposal.
 5. Copy a closed disposable encrypted profile into a separate application-data root. Confirm correct-credential relocation, wrong-credential rejection, corruption failure without source mutation, and authenticated v2-to-v3 migration where a v2 fixture is available.
 6. On Testnet4, additionally record RBF replacement, CPFP package confirmation, a one-block reorg, mempool restoration, and reconfirmation.
+7. For a birthday-only wallet, invalidate every retained post-birthday checkpoint on a disposable chain, mine the replacement branch, and confirm normal sync rewinds to active-chain agreement without deleting transaction, label, proposal, or signer metadata. Then repeat a full rescan from an earlier birthday and confirm the introduced chain connects and completes.
 
 The same-machine Core command, build identity check, exact connection fields, and ordered storage/payment drill are specified in [the Testnet4 portable-storage rehearsal](pre-mainnet-test-runbook.md#2a-testnet4-portable-storage-and-core-rehearsal).
 

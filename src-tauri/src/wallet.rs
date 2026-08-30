@@ -9,7 +9,7 @@ use bdk_bitcoind_rpc::{
         json::{EstimateMode, GetBlockchainInfoResult},
         jsonrpc, Auth, Client, Error as CoreRpcError, RpcApi,
     },
-    Emitter,
+    BitcoindRpcErrorExt, Emitter,
 };
 use bdk_wallet::{
     bitcoin::{
@@ -22,7 +22,6 @@ use bdk_wallet::{
     },
     chain::{BlockId, ChainPosition, CheckPoint, ConfirmationBlockTime},
     descriptor::{policy::SatisfiableItem, Descriptor, DescriptorPublicKey},
-    error::CreateTxError,
     psbt::PsbtUtils,
     rusqlite::{
         config::DbConfig, params, Connection, OpenFlags, OptionalExtension,
@@ -53,20 +52,19 @@ use uuid::Uuid;
 use zeroize::{Zeroize, Zeroizing};
 
 use crate::auth::AuthThrottle;
-use crate::bsms::{BsmsError, DescriptorRecord, PublicDescriptorPair};
+use crate::bsms::{DescriptorRecord, PublicDescriptorPair};
 use crate::build_network::{
     DEFAULT_RPC_URL, IS_REGTEST, NAME as NETWORK_NAME, NETWORK, PARAMETERS,
 };
 use crate::external_signer::{
-    self, ExternalSignerError, ExternalSignerInput, ExternalSignerWallet, SignerSource,
-    SINGLESIG_ACCOUNT_PATH,
+    self, ExternalSignerInput, ExternalSignerWallet, SignerSource, SINGLESIG_ACCOUNT_PATH,
 };
 use crate::hardware::{HardwareError, HardwareTransport, HwiChain, HwiCli};
 use crate::label_provenance::{
     self, LabelOrigin, LabelSuggestionDto, PermanentLabelDto, ProvenanceState, ProvenanceSummaryDto,
 };
 use crate::multisig::{
-    CosignerInput, CosignerSource, MultisigPreviewDto, MultisigWalletDto, PolicyError, PolicyInput,
+    CosignerInput, CosignerSource, MultisigPreviewDto, MultisigWalletDto, PolicyInput,
     MULTISIG_ACCOUNT_PATH,
 };
 use crate::native_backup;
@@ -80,16 +78,29 @@ use crate::proposal::{
     merge_signed_psbt, signature_progress,
 };
 use crate::recovery::{
-    analyze_template, calculate_maturity, MaturityState, PolicyAnalysis, RecoveryError,
-    RecoveryTemplate,
+    analyze_template, calculate_maturity, MaturityState, PolicyAnalysis, RecoveryTemplate,
 };
 use crate::registry::{self, RegistryError, WalletKind, WalletProfile, WalletRegistry};
-use crate::secure_store::{self, SecureStoreError};
+use crate::secure_store;
 use crate::session::WalletSessions;
-use crate::ur_transport::{self, UrTransportError};
+use crate::ur_transport;
+
+#[path = "wallet/error_translation.rs"]
+mod error_translation;
+use error_translation::*;
+#[path = "wallet/recovery_scan.rs"]
+mod recovery_scan;
+use recovery_scan::*;
+#[path = "wallet/verification_evidence.rs"]
+mod verification_evidence;
+use verification_evidence::*;
+#[path = "wallet/proposal_review.rs"]
+mod proposal_review;
+use proposal_review::*;
 
 const MAX_PRIVATE_JSON_BYTES: u64 = 256 * 1024;
 const MAX_CREDENTIAL_BYTES: usize = 1_024;
+const MIN_NEW_WALLET_PASSPHRASE_CHARACTERS: usize = 16;
 const MAX_MNEMONIC_INPUT_BYTES: usize = 4_096;
 const ONBOARDING_SESSION_SECONDS: u64 = 15 * 60;
 const HARDWARE_PIN_CHALLENGE_TIMEOUT: Duration = Duration::from_secs(2 * 60);
@@ -106,10 +117,13 @@ const SUPPLEMENTAL_MIX_DOMAIN: &[u8] = b"Groot BIP39 entropy mix v1";
 const RPC_TIMEOUT: Duration = Duration::from_secs(15);
 const NODE_HEALTH_ATTEMPTS: usize = 3;
 const NODE_HEALTH_RETRY_DELAY: Duration = Duration::from_millis(200);
+const MAINNET_NODE_ADMISSION_LIFETIME: Duration = Duration::from_secs(15 * 60);
 
+#[path = "wallet/diagnostics.rs"]
+pub mod diagnostics;
 #[path = "wallet/export_commands.rs"]
 mod export_commands;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", test))]
 use export_commands::PendingPdfExport;
 use export_commands::SavedFileReveal;
 #[cfg(test)]
@@ -219,8 +233,6 @@ pub struct ApiError {
 
 type ApiResult<T> = Result<T, ApiError>;
 
-const RPC_UNAVAILABLE_MESSAGE: &str = "Could not connect to Bitcoin Core. Check that the node is running and review the RPC address, authentication, and network settings.";
-const RPC_PERMISSION_MESSAGE: &str = "Bitcoin Core accepted the RPC credentials, but this user is missing a required RPC permission. Add Groot's documented RPC methods to the user's rpcwhitelist and restart Bitcoin Core.";
 const RECENT_CHECKPOINT_WINDOW: u32 = 2_016;
 const PERIODIC_CHECKPOINT_INTERVAL: u32 = 2_016;
 const CHECKPOINT_COMPACTION_THRESHOLD: u32 = 4_096;
@@ -241,34 +253,12 @@ fn wallet_already_exists(profile: &WalletProfile) -> ApiError {
     }
 }
 
-fn rpc_unavailable() -> ApiError {
-    api_error("network_unavailable", RPC_UNAVAILABLE_MESSAGE)
-}
-
-fn rpc_api_error(error: CoreRpcError) -> ApiError {
-    match error {
-        CoreRpcError::JsonRpc(jsonrpc::Error::Rpc(response))
-            if response.message.contains("not allowed to call method") =>
-        {
-            api_error("invalid_node_config", RPC_PERMISSION_MESSAGE)
-        }
-        _ => rpc_unavailable(),
-    }
-}
-
 fn get_blockchain_info(client: &Client) -> Result<GetBlockchainInfoResult, CoreRpcError> {
     // RpcApi::get_blockchain_info performs an extra getnetworkinfo call only
     // to decode pre-0.19 Core responses. Groot's supported Core versions use
     // the modern response, so calling the typed RPC directly preserves the
     // node's least-privilege whitelist.
     client.call("getblockchaininfo", &[])
-}
-
-fn compact_filter_unavailable() -> ApiError {
-    api_error(
-        "network_unavailable",
-        "Could not sync from the configured Bitcoin peers. Check the peer and proxy settings, then try again.",
-    )
 }
 
 fn internal(error: impl ToString) -> ApiError {
@@ -288,12 +278,33 @@ fn require_unlocked_with_activity(
     let selected = registry
         .selected_wallet_id
         .ok_or_else(|| registry_api_error(RegistryError::UnknownSelection))?;
-    let idle_timeout = Duration::from_secs(u64::from(registry.inactivity_timeout_minutes) * 60);
+    let authorized = authorize_wallet_session(
+        state,
+        selected,
+        record_activity,
+        registry.inactivity_timeout_minutes,
+    )?;
+    if authorized {
+        return Ok(selected);
+    }
+    Err(api_error(
+        "wallet_locked",
+        "Enter your passphrase / PIN to unlock Groot.",
+    ))
+}
+
+fn authorize_wallet_session(
+    state: &State<'_, AppState>,
+    wallet_id: Uuid,
+    record_activity: bool,
+    inactivity_timeout_minutes: u16,
+) -> ApiResult<bool> {
+    let idle_timeout = Duration::from_secs(u64::from(inactivity_timeout_minutes) * 60);
     let now = Instant::now();
     let (expired_wallets, authorized) = {
         let mut sessions = state.unlocked_wallets.lock().map_err(internal)?;
         let expired_wallets = sessions.prune_expired_at(now, idle_timeout);
-        let authorized = sessions.authorize_at(selected, record_activity, now, idle_timeout);
+        let authorized = sessions.authorize_at(wallet_id, record_activity, now, idle_timeout);
         (expired_wallets, authorized)
     };
     if !expired_wallets.is_empty() || !authorized {
@@ -302,22 +313,16 @@ fn require_unlocked_with_activity(
             .authenticated_software_descriptors
             .lock()
             .map_err(internal)?;
-        for wallet_id in expired_wallets {
+        for expired in expired_wallets {
+            node_auth.remove(&expired);
+            authenticated_descriptors.remove(&expired);
+        }
+        if !authorized {
             node_auth.remove(&wallet_id);
             authenticated_descriptors.remove(&wallet_id);
         }
-        if !authorized {
-            node_auth.remove(&selected);
-            authenticated_descriptors.remove(&selected);
-        }
     }
-    if authorized {
-        return Ok(selected);
-    }
-    Err(api_error(
-        "wallet_locked",
-        "Enter your passphrase / PIN to unlock Groot.",
-    ))
+    Ok(authorized)
 }
 
 fn require_unlocked(app: &AppHandle, state: &State<'_, AppState>) -> ApiResult<Uuid> {
@@ -353,6 +358,7 @@ fn lock_wallet(state: &State<'_, AppState>, wallet_id: Uuid) -> ApiResult<()> {
         .lock()
         .map_err(internal)?
         .remove(&wallet_id);
+    clear_mainnet_node_admission(state)?;
     Ok(())
 }
 
@@ -366,8 +372,10 @@ pub struct AppState {
     verified_recovery: Mutex<HashMap<Uuid, String>>,
     pending_hardware_pins: Mutex<HashMap<String, PendingHardwarePin>>,
     recent_hardware_scan: Mutex<Option<RecentHardwareScan>>,
+    pending_hardware_admissions: Mutex<HashMap<String, Instant>>,
     hardware_scan_epoch: AtomicU64,
     node_auth: Mutex<HashMap<Uuid, NodeAuthSession>>,
+    pending_mainnet_node_admission: Mutex<Option<PendingMainnetNodeAdmission>>,
     authenticated_software_descriptors: Mutex<HashMap<Uuid, (String, String)>>,
     saved_files: Mutex<HashMap<String, SavedFileReveal>>,
     #[cfg(target_os = "macos")]
@@ -379,6 +387,7 @@ pub struct AppState {
     pending_policy_verifications: Mutex<HashMap<String, SignerPolicyVerificationDto>>,
     desktop_pairings: Mutex<HashMap<String, coordination_commands::PendingDesktopPairing>>,
     sync_status: Arc<Mutex<Option<WalletSyncStatusDto>>>,
+    diagnostic_log: Mutex<()>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -392,6 +401,7 @@ pub struct WalletSyncStatusDto {
     last_verified_height: u32,
     connected_peers: Option<usize>,
     required_peers: Option<usize>,
+    failure_code: Option<&'static str>,
     updated_at: u64,
 }
 
@@ -411,6 +421,7 @@ fn set_sync_status(
         last_verified_height,
         connected_peers: None,
         required_peers: None,
+        failure_code: None,
         updated_at: now(),
     });
     Ok(())
@@ -517,6 +528,7 @@ fn finish_sync_status(
         Err(error) if error.code == "sync_cancelled" => "cancelled",
         Err(_) => "failed",
     };
+    current.failure_code = result.as_ref().err().map(|error| error.code);
     current.last_verified_height = verified_height;
     current.updated_at = now();
 }
@@ -534,6 +546,47 @@ struct ActiveForegroundSync {
 struct NodeAuthSession {
     config: CoreNodeConfig,
     password: Zeroizing<String>,
+    mainnet_node_verified: bool,
+}
+
+#[derive(Clone)]
+struct PendingMainnetNodeAdmission {
+    config: CoreNodeConfig,
+    password: Zeroizing<String>,
+    created_at: Instant,
+    scope: MainnetNodeAdmissionScope,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum MainnetNodeAdmissionScope {
+    ExistingWallet(Uuid),
+    NewWallet,
+}
+
+struct DatabaseOpenPermit {
+    issued_at: Instant,
+}
+
+struct AuthenticationDatabaseOpenPermit {
+    issued_at: Instant,
+}
+
+struct AuthenticationDatabase(Connection);
+
+struct NewWalletAdmissionCleanup<'a> {
+    state: &'a AppState,
+}
+
+impl Drop for NewWalletAdmissionCleanup<'_> {
+    fn drop(&mut self) {
+        if let Ok(mut admission) = self.state.pending_mainnet_node_admission.lock() {
+            admission.take();
+        }
+    }
+}
+
+fn clear_new_wallet_admission_on_exit(state: &AppState) -> NewWalletAdmissionCleanup<'_> {
+    NewWalletAdmissionCleanup { state }
 }
 
 #[derive(Deserialize)]
@@ -1030,6 +1083,24 @@ pub struct AccelerationQuoteDto {
     recommendation_source: String,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CpfpAccelerationQuoteDto {
+    method: AccelerationMethod,
+    original_txid: String,
+    parent_fee: u64,
+    parent_vsize: u64,
+    parent_effective_fee_rate: f64,
+    minimum_fee_rate: f64,
+    target_fee_rate: f64,
+    child_fee: u64,
+    child_vsize: u64,
+    package_fee: u64,
+    package_vsize: u64,
+    resulting_package_fee_rate: f64,
+    recommendation_source: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SelectionImpactDto {
@@ -1313,21 +1384,26 @@ fn missing_hardware_xpub(
     }
     match device_type.to_ascii_lowercase().as_str() {
         "ledger" => {
+            let ledger_app = if NETWORK == Network::Bitcoin {
+                "Bitcoin"
+            } else {
+                "Bitcoin Test—not Bitcoin"
+            };
             let message = if code == Some(-7) || safe_detail.contains("bad argument") {
-                "Ledger rejected this test-chain account path. Open the Bitcoin Test app, not the main Bitcoin app, then reconnect and try again."
+                format!("Ledger rejected this {NETWORK_NAME} account path. Open the {ledger_app} app, then reconnect and try again.")
             } else if code == Some(-13)
                 || safe_detail.contains("technical problem")
                 || safe_detail.contains("device failure")
             {
-                "Ledger is in the wrong app for this Regtest wallet. Quit Ledger Live, open Bitcoin Test, not Bitcoin, then reconnect and try again."
+                format!("Ledger is in the wrong app for this {NETWORK_NAME} wallet. Quit Ledger Live, open {ledger_app}, then reconnect and try again.")
             } else if safe_detail.contains("bitcoin test")
                 || safe_detail.contains("not in either the bitcoin")
             {
-                "Open the Bitcoin or Bitcoin Test app on Ledger, keep Ledger Live closed, then try again."
+                format!("Open {ledger_app} on Ledger, keep Ledger Live closed, then try again.")
             } else if derivation_path.starts_with("m/48'") {
-                "Ledger did not return the Regtest multisig account key. Keep Ledger Live closed, open Bitcoin Test, try again, then approve the public-key export if Ledger asks."
+                format!("Ledger did not return the {NETWORK_NAME} multisig account key. Keep Ledger Live closed, open {ledger_app}, try again, then approve the public-key export if Ledger asks.")
             } else {
-                "Ledger did not return the Regtest BIP84 account key. Keep Ledger Live closed, open Bitcoin Test, not Bitcoin, reconnect, then try again."
+                format!("Ledger did not return the {NETWORK_NAME} BIP84 account key. Keep Ledger Live closed, open {ledger_app}, reconnect, then try again.")
             };
             api_error("hardware_unavailable", message)
         }
@@ -1335,7 +1411,7 @@ fn missing_hardware_xpub(
             "hardware_unavailable",
             "BitBox may request its password again for this new secure connection. Check its screen, enter the password on BitBox if asked, and try again.",
         ),
-        "trezor" | "keepkey" => {
+        "trezor" => {
             let safe_detail = hwi_message.unwrap_or_default().to_ascii_lowercase();
             let message = if code == Some(-13)
                 && safe_detail.contains("unsupported trezor model")
@@ -1375,9 +1451,9 @@ fn hardware_device_dto(device: HwiDevice) -> HardwareDeviceDto {
     };
     // A locked Trezor can report both PIN and passphrase requirements. PIN must
     // be resolved first because no wallet fingerprint exists until it is unlocked.
-    let pin_required = matches!(device_type.as_str(), "trezor" | "keepkey")
+    let pin_required = device_type == "trezor"
         && (device.needs_pin_sent || (device.code == Some(-12) && !device.needs_passphrase_sent));
-    let unsupported_trezor_model = matches!(device_type.as_str(), "trezor" | "keepkey")
+    let unsupported_trezor_model = device_type == "trezor"
         && device.code == Some(-13)
         && device
             .error
@@ -1385,7 +1461,13 @@ fn hardware_device_dto(device: HwiDevice) -> HardwareDeviceDto {
             .unwrap_or_default()
             .to_ascii_lowercase()
             .contains("unsupported trezor model");
-    let (status, message, action) = if unsupported_trezor_model {
+    let (status, message, action) = if matches!(device_type.as_str(), "keepkey" | "digitalbitbox") {
+        (
+            "not_ready",
+            "This hardware signer is not supported by Groot.",
+            "retry",
+        )
+    } else if unsupported_trezor_model {
         (
             "not_ready",
             "This Groot release's bundled HWI 3.2.0 does not support this Trezor model. Update Groot when a reviewed release adds support, then scan again.",
@@ -1514,31 +1596,6 @@ fn wallets_root(app: &AppHandle) -> ApiResult<PathBuf> {
     Ok(app_data_dir(app)?.join("wallets"))
 }
 
-fn registry_api_error(error: RegistryError) -> ApiError {
-    match error {
-        RegistryError::Missing => api_error("wallet_not_found", "No wallet exists on this device."),
-        RegistryError::UnknownSelection => {
-            api_error("wallet_not_found", "Select an available wallet first.")
-        }
-        RegistryError::InvalidName => api_error(
-            "invalid_wallet_name",
-            "Wallet names must contain 1 to 48 characters.",
-        ),
-        RegistryError::InvalidInactivityTimeout => api_error(
-            "invalid_inactivity_timeout",
-            "Automatic lock must be 1, 5, 15, 30, or 60 minutes.",
-        ),
-        RegistryError::Corrupt | RegistryError::UnsupportedVersion => api_error(
-            "wallet_corrupt",
-            "The wallet registry is corrupt or unsupported. No wallet was opened.",
-        ),
-        _ => api_error(
-            "internal_error",
-            "The wallet registry could not be updated.",
-        ),
-    }
-}
-
 fn descriptor_checksum(descriptor: &str) -> ApiResult<String> {
     descriptor
         .rsplit_once('#')
@@ -1644,13 +1701,15 @@ fn multisig_db_path(app: &AppHandle) -> ApiResult<PathBuf> {
 }
 
 fn profile_from_directory(
+    app: &AppHandle,
     directory: &Path,
     id: Uuid,
     kind: WalletKind,
 ) -> ApiResult<WalletProfile> {
     let (name, checksum) = match kind {
         WalletKind::SingleKey => {
-            let mut db = open_wallet_database(&directory.join("wallet.sqlite"))?;
+            let permit = database_open_permit_for_identity_inspection(app)?;
+            let mut db = open_wallet_database(&directory.join("wallet.sqlite"), &permit)?;
             let wallet = load_wallet(&mut db)?;
             (
                 "Primary wallet".to_owned(),
@@ -1716,8 +1775,9 @@ fn ensure_registry_migrated(app: &AppHandle) -> ApiResult<()> {
             ));
         }
         let id = Uuid::new_v4();
-        let profile = profile_from_directory(&legacy_directory, id, kind)?;
-        let (external_descriptor, _) = descriptor_pair_from_directory(&legacy_directory, &profile)?;
+        let profile = profile_from_directory(app, &legacy_directory, id, kind)?;
+        let (external_descriptor, _) =
+            descriptor_pair_from_directory(app, &legacy_directory, &profile)?;
         if let Some((_, existing)) = legacy_identities
             .iter()
             .find(|(existing_descriptor, _)| existing_descriptor == &external_descriptor)
@@ -1787,9 +1847,185 @@ fn prepare_profile_directory_with_id(app: &AppHandle, id: Uuid) -> ApiResult<Pat
     Ok(directory)
 }
 
-fn open_wallet_database(path: &Path) -> ApiResult<Connection> {
+fn current_mainnet_node_admission(state: &AppState) -> ApiResult<PendingMainnetNodeAdmission> {
+    let mut admission = state
+        .pending_mainnet_node_admission
+        .lock()
+        .map_err(internal)?;
+    if admission.as_ref().is_some_and(|record| {
+        mainnet_node_admission_is_current_at(record.created_at, Instant::now())
+    }) {
+        return Ok(admission.as_ref().expect("checked admission").clone());
+    }
+    admission.take();
+    Err(api_error(
+        "node_admission_required",
+        "Connect and verify the approved local Bitcoin Core node before opening a mainnet wallet.",
+    ))
+}
+
+fn mainnet_node_admission_is_current_at(created_at: Instant, now: Instant) -> bool {
+    now.checked_duration_since(created_at)
+        .is_some_and(|age| age <= MAINNET_NODE_ADMISSION_LIFETIME)
+}
+
+fn clear_mainnet_node_admission(state: &AppState) -> ApiResult<()> {
+    state
+        .pending_mainnet_node_admission
+        .lock()
+        .map_err(internal)?
+        .take();
+    Ok(())
+}
+
+fn database_admission_error(error: crate::release_policy::ReleasePolicyError) -> ApiError {
+    match error {
+        crate::release_policy::ReleasePolicyError::BackendAdmissionRequired => api_error(
+            "node_admission_required",
+            "Connect and verify the approved local Bitcoin Core node before opening a mainnet wallet.",
+        ),
+        _ => internal("This build is not authorized to open a mainnet wallet database."),
+    }
+}
+
+fn admission_allows_new_wallet(admission: &PendingMainnetNodeAdmission) -> bool {
+    admission.scope == MainnetNodeAdmissionScope::NewWallet
+}
+
+fn admission_allows_selected_wallet(
+    admission: &PendingMainnetNodeAdmission,
+    selected_wallet: Uuid,
+    saved_config: &CoreNodeConfig,
+) -> bool {
+    admission.scope == MainnetNodeAdmissionScope::ExistingWallet(selected_wallet)
+        && admission.config == *saved_config
+}
+
+fn node_auth_session_allows_database_open(
+    session: &NodeAuthSession,
+    saved_config: &CoreNodeConfig,
+) -> bool {
+    session.config == *saved_config && session.mainnet_node_verified
+}
+
+fn database_open_permit_for_new_wallet(state: &AppState) -> ApiResult<DatabaseOpenPermit> {
+    if NETWORK != Network::Bitcoin {
+        return Ok(DatabaseOpenPermit {
+            issued_at: Instant::now(),
+        });
+    }
+    let admission = current_mainnet_node_admission(state)?;
+    if !admission_allows_new_wallet(&admission) {
+        return Err(api_error(
+            "node_admission_required",
+            "Verify the local Bitcoin Core node specifically for new mainnet wallet creation.",
+        ));
+    }
+    crate::release_policy::ensure_database_open_enabled(NETWORK, true)
+        .map_err(database_admission_error)?;
+    Ok(DatabaseOpenPermit {
+        issued_at: Instant::now(),
+    })
+}
+
+fn database_open_permit_for_selected_wallet(app: &AppHandle) -> ApiResult<DatabaseOpenPermit> {
+    if NETWORK != Network::Bitcoin {
+        return Ok(DatabaseOpenPermit {
+            issued_at: Instant::now(),
+        });
+    }
+    let state = app.state::<AppState>();
+    let selected = selected_profile(app)?;
+    let saved_config = read_node_config_for(app, selected.id)?;
+    let pending_matches = current_mainnet_node_admission(&state).is_ok_and(|admission| {
+        admission_allows_selected_wallet(&admission, selected.id, &saved_config)
+    });
+    let active_matches = state
+        .unlocked_wallets
+        .lock()
+        .map_err(internal)?
+        .is_unlocked(selected.id)
+        && state
+            .node_auth
+            .lock()
+            .map_err(internal)?
+            .get(&selected.id)
+            .is_some_and(|session| node_auth_session_allows_database_open(session, &saved_config));
+    if !pending_matches && !active_matches {
+        return Err(api_error(
+            "node_admission_required",
+            "Verify this wallet's saved local Bitcoin Core connection before reading wallet data.",
+        ));
+    }
+    crate::release_policy::ensure_database_open_enabled(NETWORK, true)
+        .map_err(database_admission_error)?;
+    Ok(DatabaseOpenPermit {
+        issued_at: Instant::now(),
+    })
+}
+
+fn database_open_permit_for_identity_inspection(app: &AppHandle) -> ApiResult<DatabaseOpenPermit> {
+    if NETWORK == Network::Bitcoin {
+        let state = app.state::<AppState>();
+        let pending = current_mainnet_node_admission(&state).is_ok();
+        let authenticated_wallets = state
+            .node_auth
+            .lock()
+            .map_err(internal)?
+            .keys()
+            .copied()
+            .collect::<Vec<_>>();
+        let sessions = state.unlocked_wallets.lock().map_err(internal)?;
+        let active = authenticated_wallets
+            .iter()
+            .any(|wallet_id| sessions.is_unlocked(*wallet_id));
+        if !pending && !active {
+            return Err(api_error(
+                "node_admission_required",
+                "Connect and verify the approved local Bitcoin Core node before inspecting mainnet wallet identities.",
+            ));
+        }
+    }
+    crate::release_policy::ensure_database_open_enabled(NETWORK, NETWORK == Network::Bitcoin)
+        .map_err(database_admission_error)?;
+    Ok(DatabaseOpenPermit {
+        issued_at: Instant::now(),
+    })
+}
+
+fn validate_database_open_permit(permit: &DatabaseOpenPermit) -> ApiResult<()> {
+    let current = NETWORK != Network::Bitcoin
+        || permit.issued_at.elapsed() <= MAINNET_NODE_ADMISSION_LIFETIME;
+    crate::release_policy::ensure_database_open_enabled(NETWORK, current)
+        .map_err(database_admission_error)
+}
+
+fn authentication_database_open_permit() -> ApiResult<AuthenticationDatabaseOpenPermit> {
     crate::release_policy::ensure_runtime_network_enabled(NETWORK)
-        .map_err(|_| internal("This build is not authorized to open a mainnet wallet database."))?;
+        .map_err(database_admission_error)?;
+    Ok(AuthenticationDatabaseOpenPermit {
+        issued_at: Instant::now(),
+    })
+}
+
+fn validate_authentication_database_open_permit(
+    permit: &AuthenticationDatabaseOpenPermit,
+) -> ApiResult<()> {
+    if permit.issued_at.elapsed() > MAINNET_NODE_ADMISSION_LIFETIME {
+        return Err(internal("The authentication database permit expired."));
+    }
+    crate::release_policy::ensure_runtime_network_enabled(NETWORK).map_err(database_admission_error)
+}
+
+#[cfg(test)]
+fn database_open_permit_for_test() -> DatabaseOpenPermit {
+    DatabaseOpenPermit {
+        issued_at: Instant::now(),
+    }
+}
+
+fn open_wallet_database(path: &Path, permit: &DatabaseOpenPermit) -> ApiResult<Connection> {
+    validate_database_open_permit(permit)?;
     if let Ok(metadata) = fs::symlink_metadata(path) {
         if metadata.file_type().is_symlink() || !metadata.is_file() {
             return Err(internal("Wallet database storage is not a regular file."));
@@ -1811,10 +2047,36 @@ fn open_wallet_database(path: &Path) -> ApiResult<Connection> {
     Ok(db)
 }
 
-fn open_existing_wallet_database_read_only(path: &Path) -> ApiResult<Connection> {
-    crate::release_policy::ensure_runtime_network_enabled(NETWORK).map_err(|_| {
-        internal("This build is not authorized to inspect a mainnet wallet database.")
-    })?;
+fn open_authentication_database(
+    path: &Path,
+    permit: &AuthenticationDatabaseOpenPermit,
+) -> ApiResult<AuthenticationDatabase> {
+    validate_authentication_database_open_permit(permit)?;
+    let metadata = fs::symlink_metadata(path).map_err(internal)?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return Err(internal("Wallet database storage is not a regular file."));
+    }
+    let db = Connection::open(path).map_err(internal)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(path, fs::Permissions::from_mode(0o600)).map_err(internal)?;
+    }
+    db.busy_timeout(Duration::from_secs(5)).map_err(internal)?;
+    db.set_db_config(DbConfig::SQLITE_DBCONFIG_DEFENSIVE, true)
+        .map_err(internal)?;
+    db.set_db_config(DbConfig::SQLITE_DBCONFIG_ENABLE_FKEY, true)
+        .map_err(internal)?;
+    db.execute_batch("PRAGMA trusted_schema = OFF;")
+        .map_err(internal)?;
+    Ok(AuthenticationDatabase(db))
+}
+
+fn open_existing_wallet_database_read_only(
+    path: &Path,
+    permit: &DatabaseOpenPermit,
+) -> ApiResult<Connection> {
+    validate_database_open_permit(permit)?;
     let metadata = fs::symlink_metadata(path).map_err(internal)?;
     if metadata.file_type().is_symlink() || !metadata.is_file() {
         return Err(internal("Wallet database storage is not a regular file."));
@@ -1836,14 +2098,17 @@ fn profile_descriptor_pair(
     profile: &WalletProfile,
 ) -> ApiResult<(String, String)> {
     let directory = profile_directory(app, profile.id)?;
-    descriptor_pair_from_directory(&directory, profile)
+    descriptor_pair_from_directory(app, &directory, profile)
 }
 
 fn descriptor_pair_from_directory(
+    app: &AppHandle,
     directory: &Path,
     profile: &WalletProfile,
 ) -> ApiResult<(String, String)> {
-    let mut db = open_existing_wallet_database_read_only(&directory.join("wallet.sqlite"))?;
+    let permit = database_open_permit_for_identity_inspection(app)?;
+    let mut db =
+        open_existing_wallet_database_read_only(&directory.join("wallet.sqlite"), &permit)?;
     let wallet = load_wallet(&mut db)?;
     let external = wallet.public_descriptor(KeychainKind::External).to_string();
     let internal_descriptor = wallet.public_descriptor(KeychainKind::Internal).to_string();
@@ -1965,6 +2230,7 @@ fn regtest_dir() -> ApiResult<PathBuf> {
     default_regtest_dir()
 }
 
+#[cfg(groot_network = "regtest")]
 fn default_regtest_dir() -> ApiResult<PathBuf> {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let repository_root = manifest_dir.parent().ok_or_else(|| {
@@ -1974,6 +2240,14 @@ fn default_regtest_dir() -> ApiResult<PathBuf> {
         )
     })?;
     Ok(repository_root.join(".regtest"))
+}
+
+#[cfg(not(groot_network = "regtest"))]
+fn default_regtest_dir() -> ApiResult<PathBuf> {
+    Err(api_error(
+        "invalid_node_config",
+        "Automatic cookie discovery is unavailable in this public-network build.",
+    ))
 }
 
 fn node_config_path(app: &AppHandle) -> ApiResult<PathBuf> {
@@ -2022,33 +2296,6 @@ fn default_node_config() -> CoreNodeConfig {
         username: None,
         tor_proxy: None,
     }
-}
-
-fn network_config_api_error(error: NetworkConfigError) -> ApiError {
-    let message = match error {
-        NetworkConfigError::InvalidUrl => "Enter a valid node URL and RPC username.",
-        NetworkConfigError::InsecureRemote => {
-            "Local nodes must use loopback. Remote nodes require HTTPS and username/password authentication."
-        }
-        NetworkConfigError::CredentialsInUrl => {
-            "Do not place RPC credentials in the URL. Use the protected credential fields."
-        }
-        NetworkConfigError::UnsupportedScheme => "This build supports Bitcoin Core RPC backends only.",
-        NetworkConfigError::UnknownPreset => "The selected backend preset is not recognized.",
-        NetworkConfigError::InvalidProxy => {
-            "Tor requires an HTTP v3 .onion RPC URL and a loopback SOCKS5 proxy such as 127.0.0.1:9050."
-        }
-        NetworkConfigError::InvalidPeerConfiguration => {
-            "Enter valid numeric IP:port peers and require no more peers than manual mode provides."
-        }
-        NetworkConfigError::InsufficientPeerDiversity => {
-            "Public test networks require at least two compact-filter peers."
-        }
-        NetworkConfigError::ProxyDnsLeak => {
-            "Tor compact-filter sync requires manual numeric peers with public discovery disabled to prevent local DNS leaks."
-        }
-    };
-    api_error("invalid_node_config", message)
 }
 
 fn read_node_config(app: &AppHandle) -> ApiResult<CoreNodeConfig> {
@@ -2141,10 +2388,6 @@ fn build_rpc_client_with_credentials(
     }
 }
 
-fn network_config_api_error_from_url(_: url::ParseError) -> ApiError {
-    network_config_api_error(NetworkConfigError::InvalidUrl)
-}
-
 fn load_node_auth_session(
     app: &AppHandle,
     state: &State<'_, AppState>,
@@ -2163,8 +2406,7 @@ fn load_node_auth_session(
                 .remove(&profile.id);
             return Ok(());
         }
-        let plaintext =
-            Zeroizing::new(secure_store::load(&path, credential).map_err(secure_store_error)?);
+        let plaintext = secure_store::load(&path, credential).map_err(secure_store_error)?;
         let Some(mut protected) = decode_protected_node_auth(&plaintext, &config)? else {
             state
                 .node_auth
@@ -2180,7 +2422,11 @@ fn load_node_auth_session(
                 "Protected RPC credentials are invalid.",
             ));
         }
-        Some(NodeAuthSession { config, password })
+        Some(NodeAuthSession {
+            config,
+            password,
+            mainnet_node_verified: false,
+        })
     } else {
         None
     };
@@ -2211,11 +2457,12 @@ fn saved_userpass_config_has_required_secret(
 
 fn rpc_client(app: &AppHandle, state: &State<'_, AppState>) -> ApiResult<Client> {
     let config = read_node_config(app)?;
+    validate_first_mainnet_rpc_endpoint(&config.backend)?;
     let url = config
         .validate()
         .map_err(network_config_api_error)?
         .to_string();
-    match config.auth {
+    let client = match config.auth {
         RpcAuthMode::Cookie => {
             if !IS_REGTEST {
                 return Err(api_error(
@@ -2255,15 +2502,18 @@ fn rpc_client(app: &AppHandle, state: &State<'_, AppState>) -> ApiResult<Client>
                 RPC_TIMEOUT,
             )
         }
-    }
+    }?;
+    validate_first_mainnet_rpc_backend(&client, &config.backend)?;
+    Ok(client)
 }
 
 fn candidate_rpc_client(config: &CoreNodeConfig, password: &str) -> ApiResult<Client> {
+    validate_first_mainnet_rpc_endpoint(&config.backend)?;
     let url = config
         .validate()
         .map_err(network_config_api_error)?
         .to_string();
-    match config.auth {
+    let client = match config.auth {
         RpcAuthMode::Cookie => {
             if !IS_REGTEST {
                 return Err(api_error(
@@ -2287,19 +2537,150 @@ fn candidate_rpc_client(config: &CoreNodeConfig, password: &str) -> ApiResult<Cl
             config.tor_proxy.as_deref(),
             RPC_TIMEOUT,
         ),
+    }?;
+    validate_first_mainnet_rpc_backend(&client, &config.backend)?;
+    Ok(client)
+}
+
+fn validate_first_mainnet_rpc_endpoint(backend: &ChainBackend) -> ApiResult<()> {
+    if NETWORK != Network::Bitcoin {
+        return Ok(());
     }
+    crate::release_policy::validate_first_mainnet_backend_endpoint(backend).map_err(|_| {
+        api_error(
+            "invalid_node_config",
+            "The first mainnet release requires a loopback Bitcoin Core node.",
+        )
+    })
+}
+
+fn validate_first_mainnet_rpc_backend(client: &Client, backend: &ChainBackend) -> ApiResult<()> {
+    if NETWORK != Network::Bitcoin {
+        return Ok(());
+    }
+    let observed_genesis = client.get_block_hash(0).map_err(rpc_api_error)?;
+    crate::release_policy::validate_first_mainnet_backend(backend, observed_genesis).map_err(|_| {
+        api_error(
+            "invalid_node_config",
+            "The first mainnet release requires a loopback Bitcoin Core node on the exact Bitcoin genesis chain.",
+        )
+    })
 }
 
 fn checked_chain_identity(client: &Client) -> ApiResult<(u64, BlockHash)> {
+    let (info, observed_genesis) = checked_core_chain(client)?;
+    Ok((info.blocks, observed_genesis))
+}
+
+fn checked_core_chain(client: &Client) -> ApiResult<(GetBlockchainInfoResult, BlockHash)> {
     let info = get_blockchain_info(client).map_err(rpc_api_error)?;
     ensure_expected_network(info.chain)?;
     let observed_genesis = client.get_block_hash(0).map_err(rpc_api_error)?;
     ensure_expected_genesis(NETWORK, observed_genesis)?;
-    Ok((info.blocks, observed_genesis))
+    Ok((info, observed_genesis))
 }
 
 fn checked_block_height(client: &Client) -> ApiResult<u64> {
     checked_chain_identity(client).map(|(height, _)| height)
+}
+
+fn ensure_core_ready_for_wallet_history(
+    node_height: u64,
+    initial_block_download: bool,
+    last_verified_height: u32,
+) -> ApiResult<()> {
+    if initial_block_download || node_height < u64::from(last_verified_height) {
+        return Err(api_error(
+            "node_syncing",
+            "Bitcoin Core is still syncing and has not reached this wallet's last verified block. Wait for Core to finish syncing, then try again.",
+        ));
+    }
+    Ok(())
+}
+
+fn ensure_core_history_available(
+    pruned: bool,
+    prune_height: Option<u64>,
+    first_required_height: u32,
+) -> ApiResult<()> {
+    if pruned && prune_height.is_some_and(|height| u64::from(first_required_height) < height) {
+        return Err(api_error(
+            "node_history_unavailable",
+            "Bitcoin Core no longer stores the blocks needed for this scan. Use a birthday at or above the retained block height, or connect an archival node.",
+        ));
+    }
+    Ok(())
+}
+
+fn recovery_scan_anchor_height(birthday_height: u32) -> u32 {
+    birthday_height.saturating_sub(1)
+}
+
+fn ensure_recovery_scan_history_available(
+    pruned: bool,
+    prune_height: Option<u64>,
+    birthday_height: u32,
+) -> ApiResult<()> {
+    let anchor_height = recovery_scan_anchor_height(birthday_height);
+    if pruned && prune_height.is_some_and(|height| u64::from(anchor_height) < height) {
+        return Err(api_error(
+            "node_history_unavailable",
+            RPC_PRUNED_HISTORY_MESSAGE,
+        ));
+    }
+    Ok(())
+}
+
+fn recovery_scan_checkpoint(
+    client: &Client,
+    genesis: BlockHash,
+    birthday_height: u32,
+) -> ApiResult<CheckPoint> {
+    let anchor_height = recovery_scan_anchor_height(birthday_height);
+    let genesis_checkpoint = CheckPoint::new(BlockId {
+        height: 0,
+        hash: genesis,
+    });
+    if anchor_height == 0 {
+        return Ok(genesis_checkpoint);
+    }
+    let anchor_hash = retry_transient_core_rpc(
+        || client.get_block_hash(u64::from(anchor_height)),
+        std::thread::sleep,
+    )?;
+    genesis_checkpoint
+        .push(BlockId {
+            height: anchor_height,
+            hash: anchor_hash,
+        })
+        .map_err(|_| internal("The recovery scan checkpoint could not be constructed."))
+}
+
+fn rewind_stale_core_checkpoints(
+    client: &Client,
+    wallet: &Wallet,
+) -> ApiResult<(CheckPoint, bool)> {
+    let original_tip = wallet.latest_checkpoint().height();
+    let mut agreement = None;
+    for checkpoint in wallet.latest_checkpoint().iter() {
+        match client.get_block_info(&checkpoint.hash()) {
+            Ok(block) if block.confirmations >= 0 => {
+                agreement = Some(checkpoint);
+                break;
+            }
+            Ok(_) => {}
+            Err(error) if error.is_not_found_error() => {}
+            Err(error) => return Err(rpc_api_error(error)),
+        }
+    }
+    let agreement = agreement.ok_or_else(|| {
+        api_error(
+            "wrong_network",
+            "The Bitcoin Core chain does not share Groot's verified genesis checkpoint.",
+        )
+    })?;
+    let rewound = agreement.height() < original_tip;
+    Ok((agreement, rewound))
 }
 
 fn retry_transient_node_health<T>(
@@ -2513,6 +2894,17 @@ fn validate_wallet_passphrase(passphrase: &str) -> ApiResult<()> {
         return Err(api_error(
             "invalid_credential",
             "The wallet passphrase is too long.",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_new_wallet_passphrase(passphrase: &str) -> ApiResult<()> {
+    validate_wallet_passphrase(passphrase)?;
+    if passphrase.chars().count() < MIN_NEW_WALLET_PASSPHRASE_CHARACTERS {
+        return Err(api_error(
+            "invalid_credential",
+            "New wallet passphrases must contain at least 16 characters.",
         ));
     }
     Ok(())
@@ -2802,7 +3194,7 @@ fn reset_auth_throttle(app: &AppHandle, state: &State<'_, AppState>) -> ApiResul
     Ok(())
 }
 
-fn open_auth_db(app: &AppHandle) -> ApiResult<Connection> {
+fn open_auth_db(app: &AppHandle) -> ApiResult<AuthenticationDatabase> {
     let profile = selected_profile(app)?;
     let path = profile_directory(app, profile.id)?.join("wallet.sqlite");
     if !path.is_file() {
@@ -2811,14 +3203,22 @@ fn open_auth_db(app: &AppHandle) -> ApiResult<Connection> {
             "The selected wallet database could not be found.",
         ));
     }
-    let db = open_wallet_database(&path)?;
-    init_app_schema(&db)?;
+    let permit = authentication_database_open_permit()?;
+    let db = open_authentication_database(&path, &permit)?;
+    db.0.execute_batch(
+        "CREATE TABLE IF NOT EXISTS groot_auth_throttle (
+            singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
+            failures INTEGER NOT NULL CHECK(failures >= 0),
+            retry_at INTEGER NOT NULL CHECK(retry_at >= 0)
+        );",
+    )
+    .map_err(internal)?;
     Ok(db)
 }
 
-fn load_auth_throttle(db: &Connection) -> ApiResult<AuthThrottle> {
-    let persisted = db
-        .query_row(
+fn load_auth_throttle(db: &AuthenticationDatabase) -> ApiResult<AuthThrottle> {
+    let persisted =
+        db.0.query_row(
             "SELECT failures, retry_at FROM groot_auth_throttle WHERE singleton = 1",
             [],
             |row| Ok((row.get::<_, u32>(0)?, row.get::<_, u64>(1)?)),
@@ -2830,14 +3230,15 @@ fn load_auth_throttle(db: &Connection) -> ApiResult<AuthThrottle> {
         .unwrap_or_default())
 }
 
-fn save_auth_throttle(db: &mut Connection, throttle: &AuthThrottle) -> ApiResult<()> {
+fn save_auth_throttle(db: &mut AuthenticationDatabase, throttle: &AuthThrottle) -> ApiResult<()> {
     let (failures, retry_at) = throttle.snapshot();
-    db.execute(
+    db.0
+        .execute(
         "INSERT INTO groot_auth_throttle(singleton, failures, retry_at) VALUES(1, ?1, ?2)\
          ON CONFLICT(singleton) DO UPDATE SET failures = excluded.failures, retry_at = excluded.retry_at",
         params![failures, retry_at],
-    )
-    .map_err(internal)?;
+        )
+        .map_err(internal)?;
     Ok(())
 }
 
@@ -2849,7 +3250,8 @@ fn open_db(app: &AppHandle) -> ApiResult<Connection> {
             "No wallet exists on this device.",
         ));
     }
-    let mut db = open_wallet_database(&path)?;
+    let permit = database_open_permit_for_selected_wallet(app)?;
+    let mut db = open_wallet_database(&path, &permit)?;
     init_app_schema(&db)?;
     compact_persisted_checkpoints(&mut db)?;
     validate_selected_wallet_database_identity(app, &mut db, WalletKind::SingleKey)?;
@@ -2864,7 +3266,8 @@ fn open_multisig_db(app: &AppHandle) -> ApiResult<Connection> {
             "No multisig wallet exists on this device.",
         ));
     }
-    let mut db = open_wallet_database(&path)?;
+    let permit = database_open_permit_for_selected_wallet(app)?;
+    let mut db = open_wallet_database(&path, &permit)?;
     init_app_schema(&db)?;
     compact_persisted_checkpoints(&mut db)?;
     validate_selected_wallet_database_identity(app, &mut db, WalletKind::Multisig)?;
@@ -3007,368 +3410,6 @@ fn load_wallet_transaction<'db>(
         .ok_or_else(|| api_error("wallet_not_found", "Wallet database is empty."))
 }
 
-fn load_recovery_scan_settings(db: &Connection) -> ApiResult<RecoveryScanSettingsDto> {
-    db.query_row(
-        "SELECT birthday_height, gap_limit FROM groot_recovery_settings WHERE singleton = 1",
-        [],
-        |row| {
-            Ok(RecoveryScanSettingsDto {
-                birthday_height: row.get(0)?,
-                gap_limit: row.get(1)?,
-            })
-        },
-    )
-    .optional()
-    .map_err(internal)
-    .map(|settings| {
-        settings.unwrap_or(RecoveryScanSettingsDto {
-            birthday_height: 0,
-            gap_limit: MIN_RECOVERY_GAP_LIMIT,
-        })
-    })
-}
-
-fn has_completed_sync(db: &Connection) -> ApiResult<bool> {
-    db.query_row(
-        "SELECT EXISTS(SELECT 1 FROM groot_chain_observation WHERE singleton = 1)",
-        [],
-        |row| row.get(0),
-    )
-    .map_err(internal)
-}
-
-struct RecoveryScanRecord {
-    run_id: String,
-    status: RecoveryScanStatusDto,
-}
-
-fn idle_recovery_scan_status(settings: &RecoveryScanSettingsDto) -> RecoveryScanStatusDto {
-    RecoveryScanStatusDto {
-        status: "idle".to_owned(),
-        birthday_height: settings.birthday_height,
-        gap_limit: settings.gap_limit,
-        current_height: 0,
-        target_height: 0,
-        processed_blocks: 0,
-        total_blocks: 0,
-        started_at: 0,
-        updated_at: 0,
-    }
-}
-
-fn load_recovery_scan_record(db: &Connection) -> ApiResult<Option<RecoveryScanRecord>> {
-    db.query_row(
-        "SELECT run_id, status, birthday_height, gap_limit, current_height, target_height,
-                processed_blocks, total_blocks, started_at, updated_at
-         FROM groot_recovery_scans WHERE singleton = 1",
-        [],
-        |row| {
-            Ok(RecoveryScanRecord {
-                run_id: row.get(0)?,
-                status: RecoveryScanStatusDto {
-                    status: row.get(1)?,
-                    birthday_height: row.get(2)?,
-                    gap_limit: row.get(3)?,
-                    current_height: row.get(4)?,
-                    target_height: row.get(5)?,
-                    processed_blocks: row.get(6)?,
-                    total_blocks: row.get(7)?,
-                    started_at: row.get(8)?,
-                    updated_at: row.get(9)?,
-                },
-            })
-        },
-    )
-    .optional()
-    .map_err(internal)
-}
-
-fn reconcile_recovery_scan_record(
-    db: &Connection,
-    active_run_id: Option<&str>,
-) -> ApiResult<Option<RecoveryScanRecord>> {
-    let Some(mut record) = load_recovery_scan_record(db)? else {
-        return Ok(None);
-    };
-    if matches!(record.status.status.as_str(), "running" | "cancelling")
-        && active_run_id != Some(record.run_id.as_str())
-    {
-        let updated_at = now();
-        let changed = db
-            .execute(
-                "UPDATE groot_recovery_scans SET status = 'interrupted', updated_at = ?1
-                 WHERE singleton = 1 AND run_id = ?2 AND status IN ('running', 'cancelling')",
-                params![updated_at, record.run_id],
-            )
-            .map_err(internal)?;
-        if changed == 1 {
-            record.status.status = "interrupted".to_owned();
-            record.status.updated_at = updated_at;
-        } else {
-            return load_recovery_scan_record(db);
-        }
-    }
-    Ok(Some(record))
-}
-
-fn start_recovery_scan_record(
-    db: &Connection,
-    run_id: &str,
-    settings: &RecoveryScanSettingsDto,
-    target_height: u32,
-) -> ApiResult<RecoveryScanStatusDto> {
-    let started_at = now();
-    let total_blocks = target_height
-        .saturating_sub(settings.birthday_height)
-        .saturating_add(1);
-    let status = RecoveryScanStatusDto {
-        status: "running".to_owned(),
-        birthday_height: settings.birthday_height,
-        gap_limit: settings.gap_limit,
-        current_height: settings.birthday_height.saturating_sub(1),
-        target_height,
-        processed_blocks: 0,
-        total_blocks,
-        started_at,
-        updated_at: started_at,
-    };
-    db.execute(
-        "INSERT INTO groot_recovery_scans
-         (singleton, run_id, status, birthday_height, gap_limit, current_height, target_height,
-          processed_blocks, total_blocks, started_at, updated_at)
-         VALUES (1, ?1, 'running', ?2, ?3, ?4, ?5, 0, ?6, ?7, ?7)
-         ON CONFLICT(singleton) DO UPDATE SET
-           run_id = excluded.run_id, status = excluded.status,
-           birthday_height = excluded.birthday_height, gap_limit = excluded.gap_limit,
-           current_height = excluded.current_height, target_height = excluded.target_height,
-           processed_blocks = excluded.processed_blocks, total_blocks = excluded.total_blocks,
-           started_at = excluded.started_at, updated_at = excluded.updated_at",
-        params![
-            run_id,
-            status.birthday_height,
-            status.gap_limit,
-            status.current_height,
-            status.target_height,
-            status.total_blocks,
-            status.started_at,
-        ],
-    )
-    .map_err(internal)?;
-    Ok(status)
-}
-
-fn resume_recovery_scan_record(
-    db: &Connection,
-    run_id: &str,
-    previous: &RecoveryScanStatusDto,
-    target_height: u32,
-) -> ApiResult<RecoveryScanStatusDto> {
-    let updated_at = now();
-    let status = RecoveryScanStatusDto {
-        status: "running".to_owned(),
-        birthday_height: previous.birthday_height,
-        gap_limit: previous.gap_limit,
-        current_height: previous.current_height,
-        target_height,
-        processed_blocks: previous.processed_blocks,
-        total_blocks: target_height
-            .saturating_sub(previous.birthday_height)
-            .saturating_add(1),
-        started_at: previous.started_at,
-        updated_at,
-    };
-    let changed = db
-        .execute(
-            "UPDATE groot_recovery_scans SET
-               run_id = ?1, status = 'running', target_height = ?2,
-               total_blocks = ?3, updated_at = ?4
-             WHERE singleton = 1 AND status IN ('cancelled', 'interrupted', 'failed')",
-            params![
-                run_id,
-                status.target_height,
-                status.total_blocks,
-                updated_at
-            ],
-        )
-        .map_err(internal)?;
-    if changed == 1 {
-        Ok(status)
-    } else {
-        Err(api_error(
-            "scan_interrupted",
-            "Recovery scan state changed unexpectedly. Review its status before continuing.",
-        ))
-    }
-}
-
-fn update_recovery_scan_progress(
-    db: &Connection,
-    run_id: &str,
-    current_height: u32,
-    processed_blocks: u32,
-) -> ApiResult<()> {
-    let changed = db
-        .execute(
-            "UPDATE groot_recovery_scans
-             SET current_height = ?1, processed_blocks = ?2, updated_at = ?3
-             WHERE singleton = 1 AND run_id = ?4 AND status IN ('running', 'cancelling')",
-            params![current_height, processed_blocks, now(), run_id],
-        )
-        .map_err(internal)?;
-    if changed == 1 {
-        Ok(())
-    } else {
-        Err(api_error(
-            "scan_interrupted",
-            "Recovery scan state changed unexpectedly. Start the scan again.",
-        ))
-    }
-}
-
-fn finish_recovery_scan_record(db: &Connection, run_id: &str, status: &str) -> ApiResult<()> {
-    let changed = db
-        .execute(
-            "UPDATE groot_recovery_scans SET status = ?1, updated_at = ?2
-             WHERE singleton = 1 AND run_id = ?3 AND status IN ('running', 'cancelling')",
-            params![status, now(), run_id],
-        )
-        .map_err(internal)?;
-    if changed == 1 {
-        Ok(())
-    } else {
-        Err(api_error(
-            "scan_interrupted",
-            "Recovery scan state changed unexpectedly. Start the scan again.",
-        ))
-    }
-}
-
-/// Returns the minimum stop-gap needed to rediscover every address Groot has
-/// revealed, including late payments to currently unused or discarded requests.
-/// A used address resets the unused run exactly as a descriptor scan would.
-fn required_recovery_gap(db: &Connection, prospective_index: Option<u32>) -> ApiResult<u32> {
-    let mut statement = db
-        .prepare("SELECT idx, observed FROM groot_addresses ORDER BY idx")
-        .map_err(internal)?;
-    let rows = statement
-        .query_map([], |row| {
-            Ok((row.get::<_, u32>(0)?, row.get::<_, bool>(1)?))
-        })
-        .map_err(internal)?;
-    let mut previous_observed = None;
-    let mut required = 0_u32;
-    let mut highest = None;
-    for row in rows {
-        let (index, observed) = row.map_err(internal)?;
-        if highest.is_some_and(|value| index <= value) {
-            return Err(internal(
-                "Address derivation indexes are not strictly increasing.",
-            ));
-        }
-        highest = Some(index);
-        required = required.max(match previous_observed {
-            Some(previous) => index
-                .checked_sub(previous)
-                .ok_or_else(|| internal("Address derivation indexes are invalid."))?,
-            None => index
-                .checked_add(1)
-                .ok_or_else(|| internal("Address derivation index overflowed."))?,
-        });
-        if observed {
-            previous_observed = Some(index);
-        }
-    }
-    if let Some(index) = prospective_index {
-        if highest.is_some_and(|value| index <= value) {
-            return Err(internal(
-                "The next address derivation index did not advance.",
-            ));
-        }
-        required = required.max(match previous_observed {
-            Some(previous) => index
-                .checked_sub(previous)
-                .ok_or_else(|| internal("Address derivation indexes are invalid."))?,
-            None => index
-                .checked_add(1)
-                .ok_or_else(|| internal("Address derivation index overflowed."))?,
-        });
-    }
-    Ok(required)
-}
-
-fn enforce_recovery_gap(db: &Connection, prospective_index: u32) -> ApiResult<()> {
-    let configured = load_recovery_scan_settings(db)?.gap_limit;
-    let required = required_recovery_gap(db, Some(prospective_index))?;
-    if required > configured {
-        return Err(api_error(
-            "address_gap_limit_reached",
-            format!(
-                "Creating this address would exceed the configured recovery gap limit of {configured}. Increase the gap limit in Settings or wait for an existing address to receive bitcoin."
-            ),
-        ));
-    }
-    Ok(())
-}
-
-fn required_keychain_gap(
-    wallet: &Wallet,
-    keychain: KeychainKind,
-    prospective_index: u32,
-) -> ApiResult<u32> {
-    let mut observed = wallet
-        .list_output()
-        .filter(|output| output.keychain == keychain)
-        .map(|output| output.derivation_index)
-        .collect::<Vec<_>>();
-    observed.sort_unstable();
-    observed.dedup();
-    let mut previous = None;
-    let mut required = 0_u32;
-    for index in observed {
-        required = required.max(match previous {
-            Some(value) => index
-                .checked_sub(value)
-                .ok_or_else(|| internal("Change derivation indexes are invalid."))?,
-            None => index
-                .checked_add(1)
-                .ok_or_else(|| internal("Change derivation index overflowed."))?,
-        });
-        previous = Some(index);
-    }
-    required = required.max(match previous {
-        Some(value) if prospective_index > value => prospective_index - value,
-        Some(_) => 0,
-        None => prospective_index
-            .checked_add(1)
-            .ok_or_else(|| internal("Change derivation index overflowed."))?,
-    });
-    Ok(required)
-}
-
-fn enforce_change_recovery_gap(db: &Connection, wallet: &Wallet, psbt: &Psbt) -> ApiResult<()> {
-    let highest_internal = psbt
-        .unsigned_tx
-        .output
-        .iter()
-        .filter_map(|output| wallet.derivation_of_spk(output.script_pubkey.clone()))
-        .filter_map(|(keychain, index)| (keychain == KeychainKind::Internal).then_some(index))
-        .max();
-    let Some(index) = highest_internal else {
-        return Ok(());
-    };
-    let configured = load_recovery_scan_settings(db)?.gap_limit;
-    let required = required_keychain_gap(wallet, KeychainKind::Internal, index)?;
-    if required > configured {
-        return Err(api_error(
-            "address_gap_limit_reached",
-            format!(
-                "This transaction would use a change index beyond the configured recovery gap limit of {configured}. Increase the gap limit in Settings before preparing it."
-            ),
-        ));
-    }
-    Ok(())
-}
-
 fn root_key(mnemonic: &Mnemonic, credential: &str) -> ApiResult<Xpriv> {
     let seed = Zeroizing::new(mnemonic.to_seed(credential));
     Xpriv::new_master(PARAMETERS.extended_key_network, seed.as_ref()).map_err(internal)
@@ -3413,9 +3454,9 @@ fn encrypt_payload(payload: &[u8], credential: &str) -> ApiResult<EncryptedSecre
     OsRng.fill_bytes(&mut nonce);
     let mut key = [0_u8; 32];
     Argon2::default()
-        .hash_password_into(credential.as_bytes(), &salt, &mut key)
+        .hash_password_into(credential.as_bytes(), &salt, key.as_mut())
         .map_err(internal)?;
-    let cipher = Aes256Gcm::new_from_slice(&key).map_err(internal)?;
+    let cipher = Aes256Gcm::new_from_slice(key.as_ref()).map_err(internal)?;
     let ciphertext = cipher
         .encrypt(Nonce::from_slice(&nonce), payload)
         .map_err(|_| internal("Unable to encrypt wallet secret."))?;
@@ -3434,7 +3475,7 @@ fn encrypt_mnemonic(mnemonic: &Mnemonic, credential: &str) -> ApiResult<Encrypte
     encrypt_payload(words.as_bytes(), credential)
 }
 
-fn decrypt_payload(secret: EncryptedSecret, credential: &str) -> ApiResult<Vec<u8>> {
+fn decrypt_payload(secret: EncryptedSecret, credential: &str) -> ApiResult<Zeroizing<Vec<u8>>> {
     if secret.version != 1 {
         return Err(internal("Unsupported encrypted secret version."));
     }
@@ -3444,15 +3485,16 @@ fn decrypt_payload(secret: EncryptedSecret, credential: &str) -> ApiResult<Vec<u
         return Err(internal("The encrypted wallet secret is malformed."));
     }
     let ciphertext = BASE64.decode(secret.ciphertext).map_err(internal)?;
-    let mut key = [0_u8; 32];
+    let mut key = Zeroizing::new([0_u8; 32]);
     Argon2::default()
-        .hash_password_into(credential.as_bytes(), &salt, &mut key)
+        .hash_password_into(credential.as_bytes(), &salt, key.as_mut())
         .map_err(internal)?;
-    let cipher = Aes256Gcm::new_from_slice(&key).map_err(internal)?;
-    let plaintext = cipher
-        .decrypt(Nonce::from_slice(&nonce), ciphertext.as_ref())
-        .map_err(|_| api_error("invalid_credential", "Incorrect passphrase / PIN."))?;
-    key.zeroize();
+    let cipher = Aes256Gcm::new_from_slice(key.as_ref()).map_err(internal)?;
+    let plaintext = Zeroizing::new(
+        cipher
+            .decrypt(Nonce::from_slice(&nonce), ciphertext.as_ref())
+            .map_err(|_| api_error("invalid_credential", "Incorrect passphrase / PIN."))?,
+    );
     Ok(plaintext)
 }
 
@@ -3483,79 +3525,9 @@ fn decrypt_encrypted_mnemonic(secret: EncryptedSecret, credential: &str) -> ApiR
     parse_mnemonic_bytes(decrypt_payload(secret, credential)?)
 }
 
-fn parse_mnemonic_bytes(plaintext: Vec<u8>) -> ApiResult<Mnemonic> {
-    let mut words = String::from_utf8(plaintext).map_err(internal)?;
-    let mnemonic = Mnemonic::parse(&words).map_err(internal);
-    words.zeroize();
-    mnemonic
-}
-
-fn policy_api_error(error: PolicyError) -> ApiError {
-    let message = match error {
-        PolicyError::InvalidName => "Enter a wallet name and labels for every signer.",
-        PolicyError::InvalidCosignerCount => "V1 requires between 3 and 7 signers.",
-        PolicyError::UnsafeThreshold => "At least 2 signatures are required and the threshold cannot exceed the number of signers.",
-        PolicyError::DuplicateFingerprint => "Every signer must have a unique master fingerprint.",
-        PolicyError::DuplicateXpub => "Every signer must have a unique account xpub.",
-        PolicyError::InvalidDescriptor => "A key or descriptor is invalid. Use a regtest BIP48 account tpub.",
-    };
-    api_error(error.code(), message)
-}
-
-fn bsms_api_error(error: BsmsError) -> ApiError {
-    let message = match error {
-        BsmsError::TooLarge => "BSMS descriptor records must be 256 KiB or smaller.",
-        BsmsError::PrivateMaterial => {
-            "A BSMS descriptor record must never contain private key material."
-        }
-        BsmsError::UnsupportedVersion => "Only the BIP129 BSMS 1.0 descriptor record is supported.",
-        BsmsError::UnsupportedPaths => {
-            "This wallet requires the standard BSMS receive/change paths /0/* and /1/*."
-        }
-        BsmsError::DescriptorMismatch => {
-            "The receive and change descriptors do not describe the same wallet."
-        }
-        BsmsError::InvalidEncoding | BsmsError::InvalidDescriptor => {
-            "Enter a valid public BSMS 1.0 descriptor record."
-        }
-    };
-    api_error(error.code(), message)
-}
-
-fn public_descriptor_api_error(error: BsmsError) -> ApiError {
-    let message = match error {
-        BsmsError::TooLarge => "Public descriptor backups must be 256 KiB or smaller.",
-        BsmsError::PrivateMaterial => {
-            "A public descriptor backup must never contain private key material."
-        }
-        BsmsError::UnsupportedVersion => "This descriptor backup version is not supported.",
-        BsmsError::UnsupportedPaths => {
-            "The backup must contain standard receive/change paths /0/* and /1/*."
-        }
-        BsmsError::DescriptorMismatch => {
-            "The receive and change descriptors do not describe the same wallet."
-        }
-        BsmsError::InvalidEncoding | BsmsError::InvalidDescriptor => {
-            "Enter a valid BSMS, Groot JSON, or public descriptor backup."
-        }
-    };
-    api_error(error.code(), message)
-}
-
-fn ur_api_error(error: UrTransportError) -> ApiError {
-    let message = match error {
-        UrTransportError::Empty => "Scan at least one crypto-psbt UR frame.",
-        UrTransportError::TooLarge | UrTransportError::TooManyFrames => {
-            "The animated QR payload exceeds Groot's safety limit."
-        }
-        UrTransportError::WrongType => "Scan a crypto-psbt UR, not a different QR payload type.",
-        UrTransportError::Incomplete => "Keep scanning. More animated QR frames are required.",
-        UrTransportError::InvalidPsbt => "The QR payload is not a valid PSBT.",
-        UrTransportError::InvalidFrame | UrTransportError::InvalidCbor => {
-            "The animated QR frame is malformed."
-        }
-    };
-    api_error(error.code(), message)
+fn parse_mnemonic_bytes(plaintext: Zeroizing<Vec<u8>>) -> ApiResult<Mnemonic> {
+    let words = std::str::from_utf8(&plaintext).map_err(internal)?;
+    Mnemonic::parse(words).map_err(internal)
 }
 
 #[tauri::command]
@@ -3566,30 +3538,6 @@ pub fn ur_encode_psbt(psbt: String, fragment_bytes: usize) -> ApiResult<Vec<Stri
 #[tauri::command]
 pub fn ur_decode_psbt(frames: Vec<String>) -> ApiResult<String> {
     ur_transport::decode_psbt(&frames).map_err(ur_api_error)
-}
-
-fn external_signer_api_error(error: ExternalSignerError) -> ApiError {
-    let message = match error {
-        ExternalSignerError::TooLarge => "Signer imports must be 256 KiB or smaller.",
-        ExternalSignerError::PrivateMaterial => {
-            "Private keys, seeds, and recovery words must never be imported into Groot."
-        }
-        ExternalSignerError::InvalidFormat => {
-            "Use a BIP84 descriptor or a supported public-key JSON export."
-        }
-        ExternalSignerError::InvalidLabel => "Enter a signer label of 1 to 48 characters.",
-        ExternalSignerError::InvalidFingerprint => {
-            "The signer fingerprint must contain exactly 8 hexadecimal characters."
-        }
-        ExternalSignerError::InvalidDerivation => {
-            "Use the test-chain BIP84 account path m/84'/1'/0'."
-        }
-        ExternalSignerError::WrongNetwork => "Use a test-chain account tpub, not a mainnet xpub.",
-        ExternalSignerError::InvalidDescriptor => {
-            "The descriptor must be canonical public-only BIP84 single-sig."
-        }
-    };
-    api_error(error.code(), message)
 }
 
 fn reject_virtual_cosigners(cosigners: &[CosignerInput]) -> ApiResult<()> {
@@ -3603,45 +3551,6 @@ fn reject_virtual_cosigners(cosigners: &[CosignerInput]) -> ApiResult<()> {
         ));
     }
     Ok(())
-}
-
-fn proposal_api_error(error: crate::proposal::ProposalError) -> ApiError {
-    use crate::proposal::ProposalError;
-
-    let message = match error {
-        ProposalError::MalformedPsbt => "The PSBT is malformed.",
-        ProposalError::PsbtTooLarge => "The PSBT exceeds Groot's size limit.",
-        ProposalError::ProposalMismatch => {
-            "The PSBT does not match the transaction you reviewed. No signatures were changed."
-        }
-        ProposalError::UnknownSigner => {
-            "The PSBT contains a signature from an unknown signer. No signatures were changed."
-        }
-        ProposalError::UnsupportedSighash => {
-            "The PSBT uses an unsupported signature type. Groot accepts only SIGHASH_ALL. No signatures were changed."
-        }
-        ProposalError::InvalidSignature => {
-            "The PSBT contains an invalid signature. No signatures were changed."
-        }
-        ProposalError::PrematureFinalization => {
-            "The PSBT was finalized outside Groot. Import a partially signed PSBT instead."
-        }
-        ProposalError::NoInputs => "The PSBT has no transaction inputs.",
-        ProposalError::NoNewSignatures => {
-            "This signer has already signed this proposal. No signatures were changed."
-        }
-        ProposalError::SignatureNotFound => {
-            "This signer has no complete signature in the current proposal. No signatures were changed."
-        }
-        ProposalError::MergeFailed => {
-            "Groot could not safely merge the signed PSBT. No signatures were changed."
-        }
-    };
-    api_error(error.code(), message)
-}
-
-fn recovery_api_error(error: RecoveryError) -> ApiError {
-    api_error(error.code(), error)
 }
 
 fn read_multisig_metadata(app: &AppHandle) -> ApiResult<MultisigWalletDto> {
@@ -4196,294 +4105,6 @@ fn proposal_dto(
     })
 }
 
-fn proposal_change_details(
-    wallet: &Wallet,
-    psbt: &Psbt,
-    recipient: &str,
-    amount: u64,
-) -> ApiResult<(u64, Vec<String>)> {
-    let recipient_script = Address::from_str(recipient)
-        .map_err(|_| internal("The stored proposal recipient is invalid."))?
-        .require_network(NETWORK)
-        .map_err(|_| internal("The stored proposal recipient is on the wrong network."))?
-        .script_pubkey();
-    let self_spend = amount == 0;
-    let mut recipient_matches = 0_usize;
-    let mut change = 0_u64;
-    let mut change_addresses = Vec::new();
-    for output in &psbt.unsigned_tx.output {
-        let matches_recipient = output.script_pubkey == recipient_script
-            && (self_spend || output.value.to_sat() == amount);
-        if matches_recipient {
-            recipient_matches += 1;
-        }
-        if self_spend || !matches_recipient {
-            if !wallet.is_mine(output.script_pubkey.clone()) {
-                return Err(api_error(
-                    "proposal_mismatch",
-                    "A non-recipient proposal output is not controlled by this wallet.",
-                ));
-            }
-            change = change
-                .checked_add(output.value.to_sat())
-                .ok_or_else(|| internal("The proposal output total overflowed."))?;
-            change_addresses.push(
-                Address::from_script(&output.script_pubkey, NETWORK)
-                    .map_err(|_| internal("A proposal change output has no displayable address."))?
-                    .to_string(),
-            );
-        }
-    }
-    if recipient_matches != 1 {
-        return Err(api_error(
-            "proposal_mismatch",
-            "The stored proposal recipient does not match exactly one transaction output.",
-        ));
-    }
-    Ok((change, change_addresses))
-}
-
-fn proposal_recipient_wallet_details(
-    wallet: &Wallet,
-    psbt: &Psbt,
-    recipient: &str,
-    amount: u64,
-) -> ApiResult<(bool, Vec<String>)> {
-    let recipient_script = Address::from_str(recipient)
-        .map_err(|_| internal("The stored proposal recipient is invalid."))?
-        .require_network(NETWORK)
-        .map_err(|_| internal("The stored proposal recipient is on the wrong network."))?
-        .script_pubkey();
-    let self_spend = amount == 0;
-    let output_indexes = psbt
-        .unsigned_tx
-        .output
-        .iter()
-        .enumerate()
-        .filter_map(|(index, output)| {
-            (output.script_pubkey == recipient_script
-                && (self_spend || output.value.to_sat() == amount))
-                .then_some(index)
-        })
-        .collect::<Vec<_>>();
-    if output_indexes.len() != 1 {
-        return Err(api_error(
-            "proposal_mismatch",
-            "The stored proposal recipient does not match exactly one transaction output.",
-        ));
-    }
-    if wallet.derivation_of_spk(recipient_script).is_none() {
-        return Ok((false, Vec::new()));
-    }
-    let output = psbt
-        .outputs
-        .get(output_indexes[0])
-        .ok_or_else(|| internal("The proposal recipient output is missing PSBT metadata."))?;
-    Ok((
-        true,
-        unique_derivation_paths(
-            output
-                .bip32_derivation
-                .values()
-                .map(|(_, path)| path.to_string()),
-        ),
-    ))
-}
-
-fn proposal_wallet_controlled_output_amount(
-    wallet: &Wallet,
-    psbt: &Psbt,
-    recipient_is_wallet_owned: bool,
-) -> ApiResult<Option<u64>> {
-    if !recipient_is_wallet_owned {
-        return Ok(None);
-    }
-    psbt.unsigned_tx
-        .output
-        .iter()
-        .filter(|output| wallet.is_mine(output.script_pubkey.clone()))
-        .try_fold(0_u64, |total, output| {
-            total
-                .checked_add(output.value.to_sat())
-                .ok_or_else(|| internal("The wallet-controlled output total overflowed."))
-        })
-        .map(Some)
-}
-
-fn proposal_change_derivation_paths(
-    psbt: &Psbt,
-    change_addresses: &[String],
-) -> ApiResult<Vec<Vec<String>>> {
-    change_addresses
-        .iter()
-        .map(|address| {
-            let script = Address::from_str(address)
-                .map_err(|_| internal("A proposal change address is invalid."))?
-                .require_network(NETWORK)
-                .map_err(|_| internal("A proposal change address is on the wrong network."))?
-                .script_pubkey();
-            let output_index = psbt
-                .unsigned_tx
-                .output
-                .iter()
-                .position(|output| output.script_pubkey == script)
-                .ok_or_else(|| {
-                    internal("A proposal change address is missing from the transaction.")
-                })?;
-            let output = psbt
-                .outputs
-                .get(output_index)
-                .ok_or_else(|| internal("A proposal change output is missing PSBT metadata."))?;
-            Ok(unique_derivation_paths(
-                output
-                    .bip32_derivation
-                    .values()
-                    .map(|(_, path)| path.to_string()),
-            ))
-        })
-        .collect()
-}
-
-fn unique_derivation_paths(paths: impl Iterator<Item = String>) -> Vec<String> {
-    paths
-        .collect::<std::collections::BTreeSet<_>>()
-        .into_iter()
-        .collect()
-}
-
-fn validate_proposal_fee(psbt: &Psbt, expected_fee: u64) -> ApiResult<()> {
-    let actual = proposal_fee_amount(psbt)?;
-    if actual != expected_fee {
-        return Err(api_error(
-            "proposal_mismatch",
-            "The stored proposal fee does not match the transaction.",
-        ));
-    }
-    Ok(())
-}
-
-fn proposal_fee_amount(psbt: &Psbt) -> ApiResult<u64> {
-    let mut input_total = 0_u64;
-    for index in 0..psbt.unsigned_tx.input.len() {
-        let value = psbt
-            .get_utxo_for(index)
-            .ok_or_else(|| {
-                api_error(
-                    "proposal_mismatch",
-                    "A proposal input is missing its authenticated previous output.",
-                )
-            })?
-            .value
-            .to_sat();
-        input_total = input_total.checked_add(value).ok_or_else(|| {
-            api_error("proposal_mismatch", "The proposal input total overflowed.")
-        })?;
-    }
-    let output_total = psbt
-        .unsigned_tx
-        .output
-        .iter()
-        .try_fold(0_u64, |total, output| {
-            total.checked_add(output.value.to_sat()).ok_or_else(|| {
-                api_error("proposal_mismatch", "The proposal output total overflowed.")
-            })
-        })?;
-    input_total.checked_sub(output_total).ok_or_else(|| {
-        api_error(
-            "proposal_mismatch",
-            "The proposal spends more than its authenticated inputs.",
-        )
-    })
-}
-
-fn proposal_transaction_details(
-    wallet: &Wallet,
-    psbt: &Psbt,
-    fee: u64,
-) -> ApiResult<(Vec<ProposalInputDto>, f64, u32, bool)> {
-    if psbt.unsigned_tx.input.is_empty() || psbt.inputs.len() != psbt.unsigned_tx.input.len() {
-        return Err(api_error(
-            "proposal_mismatch",
-            "The proposal has no complete input set.",
-        ));
-    }
-    let mut seen = std::collections::HashSet::new();
-    let mut satisfaction_weight = Weight::ZERO;
-    let mut inputs = Vec::with_capacity(psbt.unsigned_tx.input.len());
-    for (index, txin) in psbt.unsigned_tx.input.iter().enumerate() {
-        if !seen.insert(txin.previous_output) {
-            return Err(api_error(
-                "proposal_mismatch",
-                "The proposal contains a duplicate input.",
-            ));
-        }
-        let utxo = psbt.get_utxo_for(index).ok_or_else(|| {
-            api_error(
-                "proposal_mismatch",
-                "A proposal input is missing its authenticated previous output.",
-            )
-        })?;
-        let (keychain, _) = wallet
-            .derivation_of_spk(utxo.script_pubkey)
-            .ok_or_else(|| {
-                api_error(
-                    "proposal_mismatch",
-                    "A proposal input is not controlled by this wallet.",
-                )
-            })?;
-        satisfaction_weight = satisfaction_weight
-            .checked_add(
-                wallet
-                    .public_descriptor(keychain)
-                    .max_weight_to_satisfy()
-                    .map_err(internal)?,
-            )
-            .ok_or_else(|| internal("The proposal weight overflowed."))?;
-        inputs.push(ProposalInputDto {
-            outpoint: txin.previous_output.to_string(),
-            amount: utxo.value.to_sat(),
-            sequence: txin.sequence.to_consensus_u32(),
-            derivation_paths: unique_derivation_paths(
-                psbt.inputs[index]
-                    .bip32_derivation
-                    .values()
-                    .map(|(_, path)| path.to_string()),
-            ),
-        });
-    }
-    let signed_weight = psbt
-        .unsigned_tx
-        .weight()
-        .checked_add(satisfaction_weight)
-        .ok_or_else(|| internal("The proposal weight overflowed."))?;
-    let vbytes = signed_weight.to_vbytes_ceil();
-    if vbytes == 0 {
-        return Err(api_error(
-            "proposal_mismatch",
-            "The proposal has an invalid signed size.",
-        ));
-    }
-    let fee_rate = ((fee as f64 / vbytes as f64) * 100.0).round() / 100.0;
-    Ok((
-        inputs,
-        fee_rate,
-        psbt.unsigned_tx.lock_time.to_consensus_u32(),
-        psbt.unsigned_tx
-            .input
-            .iter()
-            .any(|input| input.sequence.is_rbf()),
-    ))
-}
-
-fn checked_payment_total(amount: u64, fee: u64) -> ApiResult<u64> {
-    amount.checked_add(fee).ok_or_else(|| {
-        api_error(
-            "invalid_amount",
-            "The payment total exceeds the amount range.",
-        )
-    })
-}
-
 fn selection_impact(
     db: &Connection,
     wallet: &Wallet,
@@ -5001,7 +4622,11 @@ fn load_acceleration_review(
                 original_fee_rate: row.get::<_, Option<f64>>(3)?.unwrap_or(0.0),
                 minimum_fee_rate: row.get::<_, Option<f64>>(4)?.unwrap_or(0.0),
                 target_fee_rate: row.get::<_, Option<f64>>(5)?.unwrap_or(resulting_fee_rate),
-                incremental_fee: replacement_fee.saturating_sub(original_fee),
+                incremental_fee: if method == AccelerationMethod::Cpfp {
+                    replacement_fee
+                } else {
+                    replacement_fee.saturating_sub(original_fee)
+                },
                 recommendation_source: row
                     .get::<_, Option<String>>(6)?
                     .unwrap_or_else(|| "legacy".to_owned()),
@@ -5010,6 +4635,78 @@ fn load_acceleration_review(
     )
     .optional()
     .map_err(internal)
+}
+
+fn proposal_acceleration_method(
+    db: &Connection,
+    proposal_id: &str,
+) -> ApiResult<Option<AccelerationMethod>> {
+    db.query_row(
+        "SELECT method FROM groot_accelerations WHERE proposal_id = ?1",
+        params![proposal_id],
+        |row| row.get::<_, String>(0),
+    )
+    .optional()
+    .map_err(internal)?
+    .map(|method| match method.as_str() {
+        "rbf" => Ok(AccelerationMethod::Rbf),
+        "cpfp" => Ok(AccelerationMethod::Cpfp),
+        _ => Err(api_error(
+            "proposal_mismatch",
+            "The stored acceleration method is invalid.",
+        )),
+    })
+    .transpose()
+}
+
+fn validate_rbf_original_intent(
+    db: &Connection,
+    wallet: &Wallet,
+    proposal_id: &str,
+    recipient: &str,
+    amount: u64,
+) -> ApiResult<()> {
+    let original_txid = db
+        .query_row(
+            "SELECT original_txid FROM groot_accelerations WHERE proposal_id = ?1 AND method = 'rbf'",
+            params![proposal_id],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(internal)?;
+    let Some(original_txid) = original_txid else {
+        return Ok(());
+    };
+    let txid = Txid::from_str(&original_txid).map_err(|_| {
+        api_error(
+            "proposal_mismatch",
+            "The stored replacement transaction reference is invalid.",
+        )
+    })?;
+    let original = wallet.get_tx(txid).ok_or_else(|| {
+        api_error(
+            "proposal_mismatch",
+            "The original transaction is unavailable for replacement verification.",
+        )
+    })?;
+    let external = original
+        .tx_node
+        .tx
+        .output
+        .iter()
+        .filter(|output| !wallet.is_mine(output.script_pubkey.clone()))
+        .collect::<Vec<_>>();
+    let valid = external.len() == 1
+        && external[0].value.to_sat() == amount
+        && Address::from_script(&external[0].script_pubkey, NETWORK)
+            .is_ok_and(|address| address.to_string() == recipient);
+    if !valid {
+        return Err(api_error(
+            "proposal_mismatch",
+            "The replacement no longer matches the original recipient and payment amount.",
+        ));
+    }
+    Ok(())
 }
 
 fn load_payment_proposal_dto(
@@ -5143,22 +4840,6 @@ fn write_private_json(path: &Path, value: &impl Serialize) -> ApiResult<()> {
     result
 }
 
-fn secure_store_error(error: SecureStoreError) -> ApiError {
-    match error {
-        SecureStoreError::InvalidCredential => {
-            api_error("invalid_credential", "Incorrect passphrase / PIN.")
-        }
-        SecureStoreError::Corrupt => api_error(
-            "wallet_corrupt",
-            "The protected wallet secret is corrupt. Restore from your backup.",
-        ),
-        SecureStoreError::Unavailable => api_error(
-            "secure_storage_unavailable",
-            "Encrypted wallet storage is unavailable. Check access to Groot's application data and try again. The wallet stayed locked.",
-        ),
-    }
-}
-
 fn persist_secret_material(path: &Path, material: &[u8], credential: &str) -> ApiResult<()> {
     secure_store::store(path, material, credential).map_err(secure_store_error)
 }
@@ -5169,6 +4850,21 @@ fn cleanup_failed_profile(dir: &Path) -> ApiResult<()> {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
         Err(error) => Err(internal(error)),
     }
+}
+
+fn finish_new_profile_attempt(
+    state: &AppState,
+    wallet_id: Uuid,
+    directory: &Path,
+    succeeded: bool,
+) -> ApiResult<()> {
+    let cleanup = if succeeded {
+        Ok(())
+    } else {
+        state.node_auth.lock().map_err(internal)?.remove(&wallet_id);
+        cleanup_failed_profile(directory)
+    };
+    cleanup
 }
 
 fn read_private_text(path: &Path) -> ApiResult<String> {
@@ -5192,6 +4888,7 @@ fn read_private_text(path: &Path) -> ApiResult<String> {
 
 fn create_from_mnemonic(
     app: &AppHandle,
+    state: &State<'_, AppState>,
     name: String,
     mnemonic: Mnemonic,
     credential: &str,
@@ -5208,7 +4905,8 @@ fn create_from_mnemonic(
     let (id, dir) = prepare_profile_directory(app)?;
     let result = (|| {
         let (external, internal_template) = watch_templates(&mnemonic, credential)?;
-        let mut db = open_wallet_database(&dir.join("wallet.sqlite"))?;
+        let permit = database_open_permit_for_new_wallet(state)?;
+        let mut db = open_wallet_database(&dir.join("wallet.sqlite"), &permit)?;
         init_app_schema(&db)?;
         let wallet = Wallet::create(external, internal_template)
             .network(NETWORK)
@@ -5216,6 +4914,9 @@ fn create_from_mnemonic(
             .map_err(internal)?;
         let words = Zeroizing::new(mnemonic.to_string());
         persist_secret_material(&dir.join("secret.json"), words.as_bytes(), credential)?;
+        profile_commands::persist_mainnet_node_admission_for_new_profile(
+            app, state, id, credential,
+        )?;
         commit_profile(
             app,
             WalletProfile {
@@ -5232,9 +4933,7 @@ fn create_from_mnemonic(
             &wallet.public_descriptor(KeychainKind::External).to_string(),
         )
     })();
-    if result.is_err() {
-        cleanup_failed_profile(&dir)?;
-    }
+    finish_new_profile_attempt(state, id, &dir, result.is_ok())?;
     result
 }
 
@@ -5391,11 +5090,23 @@ fn sync_wallet_with_core(
 ) -> ApiResult<WalletSnapshotDto> {
     ensure_foreground_sync_not_cancelled(cancel)?;
     let rpc = Arc::new(rpc_client(app, state)?);
-    let target_height = u32::try_from(checked_block_height(rpc.as_ref())?)
-        .map_err(|_| internal("The node height exceeds the supported sync range."))?;
     let mut wallet = load_wallet(db)?;
-    let wallet_tip = wallet.latest_checkpoint();
+    let (chain, _) = checked_core_chain(rpc.as_ref())?;
+    ensure_core_ready_for_wallet_history(
+        chain.blocks,
+        chain.initial_block_download,
+        wallet.latest_checkpoint().height(),
+    )?;
+    let target_height = u32::try_from(chain.blocks)
+        .map_err(|_| internal("The node height exceeds the supported sync range."))?;
+    let (wallet_tip, _) = rewind_stale_core_checkpoints(rpc.as_ref(), &wallet)?;
     let start_height = wallet_tip.height();
+    ensure_core_history_available(
+        chain.pruned,
+        chain.prune_height,
+        start_height.saturating_add(1),
+    )?;
+    let scan_birthday = load_recovery_scan_settings(db)?.birthday_height;
     update_core_sync_status(
         &state.sync_status,
         start_height,
@@ -5405,7 +5116,7 @@ fn sync_wallet_with_core(
     let mut emitter = Emitter::new(
         rpc,
         wallet_tip,
-        0,
+        scan_birthday,
         wallet
             .transactions()
             .filter(|tx| tx.chain_position.is_unconfirmed()),
@@ -5579,13 +5290,24 @@ fn full_rescan_loaded_wallet(
     run_id: &str,
     cancel: &AtomicBool,
 ) -> ApiResult<()> {
-    let (tip, genesis) = checked_chain_identity(rpc.as_ref())?;
+    let (chain, genesis) = checked_core_chain(rpc.as_ref())?;
+    let tip = chain.blocks;
+    ensure_core_ready_for_wallet_history(
+        tip,
+        chain.initial_block_download,
+        wallet.latest_checkpoint().height(),
+    )?;
     if u64::from(settings.birthday_height) > tip {
         return Err(api_error(
             "invalid_scan_settings",
             "Wallet birthday cannot be above the node's current block height.",
         ));
     }
+    ensure_recovery_scan_history_available(
+        chain.pruned,
+        chain.prune_height,
+        settings.birthday_height,
+    )?;
     let target_height = u32::try_from(tip)
         .map_err(|_| internal("The node height exceeds the supported recovery range."))?;
     let previous = reconcile_recovery_scan_record(db, None)?.map(|record| record.status);
@@ -5625,14 +5347,23 @@ fn full_rescan_loaded_wallet(
         } else {
             start_recovery_scan_record(db, run_id, settings, target_height)?;
             (
-                CheckPoint::new(BlockId {
-                    height: 0,
-                    hash: genesis,
-                }),
+                recovery_scan_checkpoint(rpc.as_ref(), genesis, settings.birthday_height)?,
                 settings.birthday_height,
                 0,
             )
         };
+    db.execute(
+        "DELETE FROM bdk_blocks WHERE block_height > ?1",
+        params![checkpoint.height()],
+    )
+    .map_err(internal)?;
+    *wallet = load_wallet(db)?;
+    wallet
+        .apply_update(Update {
+            chain: Some(checkpoint.clone()),
+            ..Default::default()
+        })
+        .map_err(internal)?;
     let expected_mempool = wallet
         .transactions()
         .filter(|tx| tx.chain_position.is_unconfirmed());
@@ -5779,254 +5510,6 @@ fn transaction_kind(received: bool, has_external_value_output: bool) -> &'static
     } else {
         "payment"
     }
-}
-
-fn address_rows(db: &Connection, multisig: bool) -> ApiResult<Vec<ReceiveAddressDto>> {
-    let mut statement = db
-        .prepare(
-            "SELECT a.idx, a.address, a.label, a.created_at, a.state,
-                    verification.verified_at, verification.signer_fingerprint,
-                    verification.displayed_address
-             FROM groot_addresses a
-             LEFT JOIN groot_address_verifications verification
-               ON verification.id = (
-                 SELECT latest.id
-                 FROM groot_address_verifications latest
-                 WHERE latest.address_idx = a.idx
-                 ORDER BY latest.verified_at DESC, latest.id DESC
-                 LIMIT 1
-               )
-             ORDER BY a.idx DESC",
-        )
-        .map_err(internal)?;
-    let rows = statement
-        .query_map([], |row| {
-            let address: String = row.get(1)?;
-            let (hardware_verified_at, hardware_verified_by) =
-                validated_hardware_verification_metadata(
-                    NETWORK,
-                    &address,
-                    row.get::<_, Option<String>>(7)?.as_deref(),
-                    row.get(5)?,
-                    row.get(6)?,
-                );
-            Ok(ReceiveAddressDto {
-                id: row.get(0)?,
-                testnet_alias: regtest_testnet_address_alias(&address),
-                address,
-                label: row.get(2)?,
-                labels: label_provenance::labels_for_subject(
-                    db,
-                    "address",
-                    &row.get::<_, u32>(0)?.to_string(),
-                )?
-                .into_iter()
-                .map(|label| label.text)
-                .collect(),
-                created: row.get::<_, u64>(3)?.to_string(),
-                status: row.get(4)?,
-                derivation_path: if multisig {
-                    format!("{MULTISIG_ACCOUNT_PATH}/0/{}", row.get::<_, u32>(0)?)
-                } else {
-                    format!("{SINGLESIG_ACCOUNT_PATH}/0/{}", row.get::<_, u32>(0)?)
-                },
-                hardware_verified_at,
-                hardware_verified_by,
-            })
-        })
-        .map_err(internal)?;
-    rows.collect::<Result<Vec<_>, _>>().map_err(internal)
-}
-
-fn record_address_verification(
-    db: &mut Connection,
-    address_id: u32,
-    identity: &VerifiedHardwareIdentity,
-    displayed_address: &str,
-    multisig: bool,
-) -> ApiResult<ReceiveAddressDto> {
-    let verified_at = now();
-    let transaction = db.transaction().map_err(internal)?;
-    transaction
-        .execute(
-            "INSERT INTO groot_address_verifications
-                (address_idx, signer_fingerprint, device_type, displayed_address, verified_at)
-             VALUES (?1, ?2, ?3, ?4, ?5)",
-            params![
-                address_id,
-                identity.fingerprint.to_ascii_lowercase(),
-                identity.device_type.to_ascii_lowercase(),
-                displayed_address,
-                verified_at
-            ],
-        )
-        .map_err(internal)?;
-    transaction.commit().map_err(internal)?;
-    address_rows(db, multisig)?
-        .into_iter()
-        .find(|address| address.id == address_id)
-        .ok_or_else(|| internal("Verified address disappeared from wallet storage."))
-}
-
-fn records_interactive_policy_verification(device_type: &str) -> bool {
-    matches!(
-        device_type.to_ascii_lowercase().as_str(),
-        "ledger" | "bitbox02" | "jade"
-    )
-}
-
-fn require_matching_policy_device_type(
-    expected_device_type: Option<&str>,
-    actual_device_type: &str,
-) -> ApiResult<()> {
-    let Some(expected) = expected_device_type else {
-        return Ok(());
-    };
-    if records_interactive_policy_verification(expected)
-        && !expected.eq_ignore_ascii_case(actual_device_type)
-    {
-        return Err(api_error(
-            "unknown_signer",
-            "The connected hardware model does not match this saved signer.",
-        ));
-    }
-    Ok(())
-}
-
-fn record_signer_policy_verification(
-    db: &Connection,
-    identity: &VerifiedHardwareIdentity,
-    displayed_address: &str,
-) -> ApiResult<SignerPolicyVerificationDto> {
-    if !records_interactive_policy_verification(&identity.device_type) {
-        return Err(api_error(
-            "invalid_hardware_request",
-            "This signer does not use Groot's interactive wallet-policy verification flow.",
-        ));
-    }
-    let verified_at = now();
-    let signer_fingerprint = identity.fingerprint.to_ascii_lowercase();
-    let device_type = identity.device_type.to_ascii_lowercase();
-    db.execute(
-        "INSERT INTO groot_signer_policy_verifications
-            (signer_fingerprint, device_type, scope, displayed_address, verified_at)
-         VALUES (?1, ?2, 'policy_and_address', ?3, ?4)",
-        params![
-            signer_fingerprint,
-            device_type,
-            displayed_address,
-            verified_at
-        ],
-    )
-    .map_err(internal)?;
-    Ok(SignerPolicyVerificationDto {
-        signer_fingerprint,
-        device_type,
-        verified_at: verified_at.to_string(),
-        scope: "policy_and_address",
-        displayed_address: Some(displayed_address.to_owned()),
-    })
-}
-
-fn policy_verification_key(wallet: &MultisigWalletDto, fingerprint: &str) -> ApiResult<String> {
-    Ok(format!(
-        "{}:{}",
-        descriptor_checksum(&wallet.external_descriptor)?,
-        fingerprint.to_ascii_lowercase()
-    ))
-}
-
-fn signer_policy_verification_rows(db: &Connection) -> ApiResult<Vec<SignerPolicyVerificationDto>> {
-    let mut statement = db
-        .prepare(
-            "SELECT signer_fingerprint, device_type, verified_at, displayed_address
-             FROM groot_signer_policy_verifications verification
-             WHERE verification.id = (
-               SELECT latest.id
-               FROM groot_signer_policy_verifications latest
-               WHERE latest.signer_fingerprint = verification.signer_fingerprint
-               ORDER BY latest.verified_at DESC, latest.id DESC
-               LIMIT 1
-             )
-             ORDER BY signer_fingerprint ASC",
-        )
-        .map_err(internal)?;
-    let rows = statement
-        .query_map([], |row| {
-            Ok(SignerPolicyVerificationDto {
-                signer_fingerprint: row.get(0)?,
-                device_type: row.get(1)?,
-                verified_at: row.get::<_, u64>(2)?.to_string(),
-                scope: "policy_and_address",
-                displayed_address: Some(row.get(3)?),
-            })
-        })
-        .map_err(internal)?;
-    let mut verifications = rows.collect::<Result<Vec<_>, _>>().map_err(internal)?;
-    let mut acknowledgements = db
-        .prepare(
-            "SELECT signer_fingerprint, device_type, acknowledged_at
-             FROM groot_signer_policy_acknowledgements acknowledgement
-             WHERE acknowledgement.id = (
-               SELECT latest.id
-               FROM groot_signer_policy_acknowledgements latest
-               WHERE latest.signer_fingerprint = acknowledgement.signer_fingerprint
-               ORDER BY latest.acknowledged_at DESC, latest.id DESC
-               LIMIT 1
-             )
-             ORDER BY signer_fingerprint ASC",
-        )
-        .map_err(internal)?;
-    let rows = acknowledgements
-        .query_map([], |row| {
-            Ok(SignerPolicyVerificationDto {
-                signer_fingerprint: row.get(0)?,
-                device_type: row.get(1)?,
-                verified_at: row.get::<_, u64>(2)?.to_string(),
-                scope: "policy_file_acknowledgement",
-                displayed_address: None,
-            })
-        })
-        .map_err(internal)?;
-    verifications.extend(rows.collect::<Result<Vec<_>, _>>().map_err(internal)?);
-    Ok(verifications)
-}
-
-fn has_signer_policy_verification(
-    verifications: &[SignerPolicyVerificationDto],
-    identity: &VerifiedHardwareIdentity,
-) -> bool {
-    verifications.iter().any(|verification| {
-        verification.scope == "policy_and_address"
-            && verification
-                .signer_fingerprint
-                .eq_ignore_ascii_case(&identity.fingerprint)
-            && verification
-                .device_type
-                .eq_ignore_ascii_case(&identity.device_type)
-    })
-}
-
-fn has_coldcard_policy_acknowledgement(
-    verifications: &[SignerPolicyVerificationDto],
-    identity: &VerifiedHardwareIdentity,
-) -> bool {
-    identity.device_type.eq_ignore_ascii_case("coldcard")
-        && verifications.iter().any(|verification| {
-            verification.scope == "policy_file_acknowledgement"
-                && verification
-                    .signer_fingerprint
-                    .eq_ignore_ascii_case(&identity.fingerprint)
-                && verification.device_type.eq_ignore_ascii_case("coldcard")
-        })
-}
-
-fn supports_coldcard_policy_acknowledgement(signer: &CosignerInput) -> bool {
-    signer
-        .device_type
-        .as_deref()
-        .is_some_and(|device_type| device_type.eq_ignore_ascii_case("coldcard"))
-        || (signer.device_type.is_none() && signer.source == CosignerSource::File)
 }
 
 #[tauri::command]
@@ -6418,140 +5901,6 @@ fn enqueue_snapshot_notifications(db: &Connection, snapshot: &WalletSnapshotDto)
 #[path = "wallet/profile_commands.rs"]
 pub(crate) mod profile_commands;
 
-fn hardware_api_error(error: HardwareError) -> ApiError {
-    let message = match error {
-        HardwareError::InvalidArgument => "The hardware signer request was rejected.",
-        HardwareError::Unavailable => bundled_hwi_unavailable_message(),
-        HardwareError::TimedOut => "The hardware signer did not respond in time.",
-        HardwareError::Busy => "Another hardware-signer action is already in progress.",
-        HardwareError::Cancelled => "The hardware-signer action was cancelled.",
-        HardwareError::OutputTooLarge => "The hardware signer returned an oversized response.",
-        HardwareError::CommandFailed(code) => match code {
-            Some(-3 | -12) => "Unlock the signer and quit other wallet apps, then try again.",
-            Some(-14) => "The action was cancelled on the hardware signer.",
-            Some(-15) => "The hardware signer is busy. Close its companion app and try again.",
-            Some(-8 | -9) => "This hardware signer does not support the requested operation.",
-            _ => "The hardware signer rejected the request.",
-        },
-        HardwareError::Io => "Communication with the hardware signer failed.",
-    };
-    api_error(error.code(), message)
-}
-
-fn bundled_hwi_unavailable_message() -> &'static str {
-    #[cfg(target_os = "macos")]
-    if option_env!("GROOT_BUNDLED_HWI_RESOURCE").is_some() {
-        return "Groot's bundled hardware support could not be verified or started. Reinstall this Groot release, then scan again; do not install HWI separately.";
-    }
-    "Bitcoin Core HWI is not installed or could not be started."
-}
-
-fn hardware_device_api_error(error: HardwareError, device_type: &str) -> ApiError {
-    if device_type.eq_ignore_ascii_case("trezor") && matches!(error, HardwareError::TimedOut) {
-        return api_error(
-            error.code(),
-            "Trezor did not finish signing in time. If it remains on a loading screen, reconnect it, unlock it, scan again, and retry; the reviewed proposal and its signatures are unchanged.",
-        );
-    }
-    if device_type.eq_ignore_ascii_case("ledger") {
-        let message = match error {
-            HardwareError::CommandFailed(Some(-3)) => {
-                Some("Ledger disconnected. Reconnect it and try again.")
-            }
-            HardwareError::CommandFailed(Some(-12)) => {
-                Some("Unlock Ledger and open the wallet's Bitcoin app, then try again.")
-            }
-            HardwareError::CommandFailed(Some(-13)) => {
-                Some("Ledger could not register this wallet policy. Keep the Bitcoin app open and try again.")
-            }
-            HardwareError::CommandFailed(Some(-15)) => {
-                Some("Ledger is busy. Quit Ledger Live and try again.")
-            }
-            _ => None,
-        };
-        if let Some(message) = message {
-            return api_error(error.code(), message);
-        }
-    }
-    if device_type.eq_ignore_ascii_case("coldcard")
-        && matches!(error, HardwareError::CommandFailed(Some(-7)))
-    {
-        return api_error(
-            error.code(),
-            "Coldcard does not recognize this multisig wallet. Save the wallet policy in Groot, import it from Settings → Multisig Wallets → Import on Coldcard, verify the threshold and fingerprints, then try again.",
-        );
-    }
-    if device_type.eq_ignore_ascii_case("bitbox02")
-        && matches!(error, HardwareError::CommandFailed(Some(-8 | -9)))
-    {
-        return api_error(
-            error.code(),
-            "Finish the BitBox account name, policy, and address checks on-device.",
-        );
-    }
-    if device_type.eq_ignore_ascii_case("bitbox02")
-        && matches!(
-            error,
-            HardwareError::CommandFailed(None | Some(-3 | -12 | -13 | -15))
-        )
-    {
-        return api_error(
-            error.code(),
-            "Keep BitBox connected and unlocked. Quit BitBoxApp, then try again.",
-        );
-    }
-    hardware_api_error(error)
-}
-
-fn missing_hardware_fingerprint(device_type: &str) -> ApiError {
-    let message = match device_type.to_ascii_lowercase().as_str() {
-        "ledger" => {
-            "Unlock Ledger and open Bitcoin Test, not Bitcoin, for this Regtest wallet, then scan again."
-        }
-        "bitbox02" => "Unlock BitBox, then try again.",
-        "jade" => "Jade is still locked. Select it again and enter your PIN on Jade when prompted.",
-        "coldcard" => "Unlock Coldcard and enable USB communication, then scan again.",
-        "trezor" | "keepkey" => {
-            "Unlock the device using Groot's PIN-matrix flow, then scan again."
-        }
-        _ => "Unlock the hardware signer and put it in its Bitcoin app, then scan again.",
-    };
-    api_error("hardware_unavailable", message)
-}
-
-fn unknown_hardware_signer() -> ApiError {
-    api_error(
-        "unknown_signer",
-        "The connected device does not match any saved signer for this wallet.",
-    )
-}
-
-fn missing_hardware_psbt(device_type: &str, code: Option<i64>, fallback: &str) -> ApiError {
-    match code {
-        Some(code) => {
-            hardware_device_api_error(HardwareError::CommandFailed(Some(code)), device_type)
-        }
-        None => missing_hwi_value(None, fallback),
-    }
-}
-
-fn hardware_xpub_api_error(
-    error: HardwareError,
-    device_type: &str,
-    derivation_path: &str,
-) -> ApiError {
-    if device_type.eq_ignore_ascii_case("ledger")
-        && derivation_path.contains("/1'")
-        && matches!(error, HardwareError::CommandFailed(Some(-7 | -13)))
-    {
-        return api_error(
-            error.code(),
-            "Ledger is in the wrong app for this test-chain wallet. Quit Ledger Live, open Bitcoin Test, not Bitcoin, then reconnect and try again.",
-        );
-    }
-    hardware_device_api_error(error, device_type)
-}
-
 #[derive(Debug)]
 struct VerifiedHardwareIdentity {
     device_type: String,
@@ -6586,20 +5935,17 @@ pub(crate) mod coordination_commands;
 #[path = "wallet/multisig_setup_commands.rs"]
 pub(crate) mod multisig_setup_commands;
 
-fn create_tx_api_error(error: CreateTxError) -> ApiError {
-    match error {
-        CreateTxError::OutputBelowDustLimit(_) => api_error(
-            "invalid_amount",
-            "The recipient amount is below Bitcoin's dust limit.",
-        ),
-        CreateTxError::CoinSelection(_)
-        | CreateTxError::NoUtxosSelected
-        | CreateTxError::UnknownUtxo => api_error("insufficient_funds", error),
-        error => internal(error),
-    }
-}
-
 fn validate_manual_outpoints(values: &[String], frozen: &[OutPoint]) -> ApiResult<Vec<OutPoint>> {
+    // A 10,000-input transaction is already far beyond normal wallet use and
+    // remains below Bitcoin's absolute block-weight envelope. This cap bounds
+    // parsing, hashing, and BDK work after Tauri has decoded the request.
+    const MAX_MANUAL_OUTPOINTS: usize = 10_000;
+    if values.len() > MAX_MANUAL_OUTPOINTS {
+        return Err(api_error(
+            "invalid_coin",
+            "Too many coins were selected for one payment.",
+        ));
+    }
     if values.is_empty() {
         return Err(api_error(
             "invalid_coin",
@@ -6818,6 +6164,7 @@ pub fn wallet_delete(
     credential: String,
     confirmation: String,
 ) -> ApiResult<()> {
+    let credential = Zeroizing::new(credential);
     let _operation = operation_guard(&state)?;
     require_unlocked(&app, &state)?;
     if confirmation != "DELETE" {
@@ -6826,7 +6173,6 @@ pub fn wallet_delete(
             "Type DELETE exactly to remove this wallet.",
         ));
     }
-    let credential = Zeroizing::new(credential);
     check_auth_throttle(&app, &state)?;
     let profile = selected_profile(&app)?;
     let verified = match profile.kind {
@@ -6843,6 +6189,17 @@ pub fn wallet_delete(
     let dir = profile_directory(&app, profile.id)?;
     delete_registered_wallet(&app, profile.id, &dir)?;
     lock_wallet(&state, profile.id)?;
+    diagnostics::record(
+        &app,
+        &state,
+        diagnostics::DiagnosticEventKind::WalletRemoved,
+        diagnostics::DiagnosticOutcome::Succeeded,
+        diagnostics::DiagnosticContext {
+            wallet_kind: Some(diagnostics::wallet_kind(profile.kind)),
+            ..Default::default()
+        },
+        None,
+    );
     Ok(())
 }
 
@@ -6858,6 +6215,17 @@ pub fn wallet_reset_regtest(
     let profile = selected_profile(&app)?;
     delete_registered_wallet(&app, profile.id, &profile_directory(&app, profile.id)?)?;
     lock_wallet(&state, profile.id)?;
+    diagnostics::record(
+        &app,
+        &state,
+        diagnostics::DiagnosticEventKind::WalletRemoved,
+        diagnostics::DiagnosticOutcome::Succeeded,
+        diagnostics::DiagnosticContext {
+            wallet_kind: Some(diagnostics::wallet_kind(profile.kind)),
+            ..Default::default()
+        },
+        None,
+    );
     Ok(())
 }
 

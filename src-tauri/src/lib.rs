@@ -70,11 +70,25 @@ pub fn run() {
         .setup(|app| {
             let lock = process_lock::ProcessLock::acquire_for_app(app.handle())?;
             app.manage(lock);
+            let state = app.state::<wallet::AppState>();
+            wallet::diagnostics::record(
+                app.handle(),
+                &state,
+                wallet::diagnostics::DiagnosticEventKind::AppStarted,
+                wallet::diagnostics::DiagnosticOutcome::Succeeded,
+                wallet::diagnostics::DiagnosticContext {
+                    trigger: wallet::diagnostics::DiagnosticTrigger::Startup,
+                    ..Default::default()
+                },
+                None,
+            );
             Ok(())
         })
         .manage(wallet::AppState::default())
         .invoke_handler(tauri::generate_handler![
             runtime_platform,
+            wallet::diagnostics::diagnostics_list,
+            wallet::diagnostics::diagnostics_export,
             wallet::profile_commands::wallet_exists,
             wallet::ur_encode_psbt,
             wallet::ur_decode_psbt,
@@ -107,6 +121,8 @@ pub fn run() {
             wallet::profile_commands::coin_set_frozen,
             wallet::profile_commands::multisig_coin_set_frozen,
             wallet::profile_commands::fees_estimate,
+            wallet::profile_commands::mainnet_core_admit,
+            wallet::profile_commands::mainnet_core_admission_clear,
             wallet::profile_commands::node_config,
             wallet::profile_commands::node_config_save,
             wallet::profile_commands::network_setup_sources,
@@ -115,6 +131,7 @@ pub fn run() {
             wallet::profile_commands::wallet_sync_source,
             wallet::profile_commands::wallet_sync_source_save,
             wallet::payjoin_uri_inspect,
+            payjoin_support::payment_request_inspect,
             wallet::profile_commands::recovery_scan_settings,
             wallet::profile_commands::recovery_scan_settings_save,
             wallet::profile_commands::recovery_scan_status,
@@ -216,6 +233,7 @@ pub fn run() {
             wallet::transaction_commands::tx_acceleration_prepare,
             wallet::transaction_commands::multisig_acceleration_prepare,
             wallet::transaction_commands::rbf_acceleration_quote,
+            wallet::transaction_commands::cpfp_acceleration_quote,
             wallet::explorer_commands::transaction_explorer_open,
             wallet::label_interchange::bip329_labels_export,
             wallet::label_interchange::bip329_labels_import,
@@ -244,6 +262,9 @@ mod runtime_tests {
             identity.commit == "unknown"
                 || (commit.len() == 40 && commit.bytes().all(|byte| byte.is_ascii_hexdigit()))
         );
-        assert_ne!(identity.network, "mainnet");
+        assert_eq!(
+            identity.network == "mainnet",
+            cfg!(groot_network = "mainnet")
+        );
     }
 }

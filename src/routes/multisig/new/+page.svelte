@@ -28,6 +28,7 @@
   import AnimatedUrQr from '$lib/components/AnimatedUrQr.svelte';
   import UrQrScanner from '$lib/components/UrQrScanner.svelte';
   import { formatInteger, locale } from '$lib/i18n';
+  import { defaultConfig, networkName } from '$lib/config';
   import FieldCounter from '$lib/components/FieldCounter.svelte';
   import HardwareActionPrompt from '$lib/components/HardwareActionPrompt.svelte';
   import InsightTip from '$lib/components/InsightTip.svelte';
@@ -513,10 +514,13 @@
   }
 
   onMount(async () => {
-    try {
-      networkSetupSource = (await walletService.networkSetupSources())[0] ?? null;
-    } catch {
-      networkSetupSource = null;
+    if (defaultConfig.network !== 'mainnet') {
+      try {
+        networkSetupSource =
+          (await walletService.networkSetupSources()).find((source) => source.ready) ?? null;
+      } catch {
+        networkSetupSource = null;
+      }
     }
     try {
       const draft = await walletService.multisigSetupDraft();
@@ -1354,7 +1358,9 @@
           href="/multisig/recover"
           aria-label={translate($locale, 'Recover from backup')}
           ><FileUp size={15} />{translate($locale, 'Recover')}</a
-        >{/if}<span class="network-chip">{translate($locale, 'Regtest · Native SegWit')}</span>
+        >{/if}<span class="network-chip"
+        >{networkName(defaultConfig.network)} · {translate($locale, 'Native SegWit')}</span
+      >
     </div>
   </header>
   <SetupProgress
@@ -2719,9 +2725,8 @@
         aria-label={translate($locale, 'Account xpub')}
         bind:value={xpub}
         rows="3"
-        placeholder={translate($locale, 'tpub…')}></textarea><small
-        >{translate($locale, 'Derivation:')} {MULTISIG_ACCOUNT_PATH}</small
-      ></label
+        placeholder={translate($locale, defaultConfig.network === 'mainnet' ? 'xpub…' : 'tpub…')}
+      ></textarea><small>{translate($locale, 'Derivation:')} {MULTISIG_ACCOUNT_PATH}</small></label
     >
     {#if keyError}<p class="form-error" role="alert">{keyError}</p>{/if}
     <div class="modal-footer">

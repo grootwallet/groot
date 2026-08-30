@@ -286,6 +286,16 @@ export const dynamicCopy = {
     fr: 'Aucun historique du portefeuille n’a encore été vérifié. Réessayez lorsque votre connexion est disponible.',
     es: 'Todavía no se ha verificado el historial de la cartera. Inténtalo de nuevo cuando la conexión esté disponible.'
   },
+  'Bitcoin Core is still syncing and has not reached this wallet’s last verified block. Balance remains verified through block {height}.':
+    {
+      fr: 'Bitcoin Core est encore en cours de synchronisation et n’a pas atteint le dernier bloc vérifié de ce portefeuille. Le solde reste vérifié jusqu’au bloc {height}.',
+      es: 'Bitcoin Core aún se está sincronizando y no ha alcanzado el último bloque verificado de esta cartera. El saldo sigue verificado hasta el bloque {height}.'
+    },
+  'Bitcoin Core no longer stores the blocks needed after this wallet’s checkpoint. Balance remains verified through block {height}.':
+    {
+      fr: 'Bitcoin Core ne conserve plus les blocs nécessaires après le point de contrôle de ce portefeuille. Le solde reste vérifié jusqu’au bloc {height}.',
+      es: 'Bitcoin Core ya no conserva los bloques necesarios después del punto de control de esta cartera. El saldo sigue verificado hasta el bloque {height}.'
+    },
   'Compare the complete address above, then approve it on the device.': {
     fr: 'Comparez l’adresse complète ci-dessus, puis approuvez-la sur l’appareil.',
     es: 'Compara la dirección completa de arriba y apruébala en el dispositivo.'

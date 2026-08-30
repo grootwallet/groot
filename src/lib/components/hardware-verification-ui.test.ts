@@ -112,6 +112,8 @@ describe('hardware receive verification UI', () => {
     expect(verificationFlow).toContain('modalAttentionSignal += 1');
     expect(verificationFlow).toContain('attentionSignal={modalAttentionSignal}');
     expect(modal).toContain('class:modal-attention={attentionActive}');
+    expect(modal).toContain('if (!attentionRunning)');
+    expect(modal).toContain('activateAttention();');
     expect(appCss).toMatch(/@keyframes modal-attention/);
     expect(appCss).toMatch(
       /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.modal\.modal-attention\s*\{[\s\S]*?animation:\s*none !important;[\s\S]*?outline:/
@@ -475,7 +477,7 @@ describe('hardware receive verification UI', () => {
   });
 
   it('reserves the signer summary while the send wallet identity loads', () => {
-    expect(singleKeySend).toContain('loading={!signerSummaryReady}');
+    expect(singleKeySend).toContain('loading={!signerSummaryReady || accelerationLoading}');
     expect(singleKeySend).not.toContain('step < 4 && signerSummaryReady');
     expect(signerSummary).toContain('aria-busy={loading}');
     expect(signerSummary).toContain('class="send-signer-placeholder"');
@@ -490,7 +492,7 @@ describe('hardware receive verification UI', () => {
     expect(review).toBeGreaterThan(-1);
     expect(cableAction).toBeGreaterThan(review);
     expect(singleKeySend).toMatch(
-      /<TransactionReviewDetails\s+\{proposal\}\s+onChangeAddress=\{\(\)\s*=>\s*\(?changeAddressOpen\s*=\s*true\)?\}\s*\/>/
+      /<TransactionReviewDetails\s+\{proposal\}\s+interactiveAmounts\s+onChangeAddress=\{\(\)\s*=>\s*\(?changeAddressOpen\s*=\s*true\)?\}\s*\/>/
     );
   });
 

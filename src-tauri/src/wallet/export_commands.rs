@@ -1,4 +1,6 @@
-use super::{api_error, internal, proposal_api_error, ApiResult, AppState};
+use super::{
+    api_error, diagnostics, internal, proposal_api_error, selected_profile, ApiResult, AppState,
+};
 use crate::proposal::decode_psbt;
 use serde::Serialize;
 use std::{
@@ -19,9 +21,9 @@ use tauri_plugin_dialog::DialogExt;
 use uuid::Uuid;
 
 const MAX_PUBLIC_BACKUP_BYTES: usize = 256 * 1024;
-#[cfg(any(target_os = "macos", test))]
+#[cfg(target_os = "macos")]
 const MAX_PUBLIC_BACKUP_PDF_BYTES: usize = 32 * 1024 * 1024;
-#[cfg(any(target_os = "macos", test))]
+#[cfg(target_os = "macos")]
 const MAX_PUBLIC_BACKUP_PDF_HTML_BYTES: usize = 2 * 1024 * 1024;
 pub(super) const SAVED_FILE_REVEAL_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 #[cfg(any(target_os = "macos", test))]
@@ -190,6 +192,7 @@ pub async fn public_backup_save(
     suggested_filename: String,
     content: String,
 ) -> ApiResult<SavedFileDto> {
+    let diagnostic_app = app.clone();
     let filename = validate_public_backup_filename(&suggested_filename)?.to_owned();
     if content.is_empty() || content.len() > MAX_PUBLIC_BACKUP_BYTES {
         return Err(api_error(
@@ -215,7 +218,24 @@ pub async fn public_backup_save(
     })
     .await
     .map_err(internal)??;
-    saved_file_result(&state, saved_path)
+    let saved = saved_file_result(&state, saved_path)?;
+    if saved.saved {
+        let kind = selected_profile(&diagnostic_app)
+            .ok()
+            .map(|profile| diagnostics::wallet_kind(profile.kind));
+        diagnostics::record(
+            &diagnostic_app,
+            &state,
+            diagnostics::DiagnosticEventKind::BackupExported,
+            diagnostics::DiagnosticOutcome::Succeeded,
+            diagnostics::DiagnosticContext {
+                wallet_kind: kind,
+                ..Default::default()
+            },
+            None,
+        );
+    }
+    Ok(saved)
 }
 
 pub async fn psbt_file_save(

@@ -32,7 +32,11 @@ export function pendingBalanceBreakdown(snapshot: WalletSnapshot): PendingBalanc
   const outgoing = snapshot.transactions
     .filter((transaction) => transaction.status === 'pending' && transaction.direction === 'sent')
     .reduce(
-      (total, transaction) => total + Number(transaction.amount) + Number(transaction.fee ?? 0),
+      (total, transaction) =>
+        total +
+        (transaction.kind === 'self_spend'
+          ? Number(transaction.amount)
+          : Number(transaction.amount) + Number(transaction.fee ?? 0)),
       0
     );
 

@@ -120,6 +120,136 @@ close the remaining packaged receive, health, policy, signing, recovery, or
 independent-review rows. No public wallet or signer identifier, credential, or
 transaction material is retained here.
 
+### Packaged v0.4.83 Testnet4 accounting and BIP48 stop checkpoint
+
+The reviewer opened the exact packaged v0.4.83 Testnet4 candidate at short
+commit `12cf1714` against the preserved Nova wallet and its existing fee-only
+child. Synchronization completed, the child was confirmed and classified as a
+self-spend, and Overview, Activity, transaction detail, and wallet accounting
+each counted the network fee once. A complete Groot quit and relaunch retained
+the same confirmed presentation. This closes the focused v0.4.83 pending
+self-spend accounting regression without creating or broadcasting another
+transaction. It does not repeat the earlier physical signature and does not
+upgrade that earlier package's evidence to this candidate.
+
+The reviewer then reported that the Testnet4 BIP48 Nova public-account step
+worked and reached signer enrollment. The multisig setup header contradicted the
+running Testnet4 shell by displaying **Regtest · Native SegWit**. Source
+inspection confirmed a hardcoded presentation string: the packaged frontend
+configuration, Rust compiled network, HWI chain, and bundle identifier remained
+Testnet4. This is a display-only defect rather than a Regtest policy draft, but
+it fails the reviewable-network presentation row.
+
+The reviewer later continued on the exact same candidate and reported that Nova
+registered the BIP48 policy and verified the first address. The first coordinator
+creation attempt failed when the preselected network-setup source was no longer
+unlocked. With reuse explicitly unchecked, the same policy was created as an
+offline Testnet4 multisig wallet. This closes the Nova BIP48 public-account,
+policy-registration, first-address, and policy-construction rows for this
+candidate while failing the stale-source offline-fallback row. The wallet has
+not synced and no funding, proposal, signature, negative/retry behavior,
+threshold result, or broadcast is claimed.
+
+The local record relies on the reviewer's sanitized written observations.
+Screenshots containing public signer identifiers were excluded. No address,
+transaction identifier, fingerprint, account key, descriptor, device path,
+PSBT, credential, RPC detail, or label is retained here.
+
+### Packaged v0.4.84 Testnet4 BIP84 negative and persistence checkpoint
+
+On the locally ad-hoc-signed Testnet4 package at commit `8ff4e7da`, the reviewer
+created one controlled BIP84 self-transfer proposal and completed the
+authoritative transaction review. The exact Nova then passed an explicit
+on-device rejection with zero signatures and an unchanged retryable proposal,
+USB interruption with a clean unchanged retry, and wrong-device refusal without
+collecting a signature. The correct Nova subsequently added exactly one verified
+signature. A complete Groot quit and relaunch retained the same proposal ready
+to broadcast with that one signature. The proposal was deliberately left
+unbroadcast to avoid an unnecessary Testnet4 transaction.
+
+This closes the packaged Nova BIP84 rejection/retry, USB interruption,
+wrong-device, successful-signature, and restart-persistence rows for this
+candidate. It does not close funded BIP48 participation, threshold broadcast and
+accounting, or packaged clean-profile recovery. A separate attempt to reuse a
+working saved Testnet4 network setup in the existing offline multisig
+coordinator stopped during synchronization while preserving its last verified
+checkpoint. That shared setup/sync regression remains unresolved and blocks the
+funded BIP48 campaign; it is not a Nova hardware failure.
+
+The reviewer repeated the operation after reusing a second known-working
+Testnet4 setup. Each connection test passed against a full-history node, while
+each explicit wallet sync failed at the same retained height. Sanitized
+read-only diagnosis found that the coordinator's birthday-only checkpoints no
+longer belonged to the active Testnet4 chain after a reorganization. v0.4.84 did
+not remove those stale checkpoints before replaying from the saved birthday, so
+BDK rejected the disconnected update. No wallet, proposal, signer, node, or
+profile data was changed during diagnosis. This remains a failed v0.4.84 row
+until a fixed packaged candidate both rewinds to active-chain agreement and
+completes sync.
+
+Submitted screenshots exposed public signer or transaction metadata and were
+excluded from retained evidence. No address, transaction identifier,
+fingerprint, account key, descriptor, PSBT, device path, credential, RPC detail,
+or label is retained.
+
+### Packaged v0.4.85 Testnet4 funded BIP48 checkpoint
+
+On the locally ad-hoc-signed Testnet4 package at commit `5ba40001`, the existing
+multisig coordinator completed normal sync after the stale-checkpoint rewind
+fix. The exact Nova and a Trezor Safe 3 independently displayed and matched the
+same newly revealed multisig receive address. The first disposable Testnet4
+deposit then synchronized into the wallet.
+
+The reviewer prepared one self-transfer and compared its wallet-owned recipient,
+amount, fee, and total before signing. Nova and Safe 3 independently supplied
+the two required signatures. Before the successful signatures, each device
+passed an explicit on-device rejection and a cable-interruption retry without
+changing the proposal or collected-signature count. One accepted local
+signature was then deliberately discarded and restored by importing the
+corresponding signed PSBT. Threshold finalization, Bitcoin Core broadcast, and
+self-transfer fee-only accounting passed.
+
+An RBF quote for that unconfirmed self-transfer failed before a replacement
+proposal or hardware review existed. Diagnosis found that v0.4.85 requested
+Core's incremental-relay policy through `getnetworkinfo`, which the canonical
+least-privilege RPC configuration intentionally did not allow. This is an
+application/RPC-method defect, not a Nova failure and not a consequence of the
+self-transfer consuming the wallet's only prior coin. The RBF row remains open
+for a corrected packaged-candidate retest; no acceleration signature is claimed.
+
+The record relies on the reviewer's sanitized written observations. Submitted
+screenshots exposed public wallet, signer, or transaction metadata and were
+excluded. No address, transaction identifier, fingerprint, account key,
+descriptor, PSBT, device path, credential, RPC detail, amount, or label is
+retained.
+
+### Packaged v0.4.88 Testnet4 RBF, shared BIP48, and recovery checkpoint
+
+On the locally ad-hoc-signed Testnet4 package at exact commit `4fcd5f27`, the
+reviewer completed a Nova RBF replacement successfully. This is functional
+evidence for that exact candidate; it does not certify the send-review UX after
+later layout and denomination fixes, and it is not inherited by v0.4.89.
+
+The same candidate completed the shared Safe 3 plus Nova BIP48 campaign. Both
+devices independently displayed the same receive address, a real Testnet4
+deposit synchronized, and the devices supplied the required signatures for a
+real 2-of-3 spend. Threshold finalization, broadcast, confirmation, full
+restart, and accounting passed. A genuinely empty profile then imported the
+public descriptor/backup and reproduced the expected wallet state. This is the
+same criterion previously named packaged clean-profile recovery in the local
+Nova worksheet, so it is recorded once as a pass rather than left open under an
+ambiguous duplicate label.
+
+The separate clean-profile recovery procedure the reviewer explicitly deferred
+remains open, as does the independent tester/reviewer run. No result here
+certifies v0.4.89 or Whisper/BLE.
+
+Exact packaged v0.4.89 commit `c9309d3` later passed full-history rescans for
+every exercised wallet with Bitcoin Core fully synchronized. This closes the
+wallet-sync regression for the candidate but is not additional Nova interaction
+and does not close the deferred recovery, independent-review, or Whisper/BLE
+rows.
+
 ## Current decision
 
 **LOCAL REGTEST USB CORE PASS WITH LIMITATIONS — NOT RELEASE CERTIFIED.**
@@ -132,5 +262,18 @@ recovery. An earlier destructive recovery attempt remains documented, but the
 reviewer subsequently repeated the clean-profile test while preserving the
 source and reproduced the same identity, balance, history, and labels; the
 source then reopened intact. Cold pairing-cache reset was not isolated from the
-shared three-device BitBoxApp cache. Testnet4, packaged-candidate, independent
-review, and Whisper/BLE remain open.
+shared three-device BitBoxApp cache. Packaged v0.4.83 closes the focused
+confirmed self-spend accounting regression and the Testnet4 Nova BIP48
+import/policy/first-address setup rows, but fails the multisig network-label and
+stale-source reuse-fallback rows. Packaged v0.4.84 closes the Nova BIP84
+rejection/retry, USB interruption, wrong-device, successful-signature, and
+restart-persistence rows. Packaged v0.4.85 closes the copied-network active-chain
+rewind/sync regression and the shared funded BIP48 receive proof, deposit,
+rejection, interruption, signature-removal/reimport, threshold,
+broadcast/accounting, and self-transfer rows. Exact v0.4.88 commit `4fcd5f27`
+closes Nova RBF and the shared BIP48 confirmation, restart/accounting, and
+packaged clean-profile public-backup recovery rows. This does not certify that
+candidate's superseded send-review UX or the later v0.4.89 candidate. The
+separately deferred recovery procedure and Whisper/BLE remain open. Independent
+tester/reviewer work is deferred until the Testnet4 device campaigns are
+finalized.

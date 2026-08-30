@@ -4,6 +4,7 @@ export type RecoveryWord = {
 };
 
 export const MAX_WALLET_PASSPHRASE_BYTES = 1_024;
+export const MIN_NEW_WALLET_PASSPHRASE_CHARACTERS = 16;
 
 export function shuffledRecoveryWords(words: string[]): RecoveryWord[] {
   const result = words.map((word, id) => ({ id, word }));
@@ -24,4 +25,8 @@ export function recoveryOrderMatches(selected: RecoveryWord[], wordCount: number
 
 export function utf8ByteLength(value: string): number {
   return new TextEncoder().encode(value).length;
+}
+
+export function unicodeCharacterLength(value: string): number {
+  return Array.from(value).length;
 }

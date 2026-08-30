@@ -32,6 +32,45 @@ export type RuntimePlatform = {
   version: string;
   commit: string;
 };
+export type DiagnosticRecord = {
+  schemaVersion: 1;
+  timestamp: number;
+  event:
+    | 'app_started'
+    | 'wallet_created'
+    | 'wallet_recovered'
+    | 'wallet_removed'
+    | 'wallet_unlocked'
+    | 'wallet_locked'
+    | 'sync'
+    | 'recovery_scan'
+    | 'transaction_prepared'
+    | 'transaction_signed'
+    | 'transaction_broadcast'
+    | 'receive_address_generated'
+    | 'receive_address_discarded'
+    | 'receive_address_verified'
+    | 'coin_frozen'
+    | 'coin_unfrozen'
+    | 'backup_exported'
+    | 'backup_imported'
+    | 'backup_verified'
+    | 'recovery_tested'
+    | 'network_configuration_changed'
+    | 'diagnostics_exported';
+  outcome: 'started' | 'progress' | 'succeeded' | 'failed' | 'cancelled';
+  trigger: 'automatic' | 'manual' | 'startup' | 'recovery';
+  walletKind?: 'software' | 'hardware' | 'multisig';
+  syncSource?: 'bitcoin_core' | 'compact_filters';
+  progressPercent?: number;
+  itemCount?: number;
+  exportFormat?: 'json' | 'csv';
+  errorCode?: string;
+  appVersion: string;
+  buildCommit: string;
+  compiledNetwork: SupportedNetwork;
+  platform: RuntimePlatform['platform'];
+};
 export type CoreNodeConfig = {
   backend: { type: 'local_core' | 'remote_core'; url: string };
   auth: 'cookie' | 'user_pass';
@@ -61,6 +100,7 @@ export type NetworkSetupSource = {
   walletId: string;
   walletName: string;
   syncSource: WalletSyncSource;
+  ready: boolean;
 };
 export type WalletSyncStatus = {
   walletId: string;
@@ -78,6 +118,7 @@ export type WalletSyncStatus = {
   lastVerifiedHeight: number;
   connectedPeers: number | null;
   requiredPeers: number | null;
+  failureCode: string | null;
   updatedAt: number;
 };
 export type PayjoinUriInspection = {
@@ -87,6 +128,13 @@ export type PayjoinUriInspection = {
   message: string | null;
   endpoint: string;
   version: 'v2';
+};
+export type PaymentRequestInspection = {
+  address: string;
+  amountSats: string | null;
+  label: string | null;
+  message: string | null;
+  payjoin: boolean;
 };
 export type RecoveryScanSettings = { birthdayHeight: number; gapLimit: number };
 export type RecoveryScanStatus = {

@@ -49,44 +49,72 @@
         <Amount value={proposal.walletControlledOutputAmount} interactive={interactiveAmounts} />
       </div>{/if}
   </aside>{/if}
-{#if proposal.acceleration?.method === 'rbf'}<aside class="info-banner acceleration-review-summary">
-    <strong>{translate($locale, 'Fee increase replacement')}</strong>
-    <dl class="details-list">
-      <div>
-        <dt>{translate($locale, 'Original effective rate')}</dt>
-        <dd>{proposal.acceleration.originalFeeRate} {translate($locale, 'sat/vB')}</dd>
-      </div>
-      <div>
-        <dt>{translate($locale, 'Exact replacement minimum')}</dt>
-        <dd>{proposal.acceleration.minimumFeeRate} {translate($locale, 'sat/vB')}</dd>
-      </div>
-      <div>
-        <dt>{translate($locale, 'Selected target')}</dt>
-        <dd>{proposal.acceleration.targetFeeRate} {translate($locale, 'sat/vB')}</dd>
-      </div>
-      <div>
-        <dt>{translate($locale, 'Replacement fee')}</dt>
-        <dd><Amount value={proposal.fee} /></dd>
-      </div>
-      <div>
-        <dt>{translate($locale, 'Incremental fee')}</dt>
-        <dd><Amount value={proposal.acceleration.incrementalFee} /></dd>
-      </div>
-      <div>
-        <dt>{translate($locale, 'Resulting effective rate')}</dt>
-        <dd>{proposal.feeRate} {translate($locale, 'sat/vB')}</dd>
-      </div>
-    </dl>
-    <span
+{#if proposal.acceleration}<aside class="acceleration-review-summary">
+    <span>{translate($locale, 'Speed-up cost')}</span>
+    <Amount value={proposal.acceleration.incrementalFee} interactive={interactiveAmounts} />
+    <small
       >{translate(
         $locale,
-        'Whole-satoshi fee construction can make the resulting effective rate differ slightly from the selected target.'
-      )}</span
+        proposal.acceleration.method === 'rbf'
+          ? 'The payment amount stays the same.'
+          : 'The child fee helps both transactions confirm together.'
+      )}</small
     >
   </aside>{/if}
 <details class:hardware-review-details={compact} class:proposal-review-details={!compact}>
   <summary>{translate($locale, 'View more details')}</summary>
   <dl class:details-list={!compact}>
+    {#if proposal.acceleration?.method === 'rbf'}
+      <div>
+        <dt>{translate($locale, 'Original fee rate')}</dt>
+        <dd>{proposal.acceleration.originalFeeRate} {translate($locale, 'sat/vB')}</dd>
+      </div>
+      <div>
+        <dt>{translate($locale, 'Minimum fee rate')}</dt>
+        <dd>{proposal.acceleration.minimumFeeRate} {translate($locale, 'sat/vB')}</dd>
+      </div>
+      <div>
+        <dt>{translate($locale, 'New fee rate')}</dt>
+        <dd>{proposal.acceleration.targetFeeRate} {translate($locale, 'sat/vB')}</dd>
+      </div>
+      <div>
+        <dt>{translate($locale, 'New network fee')}</dt>
+        <dd><Amount value={proposal.fee} interactive={interactiveAmounts} /></dd>
+      </div>
+      <div>
+        <dt>{translate($locale, 'Additional fee')}</dt>
+        <dd>
+          <Amount value={proposal.acceleration.incrementalFee} interactive={interactiveAmounts} />
+        </dd>
+      </div>
+      <div>
+        <dt>{translate($locale, 'Effective fee rate')}</dt>
+        <dd>{proposal.feeRate} {translate($locale, 'sat/vB')}</dd>
+      </div>
+    {:else if proposal.acceleration?.method === 'cpfp'}
+      <div>
+        <dt>{translate($locale, 'Parent fee rate')}</dt>
+        <dd>{proposal.acceleration.originalFeeRate} {translate($locale, 'sat/vB')}</dd>
+      </div>
+      <div>
+        <dt>{translate($locale, 'Minimum package rate')}</dt>
+        <dd>{proposal.acceleration.minimumFeeRate} {translate($locale, 'sat/vB')}</dd>
+      </div>
+      <div>
+        <dt>{translate($locale, 'Target package rate')}</dt>
+        <dd>{proposal.acceleration.targetFeeRate} {translate($locale, 'sat/vB')}</dd>
+      </div>
+      <div>
+        <dt>{translate($locale, 'Child network fee')}</dt>
+        <dd><Amount value={proposal.fee} interactive={interactiveAmounts} /></dd>
+      </div>
+      <div>
+        <dt>{translate($locale, 'Additional fee')}</dt>
+        <dd>
+          <Amount value={proposal.acceleration.incrementalFee} interactive={interactiveAmounts} />
+        </dd>
+      </div>
+    {/if}
     <div>
       <dt>{translate($locale, 'Inputs')}</dt>
       <dd>

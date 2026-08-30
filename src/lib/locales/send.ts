@@ -1,6 +1,14 @@
 import type { CatalogSection } from './types';
 
 export const sendCopy = {
+  'Preparing fee acceleration': {
+    fr: 'Préparation de l’accélération des frais',
+    es: 'Preparando la aceleración de comisión'
+  },
+  'Reading the original transaction and current fee policy from Bitcoin Core.': {
+    fr: 'Lecture de la transaction d’origine et de la politique de frais actuelle depuis Bitcoin Core.',
+    es: 'Leyendo la transacción original y la política de comisiones actual desde Bitcoin Core.'
+  },
   'Self-transfer': { fr: 'Transfert interne', es: 'Transferencia interna' },
   Consolidating: { fr: 'Consolidation', es: 'Consolidación' },
   'Self-transfer recipient': {
@@ -136,6 +144,26 @@ export const sendCopy = {
   'Review frozen coins': {
     fr: 'Examiner les pièces gelées',
     es: 'Revisar monedas congeladas'
+  },
+  'Maximum spendable amount selected': {
+    fr: 'Montant maximal disponible sélectionné',
+    es: 'Importe máximo disponible seleccionado'
+  },
+  'Frozen coins remain in this wallet. Unfreeze them first to include them.': {
+    fr: 'Les pièces gelées restent dans ce portefeuille. Dégelez-les d’abord pour les inclure.',
+    es: 'Las monedas congeladas permanecen en esta cartera. Descongélalas primero para incluirlas.'
+  },
+  'The amount uses all spendable coins after the network fee.': {
+    fr: 'Le montant utilise toutes les pièces disponibles après les frais de réseau.',
+    es: 'El importe usa todas las monedas disponibles después de la comisión de red.'
+  },
+  'Maximum spendable amount selected. Frozen coins remain in this wallet.': {
+    fr: 'Montant maximal disponible sélectionné. Les pièces gelées restent dans ce portefeuille.',
+    es: 'Importe máximo disponible seleccionado. Las monedas congeladas permanecen en esta cartera.'
+  },
+  'Maximum spendable amount selected after the network fee.': {
+    fr: 'Montant maximal disponible sélectionné après les frais de réseau.',
+    es: 'Importe máximo disponible seleccionado después de la comisión de red.'
   },
   '{count} more signature required': {
     fr: 'Encore {count} signature requise',
@@ -318,6 +346,15 @@ export const sendCopy = {
     fr: 'Requis · supérieur à 0 et au maximum 10 000 sat/vB',
     es: 'Obligatorio · mayor que 0 y como máximo 10.000 sat/vB'
   },
+  'Enter a fee rate': {
+    fr: 'Saisissez un taux de frais',
+    es: 'Introduce una tasa de comisión'
+  },
+  'Not enough bitcoin to raise the fee. Receive more and wait for it to confirm, or wait for this transaction to confirm.':
+    {
+      fr: 'Pas assez de bitcoins pour augmenter les frais. Recevez-en davantage et attendez sa confirmation, ou attendez la confirmation de cette transaction.',
+      es: 'No hay suficiente bitcoin para aumentar la comisión. Recibe más y espera a que se confirme, o espera a que se confirme esta transacción.'
+    },
   Rescan: { fr: 'Rechercher à nouveau', es: 'Volver a buscar' },
   'Return to the saved policy reference without interrupting this signing request.': {
     fr: 'Revenez à la référence de politique enregistrée sans interrompre cette demande de signature.',
@@ -484,5 +521,175 @@ export const sendCopy = {
   'Your proposal will stay saved.': {
     fr: 'Votre proposition restera enregistrée.',
     es: 'Tu propuesta seguirá guardada.'
+  },
+  'Discard draft': {
+    fr: 'Écarter le brouillon',
+    es: 'Descartar borrador'
+  },
+  'Discard this payment draft?': {
+    fr: 'Écarter ce brouillon de paiement ?',
+    es: '¿Descartar este borrador de pago?'
+  },
+  'Discarding draft…': {
+    fr: 'Suppression du brouillon…',
+    es: 'Descartando borrador…'
+  },
+  'Keep draft': {
+    fr: 'Conserver le brouillon',
+    es: 'Conservar borrador'
+  },
+  'No transaction or signature exists yet.': {
+    fr: 'Aucune transaction ni signature n’existe encore.',
+    es: 'Aún no existe ninguna transacción ni firma.'
+  },
+  'Only the draft will be removed.': {
+    fr: 'Seul le brouillon sera supprimé.',
+    es: 'Solo se eliminará el borrador.'
+  },
+  'Payment draft discarded': {
+    fr: 'Brouillon de paiement écarté',
+    es: 'Borrador de pago descartado'
+  },
+  'Recipient, labels, amount, fee, and coin selection': {
+    fr: 'Destinataire, libellés, montant, frais et sélection des pièces',
+    es: 'Destinatario, etiquetas, importe, comisión y selección de monedas'
+  },
+  'Remove the unfinished payment without creating a transaction.': {
+    fr: 'Supprimez le paiement inachevé sans créer de transaction.',
+    es: 'Elimina el pago sin terminar sin crear una transacción.'
+  },
+  'Saved fields': {
+    fr: 'Champs enregistrés',
+    es: 'Campos guardados'
+  },
+  'The payment draft could not be discarded.': {
+    fr: 'Le brouillon de paiement n’a pas pu être supprimé.',
+    es: 'No se pudo descartar el borrador de pago.'
+  },
+  'The unfinished payment was removed. No transaction was created.': {
+    fr: 'Le paiement inachevé a été supprimé. Aucune transaction n’a été créée.',
+    es: 'Se eliminó el pago sin terminar. No se creó ninguna transacción.'
+  },
+  'Speed up transaction': {
+    fr: 'Accélérer la transaction',
+    es: 'Acelerar transacción'
+  },
+  'Confirm the additional fee. The payment amount and recipient stay the same.': {
+    fr: 'Confirmez les frais supplémentaires. Le montant du paiement et le destinataire restent inchangés.',
+    es: 'Confirma la comisión adicional. El importe del pago y el destinatario no cambian.'
+  },
+  'Confirm the additional fee, then continue to sign.': {
+    fr: 'Confirmez les frais supplémentaires, puis continuez pour signer.',
+    es: 'Confirma la comisión adicional y continúa para firmar.'
+  },
+  'You will spend this much more': {
+    fr: 'Vous dépenserez ce montant en plus',
+    es: 'Gastarás este importe adicional'
+  },
+  'Your payment amount and recipient will not change.': {
+    fr: 'Le montant de votre paiement et le destinataire ne changeront pas.',
+    es: 'El importe del pago y el destinatario no cambiarán.'
+  },
+  'This child fee helps the parent and child confirm together.': {
+    fr: 'Ces frais de l’enfant aident le parent et l’enfant à être confirmés ensemble.',
+    es: 'Esta comisión de la transacción hija ayuda a confirmar juntas ambas transacciones.'
+  },
+  'Change fee rate': {
+    fr: 'Modifier le taux de frais',
+    es: 'Cambiar tasa de comisión'
+  },
+  'View fee details': {
+    fr: 'Afficher le détail des frais',
+    es: 'Ver detalles de la comisión'
+  },
+  'Original fee rate': { fr: 'Taux de frais initial', es: 'Tasa de comisión original' },
+  'Minimum fee rate': { fr: 'Taux de frais minimum', es: 'Tasa de comisión mínima' },
+  'New fee rate': { fr: 'Nouveau taux de frais', es: 'Nueva tasa de comisión' },
+  'Package fee rate': { fr: 'Taux de frais du paquet', es: 'Tasa de comisión del paquete' },
+  'Parent fee rate': {
+    fr: 'Taux de frais du parent',
+    es: 'Tasa de comisión de la transacción madre'
+  },
+  'Minimum package rate': {
+    fr: 'Taux minimum du paquet',
+    es: 'Tasa mínima del paquete'
+  },
+  'Target package rate': { fr: 'Taux cible du paquet', es: 'Tasa objetivo del paquete' },
+  'Child network fee': {
+    fr: 'Frais réseau de l’enfant',
+    es: 'Comisión de red de la transacción hija'
+  },
+  'Package network fee': { fr: 'Frais réseau du paquet', es: 'Comisión de red del paquete' },
+  'Effective package rate': {
+    fr: 'Taux effectif du paquet',
+    es: 'Tasa efectiva del paquete'
+  },
+  'New network fee': { fr: 'Nouveaux frais de réseau', es: 'Nueva comisión de red' },
+  'Additional fee': { fr: 'Frais supplémentaires', es: 'Comisión adicional' },
+  'Effective fee rate': { fr: 'Taux de frais effectif', es: 'Tasa de comisión efectiva' },
+  'Minimum {rate} sat/vB': {
+    fr: 'Minimum {rate} sat/vB',
+    es: 'Mínimo {rate} sat/vB'
+  },
+  'Speed-up cost': { fr: 'Coût de l’accélération', es: 'Coste de aceleración' },
+  'The payment amount stays the same.': {
+    fr: 'Le montant du paiement reste inchangé.',
+    es: 'El importe del pago no cambia.'
+  },
+  'The child fee helps both transactions confirm together.': {
+    fr: 'Les frais de l’enfant aident les deux transactions à être confirmées ensemble.',
+    es: 'La comisión de la transacción hija ayuda a confirmar juntas ambas transacciones.'
+  },
+  'Transaction accelerated': {
+    fr: 'Transaction accélérée',
+    es: 'Transacción acelerada'
+  },
+  'Transaction accelerated.': {
+    fr: 'Transaction accélérée.',
+    es: 'Transacción acelerada.'
+  },
+  'The additional fee was accepted. Your payment is waiting for confirmation.': {
+    fr: 'Les frais supplémentaires ont été acceptés. Votre paiement attend sa confirmation.',
+    es: 'La comisión adicional fue aceptada. Tu pago está esperando confirmación.'
+  },
+  'The higher fee was accepted. Your payment amount and recipient stayed the same.': {
+    fr: 'Les frais plus élevés ont été acceptés. Le montant du paiement et le destinataire sont restés inchangés.',
+    es: 'La comisión más alta fue aceptada. El importe del pago y el destinatario no cambiaron.'
+  },
+  'Your payment was accepted by the Bitcoin network.': {
+    fr: 'Votre paiement a été accepté par le réseau Bitcoin.',
+    es: 'Tu pago fue aceptado por la red Bitcoin.'
+  },
+  'The system browser could not open the explorer.': {
+    fr: 'Le navigateur du système n’a pas pu ouvrir l’explorateur.',
+    es: 'El navegador del sistema no pudo abrir el explorador.'
+  },
+  'Scan Bitcoin payment QR': {
+    fr: 'Scanner le QR de paiement Bitcoin',
+    es: 'Escanear QR de pago de Bitcoin'
+  },
+  'Scan payment request': {
+    fr: 'Scanner la demande de paiement',
+    es: 'Escanear solicitud de pago'
+  },
+  'Scan a Bitcoin address or payment URI. You will review every imported detail before sending.': {
+    fr: 'Scannez une adresse Bitcoin ou un URI de paiement. Vous vérifierez chaque détail importé avant l’envoi.',
+    es: 'Escanea una dirección de Bitcoin o un URI de pago. Revisarás cada dato importado antes de enviar.'
+  },
+  'Point the camera at a Bitcoin payment QR': {
+    fr: 'Pointez la caméra vers un QR de paiement Bitcoin',
+    es: 'Apunta la cámara a un QR de pago de Bitcoin'
+  },
+  'Reading payment request…': {
+    fr: 'Lecture de la demande de paiement…',
+    es: 'Leyendo solicitud de pago…'
+  },
+  'Payment request scanned': {
+    fr: 'Demande de paiement scannée',
+    es: 'Solicitud de pago escaneada'
+  },
+  'QR code rejected': {
+    fr: 'Code QR refusé',
+    es: 'Código QR rechazado'
   }
 } as const satisfies CatalogSection;

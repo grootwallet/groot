@@ -42,13 +42,17 @@ describe('protected network setup reuse', () => {
 
     expect(sourceDto).toContain('walletId');
     expect(sourceDto).toContain('syncSource');
+    expect(sourceDto).toContain('ready');
     expect(sourceDto).not.toMatch(/password|credential|nodeConfig/i);
   });
 
   it('revalidates the source and re-encrypts its RPC password for the destination wallet', () => {
     const source = nativeCommand('network_setup_adopt');
 
-    expect(source).toContain('.is_unlocked(source)');
+    expect(source).toContain(
+      'authorize_wallet_session(&state, source, false, registry.inactivity_timeout_minutes)'
+    );
+    expect(source).not.toContain('.is_unlocked(source)');
     expect(source).toContain('session.config != config');
     expect(source).toContain('checked_node_status(&client, config.clone())');
     expect(source).toContain('node_secret_path_for(&app, destination)');
@@ -79,6 +83,18 @@ describe('protected network setup reuse', () => {
     expect(commit).toBeGreaterThan(copy);
   });
 
+  it('creates a multisig wallet offline when a previously offered source is no longer ready', () => {
+    const standardCreate = multisigCommands.slice(
+      multisigCommands.indexOf('pub async fn multisig_create'),
+      multisigCommands.indexOf('pub async fn multisig_recovery_create')
+    );
+
+    expect(standardCreate).not.toContain('if network_setup_source_wallet_id.is_some()');
+    expect(standardCreate).toContain('copy_network_setup_before_profile_commit(');
+    expect(multisigCommands).toContain('return Ok(true);');
+    expect(multisigCommands).toContain('Ok(false)');
+  });
+
   it('leaves multisig refresh ownership with the global live-sync scheduler', () => {
     expect(multisigPolicyRoute).toContain('walletService.multisigSnapshot()');
     expect(multisigPolicyRoute).not.toContain('walletService.syncMultisig()');
@@ -88,5 +104,7 @@ describe('protected network setup reuse', () => {
     expect(settings).toContain('Use an existing network setup');
     expect(settings).toContain('walletService.adoptNetworkSetup(');
     expect(settings).toContain('Wallet data stays separate.');
+    expect(settings).toContain('Unlock the source wallet first.');
+    expect(settings).toContain('source.ready');
   });
 });

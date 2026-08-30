@@ -15,6 +15,7 @@
     ShieldCheck
   } from '@lucide/svelte';
   import { goto } from '$app/navigation';
+  import { defaultConfig } from '$lib/config';
   import { onDestroy, onMount } from 'svelte';
   import Button from '$lib/components/Button.svelte';
   import FieldCounter from '$lib/components/FieldCounter.svelte';
@@ -85,8 +86,10 @@
   let hardwareScanGeneration = 0;
 
   onMount(async () => {
+    if (defaultConfig.network === 'mainnet') return;
     try {
-      networkSetupSource = (await walletService.networkSetupSources())[0] ?? null;
+      networkSetupSource =
+        (await walletService.networkSetupSources()).find((source) => source.ready) ?? null;
     } catch {
       networkSetupSource = null;
     }
@@ -276,7 +279,7 @@
         { ...signer, label: walletName },
         pin
       );
-      if (reuseNetworkSetup && networkSetupSource) {
+      if (defaultConfig.network !== 'mainnet' && reuseNetworkSetup && networkSetupSource) {
         try {
           await walletService.adoptNetworkSetup(networkSetupSource.walletId, pin);
         } catch {
@@ -403,8 +406,12 @@
           ><span>{translate($locale, 'Descriptor or public export')}</span><textarea
             bind:value={encoded}
             rows="5"
-            placeholder={translate($locale, "wpkh([fingerprint/84'/1'/0']tpub…/<0;1>/*)")}
-          ></textarea></label
+            placeholder={translate(
+              $locale,
+              defaultConfig.network === 'mainnet'
+                ? "wpkh([fingerprint/84'/0'/0']xpub…/<0;1>/*)"
+                : "wpkh([fingerprint/84'/1'/0']tpub…/<0;1>/*)"
+            )}></textarea></label
         ><Button
           class="full"
           disabled={!encoded.trim() || !label.trim()}

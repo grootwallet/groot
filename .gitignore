@@ -8,9 +8,11 @@ dist/
 !.env.regtest
 !.env.signet
 !.env.testnet4
+!.env.mainnet
 .regtest/
 .regtest-test/
 src-tauri/target/
+src-tauri/.release-stage/
 src-tauri/gen/
 *.sqlite
 *.sqlite3

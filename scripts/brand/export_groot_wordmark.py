@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Export the approved Groot wordmark as self-contained SVG outlines.
 
-This brand-production utility deliberately converts the
-locally reviewed Newsreader Medium font into paths so exported lockups do not
-depend on installed fonts or network requests.
+This brand-production utility converts the pinned Manrope variable font at the
+approved 690 weight into paths so exported lockups do not depend on installed
+fonts or network requests.
 
 Runtime-only dependencies (do not add them to the wallet):
     python -m pip install fonttools uharfbuzz
@@ -18,6 +18,7 @@ from pathlib import Path
 import uharfbuzz as hb
 from fontTools.pens.svgPathPen import SVGPathPen
 from fontTools.ttLib import TTFont
+from fontTools.varLib.instancer import instantiateVariableFont
 
 
 INK = "#102A4C"
@@ -27,6 +28,17 @@ CONTROL_PATH = (
     "Q50 89 48 89H30Q28 89 28 87V75A36 36 0 0 1 100 75V87Q100 89 98 89"
     "H80Q78 89 78 91V105Q78 107 80 107H116Q118 107 118 105V75A54 54 0 0 0 64 21Z"
 )
+
+# These values reproduce the adopted website lockup, expressed on a 70-unit
+# symbol canvas. The CSS source proportions were 22% symbol, 27.9% type size,
+# and 6% flex gap. Baseline 68 leaves room for Manrope's lowercase g descender.
+FONT_WEIGHT = 690.0
+ICON_CANVAS = 70.0
+EM_SIZE = ICON_CANVAS * 0.279 / 0.22
+GAP = ICON_CANVAS * 0.06 / 0.22
+TRACKING_EM = -0.082
+BASELINE = 68.0
+ARTBOARD_HEIGHT = 96.0
 
 
 @dataclass(frozen=True)
@@ -41,13 +53,16 @@ def outline_word(font_path: Path, text: str, em_size: float, tracking_em: float)
     hb_font = hb.Font(hb_face)
     upem = hb_face.upem
     hb_font.scale = (upem, upem)
+    hb_font.set_variations({"wght": FONT_WEIGHT})
 
     buffer = hb.Buffer()
     buffer.add_str(text)
     buffer.guess_segment_properties()
     hb.shape(hb_font, buffer, {"kern": True, "liga": True})
 
-    tt_font = TTFont(font_path)
+    tt_font = instantiateVariableFont(
+        TTFont(font_path), {"wght": FONT_WEIGHT}, inplace=False
+    )
     glyph_set = tt_font.getGlyphSet()
     glyph_order = tt_font.getGlyphOrder()
     scale = em_size / upem
@@ -55,7 +70,8 @@ def outline_word(font_path: Path, text: str, em_size: float, tracking_em: float)
     cursor = 0.0
     paths: list[tuple[float, str]] = []
 
-    for index, (info, position) in enumerate(zip(buffer.glyph_infos, buffer.glyph_positions, strict=True)):
+    glyphs = zip(buffer.glyph_infos, buffer.glyph_positions)
+    for index, (info, position) in enumerate(glyphs):
         glyph_name = glyph_order[info.codepoint]
         pen = SVGPathPen(glyph_set)
         glyph_set[glyph_name].draw(pen)
@@ -82,6 +98,8 @@ def svg_document(*, title: str, color: str, width: float, height: float, body: s
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width:.4f} {height:.4f}" '
         f'role="img" aria-labelledby="title">\n'
         f'  <title id="title">{title}</title>\n'
+        '  <desc>Outlined Manrope 690 wordmark; the Control symbol visible bottom '
+        'meets the typographic baseline.</desc>\n'
         f'  <g fill="{color}">{body}</g>\n'
         '</svg>\n'
     )
@@ -92,18 +110,17 @@ def export(font_path: Path, output_dir: Path) -> None:
     tt_font = TTFont(font_path)
     upem = tt_font["head"].unitsPerEm
 
-    em_size = 82.0
-    baseline = 72.0
-    tracking_em = -0.052
-    word = outline_word(font_path, "Groot", em_size, tracking_em)
+    em_size = EM_SIZE
+    baseline = BASELINE
+    word = outline_word(font_path, "groot", em_size, TRACKING_EM)
     word_x = 0.0
     word_width = word.advance
     word_body = word_paths(word, word_x, baseline, em_size, upem)
 
-    icon_canvas = 70.0
+    icon_canvas = ICON_CANVAS
     icon_scale = icon_canvas / 128.0
     icon_y = baseline - icon_canvas + (21.0 / 128.0 * icon_canvas)
-    lockup_word_x = icon_canvas + 17.0
+    lockup_word_x = icon_canvas + GAP
     lockup_width = lockup_word_x + word_width
     mark = (
         f'<path transform="translate(0 {icon_y:.4f}) scale({icon_scale:.8f})" '
@@ -113,16 +130,16 @@ def export(font_path: Path, output_dir: Path) -> None:
 
     assets = {
         "wordmark-ink.svg": svg_document(
-            title="Groot", color=INK, width=word_width, height=88.0, body=word_body
+            title="Groot", color=INK, width=word_width, height=ARTBOARD_HEIGHT, body=word_body
         ),
         "wordmark-reversed.svg": svg_document(
-            title="Groot", color=IVORY, width=word_width, height=88.0, body=word_body
+            title="Groot", color=IVORY, width=word_width, height=ARTBOARD_HEIGHT, body=word_body
         ),
         "lockup-horizontal-ink.svg": svg_document(
-            title="Groot", color=INK, width=lockup_width, height=88.0, body=lockup_body
+            title="Groot", color=INK, width=lockup_width, height=ARTBOARD_HEIGHT, body=lockup_body
         ),
         "lockup-horizontal-reversed.svg": svg_document(
-            title="Groot", color=IVORY, width=lockup_width, height=88.0, body=lockup_body
+            title="Groot", color=IVORY, width=lockup_width, height=ARTBOARD_HEIGHT, body=lockup_body
         ),
     }
 

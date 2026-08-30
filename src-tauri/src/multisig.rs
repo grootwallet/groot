@@ -493,6 +493,12 @@ mod tests {
             wrong_fingerprint.parse().unwrap_err(),
             PolicyError::InvalidDescriptor
         );
+        let mut empty_id = preview.clone();
+        empty_id.cosigners[0].id = " ".into();
+        assert_eq!(
+            empty_id.parse().unwrap_err(),
+            PolicyError::InvalidDescriptor
+        );
         let mut wrong_xpub = preview;
         wrong_xpub.cosigners[0].xpub = "bad".into();
         assert_eq!(

@@ -18,42 +18,72 @@
   let dialog = $state<HTMLDivElement>();
   let documentTop = $state(-32);
   let attentionActive = $state(false);
+  let attentionRunning = false;
   let attentionFrame: number | null = null;
   let attentionTimer: ReturnType<typeof setTimeout> | null = null;
 
-  onDestroy(() => {
+  function clearAttentionSchedule() {
     if (attentionFrame !== null) cancelAnimationFrame(attentionFrame);
     if (attentionTimer !== null) clearTimeout(attentionTimer);
-  });
-
-  function showAttention() {
-    if (!open || typeof requestAnimationFrame === 'undefined') return;
-    if (attentionFrame !== null) cancelAnimationFrame(attentionFrame);
-    if (attentionTimer !== null) clearTimeout(attentionTimer);
-    attentionActive = false;
-    attentionFrame = requestAnimationFrame(() => {
-      attentionFrame = null;
-      attentionActive = true;
-      attentionTimer = setTimeout(() => {
-        attentionTimer = null;
-        attentionActive = false;
-      }, 420);
-    });
+    attentionFrame = null;
+    attentionTimer = null;
   }
+
+  function activateAttention() {
+    attentionRunning = true;
+    attentionActive = true;
+    attentionTimer = setTimeout(() => {
+      attentionTimer = null;
+      attentionRunning = false;
+      attentionActive = false;
+    }, 420);
+  }
+
+  onDestroy(clearAttentionSchedule);
+
+  $effect(() => {
+    const signal = attentionSignal;
+    if (!open || !signal) return;
+    clearAttentionSchedule();
+    if (!attentionRunning) {
+      activateAttention();
+      return;
+    }
+    attentionRunning = false;
+    attentionActive = false;
+    const restart = () => {
+      attentionFrame = null;
+      activateAttention();
+    };
+    if (typeof requestAnimationFrame === 'undefined') {
+      attentionTimer = setTimeout(restart, 0);
+    } else {
+      attentionFrame = requestAnimationFrame(restart);
+    }
+  });
 
   function requestClose() {
     if (dismissible) {
       onclose();
       return;
     }
-    showAttention();
+    clearAttentionSchedule();
+    if (!attentionRunning) {
+      activateAttention();
+      return;
+    }
+    attentionRunning = false;
+    attentionActive = false;
+    const restart = () => {
+      attentionFrame = null;
+      activateAttention();
+    };
+    if (typeof requestAnimationFrame === 'undefined') {
+      attentionTimer = setTimeout(restart, 0);
+    } else {
+      attentionFrame = requestAnimationFrame(restart);
+    }
   }
-
-  $effect(() => {
-    const signal = attentionSignal;
-    if (!signal) return;
-    showAttention();
-  });
 
   $effect(() => {
     if (!open || typeof document === 'undefined') return;

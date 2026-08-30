@@ -6,6 +6,7 @@ import {
   addressReuseInsights,
   awaitingPaymentAddresses,
   canDiscardAddress,
+  hasMiniscriptPolicy,
   hasAddressPrefixForNetwork,
   normalizeCoinSelection,
   normalizePermanentLabel,
@@ -18,6 +19,19 @@ import {
 } from './policy';
 
 describe('wallet invariants', () => {
+  it('exposes recovery-only controls only for wallets with a Miniscript template', () => {
+    expect(hasMiniscriptPolicy(null)).toBe(false);
+    expect(hasMiniscriptPolicy({})).toBe(false);
+    expect(
+      hasMiniscriptPolicy({
+        recoveryTemplate: {
+          type: 'decaying',
+          stages: [{ availableAfterBlocks: 0, threshold: 2, signerIds: ['key-0', 'key-1'] }]
+        }
+      })
+    ).toBe(true);
+  });
+
   it('summarizes a standard multisig policy without a delayed key', () => {
     expect(
       walletPolicyPresentation({
@@ -67,11 +81,22 @@ describe('wallet invariants', () => {
     expect(addressPrefixForNetwork('regtest')).toBe('bcrt1');
     expect(addressPrefixForNetwork('signet')).toBe('tb1');
     expect(addressPrefixForNetwork('testnet4')).toBe('tb1');
+    expect(addressPrefixForNetwork('mainnet')).toBe('bc1');
     expect(hasAddressPrefixForNetwork(' bcrt1qfixtureaddress000 ', 'regtest')).toBe(true);
     expect(hasAddressPrefixForNetwork('tb1qfixtureaddress000', 'signet')).toBe(true);
     expect(hasAddressPrefixForNetwork('tb1qfixtureaddress000', 'testnet4')).toBe(true);
     expect(hasAddressPrefixForNetwork('tb1qfixtureaddress000', 'regtest')).toBe(false);
     expect(hasAddressPrefixForNetwork('bcrt1short', 'regtest')).toBe(false);
+    expect(hasAddressPrefixForNetwork('mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn', 'regtest')).toBe(true);
+    expect(
+      hasAddressPrefixForNetwork('bc1qrur4qp60xej8v5st3e58xh6vnaqsfh0mf8w6kj', 'mainnet')
+    ).toBe(true);
+    expect(hasAddressPrefixForNetwork('1BoatSLRHtKNngkdXEeobR76b53LETtpyT', 'mainnet')).toBe(true);
+    expect(hasAddressPrefixForNetwork('3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy', 'mainnet')).toBe(true);
+    expect(hasAddressPrefixForNetwork('bc1pfixtureaddress000', 'mainnet')).toBe(true);
+    expect(hasAddressPrefixForNetwork('tb1qfixtureaddress000', 'mainnet')).toBe(false);
+    expect(hasAddressPrefixForNetwork('mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn', 'testnet4')).toBe(true);
+    expect(hasAddressPrefixForNetwork('2N47mmrWXsNBvQR6k78hWJoTji57zXwNcU7', 'signet')).toBe(true);
   });
 
   it('requires and freezes a normalized address label at creation', () => {

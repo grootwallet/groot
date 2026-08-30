@@ -88,7 +88,8 @@ export type AccelerationReview = {
   minimumFeeRate: FeeRate;
   targetFeeRate: FeeRate;
   incrementalFee: Sats;
-  recommendationSource: 'bitcoin_core' | 'replacement_fallback' | 'custom' | 'legacy';
+  recommendationSource:
+    'bitcoin_core' | 'replacement_fallback' | 'package_fallback' | 'custom' | 'legacy';
 };
 
 export type AccelerationQuote = {
@@ -104,6 +105,22 @@ export type AccelerationQuote = {
   resultingEffectiveFeeRate: FeeRate;
   replacementVsize: number;
   recommendationSource: 'bitcoin_core' | 'replacement_fallback' | 'custom';
+};
+
+export type CpfpAccelerationQuote = {
+  method: 'cpfp';
+  originalTxid: string;
+  parentFee: Sats;
+  parentVsize: number;
+  parentEffectiveFeeRate: FeeRate;
+  minimumFeeRate: FeeRate;
+  targetFeeRate: FeeRate;
+  childFee: Sats;
+  childVsize: number;
+  packageFee: Sats;
+  packageVsize: number;
+  resultingPackageFeeRate: FeeRate;
+  recommendationSource: 'bitcoin_core' | 'package_fallback' | 'custom';
 };
 
 export type LabelExportResult = {

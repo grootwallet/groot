@@ -3,7 +3,8 @@ use super::multisig_proposal_commands::{
     import_multisig_proposal_in_db,
 };
 use super::transaction_commands::{
-    prepare_persisted_multisig_acceleration, validate_acceleration_rate, AccelerationRatePolicy,
+    core_incremental_relay_fee, prepare_persisted_multisig_acceleration, validate_fee_rate,
+    AccelerationRatePolicy,
 };
 use super::*;
 use crate::multisig::{CosignerInput, CosignerSource, MULTISIG_ACCOUNT_PATH};
@@ -105,6 +106,32 @@ fn metadata(keys: &[TestKey]) -> MultisigWalletDto {
         recovery_template: None,
         spending_paths: vec![],
     }
+}
+
+#[test]
+fn multisig_policy_builders_fail_closed_without_spendable_policy_context() {
+    let keys = test_keys();
+    let metadata = metadata(&keys);
+    let mut wallet = Wallet::create(metadata.external_descriptor, metadata.internal_descriptor)
+        .network(Network::Regtest)
+        .create_wallet_no_persist()
+        .unwrap();
+    let destination = wallet.next_unused_address(KeychainKind::Internal).address;
+    let foreign = OutPoint::new(Txid::from_byte_array([0x51; 32]), 7);
+    let rate = FeeRate::from_sat_per_vb(2).unwrap();
+
+    assert_eq!(
+        build_policy_renewal(&mut wallet, foreign, rate)
+            .unwrap_err()
+            .code,
+        "wallet_corrupt"
+    );
+    assert_eq!(
+        build_delayed_policy_sweep(&mut wallet, foreign, &destination, rate)
+            .unwrap_err()
+            .code,
+        "wallet_corrupt"
+    );
 }
 
 fn regtest_dir() -> PathBuf {
@@ -643,9 +670,251 @@ fn clean_storage_descriptor_recovery_restores_known_history_and_survives_reopen(
 
 #[test]
 #[ignore = "requires the isolated Bitcoin Core regtest harness"]
+fn current_tip_initial_scan_allows_later_bitcoin_core_sync() {
+    assert!(std::env::var_os("GROOT_RUN_REGTEST").is_some());
+    let rpc = Arc::new(rpc());
+    let keys = test_keys();
+    let metadata = metadata(&keys);
+    let database = TemporaryDatabase::new();
+    let mut db = Connection::open(&database.0).unwrap();
+    init_app_schema(&db).unwrap();
+    let tip_before_scan = u32::try_from(rpc.get_block_count().unwrap()).unwrap();
+    let settings = RecoveryScanSettingsDto {
+        birthday_height: tip_before_scan,
+        gap_limit: 20,
+    };
+    db.execute(
+        "INSERT INTO groot_recovery_settings (singleton, birthday_height, gap_limit)
+         VALUES (1, ?1, ?2)",
+        params![settings.birthday_height, settings.gap_limit],
+    )
+    .unwrap();
+    let mut wallet = Wallet::create(metadata.external_descriptor, metadata.internal_descriptor)
+        .network(Network::Regtest)
+        .lookahead(settings.gap_limit)
+        .create_wallet(&mut db)
+        .unwrap();
+    let cancel = AtomicBool::new(false);
+    full_rescan_loaded_wallet(
+        Arc::clone(&rpc),
+        &mut wallet,
+        &mut db,
+        &settings,
+        "current-tip-run",
+        &cancel,
+    )
+    .unwrap();
+    finish_recovery_scan_record(&db, "current-tip-run", "completed").unwrap();
+    let initial_snapshot =
+        snapshot_from(&wallet, &db, Some(now().to_string()), true, None).unwrap();
+    assert_eq!(initial_snapshot.chain_tip.height, tip_before_scan);
+    assert!(has_completed_sync(&db).unwrap());
+
+    let mining = rpc
+        .get_new_address(Some("groot current-tip follow-up"), None)
+        .unwrap()
+        .require_network(Network::Regtest)
+        .unwrap();
+    rpc.generate_to_address(1, &mining).unwrap();
+    sync(&mut wallet, &mut db, Arc::clone(&rpc));
+    let refreshed = snapshot_from(&wallet, &db, Some(now().to_string()), true, None).unwrap();
+
+    assert_eq!(refreshed.chain_tip.height, tip_before_scan + 1);
+}
+
+#[test]
+#[ignore = "requires the isolated Bitcoin Core regtest harness"]
+fn explicit_rescan_waits_when_core_falls_behind_the_wallet_checkpoint() {
+    assert!(std::env::var_os("GROOT_RUN_REGTEST").is_some());
+    let rpc = Arc::new(rpc());
+    let keys = test_keys();
+    let metadata = metadata(&keys);
+    let database = TemporaryDatabase::new();
+    let mut db = Connection::open(&database.0).unwrap();
+    init_app_schema(&db).unwrap();
+    let birthday = u32::try_from(rpc.get_block_count().unwrap()).unwrap();
+    let settings = RecoveryScanSettingsDto {
+        birthday_height: birthday,
+        gap_limit: 20,
+    };
+    let mut wallet = Wallet::create(metadata.external_descriptor, metadata.internal_descriptor)
+        .network(Network::Regtest)
+        .lookahead(settings.gap_limit)
+        .create_wallet(&mut db)
+        .unwrap();
+    let cancel = AtomicBool::new(false);
+    full_rescan_loaded_wallet(
+        Arc::clone(&rpc),
+        &mut wallet,
+        &mut db,
+        &settings,
+        "behind-core-initial",
+        &cancel,
+    )
+    .unwrap();
+    finish_recovery_scan_record(&db, "behind-core-initial", "completed").unwrap();
+    let verified_tip = wallet.latest_checkpoint();
+
+    let invalidated = rpc.get_best_block_hash().unwrap();
+    rpc.invalidate_block(&invalidated).unwrap();
+    let result = full_rescan_loaded_wallet(
+        Arc::clone(&rpc),
+        &mut wallet,
+        &mut db,
+        &settings,
+        "behind-core-retry",
+        &cancel,
+    );
+    rpc.reconsider_block(&invalidated).unwrap();
+
+    let error = result.unwrap_err();
+    assert_eq!(error.code, "node_syncing");
+    assert_eq!(wallet.latest_checkpoint(), verified_tip);
+    drop(wallet);
+    let persisted = load_wallet(&mut db).unwrap();
+    assert_eq!(persisted.latest_checkpoint(), verified_tip);
+}
+
+#[test]
+#[ignore = "requires the isolated Bitcoin Core regtest harness"]
+fn birthday_only_checkpoint_recovers_after_a_deep_reorg() {
+    assert!(std::env::var_os("GROOT_RUN_REGTEST").is_some());
+    let rpc = Arc::new(rpc());
+    let keys = test_keys();
+    let metadata = metadata(&keys);
+    let database = TemporaryDatabase::new();
+    let mut db = Connection::open(&database.0).unwrap();
+    init_app_schema(&db).unwrap();
+    let birthday = u32::try_from(rpc.get_block_count().unwrap()).unwrap();
+    let settings = RecoveryScanSettingsDto {
+        birthday_height: birthday,
+        gap_limit: 20,
+    };
+    db.execute(
+        "INSERT INTO groot_recovery_settings (singleton, birthday_height, gap_limit)
+         VALUES (1, ?1, ?2)",
+        params![settings.birthday_height, settings.gap_limit],
+    )
+    .unwrap();
+    let mut wallet = Wallet::create(metadata.external_descriptor, metadata.internal_descriptor)
+        .network(Network::Regtest)
+        .lookahead(settings.gap_limit)
+        .create_wallet(&mut db)
+        .unwrap();
+    let cancel = AtomicBool::new(false);
+    full_rescan_loaded_wallet(
+        Arc::clone(&rpc),
+        &mut wallet,
+        &mut db,
+        &settings,
+        "deep-reorg-initial",
+        &cancel,
+    )
+    .unwrap();
+    finish_recovery_scan_record(&db, "deep-reorg-initial", "completed").unwrap();
+    snapshot_from(&wallet, &db, Some(now().to_string()), true, None).unwrap();
+
+    let fork_point = rpc
+        .get_block_hash(u64::from(birthday.saturating_sub(1)))
+        .unwrap();
+    rpc.invalidate_block(&fork_point).unwrap();
+    let mining = rpc
+        .get_new_address(Some("groot deep reorg recovery"), None)
+        .unwrap()
+        .require_network(Network::Regtest)
+        .unwrap();
+    rpc.generate_to_address(3, &mining).unwrap();
+
+    let (active_checkpoint, rewound) =
+        rewind_stale_core_checkpoints(rpc.as_ref(), &wallet).unwrap();
+    assert!(rewound);
+    let mut emitter = Emitter::new(
+        Arc::clone(&rpc),
+        active_checkpoint,
+        settings.birthday_height,
+        wallet
+            .transactions()
+            .filter(|transaction| transaction.chain_position.is_unconfirmed()),
+    );
+    while let Some(block) = emitter.next_block().unwrap() {
+        wallet
+            .apply_block_connected_to(&block.block, block.block_height(), block.connected_to())
+            .unwrap();
+    }
+    let mempool = emitter.mempool().unwrap();
+    wallet.apply_evicted_txs(mempool.evicted);
+    wallet.apply_unconfirmed_txs(mempool.update);
+    wallet.persist(&mut db).unwrap();
+
+    assert_eq!(wallet.latest_checkpoint().height(), birthday + 1);
+}
+
+#[test]
+#[ignore = "requires the isolated Bitcoin Core regtest harness"]
+fn existing_wallet_can_repeat_full_rescan_from_an_earlier_birthday() {
+    assert!(std::env::var_os("GROOT_RUN_REGTEST").is_some());
+    let rpc = Arc::new(rpc());
+    let keys = test_keys();
+    let metadata = metadata(&keys);
+    let database = TemporaryDatabase::new();
+    let mut db = Connection::open(&database.0).unwrap();
+    init_app_schema(&db).unwrap();
+    let initial_birthday = u32::try_from(rpc.get_block_count().unwrap()).unwrap();
+    let mut wallet = Wallet::create(metadata.external_descriptor, metadata.internal_descriptor)
+        .network(Network::Regtest)
+        .lookahead(20)
+        .create_wallet(&mut db)
+        .unwrap();
+    let cancel = AtomicBool::new(false);
+    let initial_settings = RecoveryScanSettingsDto {
+        birthday_height: initial_birthday,
+        gap_limit: 20,
+    };
+    full_rescan_loaded_wallet(
+        Arc::clone(&rpc),
+        &mut wallet,
+        &mut db,
+        &initial_settings,
+        "existing-wallet-initial",
+        &cancel,
+    )
+    .unwrap();
+    finish_recovery_scan_record(&db, "existing-wallet-initial", "completed").unwrap();
+    snapshot_from(&wallet, &db, Some(now().to_string()), true, None).unwrap();
+
+    let mining = rpc
+        .get_new_address(Some("groot existing-wallet rescan"), None)
+        .unwrap()
+        .require_network(Network::Regtest)
+        .unwrap();
+    rpc.generate_to_address(3, &mining).unwrap();
+    sync(&mut wallet, &mut db, Arc::clone(&rpc));
+    let tip_before_repeat = wallet.latest_checkpoint().height();
+    let repeated_settings = RecoveryScanSettingsDto {
+        birthday_height: initial_birthday.saturating_sub(5),
+        gap_limit: 20,
+    };
+    full_rescan_loaded_wallet(
+        Arc::clone(&rpc),
+        &mut wallet,
+        &mut db,
+        &repeated_settings,
+        "existing-wallet-repeat",
+        &cancel,
+    )
+    .unwrap();
+    finish_recovery_scan_record(&db, "existing-wallet-repeat", "completed").unwrap();
+    let repeated = snapshot_from(&wallet, &db, Some(now().to_string()), true, None).unwrap();
+
+    assert_eq!(repeated.chain_tip.height, tip_before_repeat);
+}
+
+#[test]
+#[ignore = "requires the isolated Bitcoin Core regtest harness"]
 fn funded_rbf_and_cpfp_cross_groot_proposal_boundaries() {
     assert!(std::env::var_os("GROOT_RUN_REGTEST").is_some());
     let rpc = Arc::new(rpc());
+    assert!(core_incremental_relay_fee(rpc.as_ref()).unwrap() > 0);
     let keys = test_keys();
     let metadata = metadata(&keys);
     let database = TemporaryDatabase::new();
@@ -695,7 +964,7 @@ fn funded_rbf_and_cpfp_cross_groot_proposal_boundaries() {
     sync(&mut wallet, &mut db, Arc::clone(&rpc));
 
     let incremental_fee = rpc.get_network_info().unwrap().incremental_fee.to_sat();
-    let (applied, rate) = validate_acceleration_rate("5").unwrap();
+    let (applied, rate) = validate_fee_rate("5").unwrap();
     let rbf = prepare_persisted_multisig_acceleration(
         &mut db,
         &metadata,
@@ -706,6 +975,7 @@ fn funded_rbf_and_cpfp_cross_groot_proposal_boundaries() {
             applied,
             rate,
             rbf_quote_request: Some(("5".to_owned(), incremental_fee, Some(5.0))),
+            cpfp_quote_request: None,
         },
     )
     .unwrap();
@@ -719,6 +989,7 @@ fn funded_rbf_and_cpfp_cross_groot_proposal_boundaries() {
             applied,
             rate,
             rbf_quote_request: Some(("5".to_owned(), incremental_fee, Some(5.0))),
+            cpfp_quote_request: None,
         },
     )
     .unwrap();
@@ -830,7 +1101,7 @@ fn funded_rbf_and_cpfp_cross_groot_proposal_boundaries() {
     );
 
     let parent_fee = rpc.get_mempool_entry(&replacement_txid).unwrap().fees.base;
-    let (applied, rate) = validate_acceleration_rate("9").unwrap();
+    let (applied, rate) = validate_fee_rate("9").unwrap();
     let cpfp = prepare_persisted_multisig_acceleration(
         &mut db,
         &metadata,
@@ -841,6 +1112,7 @@ fn funded_rbf_and_cpfp_cross_groot_proposal_boundaries() {
             applied,
             rate,
             rbf_quote_request: None,
+            cpfp_quote_request: Some("9".to_owned()),
         },
     )
     .unwrap();

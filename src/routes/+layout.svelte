@@ -8,13 +8,6 @@
   onMount(() => {
     initLocale();
     initDiscreetMode();
-    const saved = localStorage.getItem('groot-theme');
-    document.documentElement.dataset.theme =
-      saved === 'light' || saved === 'dark'
-        ? saved
-        : matchMedia('(prefers-color-scheme: light)').matches
-          ? 'light'
-          : 'dark';
   });
 </script>
 

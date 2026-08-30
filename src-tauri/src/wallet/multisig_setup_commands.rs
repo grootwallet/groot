@@ -793,15 +793,27 @@ pub fn multisig_export(
     state: State<'_, AppState>,
     credential: String,
 ) -> ApiResult<String> {
-    let _operation = operation_guard(&state)?;
     let credential = Zeroizing::new(credential);
+    let _operation = operation_guard(&state)?;
     authorize_multisig_operation(&app, &state, credential.as_str())?;
     let backup = MultisigBackupDto {
         version: 1,
         network: NETWORK_NAME.to_owned(),
         wallet: read_multisig_metadata(&app)?,
     };
-    serde_json::to_string_pretty(&backup).map_err(internal)
+    let encoded = serde_json::to_string_pretty(&backup).map_err(internal)?;
+    diagnostics::record(
+        &app,
+        &state,
+        diagnostics::DiagnosticEventKind::BackupExported,
+        diagnostics::DiagnosticOutcome::Succeeded,
+        diagnostics::DiagnosticContext {
+            wallet_kind: Some(diagnostics::DiagnosticWalletKind::Multisig),
+            ..Default::default()
+        },
+        None,
+    );
+    Ok(encoded)
 }
 
 #[tauri::command]
@@ -810,18 +822,30 @@ pub fn multisig_export_bsms(
     state: State<'_, AppState>,
     credential: String,
 ) -> ApiResult<String> {
-    let _operation = operation_guard(&state)?;
     let credential = Zeroizing::new(credential);
+    let _operation = operation_guard(&state)?;
     authorize_multisig_operation(&app, &state, credential.as_str())?;
     let wallet = read_multisig_metadata(&app)?;
     let first_address = first_multisig_address(&wallet)?;
-    DescriptorRecord::from_descriptor_pair(
+    let encoded = DescriptorRecord::from_descriptor_pair(
         &wallet.external_descriptor,
         &wallet.internal_descriptor,
         &first_address,
     )
     .map(|record| record.encode())
-    .map_err(bsms_api_error)
+    .map_err(bsms_api_error)?;
+    diagnostics::record(
+        &app,
+        &state,
+        diagnostics::DiagnosticEventKind::BackupExported,
+        diagnostics::DiagnosticOutcome::Succeeded,
+        diagnostics::DiagnosticContext {
+            wallet_kind: Some(diagnostics::DiagnosticWalletKind::Multisig),
+            ..Default::default()
+        },
+        None,
+    );
+    Ok(encoded)
 }
 
 pub(crate) fn parse_public_descriptor_record(encoded: &str) -> ApiResult<DescriptorRecord> {
@@ -902,6 +926,17 @@ pub fn multisig_bsms_inspect(
             .map_err(internal)?
             .insert(wallet_id, descriptor);
     }
+    diagnostics::record(
+        &app,
+        &state,
+        diagnostics::DiagnosticEventKind::RecoveryTested,
+        diagnostics::DiagnosticOutcome::Succeeded,
+        diagnostics::DiagnosticContext {
+            wallet_kind: Some(diagnostics::DiagnosticWalletKind::Multisig),
+            ..Default::default()
+        },
+        None,
+    );
     Ok(RecoveryDrillDto {
         first_address: derived_first,
         matches_current_wallet,
@@ -916,8 +951,9 @@ pub fn multisig_recover_bsms(
     encoded_backup: String,
     credential: String,
 ) -> ApiResult<MultisigWalletDto> {
-    let _operation = operation_guard(&state)?;
     let credential = Zeroizing::new(credential);
+    let _operation = operation_guard(&state)?;
+    let _admission_cleanup = clear_new_wallet_admission_on_exit(&state);
     validate_credential(credential.as_str())?;
     let record = parse_public_descriptor_record(&encoded_backup)?;
     let (threshold, keys) = record.standard_policy().map_err(bsms_api_error)?;
@@ -934,6 +970,7 @@ pub fn multisig_recover_bsms(
             device_type: None,
         })
         .collect::<Vec<_>>();
+    let cosigners = hardware_commands::reconcile_mainnet_recovery_cosigners(&state, &cosigners)?;
     let preview = PolicyInput {
         name,
         threshold,
@@ -961,7 +998,8 @@ pub fn multisig_recover_bsms(
     }
     let (id, dir) = prepare_profile_directory(&app)?;
     let result = (|| {
-        let mut db = open_wallet_database(&dir.join("wallet.sqlite"))?;
+        let permit = database_open_permit_for_new_wallet(&state)?;
+        let mut db = open_wallet_database(&dir.join("wallet.sqlite"), &permit)?;
         init_app_schema(&db)?;
         Wallet::create(
             wallet.external_descriptor.clone(),
@@ -979,15 +1017,43 @@ pub fn multisig_recover_bsms(
         )
         .map_err(secure_store_error)?;
         write_private_json(&dir.join("wallet.json"), &wallet)?;
+        profile_commands::persist_mainnet_node_admission_for_new_profile(
+            &app,
+            &state,
+            id,
+            credential.as_str(),
+        )?;
         commit_multisig_profile(&app, id, &wallet)?;
         Ok(wallet)
     })();
-    if result.is_err() {
-        cleanup_failed_profile(&dir)?;
-    }
+    finish_new_profile_attempt(&state, id, &dir, result.is_ok())?;
     let wallet = result?;
     unlock_selected(&app, &state)?;
     reset_auth_throttle(&app, &state)?;
+    diagnostics::record(
+        &app,
+        &state,
+        diagnostics::DiagnosticEventKind::BackupImported,
+        diagnostics::DiagnosticOutcome::Succeeded,
+        diagnostics::DiagnosticContext {
+            trigger: diagnostics::DiagnosticTrigger::Recovery,
+            wallet_kind: Some(diagnostics::DiagnosticWalletKind::Multisig),
+            ..Default::default()
+        },
+        None,
+    );
+    diagnostics::record(
+        &app,
+        &state,
+        diagnostics::DiagnosticEventKind::WalletRecovered,
+        diagnostics::DiagnosticOutcome::Succeeded,
+        diagnostics::DiagnosticContext {
+            trigger: diagnostics::DiagnosticTrigger::Recovery,
+            wallet_kind: Some(diagnostics::DiagnosticWalletKind::Multisig),
+            ..Default::default()
+        },
+        None,
+    );
     Ok(wallet)
 }
 
@@ -1012,6 +1078,17 @@ pub fn multisig_recovery_drill(
             .map_err(internal)?
             .insert(wallet_id, backup.wallet.external_descriptor.clone());
     }
+    diagnostics::record(
+        &app,
+        &state,
+        diagnostics::DiagnosticEventKind::RecoveryTested,
+        diagnostics::DiagnosticOutcome::Succeeded,
+        diagnostics::DiagnosticContext {
+            wallet_kind: Some(diagnostics::DiagnosticWalletKind::Multisig),
+            ..Default::default()
+        },
+        None,
+    );
     Ok(RecoveryDrillDto {
         first_address,
         matches_current_wallet,
@@ -1042,13 +1119,26 @@ pub fn multisig_recover(
     encoded_backup: String,
     credential: String,
 ) -> ApiResult<MultisigWalletDto> {
-    let _operation = operation_guard(&state)?;
     let credential = Zeroizing::new(credential);
+    let _operation = operation_guard(&state)?;
+    let _admission_cleanup = clear_new_wallet_admission_on_exit(&state);
     validate_credential(credential.as_str())?;
-    let backup = validate_multisig_backup(&encoded_backup)?;
+    let mut backup = validate_multisig_backup(&encoded_backup)?;
+    let standard_policy = backup.wallet.recovery_template.is_none()
+        && matches!(backup.wallet.policy_type.as_str(), "" | "standard");
+    crate::release_policy::ensure_recovered_wallet_policy_enabled(NETWORK, standard_policy)
+        .map_err(|_| {
+            api_error(
+                "unsupported_wallet_policy",
+                "Guided recovery and inheritance wallets are not included in the first mainnet release.",
+            )
+        })?;
+    backup.wallet.cosigners =
+        hardware_commands::reconcile_mainnet_recovery_cosigners(&state, &backup.wallet.cosigners)?;
     let (id, dir) = prepare_profile_directory(&app)?;
     let result = (|| {
-        let mut db = open_wallet_database(&dir.join("wallet.sqlite"))?;
+        let permit = database_open_permit_for_new_wallet(&state)?;
+        let mut db = open_wallet_database(&dir.join("wallet.sqlite"), &permit)?;
         init_app_schema(&db)?;
         Wallet::create(
             backup.wallet.external_descriptor.clone(),
@@ -1065,14 +1155,42 @@ pub fn multisig_recover(
         )
         .map_err(secure_store_error)?;
         write_private_json(&dir.join("wallet.json"), &backup.wallet)?;
+        profile_commands::persist_mainnet_node_admission_for_new_profile(
+            &app,
+            &state,
+            id,
+            credential.as_str(),
+        )?;
         commit_multisig_profile(&app, id, &backup.wallet)?;
         Ok(backup.wallet)
     })();
-    if result.is_err() {
-        cleanup_failed_profile(&dir)?;
-    }
+    finish_new_profile_attempt(&state, id, &dir, result.is_ok())?;
     let wallet = result?;
     unlock_selected(&app, &state)?;
+    diagnostics::record(
+        &app,
+        &state,
+        diagnostics::DiagnosticEventKind::BackupImported,
+        diagnostics::DiagnosticOutcome::Succeeded,
+        diagnostics::DiagnosticContext {
+            trigger: diagnostics::DiagnosticTrigger::Recovery,
+            wallet_kind: Some(diagnostics::DiagnosticWalletKind::Multisig),
+            ..Default::default()
+        },
+        None,
+    );
+    diagnostics::record(
+        &app,
+        &state,
+        diagnostics::DiagnosticEventKind::WalletRecovered,
+        diagnostics::DiagnosticOutcome::Succeeded,
+        diagnostics::DiagnosticContext {
+            trigger: diagnostics::DiagnosticTrigger::Recovery,
+            wallet_kind: Some(diagnostics::DiagnosticWalletKind::Multisig),
+            ..Default::default()
+        },
+        None,
+    );
     Ok(wallet)
 }
 
@@ -1083,8 +1201,8 @@ pub fn multisig_delete(
     credential: String,
     confirmation: String,
 ) -> ApiResult<()> {
-    let _operation = operation_guard(&state)?;
     let credential = Zeroizing::new(credential);
+    let _operation = operation_guard(&state)?;
     require_unlocked(&app, &state)?;
     let wallet = read_multisig_metadata(&app)?;
     let wallet_id = selected_profile_of_kind(&app, WalletKind::Multisig)?.id;
@@ -1118,6 +1236,17 @@ pub fn multisig_delete(
         .map_err(internal)?
         .remove(&wallet_id);
     lock_wallet(&state, wallet_id)?;
+    diagnostics::record(
+        &app,
+        &state,
+        diagnostics::DiagnosticEventKind::WalletRemoved,
+        diagnostics::DiagnosticOutcome::Succeeded,
+        diagnostics::DiagnosticContext {
+            wallet_kind: Some(diagnostics::DiagnosticWalletKind::Multisig),
+            ..Default::default()
+        },
+        None,
+    );
     Ok(())
 }
 
@@ -1137,10 +1266,51 @@ pub async fn multisig_snapshot(app: AppHandle) -> ApiResult<WalletSnapshotDto> {
 }
 
 #[tauri::command]
-pub async fn multisig_sync(app: AppHandle) -> ApiResult<WalletSnapshotDto> {
+pub async fn multisig_sync(
+    app: AppHandle,
+    automatic: Option<bool>,
+) -> ApiResult<WalletSnapshotDto> {
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
-        run_foreground_sync(&app, &state, true)
+        let source = read_sync_source(&app)?;
+        let context = diagnostics::DiagnosticContext {
+            trigger: if automatic.unwrap_or(false) {
+                diagnostics::DiagnosticTrigger::Automatic
+            } else {
+                diagnostics::DiagnosticTrigger::Manual
+            },
+            wallet_kind: Some(diagnostics::DiagnosticWalletKind::Multisig),
+            sync_source: Some(diagnostics::sync_source(&source)),
+            ..Default::default()
+        };
+        diagnostics::record(
+            &app,
+            &state,
+            diagnostics::DiagnosticEventKind::Sync,
+            diagnostics::DiagnosticOutcome::Started,
+            context,
+            None,
+        );
+        diagnostics::record(
+            &app,
+            &state,
+            diagnostics::DiagnosticEventKind::Sync,
+            diagnostics::DiagnosticOutcome::Progress,
+            diagnostics::DiagnosticContext {
+                progress_percent: Some(0),
+                ..context
+            },
+            None,
+        );
+        let result = run_foreground_sync(&app, &state, true);
+        diagnostics::record_result(
+            &app,
+            &state,
+            diagnostics::DiagnosticEventKind::Sync,
+            context,
+            &result,
+        );
+        result
     })
     .await
     .map_err(internal)?
@@ -1183,7 +1353,7 @@ pub fn multisig_address_create(
     .map_err(internal)?;
     wallet.persist(&mut transaction).map_err(internal)?;
     transaction.commit().map_err(internal)?;
-    Ok(ReceiveAddressDto {
+    let response = ReceiveAddressDto {
         id: info.index,
         testnet_alias: regtest_testnet_address_alias(&info.address.to_string()),
         address: info.address.to_string(),
@@ -1194,7 +1364,20 @@ pub fn multisig_address_create(
         derivation_path: format!("{MULTISIG_ACCOUNT_PATH}/0/{}", info.index),
         hardware_verified_at: None,
         hardware_verified_by: None,
-    })
+    };
+    diagnostics::record(
+        &app,
+        &state,
+        diagnostics::DiagnosticEventKind::ReceiveAddressGenerated,
+        diagnostics::DiagnosticOutcome::Succeeded,
+        diagnostics::DiagnosticContext {
+            wallet_kind: Some(diagnostics::DiagnosticWalletKind::Multisig),
+            item_count: u32::try_from(response.labels.len()).ok(),
+            ..Default::default()
+        },
+        None,
+    );
+    Ok(response)
 }
 
 pub(crate) fn claim_observed_receive_output(
@@ -1316,5 +1499,16 @@ pub fn multisig_address_discard(
             "Only an unused address awaiting payment can be discarded.",
         ));
     }
+    diagnostics::record(
+        &app,
+        &state,
+        diagnostics::DiagnosticEventKind::ReceiveAddressDiscarded,
+        diagnostics::DiagnosticOutcome::Succeeded,
+        diagnostics::DiagnosticContext {
+            wallet_kind: Some(diagnostics::DiagnosticWalletKind::Multisig),
+            ..Default::default()
+        },
+        None,
+    );
     Ok(())
 }

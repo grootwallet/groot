@@ -1,4 +1,21 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
+
+async function expectAmountUnitsSeparated(scope: Locator) {
+  const gaps = await scope.locator('.formatted-amount').evaluateAll((elements) =>
+    elements.flatMap((element) => {
+      const amount = element.querySelector('strong')?.getBoundingClientRect();
+      const unitText = [...(element.querySelector('small')?.childNodes ?? [])].find(
+        (node) => node.nodeType === Node.TEXT_NODE && node.textContent?.trim()
+      );
+      if (!amount || !unitText) return [];
+      const range = document.createRange();
+      range.selectNode(unitText);
+      return [range.getBoundingClientRect().left - amount.right];
+    })
+  );
+  expect(gaps.length).toBeGreaterThan(0);
+  for (const gap of gaps) expect(gap).toBeGreaterThanOrEqual(7.5);
+}
 
 async function confirmGeneratedBackup(page: Page) {
   const words = await page.locator('.mnemonic-grid strong').allTextContents();
@@ -31,6 +48,56 @@ async function confirmGeneratedBackup(page: Page) {
 async function chooseSoftwareWallet(page: Page) {
   await page.getByRole('button', { name: /Software wallet/ }).click();
 }
+
+test('copies the public build identity with inline retry feedback', async ({ page }) => {
+  test.skip((page.viewportSize()?.width ?? 0) <= 760, 'The build identity is desktop-only.');
+  await page.addInitScript(() => {
+    let copied = '';
+    let attempts = 0;
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: async (value: string) => {
+          attempts += 1;
+          if (attempts === 1) throw new Error('Simulated clipboard denial');
+          copied = value;
+        },
+        readText: async () => copied
+      }
+    });
+  });
+  await page.goto('/unlock?fixture-locked-wallet-switch=1');
+  const buildIdentity = page.getByRole('button', { name: 'Copy build information' });
+  const displayedIdentity = (await buildIdentity.textContent())?.trim();
+  expect(displayedIdentity).toMatch(/^Groot v\d+\.\d+\.\d+ · [a-z0-9-]+$/);
+
+  await buildIdentity.click();
+  const copyStatus = page.locator('.build-identity-sidebar .build-copy-status');
+  await expect(copyStatus).toHaveText('Copy failed · Try again');
+
+  await buildIdentity.click();
+  await expect(copyStatus).toHaveText('Copied');
+  await expect(page.getByText('Build information copied')).toBeVisible();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(displayedIdentity);
+});
+
+test('exports diagnostics with a Finder action and continuous table rows', async ({ page }) => {
+  await page.goto('/diagnostics');
+  const table = page.getByRole('table');
+  await expect(table).toBeVisible();
+
+  const firstRowBottoms = await table
+    .locator('tbody tr')
+    .first()
+    .locator('td')
+    .evaluateAll((cells) => cells.map((cell) => Math.round(cell.getBoundingClientRect().bottom)));
+  expect(new Set(firstRowBottoms).size).toBe(1);
+
+  await page.getByRole('button', { name: 'Export CSV' }).click();
+  const toast = page.locator('.toast').filter({ hasText: 'Diagnostics exported' });
+  await expect(toast.getByRole('button', { name: 'Show in Finder' })).toBeVisible();
+  await toast.getByRole('button', { name: 'Show in Finder' }).click();
+});
 
 test('creates a 24-word wallet and clears onboarding secrets', async ({ page }) => {
   await page.goto('/welcome?fixture-empty=1');
@@ -99,7 +166,12 @@ test('creates a 24-word wallet and clears onboarding secrets', async ({ page }) 
   await page.getByLabel('Wallet passphrase', { exact: true }).fill('a'.repeat(1025));
   await expect(page.getByText('The wallet passphrase is too long.')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Create wallet' })).toBeDisabled();
-  await page.getByLabel('Wallet passphrase', { exact: true }).fill('new-wallet-pin');
+  await page.getByLabel('Wallet passphrase', { exact: true }).fill('abcdefghijklmno');
+  await expect(
+    page.getByText('Use at least 16 characters. Letters-only passphrases are allowed.')
+  ).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Create wallet' })).toBeDisabled();
+  await page.getByLabel('Wallet passphrase', { exact: true }).fill('abcdefghijklmnop');
   await page.getByRole('button', { name: 'Show Wallet passphrase' }).click();
   await expect(page.getByLabel('Wallet passphrase', { exact: true })).toHaveAttribute(
     'type',
@@ -110,7 +182,7 @@ test('creates a 24-word wallet and clears onboarding secrets', async ({ page }) 
   await page.getByLabel('Confirm wallet passphrase', { exact: true }).fill('different-pin');
   await expect(page.getByText('Passphrases do not match.')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Create wallet' })).toBeDisabled();
-  await page.getByLabel('Confirm wallet passphrase', { exact: true }).fill('new-wallet-pin');
+  await page.getByLabel('Confirm wallet passphrase', { exact: true }).fill('abcdefghijklmnop');
   await page.getByLabel(/I understand this exact passphrase/).check();
   await page.getByRole('button', { name: 'Create wallet' }).click();
   await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible();
@@ -191,6 +263,8 @@ test('keeps recovery words out of the webview and unlock rejects the wrong crede
   await expect(page.getByLabel('Wallet passphrase', { exact: true })).toHaveValue('');
 
   await page.goto('/unlock?fixture-locked-wallet-switch=1');
+  const unlockCredential = page.getByLabel('Wallet passphrase', { exact: true });
+  await expect(unlockCredential).toBeFocused();
   await expect(page.getByRole('link', { name: 'Overview' })).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'Activity' })).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'Coins' })).toHaveCount(0);
@@ -211,12 +285,18 @@ test('keeps recovery words out of the webview and unlock rejects the wrong crede
     'type',
     'text'
   );
-  await page.getByLabel('Wallet passphrase', { exact: true }).fill('wrong');
+  await unlockCredential.fill('wrong');
   await page.getByRole('button', { name: 'Unlock wallet' }).click();
   await expect(page.getByText('Incorrect passphrase / PIN.')).toBeVisible();
-  await page.getByLabel('Wallet passphrase', { exact: true }).fill('prototype-passphrase');
-  await page.getByLabel('Wallet passphrase', { exact: true }).press('Enter');
+  await unlockCredential.fill('prototype-passphrase');
+  await unlockCredential.press('Enter');
   await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Syncing' })).toBeVisible();
+  await expect(page.locator('.sync-progress')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Updated now' })).toBeVisible();
+  await page.getByRole('link', { name: 'Activity' }).click();
+  await page.getByRole('link', { name: 'Overview' }).click();
+  await expect(page.getByRole('button', { name: 'Syncing' })).toHaveCount(0);
 });
 
 test('protected-storage denial stays locked and permits an explicit unlock retry', async ({
@@ -265,25 +345,33 @@ test('locked wallet can continue into hardware and multisig setup', async ({ pag
 
   await page.goto('/welcome?add=1');
   await page.getByRole('button', { name: 'Add wallet' }).click();
-  await page.getByRole('link', { name: /Hardware signer/ }).click();
+  await page.getByRole('button', { name: /Hardware signer/ }).click();
   await expect(page).toHaveURL(/\/hardware\/new$/);
   await expect(page.getByRole('heading', { name: 'Add hardware signer' })).toBeVisible();
   await expect(page.locator('.app-shell')).toHaveClass(/onboarding-shell/);
 
   await page.getByRole('link', { name: /Cancel/ }).click();
   await page.getByRole('button', { name: 'Add wallet' }).click();
-  await page.getByRole('link', { name: /Multisig wallet/ }).click();
+  await page.getByRole('button', { name: /Multisig wallet/ }).click();
   await expect(page).toHaveURL(/\/multisig\/new$/);
   await expect(page.getByRole('heading', { name: 'Create a multisig wallet' })).toBeVisible();
   await expect(page.locator('.app-shell')).toHaveClass(/onboarding-shell/);
 });
 
 test('shows skeletons while a restored wallet loads its first synced data', async ({ page }) => {
-  // Start observing after navigation commits rather than after every resource
-  // finishes, because the fixture intentionally makes this state transient.
+  // Hold the fixture's data timer until the loading state has been observed;
+  // runner speed must not decide whether this 600 ms state can be asserted.
+  await page.clock.install({ time: new Date('2026-09-07T00:00:00Z') });
+  await page.clock.pauseAt(new Date('2026-09-07T00:00:01Z'));
   await page.goto('/?fixture-delayed-wallet-data=1', { waitUntil: 'commit' });
-  await expect(page.locator('.wallet-skeleton.balance')).toBeVisible();
-  await expect(page.locator('.wallet-skeleton.transactions')).toBeVisible();
+  await expect
+    .poll(() =>
+      page
+        .locator('.wallet-skeleton')
+        .evaluateAll((skeletons) => skeletons.map((item) => item.className).sort())
+    )
+    .toEqual(['wallet-skeleton balance', 'wallet-skeleton transactions']);
+  await page.clock.runFor(1000);
   await expect(page.getByText('Hardware order', { exact: true })).toBeVisible();
   await expect(page.locator('.wallet-skeleton')).toHaveCount(0);
 });
@@ -424,7 +512,7 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   test.setTimeout(60_000);
   await page.goto('/welcome?add=1');
   await page.getByRole('button', { name: 'Add wallet' }).click();
-  await page.getByRole('link', { name: /Hardware signer/ }).click();
+  await page.getByRole('button', { name: /Hardware signer/ }).click();
   await expect(page.getByRole('heading', { name: 'Add hardware signer' })).toBeVisible();
   await page.getByLabel('Wallet name').fill('Hardware savings');
   await page.getByRole('button', { name: /Connect with cable/ }).click();
@@ -526,6 +614,7 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   await page.getByRole('button', { name: 'Continue to amount' }).click();
   await page.getByLabel('Amount', { exact: true }).fill('1200');
   await page.getByRole('button', { name: 'Review payment' }).click();
+  await expectAmountUnitsSeparated(page.locator('.form-card').first());
   const consolidationReview = page.locator('.self-transfer-consolidating');
   await expect(consolidationReview.getByText('Consolidating', { exact: true })).toBeVisible();
   await expect(consolidationReview).toContainText(/1,200 sats|0\.00001200 BTC/);
@@ -572,7 +661,7 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   await page.getByRole('button', { name: 'Show unsigned QR' }).click();
   await expect(durableImportError).toHaveCount(0);
   const unsignedQrDialog = page.getByRole('dialog', { name: 'Unsigned PSBT' });
-  const unsignedQrImage = unsignedQrDialog.getByRole('img', { name: /Animated QR frame/ });
+  const unsignedQrImage = unsignedQrDialog.getByRole('img', { name: /QR frame/ });
   await expect(unsignedQrImage).toBeVisible();
   await page.getByRole('button', { name: 'Close' }).click();
   await page.getByRole('button', { name: 'Scan signed QR' }).click();
@@ -601,6 +690,7 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   await expect(page.getByText('Signature verified')).toBeVisible();
   const signedReview = page.getByRole('region', { name: 'Signed transaction review' });
   await expect(signedReview).toBeVisible();
+  await expectAmountUnitsSeparated(signedReview);
   expect(
     await signedReview
       .locator(':scope > .details-list')
@@ -640,6 +730,7 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   await page.getByLabel('App PIN', { exact: true }).fill('hardware-pin');
   await page.getByRole('button', { name: 'Finalize & broadcast' }).click();
   await expect(page.getByRole('heading', { name: 'Payment sent' })).toBeVisible();
+  await expectAmountUnitsSeparated(page.locator('.success-amount'));
 
   await page.getByRole('link', { name: 'Settings' }).click();
   await page.getByRole('button', { name: /Export public descriptor/ }).click();
@@ -980,6 +1071,44 @@ test('overview, activity, UTXOs, and settings expose durable states', async ({ p
   await expect(page.getByText('Delete wallet', { exact: true })).toBeVisible();
 });
 
+test('settings clears credentials and confirmations after every modal dismissal', async ({
+  page
+}) => {
+  await page.goto('/settings');
+
+  await page.getByRole('button', { name: /Fee and broadcast node/ }).click();
+  let dialog = page.getByRole('dialog', { name: 'Connect Bitcoin Core' });
+  await dialog.getByRole('button', { name: 'Remote TLS' }).click();
+  await dialog.getByLabel('RPC password', { exact: true }).fill('temporary-rpc-secret');
+  await dialog.getByLabel('Wallet passphrase', { exact: true }).fill('prototype-passphrase');
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: /Fee and broadcast node/ }).click();
+  dialog = page.getByRole('dialog', { name: 'Connect Bitcoin Core' });
+  await expect(dialog.getByLabel('RPC password', { exact: true })).toHaveValue('');
+  await expect(dialog.getByLabel('Wallet passphrase', { exact: true })).toHaveValue('');
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+
+  await page.getByRole('button', { name: /Recovery scan/ }).click();
+  dialog = page.getByRole('dialog', { name: 'Full wallet rescan' });
+  await dialog.getByLabel('Wallet passphrase', { exact: true }).fill('prototype-passphrase');
+  await dialog.getByText('Close', { exact: true }).click();
+  await page.getByRole('button', { name: /Recovery scan/ }).click();
+  dialog = page.getByRole('dialog', { name: 'Full wallet rescan' });
+  await expect(dialog.getByLabel('Wallet passphrase', { exact: true })).toHaveValue('');
+  await dialog.getByText('Close', { exact: true }).click();
+
+  await page.getByRole('button', { name: 'Delete', exact: true }).click();
+  dialog = page.getByRole('dialog', { name: 'Delete this wallet?' });
+  await dialog.getByLabel('Wallet passphrase', { exact: true }).fill('prototype-passphrase');
+  await dialog.getByLabel('Type DELETE to confirm').fill('DELETE');
+  await dialog.getByRole('button', { name: 'Close' }).click();
+  await page.getByRole('button', { name: 'Delete', exact: true }).click();
+  dialog = page.getByRole('dialog', { name: 'Delete this wallet?' });
+  await expect(dialog.getByLabel('Wallet passphrase', { exact: true })).toHaveValue('');
+  await expect(dialog.getByLabel('Type DELETE to confirm')).toHaveValue('');
+  await expect(dialog.getByRole('button', { name: 'Delete wallet' })).toBeDisabled();
+});
+
 test('amount denomination stays consistent across wallet surfaces', async ({ page }) => {
   await page.goto('/settings');
   const amountDisplay = page.getByLabel('Amount display');
@@ -1016,6 +1145,10 @@ test('amount denomination stays consistent across wallet surfaces', async ({ pag
   await page.getByLabel('Payment label').fill('Uniform BTC amount');
   await page.getByRole('button', { name: 'Continue to amount' }).click();
   await page.getByLabel('Amount', { exact: true }).fill('0.00008000');
+  await page.getByRole('button', { name: 'Show transaction amount in sats' }).click();
+  await expect(page.getByLabel('Amount', { exact: true })).toHaveValue('8000');
+  await page.getByRole('button', { name: 'Show transaction amount in BTC' }).click();
+  await expect(page.getByLabel('Amount', { exact: true })).toHaveValue('0.00008000');
   await page.getByRole('button', { name: 'Review payment' }).click();
   const reviewedAmount = page.locator('.review-amount .formatted-amount');
   await expect(reviewedAmount).toContainText('0.00008000 BTC');
@@ -1114,34 +1247,57 @@ test('RBF starts safely and presents one payment row with durable lineage', asyn
   await page.getByRole('link', { name: 'View transaction' }).click();
 
   await page.locator('.tx-row').filter({ hasText: 'RBF target fixture' }).first().click();
-  await page.getByRole('link', { name: 'Increase fee (RBF)' }).click();
-  await expect(page.getByRole('heading', { name: 'Review replacement fee' })).toBeVisible();
-  await expect(page.getByText('Original effective rate', { exact: true })).toBeVisible();
-  await expect(page.getByText('Exact replacement minimum', { exact: true })).toBeVisible();
-  await expect(page.getByText('Selected target', { exact: true })).toBeVisible();
-  await expect(page.getByText('Estimated replacement fee', { exact: true })).toBeVisible();
-  await expect(page.getByText('Incremental fee', { exact: true })).toBeVisible();
-  await expect(page.getByText('Resulting effective rate', { exact: true })).toBeVisible();
+  const rbfLink = page.getByRole('link', { name: 'Increase fee (RBF)' });
+  await rbfLink.evaluate((link) => {
+    const href = link.getAttribute('href');
+    if (href) link.setAttribute('href', `${href}&fixture-acceleration-loading=1`);
+  });
+  await rbfLink.click();
+  await expect(page.getByRole('heading', { name: 'Preparing fee acceleration' })).toBeVisible();
+  await expect(page.getByText('Checking wallet identity…')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Speed up transaction' })).toBeVisible();
+  await expect(page.getByText('You will spend this much more', { exact: true })).toBeVisible();
+  await expect(page.getByText('Your payment amount and recipient will not change.')).toBeVisible();
+  await expect(page.getByText('Original fee rate', { exact: true })).toBeHidden();
+  await expect(page.getByLabel('Custom acceleration fee rate')).toBeHidden();
+  await page.getByText('Change fee rate', { exact: true }).click();
   const rate = page.getByLabel('Custom acceleration fee rate');
   await expect(rate).not.toHaveValue('0');
   await rate.fill('2.5');
   await rate.blur();
   await expect(rate).toHaveValue('2.5');
+  await page.getByText('View fee details', { exact: true }).click();
   await expect(
-    page.locator('.acceleration-quote-details > div').filter({ hasText: 'Selected target' })
+    page.locator('.acceleration-quote-details > div').filter({ hasText: 'New fee rate' })
   ).toContainText('2.5 sat/vB');
   await expect(
-    page
-      .locator('.acceleration-quote-details > div')
-      .filter({ hasText: 'Resulting effective rate' })
+    page.locator('.acceleration-quote-details > div').filter({ hasText: 'Effective fee rate' })
   ).toContainText('2.5 sat/vB');
-  await page.getByRole('button', { name: 'Review acceleration' }).click();
+  await page.getByRole('button', { name: 'Continue to sign' }).click();
   const review = page.locator('.acceleration-review-summary');
-  await expect(review).toContainText('Fee increase replacement');
-  await expect(review).toContainText('2.5 sat/vB');
+  await expect(review).toContainText('Speed-up cost');
+  await expect(review).toContainText('The payment amount stays the same.');
+  await expect(review).not.toContainText('sat/vB');
+  await expect(page.getByText('Original fee rate', { exact: true })).toBeHidden();
   await page.getByRole('button', { name: 'Continue to sign' }).click();
   await page.getByLabel('Wallet passphrase', { exact: true }).fill('prototype-passphrase');
   await page.getByRole('button', { name: /Sign & broadcast/ }).click();
+  await expect(page.getByRole('heading', { name: 'Transaction accelerated' })).toBeVisible();
+  const successAmount = page.locator('.success-state .success-amount');
+  await expect(successAmount).toContainText('10,000 sats');
+  const satsValueBox = await successAmount.locator('strong').boundingBox();
+  const satsUnitBox = await successAmount.locator('small').boundingBox();
+  expect(
+    (satsUnitBox?.x ?? 0) - ((satsValueBox?.x ?? 0) + (satsValueBox?.width ?? 0))
+  ).toBeGreaterThanOrEqual(4);
+  await successAmount.getByRole('button').click();
+  await expect(successAmount).toContainText('0.00010000 BTC');
+  const btcValueBox = await successAmount.locator('strong').boundingBox();
+  const btcUnitBox = await successAmount.locator('small').boundingBox();
+  expect(
+    (btcUnitBox?.x ?? 0) - ((btcValueBox?.x ?? 0) + (btcValueBox?.width ?? 0))
+  ).toBeGreaterThanOrEqual(4);
+  await expect(page.locator('.success-state .hash-box')).toContainText('Transaction ID');
   await page.getByRole('link', { name: 'View transaction' }).click();
 
   const paymentRows = page.locator('.tx-row').filter({ hasText: 'RBF target fixture' });
@@ -1177,6 +1333,24 @@ test('RBF starts safely and presents one payment row with durable lineage', asyn
   );
 });
 
+test('RBF explains a full-balance funding shortfall without presenting zero as a default', async ({
+  page
+}) => {
+  await page.goto(
+    '/send?fixture-rbf-insufficient-funds=1&accelerate=rbf&txid=6a1b2c3d4e5f67890123456789abcdef6a1b2c3d4e5f67890123456789abcdef'
+  );
+
+  await expect(page.getByRole('heading', { name: 'Enter a custom fee rate' })).toBeVisible();
+  const rate = page.getByLabel('Custom acceleration fee rate');
+  await expect(rate).toHaveValue('');
+  await expect(rate).toHaveAttribute('placeholder', 'Enter a fee rate');
+  await expect(page.getByRole('alert')).toContainText('Not enough bitcoin to raise the fee.');
+  await expect(page.getByRole('alert')).toContainText(
+    'Receive more and wait for it to confirm, or wait for this transaction to confirm.'
+  );
+  await expect(page.getByRole('button', { name: 'Continue to sign' })).toBeDisabled();
+});
+
 test('pending incoming transaction opens CPFP review without offering sender-side RBF', async ({
   page
 }) => {
@@ -1185,26 +1359,35 @@ test('pending incoming transaction opens CPFP review without offering sender-sid
   await expect(page.getByRole('link', { name: 'Increase fee (RBF)' })).toHaveCount(0);
   await page.getByRole('link', { name: 'Spend output (CPFP)' }).click();
   await expect(page).toHaveURL(/accelerate=cpfp/);
-  await expect(page.getByText('Fee rate', { exact: true })).toBeHidden();
-  await page.getByText('View more details', { exact: true }).click();
-  await expect(page.getByText('Fee rate', { exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Speed up transaction' })).toBeVisible();
+  await expect(page.getByText('You will spend this much more')).toBeVisible();
+  await page.getByText('Change fee rate', { exact: true }).click();
+  const rate = page.getByLabel('Custom acceleration fee rate');
+  await expect(rate).toBeVisible();
+  await rate.fill('7');
+  await rate.blur();
+  await expect(rate).toHaveValue('7');
+  await page.getByText('View fee details', { exact: true }).click();
+  await expect(page.getByText('Target package rate')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Continue to sign' })).toBeVisible();
 });
 
-test('CPFP success identifies the fee-only child instead of a zero-sat payment', async ({
+test('CPFP success identifies the additional fee instead of a zero-sat payment', async ({
   page
 }) => {
   await page.goto('/activity');
   await page.locator('.tx-row').filter({ hasText: 'Invoice #104' }).click();
   await page.getByRole('link', { name: 'Spend output (CPFP)' }).click();
   await page.getByRole('button', { name: 'Continue to sign' }).click();
+  await page.getByRole('button', { name: 'Continue to sign' }).click();
   await page.getByLabel('Wallet passphrase', { exact: true }).fill('prototype-passphrase');
   await page.getByRole('button', { name: /Sign & broadcast/ }).click();
 
-  await expect(page.getByRole('heading', { name: 'Fee acceleration broadcast' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Transaction accelerated' })).toBeVisible();
   await expect(page.locator('.success-state')).toContainText(
-    /fee-only child transaction with a .* sats network fee was broadcast/
+    'The additional fee was accepted. Your payment is waiting for confirmation.'
   );
+  await expect(page.locator('.success-state .success-amount')).not.toHaveText('0 sats');
   await expect(page.getByText('0 sats was broadcast to the Bitcoin network.')).toHaveCount(0);
 });
 
@@ -1291,17 +1474,21 @@ test('first Bitcoin Core scan requires an explicit range and never presents part
 }) => {
   await page.goto('/?fixture-initial-history-required=1');
 
-  await expect(page.getByText('Not verified yet')).toBeVisible();
+  await expect(page.getByText('Never synced')).toBeVisible();
   await expect(page.getByText('Wallet history not verified')).toBeVisible();
-  await expect(page.getByText('0 sats', { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel('Unverified balance')).toContainText('0 sats');
 
   const scan = page.getByRole('dialog', { name: 'First wallet-history scan' });
   await expect(scan).toBeVisible();
+  await expect(scan.getByRole('radio', { name: /New wallet · no earlier activity/ })).toBeChecked();
   await expect(scan.getByRole('button', { name: 'Start scan' })).toBeDisabled();
-  await expect(scan.getByText(/controls address discovery, not block-scan speed/)).toBeVisible();
+  await expect(scan.getByRole('radio', { name: /Existing wallet/ })).toHaveCount(0);
+  await expect(scan.getByLabel('Address gap limit')).toHaveCount(0);
 
+  await scan.getByRole('button', { name: 'Existing wallet options' }).click();
   await scan.getByRole('radio', { name: /Existing wallet · use a birthday block/ }).click();
   await scan.getByLabel('Wallet birthday block').fill('200');
+  await scan.getByRole('button', { name: 'Address discovery options' }).click();
   await scan.getByLabel('Address gap limit').fill('19');
   await scan.getByLabel('Wallet passphrase', { exact: true }).fill('prototype-passphrase');
   await expect(scan.getByRole('button', { name: 'Start scan' })).toBeDisabled();
@@ -1309,14 +1496,39 @@ test('first Bitcoin Core scan requires an explicit range and never presents part
   await scan.getByRole('button', { name: 'Start scan' }).click();
 
   await expect(page.getByText('Scanning wallet history')).toBeVisible();
-  await expect(page.getByText('Not verified yet')).toBeVisible();
+  await expect(page.getByText('Never synced')).toBeVisible();
   await expect(page.getByText('Wallet history not verified')).toBeVisible();
   await expect(page.getByText('Wallet history verified')).toBeVisible();
-  await expect(page.getByText('Not verified yet')).toHaveCount(0);
+  await expect(page.getByText('Never synced')).toHaveCount(0);
 
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true
   );
+});
+
+test('a never-synced Core wallet opens Settings before history controls when no node is saved', async ({
+  page
+}) => {
+  await page.goto('/?fixture-initial-history-required=1&fixture-no-network-setup=1');
+
+  await expect(page.getByRole('dialog', { name: 'First wallet-history scan' })).toHaveCount(0);
+  await expect(page.getByLabel('Unverified balance')).toContainText('0 sats');
+  await expect(page.getByLabel('Unverified balance')).toContainText('Never synced');
+  await page.getByRole('link', { name: 'Connect Bitcoin Core' }).click();
+  await expect(page).toHaveURL(/\/settings/);
+});
+
+test('Settings keeps saved locked network setups visible with unlock guidance', async ({
+  page
+}) => {
+  await page.goto('/settings?fixture-locked-network-source=1');
+  await page.getByRole('button', { name: /Use an existing network setup/ }).click();
+
+  const reuse = page.getByRole('dialog', { name: 'Use existing network setup' });
+  await expect(reuse.getByLabel('Copy from')).toContainText('Unlock first');
+  await expect(reuse.getByText('Unlock the source wallet first.')).toBeVisible();
+  await expect(reuse.getByLabel('Wallet passphrase', { exact: true })).toBeDisabled();
+  await expect(reuse.getByRole('button', { name: 'Use setup' })).toBeDisabled();
 });
 
 test('activity explains its empty state', async ({ page }) => {
@@ -1343,8 +1555,23 @@ test('overview and coins resolve empty wallets without lingering skeletons', asy
   expect(empty!.y - (toolbar!.y + toolbar!.height)).toBeGreaterThanOrEqual(13);
 });
 
+test('overview counts a pending CPFP self-spend fee exactly once', async ({ page }) => {
+  await page.goto('/?fixture-pending-self-spend=1');
+  await expect(page.getByText('39,890 sats unconfirmed change · 110 sats outgoing')).toBeVisible();
+  await expect(page.getByText('220 sats outgoing')).toHaveCount(0);
+  const acceleration = page.locator('.tx-row').filter({ hasText: 'Fee acceleration' });
+  await expect(acceleration).toContainText('−110 sats');
+  await acceleration.click();
+  await expect(page.getByRole('link', { name: 'Increase fee (RBF)' })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Spend output (CPFP)' })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true
+  );
+});
+
 test('receive label suggestions expose aligned tooltips only when truncated', async ({ page }) => {
   await page.goto('/receive');
+  await page.waitForFunction(() => document.fonts.status === 'loaded');
   await page.getByRole('button', { name: 'New receive address' }).click();
   const shortSuggestion = page.getByRole('button', { name: 'Reuse Savings' });
   await shortSuggestion.hover();
@@ -1365,6 +1592,15 @@ test('receive label suggestions expose aligned tooltips only when truncated', as
   const tooltipGap = suggestionBox!.y - (tooltipBox!.y + tooltipBox!.height);
   expect(tooltipGap).toBeGreaterThanOrEqual(4);
   expect(tooltipGap).toBeLessThanOrEqual(9);
+});
+
+test('manually refreshes incoming payments without leaving Receive', async ({ page }) => {
+  await page.goto('/receive');
+  const refresh = page.getByRole('button', { name: 'Refresh payments' });
+  await refresh.click();
+  await expect(page.getByRole('button', { name: 'Refreshing payments…' })).toBeDisabled();
+  await expect(page.getByText('Incoming payments and receive addresses refreshed.')).toBeVisible();
+  await expect(page).toHaveURL(/\/receive$/);
 });
 
 test('receive keeps multiple labeled payment requests and discards them independently', async ({
@@ -1540,6 +1776,12 @@ test('coin control selects, freezes, and carries coins into send', async ({ page
   await expect(page.locator('.coin-mode')).toContainText('More private');
   await page.getByRole('button', { name: 'Max' }).click();
   await expect(page.getByLabel('Amount', { exact: true })).toHaveValue('2480260');
+  await expect(page.locator('.max-spend-guidance')).toContainText(
+    'Maximum spendable amount selected'
+  );
+  await expect(
+    page.locator('.toast').filter({ hasText: 'Maximum spendable amount selected' })
+  ).toBeVisible();
   await expect(page.getByRole('button', { name: 'Review payment' })).toBeEnabled();
   await page.getByRole('button', { name: 'Custom' }).click();
   await page.getByLabel('Custom fee rate').fill('3');
@@ -1689,6 +1931,26 @@ test('an address copied from Receive completes the browser send flow', async ({ 
   await expect(page.getByText('Remaining wallet balance: 2,455,253 sats')).toBeVisible();
 });
 
+test('payment QR scanner uses a large square camera target', async ({ page }) => {
+  await page.goto('/send');
+  await page.getByRole('button', { name: 'Scan Bitcoin payment QR' }).click();
+
+  const dialog = page.getByRole('dialog', { name: 'Scan payment request' });
+  const camera = dialog.locator('.camera-frame');
+  const guide = dialog.locator('.scan-guide');
+  await expect(camera).toBeVisible();
+
+  const cameraBox = await camera.boundingBox();
+  const guideBox = await guide.boundingBox();
+  expect(cameraBox).not.toBeNull();
+  expect(guideBox).not.toBeNull();
+  expect(Math.abs(cameraBox!.width - cameraBox!.height)).toBeLessThanOrEqual(1);
+  expect(Math.abs(guideBox!.width - guideBox!.height)).toBeLessThanOrEqual(1);
+  expect(cameraBox!.width).toBeGreaterThanOrEqual(
+    (page.viewportSize()?.width ?? 1180) > 760 ? 540 : 320
+  );
+});
+
 test('custom fees validate and wallet deletion requires typed confirmation', async ({ page }) => {
   await page.goto('/send');
   await page.getByLabel('Bitcoin address').fill('bcrt1qreceiver0000000000000000000000000000000');
@@ -1701,8 +1963,13 @@ test('custom fees validate and wallet deletion requires typed confirmation', asy
   await page.getByRole('button', { name: /Custom/ }).click();
   await page.getByLabel('Custom fee rate').fill('0');
   await expect(page.getByRole('button', { name: 'Review payment' })).toBeDisabled();
-  await page.getByLabel('Custom fee rate').fill('3.5');
+  await page.getByLabel('Custom fee rate').fill('0.5');
   await expect(page.getByRole('button', { name: 'Review payment' })).toBeEnabled();
+  await page.getByLabel('Custom fee rate').fill('2.45');
+  await page.getByRole('button', { name: 'Review payment' }).click();
+  await page.getByText('View more details', { exact: true }).click();
+  await expect(page.getByText('2.45 sat/vB', { exact: true })).toBeVisible();
+  await expectAmountUnitsSeparated(page.locator('.form-card').first());
 
   await page.goto('/settings');
   await page.getByRole('button', { name: 'Delete', exact: true }).click();
@@ -1743,7 +2010,7 @@ test('fee estimate failure preserves explicit CPFP acceleration', async ({ page 
   await page.getByRole('link', { name: 'Spend output (CPFP)' }).click();
   await expect(page.getByRole('heading', { name: 'Enter a custom fee rate' })).toBeVisible();
   await expect(page.getByText(/will not invent one/)).toBeVisible();
-  const review = page.getByRole('button', { name: 'Review acceleration' });
+  const review = page.getByRole('button', { name: 'Continue to sign' });
   await expect(review).toBeDisabled();
   await page.getByLabel('Custom acceleration fee rate').fill('15');
   await expect(review).toBeEnabled();

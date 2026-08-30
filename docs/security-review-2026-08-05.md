@@ -14,7 +14,13 @@ This pass reviewed the new public BIP129/BSMS descriptor-record boundary, Blockc
 - Recovery controls persist bounded birthday and gap-limit values. Full rescan is credential authenticated. A clean wallet recovered the same real regtest balance and history with a lookahead of 50.
 - Direct Core HTTP/HTTPS uses the explicitly constructed rustls-backed minreq transport. The reviewed `jsonrpc` proxy feature otherwise redirects its legacy simple transport through the default Tor port globally; an initial live-regtest failure exposed this behavior. Satchel now constructs SOCKS only for an explicit `.onion` backend with a validated loopback proxy.
 - Remote direct endpoints reject cleartext non-loopback transport and URL credentials. Onion endpoints require explicit loopback SOCKS5. RPC passwords remain encrypted per wallet and are cleared with the wallet session.
-- Release helpers refuse a dirty tree, use locked dependency installation, preserve hashes/toolchain metadata, compare independent unsigned artifacts, and verify macOS signing/notarization. They do not manufacture reproducibility or signing evidence; two clean machines and release credentials are still required.
+- Release helpers refuse a dirty tree, use locked dependency installation,
+  preserve hashes/toolchain metadata, compare independent unsigned artifacts,
+  and verify macOS signing/notarization. They do not manufacture reproducibility
+  or signing evidence. Two clean machines later produced matching unsigned
+  evidence for frozen commit `2110eaf`, as recorded in
+  [`reproducible-mainnet-builds-2026-09-04.md`](reproducible-mainnet-builds-2026-09-04.md);
+  release credentials and signed-candidate verification remain required.
 
 ## Automated evidence
 

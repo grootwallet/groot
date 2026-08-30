@@ -17,12 +17,15 @@ Groot is a deliberately small, non-custodial, onchain Bitcoin wallet for desktop
 1. Read `docs/product-spec.md` for canonical behavior.
 2. Read `docs/architecture.md` for boundaries and data flow.
 3. Read `docs/implementation-status.md` before assuming a prototype surface is wired to Rust.
-4. For UI work, read `docs/design-system.md` and `docs/flows.md`.
-5. Read relevant records in `docs/adr/` before changing a settled decision.
-6. Read `docs/engineering-standards.md`, including its supply-chain rules.
-7. Read `docs/agent-harness.md` for the exact test, formatting, CI, GitHub,
+4. Read `docs/bip-support.md` before changing wallet standards, interoperability,
+   descriptors, transactions, payment requests, recovery, sync, networks, signers,
+   or protocol dependencies.
+5. For UI work, read `docs/design-system.md` and `docs/flows.md`.
+6. Read relevant records in `docs/adr/` before changing a settled decision.
+7. Read `docs/engineering-standards.md`, including its supply-chain rules.
+8. Read `docs/agent-harness.md` for the exact test, formatting, CI, GitHub,
    process-ownership, and hardware-certification workflow.
-8. Run `pnpm validate` before handing off a change.
+9. Run `pnpm validate` before handing off a change.
 
 If code and documentation disagree, stop and resolve the mismatch in the same change. Do not silently choose one.
 
@@ -30,7 +33,7 @@ If code and documentation disagree, stop and resolve the mismatch in the same ch
 
 - `src/routes/` — presentation and route-level orchestration only.
 - `src/lib/components/` — reusable, shadcn-svelte-style UI primitives.
-- `src/lib/wallet/contracts.ts` — frontend wallet API and stable error/event types.
+- `src/lib/wallet/contracts/` — frontend wallet API and stable error/event types; `contracts.ts` is its public barrel.
 - `src/lib/wallet/policy.ts` — pure product/security invariants.
 - `src/lib/wallet/dummy.ts` — deterministic UI adapter; never import it directly from routes.
 - `src/lib/wallet/index.ts` — composition root. Swap the adapter here.
@@ -69,6 +72,8 @@ If code and documentation disagree, stop and resolve the mismatch in the same ch
 2. Before changing a persisted wallet, profile, backup, proposal, or registry format, identify whether existing data remains compatible. Any breaking format change requires an ADR, a clear migration-versus-discard plan, and the user's explicit approval before implementation. Never silently add a migration or strand existing profiles.
 3. Make the smallest coherent change.
 4. Add/update tests and canonical docs.
+   Assess BIP impact and update `docs/bip-support.md` in the same change whenever
+   support or evidence changes; record an explicit no-impact assessment otherwise.
 5. Run `pnpm validate`.
 6. For UI changes, inspect desktop (1180×780) and mobile (390×844), including keyboard-safe bottom spacing.
 7. For Rust wallet changes, also run `cargo fmt --check`, `cargo clippy --locked --all-targets --all-features -- -D warnings`, and `cargo test --locked --all-features` from `src-tauri`.

@@ -6,16 +6,17 @@ fn main() {
     println!("cargo:rerun-if-env-changed=GROOT_MACOS_SIGNING_TEAM_ID");
     watch_git_identity();
     println!(
-        "cargo:rustc-check-cfg=cfg(groot_network, values(\"regtest\", \"signet\", \"testnet4\"))"
+        "cargo:rustc-check-cfg=cfg(groot_network, values(\"regtest\", \"signet\", \"testnet4\", \"mainnet\"))"
     );
     let network = std::env::var("GROOT_BUILD_NETWORK").unwrap_or_else(|_| "regtest".to_owned());
     match network.as_str() {
-        "regtest" | "signet" | "testnet4" => {}
-        _ => panic!(
-            "GROOT_BUILD_NETWORK must be exactly regtest, signet, or testnet4; mainnet is not compiled into this release"
-        ),
+        "regtest" | "signet" | "testnet4" | "mainnet" => {}
+        _ => panic!("GROOT_BUILD_NETWORK must be exactly regtest, signet, testnet4, or mainnet"),
     }
     println!("cargo:rustc-cfg=groot_network=\"{network}\"");
+    let compiled_team_id = std::env::var("GROOT_MACOS_SIGNING_TEAM_ID")
+        .unwrap_or_else(|_| "REHEARSAL_ONLY".to_owned());
+    println!("cargo:rustc-env=GROOT_COMPILED_MACOS_SIGNING_TEAM_ID={compiled_team_id}");
     let commit = build_commit();
     println!("cargo:rustc-env=GROOT_BUILD_COMMIT={commit}");
 

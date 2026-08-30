@@ -33,11 +33,34 @@ Secret-envelope units prove portable version-3 round trips, wrong-credential rej
 
 `pnpm test:sbom` generates the target-specific CycloneDX inventory twice and requires byte-identical output, unique component references, declared dependency licenses, Cargo registry checksums, npm SHA-512 lockfile integrity, the exact Git commit, both lockfile SHA-256 digests, and a fixture executable hash. Optional packages locked for other operating systems are recorded as a lock/package-count property but are not falsely listed as installed components for the current artifact. Generated CycloneDX/SPDX outputs are build evidence rather than source: the gate rejects tracked output so a stale checked-in copy cannot become authoritative. Native Signet/Testnet4 packaging and the unsigned-release script require a clean source worktree and generate fresh SBOMs after their executable exists; each SBOM embeds that executable's SHA-256, and the unsigned evidence set also hashes the binary and SBOM together in `SHA256SUMS`. This is inventory evidence, not provenance, reproducibility, or signing evidence.
 
+`pnpm build:native:mainnet:internal` creates only a non-distributable ad-hoc
+physical-test candidate from a clean exact commit. It packages the pinned HWI,
+compiles the runtime signing requirement as `REHEARSAL_ONLY`, verifies that marker
+and the copied app seal, and records a small local build identity. It performs no
+Developer ID signing, notarization, stapling, publishing, or remote Git action.
+
 `pnpm test:supply-chain` is the fast policy gate included in every `pnpm validate`: direct Node and Rust requirements and the Node/pnpm toolchain must be exact, lifecycle scripts and loose engine installs remain disabled, package-store integrity stays enabled, and every CI Action reference must be a full commit SHA under read-only default permissions without persisted checkout credentials.
 
 The whole Rust library is reported and regression-gated separately with `pnpm test:coverage:rust:all` at 55% lines, 51% functions, and 51% regions. Environment adapters and Tauri `AppHandle` orchestration are not included in the near-100% deterministic-core percentage; their behavior is covered through boundary units, restart/corruption tests, regtest, and E2E. The scoped score must never be presented as whole-crate coverage. The 2026-08-11 deterministic-core baseline is 99.69% lines / 100% functions / 97.61% regions. The refreshed whole-library baseline is 58.14% lines / 56.04% functions / 55.34% regions.
 
 ### Integration tests
+
+The restored-wallet skeleton acceptance test holds the browser fixture's data
+timer with Playwright's clock until the loading state is asserted, then advances
+time and requires loaded data with no remaining skeleton. The multisig menu test
+verifies its dismissal click is outside the menu bounds; it must not force a click
+through an overlay. Neither test relies on runner speed or skips its UI assertion.
+
+The synthetic `src/lib/wallet/fixtures/registry-contract.json` is shared by
+`src-tauri/tests/registry_contract.rs` and the frontend registry contract tests.
+The Rust integration test serializes real registry/profile types, checks every
+wallet-kind representation and the empty/default registry, and exercises native
+timeout validation. Frontend tests read those fields through `TauriWalletAdapter`
+with mocked IPC and check browser-adapter timeout parity, including locked-wallet
+and invalid-input rejection without mutation. This is serializer/domain and
+mocked-adapter evidence, not live Tauri IPC or session-expiry evidence. Run the
+native fixture with `cargo test --locked --test registry_contract` from
+`src-tauri`; the frontend fixture runs in `pnpm test`.
 
 Two dependency-free, ignored Rust benchmarks provide repeatable local evidence for the SQLite queries most likely to grow with long-lived use: receive-address history with latest hardware evidence, and latest policy-verification evidence per signer. Run `cargo test --lib wallet::performance_tests -- --ignored --nocapture` from `src-tauri`; `GROOT_BENCH_ADDRESS_ROWS` and `GROOT_BENCH_SIGNERS` may raise or lower the bounded fixture sizes. The harness reports elapsed time and per-row cost but deliberately has no machine-independent pass threshold. Release optimization decisions require measurements from representative signed builds and datasets; the benchmark exists to compare revisions on the same controlled machine without encouraging unsafe caching of descriptors or secrets.
 

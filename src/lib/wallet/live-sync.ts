@@ -4,6 +4,7 @@ export type LiveSyncController = {
   start(): void;
   restart(): void;
   stop(): void;
+  stopAndWait(): Promise<void>;
   runNow(): Promise<void>;
 };
 
@@ -41,8 +42,8 @@ export function createLiveSync(
       const registry = await wallet.profiles();
       const selected = registry.wallets.find((profile) => profile.id === registry.selectedWalletId);
       if (!selected) return true;
-      if (selected.kind === 'multisig') await wallet.syncMultisig();
-      else await wallet.sync();
+      if (selected.kind === 'multisig') await wallet.syncMultisig(true);
+      else await wallet.sync(true);
       return true;
     } catch (cause) {
       if (
@@ -99,6 +100,14 @@ export function createLiveSync(
       enabled = false;
       clearTimer();
       if (active) void wallet.cancelSync().catch(() => undefined);
+    },
+    async stopAndWait() {
+      enabled = false;
+      clearTimer();
+      const pending = active;
+      if (!pending) return;
+      await wallet.cancelSync().catch(() => undefined);
+      await pending;
     },
     runNow
   };

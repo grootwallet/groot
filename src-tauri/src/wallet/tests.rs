@@ -4,10 +4,20 @@ use super::profile_commands::*;
 use super::transaction_commands::*;
 use super::*;
 use crate::external_signer::{self, ExternalSignerInput, SignerSource, SINGLESIG_ACCOUNT_PATH};
+use crate::multisig::PolicyError;
 use crate::multisig::{CosignerInput, CosignerSource, MULTISIG_ACCOUNT_PATH};
 use crate::recovery::{SpendingPath, TimedSpendingPath};
+use crate::secure_store::SecureStoreError;
 use bdk_wallet::bitcoin::NetworkKind;
+use bdk_wallet::error::CreateTxError;
 use std::{net::TcpListener, thread};
+
+#[test]
+fn mainnet_core_admission_rejects_initial_block_download() {
+    let error = ensure_mainnet_core_ready_for_admission(true).unwrap_err();
+    assert_eq!(error.code, "node_syncing");
+    assert!(ensure_mainnet_core_ready_for_admission(false).is_ok());
+}
 
 #[test]
 fn transaction_observation_time_is_stable_across_snapshot_refreshes() {
@@ -376,7 +386,8 @@ fn serve_one_http_response(response: Option<&'static [u8]>) -> String {
     format!("http://{address}")
 }
 
-fn serve_one_json(body: &'static str) -> String {
+fn serve_one_json(body: impl AsRef<str>) -> String {
+    let body = body.as_ref();
     let response = format!(
         "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
         body.len()
@@ -416,6 +427,24 @@ fn core_fee_estimator_uses_rpc_and_never_falls_back() {
 }
 
 #[test]
+fn core_replacement_policy_uses_mempool_incremental_relay_fee() {
+    let available = serve_one_json(
+        r#"{"result":{"loaded":true,"size":0,"bytes":0,"usage":0,"total_fee":0.0,"maxmempool":300000000,"mempoolminfee":0.00001000,"minrelaytxfee":0.00001000,"incrementalrelayfee":0.00001000,"unbroadcastcount":0,"fullrbf":false},"error":null,"id":"groot"}"#,
+    );
+    let client = build_rpc_client(&available, Auth::None, None).unwrap();
+    assert_eq!(core_incremental_relay_fee(&client).unwrap(), 1_000);
+
+    let missing = serve_one_json(
+        r#"{"result":{"loaded":true,"size":0,"bytes":0,"usage":0,"total_fee":0.0,"maxmempool":300000000,"mempoolminfee":0.00001000,"minrelaytxfee":0.00001000,"unbroadcastcount":0,"fullrbf":false},"error":null,"id":"groot"}"#,
+    );
+    let client = build_rpc_client(&missing, Auth::None, None).unwrap();
+    assert_eq!(
+        core_incremental_relay_fee(&client).unwrap_err().code,
+        "fee_estimate_unavailable"
+    );
+}
+
+#[test]
 fn core_sync_progress_is_relative_to_the_persisted_wallet_tip() {
     assert_eq!(core_sync_progress_percent(20, 20, 120), 0);
     assert_eq!(core_sync_progress_percent(20, 70, 120), 50);
@@ -423,6 +452,56 @@ fn core_sync_progress_is_relative_to_the_persisted_wallet_tip() {
     assert_eq!(core_sync_progress_percent(20, 130, 120), 100);
     assert_eq!(core_sync_progress_percent(20, 10, 120), 0);
     assert_eq!(core_sync_progress_percent(120, 120, 120), 100);
+}
+
+#[test]
+fn wallet_history_waits_for_core_to_reach_the_verified_checkpoint() {
+    assert!(ensure_core_ready_for_wallet_history(150_700, false, 150_570).is_ok());
+
+    let behind = ensure_core_ready_for_wallet_history(150_500, false, 150_570).unwrap_err();
+    assert_eq!(behind.code, "node_syncing");
+    assert!(behind.message.contains("last verified block"));
+
+    let initial_download =
+        ensure_core_ready_for_wallet_history(150_700, true, 150_570).unwrap_err();
+    assert_eq!(initial_download.code, "node_syncing");
+}
+
+#[test]
+fn wallet_history_rejects_only_blocks_absent_from_a_pruned_node() {
+    assert!(ensure_core_history_available(false, None, 0).is_ok());
+    assert!(ensure_core_history_available(true, Some(140_000), 140_000).is_ok());
+    assert!(ensure_core_history_available(true, Some(140_000), 150_000).is_ok());
+
+    let unavailable = ensure_core_history_available(true, Some(140_000), 0).unwrap_err();
+    assert_eq!(unavailable.code, "node_history_unavailable");
+    assert!(unavailable.message.contains("archival node"));
+}
+
+#[test]
+fn recovery_scan_anchors_immediately_before_the_birthday() {
+    assert_eq!(recovery_scan_anchor_height(0), 0);
+    assert_eq!(recovery_scan_anchor_height(1), 0);
+    assert_eq!(recovery_scan_anchor_height(965_600), 965_599);
+
+    assert!(ensure_recovery_scan_history_available(true, Some(960_062), 965_600).is_ok());
+    let boundary =
+        ensure_recovery_scan_history_available(true, Some(960_062), 960_062).unwrap_err();
+    assert_eq!(boundary.code, "node_history_unavailable");
+    assert!(boundary.message.contains("above the retained prune height"));
+
+    let anchor_hash = "1111111111111111111111111111111111111111111111111111111111111111";
+    let endpoint = serve_one_json(format!(
+        r#"{{"result":"{anchor_hash}","error":null,"id":"groot"}}"#
+    ));
+    let client = build_rpc_client(&endpoint, Auth::None, None).unwrap();
+    let genesis = genesis_block(Network::Bitcoin).block_hash();
+    let checkpoint = recovery_scan_checkpoint(&client, genesis, 965_600).unwrap();
+    assert_eq!(checkpoint.height(), 965_599);
+    assert_eq!(checkpoint.hash().to_string(), anchor_hash);
+    let base = checkpoint.prev().unwrap();
+    assert_eq!(base.height(), 0);
+    assert_eq!(base.hash(), genesis);
 }
 
 #[test]
@@ -511,14 +590,31 @@ fn rpc_whitelist_rejection_is_actionable_without_exposing_core_details() {
     let error = rpc_api_error(CoreRpcError::JsonRpc(jsonrpc::Error::Rpc(
         jsonrpc::error::RpcError {
             code: -1,
-            message: "RPC User private-user not allowed to call method getnetworkinfo".to_owned(),
+            message: "RPC User private-user not allowed to call method getmempoolinfo".to_owned(),
             data: None,
         },
     )));
 
     assert_eq!(error.code, "invalid_node_config");
     assert_eq!(error.message, RPC_PERMISSION_MESSAGE);
-    for internal_detail in ["private-user", "getnetworkinfo", "JSON-RPC", "code -1"] {
+    for internal_detail in ["private-user", "getmempoolinfo", "JSON-RPC", "code -1"] {
+        assert!(!error.message.contains(internal_detail));
+    }
+}
+
+#[test]
+fn pruned_block_rpc_failure_is_actionable_without_exposing_core_details() {
+    let error = rpc_api_error(CoreRpcError::JsonRpc(jsonrpc::Error::Rpc(
+        jsonrpc::error::RpcError {
+            code: -1,
+            message: "Block not available (pruned data)".to_owned(),
+            data: None,
+        },
+    )));
+
+    assert_eq!(error.code, "node_history_unavailable");
+    assert_eq!(error.message, RPC_PRUNED_HISTORY_MESSAGE);
+    for internal_detail in ["JSON-RPC", "code -1", "Block not available"] {
         assert!(!error.message.contains(internal_detail));
     }
 }
@@ -900,8 +996,9 @@ fn transaction_kind_distinguishes_fee_only_self_spends_from_payments() {
 
 #[test]
 fn authentication_throttle_round_trips_through_wallet_storage() {
-    let mut db = Connection::open_in_memory().unwrap();
+    let db = Connection::open_in_memory().unwrap();
     init_app_schema(&db).unwrap();
+    let mut db = AuthenticationDatabase(db);
     let mut throttle = AuthThrottle::default();
     for _ in 0..7 {
         throttle.failed(100);
@@ -960,6 +1057,47 @@ fn completed_sync_requires_a_persisted_chain_observation() {
     )
     .unwrap();
     assert!(has_completed_sync(&db).unwrap());
+}
+
+#[test]
+fn recovery_scan_command_bounds_fail_closed_at_exact_edges() {
+    assert!(validate_recovery_gap_limit(MIN_RECOVERY_GAP_LIMIT).is_ok());
+    assert!(validate_recovery_gap_limit(MAX_RECOVERY_GAP_LIMIT).is_ok());
+    assert_eq!(
+        validate_recovery_gap_limit(MIN_RECOVERY_GAP_LIMIT - 1)
+            .unwrap_err()
+            .code,
+        "invalid_scan_settings"
+    );
+    assert_eq!(
+        validate_recovery_gap_limit(MAX_RECOVERY_GAP_LIMIT + 1)
+            .unwrap_err()
+            .code,
+        "invalid_scan_settings"
+    );
+    assert!(validate_recovery_birthday(500, 500).is_ok());
+    assert_eq!(
+        validate_recovery_birthday(501, 500).unwrap_err().code,
+        "invalid_scan_settings"
+    );
+}
+
+#[test]
+fn notification_acknowledgement_command_bounds_are_inclusive() {
+    let maximum = vec!["n".repeat(64); 1_000];
+    assert!(validate_notification_acknowledgements(&maximum).is_ok());
+    assert_eq!(
+        validate_notification_acknowledgements(&vec!["n".to_owned(); 1_001])
+            .unwrap_err()
+            .code,
+        "internal_error"
+    );
+    assert_eq!(
+        validate_notification_acknowledgements(&["n".repeat(65)])
+            .unwrap_err()
+            .code,
+        "internal_error"
+    );
 }
 
 #[test]
@@ -1106,7 +1244,7 @@ fn transaction_change_cannot_cross_the_configured_recovery_gap() {
         Bip84(master, KeychainKind::External),
         Bip84(master, KeychainKind::Internal),
     )
-    .network(Network::Regtest)
+    .network(NETWORK)
     .create_wallet_no_persist()
     .unwrap();
     let change = (0..=MIN_RECOVERY_GAP_LIMIT)
@@ -1142,7 +1280,7 @@ fn proposal_review_rejects_any_non_recipient_output_not_owned_by_the_wallet() {
             Bip84(master, KeychainKind::External),
             Bip84(master, KeychainKind::Internal),
         )
-        .network(Network::Regtest)
+        .network(NETWORK)
         .create_wallet_no_persist()
         .unwrap()
     }
@@ -1247,6 +1385,14 @@ fn proposal_review_rejects_any_non_recipient_output_not_owned_by_the_wallet() {
         proposal_fee_amount(&overspend).unwrap_err().code,
         "proposal_mismatch"
     );
+    let funding_outpoint = psbt.unsigned_tx.input[0].previous_output;
+    validate_psbt_excludes_frozen(&psbt, &[]).unwrap();
+    assert_eq!(
+        validate_psbt_excludes_frozen(&psbt, &[funding_outpoint])
+            .unwrap_err()
+            .code,
+        "coin_unavailable"
+    );
 
     let mut redirected = psbt.clone();
     redirected.unsigned_tx.output[1].script_pubkey = attacker.script_pubkey();
@@ -1273,22 +1419,68 @@ fn proposal_review_rejects_any_non_recipient_output_not_owned_by_the_wallet() {
 }
 
 #[test]
-fn acceleration_rates_and_error_classes_fail_closed() {
+fn cpfp_ownership_requires_one_descriptor_derived_wallet_output() {
+    use bdk_wallet::bitcoin::{
+        absolute::LockTime, transaction::Version, ScriptBuf, Sequence, TxIn, TxOut, Witness,
+    };
+
+    let mnemonic = Mnemonic::parse(WORDS).unwrap();
+    let master = root_key(&mnemonic, "cpfp ownership").unwrap();
+    let wallet = Wallet::create(
+        Bip84(master, KeychainKind::External),
+        Bip84(master, KeychainKind::Internal),
+    )
+    .network(NETWORK)
+    .create_wallet_no_persist()
+    .unwrap();
+    let destination = wallet.peek_address(KeychainKind::Internal, 0).address;
+    let transaction = Transaction {
+        version: Version::TWO,
+        lock_time: LockTime::ZERO,
+        input: vec![TxIn {
+            previous_output: OutPoint::null(),
+            script_sig: ScriptBuf::new(),
+            sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
+            witness: Witness::new(),
+        }],
+        output: vec![TxOut {
+            value: Amount::from_sat(900),
+            script_pubkey: destination.script_pubkey(),
+        }],
+    };
+    let mut psbt = Psbt::from_unsigned_tx(transaction).unwrap();
+    validate_cpfp_output_ownership(&wallet, &psbt, &destination.to_string()).unwrap();
+
+    psbt.unsigned_tx
+        .output
+        .push(psbt.unsigned_tx.output[0].clone());
+    psbt.outputs.push(psbt.outputs[0].clone());
+    assert!(validate_cpfp_output_ownership(&wallet, &psbt, &destination.to_string()).is_err());
+}
+
+#[test]
+fn fee_rates_preserve_decimal_and_sub_one_precision_and_errors_fail_closed() {
     for invalid in ["NaN", "inf", "-1", "0", "10000.1"] {
         assert_eq!(
-            validate_acceleration_rate(invalid).unwrap_err().code,
+            validate_fee_rate(invalid).unwrap_err().code,
             "invalid_amount"
         );
     }
-    let (applied, rate) = validate_acceleration_rate("1.01").unwrap();
+    let (applied, rate) = validate_fee_rate("1.01").unwrap();
     assert_eq!(applied, 1.012);
     assert_eq!(rate.to_sat_per_kwu(), 253);
-    let (applied, rate) = validate_acceleration_rate("2.5").unwrap();
+    let (applied, rate) = validate_fee_rate("2.5").unwrap();
     assert_eq!(applied, 2.5);
     assert_eq!(rate.to_sat_per_kwu(), 625);
-    let (applied, rate) = validate_acceleration_rate("2.501").unwrap();
+    let (applied, rate) = validate_fee_rate("2.501").unwrap();
     assert_eq!(applied, 2.504);
     assert_eq!(rate.to_sat_per_kwu(), 626);
+    let (applied, rate) = validate_fee_rate("2.45").unwrap();
+    assert_eq!(applied, 2.452);
+    assert_eq!(rate.to_sat_per_kwu(), 613);
+    let (applied, rate) = validate_fee_rate("0.5").unwrap();
+    assert_eq!(applied, 0.5);
+    assert_eq!(rate.to_sat_per_kwu(), 125);
     assert_eq!(
         acceleration_error("transaction confirmed").code,
         "transaction_confirmed"
@@ -1305,8 +1497,30 @@ fn acceleration_rates_and_error_classes_fail_closed() {
         acceleration_error("insufficient fee").code,
         "insufficient_funds"
     );
+    let funding_shortfall = rbf_candidate_error("insufficient funds");
+    assert_eq!(funding_shortfall.code, "insufficient_funds");
+    assert!(funding_shortfall
+        .message
+        .contains("keeps the recipient amount unchanged"));
     assert_eq!(
         acceleration_error("unknown parent").code,
+        "acceleration_unavailable"
+    );
+}
+
+#[test]
+fn rbf_replacement_must_preserve_the_original_recipient_and_amount() {
+    validate_rbf_recipient_unchanged(Some("recipient"), 42, "recipient", 42).unwrap();
+    assert_eq!(
+        validate_rbf_recipient_unchanged(Some("recipient"), 42, "recipient", 43)
+            .unwrap_err()
+            .code,
+        "proposal_mismatch"
+    );
+    assert_eq!(
+        validate_rbf_recipient_unchanged(None, 42, "recipient", 42)
+            .unwrap_err()
+            .code,
         "acceleration_unavailable"
     );
 }
@@ -1370,10 +1584,16 @@ fn cpfp_builds_from_an_incoming_parent_without_foreign_prevouts() {
             sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
             witness: Witness::new(),
         }],
-        output: vec![TxOut {
-            value: Amount::from_sat(100_000),
-            script_pubkey: receive.address.script_pubkey(),
-        }],
+        output: vec![
+            TxOut {
+                value: Amount::from_sat(100_000),
+                script_pubkey: receive.address.script_pubkey(),
+            },
+            TxOut {
+                value: Amount::from_sat(50_000),
+                script_pubkey: receive.address.script_pubkey(),
+            },
+        ],
     };
     let parent_txid = parent.compute_txid();
     wallet.apply_unconfirmed_txs([(parent.clone(), 1)]);
@@ -1384,11 +1604,35 @@ fn cpfp_builds_from_an_incoming_parent_without_foreign_prevouts() {
         parent_txid,
         Amount::from_sat(1_000),
         FeeRate::from_sat_per_vb(5).unwrap(),
+        &[],
     )
     .unwrap();
     assert_eq!(child.unsigned_tx.input.len(), 1);
     assert_eq!(child.unsigned_tx.input[0].previous_output.txid, parent_txid);
+    assert_eq!(child.unsigned_tx.input[0].previous_output.vout, 0);
     assert!(child.fee_amount().unwrap() > Amount::ZERO);
+    let largest = OutPoint::new(parent_txid, 0);
+    let fallback = build_cpfp(
+        &mut wallet,
+        parent_txid,
+        Amount::from_sat(1_000),
+        FeeRate::from_sat_per_vb(5).unwrap(),
+        &[largest],
+    )
+    .unwrap();
+    assert_eq!(fallback.unsigned_tx.input[0].previous_output.vout, 1);
+    assert_eq!(
+        build_cpfp(
+            &mut wallet,
+            parent_txid,
+            Amount::from_sat(1_000),
+            FeeRate::from_sat_per_vb(5).unwrap(),
+            &[largest, OutPoint::new(parent_txid, 1)],
+        )
+        .unwrap_err()
+        .code,
+        "acceleration_unavailable"
+    );
 }
 
 #[test]
@@ -1405,6 +1649,7 @@ fn credential_and_mnemonic_inputs_are_bounded() {
         "invalid_credential"
     );
     assert!(WORDS.len() < MAX_MNEMONIC_INPUT_BYTES);
+    assert!(validate_wallet_passphrase("x").is_ok());
     let missing_passphrase = validate_wallet_passphrase("").unwrap_err();
     assert_eq!(missing_passphrase.code, "invalid_credential");
     assert_eq!(
@@ -1419,6 +1664,16 @@ fn credential_and_mnemonic_inputs_are_bounded() {
         long_passphrase.message,
         "The wallet passphrase is too long."
     );
+    let short_new_passphrase =
+        validate_new_wallet_passphrase(&"x".repeat(MIN_NEW_WALLET_PASSPHRASE_CHARACTERS - 1))
+            .unwrap_err();
+    assert_eq!(short_new_passphrase.code, "invalid_credential");
+    assert_eq!(
+        short_new_passphrase.message,
+        "New wallet passphrases must contain at least 16 characters."
+    );
+    assert!(validate_new_wallet_passphrase("abcdefghijklmnop").is_ok());
+    assert!(validate_new_wallet_passphrase(&"🌳".repeat(16)).is_ok());
 }
 
 #[test]
@@ -1680,7 +1935,8 @@ fn exact_identity_inspection_never_creates_a_missing_wallet_database() {
     fs::create_dir_all(&directory).unwrap();
     let database = directory.join("wallet.sqlite");
 
-    let error = open_existing_wallet_database_read_only(&database).unwrap_err();
+    let permit = database_open_permit_for_test();
+    let error = open_existing_wallet_database_read_only(&database, &permit).unwrap_err();
 
     assert_eq!(error.code, "internal_error");
     assert!(!database.exists());
@@ -2096,8 +2352,12 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
         needs_passphrase_sent: false,
         warnings: vec![],
     });
-    assert_eq!(keepkey.status, "needs_pin");
-    assert_eq!(keepkey.action, "prompt_pin");
+    assert_eq!(keepkey.status, "not_ready");
+    assert_eq!(keepkey.action, "retry");
+    assert_eq!(
+        keepkey.message,
+        "This hardware signer is not supported by Groot."
+    );
 
     let ready = hardware_device_dto(HwiDevice {
         capability: "opaque-device".to_owned(),
@@ -2382,6 +2642,12 @@ fn manual_selection_rejects_empty_malformed_duplicate_and_frozen_outpoints() {
             .unwrap_err()
             .code,
         "coin_unavailable"
+    );
+    assert_eq!(
+        validate_manual_outpoints(&vec!["x".to_owned(); 10_001], &[])
+            .unwrap_err()
+            .code,
+        "invalid_coin"
     );
 }
 
@@ -2772,7 +3038,8 @@ fn wallet_database_is_owner_only_and_uses_defensive_settings() {
     let dir = std::env::temp_dir().join(format!("groot-db-test-{}", Uuid::new_v4()));
     fs::create_dir_all(&dir).unwrap();
     let path = dir.join("wallet.sqlite");
-    let db = open_wallet_database(&path).unwrap();
+    let permit = database_open_permit_for_test();
+    let db = open_wallet_database(&path, &permit).unwrap();
     assert!(db.db_config(DbConfig::SQLITE_DBCONFIG_DEFENSIVE).unwrap());
     assert!(db.db_config(DbConfig::SQLITE_DBCONFIG_ENABLE_FKEY).unwrap());
     let trusted: bool = db
@@ -2796,7 +3063,8 @@ fn exact_identity_inspection_reads_an_existing_wallet_database_without_mutating_
     let dir = std::env::temp_dir().join(format!("groot-db-identity-read-{}", Uuid::new_v4()));
     fs::create_dir_all(&dir).unwrap();
     let path = dir.join("wallet.sqlite");
-    let mut writable = open_wallet_database(&path).unwrap();
+    let permit = database_open_permit_for_test();
+    let mut writable = open_wallet_database(&path, &permit).unwrap();
     init_app_schema(&writable).unwrap();
     let mnemonic = Mnemonic::parse(WORDS).unwrap();
     let (external, internal) = watch_templates(&mnemonic, "identity read only").unwrap();
@@ -2814,7 +3082,8 @@ fn exact_identity_inspection_reads_an_existing_wallet_database_without_mutating_
         .collect::<Vec<_>>();
     entries_before.sort();
 
-    let mut read_only = open_existing_wallet_database_read_only(&path).unwrap();
+    let permit = database_open_permit_for_test();
+    let mut read_only = open_existing_wallet_database_read_only(&path, &permit).unwrap();
     let loaded = load_wallet(&mut read_only).unwrap();
     assert_eq!(
         loaded.public_descriptor(KeychainKind::External).to_string(),
@@ -2847,10 +3116,110 @@ fn wallet_database_rejects_symlink_storage() {
     let link = dir.join("wallet.sqlite");
     symlink(&target, &link).unwrap();
     assert_eq!(
-        open_wallet_database(&link).unwrap_err().code,
+        open_wallet_database(&link, &database_open_permit_for_test())
+            .unwrap_err()
+            .code,
         "internal_error"
     );
     fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn mainnet_node_admission_lifetime_is_monotonic_and_bounded() {
+    let created_at = Instant::now();
+    assert!(mainnet_node_admission_is_current_at(created_at, created_at));
+    assert!(mainnet_node_admission_is_current_at(
+        created_at,
+        created_at + MAINNET_NODE_ADMISSION_LIFETIME
+    ));
+    assert!(!mainnet_node_admission_is_current_at(
+        created_at,
+        created_at + MAINNET_NODE_ADMISSION_LIFETIME + Duration::from_nanos(1)
+    ));
+    assert!(!mainnet_node_admission_is_current_at(
+        created_at,
+        created_at - Duration::from_nanos(1)
+    ));
+}
+
+#[test]
+fn new_wallet_admission_cleanup_invalidates_the_attempt() {
+    let state = AppState::default();
+    *state.pending_mainnet_node_admission.lock().unwrap() = Some(PendingMainnetNodeAdmission {
+        config: default_node_config(),
+        password: Zeroizing::new("disposable-test-password".to_owned()),
+        created_at: Instant::now(),
+        scope: MainnetNodeAdmissionScope::NewWallet,
+    });
+
+    let cleanup = clear_new_wallet_admission_on_exit(&state);
+    assert!(state
+        .pending_mainnet_node_admission
+        .lock()
+        .unwrap()
+        .is_some());
+    drop(cleanup);
+    assert!(state
+        .pending_mainnet_node_admission
+        .lock()
+        .unwrap()
+        .is_none());
+}
+
+fn test_mainnet_admission(
+    scope: MainnetNodeAdmissionScope,
+    config: CoreNodeConfig,
+) -> PendingMainnetNodeAdmission {
+    PendingMainnetNodeAdmission {
+        config,
+        password: Zeroizing::new("disposable-test-password".to_owned()),
+        created_at: Instant::now(),
+        scope,
+    }
+}
+
+#[test]
+fn new_wallet_admission_rejects_an_existing_wallet_scope() {
+    let admission = test_mainnet_admission(
+        MainnetNodeAdmissionScope::ExistingWallet(Uuid::new_v4()),
+        default_node_config(),
+    );
+    assert!(!admission_allows_new_wallet(&admission));
+    assert!(admission_allows_new_wallet(&test_mainnet_admission(
+        MainnetNodeAdmissionScope::NewWallet,
+        default_node_config(),
+    )));
+}
+
+#[test]
+fn selected_wallet_admission_rejects_a_different_wallet() {
+    let selected = Uuid::new_v4();
+    let config = default_node_config();
+    let admission = test_mainnet_admission(
+        MainnetNodeAdmissionScope::ExistingWallet(Uuid::new_v4()),
+        config.clone(),
+    );
+    assert!(!admission_allows_selected_wallet(
+        &admission, selected, &config
+    ));
+}
+
+#[test]
+fn selected_wallet_admission_rejects_changed_core_configuration() {
+    let selected = Uuid::new_v4();
+    let config = default_node_config();
+    let admission = test_mainnet_admission(
+        MainnetNodeAdmissionScope::ExistingWallet(selected),
+        config.clone(),
+    );
+    let mut changed = config.clone();
+    changed.username = Some("different-test-user".to_owned());
+    assert!(admission_allows_selected_wallet(
+        &admission, selected, &config
+    ));
+    assert!(!admission_allows_selected_wallet(
+        &admission, selected, &changed
+    ));
 }
 
 #[test]
@@ -2878,11 +3247,21 @@ fn regtest_app_data_override_is_limited_to_named_temporary_directories() {
 }
 
 #[test]
+#[cfg(groot_network = "regtest")]
 fn default_regtest_directory_is_independent_of_process_working_directory() {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     assert_eq!(
         default_regtest_dir().unwrap(),
         manifest_dir.parent().unwrap().join(".regtest")
+    );
+}
+
+#[test]
+#[cfg(not(groot_network = "regtest"))]
+fn public_network_build_has_no_compiled_regtest_repository_path() {
+    assert_eq!(
+        default_regtest_dir().unwrap_err().code,
+        "invalid_node_config"
     );
 }
 
@@ -3645,6 +4024,7 @@ fn compact_filter_progress_dto_is_sanitized_and_bounded() {
         last_verified_height: 42,
         connected_peers: None,
         required_peers: None,
+        failure_code: None,
         updated_at: 1,
     })));
     update_compact_filter_sync_status(
@@ -3666,9 +4046,10 @@ fn compact_filter_progress_dto_is_sanitized_and_bounded() {
     assert_eq!(status.progress_percent, Some(100));
     assert_eq!(status.chain_height, Some(123));
     assert_eq!(status.last_verified_height, 42);
+    assert_eq!(status.failure_code, None);
     let serialized = serde_json::to_value(status).unwrap();
     let object = serialized.as_object().unwrap();
-    assert_eq!(object.len(), 9);
+    assert_eq!(object.len(), 10);
     for forbidden in ["address", "hash", "script", "descriptor", "warning"] {
         assert!(!object.keys().any(|key| key.contains(forbidden)));
     }
@@ -4023,6 +4404,66 @@ fn protected_rpc_password_is_bound_to_the_complete_node_config() {
         decode_protected_node_auth(b"legacy plaintext password", &config)
             .unwrap()
             .is_none()
+    );
+}
+
+#[test]
+fn restored_mainnet_node_auth_requires_fresh_verification_before_database_open() {
+    let config = CoreNodeConfig {
+        backend: ChainBackend::LocalCore {
+            url: "http://127.0.0.1:8332".to_owned(),
+        },
+        auth: RpcAuthMode::UserPass,
+        username: Some("groot".to_owned()),
+        tor_proxy: None,
+    };
+    let mut session = NodeAuthSession {
+        config: config.clone(),
+        password: Zeroizing::new("secret".to_owned()),
+        mainnet_node_verified: false,
+    };
+    assert!(!node_auth_session_allows_database_open(&session, &config));
+
+    session.mainnet_node_verified = true;
+    assert!(node_auth_session_allows_database_open(&session, &config));
+
+    let mut changed = config.clone();
+    changed.username = Some("other".to_owned());
+    assert!(!node_auth_session_allows_database_open(&session, &changed));
+}
+
+#[test]
+fn authentication_database_permit_is_short_lived_and_does_not_require_node_admission() {
+    let permit = authentication_database_open_permit().unwrap();
+    validate_authentication_database_open_permit(&permit).unwrap();
+
+    let directory = std::env::temp_dir().join(format!("groot-auth-db-test-{}", Uuid::new_v4()));
+    fs::create_dir_all(&directory).unwrap();
+    let path = directory.join("wallet.sqlite");
+    let wallet_db = open_wallet_database(&path, &database_open_permit_for_test()).unwrap();
+    wallet_db
+        .execute_batch(
+            "CREATE TABLE groot_auth_throttle (
+                singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
+                failures INTEGER NOT NULL CHECK(failures >= 0),
+                retry_at INTEGER NOT NULL CHECK(retry_at >= 0)
+            );",
+        )
+        .unwrap();
+    drop(wallet_db);
+    let auth_db = open_authentication_database(&path, &permit).unwrap();
+    assert_eq!(load_auth_throttle(&auth_db).unwrap().snapshot(), (0, 0));
+    drop(auth_db);
+    fs::remove_dir_all(directory).unwrap();
+
+    let expired = AuthenticationDatabaseOpenPermit {
+        issued_at: Instant::now() - MAINNET_NODE_ADMISSION_LIFETIME - Duration::from_secs(1),
+    };
+    assert_eq!(
+        validate_authentication_database_open_permit(&expired)
+            .unwrap_err()
+            .code,
+        "internal_error"
     );
 }
 

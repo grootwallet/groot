@@ -25,6 +25,120 @@ export const settingsCopy = {
     fr: 'Utilise votre connexion Bitcoin Core.',
     es: 'Usa tu conexión de Bitcoin Core.'
   },
+  Diagnostics: { fr: 'Diagnostics', es: 'Diagnóstico' },
+  'APP DIAGNOSTICS': { fr: 'DIAGNOSTIC DE L’APP', es: 'DIAGNÓSTICO DE LA APP' },
+  'Diagnostic event log': {
+    fr: 'Journal des événements de diagnostic',
+    es: 'Registro de eventos de diagnóstico'
+  },
+  'Review and export sanitized app events without wallet identifiers or secrets.': {
+    fr: 'Consultez et exportez les événements assainis de l’app sans identifiants de portefeuille ni secrets.',
+    es: 'Revisa y exporta eventos depurados de la app sin identificadores de cartera ni secretos.'
+  },
+  'Recorded event types': {
+    fr: 'Types d’événements enregistrés',
+    es: 'Tipos de eventos registrados'
+  },
+  'Only these durable lifecycle and operation categories are recorded. Sensitive values and passive polling are excluded.':
+    {
+      fr: 'Seules ces catégories durables de cycle de vie et d’opération sont enregistrées. Les valeurs sensibles et l’interrogation passive sont exclues.',
+      es: 'Solo se registran estas categorías duraderas de ciclo de vida y operación. Se excluyen los valores sensibles y el sondeo pasivo.'
+    },
+  'Sanitized wallet-operation history for troubleshooting. It never includes secrets or full wallet identifiers.':
+    {
+      fr: 'Historique assaini des opérations du portefeuille pour le dépannage. Il ne contient jamais de secrets ni d’identifiants complets.',
+      es: 'Historial depurado de operaciones de la cartera para diagnóstico. Nunca incluye secretos ni identificadores completos.'
+    },
+  'Diagnostic log summary': {
+    fr: 'Résumé du journal de diagnostic',
+    es: 'Resumen del registro de diagnóstico'
+  },
+  '{count} events': { fr: '{count} événements', es: '{count} eventos' },
+  '{network} · {platform} · v{version}': {
+    fr: '{network} · {platform} · v{version}',
+    es: '{network} · {platform} · v{version}'
+  },
+  'Stored locally as append-only JSONL. New records stop at the 16 MiB safety limit.': {
+    fr: 'Stocké localement en JSONL à ajout seul. Les nouveaux enregistrements s’arrêtent à la limite de sécurité de 16 Mio.',
+    es: 'Almacenado localmente como JSONL de solo anexado. Los nuevos registros se detienen en el límite de seguridad de 16 MiB.'
+  },
+  'Export CSV': { fr: 'Exporter en CSV', es: 'Exportar CSV' },
+  'Export JSON': { fr: 'Exporter en JSON', es: 'Exportar JSON' },
+  'Loading diagnostics…': { fr: 'Chargement du diagnostic…', es: 'Cargando diagnóstico…' },
+  'Could not load diagnostics.': {
+    fr: 'Impossible de charger le diagnostic.',
+    es: 'No se pudo cargar el diagnóstico.'
+  },
+  'No diagnostic events have been recorded yet.': {
+    fr: 'Aucun événement de diagnostic enregistré.',
+    es: 'Aún no se registraron eventos de diagnóstico.'
+  },
+  'The sanitized diagnostic log was saved.': {
+    fr: 'Le journal de diagnostic assaini a été enregistré.',
+    es: 'Se guardó el registro de diagnóstico depurado.'
+  },
+  'Could not export diagnostics': {
+    fr: 'Impossible d’exporter le diagnostic',
+    es: 'No se pudo exportar el diagnóstico'
+  },
+  Time: { fr: 'Heure', es: 'Hora' },
+  Event: { fr: 'Événement', es: 'Evento' },
+  Outcome: { fr: 'Résultat', es: 'Resultado' },
+  'Safe context': { fr: 'Contexte sûr', es: 'Contexto seguro' },
+  'App started': { fr: 'App démarrée', es: 'App iniciada' },
+  'Wallet created': { fr: 'Portefeuille créé', es: 'Cartera creada' },
+  'Wallet recovered': { fr: 'Portefeuille récupéré', es: 'Cartera recuperada' },
+  'Wallet removed': { fr: 'Portefeuille supprimé', es: 'Cartera eliminada' },
+  'Wallet unlocked': { fr: 'Portefeuille déverrouillé', es: 'Cartera desbloqueada' },
+  'Wallet locked': { fr: 'Portefeuille verrouillé', es: 'Cartera bloqueada' },
+  'Wallet sync': { fr: 'Synchronisation du portefeuille', es: 'Sincronización de cartera' },
+  'Transaction prepared': { fr: 'Transaction préparée', es: 'Transacción preparada' },
+  'Transaction signed': { fr: 'Transaction signée', es: 'Transacción firmada' },
+  'Transaction broadcast': { fr: 'Transaction diffusée', es: 'Transacción transmitida' },
+  'Receive address generated': {
+    fr: 'Adresse de réception générée',
+    es: 'Dirección de recepción generada'
+  },
+  receive_address_generated: {
+    fr: 'receive_address_generated',
+    es: 'receive_address_generated'
+  },
+  'Receive address discarded': {
+    fr: 'Adresse de réception écartée',
+    es: 'Dirección de recepción descartada'
+  },
+  'Receive address verified': {
+    fr: 'Adresse de réception vérifiée',
+    es: 'Dirección de recepción verificada'
+  },
+  'Coin frozen': { fr: 'Pièce gelée', es: 'Moneda congelada' },
+  'Coin unfrozen': { fr: 'Pièce dégelée', es: 'Moneda descongelada' },
+  'Backup exported': { fr: 'Sauvegarde exportée', es: 'Copia exportada' },
+  'Backup imported': { fr: 'Sauvegarde importée', es: 'Copia importada' },
+  'Backup verified': { fr: 'Sauvegarde vérifiée', es: 'Copia verificada' },
+  'Recovery tested': { fr: 'Récupération testée', es: 'Recuperación probada' },
+  'Network configuration changed': {
+    fr: 'Configuration réseau modifiée',
+    es: 'Configuración de red modificada'
+  },
+  'Diagnostics exported': { fr: 'Diagnostic exporté', es: 'Diagnóstico exportado' },
+  started: { fr: 'démarré', es: 'iniciado' },
+  progress: { fr: 'en cours', es: 'en curso' },
+  succeeded: { fr: 'réussi', es: 'correcto' },
+  failed: { fr: 'échoué', es: 'fallido' },
+  cancelled: { fr: 'annulé', es: 'cancelado' },
+  automatic: { fr: 'automatique', es: 'automático' },
+  startup: { fr: 'démarrage', es: 'inicio' },
+  'Trigger: {trigger}': { fr: 'Déclencheur : {trigger}', es: 'Origen: {trigger}' },
+  '{count} permanent labels assigned': {
+    fr: '{count} libellés permanents attribués',
+    es: '{count} etiquetas permanentes asignadas'
+  },
+  '{count} items': { fr: '{count} éléments', es: '{count} elementos' },
+  '{format} export': { fr: 'Export {format}', es: 'Exportación {format}' },
+  software: { fr: 'logiciel', es: 'software' },
+  hardware: { fr: 'matériel', es: 'hardware' },
+  multisig: { fr: 'multisignature', es: 'multifirma' },
   '{walletName} · Local display name only': {
     fr: '{walletName} · Nom d’affichage local uniquement',
     es: '{walletName} · Solo nombre de visualización local'
@@ -469,6 +583,16 @@ export const settingsCopy = {
     es: 'Usa una sola unidad en todo Groot.'
   },
   'Use setup': { fr: 'Utiliser la configuration', es: 'Usar configuración' },
+  'Unlock first': { fr: 'Déverrouiller d’abord', es: 'Desbloquear primero' },
+  'Unlock the source wallet first.': {
+    fr: 'Déverrouillez d’abord le portefeuille source.',
+    es: 'Desbloquea primero la cartera de origen.'
+  },
+  'Open and unlock that wallet, then return here. Its saved credentials never enter this screen.': {
+    fr: 'Ouvrez et déverrouillez ce portefeuille, puis revenez ici. Ses identifiants enregistrés ne sont jamais affichés sur cet écran.',
+    es: 'Abre y desbloquea esa cartera y vuelve aquí. Sus credenciales guardadas nunca aparecen en esta pantalla.'
+  },
+  Ready: { fr: 'Prêt', es: 'Listo' },
   'Username and password': { fr: 'Nom d’utilisateur et mot de passe', es: 'Usuario y contraseña' },
   'Verify now': { fr: 'Vérifier maintenant', es: 'Verificar ahora' },
   'View descriptor': { fr: 'Afficher le descripteur', es: 'Ver descriptor' },

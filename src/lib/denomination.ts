@@ -39,6 +39,16 @@ export function amountInputValue(sats: number, unit: Denomination): string {
   return unit === 'btc' ? (sats / 100_000_000).toFixed(8) : String(sats);
 }
 
+export function convertAmountInput(
+  value: string,
+  from: Denomination,
+  to: Denomination
+): string | null {
+  if (!value.trim()) return '';
+  const parsed = parseAmountInput(value, from);
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? amountInputValue(parsed, to) : null;
+}
+
 export function parseAmountInput(value: string, unit: Denomination): number {
   const trimmed = value.trim();
   if (!trimmed) return 0;

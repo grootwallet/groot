@@ -119,6 +119,104 @@ recorded above.
 - The local Regtest USB and clean-profile recovery campaign is complete. The
   public-network/package and independent-review row remains unclaimed.
 
+## Packaged v0.4.83 Testnet4 setup checkpoint — 2026-08-31
+
+On the exact packaged Testnet4 candidate at short commit `12cf1714`, the reviewer
+reported a successful Trezor Safe 3 BIP48 public-account import into a new
+standard multisig policy. After that wallet was created offline, the bounded
+saved-identity health check matched the connected physical Safe 3. Groot
+correctly showed **No setup needed** for wallet policy because Safe 3 receives
+the complete policy on each request and does not persist Groot registration
+state. This evidence does not inherit any Regtest transaction row.
+
+The wallet has never synced. No trusted receive display, funding, payment
+review, rejection/retry, signature, disconnect/wrong-device behavior,
+acceleration, recovery, restart, threshold, or broadcast is claimed for
+Testnet4. The first coordinator creation attempt also exposed a product defect
+when a preselected network-setup source was no longer unlocked; the later
+offline creation does not convert that failure into a pass. Screenshots that
+contained public signer identifiers and node details were excluded. No address,
+transaction identifier, fingerprint, account key, descriptor, PSBT, device path,
+credential, or RPC detail is retained.
+
+Independent review is deferred until all Testnet4 hardware-device campaigns are
+finalized; this row is neither passed nor failed.
+
+## Packaged v0.4.84 Testnet4 BIP84 checkpoint — 2026-08-31
+
+On the locally ad-hoc-signed Testnet4 package at commit `8ff4e7da`, the reviewer
+created a new Safe 3 BIP84 wallet, completed its first history scan, verified a
+permanently labeled receive address on the exact device, and confirmed that the
+wallet and its verified zero-balance state persisted over a complete Groot quit
+and relaunch. The saved public descriptor export and BIP329 label export also
+completed. These observations close only the named BIP84 import/sync,
+trusted-display, restart-persistence, and public-export rows; they do not imply a
+payment, signature, rejection, acceleration, or broadcast pass.
+
+A later explicit full wallet rescan from a recent birthday failed. Ordinary sync
+continued to work and the last verified wallet state remained available, so this
+is recorded as a v0.4.84 recovery-scan defect rather than a Safe 3 hardware
+failure. The defect requires a fixed packaged-candidate retest before the
+Testnet4 recovery row can close.
+
+Screenshots that exposed a public receive address were excluded from retained
+evidence. No address, transaction identifier, fingerprint, account key,
+descriptor, PSBT, device path, credential, RPC detail, or label is retained.
+
+## Packaged v0.4.85 Testnet4 funded BIP48 checkpoint — 2026-08-31
+
+On the locally ad-hoc-signed Testnet4 package at commit `5ba40001`, the existing
+multisig coordinator synchronized after the active-chain checkpoint repair. The
+exact Safe 3 and a BitBox02 Nova independently displayed and matched the same
+newly revealed multisig receive address, and the first disposable deposit was
+then observed by the wallet.
+
+For one reviewed self-transfer, Safe 3 and Nova independently supplied the two
+required signatures. Safe 3 first passed both an explicit on-device rejection
+and a cable-interruption retry without changing the proposal or its signature
+count. The campaign also passed local signature discard and restoration through
+signed-PSBT import, threshold finalization, Bitcoin Core broadcast, and
+self-transfer fee-only accounting. These observations close only the named
+packaged BIP48 rows; they do not inherit or close Safe 3's still-open BIP84
+funded-signing and full-rescan rows.
+
+The subsequent RBF quote failed before replacement construction or any Safe 3
+interaction because v0.4.85 requested Core's incremental-relay policy through
+an RPC method absent from the canonical least-privilege configuration. This is
+an application/RPC-method defect, not a Safe 3 failure and not evidence that an
+only-coin self-transfer is inherently non-replaceable. The packaged acceleration
+row remains open.
+
+The record relies on sanitized written observations. Submitted screenshots
+exposed public wallet, signer, or transaction metadata and were excluded. No
+address, transaction identifier, fingerprint, account key, descriptor, PSBT,
+device path, credential, RPC detail, amount, or label is retained.
+
+## Packaged v0.4.88 Testnet4 funded BIP84 and shared BIP48 checkpoint
+
+On the locally ad-hoc-signed Testnet4 package at exact commit `4fcd5f27`, Safe 3
+passed funded BIP84 transaction review, signing, and broadcast, followed by
+wrong-device rejection. In the shared BIP48 policy Groot truthfully displayed
+**No setup needed** for Safe 3; it did not claim persistent policy registration.
+
+Safe 3 and BitBox02 Nova independently displayed and matched the same BIP48
+receive address. A real Testnet4 deposit synchronized, and the two devices
+supplied the required signatures for a real 2-of-3 spend. Threshold
+finalization, broadcast, confirmation, complete app restart, and accounting
+passed. A genuinely empty profile then imported the public descriptor/backup
+and reproduced the expected wallet state.
+
+The descriptor/public-backup recovery is recorded as the packaged BIP48
+clean-profile recovery pass because it matches that worksheet definition. The
+different clean-profile recovery procedure the reviewer explicitly deferred
+remains open, as does the independent tester/reviewer run.
+
+Exact packaged v0.4.89 commit `c9309d3` was subsequently exercised with Bitcoin
+Core fully synchronized. Full-history rescans completed successfully for every
+exercised wallet, closing the candidate-bound rescan regression. This is
+wallet-sync evidence and does not imply another hardware-device interaction,
+clean-profile recovery, or independent-review pass.
+
 Local sensitive evidence reviewed without copying identifiers: yes
 
 Certification decision: **LIMITED — LOCAL REGTEST AND RECOVERY PASS / RELEASE

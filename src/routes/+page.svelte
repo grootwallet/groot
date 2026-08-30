@@ -1,5 +1,6 @@
 <script lang="ts">
   import { translate, localizedError } from '$lib/i18n-catalog';
+  import { defaultConfig } from '$lib/config';
   import {
     Activity,
     ArrowDownToLine,
@@ -14,7 +15,8 @@
     Network,
     RefreshCw,
     ShieldCheck,
-    Smartphone
+    Smartphone,
+    Trash2
   } from '@lucide/svelte';
   import Button from '$lib/components/Button.svelte';
   import Modal from '$lib/components/Modal.svelte';
@@ -69,7 +71,9 @@
   import { fly } from 'svelte/transition';
   import { presentLocalTimestamp, syncAge } from '$lib/date-time';
   const walletShell = useWalletShellContext();
+  const isMainnet = defaultConfig.network === 'mainnet';
   let syncing = $state(false);
+  let manualSyncDetailsVisible = $state(false);
   let snapshot = $state<WalletSnapshot | null>(null);
   let multisigWallet = $state<MultisigWallet | null>(null);
   let hardwareSignerWallet = $state<ExternalSignerWallet | null>(null);
@@ -78,6 +82,9 @@
   let activeProposal = $state<MultisigProposal | PaymentProposal | null>(null);
   let activeDraft = $state<PaymentDraft | null>(null);
   let pendingMobilePairingCount = $state(0);
+  let discardDraftOpen = $state(false);
+  let discardingDraft = $state(false);
+  let discardDraftError = $state('');
   let selected = $state<Transaction | null>(null);
   let multisig = $state(false);
   let moreOpen = $state(false);
@@ -113,12 +120,15 @@
   });
   let recoveryPollToken = 0;
   let initialScanOpen = $state(false);
-  let initialScanMode = $state<'new' | 'birthday' | 'full' | null>(null);
+  let initialScanMode = $state<'new' | 'birthday' | 'full'>('new');
+  let showManualScanOptions = $state(false);
+  let showAdvancedScanOptions = $state(false);
   let initialBirthdayHeight = $state(0);
   let initialGapLimit = $state(20);
   let initialScanCredential = $state('');
   let initialScanError = $state('');
   let initialScanStarting = $state(false);
+  let nodeReady = $state(false);
   const recoveryScanIsActive = (status: RecoveryScanStatus) =>
     ['running', 'cancelling'].includes(status.status);
   let recoveryPercent = $derived(
@@ -146,9 +156,53 @@
     Boolean(
       status && ['connecting', 'syncing', 'checking_matches', 'applying'].includes(status.state)
     );
+  const syncFailureDescription = (status: WalletSyncStatus) => {
+    if (status.lastVerifiedHeight === 0 && !snapshot?.syncedAt) {
+      return translate(
+        $locale,
+        'No wallet history has been verified yet. Retry when your connection is available.'
+      );
+    }
+    const height = formatInteger(status.lastVerifiedHeight, $locale);
+    if (status.failureCode === 'invalid_node_config') {
+      return translate(
+        $locale,
+        'Bitcoin Core is reachable, but its RPC user cannot run every wallet-sync method. Balance remains verified through block {height}.',
+        { height }
+      );
+    }
+    if (status.failureCode === 'node_syncing') {
+      return translate(
+        $locale,
+        'Bitcoin Core is still syncing and has not reached this wallet’s last verified block. Balance remains verified through block {height}.',
+        { height }
+      );
+    }
+    if (status.failureCode === 'node_history_unavailable') {
+      return translate(
+        $locale,
+        'Bitcoin Core no longer stores the blocks needed after this wallet’s checkpoint. Balance remains verified through block {height}.',
+        { height }
+      );
+    }
+    if (status.failureCode === 'internal_error') {
+      return translate(
+        $locale,
+        'Groot could not reconcile or save the refreshed wallet state. Balance remains verified through block {height}.',
+        { height }
+      );
+    }
+    return translate(
+      $locale,
+      'Balance remains verified through block {height}. Retry when your connection is available.',
+      { height }
+    );
+  };
   let syncInProgress = $derived(syncing || syncStatusIsActive(syncStatus));
   let syncAgeValue = $derived(syncAge(snapshot?.syncedAt ?? null, syncClock));
   let syncButtonLabel = $derived.by(() => {
+    if (initialHistoryRequired && !nodeReady && !recoveryScanIsActive(recoveryStatus))
+      return translate($locale, 'Connect Bitcoin Core');
     if (initialHistoryRequired && !recoveryScanIsActive(recoveryStatus))
       return translate($locale, savedRecoveryCanResume ? 'Resume scan' : 'Choose scan');
     if (recoveryScanIsActive(recoveryStatus)) return `${recoveryPercent}%`;
@@ -286,27 +340,40 @@
     initialDataLoading = true;
     try {
       const pendingPairingsPromise = walletService.pendingMobilePairings().catch(() => []);
-      const shellWallets = walletShell.profiles();
-      const shellSelectedWalletId = walletShell.selectedWalletId();
-      if (!shellWallets.length || !shellSelectedWalletId) {
+      // Profile-mutating routes refresh the shell after navigation. Read the
+      // authoritative registry here so this route cannot race that refresh and
+      // query the newly selected wallet using the previous wallet's kind.
+      const registry = await walletService.profiles();
+      if (!registry.wallets.length || !registry.selectedWalletId) {
         if (!(await walletService.exists())) {
           await goto('/welcome');
           return;
         }
       }
-      const [registry, nextSyncSource, runtime, nextNodeConfig] = await Promise.all([
-        shellWallets.length && shellSelectedWalletId
-          ? Promise.resolve({ wallets: shellWallets, selectedWalletId: shellSelectedWalletId })
-          : walletService.profiles(),
+      const [nextSyncSource, runtime, nextNodeConfig, networkSetupSources] = await Promise.all([
         walletService.syncSource(),
         walletService.runtimePlatform(),
-        walletService.nodeConfig()
+        walletService.nodeConfig(),
+        isMainnet ? Promise.resolve([]) : walletService.networkSetupSources()
       ]);
       syncSource = nextSyncSource;
       mobileRuntime = runtime.mobile;
       nodeConfig = nextNodeConfig;
       selectedProfile =
         registry.wallets.find((wallet) => wallet.id === registry.selectedWalletId) ?? null;
+      if (isMainnet) await walletService.testNodeConnection();
+      // A successful mainnet wallet-data read is already gated by the exact
+      // selected wallet's authenticated, retained Core setup in Rust. Mainnet
+      // deliberately rejects cross-wallet setup discovery, so do not call that
+      // test-network-only API merely to derive presentation state.
+      nodeReady =
+        isMainnet ||
+        Boolean(
+          selectedProfile &&
+          networkSetupSources.some(
+            (source) => source.walletId === selectedProfile?.id && source.ready
+          )
+        );
       activeDraft = selectedProfile ? await walletService.paymentDraft() : null;
       multisig = selectedProfile?.kind === 'multisig';
       if (multisig) {
@@ -349,7 +416,13 @@
       if (syncSource.type === 'bitcoin_core' && !snapshot?.syncedAt) {
         await loadRecoveryState();
       }
-      if (syncSource.type === 'compact_filters' && !mobileRuntime && !inheritedSyncObserved)
+      const resumeUnlockSync =
+        selectedProfile &&
+        walletShell.consumeUnlockSync(selectedProfile.id);
+      if (
+        !inheritedSyncObserved &&
+        ((syncSource.type === 'compact_filters' && !mobileRuntime) || resumeUnlockSync)
+      )
         void sync(false);
     } catch (cause) {
       if (cause instanceof WalletError && cause.code === 'wallet_locked') {
@@ -359,6 +432,33 @@
       loadError = localizedError(cause, $locale, 'The wallet data could not be read.');
       initialDataLoading = false;
       toast({ title: 'Could not open wallet', description: loadError, tone: 'danger' });
+    }
+  }
+
+  async function confirmDiscardPaymentDraft() {
+    if (!activeDraft || discardingDraft) return;
+    discardingDraft = true;
+    discardDraftError = '';
+    try {
+      await walletService.clearPaymentDraft();
+      activeDraft = null;
+      discardDraftOpen = false;
+      toast({
+        title: translate($locale, 'Payment draft discarded'),
+        description: translate(
+          $locale,
+          'The unfinished payment was removed. No transaction was created.'
+        ),
+        tone: 'success'
+      });
+    } catch (cause) {
+      discardDraftError = localizedError(
+        cause,
+        $locale,
+        'The payment draft could not be discarded.'
+      );
+    } finally {
+      discardingDraft = false;
     }
   }
   onMount(() =>
@@ -410,7 +510,7 @@
       initialGapLimit = settings.gapLimit;
       if (recoveryScanIsActive(status)) {
         startRecoveryStatusPolling();
-      } else if (!snapshot?.syncedAt) {
+      } else if (!snapshot?.syncedAt && nodeReady) {
         initialScanOpen = true;
       }
     } catch (cause) {
@@ -445,15 +545,24 @@
   }
   function openInitialScan() {
     initialScanError = '';
+    if (!nodeReady) {
+      void goto('/settings');
+      return;
+    }
     if (savedRecoveryCanResume) {
       initialScanMode = recoverySettings.birthdayHeight === 0 ? 'full' : 'birthday';
       initialBirthdayHeight = recoverySettings.birthdayHeight;
       initialGapLimit = recoverySettings.gapLimit;
+      showManualScanOptions = true;
+      showAdvancedScanOptions = recoverySettings.gapLimit !== 20;
+    } else {
+      initialScanMode = 'new';
+      showManualScanOptions = false;
+      showAdvancedScanOptions = false;
     }
     initialScanOpen = true;
   }
   async function startInitialScan() {
-    if (!initialScanMode && !savedRecoveryCanResume) return;
     initialScanStarting = true;
     initialScanError = '';
     const credential = initialScanCredential;
@@ -506,7 +615,7 @@
     const token = ++syncPollToken;
     void pollSyncStatus(token);
   }
-  const sync = async (showToast = true) => {
+  const sync = async (manual = true) => {
     if (mobileSyncSetupRequired) {
       await goto('/settings#network-services');
       return;
@@ -516,15 +625,17 @@
       return;
     }
     if (syncInProgress) return;
+    manualSyncDetailsVisible = manual;
     syncing = true;
-    startSyncStatusPolling();
     try {
+      if (manual) await walletShell.pauseAutomaticSync();
+      startSyncStatusPolling();
       const [nextSnapshot] = await Promise.all([
         multisig ? walletService.syncMultisig() : walletService.sync(),
         new Promise((resolve) => setTimeout(resolve, 1_200))
       ]);
       snapshot = nextSnapshot;
-      if (showToast)
+      if (manual)
         toast({
           title: 'Wallet is up to date',
           description: 'Balance and transactions refreshed.',
@@ -536,7 +647,7 @@
         await goto('/unlock');
         return;
       }
-      if (showToast)
+      if (manual)
         toast({
           title: 'Sync failed',
           description: localizedError(cause, $locale),
@@ -545,6 +656,8 @@
     } finally {
       await refreshSyncStatus();
       syncing = false;
+      if (syncStatus?.state !== 'failed') manualSyncDetailsVisible = false;
+      if (manual) walletShell.resumeAutomaticSync();
     }
   };
   async function verifyBackup() {
@@ -685,7 +798,9 @@
               ? 'Scanning wallet history · {percent}%'
               : savedRecoveryCanResume
                 ? 'Wallet-history scan paused'
-                : 'Choose where wallet history begins',
+                : nodeReady
+                  ? 'Choose where wallet history begins'
+                  : 'Connect Bitcoin Core',
             { percent: recoveryPercent }
           )}</strong
         ><small
@@ -698,10 +813,12 @@
                   total: formatInteger(recoveryStatus.totalBlocks, $locale)
                 }
               )
-            : translate(
-                $locale,
-                'A birthday makes the first scan faster. Full history always remains available.'
-              )}</small
+            : nodeReady
+              ? translate(
+                  $locale,
+                  'A birthday makes the first scan faster. Full history always remains available.'
+                )
+              : translate($locale, 'This wallet has not completed a sync yet.')}</small
         >
       </div>
       {#if recoveryScanIsActive(recoveryStatus)}
@@ -711,13 +828,24 @@
           aria-label={translate($locale, 'Recovery scan progress')}
         ></progress>
       {:else}
-        <Button size="small" variant="secondary" onclick={openInitialScan}
-          >{translate($locale, savedRecoveryCanResume ? 'Resume scan' : 'Choose scan')}</Button
+        <Button
+          size="small"
+          variant="secondary"
+          href={nodeReady ? undefined : '/settings'}
+          onclick={nodeReady ? openInitialScan : undefined}
+          >{translate(
+            $locale,
+            nodeReady
+              ? savedRecoveryCanResume
+                ? 'Resume scan'
+                : 'Choose scan'
+              : 'Connect Bitcoin Core'
+          )}</Button
         >
       {/if}
     </section>
   {/if}
-  {#if syncStatus && (syncInProgress || syncStatus.state === 'failed')}
+  {#if manualSyncDetailsVisible && syncStatus && (syncInProgress || syncStatus.state === 'failed')}
     <section class:failed={syncStatus.state === 'failed'} class="sync-progress" aria-live="polite">
       <div>
         <strong
@@ -739,18 +867,7 @@
           )}</strong
         ><small
           >{syncStatus.state === 'failed'
-            ? syncStatus.lastVerifiedHeight === 0 && !snapshot?.syncedAt
-              ? translate(
-                  $locale,
-                  'No wallet history has been verified yet. Retry when your connection is available.'
-                )
-              : translate(
-                  $locale,
-                  'Balance remains verified through block {height}. Retry when your connection is available.',
-                  {
-                    height: formatInteger(syncStatus.lastVerifiedHeight, $locale)
-                  }
-                )
+            ? syncFailureDescription(syncStatus)
             : syncStatus.chainHeight !== null
               ? translate(
                   $locale,
@@ -875,7 +992,9 @@
           class="balance-value unverified-balance"
           aria-label={translate($locale, 'Unverified balance')}
         >
-          <strong>—</strong><small>{translate($locale, 'Not verified yet')}</small>
+          <Amount value={0} hidden={$discreetMode} /><small
+            >{translate($locale, 'Never synced')}</small
+          >
         </div>
       {:else}
         <button
@@ -898,7 +1017,7 @@
         <i></i>{translate(
           $locale,
           initialHistoryRequired
-            ? 'Balance and activity remain unverified until the scan completes.'
+            ? 'This wallet has not completed a sync yet.'
             : $discreetMode
               ? 'Pending activity hidden'
               : pendingDescription
@@ -938,27 +1057,21 @@
         })}
       >
         <span class="active-proposal-icon"><Clock3 size={17} /></span>
-        <span class="active-proposal-copy"
+        <span class="active-proposal-copy active-payment-copy"
           ><strong>{proposalTitle}</strong><span class="active-proposal-meta"
             ><PermanentLabelTags
               labels={activeProposal.labels ?? [activeProposal.label]}
               hidden={$discreetMode}
               prominent
-            /><small>{proposalProgress}</small></span
-          ></span
+            /></span
+          ><small class="active-proposal-progress">{proposalProgress}</small></span
         >
         <span class="active-proposal-action"
           >{translate($locale, 'Resume')} <ChevronRight size={15} /></span
         >
       </a>
     {:else if activeDraft}
-      <a
-        class="active-proposal-callout"
-        href={activeDraft.kind === 'multisig' ? '/multisig/send' : '/send'}
-        aria-label={translate($locale, 'Resume payment draft, {label}', {
-          label: $discreetMode ? 'Label hidden' : activeDraft.labels.join(', ')
-        })}
-      >
+      <section class="active-proposal-callout active-draft-callout">
         <span class="active-proposal-icon"><Clock3 size={17} /></span>
         <span class="active-proposal-copy"
           ><strong>{translate($locale, 'Payment draft in progress')}</strong><span
@@ -970,10 +1083,25 @@
             /><small>{translate($locale, 'Recipient and labels saved')}</small></span
           ></span
         >
-        <span class="active-proposal-action"
-          >{translate($locale, 'Resume')} <ChevronRight size={15} /></span
-        >
-      </a>
+        <span class="active-draft-actions">
+          <Button
+            variant="ghost-danger"
+            size="small"
+            onclick={() => {
+              discardDraftError = '';
+              discardDraftOpen = true;
+            }}><Trash2 size={14} />{translate($locale, 'Discard draft')}</Button
+          >
+          <Button
+            variant="secondary"
+            size="small"
+            href={activeDraft.kind === 'multisig' ? '/multisig/send' : '/send'}
+            ariaLabel={translate($locale, 'Resume payment draft, {label}', {
+              label: $discreetMode ? 'Label hidden' : activeDraft.labels.join(', ')
+            })}>{translate($locale, 'Resume')} <ChevronRight size={15} /></Button
+          >
+        </span>
+      </section>
     {/if}
     <div class="primary-actions">
       <MobileWalletSwitcher
@@ -1113,6 +1241,47 @@
   onclose={() => (showDescriptors = false)}
 />
 <Modal
+  open={discardDraftOpen}
+  title={translate($locale, 'Discard this payment draft?')}
+  description={translate($locale, 'Remove the unfinished payment without creating a transaction.')}
+  onclose={() => {
+    if (!discardingDraft) {
+      discardDraftOpen = false;
+      discardDraftError = '';
+    }
+  }}
+  >{#if activeDraft}<div class="warning-box">
+      <strong>{translate($locale, 'Only the draft will be removed.')}</strong>
+      {translate($locale, 'No transaction or signature exists yet.')}
+    </div>
+    <dl class="details-list cancel-proposal-details">
+      <div>
+        <dt>{translate($locale, 'Payment')}</dt>
+        <dd><PermanentLabelTags labels={activeDraft.labels} hidden={$discreetMode} prominent /></dd>
+      </div>
+      <div>
+        <dt>{translate($locale, 'Saved fields')}</dt>
+        <dd>{translate($locale, 'Recipient, labels, amount, fee, and coin selection')}</dd>
+      </div>
+    </dl>
+    {#if discardDraftError}<p class="form-error" role="alert">{discardDraftError}</p>{/if}
+    <div class="modal-footer">
+      <Button
+        variant="secondary"
+        disabled={discardingDraft}
+        onclick={() => {
+          discardDraftOpen = false;
+          discardDraftError = '';
+        }}>{translate($locale, 'Keep draft')}</Button
+      ><Button
+        variant="danger"
+        loading={discardingDraft}
+        loadingLabel={translate($locale, 'Discarding draft…')}
+        onclick={confirmDiscardPaymentDraft}>{translate($locale, 'Discard draft')}</Button
+      >
+    </div>{/if}</Modal
+>
+<Modal
   open={initialScanOpen}
   title={translate(
     $locale,
@@ -1165,64 +1334,88 @@
           )}</small
         >
       </button>
-      <button
-        type="button"
-        role="radio"
-        aria-checked={initialScanMode === 'birthday'}
-        class:selected={initialScanMode === 'birthday'}
-        onclick={() => (initialScanMode = 'birthday')}
+      <Button
+        class="initial-scan-disclosure"
+        variant="ghost"
+        size="small"
+        onclick={() => (showManualScanOptions = !showManualScanOptions)}
+        >{translate(
+          $locale,
+          showManualScanOptions ? 'Hide existing-wallet options' : 'Existing wallet options'
+        )}</Button
       >
-        <strong>{translate($locale, 'Existing wallet · use a birthday block')}</strong>
-        <small
+      {#if showManualScanOptions}
+        <button
+          type="button"
+          role="radio"
+          aria-checked={initialScanMode === 'birthday'}
+          class:selected={initialScanMode === 'birthday'}
+          onclick={() => (initialScanMode = 'birthday')}
+        >
+          <strong>{translate($locale, 'Existing wallet · use a birthday block')}</strong>
+          <small
+            >{translate(
+              $locale,
+              'Start before the wallet’s first payment. Earlier is safer; later is faster.'
+            )}</small
+          >
+        </button>
+        {#if initialScanMode === 'birthday'}
+          <label class="field initial-scan-field"
+            ><span>{translate($locale, 'Wallet birthday block')}</span><input
+              type="number"
+              min="0"
+              step="1"
+              bind:value={initialBirthdayHeight}
+              disabled={initialScanStarting}
+            /><small
+              >{translate($locale, 'If uncertain, choose full history instead of guessing.')}</small
+            ></label
+          >
+        {/if}
+        <button
+          type="button"
+          role="radio"
+          aria-checked={initialScanMode === 'full'}
+          class:selected={initialScanMode === 'full'}
+          onclick={() => (initialScanMode = 'full')}
+        >
+          <strong>{translate($locale, 'Full history · safest')}</strong>
+          <small
+            >{translate(
+              $locale,
+              'Scan from genesis. This can take tens of minutes on Testnet4.'
+            )}</small
+          >
+        </button>
+        <Button
+          class="initial-scan-disclosure"
+          variant="ghost"
+          size="small"
+          onclick={() => (showAdvancedScanOptions = !showAdvancedScanOptions)}
           >{translate(
             $locale,
-            'Start before the wallet’s first payment. Earlier is safer; later is faster.'
-          )}</small
+            showAdvancedScanOptions ? 'Hide address discovery options' : 'Address discovery options'
+          )}</Button
         >
-      </button>
-      {#if initialScanMode === 'birthday'}
-        <label class="field initial-scan-field"
-          ><span>{translate($locale, 'Wallet birthday block')}</span><input
-            type="number"
-            min="0"
-            step="1"
-            bind:value={initialBirthdayHeight}
-            disabled={initialScanStarting}
-          /><small
-            >{translate($locale, 'If uncertain, choose full history instead of guessing.')}</small
-          ></label
-        >
+        {#if showAdvancedScanOptions}
+          <label class="field initial-scan-field"
+            ><span>{translate($locale, 'Address gap limit')}</span><input
+              type="number"
+              min="20"
+              max="1000"
+              step="1"
+              bind:value={initialGapLimit}
+              disabled={initialScanStarting}
+            /><small
+              >{translate(
+                $locale,
+                '20 is standard. It controls address discovery, not block-scan speed.'
+              )}</small
+            ></label
+          >
+        {/if}
       {/if}
-      <button
-        type="button"
-        role="radio"
-        aria-checked={initialScanMode === 'full'}
-        class:selected={initialScanMode === 'full'}
-        onclick={() => (initialScanMode = 'full')}
-      >
-        <strong>{translate($locale, 'Full history · safest')}</strong>
-        <small
-          >{translate(
-            $locale,
-            'Scan from genesis. This can take tens of minutes on Testnet4.'
-          )}</small
-        >
-      </button>
-      <label class="field initial-scan-field"
-        ><span>{translate($locale, 'Address gap limit')}</span><input
-          type="number"
-          min="20"
-          max="1000"
-          step="1"
-          bind:value={initialGapLimit}
-          disabled={initialScanStarting}
-        /><small
-          >{translate(
-            $locale,
-            '20 is standard. It controls address discovery, not block-scan speed.'
-          )}</small
-        ></label
-      >
     </div>
   {/if}
   <PasswordField
@@ -1243,7 +1436,6 @@
       }}>{translate($locale, 'Not now')}</Button
     ><Button
       disabled={!initialScanCredential ||
-        (!savedRecoveryCanResume && !initialScanMode) ||
         (!savedRecoveryCanResume &&
           initialScanMode === 'birthday' &&
           (!Number.isInteger(Number(initialBirthdayHeight)) ||

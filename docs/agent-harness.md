@@ -49,7 +49,7 @@ runtime and reuses the saved isolated certification profile.
 | iOS Regtest development  | `pnpm dev:native:ios:regtest -- "<explicit simulator or device name>"`                         | Builds only the isolated `app.groot.wallet.regtest.dev` identity after `pnpm tauri ios init --ci`; an explicit target prevents accidental physical-device selection. Simulator results are not physical-device evidence.                 |
 | macOS Regtest camera     | `APPLE_SIGNING_IDENTITY="<Apple Development identity>" pnpm build:native:macos:regtest-camera` | Builds only the isolated `app.groot.wallet.regtest.desktop.dev` `.app` with the camera usage string and camera-only entitlement. Launch the bundle through Launch Services; raw `tauri dev` processes are not valid TCC camera evidence. |
 | Real Core Regtest        | `pnpm test:integration:regtest`                                                                | Disposable Bitcoin Core sync, transaction, multisig, and recovery integration. It is not physical-device evidence.                                                                                                                       |
-| Rust coverage            | `pnpm test:coverage:rust` and `pnpm test:coverage:rust:all`                                    | Classified deterministic-core and whole-library coverage floors.                                                                                                                                                                         |
+| Rust coverage            | `pnpm test:coverage:rust` and `pnpm test:coverage:rust:all`                                    | Classified deterministic-core coverage and whole-library coverage merged with the isolated real-Core scenarios.                                                                                                                          |
 | SBOM/license evidence    | `pnpm test:sbom`                                                                               | Deterministic CycloneDX inventory, exact commit/lockfile identity, artifact-hash binding, and dependency-license evidence.                                                                                                               |
 | Full local suite         | `pnpm test:full`                                                                               | Standard validation, frontend policy coverage, classified Rust coverage, and browser acceptance.                                                                                                                                         |
 
@@ -63,8 +63,37 @@ pinned GitHub Actions are in `.github/workflows/ci.yml`.
 Native Signet and Testnet4 package commands require a clean tracked and
 untracked worktree, then generate a fresh target-specific SBOM after the
 executable exists. `pnpm release:unsigned` does the same for the unsigned
-release evidence set. These generated files bind the exact commit and lockfiles
-to the built executable digest and remain untracked build artifacts.
+release evidence set, while `pnpm release:unsigned:mainnet` creates the dedicated
+mainnet evidence set. The macOS evidence records stable exact OS, Xcode, Clang,
+SDK, architecture, and language-toolchain inputs without binding otherwise
+independent machines to one Apple hardware-family kernel suffix. These generated
+files bind the exact commit and lockfiles to the built executable digest. The
+mainnet builder rejects external `RUSTFLAGS`/`CARGO_ENCODED_RUSTFLAGS`, clears
+Apple ld's ambient `RC_UUID_SALT`, remaps the physical checkout, Cargo-home, and
+Cargo-target paths to stable virtual prefixes, and requests Apple ld's
+reproducible mode. Because current Apple ld still emits different content-based
+UUIDs for byte-identical full application payloads, the builder derives the
+retained UUID from the finished pre-signature Mach-O bytes and recomputes the
+existing linker-generated ad hoc CodeDirectory's SHA-256 code slots. The
+normalizer accepts only the reviewed thin 64-bit Mach-O, single UUID/signature,
+ad hoc full-SHA-256 layout, replaces the target atomically, and must pass strict
+`codesign` verification before evidence is emitted. It does not apply an
+identity signature. The builder rejects an executable if its checkout, Cargo
+home, Cargo target, or user home survives in its strings. It compiles with
+Tauri's production
+`custom-protocol` feature so the evidence binary matches the packaged execution
+mode. Generated evidence remains untracked build artifacts.
+
+`pnpm build:native:mainnet:internal` is the separate non-distributable physical-
+testing builder. It requires a clean exact commit, bundles the pinned HWI,
+compiles the runtime signature requirement as `REHEARSAL_ONLY`, applies only an
+ad-hoc identity, and verifies the copied `.app`. It never signs with Developer ID,
+notarizes, staples, packages for distribution, or pushes source.
+
+The completed independent `2110eaf` Mainnet Build A/Build B run, including
+exact evidence hashes, validation totals, deviations, and path-leak results, is
+recorded in
+[`reproducible-mainnet-builds-2026-09-04.md`](reproducible-mainnet-builds-2026-09-04.md).
 
 Real-Core integration scripts create disposable isolated data. Never redirect
 them to the funded physical-certification profile. Do not recreate or replace a
@@ -132,18 +161,106 @@ Current local status on 2026-08-24:
   interruption with an unchanged successful retry, and independent clean-profile
   balance/history recovery pass. A bounded hostile unsigned-transaction mutation
   was also rejected before the preserved proposal reached 2 of 2 with the
-  original Jade and Safe 3; it remains unfinalized and unbroadcast. Only
-  public-network/package and independent-review rows remain pending. Its policy
-  status is always **No setup needed**, never **Policy verified**.
+  original Jade and Safe 3; it remains unfinalized and unbroadcast. Exact
+  packaged v0.4.88 commit `4fcd5f27` additionally passed funded BIP84
+  signing/broadcast and wrong-device rejection. The same candidate passed the
+  shared Safe 3 plus Nova BIP48 trusted-display, real Testnet4 deposit and
+  2-of-3 spend, confirmation, restart/accounting, and genuine clean-profile
+  descriptor/public-backup recovery campaign. Its policy status was correctly
+  **No setup needed**, never **Policy verified**. Exact packaged v0.4.89 commit
+  `c9309d3` subsequently passed full-history rescans for every exercised wallet
+  with Bitcoin Core fully synchronized. The separately deferred clean-profile
+  recovery procedure and an independent tester/reviewer run remain open.
 - BitBox02 Nova firmware 9.26.3 has a local HWI 3.2.0 Regtest USB core pass
   under self-review for BIP84 and BIP48 import, policy/address proof, funded
   rejection/retry, canonical signing, restart, Ledger wrong-device rejection,
   duplicate/foreign/mutated-PSBT rejection, interruption/retry, threshold
   broadcast/accounting, and independent clean-profile Groot JSON recovery with
   the funded source preserved and reopened intact. It is **not release
-  certified**: cold-cache reset was not isolated from the shared BitBoxApp cache, and Testnet4,
-  packaged-candidate, independent-review, and Whisper/BLE rows remain open.
+  certified**: cold-cache reset was not isolated from the shared BitBoxApp
+  cache. Exact packaged v0.4.88 commit `4fcd5f27` passed Nova RBF plus the
+  shared Safe 3/Nova BIP48 display, deposit, 2-of-3 spend, confirmation,
+  restart/accounting, and genuine clean-profile descriptor/public-backup
+  recovery rows. The RBF result is functional evidence for that candidate only
+  and does not certify its superseded UX or v0.4.89. The separately deferred
+  recovery procedure, independent tester/reviewer, and Whisper/BLE remain open.
   Original BitBox02 evidence is not inherited.
+- Exact packaged v0.4.89 commit `fc2ac74f` passed the reviewer-operated
+  Testnet4 software-wallet create, copied-network-setup, wrong-passphrase,
+  reopen-without-Keychain-prompt, labeled receive and restart-persistence,
+  funded receive, send/broadcast, accounting, Activity, Coins, and relaunch
+  checks. The run found insufficient warning spacing, crowded amount/unit
+  presentation, and one false unsupported-wallet startup toast. These findings
+  are fixed in v0.4.90, but the physical evidence remains bound to `fc2ac74f`;
+  it is not silently transferred to the replacement package.
+  Exact packaged v0.4.90 commit `c6d0d5d2` subsequently passed the focused
+  physical regression: warning separation, first-open status presentation,
+  and BTC/sats unit spacing were all reported correct. A closed, owner-only
+  copy of the same software-wallet profile was then opened under that package
+  from clean application state: it presented the expected locked wallet,
+  rejected one wrong passphrase, accepted the correct passphrase, restored its
+  saved Core setup without editing, completed a full-history rescan, reconciled
+  balance/history/labels/coins, and preserved that state across restart. A
+  separately copied profile with one controlled encrypted-payload mutation was
+  rejected as corrupt and remained locked. The reviewer then reported both
+  cancellation and confirmed deletion against a disposable copy, with unrelated
+  wallets retained. The untouched source was restored byte-for-byte from a
+  second matching safety copy, relaunched, unlocked, and physically confirmed
+  with matching balance/history/labels/coins, restored Core setup, no corruption
+  error, and no Keychain prompt. A separate clean application profile then
+  created one disposable app-PIN external-signer wallet after first confirming
+  that an existing public descriptor is rejected as a duplicate without
+  changes. The new profile passed locked restart, correct-PIN unlock, public
+  state persistence, owner-only relocation, wrong- then correct-PIN handling,
+  controlled encrypted-verifier corruption rejection, valid-copy restoration,
+  cancelled deletion, confirmed deletion, and return to the empty chooser. The
+  original multi-wallet source was restored from its matching safety copy and
+  physically reconfirmed. Authenticated v2 migration and independent review
+  remain open. The broader funded functional evidence above remains accurately
+  bound to `fc2ac74f`.
+- Exact packaged v0.4.90 commit `c6d0d5d2` also passed the reviewer-operated
+  ad-hoc macOS lifecycle: one-minute inactivity lock, explicit lock/unlock,
+  short sleep/wake with Core recovery, forced termination and normal reopen,
+  second-instance refusal with the first instance unaffected, immediate lock
+  reacquisition after quit, keyboard focus containment, locked/discreet
+  VoiceOver inspection, explicit-only clipboard behavior, single-window
+  behavior, and final restart persistence. macOS displayed its standard
+  crash-recovery prompt after the intentional forced termination; Groot then
+  reopened normally without manual lock-file cleanup. A disposable native
+  recovery-word sheet was deliberately captured through the operating-system
+  screenshot shortcut, the unsaved image and clipboard value were discarded,
+  wallet creation was cancelled, and the original profile was restored. The
+  reviewer explicitly accepted deliberate user-initiated capture as intended
+  behavior; Groot still warns against digital storage and must never initiate
+  or retain such a capture. Signed/notarized repetition and crash-artifact
+  inspection remain open.
+- Exact packaged v0.4.91 commit `0849375d` passed the focused reviewer-operated
+  build-identity follow-up: the version and short commit were visible and the
+  copy control worked in the normal sidebar, shell-less wallet setup flows, and
+  Settings. This presentation-only result is bound to v0.4.91; the broader
+  portable-profile and macOS lifecycle evidence above remains bound to exact
+  packaged v0.4.90 commit `c6d0d5d2` and is not silently transferred.
+- The same exact v0.4.91 source commit `0849375d` was subsequently packaged as
+  a Developer ID signed, hardened-runtime, Apple-notarized and stapled macOS
+  arm64 Testnet4 app. Deep strict verification, Gatekeeper assessment, offline
+  ticket validation, packaged HWI 3.2.0 execution, and the signed-executable
+  binding in a fresh 539-component SBOM passed. A reviewer then opened the
+  exact repository artifact without an unidentified-developer warning and
+  confirmed its displayed `v0.4.91 · 0849375d` identity. The package then used
+  its bundled HWI to discover one previously certified signer, derive its
+  authoritative public identity, reject duplicate creation, and open the
+  existing wallet. A following non-spending check matched a newly revealed
+  Testnet4 receive address exactly between Groot and the signer's trusted
+  display. The reviewer then used a previously certified signer for one
+  disposable Testnet4 payment: Groot's review matched before signing, the
+  bundled HWI returned a valid hardware signature, Bitcoin Core accepted the
+  finalized transaction, and a full app restart plus sync showed confirmed
+  outgoing activity with the expected fee, remaining balance, label, and
+  accounting. No wallet, signer, transaction, address, or node identifier is
+  retained. The same-team HWI helper alone carries the explicitly approved
+  library-validation entitlement required by its PyInstaller embedded runtime;
+  Groot does not. This focused result does not transfer the broader v0.4.90
+  lifecycle campaign or provide independent review.
 - Packaged v0.4.28 Testnet4 testing with the original BitBox02 exposed that
   HWI 3.2.0 may wait for device-password entry inside aggregate discovery,
   before returning the locked device row. The former 30-second discovery

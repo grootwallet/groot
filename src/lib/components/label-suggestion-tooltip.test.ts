@@ -3,22 +3,15 @@ import { describe, expect, it } from 'vitest';
 
 const tooltip = readFileSync(new URL('./Tooltip.svelte', import.meta.url), 'utf8');
 const appCss = readFileSync(new URL('../../app.css', import.meta.url), 'utf8');
-const labelRoutes = [
-  '../../routes/send/+page.svelte',
-  '../../routes/multisig/send/+page.svelte',
-  '../../routes/receive/+page.svelte',
-  '../../routes/multisig/receive/+page.svelte'
-].map((path) => readFileSync(new URL(path, import.meta.url), 'utf8'));
+const labelEditor = readFileSync(new URL('./PermanentLabelEditor.svelte', import.meta.url), 'utf8');
 
 describe('label suggestion tooltips', () => {
   it('measures a dedicated ellipsis span before showing a suggestion tooltip', () => {
-    for (const source of labelRoutes) {
-      const suggestions = source.slice(source.indexOf('class="label-suggestions"'));
-      expect(suggestions).toContain('text={suggestion.text}');
-      expect(suggestions).toContain('truncatedSelector=".label-suggestion-text"');
-      expect(suggestions).toContain('positionSelector="button"');
-      expect(suggestions).toContain('class="label-suggestion-text"');
-    }
+    const suggestions = labelEditor.slice(labelEditor.indexOf('class="label-suggestions"'));
+    expect(suggestions).toContain('text={suggestion.text}');
+    expect(suggestions).toContain('truncatedSelector=".label-suggestion-text"');
+    expect(suggestions).toContain('positionSelector="button"');
+    expect(suggestions).toContain('class="label-suggestion-text"');
     expect(appCss).toMatch(
       /\.label-suggestion-text\s*\{[\s\S]*?overflow: hidden;[\s\S]*?text-overflow: ellipsis;/
     );

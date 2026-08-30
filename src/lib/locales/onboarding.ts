@@ -66,6 +66,24 @@ export const onboardingCopy = {
       fr: 'Choisissez la phrase secrète BIP39 qui complète cette sauvegarde. La même phrase secrète déverrouille Groot.',
       es: 'Elige la frase de contraseña BIP39 que completa esta copia. La misma frase desbloquea Groot.'
     },
+  'Use at least 16 characters. Letters-only passphrases are allowed. Keep it with your recovery words; it also unlocks Groot on this device.':
+    {
+      fr: 'Utilisez au moins 16 caractères. Une phrase composée uniquement de lettres est acceptée. Conservez-la avec vos mots de récupération ; elle déverrouille aussi Groot sur cet appareil.',
+      es: 'Usa al menos 16 caracteres. Se permiten frases formadas solo por letras. Guárdala con tus palabras de recuperación; también desbloquea Groot en este dispositivo.'
+    },
+  'Use at least 16 characters. Letters-only passphrases are allowed.': {
+    fr: 'Utilisez au moins 16 caractères. Une phrase composée uniquement de lettres est acceptée.',
+    es: 'Usa al menos 16 caracteres. Se permiten frases formadas solo por letras.'
+  },
+  'Use a unique, long passphrase.': {
+    fr: 'Utilisez une phrase secrète unique et longue.',
+    es: 'Usa una frase de contraseña única y larga.'
+  },
+  'Anyone with a copy of this encrypted profile can guess its passphrase offline. Groot’s lockout timer cannot protect a stolen copy.':
+    {
+      fr: 'Toute personne possédant une copie de ce profil chiffré peut tenter de deviner sa phrase secrète hors ligne. Le délai de verrouillage de Groot ne peut pas protéger une copie volée.',
+      es: 'Cualquiera que tenga una copia de este perfil cifrado puede intentar adivinar su frase de contraseña sin conexión. El bloqueo temporal de Groot no puede proteger una copia robada.'
+    },
   'Copies its node and sync method. This wallet protects its own copy.': {
     fr: 'Copie son nœud et sa méthode de synchronisation. Ce portefeuille protège sa propre copie.',
     es: 'Copia su nodo y método de sincronización. Esta cartera protege su propia copia.'
@@ -248,5 +266,80 @@ export const onboardingCopy = {
     es: 'PIN del prototipo de interfaz:'
   },
   'Unlock wallet': { fr: 'Déverrouiller le portefeuille', es: 'Desbloquear cartera' },
-  'WALLET LOCKED': { fr: 'PORTEFEUILLE VERROUILLÉ', es: 'CARTERA BLOQUEADA' }
+  'WALLET LOCKED': { fr: 'PORTEFEUILLE VERROUILLÉ', es: 'CARTERA BLOQUEADA' },
+  'MAINNET PREFLIGHT': { fr: 'PRÉVÉRIFICATION MAINNET', es: 'COMPROBACIÓN MAINNET' },
+  'Connect your Bitcoin Core node': {
+    fr: 'Connectez votre nœud Bitcoin Core',
+    es: 'Conecta tu nodo Bitcoin Core'
+  },
+  'Groot must authenticate your local, fully synchronized mainnet node before it can create any wallet files.':
+    {
+      fr: 'Groot doit authentifier votre nœud mainnet local entièrement synchronisé avant de créer tout fichier de portefeuille.',
+      es: 'Groot debe autenticar tu nodo mainnet local totalmente sincronizado antes de crear archivos de cartera.'
+    },
+  'Real bitcoin network': { fr: 'Réseau bitcoin réel', es: 'Red bitcoin real' },
+  'Only continue with a Bitcoin Core node you control on this Mac. Remote nodes and fallback services are disabled.':
+    {
+      fr: 'Continuez uniquement avec un nœud Bitcoin Core que vous contrôlez sur ce Mac. Les nœuds distants et services de secours sont désactivés.',
+      es: 'Continúa solo con un nodo Bitcoin Core que controles en este Mac. Los nodos remotos y servicios alternativos están desactivados.'
+    },
+  'Local RPC URL': { fr: 'URL RPC locale', es: 'URL RPC local' },
+  'Plain HTTP is accepted only on a loopback address.': {
+    fr: 'Le HTTP simple est accepté uniquement sur une adresse de bouclage.',
+    es: 'HTTP sin cifrar solo se acepta en una dirección de bucle local.'
+  },
+  'RPC username': { fr: 'Nom d’utilisateur RPC', es: 'Usuario RPC' },
+  'RPC password': { fr: 'Mot de passe RPC', es: 'Contraseña RPC' },
+  'Used only by trusted native code and encrypted into the new wallet profile.': {
+    fr: 'Utilisé uniquement par le code natif de confiance et chiffré dans le nouveau profil.',
+    es: 'Solo lo usa el código nativo de confianza y se cifra en el perfil nuevo.'
+  },
+  'Verifying mainnet Core…': {
+    fr: 'Vérification de Core mainnet…',
+    es: 'Verificando Core mainnet…'
+  },
+  'Verify Core and continue': {
+    fr: 'Vérifier Core et continuer',
+    es: 'Verificar Core y continuar'
+  },
+  'Mainnet Core verification required': {
+    fr: 'Vérification de Core mainnet requise',
+    es: 'Se requiere verificar Core mainnet'
+  },
+  'Groot will verify the exact Bitcoin genesis chain before creating the wallet.': {
+    fr: 'Groot vérifiera la chaîne de genèse Bitcoin exacte avant de créer le portefeuille.',
+    es: 'Groot verificará la cadena génesis exacta de Bitcoin antes de crear la cartera.'
+  },
+  'Sent only to trusted native code for this immediate Core preflight.': {
+    fr: 'Envoyé uniquement au code natif de confiance pour cette vérification immédiate de Core.',
+    es: 'Se envía solo al código nativo de confianza para esta comprobación inmediata de Core.'
+  },
+  'Groot will authenticate your local node and verify the exact Bitcoin genesis chain before creating any wallet files.':
+    {
+      fr: 'Groot authentifiera votre nœud local et vérifiera la chaîne de genèse Bitcoin exacte avant de créer tout fichier de portefeuille.',
+      es: 'Groot autenticará tu nodo local y verificará la cadena génesis exacta de Bitcoin antes de crear archivos de cartera.'
+    },
+  'Compact-filter and remote-node fallbacks are disabled so the reviewed trust boundary cannot change silently.':
+    {
+      fr: 'Les solutions de secours par filtres compacts et nœuds distants sont désactivées afin que la limite de confiance examinée ne change pas silencieusement.',
+      es: 'Las alternativas de filtros compactos y nodos remotos están desactivadas para que el límite de confianza revisado no cambie silenciosamente.'
+    },
+  mainnet: { fr: 'mainnet', es: 'mainnet' },
+  'Mainnet requires a Bitcoin Core RPC endpoint on this Mac. Credentials in URLs are rejected.': {
+    fr: 'Mainnet exige un point de terminaison RPC Bitcoin Core sur ce Mac. Les identifiants dans les URL sont refusés.',
+    es: 'Mainnet requiere un endpoint RPC de Bitcoin Core en este Mac. Se rechazan credenciales en las URL.'
+  },
+  'Mainnet requires the admitted local Bitcoin Core node.': {
+    fr: 'Mainnet exige le nœud Bitcoin Core local admis.',
+    es: 'Mainnet requiere el nodo Bitcoin Core local admitido.'
+  },
+  'Must be a loopback address on this Mac.': {
+    fr: 'Doit être une adresse de bouclage sur ce Mac.',
+    es: 'Debe ser una dirección de bucle local en este Mac.'
+  },
+  "wpkh([fingerprint/84'/0'/0']xpub…/<0;1>/*)": {
+    fr: "wpkh([fingerprint/84'/0'/0']xpub…/<0;1>/*)",
+    es: "wpkh([fingerprint/84'/0'/0']xpub…/<0;1>/*)"
+  },
+  'xpub…': { fr: 'xpub…', es: 'xpub…' }
 } as const satisfies CatalogSection;

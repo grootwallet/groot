@@ -21,6 +21,10 @@ export const accessibilityCopy = {
     fr: 'Aperçu caméra du QR animé',
     es: 'Vista de cámara del QR animado'
   },
+  'Payment QR camera preview': {
+    fr: 'Aperçu caméra du QR de paiement',
+    es: 'Vista de cámara del QR de pago'
+  },
   'Authoritative transaction details': {
     fr: 'Détails de transaction de référence',
     es: 'Detalles autorizados de la transacción'

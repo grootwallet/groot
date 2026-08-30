@@ -12,6 +12,7 @@
     ShieldCheck
   } from '@lucide/svelte';
   import BrandLockup from './BrandLockup.svelte';
+  import BuildIdentity from './BuildIdentity.svelte';
   import DiscardMultisigSetupModal from './DiscardMultisigSetupModal.svelte';
   import ToastHost from './ToastHost.svelte';
   import WalletProfileList from './WalletProfileList.svelte';
@@ -26,12 +27,13 @@
   import { createLiveSync, type LiveSyncController } from '$lib/wallet/live-sync';
   import { createSessionMonitor, type SessionMonitorController } from '$lib/wallet/session-monitor';
   import { toast } from '$lib/stores/toasts';
-  import { denomination, formatAmount, initDenomination } from '$lib/denomination';
+  import { denomination, initDenomination } from '$lib/denomination';
   import { fade } from 'svelte/transition';
   import type { MultisigSetupDraft, RuntimePlatform, WalletProfile } from '$lib/wallet/contracts';
   import { formatWalletCount, locale, t, type MessageKey } from '$lib/i18n';
   import { provideWalletShellContext } from '$lib/wallet/shell-context';
   import { multisigSetupSignerTarget, multisigSetupStageLabel } from '$lib/wallet/multisig-setup';
+  import { walletEventPresentation } from '$lib/wallet/notification-policy';
   import {
     isDesktopPlatform,
     matchKeyboardShortcut,
@@ -60,6 +62,7 @@
     walletSetupRoutes.has(pathname) ||
     pathname === '/unlock' ||
     pathname === '/settings' ||
+    pathname === '/diagnostics' ||
     foregroundWalletRoutes.has(pathname);
   const active = (href: string) =>
     href === '/multisig'
@@ -87,6 +90,7 @@
   let shortcutLockPending = false;
   let walletSelectionTask: Promise<void> | undefined;
   let mobileRuntime = false;
+  let pendingUnlockSyncWalletId: string | null = null;
   let runtimeIdentity = $state<RuntimePlatform | null>(null);
   let startupFailure = $state('');
   let checkingRuntime = $state(true);
@@ -104,26 +108,26 @@
       page.url.pathname === '/mobile/recover'
   );
   let lockedRoute = $derived(page.url.pathname === '/unlock');
+  let diagnosticsRoute = $derived(page.url.pathname === '/diagnostics');
+  let restrictedUtilityRoute = $derived(lockedRoute || diagnosticsRoute);
   let syncPausedRoute = $derived(
     onboardingRoute ||
       mobileSetupRoute ||
       lockedRoute ||
+      diagnosticsRoute ||
       page.url.pathname === '/settings' ||
       foregroundWalletRoutes.has(page.url.pathname)
   );
   const showQuickActions = $derived(
-    !lockedRoute && (page.url.pathname === '/' || page.url.pathname === '/coins')
+    !restrictedUtilityRoute && (page.url.pathname === '/' || page.url.pathname === '/coins')
   );
   const receiveHref = $derived(
     selectedProfile?.kind === 'multisig' ? '/multisig/receive' : '/receive'
   );
   const sendHref = $derived(selectedProfile?.kind === 'multisig' ? '/multisig/send' : '/send');
-  const showSetupResume = $derived(Boolean(multisigSetupDraft) && !onboardingRoute);
-  const shortCommit = (commit: string) =>
-    commit === 'unknown'
-      ? commit
-      : `${commit.slice(0, 8)}${commit.endsWith('-dirty') ? '-dirty' : ''}`;
-
+  const showSetupResume = $derived(
+    Boolean(multisigSetupDraft) && !onboardingRoute && !diagnosticsRoute
+  );
   function handleKeyboardShortcut(event: KeyboardEvent) {
     const primaryModifier = commandModifier
       ? event.metaKey && !event.ctrlKey
@@ -133,6 +137,7 @@
       startupState !== 'ready' ||
       onboardingRoute ||
       lockedRoute ||
+      diagnosticsRoute ||
       event.defaultPrevented ||
       event.repeat ||
       event.altKey ||
@@ -263,7 +268,10 @@
 
   beforeNavigate(({ to }) => {
     navigationPending = Boolean(to && to.url.href !== page.url.href);
-    void walletService.cancelHardwareOperations();
+    const preserveMainnetAdmission = Boolean(
+      defaultConfig.network === 'mainnet' && to && walletSetupRoutes.has(to.url.pathname)
+    );
+    void walletService.cancelHardwareOperations(preserveMainnetAdmission);
     if (navigationPending && to && routeCancelsSync(to.url.pathname) && !isPrototypeWallet)
       void walletService.cancelSync().catch(() => undefined);
     if (to && foregroundWalletRoutes.has(to.url.pathname)) liveSync?.stop();
@@ -331,12 +339,30 @@
       activeHardwareReviews = Math.max(0, activeHardwareReviews - 1);
     };
   }
+  function requestUnlockSync(walletId: string) {
+    pendingUnlockSyncWalletId = walletId;
+  }
+  function consumeUnlockSync(walletId: string) {
+    if (pendingUnlockSyncWalletId !== walletId) return false;
+    pendingUnlockSyncWalletId = null;
+    return true;
+  }
+  async function pauseAutomaticSync() {
+    await liveSync?.stopAndWait();
+  }
+  function resumeAutomaticSync() {
+    if (!isPrototypeWallet && !syncPausedRoute) liveSync?.start();
+  }
   provideWalletShellContext({
     profiles: () => profiles,
     selectedWalletId: () => selectedWalletId,
     refreshProfiles,
     selectWallet,
-    beginHardwareReview
+    beginHardwareReview,
+    requestUnlockSync,
+    consumeUnlockSync,
+    pauseAutomaticSync,
+    resumeAutomaticSync
   });
 
   async function resolveStartupRoute() {
@@ -374,14 +400,14 @@
       checkingRuntime = false;
       await refreshSetupDraft();
       if (!(await walletService.exists())) {
-        await goto('/welcome');
+        if (!diagnosticsRoute) await goto('/welcome');
         await holdStartupGate();
         startupState = 'ready';
         return;
       }
       await refreshProfiles();
       const selection = await walletService.session();
-      if (!selection.unlocked && !onboardingRoute && !lockedRoute) {
+      if (!selection.unlocked && !onboardingRoute && !lockedRoute && !diagnosticsRoute) {
         await goto('/unlock');
       } else if (selection.unlocked && lockedRoute) {
         await goto('/');
@@ -452,81 +478,8 @@
       navigator.maxTouchPoints
     );
     const unsubscribe = walletService.subscribe((event) => {
-      if (event.type === 'payment_received')
-        toast({
-          title: 'Bitcoin received',
-          description: translate($locale, 'Received {amount} {unit} · Balance {balance} {unit}', {
-            amount: formatAmount(event.amount, $denomination),
-            balance: formatAmount(event.balance, $denomination),
-            unit: $denomination === 'btc' ? 'BTC' : 'sats'
-          }),
-          tone: 'success'
-        });
-      if (event.type === 'payment_received_confirmed')
-        toast({
-          title: 'Bitcoin received',
-          description: translate(
-            $locale,
-            'Received {amount} {unit} · First confirmation · Balance {balance} {unit}',
-            {
-              amount: formatAmount(event.amount, $denomination),
-              balance: formatAmount(event.balance, $denomination),
-              unit: $denomination === 'btc' ? 'BTC' : 'sats'
-            }
-          ),
-          tone: 'success'
-        });
-      if (event.type === 'first_confirmation')
-        toast({
-          title: 'First confirmation',
-          description: translate($locale, 'Transaction confirmed · Balance {balance} {unit}', {
-            balance: formatAmount(event.balance, $denomination),
-            unit: $denomination === 'btc' ? 'BTC' : 'sats'
-          }),
-          tone: 'success'
-        });
-      if (event.type === 'transaction_broadcast')
-        toast({
-          title: 'Transaction broadcast',
-          description: translate($locale, 'Remaining wallet balance: {balance} {unit}', {
-            balance: formatAmount(event.balance, $denomination),
-            unit: $denomination === 'btc' ? 'BTC' : 'sats'
-          }),
-          tone: 'success'
-        });
-      if (event.type === 'policy_approaching_maturity')
-        toast({
-          title: translate($locale, '{key} available soon', {
-            key: translate(
-              $locale,
-              event.policyType === 'inheritance' ? 'Heir key' : 'Recovery key'
-            )
-          }),
-          description: translate($locale, '{count} blocks remain before it can spend one coin.', {
-            count: event.remainingBlocks
-          }),
-          action: {
-            label: translate($locale, 'View coin'),
-            run: () => goto(`/coins?coin=${encodeURIComponent(event.outpoint)}`)
-          }
-        });
-      if (event.type === 'policy_mature')
-        toast({
-          title: translate($locale, '{key} can now spend a coin', {
-            key: translate(
-              $locale,
-              event.policyType === 'inheritance' ? 'Heir key' : 'Recovery key'
-            )
-          }),
-          description: translate(
-            $locale,
-            'Your normal 2-of-3 keys still work. No action is required.'
-          ),
-          action: {
-            label: translate($locale, 'View options'),
-            run: () => goto(`/coins?coin=${encodeURIComponent(event.outpoint)}`)
-          }
-        });
+      const presentation = walletEventPresentation(event, $locale, $denomination, goto);
+      if (presentation) toast(presentation);
       if (event.type === 'wallet_profile_updated') {
         const known = profiles.some((profile) => profile.id === event.profile.id);
         profiles = known
@@ -624,7 +577,7 @@
           <a href="/welcome?add=1"><Plus size={14} />{t('addWallet', $locale)}</a>
         </div>
       {/if}
-      {#if !lockedRoute}
+      {#if !restrictedUtilityRoute}
         <nav class="side-nav">
           {#each visibleNav as item}
             <a
@@ -637,7 +590,7 @@
         </nav>
       {/if}
       <div class="sidebar-bottom">
-        {#if !lockedRoute}<a
+        {#if !restrictedUtilityRoute}<a
             href="/settings"
             class:active={active('/settings')}
             aria-current={active('/settings') ? 'page' : undefined}
@@ -648,14 +601,9 @@
         </div>
         <NetworkStatus
           network={runtimeIdentity?.network ?? defaultConfig.network}
-          locked={lockedRoute}
+          locked={restrictedUtilityRoute}
         />
-        {#if runtimeIdentity}<small class="sidebar-build-identity"
-            >{translate($locale, 'Groot v{version} · {commit}', {
-              version: runtimeIdentity.version,
-              commit: shortCommit(runtimeIdentity.commit)
-            })}</small
-          >{/if}
+        <BuildIdentity runtime={runtimeIdentity} placement="sidebar" />
       </div>
     </aside>
 
@@ -701,7 +649,12 @@
       {/key}
     </main>
 
-    {#if !lockedRoute && !mobileSetupRoute}<nav class="mobile-nav" class:policy-nav={policyContext}>
+    {#if onboardingRoute}<BuildIdentity runtime={runtimeIdentity} placement="onboarding" />{/if}
+
+    {#if !restrictedUtilityRoute && !onboardingRoute && !mobileSetupRoute}<nav
+        class="mobile-nav"
+        class:policy-nav={policyContext}
+      >
         {#each mobileItems as item}
           <a
             href={item.href}
@@ -718,7 +671,7 @@
         >
       </nav>{/if}
 
-    {#if lockedRoute}<div class="locked-mobile-utilities">
+    {#if restrictedUtilityRoute}<div class="locked-mobile-utilities">
         <ThemeToggle /><DiscreetModeToggle /><NetworkStatus
           network={runtimeIdentity?.network ?? defaultConfig.network}
           locked

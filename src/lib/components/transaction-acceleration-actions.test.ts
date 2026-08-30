@@ -13,8 +13,9 @@ describe('transaction acceleration actions', () => {
     expect(component).toContain("<Layers size={15} />{translate($locale, 'Spend output (CPFP)')}");
   });
 
-  it('offers sender-side RBF only for replaceable outgoing transactions', () => {
+  it('offers sender-side RBF only for replaceable external outgoing transactions', () => {
     expect(component).toContain("transaction.direction === 'sent'");
+    expect(component).toContain('!isSelfSpend');
     expect(component).toContain('transaction.rbf === true');
     expect(component).toContain('{#if canIncreaseFee}<Button');
   });

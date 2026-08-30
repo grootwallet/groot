@@ -167,7 +167,10 @@ impl WalletRegistry {
             if wallet.name.trim().is_empty() || wallet.name.chars().count() > 48 {
                 return Err(RegistryError::InvalidName);
             }
-            if !matches!(wallet.network.as_str(), "regtest" | "signet" | "testnet4") {
+            if !matches!(
+                wallet.network.as_str(),
+                "regtest" | "signet" | "testnet4" | "mainnet"
+            ) {
                 return Err(RegistryError::InvalidNetwork);
             }
             if wallet.descriptor_checksum.len() != 8
@@ -327,7 +330,7 @@ mod tests {
         r.wallets = vec![x];
         assert_eq!(r.validate(), Err(RegistryError::InvalidName));
         let mut x = p(id);
-        x.network = "mainnet".into();
+        x.network = "testnet".into();
         r.wallets = vec![x];
         assert_eq!(r.validate(), Err(RegistryError::InvalidNetwork));
         let mut x = p(id);

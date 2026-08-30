@@ -1,5 +1,5 @@
-export const SUPPORTED_NETWORKS = ['signet', 'testnet4', 'regtest'] as const;
-export const APP_VERSION = '0.4.82';
+export const SUPPORTED_NETWORKS = ['signet', 'testnet4', 'regtest', 'mainnet'] as const;
+export const APP_VERSION = '0.4.92';
 export type SupportedNetwork = (typeof SUPPORTED_NETWORKS)[number];
 
 export type AppConfig = {
@@ -26,6 +26,7 @@ export const defaultConfig: AppConfig = {
 };
 
 export function explorerUrlForNetwork(network: SupportedNetwork): string | null {
+  if (network === 'mainnet') return 'https://mempool.space';
   if (network === 'signet') return 'https://mempool.space/signet';
   if (network === 'testnet4') return 'https://mempool.space/testnet4';
   return null;

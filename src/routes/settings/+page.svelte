@@ -19,6 +19,7 @@
     Pencil,
     Plus,
     RefreshCw,
+    ScrollText,
     ShieldCheck,
     Sun,
     Trash2,
@@ -27,6 +28,7 @@
   } from '@lucide/svelte';
   import Button from '$lib/components/Button.svelte';
   import AnimatedUrQr from '$lib/components/AnimatedUrQr.svelte';
+  import BuildIdentity from '$lib/components/BuildIdentity.svelte';
   import FieldCounter from '$lib/components/FieldCounter.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import PasswordField from '$lib/components/PasswordField.svelte';
@@ -36,7 +38,7 @@
   import LocalTimestamp from '$lib/components/LocalTimestamp.svelte';
   import { toast } from '$lib/stores/toasts';
   import { formatInteger, locale, t } from '$lib/i18n';
-  import { APP_VERSION, defaultConfig, networkName } from '$lib/config';
+  import { defaultConfig, networkName } from '$lib/config';
   import { isPrototypeWallet, walletService, WalletError } from '$lib/wallet';
   import { goto } from '$app/navigation';
   import { onDestroy, onMount } from 'svelte';
@@ -61,6 +63,7 @@
     shortcutKeys,
     usesCommandModifier
   } from '$lib/keyboard-shortcuts';
+  import { applyTheme, currentTheme, type Theme } from '$lib/theme';
   import {
     hardwareHealthChecks,
     hardwareHealthKey,
@@ -75,7 +78,7 @@
   let checking = $state(false);
   let connected = $state<boolean | null>(null);
   let nodeStatus = $state<NodeStatus | null>(null);
-  let theme = $state<'light' | 'dark'>('dark');
+  let theme = $state<Theme>('dark');
   let commandModifier = $state(false);
   let desktopPlatform = $state(false);
   let displayedKeyboardShortcuts = $derived(
@@ -84,9 +87,6 @@
     )
   );
   let mobileRuntime = $state(false);
-  let runtimeVersion = $state(APP_VERSION);
-  let runtimeCommit = $state('unknown');
-  let runtimeNetwork = $state(defaultConfig.network);
   let profiles = $state<WalletProfile[]>([]);
   let selectedWalletId = $state<string | null>(null);
   let profileReadGeneration = 0;
@@ -143,7 +143,9 @@
       ? 'http://127.0.0.1:18443'
       : defaultConfig.network === 'signet'
         ? 'http://127.0.0.1:38332'
-        : 'http://127.0.0.1:48332';
+        : defaultConfig.network === 'testnet4'
+          ? 'http://127.0.0.1:48332'
+          : 'http://127.0.0.1:8332';
   const localNodeConfig = (): CoreNodeConfig => ({
     backend: { type: 'local_core', url: localRpcUrl },
     auth: defaultConfig.network === 'regtest' ? 'cookie' : 'user_pass',
@@ -163,6 +165,9 @@
         source.walletId !== selectedWalletId &&
         (!mobileRuntime || source.syncSource.type === 'bitcoin_core')
     )
+  );
+  let selectedNetworkReuseSource = $derived(
+    reusableNetworkSetups.find((source) => source.walletId === networkReuseSourceId) ?? null
   );
   let syncSource = $state<WalletSyncSource>({ type: 'bitcoin_core' });
   let syncOpen = $state(false),
@@ -249,16 +254,13 @@
       navigator.maxTouchPoints
     );
     const generation = ++profileReadGeneration;
-    theme = document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
+    theme = currentTheme();
     const [registry, runtime] = await Promise.all([
       walletService.profiles(),
       walletService.runtimePlatform()
     ]);
     if (generation !== profileReadGeneration) return;
     mobileRuntime = runtime.mobile;
-    runtimeVersion = runtime.version;
-    runtimeCommit = runtime.commit;
-    runtimeNetwork = runtime.network;
     profiles = registry.wallets;
     selectedWalletId = registry.selectedWalletId;
     inactivityTimeoutMinutes = registry.inactivityTimeoutMinutes;
@@ -278,7 +280,9 @@
     [node, syncSource, networkSetupSources] = await Promise.all([
       walletService.nodeConfig(),
       walletService.syncSource(),
-      walletService.networkSetupSources()
+      defaultConfig.network === 'mainnet'
+        ? Promise.resolve([])
+        : walletService.networkSetupSources()
     ]);
     scan = await walletService.recoveryScanSettings();
     scanDraft = { ...scan };
@@ -392,13 +396,9 @@
       document.removeEventListener('keydown', closeEscape);
     };
   });
-  function setTheme(next: 'light' | 'dark') {
+  function setTheme(next: Theme) {
     theme = next;
-    document.documentElement.dataset.theme = next;
-    document
-      .querySelector('meta[name="theme-color"]')
-      ?.setAttribute('content', next === 'light' ? '#f4f1e9' : '#0d1118');
-    localStorage.setItem('groot-theme', next);
+    applyTheme(next);
   }
   function storageSize(bytes: number) {
     return bytes >= 1_000_000_000
@@ -442,6 +442,7 @@
     }
   }
   function setNodeLocation(type: 'local_core' | 'remote_core' | 'tor') {
+    if (defaultConfig.network === 'mainnet' && type !== 'local_core') return;
     node =
       type === 'local_core'
         ? localNodeConfig()
@@ -461,9 +462,19 @@
     nodePassword = '';
     nodeError = '';
   }
+  function clearNodeCredentials() {
+    nodePassword = '';
+    walletCredential = '';
+    nodeError = '';
+  }
   function openNodeSettings() {
+    clearNodeCredentials();
     if (mobileRuntime && node.backend.type === 'local_core') setNodeLocation('remote_core');
     nodeOpen = true;
+  }
+  function closeNodeSettings() {
+    clearNodeCredentials();
+    nodeOpen = false;
   }
   async function saveNode() {
     busy = true;
@@ -496,7 +507,10 @@
     }
   }
   function openNetworkReuse() {
-    networkReuseSourceId = reusableNetworkSetups[0]?.walletId ?? '';
+    networkReuseSourceId =
+      reusableNetworkSetups.find((source) => source.ready)?.walletId ??
+      reusableNetworkSetups[0]?.walletId ??
+      '';
     networkReuseCredential = '';
     networkReuseError = '';
     networkReuseOpen = true;
@@ -534,7 +548,8 @@
     }
   }
   function openSyncSource() {
-    syncSourceType = mobileRuntime ? 'bitcoin_core' : syncSource.type;
+    syncSourceType =
+      mobileRuntime || defaultConfig.network === 'mainnet' ? 'bitcoin_core' : syncSource.type;
     if (syncSource.type === 'compact_filters') {
       syncDiscoverPeers = syncSource.discoverPeers;
       syncPeers = syncSource.peers.join('\n');
@@ -792,6 +807,29 @@
       scanError = localizedError(cause, $locale, 'The recovery scan could not be cancelled.');
       cancellingScan = false;
     }
+  }
+  function openFullRescan() {
+    scanCredential = '';
+    scanError = '';
+    scanDraft = { ...scan };
+    scanOpen = true;
+  }
+  function closeFullRescan() {
+    if (scanning) return;
+    scanCredential = '';
+    scanError = '';
+    scanDraft = { ...scan };
+    scanOpen = false;
+  }
+  function openDeleteWallet() {
+    deleteCredential = '';
+    confirmText = '';
+    deleting = true;
+  }
+  function closeDeleteWallet() {
+    deleteCredential = '';
+    confirmText = '';
+    deleting = false;
   }
   async function deleteWallet() {
     busy = true;
@@ -1112,11 +1150,7 @@
             >{translate($locale, isSoftwareWallet ? 'Verified' : 'Backup required')}</span
           >
         </div>{/if}
-      <button
-        onclick={() => {
-          scanDraft = { ...scan };
-          scanOpen = true;
-        }}
+      <button onclick={openFullRescan}
         ><span class="setting-icon"><History size={18} /></span><span
           ><strong>{translate($locale, 'Recovery scan')}</strong><small
             >{translate($locale, 'Birthday block')}
@@ -1302,7 +1336,8 @@
           ></span
         ><ChevronRight size={16} /></button
       >
-      {#if reusableNetworkSetups.length > 0}<button onclick={openNetworkReuse}
+      {#if defaultConfig.network !== 'mainnet' && reusableNetworkSetups.length > 0}<button
+          onclick={openNetworkReuse}
           ><span class="setting-icon"><RefreshCw size={18} /></span><span
             ><strong>{translate($locale, 'Use an existing network setup')}</strong><small
               >{translate(
@@ -1351,6 +1386,23 @@
       >
     </div>
   </section>
+  <section class="settings-group">
+    <h2>{translate($locale, 'Diagnostics')}</h2>
+    <div class="settings-list">
+      <a class="setting-row" href="/diagnostics">
+        <ScrollText class="setting-icon" size={17} />
+        <span
+          ><strong>{translate($locale, 'Diagnostic event log')}</strong><small
+            >{translate(
+              $locale,
+              'Review and export sanitized app events without wallet identifiers or secrets.'
+            )}</small
+          ></span
+        >
+        <ChevronRight size={16} />
+      </a>
+    </div>
+  </section>
   {#if selectedProfile?.kind !== 'multisig'}<section class="settings-group danger-zone">
       <h2>{translate($locale, 'Wallet deletion')}</h2>
       <div>
@@ -1360,7 +1412,7 @@
               walletName: selectedProfile?.name ?? translate($locale, 'this wallet')
             })}</small
           ></span
-        ><Button variant="danger-outline" size="small" onclick={() => (deleting = true)}
+        ><Button variant="danger-outline" size="small" onclick={openDeleteWallet}
           ><Trash2 size={15} />{translate($locale, 'Delete')}</Button
         >
       </div>
@@ -1379,13 +1431,7 @@
         >
       </div>
     </section>{/if}
-  <p class="version">
-    {translate($locale, 'Groot v{version} · {commit} · BDK {network}', {
-      version: runtimeVersion,
-      commit: runtimeCommit,
-      network: networkName(runtimeNetwork)
-    })}
-  </p>
+  <BuildIdentity placement="settings" />
 </div>
 
 <Modal
@@ -1532,7 +1578,7 @@
   open={deleting}
   title={translate($locale, 'Delete this wallet?')}
   description={translate($locale, 'This permanently removes wallet data from this device.')}
-  onclose={() => (deleting = false)}
+  onclose={closeDeleteWallet}
 >
   <div class="warning-box danger">
     <strong>{translate($locale, 'Make sure your recovery phrase is backed up.')}</strong>
@@ -1550,12 +1596,7 @@
     /></label
   >
   <div class="modal-footer">
-    <Button
-      variant="secondary"
-      onclick={() => {
-        deleting = false;
-        deleteCredential = '';
-      }}>{translate($locale, 'Cancel')}</Button
+    <Button variant="secondary" onclick={closeDeleteWallet}>{translate($locale, 'Cancel')}</Button
     ><Button
       variant="danger"
       disabled={confirmText !== 'DELETE' || !deleteCredential}
@@ -1729,22 +1770,39 @@
     syncError = '';
   }}
 >
-  <div class="theme-choice node-location">
-    <button
-      class:active={syncSourceType === 'bitcoin_core'}
-      onclick={() => (syncSourceType = 'bitcoin_core')}>Bitcoin Core</button
-    >{#if !mobileRuntime}<button
+  {#if defaultConfig.network !== 'mainnet'}<div class="theme-choice node-location">
+      <button
+        class:active={syncSourceType === 'bitcoin_core'}
+        onclick={() => (syncSourceType = 'bitcoin_core')}>Bitcoin Core</button
+      >{#if !mobileRuntime}<button
         class:active={syncSourceType === 'compact_filters'}
         onclick={() => (syncSourceType = 'compact_filters')}
-        >{translate($locale, 'Compact filters · Experimental')}</button
-      >{/if}
-  </div>
-  {#if mobileRuntime && syncSource.type === 'compact_filters'}
+          >{translate($locale, 'Compact filters · Experimental')}</button
+        >{/if}
+    </div>{/if}
+  {#if defaultConfig.network === 'mainnet'}
+    <div class="warning-box danger">
+      <strong>{translate($locale, 'Mainnet requires the admitted local Bitcoin Core node.')}</strong
+      >
+      {translate(
+        $locale,
+        'Compact-filter and remote-node fallbacks are disabled so the reviewed trust boundary cannot change silently.'
+      )}
+    </div>
+  {:else if mobileRuntime && syncSource.type === 'compact_filters'}
     <div class="warning-box sync-source-warning">
       <strong>{translate($locale, 'Compact filters are unavailable on mobile.')}</strong>
       {translate(
         $locale,
         'Their initial scan is not yet durably resumable. Configure Bitcoin Core to continue.'
+      )}
+    </div>
+  {:else if syncSourceType === 'compact_filters'}
+    <div class="warning-box">
+      <strong>{translate($locale, 'Confirmed activity only.')}</strong>
+      {translate(
+        $locale,
+        'BIP157/158 peers provide public filters and matching blocks. Groot validates them locally; pending incoming payments are not discoverable through this source. This build keeps the public chain index in memory, so filters are downloaded again after an app restart; wallet history and checkpoints remain durable.'
       )}
     </div>
   {/if}
@@ -1858,13 +1916,7 @@
     $locale,
     'Search from the earliest possible payment while deriving a bounded address gap.'
   )}
-  onclose={() => {
-    if (scanning) return;
-    scanOpen = false;
-    scanCredential = '';
-    scanError = '';
-    scanDraft = { ...scan };
-  }}
+  onclose={closeFullRescan}
 >
   <div class="scan-form">
     <div class="warning-box">
@@ -1952,12 +2004,8 @@
         loading={cancellingScan}
         loadingLabel={translate($locale, 'Requesting…')}
         onclick={cancelFullRescan}>{translate($locale, 'Cancel scan')}</Button
-      >{:else}<Button
-        variant="secondary"
-        onclick={() => {
-          scanOpen = false;
-          scanDraft = { ...scan };
-        }}>{translate($locale, 'Close')}</Button
+      >{:else}<Button variant="secondary" onclick={closeFullRescan}
+        >{translate($locale, 'Close')}</Button
       >{/if}<Button
       disabled={scanning ||
         !scanCredential ||
@@ -1987,15 +2035,31 @@
   <label class="field"
     ><span>{translate($locale, 'Copy from')}</span><select bind:value={networkReuseSourceId}
       >{#each reusableNetworkSetups as source}<option value={source.walletId}
-          >{source.walletName}</option
+          >{source.walletName} — {translate(
+            $locale,
+            source.ready ? 'Ready' : 'Unlock first'
+          )}</option
         >{/each}</select
     ><small>{translate($locale, 'The RPC password stays inside trusted native code.')}</small
     ></label
   >
+  {#if selectedNetworkReuseSource && !selectedNetworkReuseSource.ready}
+    <div class="warning-box" role="status">
+      <strong>{translate($locale, 'Unlock the source wallet first.')}</strong>
+      {' '}
+      <span
+        >{translate(
+          $locale,
+          'Open and unlock that wallet, then return here. Its saved credentials never enter this screen.'
+        )}</span
+      >
+    </div>
+  {/if}
   <PasswordField
     label={credentialLabel}
     bind:value={networkReuseCredential}
     autocomplete="current-password"
+    disabled={!selectedNetworkReuseSource?.ready}
     hint={translate($locale, 'Protects the copied connection for this wallet.')}
   />
   {#if networkReuseError}<p class="form-error" role="alert">{networkReuseError}</p>{/if}
@@ -2008,7 +2072,7 @@
         networkReuseOpen = false;
       }}>{translate($locale, 'Cancel')}</Button
     ><Button
-      disabled={!networkReuseSourceId || !networkReuseCredential}
+      disabled={!selectedNetworkReuseSource?.ready || !networkReuseCredential}
       loading={networkReusing}
       loadingLabel={translate($locale, 'Verifying…')}
       onclick={reuseNetworkSetup}>{translate($locale, 'Use setup')}</Button
@@ -2022,18 +2086,18 @@
     $locale,
     'Used for activity sync, fee estimates, and broadcast. Credentials are encrypted for this wallet.'
   )}
-  onclose={() => (nodeOpen = false)}
+  onclose={closeNodeSettings}
 >
   <div class="theme-choice node-location">
     {#if !mobileRuntime}<button
         class:active={node.backend.type === 'local_core'}
         onclick={() => setNodeLocation('local_core')}>{translate($locale, 'This Mac')}</button
-      >{/if}<button
-      class:active={node.backend.type === 'remote_core' && !node.torProxy}
-      onclick={() => setNodeLocation('remote_core')}>{translate($locale, 'Remote TLS')}</button
-    ><button class:active={!!node.torProxy} onclick={() => setNodeLocation('tor')}
-      >{translate($locale, 'Tor onion')}</button
-    >
+      >{/if}{#if defaultConfig.network !== 'mainnet'}<button
+        class:active={node.backend.type === 'remote_core' && !node.torProxy}
+        onclick={() => setNodeLocation('remote_core')}>{translate($locale, 'Remote TLS')}</button
+      ><button class:active={!!node.torProxy} onclick={() => setNodeLocation('tor')}
+        >{translate($locale, 'Tor onion')}</button
+      >{/if}
   </div>
   <label class="field"
     ><span>{translate($locale, 'RPC URL')}</span><input
@@ -2049,7 +2113,9 @@
     /><small
       >{translate(
         $locale,
-        'Credentials in URLs are rejected. TLS uses system trust roots; Tor accepts only .onion\n      destinations.'
+        defaultConfig.network === 'mainnet'
+          ? 'Mainnet requires a Bitcoin Core RPC endpoint on this Mac. Credentials in URLs are rejected.'
+          : 'Credentials in URLs are rejected. TLS uses system trust roots; Tor accepts only .onion\n      destinations.'
       )}</small
     ></label
   >
@@ -2105,8 +2171,7 @@
   />
   {#if nodeError}<p class="form-error">{nodeError}</p>{/if}
   <div class="modal-footer">
-    <Button variant="secondary" onclick={() => (nodeOpen = false)}
-      >{translate($locale, 'Cancel')}</Button
+    <Button variant="secondary" onclick={closeNodeSettings}>{translate($locale, 'Cancel')}</Button
     ><Button
       disabled={!node.backend.url ||
         !walletCredential ||

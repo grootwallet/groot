@@ -20,11 +20,22 @@ const tauriRoot = join(repoRoot, 'src-tauri');
 const manifestPath = join(repoRoot, 'docs/hwi-artifact-manifest-3.2.0-mac-arm64.json');
 const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
 const source = resolve(process.env.GROOT_HWI_SOURCE ?? '/opt/homebrew/bin/hwi');
-const stageDirectory = join(tauriRoot, 'target', 'groot-hwi-stage');
+const cargoMetadata = JSON.parse(
+  execFileSync(
+    'cargo',
+    ['metadata', '--format-version', '1', '--no-deps', '--manifest-path', 'src-tauri/Cargo.toml'],
+    { cwd: repoRoot, encoding: 'utf8' }
+  )
+);
+const cargoTarget = cargoMetadata.target_directory;
+// Keep resources outside Cargo's target directory: Tauri may replace that
+// directory before it resolves bundle inputs. The ignored staging directory
+// preserves the release build's clean-tree gate while the resource exists.
+const stageDirectory = join(tauriRoot, '.release-stage');
 const stagedHwi = join(stageDirectory, 'hwi');
-const app = join(tauriRoot, 'target', 'release', 'bundle', 'macos', 'Groot Testnet4.app');
+const app = join(cargoTarget, 'release', 'bundle', 'macos', 'Groot Testnet4.app');
 const executable = join(app, 'Contents', 'MacOS', 'Groot');
-const sbom = join(tauriRoot, 'target', 'release', 'groot-testnet4.cdx.json');
+const sbom = join(cargoTarget, 'release', 'groot-testnet4.cdx.json');
 
 const digest = (path) => createHash('sha256').update(readFileSync(path)).digest('hex');
 const fail = (message) => {
@@ -86,7 +97,7 @@ try {
   execFileSync('codesign', ['--force', '--sign', '-', '--timestamp=none', app], {
     stdio: 'inherit'
   });
-  const result = verifyPackagedHwi(app, { manifestPath });
+  const result = verifyPackagedHwi(app, { manifestPath, requireProductionSigning: false });
   rmSync(sbom, { force: true });
   execFileSync(
     process.execPath,

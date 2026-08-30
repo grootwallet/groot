@@ -255,6 +255,11 @@ impl HardwareOperation {
         self.remaining()?;
         Ok(complete())
     }
+
+    #[cfg(test)]
+    pub(crate) fn cancelled_for_test(&self) -> bool {
+        self.cancelled.load(Ordering::Acquire)
+    }
 }
 
 impl Drop for HardwareOperation {
@@ -1011,15 +1016,21 @@ fn run_program_in_operation_with_mode(
         let _ = stderr_tx.send(read_bounded(stderr));
     });
     if let Some(input) = input.take() {
-        let write_result = child
-            .stdin
-            .take()
-            .ok_or(HardwareError::Io)
-            .and_then(|mut stdin| stdin.write_all(&input).map_err(|_| HardwareError::Io));
-        if let Err(error) = write_result {
+        let Some(mut stdin) = child.stdin.take() else {
             terminate_process_tree(&mut child);
             let _ = collect_pipes(&stdout_rx, &stderr_rx);
-            return Err(error);
+            return Err(HardwareError::Io);
+        };
+        if let Err(error) = stdin.write_all(&input) {
+            // A command can reject the request and close stdin before this
+            // writer is scheduled. BrokenPipe is therefore part of the
+            // command-exit path, not an HWI transport failure; the bounded
+            // wait below still classifies its exit status and output.
+            if error.kind() != std::io::ErrorKind::BrokenPipe {
+                terminate_process_tree(&mut child);
+                let _ = collect_pipes(&stdout_rx, &stderr_rx);
+                return Err(HardwareError::Io);
+            }
         }
     }
     let status = loop {
@@ -1260,9 +1271,10 @@ fn verify_macos_code_signature(path: &Path, app_bundle: bool) -> Result<(), Hard
 
 #[cfg(target_os = "macos")]
 fn macos_app_signing_requirement() -> Result<String, HardwareError> {
-    let Some(team_id) = option_env!("GROOT_MACOS_SIGNING_TEAM_ID") else {
+    let team_id = env!("GROOT_COMPILED_MACOS_SIGNING_TEAM_ID");
+    if team_id == "REHEARSAL_ONLY" {
         return Ok("always".to_owned());
-    };
+    }
     if team_id.len() != 10 || !team_id.bytes().all(|byte| byte.is_ascii_alphanumeric()) {
         return Err(HardwareError::Unavailable);
     }
@@ -1270,6 +1282,13 @@ fn macos_app_signing_requirement() -> Result<String, HardwareError> {
         "anchor apple generic and certificate leaf[subject.OU] = \"{team_id}\""
     ))
 }
+
+#[cfg(target_os = "macos")]
+#[used]
+static GROOT_COMPILED_SIGNING_TEAM_MARKER: &str = concat!(
+    "GROOT_COMPILED_MACOS_SIGNING_TEAM_ID:",
+    env!("GROOT_COMPILED_MACOS_SIGNING_TEAM_ID")
+);
 
 #[cfg(unix)]
 fn verify_release_hwi(canonical: &Path, metadata: &std::fs::Metadata) -> Result<(), HardwareError> {
@@ -1320,6 +1339,32 @@ mod tests {
         std::fs::write(&path, format!("#!/bin/sh\n{body}\n")).unwrap();
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
         path
+    }
+
+    #[cfg(target_os = "linux")]
+    fn process_is_effectively_alive(pid: i32) -> bool {
+        let Ok(stat) = std::fs::read_to_string(format!("/proc/{pid}/stat")) else {
+            return false;
+        };
+        let Some((_, fields)) = stat.rsplit_once(") ") else {
+            return true;
+        };
+        !matches!(fields.as_bytes().first(), Some(b'Z' | b'X'))
+    }
+
+    #[cfg(all(unix, not(target_os = "linux")))]
+    fn process_is_effectively_alive(pid: i32) -> bool {
+        // SAFETY: signal zero only probes whether the test process still exists.
+        unsafe { libc::kill(pid, 0) == 0 }
+    }
+
+    #[cfg(unix)]
+    fn process_stops_within(pid: i32, timeout: Duration) -> bool {
+        let started = Instant::now();
+        while process_is_effectively_alive(pid) && started.elapsed() < timeout {
+            thread::sleep(Duration::from_millis(10));
+        }
+        !process_is_effectively_alive(pid)
     }
 
     #[test]
@@ -1504,16 +1549,18 @@ mod tests {
 
     #[test]
     fn reports_failure_timeout_and_missing_executable_without_output_leaks() {
-        assert_eq!(
-            run_program(
-                Path::new("/usr/bin/false"),
-                &HwiSource::External,
-                &["test".to_owned()],
-                Duration::from_secs(1),
-                None,
-            ),
-            Err(HardwareError::CommandFailed(None))
-        );
+        for _ in 0..64 {
+            assert_eq!(
+                run_program(
+                    Path::new("/usr/bin/false"),
+                    &HwiSource::External,
+                    &["test".to_owned()],
+                    Duration::from_secs(1),
+                    None,
+                ),
+                Err(HardwareError::CommandFailed(None))
+            );
+        }
         let slow = test_script("slow", "IFS= read -r command\n/bin/sleep 1");
         assert_eq!(
             run_program(
@@ -1556,6 +1603,9 @@ mod tests {
         let hwi = HwiCli::for_test_program(slow.clone());
         let running = thread::spawn(move || hwi.enumerate());
         let wait_started = Instant::now();
+        // The complete suite intentionally shares the global hardware coordinator.
+        // Coverage instrumentation can leave this fixture queued behind another
+        // process-control test for several seconds before its child is spawned.
         while !started_file.exists() && wait_started.elapsed() < Duration::from_secs(15) {
             thread::sleep(Duration::from_millis(10));
         }
@@ -1649,9 +1699,8 @@ mod tests {
             .trim()
             .parse::<i32>()
             .unwrap();
-        let descendant_alive = unsafe { libc::kill(pid, 0) } == 0;
         assert!(
-            !descendant_alive,
+            process_stops_within(pid, Duration::from_secs(2)),
             "the timed-out descendant survived cleanup"
         );
         std::fs::remove_file(script).unwrap();
@@ -1694,7 +1743,10 @@ mod tests {
             .trim()
             .parse::<i32>()
             .unwrap();
-        assert_ne!(unsafe { libc::kill(pid, 0) }, 0);
+        assert!(
+            process_stops_within(pid, Duration::from_secs(2)),
+            "the inherited-pipe descendant survived cleanup"
+        );
         drop(operation);
 
         let fast = test_script(

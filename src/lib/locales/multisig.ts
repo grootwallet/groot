@@ -277,10 +277,10 @@ export const multisigCopy = {
     fr: 'Compiler et analyser la politique',
     es: 'Compilar y analizar política'
   },
-  'Compile shows the resulting public descriptors and spending paths. To use a policy, create and back up a separate recovery wallet.':
+  'Compiling previews public descriptors and spending paths. To use a different policy, create and back up a separate recovery wallet.':
     {
-      fr: 'La compilation affiche les descripteurs publics et chemins de dépense obtenus. Pour utiliser une politique, créez et sauvegardez un portefeuille de récupération distinct.',
-      es: 'La compilación muestra los descriptores públicos y las rutas de gasto resultantes. Para usar una política, crea y guarda una cartera de recuperación separada.'
+      fr: 'La compilation prévisualise les descripteurs publics et les chemins de dépense. Pour utiliser une autre politique, créez et sauvegardez un portefeuille de récupération distinct.',
+      es: 'La compilación previsualiza los descriptores públicos y las rutas de gasto. Para usar otra política, crea y guarda una cartera de recuperación separada.'
     },
   'Compiled policy': { fr: 'Politique compilée', es: 'Política compilada' },
   'Complete step 1 before deletion can be authorized.': {
@@ -328,6 +328,11 @@ export const multisigCopy = {
     fr: 'Analyse expérimentale uniquement',
     es: 'Solo análisis experimental'
   },
+  'Compare reviewed Miniscript paths using this wallet’s public signers. Analysis never changes the selected wallet.':
+    {
+      fr: 'Comparez des chemins Miniscript vérifiés avec les signataires publics de ce portefeuille. L’analyse ne modifie jamais le portefeuille sélectionné.',
+      es: 'Compara rutas Miniscript revisadas usando los firmantes públicos de esta cartera. El análisis nunca cambia la cartera seleccionada.'
+    },
   'Explore guided Miniscript paths': {
     fr: 'Explorer les chemins Miniscript guidés',
     es: 'Explorar rutas guiadas de Miniscript'
@@ -824,7 +829,7 @@ export const multisigCopy = {
     fr: 'Actualisez les signataires connectés.',
     es: 'Actualiza los firmantes conectados.'
   },
-  'Regtest · Native SegWit': { fr: 'Regtest · SegWit natif', es: 'Regtest · SegWit nativo' },
+  'Native SegWit': { fr: 'SegWit natif', es: 'SegWit nativo' },
   'Remove signer': { fr: 'Supprimer le signataire', es: 'Eliminar firmante' },
   'Review wallet': { fr: 'Vérifier le portefeuille', es: 'Revisar cartera' },
   'Save the policy to microSD or Coldcard Virtual Disk.': {

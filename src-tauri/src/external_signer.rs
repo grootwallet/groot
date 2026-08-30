@@ -396,10 +396,10 @@ mod tests {
         // an opposite-kind extended key is always rejected, while the
         // compiled-network key in `valid` continues to pass. This keeps the
         // regression honest if a future mainnet build ever enables it.
-        let wrong_kind = match PARAMETERS.extended_key_network {
-            NetworkKind::Main => NetworkKind::Test,
-            NetworkKind::Test => NetworkKind::Main,
-        };
+        #[cfg(groot_network = "mainnet")]
+        let wrong_kind = NetworkKind::Test;
+        #[cfg(not(groot_network = "mainnet"))]
+        let wrong_kind = NetworkKind::Main;
         let wrong = Xpriv::new_master(wrong_kind, &[9_u8; 64]).unwrap();
         candidate = valid;
         candidate.xpub = Xpub::from_priv(&Secp256k1::new(), &wrong).to_string();

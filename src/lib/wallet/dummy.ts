@@ -4,6 +4,7 @@ import {
   addressPrefixForNetwork,
   canDiscardAddress,
   hasAddressPrefixForNetwork,
+  INACTIVITY_TIMEOUT_CHOICES,
   normalizePermanentLabel
 } from './policy';
 import {
@@ -47,6 +48,12 @@ import {
   validatePolicyDraft
 } from '$lib/multisig/policy';
 import { policyReadinessKind } from '$lib/hardware/policy-readiness';
+import {
+  MAX_WALLET_PASSPHRASE_BYTES,
+  MIN_NEW_WALLET_PASSPHRASE_CHARACTERS,
+  unicodeCharacterLength,
+  utf8ByteLength
+} from '$lib/mnemonic-verification';
 
 import {
   DummyWalletState,
@@ -74,6 +81,54 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
   async paymentDraft() {
     const draft = this._selectedWalletId ? this.paymentDrafts.get(this._selectedWalletId) : null;
     return draft ? structuredClone(draft) : null;
+  }
+  async diagnostics() {
+    const timestamp = Math.floor(Date.now() / 1000);
+    return [
+      {
+        schemaVersion: 1 as const,
+        timestamp: timestamp - 120,
+        event: 'receive_address_generated' as const,
+        outcome: 'succeeded' as const,
+        trigger: 'manual' as const,
+        walletKind: 'software' as const,
+        itemCount: 1,
+        appVersion: APP_VERSION,
+        buildCommit: 'development',
+        compiledNetwork: defaultConfig.network,
+        platform: 'browser' as const
+      },
+      {
+        schemaVersion: 1 as const,
+        timestamp: timestamp - 60,
+        event: 'receive_address_discarded' as const,
+        outcome: 'succeeded' as const,
+        trigger: 'manual' as const,
+        walletKind: 'software' as const,
+        appVersion: APP_VERSION,
+        buildCommit: 'development',
+        compiledNetwork: defaultConfig.network,
+        platform: 'browser' as const
+      },
+      {
+        schemaVersion: 1 as const,
+        timestamp,
+        event: 'app_started' as const,
+        outcome: 'succeeded' as const,
+        trigger: 'startup' as const,
+        appVersion: APP_VERSION,
+        buildCommit: 'development',
+        compiledNetwork: defaultConfig.network,
+        platform: 'browser' as const
+      }
+    ];
+  }
+  async exportDiagnostics(_format: 'json' | 'csv') {
+    return {
+      saved: true,
+      revealToken: 'fixture-diagnostics-export-reveal',
+      revealLabel: 'Show in Finder'
+    };
   }
   async savePaymentDraft(draft: PaymentDraft) {
     if (!this._selectedWalletId || draft.walletId !== this._selectedWalletId)
@@ -114,10 +169,13 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     return renamed;
   }
   async saveInactivityTimeout(minutes: number) {
-    if (!Number.isInteger(minutes) || minutes < 1 || minutes > 60) {
+    if (!this._selectedWalletId || !this._unlockedWalletIds.has(this._selectedWalletId)) {
+      throw new WalletError('wallet_locked', 'Unlock this wallet before changing automatic lock.');
+    }
+    if (!INACTIVITY_TIMEOUT_CHOICES.includes(minutes)) {
       throw new WalletError(
         'invalid_inactivity_timeout',
-        'Automatic lock must be between 1 and 60 minutes.'
+        'Automatic lock must be 1, 5, 15, 30, or 60 minutes.'
       );
     }
     this._inactivityTimeoutMinutes = minutes;
@@ -164,10 +222,17 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
         )
     };
   }
-  async cancelOnboarding() {}
+  async cancelOnboarding(_preserveMainnetAdmission = false) {}
   async createWallet(name: string, credential: string, backupVerified: boolean) {
     if (!name.trim()) throw new WalletError('invalid_wallet_name', 'A wallet name is required.');
     if (!credential) throw new WalletError('invalid_credential', 'A passphrase / PIN is required.');
+    if (unicodeCharacterLength(credential) < MIN_NEW_WALLET_PASSPHRASE_CHARACTERS)
+      throw new WalletError(
+        'invalid_credential',
+        'New wallet passphrases must contain at least 16 characters.'
+      );
+    if (utf8ByteLength(credential) > MAX_WALLET_PASSPHRASE_BYTES)
+      throw new WalletError('invalid_credential', 'The wallet passphrase is too long.');
     const profile = {
       id: crypto.randomUUID(),
       name: name.trim(),
@@ -274,14 +339,34 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
   async nodeConfig() {
     return structuredClone(this._nodeConfig);
   }
+  async admitMainnetCore(
+    config: CoreNodeConfig,
+    password: string,
+    _purpose: 'open_existing_wallet' | 'create_new_wallet'
+  ) {
+    if (config.auth === 'user_pass' && !password)
+      throw new WalletError('invalid_node_config', 'RPC password is required.');
+    this._nodeConfig = { ...config, backend: { ...config.backend } };
+    return this.testNodeConnection();
+  }
+  async clearMainnetCoreAdmission() {}
   async networkSetupSources() {
-    return this._profiles
-      .filter((profile) => this._unlockedWalletIds.has(profile.id))
-      .map((profile) => ({
-        walletId: profile.id,
-        walletName: profile.name,
-        syncSource: structuredClone(this._syncSource)
-      }));
+    if (
+      typeof location !== 'undefined' &&
+      new URLSearchParams(location.search).has('fixture-no-network-setup')
+    )
+      return [];
+    const lockReusableSources =
+      typeof location !== 'undefined' &&
+      new URLSearchParams(location.search).has('fixture-locked-network-source');
+    return this._profiles.map((profile) => ({
+      walletId: profile.id,
+      walletName: profile.name,
+      syncSource: structuredClone(this._syncSource),
+      ready:
+        this._unlockedWalletIds.has(profile.id) &&
+        (!lockReusableSources || profile.id === this._selectedWalletId)
+    }));
   }
   async adoptNetworkSetup(sourceWalletId: string, credential: string) {
     if (!this._profiles.some((profile) => profile.id === sourceWalletId))
@@ -335,6 +420,14 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     throw new WalletError(
       'invalid_payjoin_uri',
       'The browser fixture does not run Payjoin protocol parsing.'
+    );
+  }
+  async inspectPaymentRequest(
+    _value: string
+  ): Promise<import('./contracts').PaymentRequestInspection> {
+    throw new WalletError(
+      'invalid_payment_request',
+      'The browser fixture does not run trusted payment-request parsing.'
     );
   }
   async recoveryScanSettings() {
@@ -434,6 +527,9 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       (typeof location !== 'undefined' &&
         new URLSearchParams(location.search).has('fixture-empty-wallet')) ||
       (this._delayedWalletSwitch && walletId === this._multisigProfileId);
+    const pendingSelfSpend =
+      typeof location !== 'undefined' &&
+      new URLSearchParams(location.search).has('fixture-pending-self-spend');
     const initialHistoryRequired =
       typeof location !== 'undefined' &&
       new URLSearchParams(location.search).has('fixture-initial-history-required') &&
@@ -442,13 +538,53 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       network: defaultConfig.network,
       balance: emptyWallet
         ? { confirmed: sats(0), pending: sats(0), trustedPending: sats(0), total: sats(0) }
-        : {
-            confirmed: sats(Math.max(0, this._balance - this._pendingBalance)),
-            pending: sats(Math.min(this._pendingBalance, this._balance)),
-            trustedPending: sats(Math.min(this._pendingBalance, this._balance)),
-            total: sats(this._balance)
-          },
-      transactions: emptyActivity || emptyWallet ? [] : structuredClone(this._transactions),
+        : pendingSelfSpend
+          ? {
+              confirmed: sats(0),
+              pending: sats(39_890),
+              trustedPending: sats(39_890),
+              total: sats(39_890)
+            }
+          : {
+              confirmed: sats(Math.max(0, this._balance - this._pendingBalance)),
+              pending: sats(Math.min(this._pendingBalance, this._balance)),
+              trustedPending: sats(Math.min(this._pendingBalance, this._balance)),
+              total: sats(this._balance)
+            },
+      transactions:
+        emptyActivity || emptyWallet
+          ? []
+          : pendingSelfSpend
+            ? [
+                {
+                  id: 'cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
+                  kind: 'self_spend',
+                  direction: 'sent',
+                  amount: 110,
+                  fee: 110,
+                  status: 'pending',
+                  confirmations: 0,
+                  date: 'Today, 20:36',
+                  address: null,
+                  label: 'Fee acceleration',
+                  inputCount: 1,
+                  outputCount: 1,
+                  feeRate: 1,
+                  walletInputAmount: 40_000,
+                  walletOutputAmount: 39_890,
+                  locktime: 0,
+                  rbf: true,
+                  intentLabel: null,
+                  provenance: {
+                    state: 'unknown',
+                    context: 'funding',
+                    labels: [],
+                    clusterCount: 0,
+                    addressReused: false
+                  }
+                }
+              ]
+            : structuredClone(this._transactions),
       utxos: emptyWallet ? [] : structuredClone(this._coins),
       receiveAddresses: structuredClone(this._addresses),
       labelSuggestions: structuredClone(this._labelSuggestionsByWallet.get(walletId) ?? []),
@@ -498,7 +634,7 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     return snapshot;
   }
 
-  async sync(): Promise<WalletSnapshot> {
+  async sync(_automatic = false): Promise<WalletSnapshot> {
     return this.snapshot();
   }
 
@@ -757,11 +893,41 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
         incrementalFee: quote.incrementalFee,
         recommendationSource: quote.recommendationSource
       };
+    } else {
+      const quote = await this.quoteCpfp(txid, selectedRate);
+      proposal.amount = sats(0);
+      proposal.fee = quote.childFee;
+      proposal.feeRate = quote.targetFeeRate;
+      proposal.total = quote.childFee;
+      proposal.acceleration = {
+        method,
+        originalTxid: txid,
+        originalFeeRate: quote.parentEffectiveFeeRate,
+        minimumFeeRate: quote.minimumFeeRate,
+        targetFeeRate: quote.targetFeeRate,
+        incrementalFee: quote.childFee,
+        recommendationSource: quote.recommendationSource
+      };
     }
     return proposal;
   }
 
   async quoteRbf(txid: string, selectedRate?: ReturnType<typeof feeRate>) {
+    if (
+      typeof location !== 'undefined' &&
+      new URLSearchParams(location.search).has('fixture-acceleration-loading')
+    ) {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+    if (
+      typeof location !== 'undefined' &&
+      new URLSearchParams(location.search).has('fixture-rbf-insufficient-funds')
+    ) {
+      throw new WalletError(
+        'insufficient_funds',
+        'Insufficient funds: the replacement fee cannot be funded.'
+      );
+    }
     const tx = this._transactions.find((item) => item.id === txid);
     if (!tx || tx.status !== 'pending' || tx.rbf !== true)
       throw new WalletError('transaction_not_replaceable', 'This transaction is not replaceable.');
@@ -786,6 +952,48 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       resultingEffectiveFeeRate: feeRate(replacementFee / vsize),
       replacementVsize: vsize,
       recommendationSource: selectedRate ? ('custom' as const) : ('replacement_fallback' as const)
+    };
+  }
+
+  async quoteCpfp(txid: string, selectedRate?: ReturnType<typeof feeRate>) {
+    const tx = this._transactions.find((item) => item.id === txid);
+    if (!tx || tx.status !== 'pending')
+      throw new WalletError('acceleration_unavailable', 'Only pending transactions can use CPFP.');
+    const parentVsize = 180;
+    const parentFee = sats(tx.fee ?? Math.ceil(Number(tx.feeRate ?? 1) * parentVsize));
+    const parentRate = Number(parentFee) / parentVsize;
+    const minimum = Math.ceil((parentRate + 0.004) * 250) / 250;
+    const target = selectedRate ?? feeRate(Math.max(5, minimum + 1));
+    if (target < minimum)
+      throw new WalletError(
+        'fee_rate_too_low',
+        `Choose at least ${minimum} sat/vB for this package.`
+      );
+    const childVsize = 110;
+    const packageVsize = parentVsize + childVsize;
+    const childFee = sats(
+      Math.max(
+        Math.ceil(Number(target) * packageVsize) - Number(parentFee),
+        Math.ceil(Number(target) * childVsize)
+      )
+    );
+    const packageFee = sats(Number(parentFee) + Number(childFee));
+    return {
+      method: 'cpfp' as const,
+      originalTxid: txid,
+      parentFee,
+      parentVsize,
+      parentEffectiveFeeRate: feeRate(Math.round(parentRate * 1000) / 1000),
+      minimumFeeRate: feeRate(minimum),
+      targetFeeRate: feeRate(Number(target)),
+      childFee,
+      childVsize,
+      packageFee,
+      packageVsize,
+      resultingPackageFeeRate: feeRate(
+        Math.round((Number(packageFee) / packageVsize) * 1000) / 1000
+      ),
+      recommendationSource: selectedRate ? ('custom' as const) : ('package_fallback' as const)
     };
   }
 
@@ -941,7 +1149,7 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       );
     this._trezorPinUnlocked = true;
   }
-  async cancelHardwareOperations() {}
+  async cancelHardwareOperations(_preserveMainnetAdmission = false) {}
   async checkHardwareCosigner(cosigner: PolicyDraft['cosigners'][number], deviceId: string) {
     await new Promise((resolve) => setTimeout(resolve, 200));
     const checkedAt = new Date().toISOString();
@@ -1647,7 +1855,7 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
   async multisigSnapshot() {
     return this.snapshot();
   }
-  async syncMultisig() {
+  async syncMultisig(_automatic = false) {
     return this.snapshot();
   }
   async createMultisigAddress(labels: string[]) {

@@ -275,8 +275,8 @@
                 >{#if health}{translate($locale, 'Last checked')}
                   <LocalTimestamp value={health.checkedAt} />{:else}{translate(
                     $locale,
-                    'Not checked yet'
-                  )}{/if}</small
+                  'Not checked yet'
+                )}{/if}</small
               >
             </div>
           </div>

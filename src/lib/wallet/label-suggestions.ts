@@ -3,6 +3,14 @@ import type { LabelSuggestion } from '$lib/types';
 export const VISIBLE_LABEL_SUGGESTION_LIMIT = 4;
 export const MAX_MANUAL_PERMANENT_LABELS = 5;
 
+export type LabelDraftState = {
+  labels: string[];
+  input: string;
+  armedIndex: number | null;
+};
+
+export type LabelDraftEditKind = 'input' | 'commit' | 'suggestion';
+
 function normalizedLabel(value: string): string {
   return value.trim().replace(/\s+/g, ' ').toLocaleLowerCase();
 }
@@ -78,4 +86,45 @@ export function permanentLabelsForSubmission(labels: string[], input: string): s
     return [];
   const combined = inputKey ? addPermanentLabel(labels, input) : labels;
   return combined.length > 0 && combined.length <= MAX_MANUAL_PERMANENT_LABELS ? combined : [];
+}
+
+export function updatePermanentLabelDraft(state: LabelDraftState, value: string): LabelDraftState {
+  if (state.labels.length >= MAX_MANUAL_PERMANENT_LABELS)
+    return { ...state, input: '', armedIndex: null };
+  const draft = tokenizeLabelDraft(state.labels, value);
+  return { labels: draft.labels, input: draft.input, armedIndex: null };
+}
+
+export function applyPermanentLabelKey(
+  state: LabelDraftState,
+  key: string,
+  shiftKey = false
+): { state: LabelDraftState; preventDefault: boolean; editKind?: LabelDraftEditKind } {
+  if (key === 'Backspace' && !state.input) {
+    const result = backspaceLabelDraft(state.labels, state.armedIndex);
+    return {
+      state: { labels: result.labels, input: '', armedIndex: result.armedIndex },
+      preventDefault: true
+    };
+  }
+  if (key === 'Tab' && shiftKey) return { state, preventDefault: false };
+  if (!state.input.trim() || !['Enter', 'Tab', ',', ';'].includes(key))
+    return { state: { ...state, armedIndex: null }, preventDefault: false };
+  const draft = tokenizeLabelDraft(state.labels, state.input, true);
+  return {
+    state: { labels: draft.labels, input: draft.input, armedIndex: null },
+    preventDefault: true,
+    editKind: 'commit'
+  };
+}
+
+export function addPermanentLabelSuggestion(
+  state: LabelDraftState,
+  suggestion: string
+): LabelDraftState {
+  return {
+    labels: addPermanentLabel(state.labels, suggestion),
+    input: '',
+    armedIndex: null
+  };
 }

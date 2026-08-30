@@ -19,6 +19,9 @@ const DEVICE_BOUND_VERSION: u8 = 2;
 const MAX_METADATA_BYTES: u64 = 256 * 1024;
 const KEY_BYTES: usize = 32;
 const NONCE_BYTES: usize = 12;
+const ARGON2_MEMORY_KIB: u32 = 19_456;
+const ARGON2_ITERATIONS: u32 = 2;
+const ARGON2_PARALLELISM: u32 = 1;
 
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum SecureStoreError {
@@ -52,8 +55,13 @@ struct Metadata {
 }
 
 fn credential_kdf() -> Result<Argon2<'static>, SecureStoreError> {
-    let params =
-        Params::new(19_456, 2, 1, Some(KEY_BYTES)).map_err(|_| SecureStoreError::Unavailable)?;
+    let params = Params::new(
+        ARGON2_MEMORY_KIB,
+        ARGON2_ITERATIONS,
+        ARGON2_PARALLELISM,
+        Some(KEY_BYTES),
+    )
+    .map_err(|_| SecureStoreError::Unavailable)?;
     Ok(Argon2::new(Algorithm::Argon2id, Version::V0x13, params))
 }
 
@@ -78,14 +86,20 @@ fn encrypt(key: &[u8], plaintext: &[u8]) -> Result<(Vec<u8>, Vec<u8>), SecureSto
     Ok((nonce, ciphertext))
 }
 
-fn decrypt(key: &[u8], nonce: &[u8], ciphertext: &[u8]) -> Result<Vec<u8>, SecureStoreError> {
+fn decrypt(
+    key: &[u8],
+    nonce: &[u8],
+    ciphertext: &[u8],
+) -> Result<Zeroizing<Vec<u8>>, SecureStoreError> {
     if key.len() != KEY_BYTES || nonce.len() != NONCE_BYTES {
         return Err(SecureStoreError::Corrupt);
     }
-    Aes256Gcm::new_from_slice(key)
-        .map_err(|_| SecureStoreError::Corrupt)?
-        .decrypt(Nonce::from_slice(nonce), ciphertext)
-        .map_err(|_| SecureStoreError::InvalidCredential)
+    Ok(Zeroizing::new(
+        Aes256Gcm::new_from_slice(key)
+            .map_err(|_| SecureStoreError::Corrupt)?
+            .decrypt(Nonce::from_slice(nonce), ciphertext)
+            .map_err(|_| SecureStoreError::InvalidCredential)?,
+    ))
 }
 
 fn decode(value: &str) -> Result<Vec<u8>, SecureStoreError> {
@@ -186,18 +200,22 @@ fn store_portable(
     write_owner_only(metadata_path, &encode_metadata(&metadata)?)
 }
 
-fn load_portable(metadata_path: &Path, credential: &str) -> Result<Vec<u8>, SecureStoreError> {
+fn load_portable_with_writer(
+    metadata_path: &Path,
+    credential: &str,
+    write_metadata: impl FnOnce(&Path, &[u8]) -> Result<(), SecureStoreError>,
+) -> Result<Zeroizing<Vec<u8>>, SecureStoreError> {
     let mut metadata = read_metadata(metadata_path)?;
     let salt = Zeroizing::new(decode(&metadata.salt)?);
     if salt.len() != 16 {
         return Err(SecureStoreError::Corrupt);
     }
     let credential_key = derive_credential_key(credential, &salt)?;
-    let credential_data_key = Zeroizing::new(decrypt(
+    let credential_data_key = decrypt(
         &credential_key,
         &decode(&metadata.credential_nonce)?,
         &decode(&metadata.credential_wrapped_key)?,
-    )?);
+    )?;
     if credential_data_key.len() != KEY_BYTES {
         return Err(SecureStoreError::Corrupt);
     }
@@ -212,10 +230,17 @@ fn load_portable(metadata_path: &Path, credential: &str) -> Result<Vec<u8>, Secu
         metadata.version = VERSION;
         metadata.device_nonce = None;
         metadata.device_wrapped_key = None;
-        write_owner_only(metadata_path, &encode_metadata(&metadata)?)?;
+        write_metadata(metadata_path, &encode_metadata(&metadata)?)?;
     }
 
     Ok(plaintext)
+}
+
+fn load_portable(
+    metadata_path: &Path,
+    credential: &str,
+) -> Result<Zeroizing<Vec<u8>>, SecureStoreError> {
+    load_portable_with_writer(metadata_path, credential, write_owner_only)
 }
 
 pub fn store(
@@ -226,13 +251,18 @@ pub fn store(
     store_portable(metadata_path, secret, credential)
 }
 
-pub fn load(metadata_path: &Path, credential: &str) -> Result<Vec<u8>, SecureStoreError> {
+pub fn load(
+    metadata_path: &Path,
+    credential: &str,
+) -> Result<Zeroizing<Vec<u8>>, SecureStoreError> {
     load_portable(metadata_path, credential)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::{self, Write};
+    use std::time::Instant;
 
     fn directory() -> std::path::PathBuf {
         std::env::temp_dir().join(format!("groot-secure-store-{}", Uuid::new_v4()))
@@ -262,11 +292,40 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "release evidence benchmark; run explicitly with --release --ignored --nocapture"]
+    fn credential_kdf_calibration() {
+        const SAMPLE_COUNT: usize = 11;
+        let credential = "disposable calibration credential";
+        let salt = [0x42_u8; 16];
+
+        derive_credential_key(credential, &salt).expect("warm-up derivation");
+        let mut elapsed_ms = Vec::with_capacity(SAMPLE_COUNT);
+        for _ in 0..SAMPLE_COUNT {
+            let started = Instant::now();
+            let key = derive_credential_key(credential, &salt).expect("calibration derivation");
+            assert_eq!(key.len(), KEY_BYTES);
+            elapsed_ms.push(started.elapsed().as_secs_f64() * 1_000.0);
+        }
+        elapsed_ms.sort_by(f64::total_cmp);
+
+        writeln!(
+            io::stdout().lock(),
+            "argon2id version=0x13 memory_kib={ARGON2_MEMORY_KIB} iterations={ARGON2_ITERATIONS} parallelism={ARGON2_PARALLELISM} output_bytes={KEY_BYTES} samples={SAMPLE_COUNT} min_ms={:.3} median_ms={:.3} max_ms={:.3}",
+            elapsed_ms[0],
+            elapsed_ms[SAMPLE_COUNT / 2],
+            elapsed_ms[SAMPLE_COUNT - 1]
+        )
+        .expect("write calibration result");
+    }
+
+    #[test]
     fn portable_v3_round_trip_requires_the_credential() {
         let directory = directory();
         let metadata = directory.join("secret.json");
         store(&metadata, b"never leave rust", "correct").unwrap();
-        assert_eq!(load(&metadata, "correct").unwrap(), b"never leave rust");
+        let plaintext = load(&metadata, "correct").unwrap();
+        let _: &Zeroizing<Vec<u8>> = &plaintext;
+        assert_eq!(plaintext.as_slice(), b"never leave rust");
         assert_eq!(
             load(&metadata, "wrong"),
             Err(SecureStoreError::InvalidCredential)
@@ -288,7 +347,10 @@ mod tests {
         fs::create_dir_all(restored.parent().unwrap()).unwrap();
         fs::copy(&original, &restored).unwrap();
 
-        assert_eq!(load(&restored, "correct").unwrap(), b"portable secret");
+        assert_eq!(
+            load(&restored, "correct").unwrap().as_slice(),
+            b"portable secret"
+        );
         assert_eq!(
             load(&restored, "wrong"),
             Err(SecureStoreError::InvalidCredential)
@@ -302,11 +364,35 @@ mod tests {
         let directory = directory();
         let metadata = directory.join("secret.json");
         write_v2_fixture(&metadata, b"migration secret", "correct");
-        assert_eq!(load(&metadata, "correct").unwrap(), b"migration secret");
+        assert_eq!(
+            load(&metadata, "correct").unwrap().as_slice(),
+            b"migration secret"
+        );
         let migrated = read_metadata(&metadata).unwrap();
         assert_eq!(migrated.version, VERSION);
         assert!(migrated.device_nonce.is_none());
         assert!(migrated.device_wrapped_key.is_none());
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn authenticated_v2_migration_prewrite_failure_keeps_ciphertext_and_fails_closed() {
+        let directory = directory();
+        let metadata = directory.join("secret.json");
+        write_v2_fixture(&metadata, b"migration secret", "correct");
+        let before = fs::read(&metadata).unwrap();
+
+        assert_eq!(
+            load_portable_with_writer(&metadata, "correct", |_path, _encoded| {
+                Err(SecureStoreError::Unavailable)
+            }),
+            Err(SecureStoreError::Unavailable)
+        );
+        assert_eq!(fs::read(&metadata).unwrap(), before);
+        assert_eq!(
+            read_metadata(&metadata).unwrap().version,
+            DEVICE_BOUND_VERSION
+        );
         fs::remove_dir_all(directory).unwrap();
     }
 

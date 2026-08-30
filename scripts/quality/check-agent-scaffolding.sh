@@ -8,7 +8,7 @@ fail() {
   exit 1
 }
 
-for guide in AGENTS.md docs/AGENTS.md src/AGENTS.md src-tauri/AGENTS.md e2e/AGENTS.md docs/agent-harness.md .github/workflows/ci.yml; do
+for guide in AGENTS.md docs/AGENTS.md src/AGENTS.md src-tauri/AGENTS.md e2e/AGENTS.md docs/agent-harness.md docs/bip-support.md .github/workflows/ci.yml; do
   [[ -f "${guide}" ]] || fail "missing ${guide}"
 done
 
@@ -19,6 +19,15 @@ require_text() {
 }
 
 require_text AGENTS.md 'docs/agent-harness.md'
+require_text AGENTS.md 'docs/bip-support.md'
+require_text README.md 'docs/bip-support.md'
+require_text docs/implementation-status.md '[`bip-support.md`](bip-support.md)'
+require_text docs/engineering-standards.md '[`bip-support.md`](bip-support.md)'
+require_text docs/bip-support.md '## Implemented and in-progress BIPs'
+require_text docs/bip-support.md '## Candidate BIPs'
+require_text docs/bip-support.md '## Maintenance rule'
+require_text docs/bip-support.md 'Upstream status'
+require_text .github/pull_request_template.md 'BIP support matrix updated'
 require_text docs/agent-harness.md 'pnpm validate'
 require_text docs/agent-harness.md 'pnpm test:full'
 require_text docs/agent-harness.md 'cargo clippy --locked --all-targets --all-features -- -D warnings'
