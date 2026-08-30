@@ -56,7 +56,8 @@ fn rpc_for_wallet(wallet: Option<&str>) -> Client {
     let wallet_path = wallet.map_or_else(String::new, |name| format!("/wallet/{name}"));
     let mut builder = jsonrpc::minreq_http::MinreqHttpTransport::builder()
         .url(&format!("http://127.0.0.1:{port}{wallet_path}"))
-        .expect("regtest RPC URL");
+        .expect("regtest RPC URL")
+        .timeout(Duration::from_secs(30));
     if let Some(username) = username {
         builder = builder.basic_auth(username, password);
     }

@@ -1,8 +1,8 @@
 # Groot security
 
-Last internal review: 2026-08-12
+Last review integration: 2026-08-30
 
-Groot is security-sensitive wallet software under active development. The native implementation supports disposable Regtest testing and compile-time-isolated Signet/Testnet4 rehearsal builds. It has not completed an independent audit, physical hardware-wallet certification, funded public-network rehearsal, or the mainnet release process. Do not use it with mainnet funds.
+Groot is security-sensitive wallet software under active development. The native implementation supports disposable Regtest testing and compile-time-isolated Signet/Testnet4 rehearsal builds. It has received bounded independent code review, but has not completed the full independent audit, physical hardware-wallet certification, funded public-network rehearsal, or mainnet release process. Do not use it with mainnet funds.
 
 This document summarizes the security posture and the hardening work present in this repository. Canonical controls are in [`docs/security-model.md`](docs/security-model.md); the attacker model and attack-vector register are in [`docs/mainnet-threat-model.md`](docs/mainnet-threat-model.md). Release authorization remains controlled by [`docs/mainnet-release-checklist.md`](docs/mainnet-release-checklist.md) and ADR 0012.
 
@@ -187,6 +187,12 @@ This is an internal code audit and bounded adversarial test pass, not an indepen
 The supplied Phase 1 review of exact commit `dc16efa5efdfee3391898dc7cc6996fd6a467c46` was revalidated finding by finding. The remediation closes the confirmed public-network envelope regression, missing external-signer export throttle, unverified imported-signature progress, locked multisig metadata disclosure, avoidable RPC credential copies, same-process wall-clock bypass, failed-creation device-key orphaning, and related error/policy/documentation inconsistencies.
 
 The implementation record, regression mapping, and remaining acceptance work are in [`docs/security-hardening-2026-08-12.md`](docs/security-hardening-2026-08-12.md); the settled boundaries and explicit residual risks are in [ADR 0028](docs/adr/0028-security-review-remediation-boundaries.md). This remediation is not reviewer closure: the exact final commit and validation evidence still require independent re-review, and the mainnet gate remains blocked.
+
+## 2026-08-30 pre-mainnet review integration
+
+The supplied review of the main and mobile-coordination branches was independently rechecked against the exact diffs before integration. Its validated fixes were accepted, and two additional merge blockers found during re-review were corrected: alternate Tauri capability formats could bypass the capability gate, and an already-active iOS screen capture could precede recovery-view protection. The review map, correction commits, test evidence, and remaining physical/platform work are recorded in [`docs/security-review-integration-2026-08-30.md`](docs/security-review-integration-2026-08-30.md).
+
+This integration closes the reviewed code findings; it is not a complete penetration test, physical iOS assurance, or authorization for mainnet.
 
 ## Mainnet blockers
 
