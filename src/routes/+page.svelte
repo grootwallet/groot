@@ -495,13 +495,18 @@
           )}</strong
         ><small
           >{syncStatus.state === 'failed'
-            ? translate(
-                $locale,
-                'Balance remains verified through block {height}. Retry when your connection is available.',
-                {
-                  height: formatInteger(syncStatus.lastVerifiedHeight, $locale)
-                }
-              )
+            ? syncStatus.lastVerifiedHeight === 0 && !snapshot?.syncedAt
+              ? translate(
+                  $locale,
+                  'No wallet history has been verified yet. Retry when your connection is available.'
+                )
+              : translate(
+                  $locale,
+                  'Balance remains verified through block {height}. Retry when your connection is available.',
+                  {
+                    height: formatInteger(syncStatus.lastVerifiedHeight, $locale)
+                  }
+                )
             : syncStatus.chainHeight !== null
               ? translate(
                   $locale,

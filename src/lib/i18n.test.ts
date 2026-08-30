@@ -114,6 +114,24 @@ describe('locale preferences', () => {
     );
   });
 
+  it('does not expose internal RPC details in English error surfaces', () => {
+    expect(
+      localizedError(
+        { code: 'network_unavailable', message: 'JSON-RPC transport exposed private detail' },
+        'en'
+      )
+    ).toBe(
+      'Could not connect to Bitcoin Core. Check that the node is running and review the RPC address, authentication, and network settings.'
+    );
+    expect(
+      localizedError(
+        { code: 'internal_error', message: 'JSON-RPC transport exposed private detail' },
+        'en',
+        'Wallet sync failed.'
+      )
+    ).toBe('Wallet sync failed.');
+  });
+
   it('translates security and privacy tooltip copy', () => {
     expect(
       translate(
