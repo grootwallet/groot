@@ -1,3 +1,4 @@
+use serde::Serialize;
 use tauri::Manager as _;
 
 pub mod airgap;
@@ -26,6 +27,38 @@ mod tor_rpc;
 pub mod ur_transport;
 mod wallet;
 
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RuntimePlatformDto {
+    platform: &'static str,
+    mobile: bool,
+    network: &'static str,
+    version: &'static str,
+    commit: &'static str,
+}
+
+#[tauri::command]
+fn runtime_platform() -> RuntimePlatformDto {
+    let platform = if cfg!(target_os = "ios") {
+        "ios"
+    } else if cfg!(target_os = "android") {
+        "android"
+    } else if cfg!(target_os = "macos") {
+        "macos"
+    } else if cfg!(target_os = "windows") {
+        "windows"
+    } else {
+        "linux"
+    };
+    RuntimePlatformDto {
+        platform,
+        mobile: cfg!(mobile),
+        network: build_network::NAME,
+        version: env!("CARGO_PKG_VERSION"),
+        commit: env!("GROOT_BUILD_COMMIT"),
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -39,6 +72,7 @@ pub fn run() {
         })
         .manage(wallet::AppState::default())
         .invoke_handler(tauri::generate_handler![
+            runtime_platform,
             wallet::profile_commands::wallet_exists,
             wallet::ur_encode_psbt,
             wallet::ur_decode_psbt,
@@ -168,4 +202,25 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running Groot");
+}
+
+#[cfg(test)]
+mod runtime_tests {
+    use super::*;
+
+    #[test]
+    fn runtime_identity_is_native_public_build_metadata() {
+        let identity = runtime_platform();
+        assert_eq!(identity.network, build_network::NAME);
+        assert_eq!(identity.version, env!("CARGO_PKG_VERSION"));
+        let commit = identity
+            .commit
+            .strip_suffix("-dirty")
+            .unwrap_or(identity.commit);
+        assert!(
+            identity.commit == "unknown"
+                || (commit.len() == 40 && commit.bytes().all(|byte| byte.is_ascii_hexdigit()))
+        );
+        assert_ne!(identity.network, "mainnet");
+    }
 }

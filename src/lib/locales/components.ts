@@ -158,6 +158,14 @@ export const componentCopy = {
     fr: 'Groot n’a pas pu vérifier l’état de verrouillage du portefeuille.',
     es: 'Groot no pudo verificar el estado de bloqueo de la cartera.'
   },
+  'Groot v{version} · {commit}': {
+    fr: 'Groot v{version} · {commit}',
+    es: 'Groot v{version} · {commit}'
+  },
+  'The native and web app builds do not match. Restart Groot with the correct build.': {
+    fr: 'Les versions native et web de l’application ne correspondent pas. Redémarrez Groot avec la bonne version.',
+    es: 'Las versiones nativa y web de la aplicación no coinciden. Reinicia Groot con la versión correcta.'
+  },
   "Groot's current Ledger connection must authorize this policy again for each signing request. Keep this reference open until Ledger reaches the transaction.":
     {
       fr: 'La connexion Ledger actuelle de Groot doit autoriser à nouveau cette politique pour chaque demande de signature. Gardez cette référence ouverte jusqu’à ce que Ledger atteigne la transaction.',

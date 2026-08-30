@@ -43,6 +43,8 @@ Tokens live in `src/app.css`. Component surfaces must use semantic tokens such a
 
 Desktop uses a 224-pixel persistent navigation rail and a centered content area. Coordinator screens may use a main column plus a narrow safety sidebar. Mobile removes the rail, uses four fixed navigation destinations, preserves safe-area padding, and places high-frequency Receive/Send actions above the tab bar.
 
+The desktop rail ends with a quiet, tabular-numeric native build identity (`Groot v… · commit`) below network status. It remains visible before wallet unlock so a packaged candidate can be identified without exposing wallet data.
+
 Required review sizes are 1180×780 and 390×844. At mobile width, content must have no horizontal overflow, long identifiers must truncate or wrap, and actions must remain above the keyboard/safe area.
 
 Transaction-review action grids respond to the width of their own card, not only the window. They use three columns when the card is spacious, two at compact desktop widths, and one on mobile. Action labels remain concise and on one line; shrinking a card must never create stacked word fragments or horizontal overflow.

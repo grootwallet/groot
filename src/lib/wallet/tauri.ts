@@ -18,6 +18,7 @@ import type {
   SupplementalEntropyInput,
   WalletProfile,
   WalletRegistry,
+  RuntimePlatform,
   WalletSelection
 } from './contracts';
 import type {
@@ -53,7 +54,7 @@ import {
 } from './multisig-setup';
 import type { PaymentDraft } from './payment-draft';
 
-type BackendError = { code?: string; message?: string };
+type BackendError = { code?: string; message?: string; existingWalletId?: string };
 type NotificationEnvelope = { id: string; event: WalletEvent };
 const NOTIFICATION_BATCH_SIZE = 256;
 const MAX_NOTIFICATION_BATCHES_PER_DRAIN = 32;
@@ -65,7 +66,8 @@ async function command<T>(name: string, args?: Record<string, unknown>): Promise
     const backend = error as BackendError;
     throw new WalletError(
       walletErrorCode(backend?.code),
-      backend?.message ?? (typeof error === 'string' ? error : 'The wallet command failed.')
+      backend?.message ?? (typeof error === 'string' ? error : 'The wallet command failed.'),
+      typeof backend?.existingWalletId === 'string' ? backend.existingWalletId : null
     );
   }
 }
@@ -147,6 +149,10 @@ export class TauriWalletAdapter implements WalletPort {
   }
   clearPaymentDraft() {
     return command<void>('payment_draft_clear');
+  }
+
+  runtimePlatform() {
+    return command<RuntimePlatform>('runtime_platform');
   }
 
   exists() {

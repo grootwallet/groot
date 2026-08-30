@@ -1819,6 +1819,7 @@ pub fn external_signer_create(
                 created_at: now(),
                 backup_verified: true,
             },
+            &metadata.external_descriptor,
         )
     })();
     if result.is_err() {

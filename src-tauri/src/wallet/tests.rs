@@ -1332,7 +1332,6 @@ fn command_boundary_error_translation_is_complete_and_stable() {
         (RegistryError::Missing, "wallet_not_found"),
         (RegistryError::UnknownSelection, "wallet_not_found"),
         (RegistryError::InvalidName, "invalid_wallet_name"),
-        (RegistryError::DuplicateIdentity, "wallet_already_exists"),
         (RegistryError::Corrupt, "wallet_corrupt"),
         (RegistryError::UnsupportedVersion, "wallet_corrupt"),
         (RegistryError::InvalidNetwork, "internal_error"),
@@ -1503,6 +1502,95 @@ fn descriptor_and_recovery_metadata_helpers_fail_closed() {
         }),
         "expanding"
     );
+}
+
+#[test]
+fn descriptor_checksum_collision_is_not_an_exact_wallet_identity_match() {
+    let profile = WalletProfile {
+        id: Uuid::new_v4(),
+        name: "Existing wallet".to_owned(),
+        network: NETWORK_NAME.to_owned(),
+        kind: WalletKind::WatchOnly,
+        descriptor_checksum: "same0001".to_owned(),
+        created_at: 1,
+        backup_verified: true,
+    };
+    let existing = "wpkh(existing-public-key)#same0001";
+    let collision = "wpkh(different-public-key)#same0001";
+
+    assert!(!exact_descriptor_identity_matches(collision, existing));
+    assert!(exact_descriptor_identity_matches(existing, existing));
+
+    let error = wallet_already_exists(&profile);
+    assert_eq!(error.code, "wallet_already_exists");
+    assert_eq!(error.existing_wallet_id, Some(profile.id));
+}
+
+#[test]
+fn exact_identity_finder_scans_all_profiles_and_fails_closed_on_stale_checksums() {
+    let first = WalletProfile {
+        id: Uuid::new_v4(),
+        name: "First".to_owned(),
+        network: NETWORK_NAME.to_owned(),
+        kind: WalletKind::WatchOnly,
+        descriptor_checksum: "first001".to_owned(),
+        created_at: 1,
+        backup_verified: true,
+    };
+    let second = WalletProfile {
+        id: Uuid::new_v4(),
+        name: "Second".to_owned(),
+        descriptor_checksum: "second02".to_owned(),
+        ..first.clone()
+    };
+    let registry = WalletRegistry {
+        wallets: vec![first.clone(), second.clone()],
+        ..WalletRegistry::default()
+    };
+    let candidate = "wpkh(second)#second02";
+    let mut visited = Vec::new();
+    let matched = find_exact_descriptor_profile_with(&registry, candidate, |profile| {
+        visited.push(profile.id);
+        Ok(if profile.id == first.id {
+            "wpkh(first)#first001".to_owned()
+        } else {
+            candidate.to_owned()
+        })
+    })
+    .unwrap()
+    .unwrap();
+    assert_eq!(visited, vec![first.id, second.id]);
+    assert_eq!(matched.id, second.id);
+
+    let stale = find_exact_descriptor_profile_with(&registry, candidate, |profile| {
+        if profile.id == first.id {
+            Err(api_error(
+                "wallet_corrupt",
+                "Stored checksum does not match authoritative descriptor.",
+            ))
+        } else {
+            Ok(candidate.to_owned())
+        }
+    })
+    .unwrap_err();
+    assert_eq!(stale.code, "wallet_corrupt");
+}
+
+#[test]
+fn exact_identity_inspection_never_creates_a_missing_wallet_database() {
+    let directory = std::env::temp_dir().join(format!(
+        "groot-missing-identity-database-{}",
+        Uuid::new_v4()
+    ));
+    fs::create_dir_all(&directory).unwrap();
+    let database = directory.join("wallet.sqlite");
+
+    let error = open_existing_wallet_database_read_only(&database).unwrap_err();
+
+    assert_eq!(error.code, "internal_error");
+    assert!(!database.exists());
+    assert_eq!(fs::read_dir(&directory).unwrap().count(), 0);
+    fs::remove_dir_all(directory).unwrap();
 }
 
 #[test]
@@ -2605,6 +2693,50 @@ fn wallet_database_is_owner_only_and_uses_defensive_settings() {
         );
     }
     drop(db);
+    fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn exact_identity_inspection_reads_an_existing_wallet_database_without_mutating_storage() {
+    let dir = std::env::temp_dir().join(format!("groot-db-identity-read-{}", Uuid::new_v4()));
+    fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("wallet.sqlite");
+    let mut writable = open_wallet_database(&path).unwrap();
+    init_app_schema(&writable).unwrap();
+    let mnemonic = Mnemonic::parse(WORDS).unwrap();
+    let (external, internal) = watch_templates(&mnemonic, "identity read only").unwrap();
+    let wallet = Wallet::create(external, internal)
+        .network(NETWORK)
+        .create_wallet(&mut writable)
+        .unwrap();
+    let expected = wallet.public_descriptor(KeychainKind::External).to_string();
+    drop(wallet);
+    drop(writable);
+    let before = fs::metadata(&path).unwrap();
+    let mut entries_before = fs::read_dir(&dir)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name())
+        .collect::<Vec<_>>();
+    entries_before.sort();
+
+    let mut read_only = open_existing_wallet_database_read_only(&path).unwrap();
+    let loaded = load_wallet(&mut read_only).unwrap();
+    assert_eq!(
+        loaded.public_descriptor(KeychainKind::External).to_string(),
+        expected
+    );
+    drop(loaded);
+    drop(read_only);
+
+    let after = fs::metadata(&path).unwrap();
+    let mut entries_after = fs::read_dir(&dir)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name())
+        .collect::<Vec<_>>();
+    entries_after.sort();
+    assert_eq!(before.len(), after.len());
+    assert_eq!(before.permissions(), after.permissions());
+    assert_eq!(entries_before, entries_after);
     fs::remove_dir_all(dir).unwrap();
 }
 

@@ -54,7 +54,6 @@ pub enum RegistryError {
     InvalidChecksum,
     InvalidInactivityTimeout,
     DuplicateId,
-    DuplicateIdentity,
     UnknownSelection,
     Missing,
     Corrupt,
@@ -164,7 +163,6 @@ impl WalletRegistry {
             return Err(RegistryError::InvalidInactivityTimeout);
         }
         let mut ids = HashSet::new();
-        let mut identities = HashSet::new();
         for wallet in &self.wallets {
             if wallet.name.trim().is_empty() || wallet.name.chars().count() > 48 {
                 return Err(RegistryError::InvalidName);
@@ -182,9 +180,6 @@ impl WalletRegistry {
             }
             if !ids.insert(wallet.id) {
                 return Err(RegistryError::DuplicateId);
-            }
-            if !identities.insert((wallet.network.as_str(), wallet.descriptor_checksum.as_str())) {
-                return Err(RegistryError::DuplicateIdentity);
             }
         }
         if self.selected_wallet_id.is_some_and(|id| !ids.contains(&id)) {
@@ -341,10 +336,9 @@ mod tests {
         assert_eq!(r.validate(), Err(RegistryError::InvalidChecksum));
         r.wallets = vec![p(id), p(id)];
         assert_eq!(r.validate(), Err(RegistryError::DuplicateId));
-        let mut b = p(Uuid::new_v4());
-        b.descriptor_checksum = "abcd1234".into();
+        let b = p(Uuid::new_v4());
         r.wallets = vec![p(id), b];
-        assert_eq!(r.validate(), Err(RegistryError::DuplicateIdentity));
+        assert_eq!(r.validate(), Ok(()));
         r.wallets = vec![p(id)];
         r.selected_wallet_id = Some(Uuid::new_v4());
         assert_eq!(r.validate(), Err(RegistryError::UnknownSelection));

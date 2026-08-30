@@ -25,7 +25,8 @@ use bdk_wallet::{
     error::CreateTxError,
     psbt::PsbtUtils,
     rusqlite::{
-        config::DbConfig, params, Connection, OptionalExtension, Transaction as SqliteTransaction,
+        config::DbConfig, params, Connection, OpenFlags, OptionalExtension,
+        Transaction as SqliteTransaction,
     },
     template::{Bip84, Bip84Public},
     KeychainKind, PersistedWallet, SignOptions, Update, Wallet,
@@ -204,6 +205,8 @@ fn hwi_cli(app: &AppHandle) -> ApiResult<HwiCli> {
 pub struct ApiError {
     code: &'static str,
     message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    existing_wallet_id: Option<Uuid>,
 }
 
 type ApiResult<T> = Result<T, ApiError>;
@@ -218,6 +221,15 @@ fn api_error(code: &'static str, message: impl ToString) -> ApiError {
     ApiError {
         code,
         message: message.to_string(),
+        existing_wallet_id: None,
+    }
+}
+
+fn wallet_already_exists(profile: &WalletProfile) -> ApiError {
+    ApiError {
+        code: "wallet_already_exists",
+        message: "This exact descriptor wallet already exists on this device.".to_owned(),
+        existing_wallet_id: Some(profile.id),
     }
 }
 
@@ -1504,10 +1516,6 @@ fn registry_api_error(error: RegistryError) -> ApiError {
             "invalid_inactivity_timeout",
             "Automatic lock must be 1, 5, 15, 30, or 60 minutes.",
         ),
-        RegistryError::DuplicateIdentity => api_error(
-            "wallet_already_exists",
-            "This descriptor wallet already exists on this device.",
-        ),
         RegistryError::Corrupt | RegistryError::UnsupportedVersion => api_error(
             "wallet_corrupt",
             "The wallet registry is corrupt or unsupported. No wallet was opened.",
@@ -1684,6 +1692,7 @@ fn ensure_registry_migrated(app: &AppHandle) -> ApiResult<()> {
     ];
     let mut registry = WalletRegistry::default();
     let mut moves = Vec::<(PathBuf, PathBuf)>::new();
+    let mut legacy_identities = Vec::<(String, WalletProfile)>::new();
     for (legacy_directory, kind) in legacy {
         if !legacy_directory.exists() {
             continue;
@@ -1695,9 +1704,16 @@ fn ensure_registry_migrated(app: &AppHandle) -> ApiResult<()> {
             ));
         }
         let id = Uuid::new_v4();
-        registry
-            .add(profile_from_directory(&legacy_directory, id, kind)?)
-            .map_err(registry_api_error)?;
+        let profile = profile_from_directory(&legacy_directory, id, kind)?;
+        let (external_descriptor, _) = descriptor_pair_from_directory(&legacy_directory, &profile)?;
+        if let Some((_, existing)) = legacy_identities
+            .iter()
+            .find(|(existing_descriptor, _)| existing_descriptor == &external_descriptor)
+        {
+            return Err(wallet_already_exists(existing));
+        }
+        legacy_identities.push((external_descriptor, profile.clone()));
+        registry.add(profile).map_err(registry_api_error)?;
         moves.push((legacy_directory, profile_directory(app, id)?));
     }
     migrate_directories_with_rollback(&moves, || save_registry(app, &registry))
@@ -1773,8 +1789,131 @@ fn open_wallet_database(path: &Path) -> ApiResult<Connection> {
     Ok(db)
 }
 
-fn commit_profile(app: &AppHandle, profile: WalletProfile) -> ApiResult<()> {
+fn open_existing_wallet_database_read_only(path: &Path) -> ApiResult<Connection> {
+    crate::release_policy::ensure_runtime_network_enabled(NETWORK).map_err(|_| {
+        internal("This build is not authorized to inspect a mainnet wallet database.")
+    })?;
+    let metadata = fs::symlink_metadata(path).map_err(internal)?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return Err(internal("Wallet database storage is not a regular file."));
+    }
+    let db =
+        Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY).map_err(internal)?;
+    db.busy_timeout(Duration::from_secs(5)).map_err(internal)?;
+    db.set_db_config(DbConfig::SQLITE_DBCONFIG_DEFENSIVE, true)
+        .map_err(internal)?;
+    db.set_db_config(DbConfig::SQLITE_DBCONFIG_ENABLE_FKEY, true)
+        .map_err(internal)?;
+    db.execute_batch("PRAGMA trusted_schema = OFF;")
+        .map_err(internal)?;
+    Ok(db)
+}
+
+fn profile_descriptor_pair(
+    app: &AppHandle,
+    profile: &WalletProfile,
+) -> ApiResult<(String, String)> {
+    let directory = profile_directory(app, profile.id)?;
+    descriptor_pair_from_directory(&directory, profile)
+}
+
+fn descriptor_pair_from_directory(
+    directory: &Path,
+    profile: &WalletProfile,
+) -> ApiResult<(String, String)> {
+    let mut db = open_existing_wallet_database_read_only(&directory.join("wallet.sqlite"))?;
+    let wallet = load_wallet(&mut db)?;
+    let external = wallet.public_descriptor(KeychainKind::External).to_string();
+    let internal_descriptor = wallet.public_descriptor(KeychainKind::Internal).to_string();
+    let expected = match profile.kind {
+        WalletKind::SingleKey => None,
+        WalletKind::WatchOnly => {
+            let encoded = read_private_text(&directory.join("wallet.json"))?;
+            let metadata: ExternalSignerWallet =
+                serde_json::from_str(&encoded).map_err(internal)?;
+            metadata
+                .signer
+                .validate()
+                .map_err(external_signer_api_error)?;
+            let derived = external_signer::descriptors(&metadata.signer)
+                .map_err(external_signer_api_error)?;
+            if metadata.version != 1
+                || metadata.external_descriptor != derived.0
+                || metadata.internal_descriptor != derived.1
+            {
+                return Err(api_error(
+                    "wallet_corrupt",
+                    "External-signer metadata does not match its public wallet identity.",
+                ));
+            }
+            Some((metadata.external_descriptor, metadata.internal_descriptor))
+        }
+        WalletKind::Multisig => {
+            let encoded = read_private_text(&directory.join("wallet.json"))?;
+            let metadata: MultisigWalletDto = serde_json::from_str(&encoded).map_err(internal)?;
+            Some((metadata.external_descriptor, metadata.internal_descriptor))
+        }
+    };
+    validate_loaded_descriptors(
+        profile,
+        &external,
+        &internal_descriptor,
+        expected
+            .as_ref()
+            .map(|(external, internal)| (external.as_str(), internal.as_str())),
+    )?;
+    Ok((external, internal_descriptor))
+}
+
+fn find_exact_descriptor_profile(
+    app: &AppHandle,
+    registry: &WalletRegistry,
+    external_descriptor: &str,
+) -> ApiResult<Option<WalletProfile>> {
+    find_exact_descriptor_profile_with(registry, external_descriptor, |profile| {
+        profile_descriptor_pair(app, profile).map(|(external, _)| external)
+    })
+}
+
+fn find_exact_descriptor_profile_with(
+    registry: &WalletRegistry,
+    external_descriptor: &str,
+    mut read_external_descriptor: impl FnMut(&WalletProfile) -> ApiResult<String>,
+) -> ApiResult<Option<WalletProfile>> {
+    descriptor_checksum(external_descriptor)?;
+    let mut matched = None;
+    for profile in registry
+        .wallets
+        .iter()
+        .filter(|profile| profile.network == NETWORK_NAME)
+    {
+        let existing_external = read_external_descriptor(profile)?;
+        if exact_descriptor_identity_matches(external_descriptor, &existing_external) {
+            if matched.is_some() {
+                return Err(api_error(
+                    "wallet_corrupt",
+                    "The wallet registry contains the same exact descriptor identity more than once.",
+                ));
+            }
+            matched = Some(profile.clone());
+        }
+    }
+    Ok(matched)
+}
+
+fn exact_descriptor_identity_matches(candidate_external: &str, existing_external: &str) -> bool {
+    candidate_external == existing_external
+}
+
+fn commit_profile(
+    app: &AppHandle,
+    profile: WalletProfile,
+    external_descriptor: &str,
+) -> ApiResult<()> {
     let mut registry = load_registry(app)?;
+    if let Some(existing) = find_exact_descriptor_profile(app, &registry, external_descriptor)? {
+        return Err(wallet_already_exists(&existing));
+    }
     registry.add(profile.clone()).map_err(registry_api_error)?;
     registry.select(profile.id).map_err(registry_api_error)?;
     save_registry(app, &registry)
@@ -1792,6 +1931,7 @@ fn commit_multisig_profile(app: &AppHandle, id: Uuid, wallet: &MultisigWalletDto
             created_at: now(),
             backup_verified: true,
         },
+        &wallet.external_descriptor,
     )
 }
 
@@ -4994,6 +5134,7 @@ fn create_from_mnemonic(
                 created_at: now(),
                 backup_verified,
             },
+            &wallet.public_descriptor(KeychainKind::External).to_string(),
         )
     })();
     if result.is_err() {

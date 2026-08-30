@@ -32,6 +32,7 @@ import type {
   PayjoinUriInspection,
   RecoveryScanSettings,
   RecoveryScanStatus,
+  RuntimePlatform,
   SupplementalEntropyInput,
   WalletEvent,
   WalletProfile,
@@ -55,6 +56,7 @@ import type {
 import type { PaymentDraft } from '../payment-draft';
 
 export interface WalletProfilesPort {
+  runtimePlatform(): Promise<RuntimePlatform>;
   exists(): Promise<boolean>;
   profiles(): Promise<WalletRegistry>;
   profileCompatibility(): Promise<WalletProfileCompatibility>;

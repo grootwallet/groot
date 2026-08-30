@@ -393,6 +393,17 @@ describe('hardware receive verification UI', () => {
     expect(opened).toBeGreaterThan(refreshed);
   });
 
+  it('opens only the exact native-matched duplicate wallet', () => {
+    expect(hardwareSetup).toContain(
+      'existingWalletId = cause instanceof WalletError ? cause.existingWalletId : null'
+    );
+    expect(hardwareSetup).toContain('await walletShell.selectWallet(existingWalletId)');
+    expect(hardwareSetup).toContain("errorCode === 'wallet_already_exists' && existingWalletId");
+    expect(hardwareSetup).not.toContain(
+      "onclick={() => goto('/')}>{translate($locale, 'Open wallet')}"
+    );
+  });
+
   it('does not require an unverifiable fingerprint attestation for Trezor imports', () => {
     const normalizedSetup = hardwareSetup.replace(/\s+/g, ' ');
     expect(normalizedSetup).toContain(

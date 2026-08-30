@@ -25,6 +25,13 @@ export type WalletSelection = {
 export type WalletProfileCompatibility = {
   supported: boolean;
 };
+export type RuntimePlatform = {
+  platform: 'ios' | 'android' | 'macos' | 'windows' | 'linux' | 'browser';
+  mobile: boolean;
+  network: SupportedNetwork;
+  version: string;
+  commit: string;
+};
 export type CoreNodeConfig = {
   backend: { type: 'local_core' | 'remote_core'; url: string };
   auth: 'cookie' | 'user_pass';
