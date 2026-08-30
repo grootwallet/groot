@@ -1321,6 +1321,17 @@ test('overview and coins resolve empty wallets without lingering skeletons', asy
   expect(empty!.y - (toolbar!.y + toolbar!.height)).toBeGreaterThanOrEqual(13);
 });
 
+test('overview counts a pending CPFP self-spend fee exactly once', async ({ page }) => {
+  await page.goto('/?fixture-pending-self-spend=1');
+  await expect(page.getByText('39,890 sats unconfirmed change · 110 sats outgoing')).toBeVisible();
+  await expect(page.getByText('220 sats outgoing')).toHaveCount(0);
+  const acceleration = page.locator('.tx-row').filter({ hasText: 'Fee acceleration' });
+  await expect(acceleration).toContainText('−110 sats');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true
+  );
+});
+
 test('receive label suggestions expose aligned tooltips only when truncated', async ({ page }) => {
   await page.goto('/receive');
   await page.getByRole('button', { name: 'New receive address' }).click();

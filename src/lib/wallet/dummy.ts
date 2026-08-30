@@ -431,6 +431,9 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       (typeof location !== 'undefined' &&
         new URLSearchParams(location.search).has('fixture-empty-wallet')) ||
       (this._delayedWalletSwitch && walletId === this._multisigProfileId);
+    const pendingSelfSpend =
+      typeof location !== 'undefined' &&
+      new URLSearchParams(location.search).has('fixture-pending-self-spend');
     const initialHistoryRequired =
       typeof location !== 'undefined' &&
       new URLSearchParams(location.search).has('fixture-initial-history-required') &&
@@ -439,13 +442,53 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       network: defaultConfig.network,
       balance: emptyWallet
         ? { confirmed: sats(0), pending: sats(0), trustedPending: sats(0), total: sats(0) }
-        : {
-            confirmed: sats(Math.max(0, this._balance - this._pendingBalance)),
-            pending: sats(Math.min(this._pendingBalance, this._balance)),
-            trustedPending: sats(Math.min(this._pendingBalance, this._balance)),
-            total: sats(this._balance)
-          },
-      transactions: emptyActivity || emptyWallet ? [] : structuredClone(this._transactions),
+        : pendingSelfSpend
+          ? {
+              confirmed: sats(0),
+              pending: sats(39_890),
+              trustedPending: sats(39_890),
+              total: sats(39_890)
+            }
+          : {
+              confirmed: sats(Math.max(0, this._balance - this._pendingBalance)),
+              pending: sats(Math.min(this._pendingBalance, this._balance)),
+              trustedPending: sats(Math.min(this._pendingBalance, this._balance)),
+              total: sats(this._balance)
+            },
+      transactions:
+        emptyActivity || emptyWallet
+          ? []
+          : pendingSelfSpend
+            ? [
+                {
+                  id: 'cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
+                  kind: 'self_spend',
+                  direction: 'sent',
+                  amount: 110,
+                  fee: 110,
+                  status: 'pending',
+                  confirmations: 0,
+                  date: 'Today, 20:36',
+                  address: null,
+                  label: 'Fee acceleration',
+                  inputCount: 1,
+                  outputCount: 1,
+                  feeRate: 1,
+                  walletInputAmount: 40_000,
+                  walletOutputAmount: 39_890,
+                  locktime: 0,
+                  rbf: false,
+                  intentLabel: null,
+                  provenance: {
+                    state: 'unknown',
+                    context: 'funding',
+                    labels: [],
+                    clusterCount: 0,
+                    addressReused: false
+                  }
+                }
+              ]
+            : structuredClone(this._transactions),
       utxos: emptyWallet ? [] : structuredClone(this._coins),
       receiveAddresses: structuredClone(this._addresses),
       labelSuggestions: structuredClone(this._labelSuggestionsByWallet.get(walletId) ?? []),

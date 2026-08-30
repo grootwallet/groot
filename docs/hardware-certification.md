@@ -149,6 +149,16 @@ hardware evidence because the signer is not contacted during descriptor sync;
 it does not close Nova receive, health, policy, signing, pairing-cache,
 Whisper/BLE, or independent-review rows.
 
+Packaged v0.4.81 Testnet4 then passed exact-Nova single-key identity use,
+trusted-display receive-address comparison, an explicit birthday-and-gap Core
+history scan, and physical review, signing, validation, and broadcast of a
+fee-only CPFP child. Confirmation was not reported. The review, Activity row,
+and wallet balance counted the child fee once, but Overview's pending annotation
+counted that same self-spend debit twice. The affected pending presentation is
+therefore failed evidence for v0.4.81 and is corrected for focused retest in
+v0.4.83. No address, transaction identifier, fingerprint, account key, device
+path, PSBT, credential, or label is retained.
+
 ### Completed checkpoint — BitBox02
 
 On 2026-08-15, the original Bitcoin-only BitBox02, firmware 9.26.3, passed the Regtest receive-address comparison and an independent BIP48 2-of-3 flow: account-key import, policy registration, first-address review, explicit signing rejection with a retryable unchanged proposal, successful retry, one-signature restart persistence, threshold completion with Trezor Model One, and broadcast. It then passed wrong-device rejection without collecting a signature, USB interruption during signing with a clean retry, rejection of a signed PSBT from another proposal without changing signatures, and an independent BSMS descriptor-recovery test reproducing the same first receive address. The sanitized host record is macOS 26.1 Tahoe with HWI 2.3.1, tested 2026-08-15 in Europe/Andorra (UTC+2). This evidence applies only to the original Bitcoin-only BitBox02; it does not cover Nova. Do not publish addresses, fingerprints, xpubs, PSBTs, or device paths.

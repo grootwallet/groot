@@ -101,6 +101,35 @@ describe('pendingBalanceBreakdown', () => {
       outgoing: 10_402
     });
   });
+
+  it('counts a pending self-spend fee exactly once', () => {
+    const cpfp = transaction('cpfp', '2026-08-30T20:36:00Z');
+    cpfp.kind = 'self_spend';
+    cpfp.direction = 'sent';
+    cpfp.amount = 110;
+    cpfp.fee = 110;
+    const snapshot = {
+      network: 'testnet4',
+      balance: {
+        confirmed: sats(0),
+        pending: sats(39_890),
+        trustedPending: sats(39_890),
+        total: sats(39_890)
+      },
+      transactions: [cpfp],
+      utxos: [],
+      receiveAddresses: [],
+      labelSuggestions: [],
+      syncedAt: null,
+      chainTip: { height: 0, observedAt: null, status: 'unknown' }
+    } satisfies import('./contracts').WalletSnapshot;
+
+    expect(pendingBalanceBreakdown(snapshot)).toEqual({
+      incoming: 0,
+      change: 39_890,
+      outgoing: 110
+    });
+  });
 });
 
 describe('sortTransactionsNewestFirst', () => {
