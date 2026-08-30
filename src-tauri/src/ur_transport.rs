@@ -107,8 +107,15 @@ pub fn decode_psbt(frames: &[String]) -> Result<String, UrTransportError> {
     } else {
         let mut decoder = Decoder::default();
         for frame in frames {
+            let lower = frame.to_ascii_lowercase();
+            let (kind, payload) =
+                ur::ur::decode(&lower).map_err(|_| UrTransportError::InvalidFrame)?;
+            if !matches!(kind, Kind::MultiPart) {
+                return Err(UrTransportError::InvalidFrame);
+            }
+            validate_fountain_part(&payload)?;
             decoder
-                .receive(&frame.to_ascii_lowercase())
+                .receive(&lower)
                 .map_err(|_| UrTransportError::InvalidFrame)?;
             if decoder.complete() {
                 break;
@@ -131,6 +138,93 @@ fn validate_psbt(raw: &[u8]) -> Result<(), UrTransportError> {
     Psbt::deserialize(raw)
         .map(|_| ())
         .map_err(|_| UrTransportError::InvalidPsbt)
+}
+
+/// Read one canonical minimal-length CBOR head for `major` (0 = unsigned int,
+/// 2 = byte string, 4 = array) and return its value. Anything else — wrong major
+/// type, non-canonical length, indefinite form, overlong form — fails closed.
+/// A head accepted here decodes to exactly one value under every compliant CBOR
+/// parser, so Groot's own checks cannot disagree with the downstream decoder
+/// about what the attacker declared.
+fn cbor_head(input: &mut &[u8], major: u8) -> Result<u32, UrTransportError> {
+    let (&head, rest) = input.split_first().ok_or(UrTransportError::InvalidFrame)?;
+    if head >> 5 != major {
+        return Err(UrTransportError::InvalidFrame);
+    }
+    let (value, rest) = match head & 0x1f {
+        info @ 0..=23 => (u32::from(info), rest),
+        24 => {
+            let (&byte, rest) = rest.split_first().ok_or(UrTransportError::InvalidFrame)?;
+            if byte < 24 {
+                return Err(UrTransportError::InvalidFrame);
+            }
+            (u32::from(byte), rest)
+        }
+        25 => {
+            let bytes: [u8; 2] = rest
+                .get(..2)
+                .ok_or(UrTransportError::InvalidFrame)?
+                .try_into()
+                .map_err(|_| UrTransportError::InvalidFrame)?;
+            let value = u16::from_be_bytes(bytes);
+            if value < 256 {
+                return Err(UrTransportError::InvalidFrame);
+            }
+            (u32::from(value), &rest[2..])
+        }
+        26 => {
+            let bytes: [u8; 4] = rest
+                .get(..4)
+                .ok_or(UrTransportError::InvalidFrame)?
+                .try_into()
+                .map_err(|_| UrTransportError::InvalidFrame)?;
+            let value = u32::from_be_bytes(bytes);
+            if value < 65_536 {
+                return Err(UrTransportError::InvalidFrame);
+            }
+            (value, &rest[4..])
+        }
+        _ => return Err(UrTransportError::InvalidFrame),
+    };
+    *input = rest;
+    Ok(value)
+}
+
+/// Bound the attacker-controlled fountain `Part` header of one multipart frame
+/// before the pinned `ur` decoder adopts it. The decoder trusts the CBOR
+/// `sequence_count`/`message_length` fields and allocates and shuffles vectors
+/// proportional to them on first receive, so a single small frame could
+/// otherwise abort or hang the process. A legitimate `MAX_UR_PAYLOAD_BYTES`
+/// message always decodes from at most `MAX_UR_FRAMES` frames here, so larger
+/// declared counts can never complete and fail closed before any allocation.
+///
+/// Only canonical minimal-length CBOR exactly matching the pinned encoder is
+/// accepted, so no compliant peer's frame can be rejected.
+fn validate_fountain_part(cbor: &[u8]) -> Result<(), UrTransportError> {
+    let mut input = cbor;
+    if cbor_head(&mut input, 4)? != 5 {
+        return Err(UrTransportError::InvalidFrame);
+    }
+    let sequence = cbor_head(&mut input, 0)?;
+    let sequence_count = cbor_head(&mut input, 0)?;
+    let message_length = cbor_head(&mut input, 0)?;
+    cbor_head(&mut input, 0)?; // checksum: inert for acceptance bounds
+    let fragment_length = cbor_head(&mut input, 2)? as usize;
+    input = input
+        .get(fragment_length..)
+        .ok_or(UrTransportError::InvalidFrame)?;
+    if !input.is_empty()
+        || sequence == 0
+        || sequence_count == 0
+        || sequence_count as usize > MAX_UR_FRAMES
+        || message_length == 0
+        || message_length as usize > MAX_UR_PAYLOAD_BYTES + 5
+        || fragment_length == 0
+        || fragment_length > MAX_UR_FRAME_BYTES
+    {
+        return Err(UrTransportError::InvalidFrame);
+    }
+    Ok(())
 }
 
 fn encode_cbor_bytes(payload: &[u8]) -> Result<Vec<u8>, UrTransportError> {
@@ -330,6 +424,132 @@ mod tests {
             encode_psbt(&BASE64.encode(fixture_psbt(100_000)), MIN_FRAGMENT_BYTES),
             Err(UrTransportError::TooManyFrames)
         );
+    }
+
+    fn part_frame(
+        sequence: u32,
+        sequence_count: u32,
+        message_length: u32,
+        fragment: &[u8],
+    ) -> String {
+        let mut cbor = Vec::new();
+        cbor.push(0x85);
+        let mut push_u32 = |value: u32| match value {
+            0..=23 => cbor.push(value as u8),
+            24..=255 => cbor.extend([24, value as u8]),
+            256..=65_535 => {
+                cbor.push(25);
+                cbor.extend_from_slice(&(value as u16).to_be_bytes());
+            }
+            _ => {
+                cbor.push(26);
+                cbor.extend_from_slice(&value.to_be_bytes());
+            }
+        };
+        push_u32(sequence);
+        push_u32(sequence_count);
+        push_u32(message_length);
+        push_u32(0xdead_beef);
+        match fragment.len() {
+            length @ 0..=23 => cbor.push(0x40 | length as u8),
+            length @ 24..=255 => cbor.extend([0x58, length as u8]),
+            length @ 256..=65_535 => {
+                cbor.push(0x59);
+                cbor.extend_from_slice(&(length as u16).to_be_bytes());
+            }
+            length => {
+                cbor.push(0x5a);
+                cbor.extend_from_slice(&(length as u32).to_be_bytes());
+            }
+        }
+        cbor.extend_from_slice(fragment);
+        format!(
+            "ur:crypto-psbt/1-2/{}",
+            ur::bytewords::encode(&cbor, ur::bytewords::Style::Minimal)
+        )
+    }
+
+    #[test]
+    fn fountain_header_bounds_match_compliant_frames() {
+        for (sequence_count, message_length, fragment_length) in
+            [(1, 100, 16), (1_024, 262_149, 4_096), (2, 512, 50)]
+        {
+            let frame = part_frame(
+                sequence_count,
+                sequence_count,
+                message_length,
+                &vec![0; fragment_length],
+            );
+            let (_, payload) = ur::ur::decode(&frame).unwrap();
+            assert!(
+                validate_fountain_part(&payload).is_ok(),
+                "legitimate header {sequence_count}/{message_length}/{fragment_length} must pass"
+            );
+        }
+        // Values just above every acceptance limit fail closed.
+        for (sequence_count, message_length, fragment_length) in
+            [(1_025, 100, 16), (2, 262_150, 16), (2, 100, 4_097)]
+        {
+            let frame = part_frame(
+                sequence_count,
+                sequence_count,
+                message_length,
+                &vec![0; fragment_length],
+            );
+            let (_, payload) = ur::ur::decode(&frame).unwrap();
+            assert_eq!(
+                validate_fountain_part(&payload),
+                Err(UrTransportError::InvalidFrame)
+            );
+        }
+    }
+
+    #[test]
+    fn fountain_header_rejects_non_canonical_cbor_and_trailing_junk() {
+        // Non-minimal integer 5 encoded in four bytes; indefinite/mistyped heads.
+        for mut cbor in [
+            vec![0x9a, 0, 0, 0, 5],       // non-minimal array length
+            vec![0x9f],                   // indefinite array
+            vec![0x85, 0x1a, 0, 0, 0, 2], // non-minimal u32 value 2
+            vec![0x86],                   // array(6)
+        ] {
+            assert!(
+                validate_fountain_part(&cbor).is_err(),
+                "non-canonical header {cbor:02x?} must fail"
+            );
+            cbor.clear();
+        }
+        let mut trailing = {
+            let frame = part_frame(2, 2, 100, &[0; 16]);
+            let (_, payload) = ur::ur::decode(&frame).unwrap();
+            payload
+        };
+        trailing.push(0);
+        assert_eq!(
+            validate_fountain_part(&trailing),
+            Err(UrTransportError::InvalidFrame)
+        );
+    }
+
+    #[test]
+    fn hostile_fountain_headers_are_rejected_before_the_decoder_amplifies() {
+        // One crafted frame per attack class. Without the pre-validation the
+        // u32-scale sequence_count drives ~70 GB of decoder allocations and
+        // aborts the process; these assertions returning proves the gate held.
+        let cases = [
+            part_frame(2, u32::MAX, 1_000, &[7; 16]), // allocation bomb
+            part_frame(0, 2, 1_000, &[7; 16]),        // zero sequence underflow
+            part_frame(2, 0, 1_000, &[7; 16]),        // zero count
+            part_frame(2, 2, 0, &[7; 16]),            // empty declared message
+            part_frame(2, 2, u32::MAX, &[7; 16]),     // unbounded declared message
+        ];
+        for frame in cases {
+            assert_eq!(
+                decode_psbt(&[frame]),
+                Err(UrTransportError::InvalidFrame),
+                "hostile fountain header must fail closed"
+            );
+        }
     }
 
     #[test]

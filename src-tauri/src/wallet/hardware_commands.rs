@@ -506,7 +506,7 @@ pub async fn hardware_find_saved_device(
             "The saved hardware signer account key is invalid.",
         )
     })?;
-    if expected_xpub.network.is_mainnet() {
+    if expected_xpub.network != PARAMETERS.extended_key_network {
         return Err(api_error(
             "wrong_network",
             "The saved hardware signer account key is for the wrong network.",
@@ -1202,10 +1202,10 @@ fn parse_hwi_account_xpub(output: &[u8], device_type: &str) -> ApiResult<String>
         })?;
     let parsed = Xpub::from_str(xpub)
         .map_err(|_| api_error("invalid_descriptor", "HWI returned an invalid account key."))?;
-    if parsed.network.is_mainnet() {
+    if parsed.network != PARAMETERS.extended_key_network {
         return Err(api_error(
             "wrong_network",
-            "The hardware signer returned a mainnet account key for this non-mainnet wallet.",
+            "The hardware signer returned an account key for the wrong network.",
         ));
     }
     Ok(xpub.to_owned())
@@ -1271,10 +1271,10 @@ fn parse_hwi_account_keypool(
     let xpub = &key_tail[..xpub_end];
     let parsed = Xpub::from_str(xpub)
         .map_err(|_| api_error("invalid_descriptor", "HWI returned an invalid account key."))?;
-    if parsed.network.is_mainnet() {
+    if parsed.network != PARAMETERS.extended_key_network {
         return Err(api_error(
             "wrong_network",
-            "The hardware signer returned a mainnet account key for this non-mainnet wallet.",
+            "The hardware signer returned an account key for the wrong network.",
         ));
     }
     Ok((fingerprint.to_ascii_lowercase(), xpub.to_owned()))

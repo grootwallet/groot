@@ -53,10 +53,49 @@ if (browserClipboardUsers.length !== 1 || browserClipboardUsers[0] !== 'src/lib/
   fail('browser clipboard writes must be classified by src/lib/clipboard.ts');
 }
 
-const capability = JSON.parse(read('src-tauri/capabilities/default.json'));
+// Tauri recursively loads multiple capability formats. Groot intentionally
+// permits one reviewed root capability only: any second file, nested entry,
+// directory, symlink, or alternate format must fail closed instead of relying
+// on this gate to reproduce Tauri's parser and glob semantics.
+const capabilitiesDir = fileURLToPath(new URL('src-tauri/capabilities/', root));
+export function approvedCapabilityPermissions(directory) {
+  const entries = readdirSync(directory, { withFileTypes: true });
+  if (
+    entries.length !== 1 ||
+    entries[0].name !== 'default.json' ||
+    !entries[0].isFile() ||
+    entries[0].isSymbolicLink()
+  ) {
+    throw new Error(
+      'src-tauri/capabilities must contain only the reviewed regular file default.json'
+    );
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(readFileSync(join(directory, 'default.json'), 'utf8'));
+  } catch {
+    throw new Error('capability default.json is not valid JSON');
+  }
+  if (!Array.isArray(parsed.permissions)) {
+    throw new Error('capability default.json has no permissions array');
+  }
+  return new Set(parsed.permissions);
+}
+
+let mergedPermissions;
+try {
+  mergedPermissions = approvedCapabilityPermissions(capabilitiesDir);
+} catch (error) {
+  fail(error instanceof Error ? error.message : String(error));
+}
 const expectedPermissions = ['core:default', 'clipboard-manager:allow-write-text'];
-if (JSON.stringify(capability.permissions) !== JSON.stringify(expectedPermissions)) {
-  fail('desktop capabilities must remain core defaults plus clipboard write-only');
+if (
+  mergedPermissions.size !== expectedPermissions.length ||
+  !expectedPermissions.every((permission) => mergedPermissions.has(permission))
+) {
+  fail(
+    `merged capabilities [${[...mergedPermissions].sort().join(', ')}] must equal [${expectedPermissions.join(', ')}]`
+  );
 }
 
 const tauriConfig = JSON.parse(read('src-tauri/tauri.conf.json'));

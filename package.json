@@ -38,7 +38,7 @@
     "test:regtest": "pnpm test:integration:regtest",
     "test:release-gate": "bash scripts/release/check-mainnet-gate.sh",
     "test:boundaries": "bash scripts/quality/check-boundaries.sh",
-    "test:secret-surfaces": "node scripts/quality/check-secret-surfaces.mjs",
+    "test:secret-surfaces": "node --test scripts/quality/check-secret-surfaces.test.mjs && node scripts/quality/check-secret-surfaces.mjs",
     "test:supply-chain": "node scripts/quality/check-supply-chain.mjs",
     "test:sbom": "bash scripts/quality/check-sbom.sh",
     "test:brand": "bash scripts/quality/check-brand-identity.sh",
