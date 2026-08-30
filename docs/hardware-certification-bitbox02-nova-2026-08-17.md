@@ -107,6 +107,19 @@ had been created when this result was recorded.
 | Independent review                                      | Pending      | The local implementer cannot self-approve it.                                    |
 | Whisper/BLE mobile transport                            | Out of scope | Requires a separate authenticated-transport threat review and physical campaign. |
 
+### Packaged v0.4.80 Testnet4 identity-routing checkpoint
+
+The reviewer reopened the exact packaged v0.4.80 Testnet4 candidate at short
+commit `d5133f59` and attempted to add the same physical Nova BIP84 identity
+again. Groot rejected the genuine duplicate without creating another profile.
+The offered **Open wallet** action selected the already-imported Nova profile,
+not the previously selected Coldcard profile, and the visible wallet count
+remained unchanged. This passes only the packaged exact-descriptor duplicate
+detection and authoritative existing-profile routing regression. It does not
+close the remaining packaged receive, health, policy, signing, recovery, or
+independent-review rows. No public wallet or signer identifier, credential, or
+transaction material is retained here.
+
 ## Current decision
 
 **LOCAL REGTEST USB CORE PASS WITH LIMITATIONS — NOT RELEASE CERTIFIED.**

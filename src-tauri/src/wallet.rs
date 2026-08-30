@@ -2320,6 +2320,26 @@ fn retry_transient_node_health<T>(
     unreachable!("node health attempts are non-zero")
 }
 
+fn retry_transient_core_rpc<T>(
+    mut operation: impl FnMut() -> Result<T, CoreRpcError>,
+    mut pause: impl FnMut(Duration),
+) -> ApiResult<T> {
+    for attempt in 0..NODE_HEALTH_ATTEMPTS {
+        match operation() {
+            Ok(value) => return Ok(value),
+            Err(error) => {
+                let error = rpc_api_error(error);
+                if error.code == "network_unavailable" && attempt + 1 < NODE_HEALTH_ATTEMPTS {
+                    pause(NODE_HEALTH_RETRY_DELAY);
+                    continue;
+                }
+                return Err(error);
+            }
+        }
+    }
+    unreachable!("Core RPC attempts are non-zero")
+}
+
 fn checked_node_status_once(client: &Client, backend: CoreNodeConfig) -> ApiResult<NodeStatusDto> {
     let info = get_blockchain_info(client).map_err(rpc_api_error)?;
     ensure_expected_network(info.chain)?;
@@ -5320,7 +5340,8 @@ fn sync_wallet_with_core(
     );
     loop {
         ensure_foreground_sync_not_cancelled(cancel)?;
-        let Some(block) = emitter.next_block().map_err(internal)? else {
+        let Some(block) = retry_transient_core_rpc(|| emitter.next_block(), std::thread::sleep)?
+        else {
             break;
         };
         ensure_foreground_sync_not_cancelled(cancel)?;
@@ -5335,7 +5356,7 @@ fn sync_wallet_with_core(
         );
     }
     ensure_foreground_sync_not_cancelled(cancel)?;
-    let mempool = emitter.mempool().map_err(internal)?;
+    let mempool = retry_transient_core_rpc(|| emitter.mempool(), std::thread::sleep)?;
     wallet.apply_evicted_txs(mempool.evicted);
     wallet.apply_unconfirmed_txs(mempool.update);
     update_core_sync_status(
@@ -5505,7 +5526,7 @@ fn full_rescan_loaded_wallet(
         .filter(|tx| tx.chain_position.is_unconfirmed());
     let mut emitter = Emitter::new(rpc, checkpoint, settings.birthday_height, expected_mempool);
     let mut processed_blocks = 0_u32;
-    while let Some(block) = emitter.next_block().map_err(internal)? {
+    while let Some(block) = retry_transient_core_rpc(|| emitter.next_block(), std::thread::sleep)? {
         if cancel.load(Ordering::Acquire) {
             return Err(api_error(
                 "scan_cancelled",
@@ -5525,7 +5546,7 @@ fn full_rescan_loaded_wallet(
             "Recovery scan cancelled. Saved progress remains safe; start it again to continue.",
         ));
     }
-    let mempool = emitter.mempool().map_err(internal)?;
+    let mempool = retry_transient_core_rpc(|| emitter.mempool(), std::thread::sleep)?;
     wallet.apply_evicted_txs(mempool.evicted);
     wallet.apply_unconfirmed_txs(mempool.update);
     wallet.persist(db).map_err(internal)?;

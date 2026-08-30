@@ -282,6 +282,10 @@ export const dynamicCopy = {
     fr: 'Synchronisation du portefeuille arrêtée',
     es: 'Sincronización de la cartera detenida'
   },
+  'No wallet history has been verified yet. Retry when your connection is available.': {
+    fr: 'Aucun historique du portefeuille n’a encore été vérifié. Réessayez lorsque votre connexion est disponible.',
+    es: 'Todavía no se ha verificado el historial de la cartera. Inténtalo de nuevo cuando la conexión esté disponible.'
+  },
   'Compare the complete address above, then approve it on the device.': {
     fr: 'Comparez l’adresse complète ci-dessus, puis approuvez-la sur l’appareil.',
     es: 'Compara la dirección completa de arriba y apruébala en el dispositivo.'

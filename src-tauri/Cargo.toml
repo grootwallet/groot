@@ -1,6 +1,6 @@
 [package]
 name = "groot"
-version = "0.4.80"
+version = "0.4.81"
 description = "Groot, a minimal onchain Bitcoin wallet"
 edition = "2021"
 

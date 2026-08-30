@@ -524,6 +524,43 @@ fn rpc_whitelist_rejection_is_actionable_without_exposing_core_details() {
 }
 
 #[test]
+fn core_scanner_retries_transient_transport_failures_and_sanitizes_exhaustion() {
+    let mut attempts = 0;
+    let mut pauses = Vec::new();
+    let result = retry_transient_core_rpc(
+        || {
+            attempts += 1;
+            Err::<(), _>(CoreRpcError::JsonRpc(jsonrpc::Error::Transport(Box::new(
+                std::io::Error::other("private transport detail"),
+            ))))
+        },
+        |delay| pauses.push(delay),
+    )
+    .unwrap_err();
+
+    assert_eq!(attempts, NODE_HEALTH_ATTEMPTS);
+    assert_eq!(pauses, vec![NODE_HEALTH_RETRY_DELAY; 2]);
+    assert_sanitized_rpc_error(result);
+
+    let mut recovering_attempts = 0;
+    let recovered = retry_transient_core_rpc(
+        || {
+            recovering_attempts += 1;
+            if recovering_attempts < NODE_HEALTH_ATTEMPTS {
+                Err(CoreRpcError::JsonRpc(jsonrpc::Error::Transport(Box::new(
+                    std::io::Error::other("temporary transport detail"),
+                ))))
+            } else {
+                Ok(149_142_u64)
+            }
+        },
+        |_| {},
+    )
+    .unwrap();
+    assert_eq!(recovered, 149_142);
+}
+
+#[test]
 fn node_health_retries_only_transient_transport_failures() {
     let mut attempts = 0;
     let mut pauses = Vec::new();

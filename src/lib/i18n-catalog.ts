@@ -533,7 +533,14 @@ export function localizedError(
   current: Locale,
   fallback = 'Something went wrong. Try again.'
 ): string {
-  if (current === 'en') return cause instanceof Error ? cause.message : fallback;
+  if (current === 'en') {
+    if (cause && typeof cause === 'object' && 'code' in cause) {
+      if (cause.code === 'network_unavailable')
+        return 'Could not connect to Bitcoin Core. Check that the node is running and review the RPC address, authentication, and network settings.';
+      if (cause.code === 'internal_error') return fallback;
+    }
+    return cause instanceof Error ? cause.message : fallback;
+  }
   if (cause && typeof cause === 'object' && 'code' in cause) {
     const category = errorCategoryCopy[String(cause.code) as keyof typeof errorCategoryCopy];
     if (category) return category[current];
