@@ -59,6 +59,14 @@ describe('foreground wallet navigation', () => {
     );
     expect(monitor).not.toContain('cancelFullRescan');
 
+    const backgroundLockStart = appShell.indexOf('async function enforceMobileBackgroundLock()');
+    const backgroundLockEnd = appShell.indexOf('onMount(() =>', backgroundLockStart);
+    const backgroundLock = appShell.slice(backgroundLockStart, backgroundLockEnd);
+    expect(backgroundLock).toContain('walletService.cancelHardwareOperations()');
+    expect(backgroundLock).toContain('walletService.cancelSync()');
+    expect(backgroundLock).toContain('walletService.lockAll()');
+    expect(backgroundLock).not.toContain('cancelFullRescan');
+
     const manualLockStart = appShell.indexOf('async function lockSelectedWallet()');
     const manualLockEnd = appShell.indexOf('async function refreshSetupDraft()', manualLockStart);
     expect(appShell.slice(manualLockStart, manualLockEnd)).not.toContain('cancelFullRescan');

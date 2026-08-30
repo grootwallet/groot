@@ -432,8 +432,7 @@
     try {
       await Promise.allSettled([
         walletService.cancelHardwareOperations(),
-        walletService.cancelSync(),
-        walletService.cancelFullRescan()
+        walletService.cancelSync()
       ]);
       await walletService.lockAll();
       backgroundLockRequired = false;
