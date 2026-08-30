@@ -181,9 +181,12 @@ typedef void (^GrootRecoveryEntryCompletion)(NSString *_Nullable words);
       word.font = [UIFont monospacedSystemFontOfSize:16.0 weight:UIFontWeightRegular];
       word.adjustsFontSizeToFitWidth = YES;
       word.minimumScaleFactor = 0.82;
-      // Keep the seed itself out of the accessibility tree: assistive
-      // services must not be able to extract all 24 words programmatically.
-      word.accessibilityLabel = [NSString stringWithFormat:@"Word %ld", (long)index + 1];
+      // VoiceOver users must be able to complete the same offline backup.
+      // Accessibility is an OS-owned presentation boundary and remains part
+      // of the physical platform audit; never expose these labels to the
+      // webview or application logging.
+      word.accessibilityLabel =
+          [NSString stringWithFormat:@"Word %ld, %@", (long)index + 1, self.words[index]];
       [column addArrangedSubview:word];
     }
     return column;
@@ -262,6 +265,18 @@ typedef void (^GrootRecoveryEntryCompletion)(NSString *_Nullable words);
                                          selector:@selector(screenCaptureChanged:)
                                              name:UIScreenCapturedDidChangeNotification
                                            object:nil];
+  // viewDidLoad precedes window attachment. Fail closed until an appearance
+  // callback can inspect this sheet's actual scene-scoped screen.
+  [self applyCaptureVisibility];
+}
+
+- (void)viewWillAppear:(BOOL)animated {
+  [super viewWillAppear:animated];
+  [self applyCaptureVisibility];
+}
+
+- (void)viewDidAppear:(BOOL)animated {
+  [super viewDidAppear:animated];
   [self applyCaptureVisibility];
 }
 
@@ -270,11 +285,13 @@ typedef void (^GrootRecoveryEntryCompletion)(NSString *_Nullable words);
 }
 
 - (void)applyCaptureVisibility {
-  // Scene-scoped screen (mainScreen is deprecated): before presentation the
-  // view has no window, which safely defaults to uncaptured.
-  BOOL captured = self.view.window.windowScene.screen.isCaptured;
-  self.grid.hidden = captured;
-  self.captureShield.hidden = !captured;
+  // Scene-scoped screen (mainScreen is deprecated). A missing screen means
+  // the view is not attached yet, so keep the words hidden until the capture
+  // state can be read from the actual presentation scene.
+  UIScreen *screen = self.view.window.windowScene.screen;
+  BOOL hidden = screen == nil || screen.isCaptured;
+  self.grid.hidden = hidden;
+  self.captureShield.hidden = !hidden;
 }
 
 - (void)dealloc {

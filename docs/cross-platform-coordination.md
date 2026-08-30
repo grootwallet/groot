@@ -98,8 +98,9 @@ newly created wallet. Never silently substitute a new phone key into the old des
    non-ALL sighashes, missing witness UTXOs, foreign inputs, false change metadata, wrong-network
    output scripts, and PSBTs with no external recipient.
 3. Mobile displays each recipient/address/amount, verified wallet change, fee, input count, txid,
-   already-signed identities, and a short exact-revision identifier. The PIN/biometric action occurs
-   only after this durable review.
+   already-signed identities, and a short exact-revision identifier. The PIN action occurs only
+   after this durable review; biometric release remains a platform-hardening gate rather than a V1
+   claim.
 4. Rust reloads the reviewed bytes and revision, decrypts the mobile words, derives the BIP48 key
    with an empty passphrase, proves the private descriptor's public descriptors equal the paired
    policy, signs, and passes the result through the existing signature-only response validator.
@@ -140,7 +141,8 @@ Secure Enclave wrapping cannot make the phone equivalent to an independent hardw
 
 - `coordination.json` v1: wallet UUID, device role, mobile fingerprint, truthful key-protection
   identifier, pairing time, and an optional one-time pairing session ID used only to reconcile an
-  interrupted mobile commit. Public metadata, owner-only file permissions.
+  interrupted mobile commit. This owner-only metadata is available through the renderer API only
+  while the selected wallet is unlocked.
 - `mobile-signer.json`: secret-store envelope containing only the words for coordinated mobile
   profiles. The local PIN protects the envelope and is not seed material.
 - `pending-mobile-pairings/<uuid>.json`: encrypted staging payload containing the invitation,
@@ -196,10 +198,13 @@ evidence.
 
 The native iOS word-entry sheet forces the Apple system keyboard via secure text entry (third-party
 keyboards receive no keystrokes), rejects paste/cut/copy so the words never touch the general
-pasteboard, scrubs the UTF-8 handoff buffer after transfer to Rust, keeps the words out of the
-accessibility tree, and hides the displayed grid while the screen is captured, mirrored, or
-recorded. These behaviors are compile-verified for the iOS target but not yet physically
-reviewed. iOS physical certification additionally requires camera denial/interruption/background/resume,
+pasteboard, and scrubs the final mutable UTF-8 handoff buffer after transfer to Rust. Foundation and
+Objective-C ARC-managed word copies remain a documented platform residual. The presentation sheet
+fails closed before it is attached to a screen, then hides the displayed grid while the attached
+screen is captured, mirrored, or recorded. Its numbered word labels remain available to VoiceOver
+so blind users can perform the same offline backup; the signed-package accessibility tree remains a
+physical audit boundary. These behaviors are compile-verified for the iOS target but not yet
+physically reviewed. iOS physical certification additionally requires camera denial/interruption/background/resume,
 safe-area and accessibility checks, passcode-required Keychain behavior, biometric enrollment
 change, phone lock during sign, process kill at each commit boundary, reinstall/restore, loss of
 device wrapper, written-word restore, and two independent wallet interoperability runs.

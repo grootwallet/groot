@@ -261,6 +261,15 @@ describe('mobile pairing lifecycle UI', () => {
     expect(iosNativeSource).not.toContain('UIScrollView');
   });
 
+  it('fails closed before iOS capture state is available and preserves VoiceOver backup', () => {
+    expect(iosNativeSource).toContain('BOOL hidden = screen == nil || screen.isCaptured;');
+    expect(iosNativeSource).toMatch(
+      /viewWillAppear:[\s\S]*?applyCaptureVisibility[\s\S]*?viewDidAppear:[\s\S]*?applyCaptureVisibility/
+    );
+    expect(iosNativeSource).toContain('@"Word %ld, %@"');
+    expect(iosNativeSource).not.toContain('@"Word %ld", (long)index + 1');
+  });
+
   it('restores a replacement phone only through native words and exact public-policy validation', () => {
     expect(multisigRouteSource).toContain('walletService.mobileRecoveryRecord()');
     expect(multisigRouteSource).toContain("translate($locale, 'Restore Groot phone')");
