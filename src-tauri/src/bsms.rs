@@ -473,6 +473,10 @@ mod tests {
     fn descriptor_identity_ignores_checksums_but_not_policy_changes() {
         let (external, internal) = descriptors();
         let address = first_address(&external, &internal);
+        assert_eq!(
+            DescriptorRecord::from_descriptor_pair(&external, &internal, &format!(" {address}"),),
+            Err(BsmsError::InvalidEncoding)
+        );
         let record =
             DescriptorRecord::from_descriptor_pair(&external, &internal, &address).unwrap();
         assert!(record

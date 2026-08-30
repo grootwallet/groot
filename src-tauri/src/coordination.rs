@@ -836,6 +836,19 @@ mod tests {
             mutate(&mut value);
             assert!(value.validate().is_err());
         }
+        let secp = Secp256k1::new();
+        let path = DerivationPath::from_str(MULTISIG_ACCOUNT_PATH).unwrap();
+        let replacement_master = Xpriv::new_master(NetworkKind::Test, &[9_u8; 32]).unwrap();
+        let replacement_account = replacement_master.derive_priv(&secp, &path).unwrap();
+        let mut mismatched_policy = valid.clone();
+        mismatched_policy.signers[1].fingerprint =
+            replacement_master.fingerprint(&secp).to_string();
+        mismatched_policy.signers[1].xpub =
+            Xpub::from_priv(&secp, &replacement_account).to_string();
+        assert_eq!(
+            mismatched_policy.validate(),
+            Err(CoordinationError::DescriptorMismatch)
+        );
         let mut without_mobile = valid;
         without_mobile.role = DeviceRole::DesktopCoordinator;
         without_mobile.mobile_signer_fingerprint = None;
