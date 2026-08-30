@@ -3028,6 +3028,15 @@ fn load_recovery_scan_settings(db: &Connection) -> ApiResult<RecoveryScanSetting
     })
 }
 
+fn has_completed_sync(db: &Connection) -> ApiResult<bool> {
+    db.query_row(
+        "SELECT EXISTS(SELECT 1 FROM groot_chain_observation WHERE singleton = 1)",
+        [],
+        |row| row.get(0),
+    )
+    .map_err(internal)
+}
+
 struct RecoveryScanRecord {
     run_id: String,
     status: RecoveryScanStatusDto,
@@ -3146,6 +3155,50 @@ fn start_recovery_scan_record(
     )
     .map_err(internal)?;
     Ok(status)
+}
+
+fn resume_recovery_scan_record(
+    db: &Connection,
+    run_id: &str,
+    previous: &RecoveryScanStatusDto,
+    target_height: u32,
+) -> ApiResult<RecoveryScanStatusDto> {
+    let updated_at = now();
+    let status = RecoveryScanStatusDto {
+        status: "running".to_owned(),
+        birthday_height: previous.birthday_height,
+        gap_limit: previous.gap_limit,
+        current_height: previous.current_height,
+        target_height,
+        processed_blocks: previous.processed_blocks,
+        total_blocks: target_height
+            .saturating_sub(previous.birthday_height)
+            .saturating_add(1),
+        started_at: previous.started_at,
+        updated_at,
+    };
+    let changed = db
+        .execute(
+            "UPDATE groot_recovery_scans SET
+               run_id = ?1, status = 'running', target_height = ?2,
+               total_blocks = ?3, updated_at = ?4
+             WHERE singleton = 1 AND status IN ('cancelled', 'interrupted', 'failed')",
+            params![
+                run_id,
+                status.target_height,
+                status.total_blocks,
+                updated_at
+            ],
+        )
+        .map_err(internal)?;
+    if changed == 1 {
+        Ok(status)
+    } else {
+        Err(api_error(
+            "scan_interrupted",
+            "Recovery scan state changed unexpectedly. Review its status before continuing.",
+        ))
+    }
 }
 
 fn update_recovery_scan_progress(
@@ -5257,6 +5310,25 @@ fn run_foreground_sync(
         } else {
             open_db(app)?
         };
+        if state
+            .recovery_scans
+            .lock()
+            .map_err(internal)?
+            .contains_key(&wallet_id)
+        {
+            return Err(api_error(
+                "scan_in_progress",
+                "A resumable wallet-history scan is already running.",
+            ));
+        }
+        if matches!(read_sync_source(app)?, WalletSyncSource::BitcoinCore)
+            && !has_completed_sync(&db)?
+        {
+            return Err(api_error(
+                "initial_scan_required",
+                "Choose a wallet birthday before the first Bitcoin Core history scan.",
+            ));
+        }
         sync_wallet_with_status(
             app,
             state,
@@ -5516,16 +5588,55 @@ fn full_rescan_loaded_wallet(
     }
     let target_height = u32::try_from(tip)
         .map_err(|_| internal("The node height exceeds the supported recovery range."))?;
-    start_recovery_scan_record(db, run_id, settings, target_height)?;
-    let checkpoint = CheckPoint::new(BlockId {
-        height: 0,
-        hash: genesis,
+    let previous = reconcile_recovery_scan_record(db, None)?.map(|record| record.status);
+    let resumable = previous.as_ref().filter(|status| {
+        matches!(
+            status.status.as_str(),
+            "cancelled" | "interrupted" | "failed"
+        ) && status.birthday_height == settings.birthday_height
+            && status.gap_limit == settings.gap_limit
+            && status.processed_blocks > 0
+            && status.current_height <= target_height
     });
+    let resume_checkpoint = resumable.and_then(|status| {
+        wallet
+            .latest_checkpoint()
+            .get(status.current_height)
+            .map(|checkpoint| (status, checkpoint))
+    });
+    let resume_checkpoint = match resume_checkpoint {
+        Some((status, checkpoint)) => {
+            let current_hash = retry_transient_core_rpc(
+                || rpc.get_block_hash(u64::from(status.current_height)),
+                std::thread::sleep,
+            )?;
+            (current_hash == checkpoint.hash()).then_some((status, checkpoint))
+        }
+        None => None,
+    };
+    let (checkpoint, start_height, mut processed_blocks) =
+        if let Some((status, checkpoint)) = resume_checkpoint {
+            resume_recovery_scan_record(db, run_id, status, target_height)?;
+            (
+                checkpoint,
+                status.current_height.saturating_add(1).min(target_height),
+                status.processed_blocks,
+            )
+        } else {
+            start_recovery_scan_record(db, run_id, settings, target_height)?;
+            (
+                CheckPoint::new(BlockId {
+                    height: 0,
+                    hash: genesis,
+                }),
+                settings.birthday_height,
+                0,
+            )
+        };
     let expected_mempool = wallet
         .transactions()
         .filter(|tx| tx.chain_position.is_unconfirmed());
-    let mut emitter = Emitter::new(rpc, checkpoint, settings.birthday_height, expected_mempool);
-    let mut processed_blocks = 0_u32;
+    let mut emitter = Emitter::new(rpc, checkpoint, start_height, expected_mempool);
     while let Some(block) = retry_transient_core_rpc(|| emitter.next_block(), std::thread::sleep)? {
         if cancel.load(Ordering::Acquire) {
             return Err(api_error(

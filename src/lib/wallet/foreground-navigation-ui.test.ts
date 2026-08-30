@@ -57,6 +57,11 @@ describe('foreground wallet navigation', () => {
     expect(monitor.indexOf('walletService.cancelSync().catch(() => undefined)')).toBeLessThan(
       monitor.indexOf("goto('/unlock')")
     );
+    expect(monitor).not.toContain('cancelFullRescan');
+
+    const manualLockStart = appShell.indexOf('async function lockSelectedWallet()');
+    const manualLockEnd = appShell.indexOf('async function refreshSetupDraft()', manualLockStart);
+    expect(appShell.slice(manualLockStart, manualLockEnd)).not.toContain('cancelFullRescan');
   });
 
   it('treats cancellation and expiry as navigation instead of stacked route failures', () => {
@@ -74,6 +79,18 @@ describe('foreground wallet navigation', () => {
     expect(overview).toContain('syncStatusIsActive(syncStatus)');
     expect(overview).toContain('startSyncStatusPolling()');
     expect(overview).toContain('syncAge(snapshot?.syncedAt ?? null, syncClock)');
+  });
+
+  it('requires an explicit first-scan start and presents resumable recovery progress', () => {
+    expect(overview).toContain(
+      "initialScanMode = $state<'new' | 'birthday' | 'full' | null>(null)"
+    );
+    expect(overview).toContain("'New wallet · no earlier activity'");
+    expect(overview).toContain("'Existing wallet · use a birthday block'");
+    expect(overview).toContain("'Full history · safest'");
+    expect(overview).toContain('walletService.fullRescan(credential)');
+    expect(overview).toContain('recoveryStatus.processedBlocks');
+    expect(overview).toContain("'Not verified yet'");
   });
 
   it('does not start a second compact-filter scan after reattaching and never auto-starts one on mobile', () => {

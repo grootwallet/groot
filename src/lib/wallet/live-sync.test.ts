@@ -84,6 +84,29 @@ describe('live wallet sync', () => {
     controller.stop();
   });
 
+  it('treats an unconfigured or active resumable first scan as expected scheduler state', async () => {
+    const onError = vi.fn();
+    const wallet = {
+      exists: vi.fn().mockResolvedValue(true),
+      profiles: vi.fn().mockResolvedValue(registry('single_key')),
+      sync: vi
+        .fn()
+        .mockRejectedValueOnce({ code: 'initial_scan_required' })
+        .mockRejectedValueOnce({ code: 'scan_in_progress' })
+        .mockResolvedValue(undefined),
+      cancelSync: vi.fn().mockResolvedValue(undefined),
+      syncMultisig: vi.fn()
+    };
+    const controller = createLiveSync(wallet, 60_000, onError);
+    controller.start();
+    await controller.runNow();
+    await controller.runNow();
+    await controller.runNow();
+    expect(onError).not.toHaveBeenCalled();
+    expect(wallet.sync).toHaveBeenCalledTimes(3);
+    controller.stop();
+  });
+
   it('backs off repeated failures and resets after a successful sync', async () => {
     vi.useFakeTimers();
     const wallet = {

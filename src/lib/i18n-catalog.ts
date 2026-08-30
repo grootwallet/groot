@@ -457,6 +457,118 @@ export const copyCatalog = {
   'Your written words matched this wallet.': {
     fr: 'Vos mots écrits correspondent à ce portefeuille.',
     es: 'Tus palabras escritas coinciden con esta cartera.'
+  },
+  '{processed} of {total} blocks saved · progress continues across wallet locks': {
+    fr: '{processed} blocs sur {total} enregistrés · la progression continue quand le portefeuille se verrouille',
+    es: '{processed} de {total} bloques guardados · el progreso continúa aunque la cartera se bloquee'
+  },
+  '20 is standard. It controls address discovery, not block-scan speed.': {
+    fr: '20 est la valeur standard. Elle contrôle la découverte des adresses, pas la vitesse d’analyse des blocs.',
+    es: '20 es el valor estándar. Controla el descubrimiento de direcciones, no la velocidad del escaneo de bloques.'
+  },
+  'A birthday makes the first scan faster. Full history always remains available.': {
+    fr: 'Une date de naissance accélère la première analyse. L’historique complet reste toujours disponible.',
+    es: 'Una fecha de nacimiento acelera el primer escaneo. El historial completo siempre seguirá disponible.'
+  },
+  'Balance and activity remain unverified until the scan completes.': {
+    fr: 'Le solde et l’activité restent non vérifiés jusqu’à la fin de l’analyse.',
+    es: 'El saldo y la actividad permanecerán sin verificar hasta que termine el escaneo.'
+  },
+  'Birthday block {height} · gap limit {gap}': {
+    fr: 'Bloc de naissance {height} · limite d’écart {gap}',
+    es: 'Bloque de nacimiento {height} · límite de separación {gap}'
+  },
+  'Choose scan': { fr: 'Choisir l’analyse', es: 'Elegir escaneo' },
+  'Choose the earliest block Groot should inspect before relying on balance or activity.': {
+    fr: 'Choisissez le premier bloc que Groot doit examiner avant de vous fier au solde ou à l’activité.',
+    es: 'Elige el primer bloque que Groot debe inspeccionar antes de confiar en el saldo o la actividad.'
+  },
+  'Choose where wallet history begins': {
+    fr: 'Choisissez le début de l’historique du portefeuille',
+    es: 'Elige dónde comienza el historial de la cartera'
+  },
+  'Complete or resume the first scan before relying on activity.': {
+    fr: 'Terminez ou reprenez la première analyse avant de vous fier à l’activité.',
+    es: 'Completa o reanuda el primer escaneo antes de confiar en la actividad.'
+  },
+  'Continue from the last safely saved block. Locking Groot will no longer stop this scan.': {
+    fr: 'Reprenez depuis le dernier bloc enregistré en sécurité. Le verrouillage de Groot n’arrêtera plus cette analyse.',
+    es: 'Continúa desde el último bloque guardado de forma segura. Bloquear Groot ya no detendrá este escaneo.'
+  },
+  'Existing wallet · use a birthday block': {
+    fr: 'Portefeuille existant · utiliser un bloc de naissance',
+    es: 'Cartera existente · usar un bloque de nacimiento'
+  },
+  'First wallet-history scan': {
+    fr: 'Première analyse de l’historique',
+    es: 'Primer escaneo del historial'
+  },
+  'Full history · safest': {
+    fr: 'Historique complet · le plus sûr',
+    es: 'Historial completo · lo más seguro'
+  },
+  'If uncertain, choose full history instead of guessing.': {
+    fr: 'En cas de doute, choisissez l’historique complet plutôt que d’estimer.',
+    es: 'Si no estás seguro, elige el historial completo en vez de adivinar.'
+  },
+  'New wallet · no earlier activity': {
+    fr: 'Nouveau portefeuille · aucune activité antérieure',
+    es: 'Cartera nueva · sin actividad anterior'
+  },
+  'Not now': { fr: 'Pas maintenant', es: 'Ahora no' },
+  'Not verified yet': { fr: 'Pas encore vérifié', es: 'Aún sin verificar' },
+  'Resume scan': { fr: 'Reprendre l’analyse', es: 'Reanudar escaneo' },
+  'Resume wallet-history scan': {
+    fr: 'Reprendre l’analyse de l’historique',
+    es: 'Reanudar el escaneo del historial'
+  },
+  'Resuming…': { fr: 'Reprise…', es: 'Reanudando…' },
+  'Saved progress: {percent}%': {
+    fr: 'Progression enregistrée : {percent} %',
+    es: 'Progreso guardado: {percent}%'
+  },
+  'Scan from genesis. This can take tens of minutes on Testnet4.': {
+    fr: 'Analyser depuis le bloc initial. Cela peut prendre plusieurs dizaines de minutes sur Testnet4.',
+    es: 'Escanear desde el bloque génesis. Puede tardar decenas de minutos en Testnet4.'
+  },
+  'Scanning wallet history · {percent}%': {
+    fr: 'Analyse de l’historique · {percent} %',
+    es: 'Escaneando el historial · {percent}%'
+  },
+  'Start at the current chain tip. Fastest, but it will not find older payments.': {
+    fr: 'Commencer à la pointe actuelle de la chaîne. C’est le plus rapide, mais les anciens paiements ne seront pas trouvés.',
+    es: 'Empezar en la punta actual de la cadena. Es lo más rápido, pero no encontrará pagos anteriores.'
+  },
+  'Start before the wallet’s first payment. Earlier is safer; later is faster.': {
+    fr: 'Commencez avant le premier paiement du portefeuille. Plus tôt est plus sûr ; plus tard est plus rapide.',
+    es: 'Empieza antes del primer pago de la cartera. Más temprano es más seguro; más tarde es más rápido.'
+  },
+  'Start scan': { fr: 'Démarrer l’analyse', es: 'Iniciar escaneo' },
+  'Starting scan…': { fr: 'Démarrage de l’analyse…', es: 'Iniciando escaneo…' },
+  'The saved balance and activity now reflect the completed scan.': {
+    fr: 'Le solde et l’activité enregistrés reflètent maintenant l’analyse terminée.',
+    es: 'El saldo y la actividad guardados ya reflejan el escaneo completado.'
+  },
+  'Unverified balance': { fr: 'Solde non vérifié', es: 'Saldo sin verificar' },
+  'Used only to authenticate this saved recovery operation.': {
+    fr: 'Utilisé uniquement pour authentifier cette opération de récupération enregistrée.',
+    es: 'Se usa únicamente para autenticar esta operación de recuperación guardada.'
+  },
+  'Wallet history not verified': {
+    fr: 'Historique du portefeuille non vérifié',
+    es: 'Historial de la cartera sin verificar'
+  },
+  'Wallet history start': {
+    fr: 'Début de l’historique du portefeuille',
+    es: 'Inicio del historial de la cartera'
+  },
+  'Wallet history verified': {
+    fr: 'Historique du portefeuille vérifié',
+    es: 'Historial de la cartera verificado'
+  },
+  'Wallet-history scan paused': {
+    fr: 'Analyse de l’historique en pause',
+    es: 'Escaneo del historial en pausa'
   }
 } as const satisfies Record<string, Translation>;
 
