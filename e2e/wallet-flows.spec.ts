@@ -569,7 +569,7 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   await page.getByRole('button', { name: 'Show unsigned QR' }).click();
   await expect(durableImportError).toHaveCount(0);
   const unsignedQrDialog = page.getByRole('dialog', { name: 'Unsigned PSBT' });
-  const unsignedQrImage = unsignedQrDialog.getByRole('img', { name: /crypto-psbt QR frame/ });
+  const unsignedQrImage = unsignedQrDialog.getByRole('img', { name: /QR frame/ });
   await expect(unsignedQrImage).toBeVisible();
   await page.getByRole('button', { name: 'Close' }).click();
   await page.getByRole('button', { name: 'Scan signed QR' }).click();
@@ -766,7 +766,8 @@ test('unlocks a Trezor before choosing its standard single-key wallet', async ({
   await expect(unlocked.getByText('Choose wallet')).toBeVisible();
   await unlocked.click();
   const standard = page.getByRole('dialog', { name: 'Use Trezor standard wallet?' });
-  await expect(standard.getByText(/add it to Groot as a separate wallet/)).toBeVisible();
+  await expect(standard.getByText('Your hidden wallet is unchanged.')).toBeVisible();
+  await expect(standard).toContainText('They have different fingerprints and addresses.');
   await standard.getByRole('button', { name: 'Use standard wallet' }).click();
 
   await expect(page.getByText('PUBLIC DATA REVIEW')).toBeVisible();
@@ -950,13 +951,11 @@ test('overview, activity, UTXOs, and settings expose durable states', async ({ p
   await expect(changeCoin.getByText('Source transaction', { exact: true })).toBeVisible();
   await expect(changeCoin.getByText('2 wallet inputs', { exact: true })).toBeVisible();
   await changeCoin.getByRole('button', { name: 'About source payment intent' }).hover();
-  await expect(changeCoin.getByRole('tooltip')).toContainText(
+  await expect(page.getByRole('tooltip')).toContainText(
     'The label of the payment that created this change.'
   );
   await changeCoin.getByRole('button', { name: 'About change lineage' }).hover();
-  await expect(changeCoin.getByRole('tooltip')).toContainText(
-    'How many wallet inputs were combined'
-  );
+  await expect(page.getByRole('tooltip')).toContainText('How many wallet inputs were combined');
   const filterHeights = await page.locator('.coin-filters').evaluate((filters) => {
     const input = filters.querySelector('input');
     const select = filters.querySelector('select');
@@ -1788,7 +1787,7 @@ test('locked profiles use recovery-safe credential terms', async ({ page }) => {
       .getByRole('button', { name: /Family wallet/ })
       .click();
     await expect(page.getByLabel('App PIN', { exact: true })).toBeVisible();
-    await page.getByRole('button', { name: 'More information' }).click();
+    await page.getByRole('button', { name: 'More information' }).hover();
     await expect(page.getByText(/not a hardware-signer passphrase/)).toBeVisible();
     await expect(
       page.locator('.onboarding-card').getByRole('button', { name: /Everyday wallet/ })

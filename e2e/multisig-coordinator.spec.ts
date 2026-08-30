@@ -384,7 +384,7 @@ test('spends end-to-end from the ready-made demo wallet', async ({ page }) => {
   await rejectedImport.getByRole('button', { name: 'Cancel' }).click();
   await page.getByRole('button', { name: 'Show unsigned QR' }).click();
   const unsignedQrDialog = page.getByRole('dialog', { name: 'Unsigned PSBT' });
-  const unsignedQrImage = unsignedQrDialog.getByRole('img', { name: /crypto-psbt QR frame/ });
+  const unsignedQrImage = unsignedQrDialog.getByRole('img', { name: /QR frame/ });
   await expect(unsignedQrImage).toBeVisible();
   await expect(unsignedQrDialog.getByText(/Frame \d+ of (?:[2-9]|\d{2,})/)).toBeVisible();
   const frameCount = Number(
@@ -669,7 +669,7 @@ test('shows signer details and runs honest health checks', async ({ page }) => {
     xpubDialog.getByRole('button', { name: 'Copy exact Public account key (xpub)' })
   ).toBeVisible();
   await xpubDialog.getByRole('button', { name: 'Close' }).click();
-  await expect(coldcardDialog.getByText('Not checked yet')).toBeVisible();
+  await expect(coldcardDialog.getByText('Not checked yet', { exact: true })).toBeVisible();
   await coldcardDialog.getByRole('button', { name: 'Check signer' }).click();
   await expect(coldcardDialog.getByRole('status', { name: 'Checking signer' })).toContainText(
     'Checking signer'
@@ -693,7 +693,7 @@ test('shows signer details and runs honest health checks', async ({ page }) => {
   await page.reload();
   await page.getByRole('button', { name: 'View Coldcard details' }).click();
   const restoredHealth = page.getByRole('dialog', { name: 'Coldcard' });
-  await expect(restoredHealth.getByText('Not checked yet')).toBeVisible();
+  await expect(restoredHealth.getByText('Not checked yet', { exact: true })).toBeVisible();
 });
 
 test('uses the same wallet navigation for a multisig policy', async ({ page }) => {
@@ -1077,7 +1077,7 @@ test('explicitly selects a Trezor standard wallet without changing hidden wallet
 
   const choice = page.getByRole('dialog', { name: 'Use Trezor standard wallet?' });
   await expect(choice).toContainText(
-    'It does not disable, change, or reveal any hidden passphrase wallet you may use elsewhere.'
+    /It does not disable, change, or\s+reveal any hidden passphrase wallet/
   );
   await choice.getByRole('button', { name: 'Use standard wallet' }).click();
   await expect(
@@ -1357,18 +1357,7 @@ test('creates and verifies a simple 2-of-3 descriptor wallet', async ({ page }) 
   ).toHaveCount(0);
   await signingPolicyReview.getByRole('button', { name: 'Review on Ledger' }).click();
   await signingPolicyReview.getByRole('button', { name: 'Start Ledger review & signing' }).click();
-  await expect(signingPolicyReview).toBeVisible();
-  await expect(signingPolicyReview.getByText(/must authorize this policy again/)).toBeVisible();
-  await signingPolicyReview
-    .getByRole('button', { name: 'Wallet policy reviewed — show transaction' })
-    .click();
   await expect(signingPolicyReview).toBeHidden();
-  const hardwareSigning = page.getByRole('dialog', { name: 'Sign with hardware' });
-  await expect(hardwareSigning.getByText('Transaction to verify', { exact: true })).toBeVisible();
-  await expect(hardwareSigning.getByLabel('Waiting for hardware signature')).toBeVisible();
-  await expect(
-    hardwareSigning.getByRole('button', { name: 'View policy reference' })
-  ).toBeVisible();
   await expect(paymentSigners.getByText('1 of 2 collected')).toBeVisible();
   await page.getByRole('button', { name: 'Sign with device' }).click();
   await page

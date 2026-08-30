@@ -417,6 +417,24 @@ mod tests {
     }
 
     #[test]
+    fn policy_notification_identity_uses_the_outpoint_without_transaction_values() {
+        let approaching = WalletNotification::PolicyApproachingMaturity {
+            outpoint: "funding:0".to_owned(),
+            remaining_blocks: 144,
+            policy_type: "recovery".to_owned(),
+        };
+        let mature = WalletNotification::PolicyMature {
+            outpoint: "inheritance:1".to_owned(),
+            policy_type: "inheritance".to_owned(),
+        };
+
+        assert_eq!(approaching.kind(), "policy_approaching_maturity");
+        assert_eq!(approaching.values(), ("funding:0", 0, 0));
+        assert_eq!(mature.kind(), "policy_mature");
+        assert_eq!(mature.values(), ("inheritance:1", 0, 0));
+    }
+
+    #[test]
     fn events_are_unique_ordered_and_remain_pending_until_acknowledged() {
         let mut db = db();
         let received = WalletNotification::PaymentReceived {
