@@ -912,46 +912,70 @@ pub async fn wallet_full_rescan(
 ) -> ApiResult<WalletSnapshotDto> {
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
-        let _operation = operation_guard(&state)?;
-        require_unlocked(&app, &state)?;
-        let credential = Zeroizing::new(credential);
-        check_auth_throttle(&app, &state)?;
-        let verified = verify_selected_credential(&app, credential.as_str());
-        record_auth_result(&app, &state, &verified)?;
-        verified?;
-        let profile = selected_profile(&app)?;
-        let (mut db, is_multisig) = match profile.kind {
-            WalletKind::Multisig => (open_multisig_db(&app)?, true),
-            WalletKind::SingleKey | WalletKind::WatchOnly => (open_db(&app)?, false),
-        };
-        let settings = load_recovery_scan_settings(&db)?;
-        let run_id = Uuid::new_v4().to_string();
-        let cancel = Arc::new(AtomicBool::new(false));
-        {
-            let mut scans = state.recovery_scans.lock().map_err(internal)?;
-            if scans.contains_key(&profile.id) {
-                return Err(api_error(
-                    "scan_in_progress",
-                    "A recovery scan is already running for this wallet.",
-                ));
-            }
-            scans.insert(
-                profile.id,
-                ActiveRecoveryScan {
-                    run_id: run_id.clone(),
-                    cancel: Arc::clone(&cancel),
-                },
-            );
-        }
-        let scan_result: ApiResult<WalletSnapshotDto> = (|| {
+        cancel_foreground_sync(&state)?;
+        let (
+            profile,
+            mut db,
+            mut wallet,
+            is_multisig,
+            settings,
+            run_id,
+            cancel,
+            rpc,
+            delayed_policy,
+        ) = {
+            let _operation = operation_guard(&state)?;
+            require_unlocked(&app, &state)?;
+            let credential = Zeroizing::new(credential);
+            check_auth_throttle(&app, &state)?;
+            let verified = verify_selected_credential(&app, credential.as_str());
+            record_auth_result(&app, &state, &verified)?;
+            verified?;
+            let profile = selected_profile(&app)?;
+            let (mut db, is_multisig) = match profile.kind {
+                WalletKind::Multisig => (open_multisig_db(&app)?, true),
+                WalletKind::SingleKey | WalletKind::WatchOnly => (open_db(&app)?, false),
+            };
+            let settings = load_recovery_scan_settings(&db)?;
+            let run_id = Uuid::new_v4().to_string();
+            let cancel = Arc::new(AtomicBool::new(false));
             let rpc = Arc::new(rpc_client(&app, &state)?);
-            let mut wallet = load_wallet(&mut db)?;
-            full_rescan_loaded_wallet(rpc, &mut wallet, &mut db, &settings, &run_id, &cancel)?;
+            let wallet = load_wallet(&mut db)?;
             let delayed_policy = if is_multisig {
                 selected_delayed_policy_context(&app)?
             } else {
                 None
             };
+            {
+                let mut scans = state.recovery_scans.lock().map_err(internal)?;
+                if scans.contains_key(&profile.id) {
+                    return Err(api_error(
+                        "scan_in_progress",
+                        "A recovery scan is already running for this wallet.",
+                    ));
+                }
+                scans.insert(
+                    profile.id,
+                    ActiveRecoveryScan {
+                        run_id: run_id.clone(),
+                        cancel: Arc::clone(&cancel),
+                    },
+                );
+            }
+            (
+                profile,
+                db,
+                wallet,
+                is_multisig,
+                settings,
+                run_id,
+                cancel,
+                rpc,
+                delayed_policy,
+            )
+        };
+        let scan_result: ApiResult<WalletSnapshotDto> = (|| {
+            full_rescan_loaded_wallet(rpc, &mut wallet, &mut db, &settings, &run_id, &cancel)?;
             let snapshot = snapshot_from(
                 &wallet,
                 &db,

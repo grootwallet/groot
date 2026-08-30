@@ -49,7 +49,7 @@ export function createLiveSync(
         typeof cause === 'object' &&
         cause !== null &&
         'code' in cause &&
-        cause.code === 'sync_cancelled'
+        ['sync_cancelled', 'scan_in_progress', 'initial_scan_required'].includes(String(cause.code))
       ) {
         return true;
       }

@@ -37,6 +37,7 @@ describe('native command scheduling', () => {
   it.each([
     ['wallet_select', profileCommands],
     ['wallet_sync', profileCommands],
+    ['wallet_full_rescan', profileCommands],
     ['wallet_notifications', profileCommands],
     ['wallet_notifications_ack', profileCommands],
     ['multisig_sync', multisigCommands],
@@ -84,5 +85,15 @@ describe('native command scheduling', () => {
     const source = walletCore.slice(start, end);
     expect(source.indexOf('emitter.mempool()')).toBeGreaterThan(-1);
     expect(source.indexOf('emitter.mempool()')).toBeLessThan(source.indexOf('db.transaction()'));
+  });
+
+  it('authenticates a full rescan under the operation lock but scans after that scope ends', () => {
+    const source = commandSource(profileCommands, 'wallet_full_rescan');
+    const guard = source.indexOf('let _operation = operation_guard(&state)?');
+    const scan = source.indexOf('full_rescan_loaded_wallet(');
+    const setupScopeEnd = source.lastIndexOf('};', scan);
+    expect(guard).toBeGreaterThan(-1);
+    expect(setupScopeEnd).toBeGreaterThan(guard);
+    expect(scan).toBeGreaterThan(setupScopeEnd);
   });
 });

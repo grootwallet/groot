@@ -32,6 +32,8 @@
     type MultisigProposal,
     type MultisigWallet,
     type PaymentProposal,
+    type RecoveryScanSettings,
+    type RecoveryScanStatus,
     type WalletProfile,
     type WalletSnapshot,
     type WalletSyncSource,
@@ -91,6 +93,49 @@
   let syncPollToken = 0;
   let inheritedSyncObserved = false;
   let syncClock = $state(Date.now());
+  let recoverySettings = $state<RecoveryScanSettings>({ birthdayHeight: 0, gapLimit: 20 });
+  let recoveryStatus = $state<RecoveryScanStatus>({
+    status: 'idle',
+    birthdayHeight: 0,
+    gapLimit: 20,
+    currentHeight: 0,
+    targetHeight: 0,
+    processedBlocks: 0,
+    totalBlocks: 0,
+    startedAt: 0,
+    updatedAt: 0
+  });
+  let recoveryPollToken = 0;
+  let initialScanOpen = $state(false);
+  let initialScanMode = $state<'new' | 'birthday' | 'full' | null>(null);
+  let initialBirthdayHeight = $state(0);
+  let initialGapLimit = $state(20);
+  let initialScanCredential = $state('');
+  let initialScanError = $state('');
+  let initialScanStarting = $state(false);
+  const recoveryScanIsActive = (status: RecoveryScanStatus) =>
+    ['running', 'cancelling'].includes(status.status);
+  let recoveryPercent = $derived(
+    recoveryStatus.totalBlocks > 0
+      ? Math.min(
+          100,
+          Math.round((recoveryStatus.processedBlocks / recoveryStatus.totalBlocks) * 100)
+        )
+      : 0
+  );
+  let initialHistoryRequired = $derived(
+    syncSource?.type === 'bitcoin_core' && Boolean(snapshot) && !snapshot?.syncedAt
+  );
+  let savedRecoveryCanResume = $derived(
+    initialHistoryRequired &&
+      recoveryStatus.processedBlocks > 0 &&
+      ['cancelled', 'interrupted', 'failed'].includes(recoveryStatus.status)
+  );
+  let scanCredentialLabel = $derived(
+    selectedProfile?.kind === 'single_key'
+      ? translate($locale, 'Wallet passphrase')
+      : translate($locale, 'App PIN')
+  );
   const syncStatusIsActive = (status: WalletSyncStatus | null) =>
     Boolean(
       status && ['connecting', 'syncing', 'checking_matches', 'applying'].includes(status.state)
@@ -98,6 +143,9 @@
   let syncInProgress = $derived(syncing || syncStatusIsActive(syncStatus));
   let syncAgeValue = $derived(syncAge(snapshot?.syncedAt ?? null, syncClock));
   let syncButtonLabel = $derived.by(() => {
+    if (initialHistoryRequired && !recoveryScanIsActive(recoveryStatus))
+      return translate($locale, savedRecoveryCanResume ? 'Resume scan' : 'Choose scan');
+    if (recoveryScanIsActive(recoveryStatus)) return `${recoveryPercent}%`;
     if (
       syncInProgress &&
       syncStatus?.progressPercent !== null &&
@@ -206,6 +254,10 @@
   onDestroy(() => {
     verifyCredential = '';
   });
+  onDestroy(() => {
+    initialScanCredential = '';
+    ++recoveryPollToken;
+  });
   onMount(() => {
     syncClock = Date.now();
     const clock = window.setInterval(() => (syncClock = Date.now()), 30_000);
@@ -277,6 +329,9 @@
       }
       if (activeProposal) activeDraft = null;
       initialDataLoading = false;
+      if (syncSource.type === 'bitcoin_core' && !snapshot?.syncedAt) {
+        await loadRecoveryState();
+      }
       if (syncSource.type === 'compact_filters' && !inheritedSyncObserved) void sync(false);
     } catch (cause) {
       if (cause instanceof WalletError && cause.code === 'wallet_locked') {
@@ -325,6 +380,103 @@
       return null;
     }
   }
+  async function loadRecoveryState() {
+    try {
+      const [settings, status] = await Promise.all([
+        walletService.recoveryScanSettings(),
+        walletService.recoveryScanStatus()
+      ]);
+      recoverySettings = settings;
+      recoveryStatus = status;
+      initialBirthdayHeight = settings.birthdayHeight;
+      initialGapLimit = settings.gapLimit;
+      if (recoveryScanIsActive(status)) {
+        startRecoveryStatusPolling();
+      } else if (!snapshot?.syncedAt) {
+        initialScanOpen = true;
+      }
+    } catch (cause) {
+      initialScanError = localizedError(
+        cause,
+        $locale,
+        'Could not read the saved recovery-scan state.'
+      );
+    }
+  }
+  async function refreshRecoveryStatus() {
+    try {
+      recoveryStatus = await walletService.recoveryScanStatus();
+      return recoveryStatus;
+    } catch {
+      return null;
+    }
+  }
+  async function pollRecoveryStatus(token: number) {
+    while (token === recoveryPollToken) {
+      const status = await refreshRecoveryStatus();
+      if (!status || !recoveryScanIsActive(status)) {
+        if (status?.status === 'completed') await loadSnapshot();
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+  }
+  function startRecoveryStatusPolling() {
+    const token = ++recoveryPollToken;
+    void pollRecoveryStatus(token);
+  }
+  function openInitialScan() {
+    initialScanError = '';
+    if (savedRecoveryCanResume) {
+      initialScanMode = recoverySettings.birthdayHeight === 0 ? 'full' : 'birthday';
+      initialBirthdayHeight = recoverySettings.birthdayHeight;
+      initialGapLimit = recoverySettings.gapLimit;
+    }
+    initialScanOpen = true;
+  }
+  async function startInitialScan() {
+    if (!initialScanMode && !savedRecoveryCanResume) return;
+    initialScanStarting = true;
+    initialScanError = '';
+    const credential = initialScanCredential;
+    try {
+      if (!savedRecoveryCanResume) {
+        let birthdayHeight = 0;
+        if (initialScanMode === 'new') {
+          const node = await walletService.testNodeConnection();
+          birthdayHeight = node.blocks;
+        } else if (initialScanMode === 'birthday') {
+          birthdayHeight = Number(initialBirthdayHeight);
+        }
+        recoverySettings = await walletService.saveRecoveryScanSettings(
+          birthdayHeight,
+          Number(initialGapLimit),
+          credential
+        );
+      }
+      const scan = walletService.fullRescan(credential);
+      initialScanCredential = '';
+      initialScanOpen = false;
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      await refreshRecoveryStatus();
+      startRecoveryStatusPolling();
+      snapshot = await scan;
+      recoveryStatus = await walletService.recoveryScanStatus();
+      toast({
+        title: 'Wallet history verified',
+        description: 'The saved balance and activity now reflect the completed scan.',
+        tone: 'success'
+      });
+    } catch (cause) {
+      if (cause instanceof WalletError && cause.code === 'wallet_locked') return;
+      initialScanError = localizedError(cause, $locale, 'The wallet-history scan could not start.');
+      initialScanOpen = true;
+      await refreshRecoveryStatus();
+    } finally {
+      initialScanCredential = '';
+      initialScanStarting = false;
+    }
+  }
   async function pollSyncStatus(token: number) {
     while (token === syncPollToken) {
       await refreshSyncStatus();
@@ -337,6 +489,10 @@
     void pollSyncStatus(token);
   }
   const sync = async (showToast = true) => {
+    if (initialHistoryRequired) {
+      openInitialScan();
+      return;
+    }
     if (syncInProgress) return;
     syncing = true;
     startSyncStatusPolling();
@@ -467,12 +623,57 @@
     </div>
     <button
       class="sync-button"
-      disabled={syncInProgress}
+      disabled={syncInProgress || recoveryScanIsActive(recoveryStatus)}
       title={syncButtonTitle}
-      onclick={() => sync(true)}
-      ><RefreshCw size={15} class={syncInProgress ? 'spin' : ''} />{syncButtonLabel}</button
+      onclick={() => (initialHistoryRequired ? openInitialScan() : sync(true))}
+      ><RefreshCw
+        size={15}
+        class={syncInProgress || recoveryScanIsActive(recoveryStatus) ? 'spin' : ''}
+      />{syncButtonLabel}</button
     >
   </header>
+  {#if initialHistoryRequired}
+    <section class="initial-history-scan" aria-live="polite">
+      <div>
+        <strong
+          >{translate(
+            $locale,
+            recoveryScanIsActive(recoveryStatus)
+              ? 'Scanning wallet history · {percent}%'
+              : savedRecoveryCanResume
+                ? 'Wallet-history scan paused'
+                : 'Choose where wallet history begins',
+            { percent: recoveryPercent }
+          )}</strong
+        ><small
+          >{recoveryScanIsActive(recoveryStatus) || savedRecoveryCanResume
+            ? translate(
+                $locale,
+                '{processed} of {total} blocks saved · progress continues across wallet locks',
+                {
+                  processed: formatInteger(recoveryStatus.processedBlocks, $locale),
+                  total: formatInteger(recoveryStatus.totalBlocks, $locale)
+                }
+              )
+            : translate(
+                $locale,
+                'A birthday makes the first scan faster. Full history always remains available.'
+              )}</small
+        >
+      </div>
+      {#if recoveryScanIsActive(recoveryStatus)}
+        <progress
+          max="100"
+          value={recoveryPercent}
+          aria-label={translate($locale, 'Recovery scan progress')}
+        ></progress>
+      {:else}
+        <Button size="small" variant="secondary" onclick={openInitialScan}
+          >{translate($locale, savedRecoveryCanResume ? 'Resume scan' : 'Choose scan')}</Button
+        >
+      {/if}
+    </section>
+  {/if}
   {#if syncStatus && (syncInProgress || syncStatus.state === 'failed')}
     <section class:failed={syncStatus.state === 'failed'} class="sync-progress" aria-live="polite">
       <div>
@@ -626,23 +827,39 @@
           >{#if $discreetMode}<Eye size={17} />{:else}<EyeOff size={17} />{/if}</button
         >
       </div>
-      <button
-        class="balance-value"
-        type="button"
-        aria-label={translate(
-          $locale,
-          $denomination === 'btc' ? 'Show balance in sats' : 'Show balance in BTC'
-        )}
-        title={translate(
-          $locale,
-          $denomination === 'btc' ? 'Show balance in sats' : 'Show balance in BTC'
-        )}
-        onclick={() => setDenomination($denomination === 'btc' ? 'sats' : 'btc')}
-      >
-        <Amount value={snapshot?.balance.total ?? 0} hidden={$discreetMode} />
-      </button>
+      {#if initialHistoryRequired}
+        <div
+          class="balance-value unverified-balance"
+          aria-label={translate($locale, 'Unverified balance')}
+        >
+          <strong>—</strong><small>{translate($locale, 'Not verified yet')}</small>
+        </div>
+      {:else}
+        <button
+          class="balance-value"
+          type="button"
+          aria-label={translate(
+            $locale,
+            $denomination === 'btc' ? 'Show balance in sats' : 'Show balance in BTC'
+          )}
+          title={translate(
+            $locale,
+            $denomination === 'btc' ? 'Show balance in sats' : 'Show balance in BTC'
+          )}
+          onclick={() => setDenomination($denomination === 'btc' ? 'sats' : 'btc')}
+        >
+          <Amount value={snapshot?.balance.total ?? 0} hidden={$discreetMode} />
+        </button>
+      {/if}
       <div class="pending-line">
-        <i></i>{translate($locale, $discreetMode ? 'Pending activity hidden' : pendingDescription)}
+        <i></i>{translate(
+          $locale,
+          initialHistoryRequired
+            ? 'Balance and activity remain unverified until the scan completes.'
+            : $discreetMode
+              ? 'Pending activity hidden'
+              : pendingDescription
+        )}
       </div>
     </section>
   {:else}
@@ -795,6 +1012,17 @@
       </div>
       {#if initialDataLoading}
         <TxList items={[]} loading />
+      {:else if initialHistoryRequired}
+        <EmptyState
+          compact
+          title={translate($locale, 'Wallet history not verified')}
+          description={translate(
+            $locale,
+            'Complete or resume the first scan before relying on activity.'
+          )}
+        >
+          {#snippet icon()}<Activity size={22} />{/snippet}
+        </EmptyState>
       {:else if recentTransactions.length}
         <TxList items={recentTransactions} onselect={(transaction) => (selected = transaction)} />
       {:else}
@@ -823,6 +1051,153 @@
   wallet={multisigWallet}
   onclose={() => (showDescriptors = false)}
 />
+<Modal
+  open={initialScanOpen}
+  title={translate(
+    $locale,
+    savedRecoveryCanResume ? 'Resume wallet-history scan' : 'First wallet-history scan'
+  )}
+  description={translate(
+    $locale,
+    savedRecoveryCanResume
+      ? 'Continue from the last safely saved block. Locking Groot will no longer stop this scan.'
+      : 'Choose the earliest block Groot should inspect before relying on balance or activity.'
+  )}
+  onclose={() => {
+    if (initialScanStarting) return;
+    initialScanOpen = false;
+    initialScanCredential = '';
+    initialScanError = '';
+  }}
+>
+  {#if savedRecoveryCanResume}
+    <div class="scan-resume-summary" role="status">
+      <strong
+        >{translate($locale, 'Saved progress: {percent}%', { percent: recoveryPercent })}</strong
+      >
+      <span
+        >{translate($locale, 'Birthday block {height} · gap limit {gap}', {
+          height: formatInteger(recoverySettings.birthdayHeight, $locale),
+          gap: formatInteger(recoverySettings.gapLimit, $locale)
+        })}</span
+      >
+      <progress max="100" value={recoveryPercent}></progress>
+    </div>
+  {:else}
+    <div
+      class="initial-scan-options"
+      role="radiogroup"
+      aria-label={translate($locale, 'Wallet history start')}
+    >
+      <button
+        type="button"
+        role="radio"
+        aria-checked={initialScanMode === 'new'}
+        class:selected={initialScanMode === 'new'}
+        onclick={() => (initialScanMode = 'new')}
+      >
+        <strong>{translate($locale, 'New wallet · no earlier activity')}</strong>
+        <small
+          >{translate(
+            $locale,
+            'Start at the current chain tip. Fastest, but it will not find older payments.'
+          )}</small
+        >
+      </button>
+      <button
+        type="button"
+        role="radio"
+        aria-checked={initialScanMode === 'birthday'}
+        class:selected={initialScanMode === 'birthday'}
+        onclick={() => (initialScanMode = 'birthday')}
+      >
+        <strong>{translate($locale, 'Existing wallet · use a birthday block')}</strong>
+        <small
+          >{translate(
+            $locale,
+            'Start before the wallet’s first payment. Earlier is safer; later is faster.'
+          )}</small
+        >
+      </button>
+      {#if initialScanMode === 'birthday'}
+        <label class="field initial-scan-field"
+          ><span>{translate($locale, 'Wallet birthday block')}</span><input
+            type="number"
+            min="0"
+            step="1"
+            bind:value={initialBirthdayHeight}
+            disabled={initialScanStarting}
+          /><small
+            >{translate($locale, 'If uncertain, choose full history instead of guessing.')}</small
+          ></label
+        >
+      {/if}
+      <button
+        type="button"
+        role="radio"
+        aria-checked={initialScanMode === 'full'}
+        class:selected={initialScanMode === 'full'}
+        onclick={() => (initialScanMode = 'full')}
+      >
+        <strong>{translate($locale, 'Full history · safest')}</strong>
+        <small
+          >{translate(
+            $locale,
+            'Scan from genesis. This can take tens of minutes on Testnet4.'
+          )}</small
+        >
+      </button>
+      <label class="field initial-scan-field"
+        ><span>{translate($locale, 'Address gap limit')}</span><input
+          type="number"
+          min="20"
+          max="1000"
+          step="1"
+          bind:value={initialGapLimit}
+          disabled={initialScanStarting}
+        /><small
+          >{translate(
+            $locale,
+            '20 is standard. It controls address discovery, not block-scan speed.'
+          )}</small
+        ></label
+      >
+    </div>
+  {/if}
+  <PasswordField
+    label={scanCredentialLabel}
+    bind:value={initialScanCredential}
+    autocomplete="current-password"
+    disabled={initialScanStarting}
+    hint={translate($locale, 'Used only to authenticate this saved recovery operation.')}
+  />
+  {#if initialScanError}<p class="form-error" role="alert">{initialScanError}</p>{/if}
+  <div class="modal-footer">
+    <Button
+      variant="secondary"
+      disabled={initialScanStarting}
+      onclick={() => {
+        initialScanOpen = false;
+        initialScanCredential = '';
+      }}>{translate($locale, 'Not now')}</Button
+    ><Button
+      disabled={!initialScanCredential ||
+        (!savedRecoveryCanResume && !initialScanMode) ||
+        (!savedRecoveryCanResume &&
+          initialScanMode === 'birthday' &&
+          (!Number.isInteger(Number(initialBirthdayHeight)) ||
+            Number(initialBirthdayHeight) < 0)) ||
+        (!savedRecoveryCanResume &&
+          (!Number.isInteger(Number(initialGapLimit)) ||
+            Number(initialGapLimit) < 20 ||
+            Number(initialGapLimit) > 1000))}
+      loading={initialScanStarting}
+      loadingLabel={translate($locale, savedRecoveryCanResume ? 'Resuming…' : 'Starting scan…')}
+      onclick={startInitialScan}
+      >{translate($locale, savedRecoveryCanResume ? 'Resume scan' : 'Start scan')}</Button
+    >
+  </div>
+</Modal>
 <Modal
   open={verifyOpen}
   title={translate($locale, 'Verify recovery backup')}

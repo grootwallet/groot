@@ -1265,6 +1265,39 @@ test('recovery scan and private network controls preserve explicit safety choice
   await expect(page.getByText(/Trusted remote server/)).toBeVisible();
 });
 
+test('first Bitcoin Core scan requires an explicit range and never presents partial data', async ({
+  page
+}) => {
+  await page.goto('/?fixture-initial-history-required=1');
+
+  await expect(page.getByText('Not verified yet')).toBeVisible();
+  await expect(page.getByText('Wallet history not verified')).toBeVisible();
+  await expect(page.getByText('0 sats', { exact: true })).toHaveCount(0);
+
+  const scan = page.getByRole('dialog', { name: 'First wallet-history scan' });
+  await expect(scan).toBeVisible();
+  await expect(scan.getByRole('button', { name: 'Start scan' })).toBeDisabled();
+  await expect(scan.getByText(/controls address discovery, not block-scan speed/)).toBeVisible();
+
+  await scan.getByRole('radio', { name: /Existing wallet · use a birthday block/ }).click();
+  await scan.getByLabel('Wallet birthday block').fill('200');
+  await scan.getByLabel('Address gap limit').fill('19');
+  await scan.getByLabel('Wallet passphrase', { exact: true }).fill('prototype-passphrase');
+  await expect(scan.getByRole('button', { name: 'Start scan' })).toBeDisabled();
+  await scan.getByLabel('Address gap limit').fill('20');
+  await scan.getByRole('button', { name: 'Start scan' }).click();
+
+  await expect(page.getByText('Scanning wallet history')).toBeVisible();
+  await expect(page.getByText('Not verified yet')).toBeVisible();
+  await expect(page.getByText('Wallet history not verified')).toBeVisible();
+  await expect(page.getByText('Wallet history verified')).toBeVisible();
+  await expect(page.getByText('Not verified yet')).toHaveCount(0);
+
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true
+  );
+});
+
 test('activity explains its empty state', async ({ page }) => {
   await page.goto('/activity?fixture-empty-activity=1');
   await expect(page.getByRole('heading', { name: 'No transactions yet' })).toBeVisible();

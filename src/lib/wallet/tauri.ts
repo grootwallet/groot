@@ -260,10 +260,15 @@ export class TauriWalletAdapter implements WalletPort {
     return command<import('./contracts').RecoveryScanStatus>('recovery_scan_status');
   }
   async fullRescan(credential: string) {
+    const walletId = this.#selectedWalletId;
     const snapshot = normalizeSnapshot(
       await command<WalletSnapshot>('wallet_full_rescan', { credential })
     );
-    this.#last = snapshot;
+    if (walletId && walletId === this.#selectedWalletId) {
+      this.#last = snapshot;
+      await this.#drainNotifications(false);
+      this.#emit({ type: 'wallet_updated', walletId, walletKind: 'single_key', snapshot });
+    }
     return snapshot;
   }
   cancelFullRescan() {

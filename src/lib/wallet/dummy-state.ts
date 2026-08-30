@@ -359,6 +359,7 @@ export abstract class DummyWalletState {
     typeof location !== 'undefined' &&
     new URLSearchParams(location.search).has('fixture-hold-first-recovery-scan');
   protected _recoveryScanAttempts = 0;
+  protected _initialHistoryCompleted = false;
   protected _trezorPinUnlocked = false;
   protected _secureStorageRetryPending =
     typeof location !== 'undefined' &&

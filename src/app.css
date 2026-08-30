@@ -904,6 +904,98 @@ code {
 .sync-progress.failed {
   border-color: color-mix(in srgb, var(--danger) 38%, var(--border));
 }
+.initial-history-scan {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px 18px;
+  margin: -18px 0 16px;
+  padding: 13px 14px;
+  border: 1px solid color-mix(in srgb, var(--accent) 38%, var(--border));
+  border-radius: 9px;
+  background: var(--accent-soft);
+}
+.initial-history-scan > div {
+  display: grid;
+  gap: 3px;
+}
+.initial-history-scan strong {
+  color: var(--text);
+  font-size: 11px;
+}
+.initial-history-scan small {
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.45;
+}
+.initial-history-scan progress {
+  grid-column: 1 / -1;
+  width: 100%;
+  height: 5px;
+  accent-color: var(--accent);
+}
+.unverified-balance {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  cursor: default;
+}
+.unverified-balance strong {
+  font-size: 42px;
+}
+.unverified-balance small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.initial-scan-options {
+  display: grid;
+  gap: 9px;
+  margin-bottom: 16px;
+}
+.initial-scan-options > button {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  padding: 12px 14px;
+  text-align: left;
+  color: var(--text);
+  border: 1px solid var(--control-border);
+  border-radius: 9px;
+  background: var(--surface-control);
+  cursor: pointer;
+}
+.initial-scan-options > button:hover {
+  background: var(--surface-hover);
+}
+.initial-scan-options > button.selected {
+  border-color: var(--focus);
+  background: color-mix(in srgb, var(--focus) 9%, var(--surface-control));
+}
+.initial-scan-options > button small,
+.scan-resume-summary span,
+.initial-scan-field small {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+.initial-scan-field {
+  margin: 2px 0 4px;
+}
+.scan-resume-summary {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 16px;
+  padding: 13px 14px;
+  border: 1px solid color-mix(in srgb, var(--accent) 38%, var(--border));
+  border-radius: 9px;
+  background: var(--accent-soft);
+}
+.scan-resume-summary progress {
+  width: 100%;
+  height: 5px;
+  accent-color: var(--accent);
+}
 .sync-progress + .backup-verification-banner {
   margin-top: 0;
 }

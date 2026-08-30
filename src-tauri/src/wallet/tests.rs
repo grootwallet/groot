@@ -930,6 +930,19 @@ fn recovery_scan_settings_default_and_persist_with_safe_bounds() {
 }
 
 #[test]
+fn completed_sync_requires_a_persisted_chain_observation() {
+    let db = Connection::open_in_memory().unwrap();
+    init_app_schema(&db).unwrap();
+    assert!(!has_completed_sync(&db).unwrap());
+    db.execute(
+        "INSERT INTO groot_chain_observation(singleton, height, observed_at) VALUES(1, 42, 100)",
+        [],
+    )
+    .unwrap();
+    assert!(has_completed_sync(&db).unwrap());
+}
+
+#[test]
 fn recovery_scan_progress_is_persisted_and_terminal_transitions_are_guarded() {
     let db = Connection::open_in_memory().unwrap();
     init_app_schema(&db).unwrap();
@@ -978,6 +991,31 @@ fn recovery_scan_progress_is_persisted_and_terminal_transitions_are_guarded() {
             .code,
         "scan_interrupted"
     );
+}
+
+#[test]
+fn recovery_scan_resume_preserves_saved_progress_and_extends_the_target() {
+    let db = Connection::open_in_memory().unwrap();
+    init_app_schema(&db).unwrap();
+    let settings = RecoveryScanSettingsDto {
+        birthday_height: 10,
+        gap_limit: 20,
+    };
+    start_recovery_scan_record(&db, "first-run", &settings, 109).unwrap();
+    update_recovery_scan_progress(&db, "first-run", 39, 30).unwrap();
+    finish_recovery_scan_record(&db, "first-run", "cancelled").unwrap();
+
+    let previous = load_recovery_scan_record(&db).unwrap().unwrap().status;
+    let resumed = resume_recovery_scan_record(&db, "second-run", &previous, 119).unwrap();
+    assert_eq!(resumed.status, "running");
+    assert_eq!(resumed.current_height, 39);
+    assert_eq!(resumed.processed_blocks, 30);
+    assert_eq!(resumed.total_blocks, 110);
+    assert_eq!(resumed.started_at, previous.started_at);
+    let persisted = load_recovery_scan_record(&db).unwrap().unwrap();
+    assert_eq!(persisted.run_id, "second-run");
+    assert_eq!(persisted.status.current_height, 39);
+    assert_eq!(persisted.status.processed_blocks, 30);
 }
 
 #[test]

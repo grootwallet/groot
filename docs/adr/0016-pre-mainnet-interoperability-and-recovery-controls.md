@@ -13,7 +13,7 @@ Satchel needs portable descriptor backups, air-gapped PSBT exchange, explicit tr
 2. Satchel JSON remains available for Satchel-specific labels and custom Miniscript recovery metadata that a public BSMS descriptor record cannot preserve.
 3. Air-gapped PSBT exchange uses Blockchain Commons UR v2 with the `crypto-psbt` type and a canonical CBOR byte-string body. The trusted Rust boundary enforces payload, frame-count, frame-size, and fragment-size limits. The webview handles only already-public PSBT frames and never mnemonic or private-key UR types.
 4. Newly created transactions signal BIP125 replacement. RBF reconstructs a replacement from the persisted BDK transaction and CPFP spends a wallet-controlled unconfirmed output while targeting the combined parent/child package fee. Both produce a normal persisted proposal that must pass the existing review and signing flow.
-5. Wallet birthday height and descriptor lookahead are persisted in the wallet database. A credential-authenticated full rescan reconstructs chain state from the configured birthday and validates a bounded gap limit.
+5. Wallet birthday height and descriptor lookahead are persisted in the wallet database. A credential-authenticated full rescan reconstructs chain state from the configured birthday and validates a bounded gap limit. A fresh Core wallet must explicitly choose current tip, a birthday block, or full history before normal synchronization. The first scan uses the same per-block persisted recovery path; after interruption it resumes only from a checkpoint that still agrees with Core and otherwise restarts from the configured birthday. Inactivity may lock presentation without revoking the already-created read-only node client or discarding scan progress.
 6. Remote Bitcoin Core connections are either direct HTTPS or HTTP `.onion` endpoints through an explicit loopback SOCKS5 proxy. Plain remote clearnet HTTP, non-loopback proxies, embedded credentials, and onion endpoints without Tor are rejected.
 7. Reproducibility is assessed on unsigned binaries built from the same clean commit and locked dependency graph. Signing and notarization happen only after unsigned hashes are compared and therefore are not expected to be byte-identical.
 
@@ -26,6 +26,6 @@ The exact `ur` 0.4.1 source was reviewed before pinning; it forbids unsafe code 
 - A BSMS record is interoperable but is not a complete backup of Satchel-only labels or custom recovery metadata.
 - Camera scanning is permission-gated and must be physically certified per desktop/mobile platform; text/file fallback remains available.
 - Acceleration can fail safely when the original transaction is confirmed, does not signal RBF, has no wallet-controlled child output, or cannot meet the requested package rate.
-- A birthday set too late can omit old history; the UI must explain this and keep height `0` as the safest default.
+- A birthday set too late can omit old history; the UI must explain this, require an explicit first-scan choice, keep height `0` as the safest option, and never present a numeric balance as verified before completion.
 - Tor privacy depends on a functioning local proxy and does not imply P2P compact-filter privacy.
 - None of these changes enables mainnet. ADR 0012 and the mainnet release checklist remain the controlling gate.

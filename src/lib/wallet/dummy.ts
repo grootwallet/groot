@@ -405,6 +405,7 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       currentHeight: 301,
       updatedAt: Math.floor(Date.now() / 1000)
     };
+    this._initialHistoryCompleted = true;
     return this.snapshot();
   }
   async cancelFullRescan() {
@@ -430,6 +431,10 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       (typeof location !== 'undefined' &&
         new URLSearchParams(location.search).has('fixture-empty-wallet')) ||
       (this._delayedWalletSwitch && walletId === this._multisigProfileId);
+    const initialHistoryRequired =
+      typeof location !== 'undefined' &&
+      new URLSearchParams(location.search).has('fixture-initial-history-required') &&
+      !this._initialHistoryCompleted;
     const snapshot: WalletSnapshot = {
       network: defaultConfig.network,
       balance: emptyWallet
@@ -444,21 +449,24 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       utxos: emptyWallet ? [] : structuredClone(this._coins),
       receiveAddresses: structuredClone(this._addresses),
       labelSuggestions: structuredClone(this._labelSuggestionsByWallet.get(walletId) ?? []),
-      syncedAt:
-        typeof location !== 'undefined' &&
-        new URLSearchParams(location.search).has('fixture-stale-tip')
+      syncedAt: initialHistoryRequired
+        ? null
+        : typeof location !== 'undefined' &&
+            new URLSearchParams(location.search).has('fixture-stale-tip')
           ? '2026-01-01T00:00:00.000Z'
           : new Date().toISOString(),
       chainTip: {
-        height: 250_000,
-        observedAt:
-          typeof location !== 'undefined' &&
-          new URLSearchParams(location.search).has('fixture-stale-tip')
+        height: initialHistoryRequired ? 0 : 250_000,
+        observedAt: initialHistoryRequired
+          ? null
+          : typeof location !== 'undefined' &&
+              new URLSearchParams(location.search).has('fixture-stale-tip')
             ? '2026-01-01T00:00:00.000Z'
             : new Date().toISOString(),
-        status:
-          typeof location !== 'undefined' &&
-          new URLSearchParams(location.search).has('fixture-stale-tip')
+        status: initialHistoryRequired
+          ? 'unknown'
+          : typeof location !== 'undefined' &&
+              new URLSearchParams(location.search).has('fixture-stale-tip')
             ? 'stale'
             : 'recent'
       }
