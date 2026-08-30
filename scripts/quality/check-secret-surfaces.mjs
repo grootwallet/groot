@@ -53,24 +53,40 @@ if (browserClipboardUsers.length !== 1 || browserClipboardUsers[0] !== 'src/lib/
   fail('browser clipboard writes must be classified by src/lib/clipboard.ts');
 }
 
-// Tauri merges the permissions of every file under src-tauri/capabilities/,
-// so the gate must inspect the same merged set rather than one named file.
+// Tauri recursively loads multiple capability formats. Groot intentionally
+// permits one reviewed root capability only: any second file, nested entry,
+// directory, symlink, or alternate format must fail closed instead of relying
+// on this gate to reproduce Tauri's parser and glob semantics.
 const capabilitiesDir = fileURLToPath(new URL('src-tauri/capabilities/', root));
-const capabilityFiles = readdirSync(capabilitiesDir, { withFileTypes: true })
-  .filter((entry) => entry.isFile() && extname(entry.name) === '.json')
-  .map((entry) => entry.name)
-  .sort();
-if (capabilityFiles.length === 0) fail('src-tauri/capabilities must contain at least one file');
-const mergedPermissions = new Set();
-for (const name of capabilityFiles) {
+export function approvedCapabilityPermissions(directory) {
+  const entries = readdirSync(directory, { withFileTypes: true });
+  if (
+    entries.length !== 1 ||
+    entries[0].name !== 'default.json' ||
+    !entries[0].isFile() ||
+    entries[0].isSymbolicLink()
+  ) {
+    throw new Error(
+      'src-tauri/capabilities must contain only the reviewed regular file default.json'
+    );
+  }
   let parsed;
   try {
-    parsed = JSON.parse(readFileSync(join(capabilitiesDir, name), 'utf8'));
+    parsed = JSON.parse(readFileSync(join(directory, 'default.json'), 'utf8'));
   } catch {
-    fail(`capability ${name} is not valid JSON`);
+    throw new Error('capability default.json is not valid JSON');
   }
-  if (!Array.isArray(parsed.permissions)) fail(`capability ${name} has no permissions array`);
-  for (const permission of parsed.permissions) mergedPermissions.add(permission);
+  if (!Array.isArray(parsed.permissions)) {
+    throw new Error('capability default.json has no permissions array');
+  }
+  return new Set(parsed.permissions);
+}
+
+let mergedPermissions;
+try {
+  mergedPermissions = approvedCapabilityPermissions(capabilitiesDir);
+} catch (error) {
+  fail(error instanceof Error ? error.message : String(error));
 }
 const expectedPermissions = ['core:default', 'clipboard-manager:allow-write-text'];
 if (
