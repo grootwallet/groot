@@ -96,7 +96,7 @@ This is the next public-network rehearsal after the isolated Regtest stories pas
 
    Require `chain: testnet4`, equal `blocks` and `headers`, `verificationprogress: 1`, and `initialblockdownload: false`. Confirm this is the intended existing node and data directory; do not start another node merely because the default `bitcoin-cli -testnet4` port or data directory differs.
 
-   If the node enables `rpcwhitelist`, compare it with the exact least-privilege method list in [Public test-network rehearsal](public-network-rehearsal.md#prerequisites). Groot does not require the compatibility-only `getnetworkinfo` probe. A missing required method is an RPC-permission failure, not a bad password or an offline node.
+   If the node enables `rpcwhitelist`, compare it with the exact least-privilege method list in [Public test-network rehearsal](public-network-rehearsal.md#prerequisites). RBF requires read-only `getmempoolinfo` for Core's authoritative incremental-relay policy; Groot does not require the compatibility-only `getnetworkinfo` probe. A missing required method is an RPC-permission failure, not a bad password or an offline node.
 
 2. Build the explicit Testnet4 app and verify its bundle identifier before opening it:
 

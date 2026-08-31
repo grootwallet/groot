@@ -399,6 +399,24 @@ fn core_fee_estimator_uses_rpc_and_never_falls_back() {
 }
 
 #[test]
+fn core_replacement_policy_uses_mempool_incremental_relay_fee() {
+    let available = serve_one_json(
+        r#"{"result":{"loaded":true,"size":0,"bytes":0,"usage":0,"total_fee":0.0,"maxmempool":300000000,"mempoolminfee":0.00001000,"minrelaytxfee":0.00001000,"incrementalrelayfee":0.00001000,"unbroadcastcount":0,"fullrbf":false},"error":null,"id":"groot"}"#,
+    );
+    let client = build_rpc_client(&available, Auth::None, None).unwrap();
+    assert_eq!(core_incremental_relay_fee(&client).unwrap(), 1_000);
+
+    let missing = serve_one_json(
+        r#"{"result":{"loaded":true,"size":0,"bytes":0,"usage":0,"total_fee":0.0,"maxmempool":300000000,"mempoolminfee":0.00001000,"minrelaytxfee":0.00001000,"unbroadcastcount":0,"fullrbf":false},"error":null,"id":"groot"}"#,
+    );
+    let client = build_rpc_client(&missing, Auth::None, None).unwrap();
+    assert_eq!(
+        core_incremental_relay_fee(&client).unwrap_err().code,
+        "fee_estimate_unavailable"
+    );
+}
+
+#[test]
 fn core_sync_progress_is_relative_to_the_persisted_wallet_tip() {
     assert_eq!(core_sync_progress_percent(20, 20, 120), 0);
     assert_eq!(core_sync_progress_percent(20, 70, 120), 50);
@@ -494,14 +512,14 @@ fn rpc_whitelist_rejection_is_actionable_without_exposing_core_details() {
     let error = rpc_api_error(CoreRpcError::JsonRpc(jsonrpc::Error::Rpc(
         jsonrpc::error::RpcError {
             code: -1,
-            message: "RPC User private-user not allowed to call method getnetworkinfo".to_owned(),
+            message: "RPC User private-user not allowed to call method getmempoolinfo".to_owned(),
             data: None,
         },
     )));
 
     assert_eq!(error.code, "invalid_node_config");
     assert_eq!(error.message, RPC_PERMISSION_MESSAGE);
-    for internal_detail in ["private-user", "getnetworkinfo", "JSON-RPC", "code -1"] {
+    for internal_detail in ["private-user", "getmempoolinfo", "JSON-RPC", "code -1"] {
         assert!(!error.message.contains(internal_detail));
     }
 }

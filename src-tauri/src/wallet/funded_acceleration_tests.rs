@@ -3,7 +3,8 @@ use super::multisig_proposal_commands::{
     import_multisig_proposal_in_db,
 };
 use super::transaction_commands::{
-    prepare_persisted_multisig_acceleration, validate_acceleration_rate, AccelerationRatePolicy,
+    core_incremental_relay_fee, prepare_persisted_multisig_acceleration,
+    validate_acceleration_rate, AccelerationRatePolicy,
 };
 use super::*;
 use crate::multisig::{CosignerInput, CosignerSource, MULTISIG_ACCOUNT_PATH};
@@ -860,6 +861,7 @@ fn existing_wallet_can_repeat_full_rescan_from_an_earlier_birthday() {
 fn funded_rbf_and_cpfp_cross_groot_proposal_boundaries() {
     assert!(std::env::var_os("GROOT_RUN_REGTEST").is_some());
     let rpc = Arc::new(rpc());
+    assert!(core_incremental_relay_fee(rpc.as_ref()).unwrap() > 0);
     let keys = test_keys();
     let metadata = metadata(&keys);
     let database = TemporaryDatabase::new();

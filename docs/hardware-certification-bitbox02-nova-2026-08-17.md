@@ -192,6 +192,37 @@ excluded from retained evidence. No address, transaction identifier,
 fingerprint, account key, descriptor, PSBT, device path, credential, RPC detail,
 or label is retained.
 
+### Packaged v0.4.85 Testnet4 funded BIP48 checkpoint
+
+On the locally ad-hoc-signed Testnet4 package at commit `5ba40001`, the existing
+multisig coordinator completed normal sync after the stale-checkpoint rewind
+fix. The exact Nova and a Trezor Safe 3 independently displayed and matched the
+same newly revealed multisig receive address. The first disposable Testnet4
+deposit then synchronized into the wallet.
+
+The reviewer prepared one self-transfer and compared its wallet-owned recipient,
+amount, fee, and total before signing. Nova and Safe 3 independently supplied
+the two required signatures. Before the successful signatures, each device
+passed an explicit on-device rejection and a cable-interruption retry without
+changing the proposal or collected-signature count. One accepted local
+signature was then deliberately discarded and restored by importing the
+corresponding signed PSBT. Threshold finalization, Bitcoin Core broadcast, and
+self-transfer fee-only accounting passed.
+
+An RBF quote for that unconfirmed self-transfer failed before a replacement
+proposal or hardware review existed. Diagnosis found that v0.4.85 requested
+Core's incremental-relay policy through `getnetworkinfo`, which the canonical
+least-privilege RPC configuration intentionally did not allow. This is an
+application/RPC-method defect, not a Nova failure and not a consequence of the
+self-transfer consuming the wallet's only prior coin. The RBF row remains open
+for a corrected packaged-candidate retest; no acceleration signature is claimed.
+
+The record relies on the reviewer's sanitized written observations. Submitted
+screenshots exposed public wallet, signer, or transaction metadata and were
+excluded. No address, transaction identifier, fingerprint, account key,
+descriptor, PSBT, device path, credential, RPC detail, amount, or label is
+retained.
+
 ## Current decision
 
 **LOCAL REGTEST USB CORE PASS WITH LIMITATIONS — NOT RELEASE CERTIFIED.**
@@ -209,8 +240,11 @@ confirmed self-spend accounting regression and the Testnet4 Nova BIP48
 import/policy/first-address setup rows, but fails the multisig network-label and
 stale-source reuse-fallback rows. Packaged v0.4.84 closes the Nova BIP84
 rejection/retry, USB interruption, wrong-device, successful-signature, and
-restart-persistence rows, but its copied-network sync regression blocks the
-shared funded BIP48 campaign. Remaining funded Testnet4 BIP48 threshold,
-broadcast/accounting, packaged clean-profile recovery, and Whisper/BLE remain
-open. Independent review is deferred until the Testnet4 device campaigns are
-finalized.
+restart-persistence rows. Packaged v0.4.85 closes the copied-network active-chain
+rewind/sync regression and the shared funded BIP48 receive proof, deposit,
+rejection, interruption, signature-removal/reimport, threshold,
+broadcast/accounting, and self-transfer rows. RBF remains open because the
+candidate requested replacement policy through an undocumented RPC method
+before proposal construction. Packaged clean-profile recovery and Whisper/BLE
+also remain open. Independent review is deferred until the Testnet4 device
+campaigns are finalized.

@@ -540,15 +540,26 @@ fn core_replacement_policy(
 ) -> ApiResult<(u64, Option<f64>)> {
     let client = rpc_client(app, state)?;
     checked_chain_identity(&client)?;
+    let incremental_fee = core_incremental_relay_fee(&client)?;
+    let priority = if IS_REGTEST {
+        Some(5.0)
+    } else {
+        profile_commands::estimate_core_fee(&client, 2, EstimateMode::Economical).ok()
+    };
+    Ok((incremental_fee, priority))
+}
+
+pub(super) fn core_incremental_relay_fee(client: &Client) -> ApiResult<u64> {
     let incremental_fee = client
-        .get_network_info()
-        .map_err(|_| {
+        .get_mempool_info()
+        .map_err(rpc_api_error)?
+        .incremental_relay_fee
+        .ok_or_else(|| {
             api_error(
                 "fee_estimate_unavailable",
-                "Bitcoin Core replacement policy is unavailable. Check the node and try again.",
+                "Bitcoin Core did not report its replacement policy.",
             )
         })?
-        .incremental_fee
         .to_sat();
     if incremental_fee == 0 {
         return Err(api_error(
@@ -556,12 +567,7 @@ fn core_replacement_policy(
             "Bitcoin Core returned an invalid replacement policy.",
         ));
     }
-    let priority = if IS_REGTEST {
-        Some(5.0)
-    } else {
-        profile_commands::estimate_core_fee(&client, 2, EstimateMode::Economical).ok()
-    };
-    Ok((incremental_fee, priority))
+    Ok(incremental_fee)
 }
 
 #[tauri::command]

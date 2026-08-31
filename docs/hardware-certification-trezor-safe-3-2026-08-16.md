@@ -163,6 +163,35 @@ Screenshots that exposed a public receive address were excluded from retained
 evidence. No address, transaction identifier, fingerprint, account key,
 descriptor, PSBT, device path, credential, RPC detail, or label is retained.
 
+## Packaged v0.4.85 Testnet4 funded BIP48 checkpoint — 2026-08-31
+
+On the locally ad-hoc-signed Testnet4 package at commit `5ba40001`, the existing
+multisig coordinator synchronized after the active-chain checkpoint repair. The
+exact Safe 3 and a BitBox02 Nova independently displayed and matched the same
+newly revealed multisig receive address, and the first disposable deposit was
+then observed by the wallet.
+
+For one reviewed self-transfer, Safe 3 and Nova independently supplied the two
+required signatures. Safe 3 first passed both an explicit on-device rejection
+and a cable-interruption retry without changing the proposal or its signature
+count. The campaign also passed local signature discard and restoration through
+signed-PSBT import, threshold finalization, Bitcoin Core broadcast, and
+self-transfer fee-only accounting. These observations close only the named
+packaged BIP48 rows; they do not inherit or close Safe 3's still-open BIP84
+funded-signing and full-rescan rows.
+
+The subsequent RBF quote failed before replacement construction or any Safe 3
+interaction because v0.4.85 requested Core's incremental-relay policy through
+an RPC method absent from the canonical least-privilege configuration. This is
+an application/RPC-method defect, not a Safe 3 failure and not evidence that an
+only-coin self-transfer is inherently non-replaceable. The packaged acceleration
+row remains open.
+
+The record relies on sanitized written observations. Submitted screenshots
+exposed public wallet, signer, or transaction metadata and were excluded. No
+address, transaction identifier, fingerprint, account key, descriptor, PSBT,
+device path, credential, RPC detail, amount, or label is retained.
+
 Local sensitive evidence reviewed without copying identifiers: yes
 
 Certification decision: **LIMITED — LOCAL REGTEST AND RECOVERY PASS / RELEASE
