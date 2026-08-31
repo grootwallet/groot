@@ -1,17 +1,20 @@
 <script lang="ts">
   import { translate, localizedError } from '$lib/i18n-catalog';
   import { AlertTriangle, Check, Clock3, ShieldCheck } from '@lucide/svelte';
+  import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
   import Button from '$lib/components/Button.svelte';
   import { formatInteger, locale } from '$lib/i18n';
   import {
     walletService,
+    hasMiniscriptPolicy,
     type MultisigWallet,
     type RecoveryPolicyAnalysis,
     type RecoveryTemplate
   } from '$lib/wallet';
 
   let wallet = $state<MultisigWallet | null>(null);
+  let loading = $state(true);
   let kind = $state<'recovery' | 'decaying' | 'expanding'>('recovery');
   let delayOne = $state(4320);
   let delayTwo = $state(8640);
@@ -29,7 +32,13 @@
   );
 
   onMount(async () => {
-    wallet = await walletService.multisigWallet();
+    const selectedWallet = await walletService.multisigWallet();
+    if (selectedWallet && !hasMiniscriptPolicy(selectedWallet)) {
+      await goto('/multisig', { replaceState: true });
+      return;
+    }
+    wallet = selectedWallet;
+    loading = false;
   });
 
   function template(): RecoveryTemplate {
@@ -79,7 +88,7 @@
   }
 </script>
 
-<div class="page coordinator-page policy-lab">
+<div class="page coordinator-page policy-lab" class:policy-lab-loading={loading}>
   <header class="page-header">
     <div>
       <p class="eyebrow">{translate($locale, 'V2 POLICY LAB')}</p>
@@ -87,7 +96,7 @@
       <p class="subtitle">
         {translate(
           $locale,
-          'Preview reviewed Miniscript templates in Rust. This lab never changes the selected wallet.'
+          'Compare reviewed Miniscript paths using this wallet’s public signers. Analysis never changes the selected wallet.'
         )}
       </p>
     </div>
@@ -95,11 +104,13 @@
   </header>
   {#if wallet}<div class="coordinator-grid">
       <section class="form-card">
-        <div class="warning-box">
-          <strong>{translate($locale, 'Experimental analysis only')}</strong><br />{translate(
-            $locale,
-            'Compile shows the resulting public\n          descriptors and spending paths. To use a policy, create and back up a separate recovery\n          wallet.'
-          )}
+        <div class="warning-box policy-lab-notice" role="note">
+          <strong>{translate($locale, 'Experimental analysis only')}</strong><span
+            >{translate(
+              $locale,
+              'Compiling previews public descriptors and spending paths. To use a different policy, create and back up a separate recovery wallet.'
+            )}</span
+          >
         </div>
         <label class="field"
           ><span>{translate($locale, 'Template')}</span><select

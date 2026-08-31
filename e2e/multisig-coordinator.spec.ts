@@ -97,8 +97,7 @@ test('keeps localized wallet policy content contained at compact desktop widths'
       expect((await badge.boundingBox())?.height).toBeLessThanOrEqual(25);
     }
     const recoveryLab = backupCard.getByRole('link', { name: 'Laboratoire de récupération' });
-    await expect(recoveryLab).toBeVisible();
-    expect((await recoveryLab.boundingBox())?.height).toBeLessThanOrEqual(40);
+    await expect(recoveryLab).toHaveCount(0);
     expect(
       await page
         .locator('.wallet-switcher-label')
@@ -1588,30 +1587,21 @@ test('reveals draft errors only after review and keeps signer identity readable'
   expect(keyLayout.scrollWidth).toBeLessThanOrEqual(keyLayout.clientWidth);
 });
 
-test('compiles and simulates guided Miniscript recovery policies', async ({ page }) => {
-  await page.goto('/multisig/new');
-  await continueToSigners(page, 'Policy lab vault');
-  for (const key of keys) {
-    await page.getByRole('button', { name: 'Add a signer' }).click();
-    await page.getByRole('button', { name: 'Enter public key' }).click();
-    await page.getByLabel('Signer label').fill(key.label);
-    await page.getByLabel('Master fingerprint').fill(key.fingerprint);
-    await page.getByLabel('Account xpub').fill(key.xpub);
-    await page.getByRole('button', { name: 'Add key' }).click();
-  }
-  await page.getByRole('button', { name: 'Review wallet' }).click();
-  await page.getByRole('button', { name: 'Continue to backup' }).click();
-  await saveSetupDescriptor(page, 'policy-lab-vault-descriptors.txt');
-  await page.getByRole('button', { name: 'Finish hardware setup before first signature' }).click();
-  await expect(page.getByLabel('App PIN', { exact: true })).toBeEnabled();
-  await page.getByLabel('App PIN', { exact: true }).fill('policy-pin');
-  await page.getByLabel('Confirm app PIN', { exact: true }).fill('policy-pin');
-  await page.getByRole('button', { name: 'Create wallet' }).click();
-  await page.getByRole('link', { name: 'Recovery policy lab' }).click();
+test('gates and simulates guided Miniscript recovery policies', async ({ page }) => {
+  await page.goto('/multisig');
+  await expect(page.getByRole('link', { name: 'Recovery policy lab' })).toHaveCount(0);
+  await page.goto('/multisig/policy');
+  await expect(page).toHaveURL(/\/multisig$/);
+
+  await page.goto('/multisig/policy?fixture-policy-maturity=1');
   await expect(page.getByText('Experimental analysis only')).toBeVisible();
-  await expect(page.getByText('This lab never changes the selected wallet.')).toBeVisible();
-  await expect(page.getByText('Separate recovery key required')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Compile & analyze policy' })).toBeDisabled();
+  await expect(page.getByText(/Analysis never changes the selected wallet/)).toBeVisible();
+  await expect(page.getByText('Separate recovery key required')).toHaveCount(0);
+  const noticeBounds = await page.locator('.policy-lab-notice').boundingBox();
+  const templateBounds = await page.getByText('Template', { exact: true }).boundingBox();
+  expect(noticeBounds).toBeTruthy();
+  expect(templateBounds).toBeTruthy();
+  expect(templateBounds!.y - (noticeBounds!.y + noticeBounds!.height)).toBeGreaterThanOrEqual(16);
   await page.getByLabel('Policy template').selectOption('decaying');
   await page.getByRole('button', { name: 'Compile & analyze policy' }).click();
   await expect(page.getByText('Sanity checked')).toBeVisible();

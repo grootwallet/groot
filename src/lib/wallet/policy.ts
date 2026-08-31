@@ -13,6 +13,12 @@ export type WalletPolicyPresentation = {
   summary: string;
 };
 
+export function hasMiniscriptPolicy(
+  wallet: Pick<MultisigWallet, 'recoveryTemplate'> | null | undefined
+): boolean {
+  return wallet?.recoveryTemplate !== undefined;
+}
+
 export function walletPolicyPresentation(wallet: MultisigWallet): WalletPolicyPresentation {
   const template = wallet.recoveryTemplate;
   if (template?.type !== 'recovery') {

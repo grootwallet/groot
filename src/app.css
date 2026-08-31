@@ -7210,6 +7210,18 @@ code {
 .policy-lab {
   max-width: 1120px;
 }
+.policy-lab-loading {
+  visibility: hidden;
+}
+.policy-lab .form-card > .policy-lab-notice {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 0 20px;
+}
+.policy-lab .warning-box.danger {
+  gap: 8px;
+}
 .template-explainer {
   display: flex;
   align-items: flex-start;

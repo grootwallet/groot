@@ -44,6 +44,7 @@
   import { coldcardPolicyFilename } from '$lib/transfer';
   import { useWalletShellContext } from '$lib/wallet/shell-context';
   import {
+    hasMiniscriptPolicy,
     policyMaturitySummary,
     validPolicyMaturity,
     walletPolicyPresentation
@@ -99,6 +100,7 @@
     wallet?.policyType === 'inheritance' ? 'inheritance' : 'recovery'
   );
   const policyPresentation = $derived(wallet ? walletPolicyPresentation(wallet) : null);
+  const recoveryPolicyLabAvailable = $derived(hasMiniscriptPolicy(wallet));
   onDestroy(() => {
     healthPinChallenge = '';
     healthPinPositions = '';
@@ -515,13 +517,13 @@
                     >{translate($locale, 'Save a public wallet backup')}</small
                   ></span
                 ></a
-              ><a role="menuitem" href="/multisig/policy"
-                ><FlaskConical size={15} /><span
-                  ><strong>{translate($locale, 'Recovery policy lab')}</strong><small
-                    >{translate($locale, 'Explore guided Miniscript paths')}</small
-                  ></span
-                ></a
-              >
+              >{#if recoveryPolicyLabAvailable}<a role="menuitem" href="/multisig/policy"
+                  ><FlaskConical size={15} /><span
+                    ><strong>{translate($locale, 'Recovery policy lab')}</strong><small
+                      >{translate($locale, 'Explore guided Miniscript paths')}</small
+                    ></span
+                  ></a
+                >{/if}
             </div>{/if}
         </div>
         <Button variant="secondary" href="/multisig/receive">{translate($locale, 'Receive')}</Button
@@ -731,9 +733,11 @@
         </div>
         <Button variant="secondary" class="full" href="/multisig/backup"
           >{translate($locale, 'Export & verify')}</Button
-        ><Button variant="ghost" class="full" href="/multisig/policy"
-          >{translate($locale, 'Recovery policy lab')}</Button
-        >
+        >{#if recoveryPolicyLabAvailable}<Button
+            variant="ghost"
+            class="full"
+            href="/multisig/policy">{translate($locale, 'Recovery policy lab')}</Button
+          >{/if}
       </aside>
     </div>
   {:else}

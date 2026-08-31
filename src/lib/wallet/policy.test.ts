@@ -6,6 +6,7 @@ import {
   addressReuseInsights,
   awaitingPaymentAddresses,
   canDiscardAddress,
+  hasMiniscriptPolicy,
   hasAddressPrefixForNetwork,
   normalizeCoinSelection,
   normalizePermanentLabel,
@@ -18,6 +19,19 @@ import {
 } from './policy';
 
 describe('wallet invariants', () => {
+  it('exposes recovery-only controls only for wallets with a Miniscript template', () => {
+    expect(hasMiniscriptPolicy(null)).toBe(false);
+    expect(hasMiniscriptPolicy({})).toBe(false);
+    expect(
+      hasMiniscriptPolicy({
+        recoveryTemplate: {
+          type: 'decaying',
+          stages: [{ availableAfterBlocks: 0, threshold: 2, signerIds: ['key-0', 'key-1'] }]
+        }
+      })
+    ).toBe(true);
+  });
+
   it('summarizes a standard multisig policy without a delayed key', () => {
     expect(
       walletPolicyPresentation({
