@@ -19,12 +19,19 @@ describe('unfinished payment resume UI', () => {
     expect(source).toContain('await saveCurrentDraft();');
     expect(source).toContain('walletService.savePaymentDraft({');
     expect(source).toContain('await walletService.clearPaymentDraft()');
+    expect(source).toContain('confirmDiscardPaymentDraft');
+    expect(source).toContain("'Discard this payment draft?'");
+    expect(source).toContain('suppressDraftSave = true');
+    expect(source).toContain('if (!suppressDraftSave) void saveCurrentDraft();');
   });
 
-  it('loads the restart-safe draft and offers the existing overview resume callout', () => {
+  it('loads the restart-safe draft and offers separate overview resume and discard actions', () => {
     expect(overview).toContain('await walletService.paymentDraft()');
     expect(overview).toContain("'Payment draft in progress'");
     expect(overview).toContain("'Recipient and labels saved'");
     expect(overview).toContain("activeDraft.kind === 'multisig' ? '/multisig/send' : '/send'");
+    expect(overview).toContain('confirmDiscardPaymentDraft');
+    expect(overview).toContain("'Discard this payment draft?'");
+    expect(overview).toContain('await walletService.clearPaymentDraft()');
   });
 });

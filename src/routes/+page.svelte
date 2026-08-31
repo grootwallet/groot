@@ -12,7 +12,8 @@
     FileKey,
     HeartPulse,
     RefreshCw,
-    ShieldCheck
+    ShieldCheck,
+    Trash2
   } from '@lucide/svelte';
   import Button from '$lib/components/Button.svelte';
   import Modal from '$lib/components/Modal.svelte';
@@ -74,6 +75,9 @@
   let checkingSignerHealth = $state(false);
   let activeProposal = $state<MultisigProposal | PaymentProposal | null>(null);
   let activeDraft = $state<PaymentDraft | null>(null);
+  let discardDraftOpen = $state(false);
+  let discardingDraft = $state(false);
+  let discardDraftError = $state('');
   let selected = $state<Transaction | null>(null);
   let multisig = $state(false);
   let moreOpen = $state(false);
@@ -381,6 +385,33 @@
       loadError = localizedError(cause, $locale, 'The wallet data could not be read.');
       initialDataLoading = false;
       toast({ title: 'Could not open wallet', description: loadError, tone: 'danger' });
+    }
+  }
+
+  async function confirmDiscardPaymentDraft() {
+    if (!activeDraft || discardingDraft) return;
+    discardingDraft = true;
+    discardDraftError = '';
+    try {
+      await walletService.clearPaymentDraft();
+      activeDraft = null;
+      discardDraftOpen = false;
+      toast({
+        title: translate($locale, 'Payment draft discarded'),
+        description: translate(
+          $locale,
+          'The unfinished payment was removed. No transaction was created.'
+        ),
+        tone: 'success'
+      });
+    } catch (cause) {
+      discardDraftError = localizedError(
+        cause,
+        $locale,
+        'The payment draft could not be discarded.'
+      );
+    } finally {
+      discardingDraft = false;
     }
   }
   onMount(() =>
@@ -946,13 +977,7 @@
         >
       </a>
     {:else if activeDraft}
-      <a
-        class="active-proposal-callout"
-        href={activeDraft.kind === 'multisig' ? '/multisig/send' : '/send'}
-        aria-label={translate($locale, 'Resume payment draft, {label}', {
-          label: $discreetMode ? 'Label hidden' : activeDraft.labels.join(', ')
-        })}
-      >
+      <section class="active-proposal-callout active-draft-callout">
         <span class="active-proposal-icon"><Clock3 size={17} /></span>
         <span class="active-proposal-copy"
           ><strong>{translate($locale, 'Payment draft in progress')}</strong><span
@@ -964,10 +989,25 @@
             /><small>{translate($locale, 'Recipient and labels saved')}</small></span
           ></span
         >
-        <span class="active-proposal-action"
-          >{translate($locale, 'Resume')} <ChevronRight size={15} /></span
-        >
-      </a>
+        <span class="active-draft-actions">
+          <Button
+            variant="ghost-danger"
+            size="small"
+            onclick={() => {
+              discardDraftError = '';
+              discardDraftOpen = true;
+            }}><Trash2 size={14} />{translate($locale, 'Discard draft')}</Button
+          >
+          <Button
+            variant="secondary"
+            size="small"
+            href={activeDraft.kind === 'multisig' ? '/multisig/send' : '/send'}
+            ariaLabel={translate($locale, 'Resume payment draft, {label}', {
+              label: $discreetMode ? 'Label hidden' : activeDraft.labels.join(', ')
+            })}>{translate($locale, 'Resume')} <ChevronRight size={15} /></Button
+          >
+        </span>
+      </section>
     {/if}
     <div class="primary-actions">
       <MobileWalletSwitcher
@@ -1106,6 +1146,47 @@
   wallet={multisigWallet}
   onclose={() => (showDescriptors = false)}
 />
+<Modal
+  open={discardDraftOpen}
+  title={translate($locale, 'Discard this payment draft?')}
+  description={translate($locale, 'Remove the unfinished payment without creating a transaction.')}
+  onclose={() => {
+    if (!discardingDraft) {
+      discardDraftOpen = false;
+      discardDraftError = '';
+    }
+  }}
+  >{#if activeDraft}<div class="warning-box">
+      <strong>{translate($locale, 'Only the draft will be removed.')}</strong>
+      {translate($locale, 'No transaction or signature exists yet.')}
+    </div>
+    <dl class="details-list cancel-proposal-details">
+      <div>
+        <dt>{translate($locale, 'Payment')}</dt>
+        <dd><PermanentLabelTags labels={activeDraft.labels} hidden={$discreetMode} prominent /></dd>
+      </div>
+      <div>
+        <dt>{translate($locale, 'Saved fields')}</dt>
+        <dd>{translate($locale, 'Recipient, labels, amount, fee, and coin selection')}</dd>
+      </div>
+    </dl>
+    {#if discardDraftError}<p class="form-error" role="alert">{discardDraftError}</p>{/if}
+    <div class="modal-footer">
+      <Button
+        variant="secondary"
+        disabled={discardingDraft}
+        onclick={() => {
+          discardDraftOpen = false;
+          discardDraftError = '';
+        }}>{translate($locale, 'Keep draft')}</Button
+      ><Button
+        variant="danger"
+        loading={discardingDraft}
+        loadingLabel={translate($locale, 'Discarding draft…')}
+        onclick={confirmDiscardPaymentDraft}>{translate($locale, 'Discard draft')}</Button
+      >
+    </div>{/if}</Modal
+>
 <Modal
   open={initialScanOpen}
   title={translate(

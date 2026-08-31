@@ -1248,6 +1248,17 @@ code {
   font-size: 10px;
   font-weight: 650;
 }
+.active-draft-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+}
+.active-draft-actions .button {
+  min-height: 32px;
+  font-size: 10px;
+  font-weight: 650;
+}
 .active-proposal-callout + .primary-actions {
   margin-top: 10px;
 }
@@ -10121,6 +10132,14 @@ code {
   }
   .active-proposal-action {
     display: none;
+  }
+  .active-draft-actions {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .active-draft-actions a.button {
+    width: 100%;
   }
   .mobile-nav {
     position: fixed;

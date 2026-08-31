@@ -484,5 +484,53 @@ export const sendCopy = {
   'Your proposal will stay saved.': {
     fr: 'Votre proposition restera enregistrée.',
     es: 'Tu propuesta seguirá guardada.'
+  },
+  'Discard draft': {
+    fr: 'Écarter le brouillon',
+    es: 'Descartar borrador'
+  },
+  'Discard this payment draft?': {
+    fr: 'Écarter ce brouillon de paiement ?',
+    es: '¿Descartar este borrador de pago?'
+  },
+  'Discarding draft…': {
+    fr: 'Suppression du brouillon…',
+    es: 'Descartando borrador…'
+  },
+  'Keep draft': {
+    fr: 'Conserver le brouillon',
+    es: 'Conservar borrador'
+  },
+  'No transaction or signature exists yet.': {
+    fr: 'Aucune transaction ni signature n’existe encore.',
+    es: 'Aún no existe ninguna transacción ni firma.'
+  },
+  'Only the draft will be removed.': {
+    fr: 'Seul le brouillon sera supprimé.',
+    es: 'Solo se eliminará el borrador.'
+  },
+  'Payment draft discarded': {
+    fr: 'Brouillon de paiement écarté',
+    es: 'Borrador de pago descartado'
+  },
+  'Recipient, labels, amount, fee, and coin selection': {
+    fr: 'Destinataire, libellés, montant, frais et sélection des pièces',
+    es: 'Destinatario, etiquetas, importe, comisión y selección de monedas'
+  },
+  'Remove the unfinished payment without creating a transaction.': {
+    fr: 'Supprimez le paiement inachevé sans créer de transaction.',
+    es: 'Elimina el pago sin terminar sin crear una transacción.'
+  },
+  'Saved fields': {
+    fr: 'Champs enregistrés',
+    es: 'Campos guardados'
+  },
+  'The payment draft could not be discarded.': {
+    fr: 'Le brouillon de paiement n’a pas pu être supprimé.',
+    es: 'No se pudo descartar el borrador de pago.'
+  },
+  'The unfinished payment was removed. No transaction was created.': {
+    fr: 'Le paiement inachevé a été supprimé. Aucune transaction n’a été créée.',
+    es: 'Se eliminó el pago sin terminar. No se creó ninguna transacción.'
   }
 } as const satisfies CatalogSection;

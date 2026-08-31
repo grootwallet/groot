@@ -13,6 +13,7 @@
     LockKeyhole,
     QrCode,
     ScanLine,
+    Trash2,
     X
   } from '@lucide/svelte';
   import { onDestroy, onMount } from 'svelte';
@@ -113,6 +114,11 @@
   let estimates = $state<FeeEstimates | null>(null);
   let feeEstimateError = $state('');
   let draftError = $state('');
+  let hasPaymentDraft = $state(false);
+  let discardDraftOpen = $state(false);
+  let discardingDraft = $state(false);
+  let discardDraftError = $state('');
+  let suppressDraftSave = false;
   let proposal = $state<PaymentProposal | null>(null);
   let maxSpendQuote = $state<MaxSpendQuote | null>(null);
   let maxSpendActive = $state(false);
@@ -374,6 +380,7 @@
       if (!proposal && !accelerationRequest && draftWalletId) {
         const savedDraft = await walletService.paymentDraft();
         if (savedDraft?.kind === 'single_key') {
+          hasPaymentDraft = true;
           address = savedDraft.address;
           selectedLabels = savedDraft.labels;
           label = '';
@@ -415,13 +422,20 @@
   });
 
   onDestroy(() => {
-    void saveCurrentDraft();
+    if (!suppressDraftSave) void saveCurrentDraft();
     hardwareScanGeneration += 1;
     passphrase = '';
   });
 
   async function saveCurrentDraft() {
-    if (!draftWalletId || proposal || !addressValid || submissionLabels.length === 0) return;
+    if (
+      suppressDraftSave ||
+      !draftWalletId ||
+      proposal ||
+      !addressValid ||
+      submissionLabels.length === 0
+    )
+      return;
     await walletService.savePaymentDraft({
       kind: 'single_key',
       walletId: draftWalletId,
@@ -434,6 +448,37 @@
       speed,
       customFee
     });
+    hasPaymentDraft = true;
+  }
+
+  async function confirmDiscardPaymentDraft() {
+    if (!hasPaymentDraft || proposal || discardingDraft) return;
+    discardingDraft = true;
+    discardDraftError = '';
+    try {
+      await walletService.clearPaymentDraft();
+      suppressDraftSave = true;
+      hasPaymentDraft = false;
+      discardDraftOpen = false;
+      toast({
+        title: translate($locale, 'Payment draft discarded'),
+        description: translate(
+          $locale,
+          'The unfinished payment was removed. No transaction was created.'
+        ),
+        tone: 'success'
+      });
+      await goto('/');
+    } catch (cause) {
+      suppressDraftSave = false;
+      discardDraftError = localizedError(
+        cause,
+        $locale,
+        'The payment draft could not be discarded.'
+      );
+    } finally {
+      discardingDraft = false;
+    }
   }
 
   async function prepare() {
@@ -447,7 +492,10 @@
         asFeeRate(selectedFeeRate),
         selection
       );
-      if (draftWalletId) await walletService.clearPaymentDraft();
+      if (draftWalletId) {
+        await walletService.clearPaymentDraft();
+        hasPaymentDraft = false;
+      }
       if (externalSigner)
         externalProposal =
           (await walletService.externalSignerProposals()).find(
@@ -941,6 +989,16 @@
         )}
       </p>
     </div>
+    {#if hasPaymentDraft && !proposal && !accelerationRequest}<div class="page-header-actions">
+        <Button
+          variant="ghost-danger"
+          size="small"
+          onclick={() => {
+            discardDraftError = '';
+            discardDraftOpen = true;
+          }}><Trash2 size={14} />{translate($locale, 'Discard draft')}</Button
+        ><Button variant="secondary" size="small" href="/">{translate($locale, 'Back')}</Button>
+      </div>{/if}
   </header>
   {#if step < 4}<SendProgress current={progressStep} />{/if}
   {#if step < 4}<SignerSummary
@@ -1850,6 +1908,47 @@
     'Groot accepts only crypto-psbt UR frames and verifies the exact proposal before importing.'
   )}
   onclose={() => (qrScanOpen = false)}><UrQrScanner onframe={receiveUrFrame} /></Modal
+>
+<Modal
+  open={discardDraftOpen}
+  title={translate($locale, 'Discard this payment draft?')}
+  description={translate($locale, 'Remove the unfinished payment without creating a transaction.')}
+  onclose={() => {
+    if (!discardingDraft) {
+      discardDraftOpen = false;
+      discardDraftError = '';
+    }
+  }}
+  ><div class="warning-box">
+    <strong>{translate($locale, 'Only the draft will be removed.')}</strong>
+    {translate($locale, 'No transaction or signature exists yet.')}
+  </div>
+  <dl class="details-list cancel-proposal-details">
+    <div>
+      <dt>{translate($locale, 'Payment')}</dt>
+      <dd><PermanentLabelTags labels={submissionLabels} prominent /></dd>
+    </div>
+    <div>
+      <dt>{translate($locale, 'Saved fields')}</dt>
+      <dd>{translate($locale, 'Recipient, labels, amount, fee, and coin selection')}</dd>
+    </div>
+  </dl>
+  {#if discardDraftError}<p class="form-error" role="alert">{discardDraftError}</p>{/if}
+  <div class="modal-footer">
+    <Button
+      variant="secondary"
+      disabled={discardingDraft}
+      onclick={() => {
+        discardDraftOpen = false;
+        discardDraftError = '';
+      }}>{translate($locale, 'Keep draft')}</Button
+    ><Button
+      variant="danger"
+      loading={discardingDraft}
+      loadingLabel={translate($locale, 'Discarding draft…')}
+      onclick={confirmDiscardPaymentDraft}>{translate($locale, 'Discard draft')}</Button
+    >
+  </div></Modal
 >
 <Modal
   open={discardSignatureOpen}

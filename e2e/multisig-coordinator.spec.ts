@@ -260,6 +260,50 @@ test('keeps multisig PSBT actions inside the review card', async ({ page }) => {
   }
 });
 
+test('discards a resumed payment draft without creating a proposal', async ({ page }) => {
+  await page.goto('/');
+  const isMobile = (page.viewportSize()?.width ?? 1180) <= 760;
+  if (isMobile) {
+    await page.getByRole('link', { name: 'Settings' }).click();
+    await page
+      .locator('.wallet-manager')
+      .getByRole('button', { name: /Family wallet/ })
+      .click();
+  } else {
+    await page
+      .getByRole('complementary')
+      .getByRole('button', { name: /Family wallet/ })
+      .click();
+  }
+  await page.getByLabel('App PIN', { exact: true }).fill('prototype-passphrase');
+  await page.getByRole('button', { name: 'Unlock wallet' }).click();
+  await page.getByRole('link', { name: 'Send', exact: true }).click();
+  await page.getByLabel('Payment label').fill('Draft to discard');
+  await page.getByLabel('Bitcoin address').fill('bcrt1qdummy00085n8k2r7v4cx9s6jlawephgzuqf5t8ul');
+  await page.getByRole('button', { name: 'Continue to amount' }).click();
+
+  await page.getByRole('link', { name: 'Back to overview' }).click();
+  const draftCallout = page.locator('.active-draft-callout');
+  await expect(draftCallout).toContainText('Payment draft in progress');
+  await expect(draftCallout.getByRole('button', { name: 'Discard draft' })).toBeVisible();
+  await draftCallout.getByRole('link', { name: /Resume payment draft/ }).click();
+
+  await expect(page).toHaveURL(/\/multisig\/send$/);
+  await expect(page.getByRole('button', { name: 'Discard draft' })).toBeVisible();
+  await page.getByRole('button', { name: 'Discard draft' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Discard this payment draft?' });
+  await expect(dialog).toContainText('No transaction or signature exists yet.');
+  await expect(dialog).toContainText('Draft to discard');
+  await dialog.getByRole('button', { name: 'Discard draft' }).click();
+
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByText('Payment draft discarded', { exact: true })).toBeVisible();
+  await expect(page.locator('.active-draft-callout')).toHaveCount(0);
+  await page.getByRole('link', { name: 'Send', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Discard draft' })).toHaveCount(0);
+  await expect(page.getByLabel('Bitcoin address')).toHaveValue('');
+});
+
 test('multisig receive and send cap manual label drafts at five', async ({ page }) => {
   await page.goto('/multisig');
   await page.getByRole('main').getByRole('link', { name: 'Receive' }).click();
