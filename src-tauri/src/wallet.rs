@@ -9,7 +9,7 @@ use bdk_bitcoind_rpc::{
         json::{EstimateMode, GetBlockchainInfoResult},
         jsonrpc, Auth, Client, Error as CoreRpcError, RpcApi,
     },
-    Emitter,
+    BitcoindRpcErrorExt, Emitter,
 };
 use bdk_wallet::{
     bitcoin::{
@@ -363,6 +363,7 @@ pub struct WalletSyncStatusDto {
     last_verified_height: u32,
     connected_peers: Option<usize>,
     required_peers: Option<usize>,
+    failure_code: Option<&'static str>,
     updated_at: u64,
 }
 
@@ -382,6 +383,7 @@ fn set_sync_status(
         last_verified_height,
         connected_peers: None,
         required_peers: None,
+        failure_code: None,
         updated_at: now(),
     });
     Ok(())
@@ -488,6 +490,7 @@ fn finish_sync_status(
         Err(error) if error.code == "sync_cancelled" => "cancelled",
         Err(_) => "failed",
     };
+    current.failure_code = result.as_ref().err().map(|error| error.code);
     current.last_verified_height = verified_height;
     current.updated_at = now();
 }
@@ -2205,6 +2208,33 @@ fn checked_chain_identity(client: &Client) -> ApiResult<(u64, BlockHash)> {
 
 fn checked_block_height(client: &Client) -> ApiResult<u64> {
     checked_chain_identity(client).map(|(height, _)| height)
+}
+
+fn rewind_stale_core_checkpoints(
+    client: &Client,
+    wallet: &Wallet,
+) -> ApiResult<(CheckPoint, bool)> {
+    let original_tip = wallet.latest_checkpoint().height();
+    let mut agreement = None;
+    for checkpoint in wallet.latest_checkpoint().iter() {
+        match client.get_block_info(&checkpoint.hash()) {
+            Ok(block) if block.confirmations >= 0 => {
+                agreement = Some(checkpoint);
+                break;
+            }
+            Ok(_) => {}
+            Err(error) if error.is_not_found_error() => {}
+            Err(error) => return Err(rpc_api_error(error)),
+        }
+    }
+    let agreement = agreement.ok_or_else(|| {
+        api_error(
+            "wrong_network",
+            "The Bitcoin Core chain does not share Groot's verified genesis checkpoint.",
+        )
+    })?;
+    let rewound = agreement.height() < original_tip;
+    Ok((agreement, rewound))
 }
 
 fn retry_transient_node_health<T>(
@@ -4790,8 +4820,9 @@ fn sync_wallet_with_core(
     let target_height = u32::try_from(checked_block_height(rpc.as_ref())?)
         .map_err(|_| internal("The node height exceeds the supported sync range."))?;
     let mut wallet = load_wallet(db)?;
-    let wallet_tip = wallet.latest_checkpoint();
+    let (wallet_tip, _) = rewind_stale_core_checkpoints(rpc.as_ref(), &wallet)?;
     let start_height = wallet_tip.height();
+    let scan_birthday = load_recovery_scan_settings(db)?.birthday_height;
     update_core_sync_status(
         &state.sync_status,
         start_height,
@@ -4801,7 +4832,7 @@ fn sync_wallet_with_core(
     let mut emitter = Emitter::new(
         rpc,
         wallet_tip,
-        0,
+        scan_birthday,
         wallet
             .transactions()
             .filter(|tx| tx.chain_position.is_unconfirmed()),
@@ -5023,6 +5054,12 @@ fn full_rescan_loaded_wallet(
                 0,
             )
         };
+    db.execute(
+        "DELETE FROM bdk_blocks WHERE block_height > ?1",
+        params![checkpoint.height()],
+    )
+    .map_err(internal)?;
+    *wallet = load_wallet(db)?;
     let expected_mempool = wallet
         .transactions()
         .filter(|tx| tx.chain_position.is_unconfirmed());

@@ -143,6 +143,34 @@
     Boolean(
       status && ['connecting', 'syncing', 'checking_matches', 'applying'].includes(status.state)
     );
+  const syncFailureDescription = (status: WalletSyncStatus) => {
+    if (status.lastVerifiedHeight === 0 && !snapshot?.syncedAt) {
+      return translate(
+        $locale,
+        'No wallet history has been verified yet. Retry when your connection is available.'
+      );
+    }
+    const height = formatInteger(status.lastVerifiedHeight, $locale);
+    if (status.failureCode === 'invalid_node_config') {
+      return translate(
+        $locale,
+        'Bitcoin Core is reachable, but its RPC user cannot run every wallet-sync method. Balance remains verified through block {height}.',
+        { height }
+      );
+    }
+    if (status.failureCode === 'internal_error') {
+      return translate(
+        $locale,
+        'Groot could not reconcile or save the refreshed wallet state. Balance remains verified through block {height}.',
+        { height }
+      );
+    }
+    return translate(
+      $locale,
+      'Balance remains verified through block {height}. Retry when your connection is available.',
+      { height }
+    );
+  };
   let syncInProgress = $derived(syncing || syncStatusIsActive(syncStatus));
   let syncAgeValue = $derived(syncAge(snapshot?.syncedAt ?? null, syncClock));
   let syncButtonLabel = $derived.by(() => {
@@ -732,18 +760,7 @@
           )}</strong
         ><small
           >{syncStatus.state === 'failed'
-            ? syncStatus.lastVerifiedHeight === 0 && !snapshot?.syncedAt
-              ? translate(
-                  $locale,
-                  'No wallet history has been verified yet. Retry when your connection is available.'
-                )
-              : translate(
-                  $locale,
-                  'Balance remains verified through block {height}. Retry when your connection is available.',
-                  {
-                    height: formatInteger(syncStatus.lastVerifiedHeight, $locale)
-                  }
-                )
+            ? syncFailureDescription(syncStatus)
             : syncStatus.chainHeight !== null
               ? translate(
                   $locale,

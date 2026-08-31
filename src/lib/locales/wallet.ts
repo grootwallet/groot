@@ -239,6 +239,16 @@ export const walletCopy = {
     fr: 'Le solde reste vérifié jusqu’au bloc {height}. Réessayez lorsque votre connexion est disponible.',
     es: 'El saldo permanece verificado hasta el bloque {height}. Vuelve a intentarlo cuando haya conexión.'
   },
+  'Bitcoin Core is reachable, but its RPC user cannot run every wallet-sync method. Balance remains verified through block {height}.':
+    {
+      fr: 'Bitcoin Core est accessible, mais son utilisateur RPC ne peut pas exécuter toutes les méthodes de synchronisation du portefeuille. Le solde reste vérifié jusqu’au bloc {height}.',
+      es: 'Bitcoin Core está accesible, pero su usuario RPC no puede ejecutar todos los métodos de sincronización de la cartera. El saldo sigue verificado hasta el bloque {height}.'
+    },
+  'Groot could not reconcile or save the refreshed wallet state. Balance remains verified through block {height}.':
+    {
+      fr: 'Groot n’a pas pu réconcilier ou enregistrer l’état actualisé du portefeuille. Le solde reste vérifié jusqu’au bloc {height}.',
+      es: 'Groot no pudo conciliar o guardar el estado actualizado de la cartera. El saldo sigue verificado hasta el bloque {height}.'
+    },
   'Network height {height} · verified wallet state stays unchanged until completion': {
     fr: 'Hauteur du réseau {height} · l’état vérifié du portefeuille reste inchangé jusqu’à la fin',
     es: 'Altura de red {height} · el estado verificado de la cartera no cambia hasta finalizar'

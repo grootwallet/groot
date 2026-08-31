@@ -71,6 +71,9 @@ describe('foreground wallet navigation', () => {
     expect(overview).toContain('syncStatusIsActive(syncStatus)');
     expect(overview).toContain('startSyncStatusPolling()');
     expect(overview).toContain('syncAge(snapshot?.syncedAt ?? null, syncClock)');
+    expect(overview).toContain("status.failureCode === 'invalid_node_config'");
+    expect(overview).toContain("status.failureCode === 'internal_error'");
+    expect(overview).toContain('syncFailureDescription(syncStatus)');
   });
 
   it('requires an explicit first-scan start and presents resumable recovery progress', () => {

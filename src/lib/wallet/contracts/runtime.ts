@@ -79,6 +79,7 @@ export type WalletSyncStatus = {
   lastVerifiedHeight: number;
   connectedPeers: number | null;
   requiredPeers: number | null;
+  failureCode: string | null;
   updatedAt: number;
 };
 export type PayjoinUriInspection = {

@@ -3669,6 +3669,7 @@ fn compact_filter_progress_dto_is_sanitized_and_bounded() {
         last_verified_height: 42,
         connected_peers: None,
         required_peers: None,
+        failure_code: None,
         updated_at: 1,
     })));
     update_compact_filter_sync_status(
@@ -3690,9 +3691,10 @@ fn compact_filter_progress_dto_is_sanitized_and_bounded() {
     assert_eq!(status.progress_percent, Some(100));
     assert_eq!(status.chain_height, Some(123));
     assert_eq!(status.last_verified_height, 42);
+    assert_eq!(status.failure_code, None);
     let serialized = serde_json::to_value(status).unwrap();
     let object = serialized.as_object().unwrap();
-    assert_eq!(object.len(), 9);
+    assert_eq!(object.len(), 10);
     for forbidden in ["address", "hash", "script", "descriptor", "warning"] {
         assert!(!object.keys().any(|key| key.contains(forbidden)));
     }

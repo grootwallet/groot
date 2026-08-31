@@ -142,6 +142,27 @@ credential, or RPC detail is retained.
 Independent review is deferred until all Testnet4 hardware-device campaigns are
 finalized; this row is neither passed nor failed.
 
+## Packaged v0.4.84 Testnet4 BIP84 checkpoint — 2026-08-31
+
+On the locally ad-hoc-signed Testnet4 package at commit `8ff4e7da`, the reviewer
+created a new Safe 3 BIP84 wallet, completed its first history scan, verified a
+permanently labeled receive address on the exact device, and confirmed that the
+wallet and its verified zero-balance state persisted over a complete Groot quit
+and relaunch. The saved public descriptor export and BIP329 label export also
+completed. These observations close only the named BIP84 import/sync,
+trusted-display, restart-persistence, and public-export rows; they do not imply a
+payment, signature, rejection, acceleration, or broadcast pass.
+
+A later explicit full wallet rescan from a recent birthday failed. Ordinary sync
+continued to work and the last verified wallet state remained available, so this
+is recorded as a v0.4.84 recovery-scan defect rather than a Safe 3 hardware
+failure. The defect requires a fixed packaged-candidate retest before the
+Testnet4 recovery row can close.
+
+Screenshots that exposed a public receive address were excluded from retained
+evidence. No address, transaction identifier, fingerprint, account key,
+descriptor, PSBT, device path, credential, RPC detail, or label is retained.
+
 Local sensitive evidence reviewed without copying identifiers: yes
 
 Certification decision: **LIMITED — LOCAL REGTEST AND RECOVERY PASS / RELEASE

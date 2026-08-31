@@ -42,6 +42,7 @@ Use fresh, non-sensitive test wallets and record only sanitized results:
 4. Exercise wrong-network recipient, wrong-chain Core, stale/unreachable Core, invalid credentials, fee-estimation failure, and rejected broadcast. Each must fail closed without mutating the persisted proposal.
 5. Copy a closed disposable encrypted profile into a separate application-data root. Confirm correct-credential relocation, wrong-credential rejection, corruption failure without source mutation, and authenticated v2-to-v3 migration where a v2 fixture is available.
 6. On Testnet4, additionally record RBF replacement, CPFP package confirmation, a one-block reorg, mempool restoration, and reconfirmation.
+7. For a birthday-only wallet, invalidate every retained post-birthday checkpoint on a disposable chain, mine the replacement branch, and confirm normal sync rewinds to active-chain agreement without deleting transaction, label, proposal, or signer metadata. Then repeat a full rescan from an earlier birthday and confirm the introduced chain connects and completes.
 
 The same-machine Core command, build identity check, exact connection fields, and ordered storage/payment drill are specified in [the Testnet4 portable-storage rehearsal](pre-mainnet-test-runbook.md#2a-testnet4-portable-storage-and-core-rehearsal).
 
