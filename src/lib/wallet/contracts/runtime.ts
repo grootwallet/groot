@@ -61,6 +61,7 @@ export type NetworkSetupSource = {
   walletId: string;
   walletName: string;
   syncSource: WalletSyncSource;
+  ready: boolean;
 };
 export type WalletSyncStatus = {
   walletId: string;

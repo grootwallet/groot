@@ -86,7 +86,8 @@
 
   onMount(async () => {
     try {
-      networkSetupSource = (await walletService.networkSetupSources())[0] ?? null;
+      networkSetupSource =
+        (await walletService.networkSetupSources()).find((source) => source.ready) ?? null;
     } catch {
       networkSetupSource = null;
     }

@@ -394,6 +394,16 @@ export const settingsCopy = {
     es: 'Usa una sola unidad en todo Groot.'
   },
   'Use setup': { fr: 'Utiliser la configuration', es: 'Usar configuración' },
+  'Unlock first': { fr: 'Déverrouiller d’abord', es: 'Desbloquear primero' },
+  'Unlock the source wallet first.': {
+    fr: 'Déverrouillez d’abord le portefeuille source.',
+    es: 'Desbloquea primero la cartera de origen.'
+  },
+  'Open and unlock that wallet, then return here. Its saved credentials never enter this screen.': {
+    fr: 'Ouvrez et déverrouillez ce portefeuille, puis revenez ici. Ses identifiants enregistrés ne sont jamais affichés sur cet écran.',
+    es: 'Abre y desbloquea esa cartera y vuelve aquí. Sus credenciales guardadas nunca aparecen en esta pantalla.'
+  },
+  Ready: { fr: 'Prêt', es: 'Listo' },
   'Username and password': { fr: 'Nom d’utilisateur et mot de passe', es: 'Usuario y contraseña' },
   'Verify now': { fr: 'Vérifier maintenant', es: 'Verificar ahora' },
   'View descriptor': { fr: 'Afficher le descripteur', es: 'Ver descriptor' },

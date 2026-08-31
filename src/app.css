@@ -972,6 +972,21 @@ code {
   border-color: var(--focus);
   background: color-mix(in srgb, var(--focus) 9%, var(--surface-control));
 }
+.initial-scan-options > button strong {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+.initial-scan-options > .initial-scan-disclosure {
+  justify-content: flex-start;
+  width: fit-content;
+  min-height: 28px;
+  margin: -2px 0 1px;
+  padding-inline: 4px;
+  color: var(--link);
+  font-size: 10px;
+  font-weight: 600;
+}
 .initial-scan-options > button small,
 .scan-resume-summary span,
 .initial-scan-field small {

@@ -119,6 +119,29 @@ recorded above.
 - The local Regtest USB and clean-profile recovery campaign is complete. The
   public-network/package and independent-review row remains unclaimed.
 
+## Packaged v0.4.83 Testnet4 setup checkpoint — 2026-08-31
+
+On the exact packaged Testnet4 candidate at short commit `12cf1714`, the reviewer
+reported a successful Trezor Safe 3 BIP48 public-account import into a new
+standard multisig policy. After that wallet was created offline, the bounded
+saved-identity health check matched the connected physical Safe 3. Groot
+correctly showed **No setup needed** for wallet policy because Safe 3 receives
+the complete policy on each request and does not persist Groot registration
+state. This evidence does not inherit any Regtest transaction row.
+
+The wallet has never synced. No trusted receive display, funding, payment
+review, rejection/retry, signature, disconnect/wrong-device behavior,
+acceleration, recovery, restart, threshold, or broadcast is claimed for
+Testnet4. The first coordinator creation attempt also exposed a product defect
+when a preselected network-setup source was no longer unlocked; the later
+offline creation does not convert that failure into a pass. Screenshots that
+contained public signer identifiers and node details were excluded. No address,
+transaction identifier, fingerprint, account key, descriptor, PSBT, device path,
+credential, or RPC detail is retained.
+
+Independent review is deferred until all Testnet4 hardware-device campaigns are
+finalized; this row is neither passed nor failed.
+
 Local sensitive evidence reviewed without copying identifiers: yes
 
 Certification decision: **LIMITED — LOCAL REGTEST AND RECOVERY PASS / RELEASE

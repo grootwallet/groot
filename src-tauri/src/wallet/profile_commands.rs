@@ -19,6 +19,7 @@ pub struct NetworkSetupSource {
     wallet_id: String,
     wallet_name: String,
     sync_source: WalletSyncSource,
+    ready: bool,
 }
 
 pub(crate) fn profile_compatibility_for(
@@ -80,27 +81,23 @@ pub fn network_setup_sources(
         .wallets
         .into_iter()
         .filter_map(|profile| {
-            if !unlocked.is_unlocked(profile.id) {
-                return None;
-            }
             let path = node_config_path_for(&app, profile.id).ok()?;
             if !path.is_file() {
                 return None;
             }
             let config = read_node_config_for(&app, profile.id).ok()?;
-            let credentials_ready = match config.auth {
-                RpcAuthMode::Cookie => true,
-                RpcAuthMode::UserPass => node_auth
-                    .get(&profile.id)
-                    .is_some_and(|session| session.config == config),
-            };
-            if !credentials_ready {
-                return None;
-            }
+            let ready = unlocked.is_unlocked(profile.id)
+                && match config.auth {
+                    RpcAuthMode::Cookie => true,
+                    RpcAuthMode::UserPass => node_auth
+                        .get(&profile.id)
+                        .is_some_and(|session| session.config == config),
+                };
             Some(NetworkSetupSource {
                 wallet_id: profile.id.to_string(),
                 wallet_name: profile.name,
                 sync_source: read_sync_source_for(&app, profile.id).ok()?,
+                ready,
             })
         })
         .collect())

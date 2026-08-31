@@ -74,15 +74,19 @@ describe('foreground wallet navigation', () => {
   });
 
   it('requires an explicit first-scan start and presents resumable recovery progress', () => {
-    expect(overview).toContain(
-      "initialScanMode = $state<'new' | 'birthday' | 'full' | null>(null)"
-    );
+    expect(overview).toContain("initialScanMode = $state<'new' | 'birthday' | 'full'>('new')");
+    expect(overview).toContain('let showManualScanOptions = $state(false)');
+    expect(overview).toContain('let showAdvancedScanOptions = $state(false)');
     expect(overview).toContain("'New wallet · no earlier activity'");
     expect(overview).toContain("'Existing wallet · use a birthday block'");
     expect(overview).toContain("'Full history · safest'");
+    expect(overview).toContain("'Address discovery options'");
+    expect(overview).toContain('!snapshot?.syncedAt && nodeReady');
+    expect(overview).toContain("href={nodeReady ? undefined : '/settings'}");
     expect(overview).toContain('walletService.fullRescan(credential)');
     expect(overview).toContain('recoveryStatus.processedBlocks');
-    expect(overview).toContain("'Not verified yet'");
+    expect(overview).toContain('<Amount value={0} hidden={$discreetMode} />');
+    expect(overview).toContain("'Never synced'");
   });
 
   it('does not start a second compact-filter scan after reattaching to an inherited scan', () => {

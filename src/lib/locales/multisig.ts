@@ -816,7 +816,7 @@ export const multisigCopy = {
     fr: 'Actualisez les signataires connectés.',
     es: 'Actualiza los firmantes conectados.'
   },
-  'Regtest · Native SegWit': { fr: 'Regtest · SegWit natif', es: 'Regtest · SegWit nativo' },
+  'Native SegWit': { fr: 'SegWit natif', es: 'SegWit nativo' },
   'Remove signer': { fr: 'Supprimer le signataire', es: 'Eliminar firmante' },
   'Review wallet': { fr: 'Vérifier le portefeuille', es: 'Revisar cartera' },
   'Save the policy to microSD or Coldcard Virtual Disk.': {

@@ -272,13 +272,22 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     return structuredClone(this._nodeConfig);
   }
   async networkSetupSources() {
-    return this._profiles
-      .filter((profile) => this._unlockedWalletIds.has(profile.id))
-      .map((profile) => ({
-        walletId: profile.id,
-        walletName: profile.name,
-        syncSource: structuredClone(this._syncSource)
-      }));
+    if (
+      typeof location !== 'undefined' &&
+      new URLSearchParams(location.search).has('fixture-no-network-setup')
+    )
+      return [];
+    const lockReusableSources =
+      typeof location !== 'undefined' &&
+      new URLSearchParams(location.search).has('fixture-locked-network-source');
+    return this._profiles.map((profile) => ({
+      walletId: profile.id,
+      walletName: profile.name,
+      syncSource: structuredClone(this._syncSource),
+      ready:
+        this._unlockedWalletIds.has(profile.id) &&
+        (!lockReusableSources || profile.id === this._selectedWalletId)
+    }));
   }
   async adoptNetworkSetup(sourceWalletId: string, credential: string) {
     if (!this._profiles.some((profile) => profile.id === sourceWalletId))

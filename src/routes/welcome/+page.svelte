@@ -83,7 +83,8 @@
     if (hasExistingWallet && page.url.searchParams.get('add') !== '1') await goto('/unlock');
     if (hasExistingWallet) {
       try {
-        networkSetupSource = (await walletService.networkSetupSources())[0] ?? null;
+        networkSetupSource =
+          (await walletService.networkSetupSources()).find((source) => source.ready) ?? null;
       } catch {
         networkSetupSource = null;
       }

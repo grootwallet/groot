@@ -497,6 +497,10 @@ export const copyCatalog = {
     fr: 'Portefeuille existant · utiliser un bloc de naissance',
     es: 'Cartera existente · usar un bloque de nacimiento'
   },
+  'Existing wallet options': {
+    fr: 'Options pour un portefeuille existant',
+    es: 'Opciones para una cartera existente'
+  },
   'First wallet-history scan': {
     fr: 'Première analyse de l’historique',
     es: 'Primer escaneo del historial'
@@ -504,6 +508,18 @@ export const copyCatalog = {
   'Full history · safest': {
     fr: 'Historique complet · le plus sûr',
     es: 'Historial completo · lo más seguro'
+  },
+  'Hide existing-wallet options': {
+    fr: 'Masquer les options du portefeuille existant',
+    es: 'Ocultar opciones de cartera existente'
+  },
+  'Address discovery options': {
+    fr: 'Options de découverte des adresses',
+    es: 'Opciones de descubrimiento de direcciones'
+  },
+  'Hide address discovery options': {
+    fr: 'Masquer les options de découverte des adresses',
+    es: 'Ocultar opciones de descubrimiento de direcciones'
   },
   'If uncertain, choose full history instead of guessing.': {
     fr: 'En cas de doute, choisissez l’historique complet plutôt que d’estimer.',

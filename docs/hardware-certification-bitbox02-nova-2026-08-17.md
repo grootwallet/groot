@@ -120,6 +120,41 @@ close the remaining packaged receive, health, policy, signing, recovery, or
 independent-review rows. No public wallet or signer identifier, credential, or
 transaction material is retained here.
 
+### Packaged v0.4.83 Testnet4 accounting and BIP48 stop checkpoint
+
+The reviewer opened the exact packaged v0.4.83 Testnet4 candidate at short
+commit `12cf1714` against the preserved Nova wallet and its existing fee-only
+child. Synchronization completed, the child was confirmed and classified as a
+self-spend, and Overview, Activity, transaction detail, and wallet accounting
+each counted the network fee once. A complete Groot quit and relaunch retained
+the same confirmed presentation. This closes the focused v0.4.83 pending
+self-spend accounting regression without creating or broadcasting another
+transaction. It does not repeat the earlier physical signature and does not
+upgrade that earlier package's evidence to this candidate.
+
+The reviewer then reported that the Testnet4 BIP48 Nova public-account step
+worked and reached signer enrollment. The multisig setup header contradicted the
+running Testnet4 shell by displaying **Regtest · Native SegWit**. Source
+inspection confirmed a hardcoded presentation string: the packaged frontend
+configuration, Rust compiled network, HWI chain, and bundle identifier remained
+Testnet4. This is a display-only defect rather than a Regtest policy draft, but
+it fails the reviewable-network presentation row.
+
+The reviewer later continued on the exact same candidate and reported that Nova
+registered the BIP48 policy and verified the first address. The first coordinator
+creation attempt failed when the preselected network-setup source was no longer
+unlocked. With reuse explicitly unchecked, the same policy was created as an
+offline Testnet4 multisig wallet. This closes the Nova BIP48 public-account,
+policy-registration, first-address, and policy-construction rows for this
+candidate while failing the stale-source offline-fallback row. The wallet has
+not synced and no funding, proposal, signature, negative/retry behavior,
+threshold result, or broadcast is claimed.
+
+The local record relies on the reviewer's sanitized written observations.
+Screenshots containing public signer identifiers were excluded. No address,
+transaction identifier, fingerprint, account key, descriptor, device path,
+PSBT, credential, RPC detail, or label is retained here.
+
 ## Current decision
 
 **LOCAL REGTEST USB CORE PASS WITH LIMITATIONS — NOT RELEASE CERTIFIED.**
@@ -132,5 +167,10 @@ recovery. An earlier destructive recovery attempt remains documented, but the
 reviewer subsequently repeated the clean-profile test while preserving the
 source and reproduced the same identity, balance, history, and labels; the
 source then reopened intact. Cold pairing-cache reset was not isolated from the
-shared three-device BitBoxApp cache. Testnet4, packaged-candidate, independent
-review, and Whisper/BLE remain open.
+shared three-device BitBoxApp cache. Packaged v0.4.83 closes the focused
+confirmed self-spend accounting regression and the Testnet4 Nova BIP48
+import/policy/first-address setup rows, but fails the multisig network-label and
+stale-source reuse-fallback rows. Remaining funded Testnet4 BIP48 signing and
+negative behavior, full packaged-candidate certification, and Whisper/BLE remain
+open. Independent review is deferred until the Testnet4 device campaigns are
+finalized.

@@ -1269,17 +1269,21 @@ test('first Bitcoin Core scan requires an explicit range and never presents part
 }) => {
   await page.goto('/?fixture-initial-history-required=1');
 
-  await expect(page.getByText('Not verified yet')).toBeVisible();
+  await expect(page.getByText('Never synced')).toBeVisible();
   await expect(page.getByText('Wallet history not verified')).toBeVisible();
-  await expect(page.getByText('0 sats', { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel('Unverified balance')).toContainText('0 sats');
 
   const scan = page.getByRole('dialog', { name: 'First wallet-history scan' });
   await expect(scan).toBeVisible();
+  await expect(scan.getByRole('radio', { name: /New wallet · no earlier activity/ })).toBeChecked();
   await expect(scan.getByRole('button', { name: 'Start scan' })).toBeDisabled();
-  await expect(scan.getByText(/controls address discovery, not block-scan speed/)).toBeVisible();
+  await expect(scan.getByRole('radio', { name: /Existing wallet/ })).toHaveCount(0);
+  await expect(scan.getByLabel('Address gap limit')).toHaveCount(0);
 
+  await scan.getByRole('button', { name: 'Existing wallet options' }).click();
   await scan.getByRole('radio', { name: /Existing wallet · use a birthday block/ }).click();
   await scan.getByLabel('Wallet birthday block').fill('200');
+  await scan.getByRole('button', { name: 'Address discovery options' }).click();
   await scan.getByLabel('Address gap limit').fill('19');
   await scan.getByLabel('Wallet passphrase', { exact: true }).fill('prototype-passphrase');
   await expect(scan.getByRole('button', { name: 'Start scan' })).toBeDisabled();
@@ -1287,14 +1291,39 @@ test('first Bitcoin Core scan requires an explicit range and never presents part
   await scan.getByRole('button', { name: 'Start scan' }).click();
 
   await expect(page.getByText('Scanning wallet history')).toBeVisible();
-  await expect(page.getByText('Not verified yet')).toBeVisible();
+  await expect(page.getByText('Never synced')).toBeVisible();
   await expect(page.getByText('Wallet history not verified')).toBeVisible();
   await expect(page.getByText('Wallet history verified')).toBeVisible();
-  await expect(page.getByText('Not verified yet')).toHaveCount(0);
+  await expect(page.getByText('Never synced')).toHaveCount(0);
 
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true
   );
+});
+
+test('a never-synced Core wallet opens Settings before history controls when no node is saved', async ({
+  page
+}) => {
+  await page.goto('/?fixture-initial-history-required=1&fixture-no-network-setup=1');
+
+  await expect(page.getByRole('dialog', { name: 'First wallet-history scan' })).toHaveCount(0);
+  await expect(page.getByLabel('Unverified balance')).toContainText('0 sats');
+  await expect(page.getByLabel('Unverified balance')).toContainText('Never synced');
+  await page.getByRole('link', { name: 'Connect Bitcoin Core' }).click();
+  await expect(page).toHaveURL(/\/settings/);
+});
+
+test('Settings keeps saved locked network setups visible with unlock guidance', async ({
+  page
+}) => {
+  await page.goto('/settings?fixture-locked-network-source=1');
+  await page.getByRole('button', { name: /Use an existing network setup/ }).click();
+
+  const reuse = page.getByRole('dialog', { name: 'Use existing network setup' });
+  await expect(reuse.getByLabel('Copy from')).toContainText('Unlock first');
+  await expect(reuse.getByText('Unlock the source wallet first.')).toBeVisible();
+  await expect(reuse.getByLabel('Wallet passphrase', { exact: true })).toBeDisabled();
+  await expect(reuse.getByRole('button', { name: 'Use setup' })).toBeDisabled();
 });
 
 test('activity explains its empty state', async ({ page }) => {

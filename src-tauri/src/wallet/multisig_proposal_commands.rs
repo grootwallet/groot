@@ -1052,9 +1052,6 @@ pub async fn multisig_create(
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
         let _operation = operation_guard(&state)?;
-        if network_setup_source_wallet_id.is_some() {
-            require_unlocked(&app, &state)?;
-        }
         let credential = Zeroizing::new(credential);
         validate_credential(credential.as_str())?;
         reject_virtual_cosigners(&policy.cosigners)?;
@@ -1179,9 +1176,6 @@ pub async fn multisig_recovery_create(
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
         let _operation = operation_guard(&state)?;
-        if network_setup_source_wallet_id.is_some() {
-            require_unlocked(&app, &state)?;
-        }
         let credential = Zeroizing::new(credential);
         validate_credential(credential.as_str())?;
         reject_virtual_cosigners(&cosigners)?;

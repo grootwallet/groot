@@ -155,6 +155,9 @@
   let reusableNetworkSetups = $derived(
     networkSetupSources.filter((source) => source.walletId !== selectedWalletId)
   );
+  let selectedNetworkReuseSource = $derived(
+    reusableNetworkSetups.find((source) => source.walletId === networkReuseSourceId) ?? null
+  );
   let syncSource = $state<WalletSyncSource>({ type: 'bitcoin_core' });
   let syncOpen = $state(false),
     syncSaving = $state(false),
@@ -474,7 +477,10 @@
     }
   }
   function openNetworkReuse() {
-    networkReuseSourceId = reusableNetworkSetups[0]?.walletId ?? '';
+    networkReuseSourceId =
+      reusableNetworkSetups.find((source) => source.ready)?.walletId ??
+      reusableNetworkSetups[0]?.walletId ??
+      '';
     networkReuseCredential = '';
     networkReuseError = '';
     networkReuseOpen = true;
@@ -1754,10 +1760,13 @@
   {:else}
     <div class="warning-box">
       <strong>{translate($locale, 'Bitcoin Core activity sync.')}</strong>
-      {translate(
-        $locale,
-        'Groot uses the RPC node below for confirmed blocks\n      and mempool changes. It does not require Core’s block-filter index. A pruned node can sync while\n      it still retains every block newer than this wallet’s checkpoint; an older rescan needs an archival\n      node or a reindex/re-download with enough history.'
-      )}
+      {' '}
+      <span
+        >{translate(
+          $locale,
+          'Groot uses the RPC node below for confirmed blocks\n      and mempool changes. It does not require Core’s block-filter index. A pruned node can sync while\n      it still retains every block newer than this wallet’s checkpoint; an older rescan needs an archival\n      node or a reindex/re-download with enough history.'
+        )}</span
+      >
     </div>
   {/if}
   <PasswordField
@@ -1921,15 +1930,31 @@
   <label class="field"
     ><span>{translate($locale, 'Copy from')}</span><select bind:value={networkReuseSourceId}
       >{#each reusableNetworkSetups as source}<option value={source.walletId}
-          >{source.walletName}</option
+          >{source.walletName} — {translate(
+            $locale,
+            source.ready ? 'Ready' : 'Unlock first'
+          )}</option
         >{/each}</select
     ><small>{translate($locale, 'The RPC password stays inside trusted native code.')}</small
     ></label
   >
+  {#if selectedNetworkReuseSource && !selectedNetworkReuseSource.ready}
+    <div class="warning-box" role="status">
+      <strong>{translate($locale, 'Unlock the source wallet first.')}</strong>
+      {' '}
+      <span
+        >{translate(
+          $locale,
+          'Open and unlock that wallet, then return here. Its saved credentials never enter this screen.'
+        )}</span
+      >
+    </div>
+  {/if}
   <PasswordField
     label={credentialLabel}
     bind:value={networkReuseCredential}
     autocomplete="current-password"
+    disabled={!selectedNetworkReuseSource?.ready}
     hint={translate($locale, 'Protects the copied connection for this wallet.')}
   />
   {#if networkReuseError}<p class="form-error" role="alert">{networkReuseError}</p>{/if}
@@ -1942,7 +1967,7 @@
         networkReuseOpen = false;
       }}>{translate($locale, 'Cancel')}</Button
     ><Button
-      disabled={!networkReuseSourceId || !networkReuseCredential}
+      disabled={!selectedNetworkReuseSource?.ready || !networkReuseCredential}
       loading={networkReusing}
       loadingLabel={translate($locale, 'Verifying…')}
       onclick={reuseNetworkSetup}>{translate($locale, 'Use setup')}</Button
