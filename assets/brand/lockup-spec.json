@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "identity": "Groot + Control",
+  "font": {
+    "family": "Manrope",
+    "version": "4.504",
+    "weight": 690,
+    "trackingEm": -0.082,
+    "sha256": "d0639be45d0af36e798172419d7bd173c4bd4f29e2b76cbb69db1d11bf8b0a40"
+  },
+  "artboard": {
+    "width": 296.9966,
+    "height": 96,
+    "baselineY": 68
+  },
+  "symbol": {
+    "sourceCanvas": 128,
+    "sourceVisibleBottomY": 107,
+    "sourceStroke": 18,
+    "renderedCanvas": 70,
+    "translateY": 9.4844,
+    "scale": 0.546875
+  },
+  "wordmark": {
+    "originX": 89.0909,
+    "emSize": 88.7727
+  },
+  "usage": {
+    "minimumLockupWidthPx": 96,
+    "minimumWordmarkWidthPx": 80,
+    "minimumMarkPx": 24,
+    "opticalMarkMinimumPx": 16,
+    "opticalMarkMaximumPx": 23,
+    "minimumClearSpaceStrokeMultiples": 1,
+    "preferredClearSpaceStrokeMultiples": 2
+  }
+}

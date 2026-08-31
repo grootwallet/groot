@@ -2,13 +2,15 @@
 
 Status: **adopted 2026-08-10**. The approved production assets were promoted to the parent brand directory.
 
+This directory is a dated adoption record. Current construction and usage rules live in [`../../../../docs/brand-identity.md`](../../../../docs/brand-identity.md#formal-lockup-construction) and [`../../lockup-spec.json`](../../lockup-spec.json); do not implement from duplicated candidate files or historical measurements here.
+
 Canonical domain: **`usegroot.com`**. The acquired `grootbitcoin.com` and `grootwallet.com` domains are defensive redirects, not separate brand surfaces.
 
 ## Primary system
 
 - Name: **Groot**
 - Symbol: canonical **Control** mark
-- Wordmark: **Newsreader Medium 500**, converted to outlines
+- Wordmark: lowercase **Manrope 690**, converted to outlines
 - Primary color: Blue Ink `#102A4C`
 - Reversed color: Warm Ivory `#F7F3E9`
 - Accent: Signal Red stays outside the symbol and wordmark
@@ -26,10 +28,10 @@ The application icon continues to use [`../../app-icon-layered-source.svg`](../.
 
 - The visible bottom of the Control path meets the wordmark baseline.
 - The source mark's `21/128` lower canvas inset is compensated exactly; do not vertically center the raw SVG box.
-- The lockup uses a 17-unit canvas gap at its 70-unit symbol size.
-- Wordmark tracking is `-0.052em`, with Newsreader's native kerning preserved by HarfBuzz.
+- The lockup uses a 19.0909-unit origin gap at its 70-unit symbol size.
+- Wordmark tracking is `-0.082em`, with Manrope's native kerning preserved by HarfBuzz.
 - Minimum digital width: **96 px** for the complete lockup. Below this, use the symbol alone.
-- Minimum clear space: one scaled 18-unit symbol stroke on every side.
+- Minimum clear space: one scaled 18-unit symbol stroke on every side; prefer two strokes of container padding.
 
 Do not retype the name in a nearby serif, move the symbol by eye, stretch either element, add a container, recolor individual letters, or attach a tagline to the master lockup.
 
@@ -39,8 +41,8 @@ The four SVGs contain outlined glyphs and make no font or network request. Regen
 
 ```sh
 python -m pip install fonttools uharfbuzz
-python scripts/brand/export_groot_wordmark.py \
-  --font static/fonts/newsreader-500.ttf \
+PYTHONPATH=/path/to/runtime-font-tools /usr/bin/python3 scripts/brand/export_groot_wordmark.py \
+  --font assets/brand/source/manrope-variable.ttf \
   --output assets/brand
 ```
 

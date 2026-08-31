@@ -1,6 +1,6 @@
 # Brand identity
 
-Status: canonical V1 guidance for the adopted **Groot + Control + Newsreader Medium** identity, application icon, palette, and brand behavior. The 2026-08-10 adoption accepts the documented naming risk; it is not a claim of professional trademark clearance.
+Status: canonical V1 guidance for the adopted **Groot + Control + Manrope 690** identity, application icon, palette, and brand behavior. The 2026-08-10 adoption accepts the documented naming risk; it is not a claim of professional trademark clearance.
 
 This document owns brand identity. [`design-system.md`](design-system.md) owns product-interface behavior. Brand work must not silently change wallet policy, information architecture, or security-state semantics.
 
@@ -135,14 +135,70 @@ The wallet UI keeps its current system-sans and Iowan/Baskerville/Georgia stacks
 ### Wordmark
 
 - **Name:** Groot.
-- **Wordmark:** Newsreader Medium (`500`), stored as outlined SVG paths.
+- **Wordmark:** lowercase Manrope at variable weight `690`, stored as outlined SVG paths.
 - **Symbol:** use the existing Control symbol in the horizontal lockup and application icon.
 - **G Return:** retain as an exploration asset only. It is more distinctive alone but repeats the initial beside Groot and makes the identity dependent on a G name.
-- **Operational study type:** Manrope may appear in the internal naming study for compact labels and metadata. It is not approved as a replacement for Source Sans 3 or the wallet UI stack.
+- **Runtime scope:** Manrope is approved only as the outlined identity wordmark. It is not approved as a replacement for Source Sans 3 or the wallet UI stack.
 
-The symbol canvas aligns to the wordmark baseline, then moves down by its exact `21/128` bottom inset (`16.40625%`) so the visible filled path—not the invisible SVG canvas—meets the baseline. This construction rule must replace ad hoc per-size offsets.
+The wallet uses the approved outlined lockup rather than live Manrope text. Marketing and historical presentation studies belong in `thibistaken/groot-site`, not in a wallet route. The exact production values are also recorded in [`assets/brand/lockup-spec.json`](../assets/brand/lockup-spec.json), which the brand test reads directly.
 
-The wallet uses the approved outlined lockup rather than live Newsreader text. Marketing and historical presentation studies belong in `thibistaken/groot-site`, not in a wallet route.
+### Formal lockup construction
+
+The horizontal master has a `296.9966 × 96` view box. The Control source canvas is scaled from `128` to `70` units (`0.546875×`) and translated to `y=9.4844`. Its visible source bottom at `107/128` therefore lands at `y=68.0000`, the wordmark baseline. This visible-path baseline—not the bottom or center of the mark's source canvas—is the alignment invariant.
+
+The wordmark is shaped from pinned Manrope 4.504 at weight `690`, using native kerning and `-0.082em` tracking, then converted to paths. Its em is `88.7727` construction units and its origin is `x=89.0909`, leaving a `19.0909`-unit gap after the 70-unit symbol canvas. The SVG includes the lowercase `g` descender and must never be cropped to the baseline.
+
+Do not rebuild the lockup from separate mark and text elements, vertically center their boxes, retype the name, or apply per-surface offsets. Preserve the SVG aspect ratio, set width with height `auto`, and use `object-fit: contain` when an image-fit rule is required.
+
+### Clear space and padding
+
+Let `S` be the rendered width of the Control symbol canvas. One construction stroke is `C = S × 18/128`. Keep at least `1C` free of text, icons, borders, window chrome, and crops on every side; `2C` is the preferred container padding. The master SVG contains no external clear space, so the consuming layout must provide it.
+
+For a complete lockup rendered at width `W`, `S = 0.235693W`, minimum clear space is `0.033144W`, and preferred clear space is `0.066289W`.
+
+| Lockup width | Symbol canvas | Minimum `1C` | Preferred `2C` |
+| ------------ | ------------- | ------------ | -------------- |
+| 96 px        | 22.63 px      | 3.18 px      | 6.36 px        |
+| 104 px       | 24.51 px      | 3.45 px      | 6.89 px        |
+| 116 px       | 27.34 px      | 3.84 px      | 7.69 px        |
+| 128 px       | 30.17 px      | 4.24 px      | 8.48 px        |
+| 192 px       | 45.25 px      | 6.36 px      | 12.73 px       |
+
+Clear space is a protected exclusion zone, not blank pixels that must be baked into an export. A larger page grid, navigation inset, or card padding may satisfy it. At final raster sizes, round outward rather than below the computed value.
+
+### Size and asset selection
+
+- Complete lockup: minimum `96 px` wide. Use the symbol alone below that width.
+- Wordmark alone: minimum `80 px` wide and only where the Control symbol is already established nearby.
+- Symbol: use `mark-master.svg` at `24 px` and above, `mark-optical-small.svg` at `16–23 px`, and never render below `16 px`.
+- Application icon and favicon: use their dedicated sources; never place the horizontal lockup inside an icon tile.
+- Large display use: scale the outlined SVG without a maximum size. Inspect final raster output for antialiasing and pixel-grid artifacts.
+
+### Background and color selection
+
+- Use `lockup-horizontal-ink.svg` on Warm Ivory, Warm Paper, white, or another quiet light field.
+- Use `lockup-horizontal-reversed.svg` on Blue Ink or a quiet dark field.
+- On photography, use the variant that maintains at least `4.5:1` contrast across the entire clear-space zone. Add one restrained local overlay when necessary; never add a stroke, glow, shadow, or plate directly to the logo.
+- Keep symbol and wordmark one color. Signal Red, Action Blue, gradients, tints, transparency, and mixed letter colors are not identity-lockup treatments.
+- Choose the variant from the effective rendered background, including translucent navigation layers. Do not rely on the underlying page color when blur or imagery changes the local field.
+
+### Placement, accessibility, and motion
+
+- Align the lockup as one image to the surrounding layout. Its internal baseline relationship is already solved; CSS baseline alignment applies only between the complete asset and neighboring content.
+- Never crop, mask, distort, rotate, skew, outline, shadow, animate continuously, or attach a tagline to the master.
+- Identity images use alt text `Groot`. When adjacent visible text already names Groot, use empty alt text to avoid repetition. A linked lockup is labelled `Groot home`.
+- The only approved identity motion is the once-only 900 ms native startup reveal. Reduced-motion mode shows the static lockup. All navigation, sidebar, onboarding, and editorial uses remain static.
+
+### Approved wallet placements
+
+| Surface             | Asset           | Width                           | Treatment                                                    |
+| ------------------- | --------------- | ------------------------------- | ------------------------------------------------------------ |
+| Native startup gate | Complete lockup | 116 px                          | Centered on the neutral product background; once-only reveal |
+| Desktop sidebar     | Complete lockup | 104 px artwork in a 120 px link | Static, left aligned, with an 8 px horizontal inset          |
+| Mobile navigation   | Complete lockup | 96 px                           | Static; minimum complete-lockup size                         |
+| Onboarding header   | Complete lockup | 104 px                          | Static; aligned as one outlined asset                        |
+
+Any new wallet placement must use [`BrandLockup.svelte`](../src/lib/components/BrandLockup.svelte) or the canonical mark component rather than importing, copying, or reassembling logo geometry locally.
 
 ### Groot decision gate
 
@@ -151,13 +207,13 @@ Review date: 2026-08-10. This is a preliminary product screen, not legal advice 
 | Gate             | Result                          | Decision                                                                                                                                                                                                                                                                           |
 | ---------------- | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Symbol           | Pass                            | Advance the existing Control symbol. It is stronger in the lockup than G Return and remains useful if the name changes.                                                                                                                                                            |
-| Wordmark         | Pass, pending font QA           | Advance Groot set in Newsreader Medium (`500`). Preserve the constructed visible-path baseline rule above.                                                                                                                                                                         |
+| Wordmark         | Pass                            | Use the lowercase website wordmark in Manrope `690`, outlined from the pinned source. Preserve the measured visible-path baseline rule above.                                                                                                                                      |
 | Small sizes      | Pass                            | Control remains the primary mark from 16 px upward; use the existing optical-small master below 24 px.                                                                                                                                                                             |
 | Domain           | Pass, configuration pending     | `usegroot.com`, `grootbitcoin.com`, and `grootwallet.com` were acquired. Use `usegroot.com` as the canonical public and email domain; redirect the other two after DNS is configured.                                                                                              |
 | Market confusion | Material risk                   | A current Android finance application uses **Groot Pay** and describes itself as a digital wallet. The product category overlap is direct even though its custody model and market differ.                                                                                         |
 | Trademark        | Professional clearance required | Marvel has active US GROOT registrations and an active I AM GROOT registration covering downloadable media. Search exact and similar marks in the intended US, EU, UK, French, and Andorran markets and in software, financial, security, and SaaS classes before public adoption. |
 
-**Adoption decision:** accept the recorded naming risk and adopt **Groot + Control + Newsreader Medium**. The outlined assets are canonical. Domain ownership is not represented as trademark clearance; professional review remains future legal/commercial work.
+**Adoption decision:** accept the recorded naming risk and adopt **Groot + Control + Manrope 690**. The outlined assets are canonical. Domain ownership is not represented as trademark clearance; professional review remains future legal/commercial work.
 
 Typography does not compensate for weak hierarchy with extreme weight, tracking, or size. Headlines are concise. Required instructions remain comfortably readable.
 
@@ -198,6 +254,7 @@ Every word must earn its place.
 | [`assets/brand/lockup-horizontal-reversed.svg`](../assets/brand/lockup-horizontal-reversed.svg) | Canonical reversed Groot lockup         |
 | [`assets/brand/wordmark-ink.svg`](../assets/brand/wordmark-ink.svg)                             | Canonical positive Groot wordmark       |
 | [`assets/brand/wordmark-reversed.svg`](../assets/brand/wordmark-reversed.svg)                   | Canonical reversed Groot wordmark       |
+| [`assets/brand/lockup-spec.json`](../assets/brand/lockup-spec.json)                             | Machine-readable geometry and usage law |
 | [`src/lib/components/BrandMark.svelte`](../src/lib/components/BrandMark.svelte)                 | Product component using the master path |
 | [`src/lib/components/BrandLockup.svelte`](../src/lib/components/BrandLockup.svelte)             | Wallet product wordmark component       |
 
@@ -209,7 +266,7 @@ Every word must earn its place.
 - Ink/ivory primary and reversed colorways.
 - No red inside the symbol.
 - Ink-enamel application-icon direction.
-- Groot name and Newsreader Medium outlined wordmark.
+- Groot name and lowercase Manrope 690 outlined wordmark.
 - Core brand purpose, values, personality, and voice constraints.
 
 ### Separately gated

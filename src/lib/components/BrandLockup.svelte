@@ -1,6 +1,6 @@
 <script lang="ts">
-  import inkUrl from '../../../assets/brand/lockup-horizontal-ink.svg?url';
-  import reversedUrl from '../../../assets/brand/lockup-horizontal-reversed.svg?url';
+  import inkUrl from '$lib/assets/brand/lockup-horizontal-ink.svg?url';
+  import reversedUrl from '$lib/assets/brand/lockup-horizontal-reversed.svg?url';
 
   let {
     variant = 'auto',

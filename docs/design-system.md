@@ -2,7 +2,9 @@
 
 Status: canonical UI guidance for the current desktop/mobile application.
 
-The symbol, application icon, identity palette, and brand voice are canonical in [`brand-identity.md`](brand-identity.md). Naming and the wordmark remain provisional there. This document continues to own product layout, components, states, accessibility, and semantic color behavior.
+The symbol, application icon, identity palette, outlined Manrope 690 wordmark, and brand voice are canonical in [`brand-identity.md`](brand-identity.md). This document continues to own product layout, components, states, accessibility, and semantic color behavior.
+
+All wallet logo placements use the shared `BrandLockup` or `BrandMark` component. Never reproduce the lowercase name with live text, position the symbol and wordmark as separate flex children, or override the internal baseline. The complete lockup is at least 96 px wide and receives at least one scaled symbol-stroke of external clear space; exact construction, padding formulas, background selection, approved surface widths, and accessibility rules live in [`brand-identity.md`](brand-identity.md#formal-lockup-construction).
 
 ## Direction
 
