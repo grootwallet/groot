@@ -178,10 +178,12 @@ describe('hardware receive verification UI', () => {
     );
   });
 
-  it('keeps delayed Miniscript policies outside the pinned HWI USB boundary', () => {
+  it('keeps firmware candidates outside direct USB until exact certification', () => {
     expect(multisigSetup).toContain(
       "{#if templateKind === 'standard'}<button onclick={scanHardware}"
     );
+    expect(multisigSetup).toContain('Jade/Jade Plus, BitBox02, and BitBox02 Nova');
+    expect(multisigSetup).toContain("hardwarePolicyCompatibility(device, 'delayed')");
     expect(multisigReceive).toContain(
       '{#if !wallet?.recoveryTemplate}<HardwareReceiveVerification'
     );

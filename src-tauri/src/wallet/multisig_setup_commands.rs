@@ -17,6 +17,8 @@ pub enum MultisigSetupTemplate {
     Standard,
     Recovery,
     Inheritance,
+    PartnerContinuityV1,
+    FamilyContinuityV1,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -73,6 +75,8 @@ fn multisig_setup_draft_path(app: &AppHandle) -> ApiResult<PathBuf> {
 fn expected_setup_cosigners(draft: &MultisigSetupDraft) -> usize {
     match draft.template_kind {
         MultisigSetupTemplate::Recovery | MultisigSetupTemplate::Inheritance => 4,
+        MultisigSetupTemplate::PartnerContinuityV1 => 8,
+        MultisigSetupTemplate::FamilyContinuityV1 => 7,
         MultisigSetupTemplate::Standard => match draft.standard_recipe {
             MultisigSetupRecipe::TwoOfThree => 3,
             MultisigSetupRecipe::ThreeOfFive => 5,
@@ -96,13 +100,29 @@ fn preview_multisig_setup_draft(draft: &MultisigSetupDraft) -> ApiResult<Multisi
         .iter()
         .map(|cosigner| cosigner.id.clone())
         .collect::<Vec<_>>();
-    let template = RecoveryTemplate::Recovery {
-        immediate: crate::recovery::SpendingPath::new(2, signer_ids[..3].to_vec()),
-        recovery: crate::recovery::TimedSpendingPath::new(
-            setup_recovery_delay(draft),
-            1,
-            [signer_ids[3].clone()],
-        ),
+    let template = match draft.template_kind {
+        MultisigSetupTemplate::Recovery | MultisigSetupTemplate::Inheritance => {
+            RecoveryTemplate::Recovery {
+                immediate: crate::recovery::SpendingPath::new(2, signer_ids[..3].to_vec()),
+                recovery: crate::recovery::TimedSpendingPath::new(
+                    setup_recovery_delay(draft),
+                    1,
+                    [signer_ids[3].clone()],
+                ),
+            }
+        }
+        MultisigSetupTemplate::PartnerContinuityV1 => RecoveryTemplate::PartnerContinuityV1 {
+            owner: crate::recovery::SpendingPath::new(2, signer_ids[..3].to_vec()),
+            partner: crate::recovery::SpendingPath::new(2, signer_ids[3..5].to_vec()),
+            estate: crate::recovery::SpendingPath::new(2, signer_ids[5..8].to_vec()),
+        },
+        MultisigSetupTemplate::FamilyContinuityV1 => RecoveryTemplate::FamilyContinuityV1 {
+            parents: crate::recovery::SpendingPath::new(2, signer_ids[..2].to_vec()),
+            child_assistance: crate::recovery::SpendingPath::new(1, signer_ids[2..4].to_vec()),
+            child_inheritance: crate::recovery::SpendingPath::new(2, signer_ids[4..6].to_vec()),
+            executor_signer_id: signer_ids[6].clone(),
+        },
+        MultisigSetupTemplate::Standard => unreachable!("standard returned above"),
     };
     let analysis = analyze_template(&template, &draft.cosigners).map_err(recovery_api_error)?;
     Ok(MultisigPreviewDto {
@@ -119,9 +139,9 @@ fn validate_multisig_setup_draft(
 ) -> ApiResult<Option<MultisigPreviewDto>> {
     if draft.version != MULTISIG_SETUP_DRAFT_VERSION
         || draft.name.chars().count() > 48
-        || !(3..=7).contains(&draft.custom_cosigner_count)
-        || draft.cosigners.len() > 7
-        || draft.policy_verifications.len() > 7
+        || !(3..=8).contains(&draft.custom_cosigner_count)
+        || draft.cosigners.len() > 8
+        || draft.policy_verifications.len() > 8
     {
         return Err(api_error(
             "wallet_corrupt",
@@ -169,9 +189,13 @@ fn validate_multisig_setup_draft(
         (MultisigSetupTemplate::Standard, MultisigSetupRecipe::TwoOfThree) => draft.threshold == 2,
         (MultisigSetupTemplate::Standard, MultisigSetupRecipe::ThreeOfFive) => draft.threshold == 3,
         (MultisigSetupTemplate::Standard, MultisigSetupRecipe::Custom) => true,
-        (MultisigSetupTemplate::Recovery | MultisigSetupTemplate::Inheritance, _) => {
-            draft.threshold == 2
-        }
+        (
+            MultisigSetupTemplate::Recovery
+            | MultisigSetupTemplate::Inheritance
+            | MultisigSetupTemplate::PartnerContinuityV1
+            | MultisigSetupTemplate::FamilyContinuityV1,
+            _,
+        ) => draft.threshold == 2,
     };
     if draft.threshold < 2 || draft.threshold > expected_cosigners || !fixed_threshold_is_valid {
         return Err(api_error(
@@ -726,6 +750,30 @@ mod setup_draft_tests {
             recovery.policy_verifications.clear();
             let preview = validate_multisig_setup_draft(&recovery).unwrap().unwrap();
             assert!(preview.external_descriptor.contains(delay));
+        }
+    }
+
+    #[test]
+    fn rebuilds_fixed_continuity_descriptors_from_saved_roles() {
+        for (template_kind, signer_count, expected_delays) in [
+            (
+                MultisigSetupTemplate::PartnerContinuityV1,
+                8,
+                vec!["older(13140)", "older(39420)", "older(52560)"],
+            ),
+            (
+                MultisigSetupTemplate::FamilyContinuityV1,
+                7,
+                vec!["older(13140)", "older(52560)"],
+            ),
+        ] {
+            let mut continuity = draft();
+            continuity.template_kind = template_kind;
+            continuity.cosigners = cosigners(signer_count);
+            let preview = validate_multisig_setup_draft(&continuity).unwrap().unwrap();
+            for delay in expected_delays {
+                assert!(preview.external_descriptor.contains(delay));
+            }
         }
     }
 }

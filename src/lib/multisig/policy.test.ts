@@ -68,8 +68,8 @@ describe('multisig policy invariants', () => {
     expect(
       validatePolicyDraft({
         name: 'Vault',
-        threshold: 8,
-        cosigners: Array.from({ length: 8 }, (_, index) =>
+        threshold: 9,
+        cosigners: Array.from({ length: 9 }, (_, index) =>
           cosigner({
             id: String(index),
             fingerprint: index.toString(16).padStart(8, '0'),
@@ -77,7 +77,7 @@ describe('multisig policy invariants', () => {
           })
         )
       })
-    ).toContain('V1 supports at most 7 signers.');
+    ).toContain('V1 supports at most 8 signers.');
     const enough = [
       cosigner(),
       cosigner({ fingerprint: 'b1b2c3d4', xpub: 'two' }),

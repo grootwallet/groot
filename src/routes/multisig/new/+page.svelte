@@ -64,6 +64,7 @@
   import { combineDescriptorBranches } from '$lib/descriptors';
   import {
     isMeaningfulMultisigSetupDraft,
+    multisigSetupRecoveryTemplate,
     multisigSetupSignerTarget
   } from '$lib/wallet/multisig-setup';
   import { coldcardPolicyFilename, readTransferFile, safeTransferFilename } from '$lib/transfer';
@@ -77,6 +78,7 @@
   } from '$lib/hardware/health-check';
   import {
     matchingPolicyVerification,
+    hardwarePolicyCompatibility,
     policyDeviceName,
     policyReadinessKind,
     policyRegistrationProfile,
@@ -170,7 +172,7 @@
   let policyAddress = $state<PolicyVerificationAddress | null>(null);
   let busy = $state(false);
   let error = $state('');
-  let templateKind = $state<'standard' | 'recovery' | 'inheritance'>('standard');
+  let templateKind = $state<MultisigSetupDraft['templateKind']>('standard');
   let recoveryDelayBlocks = $state(4_320);
   let policyStep = $state<'choose' | 'configure'>('choose');
   let standardRecipe = $state<'2of3' | '3of5' | 'custom'>('2of3');
@@ -198,7 +200,15 @@
   const standardCosignerCount = $derived(
     standardRecipe === '2of3' ? 3 : standardRecipe === '3of5' ? 5 : customCosignerCount
   );
-  const requiredKeys = $derived(templateKind === 'standard' ? standardCosignerCount : 4);
+  const requiredKeys = $derived(
+    templateKind === 'standard'
+      ? standardCosignerCount
+      : templateKind === 'partner_continuity_v1'
+        ? 8
+        : templateKind === 'family_continuity_v1'
+          ? 7
+          : 4
+  );
   const errors = $derived([
     ...validatePolicyDraft(policy),
     ...(cosigners.length !== requiredKeys
@@ -243,16 +253,7 @@
     return [...errors.filter((item) => !countErrors.has(item)), countGuidance].map(signerLanguage);
   });
   const recoveryTemplate = $derived.by<RecoveryTemplate | null>(() => {
-    if (templateKind === 'standard' || cosigners.length < 4) return null;
-    return {
-      type: 'recovery',
-      immediate: { threshold: 2, signerIds: cosigners.slice(0, 3).map((key) => key.id) },
-      recovery: {
-        threshold: 1,
-        signerIds: [cosigners[3].id],
-        availableAfterBlocks: templateKind === 'inheritance' ? 52_560 : recoveryDelayBlocks
-      }
-    };
+    return multisigSetupRecoveryTemplate(templateKind, cosigners, recoveryDelayBlocks);
   });
   const combinedDescriptor = $derived(
     preview
@@ -400,18 +401,12 @@
       ]);
       return;
     }
-    const restoredTemplate: RecoveryTemplate = {
-      type: 'recovery',
-      immediate: { threshold: 2, signerIds: draft.cosigners.slice(0, 3).map((key) => key.id) },
-      recovery: {
-        threshold: 1,
-        signerIds: [draft.cosigners[3].id],
-        availableAfterBlocks:
-          draft.templateKind === 'inheritance'
-            ? (draft.recoveryDelayBlocks ?? 52_560)
-            : (draft.recoveryDelayBlocks ?? 4_320)
-      }
-    };
+    const restoredTemplate = multisigSetupRecoveryTemplate(
+      draft.templateKind,
+      draft.cosigners,
+      draft.recoveryDelayBlocks
+    );
+    if (!restoredTemplate) return;
     const analysis = await walletService.analyzeRecoveryPolicy(restoredTemplate, draft.cosigners);
     preview = {
       name: draft.name,
@@ -669,7 +664,27 @@
     return value === 'usb' || value === 'virtual' ? 'Connection' : 'Imported via';
   }
 
-  function chooseTemplate(next: 'standard' | 'recovery' | 'inheritance') {
+  function policyRole(index: number) {
+    if (templateKind === 'partner_continuity_v1') {
+      return index < 3 ? 'Owner signer' : index < 5 ? 'Partner signer' : 'Estate guardian';
+    }
+    if (templateKind === 'family_continuity_v1') {
+      return index < 2
+        ? 'Parent signer'
+        : index < 4
+          ? 'Child assistance role'
+          : index < 6
+            ? 'Child inheritance role'
+            : 'Executor';
+    }
+    return index === 3
+      ? templateKind === 'inheritance'
+        ? 'Heir-only signer'
+        : 'Recovery-only signer'
+      : 'Primary signer';
+  }
+
+  function chooseTemplate(next: MultisigSetupDraft['templateKind']) {
     templateKind = next;
     if (next !== 'standard') threshold = 2;
     else applyStandardRecipe(standardRecipe);
@@ -923,6 +938,13 @@
           device: profile.name
         }
       );
+      return;
+    }
+    if (
+      (templateKind === 'partner_continuity_v1' || templateKind === 'family_continuity_v1') &&
+      hardwarePolicyCompatibility(device, 'delayed') !== 'firmware_candidate'
+    ) {
+      error = `${profile.name} is not compatible with Groot Continuity policies. Use a certified Ledger, Jade/Jade Plus, BitBox02, or BitBox02 Nova.`;
       return;
     }
     const deviceLabel = label.trim() || device.label;
@@ -1303,33 +1325,39 @@
             >
             <button
               class="policy-kind-card recovery"
-              class:active={templateKind === 'recovery'}
-              onclick={() => chooseTemplate('recovery')}
+              class:active={templateKind === 'partner_continuity_v1'}
+              onclick={() => chooseTemplate('partner_continuity_v1')}
               ><span class="policy-kind-icon"><ShieldCheck size={21} /></span><span
                 class="policy-kind-copy"
-                ><strong>{translate($locale, 'Recovery')}</strong><small
-                  >{translate($locale, '2 of 3 now, or one backup key later.')}</small
+                ><strong>{translate($locale, 'Partner continuity')}</strong><small
+                  >{translate(
+                    $locale,
+                    'Your 2 of 3 now, guided access for your partner later.'
+                  )}</small
                 ></span
-              ><span class="policy-kind-meta">{translate($locale, 'About one month')}</span
-              >{#if templateKind === 'recovery'}<span class="policy-kind-check" aria-hidden="true"
-                  ><Check size={16} strokeWidth={3} /></span
+              ><span class="policy-kind-meta">{translate($locale, '3 · 9 · 12 months')}</span
+              >{#if templateKind === 'partner_continuity_v1'}<span
+                  class="policy-kind-check"
+                  aria-hidden="true"><Check size={16} strokeWidth={3} /></span
                 >{/if}</button
             >
             <button
               class="policy-kind-card inheritance"
-              type="button"
-              disabled
-              aria-describedby="assisted-recovery-description"
+              class:active={templateKind === 'family_continuity_v1'}
+              onclick={() => chooseTemplate('family_continuity_v1')}
               ><span class="policy-kind-icon"><Clock3 size={21} /></span><span
                 class="policy-kind-copy"
-                ><strong>{translate($locale, 'Assisted recovery')}</strong><small
-                  id="assisted-recovery-description"
+                ><strong>{translate($locale, 'Family continuity')}</strong><small
                   >{translate(
                     $locale,
-                    'A recovery partner helps you or your heirs regain access.'
+                    'Parents stay in control; children can assist or inherit later.'
                   )}</small
                 ></span
-              ><span class="policy-kind-meta">{translate($locale, 'Coming soon')}</span></button
+              ><span class="policy-kind-meta">{translate($locale, '3 · 12 months')}</span
+              >{#if templateKind === 'family_continuity_v1'}<span
+                  class="policy-kind-check"
+                  aria-hidden="true"><Check size={16} strokeWidth={3} /></span
+                >{/if}</button
             >
           </div>
           <div class="policy-choice-insight">
@@ -1338,17 +1366,17 @@
                 $locale,
                 templateKind === 'standard'
                   ? 'How Standard multisig works'
-                  : templateKind === 'recovery'
-                    ? 'How Recovery works'
-                    : 'How assisted recovery works'
+                  : templateKind === 'partner_continuity_v1'
+                    ? 'How Partner continuity works'
+                    : 'How Family continuity works'
               )}
               text={translate(
                 $locale,
                 templateKind === 'standard'
                   ? 'Standard 2-of-3 can also support assisted signing: the owners keep two keys and a trusted helper keeps one. Either owner plus the helper can sign, or the two owner keys can sign together. The helper can never spend alone.'
-                  : templateKind === 'recovery'
-                    ? 'The recovery key is a separate spending path. After each coin has aged 4,320 blocks, that key can spend the matured coin alone. Every new deposit starts its own delay.'
-                    : 'Assisted recovery will combine your keys with a dedicated recovery service and guided beneficiary support. It is not available yet.'
+                  : templateKind === 'partner_continuity_v1'
+                    ? 'Your 2-of-3 remains available. After three months your partner uses both partner keys, after nine months either partner key works, and after twelve months two estate guardians can recover. Renewing moves every delayed path back.'
+                    : 'Both parents sign now. After three months either parent can sign with either child assistance key. After twelve months two of the children’s inheritance role keys and the executor can recover. Renewing moves the delayed paths back.'
               )}
             />
           </div>
@@ -1371,9 +1399,13 @@
                   $locale,
                   templateKind === 'standard'
                     ? 'Standard multisig'
-                    : templateKind === 'recovery'
-                      ? 'Recovery wallet'
-                      : 'Inheritance wallet'
+                    : templateKind === 'partner_continuity_v1'
+                      ? 'Partner continuity'
+                      : templateKind === 'family_continuity_v1'
+                        ? 'Family continuity'
+                        : templateKind === 'recovery'
+                          ? 'Recovery wallet'
+                          : 'Inheritance wallet'
                 )}
               </h2>
               <p>
@@ -1381,9 +1413,13 @@
                   $locale,
                   templateKind === 'standard'
                     ? 'Name the wallet and choose its signature threshold.'
-                    : templateKind === 'recovery'
-                      ? 'Three primary keys. One backup recovery key.'
-                      : 'Three primary keys. One delayed heir key.'
+                    : templateKind === 'partner_continuity_v1'
+                      ? 'Eight independent role keys protect you, your partner, and the estate path.'
+                      : templateKind === 'family_continuity_v1'
+                        ? 'Seven role keys keep parents autonomous while enabling assistance and inheritance.'
+                        : templateKind === 'recovery'
+                          ? 'Three primary keys. One backup recovery key.'
+                          : 'Three primary keys. One delayed heir key.'
                 )}
               </p>
             </div>
@@ -1392,7 +1428,11 @@
                 $locale,
                 templateKind === 'standard'
                   ? `${threshold} of ${requiredKeys}`
-                  : '2 of 3 + backup key'
+                  : templateKind === 'partner_continuity_v1'
+                    ? '2 of 3 + continuity'
+                    : templateKind === 'family_continuity_v1'
+                      ? 'Parents + family'
+                      : '2 of 3 + backup key'
               )}</span
             >
           </div>
@@ -1476,6 +1516,78 @@
                 {translate($locale, 'Multisig requires at least two signatures.')}
               </p>
             {/if}
+          {:else if templateKind === 'partner_continuity_v1' || templateKind === 'family_continuity_v1'}
+            <div
+              class="path-visual continuity-path-visual"
+              class:family-continuity-path={templateKind === 'family_continuity_v1'}
+            >
+              <span
+                ><b>{translate($locale, 'TODAY')}</b><strong
+                  >{translate(
+                    $locale,
+                    templateKind === 'partner_continuity_v1' ? 'Owner: 2 of 3' : 'Parents: 2 of 2'
+                  )}</strong
+                ></span
+              >
+              <i></i>
+              <span
+                ><b>{translate($locale, 'ABOUT 3 MONTHS')}</b><strong
+                  >{translate(
+                    $locale,
+                    templateKind === 'partner_continuity_v1'
+                      ? 'Both partner keys'
+                      : 'One parent + one child'
+                  )}</strong
+                ><small>{formatInteger(13_140, $locale)} {translate($locale, 'blocks')}</small
+                ></span
+              >
+              <i></i>
+              <span
+                ><b
+                  >{translate(
+                    $locale,
+                    templateKind === 'partner_continuity_v1' ? 'ABOUT 9 MONTHS' : 'ABOUT 12 MONTHS'
+                  )}</b
+                ><strong
+                  >{translate(
+                    $locale,
+                    templateKind === 'partner_continuity_v1'
+                      ? 'Either partner key'
+                      : '2 of 3 estate quorum'
+                  )}</strong
+                ><small
+                  >{formatInteger(
+                    templateKind === 'partner_continuity_v1' ? 39_420 : 52_560,
+                    $locale
+                  )}
+                  {translate($locale, 'blocks')}</small
+                ></span
+              >
+              {#if templateKind === 'partner_continuity_v1'}
+                <i></i><span
+                  ><b>{translate($locale, 'ABOUT 12 MONTHS')}</b><strong
+                    >{translate($locale, '2 of 3 estate guardians')}</strong
+                  ><small>{formatInteger(52_560, $locale)} {translate($locale, 'blocks')}</small
+                  ></span
+                >
+              {/if}
+            </div>
+            <p class="policy-delay-note">
+              <RefreshCw size={14} />{translate(
+                $locale,
+                'Renew around six months to move every delayed path back.'
+              )}
+            </p>
+            <div class="recovery-separation">
+              <ShieldCheck size={15} /><span
+                ><strong>{translate($locale, 'Fixed, reviewed roles')}</strong><small
+                  >{translate(
+                    $locale,
+                    'Only Ledger, Jade/Jade Plus, BitBox02, and BitBox02 Nova are Miniscript candidates; each exact setup still requires certification.'
+                  )}</small
+                ></span
+              >
+            </div>
           {:else}<div class="path-visual">
               <span
                 ><b>{translate($locale, 'TODAY')}</b><strong
@@ -1619,15 +1731,7 @@
                   <span class="cosigner-metadata">
                     {#if templateKind !== 'standard'}<span
                         ><small>{translate($locale, 'Policy role')}</small><span
-                          class="source-badge"
-                          >{translate(
-                            $locale,
-                            i === 3
-                              ? templateKind === 'inheritance'
-                                ? 'Heir-only signer'
-                                : 'Recovery-only signer'
-                              : 'Primary signer'
-                          )}</span
+                          class="source-badge">{translate($locale, policyRole(i))}</span
                         ></span
                       >{/if}
                     <span
@@ -2172,14 +2276,11 @@
         ><ChevronRight size={15} /></button
       >{:else}<div class="warning-box" role="note">
         <AlertTriangle size={17} /><strong
-          >{translate(
-            $locale,
-            'USB hardware signing is not available for delayed policies yet.'
-          )}</strong
+          >{translate($locale, 'Direct USB is not enabled for Continuity policies yet.')}</strong
         ><span
           >{translate(
             $locale,
-            'Groot’s pinned HWI release supports standard multisig only. Add public keys by file or manual entry and use the offline PSBT workflow.'
+            'Ledger, Jade/Jade Plus, BitBox02, and BitBox02 Nova support Miniscript at the firmware level, but Groot enables each exact model only after descriptor registration, display, and signing certification. For now, add public keys by file or manual entry and use the offline PSBT workflow.'
           )}</span
         >
       </div>{/if}

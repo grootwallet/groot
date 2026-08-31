@@ -9679,6 +9679,13 @@ code {
   gap: 12px;
   padding: 4px 0 0;
 }
+.path-visual.continuity-path-visual {
+  grid-template-columns: minmax(0, 1fr) 28px minmax(0, 1fr) 28px minmax(0, 1fr) 28px minmax(0, 1fr);
+  gap: 8px;
+}
+.path-visual.family-continuity-path {
+  grid-template-columns: minmax(0, 1fr) 36px minmax(0, 1fr) 36px minmax(0, 1fr);
+}
 .path-visual > span {
   min-height: 108px;
   display: flex;
@@ -10816,6 +10823,12 @@ code {
     padding: 15px 16px;
   }
   .path-visual {
+    grid-template-columns: 1fr;
+  }
+  .path-visual.continuity-path-visual {
+    grid-template-columns: 1fr;
+  }
+  .path-visual.family-continuity-path {
     grid-template-columns: 1fr;
   }
   .path-visual i {
