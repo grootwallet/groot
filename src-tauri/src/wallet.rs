@@ -94,6 +94,9 @@ use recovery_scan::*;
 #[path = "wallet/verification_evidence.rs"]
 mod verification_evidence;
 use verification_evidence::*;
+#[path = "wallet/proposal_review.rs"]
+mod proposal_review;
+use proposal_review::*;
 
 const MAX_PRIVATE_JSON_BYTES: u64 = 256 * 1024;
 const MAX_CREDENTIAL_BYTES: usize = 1_024;

@@ -19,7 +19,7 @@
   import { onDestroy, onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import Button from '$lib/components/Button.svelte';
-  import FieldCounter from '$lib/components/FieldCounter.svelte';
+  import PermanentLabelEditor from '$lib/components/PermanentLabelEditor.svelte';
   import HardwareActionPrompt from '$lib/components/HardwareActionPrompt.svelte';
   import TransactionReviewDetails from '$lib/components/TransactionReviewDetails.svelte';
   import Modal from '$lib/components/Modal.svelte';
@@ -63,17 +63,18 @@
   import { compactAddress } from '$lib/address-display';
   import { accelerationUnavailableTitle } from '$lib/wallet/acceleration-presentation';
   import {
+    automaticStrategyMessage,
+    presentedCoinSelection,
+    toggleManualCoin
+  } from '$lib/wallet/coin-selection-presentation';
+  import {
     isCurrentMaxSpendResponse,
     matchingMaxSpendFee,
     validatedMaxSpendQuote,
     type MaxSpendQuote
   } from '$lib/wallet/max-spend-quote';
   import {
-    addPermanentLabel,
-    backspaceLabelDraft,
-    MAX_MANUAL_PERMANENT_LABELS,
     permanentLabelsForSubmission,
-    tokenizeLabelDraft,
     visibleLabelSuggestions,
     VISIBLE_LABEL_SUGGESTION_LIMIT
   } from '$lib/wallet/label-suggestions';
@@ -95,7 +96,6 @@
   import { fly } from 'svelte/transition';
   import { discreetMode } from '$lib/privacy';
   import PermanentLabelTags from '$lib/components/PermanentLabelTags.svelte';
-  import Tooltip from '$lib/components/Tooltip.svelte';
   import FeeSelector from '$lib/components/FeeSelector.svelte';
   import Amount from '$lib/components/Amount.svelte';
   import {
@@ -125,7 +125,6 @@
     deviceError = $state(''),
     cancelError = $state('');
   let selectedLabels = $state<string[]>([]);
-  let armedLabelIndex = $state<number | null>(null);
   let labelSuggestions = $state<LabelSuggestion[]>([]);
   let visibleSuggestions = $derived(
     visibleLabelSuggestions(labelSuggestions, label, VISIBLE_LABEL_SUGGESTION_LIMIT, selectedLabels)
@@ -195,19 +194,10 @@
   let discardDraftError = $state('');
   let suppressDraftSave = false;
   const selection = $derived<CoinSelection>(
-    selectedCoins.length
-      ? { mode: 'manual', outpoints: selectedCoins }
-      : { mode: 'auto', strategy: automaticStrategy }
+    presentedCoinSelection(selectedCoins, automaticStrategy)
   );
   const automaticStrategyLabel = $derived(
-    translate(
-      $locale,
-      automaticStrategy === 'private'
-        ? 'More private'
-        : automaticStrategy === 'lower_fee'
-          ? 'Lower fee'
-          : 'Balanced'
-    )
+    translate($locale, automaticStrategyMessage(automaticStrategy))
   );
   const frozenAmount = $derived(
     coins.filter((coin) => coin.frozen).reduce((total, coin) => total + coin.amount, 0)
@@ -568,7 +558,6 @@
     error = '';
     selectedLabels = submissionLabels;
     label = '';
-    armedLabelIndex = null;
     draftStep = 2;
     try {
       await saveCurrentDraft();
@@ -766,9 +755,7 @@
   }
   function toggleCoin(outpoint: string, checked: boolean) {
     error = '';
-    selectedCoins = checked
-      ? [...selectedCoins, outpoint]
-      : selectedCoins.filter((item) => item !== outpoint);
+    selectedCoins = toggleManualCoin(selectedCoins, outpoint, checked);
     updateAvailable();
   }
   function useAutomatic() {
@@ -1339,82 +1326,20 @@
       if (!message.includes('Keep scanning')) error = message || 'The QR frame was rejected.';
     }
   }
-  function updateLabelDraft(value: string): string {
-    armedLabelIndex = null;
-    if (selectedLabels.length >= MAX_MANUAL_PERMANENT_LABELS) {
-      label = '';
-      return label;
-    }
-    const draft = tokenizeLabelDraft(selectedLabels, value);
-    selectedLabels = draft.labels;
-    label = draft.input;
-    clearDraftError();
-    return label;
-  }
-  function handleLabelKeydown(event: KeyboardEvent) {
-    if (event.key === 'Backspace' && !label) {
-      event.preventDefault();
-      const result = backspaceLabelDraft(selectedLabels, armedLabelIndex);
-      selectedLabels = result.labels;
-      armedLabelIndex = result.armedIndex;
-      return;
-    }
-    if (event.key === 'Tab' && event.shiftKey) return;
-    armedLabelIndex = null;
-    if (!label.trim() || !['Enter', 'Tab', ',', ';'].includes(event.key)) return;
-    event.preventDefault();
-    const draft = tokenizeLabelDraft(selectedLabels, label, true);
-    selectedLabels = draft.labels;
-    label = draft.input;
-    clearDraftError();
-  }
 </script>
 
 {#snippet labelTokenPicker(id: string, title: string, placeholder: string, hint: string)}
-  <div class="field">
-    <label for={id}>{title}</label>
-    <div class="label-token-field" aria-label={translate($locale, 'Selected labels')}>
-      {#each selectedLabels as selected, index}<span
-          class="label-token"
-          class:label-token-armed={index === armedLabelIndex}
-          ><span class="label-token-text">{selected}</span><button
-            type="button"
-            aria-label={translate($locale, 'Remove {label}', { label: selected })}
-            onclick={() => {
-              selectedLabels = selectedLabels.filter((item) => item !== selected);
-              armedLabelIndex = null;
-            }}><X size={11} /></button
-          ></span
-        >{/each}<input
-        {id}
-        aria-label={title}
-        value={label}
-        oninput={(event) =>
-          (event.currentTarget.value = updateLabelDraft(event.currentTarget.value))}
-        onkeydown={handleLabelKeydown}
-        placeholder={selectedLabels.length ? '' : placeholder}
-        maxlength="48"
-      />
-    </div>
-    <FieldCounter value={label} max={48} {hint} />
-  </div>
-  {#if !$discreetMode}<div class="label-suggestions">
-      {#each visibleSuggestions as suggestion}<Tooltip
-          text={suggestion.text}
-          truncatedSelector=".label-suggestion-text"
-          positionSelector="button"
-          ><button
-            type="button"
-            aria-label={translate($locale, 'Reuse {label}', { label: suggestion.text })}
-            onclick={() => {
-              selectedLabels = addPermanentLabel(selectedLabels, suggestion.text);
-              label = '';
-              armedLabelIndex = null;
-              clearDraftError();
-            }}><span class="label-suggestion-text">{suggestion.text}</span></button
-          ></Tooltip
-        >{/each}
-    </div>{/if}
+  <PermanentLabelEditor
+    {id}
+    {title}
+    {placeholder}
+    {hint}
+    discreet={$discreetMode}
+    suggestions={visibleSuggestions}
+    bind:labels={selectedLabels}
+    bind:value={label}
+    onedit={clearDraftError}
+  />
 {/snippet}
 
 <div class="page narrow-page send-page" class:signing-page={Boolean(proposal)}>

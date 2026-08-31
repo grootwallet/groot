@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { applyTheme, currentTheme, resolveTheme, THEME_COLORS, THEME_STORAGE_KEY } from './theme';
 
 const css = readFileSync(new URL('../app.css', import.meta.url), 'utf8');
 const appHtml = readFileSync(new URL('../app.html', import.meta.url), 'utf8');
@@ -38,6 +39,44 @@ function contrast(foreground: string, background: string): number {
 }
 
 describe('theme system', () => {
+  it('resolves saved preferences before the operating-system preference', () => {
+    expect(resolveTheme('light', false)).toBe('light');
+    expect(resolveTheme('dark', true)).toBe('dark');
+    expect(resolveTheme(null, true)).toBe('light');
+    expect(resolveTheme('invalid', false)).toBe('dark');
+  });
+
+  it('applies the mounted theme atomically and tolerates unavailable storage', () => {
+    const root = { dataset: {} } as Pick<HTMLElement, 'dataset'>;
+    const attributes = new Map<string, string>();
+    const themeColor = {
+      setAttribute: (name: string, value: string) => attributes.set(name, value)
+    };
+    const writes: Array<[string, string]> = [];
+    applyTheme('light', {
+      root,
+      themeColor,
+      storage: { setItem: (key, value) => writes.push([key, value]) }
+    });
+    expect(currentTheme(root)).toBe('light');
+    expect(attributes.get('content')).toBe(THEME_COLORS.light);
+    expect(writes).toEqual([[THEME_STORAGE_KEY, 'light']]);
+
+    expect(() =>
+      applyTheme('dark', {
+        root,
+        themeColor,
+        storage: {
+          setItem: () => {
+            throw new Error('denied');
+          }
+        }
+      })
+    ).not.toThrow();
+    expect(currentTheme(root)).toBe('dark');
+    expect(attributes.get('content')).toBe(THEME_COLORS.dark);
+  });
+
   for (const theme of ['dark', 'light'] as const) {
     it(`${theme} semantic text and control pairs meet contrast requirements`, () => {
       const tokens = themeTokens(theme);
@@ -85,5 +124,10 @@ describe('theme system', () => {
   it('applies the saved theme before paint without weakening the Tauri CSP', () => {
     expect(appHtml).toContain('<script src="/theme-init.js"></script>');
     expect(appHtml).not.toMatch(/<script>([\s\S]*?)<\/script>/);
+    const themeInit = readFileSync(new URL('../../static/theme-init.js', import.meta.url), 'utf8');
+    expect(themeInit).toContain(`localStorage.getItem('${THEME_STORAGE_KEY}')`);
+    expect(themeInit).toContain(
+      `theme === 'light' ? '${THEME_COLORS.light}' : '${THEME_COLORS.dark}'`
+    );
   });
 });

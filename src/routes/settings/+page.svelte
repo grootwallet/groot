@@ -60,6 +60,7 @@
     shortcutKeys,
     usesCommandModifier
   } from '$lib/keyboard-shortcuts';
+  import { applyTheme, currentTheme, type Theme } from '$lib/theme';
   import {
     hardwareHealthChecks,
     hardwareHealthKey,
@@ -74,7 +75,7 @@
   let checking = $state(false);
   let connected = $state<boolean | null>(null);
   let nodeStatus = $state<NodeStatus | null>(null);
-  let theme = $state<'light' | 'dark'>('dark');
+  let theme = $state<Theme>('dark');
   let commandModifier = $state(false);
   let desktopPlatform = $state(false);
   let displayedKeyboardShortcuts = $derived(
@@ -242,7 +243,7 @@
       navigator.maxTouchPoints
     );
     const generation = ++profileReadGeneration;
-    theme = document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
+    theme = currentTheme();
     const registry = await walletService.profiles();
     if (generation !== profileReadGeneration) return;
     profiles = registry.wallets;
@@ -377,13 +378,9 @@
       document.removeEventListener('keydown', closeEscape);
     };
   });
-  function setTheme(next: 'light' | 'dark') {
+  function setTheme(next: Theme) {
     theme = next;
-    document.documentElement.dataset.theme = next;
-    document
-      .querySelector('meta[name="theme-color"]')
-      ?.setAttribute('content', next === 'light' ? '#f4f1e9' : '#0d1118');
-    localStorage.setItem('groot-theme', next);
+    applyTheme(next);
   }
   function storageSize(bytes: number) {
     return bytes >= 1_000_000_000

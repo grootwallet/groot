@@ -3,20 +3,17 @@
   import { translate } from '$lib/i18n-catalog';
   import { Moon, Sun } from '@lucide/svelte';
   import { onMount } from 'svelte';
+  import { applyTheme, currentTheme, type Theme } from '$lib/theme';
 
-  let theme = $state<'light' | 'dark'>('dark');
+  let theme = $state<Theme>('dark');
 
   onMount(() => {
-    theme = document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
+    theme = currentTheme();
   });
 
-  function setTheme(next: 'light' | 'dark') {
+  function setTheme(next: Theme) {
     theme = next;
-    document.documentElement.dataset.theme = next;
-    document
-      .querySelector('meta[name="theme-color"]')
-      ?.setAttribute('content', next === 'light' ? '#f4f1e9' : '#0d1118');
-    localStorage.setItem('groot-theme', next);
+    applyTheme(next);
   }
 </script>
 

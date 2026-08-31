@@ -2094,12 +2094,11 @@ pub fn external_signer_proposal_import(
     let metadata = read_external_signer_metadata(&app)?;
     let mut db = open_db(&app)?;
     let current = load_external_proposal(&mut db, &metadata, &proposal_id)?;
-    if current.psbt != reviewed_psbt {
-        return Err(api_error(
-            "proposal_mismatch",
-            "The proposal changed after review. Reload it before importing a signature.",
-        ));
-    }
+    require_reviewed_psbt_unchanged(
+        &current.psbt,
+        &reviewed_psbt,
+        "The proposal changed after review. Reload it before importing a signature.",
+    )?;
     drop(db);
     import_external_proposal(&app, &proposal_id, &signed_psbt)
 }
@@ -2116,12 +2115,11 @@ pub fn external_signer_proposal_discard_signature(
     let metadata = read_external_signer_metadata(&app)?;
     let mut db = open_db(&app)?;
     let current = load_external_proposal(&mut db, &metadata, &proposal_id)?;
-    if current.psbt != reviewed_psbt {
-        return Err(api_error(
-            "proposal_mismatch",
-            "The proposal changed after review. Reload it before discarding the signature.",
-        ));
-    }
+    require_reviewed_psbt_unchanged(
+        &current.psbt,
+        &reviewed_psbt,
+        "The proposal changed after review. Reload it before discarding the signature.",
+    )?;
 
     let signer = metadata.signer.fingerprint.parse().map_err(internal)?;
     let mut psbt = decode_psbt(&current.psbt).map_err(proposal_api_error)?;
@@ -2160,12 +2158,11 @@ pub async fn hardware_sign_external(
     let metadata = read_external_signer_metadata(&app)?;
     let mut db = open_db(&app)?;
     let proposal = load_external_proposal(&mut db, &metadata, &proposal_id)?;
-    if proposal.psbt != reviewed_psbt {
-        return Err(api_error(
-            "proposal_mismatch",
-            "The proposal changed after review. Reload it before signing.",
-        ));
-    }
+    require_reviewed_psbt_unchanged(
+        &proposal.psbt,
+        &reviewed_psbt,
+        "The proposal changed after review. Reload it before signing.",
+    )?;
     drop(db);
     let reviewed = decode_psbt(&proposal.psbt).map_err(proposal_api_error)?;
     let encoded = proposal.psbt;
@@ -2215,12 +2212,11 @@ pub fn external_signer_proposal_broadcast(
     let metadata = read_external_signer_metadata(&app)?;
     let mut db = open_db(&app)?;
     let proposal = load_external_proposal(&mut db, &metadata, &proposal_id)?;
-    if proposal.psbt != reviewed_psbt {
-        return Err(api_error(
-            "proposal_mismatch",
-            "The signed proposal changed after review. Reload it before broadcast.",
-        ));
-    }
+    require_reviewed_psbt_unchanged(
+        &proposal.psbt,
+        &reviewed_psbt,
+        "The signed proposal changed after review. Reload it before broadcast.",
+    )?;
     if !proposal.can_finalize {
         return Err(api_error(
             "insufficient_signatures",

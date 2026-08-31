@@ -2,10 +2,13 @@ import { describe, expect, it } from 'vitest';
 import type { LabelSuggestion } from '$lib/types';
 import {
   addPermanentLabel,
+  addPermanentLabelSuggestion,
+  applyPermanentLabelKey,
   backspaceLabelDraft,
   MAX_MANUAL_PERMANENT_LABELS,
   permanentLabelsForSubmission,
   tokenizeLabelDraft,
+  updatePermanentLabelDraft,
   visibleLabelSuggestions
 } from './label-suggestions';
 
@@ -101,5 +104,38 @@ describe('visibleLabelSuggestions', () => {
       labels: ['Client'],
       armedIndex: null
     });
+  });
+
+  it('keeps the shared editor transitions identical for input, commit, and backspace', () => {
+    const initial = { labels: ['Client'], input: '', armedIndex: null };
+    expect(updatePermanentLabelDraft(initial, 'Quarterly; pending')).toEqual({
+      labels: ['Client', 'Quarterly'],
+      input: ' pending',
+      armedIndex: null
+    });
+    expect(
+      applyPermanentLabelKey({ labels: ['Client'], input: 'Quarterly', armedIndex: null }, 'Tab')
+    ).toEqual({
+      state: { labels: ['Client', 'Quarterly'], input: '', armedIndex: null },
+      preventDefault: true,
+      editKind: 'commit'
+    });
+    expect(applyPermanentLabelKey(initial, 'Backspace')).toEqual({
+      state: { labels: ['Client'], input: '', armedIndex: 0 },
+      preventDefault: true
+    });
+    expect(applyPermanentLabelKey(initial, 'Tab', true)).toEqual({
+      state: initial,
+      preventDefault: false
+    });
+  });
+
+  it('adds suggestions without retaining draft or armed deletion state', () => {
+    expect(
+      addPermanentLabelSuggestion(
+        { labels: ['Client'], input: 'ignored', armedIndex: 0 },
+        'Quarterly'
+      )
+    ).toEqual({ labels: ['Client', 'Quarterly'], input: '', armedIndex: null });
   });
 });

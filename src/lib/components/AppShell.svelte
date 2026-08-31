@@ -26,12 +26,13 @@
   import { createLiveSync, type LiveSyncController } from '$lib/wallet/live-sync';
   import { createSessionMonitor, type SessionMonitorController } from '$lib/wallet/session-monitor';
   import { toast } from '$lib/stores/toasts';
-  import { denomination, formatAmount, initDenomination } from '$lib/denomination';
+  import { denomination, initDenomination } from '$lib/denomination';
   import { fade } from 'svelte/transition';
   import type { MultisigSetupDraft, RuntimePlatform, WalletProfile } from '$lib/wallet/contracts';
   import { formatWalletCount, locale, t, type MessageKey } from '$lib/i18n';
   import { provideWalletShellContext } from '$lib/wallet/shell-context';
   import { multisigSetupSignerTarget, multisigSetupStageLabel } from '$lib/wallet/multisig-setup';
+  import { walletEventPresentation } from '$lib/wallet/notification-policy';
   import {
     isDesktopPlatform,
     matchKeyboardShortcut,
@@ -378,81 +379,8 @@
       navigator.maxTouchPoints
     );
     const unsubscribe = walletService.subscribe((event) => {
-      if (event.type === 'payment_received')
-        toast({
-          title: 'Bitcoin received',
-          description: translate($locale, 'Received {amount} {unit} · Balance {balance} {unit}', {
-            amount: formatAmount(event.amount, $denomination),
-            balance: formatAmount(event.balance, $denomination),
-            unit: $denomination === 'btc' ? 'BTC' : 'sats'
-          }),
-          tone: 'success'
-        });
-      if (event.type === 'payment_received_confirmed')
-        toast({
-          title: 'Bitcoin received',
-          description: translate(
-            $locale,
-            'Received {amount} {unit} · First confirmation · Balance {balance} {unit}',
-            {
-              amount: formatAmount(event.amount, $denomination),
-              balance: formatAmount(event.balance, $denomination),
-              unit: $denomination === 'btc' ? 'BTC' : 'sats'
-            }
-          ),
-          tone: 'success'
-        });
-      if (event.type === 'first_confirmation')
-        toast({
-          title: 'First confirmation',
-          description: translate($locale, 'Transaction confirmed · Balance {balance} {unit}', {
-            balance: formatAmount(event.balance, $denomination),
-            unit: $denomination === 'btc' ? 'BTC' : 'sats'
-          }),
-          tone: 'success'
-        });
-      if (event.type === 'transaction_broadcast')
-        toast({
-          title: 'Transaction broadcast',
-          description: translate($locale, 'Remaining wallet balance: {balance} {unit}', {
-            balance: formatAmount(event.balance, $denomination),
-            unit: $denomination === 'btc' ? 'BTC' : 'sats'
-          }),
-          tone: 'success'
-        });
-      if (event.type === 'policy_approaching_maturity')
-        toast({
-          title: translate($locale, '{key} available soon', {
-            key: translate(
-              $locale,
-              event.policyType === 'inheritance' ? 'Heir key' : 'Recovery key'
-            )
-          }),
-          description: translate($locale, '{count} blocks remain before it can spend one coin.', {
-            count: event.remainingBlocks
-          }),
-          action: {
-            label: translate($locale, 'View coin'),
-            run: () => goto(`/coins?coin=${encodeURIComponent(event.outpoint)}`)
-          }
-        });
-      if (event.type === 'policy_mature')
-        toast({
-          title: translate($locale, '{key} can now spend a coin', {
-            key: translate(
-              $locale,
-              event.policyType === 'inheritance' ? 'Heir key' : 'Recovery key'
-            )
-          }),
-          description: translate(
-            $locale,
-            'Your normal 2-of-3 keys still work. No action is required.'
-          ),
-          action: {
-            label: translate($locale, 'View options'),
-            run: () => goto(`/coins?coin=${encodeURIComponent(event.outpoint)}`)
-          }
-        });
+      const presentation = walletEventPresentation(event, $locale, $denomination, goto);
+      if (presentation) toast(presentation);
       if (event.type === 'wallet_profile_updated')
         profiles = profiles.map((profile) =>
           profile.id === event.profile.id ? event.profile : profile
