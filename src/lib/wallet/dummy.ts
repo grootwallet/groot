@@ -1358,10 +1358,35 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     template: RecoveryTemplate,
     cosigners: PolicyDraft['cosigners']
   ): Promise<RecoveryPolicyAnalysis> {
-    const paths =
+    const paths: import('./contracts').TimedSpendingPath[] =
       template.type === 'recovery'
         ? [{ ...template.immediate, availableAfterBlocks: 0 }, template.recovery]
-        : template.stages;
+        : template.type === 'decaying' || template.type === 'expanding'
+          ? template.stages
+          : template.type === 'partner_continuity_v1'
+            ? [
+                { ...template.owner, availableAfterBlocks: 0 },
+                { ...template.partner, availableAfterBlocks: 13_140 },
+                {
+                  threshold: 1,
+                  signerIds: template.partner.signerIds,
+                  availableAfterBlocks: 39_420
+                },
+                { ...template.estate, availableAfterBlocks: 52_560 }
+              ]
+            : [
+                { ...template.parents, availableAfterBlocks: 0 },
+                {
+                  threshold: 2,
+                  signerIds: [...template.parents.signerIds, ...template.childAssistance.signerIds],
+                  availableAfterBlocks: 13_140
+                },
+                {
+                  threshold: 2,
+                  signerIds: [...template.childInheritance.signerIds, template.executorSignerId],
+                  availableAfterBlocks: 52_560
+                }
+              ];
     if (
       paths.length < 2 ||
       paths.some((path) => path.threshold < 1 || path.threshold > path.signerIds.length)
@@ -1481,7 +1506,10 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       externalDescriptor: analysis.externalDescriptor,
       internalDescriptor: analysis.internalDescriptor,
       createdAt: new Date().toISOString(),
-      policyType: 'recovery',
+      policyType:
+        template.type === 'partner_continuity_v1' || template.type === 'family_continuity_v1'
+          ? template.type
+          : 'recovery',
       recoveryTemplate: template,
       spendingPaths: analysis.paths
     };

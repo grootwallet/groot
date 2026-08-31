@@ -3152,6 +3152,8 @@ fn recovery_policy_type(template: &RecoveryTemplate) -> &'static str {
         RecoveryTemplate::Recovery { .. } => "recovery",
         RecoveryTemplate::Decaying { .. } => "decaying",
         RecoveryTemplate::Expanding { .. } => "expanding",
+        RecoveryTemplate::PartnerContinuityV1 { .. } => "partner_continuity_v1",
+        RecoveryTemplate::FamilyContinuityV1 { .. } => "family_continuity_v1",
     }
 }
 
@@ -3428,11 +3430,7 @@ fn proposal_signing_context(
         }
     };
 
-    let Some(RecoveryTemplate::Recovery {
-        immediate,
-        recovery,
-    }) = metadata.recovery_template.as_ref()
-    else {
+    let Some(template) = metadata.recovery_template.as_ref() else {
         if spend_path == ProposalSpendPath::Delayed {
             return Err(api_error(
                 "wallet_corrupt",
@@ -3448,15 +3446,48 @@ fn proposal_signing_context(
         });
     };
 
-    delayed_policy_context(metadata)?.ok_or_else(|| {
-        api_error(
-            "wallet_corrupt",
-            "The delayed wallet policy could not be verified.",
-        )
-    })?;
-    let (required, signer_ids) = match spend_path {
-        ProposalSpendPath::Primary => (immediate.threshold, immediate.signer_ids.as_slice()),
-        ProposalSpendPath::Delayed => (recovery.threshold, recovery.signer_ids.as_slice()),
+    let (required, signer_ids) = match template {
+        RecoveryTemplate::Recovery {
+            immediate,
+            recovery,
+        } => {
+            delayed_policy_context(metadata)?.ok_or_else(|| {
+                api_error(
+                    "wallet_corrupt",
+                    "The delayed wallet policy could not be verified.",
+                )
+            })?;
+            match spend_path {
+                ProposalSpendPath::Primary => {
+                    (immediate.threshold, immediate.signer_ids.as_slice())
+                }
+                ProposalSpendPath::Delayed => (recovery.threshold, recovery.signer_ids.as_slice()),
+            }
+        }
+        RecoveryTemplate::PartnerContinuityV1 { owner, .. } => match spend_path {
+            ProposalSpendPath::Primary => (owner.threshold, owner.signer_ids.as_slice()),
+            ProposalSpendPath::Delayed => {
+                return Err(api_error(
+                    "spending_path_unavailable",
+                    "Choose a named Continuity recovery path before creating this proposal.",
+                ));
+            }
+        },
+        RecoveryTemplate::FamilyContinuityV1 { parents, .. } => match spend_path {
+            ProposalSpendPath::Primary => (parents.threshold, parents.signer_ids.as_slice()),
+            ProposalSpendPath::Delayed => {
+                return Err(api_error(
+                    "spending_path_unavailable",
+                    "Choose a named Continuity recovery path before creating this proposal.",
+                ));
+            }
+        },
+        RecoveryTemplate::Decaying { .. } | RecoveryTemplate::Expanding { .. } => {
+            return Err(api_error(
+                "hardware_policy_unsupported",
+                "This advanced policy is not available in the transaction coordinator.",
+            ));
+        }
     };
     let (fingerprints, fingerprint_strings) = signer_fingerprints_for_ids(metadata, signer_ids)?;
     if required == 0 || required > fingerprints.len() {

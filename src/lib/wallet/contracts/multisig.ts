@@ -6,7 +6,8 @@ export type MultisigWallet = PolicyDraft & {
   externalDescriptor: string;
   internalDescriptor: string;
   createdAt: string;
-  policyType?: 'standard' | 'recovery' | 'inheritance';
+  policyType?:
+    'standard' | 'recovery' | 'inheritance' | 'partner_continuity_v1' | 'family_continuity_v1';
   recoveryTemplate?: RecoveryTemplate;
   spendingPaths?: TimedSpendingPath[];
 };
@@ -41,7 +42,20 @@ export type TimedSpendingPath = SpendingPath & { availableAfterBlocks: number };
 export type RecoveryTemplate =
   | { type: 'recovery'; immediate: SpendingPath; recovery: TimedSpendingPath }
   | { type: 'decaying'; stages: TimedSpendingPath[] }
-  | { type: 'expanding'; stages: TimedSpendingPath[] };
+  | { type: 'expanding'; stages: TimedSpendingPath[] }
+  | {
+      type: 'partner_continuity_v1';
+      owner: SpendingPath;
+      partner: SpendingPath;
+      estate: SpendingPath;
+    }
+  | {
+      type: 'family_continuity_v1';
+      parents: SpendingPath;
+      childAssistance: SpendingPath;
+      childInheritance: SpendingPath;
+      executorSignerId: string;
+    };
 export type RecoveryPolicyAnalysis = {
   externalDescriptor: string;
   internalDescriptor: string;
@@ -52,7 +66,8 @@ export type RecoveryPolicyAnalysis = {
 export type RecoveryDrill = { firstAddress: string; matchesCurrentWallet: boolean };
 
 export type MultisigSetupStage = 'policy' | 'keys' | 'review' | 'backup';
-export type MultisigSetupTemplate = 'standard' | 'recovery' | 'inheritance';
+export type MultisigSetupTemplate =
+  'standard' | 'recovery' | 'inheritance' | 'partner_continuity_v1' | 'family_continuity_v1';
 export type MultisigSetupRecipe = 'two_of_three' | 'three_of_five' | 'custom';
 export type MultisigSetupDraft = {
   version: 1;

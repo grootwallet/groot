@@ -1,6 +1,6 @@
 export const MULTISIG_ACCOUNT_PATH = "m/48'/1'/0'/2'";
 export const MIN_COSIGNERS = 3;
-export const MAX_COSIGNERS = 7;
+export const MAX_COSIGNERS = 8;
 
 export type CosignerSource = 'usb' | 'qr' | 'file' | 'manual' | 'virtual';
 
@@ -74,7 +74,7 @@ export function validatePolicyDraft(draft: PolicyDraft): string[] {
   else if (draft.name.trim().length > 48)
     errors.push('The wallet name must be 48 characters or fewer.');
   if (cosigners.length < MIN_COSIGNERS) errors.push('Add at least 3 signers.');
-  if (cosigners.length > MAX_COSIGNERS) errors.push('V1 supports at most 7 signers.');
+  if (cosigners.length > MAX_COSIGNERS) errors.push('V1 supports at most 8 signers.');
   if (!Number.isInteger(draft.threshold) || draft.threshold < 2)
     errors.push('At least 2 signatures are required.');
   if (draft.threshold > cosigners.length)

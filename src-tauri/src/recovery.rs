@@ -16,6 +16,10 @@ use std::{
 const MAX_STAGES: usize = 8;
 const MIN_DELAY_BLOCKS: u32 = 144;
 const MAX_DELAY_BLOCKS: u32 = 52_560;
+pub const CONTINUITY_ASSISTANCE_BLOCKS: u32 = 13_140;
+pub const CONTINUITY_RENEWAL_BLOCKS: u32 = 26_280;
+pub const PARTNER_SOLO_BLOCKS: u32 = 39_420;
+pub const CONTINUITY_ESTATE_BLOCKS: u32 = 52_560;
 pub const EXPECTED_BLOCK_SECONDS: u64 = 600;
 pub const MIN_APPROACHING_BLOCKS: u32 = 1_008;
 const APPROACHING_DELAY_DIVISOR: u32 = 10;
@@ -137,6 +141,17 @@ pub enum RecoveryTemplate {
     Expanding {
         stages: Vec<TimedSpendingPath>,
     },
+    PartnerContinuityV1 {
+        owner: SpendingPath,
+        partner: SpendingPath,
+        estate: SpendingPath,
+    },
+    FamilyContinuityV1 {
+        parents: SpendingPath,
+        child_assistance: SpendingPath,
+        child_inheritance: SpendingPath,
+        executor_signer_id: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -170,6 +185,7 @@ pub enum RecoveryError {
     InvalidTimeline,
     InvalidDecay,
     InvalidExpansion,
+    InvalidContinuityTemplate,
     InvalidSignerCount,
     UnknownSigner,
     DuplicateSigner,
@@ -189,6 +205,7 @@ impl RecoveryError {
             Self::InvalidTimeline => "invalid_timeline",
             Self::InvalidDecay => "invalid_decay",
             Self::InvalidExpansion => "invalid_expansion",
+            Self::InvalidContinuityTemplate => "invalid_continuity_template",
             Self::InvalidSignerCount => "invalid_signer_count",
             Self::UnknownSigner => "unknown_signer",
             Self::DuplicateSigner => "duplicate_signer",
@@ -307,6 +324,18 @@ fn timed_policy(delay: u32, policy: Policy<DescriptorPublicKey>) -> Policy<Descr
     ])
 }
 
+fn binary_or(
+    left_weight: usize,
+    left: Policy<DescriptorPublicKey>,
+    right_weight: usize,
+    right: Policy<DescriptorPublicKey>,
+) -> Policy<DescriptorPublicKey> {
+    Policy::Or(vec![
+        (left_weight, Arc::new(left)),
+        (right_weight, Arc::new(right)),
+    ])
+}
+
 fn compile_branch(
     template: &RecoveryTemplate,
     paths: &[TimedSpendingPath],
@@ -383,6 +412,59 @@ fn compile_branch(
                 Threshold::new(first.threshold, items)
                     .map_err(|_| RecoveryError::CompilationFailed)?,
             )
+        }
+        RecoveryTemplate::PartnerContinuityV1 {
+            owner,
+            partner,
+            estate,
+        } => {
+            let owner = threshold_policy(keys(&owner.signer_ids)?, owner.threshold)?;
+            let mut partner_items = keys(&partner.signer_ids)?
+                .into_iter()
+                .map(|key| Arc::new(Policy::Key(key)))
+                .collect::<Vec<_>>();
+            partner_items.push(Arc::new(Policy::Older(RelLockTime::from_height(
+                PARTNER_SOLO_BLOCKS as u16,
+            ))));
+            let partner = Policy::Thresh(
+                Threshold::new(2, partner_items).map_err(|_| RecoveryError::CompilationFailed)?,
+            );
+            let partner = timed_policy(CONTINUITY_ASSISTANCE_BLOCKS, partner);
+            let estate = timed_policy(
+                CONTINUITY_ESTATE_BLOCKS,
+                threshold_policy(keys(&estate.signer_ids)?, estate.threshold)?,
+            );
+            binary_or(100, owner, 1, binary_or(10, partner, 1, estate))
+        }
+        RecoveryTemplate::FamilyContinuityV1 {
+            parents,
+            child_assistance,
+            child_inheritance,
+            executor_signer_id,
+        } => {
+            let mut parent_items = keys(&parents.signer_ids)?
+                .into_iter()
+                .map(|key| Arc::new(Policy::Key(key)))
+                .collect::<Vec<_>>();
+            let child_assistance = timed_policy(
+                CONTINUITY_ASSISTANCE_BLOCKS,
+                threshold_policy(
+                    keys(&child_assistance.signer_ids)?,
+                    child_assistance.threshold,
+                )?,
+            );
+            parent_items.push(Arc::new(child_assistance));
+            let parent_assistance = Policy::Thresh(
+                Threshold::new(2, parent_items).map_err(|_| RecoveryError::CompilationFailed)?,
+            );
+
+            let mut inheritance_ids = child_inheritance.signer_ids.clone();
+            inheritance_ids.push(executor_signer_id.clone());
+            let inheritance = timed_policy(
+                CONTINUITY_ESTATE_BLOCKS,
+                threshold_policy(keys(&inheritance_ids)?, 2)?,
+            );
+            binary_or(100, parent_assistance, 1, inheritance)
         }
     };
     let descriptor = policy
@@ -477,6 +559,104 @@ pub fn analyze_template(
                 }
             }
             stages.clone()
+        }
+        RecoveryTemplate::PartnerContinuityV1 {
+            owner,
+            partner,
+            estate,
+        } => {
+            validate_path(owner, &known)?;
+            validate_path(partner, &known)?;
+            validate_path(estate, &known)?;
+            let owner_ids = owner.signer_ids.iter().collect::<HashSet<_>>();
+            let partner_ids = partner.signer_ids.iter().collect::<HashSet<_>>();
+            let estate_ids = estate.signer_ids.iter().collect::<HashSet<_>>();
+            if owner.threshold != 2
+                || owner.signer_ids.len() != 3
+                || partner.threshold != 2
+                || partner.signer_ids.len() != 2
+                || estate.threshold != 2
+                || estate.signer_ids.len() != 3
+                || !owner_ids.is_disjoint(&partner_ids)
+                || !owner_ids.is_disjoint(&estate_ids)
+                || !partner_ids.is_disjoint(&estate_ids)
+            {
+                return Err(RecoveryError::InvalidContinuityTemplate);
+            }
+            warnings.push(PolicyWarning {
+                code: "renewal_required",
+                message:
+                    "Renew near six months to keep the single-partner-key and estate paths locked.",
+            });
+            warnings.push(PolicyWarning {
+                code: "reduced_theft_resistance",
+                message: "After nine months either partner key can spend alone; after twelve months any two estate guardians can spend.",
+            });
+            vec![
+                TimedSpendingPath::new(0, 2, owner.signer_ids.clone()),
+                TimedSpendingPath::new(CONTINUITY_ASSISTANCE_BLOCKS, 2, partner.signer_ids.clone()),
+                TimedSpendingPath::new(PARTNER_SOLO_BLOCKS, 1, partner.signer_ids.clone()),
+                TimedSpendingPath::new(CONTINUITY_ESTATE_BLOCKS, 2, estate.signer_ids.clone()),
+            ]
+        }
+        RecoveryTemplate::FamilyContinuityV1 {
+            parents,
+            child_assistance,
+            child_inheritance,
+            executor_signer_id,
+        } => {
+            validate_path(parents, &known)?;
+            validate_path(child_assistance, &known)?;
+            validate_path(child_inheritance, &known)?;
+            if executor_signer_id.trim().is_empty() || !known.contains(executor_signer_id.as_str())
+            {
+                return Err(RecoveryError::UnknownSigner);
+            }
+            let parents_ids = parents.signer_ids.iter().collect::<HashSet<_>>();
+            let assistance_ids = child_assistance.signer_ids.iter().collect::<HashSet<_>>();
+            let inheritance_ids = child_inheritance.signer_ids.iter().collect::<HashSet<_>>();
+            if parents.threshold != 2
+                || parents.signer_ids.len() != 2
+                || child_assistance.threshold != 1
+                || child_assistance.signer_ids.len() != 2
+                || child_inheritance.threshold != 2
+                || child_inheritance.signer_ids.len() != 2
+                || parents_ids.contains(&executor_signer_id)
+                || assistance_ids.contains(&executor_signer_id)
+                || inheritance_ids.contains(&executor_signer_id)
+                || !parents_ids.is_disjoint(&assistance_ids)
+                || !parents_ids.is_disjoint(&inheritance_ids)
+                || !assistance_ids.is_disjoint(&inheritance_ids)
+            {
+                return Err(RecoveryError::InvalidContinuityTemplate);
+            }
+            warnings.push(PolicyWarning {
+                code: "renewal_required",
+                message: "Renew near six months to keep the inheritance quorum locked.",
+            });
+            vec![
+                TimedSpendingPath::new(0, 2, parents.signer_ids.clone()),
+                TimedSpendingPath::new(
+                    CONTINUITY_ASSISTANCE_BLOCKS,
+                    2,
+                    parents
+                        .signer_ids
+                        .iter()
+                        .chain(child_assistance.signer_ids.iter())
+                        .cloned()
+                        .collect::<Vec<_>>(),
+                ),
+                TimedSpendingPath::new(
+                    CONTINUITY_ESTATE_BLOCKS,
+                    2,
+                    child_inheritance
+                        .signer_ids
+                        .iter()
+                        .cloned()
+                        .chain(std::iter::once(executor_signer_id.clone()))
+                        .collect::<Vec<_>>(),
+                ),
+            ]
         }
     };
     let by_id = cosigners
@@ -579,6 +759,23 @@ mod tests {
         (1..=count).map(signer).collect()
     }
 
+    fn partner_continuity_template() -> RecoveryTemplate {
+        RecoveryTemplate::PartnerContinuityV1 {
+            owner: SpendingPath::new(2, ["key-1", "key-2", "key-3"]),
+            partner: SpendingPath::new(2, ["key-4", "key-5"]),
+            estate: SpendingPath::new(2, ["key-6", "key-7", "key-8"]),
+        }
+    }
+
+    fn family_continuity_template() -> RecoveryTemplate {
+        RecoveryTemplate::FamilyContinuityV1 {
+            parents: SpendingPath::new(2, ["key-1", "key-2"]),
+            child_assistance: SpendingPath::new(1, ["key-3", "key-4"]),
+            child_inheritance: SpendingPath::new(2, ["key-5", "key-6"]),
+            executor_signer_id: "key-7".into(),
+        }
+    }
+
     #[test]
     fn compiles_immediate_plus_timelocked_recovery_for_both_branches() {
         let template = RecoveryTemplate::Recovery {
@@ -598,6 +795,92 @@ mod tests {
         }
         assert!(analyzed.external_descriptor.contains("/0/*"));
         assert!(analyzed.internal_descriptor.contains("/1/*"));
+    }
+
+    #[test]
+    fn partner_continuity_v1_compiles_the_fixed_timeline() {
+        let analyzed = analyze_template(&partner_continuity_template(), &signers(8)).unwrap();
+        assert_eq!(
+            analyzed
+                .paths
+                .iter()
+                .map(|path| (path.available_after_blocks, path.threshold))
+                .collect::<Vec<_>>(),
+            vec![
+                (0, 2),
+                (CONTINUITY_ASSISTANCE_BLOCKS, 2),
+                (PARTNER_SOLO_BLOCKS, 1),
+                (CONTINUITY_ESTATE_BLOCKS, 2),
+            ]
+        );
+        assert_eq!(analyzed.max_satisfaction_weight, 599);
+        assert!(analyzed
+            .warnings
+            .iter()
+            .any(|warning| warning.code == "renewal_required"));
+        for descriptor in [&analyzed.external_descriptor, &analyzed.internal_descriptor] {
+            Descriptor::<DescriptorPublicKey>::from_str(descriptor)
+                .unwrap()
+                .sanity_check()
+                .unwrap();
+            assert!(descriptor.contains("older(13140)"));
+            assert!(descriptor.contains("older(39420)"));
+            assert!(descriptor.contains("older(52560)"));
+        }
+    }
+
+    #[test]
+    fn family_continuity_v1_compiles_assistance_and_inheritance_roles() {
+        let analyzed = analyze_template(&family_continuity_template(), &signers(7)).unwrap();
+        assert_eq!(
+            analyzed
+                .paths
+                .iter()
+                .map(|path| (
+                    path.available_after_blocks,
+                    path.threshold,
+                    path.signer_ids.len()
+                ))
+                .collect::<Vec<_>>(),
+            vec![
+                (0, 2, 2),
+                (CONTINUITY_ASSISTANCE_BLOCKS, 2, 4),
+                (CONTINUITY_ESTATE_BLOCKS, 2, 3)
+            ]
+        );
+        assert_eq!(analyzed.max_satisfaction_weight, 572);
+        for descriptor in [&analyzed.external_descriptor, &analyzed.internal_descriptor] {
+            Descriptor::<DescriptorPublicKey>::from_str(descriptor)
+                .unwrap()
+                .sanity_check()
+                .unwrap();
+            assert!(descriptor.contains("older(13140)"));
+            assert!(descriptor.contains("older(52560)"));
+        }
+    }
+
+    #[test]
+    fn continuity_templates_reject_role_overlap_or_shape_changes() {
+        let invalid_partner = RecoveryTemplate::PartnerContinuityV1 {
+            owner: SpendingPath::new(2, ["key-1", "key-2", "key-3"]),
+            partner: SpendingPath::new(2, ["key-3", "key-4"]),
+            estate: SpendingPath::new(2, ["key-5", "key-6", "key-7"]),
+        };
+        assert_eq!(
+            analyze_template(&invalid_partner, &signers(8)).unwrap_err(),
+            RecoveryError::InvalidContinuityTemplate
+        );
+
+        let invalid_family = RecoveryTemplate::FamilyContinuityV1 {
+            parents: SpendingPath::new(2, ["key-1", "key-2"]),
+            child_assistance: SpendingPath::new(1, ["key-3", "key-4"]),
+            child_inheritance: SpendingPath::new(1, ["key-5", "key-6"]),
+            executor_signer_id: "key-7".into(),
+        };
+        assert_eq!(
+            analyze_template(&invalid_family, &signers(7)).unwrap_err(),
+            RecoveryError::InvalidContinuityTemplate
+        );
     }
 
     #[test]
@@ -752,6 +1035,10 @@ mod tests {
             (RecoveryError::InvalidTimeline, "invalid_timeline"),
             (RecoveryError::InvalidDecay, "invalid_decay"),
             (RecoveryError::InvalidExpansion, "invalid_expansion"),
+            (
+                RecoveryError::InvalidContinuityTemplate,
+                "invalid_continuity_template",
+            ),
             (RecoveryError::InvalidSignerCount, "invalid_signer_count"),
             (RecoveryError::UnknownSigner, "unknown_signer"),
             (RecoveryError::DuplicateSigner, "duplicate_signer"),

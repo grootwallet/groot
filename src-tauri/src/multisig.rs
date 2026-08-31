@@ -9,7 +9,7 @@ use std::{collections::HashSet, fmt, str::FromStr};
 pub use crate::build_network::MULTISIG_ACCOUNT_PATH;
 use crate::build_network::PARAMETERS;
 const MIN_COSIGNERS: usize = 3;
-const MAX_COSIGNERS: usize = 7;
+const MAX_COSIGNERS: usize = 8;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
