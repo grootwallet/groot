@@ -4,154 +4,25 @@ use crate::{
         decrypt_bip129, derive_mobile_account, encrypt_bip129, CoordinationError, DeviceRole,
         KeyRecord, MobileAccount, PairingInvitation, PublicWalletRecord, PAIRING_SESSION_SECONDS,
     },
-    coordination_transport::{self, CoordinationUrError, CoordinationUrType},
+    coordination_transport::{self, CoordinationUrType},
 };
 
 const FRAGMENT_BYTES: usize = 220;
 const MOBILE_RESPONSE_FRAGMENT_BYTES: usize = 160;
 const MOBILE_DEVICE_TYPE: &str = "groot-mobile";
 
-#[derive(Debug, Clone)]
-pub(super) struct PendingDesktopPairing {
-    invitation: PairingInvitation,
-    accepted_signer: Option<CosignerInput>,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PairingInvitationDto {
-    session_id: String,
-    expires_at: u64,
-    comparison_code: String,
-    frames: Vec<String>,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DecodedPairingInvitationDto {
-    invitation_json: String,
-    comparison_code: String,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PairingResponseDto {
-    session_id: String,
-    fingerprint: String,
-    xpub_checksum: String,
-    backup_verified: bool,
-    comparison_code: String,
-    frames: Vec<String>,
-    awaiting_final_policy: bool,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct EncryptedEnvelope {
-    version: u8,
-    session_id: String,
-    encrypted_record: String,
-}
-
-fn serialize_mc<S: serde::Serializer>(
-    words: &Zeroizing<String>,
-    serializer: S,
-) -> Result<S::Ok, S::Error> {
-    serializer.serialize_str(words.as_str())
-}
-
-fn deserialize_mc<'de, D: serde::Deserializer<'de>>(
-    deserializer: D,
-) -> Result<Zeroizing<String>, D::Error> {
-    String::deserialize(deserializer).map(Zeroizing::new)
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct PendingMobileSecret {
-    version: u8,
-    invitation: PairingInvitation,
-    #[serde(serialize_with = "serialize_mc", deserialize_with = "deserialize_mc")]
-    mnemonic: Zeroizing<String>,
-    #[serde(default)]
-    signer_label: String,
-    backup_verified: bool,
-    #[serde(default)]
-    awaiting_final_policy: bool,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct CoordinationMetadata {
-    version: u8,
-    wallet_id: String,
-    role: DeviceRole,
-    mobile_signer_fingerprint: Option<String>,
-    key_protection: String,
-    paired_at: u64,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pairing_session_id: Option<String>,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct MobilePsbtReviewDto {
-    revision_id: String,
-    transaction_id: String,
-    input_count: usize,
-    recipients: Vec<MobileOutputDto>,
-    change: Vec<MobileOutputDto>,
-    fee_sats: u64,
-    already_signed_by: Vec<String>,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct MobileOutputDto {
-    address: String,
-    amount_sats: u64,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SignedMobilePsbtDto {
-    revision_id: String,
-    signer_fingerprint: String,
-    signed_psbt: String,
-    frames: Vec<String>,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CoordinationStatusDto {
-    shared: bool,
-    role: Option<DeviceRole>,
-    can_sign_on_this_device: bool,
-    mobile_signer_fingerprint: Option<String>,
-    key_protection: Option<String>,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PendingMobilePairingDto {
-    session_id: String,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct MobileRecoveryRecordDto {
-    wallet_name: String,
-    threshold: usize,
-    signer_count: usize,
-    mobile_signer_fingerprint: String,
-}
-
-#[derive(Debug)]
-struct ValidatedMobileWallet {
-    wallet: MultisigWalletDto,
-    fingerprint: Fingerprint,
-    descriptor_checksum: String,
-}
+#[path = "coordination_commands/dto.rs"]
+mod dto;
+#[path = "coordination_commands/error_translation.rs"]
+mod error_translation;
+pub(crate) use dto::PendingDesktopPairing;
+pub use dto::{
+    CoordinationMetadata, CoordinationStatusDto, DecodedPairingInvitationDto, MobileOutputDto,
+    MobilePsbtReviewDto, MobileRecoveryRecordDto, PairingInvitationDto, PairingResponseDto,
+    PendingMobilePairingDto, SignedMobilePsbtDto,
+};
+use dto::{EncryptedEnvelope, PendingMobileSecret, ValidatedMobileWallet};
+use error_translation::*;
 
 #[tauri::command]
 pub fn coordination_status(
@@ -2019,58 +1890,6 @@ fn encode_hex(bytes: &[u8]) -> String {
         encoded.push(HEX[(byte & 0x0f) as usize] as char);
     }
     encoded
-}
-
-fn invalid_payload(message: impl Into<String>) -> ApiError {
-    api_error("invalid_coordination_payload", message.into())
-}
-
-fn session_missing() -> ApiError {
-    api_error(
-        "pairing_session_not_found",
-        "This one-time pairing session is missing, expired, or was cancelled.",
-    )
-}
-
-fn coordination_api_error(error: CoordinationError) -> ApiError {
-    let message = match error {
-        CoordinationError::TooLarge => "The coordination payload exceeds Groot's safety limit.",
-        CoordinationError::InvalidToken | CoordinationError::AuthenticationFailed => {
-            "The encrypted response does not authenticate to this one-time desktop invitation."
-        }
-        CoordinationError::InvalidSignature => {
-            "The mobile signer identity proof is invalid. Nothing was paired."
-        }
-        CoordinationError::WrongNetwork => "The coordination payload belongs to another network.",
-        CoordinationError::WrongDerivation => {
-            "Groot mobile V1 requires the compiled-network BIP48 native-SegWit account."
-        }
-        CoordinationError::DescriptorMismatch => {
-            "The final policy does not exactly contain the invited signer and agreed policy."
-        }
-        CoordinationError::UnsupportedVersion => "This coordination version is unsupported.",
-        CoordinationError::ExpiredInvitation => {
-            "This pairing invitation expired. Ask desktop for a new QR."
-        }
-        CoordinationError::InvalidEncoding | CoordinationError::InvalidKeyRecord => {
-            "The coordination payload is malformed or unsupported."
-        }
-    };
-    api_error(error.code(), message)
-}
-
-fn coordination_ur_api_error(error: CoordinationUrError) -> ApiError {
-    let message = match error {
-        CoordinationUrError::TooLarge | CoordinationUrError::TooManyFrames => {
-            "The coordination QR exceeds Groot's bounded transport limits."
-        }
-        CoordinationUrError::WrongType => "Scan the QR requested by this exact step.",
-        CoordinationUrError::Empty
-        | CoordinationUrError::InvalidFrame
-        | CoordinationUrError::Incomplete
-        | CoordinationUrError::InvalidCbor => "The coordination QR is malformed or incomplete.",
-    };
-    api_error("invalid_coordination_qr", message)
 }
 
 #[cfg(test)]

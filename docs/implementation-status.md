@@ -212,6 +212,12 @@ stored JSON and no migration or destructive conversion is required. Promotion
 requirements are canonical in
 [`compact-filter-deferred-work.md`](compact-filter-deferred-work.md).
 
+The coordination audit after the v0.4.88 main synchronization keeps Tauri command
+names and orchestration stable while separating coordination DTO/sidecar schemas
+and stable error translation from the command implementation. The split is
+source-only: serialized field names, sidecar versions, encrypted payloads, IPC
+DTOs, stable error codes, and pairing/signing semantics are unchanged.
+
 v0.4.64 fixes the Testnet4 hardware-wallet Overview race exposed by a fresh Coldcard Mk4 Bitcoin Core scan. Saved hardware-health and multisig policy-verification reads now join the serialized blocking wallet-operation boundary before opening SQLite, so they cannot perform database-open checkpoint maintenance beside a sync write transaction. Core block and mempool fetching now stages BDK changes in memory before opening the short atomic SQLite transaction, and Overview reports scan progress relative to the wallet's persisted checkpoint instead of appearing indefinitely stuck. Navigation and automatic-lock expiry request cancellation of any native foreground scan; expected `sync_cancelled` and `wallet_locked` transitions route quietly instead of emitting stacked sync, activity, and coin errors. Network-setup reuse still copies only protected connection settings—not wallet checkpoints, history, labels, or scan state. Persisted wallet/profile/proposal/registry/backup/payment-draft/network-settings formats, public DTO shapes, signer identity handling, dependencies, and stable errors are unchanged; no migration is required.
 
 v0.4.63 keeps an explicitly selected maximum payment synchronized with its native drain quote. Changing an active Max payment's preset or custom fee rate now requests a fresh native maximum for that exact recipient, rate, and coin selection, then atomically replaces the displayed amount and fee; asynchronous responses are still discarded if any quoted input changed. Manually editing the amount exits Max mode, so later fee changes never overwrite a user-entered amount. Single-key and multisig desktop/mobile acceptance tests characterize the amount reduction and authoritative fee at a changed custom rate. The Rust transaction builders, integer-satoshi accounting, PSBT review derivation, persisted wallet/profile/proposal/registry/backup/payment-draft formats, IPC DTOs, dependencies, and stable errors are unchanged; no migration is required.
