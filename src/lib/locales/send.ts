@@ -550,6 +550,10 @@ export const sendCopy = {
     fr: 'Confirmez les frais supplémentaires. Le montant du paiement et le destinataire restent inchangés.',
     es: 'Confirma la comisión adicional. El importe del pago y el destinatario no cambian.'
   },
+  'Confirm the additional fee, then continue to sign.': {
+    fr: 'Confirmez les frais supplémentaires, puis continuez pour signer.',
+    es: 'Confirma la comisión adicional y continúa para firmar.'
+  },
   'You will spend this much more': {
     fr: 'Vous dépenserez ce montant en plus',
     es: 'Gastarás este importe adicional'
@@ -557,6 +561,10 @@ export const sendCopy = {
   'Your payment amount and recipient will not change.': {
     fr: 'Le montant de votre paiement et le destinataire ne changeront pas.',
     es: 'El importe del pago y el destinatario no cambiarán.'
+  },
+  'This child fee helps the parent and child confirm together.': {
+    fr: 'Ces frais de l’enfant aident le parent et l’enfant à être confirmés ensemble.',
+    es: 'Esta comisión de la transacción hija ayuda a confirmar juntas ambas transacciones.'
   },
   'Change fee rate': {
     fr: 'Modifier le taux de frais',
@@ -569,6 +577,25 @@ export const sendCopy = {
   'Original fee rate': { fr: 'Taux de frais initial', es: 'Tasa de comisión original' },
   'Minimum fee rate': { fr: 'Taux de frais minimum', es: 'Tasa de comisión mínima' },
   'New fee rate': { fr: 'Nouveau taux de frais', es: 'Nueva tasa de comisión' },
+  'Package fee rate': { fr: 'Taux de frais du paquet', es: 'Tasa de comisión del paquete' },
+  'Parent fee rate': {
+    fr: 'Taux de frais du parent',
+    es: 'Tasa de comisión de la transacción madre'
+  },
+  'Minimum package rate': {
+    fr: 'Taux minimum du paquet',
+    es: 'Tasa mínima del paquete'
+  },
+  'Target package rate': { fr: 'Taux cible du paquet', es: 'Tasa objetivo del paquete' },
+  'Child network fee': {
+    fr: 'Frais réseau de l’enfant',
+    es: 'Comisión de red de la transacción hija'
+  },
+  'Package network fee': { fr: 'Frais réseau du paquet', es: 'Comisión de red del paquete' },
+  'Effective package rate': {
+    fr: 'Taux effectif du paquet',
+    es: 'Tasa efectiva del paquete'
+  },
   'New network fee': { fr: 'Nouveaux frais de réseau', es: 'Nueva comisión de red' },
   'Additional fee': { fr: 'Frais supplémentaires', es: 'Comisión adicional' },
   'Effective fee rate': { fr: 'Taux de frais effectif', es: 'Tasa de comisión efectiva' },
@@ -580,6 +607,10 @@ export const sendCopy = {
   'The payment amount stays the same.': {
     fr: 'Le montant du paiement reste inchangé.',
     es: 'El importe del pago no cambia.'
+  },
+  'The child fee helps both transactions confirm together.': {
+    fr: 'Les frais de l’enfant aident les deux transactions à être confirmées ensemble.',
+    es: 'La comisión de la transacción hija ayuda a confirmar juntas ambas transacciones.'
   },
   'Transaction accelerated': {
     fr: 'Transaction accélérée',

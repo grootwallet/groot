@@ -611,6 +611,38 @@ pub fn rbf_acceleration_quote(
     Ok(quote)
 }
 
+#[tauri::command]
+pub fn cpfp_acceleration_quote(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    txid: String,
+    fee_rate: Option<String>,
+) -> ApiResult<CpfpAccelerationQuoteDto> {
+    let _operation = operation_guard(&state)?;
+    require_unlocked(&app, &state)?;
+    let txid = Txid::from_str(&txid)
+        .map_err(|_| api_error("acceleration_unavailable", "Enter a valid transaction ID."))?;
+    let priority = if IS_REGTEST {
+        Some(5.0)
+    } else {
+        let client = rpc_client(&app, &state)?;
+        checked_chain_identity(&client)?;
+        profile_commands::estimate_core_fee(&client, 2, EstimateMode::Economical).ok()
+    };
+    let profile = selected_profile(&app)?;
+    let mut db = match profile.kind {
+        WalletKind::Multisig => open_multisig_db(&app)?,
+        WalletKind::SingleKey | WalletKind::WatchOnly => open_db(&app)?,
+    };
+    let wallet = load_wallet(&mut db)?;
+    let parent_fee = cpfp_parent_fee(&app, &state, &wallet, txid)?;
+    drop(wallet);
+    let mut transaction = db.transaction().map_err(internal)?;
+    let mut wallet = load_wallet_transaction(&mut transaction)?;
+    let (quote, _) = quote_cpfp(&mut wallet, txid, parent_fee, fee_rate.as_deref(), priority)?;
+    Ok(quote)
+}
+
 pub(crate) fn acceleration_error(error: impl ToString) -> ApiError {
     let message = error.to_string();
     let lower = message.to_ascii_lowercase();
@@ -857,6 +889,121 @@ pub(crate) fn build_cpfp(
     builder.finish().map_err(acceleration_error)
 }
 
+fn quote_cpfp(
+    wallet: &mut Wallet,
+    parent_txid: Txid,
+    parent_fee: Amount,
+    requested_rate: Option<&str>,
+    core_priority_rate: Option<f64>,
+) -> ApiResult<(CpfpAccelerationQuoteDto, Psbt)> {
+    let parent = wallet.get_tx(parent_txid).ok_or_else(|| {
+        api_error(
+            "acceleration_unavailable",
+            "Transaction was not found in this wallet.",
+        )
+    })?;
+    if parent.chain_position.is_confirmed() {
+        return Err(api_error(
+            "transaction_confirmed",
+            "Confirmed transactions cannot be accelerated.",
+        ));
+    }
+    let parent_vsize = parent.tx_node.tx.weight().to_vbytes_ceil();
+    let parent_rate = parent_fee / parent.tx_node.tx.weight();
+    let minimum_kwu = parent_rate
+        .to_sat_per_kwu()
+        .saturating_add(1)
+        .max(FeeRate::BROADCAST_MIN.to_sat_per_kwu());
+    let minimum_rate = minimum_kwu as f64 / 250.0;
+    let (target_rate, target, source) = if let Some(requested) = requested_rate {
+        let (applied, rate) = validate_acceleration_rate(requested)?;
+        if rate.to_sat_per_kwu() < minimum_kwu {
+            return Err(api_error(
+                "fee_rate_too_low",
+                format!("Choose at least {minimum_rate:.3} sat/vB for this package."),
+            ));
+        }
+        (applied, rate, "custom".to_owned())
+    } else {
+        let safe_kwu = minimum_kwu.saturating_add(250);
+        let core_kwu = core_priority_rate
+            .filter(|rate| rate.is_finite() && *rate > 0.0 && *rate <= 10_000.0)
+            .map(|rate| (rate * 250.0).ceil() as u64)
+            .unwrap_or(0);
+        let target_kwu = safe_kwu.max(core_kwu);
+        (
+            target_kwu as f64 / 250.0,
+            FeeRate::from_sat_per_kwu(target_kwu),
+            if core_kwu >= safe_kwu {
+                "bitcoin_core"
+            } else {
+                "package_fallback"
+            }
+            .to_owned(),
+        )
+    };
+    let psbt = build_cpfp(wallet, parent_txid, parent_fee, target)?;
+    let child_fee = psbt
+        .fee_amount()
+        .ok_or_else(|| internal("Unable to calculate the CPFP child fee."))?
+        .to_sat();
+    let child_vsize = replacement_vsize(wallet, &psbt)?;
+    let package_fee = parent_fee
+        .to_sat()
+        .checked_add(child_fee)
+        .ok_or_else(|| internal("The CPFP package fee overflowed."))?;
+    let package_vsize = parent_vsize
+        .checked_add(child_vsize)
+        .ok_or_else(|| internal("The CPFP package size overflowed."))?;
+    let resulting_package_rate =
+        ((package_fee as f64 / package_vsize as f64) * 1000.0).round() / 1000.0;
+    Ok((
+        CpfpAccelerationQuoteDto {
+            method: AccelerationMethod::Cpfp,
+            original_txid: parent_txid.to_string(),
+            parent_fee: parent_fee.to_sat(),
+            parent_vsize,
+            parent_effective_fee_rate: ((parent_fee.to_sat() as f64 / parent_vsize as f64)
+                * 1000.0)
+                .round()
+                / 1000.0,
+            minimum_fee_rate: minimum_rate,
+            target_fee_rate: target_rate,
+            child_fee,
+            child_vsize,
+            package_fee,
+            package_vsize,
+            resulting_package_fee_rate: resulting_package_rate,
+            recommendation_source: source,
+        },
+        psbt,
+    ))
+}
+
+fn rbf_review(quote: AccelerationQuoteDto) -> AccelerationReviewDto {
+    AccelerationReviewDto {
+        method: AccelerationMethod::Rbf,
+        original_txid: quote.original_txid,
+        original_fee_rate: quote.original_effective_fee_rate,
+        minimum_fee_rate: quote.minimum_fee_rate,
+        target_fee_rate: quote.target_fee_rate,
+        incremental_fee: quote.incremental_fee,
+        recommendation_source: quote.recommendation_source,
+    }
+}
+
+fn cpfp_review(quote: CpfpAccelerationQuoteDto) -> AccelerationReviewDto {
+    AccelerationReviewDto {
+        method: AccelerationMethod::Cpfp,
+        original_txid: quote.original_txid,
+        original_fee_rate: quote.parent_effective_fee_rate,
+        minimum_fee_rate: quote.minimum_fee_rate,
+        target_fee_rate: quote.target_fee_rate,
+        incremental_fee: quote.child_fee,
+        recommendation_source: quote.recommendation_source,
+    }
+}
+
 pub(crate) fn build_acceleration_psbt(
     wallet: &mut Wallet,
     txid: Txid,
@@ -888,6 +1035,7 @@ pub(crate) struct AccelerationRatePolicy {
     pub(crate) applied: f64,
     pub(crate) rate: FeeRate,
     pub(crate) rbf_quote_request: Option<(String, u64, Option<f64>)>,
+    pub(crate) cpfp_quote_request: Option<String>,
 }
 
 pub(crate) fn prepare_persisted_multisig_acceleration(
@@ -914,20 +1062,31 @@ pub(crate) fn prepare_persisted_multisig_acceleration(
             )
         })?;
     let mut quote = None;
-    let mut psbt =
-        if let Some((requested, incremental_fee, priority)) = rate_policy.rbf_quote_request {
-            let (rbf_quote, psbt) = quote_rbf(
-                &mut wallet,
-                txid,
-                Some(&requested),
-                incremental_fee,
-                priority,
-            )?;
-            quote = Some(rbf_quote);
-            psbt
-        } else {
-            build_acceleration_psbt(&mut wallet, txid, method, parent_fee, rate_policy.rate)?
-        };
+    let mut psbt = if let Some((requested, incremental_fee, priority)) =
+        rate_policy.rbf_quote_request
+    {
+        let (rbf_quote, psbt) = quote_rbf(
+            &mut wallet,
+            txid,
+            Some(&requested),
+            incremental_fee,
+            priority,
+        )?;
+        quote = Some(rbf_review(rbf_quote));
+        psbt
+    } else if let Some(requested) = rate_policy.cpfp_quote_request {
+        let parent_fee = parent_fee.ok_or_else(|| {
+            api_error(
+                "acceleration_unavailable",
+                "The parent transaction fee is unavailable.",
+            )
+        })?;
+        let (cpfp_quote, psbt) = quote_cpfp(&mut wallet, txid, parent_fee, Some(&requested), None)?;
+        quote = Some(cpfp_review(cpfp_quote));
+        psbt
+    } else {
+        build_acceleration_psbt(&mut wallet, txid, method, parent_fee, rate_policy.rate)?
+    };
     add_multisig_global_xpubs(&mut psbt, metadata)?;
     enforce_change_recovery_gap(&transaction, &wallet, &psbt)?;
     let mut proposal = summarize_payment_psbt(
@@ -939,15 +1098,7 @@ pub(crate) fn prepare_persisted_multisig_acceleration(
         acceleration_label(method, &original),
     )?;
     if let Some(quote) = quote {
-        proposal.acceleration = Some(AccelerationReviewDto {
-            method,
-            original_txid: quote.original_txid,
-            original_fee_rate: quote.original_effective_fee_rate,
-            minimum_fee_rate: quote.minimum_fee_rate,
-            target_fee_rate: quote.target_fee_rate,
-            incremental_fee: quote.incremental_fee,
-            recommendation_source: quote.recommendation_source,
-        });
+        proposal.acceleration = Some(quote);
     }
     persist_prepared_state(
         &mut transaction,
@@ -972,7 +1123,7 @@ pub fn tx_acceleration_prepare(
     require_unlocked(&app, &state)?;
     let txid = Txid::from_str(&txid)
         .map_err(|_| api_error("acceleration_unavailable", "Enter a valid transaction ID."))?;
-    let (applied, rate) = validate_acceleration_rate(&fee_rate)?;
+    let (applied, _rate) = validate_acceleration_rate(&fee_rate)?;
     let mut db = open_db(&app)?;
     if let Some(proposal_id) = active_acceleration_proposal_id(&db, &txid, method)? {
         let wallet = load_wallet(&mut db)?;
@@ -1005,8 +1156,7 @@ pub fn tx_acceleration_prepare(
     drop(wallet);
     let mut transaction = db.transaction().map_err(internal)?;
     let mut wallet = load_wallet_transaction(&mut transaction)?;
-    let mut quote = None;
-    let psbt = if method == AccelerationMethod::Rbf {
+    let (psbt, quote) = if method == AccelerationMethod::Rbf {
         let (incremental_fee, priority) = core_replacement_policy(&app, &state)?;
         let (rbf_quote, psbt) = quote_rbf(
             &mut wallet,
@@ -1015,10 +1165,16 @@ pub fn tx_acceleration_prepare(
             incremental_fee,
             priority,
         )?;
-        quote = Some(rbf_quote);
-        psbt
+        (psbt, rbf_review(rbf_quote))
     } else {
-        build_acceleration_psbt(&mut wallet, txid, method, parent_fee, rate)?
+        let parent_fee = parent_fee.ok_or_else(|| {
+            api_error(
+                "acceleration_unavailable",
+                "The parent transaction fee is unavailable.",
+            )
+        })?;
+        let (cpfp_quote, psbt) = quote_cpfp(&mut wallet, txid, parent_fee, Some(&fee_rate), None)?;
+        (psbt, cpfp_review(cpfp_quote))
     };
     enforce_change_recovery_gap(&transaction, &wallet, &psbt)?;
     let mut proposal = summarize_payment_psbt(
@@ -1029,17 +1185,7 @@ pub fn tx_acceleration_prepare(
         matches!(method, AccelerationMethod::Cpfp),
         acceleration_label(method, &original),
     )?;
-    if let Some(quote) = quote {
-        proposal.acceleration = Some(AccelerationReviewDto {
-            method,
-            original_txid: quote.original_txid,
-            original_fee_rate: quote.original_effective_fee_rate,
-            minimum_fee_rate: quote.minimum_fee_rate,
-            target_fee_rate: quote.target_fee_rate,
-            incremental_fee: quote.incremental_fee,
-            recommendation_source: quote.recommendation_source,
-        });
-    }
+    proposal.acceleration = Some(quote);
     persist_prepared_state(
         &mut transaction,
         &mut wallet,
@@ -1083,12 +1229,13 @@ pub fn multisig_acceleration_prepare(
         None
     };
     drop(wallet);
-    let quote = if method == AccelerationMethod::Rbf {
+    let rbf_quote = if method == AccelerationMethod::Rbf {
         let (incremental_fee, priority) = core_replacement_policy(&app, &state)?;
-        Some((fee_rate, incremental_fee, priority))
+        Some((fee_rate.clone(), incremental_fee, priority))
     } else {
         None
     };
+    let cpfp_quote = (method == AccelerationMethod::Cpfp).then_some(fee_rate);
     prepare_persisted_multisig_acceleration(
         &mut db,
         &metadata,
@@ -1098,7 +1245,8 @@ pub fn multisig_acceleration_prepare(
         AccelerationRatePolicy {
             applied,
             rate,
-            rbf_quote_request: quote,
+            rbf_quote_request: rbf_quote,
+            cpfp_quote_request: cpfp_quote,
         },
     )
 }

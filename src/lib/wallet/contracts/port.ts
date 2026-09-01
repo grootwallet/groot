@@ -137,6 +137,10 @@ export interface WalletTransactionsPort {
     feeRate: FeeRate
   ): Promise<PaymentProposal>;
   quoteRbf(txid: string, feeRate?: FeeRate): Promise<import('./transactions').AccelerationQuote>;
+  quoteCpfp(
+    txid: string,
+    feeRate?: FeeRate
+  ): Promise<import('./transactions').CpfpAccelerationQuote>;
   signAndBroadcast(proposalId: string, credential: string): Promise<BroadcastResult>;
 }
 

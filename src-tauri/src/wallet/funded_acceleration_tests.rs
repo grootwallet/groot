@@ -922,6 +922,7 @@ fn funded_rbf_and_cpfp_cross_groot_proposal_boundaries() {
             applied,
             rate,
             rbf_quote_request: Some(("5".to_owned(), incremental_fee, Some(5.0))),
+            cpfp_quote_request: None,
         },
     )
     .unwrap();
@@ -935,6 +936,7 @@ fn funded_rbf_and_cpfp_cross_groot_proposal_boundaries() {
             applied,
             rate,
             rbf_quote_request: Some(("5".to_owned(), incremental_fee, Some(5.0))),
+            cpfp_quote_request: None,
         },
     )
     .unwrap();
@@ -1057,6 +1059,7 @@ fn funded_rbf_and_cpfp_cross_groot_proposal_boundaries() {
             applied,
             rate,
             rbf_quote_request: None,
+            cpfp_quote_request: Some("9".to_owned()),
         },
     )
     .unwrap();

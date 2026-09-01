@@ -193,6 +193,7 @@ pub fn run() {
             wallet::transaction_commands::tx_acceleration_prepare,
             wallet::transaction_commands::multisig_acceleration_prepare,
             wallet::transaction_commands::rbf_acceleration_quote,
+            wallet::transaction_commands::cpfp_acceleration_quote,
             wallet::explorer_commands::transaction_explorer_open,
             wallet::label_interchange::bip329_labels_export,
             wallet::label_interchange::bip329_labels_import,

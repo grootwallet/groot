@@ -225,7 +225,7 @@ test('multisig RBF explains a full-balance funding shortfall without a zero defa
     '/multisig/send?fixture-rbf-insufficient-funds=1&accelerate=rbf&txid=6a1b2c3d4e5f67890123456789abcdef6a1b2c3d4e5f67890123456789abcdef'
   );
 
-  await expect(page.getByRole('heading', { name: 'Speed up transaction' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Enter a custom fee rate' })).toBeVisible();
   const rate = page.getByLabel('Custom acceleration fee rate');
   await expect(rate).toHaveValue('');
   await expect(rate).toHaveAttribute('placeholder', 'Enter a fee rate');

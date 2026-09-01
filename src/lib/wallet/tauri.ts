@@ -376,6 +376,12 @@ export class TauriWalletAdapter implements WalletPort {
       feeRate: feeRate == null ? null : String(feeRate)
     });
   }
+  quoteCpfp(txid: string, feeRate?: FeeRate) {
+    return command<import('./contracts').CpfpAccelerationQuote>('cpfp_acceleration_quote', {
+      txid,
+      feeRate: feeRate == null ? null : String(feeRate)
+    });
+  }
   async signAndBroadcast(proposalId: string, credential: string) {
     const result = await command<BroadcastResult>('tx_sign_and_broadcast', {
       proposalId,

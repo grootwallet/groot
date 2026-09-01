@@ -1008,6 +1008,24 @@ pub struct AccelerationQuoteDto {
     recommendation_source: String,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CpfpAccelerationQuoteDto {
+    method: AccelerationMethod,
+    original_txid: String,
+    parent_fee: u64,
+    parent_vsize: u64,
+    parent_effective_fee_rate: f64,
+    minimum_fee_rate: f64,
+    target_fee_rate: f64,
+    child_fee: u64,
+    child_vsize: u64,
+    package_fee: u64,
+    package_vsize: u64,
+    resulting_package_fee_rate: f64,
+    recommendation_source: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SelectionImpactDto {
@@ -4168,7 +4186,11 @@ fn load_acceleration_review(
                 original_fee_rate: row.get::<_, Option<f64>>(3)?.unwrap_or(0.0),
                 minimum_fee_rate: row.get::<_, Option<f64>>(4)?.unwrap_or(0.0),
                 target_fee_rate: row.get::<_, Option<f64>>(5)?.unwrap_or(resulting_fee_rate),
-                incremental_fee: replacement_fee.saturating_sub(original_fee),
+                incremental_fee: if method == AccelerationMethod::Cpfp {
+                    replacement_fee
+                } else {
+                    replacement_fee.saturating_sub(original_fee)
+                },
                 recommendation_source: row
                     .get::<_, Option<String>>(6)?
                     .unwrap_or_else(|| "legacy".to_owned()),

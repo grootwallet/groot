@@ -819,6 +819,21 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
         incrementalFee: quote.incrementalFee,
         recommendationSource: quote.recommendationSource
       };
+    } else {
+      const quote = await this.quoteCpfp(txid, selectedRate);
+      proposal.amount = sats(0);
+      proposal.fee = quote.childFee;
+      proposal.feeRate = quote.targetFeeRate;
+      proposal.total = quote.childFee;
+      proposal.acceleration = {
+        method,
+        originalTxid: txid,
+        originalFeeRate: quote.parentEffectiveFeeRate,
+        minimumFeeRate: quote.minimumFeeRate,
+        targetFeeRate: quote.targetFeeRate,
+        incrementalFee: quote.childFee,
+        recommendationSource: quote.recommendationSource
+      };
     }
     return proposal;
   }
@@ -857,6 +872,48 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       resultingEffectiveFeeRate: feeRate(replacementFee / vsize),
       replacementVsize: vsize,
       recommendationSource: selectedRate ? ('custom' as const) : ('replacement_fallback' as const)
+    };
+  }
+
+  async quoteCpfp(txid: string, selectedRate?: ReturnType<typeof feeRate>) {
+    const tx = this._transactions.find((item) => item.id === txid);
+    if (!tx || tx.status !== 'pending')
+      throw new WalletError('acceleration_unavailable', 'Only pending transactions can use CPFP.');
+    const parentVsize = 180;
+    const parentFee = sats(tx.fee ?? Math.ceil(Number(tx.feeRate ?? 1) * parentVsize));
+    const parentRate = Number(parentFee) / parentVsize;
+    const minimum = Math.ceil((parentRate + 0.004) * 250) / 250;
+    const target = selectedRate ?? feeRate(Math.max(5, minimum + 1));
+    if (target < minimum)
+      throw new WalletError(
+        'fee_rate_too_low',
+        `Choose at least ${minimum} sat/vB for this package.`
+      );
+    const childVsize = 110;
+    const packageVsize = parentVsize + childVsize;
+    const childFee = sats(
+      Math.max(
+        Math.ceil(Number(target) * packageVsize) - Number(parentFee),
+        Math.ceil(Number(target) * childVsize)
+      )
+    );
+    const packageFee = sats(Number(parentFee) + Number(childFee));
+    return {
+      method: 'cpfp' as const,
+      originalTxid: txid,
+      parentFee,
+      parentVsize,
+      parentEffectiveFeeRate: feeRate(Math.round(parentRate * 1000) / 1000),
+      minimumFeeRate: feeRate(minimum),
+      targetFeeRate: feeRate(Number(target)),
+      childFee,
+      childVsize,
+      packageFee,
+      packageVsize,
+      resultingPackageFeeRate: feeRate(
+        Math.round((Number(packageFee) / packageVsize) * 1000) / 1000
+      ),
+      recommendationSource: selectedRate ? ('custom' as const) : ('package_fallback' as const)
     };
   }
 

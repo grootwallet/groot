@@ -1223,7 +1223,7 @@ test('RBF explains a full-balance funding shortfall without presenting zero as a
     '/send?fixture-rbf-insufficient-funds=1&accelerate=rbf&txid=6a1b2c3d4e5f67890123456789abcdef6a1b2c3d4e5f67890123456789abcdef'
   );
 
-  await expect(page.getByRole('heading', { name: 'Speed up transaction' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Enter a custom fee rate' })).toBeVisible();
   const rate = page.getByLabel('Custom acceleration fee rate');
   await expect(rate).toHaveValue('');
   await expect(rate).toHaveAttribute('placeholder', 'Enter a fee rate');
@@ -1244,9 +1244,16 @@ test('pending incoming transaction opens CPFP review without offering sender-sid
   await expect(page.getByRole('link', { name: 'Increase fee (RBF)' })).toHaveCount(0);
   await page.getByRole('link', { name: 'Spend output (CPFP)' }).click();
   await expect(page).toHaveURL(/accelerate=cpfp/);
-  await expect(page.getByText('Fee rate', { exact: true })).toBeHidden();
-  await page.getByText('View more details', { exact: true }).click();
-  await expect(page.getByText('Fee rate', { exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Speed up transaction' })).toBeVisible();
+  await expect(page.getByText('You will spend this much more')).toBeVisible();
+  await page.getByText('Change fee rate', { exact: true }).click();
+  const rate = page.getByLabel('Custom acceleration fee rate');
+  await expect(rate).toBeVisible();
+  await rate.fill('7');
+  await rate.blur();
+  await expect(rate).toHaveValue('7');
+  await page.getByText('View fee details', { exact: true }).click();
+  await expect(page.getByText('Target package rate')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Continue to sign' })).toBeVisible();
 });
 
@@ -1257,6 +1264,7 @@ test('CPFP success identifies the additional fee instead of a zero-sat payment',
   await page.locator('.tx-row').filter({ hasText: 'Invoice #104' }).click();
   await page.getByRole('link', { name: 'Spend output (CPFP)' }).click();
   await page.getByRole('button', { name: 'Continue to sign' }).click();
+  await page.getByRole('button', { name: 'Continue to sign' }).click();
   await page.getByLabel('Wallet passphrase', { exact: true }).fill('prototype-passphrase');
   await page.getByRole('button', { name: /Sign & broadcast/ }).click();
 
@@ -1264,7 +1272,7 @@ test('CPFP success identifies the additional fee instead of a zero-sat payment',
   await expect(page.locator('.success-state')).toContainText(
     'The additional fee was accepted. Your payment is waiting for confirmation.'
   );
-  await expect(page.locator('.success-state .success-amount')).not.toContainText('0 sats');
+  await expect(page.locator('.success-state .success-amount')).not.toHaveText('0 sats');
   await expect(page.getByText('0 sats was broadcast to the Bitcoin network.')).toHaveCount(0);
 });
 
@@ -1827,7 +1835,7 @@ test('fee estimate failure preserves explicit CPFP acceleration', async ({ page 
   await page.getByRole('link', { name: 'Spend output (CPFP)' }).click();
   await expect(page.getByRole('heading', { name: 'Enter a custom fee rate' })).toBeVisible();
   await expect(page.getByText(/will not invent one/)).toBeVisible();
-  const review = page.getByRole('button', { name: 'Review acceleration' });
+  const review = page.getByRole('button', { name: 'Continue to sign' });
   await expect(review).toBeDisabled();
   await page.getByLabel('Custom acceleration fee rate').fill('15');
   await expect(review).toBeEnabled();

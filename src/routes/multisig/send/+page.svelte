@@ -47,6 +47,7 @@
     type CoinSelectionPreview,
     type FeeEstimates,
     type AccelerationQuote,
+    type CpfpAccelerationQuote,
     type HardwareDevice,
     type MultisigProposal,
     type MultisigWallet,
@@ -174,6 +175,7 @@
     coldcardSetupDevice = $state<HardwareDevice | null>(null);
   let accelerationRequest = $state<{ txid: string; method: 'rbf' | 'cpfp' } | null>(null);
   let rbfQuote = $state<AccelerationQuote | null>(null);
+  let cpfpQuote = $state<CpfpAccelerationQuote | null>(null);
   const broadcastExplorerUrl = $derived(
     txid ? transactionExplorerUrl(defaultConfig.network, txid) : null
   );
@@ -539,12 +541,10 @@
           rbfQuote = await walletService.quoteRbf(txid);
           selectedRate = Number(rbfQuote.targetFeeRate);
         } else if (estimates) {
-          proposal = await walletService.prepareMultisigAcceleration(
-            txid,
-            method,
-            feeRate(Number(estimates.priority))
-          );
-          accelerationRequest = null;
+          cpfpQuote = await walletService.quoteCpfp(txid);
+          selectedRate = Number(cpfpQuote.targetFeeRate);
+        } else {
+          selectedRate = '';
         }
       }
     } catch (cause) {
@@ -751,6 +751,9 @@
       if (request.method === 'rbf') {
         rbfQuote = await walletService.quoteRbf(request.txid, feeRate(selectedRateNumber));
         selectedRate = Number(rbfQuote.targetFeeRate);
+      } else {
+        cpfpQuote = await walletService.quoteCpfp(request.txid, feeRate(selectedRateNumber));
+        selectedRate = Number(cpfpQuote.targetFeeRate);
       }
       proposal = await walletService.prepareMultisigAcceleration(
         request.txid,
@@ -1630,7 +1633,8 @@
         <h2>
           {translate(
             $locale,
-            accelerationRequest.method === 'rbf'
+            (accelerationRequest.method === 'rbf' && rbfQuote) ||
+              (accelerationRequest.method === 'cpfp' && cpfpQuote)
               ? 'Speed up transaction'
               : 'Enter a custom fee rate'
           )}
@@ -1638,34 +1642,60 @@
         <p>
           {translate(
             $locale,
-            accelerationRequest.method === 'rbf'
-              ? 'Confirm the additional fee. The payment amount and recipient stay the same.'
+            (accelerationRequest.method === 'rbf' && rbfQuote) ||
+              (accelerationRequest.method === 'cpfp' && cpfpQuote)
+              ? 'Confirm the additional fee, then continue to sign.'
               : 'Bitcoin Core has no usable estimate. Groot will not invent one; choose the sat/vB rate\n          every signer will review.'
           )}
         </p>
       </div>
-      {#if accelerationRequest.method === 'rbf' && rbfQuote}
+      {#if (accelerationRequest.method === 'rbf' && rbfQuote) || (accelerationRequest.method === 'cpfp' && cpfpQuote)}
         <div class="acceleration-default-choice">
           <span>{translate($locale, 'You will spend this much more')}</span>
-          <Amount value={rbfQuote.incrementalFee} interactive />
-          <p>{translate($locale, 'Your payment amount and recipient will not change.')}</p>
+          <Amount
+            value={accelerationRequest.method === 'rbf'
+              ? (rbfQuote?.incrementalFee ?? 0)
+              : (cpfpQuote?.childFee ?? 0)}
+            interactive
+          />
+          <p>
+            {translate(
+              $locale,
+              accelerationRequest.method === 'rbf'
+                ? 'Your payment amount and recipient will not change.'
+                : 'This child fee helps the parent and child confirm together.'
+            )}
+          </p>
         </div>
         <details class="acceleration-optional-control">
           <summary>{translate($locale, 'Change fee rate')}</summary>
           <label class="field"
-            ><span>{translate($locale, 'New fee rate')}</span>
+            ><span
+              >{translate(
+                $locale,
+                accelerationRequest.method === 'cpfp' ? 'Package fee rate' : 'New fee rate'
+              )}</span
+            >
             <div class="amount-input">
               <input
                 aria-label={translate($locale, 'Custom acceleration fee rate')}
                 bind:value={selectedRate}
                 onblur={async () => {
-                  if (accelerationRequest?.method !== 'rbf' || !customFeeValid) return;
+                  if (!accelerationRequest || !customFeeValid) return;
                   try {
-                    rbfQuote = await walletService.quoteRbf(
-                      accelerationRequest.txid,
-                      feeRate(selectedRateNumber)
-                    );
-                    selectedRate = Number(rbfQuote.targetFeeRate);
+                    if (accelerationRequest.method === 'rbf') {
+                      rbfQuote = await walletService.quoteRbf(
+                        accelerationRequest.txid,
+                        feeRate(selectedRateNumber)
+                      );
+                      selectedRate = Number(rbfQuote.targetFeeRate);
+                    } else {
+                      cpfpQuote = await walletService.quoteCpfp(
+                        accelerationRequest.txid,
+                        feeRate(selectedRateNumber)
+                      );
+                      selectedRate = Number(cpfpQuote.targetFeeRate);
+                    }
                     feeEstimateError = '';
                   } catch (cause) {
                     feeEstimateError = accelerationUnavailableDescription(
@@ -1681,39 +1711,69 @@
             </div>
             <small
               >{translate($locale, 'Minimum {rate} sat/vB', {
-                rate: rbfQuote.minimumFeeRate
+                rate:
+                  accelerationRequest.method === 'rbf'
+                    ? (rbfQuote?.minimumFeeRate ?? 0)
+                    : (cpfpQuote?.minimumFeeRate ?? 0)
               })}</small
             ></label
           >
         </details>
         <details class="acceleration-optional-control">
           <summary>{translate($locale, 'View fee details')}</summary>
-          <dl class="details-list acceleration-quote-details">
-            <div>
-              <dt>{translate($locale, 'Original fee rate')}</dt>
-              <dd>{rbfQuote.originalEffectiveFeeRate} {translate($locale, 'sat/vB')}</dd>
-            </div>
-            <div>
-              <dt>{translate($locale, 'Minimum fee rate')}</dt>
-              <dd>{rbfQuote.minimumFeeRate} {translate($locale, 'sat/vB')}</dd>
-            </div>
-            <div>
-              <dt>{translate($locale, 'New fee rate')}</dt>
-              <dd>{rbfQuote.targetFeeRate} {translate($locale, 'sat/vB')}</dd>
-            </div>
-            <div>
-              <dt>{translate($locale, 'New network fee')}</dt>
-              <dd><Amount value={rbfQuote.estimatedReplacementFee} /></dd>
-            </div>
-            <div>
-              <dt>{translate($locale, 'Additional fee')}</dt>
-              <dd><Amount value={rbfQuote.incrementalFee} /></dd>
-            </div>
-            <div>
-              <dt>{translate($locale, 'Effective fee rate')}</dt>
-              <dd>{rbfQuote.resultingEffectiveFeeRate} {translate($locale, 'sat/vB')}</dd>
-            </div>
-          </dl>
+          {#if accelerationRequest.method === 'rbf' && rbfQuote}<dl
+              class="details-list acceleration-quote-details"
+            >
+              <div>
+                <dt>{translate($locale, 'Original fee rate')}</dt>
+                <dd>{rbfQuote.originalEffectiveFeeRate} {translate($locale, 'sat/vB')}</dd>
+              </div>
+              <div>
+                <dt>{translate($locale, 'Minimum fee rate')}</dt>
+                <dd>{rbfQuote.minimumFeeRate} {translate($locale, 'sat/vB')}</dd>
+              </div>
+              <div>
+                <dt>{translate($locale, 'New fee rate')}</dt>
+                <dd>{rbfQuote.targetFeeRate} {translate($locale, 'sat/vB')}</dd>
+              </div>
+              <div>
+                <dt>{translate($locale, 'New network fee')}</dt>
+                <dd><Amount value={rbfQuote.estimatedReplacementFee} /></dd>
+              </div>
+              <div>
+                <dt>{translate($locale, 'Additional fee')}</dt>
+                <dd><Amount value={rbfQuote.incrementalFee} /></dd>
+              </div>
+              <div>
+                <dt>{translate($locale, 'Effective fee rate')}</dt>
+                <dd>{rbfQuote.resultingEffectiveFeeRate} {translate($locale, 'sat/vB')}</dd>
+              </div>
+            </dl>{:else if cpfpQuote}<dl class="details-list acceleration-quote-details">
+              <div>
+                <dt>{translate($locale, 'Parent fee rate')}</dt>
+                <dd>{cpfpQuote.parentEffectiveFeeRate} {translate($locale, 'sat/vB')}</dd>
+              </div>
+              <div>
+                <dt>{translate($locale, 'Minimum package rate')}</dt>
+                <dd>{cpfpQuote.minimumFeeRate} {translate($locale, 'sat/vB')}</dd>
+              </div>
+              <div>
+                <dt>{translate($locale, 'Target package rate')}</dt>
+                <dd>{cpfpQuote.targetFeeRate} {translate($locale, 'sat/vB')}</dd>
+              </div>
+              <div>
+                <dt>{translate($locale, 'Child network fee')}</dt>
+                <dd><Amount value={cpfpQuote.childFee} /></dd>
+              </div>
+              <div>
+                <dt>{translate($locale, 'Package network fee')}</dt>
+                <dd><Amount value={cpfpQuote.packageFee} /></dd>
+              </div>
+              <div>
+                <dt>{translate($locale, 'Effective package rate')}</dt>
+                <dd>{cpfpQuote.resultingPackageFeeRate} {translate($locale, 'sat/vB')}</dd>
+              </div>
+            </dl>{/if}
         </details>
       {:else}
         <label class="field"
@@ -1737,10 +1797,7 @@
         disabled={!customFeeValid}
         loading={busy}
         loadingLabel={translate($locale, 'Preparing acceleration…')}
-        >{translate(
-          $locale,
-          accelerationRequest.method === 'rbf' ? 'Continue to sign' : 'Review acceleration'
-        )}</Button
+        >{translate($locale, 'Continue to sign')}</Button
       >
     </form>
   {:else if delayedSpendMode && delayedSpendCoin && !proposal}<form

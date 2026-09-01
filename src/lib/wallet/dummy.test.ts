@@ -32,6 +32,21 @@ describe('dummy acceleration proposals', () => {
     expect(quote.targetFeeRate).toBeGreaterThan(quote.minimumFeeRate);
     expect(quote.recommendationSource).toBe('replacement_fallback');
   });
+
+  it('quotes a CPFP package target and makes the child fee the additional cost', async () => {
+    const adapter = new DummyWalletAdapter();
+    const quote = await adapter.quoteCpfp(pendingTransactionId, feeRate(7));
+    const proposal = await adapter.prepareAcceleration(pendingTransactionId, 'cpfp', feeRate(7));
+
+    expect(quote.targetFeeRate).toBe(7);
+    expect(quote.resultingPackageFeeRate).toBeGreaterThanOrEqual(quote.targetFeeRate);
+    expect(proposal.acceleration).toMatchObject({
+      method: 'cpfp',
+      targetFeeRate: 7,
+      incrementalFee: quote.childFee
+    });
+    expect(proposal.fee).toBe(quote.childFee);
+  });
 });
 
 describe('software payment proposals', () => {
