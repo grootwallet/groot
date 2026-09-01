@@ -1298,7 +1298,7 @@
     <section class="form-card">
       <div class="review-amount">
         <span>{translate($locale, 'You send')}</span><strong
-          ><Amount value={proposal.amount} /></strong
+          ><Amount value={proposal.amount} interactive /></strong
         >
       </div>
       <dl class="details-list">
@@ -1312,7 +1312,7 @@
             >
           </dd>
         </div>
-        <div>
+        <div class="label-details-row">
           <dt>{translate($locale, 'Label')}</dt>
           <dd><PermanentLabelTags labels={proposal.labels ?? [proposal.label]} prominent /></dd>
         </div>
@@ -1322,11 +1322,11 @@
         </div>
         <div>
           <dt>{translate($locale, 'Network fee')}</dt>
-          <dd><Amount value={proposal.fee} /></dd>
+          <dd><Amount value={proposal.fee} interactive /></dd>
         </div>
         <div class="total">
           <dt>{translate($locale, 'Total')}</dt>
-          <dd><Amount value={proposal.total} /></dd>
+          <dd><Amount value={proposal.total} interactive /></dd>
         </div>
       </dl>
       <div class:warning={proposalHasPrivacyWarning} class="selection-review">
@@ -1358,7 +1358,11 @@
             )}</span
           >
         </div>{/if}
-      <TransactionReviewDetails {proposal} onChangeAddress={() => (changeAddressOpen = true)} />
+      <TransactionReviewDetails
+        {proposal}
+        interactiveAmounts
+        onChangeAddress={() => (changeAddressOpen = true)}
+      />
       <div class="warning-box">
         {translate(
           $locale,
@@ -1417,13 +1421,13 @@
               >
             </dd>
           </div>
-          <div>
+          <div class="label-details-row">
             <dt>{translate($locale, 'Label')}</dt>
             <dd><PermanentLabelTags labels={proposal.labels ?? [proposal.label]} prominent /></dd>
           </div>
           <div>
             <dt>{translate($locale, 'Amount')}</dt>
-            <dd><Amount value={proposal.amount} /></dd>
+            <dd><Amount value={proposal.amount} interactive /></dd>
           </div>
           <div>
             <dt>{translate($locale, 'Network')}</dt>
@@ -1431,14 +1435,18 @@
           </div>
           <div>
             <dt>{translate($locale, 'Network fee')}</dt>
-            <dd><Amount value={proposal.fee} /></dd>
+            <dd><Amount value={proposal.fee} interactive /></dd>
           </div>
           <div class="total">
             <dt>{translate($locale, 'Total')}</dt>
-            <dd><Amount value={proposal.total} /></dd>
+            <dd><Amount value={proposal.total} interactive /></dd>
           </div>
         </dl>
-        <TransactionReviewDetails {proposal} onChangeAddress={() => (changeAddressOpen = true)} />
+        <TransactionReviewDetails
+          {proposal}
+          interactiveAmounts
+          onChangeAddress={() => (changeAddressOpen = true)}
+        />
       </section>
       {#if externalProposal?.canFinalize}
         <div class="ready-panel">
@@ -1545,13 +1553,13 @@
               >
             </dd>
           </div>
-          <div>
+          <div class="label-details-row">
             <dt>{translate($locale, 'Label')}</dt>
             <dd><PermanentLabelTags labels={proposal.labels ?? [proposal.label]} prominent /></dd>
           </div>
           <div>
             <dt>{translate($locale, 'Amount')}</dt>
-            <dd><Amount value={proposal.amount} /></dd>
+            <dd><Amount value={proposal.amount} interactive /></dd>
           </div>
           <div>
             <dt>{translate($locale, 'Network')}</dt>
@@ -1559,14 +1567,18 @@
           </div>
           <div>
             <dt>{translate($locale, 'Network fee')}</dt>
-            <dd><Amount value={proposal.fee} /></dd>
+            <dd><Amount value={proposal.fee} interactive /></dd>
           </div>
           <div class="total">
             <dt>{translate($locale, 'Total')}</dt>
-            <dd><Amount value={proposal.total} /></dd>
+            <dd><Amount value={proposal.total} interactive /></dd>
           </div>
         </dl>
-        <TransactionReviewDetails {proposal} onChangeAddress={() => (changeAddressOpen = true)} />
+        <TransactionReviewDetails
+          {proposal}
+          interactiveAmounts
+          onChangeAddress={() => (changeAddressOpen = true)}
+        />
       </section>
       <PasswordField
         label={translate($locale, 'Wallet passphrase')}

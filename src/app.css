@@ -765,13 +765,17 @@ code {
 .formatted-amount {
   display: inline-flex;
   align-items: baseline;
+  min-width: 0;
+  max-width: 100%;
   gap: 0;
   font-variant-numeric: tabular-nums;
 }
 .formatted-amount strong {
+  min-width: 0;
   color: inherit;
   font-size: 1em;
   font-weight: 750;
+  white-space: nowrap;
 }
 .formatted-amount small {
   color: var(--muted);
@@ -1220,6 +1224,19 @@ code {
   display: grid;
   gap: 3px;
 }
+.active-payment-copy {
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    'title progress'
+    'labels progress';
+  column-gap: 10px;
+}
+.active-payment-copy > strong {
+  grid-area: title;
+}
+.active-payment-copy > .active-proposal-meta {
+  grid-area: labels;
+}
 .active-proposal-copy strong {
   font-size: 11px;
 }
@@ -1232,6 +1249,7 @@ code {
   display: flex;
   align-items: center;
   gap: 7px;
+  padding-top: 4px;
 }
 .active-proposal-meta .permanent-label-tags.prominent {
   flex: 0 1 auto;
@@ -1239,6 +1257,13 @@ code {
 }
 .active-proposal-meta > small {
   flex: 0 0 auto;
+}
+.active-proposal-progress {
+  grid-area: progress;
+  align-self: center;
+  color: var(--muted);
+  font-size: 9px;
+  white-space: nowrap;
 }
 .active-proposal-action {
   display: inline-flex;
@@ -2931,6 +2956,16 @@ code {
   align-items: center;
   gap: 28px;
 }
+.details-list > .label-details-row {
+  padding-block: 8px;
+}
+.details-list > .label-details-row dd {
+  width: 65%;
+  min-width: 0;
+}
+.details-list > .label-details-row .permanent-label-tags {
+  justify-content: flex-end;
+}
 .details-list dt {
   color: var(--muted);
   font-size: 11px;
@@ -3029,7 +3064,7 @@ code {
 }
 .self-transfer-consolidating {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 42%);
   align-items: center;
   gap: 12px;
   margin-top: 6px;
@@ -3050,8 +3085,12 @@ code {
   line-height: 1.4;
 }
 .self-transfer-consolidating > :last-child {
+  min-width: 0;
+  max-width: 100%;
   justify-self: end;
   font-weight: 700;
+  text-align: right;
+  white-space: nowrap;
 }
 .proposal-review-details > summary {
   min-height: 45px;
@@ -10129,6 +10168,17 @@ code {
   }
   .active-proposal-callout {
     grid-template-columns: 32px minmax(0, 1fr);
+  }
+  .active-payment-copy {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      'title'
+      'labels'
+      'progress';
+  }
+  .active-proposal-progress {
+    justify-self: start;
+    margin-top: 3px;
   }
   .active-proposal-action {
     display: none;

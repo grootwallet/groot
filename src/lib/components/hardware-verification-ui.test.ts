@@ -465,7 +465,7 @@ describe('hardware receive verification UI', () => {
     expect(review).toBeGreaterThan(-1);
     expect(cableAction).toBeGreaterThan(review);
     expect(singleKeySend).toMatch(
-      /<TransactionReviewDetails\s+\{proposal\}\s+onChangeAddress=\{\(\)\s*=>\s*\(?changeAddressOpen\s*=\s*true\)?\}\s*\/>/
+      /<TransactionReviewDetails\s+\{proposal\}\s+interactiveAmounts\s+onChangeAddress=\{\(\)\s*=>\s*\(?changeAddressOpen\s*=\s*true\)?\}\s*\/>/
     );
   });
 

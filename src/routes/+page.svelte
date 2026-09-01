@@ -963,14 +963,14 @@
         })}
       >
         <span class="active-proposal-icon"><Clock3 size={17} /></span>
-        <span class="active-proposal-copy"
+        <span class="active-proposal-copy active-payment-copy"
           ><strong>{proposalTitle}</strong><span class="active-proposal-meta"
             ><PermanentLabelTags
               labels={activeProposal.labels ?? [activeProposal.label]}
               hidden={$discreetMode}
               prominent
-            /><small>{proposalProgress}</small></span
-          ></span
+            /></span
+          ><small class="active-proposal-progress">{proposalProgress}</small></span
         >
         <span class="active-proposal-action"
           >{translate($locale, 'Resume')} <ChevronRight size={15} /></span

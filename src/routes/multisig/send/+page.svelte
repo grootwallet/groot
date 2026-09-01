@@ -2060,7 +2060,7 @@
                   ? 'Recipient receives'
                   : 'You send'
             )}</span
-          ><strong><Amount value={Number(proposal.amount)} /></strong>
+          ><strong><Amount value={Number(proposal.amount)} interactive /></strong>
         </div>
         <dl class="details-list proposal-review-primary">
           <div>
@@ -2073,7 +2073,7 @@
               >
             </dd>
           </div>
-          <div>
+          <div class="label-details-row">
             <dt>{translate($locale, 'Label')}</dt>
             <dd><PermanentLabelTags labels={proposal.labels ?? [proposal.label]} prominent /></dd>
           </div>
@@ -2083,11 +2083,11 @@
           </div>
           <div>
             <dt>{translate($locale, 'Network fee')}</dt>
-            <dd><Amount value={Number(proposal.fee)} /></dd>
+            <dd><Amount value={Number(proposal.fee)} interactive /></dd>
           </div>
           <div class="total">
             <dt>{translate($locale, 'Total')}</dt>
-            <dd><Amount value={Number(proposal.total)} /></dd>
+            <dd><Amount value={Number(proposal.total)} interactive /></dd>
           </div>
         </dl>
         {#if delayedSpendMode}<div class="selection-review renewal-review">
@@ -2158,6 +2158,7 @@
           </div>{/if}
         <TransactionReviewDetails
           {proposal}
+          interactiveAmounts
           policy={proposal.spendPath === 'delayed'
             ? `${delayedSpendKeyName} only`
             : wallet?.recoveryTemplate?.type === 'recovery'

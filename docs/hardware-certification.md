@@ -214,6 +214,19 @@ Submitted screenshots exposed public wallet, signer, or transaction metadata
 and were excluded; no prohibited identifier, credential, RPC detail, amount,
 PSBT, or label is retained.
 
+Packaged v0.4.88 Testnet4 at exact commit `4fcd5f27` received a bounded shared
+presentation regression on 2026-09-01. The reviewer reported that permanent-label
+behavior in light and dark modes, single-key and multisig coin-selection
+presentation, provenance and privacy warnings, all exercised app-to-device
+amount comparisons, and toast presentation passed. Five long labels exposed
+insufficient review-row spacing and crowded Overview signing-progress alignment;
+one BTC send-signing summary also overflowed and did not toggle denomination.
+Those presentation findings keep this exact package limited and require a new
+candidate-bound retest after correction. No physical result is inferred for the
+correcting source branch, and no address, transaction identifier, fingerprint,
+account key, descriptor, PSBT, device path, credential, node detail, amount, or
+label is retained.
+
 ### Completed checkpoint — BitBox02
 
 On 2026-08-15, the original Bitcoin-only BitBox02, firmware 9.26.3, passed the Regtest receive-address comparison and an independent BIP48 2-of-3 flow: account-key import, policy registration, first-address review, explicit signing rejection with a retryable unchanged proposal, successful retry, one-signature restart persistence, threshold completion with Trezor Model One, and broadcast. It then passed wrong-device rejection without collecting a signature, USB interruption during signing with a clean retry, rejection of a signed PSBT from another proposal without changing signatures, and an independent BSMS descriptor-recovery test reproducing the same first receive address. The sanitized host record is macOS 26.1 Tahoe with HWI 2.3.1, tested 2026-08-15 in Europe/Andorra (UTC+2). This evidence applies only to the original Bitcoin-only BitBox02; it does not cover Nova. Do not publish addresses, fingerprints, xpubs, PSBTs, or device paths.
