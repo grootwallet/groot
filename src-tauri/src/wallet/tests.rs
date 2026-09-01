@@ -1347,6 +1347,11 @@ fn acceleration_rates_and_error_classes_fail_closed() {
         acceleration_error("insufficient fee").code,
         "insufficient_funds"
     );
+    let funding_shortfall = rbf_candidate_error("insufficient funds");
+    assert_eq!(funding_shortfall.code, "insufficient_funds");
+    assert!(funding_shortfall
+        .message
+        .contains("keeps the recipient amount unchanged"));
     assert_eq!(
         acceleration_error("unknown parent").code,
         "acceleration_unavailable"

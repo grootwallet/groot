@@ -1213,6 +1213,26 @@ test('RBF starts safely and presents one payment row with durable lineage', asyn
   );
 });
 
+test('RBF explains a full-balance funding shortfall without presenting zero as a default', async ({
+  page
+}) => {
+  await page.goto(
+    '/send?fixture-rbf-insufficient-funds=1&accelerate=rbf&txid=6a1b2c3d4e5f67890123456789abcdef6a1b2c3d4e5f67890123456789abcdef'
+  );
+
+  await expect(page.getByRole('heading', { name: 'Review replacement fee' })).toBeVisible();
+  const rate = page.getByLabel('Custom acceleration fee rate');
+  await expect(rate).toHaveValue('');
+  await expect(rate).toHaveAttribute('placeholder', 'Enter a fee rate');
+  await expect(page.getByRole('alert')).toContainText(
+    'This replacement keeps the recipient amount unchanged.'
+  );
+  await expect(page.getByRole('alert')).toContainText(
+    'Available change and the wallet’s other spendable coins cannot cover the higher fee.'
+  );
+  await expect(page.getByRole('button', { name: 'Review acceleration' })).toBeDisabled();
+});
+
 test('pending incoming transaction opens CPFP review without offering sender-side RBF', async ({
   page
 }) => {

@@ -416,13 +416,25 @@ fn replacement_vsize(wallet: &Wallet, psbt: &Psbt) -> ApiResult<u64> {
 fn rbf_candidate(wallet: &mut Wallet, txid: Txid, rate: FeeRate) -> ApiResult<(Psbt, u64, u64)> {
     let mut builder = wallet.build_fee_bump(txid).map_err(acceleration_error)?;
     builder.fee_rate(rate);
-    let psbt = builder.finish().map_err(acceleration_error)?;
+    let psbt = builder.finish().map_err(rbf_candidate_error)?;
     let fee = psbt
         .fee_amount()
         .ok_or_else(|| internal("Unable to calculate the replacement fee."))?
         .to_sat();
     let vsize = replacement_vsize(wallet, &psbt)?;
     Ok((psbt, fee, vsize))
+}
+
+pub(crate) fn rbf_candidate_error(error: impl ToString) -> ApiError {
+    let translated = acceleration_error(error);
+    if translated.code == "insufficient_funds" {
+        api_error(
+            "insufficient_funds",
+            "The replacement keeps the recipient amount unchanged, but available change and the wallet's other spendable coins cannot cover the higher fee.",
+        )
+    } else {
+        translated
+    }
 }
 
 fn quote_rbf(

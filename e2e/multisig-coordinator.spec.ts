@@ -217,6 +217,23 @@ test('multisig RBF keeps a safe replacement-specific default when estimates are 
   await expect(page.getByRole('region', { name: 'Payment signers' })).toContainText('2 of 3');
 });
 
+test('multisig RBF explains a full-balance funding shortfall without a zero default', async ({
+  page
+}) => {
+  await page.goto(
+    '/multisig/send?fixture-rbf-insufficient-funds=1&accelerate=rbf&txid=6a1b2c3d4e5f67890123456789abcdef6a1b2c3d4e5f67890123456789abcdef'
+  );
+
+  await expect(page.getByRole('heading', { name: 'Review replacement fee' })).toBeVisible();
+  const rate = page.getByLabel('Custom acceleration fee rate');
+  await expect(rate).toHaveValue('');
+  await expect(rate).toHaveAttribute('placeholder', 'Enter a fee rate');
+  await expect(page.getByRole('alert')).toContainText(
+    'This replacement keeps the recipient amount unchanged.'
+  );
+  await expect(page.getByRole('button', { name: 'Review acceleration' })).toBeDisabled();
+});
+
 test('keeps multisig PSBT actions inside the review card', async ({ page }) => {
   await page.goto('/multisig/send');
   await page.getByLabel('Payment label').fill('Responsive action test');

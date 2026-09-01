@@ -824,6 +824,15 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
   }
 
   async quoteRbf(txid: string, selectedRate?: ReturnType<typeof feeRate>) {
+    if (
+      typeof location !== 'undefined' &&
+      new URLSearchParams(location.search).has('fixture-rbf-insufficient-funds')
+    ) {
+      throw new WalletError(
+        'insufficient_funds',
+        'Insufficient funds: the replacement fee cannot be funded.'
+      );
+    }
     const tx = this._transactions.find((item) => item.id === txid);
     if (!tx || tx.status !== 'pending' || tx.rbf !== true)
       throw new WalletError('transaction_not_replaceable', 'This transaction is not replaceable.');

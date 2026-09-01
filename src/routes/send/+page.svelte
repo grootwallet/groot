@@ -68,7 +68,10 @@
     visibleLabelSuggestions,
     VISIBLE_LABEL_SUGGESTION_LIMIT
   } from '$lib/wallet/label-suggestions';
-  import { accelerationUnavailableTitle } from '$lib/wallet/acceleration-presentation';
+  import {
+    accelerationUnavailableDescription,
+    accelerationUnavailableTitle
+  } from '$lib/wallet/acceleration-presentation';
   import {
     automaticStrategyMessage,
     presentedCoinSelection,
@@ -396,8 +399,9 @@
       }
     } catch (cause) {
       signerSummaryReady = true;
-      const description =
-        cause instanceof WalletError && cause.code === 'insufficient_funds'
+      const description = accelerationRequest
+        ? accelerationUnavailableDescription(accelerationRequest.method, cause, $locale)
+        : cause instanceof WalletError && cause.code === 'insufficient_funds'
           ? `The amount plus network fee exceeds the ${selectedCoins.length ? 'selected coin balance' : 'available balance'}.`
           : localizedError(cause, $locale);
       if (accelerationRequest) {
@@ -589,7 +593,7 @@
       accelerationRequest = null;
       step = 2;
     } catch (cause) {
-      feeEstimateError = localizedError(cause, $locale, 'Could not prepare fee acceleration.');
+      feeEstimateError = accelerationUnavailableDescription(request.method, cause, $locale);
       toast({
         title: accelerationUnavailableTitle(request.method),
         description: feeEstimateError,
@@ -1008,11 +1012,15 @@
                 customFee = String(rbfQuote.targetFeeRate);
                 feeEstimateError = '';
               } catch (cause) {
-                feeEstimateError = localizedError(cause, $locale);
+                feeEstimateError = accelerationUnavailableDescription(
+                  accelerationRequest.method,
+                  cause,
+                  $locale
+                );
               }
             }}
             inputmode="decimal"
-            placeholder="0"
+            placeholder={translate($locale, 'Enter a fee rate')}
           /><b>{translate($locale, 'sat/vB')}</b>
         </div>
         <small

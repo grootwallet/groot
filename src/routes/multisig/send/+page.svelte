@@ -61,7 +61,10 @@
     validPolicyMaturity
   } from '$lib/wallet/policy';
   import { compactAddress } from '$lib/address-display';
-  import { accelerationUnavailableTitle } from '$lib/wallet/acceleration-presentation';
+  import {
+    accelerationUnavailableDescription,
+    accelerationUnavailableTitle
+  } from '$lib/wallet/acceleration-presentation';
   import {
     automaticStrategyMessage,
     presentedCoinSelection,
@@ -117,7 +120,7 @@
   let address = $state(''),
     label = $state(''),
     amount = $state(''),
-    selectedRate = $state(0),
+    selectedRate = $state<number | ''>(0),
     pin = $state(''),
     imported = $state(''),
     txid = $state(''),
@@ -541,7 +544,12 @@
       }
     } catch (cause) {
       if (accelerationRequest) {
-        feeEstimateError = localizedError(cause, $locale, 'Could not prepare fee acceleration.');
+        if (accelerationRequest.method === 'rbf' && !rbfQuote) selectedRate = '';
+        feeEstimateError = accelerationUnavailableDescription(
+          accelerationRequest.method,
+          cause,
+          $locale
+        );
         toast({
           title: accelerationUnavailableTitle(accelerationRequest.method),
           description: feeEstimateError,
@@ -588,7 +596,7 @@
       stage: draftStep,
       selectedCoins: [...selectedCoins],
       automaticStrategy,
-      selectedRate
+      selectedRate: selectedRateNumber
     });
     hasPaymentDraft = true;
   }
@@ -746,7 +754,7 @@
       );
       accelerationRequest = null;
     } catch (cause) {
-      feeEstimateError = localizedError(cause, $locale, 'Could not prepare fee acceleration.');
+      feeEstimateError = accelerationUnavailableDescription(request.method, cause, $locale);
       toast({
         title: accelerationUnavailableTitle(request.method),
         description: feeEstimateError,
@@ -1588,11 +1596,15 @@
                 selectedRate = Number(rbfQuote.targetFeeRate);
                 feeEstimateError = '';
               } catch (cause) {
-                feeEstimateError = localizedError(cause, $locale);
+                feeEstimateError = accelerationUnavailableDescription(
+                  accelerationRequest.method,
+                  cause,
+                  $locale
+                );
               }
             }}
             inputmode="decimal"
-            placeholder="0"
+            placeholder={translate($locale, 'Enter a fee rate')}
           /><b>{translate($locale, 'sat/vB')}</b>
         </div>
         <small
