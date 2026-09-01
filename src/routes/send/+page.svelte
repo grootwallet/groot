@@ -81,9 +81,11 @@
   import {
     amountInputValue,
     amountUnit,
+    convertAmountInput,
     denomination,
     formatAmount,
-    parseAmountInput
+    parseAmountInput,
+    setDenomination
   } from '$lib/denomination';
   import { fly } from 'svelte/transition';
   import { useWalletShellContext } from '$lib/wallet/shell-context';
@@ -540,6 +542,14 @@
         tone: 'danger'
       });
     }
+  }
+
+  function toggleAmountInputDenomination() {
+    const next = $denomination === 'btc' ? 'sats' : 'btc';
+    const converted = convertAmountInput(amount, $denomination, next);
+    if (converted === null) return;
+    amount = converted;
+    setDenomination(next);
   }
 
   function updateFeeRate(rate: number) {
@@ -1142,9 +1152,19 @@
             }}
             inputmode={$denomination === 'btc' ? 'decimal' : 'numeric'}
             placeholder="0"
-          /><b>{translate($locale, $denomination === 'btc' ? 'BTC' : 'sats')}</b><button
+          /><button
+            class="amount-unit-toggle"
             type="button"
-            onclick={() => void useMaxAmount()}>{translate($locale, 'Max')}</button
+            aria-label={translate(
+              $locale,
+              $denomination === 'btc'
+                ? 'Show transaction amount in sats'
+                : 'Show transaction amount in BTC'
+            )}
+            onclick={toggleAmountInputDenomination}
+            >{translate($locale, $denomination === 'btc' ? 'BTC' : 'sats')}</button
+          ><button class="amount-max-action" type="button" onclick={() => void useMaxAmount()}
+            >{translate($locale, 'Max')}</button
           >
         </div>
         <small class="available-balance-summary"

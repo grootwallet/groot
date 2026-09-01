@@ -65,7 +65,7 @@ Suggestions never prefill a field. Choosing one adds a removable token inside th
 
 ## Single-key send
 
-The global sats/BTC preference applies to the amount field, balance, fees, review, errors, and success copy; BTC is always eight decimals while the wallet boundary remains integer satoshis. **Max** asks the native builder for an exact, non-persisted drain preview with the active fee choice and coin-selection policy. Single-key and multisig sends share Economy, Standard, Priority, and Custom fee choices. Fee provenance is shown once in plain language as **Bitcoin Core**; RPC method names stay hidden.
+The global sats/BTC preference applies to the amount field, balance, fees, review, errors, and success copy; BTC is always eight decimals while the wallet boundary remains integer satoshis. In both single-key and multisig amount entry, the visible `sats` or `BTC` unit is a button that converts the current valid input exactly and updates the global preference; invalid text is never reinterpreted under another unit. **Max** asks the native builder for an exact, non-persisted drain preview with the active fee choice and coin-selection policy. Single-key and multisig sends share Economy, Standard, Priority, and Custom fee choices. Fee provenance is shown once in plain language as **Bitcoin Core**; RPC method names stay hidden.
 
 `Intent: one to five explicit new/reused permanent labels+recipient → Amount & fee: amount+privacy strategy or exact coins+fee rate → persist Rust PSBT+assignments → Review funding privacy → Review & sign: authoritative review+credential → sign+broadcast → durable labeled success`
 

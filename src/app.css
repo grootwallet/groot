@@ -2837,15 +2837,37 @@ code {
   font-size: 20px;
   padding-right: 100px;
 }
-.amount-input b {
+.amount-input b,
+.amount-input .amount-unit-toggle {
   position: absolute;
   right: 53px;
-  top: 14px;
   color: var(--muted);
   font-size: 11px;
   font-weight: 500;
 }
-.amount-input button {
+.amount-input b {
+  top: 14px;
+}
+.amount-input .amount-unit-toggle {
+  top: 9px;
+  min-width: 40px;
+  height: 26px;
+  padding: 0 5px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+}
+.amount-input .amount-unit-toggle:hover,
+.amount-input .amount-unit-toggle:focus-visible {
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  color: var(--text);
+  outline: none;
+}
+.amount-input .amount-unit-toggle:focus-visible {
+  box-shadow: 0 0 0 2px var(--focus);
+}
+.amount-input .amount-max-action {
   position: absolute;
   right: 5px;
   top: 6px;

@@ -223,6 +223,10 @@ test('keeps multisig PSBT actions inside the review card', async ({ page }) => {
   await page.getByLabel('Bitcoin address').fill('bcrt1qdummy00085n8k2r7v4cx9s6jlawephgzuqf5t8ul');
   await page.getByRole('button', { name: 'Continue to amount' }).click();
   await page.getByLabel('Amount', { exact: true }).fill('50000');
+  await page.getByRole('button', { name: 'Show transaction amount in BTC' }).click();
+  await expect(page.getByLabel('Amount', { exact: true })).toHaveValue('0.00050000');
+  await page.getByRole('button', { name: 'Show transaction amount in sats' }).click();
+  await expect(page.getByLabel('Amount', { exact: true })).toHaveValue('50000');
   await page.getByRole('button', { name: 'Review payment' }).click();
 
   const psbtActions = page.locator('.psbt-actions');

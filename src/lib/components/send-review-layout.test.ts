@@ -42,6 +42,16 @@ describe('send review layout', () => {
     );
   });
 
+  it('makes both send amount-field units accessible denomination toggles', () => {
+    for (const route of [singleSend, multisigSend]) {
+      expect(route).toContain('class="amount-unit-toggle"');
+      expect(route).toContain('onclick={toggleAmountInputDenomination}');
+      expect(route).toContain("? 'Show transaction amount in sats'");
+      expect(route).toContain(": 'Show transaction amount in BTC'");
+    }
+    expect(appCss).toMatch(/\.amount-input \.amount-unit-toggle\s*\{/);
+  });
+
   it('bounds long BTC values inside self-transfer summaries', () => {
     expect(appCss).toMatch(
       /\.self-transfer-consolidating\s*\{[^}]*grid-template-columns: minmax\(0, 1fr\) minmax\(0, 42%\)/s

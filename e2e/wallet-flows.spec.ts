@@ -1048,6 +1048,10 @@ test('amount denomination stays consistent across wallet surfaces', async ({ pag
   await page.getByLabel('Payment label').fill('Uniform BTC amount');
   await page.getByRole('button', { name: 'Continue to amount' }).click();
   await page.getByLabel('Amount', { exact: true }).fill('0.00008000');
+  await page.getByRole('button', { name: 'Show transaction amount in sats' }).click();
+  await expect(page.getByLabel('Amount', { exact: true })).toHaveValue('8000');
+  await page.getByRole('button', { name: 'Show transaction amount in BTC' }).click();
+  await expect(page.getByLabel('Amount', { exact: true })).toHaveValue('0.00008000');
   await page.getByRole('button', { name: 'Review payment' }).click();
   const reviewedAmount = page.locator('.review-amount .formatted-amount');
   await expect(reviewedAmount).toContainText('0.00008000 BTC');
