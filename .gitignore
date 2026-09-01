@@ -11,6 +11,7 @@ dist/
 .regtest/
 .regtest-test/
 src-tauri/target/
+src-tauri/.release-stage/
 src-tauri/gen/
 *.sqlite
 *.sqlite3
