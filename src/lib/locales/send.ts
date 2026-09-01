@@ -541,5 +541,68 @@ export const sendCopy = {
   'The unfinished payment was removed. No transaction was created.': {
     fr: 'Le paiement inachevé a été supprimé. Aucune transaction n’a été créée.',
     es: 'Se eliminó el pago sin terminar. No se creó ninguna transacción.'
+  },
+  'Speed up transaction': {
+    fr: 'Accélérer la transaction',
+    es: 'Acelerar transacción'
+  },
+  'Confirm the additional fee. The payment amount and recipient stay the same.': {
+    fr: 'Confirmez les frais supplémentaires. Le montant du paiement et le destinataire restent inchangés.',
+    es: 'Confirma la comisión adicional. El importe del pago y el destinatario no cambian.'
+  },
+  'You will spend this much more': {
+    fr: 'Vous dépenserez ce montant en plus',
+    es: 'Gastarás este importe adicional'
+  },
+  'Your payment amount and recipient will not change.': {
+    fr: 'Le montant de votre paiement et le destinataire ne changeront pas.',
+    es: 'El importe del pago y el destinatario no cambiarán.'
+  },
+  'Change fee rate': {
+    fr: 'Modifier le taux de frais',
+    es: 'Cambiar tasa de comisión'
+  },
+  'View fee details': {
+    fr: 'Afficher le détail des frais',
+    es: 'Ver detalles de la comisión'
+  },
+  'Original fee rate': { fr: 'Taux de frais initial', es: 'Tasa de comisión original' },
+  'Minimum fee rate': { fr: 'Taux de frais minimum', es: 'Tasa de comisión mínima' },
+  'New fee rate': { fr: 'Nouveau taux de frais', es: 'Nueva tasa de comisión' },
+  'New network fee': { fr: 'Nouveaux frais de réseau', es: 'Nueva comisión de red' },
+  'Additional fee': { fr: 'Frais supplémentaires', es: 'Comisión adicional' },
+  'Effective fee rate': { fr: 'Taux de frais effectif', es: 'Tasa de comisión efectiva' },
+  'Minimum {rate} sat/vB': {
+    fr: 'Minimum {rate} sat/vB',
+    es: 'Mínimo {rate} sat/vB'
+  },
+  'Speed-up cost': { fr: 'Coût de l’accélération', es: 'Coste de aceleración' },
+  'The payment amount stays the same.': {
+    fr: 'Le montant du paiement reste inchangé.',
+    es: 'El importe del pago no cambia.'
+  },
+  'Transaction accelerated': {
+    fr: 'Transaction accélérée',
+    es: 'Transacción acelerada'
+  },
+  'Transaction accelerated.': {
+    fr: 'Transaction accélérée.',
+    es: 'Transacción acelerada.'
+  },
+  'The additional fee was accepted. Your payment is waiting for confirmation.': {
+    fr: 'Les frais supplémentaires ont été acceptés. Votre paiement attend sa confirmation.',
+    es: 'La comisión adicional fue aceptada. Tu pago está esperando confirmación.'
+  },
+  'The higher fee was accepted. Your payment amount and recipient stayed the same.': {
+    fr: 'Les frais plus élevés ont été acceptés. Le montant du paiement et le destinataire sont restés inchangés.',
+    es: 'La comisión más alta fue aceptada. El importe del pago y el destinatario no cambiaron.'
+  },
+  'Your payment was accepted by the Bitcoin network.': {
+    fr: 'Votre paiement a été accepté par le réseau Bitcoin.',
+    es: 'Tu pago fue aceptado por la red Bitcoin.'
+  },
+  'The system browser could not open the explorer.': {
+    fr: 'Le navigateur du système n’a pas pu ouvrir l’explorateur.',
+    es: 'El navegador del sistema no pudo abrir el explorador.'
   }
 } as const satisfies CatalogSection;

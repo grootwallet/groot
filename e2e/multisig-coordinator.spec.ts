@@ -206,9 +206,10 @@ test('multisig RBF keeps a safe replacement-specific default when estimates are 
     '/multisig/send?fixture-fee-estimates-unavailable=1&accelerate=rbf&txid=6a1b2c3d4e5f67890123456789abcdef6a1b2c3d4e5f67890123456789abcdef'
   );
 
-  await expect(page.getByRole('heading', { name: 'Review replacement fee' })).toBeVisible();
-  await expect(page.getByText(/replacement-only fallback/)).toBeVisible();
-  const review = page.getByRole('button', { name: 'Review acceleration' });
+  await expect(page.getByRole('heading', { name: 'Speed up transaction' })).toBeVisible();
+  await expect(page.getByText('You will spend this much more', { exact: true })).toBeVisible();
+  await expect(page.getByLabel('Custom acceleration fee rate')).toBeHidden();
+  const review = page.getByRole('button', { name: 'Continue to sign' });
   await expect(review).toBeEnabled();
   await expect(page.getByLabel('Custom acceleration fee rate')).not.toHaveValue('0');
   await review.click();
@@ -224,14 +225,14 @@ test('multisig RBF explains a full-balance funding shortfall without a zero defa
     '/multisig/send?fixture-rbf-insufficient-funds=1&accelerate=rbf&txid=6a1b2c3d4e5f67890123456789abcdef6a1b2c3d4e5f67890123456789abcdef'
   );
 
-  await expect(page.getByRole('heading', { name: 'Review replacement fee' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Speed up transaction' })).toBeVisible();
   const rate = page.getByLabel('Custom acceleration fee rate');
   await expect(rate).toHaveValue('');
   await expect(rate).toHaveAttribute('placeholder', 'Enter a fee rate');
   await expect(page.getByRole('alert')).toContainText(
     'This replacement keeps the recipient amount unchanged.'
   );
-  await expect(page.getByRole('button', { name: 'Review acceleration' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Continue to sign' })).toBeDisabled();
 });
 
 test('keeps multisig PSBT actions inside the review card', async ({ page }) => {

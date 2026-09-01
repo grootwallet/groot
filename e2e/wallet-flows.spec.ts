@@ -1151,33 +1151,36 @@ test('RBF starts safely and presents one payment row with durable lineage', asyn
 
   await page.locator('.tx-row').filter({ hasText: 'RBF target fixture' }).first().click();
   await page.getByRole('link', { name: 'Increase fee (RBF)' }).click();
-  await expect(page.getByRole('heading', { name: 'Review replacement fee' })).toBeVisible();
-  await expect(page.getByText('Original effective rate', { exact: true })).toBeVisible();
-  await expect(page.getByText('Exact replacement minimum', { exact: true })).toBeVisible();
-  await expect(page.getByText('Selected target', { exact: true })).toBeVisible();
-  await expect(page.getByText('Estimated replacement fee', { exact: true })).toBeVisible();
-  await expect(page.getByText('Incremental fee', { exact: true })).toBeVisible();
-  await expect(page.getByText('Resulting effective rate', { exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Speed up transaction' })).toBeVisible();
+  await expect(page.getByText('You will spend this much more', { exact: true })).toBeVisible();
+  await expect(page.getByText('Your payment amount and recipient will not change.')).toBeVisible();
+  await expect(page.getByText('Original fee rate', { exact: true })).toBeHidden();
+  await expect(page.getByLabel('Custom acceleration fee rate')).toBeHidden();
+  await page.getByText('Change fee rate', { exact: true }).click();
   const rate = page.getByLabel('Custom acceleration fee rate');
   await expect(rate).not.toHaveValue('0');
   await rate.fill('2.5');
   await rate.blur();
   await expect(rate).toHaveValue('2.5');
+  await page.getByText('View fee details', { exact: true }).click();
   await expect(
-    page.locator('.acceleration-quote-details > div').filter({ hasText: 'Selected target' })
+    page.locator('.acceleration-quote-details > div').filter({ hasText: 'New fee rate' })
   ).toContainText('2.5 sat/vB');
   await expect(
-    page
-      .locator('.acceleration-quote-details > div')
-      .filter({ hasText: 'Resulting effective rate' })
+    page.locator('.acceleration-quote-details > div').filter({ hasText: 'Effective fee rate' })
   ).toContainText('2.5 sat/vB');
-  await page.getByRole('button', { name: 'Review acceleration' }).click();
+  await page.getByRole('button', { name: 'Continue to sign' }).click();
   const review = page.locator('.acceleration-review-summary');
-  await expect(review).toContainText('Fee increase replacement');
-  await expect(review).toContainText('2.5 sat/vB');
+  await expect(review).toContainText('Speed-up cost');
+  await expect(review).toContainText('The payment amount stays the same.');
+  await expect(review).not.toContainText('sat/vB');
+  await expect(page.getByText('Original fee rate', { exact: true })).toBeHidden();
   await page.getByRole('button', { name: 'Continue to sign' }).click();
   await page.getByLabel('Wallet passphrase', { exact: true }).fill('prototype-passphrase');
   await page.getByRole('button', { name: /Sign & broadcast/ }).click();
+  await expect(page.getByRole('heading', { name: 'Transaction accelerated' })).toBeVisible();
+  await expect(page.locator('.success-state .success-amount')).toContainText('10,000 sats');
+  await expect(page.locator('.success-state .hash-box')).toContainText('Transaction ID');
   await page.getByRole('link', { name: 'View transaction' }).click();
 
   const paymentRows = page.locator('.tx-row').filter({ hasText: 'RBF target fixture' });
@@ -1220,7 +1223,7 @@ test('RBF explains a full-balance funding shortfall without presenting zero as a
     '/send?fixture-rbf-insufficient-funds=1&accelerate=rbf&txid=6a1b2c3d4e5f67890123456789abcdef6a1b2c3d4e5f67890123456789abcdef'
   );
 
-  await expect(page.getByRole('heading', { name: 'Review replacement fee' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Speed up transaction' })).toBeVisible();
   const rate = page.getByLabel('Custom acceleration fee rate');
   await expect(rate).toHaveValue('');
   await expect(rate).toHaveAttribute('placeholder', 'Enter a fee rate');
@@ -1230,7 +1233,7 @@ test('RBF explains a full-balance funding shortfall without presenting zero as a
   await expect(page.getByRole('alert')).toContainText(
     'Available change and the wallet’s other spendable coins cannot cover the higher fee.'
   );
-  await expect(page.getByRole('button', { name: 'Review acceleration' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Continue to sign' })).toBeDisabled();
 });
 
 test('pending incoming transaction opens CPFP review without offering sender-side RBF', async ({
@@ -1247,7 +1250,7 @@ test('pending incoming transaction opens CPFP review without offering sender-sid
   await expect(page.getByRole('button', { name: 'Continue to sign' })).toBeVisible();
 });
 
-test('CPFP success identifies the fee-only child instead of a zero-sat payment', async ({
+test('CPFP success identifies the additional fee instead of a zero-sat payment', async ({
   page
 }) => {
   await page.goto('/activity');
@@ -1257,10 +1260,11 @@ test('CPFP success identifies the fee-only child instead of a zero-sat payment',
   await page.getByLabel('Wallet passphrase', { exact: true }).fill('prototype-passphrase');
   await page.getByRole('button', { name: /Sign & broadcast/ }).click();
 
-  await expect(page.getByRole('heading', { name: 'Fee acceleration broadcast' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Transaction accelerated' })).toBeVisible();
   await expect(page.locator('.success-state')).toContainText(
-    /fee-only child transaction with a .* sats network fee was broadcast/
+    'The additional fee was accepted. Your payment is waiting for confirmation.'
   );
+  await expect(page.locator('.success-state .success-amount')).not.toContainText('0 sats');
   await expect(page.getByText('0 sats was broadcast to the Bitcoin network.')).toHaveCount(0);
 });
 

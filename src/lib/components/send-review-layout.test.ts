@@ -60,4 +60,18 @@ describe('send review layout', () => {
       /\.self-transfer-consolidating > :last-child\s*\{[^}]*max-width: 100%[^}]*white-space: nowrap/s
     );
   });
+
+  it('keeps RBF cost simple by default and moves rate controls behind disclosures', () => {
+    for (const route of [singleSend, multisigSend]) {
+      expect(route).toContain("'You will spend this much more'");
+      expect(route).toContain('class="acceleration-default-choice"');
+      expect(route).toContain('class="acceleration-optional-control"');
+      expect(route).toContain("'Change fee rate'");
+      expect(route).toContain("'View fee details'");
+      expect(route).toContain("'Transaction accelerated'");
+      expect(route).toContain('class="success-amount"');
+      expect(route).toContain('variant="secondary" href="/activity"');
+    }
+    expect(appCss).toMatch(/\.success-state \.success-amount\s*\{[^}]*font-size: 24px/s);
+  });
 });

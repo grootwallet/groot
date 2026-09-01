@@ -8,6 +8,7 @@
     Copy,
     Cpu,
     Download,
+    ExternalLink,
     FileUp,
     LockKeyhole,
     QrCode,
@@ -54,13 +55,13 @@
     type WalletErrorCode
   } from '$lib/wallet';
   import type { LabelSuggestion, Utxo } from '$lib/types';
-  import { defaultConfig, networkName } from '$lib/config';
+  import { defaultConfig, networkName, transactionExplorerUrl } from '$lib/config';
   import {
     addressPrefixForNetwork,
     hasAddressPrefixForNetwork,
     validPolicyMaturity
   } from '$lib/wallet/policy';
-  import { compactAddress } from '$lib/address-display';
+  import { compactAddress, compactIdentifier } from '$lib/address-display';
   import {
     accelerationUnavailableDescription,
     accelerationUnavailableTitle
@@ -124,6 +125,7 @@
     pin = $state(''),
     imported = $state(''),
     txid = $state(''),
+    broadcastExplorerError = $state(''),
     error = $state(''),
     importError = $state(''),
     feeEstimateError = $state(''),
@@ -172,6 +174,9 @@
     coldcardSetupDevice = $state<HardwareDevice | null>(null);
   let accelerationRequest = $state<{ txid: string; method: 'rbf' | 'cpfp' } | null>(null);
   let rbfQuote = $state<AccelerationQuote | null>(null);
+  const broadcastExplorerUrl = $derived(
+    txid ? transactionExplorerUrl(defaultConfig.network, txid) : null
+  );
   let hardwareAction = $state<'scan' | 'sign'>('scan');
   let hardwareAttentionSignal = $state(0),
     hardwareCancelRequested = $state(false);
@@ -1178,6 +1183,33 @@
       busy = false;
     }
   }
+  async function copyBroadcastTxid() {
+    if (!txid) return;
+    try {
+      await copyText(txid, 'identifier');
+      toast({ title: 'Transaction ID copied', tone: 'success' });
+    } catch {
+      toast({ title: 'Copy failed', tone: 'danger' });
+    }
+  }
+  async function openBroadcastExplorer() {
+    if (!txid || !broadcastExplorerUrl) return;
+    broadcastExplorerError = '';
+    try {
+      await walletService.openTransactionExplorer(txid);
+    } catch (cause) {
+      broadcastExplorerError = localizedError(
+        cause,
+        $locale,
+        'The system browser could not open the explorer.'
+      );
+      toast({
+        title: translate($locale, 'Could not open explorer'),
+        description: broadcastExplorerError,
+        tone: 'danger'
+      });
+    }
+  }
   async function confirmCancel() {
     if (!proposal || busy) return;
     busy = true;
@@ -1541,18 +1573,50 @@
             ? 'Protection renewal broadcast'
             : delayedSpendMode
               ? 'Recovery-key payment broadcast'
-              : 'Transaction broadcast'
+              : proposal?.acceleration
+                ? 'Transaction accelerated'
+                : 'Transaction broadcast'
         )}
       </h2>
+      {#if proposal}<div class="success-amount">
+          <Amount
+            value={proposal.acceleration?.method === 'cpfp'
+              ? Number(proposal.fee)
+              : Number(proposal.amount)}
+            interactive
+          />
+        </div>{/if}
       <p>
-        {translate($locale, 'The signed transaction was accepted by the')}
-        {networkName(defaultConfig.network)}
-        {translate($locale, 'network.')}
+        {#if proposal?.acceleration?.method === 'rbf'}{translate(
+            $locale,
+            'The higher fee was accepted. Your payment amount and recipient stayed the same.'
+          )}{:else if proposal?.acceleration?.method === 'cpfp'}{translate(
+            $locale,
+            'The additional fee was accepted. Your payment is waiting for confirmation.'
+          )}{:else}{translate($locale, 'The signed transaction was accepted by the')}
+          {networkName(defaultConfig.network)}
+          {translate($locale, 'network.')}{/if}
       </p>
-      <div class="txid-box">
-        <span>{translate($locale, 'Transaction ID')}</span><code>{txid}</code>
+      <button class="hash-box" type="button" onclick={copyBroadcastTxid}
+        ><span>{translate($locale, 'Transaction ID')}</span><code>{compactIdentifier(txid)}</code
+        ><Copy size={16} /></button
+      >
+      <div class="success-actions">
+        <Button href="/multisig">{translate($locale, 'Return to wallet')}</Button>
+        <Button variant="secondary" href="/activity"
+          >{translate($locale, 'View transaction')}</Button
+        >
       </div>
-      <Button href="/multisig">{translate($locale, 'Return to wallet')}</Button>
+      {#if broadcastExplorerUrl}<div class="explorer-panel">
+          <button class="explorer-link" type="button" onclick={openBroadcastExplorer}
+            >{translate($locale, 'View on mempool.space')} <ExternalLink size={14} /></button
+          >{#if broadcastExplorerError}<p class="form-error" role="alert">
+              {broadcastExplorerError}
+            </p>{/if}
+          <p class="explorer-privacy">
+            {translate($locale, 'Opening this shares the transaction lookup with mempool.space.')}
+          </p>
+        </div>{/if}
     </section>
   {:else if accelerationRequest}<form
       class="form-card send-stage-card"
@@ -1567,7 +1631,7 @@
           {translate(
             $locale,
             accelerationRequest.method === 'rbf'
-              ? 'Review replacement fee'
+              ? 'Speed up transaction'
               : 'Enter a custom fee rate'
           )}
         </h2>
@@ -1575,82 +1639,97 @@
           {translate(
             $locale,
             accelerationRequest.method === 'rbf'
-              ? 'Groot checked this transaction and Bitcoin Core’s replacement policy. Edit the target before creating the replacement.'
+              ? 'Confirm the additional fee. The payment amount and recipient stay the same.'
               : 'Bitcoin Core has no usable estimate. Groot will not invent one; choose the sat/vB rate\n          every signer will review.'
           )}
         </p>
       </div>
-      <label class="field"
-        ><span>{translate($locale, 'Custom fee rate')}</span>
-        <div class="amount-input">
-          <input
-            aria-label={translate($locale, 'Custom acceleration fee rate')}
-            bind:value={selectedRate}
-            onblur={async () => {
-              if (accelerationRequest?.method !== 'rbf' || !customFeeValid) return;
-              try {
-                rbfQuote = await walletService.quoteRbf(
-                  accelerationRequest.txid,
-                  feeRate(selectedRateNumber)
-                );
-                selectedRate = Number(rbfQuote.targetFeeRate);
-                feeEstimateError = '';
-              } catch (cause) {
-                feeEstimateError = accelerationUnavailableDescription(
-                  accelerationRequest.method,
-                  cause,
-                  $locale
-                );
-              }
-            }}
-            inputmode="decimal"
-            placeholder={translate($locale, 'Enter a fee rate')}
-          /><b>{translate($locale, 'sat/vB')}</b>
+      {#if accelerationRequest.method === 'rbf' && rbfQuote}
+        <div class="acceleration-default-choice">
+          <span>{translate($locale, 'You will spend this much more')}</span>
+          <Amount value={rbfQuote.incrementalFee} interactive />
+          <p>{translate($locale, 'Your payment amount and recipient will not change.')}</p>
         </div>
-        <small
-          >{#if rbfQuote}{translate(
-              $locale,
-              'Minimum {rate} sat/vB · rounded up only to 0.004 sat/vB precision',
-              { rate: rbfQuote.minimumFeeRate }
-            )}{:else}{translate(
-              $locale,
-              'Required · greater than 0 and at most 10,000 sat/vB'
-            )}{/if}</small
-        ></label
-      >{#if rbfQuote}<dl class="details-list acceleration-quote-details">
-          <div>
-            <dt>{translate($locale, 'Original effective rate')}</dt>
-            <dd>{rbfQuote.originalEffectiveFeeRate} {translate($locale, 'sat/vB')}</dd>
+        <details class="acceleration-optional-control">
+          <summary>{translate($locale, 'Change fee rate')}</summary>
+          <label class="field"
+            ><span>{translate($locale, 'New fee rate')}</span>
+            <div class="amount-input">
+              <input
+                aria-label={translate($locale, 'Custom acceleration fee rate')}
+                bind:value={selectedRate}
+                onblur={async () => {
+                  if (accelerationRequest?.method !== 'rbf' || !customFeeValid) return;
+                  try {
+                    rbfQuote = await walletService.quoteRbf(
+                      accelerationRequest.txid,
+                      feeRate(selectedRateNumber)
+                    );
+                    selectedRate = Number(rbfQuote.targetFeeRate);
+                    feeEstimateError = '';
+                  } catch (cause) {
+                    feeEstimateError = accelerationUnavailableDescription(
+                      accelerationRequest.method,
+                      cause,
+                      $locale
+                    );
+                  }
+                }}
+                inputmode="decimal"
+                placeholder={translate($locale, 'Enter a fee rate')}
+              /><b>{translate($locale, 'sat/vB')}</b>
+            </div>
+            <small
+              >{translate($locale, 'Minimum {rate} sat/vB', {
+                rate: rbfQuote.minimumFeeRate
+              })}</small
+            ></label
+          >
+        </details>
+        <details class="acceleration-optional-control">
+          <summary>{translate($locale, 'View fee details')}</summary>
+          <dl class="details-list acceleration-quote-details">
+            <div>
+              <dt>{translate($locale, 'Original fee rate')}</dt>
+              <dd>{rbfQuote.originalEffectiveFeeRate} {translate($locale, 'sat/vB')}</dd>
+            </div>
+            <div>
+              <dt>{translate($locale, 'Minimum fee rate')}</dt>
+              <dd>{rbfQuote.minimumFeeRate} {translate($locale, 'sat/vB')}</dd>
+            </div>
+            <div>
+              <dt>{translate($locale, 'New fee rate')}</dt>
+              <dd>{rbfQuote.targetFeeRate} {translate($locale, 'sat/vB')}</dd>
+            </div>
+            <div>
+              <dt>{translate($locale, 'New network fee')}</dt>
+              <dd><Amount value={rbfQuote.estimatedReplacementFee} /></dd>
+            </div>
+            <div>
+              <dt>{translate($locale, 'Additional fee')}</dt>
+              <dd><Amount value={rbfQuote.incrementalFee} /></dd>
+            </div>
+            <div>
+              <dt>{translate($locale, 'Effective fee rate')}</dt>
+              <dd>{rbfQuote.resultingEffectiveFeeRate} {translate($locale, 'sat/vB')}</dd>
+            </div>
+          </dl>
+        </details>
+      {:else}
+        <label class="field"
+          ><span>{translate($locale, 'Custom fee rate')}</span>
+          <div class="amount-input">
+            <input
+              aria-label={translate($locale, 'Custom acceleration fee rate')}
+              bind:value={selectedRate}
+              inputmode="decimal"
+              placeholder={translate($locale, 'Enter a fee rate')}
+            /><b>{translate($locale, 'sat/vB')}</b>
           </div>
-          <div>
-            <dt>{translate($locale, 'Exact replacement minimum')}</dt>
-            <dd>{rbfQuote.minimumFeeRate} {translate($locale, 'sat/vB')}</dd>
-          </div>
-          <div>
-            <dt>{translate($locale, 'Selected target')}</dt>
-            <dd>{rbfQuote.targetFeeRate} {translate($locale, 'sat/vB')}</dd>
-          </div>
-          <div>
-            <dt>{translate($locale, 'Estimated replacement fee')}</dt>
-            <dd><Amount value={rbfQuote.estimatedReplacementFee} /></dd>
-          </div>
-          <div>
-            <dt>{translate($locale, 'Incremental fee')}</dt>
-            <dd><Amount value={rbfQuote.incrementalFee} /></dd>
-          </div>
-          <div>
-            <dt>{translate($locale, 'Resulting effective rate')}</dt>
-            <dd>{rbfQuote.resultingEffectiveFeeRate} {translate($locale, 'sat/vB')}</dd>
-          </div>
-        </dl>
-        <p class="field-note">
-          {translate(
-            $locale,
-            rbfQuote.recommendationSource === 'bitcoin_core'
-              ? 'Default uses Bitcoin Core because it is above the safe replacement minimum.'
-              : 'Default is a replacement-only fallback one sat/vB above the exact minimum; it is not a general fee estimate.'
-          )}
-        </p>{/if}
+          <small>{translate($locale, 'Required · greater than 0 and at most 10,000 sat/vB')}</small
+          ></label
+        >
+      {/if}
       {#if feeEstimateError}<p class="form-error" role="alert">{feeEstimateError}</p>{/if}<Button
         type="submit"
         size="large"
@@ -1658,7 +1737,10 @@
         disabled={!customFeeValid}
         loading={busy}
         loadingLabel={translate($locale, 'Preparing acceleration…')}
-        >{translate($locale, 'Review acceleration')}</Button
+        >{translate(
+          $locale,
+          accelerationRequest.method === 'rbf' ? 'Continue to sign' : 'Review acceleration'
+        )}</Button
       >
     </form>
   {:else if delayedSpendMode && delayedSpendCoin && !proposal}<form
