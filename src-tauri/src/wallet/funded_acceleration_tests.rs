@@ -724,6 +724,59 @@ fn current_tip_initial_scan_allows_later_bitcoin_core_sync() {
 
 #[test]
 #[ignore = "requires the isolated Bitcoin Core regtest harness"]
+fn explicit_rescan_waits_when_core_falls_behind_the_wallet_checkpoint() {
+    assert!(std::env::var_os("GROOT_RUN_REGTEST").is_some());
+    let rpc = Arc::new(rpc());
+    let keys = test_keys();
+    let metadata = metadata(&keys);
+    let database = TemporaryDatabase::new();
+    let mut db = Connection::open(&database.0).unwrap();
+    init_app_schema(&db).unwrap();
+    let birthday = u32::try_from(rpc.get_block_count().unwrap()).unwrap();
+    let settings = RecoveryScanSettingsDto {
+        birthday_height: birthday,
+        gap_limit: 20,
+    };
+    let mut wallet = Wallet::create(metadata.external_descriptor, metadata.internal_descriptor)
+        .network(Network::Regtest)
+        .lookahead(settings.gap_limit)
+        .create_wallet(&mut db)
+        .unwrap();
+    let cancel = AtomicBool::new(false);
+    full_rescan_loaded_wallet(
+        Arc::clone(&rpc),
+        &mut wallet,
+        &mut db,
+        &settings,
+        "behind-core-initial",
+        &cancel,
+    )
+    .unwrap();
+    finish_recovery_scan_record(&db, "behind-core-initial", "completed").unwrap();
+    let verified_tip = wallet.latest_checkpoint();
+
+    let invalidated = rpc.get_best_block_hash().unwrap();
+    rpc.invalidate_block(&invalidated).unwrap();
+    let result = full_rescan_loaded_wallet(
+        Arc::clone(&rpc),
+        &mut wallet,
+        &mut db,
+        &settings,
+        "behind-core-retry",
+        &cancel,
+    );
+    rpc.reconsider_block(&invalidated).unwrap();
+
+    let error = result.unwrap_err();
+    assert_eq!(error.code, "node_syncing");
+    assert_eq!(wallet.latest_checkpoint(), verified_tip);
+    drop(wallet);
+    let persisted = load_wallet(&mut db).unwrap();
+    assert_eq!(persisted.latest_checkpoint(), verified_tip);
+}
+
+#[test]
+#[ignore = "requires the isolated Bitcoin Core regtest harness"]
 fn birthday_only_checkpoint_recovers_after_a_deep_reorg() {
     assert!(std::env::var_os("GROOT_RUN_REGTEST").is_some());
     let rpc = Arc::new(rpc());

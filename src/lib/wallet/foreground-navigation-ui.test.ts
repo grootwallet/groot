@@ -72,6 +72,8 @@ describe('foreground wallet navigation', () => {
     expect(overview).toContain('startSyncStatusPolling()');
     expect(overview).toContain('syncAge(snapshot?.syncedAt ?? null, syncClock)');
     expect(overview).toContain("status.failureCode === 'invalid_node_config'");
+    expect(overview).toContain("status.failureCode === 'node_syncing'");
+    expect(overview).toContain("status.failureCode === 'node_history_unavailable'");
     expect(overview).toContain("status.failureCode === 'internal_error'");
     expect(overview).toContain('syncFailureDescription(syncStatus)');
   });

@@ -162,6 +162,20 @@
         { height }
       );
     }
+    if (status.failureCode === 'node_syncing') {
+      return translate(
+        $locale,
+        'Bitcoin Core is still syncing and has not reached this wallet’s last verified block. Balance remains verified through block {height}.',
+        { height }
+      );
+    }
+    if (status.failureCode === 'node_history_unavailable') {
+      return translate(
+        $locale,
+        'Bitcoin Core no longer stores the blocks needed after this wallet’s checkpoint. Balance remains verified through block {height}.',
+        { height }
+      );
+    }
     if (status.failureCode === 'internal_error') {
       return translate(
         $locale,

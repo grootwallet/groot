@@ -227,6 +227,21 @@ correcting source branch, and no address, transaction identifier, fingerprint,
 account key, descriptor, PSBT, device path, credential, node detail, amount, or
 label is retained.
 
+The same exact v0.4.88 package later exposed a Bitcoin Core catch-up race while
+the Safe 3 BIP84 profile was selected after its saved network configuration was
+changed. A full-history attempt stopped with the prior verified checkpoint
+preserved and only the generic wallet-reconciliation error visible. After Core
+advanced, a birthday scan from a reviewer-selected height with the standard gap
+limit completed, recovered the expected pending wallet state, and a subsequent
+normal sync also completed. The later successes do not convert the earlier
+failure into a pass: they are consistent with Core catching up to the saved
+checkpoint. This is public wallet-sync evidence only—the device does not
+participate in descriptor synchronization—and requires a focused retest on the
+candidate that introduces explicit node-catch-up and retained-history errors.
+No address, transaction identifier, fingerprint, account key, descriptor,
+PSBT, device path, credential, endpoint, RPC detail, amount, or label is
+retained.
+
 ### Completed checkpoint — BitBox02
 
 On 2026-08-15, the original Bitcoin-only BitBox02, firmware 9.26.3, passed the Regtest receive-address comparison and an independent BIP48 2-of-3 flow: account-key import, policy registration, first-address review, explicit signing rejection with a retryable unchanged proposal, successful retry, one-signature restart persistence, threshold completion with Trezor Model One, and broadcast. It then passed wrong-device rejection without collecting a signature, USB interruption during signing with a clean retry, rejection of a signed PSBT from another proposal without changing signatures, and an independent BSMS descriptor-recovery test reproducing the same first receive address. The sanitized host record is macOS 26.1 Tahoe with HWI 2.3.1, tested 2026-08-15 in Europe/Andorra (UTC+2). This evidence applies only to the original Bitcoin-only BitBox02; it does not cover Nova. Do not publish addresses, fingerprints, xpubs, PSBTs, or device paths.

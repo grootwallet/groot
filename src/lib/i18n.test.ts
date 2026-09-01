@@ -109,6 +109,12 @@ describe('locale preferences', () => {
     expect(localizedError({ code: 'hardware_pairing_required' }, 'es')).toBe(
       'Empareja esta BitBox en BitBoxApp y comprueba que BitBoxApp puede abrirla. Después, cierra BitBoxApp por completo y vuelve a buscar en Groot.'
     );
+    expect(localizedError({ code: 'node_syncing' }, 'fr')).toContain(
+      'Bitcoin Core est encore en cours de synchronisation'
+    );
+    expect(localizedError({ code: 'node_history_unavailable' }, 'es')).toContain(
+      'ya no conserva los bloques necesarios'
+    );
     expect(localizedError(new Error('Uncatalogued native detail'), 'fr')).toBe(
       'Une erreur est survenue. Réessayez.'
     );

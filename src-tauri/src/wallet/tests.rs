@@ -427,6 +427,30 @@ fn core_sync_progress_is_relative_to_the_persisted_wallet_tip() {
 }
 
 #[test]
+fn wallet_history_waits_for_core_to_reach_the_verified_checkpoint() {
+    assert!(ensure_core_ready_for_wallet_history(150_700, false, 150_570).is_ok());
+
+    let behind = ensure_core_ready_for_wallet_history(150_500, false, 150_570).unwrap_err();
+    assert_eq!(behind.code, "node_syncing");
+    assert!(behind.message.contains("last verified block"));
+
+    let initial_download =
+        ensure_core_ready_for_wallet_history(150_700, true, 150_570).unwrap_err();
+    assert_eq!(initial_download.code, "node_syncing");
+}
+
+#[test]
+fn wallet_history_rejects_only_blocks_absent_from_a_pruned_node() {
+    assert!(ensure_core_history_available(false, None, 0).is_ok());
+    assert!(ensure_core_history_available(true, Some(140_000), 140_000).is_ok());
+    assert!(ensure_core_history_available(true, Some(140_000), 150_000).is_ok());
+
+    let unavailable = ensure_core_history_available(true, Some(140_000), 0).unwrap_err();
+    assert_eq!(unavailable.code, "node_history_unavailable");
+    assert!(unavailable.message.contains("archival node"));
+}
+
+#[test]
 fn direct_rpc_auth_timeout_tls_and_chain_fail_closed() {
     let unauthorized = serve_one_http_response(Some(
         b"HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",

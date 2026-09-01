@@ -14,6 +14,8 @@ export const WALLET_ERROR_CODES = [
   'address_not_discardable',
   'address_not_found',
   'network_unavailable',
+  'node_syncing',
+  'node_history_unavailable',
   'fee_estimate_unavailable',
   'wallet_locked',
   'invalid_inactivity_timeout',

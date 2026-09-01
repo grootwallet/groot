@@ -2220,15 +2220,48 @@ fn candidate_rpc_client(config: &CoreNodeConfig, password: &str) -> ApiResult<Cl
 }
 
 fn checked_chain_identity(client: &Client) -> ApiResult<(u64, BlockHash)> {
+    let (info, observed_genesis) = checked_core_chain(client)?;
+    Ok((info.blocks, observed_genesis))
+}
+
+fn checked_core_chain(client: &Client) -> ApiResult<(GetBlockchainInfoResult, BlockHash)> {
     let info = get_blockchain_info(client).map_err(rpc_api_error)?;
     ensure_expected_network(info.chain)?;
     let observed_genesis = client.get_block_hash(0).map_err(rpc_api_error)?;
     ensure_expected_genesis(NETWORK, observed_genesis)?;
-    Ok((info.blocks, observed_genesis))
+    Ok((info, observed_genesis))
 }
 
 fn checked_block_height(client: &Client) -> ApiResult<u64> {
     checked_chain_identity(client).map(|(height, _)| height)
+}
+
+fn ensure_core_ready_for_wallet_history(
+    node_height: u64,
+    initial_block_download: bool,
+    last_verified_height: u32,
+) -> ApiResult<()> {
+    if initial_block_download || node_height < u64::from(last_verified_height) {
+        return Err(api_error(
+            "node_syncing",
+            "Bitcoin Core is still syncing and has not reached this wallet's last verified block. Wait for Core to finish syncing, then try again.",
+        ));
+    }
+    Ok(())
+}
+
+fn ensure_core_history_available(
+    pruned: bool,
+    prune_height: Option<u64>,
+    first_required_height: u32,
+) -> ApiResult<()> {
+    if pruned && prune_height.is_some_and(|height| u64::from(first_required_height) < height) {
+        return Err(api_error(
+            "node_history_unavailable",
+            "Bitcoin Core no longer stores the blocks needed for this scan. Use a birthday at or above the retained block height, or connect an archival node.",
+        ));
+    }
+    Ok(())
 }
 
 fn rewind_stale_core_checkpoints(
@@ -4564,11 +4597,22 @@ fn sync_wallet_with_core(
 ) -> ApiResult<WalletSnapshotDto> {
     ensure_foreground_sync_not_cancelled(cancel)?;
     let rpc = Arc::new(rpc_client(app, state)?);
-    let target_height = u32::try_from(checked_block_height(rpc.as_ref())?)
-        .map_err(|_| internal("The node height exceeds the supported sync range."))?;
     let mut wallet = load_wallet(db)?;
+    let (chain, _) = checked_core_chain(rpc.as_ref())?;
+    ensure_core_ready_for_wallet_history(
+        chain.blocks,
+        chain.initial_block_download,
+        wallet.latest_checkpoint().height(),
+    )?;
+    let target_height = u32::try_from(chain.blocks)
+        .map_err(|_| internal("The node height exceeds the supported sync range."))?;
     let (wallet_tip, _) = rewind_stale_core_checkpoints(rpc.as_ref(), &wallet)?;
     let start_height = wallet_tip.height();
+    ensure_core_history_available(
+        chain.pruned,
+        chain.prune_height,
+        start_height.saturating_add(1),
+    )?;
     let scan_birthday = load_recovery_scan_settings(db)?.birthday_height;
     update_core_sync_status(
         &state.sync_status,
@@ -4747,13 +4791,20 @@ fn full_rescan_loaded_wallet(
     run_id: &str,
     cancel: &AtomicBool,
 ) -> ApiResult<()> {
-    let (tip, genesis) = checked_chain_identity(rpc.as_ref())?;
+    let (chain, genesis) = checked_core_chain(rpc.as_ref())?;
+    let tip = chain.blocks;
+    ensure_core_ready_for_wallet_history(
+        tip,
+        chain.initial_block_download,
+        wallet.latest_checkpoint().height(),
+    )?;
     if u64::from(settings.birthday_height) > tip {
         return Err(api_error(
             "invalid_scan_settings",
             "Wallet birthday cannot be above the node's current block height.",
         ));
     }
+    ensure_core_history_available(chain.pruned, chain.prune_height, settings.birthday_height)?;
     let target_height = u32::try_from(tip)
         .map_err(|_| internal("The node height exceeds the supported recovery range."))?;
     let previous = reconcile_recovery_scan_record(db, None)?.map(|record| record.status);

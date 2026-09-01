@@ -611,6 +611,14 @@ const errorCategoryCopy = {
     fr: 'Le réseau est indisponible. Réessayez lorsque la connexion est rétablie.',
     es: 'La red no está disponible. Inténtalo cuando se restablezca la conexión.'
   },
+  node_syncing: {
+    fr: 'Bitcoin Core est encore en cours de synchronisation. Attendez qu’il ait atteint le dernier bloc vérifié du portefeuille, puis réessayez.',
+    es: 'Bitcoin Core aún se está sincronizando. Espera a que alcance el último bloque verificado de la cartera e inténtalo de nuevo.'
+  },
+  node_history_unavailable: {
+    fr: 'Bitcoin Core ne conserve plus les blocs nécessaires. Choisissez une date de création située dans l’historique conservé ou connectez un nœud d’archive.',
+    es: 'Bitcoin Core ya no conserva los bloques necesarios. Elige un bloque de nacimiento dentro del historial conservado o conecta un nodo de archivo.'
+  },
   hardware_unavailable: {
     fr: 'Le signataire matériel est indisponible. Vérifiez sa connexion et réessayez.',
     es: 'El firmante físico no está disponible. Comprueba la conexión e inténtalo de nuevo.'
