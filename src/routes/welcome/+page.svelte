@@ -35,8 +35,10 @@
   import { onDestroy, onMount } from 'svelte';
   import {
     MAX_WALLET_PASSPHRASE_BYTES,
+    MIN_NEW_WALLET_PASSPHRASE_CHARACTERS,
     recoveryOrderMatches,
     shuffledRecoveryWords,
+    unicodeCharacterLength,
     utf8ByteLength,
     type RecoveryWord
   } from '$lib/mnemonic-verification';
@@ -66,7 +68,11 @@
   let passphraseError = $derived(
     utf8ByteLength(passphrase) > MAX_WALLET_PASSPHRASE_BYTES
       ? 'The wallet passphrase is too long.'
-      : ''
+      : mode === 'passphrase' &&
+          passphrase &&
+          unicodeCharacterLength(passphrase) < MIN_NEW_WALLET_PASSPHRASE_CHARACTERS
+        ? translate($locale, 'Use at least 16 characters. Letters-only passphrases are allowed.')
+        : ''
   );
   let supplementalMinimum = $derived(
     supplementalSource === 'coin' ? MIN_SUPPLEMENTAL_COIN_FLIPS : MIN_SUPPLEMENTAL_DICE_ROLLS
@@ -670,7 +676,7 @@
           autocomplete="new-password"
           hint={translate(
             $locale,
-            'Keep it with your recovery words. It also unlocks Groot on this device.'
+            'Use at least 16 characters. Letters-only passphrases are allowed. Keep it with your recovery words; it also unlocks Groot on this device.'
           )}
           error={passphraseError}
         />

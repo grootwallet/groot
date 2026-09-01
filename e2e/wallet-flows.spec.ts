@@ -97,7 +97,12 @@ test('creates a 24-word wallet and clears onboarding secrets', async ({ page }) 
   await page.getByLabel('Wallet passphrase', { exact: true }).fill('a'.repeat(1025));
   await expect(page.getByText('The wallet passphrase is too long.')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Create wallet' })).toBeDisabled();
-  await page.getByLabel('Wallet passphrase', { exact: true }).fill('new-wallet-pin');
+  await page.getByLabel('Wallet passphrase', { exact: true }).fill('abcdefghijklmno');
+  await expect(
+    page.getByText('Use at least 16 characters. Letters-only passphrases are allowed.')
+  ).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Create wallet' })).toBeDisabled();
+  await page.getByLabel('Wallet passphrase', { exact: true }).fill('abcdefghijklmnop');
   await page.getByRole('button', { name: 'Show Wallet passphrase' }).click();
   await expect(page.getByLabel('Wallet passphrase', { exact: true })).toHaveAttribute(
     'type',
@@ -108,7 +113,7 @@ test('creates a 24-word wallet and clears onboarding secrets', async ({ page }) 
   await page.getByLabel('Confirm wallet passphrase', { exact: true }).fill('different-pin');
   await expect(page.getByText('Passphrases do not match.')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Create wallet' })).toBeDisabled();
-  await page.getByLabel('Confirm wallet passphrase', { exact: true }).fill('new-wallet-pin');
+  await page.getByLabel('Confirm wallet passphrase', { exact: true }).fill('abcdefghijklmnop');
   await page.getByLabel(/I understand this exact passphrase/).check();
   await page.getByRole('button', { name: 'Create wallet' }).click();
   await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible();
@@ -967,6 +972,44 @@ test('overview, activity, UTXOs, and settings expose durable states', async ({ p
   expect(filterHeights.input).toBe(filterHeights.select);
   await page.getByRole('link', { name: 'Settings' }).click();
   await expect(page.getByText('Delete wallet', { exact: true })).toBeVisible();
+});
+
+test('settings clears credentials and confirmations after every modal dismissal', async ({
+  page
+}) => {
+  await page.goto('/settings');
+
+  await page.getByRole('button', { name: /Fee and broadcast node/ }).click();
+  let dialog = page.getByRole('dialog', { name: 'Connect Bitcoin Core' });
+  await dialog.getByRole('button', { name: 'Remote TLS' }).click();
+  await dialog.getByLabel('RPC password', { exact: true }).fill('temporary-rpc-secret');
+  await dialog.getByLabel('Wallet passphrase', { exact: true }).fill('prototype-passphrase');
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: /Fee and broadcast node/ }).click();
+  dialog = page.getByRole('dialog', { name: 'Connect Bitcoin Core' });
+  await expect(dialog.getByLabel('RPC password', { exact: true })).toHaveValue('');
+  await expect(dialog.getByLabel('Wallet passphrase', { exact: true })).toHaveValue('');
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+
+  await page.getByRole('button', { name: /Recovery scan/ }).click();
+  dialog = page.getByRole('dialog', { name: 'Full wallet rescan' });
+  await dialog.getByLabel('Wallet passphrase', { exact: true }).fill('prototype-passphrase');
+  await dialog.getByText('Close', { exact: true }).click();
+  await page.getByRole('button', { name: /Recovery scan/ }).click();
+  dialog = page.getByRole('dialog', { name: 'Full wallet rescan' });
+  await expect(dialog.getByLabel('Wallet passphrase', { exact: true })).toHaveValue('');
+  await dialog.getByText('Close', { exact: true }).click();
+
+  await page.getByRole('button', { name: 'Delete', exact: true }).click();
+  dialog = page.getByRole('dialog', { name: 'Delete this wallet?' });
+  await dialog.getByLabel('Wallet passphrase', { exact: true }).fill('prototype-passphrase');
+  await dialog.getByLabel('Type DELETE to confirm').fill('DELETE');
+  await dialog.getByRole('button', { name: 'Close' }).click();
+  await page.getByRole('button', { name: 'Delete', exact: true }).click();
+  dialog = page.getByRole('dialog', { name: 'Delete this wallet?' });
+  await expect(dialog.getByLabel('Wallet passphrase', { exact: true })).toHaveValue('');
+  await expect(dialog.getByLabel('Type DELETE to confirm')).toHaveValue('');
+  await expect(dialog.getByRole('button', { name: 'Delete wallet' })).toBeDisabled();
 });
 
 test('amount denomination stays consistent across wallet surfaces', async ({ page }) => {

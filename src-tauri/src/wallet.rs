@@ -100,6 +100,7 @@ use proposal_review::*;
 
 const MAX_PRIVATE_JSON_BYTES: u64 = 256 * 1024;
 const MAX_CREDENTIAL_BYTES: usize = 1_024;
+const MIN_NEW_WALLET_PASSPHRASE_CHARACTERS: usize = 16;
 const MAX_MNEMONIC_INPUT_BYTES: usize = 4_096;
 const ONBOARDING_SESSION_SECONDS: u64 = 15 * 60;
 const HARDWARE_PIN_CHALLENGE_TIMEOUT: Duration = Duration::from_secs(2 * 60);
@@ -2074,8 +2075,7 @@ fn load_node_auth_session(
                 .remove(&profile.id);
             return Ok(());
         }
-        let plaintext =
-            Zeroizing::new(secure_store::load(&path, credential).map_err(secure_store_error)?);
+        let plaintext = secure_store::load(&path, credential).map_err(secure_store_error)?;
         let Some(mut protected) = decode_protected_node_auth(&plaintext, &config)? else {
             state
                 .node_auth
@@ -2451,6 +2451,17 @@ fn validate_wallet_passphrase(passphrase: &str) -> ApiResult<()> {
         return Err(api_error(
             "invalid_credential",
             "The wallet passphrase is too long.",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_new_wallet_passphrase(passphrase: &str) -> ApiResult<()> {
+    validate_wallet_passphrase(passphrase)?;
+    if passphrase.chars().count() < MIN_NEW_WALLET_PASSPHRASE_CHARACTERS {
+        return Err(api_error(
+            "invalid_credential",
+            "New wallet passphrases must contain at least 16 characters.",
         ));
     }
     Ok(())
@@ -2989,9 +3000,9 @@ fn encrypt_payload(payload: &[u8], credential: &str) -> ApiResult<EncryptedSecre
     OsRng.fill_bytes(&mut nonce);
     let mut key = [0_u8; 32];
     Argon2::default()
-        .hash_password_into(credential.as_bytes(), &salt, &mut key)
+        .hash_password_into(credential.as_bytes(), &salt, key.as_mut())
         .map_err(internal)?;
-    let cipher = Aes256Gcm::new_from_slice(&key).map_err(internal)?;
+    let cipher = Aes256Gcm::new_from_slice(key.as_ref()).map_err(internal)?;
     let ciphertext = cipher
         .encrypt(Nonce::from_slice(&nonce), payload)
         .map_err(|_| internal("Unable to encrypt wallet secret."))?;
@@ -3010,7 +3021,7 @@ fn encrypt_mnemonic(mnemonic: &Mnemonic, credential: &str) -> ApiResult<Encrypte
     encrypt_payload(words.as_bytes(), credential)
 }
 
-fn decrypt_payload(secret: EncryptedSecret, credential: &str) -> ApiResult<Vec<u8>> {
+fn decrypt_payload(secret: EncryptedSecret, credential: &str) -> ApiResult<Zeroizing<Vec<u8>>> {
     if secret.version != 1 {
         return Err(internal("Unsupported encrypted secret version."));
     }
@@ -3020,15 +3031,16 @@ fn decrypt_payload(secret: EncryptedSecret, credential: &str) -> ApiResult<Vec<u
         return Err(internal("The encrypted wallet secret is malformed."));
     }
     let ciphertext = BASE64.decode(secret.ciphertext).map_err(internal)?;
-    let mut key = [0_u8; 32];
+    let mut key = Zeroizing::new([0_u8; 32]);
     Argon2::default()
-        .hash_password_into(credential.as_bytes(), &salt, &mut key)
+        .hash_password_into(credential.as_bytes(), &salt, key.as_mut())
         .map_err(internal)?;
-    let cipher = Aes256Gcm::new_from_slice(&key).map_err(internal)?;
-    let plaintext = cipher
-        .decrypt(Nonce::from_slice(&nonce), ciphertext.as_ref())
-        .map_err(|_| api_error("invalid_credential", "Incorrect passphrase / PIN."))?;
-    key.zeroize();
+    let cipher = Aes256Gcm::new_from_slice(key.as_ref()).map_err(internal)?;
+    let plaintext = Zeroizing::new(
+        cipher
+            .decrypt(Nonce::from_slice(&nonce), ciphertext.as_ref())
+            .map_err(|_| api_error("invalid_credential", "Incorrect passphrase / PIN."))?,
+    );
     Ok(plaintext)
 }
 
@@ -3059,11 +3071,9 @@ fn decrypt_encrypted_mnemonic(secret: EncryptedSecret, credential: &str) -> ApiR
     parse_mnemonic_bytes(decrypt_payload(secret, credential)?)
 }
 
-fn parse_mnemonic_bytes(plaintext: Vec<u8>) -> ApiResult<Mnemonic> {
-    let mut words = String::from_utf8(plaintext).map_err(internal)?;
-    let mnemonic = Mnemonic::parse(&words).map_err(internal);
-    words.zeroize();
-    mnemonic
+fn parse_mnemonic_bytes(plaintext: Zeroizing<Vec<u8>>) -> ApiResult<Mnemonic> {
+    let words = std::str::from_utf8(&plaintext).map_err(internal)?;
+    Mnemonic::parse(words).map_err(internal)
 }
 
 #[tauri::command]

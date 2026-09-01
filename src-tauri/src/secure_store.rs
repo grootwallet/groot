@@ -78,14 +78,20 @@ fn encrypt(key: &[u8], plaintext: &[u8]) -> Result<(Vec<u8>, Vec<u8>), SecureSto
     Ok((nonce, ciphertext))
 }
 
-fn decrypt(key: &[u8], nonce: &[u8], ciphertext: &[u8]) -> Result<Vec<u8>, SecureStoreError> {
+fn decrypt(
+    key: &[u8],
+    nonce: &[u8],
+    ciphertext: &[u8],
+) -> Result<Zeroizing<Vec<u8>>, SecureStoreError> {
     if key.len() != KEY_BYTES || nonce.len() != NONCE_BYTES {
         return Err(SecureStoreError::Corrupt);
     }
-    Aes256Gcm::new_from_slice(key)
-        .map_err(|_| SecureStoreError::Corrupt)?
-        .decrypt(Nonce::from_slice(nonce), ciphertext)
-        .map_err(|_| SecureStoreError::InvalidCredential)
+    Ok(Zeroizing::new(
+        Aes256Gcm::new_from_slice(key)
+            .map_err(|_| SecureStoreError::Corrupt)?
+            .decrypt(Nonce::from_slice(nonce), ciphertext)
+            .map_err(|_| SecureStoreError::InvalidCredential)?,
+    ))
 }
 
 fn decode(value: &str) -> Result<Vec<u8>, SecureStoreError> {
@@ -186,18 +192,21 @@ fn store_portable(
     write_owner_only(metadata_path, &encode_metadata(&metadata)?)
 }
 
-fn load_portable(metadata_path: &Path, credential: &str) -> Result<Vec<u8>, SecureStoreError> {
+fn load_portable(
+    metadata_path: &Path,
+    credential: &str,
+) -> Result<Zeroizing<Vec<u8>>, SecureStoreError> {
     let mut metadata = read_metadata(metadata_path)?;
     let salt = Zeroizing::new(decode(&metadata.salt)?);
     if salt.len() != 16 {
         return Err(SecureStoreError::Corrupt);
     }
     let credential_key = derive_credential_key(credential, &salt)?;
-    let credential_data_key = Zeroizing::new(decrypt(
+    let credential_data_key = decrypt(
         &credential_key,
         &decode(&metadata.credential_nonce)?,
         &decode(&metadata.credential_wrapped_key)?,
-    )?);
+    )?;
     if credential_data_key.len() != KEY_BYTES {
         return Err(SecureStoreError::Corrupt);
     }
@@ -226,7 +235,10 @@ pub fn store(
     store_portable(metadata_path, secret, credential)
 }
 
-pub fn load(metadata_path: &Path, credential: &str) -> Result<Vec<u8>, SecureStoreError> {
+pub fn load(
+    metadata_path: &Path,
+    credential: &str,
+) -> Result<Zeroizing<Vec<u8>>, SecureStoreError> {
     load_portable(metadata_path, credential)
 }
 
@@ -266,7 +278,9 @@ mod tests {
         let directory = directory();
         let metadata = directory.join("secret.json");
         store(&metadata, b"never leave rust", "correct").unwrap();
-        assert_eq!(load(&metadata, "correct").unwrap(), b"never leave rust");
+        let plaintext = load(&metadata, "correct").unwrap();
+        let _: &Zeroizing<Vec<u8>> = &plaintext;
+        assert_eq!(plaintext.as_slice(), b"never leave rust");
         assert_eq!(
             load(&metadata, "wrong"),
             Err(SecureStoreError::InvalidCredential)
@@ -288,7 +302,10 @@ mod tests {
         fs::create_dir_all(restored.parent().unwrap()).unwrap();
         fs::copy(&original, &restored).unwrap();
 
-        assert_eq!(load(&restored, "correct").unwrap(), b"portable secret");
+        assert_eq!(
+            load(&restored, "correct").unwrap().as_slice(),
+            b"portable secret"
+        );
         assert_eq!(
             load(&restored, "wrong"),
             Err(SecureStoreError::InvalidCredential)
@@ -302,7 +319,10 @@ mod tests {
         let directory = directory();
         let metadata = directory.join("secret.json");
         write_v2_fixture(&metadata, b"migration secret", "correct");
-        assert_eq!(load(&metadata, "correct").unwrap(), b"migration secret");
+        assert_eq!(
+            load(&metadata, "correct").unwrap().as_slice(),
+            b"migration secret"
+        );
         let migrated = read_metadata(&metadata).unwrap();
         assert_eq!(migrated.version, VERSION);
         assert!(migrated.device_nonce.is_none());

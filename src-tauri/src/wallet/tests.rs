@@ -1447,6 +1447,7 @@ fn credential_and_mnemonic_inputs_are_bounded() {
         "invalid_credential"
     );
     assert!(WORDS.len() < MAX_MNEMONIC_INPUT_BYTES);
+    assert!(validate_wallet_passphrase("x").is_ok());
     let missing_passphrase = validate_wallet_passphrase("").unwrap_err();
     assert_eq!(missing_passphrase.code, "invalid_credential");
     assert_eq!(
@@ -1461,6 +1462,16 @@ fn credential_and_mnemonic_inputs_are_bounded() {
         long_passphrase.message,
         "The wallet passphrase is too long."
     );
+    let short_new_passphrase =
+        validate_new_wallet_passphrase(&"x".repeat(MIN_NEW_WALLET_PASSPHRASE_CHARACTERS - 1))
+            .unwrap_err();
+    assert_eq!(short_new_passphrase.code, "invalid_credential");
+    assert_eq!(
+        short_new_passphrase.message,
+        "New wallet passphrases must contain at least 16 characters."
+    );
+    assert!(validate_new_wallet_passphrase("abcdefghijklmnop").is_ok());
+    assert!(validate_new_wallet_passphrase(&"🌳".repeat(16)).is_ok());
 }
 
 #[test]

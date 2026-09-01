@@ -73,6 +73,17 @@ describe('software payment proposals', () => {
 });
 
 describe('deferred backup verification', () => {
+  it('requires 16 characters only for newly created software wallets', async () => {
+    const adapter = new DummyWalletAdapter();
+
+    await expect(adapter.createWallet('Too short', 'abcdefghijklmno', true)).rejects.toMatchObject({
+      code: 'invalid_credential'
+    });
+    await expect(adapter.createWallet('Letters only', 'abcdefghijklmnop', true)).resolves.toBe(
+      undefined
+    );
+  });
+
   it('keeps re-presentation secret-free and marks the fixture verified only after its proof', async () => {
     const adapter = new DummyWalletAdapter();
     await adapter.createWallet('Deferred backup', 'correct passphrase', false);

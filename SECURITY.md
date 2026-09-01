@@ -1,6 +1,6 @@
 # Groot security
 
-Last review integration: 2026-08-30
+Last review integration: 2026-09-01
 
 Groot is security-sensitive wallet software under active development. The native implementation supports disposable Regtest testing and compile-time-isolated Signet/Testnet4 rehearsal builds. It has received bounded independent code review, but has not completed the full independent audit, physical hardware-wallet certification, funded public-network rehearsal, or mainnet release process. Do not use it with mainnet funds.
 
@@ -40,9 +40,11 @@ Reports should describe:
 - Recovery mnemonics are entered in a native application sheet and move directly into bounded Rust parsing and wallet construction. They are never stored in renderer state or accepted as a Tauri command argument; unsupported platforms fail closed instead of using a browser form.
 - Users may defer the exact-order backup challenge. The unverified marker is persisted per software wallet and remains visible until later verification succeeds. Later verification requires an unlocked wallet plus fresh wallet-passphrase authentication, decrypts the mnemonic only in Rust, and opens a native shuffled-word challenge without re-revealing or returning the ordered words. Renderer input cannot directly mark a backup verified.
 - The wallet credential is both the BIP39 passphrase and app unlock/signing PIN. A wrong credential returns a stable `invalid_credential` failure instead of deriving and appearing to open another wallet.
+- New software-wallet creation requires at least 16 Unicode characters without composition rules, so letters-only passphrases remain valid. Recovery and every existing-wallet operation continue accepting the exact historical non-empty passphrase because changing a BIP39 passphrase selects a different wallet. The remediation record is [`docs/security-remediation-2026-09-01.md`](docs/security-remediation-2026-09-01.md).
 - Credentials, mnemonics, xprvs, private descriptors, decrypted signing material, and native command payloads are not logged or included in analytics.
 - Credential IPC inputs and native recovery-mnemonic input have explicit byte limits. File, backup, descriptor, PSBT, HWI argument, and HWI output boundaries are also bounded.
 - Every credential-bearing Svelte route clears its field after an attempt and on component teardown.
+- Credential-bearing Settings dialogs also clear passphrases, RPC passwords, destructive confirmation text, and related error state on every dismissal path and before reopening.
 - Version-3 secret envelopes use authenticated encryption with an Argon2id credential-derived key wrapping a separately generated AES-256 data key. They are portable across supported systems and do not depend on a platform Keychain or device key. Decrypted material is zeroized on every return path. A copied encrypted profile therefore permits offline credential guessing; strong wallet credentials, reviewed Argon2id calibration, full-disk encryption, and host security remain required defense in depth.
 - Authenticated version-2 device-bound envelopes are accepted only as a compatibility input. After the credential successfully authenticates and decrypts the envelope, Groot rewrites its metadata as a portable version-3 envelope without the obsolete device-wrapping fields.
 

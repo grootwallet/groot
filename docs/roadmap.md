@@ -4,6 +4,12 @@ This roadmap is ordered by security dependency, not marketing priority. A phase 
 
 Commercial packaging and the issue-level sequence are tracked separately in [`commercial-product-strategy.md`](commercial-product-strategy.md) and [`product-backlog.md`](product-backlog.md). The proposed first post-release add-on is the test-network-first, end-to-end encrypted coordination path in [`remote-signer-coordination-roadmap.md`](remote-signer-coordination-roadmap.md). Family, inheritance, cosigner, and insurance direction is bounded by [`recovery-assurance-roadmap.md`](recovery-assurance-roadmap.md). None of those documents weakens the release gates below.
 
+The short, maintainer-facing execution order is tracked in
+[`engineering-roadmap.md`](engineering-roadmap.md). Security remediation and
+macOS/Testnet4 certification are active in parallel; incremental maintainability
+work is the next engineering priority before concurrency or performance
+redesign.
+
 ## Current checkpoint
 
 The regtest app now has labeled receive addresses with enlarged QR and optional derivation detail, persisted coin freeze/unfreeze, automatic or exact-input sends, recommended 2-of-3 and 3-of-5 creation plus safe advanced M-of-N controls, and real Rust-compiled configurable Recovery descriptors with compatible legacy Inheritance wallets. The remaining gates below are ordered; unchecked work must not be presented as production-ready.

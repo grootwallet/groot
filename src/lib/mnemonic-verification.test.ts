@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   MAX_WALLET_PASSPHRASE_BYTES,
+  MIN_NEW_WALLET_PASSPHRASE_CHARACTERS,
   recoveryOrderMatches,
   shuffledRecoveryWords,
+  unicodeCharacterLength,
   utf8ByteLength
 } from './mnemonic-verification';
 
@@ -41,5 +43,11 @@ describe('recovery word verification', () => {
       MAX_WALLET_PASSPHRASE_BYTES
     );
     expect(utf8ByteLength('é')).toBe(2);
+  });
+
+  it('measures the creation minimum in Unicode characters without composition rules', () => {
+    expect(MIN_NEW_WALLET_PASSPHRASE_CHARACTERS).toBe(16);
+    expect(unicodeCharacterLength('abcdefghijklmnop')).toBe(16);
+    expect(unicodeCharacterLength('🌳'.repeat(16))).toBe(16);
   });
 });

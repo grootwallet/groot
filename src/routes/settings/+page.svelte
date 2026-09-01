@@ -443,6 +443,19 @@
     nodePassword = '';
     nodeError = '';
   }
+  function clearNodeCredentials() {
+    nodePassword = '';
+    walletCredential = '';
+    nodeError = '';
+  }
+  function openNodeSettings() {
+    clearNodeCredentials();
+    nodeOpen = true;
+  }
+  function closeNodeSettings() {
+    clearNodeCredentials();
+    nodeOpen = false;
+  }
   async function saveNode() {
     busy = true;
     nodeError = '';
@@ -774,6 +787,29 @@
       cancellingScan = false;
     }
   }
+  function openFullRescan() {
+    scanCredential = '';
+    scanError = '';
+    scanDraft = { ...scan };
+    scanOpen = true;
+  }
+  function closeFullRescan() {
+    if (scanning) return;
+    scanCredential = '';
+    scanError = '';
+    scanDraft = { ...scan };
+    scanOpen = false;
+  }
+  function openDeleteWallet() {
+    deleteCredential = '';
+    confirmText = '';
+    deleting = true;
+  }
+  function closeDeleteWallet() {
+    deleteCredential = '';
+    confirmText = '';
+    deleting = false;
+  }
   async function deleteWallet() {
     busy = true;
     try {
@@ -1092,11 +1128,7 @@
             >{translate($locale, isSoftwareWallet ? 'Verified' : 'Backup required')}</span
           >
         </div>{/if}
-      <button
-        onclick={() => {
-          scanDraft = { ...scan };
-          scanOpen = true;
-        }}
+      <button onclick={openFullRescan}
         ><span class="setting-icon"><History size={18} /></span><span
           ><strong>{translate($locale, 'Recovery scan')}</strong><small
             >{translate($locale, 'Birthday block')}
@@ -1263,7 +1295,7 @@
           ></span
         ><ChevronRight size={16} /></button
       >
-      <button onclick={() => (nodeOpen = true)}
+      <button onclick={openNodeSettings}
         ><span class="setting-icon"><Network size={18} /></span><span
           ><strong>{translate($locale, 'Fee and broadcast node')}</strong><small
             >{networkName(defaultConfig.network)}{' · '}{translate(
@@ -1331,7 +1363,7 @@
               walletName: selectedProfile?.name ?? translate($locale, 'this wallet')
             })}</small
           ></span
-        ><Button variant="danger-outline" size="small" onclick={() => (deleting = true)}
+        ><Button variant="danger-outline" size="small" onclick={openDeleteWallet}
           ><Trash2 size={15} />{translate($locale, 'Delete')}</Button
         >
       </div>
@@ -1497,7 +1529,7 @@
   open={deleting}
   title={translate($locale, 'Delete this wallet?')}
   description={translate($locale, 'This permanently removes wallet data from this device.')}
-  onclose={() => (deleting = false)}
+  onclose={closeDeleteWallet}
 >
   <div class="warning-box danger">
     <strong>{translate($locale, 'Make sure your recovery phrase is backed up.')}</strong>
@@ -1515,12 +1547,7 @@
     /></label
   >
   <div class="modal-footer">
-    <Button
-      variant="secondary"
-      onclick={() => {
-        deleting = false;
-        deleteCredential = '';
-      }}>{translate($locale, 'Cancel')}</Button
+    <Button variant="secondary" onclick={closeDeleteWallet}>{translate($locale, 'Cancel')}</Button
     ><Button
       variant="danger"
       disabled={confirmText !== 'DELETE' || !deleteCredential}
@@ -1798,13 +1825,7 @@
     $locale,
     'Search from the earliest possible payment while deriving a bounded address gap.'
   )}
-  onclose={() => {
-    if (scanning) return;
-    scanOpen = false;
-    scanCredential = '';
-    scanError = '';
-    scanDraft = { ...scan };
-  }}
+  onclose={closeFullRescan}
 >
   <div class="scan-form">
     <div class="warning-box">
@@ -1892,12 +1913,8 @@
         loading={cancellingScan}
         loadingLabel={translate($locale, 'Requesting…')}
         onclick={cancelFullRescan}>{translate($locale, 'Cancel scan')}</Button
-      >{:else}<Button
-        variant="secondary"
-        onclick={() => {
-          scanOpen = false;
-          scanDraft = { ...scan };
-        }}>{translate($locale, 'Close')}</Button
+      >{:else}<Button variant="secondary" onclick={closeFullRescan}
+        >{translate($locale, 'Close')}</Button
       >{/if}<Button
       disabled={scanning ||
         !scanCredential ||
@@ -1978,7 +1995,7 @@
     $locale,
     'Each wallet keeps isolated, encrypted RPC credentials. Use direct TLS or a local Tor SOCKS proxy remotely.'
   )}
-  onclose={() => (nodeOpen = false)}
+  onclose={closeNodeSettings}
 >
   <div class="theme-choice node-location">
     <button
@@ -2061,8 +2078,7 @@
   />
   {#if nodeError}<p class="form-error">{nodeError}</p>{/if}
   <div class="modal-footer">
-    <Button variant="secondary" onclick={() => (nodeOpen = false)}
-      >{translate($locale, 'Cancel')}</Button
+    <Button variant="secondary" onclick={closeNodeSettings}>{translate($locale, 'Cancel')}</Button
     ><Button
       disabled={!node.backend.url ||
         !walletCredential ||

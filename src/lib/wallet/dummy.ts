@@ -47,6 +47,12 @@ import {
   validatePolicyDraft
 } from '$lib/multisig/policy';
 import { policyReadinessKind } from '$lib/hardware/policy-readiness';
+import {
+  MAX_WALLET_PASSPHRASE_BYTES,
+  MIN_NEW_WALLET_PASSPHRASE_CHARACTERS,
+  unicodeCharacterLength,
+  utf8ByteLength
+} from '$lib/mnemonic-verification';
 
 import {
   DummyWalletState,
@@ -168,6 +174,13 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
   async createWallet(name: string, credential: string, backupVerified: boolean) {
     if (!name.trim()) throw new WalletError('invalid_wallet_name', 'A wallet name is required.');
     if (!credential) throw new WalletError('invalid_credential', 'A passphrase / PIN is required.');
+    if (unicodeCharacterLength(credential) < MIN_NEW_WALLET_PASSPHRASE_CHARACTERS)
+      throw new WalletError(
+        'invalid_credential',
+        'New wallet passphrases must contain at least 16 characters.'
+      );
+    if (utf8ByteLength(credential) > MAX_WALLET_PASSPHRASE_BYTES)
+      throw new WalletError('invalid_credential', 'The wallet passphrase is too long.');
     const profile = {
       id: crypto.randomUUID(),
       name: name.trim(),

@@ -66,6 +66,15 @@ export const onboardingCopy = {
       fr: 'Choisissez la phrase secrète BIP39 qui complète cette sauvegarde. La même phrase secrète déverrouille Groot.',
       es: 'Elige la frase de contraseña BIP39 que completa esta copia. La misma frase desbloquea Groot.'
     },
+  'Use at least 16 characters. Letters-only passphrases are allowed. Keep it with your recovery words; it also unlocks Groot on this device.':
+    {
+      fr: 'Utilisez au moins 16 caractères. Une phrase composée uniquement de lettres est acceptée. Conservez-la avec vos mots de récupération ; elle déverrouille aussi Groot sur cet appareil.',
+      es: 'Usa al menos 16 caracteres. Se permiten frases formadas solo por letras. Guárdala con tus palabras de recuperación; también desbloquea Groot en este dispositivo.'
+    },
+  'Use at least 16 characters. Letters-only passphrases are allowed.': {
+    fr: 'Utilisez au moins 16 caractères. Une phrase composée uniquement de lettres est acceptée.',
+    es: 'Usa al menos 16 caracteres. Se permiten frases formadas solo por letras.'
+  },
   'Copies its node and sync method. This wallet protects its own copy.': {
     fr: 'Copie son nœud et sa méthode de synchronisation. Ce portefeuille protège sa propre copie.',
     es: 'Copia su nodo y método de sincronización. Esta cartera protege su propia copia.'

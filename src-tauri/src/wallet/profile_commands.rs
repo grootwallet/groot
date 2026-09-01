@@ -225,6 +225,7 @@ pub fn wallet_create(
 ) -> ApiResult<()> {
     let _operation = operation_guard(&state)?;
     let credential = Zeroizing::new(credential);
+    validate_new_wallet_passphrase(credential.as_str())?;
     let pending = state
         .pending_mnemonic
         .lock()
@@ -271,11 +272,11 @@ pub fn wallet_recover(
     name: String,
     credential: String,
 ) -> ApiResult<()> {
+    let credential = Zeroizing::new(credential);
     let _operation = operation_guard(&state)?;
     let mnemonic_words = native_backup::recover(&app)
         .map_err(internal)?
         .ok_or_else(|| api_error("onboarding_cancelled", "Wallet recovery was cancelled."))?;
-    let credential = Zeroizing::new(credential);
     if mnemonic_words.len() > MAX_MNEMONIC_INPUT_BYTES {
         return Err(api_error(
             "invalid_mnemonic",
