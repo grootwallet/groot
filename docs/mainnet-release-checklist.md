@@ -24,11 +24,11 @@ Candidate scope: first mainnet release is macOS desktop on Apple silicon, includ
 
 ## Hardware certification
 
-The release owner approved these seven exact desktop-USB model targets: Coldcard Mk4, Trezor Model One, Ledger Nano S Plus, original Bitcoin-only BitBox02, original Blockstream Jade Classic, Trezor Safe 3 Bitcoin-only, and BitBox02 Nova. Frozen firmware exists for Coldcard Mk4 5.6.1, original BitBox02 9.26.3, Jade Classic 1.0.40, Safe 3 2.12.3, and Nova 9.26.3. The release owner has declared Trezor Model One firmware 1.14.1 and Ledger Nano S Plus firmware 1.6.1 as release-target versions; these declarations are not physical certification evidence. Ledger's exact Bitcoin app version remains unrecorded, so that combination cannot enter the release. HWI is pinned to 3.2.0. No BLE, QR, NFC, or unlisted model inherits this USB evidence.
+The release owner approved these seven exact desktop-USB model targets: Coldcard Mk4, Trezor Model One, Ledger Nano S Plus, original Bitcoin-only BitBox02, original Blockstream Jade Classic, Trezor Safe 3 Bitcoin-only, and BitBox02 Nova. Frozen firmware exists for Coldcard Mk4 5.6.1, original BitBox02 9.26.3, Jade Classic 1.0.40, Safe 3 2.12.3, and Nova 9.26.3. The release owner has declared Trezor Model One firmware 1.14.1 and Ledger Nano S Plus firmware 1.6.1 with Bitcoin app 2.5.0 as release-target versions; these declarations are not physical certification evidence. HWI is pinned to 3.2.0. No BLE, QR, NFC, or unlisted model inherits this USB evidence.
 
 - [ ] Coldcard Mk4 certification record complete and sanitized summary reviewed.
 - [ ] Trezor Model One firmware 1.14.1 certification record complete and sanitized summary reviewed.
-- [ ] Ledger Nano S Plus firmware 1.6.1 certification record complete, including the exact Bitcoin app version, and sanitized summary reviewed.
+- [ ] Ledger Nano S Plus firmware 1.6.1 with Bitcoin app 2.5.0 certification record complete and sanitized summary reviewed.
 - [ ] BitBox02 certification record complete.
 - [ ] BitBox02 Nova desktop-USB support is either implemented and separately certified or explicitly excluded from the first-release support matrix.
 - [ ] Blockstream Jade certification record complete.
