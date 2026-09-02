@@ -49,8 +49,11 @@ The proposed first release is deliberately narrower than the complete product:
   storage and no runtime network selector;
 - a user-controlled Bitcoin Core node on a validated loopback endpoint only;
 - exact Bitcoin mainnet genesis verification before any wallet database opens;
-- hardware-focused wallet operation using only exact models and firmware named
-  in the approved release matrix;
+- software BIP84 single-key wallets, hardware BIP84 single-key wallets, and
+  standard BIP48 hardware multisig under
+  [ADR 0052](adr/0052-first-mainnet-software-and-hardware-scope.md), with
+  hardware support limited to exact models and firmware named in the approved
+  release matrix;
 - exactly one external recipient per transaction;
 - a hard trusted-boundary maximum of 1,000,000 satoshis per transaction, which
   is a loss limiter rather than a recommended test amount;
@@ -60,11 +63,10 @@ The proposed first release is deliberately narrower than the complete product:
 - signed update metadata, rollback instructions, incident response, and an
   immediate release-disable path.
 
-Before the mainnet-enablement diff is written, the release owner must explicitly
-decide whether software-wallet creation and spending are excluded from this
-first release. “Hardware-focused” is not precise enough for a security boundary.
-The resulting ADR, UI, Rust gate, tests, release notes, and reviewer scope must
-all express the same decision.
+The release owner explicitly selected both software and hardware wallet support.
+Guided delayed/recovery Miniscript policies remain outside this first scope
+unless a later ADR adds them. The mainnet-enablement ADR, UI, Rust gate, tests,
+release notes, and reviewer scope must all preserve this exact boundary.
 
 ## Reviewer independence
 
@@ -101,8 +103,9 @@ Review entropy acquisition, native mnemonic presentation/recovery, BIP39
 passphrase semantics, Argon2id parameters and offline-guessing exposure,
 AES-GCM envelope handling, v2-to-v3 migration, zeroization, credential
 throttling, session expiry, clipboard/accessibility/crash surfaces, and profile
-relocation/deletion. Confirm no mnemonic, seed, private descriptor, signing
-material, or credential crosses into the webview or logs.
+relocation/deletion. Exercise the complete included software-wallet mainnet
+lifecycle and confirm no mnemonic, seed, private descriptor, signing material,
+or credential crosses into the webview or logs.
 
 ### 3. Wallet and transaction correctness
 

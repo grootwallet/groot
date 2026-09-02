@@ -66,11 +66,15 @@ contains_fixed 'address_hrp: "bc"' src-tauri/src/build_network.rs \
   || fail "the dormant mainnet address family is no longer explicit"
 contains_fixed "Release decision: BLOCKED" docs/mainnet-release-checklist.md \
   || fail "the release checklist is not explicitly blocked"
-contains_fixed "Candidate scope: first mainnet release is macOS desktop only" docs/mainnet-release-checklist.md \
+contains_fixed "Candidate scope: first mainnet release is macOS desktop on Apple silicon, includes BIP84 software single-key wallets" docs/mainnet-release-checklist.md \
   || fail "the first-release platform scope is missing from the checklist"
+contains_fixed "The first limited mainnet candidate includes:" docs/adr/0052-first-mainnet-software-and-hardware-scope.md \
+  || fail "the first-release software and hardware wallet scope decision is missing"
+contains_fixed "Mainnet remains compile-time disabled under ADR 0012" docs/adr/0052-first-mainnet-software-and-hardware-scope.md \
+  || fail "the software and hardware scope decision no longer preserves the mainnet lock"
 contains_fixed "- [x] User-controlled Bitcoin Core is the only first-release mainnet backend" docs/mainnet-release-checklist.md \
   || fail "the evidence-backed first-mainnet backend scope is no longer locked"
-contains_fixed "The first production target is a **macOS desktop" docs/roadmap.md \
+contains_fixed "The first production target is a **macOS Apple-silicon desktop release with both software and approved hardware wallets" docs/roadmap.md \
   || fail "the roadmap no longer matches the first-release platform scope"
 contains_fixed "A second Groot process cannot concurrently mutate" docs/mainnet-release-checklist.md \
   || fail "cross-process locking is missing from the mainnet blockers"
