@@ -1,6 +1,15 @@
 import type { CatalogSection } from './types';
 
 export const componentCopy = {
+  'Build information copied': {
+    fr: 'Informations de version copiées',
+    es: 'Información de compilación copiada'
+  },
+  'Copy build information': {
+    fr: 'Copier les informations de version',
+    es: 'Copiar información de compilación'
+  },
+  'Copying…': { fr: 'Copie…', es: 'Copiando…' },
   '{label} copied': { fr: '{label} copié', es: '{label} copiado' },
   'Select and copy the {label} manually.': {
     fr: 'Sélectionnez et copiez manuellement {label}.',

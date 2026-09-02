@@ -36,6 +36,12 @@ describe('startup wallet lock gate', () => {
     expect(shell).toContain('runtime.version !== APP_VERSION');
     expect(shell).toContain('class="sidebar-build-identity"');
     expect(shell).toContain("'Groot v{version} · {commit}'");
+    expect(shell).toContain(
+      "await copyText(buildIdentityText(runtimeIdentity), 'build-information')"
+    );
+    expect(shell).toContain("aria-label={translate($locale, 'Copy build information')}");
+    expect(shell).toContain("buildIdentityCopyState === 'failed'");
+    expect(appCss).toContain('.sidebar-build-identity button:focus-visible');
     expect(shell).toContain("commit.endsWith('-dirty') ? '-dirty' : ''");
     expect(buildScript).toContain(
       'GROOT_BUILD_COMMIT does not match the checked-out repository commit'

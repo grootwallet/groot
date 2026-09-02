@@ -26,6 +26,7 @@
   import { createLiveSync, type LiveSyncController } from '$lib/wallet/live-sync';
   import { createSessionMonitor, type SessionMonitorController } from '$lib/wallet/session-monitor';
   import { toast } from '$lib/stores/toasts';
+  import { copyText } from '$lib/clipboard';
   import { denomination, initDenomination } from '$lib/denomination';
   import { fade } from 'svelte/transition';
   import type { MultisigSetupDraft, RuntimePlatform, WalletProfile } from '$lib/wallet/contracts';
@@ -88,6 +89,7 @@
   let shortcutLockPending = false;
   let walletSelectionTask: Promise<void> | undefined;
   let runtimeIdentity = $state<RuntimePlatform | null>(null);
+  let buildIdentityCopyState = $state<'idle' | 'copying' | 'copied' | 'failed'>('idle');
   let startupFailure = $state('');
   let selectedProfile = $derived(profiles.find((wallet) => wallet.id === selectedWalletId));
   let policyContext = $derived(
@@ -115,6 +117,31 @@
     commit === 'unknown'
       ? commit
       : `${commit.slice(0, 8)}${commit.endsWith('-dirty') ? '-dirty' : ''}`;
+  const buildIdentityText = (runtime: RuntimePlatform) =>
+    translate($locale, 'Groot v{version} · {commit}', {
+      version: runtime.version,
+      commit: shortCommit(runtime.commit)
+    });
+
+  async function copyBuildIdentity() {
+    if (!runtimeIdentity || buildIdentityCopyState === 'copying') return;
+    buildIdentityCopyState = 'copying';
+    try {
+      await copyText(buildIdentityText(runtimeIdentity), 'build-information');
+      buildIdentityCopyState = 'copied';
+      toast({ title: translate($locale, 'Build information copied'), tone: 'success' });
+      setTimeout(() => {
+        if (buildIdentityCopyState === 'copied') buildIdentityCopyState = 'idle';
+      }, 1_500);
+    } catch {
+      buildIdentityCopyState = 'failed';
+      toast({
+        title: translate($locale, 'Copy failed'),
+        description: translate($locale, 'Try again'),
+        tone: 'danger'
+      });
+    }
+  }
 
   function handleKeyboardShortcut(event: KeyboardEvent) {
     const primaryModifier = commandModifier
@@ -485,12 +512,23 @@
           <ThemeToggle /><DiscreetModeToggle />
         </div>
         <NetworkStatus network={defaultConfig.network} locked={lockedRoute} />
-        {#if runtimeIdentity}<small class="sidebar-build-identity"
-            >{translate($locale, 'Groot v{version} · {commit}', {
-              version: runtimeIdentity.version,
-              commit: shortCommit(runtimeIdentity.commit)
-            })}</small
-          >{/if}
+        {#if runtimeIdentity}<div class="sidebar-build-identity">
+            <button
+              type="button"
+              aria-label={translate($locale, 'Copy build information')}
+              disabled={buildIdentityCopyState === 'copying'}
+              onclick={copyBuildIdentity}>{buildIdentityText(runtimeIdentity)}</button
+            >
+            <span class="sidebar-build-copy-status" role="status">
+              {#if buildIdentityCopyState === 'copying'}
+                {translate($locale, 'Copying…')}
+              {:else if buildIdentityCopyState === 'copied'}
+                {translate($locale, 'Copied')}
+              {:else if buildIdentityCopyState === 'failed'}
+                {translate($locale, 'Copy failed')} · {translate($locale, 'Try again')}
+              {/if}
+            </span>
+          </div>{/if}
       </div>
     </aside>
 

@@ -4,6 +4,9 @@ import { validateClipboardText } from './clipboard';
 describe('clipboard export policy', () => {
   it('assigns an explicit platform label to each allowed public-data class', () => {
     expect(validateClipboardText('bc1qexample', 'bitcoin-address')).toBe('Bitcoin address');
+    expect(validateClipboardText('Groot v0.4.89 · c9309d3d', 'build-information')).toBe(
+      'Groot build information'
+    );
     expect(validateClipboardText('txid', 'identifier')).toBe('Wallet identifier');
     expect(validateClipboardText('wpkh([00000000/84h/0h/0h]xpub/0/*)', 'public-wallet-data')).toBe(
       'Public wallet data'

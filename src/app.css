@@ -503,12 +503,41 @@ code {
   gap: 10px;
 }
 .sidebar-build-identity {
-  display: block;
+  display: grid;
+  justify-items: center;
+  min-height: 38px;
+}
+.sidebar-build-identity button {
+  min-height: 38px;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
   color: var(--muted-2);
+  font: inherit;
   font-size: 9px;
   line-height: 1.35;
   text-align: center;
   font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.sidebar-build-identity button:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+.sidebar-build-identity button:focus-visible {
+  outline: 2px solid var(--fr-blue);
+  outline-offset: 2px;
+}
+.sidebar-build-identity button:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+.sidebar-build-copy-status {
+  min-height: 12px;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.35;
 }
 .preference-toggles {
   display: flex;

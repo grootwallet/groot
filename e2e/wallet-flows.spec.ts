@@ -32,6 +32,37 @@ async function chooseSoftwareWallet(page: Page) {
   await page.getByRole('button', { name: /Software wallet/ }).click();
 }
 
+test('copies the public build identity with inline retry feedback', async ({ page }) => {
+  test.skip((page.viewportSize()?.width ?? 0) <= 760, 'The build identity is desktop-only.');
+  await page.addInitScript(() => {
+    let copied = '';
+    let attempts = 0;
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: async (value: string) => {
+          attempts += 1;
+          if (attempts === 1) throw new Error('Simulated clipboard denial');
+          copied = value;
+        },
+        readText: async () => copied
+      }
+    });
+  });
+  await page.goto('/unlock?fixture-locked-wallet-switch=1');
+  const buildIdentity = page.getByRole('button', { name: 'Copy build information' });
+  const displayedIdentity = (await buildIdentity.textContent())?.trim();
+  expect(displayedIdentity).toMatch(/^Groot v\d+\.\d+\.\d+ · [a-z0-9-]+$/);
+
+  await buildIdentity.click();
+  await expect(page.locator('.sidebar-build-copy-status')).toHaveText('Copy failed · Try again');
+
+  await buildIdentity.click();
+  await expect(page.locator('.sidebar-build-copy-status')).toHaveText('Copied');
+  await expect(page.getByText('Build information copied')).toBeVisible();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(displayedIdentity);
+});
+
 test('creates a 24-word wallet and clears onboarding secrets', async ({ page }) => {
   await page.goto('/welcome?fixture-empty=1');
   await expect(
