@@ -19,6 +19,9 @@ const DEVICE_BOUND_VERSION: u8 = 2;
 const MAX_METADATA_BYTES: u64 = 256 * 1024;
 const KEY_BYTES: usize = 32;
 const NONCE_BYTES: usize = 12;
+const ARGON2_MEMORY_KIB: u32 = 19_456;
+const ARGON2_ITERATIONS: u32 = 2;
+const ARGON2_PARALLELISM: u32 = 1;
 
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum SecureStoreError {
@@ -52,8 +55,13 @@ struct Metadata {
 }
 
 fn credential_kdf() -> Result<Argon2<'static>, SecureStoreError> {
-    let params =
-        Params::new(19_456, 2, 1, Some(KEY_BYTES)).map_err(|_| SecureStoreError::Unavailable)?;
+    let params = Params::new(
+        ARGON2_MEMORY_KIB,
+        ARGON2_ITERATIONS,
+        ARGON2_PARALLELISM,
+        Some(KEY_BYTES),
+    )
+    .map_err(|_| SecureStoreError::Unavailable)?;
     Ok(Argon2::new(Algorithm::Argon2id, Version::V0x13, params))
 }
 
@@ -245,6 +253,7 @@ pub fn load(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::Instant;
 
     fn directory() -> std::path::PathBuf {
         std::env::temp_dir().join(format!("groot-secure-store-{}", Uuid::new_v4()))
@@ -271,6 +280,31 @@ mod tests {
             device_wrapped_key: Some(BASE64.encode(device_wrapped_key)),
         };
         write_owner_only(path, &encode_metadata(&metadata).unwrap()).unwrap();
+    }
+
+    #[test]
+    #[ignore = "release evidence benchmark; run explicitly with --release --ignored --nocapture"]
+    fn credential_kdf_calibration() {
+        const SAMPLE_COUNT: usize = 11;
+        let credential = "disposable calibration credential";
+        let salt = [0x42_u8; 16];
+
+        derive_credential_key(credential, &salt).expect("warm-up derivation");
+        let mut elapsed_ms = Vec::with_capacity(SAMPLE_COUNT);
+        for _ in 0..SAMPLE_COUNT {
+            let started = Instant::now();
+            let key = derive_credential_key(credential, &salt).expect("calibration derivation");
+            assert_eq!(key.len(), KEY_BYTES);
+            elapsed_ms.push(started.elapsed().as_secs_f64() * 1_000.0);
+        }
+        elapsed_ms.sort_by(f64::total_cmp);
+
+        println!(
+            "argon2id version=0x13 memory_kib={ARGON2_MEMORY_KIB} iterations={ARGON2_ITERATIONS} parallelism={ARGON2_PARALLELISM} output_bytes={KEY_BYTES} samples={SAMPLE_COUNT} min_ms={:.3} median_ms={:.3} max_ms={:.3}",
+            elapsed_ms[0],
+            elapsed_ms[SAMPLE_COUNT / 2],
+            elapsed_ms[SAMPLE_COUNT - 1]
+        );
     }
 
     #[test]

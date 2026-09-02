@@ -249,4 +249,13 @@ v0.4.88 makes pre-PSBT payment drafts directly disposable. Overview now separate
 
 v0.4.89 closes the Core-configuration catch-up race observed during the packaged Testnet4 BIP84 recovery rehearsal. Before normal sync or any explicit full/birthday history scan, Rust now requires the configured Core node to be out of initial block download and its tip to have reached the wallet's last verified checkpoint. Full and birthday scans also reject a requested block range that a pruned node no longer stores. These cases return stable actionable `node_syncing` or `node_history_unavailable` errors and keep the previous verified wallet state untouched instead of surfacing a generic BDK reconciliation failure. This is compatible with every existing wallet, checkpoint, recovery-scan, descriptor, profile, registry, proposal, credential, and network-setting record; no migration is required.
 
+# Mainnet preparation remains disabled
+
+The proposed ADR 0053 documents the eventual limited-mainnet enablement diff
+and its exit conditions without changing any runtime allowlist or the trusted
+`MAINNET_ENABLED = false` gate. The existing portable-profile Argon2id
+parameters are now named constants with an explicit ignored release-mode
+calibration test; this changes neither derivation output nor persisted format.
+No BIP support changes in this preparation.
+
 Update this table in the same change whenever a capability crosses a boundary.
