@@ -164,9 +164,19 @@ Current local status on 2026-08-24:
   it is not silently transferred to the replacement package.
   Exact packaged v0.4.90 commit `c6d0d5d2` subsequently passed the focused
   physical regression: warning separation, first-open status presentation,
-  and BTC/sats unit spacing were all reported correct. This closes only those
-  replacement-package presentation rows; the broader functional evidence
-  above remains accurately bound to `fc2ac74f`.
+  and BTC/sats unit spacing were all reported correct. A closed, owner-only
+  copy of the same software-wallet profile was then opened under that package
+  from clean application state: it presented the expected locked wallet,
+  rejected one wrong passphrase, accepted the correct passphrase, restored its
+  saved Core setup without editing, completed a full-history rescan, reconciled
+  balance/history/labels/coins, and preserved that state across restart. A
+  separately copied profile with one controlled encrypted-payload mutation was
+  rejected as corrupt and remained locked. The reviewer then reported both
+  cancellation and confirmed deletion against a disposable copy, with unrelated
+  wallets retained. The untouched source was restored byte-for-byte from a
+  second matching safety copy and relaunched; its final physical reopen check,
+  authenticated v2 migration, and independent review remain open. The broader
+  funded functional evidence above remains accurately bound to `fc2ac74f`.
 - Packaged v0.4.28 Testnet4 testing with the original BitBox02 exposed that
   HWI 3.2.0 may wait for device-password entry inside aggregate discovery,
   before returning the locked device row. The former 30-second discovery
