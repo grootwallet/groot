@@ -187,6 +187,22 @@ Current local status on 2026-08-24:
   physically reconfirmed. Authenticated v2 migration and independent review
   remain open. The broader funded functional evidence above remains accurately
   bound to `fc2ac74f`.
+- Exact packaged v0.4.90 commit `c6d0d5d2` also passed the reviewer-operated
+  ad-hoc macOS lifecycle: one-minute inactivity lock, explicit lock/unlock,
+  short sleep/wake with Core recovery, forced termination and normal reopen,
+  second-instance refusal with the first instance unaffected, immediate lock
+  reacquisition after quit, keyboard focus containment, locked/discreet
+  VoiceOver inspection, explicit-only clipboard behavior, single-window
+  behavior, and final restart persistence. macOS displayed its standard
+  crash-recovery prompt after the intentional forced termination; Groot then
+  reopened normally without manual lock-file cleanup. A disposable native
+  recovery-word sheet was deliberately captured through the operating-system
+  screenshot shortcut, the unsaved image and clipboard value were discarded,
+  wallet creation was cancelled, and the original profile was restored. The
+  reviewer explicitly accepted deliberate user-initiated capture as intended
+  behavior; Groot still warns against digital storage and must never initiate
+  or retain such a capture. Signed/notarized repetition and crash-artifact
+  inspection remain open.
 - Packaged v0.4.28 Testnet4 testing with the original BitBox02 exposed that
   HWI 3.2.0 may wait for device-password entry inside aggregate discovery,
   before returning the locked device row. The former 30-second discovery
