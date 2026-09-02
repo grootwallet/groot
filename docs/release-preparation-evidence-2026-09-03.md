@@ -24,6 +24,10 @@ committed by this record.
 | `pnpm release:test:update`                       | PASS                  | The signed-update fixture verified and rejected tampering. This is not an actual release signing/rollback drill.                                                  |
 | `pnpm release:test:hwi`                          | PASS                  | HWI 3.2.0 provenance verified; tampering and wrong-version fixtures were rejected; the sealed-package fixture passed.                                             |
 | `pnpm release:test:compare`                      | PASS                  | The unsigned comparator rejected incomplete, substituted, and mismatched evidence. Build B remains pending.                                                       |
+| `cargo fmt --check`                              | PASS                  | Rust formatting is clean.                                                                                                                                         |
+| strict all-target/all-feature Clippy             | PASS                  | `cargo clippy --locked --all-targets --all-features -- -D warnings` completed without a warning.                                                                  |
+| `cargo test --locked --all-features`             | PASS                  | 378 library tests and 2 adversarial integration tests passed; explicitly environment-dependent tests remained ignored.                                            |
+| `pnpm validate`                                  | PASS                  | The complete standard repository validation passed under pinned Node.js 24.19.0 and pnpm 11.13.1.                                                                 |
 
 ## RustSec warning disposition
 
