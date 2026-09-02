@@ -209,10 +209,13 @@ and reproduced the expected wallet state.
 The descriptor/public-backup recovery is recorded as the packaged BIP48
 clean-profile recovery pass because it matches that worksheet definition. The
 different clean-profile recovery procedure the reviewer explicitly deferred
-remains open, as does the independent tester/reviewer run. The BIP84
-full-history scan also remains open: the next candidate-bound action is to
-repeat it on exact v0.4.89 with Bitcoin Core fully synchronized. Nothing in
-this checkpoint certifies the v0.4.89 rescan fix or later send-review UX.
+remains open, as does the independent tester/reviewer run.
+
+Exact packaged v0.4.89 commit `c9309d3` was subsequently exercised with Bitcoin
+Core fully synchronized. Full-history rescans completed successfully for every
+exercised wallet, closing the candidate-bound rescan regression. This is
+wallet-sync evidence and does not imply another hardware-device interaction,
+clean-profile recovery, or independent-review pass.
 
 Local sensitive evidence reviewed without copying identifiers: yes
 

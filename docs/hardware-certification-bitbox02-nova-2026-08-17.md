@@ -244,6 +244,12 @@ The separate clean-profile recovery procedure the reviewer explicitly deferred
 remains open, as does the independent tester/reviewer run. No result here
 certifies v0.4.89 or Whisper/BLE.
 
+Exact packaged v0.4.89 commit `c9309d3` later passed full-history rescans for
+every exercised wallet with Bitcoin Core fully synchronized. This closes the
+wallet-sync regression for the candidate but is not additional Nova interaction
+and does not close the deferred recovery, independent-review, or Whisper/BLE
+rows.
+
 ## Current decision
 
 **LOCAL REGTEST USB CORE PASS WITH LIMITATIONS — NOT RELEASE CERTIFIED.**

@@ -136,9 +136,10 @@ Current local status on 2026-08-24:
   shared Safe 3 plus Nova BIP48 trusted-display, real Testnet4 deposit and
   2-of-3 spend, confirmation, restart/accounting, and genuine clean-profile
   descriptor/public-backup recovery campaign. Its policy status was correctly
-  **No setup needed**, never **Policy verified**. The exact v0.4.89 BIP84
-  full-history rescan, the separately deferred recovery procedure, and an
-  independent tester/reviewer run remain open.
+  **No setup needed**, never **Policy verified**. Exact packaged v0.4.89 commit
+  `c9309d3` subsequently passed full-history rescans for every exercised wallet
+  with Bitcoin Core fully synchronized. The separately deferred clean-profile
+  recovery procedure and an independent tester/reviewer run remain open.
 - BitBox02 Nova firmware 9.26.3 has a local HWI 3.2.0 Regtest USB core pass
   under self-review for BIP84 and BIP48 import, policy/address proof, funded
   rejection/retry, canonical signing, restart, Ledger wrong-device rejection,
