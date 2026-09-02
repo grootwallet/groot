@@ -162,6 +162,11 @@ Current local status on 2026-08-24:
   presentation, and one false unsupported-wallet startup toast. These findings
   are fixed in v0.4.90, but the physical evidence remains bound to `fc2ac74f`;
   it is not silently transferred to the replacement package.
+  Exact packaged v0.4.90 commit `c6d0d5d2` subsequently passed the focused
+  physical regression: warning separation, first-open status presentation,
+  and BTC/sats unit spacing were all reported correct. This closes only those
+  replacement-package presentation rows; the broader functional evidence
+  above remains accurately bound to `fc2ac74f`.
 - Packaged v0.4.28 Testnet4 testing with the original BitBox02 exposed that
   HWI 3.2.0 may wait for device-password entry inside aggregate discovery,
   before returning the locked device row. The former 30-second discovery
