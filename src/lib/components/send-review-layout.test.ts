@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const appCss = readFileSync(new URL('../../app.css', import.meta.url), 'utf8');
+const amount = readFileSync(new URL('./Amount.svelte', import.meta.url), 'utf8');
 const overview = readFileSync(new URL('../../routes/+page.svelte', import.meta.url), 'utf8');
 const singleSend = readFileSync(new URL('../../routes/send/+page.svelte', import.meta.url), 'utf8');
 const multisigSend = readFileSync(
@@ -10,6 +11,12 @@ const multisigSend = readFileSync(
 );
 
 describe('send review layout', () => {
+  it('keeps the denomination separated from the amount', () => {
+    expect(amount).toMatch(
+      /\.formatted-amount\s*\{[^}]*display: inline-flex;[^}]*align-items: baseline;[^}]*gap: 0\.25em;/s
+    );
+  });
+
   it('keeps wrapped permanent labels clear of review separators', () => {
     expect(singleSend.match(/class="label-details-row"/g)?.length).toBeGreaterThanOrEqual(3);
     expect(multisigSend).toContain('class="label-details-row"');

@@ -1179,7 +1179,20 @@ test('RBF starts safely and presents one payment row with durable lineage', asyn
   await page.getByLabel('Wallet passphrase', { exact: true }).fill('prototype-passphrase');
   await page.getByRole('button', { name: /Sign & broadcast/ }).click();
   await expect(page.getByRole('heading', { name: 'Transaction accelerated' })).toBeVisible();
-  await expect(page.locator('.success-state .success-amount')).toContainText('10,000 sats');
+  const successAmount = page.locator('.success-state .success-amount');
+  await expect(successAmount).toContainText('10,000 sats');
+  const satsValueBox = await successAmount.locator('strong').boundingBox();
+  const satsUnitBox = await successAmount.locator('small').boundingBox();
+  expect(
+    (satsUnitBox?.x ?? 0) - ((satsValueBox?.x ?? 0) + (satsValueBox?.width ?? 0))
+  ).toBeGreaterThanOrEqual(4);
+  await successAmount.getByRole('button').click();
+  await expect(successAmount).toContainText('0.00010000 BTC');
+  const btcValueBox = await successAmount.locator('strong').boundingBox();
+  const btcUnitBox = await successAmount.locator('small').boundingBox();
+  expect(
+    (btcUnitBox?.x ?? 0) - ((btcValueBox?.x ?? 0) + (btcValueBox?.width ?? 0))
+  ).toBeGreaterThanOrEqual(4);
   await expect(page.locator('.success-state .hash-box')).toContainText('Transaction ID');
   await page.getByRole('link', { name: 'View transaction' }).click();
 
