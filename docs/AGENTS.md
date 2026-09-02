@@ -3,6 +3,9 @@
 This file extends the root `AGENTS.md` for `docs/`.
 
 - `product-spec.md` owns user behavior; `architecture.md` owns boundaries; `flows.md` owns state transitions; `implementation-status.md` separates fixtures from wired Rust behavior.
+- `bip-support.md` owns the standards inventory. Update it whenever a feature or
+  dependency adds, removes, expands, narrows, or changes evidence for BIP support;
+  keep upstream BIP status separate from Groot implementation status.
 - ADRs are append-only. Supersede an accepted decision explicitly instead of rewriting its history.
 - A persisted-format break is never an incidental implementation detail. Document the affected formats, compatibility boundary, migration or discard behavior, and user-visible failure state in an ADR and canonical docs; obtain explicit user approval before code changes.
 - Claims require evidence. Say browser fixture, Rust unit, regtest integration, physical device, or external review precisely.

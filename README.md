@@ -123,6 +123,7 @@ Before connecting a physical signer, run `pnpm hardware:preflight` and follow th
 - [Design system](docs/design-system.md)
 - [Security model and release blockers](docs/security-model.md)
 - [Implementation status](docs/implementation-status.md)
+- [BIP implementation and candidate matrix](docs/bip-support.md)
 - [V1 and V2 roadmap](docs/roadmap.md)
 - [Commercial product strategy](docs/commercial-product-strategy.md)
 - [Issue-level product backlog](docs/product-backlog.md)

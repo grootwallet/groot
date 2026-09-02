@@ -12,6 +12,9 @@ Dependencies point inward. Routes never select adapters. Rust commands translate
 2. Change the smallest owning layer.
 3. Add pure unit tests first, then adapter/command integration, then the minimum E2E proof.
 4. Update product, architecture, flow, implementation-status, testing, and ADR documents that own the changed claim.
+   Update [`bip-support.md`](bip-support.md) whenever the change adds, removes,
+   expands, narrows, or changes evidence for a BIP; record an explicit no-impact
+   assessment when no BIP is affected.
 5. Run `pnpm format` after editing supported frontend, configuration, or documentation files.
 6. Run `pnpm validate`; add Rust and visual checks when applicable.
 
