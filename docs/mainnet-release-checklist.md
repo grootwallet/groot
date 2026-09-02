@@ -31,7 +31,7 @@ Candidate scope: first mainnet release is macOS desktop only, hardware-focused, 
 - [ ] BitBox02 Nova desktop-USB support is either implemented and separately certified or explicitly excluded from the first-release support matrix.
 - [ ] Blockstream Jade certification record complete.
 - [ ] Each record covers setup/import, reconnect, fingerprint, policy registration, address display, signing, user rejection, wrong device, changed PSBT, and firmware/HWI compatibility.
-- [ ] At least two independent devices complete a real 2-of-3 Testnet4 spend and descriptor recovery test.
+- [x] At least two independent devices complete a real 2-of-3 Testnet4 spend and descriptor recovery test. Exact packaged v0.4.88 commit `4fcd5f27` passed the Safe 3 plus Nova trusted-display, real deposit, 2-of-3 spend, finalization, broadcast, confirmation, restart/accounting, and genuine clean-profile descriptor/public-backup recovery campaign. This device-specific functional evidence does not certify the later candidate UX, the v0.4.89 rescan fix, or independent review. Evidence: [`hardware-certification.md`](hardware-certification.md), [`hardware-certification-trezor-safe-3-2026-08-16.md`](hardware-certification-trezor-safe-3-2026-08-16.md), and [`hardware-certification-bitbox02-nova-2026-08-17.md`](hardware-certification-bitbox02-nova-2026-08-17.md).
 
 ## Secrets and platforms
 

@@ -223,6 +223,27 @@ excluded. No address, transaction identifier, fingerprint, account key,
 descriptor, PSBT, device path, credential, RPC detail, amount, or label is
 retained.
 
+### Packaged v0.4.88 Testnet4 RBF, shared BIP48, and recovery checkpoint
+
+On the locally ad-hoc-signed Testnet4 package at exact commit `4fcd5f27`, the
+reviewer completed a Nova RBF replacement successfully. This is functional
+evidence for that exact candidate; it does not certify the send-review UX after
+later layout and denomination fixes, and it is not inherited by v0.4.89.
+
+The same candidate completed the shared Safe 3 plus Nova BIP48 campaign. Both
+devices independently displayed the same receive address, a real Testnet4
+deposit synchronized, and the devices supplied the required signatures for a
+real 2-of-3 spend. Threshold finalization, broadcast, confirmation, full
+restart, and accounting passed. A genuinely empty profile then imported the
+public descriptor/backup and reproduced the expected wallet state. This is the
+same criterion previously named packaged clean-profile recovery in the local
+Nova worksheet, so it is recorded once as a pass rather than left open under an
+ambiguous duplicate label.
+
+The separate clean-profile recovery procedure the reviewer explicitly deferred
+remains open, as does the independent tester/reviewer run. No result here
+certifies v0.4.89 or Whisper/BLE.
+
 ## Current decision
 
 **LOCAL REGTEST USB CORE PASS WITH LIMITATIONS — NOT RELEASE CERTIFIED.**
@@ -243,8 +264,10 @@ rejection/retry, USB interruption, wrong-device, successful-signature, and
 restart-persistence rows. Packaged v0.4.85 closes the copied-network active-chain
 rewind/sync regression and the shared funded BIP48 receive proof, deposit,
 rejection, interruption, signature-removal/reimport, threshold,
-broadcast/accounting, and self-transfer rows. RBF remains open because the
-candidate requested replacement policy through an undocumented RPC method
-before proposal construction. Packaged clean-profile recovery and Whisper/BLE
-also remain open. Independent review is deferred until the Testnet4 device
-campaigns are finalized.
+broadcast/accounting, and self-transfer rows. Exact v0.4.88 commit `4fcd5f27`
+closes Nova RBF and the shared BIP48 confirmation, restart/accounting, and
+packaged clean-profile public-backup recovery rows. This does not certify that
+candidate's superseded send-review UX or the later v0.4.89 candidate. The
+separately deferred recovery procedure and Whisper/BLE remain open. Independent
+tester/reviewer work is deferred until the Testnet4 device campaigns are
+finalized.

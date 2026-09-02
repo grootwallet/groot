@@ -192,6 +192,28 @@ exposed public wallet, signer, or transaction metadata and were excluded. No
 address, transaction identifier, fingerprint, account key, descriptor, PSBT,
 device path, credential, RPC detail, amount, or label is retained.
 
+## Packaged v0.4.88 Testnet4 funded BIP84 and shared BIP48 checkpoint
+
+On the locally ad-hoc-signed Testnet4 package at exact commit `4fcd5f27`, Safe 3
+passed funded BIP84 transaction review, signing, and broadcast, followed by
+wrong-device rejection. In the shared BIP48 policy Groot truthfully displayed
+**No setup needed** for Safe 3; it did not claim persistent policy registration.
+
+Safe 3 and BitBox02 Nova independently displayed and matched the same BIP48
+receive address. A real Testnet4 deposit synchronized, and the two devices
+supplied the required signatures for a real 2-of-3 spend. Threshold
+finalization, broadcast, confirmation, complete app restart, and accounting
+passed. A genuinely empty profile then imported the public descriptor/backup
+and reproduced the expected wallet state.
+
+The descriptor/public-backup recovery is recorded as the packaged BIP48
+clean-profile recovery pass because it matches that worksheet definition. The
+different clean-profile recovery procedure the reviewer explicitly deferred
+remains open, as does the independent tester/reviewer run. The BIP84
+full-history scan also remains open: the next candidate-bound action is to
+repeat it on exact v0.4.89 with Bitcoin Core fully synchronized. Nothing in
+this checkpoint certifies the v0.4.89 rescan fix or later send-review UX.
+
 Local sensitive evidence reviewed without copying identifiers: yes
 
 Certification decision: **LIMITED — LOCAL REGTEST AND RECOVERY PASS / RELEASE

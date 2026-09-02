@@ -130,17 +130,28 @@ Current local status on 2026-08-24:
   interruption with an unchanged successful retry, and independent clean-profile
   balance/history recovery pass. A bounded hostile unsigned-transaction mutation
   was also rejected before the preserved proposal reached 2 of 2 with the
-  original Jade and Safe 3; it remains unfinalized and unbroadcast. Only
-  public-network/package and independent-review rows remain pending. Its policy
-  status is always **No setup needed**, never **Policy verified**.
+  original Jade and Safe 3; it remains unfinalized and unbroadcast. Exact
+  packaged v0.4.88 commit `4fcd5f27` additionally passed funded BIP84
+  signing/broadcast and wrong-device rejection. The same candidate passed the
+  shared Safe 3 plus Nova BIP48 trusted-display, real Testnet4 deposit and
+  2-of-3 spend, confirmation, restart/accounting, and genuine clean-profile
+  descriptor/public-backup recovery campaign. Its policy status was correctly
+  **No setup needed**, never **Policy verified**. The exact v0.4.89 BIP84
+  full-history rescan, the separately deferred recovery procedure, and an
+  independent tester/reviewer run remain open.
 - BitBox02 Nova firmware 9.26.3 has a local HWI 3.2.0 Regtest USB core pass
   under self-review for BIP84 and BIP48 import, policy/address proof, funded
   rejection/retry, canonical signing, restart, Ledger wrong-device rejection,
   duplicate/foreign/mutated-PSBT rejection, interruption/retry, threshold
   broadcast/accounting, and independent clean-profile Groot JSON recovery with
   the funded source preserved and reopened intact. It is **not release
-  certified**: cold-cache reset was not isolated from the shared BitBoxApp cache, and Testnet4,
-  packaged-candidate, independent-review, and Whisper/BLE rows remain open.
+  certified**: cold-cache reset was not isolated from the shared BitBoxApp
+  cache. Exact packaged v0.4.88 commit `4fcd5f27` passed Nova RBF plus the
+  shared Safe 3/Nova BIP48 display, deposit, 2-of-3 spend, confirmation,
+  restart/accounting, and genuine clean-profile descriptor/public-backup
+  recovery rows. The RBF result is functional evidence for that candidate only
+  and does not certify its superseded UX or v0.4.89. The separately deferred
+  recovery procedure, independent tester/reviewer, and Whisper/BLE remain open.
   Original BitBox02 evidence is not inherited.
 - Packaged v0.4.28 Testnet4 testing with the original BitBox02 exposed that
   HWI 3.2.0 may wait for device-password entry inside aggregate discovery,
