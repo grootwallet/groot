@@ -26,10 +26,13 @@ plan was written, the inputs are:
   `bb94e468d0c83d42ea600dd5ed5ea1b411f00a31`;
 - the Developer ID signed and Apple-notarized v0.4.91 macOS arm64 Testnet4
   package and its 539-component SBOM, both bound to source commit `0849375d`;
-- unsigned independent-machine Build A: executable SHA-256
+- unsigned Build A evidence set: executable SHA-256
   `d4736d53c9f9dde8535242b03e021f1609d8a623ceeef0f9e682160c539b9bf6`
   and SBOM SHA-256
-  `f137a0a7527499749f9cdc433adccd036938298c0661ae1e9280f1a7f69fa2ca`;
+  `f137a0a7527499749f9cdc433adccd036938298c0661ae1e9280f1a7f69fa2ca`,
+  with same-machine provenance only; it is supporting evidence, not an
+  independent-machine reproduction (the required independent-machine Build B
+  and strict comparison remain pending);
 - Build B and the strict complete-evidence comparison, which remain pending;
 - this threat model, security model, accepted ADRs, dependency locks, release
   checklist, sanitized hardware summaries, backend evidence, recovery evidence,

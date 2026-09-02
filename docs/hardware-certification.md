@@ -2,6 +2,12 @@
 
 Virtual devices prove coordinator behavior, not vendor compatibility. Run this only with disposable Regtest, Signet, or Testnet4 wallets until the mainnet checklist is approved.
 
+Release-target declarations, not certification evidence: Trezor Model One
+firmware 1.14.1; Ledger Nano S Plus firmware 1.6.1. Ledger's exact Bitcoin app
+version remains unrecorded. Existing results below are not retroactively bound
+to these versions unless the applicable sanitized certification record
+documents them.
+
 ## Hardware certification matrix
 
 | Exact model                                 | Primary transport                                                                   | Credential rule                                                                                  | Local Regtest                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | Open work                                                                                                                                                               |
