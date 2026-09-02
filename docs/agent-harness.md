@@ -176,9 +176,17 @@ Current local status on 2026-08-24:
   wallets retained. The untouched source was restored byte-for-byte from a
   second matching safety copy, relaunched, unlocked, and physically confirmed
   with matching balance/history/labels/coins, restored Core setup, no corruption
-  error, and no Keychain prompt. Authenticated v2 migration and independent
-  review remain open. The broader funded functional evidence above remains
-  accurately bound to `fc2ac74f`.
+  error, and no Keychain prompt. A separate clean application profile then
+  created one disposable app-PIN external-signer wallet after first confirming
+  that an existing public descriptor is rejected as a duplicate without
+  changes. The new profile passed locked restart, correct-PIN unlock, public
+  state persistence, owner-only relocation, wrong- then correct-PIN handling,
+  controlled encrypted-verifier corruption rejection, valid-copy restoration,
+  cancelled deletion, confirmed deletion, and return to the empty chooser. The
+  original multi-wallet source was restored from its matching safety copy and
+  physically reconfirmed. Authenticated v2 migration and independent review
+  remain open. The broader funded functional evidence above remains accurately
+  bound to `fc2ac74f`.
 - Packaged v0.4.28 Testnet4 testing with the original BitBox02 exposed that
   HWI 3.2.0 may wait for device-password entry inside aggregate discovery,
   before returning the locked device row. The former 30-second discovery
