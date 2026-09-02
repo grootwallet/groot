@@ -229,9 +229,7 @@ test('multisig RBF explains a full-balance funding shortfall without a zero defa
   const rate = page.getByLabel('Custom acceleration fee rate');
   await expect(rate).toHaveValue('');
   await expect(rate).toHaveAttribute('placeholder', 'Enter a fee rate');
-  await expect(page.getByRole('alert')).toContainText(
-    'This replacement keeps the recipient amount unchanged.'
-  );
+  await expect(page.getByRole('alert')).toContainText('Not enough bitcoin to raise the fee.');
   await expect(page.getByRole('button', { name: 'Continue to sign' })).toBeDisabled();
 });
 

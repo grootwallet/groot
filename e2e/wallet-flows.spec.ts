@@ -1227,11 +1227,9 @@ test('RBF explains a full-balance funding shortfall without presenting zero as a
   const rate = page.getByLabel('Custom acceleration fee rate');
   await expect(rate).toHaveValue('');
   await expect(rate).toHaveAttribute('placeholder', 'Enter a fee rate');
+  await expect(page.getByRole('alert')).toContainText('Not enough bitcoin to raise the fee.');
   await expect(page.getByRole('alert')).toContainText(
-    'This replacement keeps the recipient amount unchanged.'
-  );
-  await expect(page.getByRole('alert')).toContainText(
-    'Available change and the wallet’s other spendable coins cannot cover the higher fee.'
+    'Receive more and wait for it to confirm, or wait for this transaction to confirm.'
   );
   await expect(page.getByRole('button', { name: 'Continue to sign' })).toBeDisabled();
 });

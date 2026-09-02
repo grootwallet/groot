@@ -322,10 +322,10 @@ export const sendCopy = {
     fr: 'Saisissez un taux de frais',
     es: 'Introduce una tasa de comisión'
   },
-  'This replacement keeps the recipient amount unchanged. Available change and the wallet’s other spendable coins cannot cover the higher fee. Receive another coin and wait for it to confirm, then try again—or wait for this transaction to confirm.':
+  'Not enough bitcoin to raise the fee. Receive more and wait for it to confirm, or wait for this transaction to confirm.':
     {
-      fr: 'Ce remplacement conserve le montant du destinataire. La monnaie disponible et les autres pièces dépensables du portefeuille ne couvrent pas les frais supplémentaires. Recevez une autre pièce et attendez sa confirmation avant de réessayer, ou attendez la confirmation de cette transaction.',
-      es: 'Este reemplazo conserva el importe del destinatario. El cambio disponible y las demás monedas gastables de la cartera no cubren la comisión más alta. Recibe otra moneda y espera a que se confirme antes de volver a intentarlo, o espera a que se confirme esta transacción.'
+      fr: 'Pas assez de bitcoins pour augmenter les frais. Recevez-en davantage et attendez sa confirmation, ou attendez la confirmation de cette transaction.',
+      es: 'No hay suficiente bitcoin para aumentar la comisión. Recibe más y espera a que se confirme, o espera a que se confirme esta transacción.'
     },
   Rescan: { fr: 'Rechercher à nouveau', es: 'Volver a buscar' },
   'Return to the saved policy reference without interrupting this signing request.': {

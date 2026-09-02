@@ -3,10 +3,10 @@ import type { Locale } from '$lib/i18n';
 import { WalletError, type AccelerationMethod } from './contracts';
 
 export const RBF_FUNDING_SHORTFALL_MESSAGE =
-  'This replacement keeps the recipient amount unchanged. Available change and the wallet’s other spendable coins cannot cover the higher fee. Receive another coin and wait for it to confirm, then try again—or wait for this transaction to confirm.';
+  'Not enough bitcoin to raise the fee. Receive more and wait for it to confirm, or wait for this transaction to confirm.';
 
 export function accelerationUnavailableTitle(method: AccelerationMethod): string {
-  return method === 'cpfp' ? 'CPFP unavailable' : 'RBF unavailable';
+  return method === 'cpfp' ? 'CPFP unavailable' : 'Can’t speed up transaction';
 }
 
 export function accelerationUnavailableDescription(
