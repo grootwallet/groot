@@ -220,11 +220,16 @@ Current local status on 2026-08-24:
   authoritative public identity, reject duplicate creation, and open the
   existing wallet. A following non-spending check matched a newly revealed
   Testnet4 receive address exactly between Groot and the signer's trusted
-  display. This does not claim transaction-signing coverage. The same-team HWI
-  helper alone carries the explicitly approved library-validation entitlement
-  required by its PyInstaller embedded runtime; Groot does not. Repeat the
-  remaining physical release-critical scope on this exact signed package before
-  transferring any broader lifecycle result.
+  display. The reviewer then used a previously certified signer for one
+  disposable Testnet4 payment: Groot's review matched before signing, the
+  bundled HWI returned a valid hardware signature, Bitcoin Core accepted the
+  finalized transaction, and a full app restart plus sync showed confirmed
+  outgoing activity with the expected fee, remaining balance, label, and
+  accounting. No wallet, signer, transaction, address, or node identifier is
+  retained. The same-team HWI helper alone carries the explicitly approved
+  library-validation entitlement required by its PyInstaller embedded runtime;
+  Groot does not. This focused result does not transfer the broader v0.4.90
+  lifecycle campaign or provide independent review.
 - Packaged v0.4.28 Testnet4 testing with the original BitBox02 exposed that
   HWI 3.2.0 may wait for device-password entry inside aggregate discovery,
   before returning the locked device row. The former 30-second discovery
