@@ -26,6 +26,7 @@
     WalletCards
   } from '@lucide/svelte';
   import Button from '$lib/components/Button.svelte';
+  import BuildIdentity from '$lib/components/BuildIdentity.svelte';
   import FieldCounter from '$lib/components/FieldCounter.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import PasswordField from '$lib/components/PasswordField.svelte';
@@ -35,7 +36,7 @@
   import LocalTimestamp from '$lib/components/LocalTimestamp.svelte';
   import { toast } from '$lib/stores/toasts';
   import { formatInteger, locale, t } from '$lib/i18n';
-  import { APP_VERSION, defaultConfig, networkName } from '$lib/config';
+  import { defaultConfig, networkName } from '$lib/config';
   import { isPrototypeWallet, walletService, WalletError } from '$lib/wallet';
   import { goto } from '$app/navigation';
   import { onDestroy, onMount } from 'svelte';
@@ -1382,7 +1383,7 @@
         >
       </div>
     </section>{/if}
-  <p class="version">Groot {APP_VERSION} · BDK {networkName(defaultConfig.network)}</p>
+  <BuildIdentity placement="settings" />
 </div>
 
 <Modal
