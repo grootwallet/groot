@@ -1044,6 +1044,7 @@ code {
   height: 5px;
   accent-color: var(--accent);
 }
+.initial-history-scan + .backup-verification-banner,
 .sync-progress + .backup-verification-banner {
   margin-top: 0;
 }
@@ -4785,6 +4786,9 @@ code {
 .credential-form {
   display: grid;
   gap: 15px;
+}
+.backup-unverified-note + .credential-form {
+  margin-top: 18px;
 }
 .credential-form .field {
   margin: 0;

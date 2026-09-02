@@ -325,18 +325,17 @@
     loadError = '';
     initialDataLoading = true;
     try {
-      const shellWallets = walletShell.profiles();
-      const shellSelectedWalletId = walletShell.selectedWalletId();
-      if (!shellWallets.length || !shellSelectedWalletId) {
+      // Profile-mutating routes refresh the shell after navigation. Read the
+      // authoritative registry here so this route cannot race that refresh and
+      // query the newly selected wallet using the previous wallet's kind.
+      const registry = await walletService.profiles();
+      if (!registry.wallets.length || !registry.selectedWalletId) {
         if (!(await walletService.exists())) {
           await goto('/welcome');
           return;
         }
       }
-      const [registry, nextSyncSource, networkSetupSources] = await Promise.all([
-        shellWallets.length && shellSelectedWalletId
-          ? Promise.resolve({ wallets: shellWallets, selectedWalletId: shellSelectedWalletId })
-          : walletService.profiles(),
+      const [nextSyncSource, networkSetupSources] = await Promise.all([
         walletService.syncSource(),
         walletService.networkSetupSources()
       ]);

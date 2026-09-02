@@ -154,6 +154,14 @@ Current local status on 2026-08-24:
   and does not certify its superseded UX or v0.4.89. The separately deferred
   recovery procedure, independent tester/reviewer, and Whisper/BLE remain open.
   Original BitBox02 evidence is not inherited.
+- Exact packaged v0.4.89 commit `fc2ac74f` passed the reviewer-operated
+  Testnet4 software-wallet create, copied-network-setup, wrong-passphrase,
+  reopen-without-Keychain-prompt, labeled receive and restart-persistence,
+  funded receive, send/broadcast, accounting, Activity, Coins, and relaunch
+  checks. The run found insufficient warning spacing, crowded amount/unit
+  presentation, and one false unsupported-wallet startup toast. These findings
+  are fixed in v0.4.90, but the physical evidence remains bound to `fc2ac74f`;
+  it is not silently transferred to the replacement package.
 - Packaged v0.4.28 Testnet4 testing with the original BitBox02 exposed that
   HWI 3.2.0 may wait for device-password entry inside aggregate discovery,
   before returning the locked device row. The former 30-second discovery

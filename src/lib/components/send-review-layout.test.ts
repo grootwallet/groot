@@ -13,8 +13,26 @@ const multisigSend = readFileSync(
 describe('send review layout', () => {
   it('keeps the denomination separated from the amount', () => {
     expect(amount).toMatch(
-      /\.formatted-amount\s*\{[^}]*display: inline-flex;[^}]*align-items: baseline;[^}]*gap: 0\.25em;/s
+      /\.formatted-amount\s*\{[^}]*display: inline-flex;[^}]*align-items: baseline;[^}]*gap: 0;/s
     );
+    expect(amount).toMatch(/\.formatted-amount > small\s*\{[^}]*margin-inline-start: 0\.4em;/s);
+  });
+
+  it('separates adjacent setup warnings and onboarding fields', () => {
+    expect(appCss).toMatch(
+      /\.initial-history-scan \+ \.backup-verification-banner,[\s\S]*?\.sync-progress \+ \.backup-verification-banner\s*\{[^}]*margin-top: 0;/s
+    );
+    expect(appCss).toMatch(
+      /\.backup-unverified-note \+ \.credential-form\s*\{[^}]*margin-top: 18px;/s
+    );
+  });
+
+  it('loads the authoritative selected profile before wallet-kind operations', () => {
+    const registryRead = overview.indexOf('const registry = await walletService.profiles()');
+    const proposalRead = overview.indexOf('walletService.paymentProposals()', registryRead);
+    expect(registryRead).toBeGreaterThan(-1);
+    expect(proposalRead).toBeGreaterThan(registryRead);
+    expect(overview).not.toContain('const shellWallets = walletShell.profiles()');
   });
 
   it('keeps wrapped permanent labels clear of review separators', () => {

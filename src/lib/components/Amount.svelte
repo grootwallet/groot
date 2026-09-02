@@ -36,8 +36,12 @@
   .formatted-amount {
     display: inline-flex;
     align-items: baseline;
-    gap: 0.25em;
+    gap: 0;
     max-width: 100%;
+  }
+
+  .formatted-amount > small {
+    margin-inline-start: 0.4em;
   }
 
   .interactive-amount {
