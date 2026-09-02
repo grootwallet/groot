@@ -253,6 +253,7 @@ pub fn load(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::{self, Write};
     use std::time::Instant;
 
     fn directory() -> std::path::PathBuf {
@@ -299,12 +300,14 @@ mod tests {
         }
         elapsed_ms.sort_by(f64::total_cmp);
 
-        println!(
+        writeln!(
+            io::stdout().lock(),
             "argon2id version=0x13 memory_kib={ARGON2_MEMORY_KIB} iterations={ARGON2_ITERATIONS} parallelism={ARGON2_PARALLELISM} output_bytes={KEY_BYTES} samples={SAMPLE_COUNT} min_ms={:.3} median_ms={:.3} max_ms={:.3}",
             elapsed_ms[0],
             elapsed_ms[SAMPLE_COUNT / 2],
             elapsed_ms[SAMPLE_COUNT - 1]
-        );
+        )
+        .expect("write calibration result");
     }
 
     #[test]
