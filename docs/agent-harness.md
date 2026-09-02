@@ -213,11 +213,13 @@ Current local status on 2026-08-24:
   a Developer ID signed, hardened-runtime, Apple-notarized and stapled macOS
   arm64 Testnet4 app. Deep strict verification, Gatekeeper assessment, offline
   ticket validation, packaged HWI 3.2.0 execution, and the signed-executable
-  binding in a fresh 539-component SBOM passed. The same-team HWI helper alone
-  carries the explicitly approved library-validation entitlement required by
-  its PyInstaller embedded runtime; Groot does not. Repeat the physical
-  release-critical scope on this exact signed package before transferring any
-  broader lifecycle result.
+  binding in a fresh 539-component SBOM passed. A reviewer then opened the
+  exact repository artifact without an unidentified-developer warning and
+  confirmed its displayed `v0.4.91 · 0849375d` identity. The same-team HWI
+  helper alone carries the explicitly approved library-validation entitlement
+  required by its PyInstaller embedded runtime; Groot does not. Repeat the
+  physical release-critical scope on this exact signed package before
+  transferring any broader lifecycle result.
 - Packaged v0.4.28 Testnet4 testing with the original BitBox02 exposed that
   HWI 3.2.0 may wait for device-password entry inside aggregate discovery,
   before returning the locked device row. The former 30-second discovery
