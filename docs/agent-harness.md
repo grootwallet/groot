@@ -203,6 +203,12 @@ Current local status on 2026-08-24:
   behavior; Groot still warns against digital storage and must never initiate
   or retain such a capture. Signed/notarized repetition and crash-artifact
   inspection remain open.
+- Exact packaged v0.4.91 commit `0849375d` passed the focused reviewer-operated
+  build-identity follow-up: the version and short commit were visible and the
+  copy control worked in the normal sidebar, shell-less wallet setup flows, and
+  Settings. This presentation-only result is bound to v0.4.91; the broader
+  portable-profile and macOS lifecycle evidence above remains bound to exact
+  packaged v0.4.90 commit `c6d0d5d2` and is not silently transferred.
 - Packaged v0.4.28 Testnet4 testing with the original BitBox02 exposed that
   HWI 3.2.0 may wait for device-password entry inside aggregate discovery,
   before returning the locked device row. The former 30-second discovery
