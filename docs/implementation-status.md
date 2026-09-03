@@ -7,10 +7,10 @@ candidate Bitcoin Improvement Proposals is
 [`bip-support.md`](bip-support.md). Any feature or dependency change that alters
 BIP support or its evidence updates that matrix and this ledger together.
 
-v0.4.92 is the post-v0.4.91 security-remediation source line. It closes the code and documentation dispositions from the independent baseline review of commit `2832acbb2f9aac3ed1b4079f70dd74d7277b2291`: future-mainnet exact-model HWI admission, final broadcast and RBF intent checks, frozen RBF/CPFP construction, expiring source-wallet authorization, recovery xpub network checks, cancellation-atomic policy evidence, credential zeroization, v2 migration failure handling, package-signing verification, deterministic SBOM ordering, and mutation-resistant release tripwires. It also discloses copied-profile offline guessing during onboarding. No persisted format changed and no migration is required. This does not make v0.4.92 a frozen candidate: v0.4.91 package and physical evidence stays historical, mainnet remains disabled, and the remediated diff still needs full validation and independent closing review. Details: [`security-remediation-2026-09-03.md`](security-remediation-2026-09-03.md).
+v0.4.92 is the post-v0.4.91 security-remediation source line. It closes the code and documentation dispositions from the independent baseline review of commit `2832acbb2f9aac3ed1b4079f70dd74d7277b2291`: future-mainnet exact-model HWI admission, final broadcast and RBF intent checks, frozen RBF/CPFP construction, expiring source-wallet authorization, recovery xpub network checks, cancellation-atomic policy evidence, credential zeroization, v2 migration failure handling, package-signing verification, deterministic SBOM ordering, and mutation-resistant release tripwires. It also discloses copied-profile offline guessing during onboarding. No persisted format changed and no migration is required. ADR 0055 now permits a separately isolated, non-distributable mainnet certification candidate; v0.4.91 package and physical evidence stays historical, and mainnet release remains blocked. Details: [`security-remediation-2026-09-03.md`](security-remediation-2026-09-03.md) and [`mainnet-closing-review-2026-09-03.md`](mainnet-closing-review-2026-09-03.md).
 
-The isolated mainnet-enablement preparation branch closes the three audited dormant
-command boundaries while keeping mainnet disabled. Standard multisig recovery from
+The isolated mainnet-enablement line closes the three audited command boundaries
+for the non-distributable ADR 0055 certification candidate. Standard multisig recovery from
 Groot or BSMS public backups now reconciles every signer against a recent live-HWI
 admission before any mainnet profile directory or database is created; recovered
 device metadata is derived from the admission rather than trusted from the backup.
@@ -24,8 +24,8 @@ migration is required. The follow-up Core-admission branch now requires a typed
 Rust-owned permit at both SQLite constructors, binds existing-wallet admission to
 the selected wallet and exact saved Core configuration, consumes new-wallet
 admission once, and covers every included creation/recovery path with symmetric
-rollback. Mainnet remains disabled; this boundary still requires independent
-review and enabled-path evidence. Coldcard Mk4 and Jade Classic remain the
+rollback. Mainnet distribution and ordinary use remain blocked; this boundary still
+requires independent human sign-off and enabled-path evidence. Coldcard Mk4 and Jade Classic remain the
 model-specific certification targets while ADR 0054 explicitly accepts HWI
 3.2.0's exact family-level runtime identities.
 

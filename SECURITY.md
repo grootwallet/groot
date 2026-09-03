@@ -1,8 +1,8 @@
 # Groot security
 
-Last review integration: 2026-09-01
+Last review integration: 2026-09-03
 
-Groot is security-sensitive wallet software under active development. The native implementation supports disposable Regtest testing and compile-time-isolated Signet/Testnet4 rehearsal builds. It has received bounded independent code review, but has not completed the full independent audit, physical hardware-wallet certification, funded public-network rehearsal, or mainnet release process. Do not use it with mainnet funds.
+Groot is security-sensitive wallet software under active development. The native implementation supports disposable Regtest testing, compile-time-isolated Signet/Testnet4 rehearsal builds, and the separately isolated ADR 0055 mainnet certification candidate. That candidate is authorized only for controlled certification and, after its preceding gates pass, a minimal-value owner-operated rehearsal. It is not authorized for distribution, ordinary use, or meaningful mainnet funds.
 
 This document summarizes the security posture and the hardening work present in this repository. Canonical controls are in [`docs/security-model.md`](docs/security-model.md); the attacker model and attack-vector register are in [`docs/mainnet-threat-model.md`](docs/mainnet-threat-model.md). Release authorization remains controlled by [`docs/mainnet-release-checklist.md`](docs/mainnet-release-checklist.md) and ADR 0012.
 
@@ -26,7 +26,7 @@ Reports should describe:
 - Svelte owns presentation and public-data orchestration through `WalletPort`; it is not wallet truth.
 - Bitcoin Core, Esplora responses, files, QR payloads, backups, descriptors, PSBTs, HWI output, and USB devices are treated as adversarial inputs.
 - Hardware wallets remain independent external signers. Groot never requests their seed or private keys.
-- External-signer imports accept only bounded public BIP84 material and reject seed fields, xprvs/tprvs, mainnet keys, ambiguous paths, and non-canonical descriptors.
+- External-signer imports accept only bounded public BIP84 material and reject seed fields, xprvs/tprvs, wrong-network keys, ambiguous paths, and non-canonical descriptors.
 - The Vercel application is a deterministic browser demonstration without a wallet backend, signing keys, authentication service, hosted database, or multi-tenant state.
 
 ## Implemented hardening
@@ -95,7 +95,7 @@ Reports should describe:
 - The HWI executable is selected from an absolute configured or known installation path, canonicalized, and required to be a regular file. Regtest permits the explicit developer installation used for certification. Public-network Unix builds additionally require the build-pinned `GROOT_HWI_SHA256`, root ownership, and non-writable ancestry; other production targets fail closed until equivalent platform-signature verification is implemented.
 - HWI subprocesses receive a cleared environment with only a Tauri-resolved canonical `HOME` restored for the BitBoxApp pairing cache. Dynamic selectors and payloads, including paths, fingerprints, descriptors, PSBTs, and bounded Trezor Model One PIN positions, travel through HWI's quoted stdin command protocol and are zeroized after use. The sole argv exception is initial BitBox single-key import: after Rust proves the cached scan contains exactly one BitBox family row, it executes a fixed documented BIP84 command containing only the chain, literal device type, address type, account, and range. No device path, fingerprint, address, descriptor, account key, PSBT, password, or other device identifier enters argv. Concurrent output reads are bounded, raw device stderr is discarded, and timeout, cancellation, or a parent exit with inherited pipes still open terminates and reaps the complete child process tree before the coordinator is reused.
 - Detected-but-locked devices remain visible with safe typed readiness states. Trezor empty-passphrase warnings fail closed until the user explicitly selects the seed-only standard wallet; Rust independently enforces that consent before import.
-- Mounted public-key files are capped at 256 KiB and reject private/recovery material, extended private keys, wrong-network origins, malformed fingerprints, and non-tpub account keys before Rust descriptor validation.
+- Mounted public-key files are capped at 256 KiB and reject private/recovery material, extended private keys, wrong-network origins, malformed fingerprints, and account keys that do not use the compiled network's extended-public-key encoding before Rust descriptor validation.
 - Every operation carries an explicit chain. One aggregate, validated discovery supplies only an opaque short-lived path hint; immediately before health, display, policy, or signing work, the same exclusive native lease reopens that path and requires the live type, fingerprint, derivation, and complete account xpub to match authoritative wallet metadata.
 - Duplicate HWI records for one connection path are rejected as ambiguous. The persisted BDK external and internal descriptors are revalidated against authenticated hardware-wallet metadata on every database open.
 - Software-wallet database opens are bound to both BIP84 descriptors re-derived from the decrypted mnemonic at unlock; the authenticated pair is removed on lock and idle expiry.
@@ -105,7 +105,7 @@ Reports should describe:
 
 ### Network and webview policy
 
-- Native wallet code is compile-time pinned to exactly one of Regtest, Signet, or Testnet4 with isolated application storage. Mainnet remains absent from the build allowlist and is rejected before opening wallet SQLite. Dormant candidate policy separately requires exact Bitcoin genesis, loopback Core, one recipient, and a 1,000,000-satoshi cap; none enables mainnet.
+- Native wallet code is compile-time pinned to exactly one of Regtest, Signet, Testnet4, or the separately configured ADR 0055 mainnet certification identity, each with isolated application storage. Only that dedicated candidate can select Bitcoin mainnet. Before it creates or opens wallet SQLite, trusted Rust requires purpose-, wallet-, configuration-, and time-bound admission of an authenticated, synchronized, loopback-only Bitcoin Core node on the exact Bitcoin genesis chain. Its trusted transaction policy permits one recipient and at most 1,000,000 satoshis; distribution remains blocked.
 - Local Bitcoin Core endpoints must be loopback. Remote endpoint policy rejects embedded credentials, cleartext non-loopback transport, forged presets, and network mismatches.
 - Tauri capabilities remain minimal: no shell, filesystem, generic HTTP, clipboard-read, or remote-origin capability is granted.
 - The Tauri CSP denies remote scripts, frames, objects, workers, and manifests. Camera media is limited to same-origin/blob capture for the explicit PSBT scanner and requires platform permission.
@@ -192,7 +192,7 @@ The implementation record, regression mapping, and remaining acceptance work are
 
 The supplied review of the main and mobile-coordination branches was independently rechecked against the exact diffs before integration. Its validated fixes were accepted, and two additional merge blockers found during re-review were corrected: alternate Tauri capability formats could bypass the capability gate, and an already-active iOS screen capture could precede recovery-view protection. The review map, correction commits, test evidence, and remaining physical/platform work are recorded in [`docs/security-review-integration-2026-08-30.md`](docs/security-review-integration-2026-08-30.md).
 
-This integration closes the reviewed code findings; it is not a complete penetration test, physical iOS assurance, or authorization for mainnet.
+This integration closes the reviewed code findings; it is not a complete penetration test, physical iOS assurance, or authorization for mainnet distribution.
 
 ## 2026-09-03 independent-review remediation
 
@@ -200,11 +200,11 @@ The independent baseline review of commit `2832acbb2f9aac3ed1b4079f70dd74d7277b2
 
 Production packaged-HWI verification now requires matching Developer ID teams, hardened runtime, secure timestamps, and the reviewed helper-only library-validation entitlement. The onboarding warning explicitly discloses offline guessing of copied encrypted profiles. The release owner accepts the current Argon2id parameters only for the capped limited-release design; a versioned KDF envelope remains mandatory before any cap or scope expansion.
 
-The complete disposition and residual-risk record is [`docs/security-remediation-2026-09-03.md`](docs/security-remediation-2026-09-03.md). It is not independent closing review, exact-candidate evidence, or mainnet authorization. The old notarized v0.4.91 artifact remains historical Testnet4 evidence only.
+The complete disposition and residual-risk record is [`docs/security-remediation-2026-09-03.md`](docs/security-remediation-2026-09-03.md). It is not independent closing review, exact-candidate evidence, or mainnet release authorization. The old notarized v0.4.91 artifact remains historical Testnet4 evidence only.
 
-## Mainnet blockers
+## Mainnet distribution blockers
 
-Mainnet remains intentionally unavailable. At minimum, release requires:
+The isolated ADR 0055 candidate is available only for certification. Mainnet distribution and ordinary use remain blocked. At minimum, release requires:
 
 1. independent external security review and remediation;
 2. reproducible signed builds, SBOM/provenance, reviewed update delivery, and pinned/verified HWI artifacts;

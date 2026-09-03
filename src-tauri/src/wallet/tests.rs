@@ -1179,7 +1179,7 @@ fn transaction_change_cannot_cross_the_configured_recovery_gap() {
         Bip84(master, KeychainKind::External),
         Bip84(master, KeychainKind::Internal),
     )
-    .network(Network::Regtest)
+    .network(NETWORK)
     .create_wallet_no_persist()
     .unwrap();
     let change = (0..=MIN_RECOVERY_GAP_LIMIT)
@@ -1215,7 +1215,7 @@ fn proposal_review_rejects_any_non_recipient_output_not_owned_by_the_wallet() {
             Bip84(master, KeychainKind::External),
             Bip84(master, KeychainKind::Internal),
         )
-        .network(Network::Regtest)
+        .network(NETWORK)
         .create_wallet_no_persist()
         .unwrap()
     }
