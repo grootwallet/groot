@@ -42,21 +42,16 @@ whose validated setup is persisted into the new encrypted profile only after
 profile creation. No environment flag, renderer assertion, or database-open
 exception may bypass this order.
 
-## Coldcard Mk4 and Jade Classic
+## Coldcard and Jade family decision
 
-Both remain intended exact-device targets, and their existing Regtest/Testnet4
-results remain valid evidence for those candidates. Bundled HWI 3.2.0 reports a
-non-EDGE Coldcard as `coldcard`/`coldcard` and serial Jade devices as `jade`/`jade`;
-it does not prove Mk4 or Classic. The safe inclusion paths are:
-
-1. implement and independently review a trusted native/device protocol that binds
-   exact model identity to the same live signer connection; or
-2. explicitly revise the release ADR to family-level support and independently
-   certify every model that can claim those family identifiers.
-
-Until one path is completed, the mainnet artifact must fail closed for those two
-families. User confirmation, USB path, label, and declared firmware are not trusted
-model proof.
+Coldcard Mk4 and Jade Classic remain the tested exact-device targets, and their
+existing Regtest/Testnet4 results remain evidence only for those candidates.
+Bundled HWI 3.2.0 reports a non-EDGE Coldcard as `coldcard`/`coldcard` and serial
+Jade devices as `jade`/`jade`; it does not prove Mk4 or Classic. ADR 0054 records
+the release owner's explicit decision to admit those exact family records at the
+mainnet runtime boundary. The residual risk is that another model using the same
+HWI record can pass admission. Such a model does not inherit certification or a
+support claim; release copy must disclose the family-level enforcement.
 
 ## Remaining release sequence
 

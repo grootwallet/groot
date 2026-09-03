@@ -2,8 +2,9 @@
 
 The 2026-09-03 independent-review remediation and isolated mainnet preparation
 change evidence, not supported BIP families. BIP84/BIP48 hardware admission is
-narrowed for a future mainnet build to trusted exact-model identifiers;
-HWI-ambiguous Coldcard/Jade identities cannot inherit certification. BIP48 recovery
+narrowed for a future mainnet build to trusted hardware identifiers. ADR 0054
+accepts HWI's exact Coldcard/Jade family records while keeping certification
+model-specific. BIP48 recovery
 from Groot and BSMS public backups requires fresh live-HWI admission before a
 mainnet profile can be created. BIP174 transaction finalization repeats the
 recipient/amount, frozen-input, RBF-original-intent, and descriptor-derived CPFP

@@ -8,11 +8,11 @@ Existing results below are not retroactively bound to these versions unless the
 applicable sanitized certification record documents them.
 
 Coldcard Mk4 and Jade Classic remain intended mainnet targets, and the physical
-results below remain valid exact-device rehearsal evidence. They are not yet
-runtime-admissible in a mainnet artifact: HWI 3.2.0 exposes only the broad
-`coldcard` and `jade` family identities. Inclusion requires trusted exact-model
-proof on the same live connection or an independently reviewed family-scope ADR;
-it does not require repeating unrelated successful Regtest/Testnet4 behavior.
+results below remain valid exact-device rehearsal evidence. Under ADR 0054, the
+future mainnet runtime admits HWI 3.2.0's exact `coldcard` and `jade` family
+records while still binding the live public signer identity. That deliberate
+family-level exception does not transfer either model's physical evidence or a
+support claim to another family member.
 
 ## Hardware certification matrix
 

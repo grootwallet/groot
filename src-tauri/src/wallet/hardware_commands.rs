@@ -195,10 +195,12 @@ fn approved_hwi_model(network: Network, device_type: &str, model: &str) -> bool 
         "ledger" => model == "ledger_nano_s_plus",
         "trezor" => matches!(model.as_str(), "trezor_1" | "trezor_safe_3"),
         "bitbox02" => matches!(model.as_str(), "bitbox02_btconly" | "bitbox02_nova_btconly"),
-        // HWI 3.2.0 reports only a family-level model for these devices. Keep
-        // their certified rehearsal paths available, but never let an
-        // ambiguous family identity inherit exact-model mainnet approval.
-        "coldcard" | "jade" => false,
+        // ADR 0054 deliberately approves HWI 3.2.0's family-level identities
+        // for Coldcard and Jade. Physical evidence remains model-specific,
+        // but the trusted runtime cannot distinguish models inside either
+        // family and therefore admits only these exact family records.
+        "coldcard" => model == "coldcard",
+        "jade" => model == "jade",
         _ => false,
     }
 }
@@ -998,7 +1000,7 @@ mod targeted_scan_tests {
     }
 
     #[test]
-    fn rehearsal_discovery_keeps_locked_devices_while_mainnet_requires_exact_models() {
+    fn mainnet_discovery_accepts_exact_models_and_approved_family_records() {
         assert!(approved_hwi_model(Network::Testnet4, "trezor", ""));
         assert!(approved_hwi_model(
             Network::Bitcoin,
@@ -1011,11 +1013,13 @@ mod targeted_scan_tests {
             "bitbox02",
             "bitbox02_nova_btconly"
         ));
+        assert!(approved_hwi_model(Network::Bitcoin, "coldcard", "coldcard"));
+        assert!(approved_hwi_model(Network::Bitcoin, "jade", "jade"));
         for (device_type, model) in [
             ("ledger", "ledger_nano_x"),
             ("trezor", ""),
-            ("coldcard", "coldcard"),
-            ("jade", "jade"),
+            ("coldcard", "coldcard_q"),
+            ("jade", "jade_plus"),
             ("bitbox02", "bitbox02_nova_multi"),
         ] {
             assert!(!approved_hwi_model(Network::Bitcoin, device_type, model));

@@ -23,8 +23,9 @@ The first limited mainnet candidate includes:
 
 - native BIP84 software single-key wallet creation, recovery, receive, signing,
   broadcast, restart, relocation, and deletion;
-- BIP84 external hardware-signer wallets using only exact model and firmware
-  combinations approved in the release matrix;
+- BIP84 external hardware-signer wallets using approved exact model and firmware
+  combinations, except for the explicitly accepted Coldcard and Jade HWI family
+  identities governed by ADR 0054;
 - standard BIP48 hardware-backed multisig using only approved signers.
 
 Guided delayed/recovery Miniscript policies, Payjoin, compact-filter sync,
@@ -43,8 +44,9 @@ isolation and presentation, backup verification, exact BIP39 passphrase
 semantics, creation-only credential policy, Argon2id calibration and offline
 guessing risk, portable encrypted-profile lifecycle, wrong credential,
 corruption, relocation, authenticated migration, signing, restart, recovery,
-and deletion. Hardware evidence must remain exact-model and exact-firmware; no
-family result is inherited.
+and deletion. Hardware evidence must remain exact-model and exact-firmware; ADR
+0054 permits family-level runtime admission for Coldcard and Jade but does not
+let one model inherit another model's certification evidence.
 
 ## Consequences
 
@@ -60,4 +62,4 @@ independent evidence.
 
 ## Implementation clarification — 2026-09-03
 
-Exact-model approval is enforced in the trusted HWI discovery boundary, not inferred from display copy. New mainnet single-key and multisig hardware wallets also require recent in-memory live-HWI admission bound to the exact fingerprint, account xpub, derivation path, and device family; renderer-supplied QR, file, manual, or replayed metadata cannot substitute for that proof. HWI 3.2.0 provides adequate distinct model identifiers for the approved Ledger Nano S Plus, Trezor Model One/Safe 3, and Bitcoin-only BitBox02 variants. It exposes only family-level identities for Coldcard and Jade, so those families remain rehearsal-capable but are excluded from a future mainnet build until a trusted exact-model proof is implemented or a later reviewed ADR narrows or revises the target matrix. Firmware versions remain exact release-evidence assertions; HWI does not securely attest them at runtime.
+Exact-model approval is enforced in the trusted HWI discovery boundary, not inferred from display copy. New mainnet single-key and multisig hardware wallets also require recent in-memory live-HWI admission bound to the exact fingerprint, account xpub, derivation path, and device family; renderer-supplied QR, file, manual, or replayed metadata cannot substitute for that proof. HWI 3.2.0 provides adequate distinct model identifiers for the approved Ledger Nano S Plus, Trezor Model One/Safe 3, and Bitcoin-only BitBox02 variants. It exposes only family-level identities for Coldcard and Jade. ADR 0054 explicitly accepts those two exact family records for the limited-mainnet runtime while retaining model-specific certification and disclosure. Firmware versions remain exact release-evidence assertions; HWI does not securely attest them at runtime.

@@ -21,7 +21,7 @@ const pinnedPolicySources = new Map([
   ['src-tauri/src/wallet.rs', '8e65b74bd9ab6d18e2e68088e34a3464ff56e21c53028de9de97d61e03edecb9'],
   [
     'src-tauri/src/wallet/hardware_commands.rs',
-    '63b97d62c1e7ac6f9bb7b4b0fcf2d60f93559ae3a06e7cb6844bea263e458358'
+    'b12947fb54938d40941464c1888f649005b187e1ccaa9fbcf4476d63ff89e4df'
   ],
   [
     'src-tauri/src/wallet/multisig_setup_commands.rs',

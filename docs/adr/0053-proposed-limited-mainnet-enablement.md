@@ -10,7 +10,9 @@
 ADR 0012 deliberately keeps mainnet unreachable until the complete release
 boundary has independent evidence. ADR 0052 fixes the first-release product
 scope as macOS desktop on Apple silicon with BIP84 software wallets, approved
-exact-model BIP84 hardware wallets, and standard BIP48 hardware multisig.
+BIP84 hardware wallets, and standard BIP48 hardware multisig. ADR 0054 accepts
+HWI's exact family records for Coldcard and Jade while keeping their evidence
+model-specific.
 
 This proposal makes the eventual enablement diff reviewable before it exists.
 It neither accepts residual risk nor authorizes a mainnet build.
@@ -26,8 +28,9 @@ revision of this ADR may authorize one dedicated mainnet build with:
   backend;
 - exactly one external recipient, a positive amount, no batch spending, and a
   maximum of 1,000,000 satoshis per transaction;
-- BIP84 software single-key wallets, approved exact-model BIP84 USB hardware
-  wallets, and standard BIP48 hardware multisig only;
+- BIP84 software single-key wallets, approved BIP84 USB hardware wallets under
+  the exact-model policy plus ADR 0054's two family exceptions, and standard
+  BIP48 hardware multisig only;
 - no guided delayed/recovery Miniscript, Payjoin, compact filters, remote Core,
   Tor/onion Core, public Esplora, mobile, Windows, or automatic updates; and
 - a visible mainnet identity and warning on onboarding, lock, wallet, review,
@@ -53,13 +56,13 @@ That pre-wallet admission flow is a blocking product and trusted-storage boundar
 not a release-script toggle.
 
 Coldcard Mk4 and Jade Classic remain named release targets because their existing
-Regtest/Testnet4 evidence is valid. Bundled HWI 3.2.0, however, reports only the
-family identities `coldcard` and `jade`; it cannot prove Mk4 or Classic. They may
-enter the first mainnet build only after a reviewed trusted model-query protocol
-binds the exact model to the same live connection, or after a separately reviewed
-ADR explicitly changes the release scope to family-level certification. User
-assertion, USB path, label text, and firmware declarations are not substitutes for
-trusted model identity.
+Regtest/Testnet4 evidence is valid. Bundled HWI 3.2.0 reports only the family
+identities `coldcard` and `jade`; it cannot prove Mk4 or Classic. ADR 0054
+explicitly accepts those two exact family records at runtime. Certification and
+release claims remain model-specific, and the release must disclose that another
+model reporting the same family identity can pass admission. User assertion, USB
+path, label text, and firmware declarations are not substitutes for trusted
+model identity.
 
 ## Exit conditions before acceptance
 
