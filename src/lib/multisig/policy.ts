@@ -1,4 +1,7 @@
-export const MULTISIG_ACCOUNT_PATH = "m/48'/1'/0'/2'";
+import { defaultConfig } from '$lib/config';
+
+export const MULTISIG_ACCOUNT_PATH =
+  defaultConfig.network === 'mainnet' ? "m/48'/0'/0'/2'" : "m/48'/1'/0'/2'";
 export const MIN_COSIGNERS = 3;
 export const MAX_COSIGNERS = 7;
 
@@ -90,8 +93,14 @@ export function validatePolicyDraft(draft: PolicyDraft): string[] {
     errors.push('Every master fingerprint must contain 8 hexadecimal characters.');
   if (cosigners.some((cosigner) => cosigner.derivationPath !== MULTISIG_ACCOUNT_PATH))
     errors.push(`Every v1 key must use ${MULTISIG_ACCOUNT_PATH}.`);
-  if (cosigners.some((cosigner) => !/^(tpub|upub|vpub)/.test(cosigner.xpub)))
-    errors.push('Every account key must use a test-network extended public key.');
+  const validAccountKey =
+    defaultConfig.network === 'mainnet' ? /^(xpub|ypub|zpub)/ : /^(tpub|upub|vpub)/;
+  if (cosigners.some((cosigner) => !validAccountKey.test(cosigner.xpub)))
+    errors.push(
+      defaultConfig.network === 'mainnet'
+        ? 'Every account key must use a mainnet extended public key.'
+        : 'Every account key must use a test-network extended public key.'
+    );
   if (new Set(cosigners.map((cosigner) => cosigner.fingerprint)).size !== cosigners.length)
     errors.push('Every signer must have a unique master fingerprint.');
   if (new Set(cosigners.map((cosigner) => cosigner.xpub)).size !== cosigners.length)
@@ -117,6 +126,9 @@ export function descriptorPreview(
   const keys = cosigners
     .map(normalizeCosigner)
     .sort((left, right) => left.fingerprint.localeCompare(right.fingerprint))
-    .map((cosigner) => `[${cosigner.fingerprint}/48'/1'/0'/2']${cosigner.xpub}/${branch}/*`);
+    .map(
+      (cosigner) =>
+        `[${cosigner.fingerprint}/${MULTISIG_ACCOUNT_PATH.slice(2)}]${cosigner.xpub}/${branch}/*`
+    );
   return `wsh(sortedmulti(${threshold},${keys.join(',')}))`;
 }

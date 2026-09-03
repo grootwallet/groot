@@ -29,6 +29,19 @@ pub enum MainnetCoreAdmissionPurpose {
     CreateNewWallet,
 }
 
+pub(super) fn ensure_mainnet_core_ready_for_admission(
+    initial_block_download: bool,
+) -> ApiResult<()> {
+    if initial_block_download {
+        Err(api_error(
+            "node_syncing",
+            "Bitcoin Core must finish synchronizing before a mainnet wallet can be opened or created.",
+        ))
+    } else {
+        Ok(())
+    }
+}
+
 pub(crate) fn profile_compatibility_for(
     profile: &WalletProfile,
     directory: &Path,
@@ -80,6 +93,12 @@ pub fn network_setup_sources(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> ApiResult<Vec<NetworkSetupSource>> {
+    if NETWORK == Network::Bitcoin {
+        return Err(api_error(
+            "unsupported_wallet_policy",
+            "Mainnet wallets must verify and retain their own local Bitcoin Core setup.",
+        ));
+    }
     require_unlocked(&app, &state)?;
     let registry = load_registry(&app)?;
     let unlocked = state.unlocked_wallets.lock().map_err(internal)?;
@@ -217,10 +236,15 @@ pub fn wallet_generate_mnemonic(
 }
 
 #[tauri::command]
-pub fn wallet_cancel_onboarding(state: State<'_, AppState>) -> ApiResult<()> {
+pub fn wallet_cancel_onboarding(
+    state: State<'_, AppState>,
+    preserve_mainnet_admission: Option<bool>,
+) -> ApiResult<()> {
     let _operation = operation_guard(&state)?;
     state.pending_mnemonic.lock().map_err(internal)?.take();
-    clear_mainnet_node_admission(&state)?;
+    if preserve_mainnet_admission != Some(true) {
+        clear_mainnet_node_admission(&state)?;
+    }
     Ok(())
 }
 
@@ -806,6 +830,7 @@ pub async fn mainnet_core_admit(
         let result = (|| {
             let client = candidate_rpc_client(&config, password.as_str())?;
             let status = checked_node_status(&client, config.clone())?;
+            ensure_mainnet_core_ready_for_admission(status.initial_block_download)?;
             *state
                 .pending_mainnet_node_admission
                 .lock()
@@ -1235,6 +1260,12 @@ pub async fn network_setup_adopt(
     credential: String,
 ) -> ApiResult<NodeStatusDto> {
     let credential = Zeroizing::new(credential);
+    if NETWORK == Network::Bitcoin {
+        return Err(api_error(
+            "unsupported_wallet_policy",
+            "Mainnet wallets cannot copy another wallet's Bitcoin Core setup.",
+        ));
+    }
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
         cancel_foreground_sync(&state)?;

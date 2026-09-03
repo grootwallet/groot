@@ -34,32 +34,32 @@ test('pins every reviewed mainnet-critical source byte', () => {
           ? `${read(path)}\nSUPPORTED_NETWORKS.push(hidden);`
           : read(path)
       ),
-    /changed after the mainnet-disabled policy snapshot/
+    /changed after the mainnet-candidate policy snapshot/
   );
 });
 
-test('browser gate tolerates formatting but rejects an added mainnet network', () => {
+test('browser gate accepts only the four reviewed build identities', () => {
   validateBrowserNetworkSource(
-    "export const SUPPORTED_NETWORKS = [\n 'signet', 'testnet4', 'regtest'\n] as const;"
+    "export const SUPPORTED_NETWORKS = [\n 'signet', 'testnet4', 'regtest', 'mainnet'\n] as const;"
   );
   assert.throws(
     () =>
       validateBrowserNetworkSource(
-        "export const SUPPORTED_NETWORKS = ['signet', 'testnet4', 'regtest', 'mainnet'] as const;"
+        "export const SUPPORTED_NETWORKS = ['signet', 'testnet4', 'regtest'] as const;"
       ),
     /unsafe/
   );
   assert.throws(
     () =>
       validateBrowserNetworkSource(`
-const decoy = \`export const SUPPORTED_NETWORKS = ['signet', 'testnet4', 'regtest'] as const;\`;
+const decoy = \`export const SUPPORTED_NETWORKS = ['signet', 'testnet4', 'regtest', 'mainnet'] as const;\`;
 export const SUPPORTED_NETWORKS = ['mainnet'] as const;`),
-    /mainnet|unsafe/
+    /unsafe/
   );
   assert.throws(
     () =>
       validateBrowserNetworkSource(
-        `export const SUPPORTED_NETWORKS = ['signet', 'testnet4', 'regtest', ...hidden] as const;`
+        `export const SUPPORTED_NETWORKS = ['signet', 'testnet4', 'regtest', 'mainnet', ...hidden] as const;`
       ),
     /unsafe/
   );
@@ -68,14 +68,14 @@ export const SUPPORTED_NETWORKS = ['mainnet'] as const;`),
 test('native build gate rejects a mainnet match arm', () => {
   const source = buildFixture(`
     "regtest" | "signet" | "testnet4" => {}
-    "mainnet" => {}
+    "mainnet" => enable_without_the_reviewed_single_arm()
   `);
   assert.throws(() => validateBuildScriptSource(source), /exact reviewed match/);
 });
 
-test('trusted release gate rejects true regardless of whitespace', () => {
+test('trusted release gate requires the dedicated compile-time mainnet identity', () => {
   validateReleasePolicySource(`
-const MAINNET_ENABLED : bool = false ;
+const MAINNET_ENABLED : bool = cfg!(groot_network = "mainnet") ;
 pub fn ensure_runtime_network_enabled(network: Network) -> Result<(), ReleasePolicyError> {
   if network == Network::Bitcoin && !MAINNET_ENABLED {
     return Err(ReleasePolicyError::MainnetDisabled);
@@ -87,19 +87,19 @@ pub fn ensure_runtime_network_enabled(network: Network) -> Result<(), ReleasePol
       validateReleasePolicySource(`
 const MAINNET_ENABLED: bool = true;
 pub fn ensure_runtime_network_enabled(network: Network) -> Result<(), ReleasePolicyError> { Ok(()) }`),
-    /not explicitly false/
+    /dedicated build cfg/
   );
   assert.throws(
     () =>
       validateReleasePolicySource(`
-const MAINNET_ENABLED: bool = false;
+const MAINNET_ENABLED: bool = cfg!(groot_network = "mainnet");
 pub fn ensure_runtime_network_enabled(_network: Network) -> Result<(), ReleasePolicyError> { Ok(()) }`),
     /exact fail-closed implementation/
   );
   assert.throws(
     () =>
       validateReleasePolicySource(`
-const MAINNET_ENABLED: bool = false;
+const MAINNET_ENABLED: bool = cfg!(groot_network = "mainnet");
 #[cfg(any())]
 pub fn ensure_runtime_network_enabled(network: Network) -> Result<(), ReleasePolicyError> {
   if network == Network::Bitcoin && !MAINNET_ENABLED { return Err(ReleasePolicyError::MainnetDisabled); }
@@ -110,7 +110,7 @@ pub fn ensure_runtime_network_enabled(_network: Network) -> Result<(), ReleasePo
   );
 });
 
-test('compiled network gate rejects a whitespace-obscured Bitcoin selection', () => {
+test('compiled network gate rejects an unscoped Bitcoin selection', () => {
   assert.throws(
     () => validateCompiledNetworkSource('pub const NETWORK : Network = Network::Bitcoin ;'),
     /exact reviewed set/
@@ -121,17 +121,17 @@ test('comments cannot hide live mainnet declarations or satisfy required guards'
   assert.throws(
     () =>
       validateBrowserNetworkSource(`
-// export const SUPPORTED_NETWORKS = ['signet', 'testnet4', 'regtest'] as const;
+// export const SUPPORTED_NETWORKS = ['signet', 'testnet4', 'regtest', 'mainnet'] as const;
 export const SUPPORTED_NETWORKS = ['mainnet'] as const;`),
     /unsafe/
   );
   assert.throws(
     () =>
       validateReleasePolicySource(`
-// const MAINNET_ENABLED: bool = false;
+// const MAINNET_ENABLED: bool = cfg!(groot_network = "mainnet");
 const MAINNET_ENABLED: bool = true;
 pub fn ensure_runtime_network_enabled(network: Network) -> Result<(), ReleasePolicyError> { Ok(()) }`),
-    /not explicitly false/
+    /dedicated build cfg/
   );
 });
 
@@ -139,19 +139,19 @@ test('indirection and decoy safe snippets cannot bypass native network checks', 
   assert.throws(
     () =>
       validateBuildScriptSource(`
-${buildFixture('"regtest" | "signet" | "testnet4" => {} _ => panic!("GROOT_BUILD_NETWORK must be exactly regtest, signet, or testnet4; mainnet is not compiled into this release"),')}
-if network == String::from("mainnet") { enable(); }`),
-    /exact reviewed match|live mainnet network literal/
+${buildFixture('"regtest" | "signet" | "testnet4" | "mainnet" => {} _ => panic!("GROOT_BUILD_NETWORK must be exactly regtest, signet, testnet4, or mainnet"),')}
+match network.as_str() { "mainnet" => enable(), _ => {} }`),
+    /exact reviewed match|not uniquely recognizable/
   );
   assert.throws(
     () =>
       validateBuildScriptSource(
         buildFixture(`
-  "regtest" | "signet" | "testnet4" => {}
-  _ => panic!("GROOT_BUILD_NETWORK must be exactly regtest, signet, or testnet4; mainnet is not compiled into this release"),
-`) + '\nmatch another { _ => {} }'
+  "regtest" | "signet" | "testnet4" | "mainnet" => {}
+  _ => panic!("GROOT_BUILD_NETWORK must be exactly regtest, signet, testnet4, or mainnet"),
+`) + '\nprintln!("cargo:rustc-cfg=groot_network=\\"mainnet\\"");'
       ),
-    /exact reviewed match/
+    /not bound/
   );
   assert.throws(
     () =>
@@ -159,6 +159,7 @@ if network == String::from("mainnet") { enable(); }`),
 pub const NETWORK: Network = Network::Signet;
 pub const NETWORK: Network = Network::Testnet4;
 pub const NETWORK: Network = Network::Regtest;
+#[cfg(groot_network = "mainnet")] pub const NETWORK: Network = Network::Bitcoin;
 const SELECTED: Network = Network::Bitcoin;
 pub const NETWORK: Network = SELECTED;`),
     /exact reviewed set/
@@ -169,6 +170,7 @@ pub const NETWORK: Network = SELECTED;`),
 #[cfg(any())] pub const NETWORK: Network = Network::Signet;
 #[cfg(any())] pub const NETWORK: Network = Network::Testnet4;
 #[cfg(any())] pub const NETWORK: Network = Network::Regtest;
+#[cfg(groot_network = "mainnet")] pub const NETWORK: Network = Network::Bitcoin;
 macro_rules! selected { () => { pub const NETWORK: Network = Network::Bitcoin; } }
 selected!();`),
     /generate|exact reviewed set/
@@ -180,7 +182,7 @@ selected!();`),
 #[cfg(groot_network = "testnet4")] pub const NETWORK: Network = Network::Testnet4;
 #[cfg(groot_network = "regtest")] pub const NETWORK: Network = Network::Regtest;
 #[cfg(groot_network = "mainnet")] pub static NETWORK: Network = Network::Bitcoin;`),
-    /exact reviewed set|mainnet cfg/
+    /exact reviewed set/
   );
 });
 
@@ -189,9 +191,9 @@ test('Rust lifetimes and nested comments cannot expose policy decoys', () => {
     () =>
       validateReleasePolicySource(`
 fn harmless<'a>() {}
-/* outer /* nested */ const MAINNET_ENABLED: bool = false; */
+/* outer /* nested */ const MAINNET_ENABLED: bool = cfg!(groot_network = "mainnet"); */
 const MAINNET_ENABLED: bool = true;`),
-    /not explicitly false/
+    /dedicated build cfg/
   );
 });
 

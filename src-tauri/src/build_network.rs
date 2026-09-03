@@ -63,6 +63,13 @@ pub const NAME: &str = "regtest";
 #[cfg(groot_network = "regtest")]
 pub const DEFAULT_RPC_URL: &str = "http://127.0.0.1:18443";
 
+#[cfg(groot_network = "mainnet")]
+pub const NETWORK: Network = Network::Bitcoin;
+#[cfg(groot_network = "mainnet")]
+pub const NAME: &str = "mainnet";
+#[cfg(groot_network = "mainnet")]
+pub const DEFAULT_RPC_URL: &str = "http://127.0.0.1:8332";
+
 pub const IS_REGTEST: bool = matches!(NETWORK, Network::Regtest);
 pub const PARAMETERS: NetworkParameters = parameters_for(NETWORK);
 pub const SINGLESIG_ACCOUNT_PATH: &str = PARAMETERS.singlesig_account_path;
@@ -79,20 +86,28 @@ mod tests {
     use std::str::FromStr;
 
     #[test]
-    fn compiled_identity_is_consistent_and_never_mainnet() {
-        assert_ne!(NETWORK, Network::Bitcoin);
+    fn compiled_identity_is_consistent() {
         let expected = match NETWORK {
             Network::Regtest => ("regtest", "http://127.0.0.1:18443"),
             Network::Signet => ("signet", "http://127.0.0.1:38332"),
             Network::Testnet4 => ("testnet4", "http://127.0.0.1:48332"),
-            Network::Bitcoin | Network::Testnet => panic!("unsupported compiled network"),
+            Network::Bitcoin => ("mainnet", "http://127.0.0.1:8332"),
+            Network::Testnet => panic!("unsupported compiled network"),
         };
         assert_eq!((NAME, DEFAULT_RPC_URL), expected);
         assert_eq!(IS_REGTEST, NETWORK == Network::Regtest);
         assert_eq!(PARAMETERS.network, NETWORK);
-        assert_eq!(PARAMETERS.extended_key_network, NetworkKind::Test);
-        assert_eq!(SINGLESIG_ACCOUNT_PATH, "m/84'/1'/0'");
-        assert_eq!(MULTISIG_ACCOUNT_PATH, "m/48'/1'/0'/2'");
+        let coin = if NETWORK == Network::Bitcoin { 0 } else { 1 };
+        assert_eq!(
+            PARAMETERS.extended_key_network,
+            if NETWORK == Network::Bitcoin {
+                NetworkKind::Main
+            } else {
+                NetworkKind::Test
+            }
+        );
+        assert_eq!(SINGLESIG_ACCOUNT_PATH, format!("m/84'/{coin}'/0'"));
+        assert_eq!(MULTISIG_ACCOUNT_PATH, format!("m/48'/{coin}'/0'/2'"));
     }
 
     #[test]

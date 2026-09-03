@@ -1,6 +1,6 @@
 # ADR 0053: Proposed limited mainnet enablement
 
-- Status: proposed and blocked; mainnet remains disabled
+- Status: proposed and blocked for release; an ADR 0055 certification build exists
 - Date: 2026-09-02
 - Would supersede: ADR 0012 only after every exit condition below is met
 - Extends: ADR 0026, ADR 0037, ADR 0052
@@ -14,8 +14,9 @@ BIP84 hardware wallets, and standard BIP48 hardware multisig. ADR 0054 accepts
 HWI's exact family records for Coldcard and Jade while keeping their evidence
 model-specific.
 
-This proposal makes the eventual enablement diff reviewable before it exists.
-It neither accepts residual risk nor authorizes a mainnet build.
+This proposal defines the eventual release decision. ADR 0055 now authorizes one
+isolated, non-distributable mainnet certification build so the exit conditions can
+be tested; it neither accepts residual risk nor authorizes distribution.
 
 ## Proposed decision
 
@@ -101,8 +102,9 @@ invokes the published incident-response procedure.
 
 ## Consequences
 
-ADR 0012 remains authoritative and `MAINNET_ENABLED` remains `false`. This
-proposal may be edited during review, but it cannot be marked accepted until
+ADR 0012 remains authoritative for distribution. `MAINNET_ENABLED` is true only
+when the dedicated compile-time `mainnet` identity is selected under ADR 0055.
+This proposal may be edited during review, but it cannot be marked accepted until
 the checklist links exact evidence for every exit condition. Accepting it later
 does not certify any unlisted platform, model, firmware, transport, backend, or
 wallet policy.

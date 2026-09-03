@@ -8,20 +8,28 @@ import { stripSourceComments } from '../quality/source-lexing.mjs';
 
 const repoRoot = resolve(fileURLToPath(new URL('../../', import.meta.url)));
 const pinnedPolicySources = new Map([
-  ['src/lib/config.ts', '3a8b9bdf46401edd7adb96d64de1a6f2b8314a05a732f662468aa30fd3682e2e'],
-  ['src-tauri/build.rs', '337855d79bc88136efc4ea576ebd50ac3036f745b9cf77275cb9c33fc3aff620'],
+  ['.env.mainnet', '1623f3f97de588daea2bbeae1f9c56ebc896b6bc2c22ac238563b46b688ced85'],
+  ['package.json', '7343a40cf30653a3d0446a8abff779f4da33a1f7b2ad63485c7f8347dcb1909e'],
+  [
+    'scripts/network/check-native-builds.sh',
+    '82b8b5de52c786b2c6d18fb8da90fd32f32a8c4714a3ed02866e923c9e81db36'
+  ],
+  ['src/lib/config.ts', '2341604c05d1ec82b8026bd31c33994613d71f3132db6a482fdb7b43e26e0072'],
+  ['src-tauri/build.rs', '1432516ef85a004cee6e9ee945dc30b7e48477c0b78429267a4fbe513cebdbce'],
   [
     'src-tauri/src/release_policy.rs',
-    '1240b0fb0789ecb4ea59279c86861b825ee4d4de6361d692ee1f37bcd26fd2ee'
+    'a32b27765989dc9826ff49ab46bfcb335e67cd5d56b0708aed05eff79991a965'
   ],
   [
     'src-tauri/src/build_network.rs',
-    'ff305684e79a6140db7b533d2fd23bc9288f8edf361793356ed99bee5064a534'
+    '24c2105c42f850abc4a5c82c6628094d16e2e30dc836dacdc019847a65f1ef68'
   ],
+  ['src-tauri/src/network.rs', 'dcf011fb789a0b690b1832a9245df5fc0199318f03a820d10f9a3b1c90f5d76b'],
+  ['src-tauri/src/registry.rs', '343aea20f5d09df6abd5c9fdba3b093efc6729c9ece8f180b27a150061753a18'],
   ['src-tauri/src/wallet.rs', '38c1fdf87b1eb637f5df5a2fba4742584a7875d532e2e2d2956c65df7ccd5ac6'],
   [
     'src-tauri/src/wallet/error_translation.rs',
-    'cc9fa6af863d74d5f05555cfd3de9db1dd2f583dd73571f856eb01bd6ab004ae'
+    'fc4d0e05f1d0441c1a4bdd3967719ec54a93f3db22b307a88b13c1cc1a33a4d5'
   ],
   [
     'src-tauri/src/wallet/explorer_commands.rs',
@@ -33,7 +41,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src-tauri/src/wallet/hardware_commands.rs',
-    '785da86d2d8efa2a6235c6cd33f3ad057ea5f6aef57c29773c9909ca7fc406ae'
+    '792ebde87790f0fd62bff4f2d687f4641cf4041aafbf7d8255e3ab4b8d04d02e'
   ],
   [
     'src-tauri/src/wallet/label_interchange.rs',
@@ -49,7 +57,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src-tauri/src/wallet/profile_commands.rs',
-    '72eb8ae3d7ee9e07ffb1f7ef3c6e75e729cbb8799914751e9b179665ec9c5062'
+    'a4b14e090bcf699b753330e3f78c29606ad4c52ff9a6ab040294b296a68cafff'
   ],
   [
     'src-tauri/src/wallet/payment_draft_commands.rs',
@@ -70,6 +78,50 @@ const pinnedPolicySources = new Map([
   [
     'src-tauri/src/wallet/verification_evidence.rs',
     '174dcb84686f4e4c7ae8707f9c79b659177ddc18851e4797fed5d1ca9b640b7c'
+  ],
+  [
+    'src-tauri/tauri.mainnet.conf.json',
+    '4f77b92faa441dbb75e5401b9dc7644ab28a5b98fb3ddb3e2b44e51e91caa58e'
+  ],
+  [
+    'scripts/release/build-unsigned-mainnet.sh',
+    '4429129dc468979b52755929d5c8ca454afb5cf94b55eb634ecd153120b381a2'
+  ],
+  [
+    'src/lib/components/AppShell.svelte',
+    '711f696daee5fc5bef56c9973a7dfd659d35b7c80bec3f2cfe032a2a4799f1b3'
+  ],
+  [
+    'src/routes/welcome/+page.svelte',
+    'c09dfb653683c98ab6bb626b9f83ead724906f2853c447c651973439b15e9b1a'
+  ],
+  [
+    'src/routes/unlock/+page.svelte',
+    '7f3449de3ec9ef2b051898ade6f900d662b3991d682bfb888e97550166d84e93'
+  ],
+  [
+    'src/routes/settings/+page.svelte',
+    'ba92bf8746a4ad0e04bf47ecb66fe6e3092c391deb78eabbf4b9849251d6456b'
+  ],
+  [
+    'src/routes/hardware/new/+page.svelte',
+    '305784ec5260941145f793fbf6c8a1dba2c929007f0b180fec945673a16f4c56'
+  ],
+  [
+    'src/routes/multisig/new/+page.svelte',
+    '7c013d530b40fc19210a76e0487651b8970338f35988e1ab387a9372cbcd5134'
+  ],
+  [
+    'src/lib/multisig/policy.ts',
+    'a06d5d465b3b9bb98f29b93310e4f988f0c5e39686483372733f720eb3ce65aa'
+  ],
+  [
+    'src/lib/multisig/cosigner-import.ts',
+    '95715d978345e0de6714640419702f96d15ca38013b4d2fee53cdb67857cad1e'
+  ],
+  [
+    'src/lib/locales/onboarding.ts',
+    'c733d8a64c7afe53bed249b85b1a493fd634c0cb11e7b45c1f8d2c1845c1d281'
   ]
 ]);
 
@@ -77,7 +129,7 @@ export function validatePinnedPolicySources(read) {
   for (const [path, expected] of pinnedPolicySources) {
     const actual = createHash('sha256').update(read(path)).digest('hex');
     if (actual !== expected) {
-      throw new Error(`${path} changed after the mainnet-disabled policy snapshot was reviewed`);
+      throw new Error(`${path} changed after the mainnet-candidate policy snapshot was reviewed`);
     }
   }
 }
@@ -98,14 +150,11 @@ export function validateBrowserNetworkSource(source) {
   const networks = [...match[1].matchAll(/['"]([^'"]+)['"]/g)].map((entry) => entry[1]);
   const nonLiteralElements = match[1].replace(/['"][^'"]+['"]/g, '').replace(/[\s,]/g, '');
   if (
-    networks.length !== 3 ||
+    networks.length !== 4 ||
     nonLiteralElements.length > 0 ||
-    !['signet', 'testnet4', 'regtest'].every((network) => networks.includes(network))
+    !['signet', 'testnet4', 'regtest', 'mainnet'].every((network) => networks.includes(network))
   ) {
     throw new Error(`browser network allowlist is unsafe: ${networks.join(', ')}`);
-  }
-  if (/['"]mainnet['"]/i.test(source)) {
-    throw new Error('browser source contains a live mainnet network literal');
   }
 }
 
@@ -131,15 +180,11 @@ export function validateBuildScriptSource(source) {
     .replace(/\s+/g, ' ')
     .trim();
   if (
-    !/^"regtest" \| "signet" \| "testnet4" => \{\} _ => panic!\( "GROOT_BUILD_NETWORK must be exactly regtest, signet, or testnet4; mainnet is not compiled into this release" \),?$/.test(
+    !/^"regtest" \| "signet" \| "testnet4" \| "mainnet" => \{\} _ => panic!\(\s*"GROOT_BUILD_NETWORK must be exactly regtest, signet, testnet4, or mainnet"\s*\),?$/.test(
       body
     )
   ) {
     throw new Error('native compile-time network allowlist is not the exact reviewed match');
-  }
-  const mainnetLiterals = [...source.matchAll(/"mainnet"/g)];
-  if (mainnetLiterals.length !== 0) {
-    throw new Error('native build contains a live mainnet network literal');
   }
   const cfgEmissions = [...source.matchAll(/cargo:rustc-cfg=groot_network/g)];
   if (
@@ -154,9 +199,13 @@ export function validateReleasePolicySource(source) {
   source = stripSourceComments(source, { rust: true });
   const code = stripSourceComments(source, { rust: true, maskStrings: true });
   rejectGeneratedPolicyCode(code, 'trusted release policy');
-  const matches = [...code.matchAll(/const\s+MAINNET_ENABLED\s*:\s*bool\s*=\s*(true|false)\s*;/g)];
-  if (matches.length !== 1 || matches[0][1] !== 'false') {
-    throw new Error('trusted-boundary mainnet gate is not explicitly false');
+  const matches = [
+    ...source.matchAll(
+      /const\s+MAINNET_ENABLED\s*:\s*bool\s*=\s*cfg!\s*\(\s*groot_network\s*=\s*"mainnet"\s*\)\s*;/g
+    )
+  ];
+  if (matches.length !== 1) {
+    throw new Error('trusted-boundary mainnet gate is not bound to the dedicated build cfg');
   }
   const guard = rustFunction(source, 'ensure_runtime_network_enabled')
     .body.replace(/\s+/g, '')
@@ -180,22 +229,20 @@ export function validateCompiledNetworkSource(source) {
   const assignments = [
     ...code.matchAll(/\b(?:pub\s+)?(?:const|static)\s+NETWORK\s*:\s*Network\s*=/g)
   ];
-  const expected = ['Signet', 'Testnet4', 'Regtest'];
-  if (declarations.length !== 3 || assignments.length !== 3) {
+  const expected = ['Signet', 'Testnet4', 'Regtest', 'Bitcoin'];
+  if (declarations.length !== 4 || assignments.length !== 4) {
     throw new Error('compiled wallet network declarations are not the exact reviewed set');
   }
   for (const declaration of declarations) {
     const cfg = declaration[1];
     const selected = declaration[2];
-    if (cfg !== selected.toLowerCase() || !expected.includes(selected)) {
+    const expectedCfg = selected === 'Bitcoin' ? 'mainnet' : selected.toLowerCase();
+    if (cfg !== expectedCfg || !expected.includes(selected)) {
       throw new Error(`compiled wallet network declaration is unsafe: ${cfg ?? 'missing'}`);
     }
   }
   if (/\b(?:pub\s+)?use\b[^;]*\bas\s+NETWORK\b/.test(code)) {
     throw new Error('compiled network source aliases another value as NETWORK');
-  }
-  if (/groot_network\s*=\s*"mainnet"/i.test(source)) {
-    throw new Error('compiled network source contains a mainnet cfg branch');
   }
 }
 
@@ -336,7 +383,9 @@ export function validateMainnetSourcePolicy(read) {
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
     validateMainnetSourcePolicy((path) => readFileSync(resolve(repoRoot, path), 'utf8'));
-    console.log('Mainnet source policy: compile-time and trusted-boundary gates remain disabled.');
+    console.log(
+      'Mainnet source policy: activation is confined to the dedicated compile-time build.'
+    );
   } catch (error) {
     console.error(
       `Mainnet source policy failed: ${error instanceof Error ? error.message : error}`

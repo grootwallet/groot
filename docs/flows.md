@@ -6,6 +6,12 @@ This document describes user-visible state transitions. The product specificatio
 
 `welcome → Generate software wallet → private recovery-word reveal → verify all 24 words now or defer → wallet passphrase → created → overview`
 
+In the isolated ADR 0055 mainnet candidate, every software, hardware, or standard
+multisig create/recover entry first requires the user to authenticate a synchronized
+Bitcoin Core RPC service on loopback. Rust verifies the exact mainnet genesis and
+issues a short-lived one-attempt creation admission before navigation or database
+creation. Mainnet never offers reuse of another wallet's setup.
+
 The generated words remain hidden until the user confirms their surroundings are private. After writing them down, the user is strongly encouraged to reconstruct all 24 from a shuffled pool in the exact original order, but may choose **Verify later** without blocking creation. Deferred verification offers two freshly authenticated native paths: users with the written backup go directly to the shuffled proof, while users who did not finish writing it down first revisit the privacy gate and ordered native backup sheet and then continue to the same proof. Merely viewing the words never marks the backup verified. The deterministic browser fixture supports tap/click and drag-and-drop. Production macOS performs presentation and challenge in native sheets so recovery words never cross Tauri IPC or enter webview state. A deferred wallet carries a persistent **Recovery backup not verified** warning on Overview and in Settings.
 
 - The wallet-type chooser uses three equal decision cards: software, hardware, and shared/recovery. Each card keeps its icon, title, one consequence-focused subtitle, and complexity cue inside the same target; helper copy is not detached below the action.
@@ -38,6 +44,13 @@ Wallet is the common top-level container. Software-key, hardware-key, multisig, 
 ## Unlock and deletion
 
 `wallet list → select wallet → focused unlock card → credential check in Rust → wallet` or `invalid_credential → focused unlock card`
+
+For a mainnet candidate profile, unlock first asks for the exact saved loopback RPC
+URL and username plus the current RPC password. Rust compares the public
+configuration with the selected wallet, authenticates Core, verifies sync state and
+the exact genesis, and only then permits the credential check/database open. The RPC
+password is cleared from renderer state immediately and no remote or compact-filter
+fallback is offered.
 
 For a legacy disposable Regtest hardware or multisig profile missing current public metadata or its local PIN verifier: `select profile → explicit unsupported-format explanation → recreate/recover guidance or explicit delete`. Credential entry is disabled. Groot does not infer missing identity metadata, reset the PIN, or mutate the saved files before deletion.
 

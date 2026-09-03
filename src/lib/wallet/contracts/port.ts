@@ -65,7 +65,7 @@ export interface WalletProfilesPort {
   session(): Promise<WalletSelection>;
   selectWallet(walletId: string): Promise<WalletSelection>;
   generateMnemonic(supplementalEntropy?: SupplementalEntropyInput): Promise<MnemonicPresentation>;
-  cancelOnboarding(): Promise<void>;
+  cancelOnboarding(preserveMainnetAdmission?: boolean): Promise<void>;
   createWallet(name: string, credential: string, backupVerified: boolean): Promise<void>;
   verifyBackup(credential: string): Promise<boolean>;
   revealAndVerifyBackup(credential: string): Promise<boolean>;
@@ -151,7 +151,7 @@ export interface WalletTransactionsPort {
 }
 
 export interface WalletHardwarePort {
-  cancelHardwareOperations(): Promise<void>;
+  cancelHardwareOperations(preserveMainnetAdmission?: boolean): Promise<void>;
   listHardwareDevices(): Promise<HardwareDevice[]>;
   listHardwareDevicesForTypes(deviceTypes: string[]): Promise<HardwareDevice[]>;
   findSavedHardwareDevice(signer: {

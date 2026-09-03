@@ -91,6 +91,9 @@ pub(super) fn network_config_api_error(error: NetworkConfigError) -> ApiError {
         NetworkConfigError::ProxyDnsLeak => {
             "Tor compact-filter sync requires manual numeric peers with public discovery disabled to prevent local DNS leaks."
         }
+        NetworkConfigError::UnsupportedSyncSource => {
+            "Mainnet wallets require the explicitly admitted local Bitcoin Core node for activity sync."
+        }
     };
     api_error("invalid_node_config", message)
 }
@@ -106,7 +109,13 @@ pub(super) fn policy_api_error(error: PolicyError) -> ApiError {
         PolicyError::UnsafeThreshold => "At least 2 signatures are required and the threshold cannot exceed the number of signers.",
         PolicyError::DuplicateFingerprint => "Every signer must have a unique master fingerprint.",
         PolicyError::DuplicateXpub => "Every signer must have a unique account xpub.",
-        PolicyError::InvalidDescriptor => "A key or descriptor is invalid. Use a regtest BIP48 account tpub.",
+        PolicyError::InvalidDescriptor => {
+            if NETWORK == bdk_wallet::bitcoin::Network::Bitcoin {
+                "A key or descriptor is invalid. Use a mainnet BIP48 account xpub."
+            } else {
+                "A key or descriptor is invalid. Use the compiled test-network BIP48 account tpub."
+            }
+        }
     };
     api_error(error.code(), message)
 }
@@ -181,9 +190,19 @@ pub(super) fn external_signer_api_error(error: ExternalSignerError) -> ApiError 
             "The signer fingerprint must contain exactly 8 hexadecimal characters."
         }
         ExternalSignerError::InvalidDerivation => {
-            "Use the test-chain BIP84 account path m/84'/1'/0'."
+            if NETWORK == bdk_wallet::bitcoin::Network::Bitcoin {
+                "Use the mainnet BIP84 account path m/84'/0'/0'."
+            } else {
+                "Use the test-chain BIP84 account path m/84'/1'/0'."
+            }
         }
-        ExternalSignerError::WrongNetwork => "Use a test-chain account tpub, not a mainnet xpub.",
+        ExternalSignerError::WrongNetwork => {
+            if NETWORK == bdk_wallet::bitcoin::Network::Bitcoin {
+                "Use a mainnet account xpub, not a test-network tpub."
+            } else {
+                "Use a test-chain account tpub, not a mainnet xpub."
+            }
+        }
         ExternalSignerError::InvalidDescriptor => {
             "The descriptor must be canonical public-only BIP84 single-sig."
         }

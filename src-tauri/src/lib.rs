@@ -224,6 +224,9 @@ mod runtime_tests {
             identity.commit == "unknown"
                 || (commit.len() == 40 && commit.bytes().all(|byte| byte.is_ascii_hexdigit()))
         );
-        assert_ne!(identity.network, "mainnet");
+        assert_eq!(
+            identity.network == "mainnet",
+            cfg!(groot_network = "mainnet")
+        );
     }
 }

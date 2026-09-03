@@ -13,6 +13,13 @@ use bdk_wallet::error::CreateTxError;
 use std::{net::TcpListener, thread};
 
 #[test]
+fn mainnet_core_admission_rejects_initial_block_download() {
+    let error = ensure_mainnet_core_ready_for_admission(true).unwrap_err();
+    assert_eq!(error.code, "node_syncing");
+    assert!(ensure_mainnet_core_ready_for_admission(false).is_ok());
+}
+
+#[test]
 fn transaction_observation_time_is_stable_across_snapshot_refreshes() {
     let db = Connection::open_in_memory().unwrap();
     init_app_schema(&db).unwrap();

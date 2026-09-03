@@ -206,7 +206,10 @@ fn approved_hwi_model(network: Network, device_type: &str, model: &str) -> bool 
 }
 
 #[tauri::command]
-pub async fn hardware_cancel_operations(state: State<'_, AppState>) -> ApiResult<()> {
+pub async fn hardware_cancel_operations(
+    state: State<'_, AppState>,
+    preserve_mainnet_admission: Option<bool>,
+) -> ApiResult<()> {
     state
         .pending_hardware_pins
         .lock()
@@ -218,7 +221,9 @@ pub async fn hardware_cancel_operations(state: State<'_, AppState>) -> ApiResult
         .lock()
         .map_err(internal)?
         .clear();
-    clear_mainnet_node_admission(&state)?;
+    if preserve_mainnet_admission != Some(true) {
+        clear_mainnet_node_admission(&state)?;
+    }
     tauri::async_runtime::spawn_blocking(crate::hardware::cancel_hardware_operations_and_wait)
         .await
         .map_err(internal)?

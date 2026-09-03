@@ -14,6 +14,9 @@ proposal format and no upstream BIP status changed. See
 The subsequent pre-wallet Core-admission interlock changes only backend/storage
 authorization order. It does not change descriptors, derivation, PSBT semantics,
 backup interchange, or support for any BIP.
+ADR 0055 makes the already reviewed BIP84/BIP48 mainnet parameter row reachable
+only in an isolated certification build. This changes network availability, not
+BIP semantics or the evidence status of any wallet, signer, or recovery path.
 
 Status: canonical implementation and candidate inventory as of 2026-09-02.
 

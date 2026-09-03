@@ -11,8 +11,7 @@ describe('locked wallet profile switching', () => {
     expect(unlockRoute).toContain(
       'const selectionChanged = selectedWalletId !== registry.selectedWalletId;'
     );
-    expect(unlockRoute).toContain(
-      "if (selectionChanged) { credential = ''; error = ''; resetConfirmation = ''; showReset = false; }"
-    );
+    expect(unlockRoute).toContain("if (selectionChanged) { credential = ''; corePassword = '';");
+    expect(unlockRoute).toContain("error = ''; resetConfirmation = ''; showReset = false;");
   });
 });

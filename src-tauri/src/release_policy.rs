@@ -2,19 +2,17 @@ use bdk_wallet::bitcoin::{constants::genesis_block, BlockHash, Network};
 
 use crate::network::ChainBackend;
 
-// This is deliberately false until ADR 0012 is superseded and every mainnet
-// checklist item is evidenced. Keeping the gate in the trusted boundary makes
-// a frontend/configuration mistake insufficient to open a mainnet database.
-const MAINNET_ENABLED: bool = false;
+// Mainnet is reachable only in the separately configured, compile-time mainnet
+// candidate. A frontend preference or environment change at runtime cannot
+// activate it in any rehearsal build.
+const MAINNET_ENABLED: bool = cfg!(groot_network = "mainnet");
 pub const FIRST_MAINNET_MAX_SEND_SATS: u64 = 1_000_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ReleasePolicyError {
     MainnetDisabled,
     BackendAdmissionRequired,
-    #[allow(dead_code, reason = "used when the disabled mainnet backend is wired")]
     WrongGenesis,
-    #[allow(dead_code, reason = "used when the disabled mainnet backend is wired")]
     UnsupportedBackend,
     InvalidAmount,
     AmountCapExceeded,
@@ -71,10 +69,6 @@ pub fn ensure_recovered_wallet_policy_enabled(
     Ok(())
 }
 
-#[allow(
-    dead_code,
-    reason = "dormant until an approved mainnet backend is wired"
-)]
 pub fn validate_first_mainnet_backend(
     backend: &ChainBackend,
     observed_genesis: BlockHash,
@@ -147,20 +141,29 @@ mod tests {
     use super::*;
 
     #[test]
-    fn mainnet_is_blocked_while_test_networks_are_unchanged() {
-        assert_eq!(
-            ensure_runtime_network_enabled(Network::Bitcoin),
-            Err(ReleasePolicyError::MainnetDisabled)
-        );
+    fn mainnet_is_compile_time_scoped_while_test_networks_are_unchanged() {
+        if cfg!(groot_network = "mainnet") {
+            assert_eq!(ensure_runtime_network_enabled(Network::Bitcoin), Ok(()));
+            assert_eq!(
+                ensure_database_open_enabled(Network::Bitcoin, false),
+                Err(ReleasePolicyError::BackendAdmissionRequired)
+            );
+            assert_eq!(ensure_database_open_enabled(Network::Bitcoin, true), Ok(()));
+        } else {
+            assert_eq!(
+                ensure_runtime_network_enabled(Network::Bitcoin),
+                Err(ReleasePolicyError::MainnetDisabled)
+            );
+            assert_eq!(
+                ensure_database_open_enabled(Network::Bitcoin, false),
+                Err(ReleasePolicyError::MainnetDisabled)
+            );
+        }
         for network in [Network::Regtest, Network::Signet, Network::Testnet] {
             assert_eq!(ensure_runtime_network_enabled(network), Ok(()));
             assert_eq!(ensure_database_open_enabled(network, false), Ok(()));
             assert_eq!(validate_spend(network, usize::MAX, u64::MAX), Ok(()));
         }
-        assert_eq!(
-            ensure_database_open_enabled(Network::Bitcoin, false),
-            Err(ReleasePolicyError::MainnetDisabled)
-        );
     }
 
     #[test]
@@ -259,10 +262,14 @@ mod tests {
     #[test]
     fn dormant_cpfp_policy_allows_only_a_wallet_owned_fee_child() {
         assert_eq!(validate_cpfp(Network::Regtest, 99, u64::MAX, false), Ok(()));
-        assert_eq!(
-            validate_cpfp(Network::Bitcoin, 0, 0, true),
-            Err(ReleasePolicyError::MainnetDisabled)
-        );
+        if cfg!(groot_network = "mainnet") {
+            assert_eq!(validate_cpfp(Network::Bitcoin, 0, 0, true), Ok(()));
+        } else {
+            assert_eq!(
+                validate_cpfp(Network::Bitcoin, 0, 0, true),
+                Err(ReleasePolicyError::MainnetDisabled)
+            );
+        }
         assert_eq!(validate_first_mainnet_cpfp(0, 0, true), Ok(()));
         assert_eq!(
             validate_first_mainnet_cpfp(1, 0, true),

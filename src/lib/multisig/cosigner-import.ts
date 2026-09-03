@@ -1,4 +1,5 @@
 import { MULTISIG_ACCOUNT_PATH } from './policy';
+import { defaultConfig } from '$lib/config';
 
 type PublicCosignerFile = {
   version?: unknown;
@@ -152,17 +153,26 @@ export function parsePublicCosignerFile(
       `${coldcardExportGuidance} Do not use Generic JSON or a device backup.`
     );
   }
-  if (xpub.startsWith('xpub')) {
+  if (defaultConfig.network !== 'mainnet' && /^(xpub|ypub|zpub)/.test(xpub)) {
     throw new PublicCosignerImportError(
       'wrong_network',
       'This Coldcard export is for Bitcoin mainnet.',
       'Groot is using Regtest. On Coldcard, open Advanced/Tools → Danger Zone → Testnet Mode → Regtest, then export the XPUB file again.'
     );
   }
-  if (!xpub.startsWith('tpub')) {
+  if (defaultConfig.network === 'mainnet' && /^(tpub|upub|vpub)/.test(xpub)) {
+    throw new PublicCosignerImportError(
+      'wrong_network',
+      'This Coldcard export is for a Bitcoin test network.',
+      'Groot is using Mainnet. On Coldcard, disable Testnet Mode, then export the XPUB file again.'
+    );
+  }
+  const validAccountKey =
+    defaultConfig.network === 'mainnet' ? /^(xpub|ypub|zpub)/ : /^(tpub|upub|vpub)/;
+  if (!validAccountKey.test(xpub)) {
     throw new PublicCosignerImportError(
       'missing_account_key',
-      'The file does not contain a test-network account key.',
+      `The file does not contain a ${defaultConfig.network === 'mainnet' ? 'mainnet' : 'test-network'} account key.`,
       `${coldcardExportGuidance} Do not use Generic JSON or a device backup.`
     );
   }

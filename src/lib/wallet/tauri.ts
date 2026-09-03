@@ -187,8 +187,8 @@ export class TauriWalletAdapter implements WalletPort {
     });
     return { mode: 'native', backupVerified };
   }
-  cancelOnboarding() {
-    return command<void>('wallet_cancel_onboarding');
+  cancelOnboarding(preserveMainnetAdmission = false) {
+    return command<void>('wallet_cancel_onboarding', { preserveMainnetAdmission });
   }
   createWallet(name: string, credential: string, _backupVerified: boolean) {
     return command<void>('wallet_create', { name, credential });
@@ -411,10 +411,10 @@ export class TauriWalletAdapter implements WalletPort {
   importLabels() {
     return command<import('./contracts').LabelImportResult | null>('bip329_labels_import');
   }
-  cancelHardwareOperations() {
+  cancelHardwareOperations(preserveMainnetAdmission = false) {
     this.#hardwareListRequest = null;
     this.#typedHardwareListRequests.clear();
-    return command<void>('hardware_cancel_operations');
+    return command<void>('hardware_cancel_operations', { preserveMainnetAdmission });
   }
   listHardwareDevices() {
     if (this.#hardwareListRequest) return this.#hardwareListRequest;

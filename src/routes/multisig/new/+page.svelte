@@ -495,11 +495,13 @@
   }
 
   onMount(async () => {
-    try {
-      networkSetupSource =
-        (await walletService.networkSetupSources()).find((source) => source.ready) ?? null;
-    } catch {
-      networkSetupSource = null;
+    if (defaultConfig.network !== 'mainnet') {
+      try {
+        networkSetupSource =
+          (await walletService.networkSetupSources()).find((source) => source.ready) ?? null;
+      } catch {
+        networkSetupSource = null;
+      }
     }
     try {
       const draft = await walletService.multisigSetupDraft();
@@ -2500,9 +2502,8 @@
         aria-label={translate($locale, 'Account xpub')}
         bind:value={xpub}
         rows="3"
-        placeholder={translate($locale, 'tpub…')}></textarea><small
-        >{translate($locale, 'Derivation:')} {MULTISIG_ACCOUNT_PATH}</small
-      ></label
+        placeholder={translate($locale, defaultConfig.network === 'mainnet' ? 'xpub…' : 'tpub…')}
+      ></textarea><small>{translate($locale, 'Derivation:')} {MULTISIG_ACCOUNT_PATH}</small></label
     >
     {#if keyError}<p class="form-error" role="alert">{keyError}</p>{/if}
     <div class="modal-footer">

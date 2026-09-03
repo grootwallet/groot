@@ -8,6 +8,7 @@ dist/
 !.env.regtest
 !.env.signet
 !.env.testnet4
+!.env.mainnet
 .regtest/
 .regtest-test/
 src-tauri/target/

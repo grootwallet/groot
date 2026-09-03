@@ -140,7 +140,9 @@
       ? 'http://127.0.0.1:18443'
       : defaultConfig.network === 'signet'
         ? 'http://127.0.0.1:38332'
-        : 'http://127.0.0.1:48332';
+        : defaultConfig.network === 'testnet4'
+          ? 'http://127.0.0.1:48332'
+          : 'http://127.0.0.1:8332';
   const localNodeConfig = (): CoreNodeConfig => ({
     backend: { type: 'local_core', url: localRpcUrl },
     auth: defaultConfig.network === 'regtest' ? 'cookie' : 'user_pass',
@@ -266,7 +268,9 @@
     [node, syncSource, networkSetupSources] = await Promise.all([
       walletService.nodeConfig(),
       walletService.syncSource(),
-      walletService.networkSetupSources()
+      defaultConfig.network === 'mainnet'
+        ? Promise.resolve([])
+        : walletService.networkSetupSources()
     ]);
     scan = await walletService.recoveryScanSettings();
     scanDraft = { ...scan };
@@ -425,6 +429,7 @@
     }
   }
   function setNodeLocation(type: 'local_core' | 'remote_core' | 'tor') {
+    if (defaultConfig.network === 'mainnet' && type !== 'local_core') return;
     node =
       type === 'local_core'
         ? localNodeConfig()
@@ -529,7 +534,7 @@
     }
   }
   function openSyncSource() {
-    syncSourceType = syncSource.type;
+    syncSourceType = defaultConfig.network === 'mainnet' ? 'bitcoin_core' : syncSource.type;
     if (syncSource.type === 'compact_filters') {
       syncDiscoverPeers = syncSource.discoverPeers;
       syncPeers = syncSource.peers.join('\n');
@@ -1306,7 +1311,8 @@
           ></span
         ><ChevronRight size={16} /></button
       >
-      {#if reusableNetworkSetups.length > 0}<button onclick={openNetworkReuse}
+      {#if defaultConfig.network !== 'mainnet' && reusableNetworkSetups.length > 0}<button
+          onclick={openNetworkReuse}
           ><span class="setting-icon"><RefreshCw size={18} /></span><span
             ><strong>{translate($locale, 'Use an existing network setup')}</strong><small
               >{translate(
@@ -1712,17 +1718,26 @@
     syncError = '';
   }}
 >
-  <div class="theme-choice node-location">
-    <button
-      class:active={syncSourceType === 'bitcoin_core'}
-      onclick={() => (syncSourceType = 'bitcoin_core')}>Bitcoin Core</button
-    ><button
-      class:active={syncSourceType === 'compact_filters'}
-      onclick={() => (syncSourceType = 'compact_filters')}
-      >{translate($locale, 'Compact filters')}</button
-    >
-  </div>
-  {#if syncSourceType === 'compact_filters'}
+  {#if defaultConfig.network !== 'mainnet'}<div class="theme-choice node-location">
+      <button
+        class:active={syncSourceType === 'bitcoin_core'}
+        onclick={() => (syncSourceType = 'bitcoin_core')}>Bitcoin Core</button
+      ><button
+        class:active={syncSourceType === 'compact_filters'}
+        onclick={() => (syncSourceType = 'compact_filters')}
+        >{translate($locale, 'Compact filters')}</button
+      >
+    </div>{/if}
+  {#if defaultConfig.network === 'mainnet'}
+    <div class="warning-box danger">
+      <strong>{translate($locale, 'Mainnet requires the admitted local Bitcoin Core node.')}</strong
+      >
+      {translate(
+        $locale,
+        'Compact-filter and remote-node fallbacks are disabled so the reviewed trust boundary cannot change silently.'
+      )}
+    </div>
+  {:else if syncSourceType === 'compact_filters'}
     <div class="warning-box">
       <strong>{translate($locale, 'Confirmed activity only.')}</strong>
       {translate(
@@ -2002,12 +2017,12 @@
     <button
       class:active={node.backend.type === 'local_core'}
       onclick={() => setNodeLocation('local_core')}>{translate($locale, 'This Mac')}</button
-    ><button
-      class:active={node.backend.type === 'remote_core' && !node.torProxy}
-      onclick={() => setNodeLocation('remote_core')}>{translate($locale, 'Remote TLS')}</button
-    ><button class:active={!!node.torProxy} onclick={() => setNodeLocation('tor')}
-      >{translate($locale, 'Tor onion')}</button
-    >
+    >{#if defaultConfig.network !== 'mainnet'}<button
+        class:active={node.backend.type === 'remote_core' && !node.torProxy}
+        onclick={() => setNodeLocation('remote_core')}>{translate($locale, 'Remote TLS')}</button
+      ><button class:active={!!node.torProxy} onclick={() => setNodeLocation('tor')}
+        >{translate($locale, 'Tor onion')}</button
+      >{/if}
   </div>
   <label class="field"
     ><span>{translate($locale, 'RPC URL')}</span><input
@@ -2023,7 +2038,9 @@
     /><small
       >{translate(
         $locale,
-        'Credentials in URLs are rejected. TLS uses system trust roots; Tor accepts only .onion\n      destinations.'
+        defaultConfig.network === 'mainnet'
+          ? 'Mainnet requires a Bitcoin Core RPC endpoint on this Mac. Credentials in URLs are rejected.'
+          : 'Credentials in URLs are rejected. TLS uses system trust roots; Tor accepts only .onion\n      destinations.'
       )}</small
     ></label
   >

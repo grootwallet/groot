@@ -1,8 +1,8 @@
 # Mainnet pre-wallet Core admission — 2026-09-03
 
-Status: implemented and internally post-patch reviewed on an isolated preparation
-branch; external independent review and enabled-path evidence are pending, and
-mainnet remains disabled.
+Status: implemented and independently reviewed on the isolated preparation branch.
+ADR 0055 permits enabled-path certification in a non-distributable candidate;
+live-Core candidate evidence remains pending.
 
 ## Security invariant
 
@@ -48,9 +48,10 @@ wallet session is not an admission.
   admission exit.
 - Explicit hardware-operation cancellation also clears pending Core admission, so
   returning to wallet creation requires a fresh preflight.
-- Mainnet onboarding never offers cross-wallet network-setup adoption. The exact
-  setup that passed admission is the only setup persisted into a new profile;
-  cross-wallet adoption remains available only on test networks.
+- Mainnet onboarding never offers cross-wallet network-setup adoption, and both
+  native listing and adoption commands reject it. The exact setup that passed
+  admission is the only setup persisted into a new profile; cross-wallet adoption
+  remains available only on test networks.
 
 ## Compatibility and scope
 
@@ -59,10 +60,10 @@ proposals, and network-settings formats are unchanged; no migration is required.
 Regtest, Signet, and Testnet4 database behavior is unchanged. This change affects
 backend authorization order only and has no BIP impact.
 
-The branch does not add a mainnet build target, enable mainnet, accept ADR 0053,
-freeze a release candidate, or transfer any Testnet4 physical evidence. Those
-steps remain separately gated by independent review, two-machine reproducibility,
-signed/notarized candidate validation, physical device certification, and the
+The follow-on ADR 0055 branch adds a dedicated mainnet build target without
+accepting ADR 0053 or transferring any Testnet4 physical evidence. Distribution
+remains gated by review of that exact diff, two-machine reproducibility,
+signed/notarized candidate validation, physical-device certification, and the
 minimal-value mainnet rehearsal.
 
 ## Reproducible validation

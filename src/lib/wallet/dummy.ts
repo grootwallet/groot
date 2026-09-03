@@ -170,7 +170,7 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
         )
     };
   }
-  async cancelOnboarding() {}
+  async cancelOnboarding(_preserveMainnetAdmission = false) {}
   async createWallet(name: string, credential: string, backupVerified: boolean) {
     if (!name.trim()) throw new WalletError('invalid_wallet_name', 'A wallet name is required.');
     if (!credential) throw new WalletError('invalid_credential', 'A passphrase / PIN is required.');
@@ -1080,7 +1080,7 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       );
     this._trezorPinUnlocked = true;
   }
-  async cancelHardwareOperations() {}
+  async cancelHardwareOperations(_preserveMainnetAdmission = false) {}
   async checkHardwareCosigner(cosigner: PolicyDraft['cosigners'][number], deviceId: string) {
     await new Promise((resolve) => setTimeout(resolve, 200));
     const checkedAt = new Date().toISOString();
