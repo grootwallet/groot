@@ -50,6 +50,7 @@ export const WALLET_ERROR_CODES = [
   'hardware_unavailable',
   'hardware_pairing_required',
   'hardware_policy_unsupported',
+  'hardware_not_approved',
   'hardware_timeout',
   'hardware_busy',
   'hardware_cancelled',
@@ -102,6 +103,7 @@ export const WALLET_ERROR_CODES = [
   'invalid_key',
   'policy_too_complex',
   'policy_compilation_failed',
+  'unsupported_wallet_policy',
   'internal_error'
 ] as const;
 

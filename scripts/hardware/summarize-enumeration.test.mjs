@@ -78,3 +78,28 @@ test('rejects unreadable and empty enumeration responses safely', () => {
     status: 2
   });
 });
+
+test('labels removed legacy devices unsupported without exposing identifiers', () => {
+  const result = summarizeEnumeration(
+    JSON.stringify([
+      {
+        type: 'keepkey',
+        model: 'keepkey',
+        fingerprint: 'sensitive-fingerprint',
+        path: '/sensitive/device/path'
+      },
+      {
+        type: 'digitalbitbox',
+        model: 'digitalbitbox',
+        fingerprint: 'other-sensitive-fingerprint',
+        path: '/other/sensitive/device/path'
+      }
+    ])
+  );
+
+  assert.deepEqual(result, {
+    lines: ['keepkey: unsupported by Groot', 'digitalbitbox: unsupported by Groot'],
+    status: 3
+  });
+  assert.doesNotMatch(result.lines.join(' '), /fingerprint|\/sensitive\/|other-sensitive/);
+});

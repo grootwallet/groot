@@ -24,7 +24,7 @@ function device(label: string, model: string): HardwareDevice {
 describe('Trezor PIN presentation', () => {
   it('normalizes transport labels to a human device brand', () => {
     expect(hardwareBrand(device('trezor_1', 'trezor_1'))).toBe('Trezor');
-    expect(hardwareBrand(device('KeepKey #1', 'keepkey'))).toBe('KeepKey');
+    expect(hardwareBrand(device('KeepKey #1', 'keepkey'))).toBe('hardware signer');
     expect(hardwareBrand(device('Unknown', 'hid'))).toBe('hardware signer');
     expect(hardwareBrand(null)).toBe('hardware signer');
   });

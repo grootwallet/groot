@@ -343,9 +343,7 @@ pub(super) fn missing_hardware_fingerprint(device_type: &str) -> ApiError {
         "jade" => "Jade is still locked. Select it again and enter your PIN on Jade when prompted."
             .to_owned(),
         "coldcard" => "Unlock Coldcard and enable USB communication, then scan again.".to_owned(),
-        "trezor" | "keepkey" => {
-            "Unlock the device using Groot's PIN-matrix flow, then scan again.".to_owned()
-        }
+        "trezor" => "Unlock the device using Groot's PIN-matrix flow, then scan again.".to_owned(),
         _ => {
             "Unlock the hardware signer and put it in its Bitcoin app, then scan again.".to_owned()
         }

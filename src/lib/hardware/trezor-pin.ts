@@ -24,7 +24,6 @@ export function trezorPinGridAvailable(
 export function hardwareBrand(device: HardwareDevice | null): string {
   const identity = `${device?.label ?? ''} ${device?.model ?? ''}`.toLowerCase();
   if (identity.includes('trezor')) return 'Trezor';
-  if (identity.includes('keepkey')) return 'KeepKey';
   return 'hardware signer';
 }
 

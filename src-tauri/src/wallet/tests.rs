@@ -2233,8 +2233,12 @@ fn not_ready_hardware_remains_visible_with_safe_device_specific_actions() {
         needs_passphrase_sent: false,
         warnings: vec![],
     });
-    assert_eq!(keepkey.status, "needs_pin");
-    assert_eq!(keepkey.action, "prompt_pin");
+    assert_eq!(keepkey.status, "not_ready");
+    assert_eq!(keepkey.action, "retry");
+    assert_eq!(
+        keepkey.message,
+        "This hardware signer is not supported by Groot."
+    );
 
     let ready = hardware_device_dto(HwiDevice {
         capability: "opaque-device".to_owned(),

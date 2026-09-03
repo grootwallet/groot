@@ -50,6 +50,10 @@ export const hardwareCopy = {
       fr: 'La version HWI 3.2.0 intégrée à cette version de Groot ne prend pas en charge ce modèle Trezor. Mettez Groot à jour lorsqu’une version vérifiée ajoutera sa prise en charge, puis relancez la recherche.',
       es: 'La versión HWI 3.2.0 incluida en esta versión de Groot no admite este modelo de Trezor. Actualiza Groot cuando una versión revisada añada compatibilidad y vuelve a buscar.'
     },
+  'This hardware signer is not supported by Groot.': {
+    fr: 'Ce signataire matériel n’est pas pris en charge par Groot.',
+    es: 'Groot no admite este firmante físico.'
+  },
   'Locked. Start the PIN matrix, then tap the blank cells matching the locations shown on the device.':
     {
       fr: 'Verrouillé. Démarrez la matrice du PIN, puis touchez les cases vides correspondant aux positions affichées sur l’appareil.',

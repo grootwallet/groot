@@ -34,12 +34,37 @@ const productionSources = [...sourceFiles('src'), ...sourceFiles('src-tauri/src'
 );
 
 export function hasUnreviewedLogging(content) {
-  return /(?:\bconsole\s*(?:\.\s*(?:log|debug|info|warn|error|trace|dir|table|group|groupCollapsed)|\[\s*['"](?:log|debug|info|warn|error|trace|dir|table|group|groupCollapsed)['"]\s*\])\s*\(|\b(?:println|eprintln|print|eprint|dbg)!\s*\(|\b(?:tracing|log)::|\b(?:std::)?io::stderr\s*\()/.test(
+  return /(?:\bconsole\s*(?:(?:\?\.|\.)\s*(?:log|debug|info|warn|error|trace|dir|table|group|groupCollapsed)|(?:\?\.)?\s*\[\s*['"](?:log|debug|info|warn|error|trace|dir|table|group|groupCollapsed)['"]\s*\])\s*\(|\b(?:println|eprintln|print|eprint|dbg)!\s*\(|\b(?:tracing|log)\s*::|\b(?:std\s*::\s*)?io\s*::\s*(?:stdout|stderr)\s*\()/.test(
     content
   );
 }
 
-const logged = productionSources.find(({ content }) => hasUnreviewedLogging(content));
+export function stripRustTestModules(content) {
+  const masked = stripSourceComments(content, { rust: true, maskStrings: true });
+  const ranges = [];
+  for (const match of masked.matchAll(
+    /#\s*\[\s*cfg\s*\(\s*test\s*\)\s*\]\s*mod\s+[A-Za-z0-9_]+\s*\{/g
+  )) {
+    const start = match.index;
+    const bodyStart = start + match[0].lastIndexOf('{');
+    let depth = 0;
+    for (let index = bodyStart; index < masked.length; index += 1) {
+      if (masked[index] === '{') depth += 1;
+      if (masked[index] === '}' && --depth === 0) {
+        ranges.push([start, index + 1]);
+        break;
+      }
+    }
+  }
+  for (const [start, end] of ranges.reverse()) {
+    content = `${content.slice(0, start)}${' '.repeat(end - start)}${content.slice(end)}`;
+  }
+  return content;
+}
+
+const logged = productionSources.find(({ path, content }) =>
+  hasUnreviewedLogging(path.endsWith('.rs') ? stripRustTestModules(content) : content)
+);
 if (logged) fail(`unreviewed production logging exists in ${logged.path}`);
 
 export function sensitiveStringIsWrappedBeforeFallibleWork(content) {
@@ -248,17 +273,37 @@ try {
 }
 
 const packageJson = JSON.parse(read('package.json'));
-const dependencyNames = Object.keys({
+const dependencyEntries = Object.entries({
   ...packageJson.dependencies,
   ...packageJson.devDependencies
 });
 const telemetryPattern =
-  /(?:analytics|telemetry|sentry|datadog|segment|mixpanel|posthog|crashlytics|opentelemetry|amplitude|bugsnag|rollbar|new[.-]?relic)/i;
-const telemetryDependency = dependencyNames.find((name) => telemetryPattern.test(name));
+  /(?:analytics|telemetry|sentry|datadog|segment|mixpanel|posthog|crashlytics|opentelemetry|amplitude|bugsnag|rollbar|new[.-]?relic|honeycomb|firebase)/i;
+
+export function unreviewedTelemetryDependency(entries) {
+  for (const entry of entries) {
+    const [name, specification = ''] = Array.isArray(entry) ? entry : [entry, ''];
+    if (telemetryPattern.test(name) || telemetryPattern.test(specification)) return name;
+  }
+  return undefined;
+}
+
+export function hasUnreviewedRustTelemetryDependency(manifest) {
+  const dependency = '(?:tracing|log|sentry|opentelemetry|honeycomb|firebase)';
+  return (
+    new RegExp(`^\\s*(?:["']?${dependency}["']?)\\s*=`, 'im').test(manifest) ||
+    new RegExp(`\\bpackage\\s*=\\s*["']${dependency}["']`, 'i').test(manifest) ||
+    new RegExp(`^\\s*\\[[^\\]\\r\\n]*dependencies\\.(?:["']?${dependency}["']?)\\s*\\]`, 'im').test(
+      manifest
+    )
+  );
+}
+
+const telemetryDependency = unreviewedTelemetryDependency(dependencyEntries);
 if (telemetryDependency) fail(`telemetry/crash dependency is not reviewed: ${telemetryDependency}`);
 
 const cargoManifest = read('src-tauri/Cargo.toml');
-if (/^(?:tracing|log|sentry|opentelemetry)\s*=/m.test(cargoManifest)) {
+if (hasUnreviewedRustTelemetryDependency(cargoManifest)) {
   fail('a Rust logging/telemetry dependency was added without review');
 }
 

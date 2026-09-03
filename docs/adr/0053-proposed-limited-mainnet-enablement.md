@@ -41,6 +41,8 @@ environment variable or runtime preference may enable mainnet in another build.
 
 All final software, external-signer, and multisig broadcast paths must re-derive the one-recipient and amount-cap policy from the exact persisted PSBT immediately before signing/finalization/broadcast, reject frozen inputs, and preserve the original recipient and value for RBF. CPFP is a separate wallet-owned fee-child branch with no external recipient. The exact-genesis/loopback-Core interlock must run before the first mainnet database opens; invoking it only after a wallet database is loaded does not satisfy this proposal.
 
+The enablement diff must also close three dormant boundaries without adding a second activation mechanism: both multisig recovery import commands must require recent live-HWI admission before creating hardware-backed mainnet profiles; a zero-recipient CPFP must prove its output is wallet-owned rather than relying on script equality alone; and local-loopback endpoint validation must occur before the first genesis RPC, while exact genesis validation must still precede the first mainnet database open.
+
 ## Exit conditions before acceptance
 
 1. The independent security review of the frozen baseline is complete and all

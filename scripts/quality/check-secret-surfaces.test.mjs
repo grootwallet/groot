@@ -5,8 +5,11 @@ import { join } from 'node:path';
 import test from 'node:test';
 import {
   approvedCapabilityPermissions,
+  hasUnreviewedRustTelemetryDependency,
   hasUnreviewedLogging,
   sensitiveStringIsWrappedBeforeFallibleWork,
+  stripRustTestModules,
+  unreviewedTelemetryDependency,
   validateCsp
 } from './check-secret-surfaces.mjs';
 
@@ -71,16 +74,76 @@ rejectsExtra('rejects a symlinked capability entry', (directory) => {
 test('detects alternate JavaScript and Rust logging spellings', () => {
   for (const source of [
     "console['log'](secret)",
+    'console?.log(secret)',
+    "console?.['error'](secret)",
     'console.trace(secret)',
     'console.table(secret)',
     'print!("{secret}")',
     'eprint!("{secret}")',
     'tracing::debug!(?secret)',
-    'std::io::stderr().write_all(secret)'
+    'tracing :: debug!(?secret)',
+    'log :: warn!(?secret)',
+    'std::io::stderr().write_all(secret)',
+    'std :: io :: stdout().write_all(secret)'
   ]) {
     assert.equal(hasUnreviewedLogging(source), true, source);
   }
   assert.equal(hasUnreviewedLogging('const catalog = console;'), false);
+});
+
+test('detects JavaScript and Rust telemetry dependency aliases', () => {
+  assert.equal(
+    unreviewedTelemetryDependency(['safe-package', '@honeycombio/opentelemetry-web']),
+    '@honeycombio/opentelemetry-web'
+  );
+  assert.equal(unreviewedTelemetryDependency(['firebase']), 'firebase');
+  assert.equal(
+    unreviewedTelemetryDependency([['observability', 'npm:@sentry/browser@^9.0.0']]),
+    'observability'
+  );
+  assert.equal(unreviewedTelemetryDependency(['safe-package']), undefined);
+  assert.equal(hasUnreviewedRustTelemetryDependency('"honeycomb" = "1.0.0"'), true);
+  assert.equal(
+    hasUnreviewedRustTelemetryDependency(
+      'observability = { package = "firebase", version = "1.0.0" }'
+    ),
+    true
+  );
+  assert.equal(
+    hasUnreviewedRustTelemetryDependency(
+      "observability = { package = 'sentry', version = '1.0.0' }"
+    ),
+    true
+  );
+  assert.equal(hasUnreviewedRustTelemetryDependency('[dependencies.sentry]'), true);
+  assert.equal(
+    hasUnreviewedRustTelemetryDependency("[target.'cfg(unix)'.dependencies.'log']"),
+    true
+  );
+  assert.equal(hasUnreviewedRustTelemetryDependency('safe-package = "1.0.0"'), false);
+});
+
+test('scans production stdout while excluding compile-time Rust test modules', () => {
+  assert.equal(hasUnreviewedLogging('std::io::stdout().write_all(secret)'), true);
+  assert.equal(
+    hasUnreviewedLogging(
+      stripRustTestModules(`
+fn production() { safe(); }
+#[cfg(test)]
+mod tests {
+  fn calibration() { std::io::stdout().write_all(b"timing"); }
+}`)
+    ),
+    false
+  );
+  assert.equal(
+    hasUnreviewedLogging(
+      stripRustTestModules(`
+#[cfg(test)] mod tests { fn fixture() { println!("safe fixture"); } }
+fn production(secret: &[u8]) { std::io::stdout().write_all(secret); }`)
+    ),
+    true
+  );
 });
 
 test('requires credential strings to enter Zeroizing before fallible work', () => {

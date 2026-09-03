@@ -255,6 +255,11 @@ impl HardwareOperation {
         self.remaining()?;
         Ok(complete())
     }
+
+    #[cfg(test)]
+    pub(crate) fn cancelled_for_test(&self) -> bool {
+        self.cancelled.load(Ordering::Acquire)
+    }
 }
 
 impl Drop for HardwareOperation {

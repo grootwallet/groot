@@ -711,6 +711,8 @@ mod targeted_scan_tests {
         );
         assert!(validated_target_device_types(vec![]).is_err());
         assert!(validated_target_device_types(vec!["unknown".into()]).is_err());
+        assert!(validated_target_device_types(vec!["keepkey".into()]).is_err());
+        assert!(validated_target_device_types(vec!["digitalbitbox".into()]).is_err());
         assert!(validated_target_device_types(vec!["trezor".into(); 9]).is_err());
     }
 
@@ -905,6 +907,47 @@ mod targeted_scan_tests {
     }
 
     #[test]
+    fn removed_legacy_hwi_devices_fail_closed_before_cache_or_ui() {
+        for device_type in ["keepkey", "digitalbitbox"] {
+            let error = validate_discovered_devices(vec![HwiDevice {
+                device_type: device_type.into(),
+                model: device_type.into(),
+                path: format!("{device_type}-path"),
+                ..HwiDevice::default()
+            }])
+            .unwrap_err();
+            assert_eq!(error.code, "invalid_hardware_response", "{device_type}");
+        }
+    }
+
+    #[test]
+    fn cancelled_policy_verification_cannot_append_saved_or_draft_evidence() {
+        let hwi = HwiCli::for_test_program(PathBuf::from("/usr/bin/false"));
+        for evidence_kind in ["saved", "draft"] {
+            let operation = hwi.begin_interactive_operation().unwrap();
+            let cancellation = thread::spawn(crate::hardware::cancel_hardware_operations_and_wait);
+            let wait_started = Instant::now();
+            while !operation.cancelled_for_test() && wait_started.elapsed() < Duration::from_secs(5)
+            {
+                thread::sleep(Duration::from_millis(10));
+            }
+            assert!(operation.cancelled_for_test(), "{evidence_kind}");
+
+            let mut evidence = Vec::new();
+            let error = complete_policy_verification_if_active(&operation, || {
+                evidence.push(evidence_kind);
+                Ok(())
+            })
+            .unwrap_err();
+            assert_eq!(error.code, "hardware_cancelled", "{evidence_kind}");
+            assert!(evidence.is_empty(), "{evidence_kind}");
+
+            drop(operation);
+            assert_eq!(cancellation.join().unwrap(), Ok(()), "{evidence_kind}");
+        }
+    }
+
+    #[test]
     fn rehearsal_discovery_keeps_locked_devices_while_mainnet_requires_exact_models() {
         assert!(approved_hwi_model(Network::Testnet4, "trezor", ""));
         assert!(approved_hwi_model(
@@ -1096,10 +1139,8 @@ pub async fn hardware_prompt_pin(
     let hwi = hwi_cli(&app)?;
     let device = recently_scanned_hardware_device(&state, &device_id)?;
     let pending = tauri::async_runtime::spawn_blocking(move || {
-        if !matches!(
-            device.device_type.to_ascii_lowercase().as_str(),
-            "trezor" | "keepkey"
-        ) || (!device.needs_pin_sent && device.code != Some(-12))
+        if !device.device_type.eq_ignore_ascii_case("trezor")
+            || (!device.needs_pin_sent && device.code != Some(-12))
         {
             return Err(api_error(
                 "invalid_hardware_request",
@@ -2832,6 +2873,15 @@ pub(crate) fn ensure_hardware_verification_context(
     Ok(())
 }
 
+fn complete_policy_verification_if_active<T>(
+    operation: &crate::hardware::HardwareOperation,
+    persist: impl FnOnce() -> ApiResult<T>,
+) -> ApiResult<T> {
+    operation
+        .complete_if_active(persist)
+        .map_err(hardware_api_error)?
+}
+
 #[tauri::command]
 pub async fn hardware_verify_multisig_policy(
     app: AppHandle,
@@ -2892,9 +2942,9 @@ pub async fn hardware_verify_multisig_policy(
         &current_metadata,
     )?;
     let db = open_multisig_db(&app)?;
-    hardware_operation
-        .complete_if_active(|| record_signer_policy_verification(&db, &identity, &actual))
-        .map_err(hardware_api_error)?
+    complete_policy_verification_if_active(&hardware_operation, || {
+        record_signer_policy_verification(&db, &identity, &actual)
+    })
 }
 
 #[tauri::command]
@@ -2964,16 +3014,14 @@ pub async fn hardware_verify_multisig_draft_policy(
         displayed_address: Some(actual),
     };
     let key = policy_verification_key(&wallet, &verification.signer_fingerprint)?;
-    hardware_operation
-        .complete_if_active(|| {
-            state
-                .pending_policy_verifications
-                .lock()
-                .map_err(internal)?
-                .insert(key, verification.clone());
-            Ok(verification)
-        })
-        .map_err(hardware_api_error)?
+    complete_policy_verification_if_active(&hardware_operation, || {
+        state
+            .pending_policy_verifications
+            .lock()
+            .map_err(internal)?
+            .insert(key, verification.clone());
+        Ok(verification)
+    })
 }
 
 #[tauri::command]

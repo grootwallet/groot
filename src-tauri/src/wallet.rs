@@ -1352,7 +1352,7 @@ fn missing_hardware_xpub(
             "hardware_unavailable",
             "BitBox may request its password again for this new secure connection. Check its screen, enter the password on BitBox if asked, and try again.",
         ),
-        "trezor" | "keepkey" => {
+        "trezor" => {
             let safe_detail = hwi_message.unwrap_or_default().to_ascii_lowercase();
             let message = if code == Some(-13)
                 && safe_detail.contains("unsupported trezor model")
@@ -1392,9 +1392,9 @@ fn hardware_device_dto(device: HwiDevice) -> HardwareDeviceDto {
     };
     // A locked Trezor can report both PIN and passphrase requirements. PIN must
     // be resolved first because no wallet fingerprint exists until it is unlocked.
-    let pin_required = matches!(device_type.as_str(), "trezor" | "keepkey")
+    let pin_required = device_type == "trezor"
         && (device.needs_pin_sent || (device.code == Some(-12) && !device.needs_passphrase_sent));
-    let unsupported_trezor_model = matches!(device_type.as_str(), "trezor" | "keepkey")
+    let unsupported_trezor_model = device_type == "trezor"
         && device.code == Some(-13)
         && device
             .error
@@ -1402,7 +1402,13 @@ fn hardware_device_dto(device: HwiDevice) -> HardwareDeviceDto {
             .unwrap_or_default()
             .to_ascii_lowercase()
             .contains("unsupported trezor model");
-    let (status, message, action) = if unsupported_trezor_model {
+    let (status, message, action) = if matches!(device_type.as_str(), "keepkey" | "digitalbitbox") {
+        (
+            "not_ready",
+            "This hardware signer is not supported by Groot.",
+            "retry",
+        )
+    } else if unsupported_trezor_model {
         (
             "not_ready",
             "This Groot release's bundled HWI 3.2.0 does not support this Trezor model. Update Groot when a reviewed release adds support, then scan again.",
