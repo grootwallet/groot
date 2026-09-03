@@ -22,6 +22,13 @@ pub struct NetworkSetupSource {
     ready: bool,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MainnetCoreAdmissionPurpose {
+    OpenExistingWallet,
+    CreateNewWallet,
+}
+
 pub(crate) fn profile_compatibility_for(
     profile: &WalletProfile,
     directory: &Path,
@@ -213,6 +220,7 @@ pub fn wallet_generate_mnemonic(
 pub fn wallet_cancel_onboarding(state: State<'_, AppState>) -> ApiResult<()> {
     let _operation = operation_guard(&state)?;
     state.pending_mnemonic.lock().map_err(internal)?.take();
+    clear_mainnet_node_admission(&state)?;
     Ok(())
 }
 
@@ -225,6 +233,7 @@ pub fn wallet_create(
 ) -> ApiResult<()> {
     let credential = Zeroizing::new(credential);
     let _operation = operation_guard(&state)?;
+    let _admission_cleanup = clear_new_wallet_admission_on_exit(&state);
     validate_new_wallet_passphrase(credential.as_str())?;
     let pending = state
         .pending_mnemonic
@@ -247,6 +256,7 @@ pub fn wallet_create(
     let authenticated_descriptors = software_wallet_descriptors(&mnemonic, credential.as_str())?;
     if let Err(error) = create_from_mnemonic(
         &app,
+        &state,
         name,
         mnemonic,
         credential.as_str(),
@@ -274,6 +284,7 @@ pub fn wallet_recover(
 ) -> ApiResult<()> {
     let credential = Zeroizing::new(credential);
     let _operation = operation_guard(&state)?;
+    let _admission_cleanup = clear_new_wallet_admission_on_exit(&state);
     validate_wallet_passphrase(credential.as_str())?;
     let mnemonic_words = native_backup::recover(&app)
         .map_err(internal)?
@@ -293,7 +304,7 @@ pub fn wallet_recover(
         ));
     }
     let authenticated_descriptors = software_wallet_descriptors(&mnemonic, credential.as_str())?;
-    create_from_mnemonic(&app, name, mnemonic, credential.as_str(), true)?;
+    create_from_mnemonic(&app, &state, name, mnemonic, credential.as_str(), true)?;
     let selected = selected_profile_of_kind(&app, WalletKind::SingleKey)?.id;
     state
         .authenticated_software_descriptors
@@ -403,6 +414,7 @@ pub fn wallet_unlock(
             .insert(selected, descriptors);
     }
     unlock_selected(&app, &state)?;
+    clear_mainnet_node_admission(&state)?;
     Ok(())
 }
 
@@ -747,6 +759,128 @@ pub fn fees_estimate(app: AppHandle, state: State<'_, AppState>) -> ApiResult<Fe
 pub fn node_config(app: AppHandle, state: State<'_, AppState>) -> ApiResult<CoreNodeConfig> {
     require_unlocked(&app, &state)?;
     read_node_config(&app)
+}
+
+#[tauri::command]
+pub async fn mainnet_core_admit(
+    app: AppHandle,
+    config: CoreNodeConfig,
+    password: String,
+    purpose: MainnetCoreAdmissionPurpose,
+) -> ApiResult<NodeStatusDto> {
+    let password = Zeroizing::new(password);
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let _operation = operation_guard(&state)?;
+        clear_mainnet_node_admission(&state)?;
+        crate::release_policy::ensure_runtime_network_enabled(NETWORK).map_err(|_| {
+            api_error(
+                "mainnet_disabled",
+                "This Groot build is not authorized to connect a mainnet wallet.",
+            )
+        })?;
+        if NETWORK != Network::Bitcoin
+            || config.auth != RpcAuthMode::UserPass
+            || password.is_empty()
+            || password.len() > 1024
+        {
+            return Err(api_error(
+                "invalid_node_config",
+                "The first mainnet release requires protected RPC credentials for a local Bitcoin Core node.",
+            ));
+        }
+        config.validate().map_err(network_config_api_error)?;
+        let scope = match purpose {
+            MainnetCoreAdmissionPurpose::OpenExistingWallet => {
+                let selected = selected_profile(&app)?;
+                if read_node_config_for(&app, selected.id)? != config {
+                    return Err(api_error(
+                        "invalid_node_config",
+                        "Enter this wallet's saved Bitcoin Core connection exactly as configured.",
+                    ));
+                }
+                MainnetNodeAdmissionScope::ExistingWallet(selected.id)
+            }
+            MainnetCoreAdmissionPurpose::CreateNewWallet => MainnetNodeAdmissionScope::NewWallet,
+        };
+        let result = (|| {
+            let client = candidate_rpc_client(&config, password.as_str())?;
+            let status = checked_node_status(&client, config.clone())?;
+            *state
+                .pending_mainnet_node_admission
+                .lock()
+                .map_err(internal)? = Some(PendingMainnetNodeAdmission {
+                config,
+                password,
+                created_at: Instant::now(),
+                scope,
+            });
+            Ok(status)
+        })();
+        if result.is_err() {
+            clear_mainnet_node_admission(&state)?;
+        }
+        result
+    })
+    .await
+    .map_err(internal)?
+}
+
+#[tauri::command]
+pub fn mainnet_core_admission_clear(state: State<'_, AppState>) -> ApiResult<()> {
+    let _operation = operation_guard(&state)?;
+    clear_mainnet_node_admission(&state)
+}
+
+pub(super) fn persist_mainnet_node_admission_for_new_profile(
+    app: &AppHandle,
+    state: &State<'_, AppState>,
+    destination: Uuid,
+    credential: &str,
+) -> ApiResult<bool> {
+    if NETWORK != Network::Bitcoin {
+        return Ok(false);
+    }
+    crate::release_policy::ensure_database_open_enabled(NETWORK, true).map_err(|_| {
+        api_error(
+            "node_admission_required",
+            "Connect and verify the approved local Bitcoin Core node before creating a mainnet wallet.",
+        )
+    })?;
+    let pending = current_mainnet_node_admission(state)?;
+    if pending.scope != MainnetNodeAdmissionScope::NewWallet {
+        return Err(api_error(
+            "node_admission_required",
+            "Verify the local Bitcoin Core node specifically for new mainnet wallet creation.",
+        ));
+    }
+    let protected = Zeroizing::new(
+        serde_json::to_vec(&ProtectedNodeAuthRef {
+            version: PROTECTED_NODE_AUTH_VERSION,
+            config: &pending.config,
+            password: pending.password.as_str(),
+        })
+        .map_err(internal)?,
+    );
+    secure_store::store(
+        &node_secret_path_for(app, destination)?,
+        protected.as_slice(),
+        credential,
+    )
+    .map_err(secure_store_error)?;
+    write_private_json(&node_config_path_for(app, destination)?, &pending.config)?;
+    write_private_json(
+        &sync_source_path_for(app, destination)?,
+        &WalletSyncSource::BitcoinCore,
+    )?;
+    state.node_auth.lock().map_err(internal)?.insert(
+        destination,
+        NodeAuthSession {
+            config: pending.config,
+            password: pending.password,
+        },
+    );
+    Ok(true)
 }
 
 #[tauri::command]

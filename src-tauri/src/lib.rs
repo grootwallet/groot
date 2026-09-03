@@ -104,6 +104,8 @@ pub fn run() {
             wallet::profile_commands::coin_set_frozen,
             wallet::profile_commands::multisig_coin_set_frozen,
             wallet::profile_commands::fees_estimate,
+            wallet::profile_commands::mainnet_core_admit,
+            wallet::profile_commands::mainnet_core_admission_clear,
             wallet::profile_commands::node_config,
             wallet::profile_commands::node_config_save,
             wallet::profile_commands::network_setup_sources,

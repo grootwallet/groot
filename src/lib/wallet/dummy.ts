@@ -284,6 +284,17 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
   async nodeConfig() {
     return structuredClone(this._nodeConfig);
   }
+  async admitMainnetCore(
+    config: CoreNodeConfig,
+    password: string,
+    _purpose: 'open_existing_wallet' | 'create_new_wallet'
+  ) {
+    if (config.auth === 'user_pass' && !password)
+      throw new WalletError('invalid_node_config', 'RPC password is required.');
+    this._nodeConfig = { ...config, backend: { ...config.backend } };
+    return this.testNodeConnection();
+  }
+  async clearMainnetCoreAdmission() {}
   async networkSetupSources() {
     if (
       typeof location !== 'undefined' &&

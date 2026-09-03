@@ -16,6 +16,7 @@ export const WALLET_ERROR_CODES = [
   'network_unavailable',
   'node_syncing',
   'node_history_unavailable',
+  'node_admission_required',
   'fee_estimate_unavailable',
   'wallet_locked',
   'invalid_inactivity_timeout',
@@ -104,6 +105,7 @@ export const WALLET_ERROR_CODES = [
   'policy_too_complex',
   'policy_compilation_failed',
   'unsupported_wallet_policy',
+  'mainnet_disabled',
   'internal_error'
 ] as const;
 

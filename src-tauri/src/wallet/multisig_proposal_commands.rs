@@ -53,6 +53,15 @@ fn copy_network_setup_before_profile_commit(
     destination: Uuid,
     credential: &str,
 ) -> ApiResult<bool> {
+    if NETWORK == Network::Bitcoin {
+        profile_commands::persist_mainnet_node_admission_for_new_profile(
+            app,
+            state,
+            destination,
+            credential,
+        )?;
+        return Ok(true);
+    }
     let Some(source_wallet_id) = source_wallet_id else {
         return Ok(true);
     };
@@ -1052,6 +1061,7 @@ pub async fn multisig_create(
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
         let _operation = operation_guard(&state)?;
+        let _admission_cleanup = clear_new_wallet_admission_on_exit(&state);
         validate_credential(credential.as_str())?;
         reject_virtual_cosigners(&policy.cosigners)?;
         hardware_commands::require_mainnet_cosigner_admissions(&state, &policy.cosigners)?;
@@ -1061,7 +1071,8 @@ pub async fn multisig_create(
         let preview_descriptor_checksum = descriptor_checksum(&preview.external_descriptor)?;
         let (id, dir) = prepare_profile_directory(&app)?;
         let result = (|| {
-            let mut db = open_wallet_database(&dir.join("wallet.sqlite"))?;
+            let permit = database_open_permit_for_new_wallet(&state)?;
+            let mut db = open_wallet_database(&dir.join("wallet.sqlite"), &permit)?;
             init_app_schema(&db)?;
             Wallet::create(
                 preview.external_descriptor.clone(),
@@ -1143,10 +1154,7 @@ pub async fn multisig_create(
             commit_multisig_profile(&app, id, &wallet)?;
             Ok((wallet, network_setup_copied))
         })();
-        if result.is_err() {
-            state.node_auth.lock().map_err(internal)?.remove(&id);
-            cleanup_failed_profile(&dir)?;
-        }
+        finish_new_profile_attempt(&state, id, &dir, result.is_ok())?;
         let (wallet, network_setup_copied) = result?;
         state
             .pending_policy_verifications
@@ -1177,6 +1185,7 @@ pub async fn multisig_recovery_create(
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
         let _operation = operation_guard(&state)?;
+        let _admission_cleanup = clear_new_wallet_admission_on_exit(&state);
         validate_credential(credential.as_str())?;
         crate::release_policy::ensure_delayed_policy_creation_enabled(NETWORK).map_err(|_| {
             api_error(
@@ -1201,7 +1210,8 @@ pub async fn multisig_recovery_create(
         let policy_type = verified_recovery_policy_type(&template, &analysis.paths);
         let (id, dir) = prepare_profile_directory(&app)?;
         let result = (|| {
-            let mut db = open_wallet_database(&dir.join("wallet.sqlite"))?;
+            let permit = database_open_permit_for_new_wallet(&state)?;
+            let mut db = open_wallet_database(&dir.join("wallet.sqlite"), &permit)?;
             init_app_schema(&db)?;
             Wallet::create(
                 analysis.external_descriptor.clone(),
@@ -1240,10 +1250,7 @@ pub async fn multisig_recovery_create(
             commit_multisig_profile(&app, id, &wallet)?;
             Ok((wallet, network_setup_copied))
         })();
-        if result.is_err() {
-            state.node_auth.lock().map_err(internal)?.remove(&id);
-            cleanup_failed_profile(&dir)?;
-        }
+        finish_new_profile_attempt(&state, id, &dir, result.is_ok())?;
         let (wallet, network_setup_copied) = result?;
         let _ = multisig_setup_commands::clear_multisig_setup_draft(&app);
         unlock_selected(&app, &state)?;

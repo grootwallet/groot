@@ -6,6 +6,7 @@ import {
   validateBrowserNetworkSource,
   validateBuildScriptSource,
   validateCompiledNetworkSource,
+  validateCrateDatabaseOpenSources,
   validateMainnetSourcePolicy,
   validateReleasePolicySource,
   validateWalletOpenGuardSource
@@ -196,8 +197,8 @@ const MAINNET_ENABLED: bool = true;`),
 
 test('database guards must precede every production wallet opener', () => {
   const guarded = (name, open) => `
-fn ${name}(path: &Path) {
-  ensure_runtime_network_enabled(NETWORK).map_err(blocked)?;
+fn ${name}(path: &Path, permit: &DatabaseOpenPermit) {
+  validate_database_open_permit(permit)?;
   let value = ${open}(path)?;
 }`;
   assert.doesNotThrow(() =>
@@ -229,5 +230,55 @@ ${guarded('open_wallet_database', 'Connection::open')}
 ${guarded('open_existing_wallet_database_read_only', 'Connection::open_with_flags')}
 fn bypass(path: &Path) { <Connection>::open(path); }`),
     /outside the guarded helpers/
+  );
+  assert.throws(
+    () =>
+      validateWalletOpenGuardSource(`
+fn open_wallet_database(path: &Path) {
+  validate_database_open_permit(&permit)?;
+  Connection::open(path);
+}
+${guarded('open_existing_wallet_database_read_only', 'Connection::open_with_flags')}`),
+    /typed admission permit/
+  );
+  assert.throws(
+    () =>
+      validateWalletOpenGuardSource(`
+fn open_wallet_database(path: &Path, permit: &DatabaseOpenPermit) {
+  Connection::open(path);
+  validate_database_open_permit(permit)?;
+}
+${guarded('open_existing_wallet_database_read_only', 'Connection::open_with_flags')}`),
+    /admission-guarded before opening/
+  );
+});
+
+test('database opens are rejected across the production Rust crate', () => {
+  assert.doesNotThrow(() =>
+    validateCrateDatabaseOpenSources([
+      ['src-tauri/src/lib.rs', 'fn harmless() {}'],
+      ['src-tauri/src/wallet.rs', 'fn approved_helpers_are_checked_separately() {}'],
+      [
+        'src-tauri/src/inline_tests.rs',
+        '#[cfg(test)] mod tests { fn opens_only_in_tests() { Connection::open("test"); } }'
+      ]
+    ])
+  );
+  assert.throws(
+    () =>
+      validateCrateDatabaseOpenSources([
+        [
+          'src-tauri/src/new_backend.rs',
+          'fn bypass() { bdk_wallet::rusqlite::Connection::open("wallet"); }'
+        ]
+      ]),
+    /outside the guarded wallet helpers/
+  );
+  assert.throws(
+    () =>
+      validateCrateDatabaseOpenSources([
+        ['src-tauri/src/new_backend.rs', 'use rusqlite::Connection as Db;']
+      ]),
+    /may not alias/
   );
 });

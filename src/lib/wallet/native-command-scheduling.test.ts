@@ -49,6 +49,7 @@ describe('native command scheduling', () => {
     ['multisig_create', multisigProposalCommands],
     ['multisig_recovery_create', multisigProposalCommands],
     ['network_setup_adopt', profileCommands],
+    ['mainnet_core_admit', profileCommands],
     ['node_config_save', profileCommands],
     ['node_connection_test', profileCommands]
   ])('%s keeps blocking disk and RPC work off the native UI thread', (command, source) => {

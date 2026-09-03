@@ -11,6 +11,7 @@ pub const FIRST_MAINNET_MAX_SEND_SATS: u64 = 1_000_000;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ReleasePolicyError {
     MainnetDisabled,
+    BackendAdmissionRequired,
     #[allow(dead_code, reason = "used when the disabled mainnet backend is wired")]
     WrongGenesis,
     #[allow(dead_code, reason = "used when the disabled mainnet backend is wired")]
@@ -39,6 +40,18 @@ pub fn ensure_runtime_network_enabled(network: Network) -> Result<(), ReleasePol
         return Err(ReleasePolicyError::MainnetDisabled);
     }
     Ok(())
+}
+
+pub fn ensure_database_open_enabled(
+    network: Network,
+    has_current_backend_admission: bool,
+) -> Result<(), ReleasePolicyError> {
+    ensure_runtime_network_enabled(network)?;
+    if network == Network::Bitcoin && !has_current_backend_admission {
+        Err(ReleasePolicyError::BackendAdmissionRequired)
+    } else {
+        Ok(())
+    }
 }
 
 pub fn ensure_delayed_policy_creation_enabled(network: Network) -> Result<(), ReleasePolicyError> {
@@ -141,8 +154,13 @@ mod tests {
         );
         for network in [Network::Regtest, Network::Signet, Network::Testnet] {
             assert_eq!(ensure_runtime_network_enabled(network), Ok(()));
+            assert_eq!(ensure_database_open_enabled(network, false), Ok(()));
             assert_eq!(validate_spend(network, usize::MAX, u64::MAX), Ok(()));
         }
+        assert_eq!(
+            ensure_database_open_enabled(Network::Bitcoin, false),
+            Err(ReleasePolicyError::MainnetDisabled)
+        );
     }
 
     #[test]

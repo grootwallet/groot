@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -12,24 +12,64 @@ const pinnedPolicySources = new Map([
   ['src-tauri/build.rs', '337855d79bc88136efc4ea576ebd50ac3036f745b9cf77275cb9c33fc3aff620'],
   [
     'src-tauri/src/release_policy.rs',
-    'f227e2669ac091dbac0fdce0a811c4d533dac97d126bf28f048d8994f55d8c87'
+    '1240b0fb0789ecb4ea59279c86861b825ee4d4de6361d692ee1f37bcd26fd2ee'
   ],
   [
     'src-tauri/src/build_network.rs',
     'ff305684e79a6140db7b533d2fd23bc9288f8edf361793356ed99bee5064a534'
   ],
-  ['src-tauri/src/wallet.rs', '8e65b74bd9ab6d18e2e68088e34a3464ff56e21c53028de9de97d61e03edecb9'],
+  ['src-tauri/src/wallet.rs', 'a25bca9026ff52f4ae78639d86a55381e0cbfa90446e5416b35d0e8e25d68cf9'],
+  [
+    'src-tauri/src/wallet/error_translation.rs',
+    'cc9fa6af863d74d5f05555cfd3de9db1dd2f583dd73571f856eb01bd6ab004ae'
+  ],
+  [
+    'src-tauri/src/wallet/explorer_commands.rs',
+    'b986185f3097f69fc6f35d6b68a1edf0165dfd9cd5f7d1c6e3159393028c677d'
+  ],
+  [
+    'src-tauri/src/wallet/export_commands.rs',
+    '12a6ccc9ded20a2b86ea5518a65c107b8b9036524213abd5fe17f90ee50acc9a'
+  ],
   [
     'src-tauri/src/wallet/hardware_commands.rs',
-    'b12947fb54938d40941464c1888f649005b187e1ccaa9fbcf4476d63ff89e4df'
+    '785da86d2d8efa2a6235c6cd33f3ad057ea5f6aef57c29773c9909ca7fc406ae'
+  ],
+  [
+    'src-tauri/src/wallet/label_interchange.rs',
+    '6a986cdc1efb02ca810450bc78aa6fbdcd7d4aaee10d971042e6e4919e16e360'
   ],
   [
     'src-tauri/src/wallet/multisig_setup_commands.rs',
-    '4450b9349b295f8edede2b5c08139b1d9cd0ffb23b077cf8fb9c887b5cf15506'
+    'f53f2fc7aab9fd713b52a0a00681e222799fb894395c336fcec799c016b0ad3b'
+  ],
+  [
+    'src-tauri/src/wallet/multisig_proposal_commands.rs',
+    'e725172eb05469bd0231b4bc6c2ee2e7dca9d63eedd8c4c874f058c7379dfc86'
+  ],
+  [
+    'src-tauri/src/wallet/profile_commands.rs',
+    '72eb8ae3d7ee9e07ffb1f7ef3c6e75e729cbb8799914751e9b179665ec9c5062'
+  ],
+  [
+    'src-tauri/src/wallet/payment_draft_commands.rs',
+    '8e6bd4e3436d45c45e19ee505920e5b22f105694738b212a8ee4c1e975074af1'
   ],
   [
     'src-tauri/src/wallet/proposal_review.rs',
     '7e64749dd5285a2f5197bba84f326303f15428a5887c80dcdb8608b8aa6752b6'
+  ],
+  [
+    'src-tauri/src/wallet/recovery_scan.rs',
+    '07157225f51b532610513c07eba251798d5c95bdc902095ea1d03d24b00c2ec6'
+  ],
+  [
+    'src-tauri/src/wallet/transaction_commands.rs',
+    '43c66f2e27b0dc5180aa855bb724f85aca450d352448294f45a997b70c2cd940'
+  ],
+  [
+    'src-tauri/src/wallet/verification_evidence.rs',
+    '174dcb84686f4e4c7ae8707f9c79b659177ddc18851e4797fed5d1ca9b640b7c'
   ]
 ]);
 
@@ -187,7 +227,12 @@ function rustFunction(source, name) {
   const bodyStart = code.indexOf('{', start);
   if (bodyStart < 0) throw new Error(`required Rust function ${name} has no body`);
   const bodyEnd = matchingBrace(code, bodyStart, `required Rust function ${name}`);
-  return { body: source.slice(bodyStart + 1, bodyEnd), start, end: bodyEnd + 1 };
+  return {
+    body: source.slice(bodyStart + 1, bodyEnd),
+    signature: source.slice(start, bodyStart),
+    start,
+    end: bodyEnd + 1
+  };
 }
 
 export function validateWalletOpenGuardSource(source) {
@@ -200,14 +245,17 @@ export function validateWalletOpenGuardSource(source) {
   const functions = ['open_wallet_database', 'open_existing_wallet_database_read_only'].map(
     (name) => rustFunction(source, name)
   );
-  for (const { body } of functions) {
-    const guard = body.search(/ensure_runtime_network_enabled\s*\(\s*NETWORK\s*\)/);
+  for (const { body, signature } of functions) {
+    if (!/permit\s*:\s*&\s*DatabaseOpenPermit/.test(signature)) {
+      throw new Error('wallet database opener does not require a typed admission permit');
+    }
+    const guard = body.search(/validate_database_open_permit\s*\(\s*permit\s*\)/);
     const opens = [
       ...body.matchAll(/(?:\bConnection\s*|<\s*Connection\s*>)\s*::\s*open(?:_with_flags)?\b/g)
     ];
     const open = opens[0]?.index ?? -1;
     if (guard < 0 || opens.length !== 1 || open < 0 || guard > open) {
-      throw new Error('wallet databases are no longer guarded before opening');
+      throw new Error('wallet databases are no longer admission-guarded before opening');
     }
   }
   let remainder = source;
@@ -219,6 +267,62 @@ export function validateWalletOpenGuardSource(source) {
   }
 }
 
+function stripCfgTestItems(source) {
+  let result = source;
+  while (true) {
+    const code = stripSourceComments(result, { rust: true, maskStrings: true });
+    const match = /#\s*\[\s*cfg\s*\(\s*test\s*\)\s*\]/g.exec(code);
+    if (!match) return result;
+    const bodyStart = code.indexOf('{', match.index + match[0].length);
+    const itemEnd = code.indexOf(';', match.index + match[0].length);
+    const end =
+      itemEnd >= 0 && (bodyStart < 0 || itemEnd < bodyStart)
+        ? itemEnd + 1
+        : matchingBrace(code, bodyStart, 'cfg(test) item') + 1;
+    result = `${result.slice(0, match.index)}${' '.repeat(end - match.index)}${result.slice(end)}`;
+  }
+}
+
+export function validateCrateDatabaseOpenSources(sources) {
+  const approved = 'src-tauri/src/wallet.rs';
+  const openPattern =
+    /(?:\b(?:\w+::)*Connection\s*|<\s*(?:\w+::)*Connection\s*>)\s*::\s*open(?:_with_flags)?\b/;
+  for (const [path, original] of sources) {
+    if (path === approved) continue;
+    const source = stripCfgTestItems(original);
+    const code = stripSourceComments(source, { rust: true, maskStrings: true });
+    if (openPattern.test(code)) {
+      throw new Error(`${path} opens a production database outside the guarded wallet helpers`);
+    }
+    if (
+      /\btype\s+\w+\s*=\s*(?:\w+::)*Connection\b|\buse\b[^;]*\bConnection\s+as\s+\w+/.test(code)
+    ) {
+      throw new Error(`${path} may not alias a database Connection`);
+    }
+  }
+}
+
+function crateRustSources() {
+  const root = resolve(repoRoot, 'src-tauri/src');
+  const excluded = new Set([
+    'src-tauri/src/wallet/tests.rs',
+    'src-tauri/src/wallet/funded_acceleration_tests.rs',
+    'src-tauri/src/wallet/performance_tests.rs'
+  ]);
+  const sources = [];
+  const visit = (directory) => {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const absolute = resolve(directory, entry.name);
+      if (entry.isDirectory()) visit(absolute);
+      if (!entry.isFile() || !entry.name.endsWith('.rs')) continue;
+      const path = `src-tauri/src/${absolute.slice(root.length + 1)}`;
+      if (!excluded.has(path)) sources.push([path, readFileSync(absolute, 'utf8')]);
+    }
+  };
+  visit(root);
+  return sources;
+}
+
 export function validateMainnetSourcePolicy(read) {
   validatePinnedPolicySources(read);
   validateBrowserNetworkSource(read('src/lib/config.ts'));
@@ -226,6 +330,7 @@ export function validateMainnetSourcePolicy(read) {
   validateReleasePolicySource(read('src-tauri/src/release_policy.rs'));
   validateCompiledNetworkSource(read('src-tauri/src/build_network.rs'));
   validateWalletOpenGuardSource(read('src-tauri/src/wallet.rs'));
+  validateCrateDatabaseOpenSources(crateRustSources());
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

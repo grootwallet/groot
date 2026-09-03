@@ -11,6 +11,9 @@ recipient/amount, frozen-input, RBF-original-intent, and descriptor-derived CPFP
 ownership checks at the trusted boundary. No persisted descriptor, backup, or
 proposal format and no upstream BIP status changed. See
 [`security-remediation-2026-09-03.md`](security-remediation-2026-09-03.md).
+The subsequent pre-wallet Core-admission interlock changes only backend/storage
+authorization order. It does not change descriptors, derivation, PSBT semantics,
+backup interchange, or support for any BIP.
 
 Status: canonical implementation and candidate inventory as of 2026-09-02.
 

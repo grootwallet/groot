@@ -218,6 +218,7 @@ pub async fn hardware_cancel_operations(state: State<'_, AppState>) -> ApiResult
         .lock()
         .map_err(internal)?
         .clear();
+    clear_mainnet_node_admission(&state)?;
     tauri::async_runtime::spawn_blocking(crate::hardware::cancel_hardware_operations_and_wait)
         .await
         .map_err(internal)?
@@ -2148,6 +2149,7 @@ pub fn external_signer_create(
 ) -> ApiResult<ExternalSignerWallet> {
     let credential = Zeroizing::new(credential);
     let _operation = operation_guard(&state)?;
+    let _admission_cleanup = clear_new_wallet_admission_on_exit(&state);
     let name = name.trim();
     if name.is_empty() || name.chars().count() > 48 {
         return Err(api_error(
@@ -2175,7 +2177,8 @@ pub fn external_signer_create(
     };
     let (id, dir) = prepare_profile_directory(&app)?;
     let result = (|| {
-        let mut db = open_wallet_database(&dir.join("wallet.sqlite"))?;
+        let permit = database_open_permit_for_new_wallet(&state)?;
+        let mut db = open_wallet_database(&dir.join("wallet.sqlite"), &permit)?;
         init_app_schema(&db)?;
         let wallet = Wallet::create(
             metadata.external_descriptor.clone(),
@@ -2189,6 +2192,12 @@ pub fn external_signer_create(
         persist_secret_material(
             &dir.join("secret.json"),
             marker.as_bytes(),
+            credential.as_str(),
+        )?;
+        profile_commands::persist_mainnet_node_admission_for_new_profile(
+            &app,
+            &state,
+            id,
             credential.as_str(),
         )?;
         commit_profile(
@@ -2207,9 +2216,7 @@ pub fn external_signer_create(
             &metadata.external_descriptor,
         )
     })();
-    if result.is_err() {
-        cleanup_failed_profile(&dir)?;
-    }
+    finish_new_profile_attempt(&state, id, &dir, result.is_ok())?;
     result?;
     unlock_selected(&app, &state)?;
     Ok(metadata)

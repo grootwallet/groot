@@ -77,6 +77,12 @@ export interface WalletProfilesPort {
 }
 
 export interface WalletNetworkPort {
+  admitMainnetCore(
+    config: CoreNodeConfig,
+    password: string,
+    purpose: 'open_existing_wallet' | 'create_new_wallet'
+  ): Promise<NodeStatus>;
+  clearMainnetCoreAdmission(): Promise<void>;
   networkSetupSources(): Promise<NetworkSetupSource[]>;
   adoptNetworkSetup(sourceWalletId: string, credential: string): Promise<NodeStatus>;
   nodeConfig(): Promise<CoreNodeConfig>;

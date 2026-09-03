@@ -1857,7 +1857,8 @@ fn exact_identity_inspection_never_creates_a_missing_wallet_database() {
     fs::create_dir_all(&directory).unwrap();
     let database = directory.join("wallet.sqlite");
 
-    let error = open_existing_wallet_database_read_only(&database).unwrap_err();
+    let permit = database_open_permit_for_test();
+    let error = open_existing_wallet_database_read_only(&database, &permit).unwrap_err();
 
     assert_eq!(error.code, "internal_error");
     assert!(!database.exists());
@@ -2959,7 +2960,8 @@ fn wallet_database_is_owner_only_and_uses_defensive_settings() {
     let dir = std::env::temp_dir().join(format!("groot-db-test-{}", Uuid::new_v4()));
     fs::create_dir_all(&dir).unwrap();
     let path = dir.join("wallet.sqlite");
-    let db = open_wallet_database(&path).unwrap();
+    let permit = database_open_permit_for_test();
+    let db = open_wallet_database(&path, &permit).unwrap();
     assert!(db.db_config(DbConfig::SQLITE_DBCONFIG_DEFENSIVE).unwrap());
     assert!(db.db_config(DbConfig::SQLITE_DBCONFIG_ENABLE_FKEY).unwrap());
     let trusted: bool = db
@@ -2983,7 +2985,8 @@ fn exact_identity_inspection_reads_an_existing_wallet_database_without_mutating_
     let dir = std::env::temp_dir().join(format!("groot-db-identity-read-{}", Uuid::new_v4()));
     fs::create_dir_all(&dir).unwrap();
     let path = dir.join("wallet.sqlite");
-    let mut writable = open_wallet_database(&path).unwrap();
+    let permit = database_open_permit_for_test();
+    let mut writable = open_wallet_database(&path, &permit).unwrap();
     init_app_schema(&writable).unwrap();
     let mnemonic = Mnemonic::parse(WORDS).unwrap();
     let (external, internal) = watch_templates(&mnemonic, "identity read only").unwrap();
@@ -3001,7 +3004,8 @@ fn exact_identity_inspection_reads_an_existing_wallet_database_without_mutating_
         .collect::<Vec<_>>();
     entries_before.sort();
 
-    let mut read_only = open_existing_wallet_database_read_only(&path).unwrap();
+    let permit = database_open_permit_for_test();
+    let mut read_only = open_existing_wallet_database_read_only(&path, &permit).unwrap();
     let loaded = load_wallet(&mut read_only).unwrap();
     assert_eq!(
         loaded.public_descriptor(KeychainKind::External).to_string(),
@@ -3034,10 +3038,54 @@ fn wallet_database_rejects_symlink_storage() {
     let link = dir.join("wallet.sqlite");
     symlink(&target, &link).unwrap();
     assert_eq!(
-        open_wallet_database(&link).unwrap_err().code,
+        open_wallet_database(&link, &database_open_permit_for_test())
+            .unwrap_err()
+            .code,
         "internal_error"
     );
     fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn mainnet_node_admission_lifetime_is_monotonic_and_bounded() {
+    let created_at = Instant::now();
+    assert!(mainnet_node_admission_is_current_at(created_at, created_at));
+    assert!(mainnet_node_admission_is_current_at(
+        created_at,
+        created_at + MAINNET_NODE_ADMISSION_LIFETIME
+    ));
+    assert!(!mainnet_node_admission_is_current_at(
+        created_at,
+        created_at + MAINNET_NODE_ADMISSION_LIFETIME + Duration::from_nanos(1)
+    ));
+    assert!(!mainnet_node_admission_is_current_at(
+        created_at,
+        created_at - Duration::from_nanos(1)
+    ));
+}
+
+#[test]
+fn new_wallet_admission_cleanup_invalidates_the_attempt() {
+    let state = AppState::default();
+    *state.pending_mainnet_node_admission.lock().unwrap() = Some(PendingMainnetNodeAdmission {
+        config: default_node_config(),
+        password: Zeroizing::new("disposable-test-password".to_owned()),
+        created_at: Instant::now(),
+        scope: MainnetNodeAdmissionScope::NewWallet,
+    });
+
+    let cleanup = clear_new_wallet_admission_on_exit(&state);
+    assert!(state
+        .pending_mainnet_node_admission
+        .lock()
+        .unwrap()
+        .is_some());
+    drop(cleanup);
+    assert!(state
+        .pending_mainnet_node_admission
+        .lock()
+        .unwrap()
+        .is_none());
 }
 
 #[test]

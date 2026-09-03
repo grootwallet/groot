@@ -30,17 +30,31 @@ Test networks keep their existing recovery and acceleration behavior. Registry v
 wallet databases, proposals, backups, descriptors, node settings, and secret
 envelopes are unchanged; no migration is required.
 
-## Remaining activation blocker
+## Pre-wallet Core admission implementation
 
-Every mutable and read-only wallet database opener must require a process-scoped
-admission proving that the selected mainnet Core setup passed loopback policy and
-exact-genesis authentication. Initial software, external-signer, and multisig
-creation/recovery currently create a database before a per-wallet protected Core
-setup exists. The enablement design therefore needs a pre-wallet Core setup flow
-whose secret stays native, whose admission is memory-only and expiry-bound, and
-whose validated setup is persisted into the new encrypted profile only after
-profile creation. No environment flag, renderer assertion, or database-open
-exception may bypass this order.
+The follow-up `codex/mainnet-core-admission` branch implements the remaining
+trusted-storage interlock while mainnet stays disabled. Both mutable and read-only
+SQLite constructors now require an unforgeable Rust-owned permit. A permit is
+issued only after a process-local Core admission proves the exact compiled chain,
+exact genesis, loopback-only HTTP endpoint, explicit protected RPC authentication,
+and the intended scope: one selected existing wallet or one new-wallet attempt.
+The preflight password is zeroized, bounded to 15 minutes, cleared on explicit
+cancel/lock and after every new-profile attempt, and cleared after a
+successful existing-wallet unlock. An unlocked profile continues through its
+existing authenticated per-wallet node session; it does not retain a second
+preflight copy.
+
+Software, external-signer, standard multisig, Groot-backup recovery, and BSMS
+recovery all require the new-wallet permit before the first database open. The
+validated Core setup is encrypted under that new profile's credential before the
+registry commit; every failure removes the incomplete directory and in-memory
+session. Exact-descriptor duplicate inspection uses a distinct identity-inspection
+permit and cannot create a missing database. Test-network behavior and all durable
+formats remain unchanged. This implementation still requires focused independent
+review and enabled-path integration evidence before it can be part of an accepted
+mainnet candidate. The exact invariant, implementation boundary, compatibility
+assessment, validation commands, and adversarial review scope are recorded in
+[`mainnet-core-admission-2026-09-03.md`](mainnet-core-admission-2026-09-03.md).
 
 ## Coldcard and Jade family decision
 
@@ -55,8 +69,8 @@ support claim; release copy must disclose the family-level enforcement.
 
 ## Remaining release sequence
 
-1. Implement and review pre-wallet exact-genesis Core admission and the dedicated,
-   isolated mainnet build/storage identity.
+1. Independently review the implemented pre-wallet exact-genesis Core admission,
+   then add the separately reviewed dedicated mainnet build/storage identity.
 2. Obtain independent security review of this complete enablement diff and accept
    ADR 0053 only when its exit conditions are evidenced.
 3. Freeze one exact commit and run clean pinned-runtime CI plus the full Rust,

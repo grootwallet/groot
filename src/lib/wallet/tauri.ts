@@ -222,6 +222,16 @@ export class TauriWalletAdapter implements WalletPort {
   nodeConfig() {
     return command<CoreNodeConfig>('node_config');
   }
+  admitMainnetCore(
+    config: CoreNodeConfig,
+    password: string,
+    purpose: 'open_existing_wallet' | 'create_new_wallet'
+  ) {
+    return command<NodeStatus>('mainnet_core_admit', { config, password, purpose });
+  }
+  clearMainnetCoreAdmission() {
+    return command<void>('mainnet_core_admission_clear');
+  }
   networkSetupSources() {
     return command<import('./contracts').NetworkSetupSource[]>('network_setup_sources');
   }

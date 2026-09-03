@@ -20,10 +20,14 @@ first-release scope.
 Final mainnet CPFP validation requires one descriptor-derived wallet output, and
 a non-loopback or non-HTTP Core backend is rejected before any
 genesis RPC. Test-network behavior and every persisted format are unchanged; no
-migration is required. Exact-genesis process admission before the first mainnet
-database open remains a blocking activation design. Coldcard Mk4 and Jade Classic
-remain certification targets but cannot be admitted to a mainnet artifact through
-HWI 3.2.0's ambiguous family identifiers alone.
+migration is required. The follow-up Core-admission branch now requires a typed
+Rust-owned permit at both SQLite constructors, binds existing-wallet admission to
+the selected wallet and exact saved Core configuration, consumes new-wallet
+admission once, and covers every included creation/recovery path with symmetric
+rollback. Mainnet remains disabled; this boundary still requires independent
+review and enabled-path evidence. Coldcard Mk4 and Jade Classic remain the
+model-specific certification targets while ADR 0054 explicitly accepts HWI
+3.2.0's exact family-level runtime identities.
 
 v0.4.91 makes the native package version and short source commit available from one shared, keyboard-focusable copy control in the sidebar, every shell-less setup and recovery flow, and Settings. Copy feedback is both inline and toasted, while failure remains explicit. The shared component reads only the existing public runtime identity and does not expose wallet, device, node, or profile data. Desktop 1180×780 and mobile 390×844 browser-prototype inspection covers the sidebar, onboarding, and Settings placements without horizontal overflow. Exact packaged Testnet4 commit `0849375d` then passed the reviewer-operated identity visibility and copy check across those three placements. Registry v1 and every persisted wallet, proposal, backup, network-settings, and secret-envelope format remain unchanged; no migration is required. The broader physical lifecycle evidence remains bound to exact packaged v0.4.90 commit `c6d0d5d2`.
 

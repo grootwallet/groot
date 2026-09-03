@@ -918,6 +918,7 @@ pub fn multisig_recover_bsms(
 ) -> ApiResult<MultisigWalletDto> {
     let credential = Zeroizing::new(credential);
     let _operation = operation_guard(&state)?;
+    let _admission_cleanup = clear_new_wallet_admission_on_exit(&state);
     validate_credential(credential.as_str())?;
     let record = parse_public_descriptor_record(&encoded_backup)?;
     let (threshold, keys) = record.standard_policy().map_err(bsms_api_error)?;
@@ -962,7 +963,8 @@ pub fn multisig_recover_bsms(
     }
     let (id, dir) = prepare_profile_directory(&app)?;
     let result = (|| {
-        let mut db = open_wallet_database(&dir.join("wallet.sqlite"))?;
+        let permit = database_open_permit_for_new_wallet(&state)?;
+        let mut db = open_wallet_database(&dir.join("wallet.sqlite"), &permit)?;
         init_app_schema(&db)?;
         Wallet::create(
             wallet.external_descriptor.clone(),
@@ -980,12 +982,16 @@ pub fn multisig_recover_bsms(
         )
         .map_err(secure_store_error)?;
         write_private_json(&dir.join("wallet.json"), &wallet)?;
+        profile_commands::persist_mainnet_node_admission_for_new_profile(
+            &app,
+            &state,
+            id,
+            credential.as_str(),
+        )?;
         commit_multisig_profile(&app, id, &wallet)?;
         Ok(wallet)
     })();
-    if result.is_err() {
-        cleanup_failed_profile(&dir)?;
-    }
+    finish_new_profile_attempt(&state, id, &dir, result.is_ok())?;
     let wallet = result?;
     unlock_selected(&app, &state)?;
     reset_auth_throttle(&app, &state)?;
@@ -1045,6 +1051,7 @@ pub fn multisig_recover(
 ) -> ApiResult<MultisigWalletDto> {
     let credential = Zeroizing::new(credential);
     let _operation = operation_guard(&state)?;
+    let _admission_cleanup = clear_new_wallet_admission_on_exit(&state);
     validate_credential(credential.as_str())?;
     let mut backup = validate_multisig_backup(&encoded_backup)?;
     let standard_policy = backup.wallet.recovery_template.is_none()
@@ -1060,7 +1067,8 @@ pub fn multisig_recover(
         hardware_commands::reconcile_mainnet_recovery_cosigners(&state, &backup.wallet.cosigners)?;
     let (id, dir) = prepare_profile_directory(&app)?;
     let result = (|| {
-        let mut db = open_wallet_database(&dir.join("wallet.sqlite"))?;
+        let permit = database_open_permit_for_new_wallet(&state)?;
+        let mut db = open_wallet_database(&dir.join("wallet.sqlite"), &permit)?;
         init_app_schema(&db)?;
         Wallet::create(
             backup.wallet.external_descriptor.clone(),
@@ -1077,12 +1085,16 @@ pub fn multisig_recover(
         )
         .map_err(secure_store_error)?;
         write_private_json(&dir.join("wallet.json"), &backup.wallet)?;
+        profile_commands::persist_mainnet_node_admission_for_new_profile(
+            &app,
+            &state,
+            id,
+            credential.as_str(),
+        )?;
         commit_multisig_profile(&app, id, &backup.wallet)?;
         Ok(backup.wallet)
     })();
-    if result.is_err() {
-        cleanup_failed_profile(&dir)?;
-    }
+    finish_new_profile_attempt(&state, id, &dir, result.is_ok())?;
     let wallet = result?;
     unlock_selected(&app, &state)?;
     Ok(wallet)

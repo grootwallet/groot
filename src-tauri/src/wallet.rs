@@ -117,6 +117,7 @@ const SUPPLEMENTAL_MIX_DOMAIN: &[u8] = b"Groot BIP39 entropy mix v1";
 const RPC_TIMEOUT: Duration = Duration::from_secs(15);
 const NODE_HEALTH_ATTEMPTS: usize = 3;
 const NODE_HEALTH_RETRY_DELAY: Duration = Duration::from_millis(200);
+const MAINNET_NODE_ADMISSION_LIFETIME: Duration = Duration::from_secs(15 * 60);
 
 #[path = "wallet/export_commands.rs"]
 mod export_commands;
@@ -347,6 +348,7 @@ fn lock_wallet(state: &State<'_, AppState>, wallet_id: Uuid) -> ApiResult<()> {
         .lock()
         .map_err(internal)?
         .remove(&wallet_id);
+    clear_mainnet_node_admission(state)?;
     Ok(())
 }
 
@@ -363,6 +365,7 @@ pub struct AppState {
     pending_hardware_admissions: Mutex<HashMap<String, Instant>>,
     hardware_scan_epoch: AtomicU64,
     node_auth: Mutex<HashMap<Uuid, NodeAuthSession>>,
+    pending_mainnet_node_admission: Mutex<Option<PendingMainnetNodeAdmission>>,
     authenticated_software_descriptors: Mutex<HashMap<Uuid, (String, String)>>,
     saved_files: Mutex<HashMap<String, SavedFileReveal>>,
     pending_pdf_exports: Mutex<HashMap<String, PendingPdfExport>>,
@@ -528,6 +531,40 @@ struct ActiveForegroundSync {
 struct NodeAuthSession {
     config: CoreNodeConfig,
     password: Zeroizing<String>,
+}
+
+#[derive(Clone)]
+struct PendingMainnetNodeAdmission {
+    config: CoreNodeConfig,
+    password: Zeroizing<String>,
+    created_at: Instant,
+    scope: MainnetNodeAdmissionScope,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum MainnetNodeAdmissionScope {
+    ExistingWallet(Uuid),
+    NewWallet,
+}
+
+struct DatabaseOpenPermit {
+    issued_at: Instant,
+}
+
+struct NewWalletAdmissionCleanup<'a> {
+    state: &'a AppState,
+}
+
+impl Drop for NewWalletAdmissionCleanup<'_> {
+    fn drop(&mut self) {
+        if let Ok(mut admission) = self.state.pending_mainnet_node_admission.lock() {
+            admission.take();
+        }
+    }
+}
+
+fn clear_new_wallet_admission_on_exit(state: &AppState) -> NewWalletAdmissionCleanup<'_> {
+    NewWalletAdmissionCleanup { state }
 }
 
 #[derive(Deserialize)]
@@ -1642,13 +1679,15 @@ fn multisig_db_path(app: &AppHandle) -> ApiResult<PathBuf> {
 }
 
 fn profile_from_directory(
+    app: &AppHandle,
     directory: &Path,
     id: Uuid,
     kind: WalletKind,
 ) -> ApiResult<WalletProfile> {
     let (name, checksum) = match kind {
         WalletKind::SingleKey => {
-            let mut db = open_wallet_database(&directory.join("wallet.sqlite"))?;
+            let permit = database_open_permit_for_identity_inspection(app)?;
+            let mut db = open_wallet_database(&directory.join("wallet.sqlite"), &permit)?;
             let wallet = load_wallet(&mut db)?;
             (
                 "Primary wallet".to_owned(),
@@ -1714,8 +1753,9 @@ fn ensure_registry_migrated(app: &AppHandle) -> ApiResult<()> {
             ));
         }
         let id = Uuid::new_v4();
-        let profile = profile_from_directory(&legacy_directory, id, kind)?;
-        let (external_descriptor, _) = descriptor_pair_from_directory(&legacy_directory, &profile)?;
+        let profile = profile_from_directory(app, &legacy_directory, id, kind)?;
+        let (external_descriptor, _) =
+            descriptor_pair_from_directory(app, &legacy_directory, &profile)?;
         if let Some((_, existing)) = legacy_identities
             .iter()
             .find(|(existing_descriptor, _)| existing_descriptor == &external_descriptor)
@@ -1775,9 +1815,149 @@ fn prepare_profile_directory(app: &AppHandle) -> ApiResult<(Uuid, PathBuf)> {
     Ok((id, directory))
 }
 
-fn open_wallet_database(path: &Path) -> ApiResult<Connection> {
-    crate::release_policy::ensure_runtime_network_enabled(NETWORK)
-        .map_err(|_| internal("This build is not authorized to open a mainnet wallet database."))?;
+fn current_mainnet_node_admission(state: &AppState) -> ApiResult<PendingMainnetNodeAdmission> {
+    let mut admission = state
+        .pending_mainnet_node_admission
+        .lock()
+        .map_err(internal)?;
+    if admission.as_ref().is_some_and(|record| {
+        mainnet_node_admission_is_current_at(record.created_at, Instant::now())
+    }) {
+        return Ok(admission.as_ref().expect("checked admission").clone());
+    }
+    admission.take();
+    Err(api_error(
+        "node_admission_required",
+        "Connect and verify the approved local Bitcoin Core node before opening a mainnet wallet.",
+    ))
+}
+
+fn mainnet_node_admission_is_current_at(created_at: Instant, now: Instant) -> bool {
+    now.checked_duration_since(created_at)
+        .is_some_and(|age| age <= MAINNET_NODE_ADMISSION_LIFETIME)
+}
+
+fn clear_mainnet_node_admission(state: &AppState) -> ApiResult<()> {
+    state
+        .pending_mainnet_node_admission
+        .lock()
+        .map_err(internal)?
+        .take();
+    Ok(())
+}
+
+fn database_admission_error(error: crate::release_policy::ReleasePolicyError) -> ApiError {
+    match error {
+        crate::release_policy::ReleasePolicyError::BackendAdmissionRequired => api_error(
+            "node_admission_required",
+            "Connect and verify the approved local Bitcoin Core node before opening a mainnet wallet.",
+        ),
+        _ => internal("This build is not authorized to open a mainnet wallet database."),
+    }
+}
+
+fn database_open_permit_for_new_wallet(state: &AppState) -> ApiResult<DatabaseOpenPermit> {
+    if NETWORK != Network::Bitcoin {
+        return Ok(DatabaseOpenPermit {
+            issued_at: Instant::now(),
+        });
+    }
+    let admission = current_mainnet_node_admission(state)?;
+    if admission.scope != MainnetNodeAdmissionScope::NewWallet {
+        return Err(api_error(
+            "node_admission_required",
+            "Verify the local Bitcoin Core node specifically for new mainnet wallet creation.",
+        ));
+    }
+    crate::release_policy::ensure_database_open_enabled(NETWORK, true)
+        .map_err(database_admission_error)?;
+    Ok(DatabaseOpenPermit {
+        issued_at: Instant::now(),
+    })
+}
+
+fn database_open_permit_for_selected_wallet(app: &AppHandle) -> ApiResult<DatabaseOpenPermit> {
+    if NETWORK != Network::Bitcoin {
+        return Ok(DatabaseOpenPermit {
+            issued_at: Instant::now(),
+        });
+    }
+    let state = app.state::<AppState>();
+    let selected = selected_profile(app)?;
+    let saved_config = read_node_config_for(app, selected.id)?;
+    let pending_matches = current_mainnet_node_admission(&state).is_ok_and(|admission| {
+        admission.scope == MainnetNodeAdmissionScope::ExistingWallet(selected.id)
+            && admission.config == saved_config
+    });
+    let active_matches = state
+        .unlocked_wallets
+        .lock()
+        .map_err(internal)?
+        .is_unlocked(selected.id)
+        && state
+            .node_auth
+            .lock()
+            .map_err(internal)?
+            .get(&selected.id)
+            .is_some_and(|session| session.config == saved_config);
+    if !pending_matches && !active_matches {
+        return Err(api_error(
+            "node_admission_required",
+            "Verify this wallet's saved local Bitcoin Core connection before unlocking it.",
+        ));
+    }
+    crate::release_policy::ensure_database_open_enabled(NETWORK, true)
+        .map_err(database_admission_error)?;
+    Ok(DatabaseOpenPermit {
+        issued_at: Instant::now(),
+    })
+}
+
+fn database_open_permit_for_identity_inspection(app: &AppHandle) -> ApiResult<DatabaseOpenPermit> {
+    if NETWORK == Network::Bitcoin {
+        let state = app.state::<AppState>();
+        let pending = current_mainnet_node_admission(&state).is_ok();
+        let authenticated_wallets = state
+            .node_auth
+            .lock()
+            .map_err(internal)?
+            .keys()
+            .copied()
+            .collect::<Vec<_>>();
+        let sessions = state.unlocked_wallets.lock().map_err(internal)?;
+        let active = authenticated_wallets
+            .iter()
+            .any(|wallet_id| sessions.is_unlocked(*wallet_id));
+        if !pending && !active {
+            return Err(api_error(
+                "node_admission_required",
+                "Connect and verify the approved local Bitcoin Core node before inspecting mainnet wallet identities.",
+            ));
+        }
+    }
+    crate::release_policy::ensure_database_open_enabled(NETWORK, NETWORK == Network::Bitcoin)
+        .map_err(database_admission_error)?;
+    Ok(DatabaseOpenPermit {
+        issued_at: Instant::now(),
+    })
+}
+
+fn validate_database_open_permit(permit: &DatabaseOpenPermit) -> ApiResult<()> {
+    let current = NETWORK != Network::Bitcoin
+        || permit.issued_at.elapsed() <= MAINNET_NODE_ADMISSION_LIFETIME;
+    crate::release_policy::ensure_database_open_enabled(NETWORK, current)
+        .map_err(database_admission_error)
+}
+
+#[cfg(test)]
+fn database_open_permit_for_test() -> DatabaseOpenPermit {
+    DatabaseOpenPermit {
+        issued_at: Instant::now(),
+    }
+}
+
+fn open_wallet_database(path: &Path, permit: &DatabaseOpenPermit) -> ApiResult<Connection> {
+    validate_database_open_permit(permit)?;
     if let Ok(metadata) = fs::symlink_metadata(path) {
         if metadata.file_type().is_symlink() || !metadata.is_file() {
             return Err(internal("Wallet database storage is not a regular file."));
@@ -1799,10 +1979,11 @@ fn open_wallet_database(path: &Path) -> ApiResult<Connection> {
     Ok(db)
 }
 
-fn open_existing_wallet_database_read_only(path: &Path) -> ApiResult<Connection> {
-    crate::release_policy::ensure_runtime_network_enabled(NETWORK).map_err(|_| {
-        internal("This build is not authorized to inspect a mainnet wallet database.")
-    })?;
+fn open_existing_wallet_database_read_only(
+    path: &Path,
+    permit: &DatabaseOpenPermit,
+) -> ApiResult<Connection> {
+    validate_database_open_permit(permit)?;
     let metadata = fs::symlink_metadata(path).map_err(internal)?;
     if metadata.file_type().is_symlink() || !metadata.is_file() {
         return Err(internal("Wallet database storage is not a regular file."));
@@ -1824,14 +2005,17 @@ fn profile_descriptor_pair(
     profile: &WalletProfile,
 ) -> ApiResult<(String, String)> {
     let directory = profile_directory(app, profile.id)?;
-    descriptor_pair_from_directory(&directory, profile)
+    descriptor_pair_from_directory(app, &directory, profile)
 }
 
 fn descriptor_pair_from_directory(
+    app: &AppHandle,
     directory: &Path,
     profile: &WalletProfile,
 ) -> ApiResult<(String, String)> {
-    let mut db = open_existing_wallet_database_read_only(&directory.join("wallet.sqlite"))?;
+    let permit = database_open_permit_for_identity_inspection(app)?;
+    let mut db =
+        open_existing_wallet_database_read_only(&directory.join("wallet.sqlite"), &permit)?;
     let wallet = load_wallet(&mut db)?;
     let external = wallet.public_descriptor(KeychainKind::External).to_string();
     let internal_descriptor = wallet.public_descriptor(KeychainKind::Internal).to_string();
@@ -2869,7 +3053,8 @@ fn open_auth_db(app: &AppHandle) -> ApiResult<Connection> {
             "The selected wallet database could not be found.",
         ));
     }
-    let db = open_wallet_database(&path)?;
+    let permit = database_open_permit_for_selected_wallet(app)?;
+    let db = open_wallet_database(&path, &permit)?;
     init_app_schema(&db)?;
     Ok(db)
 }
@@ -2907,7 +3092,8 @@ fn open_db(app: &AppHandle) -> ApiResult<Connection> {
             "No wallet exists on this device.",
         ));
     }
-    let mut db = open_wallet_database(&path)?;
+    let permit = database_open_permit_for_selected_wallet(app)?;
+    let mut db = open_wallet_database(&path, &permit)?;
     init_app_schema(&db)?;
     compact_persisted_checkpoints(&mut db)?;
     validate_selected_wallet_database_identity(app, &mut db, WalletKind::SingleKey)?;
@@ -2922,7 +3108,8 @@ fn open_multisig_db(app: &AppHandle) -> ApiResult<Connection> {
             "No multisig wallet exists on this device.",
         ));
     }
-    let mut db = open_wallet_database(&path)?;
+    let permit = database_open_permit_for_selected_wallet(app)?;
+    let mut db = open_wallet_database(&path, &permit)?;
     init_app_schema(&db)?;
     compact_persisted_checkpoints(&mut db)?;
     validate_selected_wallet_database_identity(app, &mut db, WalletKind::Multisig)?;
@@ -4507,6 +4694,21 @@ fn cleanup_failed_profile(dir: &Path) -> ApiResult<()> {
     }
 }
 
+fn finish_new_profile_attempt(
+    state: &AppState,
+    wallet_id: Uuid,
+    directory: &Path,
+    succeeded: bool,
+) -> ApiResult<()> {
+    let cleanup = if succeeded {
+        Ok(())
+    } else {
+        state.node_auth.lock().map_err(internal)?.remove(&wallet_id);
+        cleanup_failed_profile(directory)
+    };
+    cleanup
+}
+
 fn read_private_text(path: &Path) -> ApiResult<String> {
     let metadata = fs::symlink_metadata(path).map_err(internal)?;
     if metadata.file_type().is_symlink() || !metadata.is_file() {
@@ -4528,6 +4730,7 @@ fn read_private_text(path: &Path) -> ApiResult<String> {
 
 fn create_from_mnemonic(
     app: &AppHandle,
+    state: &State<'_, AppState>,
     name: String,
     mnemonic: Mnemonic,
     credential: &str,
@@ -4544,7 +4747,8 @@ fn create_from_mnemonic(
     let (id, dir) = prepare_profile_directory(app)?;
     let result = (|| {
         let (external, internal_template) = watch_templates(&mnemonic, credential)?;
-        let mut db = open_wallet_database(&dir.join("wallet.sqlite"))?;
+        let permit = database_open_permit_for_new_wallet(state)?;
+        let mut db = open_wallet_database(&dir.join("wallet.sqlite"), &permit)?;
         init_app_schema(&db)?;
         let wallet = Wallet::create(external, internal_template)
             .network(NETWORK)
@@ -4552,6 +4756,9 @@ fn create_from_mnemonic(
             .map_err(internal)?;
         let words = Zeroizing::new(mnemonic.to_string());
         persist_secret_material(&dir.join("secret.json"), words.as_bytes(), credential)?;
+        profile_commands::persist_mainnet_node_admission_for_new_profile(
+            app, state, id, credential,
+        )?;
         commit_profile(
             app,
             WalletProfile {
@@ -4568,9 +4775,7 @@ fn create_from_mnemonic(
             &wallet.public_descriptor(KeychainKind::External).to_string(),
         )
     })();
-    if result.is_err() {
-        cleanup_failed_profile(&dir)?;
-    }
+    finish_new_profile_attempt(state, id, &dir, result.is_ok())?;
     result
 }
 
