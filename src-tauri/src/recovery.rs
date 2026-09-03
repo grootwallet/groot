@@ -398,6 +398,12 @@ pub fn analyze_template(
     template: &RecoveryTemplate,
     cosigners: &[CosignerInput],
 ) -> Result<PolicyAnalysis, RecoveryError> {
+    if cosigners
+        .iter()
+        .any(|cosigner| cosigner.parse_for_validation().is_err())
+    {
+        return Err(RecoveryError::InvalidKey);
+    }
     let known = cosigners
         .iter()
         .map(|key| key.id.as_str())
@@ -806,6 +812,16 @@ mod tests {
         wrong_path[0].derivation_path = "bad".into();
         assert_eq!(
             analyze_template(&template, &wrong_path).unwrap_err(),
+            RecoveryError::InvalidKey
+        );
+        let mut wrong_network = signers(4);
+        let secp = Secp256k1::new();
+        let master = Xpriv::new_master(NetworkKind::Main, &[9_u8; 32]).unwrap();
+        let path = DerivationPath::from_str(MULTISIG_ACCOUNT_PATH).unwrap();
+        let account = master.derive_priv(&secp, &path).unwrap();
+        wrong_network[0].xpub = Xpub::from_priv(&secp, &account).to_string();
+        assert_eq!(
+            analyze_template(&template, &wrong_network).unwrap_err(),
             RecoveryError::InvalidKey
         );
     }

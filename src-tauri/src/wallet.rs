@@ -267,12 +267,33 @@ fn require_unlocked_with_activity(
     let selected = registry
         .selected_wallet_id
         .ok_or_else(|| registry_api_error(RegistryError::UnknownSelection))?;
-    let idle_timeout = Duration::from_secs(u64::from(registry.inactivity_timeout_minutes) * 60);
+    let authorized = authorize_wallet_session(
+        state,
+        selected,
+        record_activity,
+        registry.inactivity_timeout_minutes,
+    )?;
+    if authorized {
+        return Ok(selected);
+    }
+    Err(api_error(
+        "wallet_locked",
+        "Enter your passphrase / PIN to unlock Groot.",
+    ))
+}
+
+fn authorize_wallet_session(
+    state: &State<'_, AppState>,
+    wallet_id: Uuid,
+    record_activity: bool,
+    inactivity_timeout_minutes: u16,
+) -> ApiResult<bool> {
+    let idle_timeout = Duration::from_secs(u64::from(inactivity_timeout_minutes) * 60);
     let now = Instant::now();
     let (expired_wallets, authorized) = {
         let mut sessions = state.unlocked_wallets.lock().map_err(internal)?;
         let expired_wallets = sessions.prune_expired_at(now, idle_timeout);
-        let authorized = sessions.authorize_at(selected, record_activity, now, idle_timeout);
+        let authorized = sessions.authorize_at(wallet_id, record_activity, now, idle_timeout);
         (expired_wallets, authorized)
     };
     if !expired_wallets.is_empty() || !authorized {
@@ -281,22 +302,16 @@ fn require_unlocked_with_activity(
             .authenticated_software_descriptors
             .lock()
             .map_err(internal)?;
-        for wallet_id in expired_wallets {
+        for expired in expired_wallets {
+            node_auth.remove(&expired);
+            authenticated_descriptors.remove(&expired);
+        }
+        if !authorized {
             node_auth.remove(&wallet_id);
             authenticated_descriptors.remove(&wallet_id);
         }
-        if !authorized {
-            node_auth.remove(&selected);
-            authenticated_descriptors.remove(&selected);
-        }
     }
-    if authorized {
-        return Ok(selected);
-    }
-    Err(api_error(
-        "wallet_locked",
-        "Enter your passphrase / PIN to unlock Groot.",
-    ))
+    Ok(authorized)
 }
 
 fn require_unlocked(app: &AppHandle, state: &State<'_, AppState>) -> ApiResult<Uuid> {
@@ -345,6 +360,7 @@ pub struct AppState {
     verified_recovery: Mutex<HashMap<Uuid, String>>,
     pending_hardware_pins: Mutex<HashMap<String, PendingHardwarePin>>,
     recent_hardware_scan: Mutex<Option<RecentHardwareScan>>,
+    pending_hardware_admissions: Mutex<HashMap<String, Instant>>,
     hardware_scan_epoch: AtomicU64,
     node_auth: Mutex<HashMap<Uuid, NodeAuthSession>>,
     authenticated_software_descriptors: Mutex<HashMap<Uuid, (String, String)>>,
@@ -1309,21 +1325,26 @@ fn missing_hardware_xpub(
     }
     match device_type.to_ascii_lowercase().as_str() {
         "ledger" => {
+            let ledger_app = if NETWORK == Network::Bitcoin {
+                "Bitcoin"
+            } else {
+                "Bitcoin Test—not Bitcoin"
+            };
             let message = if code == Some(-7) || safe_detail.contains("bad argument") {
-                "Ledger rejected this test-chain account path. Open the Bitcoin Test app—not the main Bitcoin app—then reconnect and try again."
+                format!("Ledger rejected this {NETWORK_NAME} account path. Open the {ledger_app} app, then reconnect and try again.")
             } else if code == Some(-13)
                 || safe_detail.contains("technical problem")
                 || safe_detail.contains("device failure")
             {
-                "Ledger is in the wrong app for this Regtest wallet. Quit Ledger Live, open Bitcoin Test—not Bitcoin—then reconnect and try again."
+                format!("Ledger is in the wrong app for this {NETWORK_NAME} wallet. Quit Ledger Live, open {ledger_app}, then reconnect and try again.")
             } else if safe_detail.contains("bitcoin test")
                 || safe_detail.contains("not in either the bitcoin")
             {
-                "Open the Bitcoin or Bitcoin Test app on Ledger, keep Ledger Live closed, then try again."
+                format!("Open {ledger_app} on Ledger, keep Ledger Live closed, then try again.")
             } else if derivation_path.starts_with("m/48'") {
-                "Ledger did not return the Regtest multisig account key. Keep Ledger Live closed, open Bitcoin Test, try again, then approve the public-key export if Ledger asks."
+                format!("Ledger did not return the {NETWORK_NAME} multisig account key. Keep Ledger Live closed, open {ledger_app}, try again, then approve the public-key export if Ledger asks.")
             } else {
-                "Ledger did not return the Regtest BIP84 account key. Keep Ledger Live closed, open Bitcoin Test—not Bitcoin—reconnect, then try again."
+                format!("Ledger did not return the {NETWORK_NAME} BIP84 account key. Keep Ledger Live closed, open {ledger_app}, reconnect, then try again.")
             };
             api_error("hardware_unavailable", message)
         }
@@ -2144,7 +2165,7 @@ fn rpc_client(app: &AppHandle, state: &State<'_, AppState>) -> ApiResult<Client>
         .validate()
         .map_err(network_config_api_error)?
         .to_string();
-    match config.auth {
+    let client = match config.auth {
         RpcAuthMode::Cookie => {
             if !IS_REGTEST {
                 return Err(api_error(
@@ -2184,7 +2205,9 @@ fn rpc_client(app: &AppHandle, state: &State<'_, AppState>) -> ApiResult<Client>
                 RPC_TIMEOUT,
             )
         }
-    }
+    }?;
+    validate_first_mainnet_rpc_backend(&client, &config.backend)?;
+    Ok(client)
 }
 
 fn candidate_rpc_client(config: &CoreNodeConfig, password: &str) -> ApiResult<Client> {
@@ -2192,7 +2215,7 @@ fn candidate_rpc_client(config: &CoreNodeConfig, password: &str) -> ApiResult<Cl
         .validate()
         .map_err(network_config_api_error)?
         .to_string();
-    match config.auth {
+    let client = match config.auth {
         RpcAuthMode::Cookie => {
             if !IS_REGTEST {
                 return Err(api_error(
@@ -2216,7 +2239,22 @@ fn candidate_rpc_client(config: &CoreNodeConfig, password: &str) -> ApiResult<Cl
             config.tor_proxy.as_deref(),
             RPC_TIMEOUT,
         ),
+    }?;
+    validate_first_mainnet_rpc_backend(&client, &config.backend)?;
+    Ok(client)
+}
+
+fn validate_first_mainnet_rpc_backend(client: &Client, backend: &ChainBackend) -> ApiResult<()> {
+    if NETWORK != Network::Bitcoin {
+        return Ok(());
     }
+    let observed_genesis = client.get_block_hash(0).map_err(rpc_api_error)?;
+    crate::release_policy::validate_first_mainnet_backend(backend, observed_genesis).map_err(|_| {
+        api_error(
+            "invalid_node_config",
+            "The first mainnet release requires a loopback Bitcoin Core node on the exact Bitcoin genesis chain.",
+        )
+    })
 }
 
 fn checked_chain_identity(client: &Client) -> ApiResult<(u64, BlockHash)> {
@@ -4234,6 +4272,78 @@ fn load_acceleration_review(
     .map_err(internal)
 }
 
+fn proposal_acceleration_method(
+    db: &Connection,
+    proposal_id: &str,
+) -> ApiResult<Option<AccelerationMethod>> {
+    db.query_row(
+        "SELECT method FROM groot_accelerations WHERE proposal_id = ?1",
+        params![proposal_id],
+        |row| row.get::<_, String>(0),
+    )
+    .optional()
+    .map_err(internal)?
+    .map(|method| match method.as_str() {
+        "rbf" => Ok(AccelerationMethod::Rbf),
+        "cpfp" => Ok(AccelerationMethod::Cpfp),
+        _ => Err(api_error(
+            "proposal_mismatch",
+            "The stored acceleration method is invalid.",
+        )),
+    })
+    .transpose()
+}
+
+fn validate_rbf_original_intent(
+    db: &Connection,
+    wallet: &Wallet,
+    proposal_id: &str,
+    recipient: &str,
+    amount: u64,
+) -> ApiResult<()> {
+    let original_txid = db
+        .query_row(
+            "SELECT original_txid FROM groot_accelerations WHERE proposal_id = ?1 AND method = 'rbf'",
+            params![proposal_id],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(internal)?;
+    let Some(original_txid) = original_txid else {
+        return Ok(());
+    };
+    let txid = Txid::from_str(&original_txid).map_err(|_| {
+        api_error(
+            "proposal_mismatch",
+            "The stored replacement transaction reference is invalid.",
+        )
+    })?;
+    let original = wallet.get_tx(txid).ok_or_else(|| {
+        api_error(
+            "proposal_mismatch",
+            "The original transaction is unavailable for replacement verification.",
+        )
+    })?;
+    let external = original
+        .tx_node
+        .tx
+        .output
+        .iter()
+        .filter(|output| !wallet.is_mine(output.script_pubkey.clone()))
+        .collect::<Vec<_>>();
+    let valid = external.len() == 1
+        && external[0].value.to_sat() == amount
+        && Address::from_script(&external[0].script_pubkey, NETWORK)
+            .is_ok_and(|address| address.to_string() == recipient);
+    if !valid {
+        return Err(api_error(
+            "proposal_mismatch",
+            "The replacement no longer matches the original recipient and payment amount.",
+        ));
+    }
+    Ok(())
+}
+
 fn load_payment_proposal_dto(
     db: &Connection,
     wallet: &Wallet,
@@ -5428,6 +5538,16 @@ pub(crate) mod hardware_commands;
 pub(crate) mod multisig_setup_commands;
 
 fn validate_manual_outpoints(values: &[String], frozen: &[OutPoint]) -> ApiResult<Vec<OutPoint>> {
+    // A 10,000-input transaction is already far beyond normal wallet use and
+    // remains below Bitcoin's absolute block-weight envelope. This cap bounds
+    // parsing, hashing, and BDK work after Tauri has decoded the request.
+    const MAX_MANUAL_OUTPOINTS: usize = 10_000;
+    if values.len() > MAX_MANUAL_OUTPOINTS {
+        return Err(api_error(
+            "invalid_coin",
+            "Too many coins were selected for one payment.",
+        ));
+    }
     if values.is_empty() {
         return Err(api_error(
             "invalid_coin",
@@ -5646,6 +5766,7 @@ pub fn wallet_delete(
     credential: String,
     confirmation: String,
 ) -> ApiResult<()> {
+    let credential = Zeroizing::new(credential);
     let _operation = operation_guard(&state)?;
     require_unlocked(&app, &state)?;
     if confirmation != "DELETE" {
@@ -5654,7 +5775,6 @@ pub fn wallet_delete(
             "Type DELETE exactly to remove this wallet.",
         ));
     }
-    let credential = Zeroizing::new(credential);
     check_auth_throttle(&app, &state)?;
     let profile = selected_profile(&app)?;
     let verified = match profile.kind {

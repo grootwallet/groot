@@ -18,11 +18,19 @@ pub enum ReleasePolicyError {
     InvalidAmount,
     AmountCapExceeded,
     BatchSpendingDisabled,
+    UnsupportedWalletPolicy,
 }
 
 pub fn ensure_runtime_network_enabled(network: Network) -> Result<(), ReleasePolicyError> {
     if network == Network::Bitcoin && !MAINNET_ENABLED {
         return Err(ReleasePolicyError::MainnetDisabled);
+    }
+    Ok(())
+}
+
+pub fn ensure_delayed_policy_creation_enabled(network: Network) -> Result<(), ReleasePolicyError> {
+    if network == Network::Bitcoin {
+        return Err(ReleasePolicyError::UnsupportedWalletPolicy);
     }
     Ok(())
 }
@@ -58,6 +66,30 @@ pub fn validate_spend(
     validate_first_mainnet_spend(recipient_count, total_sats)
 }
 
+pub fn validate_cpfp(
+    network: Network,
+    recipient_count: usize,
+    total_sats: u64,
+) -> Result<(), ReleasePolicyError> {
+    if network != Network::Bitcoin {
+        return Ok(());
+    }
+    if !MAINNET_ENABLED {
+        return Err(ReleasePolicyError::MainnetDisabled);
+    }
+    validate_first_mainnet_cpfp(recipient_count, total_sats)
+}
+
+fn validate_first_mainnet_cpfp(
+    recipient_count: usize,
+    total_sats: u64,
+) -> Result<(), ReleasePolicyError> {
+    if recipient_count != 0 || total_sats != 0 {
+        return Err(ReleasePolicyError::InvalidAmount);
+    }
+    Ok(())
+}
+
 fn validate_first_mainnet_spend(
     recipient_count: usize,
     total_sats: u64,
@@ -88,6 +120,18 @@ mod tests {
             assert_eq!(ensure_runtime_network_enabled(network), Ok(()));
             assert_eq!(validate_spend(network, usize::MAX, u64::MAX), Ok(()));
         }
+    }
+
+    #[test]
+    fn first_mainnet_scope_excludes_guided_delayed_policy_creation() {
+        assert_eq!(
+            ensure_delayed_policy_creation_enabled(Network::Bitcoin),
+            Err(ReleasePolicyError::UnsupportedWalletPolicy)
+        );
+        assert_eq!(
+            ensure_delayed_policy_creation_enabled(Network::Testnet4),
+            Ok(())
+        );
     }
 
     #[test]
@@ -149,6 +193,24 @@ mod tests {
         assert_eq!(
             validate_first_mainnet_spend(1, FIRST_MAINNET_MAX_SEND_SATS + 1),
             Err(ReleasePolicyError::AmountCapExceeded)
+        );
+    }
+
+    #[test]
+    fn dormant_cpfp_policy_allows_only_a_wallet_owned_fee_child() {
+        assert_eq!(validate_cpfp(Network::Regtest, 99, u64::MAX), Ok(()));
+        assert_eq!(
+            validate_cpfp(Network::Bitcoin, 0, 0),
+            Err(ReleasePolicyError::MainnetDisabled)
+        );
+        assert_eq!(validate_first_mainnet_cpfp(0, 0), Ok(()));
+        assert_eq!(
+            validate_first_mainnet_cpfp(1, 0),
+            Err(ReleasePolicyError::InvalidAmount)
+        );
+        assert_eq!(
+            validate_first_mainnet_cpfp(0, 1),
+            Err(ReleasePolicyError::InvalidAmount)
         );
     }
 }

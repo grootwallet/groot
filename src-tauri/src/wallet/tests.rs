@@ -1313,6 +1313,14 @@ fn proposal_review_rejects_any_non_recipient_output_not_owned_by_the_wallet() {
         proposal_fee_amount(&overspend).unwrap_err().code,
         "proposal_mismatch"
     );
+    let funding_outpoint = psbt.unsigned_tx.input[0].previous_output;
+    validate_psbt_excludes_frozen(&psbt, &[]).unwrap();
+    assert_eq!(
+        validate_psbt_excludes_frozen(&psbt, &[funding_outpoint])
+            .unwrap_err()
+            .code,
+        "coin_unavailable"
+    );
 
     let mut redirected = psbt.clone();
     redirected.unsigned_tx.output[1].script_pubkey = attacker.script_pubkey();
@@ -1383,6 +1391,23 @@ fn acceleration_rates_and_error_classes_fail_closed() {
 }
 
 #[test]
+fn rbf_replacement_must_preserve_the_original_recipient_and_amount() {
+    validate_rbf_recipient_unchanged(Some("recipient"), 42, "recipient", 42).unwrap();
+    assert_eq!(
+        validate_rbf_recipient_unchanged(Some("recipient"), 42, "recipient", 43)
+            .unwrap_err()
+            .code,
+        "proposal_mismatch"
+    );
+    assert_eq!(
+        validate_rbf_recipient_unchanged(None, 42, "recipient", 42)
+            .unwrap_err()
+            .code,
+        "acceleration_unavailable"
+    );
+}
+
+#[test]
 fn fee_comparison_is_exact_signed_integer_arithmetic() {
     assert_eq!(fee_difference(700, Some(900)).unwrap(), Some(-200));
     assert_eq!(fee_difference(1_100, Some(900)).unwrap(), Some(200));
@@ -1441,10 +1466,16 @@ fn cpfp_builds_from_an_incoming_parent_without_foreign_prevouts() {
             sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
             witness: Witness::new(),
         }],
-        output: vec![TxOut {
-            value: Amount::from_sat(100_000),
-            script_pubkey: receive.address.script_pubkey(),
-        }],
+        output: vec![
+            TxOut {
+                value: Amount::from_sat(100_000),
+                script_pubkey: receive.address.script_pubkey(),
+            },
+            TxOut {
+                value: Amount::from_sat(50_000),
+                script_pubkey: receive.address.script_pubkey(),
+            },
+        ],
     };
     let parent_txid = parent.compute_txid();
     wallet.apply_unconfirmed_txs([(parent.clone(), 1)]);
@@ -1455,11 +1486,35 @@ fn cpfp_builds_from_an_incoming_parent_without_foreign_prevouts() {
         parent_txid,
         Amount::from_sat(1_000),
         FeeRate::from_sat_per_vb(5).unwrap(),
+        &[],
     )
     .unwrap();
     assert_eq!(child.unsigned_tx.input.len(), 1);
     assert_eq!(child.unsigned_tx.input[0].previous_output.txid, parent_txid);
+    assert_eq!(child.unsigned_tx.input[0].previous_output.vout, 0);
     assert!(child.fee_amount().unwrap() > Amount::ZERO);
+    let largest = OutPoint::new(parent_txid, 0);
+    let fallback = build_cpfp(
+        &mut wallet,
+        parent_txid,
+        Amount::from_sat(1_000),
+        FeeRate::from_sat_per_vb(5).unwrap(),
+        &[largest],
+    )
+    .unwrap();
+    assert_eq!(fallback.unsigned_tx.input[0].previous_output.vout, 1);
+    assert_eq!(
+        build_cpfp(
+            &mut wallet,
+            parent_txid,
+            Amount::from_sat(1_000),
+            FeeRate::from_sat_per_vb(5).unwrap(),
+            &[largest, OutPoint::new(parent_txid, 1)],
+        )
+        .unwrap_err()
+        .code,
+        "acceleration_unavailable"
+    );
 }
 
 #[test]
@@ -2464,6 +2519,12 @@ fn manual_selection_rejects_empty_malformed_duplicate_and_frozen_outpoints() {
             .unwrap_err()
             .code,
         "coin_unavailable"
+    );
+    assert_eq!(
+        validate_manual_outpoints(&vec!["x".to_owned(); 10_001], &[])
+            .unwrap_err()
+            .code,
+        "invalid_coin"
     );
 }
 

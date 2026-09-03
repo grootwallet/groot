@@ -200,9 +200,10 @@ fn store_portable(
     write_owner_only(metadata_path, &encode_metadata(&metadata)?)
 }
 
-fn load_portable(
+fn load_portable_with_writer(
     metadata_path: &Path,
     credential: &str,
+    write_metadata: impl FnOnce(&Path, &[u8]) -> Result<(), SecureStoreError>,
 ) -> Result<Zeroizing<Vec<u8>>, SecureStoreError> {
     let mut metadata = read_metadata(metadata_path)?;
     let salt = Zeroizing::new(decode(&metadata.salt)?);
@@ -229,10 +230,17 @@ fn load_portable(
         metadata.version = VERSION;
         metadata.device_nonce = None;
         metadata.device_wrapped_key = None;
-        write_owner_only(metadata_path, &encode_metadata(&metadata)?)?;
+        write_metadata(metadata_path, &encode_metadata(&metadata)?)?;
     }
 
     Ok(plaintext)
+}
+
+fn load_portable(
+    metadata_path: &Path,
+    credential: &str,
+) -> Result<Zeroizing<Vec<u8>>, SecureStoreError> {
+    load_portable_with_writer(metadata_path, credential, write_owner_only)
 }
 
 pub fn store(
@@ -364,6 +372,27 @@ mod tests {
         assert_eq!(migrated.version, VERSION);
         assert!(migrated.device_nonce.is_none());
         assert!(migrated.device_wrapped_key.is_none());
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn authenticated_v2_migration_prewrite_failure_keeps_ciphertext_and_fails_closed() {
+        let directory = directory();
+        let metadata = directory.join("secret.json");
+        write_v2_fixture(&metadata, b"migration secret", "correct");
+        let before = fs::read(&metadata).unwrap();
+
+        assert_eq!(
+            load_portable_with_writer(&metadata, "correct", |_path, _encoded| {
+                Err(SecureStoreError::Unavailable)
+            }),
+            Err(SecureStoreError::Unavailable)
+        );
+        assert_eq!(fs::read(&metadata).unwrap(), before);
+        assert_eq!(
+            read_metadata(&metadata).unwrap().version,
+            DEVICE_BOUND_VERSION
+        );
         fs::remove_dir_all(directory).unwrap();
     }
 

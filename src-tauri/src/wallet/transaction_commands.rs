@@ -413,9 +413,14 @@ fn replacement_vsize(wallet: &Wallet, psbt: &Psbt) -> ApiResult<u64> {
         .ok_or_else(|| internal("The replacement has an invalid signed size."))
 }
 
-fn rbf_candidate(wallet: &mut Wallet, txid: Txid, rate: FeeRate) -> ApiResult<(Psbt, u64, u64)> {
+fn rbf_candidate(
+    wallet: &mut Wallet,
+    txid: Txid,
+    rate: FeeRate,
+    frozen: &[OutPoint],
+) -> ApiResult<(Psbt, u64, u64)> {
     let mut builder = wallet.build_fee_bump(txid).map_err(acceleration_error)?;
-    builder.fee_rate(rate);
+    builder.fee_rate(rate).unspendable(frozen.to_vec());
     let psbt = builder.finish().map_err(rbf_candidate_error)?;
     let fee = psbt
         .fee_amount()
@@ -443,6 +448,7 @@ fn quote_rbf(
     requested_rate: Option<&str>,
     core_incremental_fee_per_kvb: u64,
     core_priority_rate: Option<f64>,
+    frozen: &[OutPoint],
 ) -> ApiResult<(AccelerationQuoteDto, Psbt)> {
     let original = wallet.get_tx(txid).ok_or_else(|| {
         api_error(
@@ -470,7 +476,7 @@ fn quote_rbf(
         .saturating_add(bdk_increment.max(core_increment));
     let (minimum_psbt, minimum_fee, minimum_vsize) = loop {
         let rate = FeeRate::from_sat_per_kwu(minimum_kwu);
-        match rbf_candidate(wallet, txid, rate) {
+        match rbf_candidate(wallet, txid, rate, frozen) {
             Ok((psbt, fee, vsize)) => {
                 let core_incremental_fee = core_incremental_fee_per_kvb
                     .saturating_mul(vsize)
@@ -522,7 +528,7 @@ fn quote_rbf(
         if target == FeeRate::from_sat_per_kwu(minimum_kwu) {
             (minimum_psbt, minimum_fee, minimum_vsize)
         } else {
-            rbf_candidate(wallet, txid, target)?
+            rbf_candidate(wallet, txid, target, frozen)?
         };
     let effective = ((replacement_fee as f64 / replacement_vsize as f64) * 100.0).round() / 100.0;
     Ok((
@@ -600,14 +606,17 @@ pub fn rbf_acceleration_quote(
         WalletKind::SingleKey | WalletKind::WatchOnly => open_db(&app)?,
     };
     let mut transaction = db.transaction().map_err(internal)?;
+    let frozen = frozen_outpoints(&transaction)?;
     let mut wallet = load_wallet_transaction(&mut transaction)?;
-    let (quote, _) = quote_rbf(
+    let (quote, psbt) = quote_rbf(
         &mut wallet,
         txid,
         fee_rate.as_deref(),
         incremental_fee,
         priority,
+        &frozen,
     )?;
+    validate_psbt_excludes_frozen(&psbt, &frozen)?;
     Ok(quote)
 }
 
@@ -638,8 +647,17 @@ pub fn cpfp_acceleration_quote(
     let parent_fee = cpfp_parent_fee(&app, &state, &wallet, txid)?;
     drop(wallet);
     let mut transaction = db.transaction().map_err(internal)?;
+    let frozen = frozen_outpoints(&transaction)?;
     let mut wallet = load_wallet_transaction(&mut transaction)?;
-    let (quote, _) = quote_cpfp(&mut wallet, txid, parent_fee, fee_rate.as_deref(), priority)?;
+    let (quote, psbt) = quote_cpfp(
+        &mut wallet,
+        txid,
+        parent_fee,
+        fee_rate.as_deref(),
+        priority,
+        &frozen,
+    )?;
+    validate_psbt_excludes_frozen(&psbt, &frozen)?;
     Ok(quote)
 }
 
@@ -803,11 +821,33 @@ pub(crate) fn acceleration_label(method: AccelerationMethod, original: &Transact
     }
 }
 
+pub(super) fn validate_rbf_recipient_unchanged(
+    original_recipient: Option<&str>,
+    original_amount: u64,
+    replacement_recipient: &str,
+    replacement_amount: u64,
+) -> ApiResult<()> {
+    let original_recipient = original_recipient.ok_or_else(|| {
+        api_error(
+            "acceleration_unavailable",
+            "The original transaction recipient could not be verified.",
+        )
+    })?;
+    if replacement_recipient != original_recipient || replacement_amount != original_amount {
+        return Err(api_error(
+            "proposal_mismatch",
+            "The replacement changes the original recipient or payment amount.",
+        ));
+    }
+    Ok(())
+}
+
 pub(crate) fn build_cpfp(
     wallet: &mut Wallet,
     parent_txid: Txid,
     parent_fee: Amount,
     rate: FeeRate,
+    frozen: &[OutPoint],
 ) -> ApiResult<Psbt> {
     let parent = wallet.get_tx(parent_txid).ok_or_else(|| {
         api_error(
@@ -825,6 +865,7 @@ pub(crate) fn build_cpfp(
     let candidate = wallet
         .list_unspent()
         .filter(|output| output.outpoint.txid == parent_txid)
+        .filter(|output| !frozen.contains(&output.outpoint))
         .max_by_key(|output| output.txout.value)
         .ok_or_else(|| {
             api_error(
@@ -895,6 +936,7 @@ fn quote_cpfp(
     parent_fee: Amount,
     requested_rate: Option<&str>,
     core_priority_rate: Option<f64>,
+    frozen: &[OutPoint],
 ) -> ApiResult<(CpfpAccelerationQuoteDto, Psbt)> {
     let parent = wallet.get_tx(parent_txid).ok_or_else(|| {
         api_error(
@@ -942,7 +984,7 @@ fn quote_cpfp(
             .to_owned(),
         )
     };
-    let psbt = build_cpfp(wallet, parent_txid, parent_fee, target)?;
+    let psbt = build_cpfp(wallet, parent_txid, parent_fee, target, frozen)?;
     let child_fee = psbt
         .fee_amount()
         .ok_or_else(|| internal("Unable to calculate the CPFP child fee."))?
@@ -1010,11 +1052,12 @@ pub(crate) fn build_acceleration_psbt(
     method: AccelerationMethod,
     cpfp_parent_fee: Option<Amount>,
     rate: FeeRate,
+    frozen: &[OutPoint],
 ) -> ApiResult<Psbt> {
     match method {
         AccelerationMethod::Rbf => {
             let mut builder = wallet.build_fee_bump(txid).map_err(acceleration_error)?;
-            builder.fee_rate(rate);
+            builder.fee_rate(rate).unspendable(frozen.to_vec());
             builder.finish().map_err(acceleration_error)
         }
         AccelerationMethod::Cpfp => build_cpfp(
@@ -1027,6 +1070,7 @@ pub(crate) fn build_acceleration_psbt(
                 )
             })?,
             rate,
+            frozen,
         ),
     }
 }
@@ -1050,6 +1094,7 @@ pub(crate) fn prepare_persisted_multisig_acceleration(
         return load_multisig_proposal(db, metadata, &proposal_id);
     }
     let mut transaction = db.transaction().map_err(internal)?;
+    let frozen = frozen_outpoints(&transaction)?;
     let mut wallet = load_wallet_transaction(&mut transaction)?;
     let original = snapshot_from(&wallet, &transaction, None, true, None)?
         .transactions
@@ -1062,31 +1107,46 @@ pub(crate) fn prepare_persisted_multisig_acceleration(
             )
         })?;
     let mut quote = None;
-    let mut psbt = if let Some((requested, incremental_fee, priority)) =
-        rate_policy.rbf_quote_request
-    {
-        let (rbf_quote, psbt) = quote_rbf(
-            &mut wallet,
-            txid,
-            Some(&requested),
-            incremental_fee,
-            priority,
-        )?;
-        quote = Some(rbf_review(rbf_quote));
-        psbt
-    } else if let Some(requested) = rate_policy.cpfp_quote_request {
-        let parent_fee = parent_fee.ok_or_else(|| {
-            api_error(
-                "acceleration_unavailable",
-                "The parent transaction fee is unavailable.",
-            )
-        })?;
-        let (cpfp_quote, psbt) = quote_cpfp(&mut wallet, txid, parent_fee, Some(&requested), None)?;
-        quote = Some(cpfp_review(cpfp_quote));
-        psbt
-    } else {
-        build_acceleration_psbt(&mut wallet, txid, method, parent_fee, rate_policy.rate)?
-    };
+    let mut psbt =
+        if let Some((requested, incremental_fee, priority)) = rate_policy.rbf_quote_request {
+            let (rbf_quote, psbt) = quote_rbf(
+                &mut wallet,
+                txid,
+                Some(&requested),
+                incremental_fee,
+                priority,
+                &frozen,
+            )?;
+            quote = Some(rbf_review(rbf_quote));
+            psbt
+        } else if let Some(requested) = rate_policy.cpfp_quote_request {
+            let parent_fee = parent_fee.ok_or_else(|| {
+                api_error(
+                    "acceleration_unavailable",
+                    "The parent transaction fee is unavailable.",
+                )
+            })?;
+            let (cpfp_quote, psbt) = quote_cpfp(
+                &mut wallet,
+                txid,
+                parent_fee,
+                Some(&requested),
+                None,
+                &frozen,
+            )?;
+            quote = Some(cpfp_review(cpfp_quote));
+            psbt
+        } else {
+            build_acceleration_psbt(
+                &mut wallet,
+                txid,
+                method,
+                parent_fee,
+                rate_policy.rate,
+                &frozen,
+            )?
+        };
+    validate_psbt_excludes_frozen(&psbt, &frozen)?;
     add_multisig_global_xpubs(&mut psbt, metadata)?;
     enforce_change_recovery_gap(&transaction, &wallet, &psbt)?;
     let mut proposal = summarize_payment_psbt(
@@ -1097,6 +1157,14 @@ pub(crate) fn prepare_persisted_multisig_acceleration(
         matches!(method, AccelerationMethod::Cpfp),
         acceleration_label(method, &original),
     )?;
+    if matches!(method, AccelerationMethod::Rbf) {
+        validate_rbf_recipient_unchanged(
+            original.address.as_deref(),
+            original.amount,
+            &proposal.recipient,
+            proposal.amount,
+        )?;
+    }
     if let Some(quote) = quote {
         proposal.acceleration = Some(quote);
     }
@@ -1155,6 +1223,7 @@ pub fn tx_acceleration_prepare(
     };
     drop(wallet);
     let mut transaction = db.transaction().map_err(internal)?;
+    let frozen = frozen_outpoints(&transaction)?;
     let mut wallet = load_wallet_transaction(&mut transaction)?;
     let (psbt, quote) = if method == AccelerationMethod::Rbf {
         let (incremental_fee, priority) = core_replacement_policy(&app, &state)?;
@@ -1164,6 +1233,7 @@ pub fn tx_acceleration_prepare(
             Some(&fee_rate),
             incremental_fee,
             priority,
+            &frozen,
         )?;
         (psbt, rbf_review(rbf_quote))
     } else {
@@ -1173,9 +1243,17 @@ pub fn tx_acceleration_prepare(
                 "The parent transaction fee is unavailable.",
             )
         })?;
-        let (cpfp_quote, psbt) = quote_cpfp(&mut wallet, txid, parent_fee, Some(&fee_rate), None)?;
+        let (cpfp_quote, psbt) = quote_cpfp(
+            &mut wallet,
+            txid,
+            parent_fee,
+            Some(&fee_rate),
+            None,
+            &frozen,
+        )?;
         (psbt, cpfp_review(cpfp_quote))
     };
+    validate_psbt_excludes_frozen(&psbt, &frozen)?;
     enforce_change_recovery_gap(&transaction, &wallet, &psbt)?;
     let mut proposal = summarize_payment_psbt(
         &transaction,
@@ -1185,6 +1263,14 @@ pub fn tx_acceleration_prepare(
         matches!(method, AccelerationMethod::Cpfp),
         acceleration_label(method, &original),
     )?;
+    if matches!(method, AccelerationMethod::Rbf) {
+        validate_rbf_recipient_unchanged(
+            original.address.as_deref(),
+            original.amount,
+            &proposal.recipient,
+            proposal.amount,
+        )?;
+    }
     proposal.acceleration = Some(quote);
     persist_prepared_state(
         &mut transaction,
@@ -1258,8 +1344,8 @@ pub fn tx_sign_and_broadcast(
     proposal_id: String,
     credential: String,
 ) -> ApiResult<BroadcastResultDto> {
-    let _operation = operation_guard(&state)?;
     let credential = Zeroizing::new(credential);
+    let _operation = operation_guard(&state)?;
     require_unlocked(&app, &state)?;
     check_auth_throttle(&app, &state)?;
     let credential_result = decrypt_mnemonic(&app, credential.as_str());
@@ -1298,12 +1384,24 @@ pub fn tx_sign_and_broadcast(
         Some((&signing_external, &signing_internal)),
     )?;
     validate_proposal_fee(&proposal.psbt, proposal.fee)?;
-    proposal_change_details(
+    let acceleration = proposal_acceleration_method(&db, &proposal_id)?;
+    if matches!(acceleration, Some(AccelerationMethod::Rbf)) {
+        validate_rbf_original_intent(
+            &db,
+            &wallet,
+            &proposal_id,
+            &proposal.recipient,
+            proposal.amount,
+        )?;
+    }
+    validate_release_spend(
         &wallet,
         &proposal.psbt,
         &proposal.recipient,
         proposal.amount,
+        acceleration,
     )?;
+    validate_psbt_excludes_frozen(&proposal.psbt, &frozen_outpoints(&db)?)?;
     let finalized = signing_wallet
         .sign(
             &mut proposal.psbt,

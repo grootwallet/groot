@@ -1260,9 +1260,10 @@ fn verify_macos_code_signature(path: &Path, app_bundle: bool) -> Result<(), Hard
 
 #[cfg(target_os = "macos")]
 fn macos_app_signing_requirement() -> Result<String, HardwareError> {
-    let Some(team_id) = option_env!("GROOT_MACOS_SIGNING_TEAM_ID") else {
+    let team_id = env!("GROOT_COMPILED_MACOS_SIGNING_TEAM_ID");
+    if team_id == "REHEARSAL_ONLY" {
         return Ok("always".to_owned());
-    };
+    }
     if team_id.len() != 10 || !team_id.bytes().all(|byte| byte.is_ascii_alphanumeric()) {
         return Err(HardwareError::Unavailable);
     }
@@ -1270,6 +1271,13 @@ fn macos_app_signing_requirement() -> Result<String, HardwareError> {
         "anchor apple generic and certificate leaf[subject.OU] = \"{team_id}\""
     ))
 }
+
+#[cfg(target_os = "macos")]
+#[used]
+static GROOT_COMPILED_SIGNING_TEAM_MARKER: &str = concat!(
+    "GROOT_COMPILED_MACOS_SIGNING_TEAM_ID:",
+    env!("GROOT_COMPILED_MACOS_SIGNING_TEAM_ID")
+);
 
 #[cfg(unix)]
 fn verify_release_hwi(canonical: &Path, metadata: &std::fs::Metadata) -> Result<(), HardwareError> {

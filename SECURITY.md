@@ -194,6 +194,14 @@ The supplied review of the main and mobile-coordination branches was independent
 
 This integration closes the reviewed code findings; it is not a complete penetration test, physical iOS assurance, or authorization for mainnet.
 
+## 2026-09-03 independent-review remediation
+
+The independent baseline review of commit `2832acbb2f9aac3ed1b4079f70dd74d7277b2291` found no critical or high issue, one medium release-scope issue, and bounded low-severity hardening gaps. The current working tree implements the required trusted-boundary fixes: exact-model future-mainnet HWI admission, final-broadcast policy and RBF-intent revalidation, expiry-aware network-setup adoption, frozen-coin enforcement in RBF/CPFP, compiled-network recovery-key validation, cancellation-atomic policy evidence, immediate credential zeroization, atomic v2 migration failure behavior, and stricter release/secret-surface gates.
+
+Production packaged-HWI verification now requires matching Developer ID teams, hardened runtime, secure timestamps, and the reviewed helper-only library-validation entitlement. The onboarding warning explicitly discloses offline guessing of copied encrypted profiles. The release owner accepts the current Argon2id parameters only for the capped limited-release design; a versioned KDF envelope remains mandatory before any cap or scope expansion.
+
+The complete disposition and residual-risk record is [`docs/security-remediation-2026-09-03.md`](docs/security-remediation-2026-09-03.md). It is not independent closing review, exact-candidate evidence, or mainnet authorization. The old notarized v0.4.91 artifact remains historical Testnet4 evidence only.
+
 ## Mainnet blockers
 
 Mainnet remains intentionally unavailable. At minimum, release requires:

@@ -1,7 +1,7 @@
 {
   "name": "groot-wallet",
   "private": true,
-  "version": "0.4.91",
+  "version": "0.4.92",
   "packageManager": "pnpm@11.13.1",
   "engines": {
     "node": "24.19.0",
@@ -34,7 +34,7 @@
     "test:acceptance": "playwright test",
     "test:integration:regtest": "bash scripts/regtest/test.sh",
     "test:regtest": "pnpm test:integration:regtest",
-    "test:release-gate": "bash scripts/release/check-mainnet-gate.sh",
+    "test:release-gate": "node --test scripts/release/verify-mainnet-source-policy.test.mjs scripts/release/sbom-order.test.mjs && bash scripts/release/check-mainnet-gate.sh",
     "test:boundaries": "bash scripts/quality/check-boundaries.sh",
     "test:secret-surfaces": "node --test scripts/quality/check-secret-surfaces.test.mjs && node scripts/quality/check-secret-surfaces.mjs",
     "test:supply-chain": "node scripts/quality/check-supply-chain.mjs",

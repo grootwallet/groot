@@ -5,6 +5,7 @@ use bdk_bitcoind_rpc::bitcoincore_rpc::{jsonrpc, Error as CoreRpcError};
 use bdk_wallet::error::CreateTxError;
 
 use crate::bsms::BsmsError;
+use crate::build_network::{NAME as NETWORK_NAME, NETWORK};
 use crate::external_signer::ExternalSignerError;
 use crate::hardware::HardwareError;
 use crate::multisig::PolicyError;
@@ -238,7 +239,7 @@ pub(super) fn secure_store_error(error: SecureStoreError) -> ApiError {
         ),
         SecureStoreError::Unavailable => api_error(
             "secure_storage_unavailable",
-            "Encrypted wallet storage is unavailable. Check access to Groot's application data and try again. The wallet stayed locked.",
+            "Groot could not read or confirm a durable encrypted-wallet update. Check application data access and try again. The wallet remains locked; no plaintext wallet secret was written.",
         ),
     }
 }
@@ -330,16 +331,24 @@ pub(super) fn hardware_device_api_error(error: HardwareError, device_type: &str)
 
 pub(super) fn missing_hardware_fingerprint(device_type: &str) -> ApiError {
     let message = match device_type.to_ascii_lowercase().as_str() {
-        "ledger" => {
-            "Unlock Ledger and open Bitcoin Test—not Bitcoin—for this Regtest wallet, then scan again."
-        }
-        "bitbox02" => "Unlock BitBox, then try again.",
-        "jade" => "Jade is still locked. Select it again and enter your PIN on Jade when prompted.",
-        "coldcard" => "Unlock Coldcard and enable USB communication, then scan again.",
+        "ledger" => format!(
+            "Unlock Ledger and open {} for this {NETWORK_NAME} wallet, then scan again.",
+            if NETWORK == bdk_wallet::bitcoin::Network::Bitcoin {
+                "Bitcoin"
+            } else {
+                "Bitcoin Test—not Bitcoin"
+            }
+        ),
+        "bitbox02" => "Unlock BitBox, then try again.".to_owned(),
+        "jade" => "Jade is still locked. Select it again and enter your PIN on Jade when prompted."
+            .to_owned(),
+        "coldcard" => "Unlock Coldcard and enable USB communication, then scan again.".to_owned(),
         "trezor" | "keepkey" => {
-            "Unlock the device using Groot's PIN-matrix flow, then scan again."
+            "Unlock the device using Groot's PIN-matrix flow, then scan again.".to_owned()
         }
-        _ => "Unlock the hardware signer and put it in its Bitcoin app, then scan again.",
+        _ => {
+            "Unlock the hardware signer and put it in its Bitcoin app, then scan again.".to_owned()
+        }
     };
     api_error("hardware_unavailable", message)
 }

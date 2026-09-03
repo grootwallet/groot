@@ -16,6 +16,9 @@ fn main() {
         ),
     }
     println!("cargo:rustc-cfg=groot_network=\"{network}\"");
+    let compiled_team_id = std::env::var("GROOT_MACOS_SIGNING_TEAM_ID")
+        .unwrap_or_else(|_| "REHEARSAL_ONLY".to_owned());
+    println!("cargo:rustc-env=GROOT_COMPILED_MACOS_SIGNING_TEAM_ID={compiled_team_id}");
     let commit = build_commit();
     println!("cargo:rustc-env=GROOT_BUILD_COMMIT={commit}");
     tauri_build::build()

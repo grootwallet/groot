@@ -47,6 +47,37 @@ pub(super) fn proposal_change_details(
     Ok((change, change_addresses))
 }
 
+pub(super) fn validate_release_spend(
+    wallet: &Wallet,
+    psbt: &Psbt,
+    recipient: &str,
+    amount: u64,
+    acceleration: Option<AccelerationMethod>,
+) -> ApiResult<()> {
+    proposal_change_details(wallet, psbt, recipient, amount)?;
+    let policy = if matches!(acceleration, Some(AccelerationMethod::Cpfp)) {
+        crate::release_policy::validate_cpfp(NETWORK, 0, amount)
+    } else {
+        crate::release_policy::validate_spend(NETWORK, 1, amount)
+    };
+    policy.map_err(|_| api_error("invalid_amount", "This spend is blocked by release policy."))
+}
+
+pub(super) fn validate_psbt_excludes_frozen(psbt: &Psbt, frozen: &[OutPoint]) -> ApiResult<()> {
+    if psbt
+        .unsigned_tx
+        .input
+        .iter()
+        .any(|input| frozen.contains(&input.previous_output))
+    {
+        return Err(api_error(
+            "coin_unavailable",
+            "A frozen coin cannot be used by this payment or fee acceleration.",
+        ));
+    }
+    Ok(())
+}
+
 pub(super) fn proposal_recipient_wallet_details(
     wallet: &Wallet,
     psbt: &Psbt,

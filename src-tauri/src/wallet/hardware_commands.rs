@@ -9,15 +9,149 @@ const BITBOX_ACCOUNT_KEY_ATTEMPTS: usize = 3;
 const BITBOX_ACCOUNT_KEY_RETRY_DELAY: Duration = Duration::from_millis(750);
 #[cfg(test)]
 const BITBOX_ACCOUNT_KEY_RETRY_DELAY: Duration = Duration::from_millis(5);
-const SUPPORTED_HWI_DEVICE_TYPES: &[&str] = &[
-    "bitbox02",
-    "coldcard",
-    "digitalbitbox",
-    "jade",
-    "keepkey",
-    "ledger",
-    "trezor",
-];
+const SUPPORTED_HWI_DEVICE_TYPES: &[&str] = &["bitbox02", "coldcard", "jade", "ledger", "trezor"];
+
+fn hardware_admission_key(
+    fingerprint: &str,
+    xpub: &str,
+    derivation_path: &str,
+    device_type: Option<&str>,
+) -> Option<String> {
+    let device_type = device_type?.trim().to_ascii_lowercase();
+    (!device_type.is_empty()).then(|| {
+        format!(
+            "{}|{}|{}|{}",
+            fingerprint.trim().to_ascii_lowercase(),
+            xpub.trim(),
+            derivation_path.trim(),
+            device_type
+        )
+    })
+}
+
+fn remember_mainnet_hardware_admission(
+    state: &AppState,
+    fingerprint: &str,
+    xpub: &str,
+    derivation_path: &str,
+    device_type: Option<&str>,
+) -> ApiResult<()> {
+    remember_hardware_admission_for_network(
+        state,
+        NETWORK,
+        fingerprint,
+        xpub,
+        derivation_path,
+        device_type,
+    )
+}
+
+fn remember_hardware_admission_for_network(
+    state: &AppState,
+    network: Network,
+    fingerprint: &str,
+    xpub: &str,
+    derivation_path: &str,
+    device_type: Option<&str>,
+) -> ApiResult<()> {
+    if network != Network::Bitcoin {
+        return Ok(());
+    }
+    let key = hardware_admission_key(fingerprint, xpub, derivation_path, device_type).ok_or_else(
+        || {
+            api_error(
+                "hardware_not_approved",
+                "This signer has no approved live hardware identity.",
+            )
+        },
+    )?;
+    let mut admissions = state.pending_hardware_admissions.lock().map_err(internal)?;
+    admissions.retain(|_, created_at| created_at.elapsed() <= HARDWARE_SCAN_CACHE_TIMEOUT);
+    admissions.insert(key, Instant::now());
+    Ok(())
+}
+
+fn require_mainnet_hardware_admission(
+    state: &AppState,
+    fingerprint: &str,
+    xpub: &str,
+    derivation_path: &str,
+    device_type: Option<&str>,
+) -> ApiResult<()> {
+    require_hardware_admission_for_network(
+        state,
+        NETWORK,
+        fingerprint,
+        xpub,
+        derivation_path,
+        device_type,
+    )
+}
+
+fn require_hardware_admission_for_network(
+    state: &AppState,
+    network: Network,
+    fingerprint: &str,
+    xpub: &str,
+    derivation_path: &str,
+    device_type: Option<&str>,
+) -> ApiResult<()> {
+    if network != Network::Bitcoin {
+        return Ok(());
+    }
+    let key = hardware_admission_key(fingerprint, xpub, derivation_path, device_type).ok_or_else(
+        || {
+            api_error(
+                "hardware_not_approved",
+                "Use a live approved hardware signer for mainnet wallet creation.",
+            )
+        },
+    )?;
+    let mut admissions = state.pending_hardware_admissions.lock().map_err(internal)?;
+    admissions.retain(|_, created_at| created_at.elapsed() <= HARDWARE_SCAN_CACHE_TIMEOUT);
+    if admissions.contains_key(&key) {
+        Ok(())
+    } else {
+        Err(api_error(
+            "hardware_not_approved",
+            "Scan and import this exact approved hardware signer again before creating a mainnet wallet.",
+        ))
+    }
+}
+
+pub(super) fn require_mainnet_cosigner_admissions(
+    state: &AppState,
+    cosigners: &[crate::multisig::CosignerInput],
+) -> ApiResult<()> {
+    for cosigner in cosigners {
+        require_mainnet_hardware_admission(
+            state,
+            &cosigner.fingerprint,
+            &cosigner.xpub,
+            &cosigner.derivation_path,
+            cosigner.device_type.as_deref(),
+        )?;
+    }
+    Ok(())
+}
+
+fn approved_hwi_model(network: Network, device_type: &str, model: &str) -> bool {
+    let device_type = device_type.trim().to_ascii_lowercase();
+    let model = model.trim().to_ascii_lowercase();
+    if network != Network::Bitcoin {
+        return SUPPORTED_HWI_DEVICE_TYPES.contains(&device_type.as_str());
+    }
+    match device_type.as_str() {
+        "ledger" => model == "ledger_nano_s_plus",
+        "trezor" => matches!(model.as_str(), "trezor_1" | "trezor_safe_3"),
+        "bitbox02" => matches!(model.as_str(), "bitbox02_btconly" | "bitbox02_nova_btconly"),
+        // HWI 3.2.0 reports only a family-level model for these devices. Keep
+        // their certified rehearsal paths available, but never let an
+        // ambiguous family identity inherit exact-model mainnet approval.
+        "coldcard" | "jade" => false,
+        _ => false,
+    }
+}
 
 #[tauri::command]
 pub async fn hardware_cancel_operations(state: State<'_, AppState>) -> ApiResult<()> {
@@ -27,6 +161,11 @@ pub async fn hardware_cancel_operations(state: State<'_, AppState>) -> ApiResult
         .map_err(internal)?
         .clear();
     *state.recent_hardware_scan.lock().map_err(internal)? = None;
+    state
+        .pending_hardware_admissions
+        .lock()
+        .map_err(internal)?
+        .clear();
     tauri::async_runtime::spawn_blocking(crate::hardware::cancel_hardware_operations_and_wait)
         .await
         .map_err(internal)?
@@ -101,6 +240,7 @@ fn validate_discovered_devices(mut devices: Vec<HwiDevice>) -> ApiResult<Vec<Hwi
     for device in &mut devices {
         device.device_type = device.device_type.trim().to_ascii_lowercase();
         if !SUPPORTED_HWI_DEVICE_TYPES.contains(&device.device_type.as_str())
+            || !approved_hwi_model(NETWORK, &device.device_type, &device.model)
             || device.path.len() > 1024
             || device.model.chars().count() > 256
             || device.path.chars().any(char::is_control)
@@ -368,6 +508,11 @@ fn forget_hardware_scan(state: &AppState) -> ApiResult<u64> {
         .fetch_add(1, Ordering::SeqCst)
         .wrapping_add(1);
     *scans = None;
+    state
+        .pending_hardware_admissions
+        .lock()
+        .map_err(internal)?
+        .clear();
     Ok(request_epoch)
 }
 
@@ -760,6 +905,82 @@ mod targeted_scan_tests {
     }
 
     #[test]
+    fn rehearsal_discovery_keeps_locked_devices_while_mainnet_requires_exact_models() {
+        assert!(approved_hwi_model(Network::Testnet4, "trezor", ""));
+        assert!(approved_hwi_model(
+            Network::Bitcoin,
+            "ledger",
+            "ledger_nano_s_plus"
+        ));
+        assert!(approved_hwi_model(Network::Bitcoin, "trezor", "trezor_1"));
+        assert!(approved_hwi_model(
+            Network::Bitcoin,
+            "bitbox02",
+            "bitbox02_nova_btconly"
+        ));
+        for (device_type, model) in [
+            ("ledger", "ledger_nano_x"),
+            ("trezor", ""),
+            ("coldcard", "coldcard"),
+            ("jade", "jade"),
+            ("bitbox02", "bitbox02_nova_multi"),
+        ] {
+            assert!(!approved_hwi_model(Network::Bitcoin, device_type, model));
+        }
+    }
+
+    #[test]
+    fn mainnet_wallet_admission_requires_matching_recent_live_hwi_identity() {
+        let state = AppState::default();
+        assert!(require_hardware_admission_for_network(
+            &state,
+            Network::Bitcoin,
+            "a1b2c3d4",
+            "approved-xpub",
+            SINGLESIG_ACCOUNT_PATH,
+            Some("trezor")
+        )
+        .is_err());
+        remember_hardware_admission_for_network(
+            &state,
+            Network::Bitcoin,
+            "a1b2c3d4",
+            "approved-xpub",
+            SINGLESIG_ACCOUNT_PATH,
+            Some("trezor"),
+        )
+        .unwrap();
+        assert!(require_hardware_admission_for_network(
+            &state,
+            Network::Bitcoin,
+            "a1b2c3d4",
+            "approved-xpub",
+            SINGLESIG_ACCOUNT_PATH,
+            Some("trezor")
+        )
+        .is_ok());
+        assert!(require_hardware_admission_for_network(
+            &state,
+            Network::Bitcoin,
+            "a1b2c3d4",
+            "renderer-substituted-xpub",
+            SINGLESIG_ACCOUNT_PATH,
+            Some("trezor")
+        )
+        .is_err());
+        forget_hardware_scan(&state).unwrap();
+        assert!(require_hardware_admission_for_network(
+            &state,
+            Network::Bitcoin,
+            "a1b2c3d4",
+            "approved-xpub",
+            SINGLESIG_ACCOUNT_PATH,
+            Some("trezor")
+        )
+        .is_err());
+    }
+
+    #[test]
     fn saved_health_check_selects_exact_jade_with_unlocked_other_devices() {
         let ledger = HwiDevice {
             fingerprint: Some("11111111".into()),
@@ -915,21 +1136,21 @@ pub async fn hardware_send_pin(
     app: AppHandle,
     state: State<'_, AppState>,
     challenge_id: String,
-    mut pin_positions: String,
+    pin_positions: String,
 ) -> ApiResult<()> {
+    let pin_positions = Zeroizing::new(pin_positions);
     let valid = !pin_positions.is_empty()
         && pin_positions.len() <= MAX_HARDWARE_PIN_POSITIONS
         && pin_positions
             .bytes()
             .all(|position| matches!(position, b'1'..=b'9'));
     if !valid {
-        pin_positions.zeroize();
         return Err(api_error(
             "invalid_hardware_request",
             "Enter only PIN-matrix positions 1 through 9.",
         ));
     }
-    let pin = Zeroizing::new(pin_positions.into_bytes());
+    let pin = Zeroizing::new(pin_positions.as_bytes().to_vec());
     let pending = state
         .pending_hardware_pins
         .lock()
@@ -1657,7 +1878,7 @@ pub async fn hardware_import_cosigner(
     let label = normalize_label(&label)?;
     let hwi = hwi_cli(&app)?;
     let device = recently_scanned_hardware_device(&state, &device_id)?;
-    tauri::async_runtime::spawn_blocking(move || {
+    let input = tauri::async_runtime::spawn_blocking(move || {
         read_hardware_cosigner(
             &hwi,
             device,
@@ -1667,7 +1888,15 @@ pub async fn hardware_import_cosigner(
         )
     })
     .await
-    .map_err(internal)?
+    .map_err(internal)??;
+    remember_mainnet_hardware_admission(
+        &state,
+        &input.fingerprint,
+        &input.xpub,
+        &input.derivation_path,
+        input.device_type.as_deref(),
+    )?;
+    Ok(input)
 }
 
 #[tauri::command]
@@ -1721,7 +1950,7 @@ pub async fn hardware_import_external_signer(
     let hwi = hwi_cli(&app)?;
     let device = recently_scanned_hardware_device(&state, &device_id)?;
     require_unique_bitbox(&state, &device)?;
-    tauri::async_runtime::spawn_blocking(move || {
+    let input = tauri::async_runtime::spawn_blocking(move || {
         read_hardware_external_signer(
             &hwi,
             device,
@@ -1731,7 +1960,15 @@ pub async fn hardware_import_external_signer(
         )
     })
     .await
-    .map_err(internal)?
+    .map_err(internal)??;
+    remember_mainnet_hardware_admission(
+        &state,
+        &input.fingerprint,
+        &input.xpub,
+        &input.derivation_path,
+        input.device_type.as_deref(),
+    )?;
+    Ok(input)
 }
 
 fn read_hardware_external_signer(
@@ -1768,8 +2005,8 @@ pub fn external_signer_create(
     signer: ExternalSignerInput,
     credential: String,
 ) -> ApiResult<ExternalSignerWallet> {
-    let _operation = operation_guard(&state)?;
     let credential = Zeroizing::new(credential);
+    let _operation = operation_guard(&state)?;
     let name = name.trim();
     if name.is_empty() || name.chars().count() > 48 {
         return Err(api_error(
@@ -1779,6 +2016,13 @@ pub fn external_signer_create(
     }
     validate_credential(credential.as_str())?;
     signer.validate().map_err(external_signer_api_error)?;
+    require_mainnet_hardware_admission(
+        &state,
+        &signer.fingerprint,
+        &signer.xpub,
+        &signer.derivation_path,
+        signer.device_type.as_deref(),
+    )?;
     let (external_descriptor, internal_descriptor) =
         external_signer::descriptors(&signer).map_err(external_signer_api_error)?;
     let metadata = ExternalSignerWallet {
@@ -1887,9 +2131,9 @@ pub fn external_signer_export_descriptor(
     state: State<'_, AppState>,
     credential: String,
 ) -> ApiResult<ExternalSignerBackupDto> {
+    let credential = Zeroizing::new(credential);
     let _operation = operation_guard(&state)?;
     require_unlocked(&app, &state)?;
-    let credential = Zeroizing::new(credential);
     check_auth_throttle(&app, &state)?;
     let verified = verify_external_signer_credential(&app, credential.as_str());
     record_auth_result(&app, &state, &verified)?;
@@ -2202,8 +2446,8 @@ pub fn external_signer_proposal_broadcast(
     reviewed_psbt: String,
     credential: String,
 ) -> ApiResult<BroadcastResultDto> {
-    let _operation = operation_guard(&state)?;
     let credential = Zeroizing::new(credential);
+    let _operation = operation_guard(&state)?;
     require_unlocked(&app, &state)?;
     check_auth_throttle(&app, &state)?;
     let verified = verify_external_signer_credential(&app, credential.as_str());
@@ -2225,6 +2469,24 @@ pub fn external_signer_proposal_broadcast(
     }
     let mut psbt = decode_psbt(&proposal.psbt).map_err(proposal_api_error)?;
     let wallet = load_wallet(&mut db)?;
+    let acceleration = proposal_acceleration_method(&db, &proposal_id)?;
+    if matches!(acceleration, Some(AccelerationMethod::Rbf)) {
+        validate_rbf_original_intent(
+            &db,
+            &wallet,
+            &proposal_id,
+            &proposal.recipient,
+            proposal.amount,
+        )?;
+    }
+    validate_release_spend(
+        &wallet,
+        &psbt,
+        &proposal.recipient,
+        proposal.amount,
+        acceleration,
+    )?;
+    validate_psbt_excludes_frozen(&psbt, &frozen_outpoints(&db)?)?;
     if !wallet
         .finalize_psbt(&mut psbt, SignOptions::default())
         .map_err(internal)?
@@ -2519,7 +2781,12 @@ fn display_multisig_policy_address(
     device: HwiDevice,
     expected_signer: &CosignerInput,
     descriptor: &str,
-) -> ApiResult<(Vec<u8>, VerifiedHardwareIdentity, HwiDevice)> {
+) -> ApiResult<(
+    Vec<u8>,
+    VerifiedHardwareIdentity,
+    HwiDevice,
+    crate::hardware::HardwareOperation,
+)> {
     let operation = hwi
         .begin_interactive_operation()
         .map_err(hardware_api_error)?;
@@ -2538,7 +2805,7 @@ fn display_multisig_policy_address(
             descriptor,
         )
         .map_err(|error| hardware_device_api_error(error, &identity.device_type))?;
-    Ok((displayed, identity, device))
+    Ok((displayed, identity, device, operation))
 }
 
 pub(crate) fn ensure_hardware_verification_context(
@@ -2595,11 +2862,12 @@ pub async fn hardware_verify_multisig_policy(
         .to_string();
     let hwi = hwi_cli(&app)?;
     let device = recently_scanned_hardware_device(&state, &device_id)?;
-    let (displayed, identity, device) = tauri::async_runtime::spawn_blocking(move || {
-        display_multisig_policy_address(&hwi, device, &expected_signer, &descriptor)
-    })
-    .await
-    .map_err(internal)??;
+    let (displayed, identity, device, hardware_operation) =
+        tauri::async_runtime::spawn_blocking(move || {
+            display_multisig_policy_address(&hwi, device, &expected_signer, &descriptor)
+        })
+        .await
+        .map_err(internal)??;
     let mut remembered = [device];
     remember_hardware_devices(&state, &mut remembered)?;
     let response: HwiAddress = serde_json::from_slice(&displayed).map_err(internal)?;
@@ -2624,7 +2892,9 @@ pub async fn hardware_verify_multisig_policy(
         &current_metadata,
     )?;
     let db = open_multisig_db(&app)?;
-    record_signer_policy_verification(&db, &identity, &actual)
+    hardware_operation
+        .complete_if_active(|| record_signer_policy_verification(&db, &identity, &actual))
+        .map_err(hardware_api_error)?
 }
 
 #[tauri::command]
@@ -2667,11 +2937,12 @@ pub async fn hardware_verify_multisig_draft_policy(
         .to_string();
     let hwi = hwi_cli(&app)?;
     let device = recently_scanned_hardware_device(&state, &device_id)?;
-    let (displayed, identity, device) = tauri::async_runtime::spawn_blocking(move || {
-        display_multisig_policy_address(&hwi, device, &expected_signer, &descriptor)
-    })
-    .await
-    .map_err(internal)??;
+    let (displayed, identity, device, hardware_operation) =
+        tauri::async_runtime::spawn_blocking(move || {
+            display_multisig_policy_address(&hwi, device, &expected_signer, &descriptor)
+        })
+        .await
+        .map_err(internal)??;
     let mut remembered = [device];
     remember_hardware_devices(&state, &mut remembered)?;
     let response: HwiAddress = serde_json::from_slice(&displayed).map_err(internal)?;
@@ -2693,12 +2964,16 @@ pub async fn hardware_verify_multisig_draft_policy(
         displayed_address: Some(actual),
     };
     let key = policy_verification_key(&wallet, &verification.signer_fingerprint)?;
-    state
-        .pending_policy_verifications
-        .lock()
-        .map_err(internal)?
-        .insert(key, verification.clone());
-    Ok(verification)
+    hardware_operation
+        .complete_if_active(|| {
+            state
+                .pending_policy_verifications
+                .lock()
+                .map_err(internal)?
+                .insert(key, verification.clone());
+            Ok(verification)
+        })
+        .map_err(hardware_api_error)?
 }
 
 #[tauri::command]
@@ -3168,6 +3443,15 @@ mod health_check_tests {
 
         let error = parse_hwi_account_xpub(b"{\"xpub\":\"not-an-xpub\"}", "trezor").unwrap_err();
         assert_eq!(error.code, "invalid_descriptor");
+
+        let secp = Secp256k1::new();
+        let mainnet = Xpriv::new_master(Network::Bitcoin, &[17_u8; 32]).unwrap();
+        let wrong_xpub = Xpub::from_priv(&secp, &mainnet).to_string();
+        let output = serde_json::to_vec(&serde_json::json!({ "xpub": wrong_xpub })).unwrap();
+        assert_eq!(
+            parse_hwi_account_xpub(&output, "trezor").unwrap_err().code,
+            "wrong_network"
+        );
     }
 
     #[test]
@@ -3190,6 +3474,29 @@ mod health_check_tests {
         let error =
             parse_hwi_account_keypool(&output, SINGLESIG_ACCOUNT_PATH, "trezor").unwrap_err();
         assert_eq!(error.code, "invalid_derivation_path");
+
+        let secp = Secp256k1::new();
+        let master = Xpriv::new_master(Network::Bitcoin, &[18_u8; 32]).unwrap();
+        let account = master
+            .derive_priv(
+                &secp,
+                &DerivationPath::from_str(MULTISIG_ACCOUNT_PATH).unwrap(),
+            )
+            .unwrap();
+        let wrong_xpub = Xpub::from_priv(&secp, &account);
+        let wrong = serde_json::to_vec(&serde_json::json!([{
+            "desc": format!(
+                "wpkh([{}/{}]{}/0/*)",
+                signer.fingerprint, origin, wrong_xpub
+            )
+        }]))
+        .unwrap();
+        assert_eq!(
+            parse_hwi_account_keypool(&wrong, MULTISIG_ACCOUNT_PATH, "trezor")
+                .unwrap_err()
+                .code,
+            "wrong_network"
+        );
     }
 
     #[test]

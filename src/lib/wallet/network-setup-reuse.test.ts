@@ -49,7 +49,10 @@ describe('protected network setup reuse', () => {
   it('revalidates the source and re-encrypts its RPC password for the destination wallet', () => {
     const source = nativeCommand('network_setup_adopt');
 
-    expect(source).toContain('.is_unlocked(source)');
+    expect(source).toContain(
+      'authorize_wallet_session(&state, source, false, registry.inactivity_timeout_minutes)'
+    );
+    expect(source).not.toContain('.is_unlocked(source)');
     expect(source).toContain('session.config != config');
     expect(source).toContain('checked_node_status(&client, config.clone())');
     expect(source).toContain('node_secret_path_for(&app, destination)');

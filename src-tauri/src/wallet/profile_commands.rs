@@ -223,8 +223,8 @@ pub fn wallet_create(
     name: String,
     credential: String,
 ) -> ApiResult<()> {
-    let _operation = operation_guard(&state)?;
     let credential = Zeroizing::new(credential);
+    let _operation = operation_guard(&state)?;
     validate_new_wallet_passphrase(credential.as_str())?;
     let pending = state
         .pending_mnemonic
@@ -274,6 +274,7 @@ pub fn wallet_recover(
 ) -> ApiResult<()> {
     let credential = Zeroizing::new(credential);
     let _operation = operation_guard(&state)?;
+    validate_wallet_passphrase(credential.as_str())?;
     let mnemonic_words = native_backup::recover(&app)
         .map_err(internal)?
         .ok_or_else(|| api_error("onboarding_cancelled", "Wallet recovery was cancelled."))?;
@@ -309,13 +310,13 @@ pub fn wallet_verify_backup(
     state: State<'_, AppState>,
     credential: String,
 ) -> ApiResult<bool> {
+    let credential = Zeroizing::new(credential);
     let _operation = operation_guard(&state)?;
     require_unlocked(&app, &state)?;
     let profile = selected_profile_of_kind(&app, WalletKind::SingleKey)?;
     if profile.backup_verified {
         return Ok(true);
     }
-    let credential = Zeroizing::new(credential);
     check_auth_throttle(&app, &state)?;
     let credential_result = decrypt_mnemonic(&app, credential.as_str());
     record_auth_result(&app, &state, &credential_result)?;
@@ -342,13 +343,13 @@ pub fn wallet_reveal_and_verify_backup(
     state: State<'_, AppState>,
     credential: String,
 ) -> ApiResult<bool> {
+    let credential = Zeroizing::new(credential);
     let _operation = operation_guard(&state)?;
     require_unlocked(&app, &state)?;
     let profile = selected_profile_of_kind(&app, WalletKind::SingleKey)?;
     if profile.backup_verified {
         return Ok(true);
     }
-    let credential = Zeroizing::new(credential);
     check_auth_throttle(&app, &state)?;
     let credential_result = decrypt_mnemonic(&app, credential.as_str());
     record_auth_result(&app, &state, &credential_result)?;
@@ -376,8 +377,8 @@ pub fn wallet_unlock(
     state: State<'_, AppState>,
     credential: String,
 ) -> ApiResult<()> {
-    let _operation = operation_guard(&state)?;
     let credential = Zeroizing::new(credential);
+    let _operation = operation_guard(&state)?;
     check_auth_throttle(&app, &state)?;
     let result = match selected_profile(&app)?.kind {
         WalletKind::SingleKey => decrypt_mnemonic(&app, credential.as_str()).and_then(|mnemonic| {
@@ -764,10 +765,10 @@ pub fn wallet_sync_source_save(
     source: WalletSyncSource,
     credential: String,
 ) -> ApiResult<WalletSyncSource> {
+    let credential = Zeroizing::new(credential);
     let _operation = operation_guard(&state)?;
     require_unlocked(&app, &state)?;
     source.validate(NETWORK).map_err(network_config_api_error)?;
-    let credential = Zeroizing::new(credential);
     check_auth_throttle(&app, &state)?;
     let verified = verify_selected_credential(&app, credential.as_str());
     record_auth_result(&app, &state, &verified)?;
@@ -798,12 +799,12 @@ pub fn recovery_scan_settings_save(
     gap_limit: u32,
     credential: String,
 ) -> ApiResult<RecoveryScanSettingsDto> {
+    let credential = Zeroizing::new(credential);
     let _operation = operation_guard(&state)?;
     require_unlocked(&app, &state)?;
     validate_recovery_gap_limit(gap_limit)?;
     let tip = checked_block_height(&rpc_client(&app, &state)?)?;
     validate_recovery_birthday(birthday_height, tip)?;
-    let credential = Zeroizing::new(credential);
     check_auth_throttle(&app, &state)?;
     let verified = verify_selected_credential(&app, credential.as_str());
     record_auth_result(&app, &state, &verified)?;
@@ -923,6 +924,7 @@ pub async fn wallet_full_rescan(
     app: AppHandle,
     credential: String,
 ) -> ApiResult<WalletSnapshotDto> {
+    let credential = Zeroizing::new(credential);
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
         cancel_foreground_sync(&state)?;
@@ -939,7 +941,6 @@ pub async fn wallet_full_rescan(
         ) = {
             let _operation = operation_guard(&state)?;
             require_unlocked(&app, &state)?;
-            let credential = Zeroizing::new(credential);
             check_auth_throttle(&app, &state)?;
             let verified = verify_selected_credential(&app, credential.as_str());
             record_auth_result(&app, &state, &verified)?;
@@ -1033,14 +1034,14 @@ pub async fn node_config_save(
     password: String,
     credential: String,
 ) -> ApiResult<NodeStatusDto> {
+    let credential = Zeroizing::new(credential);
+    let password = Zeroizing::new(password);
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
         cancel_foreground_sync(&state)?;
         let _operation = operation_guard(&state)?;
         require_unlocked(&app, &state)?;
         config.validate().map_err(network_config_api_error)?;
-        let credential = Zeroizing::new(credential);
-        let password = Zeroizing::new(password);
         check_auth_throttle(&app, &state)?;
         let verified = verify_selected_credential(&app, credential.as_str());
         record_auth_result(&app, &state, &verified)?;
@@ -1099,6 +1100,7 @@ pub async fn network_setup_adopt(
     source_wallet_id: String,
     credential: String,
 ) -> ApiResult<NodeStatusDto> {
+    let credential = Zeroizing::new(credential);
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
         cancel_foreground_sync(&state)?;
@@ -1129,19 +1131,13 @@ pub async fn network_setup_adopt(
                 "The selected wallet has no saved Bitcoin Core connection.",
             ));
         }
-        if !state
-            .unlocked_wallets
-            .lock()
-            .map_err(internal)?
-            .is_unlocked(source)
-        {
+        if !authorize_wallet_session(&state, source, false, registry.inactivity_timeout_minutes)? {
             return Err(api_error(
                 "wallet_locked",
                 "Unlock the wallet providing this network setup, then try again.",
             ));
         }
 
-        let credential = Zeroizing::new(credential);
         check_auth_throttle(&app, &state)?;
         let verified = verify_selected_credential(&app, credential.as_str());
         record_auth_result(&app, &state, &verified)?;
@@ -1241,12 +1237,7 @@ pub(super) fn adopt_network_setup_for_new_profile(
             "The selected wallet has no saved Bitcoin Core connection.",
         ));
     }
-    if !state
-        .unlocked_wallets
-        .lock()
-        .map_err(internal)?
-        .is_unlocked(source)
-    {
+    if !authorize_wallet_session(state, source, false, registry.inactivity_timeout_minutes)? {
         return Err(api_error(
             "wallet_locked",
             "Unlock the wallet providing this network setup, then try again.",

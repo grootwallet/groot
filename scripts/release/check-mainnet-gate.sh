@@ -9,12 +9,19 @@ fail() {
 }
 
 if command -v rg >/dev/null 2>&1; then
-  contains_fixed() { rg -F -- "$1" "$2" >/dev/null; }
+  search_fixed() { rg -F -- "$1" "$2" >/dev/null; }
 elif command -v grep >/dev/null 2>&1; then
-  contains_fixed() { grep -F -- "$1" "$2" >/dev/null; }
+  search_fixed() { grep -F -- "$1" "$2" >/dev/null; }
 else
   fail "ripgrep or grep is required"
 fi
+
+contains_fixed() {
+  case "$2" in
+    *.rs|*.ts|*.svelte|*.js|*.mjs) node scripts/quality/source-contains.mjs "$1" "$2" ;;
+    *) search_fixed "$1" "$2" ;;
+  esac
+}
 
 reject_fixed() {
   if contains_fixed "$1" "$2"; then
@@ -28,14 +35,9 @@ contains_fixed '"regtest" | "signet" | "testnet4" => {}' src-tauri/build.rs \
   || fail "the native compile-time network allowlist changed"
 contains_fixed "mainnet is not compiled into this release" src-tauri/build.rs \
   || fail "the native build no longer rejects mainnet explicitly"
-reject_fixed "pub const NETWORK: Network = Network::Bitcoin" src-tauri/src/build_network.rs \
-  "the native build module can select Bitcoin mainnet"
+node scripts/release/verify-mainnet-source-policy.mjs
 contains_fixed "NAME as NETWORK_NAME, NETWORK, PARAMETERS," src-tauri/src/wallet.rs \
   || fail "the wallet no longer consumes the compile-time network identity"
-contains_fixed "const MAINNET_ENABLED: bool = false;" src-tauri/src/release_policy.rs \
-  || fail "the trusted-boundary mainnet gate is no longer disabled"
-contains_fixed "ensure_runtime_network_enabled(NETWORK)" src-tauri/src/wallet.rs \
-  || fail "wallet databases are no longer guarded before opening"
 contains_fixed "backend.validate().is_err()" src-tauri/src/release_policy.rs \
   || fail "the first-mainnet local-Core policy no longer revalidates its loopback endpoint"
 contains_fixed ".estimate_smart_fee(blocks, Some(mode))" src-tauri/src/wallet/profile_commands.rs \

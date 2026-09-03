@@ -55,10 +55,11 @@ test('copies the public build identity with inline retry feedback', async ({ pag
   expect(displayedIdentity).toMatch(/^Groot v\d+\.\d+\.\d+ · [a-z0-9-]+$/);
 
   await buildIdentity.click();
-  await expect(page.locator('.sidebar-build-copy-status')).toHaveText('Copy failed · Try again');
+  const copyStatus = page.locator('.build-identity-sidebar .build-copy-status');
+  await expect(copyStatus).toHaveText('Copy failed · Try again');
 
   await buildIdentity.click();
-  await expect(page.locator('.sidebar-build-copy-status')).toHaveText('Copied');
+  await expect(copyStatus).toHaveText('Copied');
   await expect(page.getByText('Build information copied')).toBeVisible();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(displayedIdentity);
 });

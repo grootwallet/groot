@@ -75,6 +75,15 @@ export const onboardingCopy = {
     fr: 'Utilisez au moins 16 caractères. Une phrase composée uniquement de lettres est acceptée.',
     es: 'Usa al menos 16 caracteres. Se permiten frases formadas solo por letras.'
   },
+  'Use a unique, long passphrase.': {
+    fr: 'Utilisez une phrase secrète unique et longue.',
+    es: 'Usa una frase de contraseña única y larga.'
+  },
+  'Anyone with a copy of this encrypted profile can guess its passphrase offline. Groot’s lockout timer cannot protect a stolen copy.':
+    {
+      fr: 'Toute personne possédant une copie de ce profil chiffré peut tenter de deviner sa phrase secrète hors ligne. Le délai de verrouillage de Groot ne peut pas protéger une copie volée.',
+      es: 'Cualquiera que tenga una copia de este perfil cifrado puede intentar adivinar su frase de contraseña sin conexión. El bloqueo temporal de Groot no puede proteger una copia robada.'
+    },
   'Copies its node and sync method. This wallet protects its own copy.': {
     fr: 'Copie son nœud et sa méthode de synchronisation. Ce portefeuille protège sa propre copie.',
     es: 'Copia su nodo y método de sincronización. Esta cartera protege su propia copia.'

@@ -12,6 +12,7 @@ import {
 } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { compareBomRefs } from './sbom-order.mjs';
 
 const repoRoot = resolve(fileURLToPath(new URL('../../', import.meta.url)));
 const [output, artifact] = process.argv.slice(2);
@@ -149,7 +150,7 @@ for (const [key, pkg] of installedNodePackages) {
   });
 }
 
-components.sort((left, right) => left['bom-ref'].localeCompare(right['bom-ref']));
+components.sort(compareBomRefs);
 const packageManifest = JSON.parse(readFileSync(resolve(repoRoot, 'package.json'), 'utf8'));
 const appVersion = packageManifest.version;
 if (typeof appVersion !== 'string' || !/^0\.\d+\.\d+$/.test(appVersion)) {

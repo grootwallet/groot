@@ -687,6 +687,17 @@
           autocomplete="new-password"
           error={confirmation && passphrase !== confirmation ? 'Passphrases do not match.' : ''}
         />
+        <div class="credential-warning" role="note">
+          <ShieldCheck size={16} />
+          <p>
+            <strong>{translate($locale, 'Use a unique, long passphrase.')}</strong><span
+              >{translate(
+                $locale,
+                'Anyone with a copy of this encrypted profile can guess its passphrase offline. Groot’s lockout timer cannot protect a stolen copy.'
+              )}</span
+            >
+          </p>
+        </div>
       </div>
       <label class="credential-warning credential-ack"
         ><input type="checkbox" bind:checked={backupAcknowledged} /><ShieldCheck size={16} />

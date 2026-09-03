@@ -793,8 +793,8 @@ pub fn multisig_export(
     state: State<'_, AppState>,
     credential: String,
 ) -> ApiResult<String> {
-    let _operation = operation_guard(&state)?;
     let credential = Zeroizing::new(credential);
+    let _operation = operation_guard(&state)?;
     authorize_multisig_operation(&app, &state, credential.as_str())?;
     let backup = MultisigBackupDto {
         version: 1,
@@ -810,8 +810,8 @@ pub fn multisig_export_bsms(
     state: State<'_, AppState>,
     credential: String,
 ) -> ApiResult<String> {
-    let _operation = operation_guard(&state)?;
     let credential = Zeroizing::new(credential);
+    let _operation = operation_guard(&state)?;
     authorize_multisig_operation(&app, &state, credential.as_str())?;
     let wallet = read_multisig_metadata(&app)?;
     let first_address = first_multisig_address(&wallet)?;
@@ -916,8 +916,8 @@ pub fn multisig_recover_bsms(
     encoded_backup: String,
     credential: String,
 ) -> ApiResult<MultisigWalletDto> {
-    let _operation = operation_guard(&state)?;
     let credential = Zeroizing::new(credential);
+    let _operation = operation_guard(&state)?;
     validate_credential(credential.as_str())?;
     let record = parse_public_descriptor_record(&encoded_backup)?;
     let (threshold, keys) = record.standard_policy().map_err(bsms_api_error)?;
@@ -1042,8 +1042,8 @@ pub fn multisig_recover(
     encoded_backup: String,
     credential: String,
 ) -> ApiResult<MultisigWalletDto> {
-    let _operation = operation_guard(&state)?;
     let credential = Zeroizing::new(credential);
+    let _operation = operation_guard(&state)?;
     validate_credential(credential.as_str())?;
     let backup = validate_multisig_backup(&encoded_backup)?;
     let (id, dir) = prepare_profile_directory(&app)?;
@@ -1083,8 +1083,8 @@ pub fn multisig_delete(
     credential: String,
     confirmation: String,
 ) -> ApiResult<()> {
-    let _operation = operation_guard(&state)?;
     let credential = Zeroizing::new(credential);
+    let _operation = operation_guard(&state)?;
     require_unlocked(&app, &state)?;
     let wallet = read_multisig_metadata(&app)?;
     let wallet_id = selected_profile_of_kind(&app, WalletKind::Multisig)?.id;

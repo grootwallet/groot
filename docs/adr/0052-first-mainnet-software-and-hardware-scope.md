@@ -57,3 +57,7 @@ only external-signer isolation.
 Mainnet remains compile-time disabled under ADR 0012. This ADR may be cited by
 the future enablement ADR only after every applicable checklist row has exact,
 independent evidence.
+
+## Implementation clarification — 2026-09-03
+
+Exact-model approval is enforced in the trusted HWI discovery boundary, not inferred from display copy. New mainnet single-key and multisig hardware wallets also require recent in-memory live-HWI admission bound to the exact fingerprint, account xpub, derivation path, and device family; renderer-supplied QR, file, manual, or replayed metadata cannot substitute for that proof. HWI 3.2.0 provides adequate distinct model identifiers for the approved Ledger Nano S Plus, Trezor Model One/Safe 3, and Bitcoin-only BitBox02 variants. It exposes only family-level identities for Coldcard and Jade, so those families remain rehearsal-capable but are excluded from a future mainnet build until a trusted exact-model proof is implemented or a later reviewed ADR narrows or revises the target matrix. Firmware versions remain exact release-evidence assertions; HWI does not securely attest them at runtime.

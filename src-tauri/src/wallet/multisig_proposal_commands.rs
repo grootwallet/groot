@@ -738,6 +738,24 @@ pub(crate) fn finalized_multisig_proposal_transaction(
     }
     let mut psbt = decode_psbt(&proposal.psbt).map_err(proposal_api_error)?;
     let wallet = load_wallet(db)?;
+    let acceleration = proposal_acceleration_method(db, proposal_id)?;
+    if matches!(acceleration, Some(AccelerationMethod::Rbf)) {
+        validate_rbf_original_intent(
+            db,
+            &wallet,
+            proposal_id,
+            &proposal.recipient,
+            proposal.amount,
+        )?;
+    }
+    validate_release_spend(
+        &wallet,
+        &psbt,
+        &proposal.recipient,
+        proposal.amount,
+        acceleration,
+    )?;
+    validate_psbt_excludes_frozen(&psbt, &frozen_outpoints(db)?)?;
     let signing = proposal_signing_context(db, metadata, proposal_id)?;
     if signing.spend_path == ProposalSpendPath::Delayed {
         let delayed_policy = delayed_policy_context(metadata)?.ok_or_else(|| {
@@ -968,8 +986,8 @@ pub fn multisig_proposal_broadcast(
     reviewed_psbt: String,
     credential: String,
 ) -> ApiResult<BroadcastResultDto> {
-    let _operation = operation_guard(&state)?;
     let credential = Zeroizing::new(credential);
+    let _operation = operation_guard(&state)?;
     require_unlocked(&app, &state)?;
     check_auth_throttle(&app, &state)?;
     let credential_result = verify_multisig_credential(&app, credential.as_str());
@@ -1030,12 +1048,13 @@ pub async fn multisig_create(
     credential: String,
     network_setup_source_wallet_id: Option<String>,
 ) -> ApiResult<MultisigCreationDto> {
+    let credential = Zeroizing::new(credential);
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
         let _operation = operation_guard(&state)?;
-        let credential = Zeroizing::new(credential);
         validate_credential(credential.as_str())?;
         reject_virtual_cosigners(&policy.cosigners)?;
+        hardware_commands::require_mainnet_cosigner_admissions(&state, &policy.cosigners)?;
         let preview = policy.preview().map_err(policy_api_error)?;
         let coldcard_registered =
             multisig_setup_commands::coldcard_registration_for_preview(&app, &preview)?;
@@ -1154,11 +1173,17 @@ pub async fn multisig_recovery_create(
     credential: String,
     network_setup_source_wallet_id: Option<String>,
 ) -> ApiResult<MultisigCreationDto> {
+    let credential = Zeroizing::new(credential);
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
         let _operation = operation_guard(&state)?;
-        let credential = Zeroizing::new(credential);
         validate_credential(credential.as_str())?;
+        crate::release_policy::ensure_delayed_policy_creation_enabled(NETWORK).map_err(|_| {
+            api_error(
+                "unsupported_wallet_policy",
+                "Guided recovery and inheritance wallets are not included in the first mainnet release.",
+            )
+        })?;
         reject_virtual_cosigners(&cosigners)?;
         reject_usb_cosigners_for_delayed_policy(&cosigners)?;
         let policy = PolicyInput {
