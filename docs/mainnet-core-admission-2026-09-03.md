@@ -1,7 +1,8 @@
 # Mainnet pre-wallet Core admission — 2026-09-03
 
-Status: implemented and independently reviewed on an isolated preparation branch;
-mainnet remains disabled and enabled-path evidence is pending.
+Status: implemented and internally post-patch reviewed on an isolated preparation
+branch; external independent review and enabled-path evidence are pending, and
+mainnet remains disabled.
 
 ## Security invariant
 
@@ -92,11 +93,12 @@ Final preparation-branch results at the reviewed tree:
 - the earlier full Regtest, native network-build, and deterministic 539-component
   SBOM evidence remains valid for this same implementation delta.
 
-The independent post-patch review found no remaining evidence-backed issue in
-the pre-wallet Core admission boundary. It confirmed permit-first SQLite opens,
-scope/config binding, monotonic expiry, cleanup and rollback paths, credential
-zeroization, exact chain/genesis validation, crate-wide source-policy coverage,
-and the independent disabled-mainnet gates.
+The internal read-only post-patch review found no remaining evidence-backed issue
+in the pre-wallet Core admission boundary. It confirmed permit-first SQLite
+opens, scope/config binding, monotonic expiry, cleanup and rollback paths,
+credential zeroization, exact chain/genesis validation, crate-wide source-policy
+coverage, and the independent disabled-mainnet gates. This is supporting evidence
+only and does not replace the external independent review required by ADR 0053.
 
 The eventual independent review must inspect the exact diff from the frozen
 `codex/mainnet-enablement` tip through this branch tip and explicitly attempt:
