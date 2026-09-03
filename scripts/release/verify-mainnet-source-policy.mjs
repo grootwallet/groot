@@ -12,13 +12,25 @@ const pinnedPolicySources = new Map([
   ['src-tauri/build.rs', '337855d79bc88136efc4ea576ebd50ac3036f745b9cf77275cb9c33fc3aff620'],
   [
     'src-tauri/src/release_policy.rs',
-    '6a7a5f9bf4e10f4f031714a28b8cd6f303175fe3ca703e72b6ca928ffa15d0f5'
+    'f227e2669ac091dbac0fdce0a811c4d533dac97d126bf28f048d8994f55d8c87'
   ],
   [
     'src-tauri/src/build_network.rs',
     'ff305684e79a6140db7b533d2fd23bc9288f8edf361793356ed99bee5064a534'
   ],
-  ['src-tauri/src/wallet.rs', '2033d70f050f868fbc083c21b57cc8d5db35cd7b4a9a123ff0aa8a8fc7d6edd2']
+  ['src-tauri/src/wallet.rs', '8e65b74bd9ab6d18e2e68088e34a3464ff56e21c53028de9de97d61e03edecb9'],
+  [
+    'src-tauri/src/wallet/hardware_commands.rs',
+    '63b97d62c1e7ac6f9bb7b4b0fcf2d60f93559ae3a06e7cb6844bea263e458358'
+  ],
+  [
+    'src-tauri/src/wallet/multisig_setup_commands.rs',
+    '4450b9349b295f8edede2b5c08139b1d9cd0ffb23b077cf8fb9c887b5cf15506'
+  ],
+  [
+    'src-tauri/src/wallet/proposal_review.rs',
+    '7e64749dd5285a2f5197bba84f326303f15428a5887c80dcdb8608b8aa6752b6'
+  ]
 ]);
 
 export function validatePinnedPolicySources(read) {

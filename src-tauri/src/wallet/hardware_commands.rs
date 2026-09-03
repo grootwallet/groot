@@ -135,6 +135,56 @@ pub(super) fn require_mainnet_cosigner_admissions(
     Ok(())
 }
 
+pub(super) fn reconcile_mainnet_recovery_cosigners(
+    state: &AppState,
+    cosigners: &[crate::multisig::CosignerInput],
+) -> ApiResult<Vec<crate::multisig::CosignerInput>> {
+    reconcile_recovery_cosigners_for_network(state, NETWORK, cosigners)
+}
+
+fn reconcile_recovery_cosigners_for_network(
+    state: &AppState,
+    network: Network,
+    cosigners: &[crate::multisig::CosignerInput],
+) -> ApiResult<Vec<crate::multisig::CosignerInput>> {
+    if network != Network::Bitcoin {
+        return Ok(cosigners.to_vec());
+    }
+    let mut admissions = state.pending_hardware_admissions.lock().map_err(internal)?;
+    admissions.retain(|_, created_at| created_at.elapsed() <= HARDWARE_SCAN_CACHE_TIMEOUT);
+    cosigners
+        .iter()
+        .map(|cosigner| {
+            let prefix = format!(
+                "{}|{}|{}|",
+                cosigner.fingerprint.trim().to_ascii_lowercase(),
+                cosigner.xpub.trim(),
+                cosigner.derivation_path.trim()
+            );
+            let mut device_types = admissions
+                .keys()
+                .filter_map(|key| key.strip_prefix(&prefix))
+                .filter(|device_type| !device_type.is_empty());
+            let device_type = device_types.next().ok_or_else(|| {
+                api_error(
+                    "hardware_not_approved",
+                    "Scan and import every signer in this mainnet recovery before creating the wallet.",
+                )
+            })?;
+            if device_types.next().is_some() {
+                return Err(api_error(
+                    "hardware_not_approved",
+                    "A recovered signer has an ambiguous live hardware identity.",
+                ));
+            }
+            let mut reconciled = cosigner.clone();
+            reconciled.source = crate::multisig::CosignerSource::Usb;
+            reconciled.device_type = Some(device_type.to_owned());
+            Ok(reconciled)
+        })
+        .collect()
+}
+
 fn approved_hwi_model(network: Network, device_type: &str, model: &str) -> bool {
     let device_type = device_type.trim().to_ascii_lowercase();
     let model = model.trim().to_ascii_lowercase();
@@ -1021,6 +1071,52 @@ mod targeted_scan_tests {
             Some("trezor")
         )
         .is_err());
+    }
+
+    #[test]
+    fn mainnet_recovery_requires_and_enriches_every_live_cosigner_admission() {
+        use crate::multisig::{CosignerInput, CosignerSource};
+
+        let state = AppState::default();
+        let cosigners = ["first-xpub", "second-xpub"].map(|xpub| CosignerInput {
+            id: xpub.to_owned(),
+            label: "Signer".to_owned(),
+            fingerprint: if xpub == "first-xpub" {
+                "a1b2c3d4".to_owned()
+            } else {
+                "b1c2d3e4".to_owned()
+            },
+            xpub: xpub.to_owned(),
+            derivation_path: MULTISIG_ACCOUNT_PATH.to_owned(),
+            source: CosignerSource::Manual,
+            device_type: None,
+        });
+        assert!(
+            reconcile_recovery_cosigners_for_network(&state, Network::Bitcoin, &cosigners).is_err()
+        );
+        for (cosigner, device_type) in cosigners.iter().zip(["trezor", "ledger"]) {
+            remember_hardware_admission_for_network(
+                &state,
+                Network::Bitcoin,
+                &cosigner.fingerprint,
+                &cosigner.xpub,
+                &cosigner.derivation_path,
+                Some(device_type),
+            )
+            .unwrap();
+        }
+        let recovered =
+            reconcile_recovery_cosigners_for_network(&state, Network::Bitcoin, &cosigners).unwrap();
+        assert_eq!(recovered[0].source, CosignerSource::Usb);
+        assert_eq!(recovered[0].device_type.as_deref(), Some("trezor"));
+        assert_eq!(recovered[1].device_type.as_deref(), Some("ledger"));
+        let rehearsal = reconcile_recovery_cosigners_for_network(
+            &AppState::default(),
+            Network::Testnet4,
+            &cosigners,
+        )
+        .unwrap();
+        assert_eq!(rehearsal[0].source, CosignerSource::Manual);
     }
 
     #[test]

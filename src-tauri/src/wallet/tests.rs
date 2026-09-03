@@ -1347,6 +1347,46 @@ fn proposal_review_rejects_any_non_recipient_output_not_owned_by_the_wallet() {
 }
 
 #[test]
+fn cpfp_ownership_requires_one_descriptor_derived_wallet_output() {
+    use bdk_wallet::bitcoin::{
+        absolute::LockTime, transaction::Version, ScriptBuf, Sequence, TxIn, TxOut, Witness,
+    };
+
+    let mnemonic = Mnemonic::parse(WORDS).unwrap();
+    let master = root_key(&mnemonic, "cpfp ownership").unwrap();
+    let wallet = Wallet::create(
+        Bip84(master, KeychainKind::External),
+        Bip84(master, KeychainKind::Internal),
+    )
+    .network(NETWORK)
+    .create_wallet_no_persist()
+    .unwrap();
+    let destination = wallet.peek_address(KeychainKind::Internal, 0).address;
+    let transaction = Transaction {
+        version: Version::TWO,
+        lock_time: LockTime::ZERO,
+        input: vec![TxIn {
+            previous_output: OutPoint::null(),
+            script_sig: ScriptBuf::new(),
+            sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
+            witness: Witness::new(),
+        }],
+        output: vec![TxOut {
+            value: Amount::from_sat(900),
+            script_pubkey: destination.script_pubkey(),
+        }],
+    };
+    let mut psbt = Psbt::from_unsigned_tx(transaction).unwrap();
+    validate_cpfp_output_ownership(&wallet, &psbt, &destination.to_string()).unwrap();
+
+    psbt.unsigned_tx
+        .output
+        .push(psbt.unsigned_tx.output[0].clone());
+    psbt.outputs.push(psbt.outputs[0].clone());
+    assert!(validate_cpfp_output_ownership(&wallet, &psbt, &destination.to_string()).is_err());
+}
+
+#[test]
 fn acceleration_rates_and_error_classes_fail_closed() {
     for invalid in ["NaN", "inf", "-1", "0", "10000.1"] {
         assert_eq!(

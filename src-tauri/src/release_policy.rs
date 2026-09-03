@@ -21,6 +21,19 @@ pub enum ReleasePolicyError {
     UnsupportedWalletPolicy,
 }
 
+pub fn validate_first_mainnet_backend_endpoint(
+    backend: &ChainBackend,
+) -> Result<(), ReleasePolicyError> {
+    let ChainBackend::LocalCore { url } = backend else {
+        return Err(ReleasePolicyError::UnsupportedBackend);
+    };
+    let parsed = url::Url::parse(url).map_err(|_| ReleasePolicyError::UnsupportedBackend)?;
+    if parsed.scheme() != "http" || backend.validate().is_err() {
+        return Err(ReleasePolicyError::UnsupportedBackend);
+    }
+    Ok(())
+}
+
 pub fn ensure_runtime_network_enabled(network: Network) -> Result<(), ReleasePolicyError> {
     if network == Network::Bitcoin && !MAINNET_ENABLED {
         return Err(ReleasePolicyError::MainnetDisabled);
@@ -35,6 +48,16 @@ pub fn ensure_delayed_policy_creation_enabled(network: Network) -> Result<(), Re
     Ok(())
 }
 
+pub fn ensure_recovered_wallet_policy_enabled(
+    network: Network,
+    is_standard: bool,
+) -> Result<(), ReleasePolicyError> {
+    if network == Network::Bitcoin && !is_standard {
+        return Err(ReleasePolicyError::UnsupportedWalletPolicy);
+    }
+    Ok(())
+}
+
 #[allow(
     dead_code,
     reason = "dormant until an approved mainnet backend is wired"
@@ -43,11 +66,9 @@ pub fn validate_first_mainnet_backend(
     backend: &ChainBackend,
     observed_genesis: BlockHash,
 ) -> Result<(), ReleasePolicyError> {
+    validate_first_mainnet_backend_endpoint(backend)?;
     if observed_genesis != genesis_block(Network::Bitcoin).block_hash() {
         return Err(ReleasePolicyError::WrongGenesis);
-    }
-    if !matches!(backend, ChainBackend::LocalCore { .. }) || backend.validate().is_err() {
-        return Err(ReleasePolicyError::UnsupportedBackend);
     }
     Ok(())
 }
@@ -70,6 +91,7 @@ pub fn validate_cpfp(
     network: Network,
     recipient_count: usize,
     total_sats: u64,
+    wallet_owned_output: bool,
 ) -> Result<(), ReleasePolicyError> {
     if network != Network::Bitcoin {
         return Ok(());
@@ -77,14 +99,15 @@ pub fn validate_cpfp(
     if !MAINNET_ENABLED {
         return Err(ReleasePolicyError::MainnetDisabled);
     }
-    validate_first_mainnet_cpfp(recipient_count, total_sats)
+    validate_first_mainnet_cpfp(recipient_count, total_sats, wallet_owned_output)
 }
 
 fn validate_first_mainnet_cpfp(
     recipient_count: usize,
     total_sats: u64,
+    wallet_owned_output: bool,
 ) -> Result<(), ReleasePolicyError> {
-    if recipient_count != 0 || total_sats != 0 {
+    if recipient_count != 0 || total_sats != 0 || !wallet_owned_output {
         return Err(ReleasePolicyError::InvalidAmount);
     }
     Ok(())
@@ -132,6 +155,18 @@ mod tests {
             ensure_delayed_policy_creation_enabled(Network::Testnet4),
             Ok(())
         );
+        assert_eq!(
+            ensure_recovered_wallet_policy_enabled(Network::Bitcoin, false),
+            Err(ReleasePolicyError::UnsupportedWalletPolicy)
+        );
+        assert_eq!(
+            ensure_recovered_wallet_policy_enabled(Network::Bitcoin, true),
+            Ok(())
+        );
+        assert_eq!(
+            ensure_recovered_wallet_policy_enabled(Network::Testnet4, false),
+            Ok(())
+        );
     }
 
     #[test]
@@ -153,6 +188,9 @@ mod tests {
                 url: "https://remote.example:8332".into(),
             },
             ChainBackend::LocalCore {
+                url: "https://localhost:8332".into(),
+            },
+            ChainBackend::LocalCore {
                 url: "https://user:password@127.0.0.1:8332".into(),
             },
             ChainBackend::LocalCore {
@@ -166,6 +204,10 @@ mod tests {
                 preset: None,
             },
         ] {
+            assert_eq!(
+                validate_first_mainnet_backend_endpoint(&backend),
+                Err(ReleasePolicyError::UnsupportedBackend)
+            );
             assert_eq!(
                 validate_first_mainnet_backend(&backend, mainnet_genesis),
                 Err(ReleasePolicyError::UnsupportedBackend)
@@ -198,18 +240,22 @@ mod tests {
 
     #[test]
     fn dormant_cpfp_policy_allows_only_a_wallet_owned_fee_child() {
-        assert_eq!(validate_cpfp(Network::Regtest, 99, u64::MAX), Ok(()));
+        assert_eq!(validate_cpfp(Network::Regtest, 99, u64::MAX, false), Ok(()));
         assert_eq!(
-            validate_cpfp(Network::Bitcoin, 0, 0),
+            validate_cpfp(Network::Bitcoin, 0, 0, true),
             Err(ReleasePolicyError::MainnetDisabled)
         );
-        assert_eq!(validate_first_mainnet_cpfp(0, 0), Ok(()));
+        assert_eq!(validate_first_mainnet_cpfp(0, 0, true), Ok(()));
         assert_eq!(
-            validate_first_mainnet_cpfp(1, 0),
+            validate_first_mainnet_cpfp(1, 0, true),
             Err(ReleasePolicyError::InvalidAmount)
         );
         assert_eq!(
-            validate_first_mainnet_cpfp(0, 1),
+            validate_first_mainnet_cpfp(0, 1, true),
+            Err(ReleasePolicyError::InvalidAmount)
+        );
+        assert_eq!(
+            validate_first_mainnet_cpfp(0, 0, false),
             Err(ReleasePolicyError::InvalidAmount)
         );
     }

@@ -1,6 +1,15 @@
 # Bitcoin Improvement Proposal support
 
-The 2026-09-03 independent-review remediation changes evidence, not supported BIP families. BIP84/BIP48 hardware admission is narrowed for a future mainnet build to trusted exact-model identifiers; HWI-ambiguous Coldcard/Jade identities cannot inherit certification. BIP174 transaction finalization now repeats the existing recipient/amount, frozen-input, and RBF-original-intent checks at every broadcast boundary, while CPFP is explicitly classified as a wallet-owned fee child. Recovery-template xpubs use the same compiled-network validation as standard multisig. No persisted descriptor or proposal format and no upstream BIP status changed. See [`security-remediation-2026-09-03.md`](security-remediation-2026-09-03.md).
+The 2026-09-03 independent-review remediation and isolated mainnet preparation
+change evidence, not supported BIP families. BIP84/BIP48 hardware admission is
+narrowed for a future mainnet build to trusted exact-model identifiers;
+HWI-ambiguous Coldcard/Jade identities cannot inherit certification. BIP48 recovery
+from Groot and BSMS public backups requires fresh live-HWI admission before a
+mainnet profile can be created. BIP174 transaction finalization repeats the
+recipient/amount, frozen-input, RBF-original-intent, and descriptor-derived CPFP
+ownership checks at the trusted boundary. No persisted descriptor, backup, or
+proposal format and no upstream BIP status changed. See
+[`security-remediation-2026-09-03.md`](security-remediation-2026-09-03.md).
 
 Status: canonical implementation and candidate inventory as of 2026-09-02.
 

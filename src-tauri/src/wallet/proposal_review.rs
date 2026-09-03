@@ -56,11 +56,62 @@ pub(super) fn validate_release_spend(
 ) -> ApiResult<()> {
     proposal_change_details(wallet, psbt, recipient, amount)?;
     let policy = if matches!(acceleration, Some(AccelerationMethod::Cpfp)) {
-        crate::release_policy::validate_cpfp(NETWORK, 0, amount)
+        let wallet_owned_output = if NETWORK == Network::Bitcoin {
+            validate_cpfp_output_ownership(wallet, psbt, recipient)?;
+            true
+        } else {
+            false
+        };
+        crate::release_policy::validate_cpfp(NETWORK, 0, amount, wallet_owned_output)
     } else {
         crate::release_policy::validate_spend(NETWORK, 1, amount)
     };
     policy.map_err(|_| api_error("invalid_amount", "This spend is blocked by release policy."))
+}
+
+pub(super) fn validate_cpfp_output_ownership(
+    wallet: &Wallet,
+    psbt: &Psbt,
+    recipient: &str,
+) -> ApiResult<()> {
+    if psbt.unsigned_tx.input.len() != 1 || psbt.unsigned_tx.output.len() != 1 {
+        return Err(api_error(
+            "proposal_mismatch",
+            "A fee child must spend one wallet input to one wallet-owned output.",
+        ));
+    }
+    let expected_script = Address::from_str(recipient)
+        .map_err(|_| internal("The stored fee-child recipient is invalid."))?
+        .require_network(NETWORK)
+        .map_err(|_| internal("The stored fee-child recipient is on the wrong network."))?
+        .script_pubkey();
+    let output = &psbt.unsigned_tx.output[0];
+    if output.script_pubkey != expected_script {
+        return Err(api_error(
+            "proposal_mismatch",
+            "The fee-child output does not match its stored wallet destination.",
+        ));
+    }
+    let (keychain, index) = wallet
+        .derivation_of_spk(output.script_pubkey.clone())
+        .ok_or_else(|| {
+            api_error(
+                "proposal_mismatch",
+                "The fee-child output is not controlled by this wallet descriptor.",
+            )
+        })?;
+    let derived_script = wallet
+        .public_descriptor(keychain)
+        .at_derivation_index(index)
+        .map_err(internal)?
+        .script_pubkey();
+    if derived_script != output.script_pubkey {
+        return Err(api_error(
+            "proposal_mismatch",
+            "The fee-child output does not match its wallet descriptor derivation.",
+        ));
+    }
+    Ok(())
 }
 
 pub(super) fn validate_psbt_excludes_frozen(psbt: &Psbt, frozen: &[OutPoint]) -> ApiResult<()> {

@@ -2167,6 +2167,7 @@ fn saved_userpass_config_has_required_secret(
 
 fn rpc_client(app: &AppHandle, state: &State<'_, AppState>) -> ApiResult<Client> {
     let config = read_node_config(app)?;
+    validate_first_mainnet_rpc_endpoint(&config.backend)?;
     let url = config
         .validate()
         .map_err(network_config_api_error)?
@@ -2217,6 +2218,7 @@ fn rpc_client(app: &AppHandle, state: &State<'_, AppState>) -> ApiResult<Client>
 }
 
 fn candidate_rpc_client(config: &CoreNodeConfig, password: &str) -> ApiResult<Client> {
+    validate_first_mainnet_rpc_endpoint(&config.backend)?;
     let url = config
         .validate()
         .map_err(network_config_api_error)?
@@ -2248,6 +2250,18 @@ fn candidate_rpc_client(config: &CoreNodeConfig, password: &str) -> ApiResult<Cl
     }?;
     validate_first_mainnet_rpc_backend(&client, &config.backend)?;
     Ok(client)
+}
+
+fn validate_first_mainnet_rpc_endpoint(backend: &ChainBackend) -> ApiResult<()> {
+    if NETWORK != Network::Bitcoin {
+        return Ok(());
+    }
+    crate::release_policy::validate_first_mainnet_backend_endpoint(backend).map_err(|_| {
+        api_error(
+            "invalid_node_config",
+            "The first mainnet release requires a loopback Bitcoin Core node.",
+        )
+    })
 }
 
 fn validate_first_mainnet_rpc_backend(client: &Client, backend: &ChainBackend) -> ApiResult<()> {

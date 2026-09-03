@@ -7,6 +7,13 @@ firmware 1.14.1; Ledger Nano S Plus firmware 1.6.1 with Bitcoin app 2.5.0.
 Existing results below are not retroactively bound to these versions unless the
 applicable sanitized certification record documents them.
 
+Coldcard Mk4 and Jade Classic remain intended mainnet targets, and the physical
+results below remain valid exact-device rehearsal evidence. They are not yet
+runtime-admissible in a mainnet artifact: HWI 3.2.0 exposes only the broad
+`coldcard` and `jade` family identities. Inclusion requires trusted exact-model
+proof on the same live connection or an independently reviewed family-scope ADR;
+it does not require repeating unrelated successful Regtest/Testnet4 behavior.
+
 ## Hardware certification matrix
 
 | Exact model                                 | Primary transport                                                                   | Credential rule                                                                                  | Local Regtest                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | Open work                                                                                                                                                               |

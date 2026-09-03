@@ -934,6 +934,7 @@ pub fn multisig_recover_bsms(
             device_type: None,
         })
         .collect::<Vec<_>>();
+    let cosigners = hardware_commands::reconcile_mainnet_recovery_cosigners(&state, &cosigners)?;
     let preview = PolicyInput {
         name,
         threshold,
@@ -1045,7 +1046,18 @@ pub fn multisig_recover(
     let credential = Zeroizing::new(credential);
     let _operation = operation_guard(&state)?;
     validate_credential(credential.as_str())?;
-    let backup = validate_multisig_backup(&encoded_backup)?;
+    let mut backup = validate_multisig_backup(&encoded_backup)?;
+    let standard_policy = backup.wallet.recovery_template.is_none()
+        && matches!(backup.wallet.policy_type.as_str(), "" | "standard");
+    crate::release_policy::ensure_recovered_wallet_policy_enabled(NETWORK, standard_policy)
+        .map_err(|_| {
+            api_error(
+                "unsupported_wallet_policy",
+                "Guided recovery and inheritance wallets are not included in the first mainnet release.",
+            )
+        })?;
+    backup.wallet.cosigners =
+        hardware_commands::reconcile_mainnet_recovery_cosigners(&state, &backup.wallet.cosigners)?;
     let (id, dir) = prepare_profile_directory(&app)?;
     let result = (|| {
         let mut db = open_wallet_database(&dir.join("wallet.sqlite"))?;
