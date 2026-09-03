@@ -55,3 +55,21 @@ record does not waive any new advisory or warning appearing before release.
 - independent review of the frozen baseline and the later enablement diff; and
 - exact signed-candidate physical evidence required by the applicable
   checklist rows.
+
+## Superseded heterogeneous-machine diagnostic
+
+An unsigned mainnet Build A from commit `18d888e5` completed on macOS 26.6.2,
+but its `BUILD-INFO` used the complete `uname -srvmp` value. That value embeds an
+Apple hardware-family kernel suffix, so the strict comparator could not accept a
+genuinely independent Mac with a different Apple silicon family even when all
+source and toolchain inputs reproduced. Its executable and SBOM are retained as
+diagnostic evidence only and must not be used for final reproducibility, signing,
+or notarization.
+
+The corrected evidence format records the stable exact inputs instead: macOS
+product version and build, arm64 architecture, Xcode version and build, Apple
+Clang version and target, SDK, Node/pnpm/Tauri and Rust/Cargo versions, source
+commit, network, signing team, HWI digest, lockfiles, and mainnet configuration.
+The comparator continues to require all four evidence files to be byte-identical.
+This release-tooling-only correction changes no runtime behavior, persisted
+format, descriptor, protocol implementation, or BIP support.

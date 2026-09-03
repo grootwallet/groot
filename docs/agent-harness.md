@@ -61,8 +61,12 @@ pinned GitHub Actions are in `.github/workflows/ci.yml`.
 Native Signet and Testnet4 package commands require a clean tracked and
 untracked worktree, then generate a fresh target-specific SBOM after the
 executable exists. `pnpm release:unsigned` does the same for the unsigned
-release evidence set. These generated files bind the exact commit and lockfiles
-to the built executable digest and remain untracked build artifacts.
+release evidence set, while `pnpm release:unsigned:mainnet` creates the dedicated
+mainnet evidence set. The macOS evidence records stable exact OS, Xcode, Clang,
+SDK, architecture, and language-toolchain inputs without binding otherwise
+independent machines to one Apple hardware-family kernel suffix. These generated
+files bind the exact commit and lockfiles to the built executable digest and
+remain untracked build artifacts.
 
 Real-Core integration scripts create disposable isolated data. Never redirect
 them to the funded physical-certification profile. Do not recreate or replace a

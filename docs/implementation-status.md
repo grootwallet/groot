@@ -9,6 +9,15 @@ BIP support or its evidence updates that matrix and this ledger together.
 
 v0.4.92 is the post-v0.4.91 security-remediation source line. It closes the code and documentation dispositions from the independent baseline review of commit `2832acbb2f9aac3ed1b4079f70dd74d7277b2291`: future-mainnet exact-model HWI admission, final broadcast and RBF intent checks, frozen RBF/CPFP construction, expiring source-wallet authorization, recovery xpub network checks, cancellation-atomic policy evidence, credential zeroization, v2 migration failure handling, package-signing verification, deterministic SBOM ordering, and mutation-resistant release tripwires. It also discloses copied-profile offline guessing during onboarding. No persisted format changed and no migration is required. ADR 0055 now permits a separately isolated, non-distributable mainnet certification candidate; v0.4.91 package and physical evidence stays historical, and mainnet release remains blocked. Details: [`security-remediation-2026-09-03.md`](security-remediation-2026-09-03.md) and [`mainnet-closing-review-2026-09-03.md`](mainnet-closing-review-2026-09-03.md).
 
+The final reproducibility correction removes the Apple hardware-family suffix
+from unsigned `BUILD-INFO` while retaining exact macOS product/build, arm64,
+Xcode version/build, Apple Clang version/target, SDK, source, network, HWI,
+configuration, lock, and language-toolchain identities. Strict comparison still
+requires the executable, SBOM, recorded digests, and corrected metadata to be
+byte-identical. The earlier `18d888e5` Build A is superseded diagnostic evidence.
+This changes release evidence only, with no persisted-format, runtime, descriptor,
+protocol, migration, or BIP impact.
+
 The isolated mainnet-enablement line closes the three audited command boundaries
 for the non-distributable ADR 0055 certification candidate. Standard multisig recovery from
 Groot or BSMS public backups now reconciles every signer against a recent live-HWI

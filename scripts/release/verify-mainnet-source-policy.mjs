@@ -85,7 +85,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'scripts/release/build-unsigned-mainnet.sh',
-    '4429129dc468979b52755929d5c8ca454afb5cf94b55eb634ecd153120b381a2'
+    '397819a9a3fed5def9e0a3c4125169ed5618015fddc8f60ec4b882d9320b2ae8'
   ],
   [
     'src/lib/components/AppShell.svelte',

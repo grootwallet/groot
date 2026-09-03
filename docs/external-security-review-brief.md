@@ -156,6 +156,10 @@ evidence, compare Build A and Build B, inspect the SBOM and HWI inputs, verify
 Developer ID signing/notarization/entitlements, and exercise signed update plus
 rollback rejection. Confirm the reviewed source, unsigned executable, signed
 package, SBOM, and release metadata are cryptographically bound.
+For heterogeneous Apple-silicon machines, require exact agreement on the stable
+recorded build inputs—macOS product/build, arm64 architecture, Xcode version/build,
+Apple Clang version/target, SDK, language toolchains, locks, source, network, and
+HWI—without requiring the hardware-family suffix embedded in full `uname` output.
 
 ### 9. Mainnet-enablement diff
 

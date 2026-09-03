@@ -213,20 +213,20 @@ Before building, verify the deterministic target dependency inventory:
 pnpm test:sbom
 ```
 
-The unsigned build emits `groot.cdx.json`, records the exact compiler, CLI, target, OS, SDK, network, commit, epoch, and lockfile identities in `BUILD-INFO`, embeds the built executable's SHA-256 in the SBOM application component, and includes both the binary and SBOM in `SHA256SUMS`. The SBOM represents packages installed/resolved for that build target; packages locked only for other targets remain visible through the recorded lock count and appear when generated on those targets. Generated SBOMs remain untracked release evidence; `pnpm test:sbom` rejects a committed CycloneDX/SPDX output rather than allowing it to drift.
+The unsigned build emits `groot.cdx.json`, records the exact compiler, CLI, target, macOS product/build, architecture, Xcode version/build, Apple Clang version/target, SDK, network, commit, epoch, and lockfile identities in `BUILD-INFO`, embeds the built executable's SHA-256 in the SBOM application component, and includes both the binary and SBOM in `SHA256SUMS`. It deliberately does not record `uname`'s hardware-family kernel suffix: independent Apple-silicon models may differ while every build input remains exact. The SBOM represents packages installed/resolved for that build target; packages locked only for other targets remain visible through the recorded lock count and appear when generated on those targets. Generated SBOMs remain untracked release evidence; `pnpm test:sbom` rejects a committed CycloneDX/SPDX output rather than allowing it to drift.
 
-Run on two clean machines with the pinned Node, pnpm, Rust toolchain, target, OS, Xcode/SDK and dependency lockfiles:
+Run on two genuinely independent clean machines with the pinned Node, pnpm, Rust toolchain, target architecture, exact macOS product/build, Xcode version/build, Apple Clang version/target, SDK, and dependency lockfiles. The Macs need not use the same Apple silicon family:
 
 ```sh
-cd /Users/thibm/Documents/Codex/2026-07-17/let
-pnpm release:unsigned
+cd /absolute/path/to/a/clean/groot/checkout
+pnpm release:unsigned:mainnet
 ```
 
 Transfer only the two output directories to one verification machine, then:
 
 ```sh
-cd /Users/thibm/Documents/Codex/2026-07-17/let
-pnpm release:compare -- /absolute/path/to/build-a /absolute/path/to/build-b
+cd /absolute/path/to/groot
+pnpm release:compare /absolute/path/to/build-a /absolute/path/to/build-b
 ```
 
 The comparator rejects symlinks, unexpected or missing files, stale recorded digests, different build environments, different SBOMs, and different binaries. Resolve any mismatch before signing. `pnpm release:test:compare` exercises those fail-closed boundaries without producing a release. Signing/notarization requires the release owner's Apple identity and protected credentials. Verify the resulting package with:
