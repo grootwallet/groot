@@ -3088,6 +3088,62 @@ fn new_wallet_admission_cleanup_invalidates_the_attempt() {
         .is_none());
 }
 
+fn test_mainnet_admission(
+    scope: MainnetNodeAdmissionScope,
+    config: CoreNodeConfig,
+) -> PendingMainnetNodeAdmission {
+    PendingMainnetNodeAdmission {
+        config,
+        password: Zeroizing::new("disposable-test-password".to_owned()),
+        created_at: Instant::now(),
+        scope,
+    }
+}
+
+#[test]
+fn new_wallet_admission_rejects_an_existing_wallet_scope() {
+    let admission = test_mainnet_admission(
+        MainnetNodeAdmissionScope::ExistingWallet(Uuid::new_v4()),
+        default_node_config(),
+    );
+    assert!(!admission_allows_new_wallet(&admission));
+    assert!(admission_allows_new_wallet(&test_mainnet_admission(
+        MainnetNodeAdmissionScope::NewWallet,
+        default_node_config(),
+    )));
+}
+
+#[test]
+fn selected_wallet_admission_rejects_a_different_wallet() {
+    let selected = Uuid::new_v4();
+    let config = default_node_config();
+    let admission = test_mainnet_admission(
+        MainnetNodeAdmissionScope::ExistingWallet(Uuid::new_v4()),
+        config.clone(),
+    );
+    assert!(!admission_allows_selected_wallet(
+        &admission, selected, &config
+    ));
+}
+
+#[test]
+fn selected_wallet_admission_rejects_changed_core_configuration() {
+    let selected = Uuid::new_v4();
+    let config = default_node_config();
+    let admission = test_mainnet_admission(
+        MainnetNodeAdmissionScope::ExistingWallet(selected),
+        config.clone(),
+    );
+    let mut changed = config.clone();
+    changed.username = Some("different-test-user".to_owned());
+    assert!(admission_allows_selected_wallet(
+        &admission, selected, &config
+    ));
+    assert!(!admission_allows_selected_wallet(
+        &admission, selected, &changed
+    ));
+}
+
 #[test]
 fn regtest_app_data_override_is_limited_to_named_temporary_directories() {
     #[cfg(unix)]

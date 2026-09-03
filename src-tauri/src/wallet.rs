@@ -1856,6 +1856,19 @@ fn database_admission_error(error: crate::release_policy::ReleasePolicyError) ->
     }
 }
 
+fn admission_allows_new_wallet(admission: &PendingMainnetNodeAdmission) -> bool {
+    admission.scope == MainnetNodeAdmissionScope::NewWallet
+}
+
+fn admission_allows_selected_wallet(
+    admission: &PendingMainnetNodeAdmission,
+    selected_wallet: Uuid,
+    saved_config: &CoreNodeConfig,
+) -> bool {
+    admission.scope == MainnetNodeAdmissionScope::ExistingWallet(selected_wallet)
+        && admission.config == *saved_config
+}
+
 fn database_open_permit_for_new_wallet(state: &AppState) -> ApiResult<DatabaseOpenPermit> {
     if NETWORK != Network::Bitcoin {
         return Ok(DatabaseOpenPermit {
@@ -1863,7 +1876,7 @@ fn database_open_permit_for_new_wallet(state: &AppState) -> ApiResult<DatabaseOp
         });
     }
     let admission = current_mainnet_node_admission(state)?;
-    if admission.scope != MainnetNodeAdmissionScope::NewWallet {
+    if !admission_allows_new_wallet(&admission) {
         return Err(api_error(
             "node_admission_required",
             "Verify the local Bitcoin Core node specifically for new mainnet wallet creation.",
@@ -1886,8 +1899,7 @@ fn database_open_permit_for_selected_wallet(app: &AppHandle) -> ApiResult<Databa
     let selected = selected_profile(app)?;
     let saved_config = read_node_config_for(app, selected.id)?;
     let pending_matches = current_mainnet_node_admission(&state).is_ok_and(|admission| {
-        admission.scope == MainnetNodeAdmissionScope::ExistingWallet(selected.id)
-            && admission.config == saved_config
+        admission_allows_selected_wallet(&admission, selected.id, &saved_config)
     });
     let active_matches = state
         .unlocked_wallets

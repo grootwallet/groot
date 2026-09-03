@@ -46,6 +46,11 @@ wallet session is not an admission.
 - Stable `node_admission_required` and `mainnet_disabled` errors are represented at
   the frontend contract. RPC credentials remain native and are zeroized on every
   admission exit.
+- Explicit hardware-operation cancellation also clears pending Core admission, so
+  returning to wallet creation requires a fresh preflight.
+- Mainnet onboarding never offers cross-wallet network-setup adoption. The exact
+  setup that passed admission is the only setup persisted into a new profile;
+  cross-wallet adoption remains available only on test networks.
 
 ## Compatibility and scope
 
