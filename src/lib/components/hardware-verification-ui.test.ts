@@ -112,6 +112,8 @@ describe('hardware receive verification UI', () => {
     expect(verificationFlow).toContain('modalAttentionSignal += 1');
     expect(verificationFlow).toContain('attentionSignal={modalAttentionSignal}');
     expect(modal).toContain('class:modal-attention={attentionActive}');
+    expect(modal).toContain('if (!attentionRunning)');
+    expect(modal).toContain('activateAttention();');
     expect(appCss).toMatch(/@keyframes modal-attention/);
     expect(appCss).toMatch(
       /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.modal\.modal-attention\s*\{[\s\S]*?animation:\s*none !important;[\s\S]*?outline:/
