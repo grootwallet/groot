@@ -300,14 +300,14 @@ test('locked wallet can continue into hardware and multisig setup', async ({ pag
 
   await page.goto('/welcome?add=1');
   await page.getByRole('button', { name: 'Add wallet' }).click();
-  await page.getByRole('link', { name: /Hardware signer/ }).click();
+  await page.getByRole('button', { name: /Hardware signer/ }).click();
   await expect(page).toHaveURL(/\/hardware\/new$/);
   await expect(page.getByRole('heading', { name: 'Add hardware signer' })).toBeVisible();
   await expect(page.locator('.app-shell')).toHaveClass(/onboarding-shell/);
 
   await page.getByRole('link', { name: /Cancel/ }).click();
   await page.getByRole('button', { name: 'Add wallet' }).click();
-  await page.getByRole('link', { name: /Multisig wallet/ }).click();
+  await page.getByRole('button', { name: /Multisig wallet/ }).click();
   await expect(page).toHaveURL(/\/multisig\/new$/);
   await expect(page.getByRole('heading', { name: 'Create a multisig wallet' })).toBeVisible();
   await expect(page.locator('.app-shell')).toHaveClass(/onboarding-shell/);
@@ -458,7 +458,7 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   test.setTimeout(60_000);
   await page.goto('/welcome?add=1');
   await page.getByRole('button', { name: 'Add wallet' }).click();
-  await page.getByRole('link', { name: /Hardware signer/ }).click();
+  await page.getByRole('button', { name: /Hardware signer/ }).click();
   await expect(page.getByRole('heading', { name: 'Add hardware signer' })).toBeVisible();
   await page.getByLabel('Wallet name').fill('Hardware savings');
   await page.getByRole('button', { name: /Connect with cable/ }).click();

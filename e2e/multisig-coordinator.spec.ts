@@ -1534,7 +1534,7 @@ test('creates and verifies a simple 2-of-3 descriptor wallet', async ({ page }) 
       .click();
   }
   await page.getByRole('button', { name: 'Add wallet' }).click();
-  await page.getByRole('link', { name: /Multisig wallet/ }).click();
+  await page.getByRole('button', { name: /Multisig wallet/ }).click();
   await page.getByRole('link', { name: /Recover from backup/ }).click();
   const publicDescriptor = JSON.parse(descriptorBackup).wallet.externalDescriptor as string;
   await page.getByLabel('Choose recovery backup file').setInputFiles({
