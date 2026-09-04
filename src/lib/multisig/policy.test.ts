@@ -4,6 +4,7 @@ import {
   coordinatorProgress,
   descriptorPreview,
   findDuplicateCosigner,
+  multisigNetworkPolicy,
   normalizeCosigner,
   normalizeSignerLabel,
   signerLabelError,
@@ -31,6 +32,20 @@ describe('multisig policy invariants', () => {
 
   it('uses the standard native-SegWit multisig account path', () => {
     expect(MULTISIG_ACCOUNT_PATH).toBe("m/48'/1'/0'/2'");
+    expect(multisigNetworkPolicy('mainnet')).toMatchObject({
+      accountPath: "m/48'/0'/0'/2'",
+      invalidAccountKey: 'Every account key must use a mainnet extended public key.'
+    });
+    for (const network of ['signet', 'testnet4', 'regtest'] as const) {
+      expect(multisigNetworkPolicy(network)).toMatchObject({
+        accountPath: "m/48'/1'/0'/2'",
+        invalidAccountKey: 'Every account key must use a test-network extended public key.'
+      });
+    }
+    expect(multisigNetworkPolicy('mainnet').accountKeyPattern.test('xpub-mainnet')).toBe(true);
+    expect(multisigNetworkPolicy('mainnet').accountKeyPattern.test('tpub-testnet')).toBe(false);
+    expect(multisigNetworkPolicy('signet').accountKeyPattern.test('tpub-testnet')).toBe(true);
+    expect(multisigNetworkPolicy('signet').accountKeyPattern.test('xpub-mainnet')).toBe(false);
   });
 
   it('accepts the deliberately narrow v1 policy envelope', () => {

@@ -1,7 +1,37 @@
-import { defaultConfig } from '$lib/config';
+import { defaultConfig, type SupportedNetwork } from '$lib/config';
 
-export const MULTISIG_ACCOUNT_PATH =
-  defaultConfig.network === 'mainnet' ? "m/48'/0'/0'/2'" : "m/48'/1'/0'/2'";
+const MULTISIG_NETWORK_POLICY = {
+  mainnet: {
+    accountPath: "m/48'/0'/0'/2'",
+    accountKeyPattern: /^(xpub|ypub|zpub)/,
+    invalidAccountKey: 'Every account key must use a mainnet extended public key.'
+  },
+  signet: {
+    accountPath: "m/48'/1'/0'/2'",
+    accountKeyPattern: /^(tpub|upub|vpub)/,
+    invalidAccountKey: 'Every account key must use a test-network extended public key.'
+  },
+  testnet4: {
+    accountPath: "m/48'/1'/0'/2'",
+    accountKeyPattern: /^(tpub|upub|vpub)/,
+    invalidAccountKey: 'Every account key must use a test-network extended public key.'
+  },
+  regtest: {
+    accountPath: "m/48'/1'/0'/2'",
+    accountKeyPattern: /^(tpub|upub|vpub)/,
+    invalidAccountKey: 'Every account key must use a test-network extended public key.'
+  }
+} as const satisfies Record<
+  SupportedNetwork,
+  { accountPath: string; accountKeyPattern: RegExp; invalidAccountKey: string }
+>;
+
+export function multisigNetworkPolicy(network: SupportedNetwork) {
+  return MULTISIG_NETWORK_POLICY[network];
+}
+
+const configuredNetworkPolicy = multisigNetworkPolicy(defaultConfig.network);
+export const MULTISIG_ACCOUNT_PATH = configuredNetworkPolicy.accountPath;
 export const MIN_COSIGNERS = 3;
 export const MAX_COSIGNERS = 7;
 
@@ -93,14 +123,8 @@ export function validatePolicyDraft(draft: PolicyDraft): string[] {
     errors.push('Every master fingerprint must contain 8 hexadecimal characters.');
   if (cosigners.some((cosigner) => cosigner.derivationPath !== MULTISIG_ACCOUNT_PATH))
     errors.push(`Every v1 key must use ${MULTISIG_ACCOUNT_PATH}.`);
-  const validAccountKey =
-    defaultConfig.network === 'mainnet' ? /^(xpub|ypub|zpub)/ : /^(tpub|upub|vpub)/;
-  if (cosigners.some((cosigner) => !validAccountKey.test(cosigner.xpub)))
-    errors.push(
-      defaultConfig.network === 'mainnet'
-        ? 'Every account key must use a mainnet extended public key.'
-        : 'Every account key must use a test-network extended public key.'
-    );
+  if (cosigners.some((cosigner) => !configuredNetworkPolicy.accountKeyPattern.test(cosigner.xpub)))
+    errors.push(configuredNetworkPolicy.invalidAccountKey);
   if (new Set(cosigners.map((cosigner) => cosigner.fingerprint)).size !== cosigners.length)
     errors.push('Every signer must have a unique master fingerprint.');
   if (new Set(cosigners.map((cosigner) => cosigner.xpub)).size !== cosigners.length)
