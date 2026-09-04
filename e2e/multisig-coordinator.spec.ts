@@ -1097,7 +1097,7 @@ test('unlocks a detected Trezor with the bounded PIN-position flow', async ({ pa
   await expect(pin).toHaveClass(/modal-attention/);
   await expect(pin.getByRole('status', { name: 'Trezor disconnection required' })).toBeVisible();
   await pin.getByRole('button', { name: 'Continue PIN entry' }).click();
-  await page.locator('.modal-layer').dispatchEvent('click');
+  await pin.locator('..').dispatchEvent('click');
   await expect(pin).toHaveClass(/modal-attention/);
   await expect(pin.getByText('Disconnect Trezor')).toBeVisible();
   await pin.getByRole('button', { name: 'Continue PIN entry' }).click();

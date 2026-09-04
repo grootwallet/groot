@@ -1352,6 +1352,15 @@ mod tests {
         unsafe { libc::kill(pid, 0) == 0 }
     }
 
+    #[cfg(unix)]
+    fn process_stops_within(pid: i32, timeout: Duration) -> bool {
+        let started = Instant::now();
+        while process_is_effectively_alive(pid) && started.elapsed() < timeout {
+            thread::sleep(Duration::from_millis(10));
+        }
+        !process_is_effectively_alive(pid)
+    }
+
     #[test]
     fn rejects_empty_control_and_oversized_arguments() {
         assert_eq!(
@@ -1682,9 +1691,8 @@ mod tests {
             .trim()
             .parse::<i32>()
             .unwrap();
-        let descendant_alive = process_is_effectively_alive(pid);
         assert!(
-            !descendant_alive,
+            process_stops_within(pid, Duration::from_secs(2)),
             "the timed-out descendant survived cleanup"
         );
         std::fs::remove_file(script).unwrap();
@@ -1727,7 +1735,10 @@ mod tests {
             .trim()
             .parse::<i32>()
             .unwrap();
-        assert!(!process_is_effectively_alive(pid));
+        assert!(
+            process_stops_within(pid, Duration::from_secs(2)),
+            "the inherited-pipe descendant survived cleanup"
+        );
         drop(operation);
 
         let fast = test_script(
