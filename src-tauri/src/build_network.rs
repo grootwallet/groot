@@ -87,25 +87,22 @@ mod tests {
 
     #[test]
     fn compiled_identity_is_consistent() {
-        let expected = match NETWORK {
-            Network::Regtest => ("regtest", "http://127.0.0.1:18443"),
-            Network::Signet => ("signet", "http://127.0.0.1:38332"),
-            Network::Testnet4 => ("testnet4", "http://127.0.0.1:48332"),
-            Network::Bitcoin => ("mainnet", "http://127.0.0.1:8332"),
-            Network::Testnet => panic!("unsupported compiled network"),
-        };
+        #[cfg(groot_network = "regtest")]
+        let expected = ("regtest", "http://127.0.0.1:18443");
+        #[cfg(groot_network = "signet")]
+        let expected = ("signet", "http://127.0.0.1:38332");
+        #[cfg(groot_network = "testnet4")]
+        let expected = ("testnet4", "http://127.0.0.1:48332");
+        #[cfg(groot_network = "mainnet")]
+        let expected = ("mainnet", "http://127.0.0.1:8332");
         assert_eq!((NAME, DEFAULT_RPC_URL), expected);
         assert_eq!(IS_REGTEST, NETWORK == Network::Regtest);
         assert_eq!(PARAMETERS.network, NETWORK);
-        let coin = if NETWORK == Network::Bitcoin { 0 } else { 1 };
-        assert_eq!(
-            PARAMETERS.extended_key_network,
-            if NETWORK == Network::Bitcoin {
-                NetworkKind::Main
-            } else {
-                NetworkKind::Test
-            }
-        );
+        #[cfg(groot_network = "mainnet")]
+        let (coin, key_network) = (0, NetworkKind::Main);
+        #[cfg(not(groot_network = "mainnet"))]
+        let (coin, key_network) = (1, NetworkKind::Test);
+        assert_eq!(PARAMETERS.extended_key_network, key_network);
         assert_eq!(SINGLESIG_ACCOUNT_PATH, format!("m/84'/{coin}'/0'"));
         assert_eq!(MULTISIG_ACCOUNT_PATH, format!("m/48'/{coin}'/0'/2'"));
     }

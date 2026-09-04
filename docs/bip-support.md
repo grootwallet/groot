@@ -17,6 +17,10 @@ backup interchange, or support for any BIP.
 ADR 0055 makes the already reviewed BIP84/BIP48 mainnet parameter row reachable
 only in an isolated certification build. This changes network availability, not
 BIP semantics or the evidence status of any wallet, signer, or recovery path.
+The final-candidate coverage repair replaces constant-folded network test
+branches with equivalent compile-time-selected branches and adds boundary
+tests; it changes no BIP implementation, descriptor, derivation, PSBT, backup,
+or interoperability semantics.
 
 Status: canonical implementation and candidate inventory as of 2026-09-02.
 

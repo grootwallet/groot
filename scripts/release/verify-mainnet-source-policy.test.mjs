@@ -75,9 +75,9 @@ test('native build gate rejects a mainnet match arm', () => {
 
 test('trusted release gate requires the dedicated compile-time mainnet identity', () => {
   validateReleasePolicySource(`
-const MAINNET_ENABLED : bool = cfg!(groot_network = "mainnet") ;
-pub fn ensure_runtime_network_enabled(network: Network) -> Result<(), ReleasePolicyError> {
-  if network == Network::Bitcoin && !MAINNET_ENABLED {
+pub fn ensure_runtime_network_enabled(_network: Network) -> Result<(), ReleasePolicyError> {
+  #[cfg(not(groot_network = "mainnet"))]
+  if _network == Network::Bitcoin {
     return Err(ReleasePolicyError::MainnetDisabled);
   }
   Ok(())
@@ -85,24 +85,23 @@ pub fn ensure_runtime_network_enabled(network: Network) -> Result<(), ReleasePol
   assert.throws(
     () =>
       validateReleasePolicySource(`
-const MAINNET_ENABLED: bool = true;
 pub fn ensure_runtime_network_enabled(network: Network) -> Result<(), ReleasePolicyError> { Ok(()) }`),
-    /dedicated build cfg/
-  );
-  assert.throws(
-    () =>
-      validateReleasePolicySource(`
-const MAINNET_ENABLED: bool = cfg!(groot_network = "mainnet");
-pub fn ensure_runtime_network_enabled(_network: Network) -> Result<(), ReleasePolicyError> { Ok(()) }`),
     /exact fail-closed implementation/
   );
   assert.throws(
     () =>
       validateReleasePolicySource(`
 const MAINNET_ENABLED: bool = cfg!(groot_network = "mainnet");
+pub fn ensure_runtime_network_enabled(_network: Network) -> Result<(), ReleasePolicyError> { Ok(()) }`),
+    /runtime cfg boolean/
+  );
+  assert.throws(
+    () =>
+      validateReleasePolicySource(`
 #[cfg(any())]
-pub fn ensure_runtime_network_enabled(network: Network) -> Result<(), ReleasePolicyError> {
-  if network == Network::Bitcoin && !MAINNET_ENABLED { return Err(ReleasePolicyError::MainnetDisabled); }
+pub fn ensure_runtime_network_enabled(_network: Network) -> Result<(), ReleasePolicyError> {
+  #[cfg(not(groot_network = "mainnet"))]
+  if _network == Network::Bitcoin { return Err(ReleasePolicyError::MainnetDisabled); }
   Ok(())
 }
 pub fn ensure_runtime_network_enabled(_network: Network) -> Result<(), ReleasePolicyError> { Ok(()) }`),
@@ -128,10 +127,9 @@ export const SUPPORTED_NETWORKS = ['mainnet'] as const;`),
   assert.throws(
     () =>
       validateReleasePolicySource(`
-// const MAINNET_ENABLED: bool = cfg!(groot_network = "mainnet");
-const MAINNET_ENABLED: bool = true;
+// #[cfg(not(groot_network = "mainnet"))]
 pub fn ensure_runtime_network_enabled(network: Network) -> Result<(), ReleasePolicyError> { Ok(()) }`),
-    /dedicated build cfg/
+    /exact fail-closed implementation/
   );
 });
 
@@ -193,7 +191,7 @@ test('Rust lifetimes and nested comments cannot expose policy decoys', () => {
 fn harmless<'a>() {}
 /* outer /* nested */ const MAINNET_ENABLED: bool = cfg!(groot_network = "mainnet"); */
 const MAINNET_ENABLED: bool = true;`),
-    /dedicated build cfg/
+    /runtime cfg boolean/
   );
 });
 

@@ -7,6 +7,22 @@ candidate Bitcoin Improvement Proposals is
 [`bip-support.md`](bip-support.md). Any feature or dependency change that alters
 BIP support or its evidence updates that matrix and this ledger together.
 
+Final-candidate preflight now compiles the mainnet release-policy branches only
+into the dedicated mainnet build and the fail-closed rejection branches only
+into rehearsal builds, instead of retaining both sides of a constant `cfg!`
+condition in every binary. The source-policy tripwire pins and regression tests
+were updated to require that exact conditional-compilation boundary. Network
+identity and wrong-network-key tests likewise select their expected branch at
+compile time, and focused frontend/Rust cases cover mainnet multisig inputs,
+wallet-choice button semantics, BSMS address validation, and empty cosigner
+identities. All four native network targets compile, and the classified Rust
+coverage gate is again above its unchanged 99% line, 100% function, and 97%
+region floors. Mainnet behavior, rehearsal behavior, persisted formats,
+descriptors, transactions, recovery semantics, and BIP support are unchanged;
+no migration is required. Because these source/test changes postdate the sealed
+`2110eaf` evidence, fresh independent unsigned builds of the eventual exact
+final commit remain required.
+
 v0.4.92 is the post-v0.4.91 security-remediation source line. It closes the code and documentation dispositions from the independent baseline review of commit `2832acbb2f9aac3ed1b4079f70dd74d7277b2291`: future-mainnet exact-model HWI admission, final broadcast and RBF intent checks, frozen RBF/CPFP construction, expiring source-wallet authorization, recovery xpub network checks, cancellation-atomic policy evidence, credential zeroization, v2 migration failure handling, package-signing verification, deterministic SBOM ordering, and mutation-resistant release tripwires. It also discloses copied-profile offline guessing during onboarding. No persisted format changed and no migration is required. ADR 0055 now permits a separately isolated, non-distributable mainnet certification candidate; v0.4.91 package and physical evidence stays historical, and mainnet release remains blocked. Details: [`security-remediation-2026-09-03.md`](security-remediation-2026-09-03.md) and [`mainnet-closing-review-2026-09-03.md`](mainnet-closing-review-2026-09-03.md).
 
 The final reproducibility correction removes the Apple hardware-family suffix

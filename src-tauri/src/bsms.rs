@@ -576,6 +576,12 @@ mod tests {
             DescriptorRecord::from_descriptor_pair(&external, &internal, "not-an-address"),
             Err(BsmsError::InvalidEncoding)
         );
+        for invalid_address in ["", " ", "address with-space"] {
+            assert_eq!(
+                DescriptorRecord::from_descriptor_pair(&external, &internal, invalid_address,),
+                Err(BsmsError::InvalidEncoding)
+            );
+        }
 
         let valid = DescriptorRecord::from_descriptor_pair(&external, &internal, &address)
             .unwrap()

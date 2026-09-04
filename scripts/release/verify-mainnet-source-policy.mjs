@@ -18,11 +18,11 @@ const pinnedPolicySources = new Map([
   ['src-tauri/build.rs', '1432516ef85a004cee6e9ee945dc30b7e48477c0b78429267a4fbe513cebdbce'],
   [
     'src-tauri/src/release_policy.rs',
-    'a32b27765989dc9826ff49ab46bfcb335e67cd5d56b0708aed05eff79991a965'
+    'b9f8a7f5f1fbf21b4546808e595419b7ec076cd388884e8cf2578644d89e3de1'
   ],
   [
     'src-tauri/src/build_network.rs',
-    '24c2105c42f850abc4a5c82c6628094d16e2e30dc836dacdc019847a65f1ef68'
+    'e24f8ae8ceb7dda0f1094abbc1b4600b933e88b8bf830af2ff954bd6188364e5'
   ],
   ['src-tauri/src/network.rs', 'dcf011fb789a0b690b1832a9245df5fc0199318f03a820d10f9a3b1c90f5d76b'],
   ['src-tauri/src/registry.rs', '343aea20f5d09df6abd5c9fdba3b093efc6729c9ece8f180b27a150061753a18'],
@@ -207,19 +207,13 @@ export function validateReleasePolicySource(source) {
   source = stripSourceComments(source, { rust: true });
   const code = stripSourceComments(source, { rust: true, maskStrings: true });
   rejectGeneratedPolicyCode(code, 'trusted release policy');
-  const matches = [
-    ...source.matchAll(
-      /const\s+MAINNET_ENABLED\s*:\s*bool\s*=\s*cfg!\s*\(\s*groot_network\s*=\s*"mainnet"\s*\)\s*;/g
-    )
-  ];
-  if (matches.length !== 1) {
-    throw new Error('trusted-boundary mainnet gate is not bound to the dedicated build cfg');
-  }
+  if (/\bMAINNET_ENABLED\b/.test(code))
+    throw new Error('trusted-boundary mainnet gate may not use a runtime cfg boolean');
   const guard = rustFunction(source, 'ensure_runtime_network_enabled')
     .body.replace(/\s+/g, '')
     .replace(/,$/, '');
   const expected =
-    'ifnetwork==Network::Bitcoin&&!MAINNET_ENABLED{returnErr(ReleasePolicyError::MainnetDisabled);}Ok(())';
+    '#[cfg(not(groot_network="mainnet"))]if_network==Network::Bitcoin{returnErr(ReleasePolicyError::MainnetDisabled);}Ok(())';
   if (guard !== expected) {
     throw new Error('trusted-boundary mainnet guard is not the exact fail-closed implementation');
   }

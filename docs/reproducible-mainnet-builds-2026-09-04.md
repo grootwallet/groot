@@ -1,12 +1,15 @@
 # Reproducible unsigned Mainnet builds — 2026-09-04
 
-Status: **PASS for independent unsigned reproducibility; not release approval**
+Status: **PASS for frozen `2110eaf` evidence; final-candidate repetition pending**
 
-This record closes only the two-machine unsigned-build row in
-[`mainnet-release-checklist.md`](mainnet-release-checklist.md). Mainnet
-distribution remains blocked by the other unchecked rows and ADR 0012. Neither
-evidence set was Developer ID signed, packaged, notarized, launched, or used
-with a wallet, node, or hardware device.
+This record proves the two-machine unsigned-build procedure at frozen commit
+`2110eaf0afd0339754c1b9bbba31011c66aa3d69`. Subsequent final-candidate
+test/policy-gate hardening changed the source commit, so the exact-final-source
+row in [`mainnet-release-checklist.md`](mainnet-release-checklist.md) is open
+again until fresh independent builds match. Mainnet distribution remains
+blocked by the other unchecked rows and ADR 0012. Neither evidence set was
+Developer ID signed, packaged, notarized, launched, or used with a wallet,
+node, or hardware device.
 
 ## Frozen source and inputs
 
