@@ -178,6 +178,7 @@ test('keeps multisig receive verification disclosure visibly expandable', async 
   await expect(dialog.locator('.readable-address-groups')).toHaveText(reviewedAddress ?? '');
   await expect(dialog.getByRole('button', { name: /^Trezor / })).toContainText('Ready');
   await dialog.getByRole('button', { name: /^Trezor / }).click();
+  await expect(dialog.getByRole('status', { name: 'Waiting for hardware approval' })).toBeVisible();
   await dialog.getByRole('button', { name: 'Close' }).click();
   await expect(dialog).toHaveClass(/modal-attention/);
   await expect(
@@ -1095,12 +1096,16 @@ test('unlocks a detected Trezor with the bounded PIN-position flow', async ({ pa
   await expect(pin.getByText(/grid deliberately stays blank/)).toHaveCount(0);
   await pin.getByRole('button', { name: 'Close' }).click();
   await expect(pin).toHaveClass(/modal-attention/);
+  await expect(pin).not.toHaveClass(/modal-attention/);
   await expect(pin.getByRole('status', { name: 'Trezor disconnection required' })).toBeVisible();
   await pin.getByRole('button', { name: 'Continue PIN entry' }).click();
+  await expect(pin.getByRole('button', { name: 'Top left position' })).toBeVisible();
   await pin.locator('..').dispatchEvent('click');
   await expect(pin).toHaveClass(/modal-attention/);
+  await expect(pin).not.toHaveClass(/modal-attention/);
   await expect(pin.getByText('Disconnect Trezor')).toBeVisible();
   await pin.getByRole('button', { name: 'Continue PIN entry' }).click();
+  await expect(pin.getByRole('button', { name: 'Top left position' })).toBeVisible();
   await pin.focus();
   await page.keyboard.press('Escape');
   await expect(pin).toHaveClass(/modal-attention/);
