@@ -121,7 +121,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src/lib/multisig/policy.ts',
-    '2e68ff7cce27a4e6672afde8c03afa11ebc3cc52877848b4b1f3d900b247ecce'
+    'a06d5d465b3b9bb98f29b93310e4f988f0c5e39686483372733f720eb3ce65aa'
   ],
   [
     'src/lib/multisig/cosigner-import.ts',
