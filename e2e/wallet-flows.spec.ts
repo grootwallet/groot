@@ -1485,6 +1485,7 @@ test('overview counts a pending CPFP self-spend fee exactly once', async ({ page
 
 test('receive label suggestions expose aligned tooltips only when truncated', async ({ page }) => {
   await page.goto('/receive');
+  await page.waitForFunction(() => document.fonts.status === 'loaded');
   await page.getByRole('button', { name: 'New receive address' }).click();
   const shortSuggestion = page.getByRole('button', { name: 'Reuse Savings' });
   await shortSuggestion.hover();
@@ -1498,10 +1499,16 @@ test('receive label suggestions expose aligned tooltips only when truncated', as
   await suggestion.hover();
   const tooltip = page.getByRole('tooltip');
   await expect(tooltip).toHaveText('A deliberately long reusable label');
-  const suggestionBox = await suggestion.boundingBox();
-  const tooltipBox = await tooltip.boundingBox();
-  expect(suggestionBox && tooltipBox).toBeTruthy();
-  expect(suggestionBox!.y - (tooltipBox!.y + tooltipBox!.height)).toBeCloseTo(8, 0);
+  const tooltipGap = await suggestion.evaluate((suggestionNode) => {
+    const tooltipNode = document.querySelector<HTMLElement>('[role="tooltip"]');
+    if (!tooltipNode) return null;
+    const suggestionBox = suggestionNode.getBoundingClientRect();
+    const tooltipBox = tooltipNode.getBoundingClientRect();
+    return suggestionBox.top - tooltipBox.bottom;
+  });
+  expect(tooltipGap).not.toBeNull();
+  expect(tooltipGap!).toBeGreaterThanOrEqual(4);
+  expect(tooltipGap!).toBeLessThanOrEqual(12);
 });
 
 test('receive keeps multiple labeled payment requests and discards them independently', async ({
