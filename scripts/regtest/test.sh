@@ -94,6 +94,13 @@ GROOT_RUN_REGTEST=1 run_lib_test funded_delayed_policy_tracks_each_coin_restarts
 # Large rescans and repeated reorgs need a clean resource baseline. Keep the descriptor
 # suite independent from state and loaded wallets accumulated by the preceding tests.
 bash "${PROJECT_DIR}/scripts/regtest/stop.sh"
+if [[ "${GROOT_RUST_COVERAGE:-0}" != "1" ]]; then
+  # The preceding tests intentionally compile the Groot package under several
+  # isolated environment contracts. Retain dependency artifacts, but release
+  # those package variants before the second Core fixture so hosted runners do
+  # not exhaust their disk while archiving the descriptor-suite binary.
+  cargo clean --manifest-path "${PROJECT_DIR}/src-tauri/Cargo.toml" --package groot
+fi
 DESCRIPTOR_REGTEST_DIR="$(mktemp -d "${TEST_TMP_ROOT%/}/groot-regtest-test.XXXXXX")"
 export GROOT_REGTEST_DIR="${DESCRIPTOR_REGTEST_DIR}"
 bash "${PROJECT_DIR}/scripts/regtest/start.sh"
