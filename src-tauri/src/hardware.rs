@@ -1016,15 +1016,21 @@ fn run_program_in_operation_with_mode(
         let _ = stderr_tx.send(read_bounded(stderr));
     });
     if let Some(input) = input.take() {
-        let write_result = child
-            .stdin
-            .take()
-            .ok_or(HardwareError::Io)
-            .and_then(|mut stdin| stdin.write_all(&input).map_err(|_| HardwareError::Io));
-        if let Err(error) = write_result {
+        let Some(mut stdin) = child.stdin.take() else {
             terminate_process_tree(&mut child);
             let _ = collect_pipes(&stdout_rx, &stderr_rx);
-            return Err(error);
+            return Err(HardwareError::Io);
+        };
+        if let Err(error) = stdin.write_all(&input) {
+            // A command can reject the request and close stdin before this
+            // writer is scheduled. BrokenPipe is therefore part of the
+            // command-exit path, not an HWI transport failure; the bounded
+            // wait below still classifies its exit status and output.
+            if error.kind() != std::io::ErrorKind::BrokenPipe {
+                terminate_process_tree(&mut child);
+                let _ = collect_pipes(&stdout_rx, &stderr_rx);
+                return Err(HardwareError::Io);
+            }
         }
     }
     let status = loop {
@@ -1543,16 +1549,18 @@ mod tests {
 
     #[test]
     fn reports_failure_timeout_and_missing_executable_without_output_leaks() {
-        assert_eq!(
-            run_program(
-                Path::new("/usr/bin/false"),
-                &HwiSource::External,
-                &["test".to_owned()],
-                Duration::from_secs(1),
-                None,
-            ),
-            Err(HardwareError::CommandFailed(None))
-        );
+        for _ in 0..64 {
+            assert_eq!(
+                run_program(
+                    Path::new("/usr/bin/false"),
+                    &HwiSource::External,
+                    &["test".to_owned()],
+                    Duration::from_secs(1),
+                    None,
+                ),
+                Err(HardwareError::CommandFailed(None))
+            );
+        }
         let slow = test_script("slow", "IFS= read -r command\n/bin/sleep 1");
         assert_eq!(
             run_program(
