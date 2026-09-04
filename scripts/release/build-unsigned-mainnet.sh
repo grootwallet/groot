@@ -4,6 +4,9 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "$0")/../.." && pwd -P)"
 cd "$repo_root"
 
+# shellcheck source=scripts/release/reproducible-rust-env.sh
+source "$repo_root/scripts/release/reproducible-rust-env.sh"
+
 if ! git diff --quiet || ! git diff --cached --quiet; then
   echo "Mainnet evidence builds require a clean tracked worktree." >&2
   exit 1
@@ -64,13 +67,27 @@ if [[ -e "$release_out" ]]; then
 fi
 
 cargo_target="$(cargo metadata --format-version 1 --no-deps --manifest-path src-tauri/Cargo.toml | node -e 'let value=""; process.stdin.on("data", chunk => value += chunk); process.stdin.on("end", () => process.stdout.write(JSON.parse(value).target_directory));')"
+mkdir -p "$cargo_target"
+configure_reproducible_rust_env "$repo_root" "$cargo_target"
 
 mkdir -p "$release_out"
 pnpm install --frozen-lockfile
 pnpm validate
-cargo build --locked --release --manifest-path src-tauri/Cargo.toml
+cargo build --locked --release --manifest-path src-tauri/Cargo.toml --features tauri/custom-protocol
 
-install -m 0755 "$cargo_target/release/Groot" "$release_out/Groot"
+built_executable="$cargo_target/release/Groot"
+effective_cargo_home="${CARGO_HOME:-$HOME/.cargo}"
+effective_cargo_home="$(cd "$effective_cargo_home" && pwd -P)"
+physical_home="$(cd "$HOME" && pwd -P)"
+for forbidden_path in "$repo_root" "$effective_cargo_home" "$cargo_target" "$physical_home"; do
+  if strings "$built_executable" | awk -v needle="$forbidden_path" \
+    'index($0, needle) { found = 1 } END { exit !found }'; then
+    echo "Mainnet evidence executable contains an unremapped host path." >&2
+    exit 1
+  fi
+done
+
+install -m 0755 "$built_executable" "$release_out/Groot"
 node scripts/release/generate-sbom.mjs "$release_out/groot.cdx.json" "$release_out/Groot"
 (
   cd "$release_out"

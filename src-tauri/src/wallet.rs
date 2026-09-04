@@ -2149,6 +2149,7 @@ fn regtest_dir() -> ApiResult<PathBuf> {
     default_regtest_dir()
 }
 
+#[cfg(groot_network = "regtest")]
 fn default_regtest_dir() -> ApiResult<PathBuf> {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let repository_root = manifest_dir.parent().ok_or_else(|| {
@@ -2158,6 +2159,14 @@ fn default_regtest_dir() -> ApiResult<PathBuf> {
         )
     })?;
     Ok(repository_root.join(".regtest"))
+}
+
+#[cfg(not(groot_network = "regtest"))]
+fn default_regtest_dir() -> ApiResult<PathBuf> {
+    Err(api_error(
+        "invalid_node_config",
+        "Automatic cookie discovery is unavailable in this public-network build.",
+    ))
 }
 
 fn node_config_path(app: &AppHandle) -> ApiResult<PathBuf> {

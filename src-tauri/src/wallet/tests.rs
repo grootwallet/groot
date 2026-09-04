@@ -3176,11 +3176,21 @@ fn regtest_app_data_override_is_limited_to_named_temporary_directories() {
 }
 
 #[test]
+#[cfg(groot_network = "regtest")]
 fn default_regtest_directory_is_independent_of_process_working_directory() {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     assert_eq!(
         default_regtest_dir().unwrap(),
         manifest_dir.parent().unwrap().join(".regtest")
+    );
+}
+
+#[test]
+#[cfg(not(groot_network = "regtest"))]
+fn public_network_build_has_no_compiled_regtest_repository_path() {
+    assert_eq!(
+        default_regtest_dir().unwrap_err().code,
+        "invalid_node_config"
     );
 }
 

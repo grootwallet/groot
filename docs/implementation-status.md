@@ -15,8 +15,19 @@ Xcode version/build, Apple Clang version/target, SDK, source, network, HWI,
 configuration, lock, and language-toolchain identities. Strict comparison still
 requires the executable, SBOM, recorded digests, and corrected metadata to be
 byte-identical. The earlier `18d888e5` Build A is superseded diagnostic evidence.
-This changes release evidence only, with no persisted-format, runtime, descriptor,
-protocol, migration, or BIP impact.
+Independent `8d38f617` builds then exposed absolute Cargo-registry paths with
+different local usernames in the executable despite identical `BUILD-INFO`;
+that campaign is also failed diagnostic evidence. The builder now owns encoded
+Rust remapping for the checkout, Cargo home, and Cargo target, rejects external
+Rust flags, and rejects any executable retaining checkout, Cargo-home,
+Cargo-target, or user-home paths. The Regtest default-cookie fallback is now
+compiled only for Regtest; public-network builds fail closed if that unreachable
+fallback is invoked instead of embedding `CARGO_MANIFEST_DIR`. Supported runtime
+behavior, persisted formats, descriptors, protocols, migrations, and BIP support
+are unchanged. The unsigned builder also activates Tauri's production
+`custom-protocol` feature, aligning the compared raw executable with the mode
+used by the packaged application and avoiding Tauri's development-only embedded
+configuration-parent path.
 
 The isolated mainnet-enablement line closes the three audited command boundaries
 for the non-distributable ADR 0055 certification candidate. Standard multisig recovery from

@@ -60,6 +60,8 @@ contains_fixed '"beforeBuildCommand": "pnpm build:mainnet"' src-tauri/tauri.main
   || fail "the mainnet candidate frontend is not build-bound to mainnet"
 contains_fixed "export GROOT_BUILD_NETWORK=mainnet" scripts/release/build-unsigned-mainnet.sh \
   || fail "the unsigned mainnet evidence builder is not network-bound"
+contains_fixed "--features tauri/custom-protocol" scripts/release/build-unsigned-mainnet.sh \
+  || fail "the unsigned mainnet evidence builder is not using Tauri's production protocol mode"
 contains_fixed "singlesig_account_path: \"m/84'/0'/0'\"" src-tauri/src/build_network.rs \
   || fail "the dormant mainnet BIP84 account path is no longer explicit"
 contains_fixed "multisig_account_path: \"m/48'/0'/0'/2'\"" src-tauri/src/build_network.rs \

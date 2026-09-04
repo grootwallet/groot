@@ -73,3 +73,38 @@ commit, network, signing team, HWI digest, lockfiles, and mainnet configuration.
 The comparator continues to require all four evidence files to be byte-identical.
 This release-tooling-only correction changes no runtime behavior, persisted
 format, descriptor, protocol implementation, or BIP support.
+
+## Superseded absolute-path diagnostic
+
+Independent Machine A and Machine B builds of commit `8d38f617` produced the
+same normalized `BUILD-INFO` digest and the same 539-component inventory, which
+confirmed that the stable OS/toolchain evidence matched. Their Groot binary,
+executable-bound SBOM, and `SHA256SUMS` bytes differed. Inspection found each
+machine's absolute Cargo registry source path, including its local username,
+inside its executable. The Build A executable digest was
+`66a5a18f23294c228b06337f097c043cea6d5eeabeb2e385a5885dbf87bdd384`;
+Build B was
+`cc9551b7e88898b2c4fe4fcc1f58df207b64a2012fc66c6ace3420e438d5419a`.
+This is a failed reproducibility campaign, not a pass, and neither artifact may
+be signed or promoted.
+
+The repository-controlled builder now rejects caller-provided Rust flags,
+applies encoded Rust path-prefix remapping for the physical checkout, effective
+Cargo home, and Cargo target, and scans the resulting executable for any
+remaining checkout, Cargo-home, Cargo-target, or user-home path before emitting
+evidence. A focused fixture compiles from two different synthetic usernames,
+checkout roots, Cargo registry roots, and target roots and requires that only
+the stable virtual prefixes remain.
+Fresh independent builds are required at the new commit. Machine B temporarily
+made Homebrew OpenSSL 3.5.8 available on `PATH`; `cargo tree --locked --target
+aarch64-apple-darwin -i openssl-sys` reports no matching package in the macOS
+arm64 graph, so it is not a linked input to this target. Exact four-file
+comparison remains the final authority. The one production `CARGO_MANIFEST_DIR`
+use belonged to the Regtest cookie-directory fallback. That fallback is now
+compiled only for Regtest; public-network builds return a stable fail-closed
+error if the unreachable fallback is invoked, so they contain no repository
+path from that macro. The remaining path was Tauri's development-context
+configuration parent: the unsigned builder had not activated Tauri's production
+`custom-protocol` feature. The builder now activates that exact feature so its
+raw evidence executable matches the packaged execution mode. A focused
+release-mode Mainnet build with that feature passed the complete host-path scan.

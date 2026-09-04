@@ -65,8 +65,13 @@ release evidence set, while `pnpm release:unsigned:mainnet` creates the dedicate
 mainnet evidence set. The macOS evidence records stable exact OS, Xcode, Clang,
 SDK, architecture, and language-toolchain inputs without binding otherwise
 independent machines to one Apple hardware-family kernel suffix. These generated
-files bind the exact commit and lockfiles to the built executable digest and
-remain untracked build artifacts.
+files bind the exact commit and lockfiles to the built executable digest. The
+mainnet builder rejects external `RUSTFLAGS`/`CARGO_ENCODED_RUSTFLAGS`, remaps
+the physical checkout, Cargo-home, and Cargo-target paths to stable virtual
+prefixes, and rejects an executable if its checkout, Cargo home, Cargo target,
+or user home survives in its strings. It compiles with Tauri's production
+`custom-protocol` feature so the evidence binary matches the packaged execution
+mode. Generated evidence remains untracked build artifacts.
 
 Real-Core integration scripts create disposable isolated data. Never redirect
 them to the funded physical-certification profile. Do not recreate or replace a

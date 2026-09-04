@@ -9,7 +9,7 @@ import { stripSourceComments } from '../quality/source-lexing.mjs';
 const repoRoot = resolve(fileURLToPath(new URL('../../', import.meta.url)));
 const pinnedPolicySources = new Map([
   ['.env.mainnet', '1623f3f97de588daea2bbeae1f9c56ebc896b6bc2c22ac238563b46b688ced85'],
-  ['package.json', '7343a40cf30653a3d0446a8abff779f4da33a1f7b2ad63485c7f8347dcb1909e'],
+  ['package.json', 'e579e2fd0c12b4b828005c2628d8b744f6a672c9e6e9930285f69021dfb9e54f'],
   [
     'scripts/network/check-native-builds.sh',
     '82b8b5de52c786b2c6d18fb8da90fd32f32a8c4714a3ed02866e923c9e81db36'
@@ -26,7 +26,7 @@ const pinnedPolicySources = new Map([
   ],
   ['src-tauri/src/network.rs', 'dcf011fb789a0b690b1832a9245df5fc0199318f03a820d10f9a3b1c90f5d76b'],
   ['src-tauri/src/registry.rs', '343aea20f5d09df6abd5c9fdba3b093efc6729c9ece8f180b27a150061753a18'],
-  ['src-tauri/src/wallet.rs', '38c1fdf87b1eb637f5df5a2fba4742584a7875d532e2e2d2956c65df7ccd5ac6'],
+  ['src-tauri/src/wallet.rs', '71175b4d64e7f3203b45839bb3706cad24fbf94d9a3cfcf9b79dafc2b66f022f'],
   [
     'src-tauri/src/wallet/error_translation.rs',
     'fc4d0e05f1d0441c1a4bdd3967719ec54a93f3db22b307a88b13c1cc1a33a4d5'
@@ -85,7 +85,11 @@ const pinnedPolicySources = new Map([
   ],
   [
     'scripts/release/build-unsigned-mainnet.sh',
-    '397819a9a3fed5def9e0a3c4125169ed5618015fddc8f60ec4b882d9320b2ae8'
+    '2c275b5406ff9d1ea31dd643ccd411cc9b29129436245fa04d85fb72adb4d4a5'
+  ],
+  [
+    'scripts/release/reproducible-rust-env.sh',
+    '7a9cc86e36b255c29009e11bbdb7f42bcfc7a4aa5e7b15616542ac59ca91830f'
   ],
   [
     'src/lib/components/AppShell.svelte',
