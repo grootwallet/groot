@@ -121,7 +121,7 @@ const MAINNET_NODE_ADMISSION_LIFETIME: Duration = Duration::from_secs(15 * 60);
 
 #[path = "wallet/export_commands.rs"]
 mod export_commands;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", test))]
 use export_commands::PendingPdfExport;
 use export_commands::SavedFileReveal;
 #[cfg(test)]
