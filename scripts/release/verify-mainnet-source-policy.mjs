@@ -89,7 +89,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'scripts/release/reproducible-rust-env.sh',
-    'e09c871e598b83d527d99e14b8f6cb8b55bf98d5659474087091366da2c6ee8b'
+    '8f309ced5719b7e57ef314df6574c875b1495b491be591d62a59bd2fc58e13ae'
   ],
   [
     'src/lib/components/AppShell.svelte',

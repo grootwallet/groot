@@ -14,6 +14,10 @@ configure_reproducible_rust_env() {
     echo "Release evidence builds reject external RUSTFLAGS and CARGO_ENCODED_RUSTFLAGS." >&2
     return 1
   fi
+  # Apple ld includes this ambient release-train salt in its otherwise
+  # content-derived LC_UUID. It is not a source input and can differ between
+  # build hosts, so release evidence builds must remove it before linking.
+  unset RC_UUID_SALT
   if [[ "$source_root" != /* || ! -d "$source_root" ]]; then
     echo "Release evidence builds require an absolute existing source root." >&2
     return 1

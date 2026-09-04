@@ -19,12 +19,15 @@ Independent `8d38f617` builds then exposed absolute Cargo-registry paths with
 different local usernames in the executable despite identical `BUILD-INFO`;
 that campaign is also failed diagnostic evidence. Independent `b2f680bd` builds
 removed every physical path but differed in only the content-derived Mach-O
-`LC_UUID` and its dependent linker-generated ad hoc-signature page hash; that
-campaign is also failed diagnostic evidence. The builder now owns encoded
-Rust remapping for the checkout, Cargo home, and Cargo target, rejects external
-Rust flags, requests Apple ld's reproducible mode while retaining a stable UUID,
-and rejects any executable retaining checkout, Cargo-home, Cargo-target, or
-user-home paths. The Regtest default-cookie fallback is now
+`LC_UUID` and its dependent linker-generated ad hoc-signature page hash.
+Independent `6aad2584` builds proved Apple ld additionally incorporates the
+host's ambient `RC_UUID_SALT`: their payloads were otherwise byte-identical but
+their original UUIDs, signatures, executable hashes, and bound SBOM hashes
+differed. Both campaigns are failed diagnostic evidence. The builder now owns
+encoded Rust remapping for the checkout, Cargo home, and Cargo target, rejects
+external Rust flags, clears `RC_UUID_SALT`, requests Apple ld's reproducible mode
+while retaining a stable UUID, and rejects any executable retaining checkout,
+Cargo-home, Cargo-target, or user-home paths. The Regtest default-cookie fallback is now
 compiled only for Regtest; public-network builds fail closed if that unreachable
 fallback is invoked instead of embedding `CARGO_MANIFEST_DIR`. Supported runtime
 behavior, persisted formats, descriptors, protocols, migrations, and BIP support

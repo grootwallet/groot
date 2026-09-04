@@ -51,9 +51,12 @@ EOF
     local rust_flags
     unset RUSTFLAGS CARGO_ENCODED_RUSTFLAGS
     export CARGO_HOME="$cargo_home"
+    export RC_UUID_SALT="host-specific-$identity"
     # shellcheck source=scripts/release/reproducible-rust-env.sh
     source "$helper"
     configure_reproducible_rust_env "$source_root" "$cargo_target"
+    [[ -z "${RC_UUID_SALT+x}" ]] \
+      || fail "the ambient Apple linker UUID salt survived release configuration"
     IFS=$'\x1f' read -r -a rust_flags <<< "$CARGO_ENCODED_RUSTFLAGS"
     rustc "${rust_flags[@]}" -C opt-level=3 "$source_root/src/main.rs" \
       -o "$output_root/source/Groot"
@@ -127,4 +130,4 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
   done
 fi
 
-echo "Rust release paths and Mach-O UUIDs are reproducible, and external Rust flags fail closed."
+echo "Rust release paths and Mach-O UUIDs are reproducible, ambient linker UUID salts are cleared, and external Rust flags fail closed."

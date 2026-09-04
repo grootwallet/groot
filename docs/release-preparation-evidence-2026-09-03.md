@@ -128,10 +128,28 @@ removing only the executable-hash binding. This is a failed reproducibility
 campaign, not releasable evidence, and neither original artifact may be changed,
 signed, or promoted.
 
-The repository-controlled Rust environment now passes Apple ld's
-`-reproducible` option while retaining `LC_UUID`. Its focused regression requires
-byte-identical executables and equal non-empty Mach-O UUIDs across synthetic
-usernames, source roots, Cargo homes, and target roots. Fresh independent builds
-are required at the new frozen commit. This release-tooling-only correction
-changes no runtime behavior, persisted format, descriptor, protocol, migration,
-or BIP support.
+The subsequent independent Machine A and Machine B builds of commit `6aad2584`
+again had byte-identical `BUILD-INFO`. Machine A produced executable hash
+`cf379a86718fd3333a887a2a5eab8c8cf66f69d5ffc9068764e831615652cb83`
+with UUID `0ECE7724-29C3-3B1E-9610-419B2C911485`; Machine B produced
+`b614ae7b12c2cbedef7a289bc49e988fdb80c896aaeca214a2bc88351cac2c79`
+with UUID `DD6AF84A-15D4-3514-B463-FD3DB1E28C8A`. The equal-size originals
+differed in exactly 48 bytes: all 16 UUID bytes and the 32-byte ad hoc-signature
+page hash that covers them. Removing signatures from disposable copies left
+only the 16 UUID bytes different; neutralizing those bytes made the complete
+unsigned payloads byte-identical. Their SBOMs were structurally identical after
+removing only the executable-hash binding. This campaign is also failed
+diagnostic evidence and its originals remain unchanged and ineligible for
+signing or promotion.
+
+Apple's linker source documents and implements an additional hash input from
+the ambient `RC_UUID_SALT` environment variable. A local controlled test using
+two different salt values reproduced the campaign's exact 48-byte difference
+despite `-reproducible`. The repository-controlled Rust environment now clears
+that non-source linker input before passing Apple ld's `-reproducible` option
+while retaining `LC_UUID`. Its focused regression injects different host salts
+and requires the helper to remove them, then requires byte-identical executables
+and equal non-empty Mach-O UUIDs across synthetic usernames, source roots, Cargo
+homes, and target roots. Fresh independent builds are required at the next
+frozen commit. This release-tooling-only correction changes no runtime behavior,
+persisted format, descriptor, protocol, migration, or BIP support.
