@@ -121,13 +121,15 @@ const MAINNET_NODE_ADMISSION_LIFETIME: Duration = Duration::from_secs(15 * 60);
 
 #[path = "wallet/export_commands.rs"]
 mod export_commands;
+#[cfg(target_os = "macos")]
+use export_commands::PendingPdfExport;
+use export_commands::SavedFileReveal;
 #[cfg(test)]
 use export_commands::{
     consume_pending_pdf_export, consume_saved_file_token, validate_psbt_filename,
     validate_public_backup_filename, validate_public_backup_pdf_filename, write_public_export,
     PENDING_PDF_EXPORT_TIMEOUT, SAVED_FILE_REVEAL_TIMEOUT,
 };
-use export_commands::{PendingPdfExport, SavedFileReveal};
 pub use export_commands::{PendingPdfExportDto, SavedFileDto};
 
 #[tauri::command]
@@ -368,6 +370,7 @@ pub struct AppState {
     pending_mainnet_node_admission: Mutex<Option<PendingMainnetNodeAdmission>>,
     authenticated_software_descriptors: Mutex<HashMap<Uuid, (String, String)>>,
     saved_files: Mutex<HashMap<String, SavedFileReveal>>,
+    #[cfg(target_os = "macos")]
     pending_pdf_exports: Mutex<HashMap<String, PendingPdfExport>>,
     recovery_scans: Mutex<HashMap<Uuid, ActiveRecoveryScan>>,
     runtime_auth_retry_at: Mutex<HashMap<Uuid, Instant>>,
