@@ -82,6 +82,11 @@ Tauri's production
 `custom-protocol` feature so the evidence binary matches the packaged execution
 mode. Generated evidence remains untracked build artifacts.
 
+The completed independent `2110eaf` Mainnet Build A/Build B run, including
+exact evidence hashes, validation totals, deviations, and path-leak results, is
+recorded in
+[`reproducible-mainnet-builds-2026-09-04.md`](reproducible-mainnet-builds-2026-09-04.md).
+
 Real-Core integration scripts create disposable isolated data. Never redirect
 them to the funded physical-certification profile. Do not recreate or replace a
 saved certification profile merely to make a test pass.

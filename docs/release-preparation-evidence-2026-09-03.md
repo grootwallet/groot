@@ -1,6 +1,7 @@
 # Release preparation evidence — 2026-09-03
 
-Status: preparation evidence only; not an exact final-candidate release record
+Status: preparation evidence plus the later exact unsigned-reproducibility
+closure; not a signed or distributable final-release record
 
 ## Inputs
 
@@ -23,7 +24,7 @@ committed by this record.
 | `pnpm test:sbom`                                 | PASS                  | Two independently generated target-specific CycloneDX documents matched with 539 locked components, source/lock identity, artifact binding, and license evidence. |
 | `pnpm release:test:update`                       | PASS                  | The signed-update fixture verified and rejected tampering. This is not an actual release signing/rollback drill.                                                  |
 | `pnpm release:test:hwi`                          | PASS                  | HWI 3.2.0 provenance verified; tampering and wrong-version fixtures were rejected; the sealed-package fixture passed.                                             |
-| `pnpm release:test:compare`                      | PASS                  | The unsigned comparator rejected incomplete, substituted, and mismatched evidence. Build B remains pending.                                                       |
+| `pnpm release:test:compare`                      | PASS                  | The unsigned comparator rejected incomplete, substituted, and mismatched evidence. The later exact `2110eaf` Build A/Build B comparison also passed.              |
 | `cargo fmt --check`                              | PASS                  | Rust formatting is clean.                                                                                                                                         |
 | strict all-target/all-feature Clippy             | PASS                  | `cargo clippy --locked --all-targets --all-features -- -D warnings` completed without a warning.                                                                  |
 | `cargo test --locked --all-features`             | PASS                  | 378 library tests and 2 adversarial integration tests passed; explicitly environment-dependent tests remained ignored.                                            |
@@ -49,7 +50,7 @@ record does not waive any new advisory or warning appearing before release.
 ## Still required
 
 - clean CI and all release gates on the exact final commit;
-- independent-machine Build B and a strict complete-evidence comparison;
+- independent review of the recorded `2110eaf` Build A/Build B evidence;
 - complete final provenance, Developer ID signing/notarization, update signing,
   and an actual rollback drill;
 - independent review of the frozen baseline and the later enablement diff; and
@@ -95,7 +96,8 @@ remaining checkout, Cargo-home, Cargo-target, or user-home path before emitting
 evidence. A focused fixture compiles from two different synthetic usernames,
 checkout roots, Cargo registry roots, and target roots and requires that only
 the stable virtual prefixes remain.
-Fresh independent builds are required at the new commit. Machine B temporarily
+At that stage, fresh independent builds were required at the new commit.
+Machine B temporarily
 made Homebrew OpenSSL 3.5.8 available on `PATH`; `cargo tree --locked --target
 aarch64-apple-darwin -i openssl-sys` reports no matching package in the macOS
 arm64 graph, so it is not a linked input to this target. Exact four-file
@@ -150,8 +152,8 @@ that non-source linker input before passing Apple ld's `-reproducible` option
 while retaining `LC_UUID`. Its focused regression injects different host salts
 and requires the helper to remove them, then requires byte-identical executables
 and equal non-empty Mach-O UUIDs across synthetic usernames, source roots, Cargo
-homes, and target roots. Fresh independent builds are required at the next
-frozen commit. This release-tooling-only correction changes no runtime behavior,
+homes, and target roots. At that stage, fresh independent builds were required
+at the next frozen commit. This release-tooling-only correction changes no runtime behavior,
 persisted format, descriptor, protocol, migration, or BIP support.
 
 ## Superseded salt-clearing diagnostic
@@ -185,3 +187,31 @@ with different salts, then requires normalization to produce byte-identical
 executables, equal non-empty UUIDs, and valid ad hoc signatures. This correction
 is release-tooling-only and has no runtime, persisted-format, descriptor,
 protocol, migration, or BIP impact.
+
+## Independent reproducibility closure — 2026-09-04
+
+Fresh Machine A and Machine B builds of detached commit
+`2110eaf0afd0339754c1b9bbba31011c66aa3d69` independently passed the complete
+builder and post-build validation procedure. All four evidence hashes matched:
+
+- `BUILD-INFO`:
+  `547a12a34094d313589b3788d582e3a312e2dd515bad46078633d2da676f32bb`
+- `Groot`:
+  `8ce9ed773f8f0c43d84f555c7a0d2a5d2d21a111c6b5e7c79ff970670561f2bb`
+- `SHA256SUMS`:
+  `4938cd3f70b337abc847a01503cc6a4e14ada9c797da6658ba3d4caf7e577754`
+- `groot.cdx.json`:
+  `681189b7d87962145472e10ac1b7ee55228788aa3788d29435db15c1b6c75712`
+
+Both executables retained UUID `4BE90441-1EF6-373F-B2C0-2982D591703B` and a
+strict-valid ad hoc/linker signature only. Both CycloneDX 1.6 SBOMs contained
+539 unique locked components and bound the matching executable digest. Each
+machine passed 74 frontend files/366 frontend tests and 46 quantified Node
+release/quality tests, retained a clean worktree, and found no physical build
+path in evidence. The complete frozen environment, source hashes, inventories,
+path scans, deviations, and disposition are recorded in
+[`reproducible-mainnet-builds-2026-09-04.md`](reproducible-mainnet-builds-2026-09-04.md).
+Private coordination issue [#79](https://github.com/thibistaken/groot/issues/79)
+records Machine B's independent report and the subsequent comparison. The
+unsigned reproducibility checklist row is closed; every other mainnet release
+gate retains its prior status.

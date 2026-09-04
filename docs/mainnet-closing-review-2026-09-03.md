@@ -8,7 +8,10 @@ on `codex/mainnet-final-enablement`. It returned **PASS** for the limited ADR 00
 certification-candidate scope, with no blocking finding. This is source-diff evidence;
 it does not replace independent human sign-off, reproducible Build A/B evidence,
 signed-package verification, physical-device certification, or the capped
-minimal-value mainnet rehearsal.
+minimal-value mainnet rehearsal. The separate unsigned Build A/B evidence later
+passed for frozen commit `2110eaf` and is recorded in
+[`reproducible-mainnet-builds-2026-09-04.md`](reproducible-mainnet-builds-2026-09-04.md);
+the other listed gates remain open.
 
 The review verified the dedicated compile-time identity and isolated storage,
 distribution block, pre-database local-Core admission, exact genesis and

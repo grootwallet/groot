@@ -17,8 +17,8 @@ fixtures until the final release checklist is independently closed.
 
 ## Exact review inputs
 
-The review packet must identify every input by full digest. At the time this
-plan was written, the inputs are:
+The review packet must identify every input by full digest. The current frozen
+inputs and supporting evidence are:
 
 - frozen v0.4.91 application source: commit
   `0849375d1c458cbcaf9bd003a23293510f02e6bf`;
@@ -26,22 +26,25 @@ plan was written, the inputs are:
   `bb94e468d0c83d42ea600dd5ed5ea1b411f00a31`;
 - the Developer ID signed and Apple-notarized v0.4.91 macOS arm64 Testnet4
   package and its 539-component SBOM, both bound to source commit `0849375d`;
-- unsigned Build A evidence set: executable SHA-256
-  `d4736d53c9f9dde8535242b03e021f1609d8a623ceeef0f9e682160c539b9bf6`
-  and SBOM SHA-256
-  `f137a0a7527499749f9cdc433adccd036938298c0661ae1e9280f1a7f69fa2ca`,
-  with same-machine provenance only; it is supporting evidence, not an
-  independent-machine reproduction (the required independent-machine Build B
-  and strict comparison remain pending);
-- Build B and the strict complete-evidence comparison, which remain pending;
+- frozen v0.4.92 mainnet-certification executable source commit
+  `2110eaf0afd0339754c1b9bbba31011c66aa3d69` and its complete diff from
+  `0849375d`;
+- independently reproduced unsigned Build A and Build B evidence with matching
+  executable SHA-256
+  `8ce9ed773f8f0c43d84f555c7a0d2a5d2d21a111c6b5e7c79ff970670561f2bb`,
+  matching SBOM SHA-256
+  `681189b7d87962145472e10ac1b7ee55228788aa3788d29435db15c1b6c75712`,
+  matching `BUILD-INFO` and `SHA256SUMS`, and matching UUID
+  `4BE90441-1EF6-373F-B2C0-2982D591703B`; complete sanitized evidence is in
+  [`reproducible-mainnet-builds-2026-09-04.md`](reproducible-mainnet-builds-2026-09-04.md);
 - this threat model, security model, accepted ADRs, dependency locks, release
   checklist, sanitized hardware summaries, backend evidence, recovery evidence,
   and release/update procedures.
 
-The v0.4.91 source review is necessary but cannot approve a future mainnet
-binary. The final mainnet-enablement commit, its complete diff from `0849375d`,
-both matching independent unsigned builds, and its signed/notarized artifact
-must be reviewed before closure.
+The v0.4.91 source review is necessary but cannot approve the frozen v0.4.92
+mainnet binary. The `2110eaf` mainnet-enablement source and complete diff from
+`0849375d`, the matching independent unsigned evidence, and the future exact
+signed/notarized artifact must all be reviewed before closure.
 
 ## Limited-mainnet design under review
 
@@ -246,7 +249,8 @@ working notes remain in the agreed private channel.
 1. Freeze and hash the review packet; do not enable mainnet.
 2. Confirm reviewer independence, competence, scope, schedule, and private
    reporting channel.
-3. Complete Build B and the strict Build A/Build B comparison.
+3. Verify the recorded `2110eaf` Build A/Build B evidence and exact four-file
+   hash comparison.
 4. Review the frozen v0.4.91 source, threat model, package, and evidence.
 5. Resolve baseline findings while mainnet remains unreachable.
 6. Approve a proposed limited-mainnet ADR and implement only that reviewed

@@ -125,7 +125,15 @@ The baseline browser, native Regtest, and full Testnet4 package builds completed
 | Full Testnet4 portable package                                      | Green: HWI staging/version/digest, ad-hoc development signing, strict deep signature verification, and packaged-HWI re-verification                                                             |
 | Fresh optimized Regtest package lifecycle                           | Green: second process failed closed and forced-termination restart reacquired the isolated profile lock; executable 17,706,368 bytes                                                            |
 
-The sandbox initially denied loopback socket creation for 11 Rust tests, the Rust coverage run, and the Playwright server. Each was rerun with loopback permission and passed; those first failures were execution-environment denials, not assertions. Physical hardware, Developer ID notarization, mainnet, and independent-machine reproducibility remain outside this code-size pass and keep their existing release gates.
+The sandbox initially denied loopback socket creation for 11 Rust tests, the
+Rust coverage run, and the Playwright server. Each was rerun with loopback
+permission and passed; those first failures were execution-environment denials,
+not assertions. Physical hardware, Developer ID notarization, mainnet, and
+independent-machine reproducibility were outside this dated code-size pass. The
+unsigned reproducibility gate was later completed for frozen commit `2110eaf`;
+see
+[`reproducible-mainnet-builds-2026-09-04.md`](reproducible-mainnet-builds-2026-09-04.md).
+The other release gates remain unchanged.
 
 ## Remaining opportunities and intentional non-changes
 

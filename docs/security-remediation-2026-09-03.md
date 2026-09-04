@@ -2,7 +2,14 @@
 
 ## Status
 
-The current working tree addresses every required code or documentation disposition from the independent baseline review of commit `2832acbb2f9aac3ed1b4079f70dd74d7277b2291`. This is implementation evidence, not reviewer closure, release authorization, or permission to use mainnet. Mainnet remains unavailable in the frontend and native build allowlists and `MAINNET_ENABLED` remains `false`.
+The remediation working tree addressed every required code or documentation
+disposition from the independent baseline review of commit
+`2832acbb2f9aac3ed1b4079f70dd74d7277b2291`. This is implementation evidence,
+not reviewer closure, release authorization, or permission to use mainnet. At
+that stage mainnet remained unavailable in the frontend and native build
+allowlists and `MAINNET_ENABLED` remained `false`. ADR 0055 later authorized
+only an isolated, non-distributable mainnet certification build; ADR 0012 still
+blocks distribution.
 
 Because this remediation changes trusted transaction, hardware, recovery, session, and release-verification boundaries, all earlier v0.4.91 package and physical evidence remains attached to that exact candidate. A later candidate needs a new version, clean validation, packaging, review, and only the proportionate physical repetitions selected after the closing review.
 
@@ -64,11 +71,16 @@ The release owner accepted the review's limited-release Argon2id decision withou
 
 Other review-listed residuals remain explicit: same-user filesystem TOCTOU opportunities, encrypted crash-temporary files, the process-lock inode lifetime, trust in a user-controlled loopback Core's mempool report, renderer composition of public export bytes, deliberate OS screenshot capability, and the installed-app HWI verify-to-exec race. The manual-outpoint self-DoS and recovery pre-bound CPU issue were removed; SBOM ordering is now locale independent. None of these records enables mainnet.
 
-## Closing evidence still required
+## Closing evidence status
 
 1. The current working tree has passed `pnpm validate`, deterministic SBOM generation (539 locked components), strict all-target/all-feature Rust formatting, lint, docs, and tests, the native Regtest/Signet/Testnet4 build matrix, and the isolated real-Core Regtest suite. The production JavaScript advisory scan found no known vulnerabilities; RustSec found no vulnerabilities and reported the 17 allowlisted unmaintained/unsound transitive warnings already governed by the release gate. Repeat these checks from the exact clean remediation commit before packaging.
 2. Fresh independent review of this diff, including bypass attempts against RB-01, RB-02, RB-03, RB-04, RB-07, RB-08, and RB-09.
 3. A new versioned candidate and signed/notarized artifact; v0.4.91 evidence must not be relabeled.
-4. Two genuinely independent clean-machine unsigned builds and strict comparison.
+4. **Complete for frozen commit `2110eaf`:** two genuinely independent
+   clean-machine unsigned builds and their strict four-file comparison passed.
+   See
+   [`reproducible-mainnet-builds-2026-09-04.md`](reproducible-mainnet-builds-2026-09-04.md).
+   Any later application source, dependency, build-tool, or release-configuration
+   change requires a new pair.
 5. The remaining exact-device certification, release-package, rollback/update, and limited-mainnet checklist evidence.
 6. A separately reviewed minimal mainnet-enablement diff and accepted revision of ADR 0053 only after every exit condition is met.

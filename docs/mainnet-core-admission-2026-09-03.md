@@ -61,8 +61,10 @@ Regtest, Signet, and Testnet4 database behavior is unchanged. This change affect
 backend authorization order only and has no BIP impact.
 
 The follow-on ADR 0055 branch adds a dedicated mainnet build target without
-accepting ADR 0053 or transferring any Testnet4 physical evidence. Distribution
-remains gated by review of that exact diff, two-machine reproducibility,
+accepting ADR 0053 or transferring any Testnet4 physical evidence. Independent
+unsigned reproducibility passed for frozen commit `2110eaf` as recorded in
+[`reproducible-mainnet-builds-2026-09-04.md`](reproducible-mainnet-builds-2026-09-04.md).
+Distribution remains gated by review of the exact enablement diff,
 signed/notarized candidate validation, physical-device certification, and the
 minimal-value mainnet rehearsal.
 
