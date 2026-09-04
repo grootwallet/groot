@@ -68,8 +68,10 @@ independent machines to one Apple hardware-family kernel suffix. These generated
 files bind the exact commit and lockfiles to the built executable digest. The
 mainnet builder rejects external `RUSTFLAGS`/`CARGO_ENCODED_RUSTFLAGS`, remaps
 the physical checkout, Cargo-home, and Cargo-target paths to stable virtual
-prefixes, and rejects an executable if its checkout, Cargo home, Cargo target,
-or user home survives in its strings. It compiles with Tauri's production
+prefixes, requests Apple ld's reproducible mode so the retained Mach-O UUID and
+linker-generated ad hoc signature are stable across physical build roots, and
+rejects an executable if its checkout, Cargo home, Cargo target, or user home
+survives in its strings. It compiles with Tauri's production
 `custom-protocol` feature so the evidence binary matches the packaged execution
 mode. Generated evidence remains untracked build artifacts.
 

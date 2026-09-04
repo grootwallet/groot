@@ -17,14 +17,18 @@ requires the executable, SBOM, recorded digests, and corrected metadata to be
 byte-identical. The earlier `18d888e5` Build A is superseded diagnostic evidence.
 Independent `8d38f617` builds then exposed absolute Cargo-registry paths with
 different local usernames in the executable despite identical `BUILD-INFO`;
-that campaign is also failed diagnostic evidence. The builder now owns encoded
+that campaign is also failed diagnostic evidence. Independent `b2f680bd` builds
+removed every physical path but differed in only the content-derived Mach-O
+`LC_UUID` and its dependent linker-generated ad hoc-signature page hash; that
+campaign is also failed diagnostic evidence. The builder now owns encoded
 Rust remapping for the checkout, Cargo home, and Cargo target, rejects external
-Rust flags, and rejects any executable retaining checkout, Cargo-home,
-Cargo-target, or user-home paths. The Regtest default-cookie fallback is now
+Rust flags, requests Apple ld's reproducible mode while retaining a stable UUID,
+and rejects any executable retaining checkout, Cargo-home, Cargo-target, or
+user-home paths. The Regtest default-cookie fallback is now
 compiled only for Regtest; public-network builds fail closed if that unreachable
 fallback is invoked instead of embedding `CARGO_MANIFEST_DIR`. Supported runtime
 behavior, persisted formats, descriptors, protocols, migrations, and BIP support
-are unchanged. The unsigned builder also activates Tauri's production
+are unchanged; this release-tooling correction has no BIP impact. The unsigned builder also activates Tauri's production
 `custom-protocol` feature, aligning the compared raw executable with the mode
 used by the packaged application and avoiding Tauri's development-only embedded
 configuration-parent path.

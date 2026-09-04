@@ -108,3 +108,30 @@ configuration parent: the unsigned builder had not activated Tauri's production
 `custom-protocol` feature. The builder now activates that exact feature so its
 raw evidence executable matches the packaged execution mode. A focused
 release-mode Mainnet build with that feature passed the complete host-path scan.
+
+## Superseded Mach-O UUID diagnostic
+
+Fresh independent Machine A and Machine B builds of commit `b2f680bd` removed
+the physical checkout, Cargo-home, Cargo-target, and user-home paths, and their
+sanitized `BUILD-INFO` files were byte-identical. Their executable hashes still
+differed: Machine A produced
+`b0375e1cbfbcc9d38768f12cb075f31976c052e7fad68a4b8e5047354b0913cb`
+and Machine B produced
+`4569666a732240a2056a6a449aeaf7b7e782412cb4bb2bb178e33182e15cd3dd`.
+The equal-size executables differed in only 47 bytes: 15 byte differences in
+the 16-byte `LC_UUID`, with one coincidentally equal byte, and the 32-byte
+linker-generated ad hoc-signature code-page hash covering that header. After
+removing the signatures from disposable diagnostic copies, only the UUID
+remained different; zeroing that UUID in those copies made their payloads
+byte-identical. The normalized SBOM inventories were also byte-identical after
+removing only the executable-hash binding. This is a failed reproducibility
+campaign, not releasable evidence, and neither original artifact may be changed,
+signed, or promoted.
+
+The repository-controlled Rust environment now passes Apple ld's
+`-reproducible` option while retaining `LC_UUID`. Its focused regression requires
+byte-identical executables and equal non-empty Mach-O UUIDs across synthetic
+usernames, source roots, Cargo homes, and target roots. Fresh independent builds
+are required at the new frozen commit. This release-tooling-only correction
+changes no runtime behavior, persisted format, descriptor, protocol, migration,
+or BIP support.

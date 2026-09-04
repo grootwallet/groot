@@ -7,6 +7,7 @@ configure_reproducible_rust_env() {
   local source_root="$1"
   local cargo_target="$2"
   local cargo_home
+  local encoded_flags
   local encoded_separator
 
   if [[ -n "${RUSTFLAGS+x}" || -n "${CARGO_ENCODED_RUSTFLAGS+x}" ]]; then
@@ -47,5 +48,9 @@ configure_reproducible_rust_env() {
   fi
 
   encoded_separator=$'\x1f'
-  export CARGO_ENCODED_RUSTFLAGS="--remap-path-prefix=${source_root}=/groot/source${encoded_separator}--remap-path-prefix=${cargo_home}=/groot/cargo${encoded_separator}--remap-path-prefix=${cargo_target}=/groot/target"
+  encoded_flags="--remap-path-prefix=${source_root}=/groot/source${encoded_separator}--remap-path-prefix=${cargo_home}=/groot/cargo${encoded_separator}--remap-path-prefix=${cargo_target}=/groot/target"
+  if [[ "$(uname -s)" == "Darwin" ]]; then
+    encoded_flags+="${encoded_separator}-C${encoded_separator}link-arg=-Wl,-reproducible"
+  fi
+  export CARGO_ENCODED_RUSTFLAGS="$encoded_flags"
 }
