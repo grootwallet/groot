@@ -1335,6 +1335,23 @@ mod tests {
         path
     }
 
+    #[cfg(target_os = "linux")]
+    fn process_is_effectively_alive(pid: i32) -> bool {
+        let Ok(stat) = std::fs::read_to_string(format!("/proc/{pid}/stat")) else {
+            return false;
+        };
+        let Some((_, fields)) = stat.rsplit_once(") ") else {
+            return true;
+        };
+        !matches!(fields.as_bytes().first(), Some(b'Z' | b'X'))
+    }
+
+    #[cfg(all(unix, not(target_os = "linux")))]
+    fn process_is_effectively_alive(pid: i32) -> bool {
+        // SAFETY: signal zero only probes whether the test process still exists.
+        unsafe { libc::kill(pid, 0) == 0 }
+    }
+
     #[test]
     fn rejects_empty_control_and_oversized_arguments() {
         assert_eq!(
@@ -1665,7 +1682,7 @@ mod tests {
             .trim()
             .parse::<i32>()
             .unwrap();
-        let descendant_alive = unsafe { libc::kill(pid, 0) } == 0;
+        let descendant_alive = process_is_effectively_alive(pid);
         assert!(
             !descendant_alive,
             "the timed-out descendant survived cleanup"
@@ -1710,7 +1727,7 @@ mod tests {
             .trim()
             .parse::<i32>()
             .unwrap();
-        assert_ne!(unsafe { libc::kill(pid, 0) }, 0);
+        assert!(!process_is_effectively_alive(pid));
         drop(operation);
 
         let fast = test_script(
