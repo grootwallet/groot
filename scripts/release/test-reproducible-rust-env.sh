@@ -3,6 +3,7 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "$0")/../.." && pwd -P)"
 helper="$repo_root/scripts/release/reproducible-rust-env.sh"
+normalizer="$repo_root/scripts/release/normalize-macho-uuid.mjs"
 fixture_root="$(mktemp -d "${TMPDIR:-/tmp}/groot-rust-remap.XXXXXX")"
 fixture_root="$(cd "$fixture_root" && pwd -P)"
 trap 'rm -rf "$fixture_root"' EXIT
@@ -95,6 +96,33 @@ fi
 build_fixture alice
 build_fixture bob
 
+mkdir -p "$fixture_root/salted/alice" "$fixture_root/salted/bob"
+RC_UUID_SALT=host-specific-alice rustc -C opt-level=3 -C link-arg=-Wl,-reproducible \
+  "$fixture_root/alice/Users/alice/source/src/main.rs" -o "$fixture_root/salted/alice/Groot"
+RC_UUID_SALT=host-specific-bob rustc -C opt-level=3 -C link-arg=-Wl,-reproducible \
+  "$fixture_root/alice/Users/alice/source/src/main.rs" -o "$fixture_root/salted/bob/Groot"
+cmp -s "$fixture_root/salted/alice/Groot" "$fixture_root/salted/bob/Groot" \
+  && fail "different linker UUID salts unexpectedly produced identical fixtures"
+node "$normalizer" "$fixture_root/salted/alice/Groot"
+node "$normalizer" "$fixture_root/salted/bob/Groot"
+cmp -s "$fixture_root/salted/alice/Groot" "$fixture_root/salted/bob/Groot" \
+  || fail "content-normalized Mach-O executables differ"
+codesign --verify --strict "$fixture_root/salted/alice/Groot" \
+  || fail "the first normalized ad hoc signature is invalid"
+codesign --verify --strict "$fixture_root/salted/bob/Groot" \
+  || fail "the second normalized ad hoc signature is invalid"
+cp "$fixture_root/salted/alice/Groot" "$fixture_root/salted/tampered-Groot"
+node -e '
+  const fs = require("node:fs");
+  const path = process.argv[1];
+  const executable = fs.readFileSync(path);
+  executable[4096] ^= 1;
+  fs.writeFileSync(path, executable);
+' "$fixture_root/salted/tampered-Groot"
+if node "$normalizer" "$fixture_root/salted/tampered-Groot" 2>/dev/null; then
+  fail "the normalizer accepted an executable with an invalid existing code hash"
+fi
+
 for location in source cargo target; do
   for identity in alice bob; do
     if binary_contains "$fixture_root/output/$identity/$location/Groot" "$fixture_root"; then
@@ -130,4 +158,4 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
   done
 fi
 
-echo "Rust release paths and Mach-O UUIDs are reproducible, ambient linker UUID salts are cleared, and external Rust flags fail closed."
+echo "Rust release paths, content-normalized Mach-O UUIDs, and ad hoc signatures are reproducible; ambient linker UUID salts are cleared and external Rust flags fail closed."

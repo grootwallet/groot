@@ -153,3 +153,35 @@ and equal non-empty Mach-O UUIDs across synthetic usernames, source roots, Cargo
 homes, and target roots. Fresh independent builds are required at the next
 frozen commit. This release-tooling-only correction changes no runtime behavior,
 persisted format, descriptor, protocol, migration, or BIP support.
+
+## Superseded salt-clearing diagnostic
+
+Fresh independent Machine A and Machine B builds of commit `1371f376` both
+reported `RC_UUID_SALT` absent and passed the salt-clearing regression. Their
+`BUILD-INFO` files were byte-identical, but Machine A produced executable hash
+`0e6698c9519dc8970db1294c61006315b3791305afb42ef6e19047d36eca02be`
+with UUID `72050244-B3B0-34F0-934A-CB32BD649ED8`, while Machine B produced
+`469d1ec72854074009704846035123c9785f75e6579feb4cb88f66bafead7951`
+with UUID `1BF79866-81B3-3657-AC58-181C8EC7156D`. The equal-size originals
+differed in exactly 48 bytes: all 16 UUID bytes and the 32-byte ad hoc-signature
+page hash covering them. Removing signatures from disposable copies left only
+the UUID bytes different; neutralizing those bytes made the complete unsigned
+payloads byte-identical. Their SBOMs were structurally identical after removing
+only the executable-hash binding. Both sealed evidence sets remain unchanged and
+are ineligible for signing or promotion.
+
+The release builder no longer relies on Apple ld's UUID derivation as the final
+authority. Before evidence generation, a repository-controlled normalizer
+accepts only a thin little-endian 64-bit Mach-O with exactly one `LC_UUID`, one
+final embedded signature, and one primary ad hoc CodeDirectory using full
+SHA-256 code slots with no special slots. It zeroes the UUID in memory, derives
+a version-3/standard-variant UUID from SHA-256 of the finished bytes before the
+signature region, writes that UUID, recomputes the affected CodeDirectory
+code-slot hashes, verifies every code-slot hash, atomically replaces the target
+executable, and requires strict `codesign` verification. It does not create a
+Developer ID, CMS, timestamped, or other
+identity signature. The focused regression first forces distinct linker UUIDs
+with different salts, then requires normalization to produce byte-identical
+executables, equal non-empty UUIDs, and valid ad hoc signatures. This correction
+is release-tooling-only and has no runtime, persisted-format, descriptor,
+protocol, migration, or BIP impact.

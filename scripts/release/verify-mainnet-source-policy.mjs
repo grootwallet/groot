@@ -85,11 +85,15 @@ const pinnedPolicySources = new Map([
   ],
   [
     'scripts/release/build-unsigned-mainnet.sh',
-    '2c275b5406ff9d1ea31dd643ccd411cc9b29129436245fa04d85fb72adb4d4a5'
+    '35b13554ff2de5ff9e7fa5a43d28338502fadbda23a9f0e4a41b688a830ed160'
   ],
   [
     'scripts/release/reproducible-rust-env.sh',
     '8f309ced5719b7e57ef314df6574c875b1495b491be591d62a59bd2fc58e13ae'
+  ],
+  [
+    'scripts/release/normalize-macho-uuid.mjs',
+    '6a0c4442e911dc5ed93ccafcd0006f9cbedf24ebf1565d689f3475119800494b'
   ],
   [
     'src/lib/components/AppShell.svelte',

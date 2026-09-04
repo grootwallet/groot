@@ -23,7 +23,7 @@ if [[ ! "${GROOT_MACOS_SIGNING_TEAM_ID:-}" =~ ^[A-Z0-9]{10}$ ]]; then
   echo "Set GROOT_MACOS_SIGNING_TEAM_ID to the reviewed 10-character Developer ID team." >&2
   exit 1
 fi
-for command_name in sw_vers xcodebuild xcrun; do
+for command_name in codesign sw_vers xcodebuild xcrun; do
   if ! command -v "$command_name" >/dev/null 2>&1; then
     echo "Mainnet evidence builds require ${command_name}." >&2
     exit 1
@@ -76,6 +76,9 @@ pnpm validate
 cargo build --locked --release --manifest-path src-tauri/Cargo.toml --features tauri/custom-protocol
 
 built_executable="$cargo_target/release/Groot"
+codesign --verify --strict "$built_executable"
+node scripts/release/normalize-macho-uuid.mjs "$built_executable"
+codesign --verify --strict "$built_executable"
 effective_cargo_home="${CARGO_HOME:-$HOME/.cargo}"
 effective_cargo_home="$(cd "$effective_cargo_home" && pwd -P)"
 physical_home="$(cd "$HOME" && pwd -P)"

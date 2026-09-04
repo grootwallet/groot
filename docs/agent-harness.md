@@ -69,10 +69,16 @@ files bind the exact commit and lockfiles to the built executable digest. The
 mainnet builder rejects external `RUSTFLAGS`/`CARGO_ENCODED_RUSTFLAGS`, clears
 Apple ld's ambient `RC_UUID_SALT`, remaps the physical checkout, Cargo-home, and
 Cargo-target paths to stable virtual prefixes, and requests Apple ld's
-reproducible mode so the retained Mach-O UUID and linker-generated ad hoc
-signature are stable across physical build roots. It rejects an executable if
-its checkout, Cargo home, Cargo target, or user home survives in its strings. It
-compiles with Tauri's production
+reproducible mode. Because current Apple ld still emits different content-based
+UUIDs for byte-identical full application payloads, the builder derives the
+retained UUID from the finished pre-signature Mach-O bytes and recomputes the
+existing linker-generated ad hoc CodeDirectory's SHA-256 code slots. The
+normalizer accepts only the reviewed thin 64-bit Mach-O, single UUID/signature,
+ad hoc full-SHA-256 layout, replaces the target atomically, and must pass strict
+`codesign` verification before evidence is emitted. It does not apply an
+identity signature. The builder rejects an executable if its checkout, Cargo
+home, Cargo target, or user home survives in its strings. It compiles with
+Tauri's production
 `custom-protocol` feature so the evidence binary matches the packaged execution
 mode. Generated evidence remains untracked build artifacts.
 
