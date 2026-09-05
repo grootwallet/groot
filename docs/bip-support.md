@@ -157,7 +157,8 @@ The following nearby wallet BIPs are deliberately not current candidates:
   every consensus rule as an implemented wallet feature.
 
 The internal mainnet RC post-unlock sync-presentation follow-up has no BIP impact.
-It changes only when one existing native sync begins and is visibly presented;
+It changes only how an existing native sync is presented: automatic unlock sync
+uses compact progress, while explicit manual refresh retains detailed progress and
 later foreground cycles remain quiet. Network access policy, wallet discovery,
 descriptors, transaction handling, and interoperability evidence are unchanged.
 

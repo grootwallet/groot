@@ -70,6 +70,7 @@
   const walletShell = useWalletShellContext();
   const isMainnet = defaultConfig.network === 'mainnet';
   let syncing = $state(false);
+  let manualSyncDetailsVisible = $state(false);
   let snapshot = $state<WalletSnapshot | null>(null);
   let multisigWallet = $state<MultisigWallet | null>(null);
   let hardwareSignerWallet = $state<ExternalSignerWallet | null>(null);
@@ -595,12 +596,13 @@
     const token = ++syncPollToken;
     void pollSyncStatus(token);
   }
-  const sync = async (showToast = true) => {
+  const sync = async (manual = true) => {
     if (initialHistoryRequired) {
       openInitialScan();
       return;
     }
     if (syncInProgress) return;
+    manualSyncDetailsVisible = manual;
     syncing = true;
     startSyncStatusPolling();
     try {
@@ -609,7 +611,7 @@
         new Promise((resolve) => setTimeout(resolve, 1_200))
       ]);
       snapshot = nextSnapshot;
-      if (showToast)
+      if (manual)
         toast({
           title: 'Wallet is up to date',
           description: 'Balance and transactions refreshed.',
@@ -621,7 +623,7 @@
         await goto('/unlock');
         return;
       }
-      if (showToast)
+      if (manual)
         toast({
           title: 'Sync failed',
           description: localizedError(cause, $locale),
@@ -630,6 +632,7 @@
     } finally {
       await refreshSyncStatus();
       syncing = false;
+      if (syncStatus?.state !== 'failed') manualSyncDetailsVisible = false;
     }
   };
   async function verifyBackup() {
@@ -796,7 +799,7 @@
       {/if}
     </section>
   {/if}
-  {#if syncStatus && (syncInProgress || syncStatus.state === 'failed')}
+  {#if manualSyncDetailsVisible && syncStatus && (syncInProgress || syncStatus.state === 'failed')}
     <section class:failed={syncStatus.state === 'failed'} class="sync-progress" aria-live="polite">
       <div>
         <strong

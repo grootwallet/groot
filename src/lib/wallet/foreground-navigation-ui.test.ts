@@ -71,10 +71,22 @@ describe('foreground wallet navigation', () => {
     expect(activity).toContain("cause.code === 'wallet_locked'");
   });
 
-  it('shows only manual and post-unlock native sync progress on Overview', () => {
+  it('keeps automatic sync compact and reserves detailed progress for manual refresh', () => {
     expect(overview).toContain("syncStatus.source === 'bitcoin_core'");
     expect(overview).toContain("'Scanning Bitcoin Core history'");
     expect(overview).toContain("'Wallet sync progress'");
+    expect(overview).toContain('let manualSyncDetailsVisible = $state(false)');
+    expect(overview).toContain('manualSyncDetailsVisible = manual');
+    expect(overview).toContain('void sync(false)');
+    expect(overview).toContain(
+      'onclick={() => (initialHistoryRequired ? openInitialScan() : sync(true))}'
+    );
+    expect(overview).toContain(
+      "{#if manualSyncDetailsVisible && syncStatus && (syncInProgress || syncStatus.state === 'failed')}"
+    );
+    expect(overview).toContain(
+      "if (syncStatus?.state !== 'failed') manualSyncDetailsVisible = false"
+    );
     expect(overview).toContain('syncStatusIsActive(syncStatus)');
     expect(overview).toContain('startSyncStatusPolling()');
     expect(overview).toContain('if (!syncing && !syncStatusIsActive(syncStatus)) return;');

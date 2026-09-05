@@ -267,6 +267,7 @@ test('keeps recovery words out of the webview and unlock rejects the wrong crede
   await unlockCredential.press('Enter');
   await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Syncing' })).toBeVisible();
+  await expect(page.locator('.sync-progress')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Updated now' })).toBeVisible();
   await page.getByRole('link', { name: 'Activity' }).click();
   await page.getByRole('link', { name: 'Overview' }).click();
