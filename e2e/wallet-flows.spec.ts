@@ -1,4 +1,16 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
+
+async function expectAmountUnitsSeparated(scope: Locator) {
+  const gaps = await scope.locator('.formatted-amount').evaluateAll((elements) =>
+    elements.flatMap((element) => {
+      const amount = element.querySelector('strong')?.getBoundingClientRect();
+      const unit = element.querySelector('small')?.getBoundingClientRect();
+      return amount && unit ? [unit.left - amount.right] : [];
+    })
+  );
+  expect(gaps.length).toBeGreaterThan(0);
+  for (const gap of gaps) expect(gap).toBeGreaterThanOrEqual(5);
+}
 
 async function confirmGeneratedBackup(page: Page) {
   const words = await page.locator('.mnemonic-grid strong').allTextContents();
@@ -567,6 +579,7 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   await page.getByRole('button', { name: 'Continue to amount' }).click();
   await page.getByLabel('Amount', { exact: true }).fill('1200');
   await page.getByRole('button', { name: 'Review payment' }).click();
+  await expectAmountUnitsSeparated(page.locator('.form-card').first());
   const consolidationReview = page.locator('.self-transfer-consolidating');
   await expect(consolidationReview.getByText('Consolidating', { exact: true })).toBeVisible();
   await expect(consolidationReview).toContainText(/1,200 sats|0\.00001200 BTC/);
@@ -642,6 +655,7 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   await expect(page.getByText('Signature verified')).toBeVisible();
   const signedReview = page.getByRole('region', { name: 'Signed transaction review' });
   await expect(signedReview).toBeVisible();
+  await expectAmountUnitsSeparated(signedReview);
   expect(
     await signedReview
       .locator(':scope > .details-list')
@@ -681,6 +695,7 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
   await page.getByLabel('App PIN', { exact: true }).fill('hardware-pin');
   await page.getByRole('button', { name: 'Finalize & broadcast' }).click();
   await expect(page.getByRole('heading', { name: 'Payment sent' })).toBeVisible();
+  await expectAmountUnitsSeparated(page.locator('.success-amount'));
 
   await page.getByRole('link', { name: 'Settings' }).click();
   await page.getByRole('button', { name: /Export public descriptor/ }).click();

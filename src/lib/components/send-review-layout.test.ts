@@ -13,9 +13,10 @@ const multisigSend = readFileSync(
 describe('send review layout', () => {
   it('keeps the denomination separated from the amount', () => {
     expect(amount).toMatch(
-      /\.formatted-amount\s*\{[^}]*display: inline-flex;[^}]*align-items: baseline;[^}]*gap: 0;/s
+      /\.formatted-amount\s*\{[^}]*display: inline-flex;[^}]*align-items: baseline;[^}]*column-gap: 0\.375rem;/s
     );
-    expect(amount).toMatch(/\.formatted-amount > small\s*\{[^}]*margin-inline-start: 0\.4em;/s);
+    expect(amount).toMatch(/\.formatted-amount > small\s*\{[^}]*margin-inline-start: 0;/s);
+    expect(appCss).toMatch(/\.formatted-amount\s*\{[^}]*column-gap: 0\.375rem;/s);
   });
 
   it('separates adjacent setup warnings and onboarding fields', () => {
