@@ -377,10 +377,17 @@ v0.4.89 closes the Core-configuration catch-up race observed during the packaged
 
 ADR 0055 authorizes one dedicated, non-distributable mainnet build so the ADR 0053
 exit conditions can be exercised. The compile-time identity, isolated bundle and
-storage ID, pre-database local-Core admission, warning UI, and excluded sync/backend
-choices are explicit; no runtime preference can activate mainnet elsewhere. ADR
-0012 still blocks distribution and merge to `main`. The existing portable-profile
-Argon2id parameters and persisted formats are unchanged. No BIP family support
-changes in this enablement.
+storage ID, pre-database local-Core admission, and excluded sync/backend choices
+are explicit; no runtime preference can activate mainnet elsewhere. ADR 0056
+restores the existing PIN-only unlock flow: Rust decrypts the persisted per-wallet
+Core setup, Overview verifies it before the first database read, and node failures
+remain on Overview rather than requesting RPC fields on the lock screen. It also
+removes the global mainnet banner while retaining the normal Mainnet network
+identity and exact payment review. The internal RC builder now compiles an
+ad-hoc-compatible `REHEARSAL_ONLY` app requirement and verifies the pinned bundled
+HWI, fixing the package mismatch that prevented Ledger enumeration. ADR 0012 still
+blocks distribution and merge to `main`. The existing portable-profile Argon2id
+parameters and persisted formats are unchanged. No BIP family support changes in
+this correction.
 
 Update this table in the same change whenever a capability crosses a boundary.

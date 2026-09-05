@@ -21,6 +21,10 @@ The final-candidate coverage repair replaces constant-folded network test
 branches with equivalent compile-time-selected branches and adds boundary
 tests; it changes no BIP implementation, descriptor, derivation, PSBT, backup,
 or interoperability semantics.
+The 2026-09-05 internal-RC correction restores encrypted saved-node reuse during
+PIN-only unlock, moves existing-wallet Core preflight back to Overview, removes a
+global banner, and corrects ad-hoc HWI packaging. It changes no BIP behavior,
+descriptor, derivation, PSBT, backup, or interoperability evidence.
 
 Status: canonical implementation and candidate inventory as of 2026-09-02.
 

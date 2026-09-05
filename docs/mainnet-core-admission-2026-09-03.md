@@ -1,8 +1,10 @@
 # Mainnet pre-wallet Core admission — 2026-09-03
 
 Status: implemented and independently reviewed on the isolated preparation branch.
-ADR 0055 permits enabled-path certification in a non-distributable candidate;
-live-Core candidate evidence remains pending.
+ADR 0055 permits enabled-path certification in a non-distributable candidate.
+Internal RC `6d11ecf` passed the initial saved-wallet scan against the retained
+pruned mainnet range. ADR 0056 subsequently corrected existing-wallet admission
+presentation without weakening the database-open permit.
 
 ## Security invariant
 
@@ -25,13 +27,11 @@ wallet session is not an admission.
   authentication and the already constrained loopback-only HTTP `LocalCore`
   backend. Client construction validates the endpoint before network I/O; Core's
   chain and genesis are checked before admission is stored.
-- Existing-wallet admission is bound to the selected wallet UUID and exact saved
-  public Core configuration. Admission expires after 15 monotonic minutes, is
-  cleared after successful unlock, and hands ownership to the authenticated
-  per-wallet node session. If the Core password was rotated, the valid preflight
-  still allows wallet unlock so the user can save the replacement protected
-  credential; the stale saved session cannot connect. Lock and inactivity remove
-  the session.
+- Existing wallets authenticate with only their wallet passphrase or app PIN.
+  Rust decrypts the exact per-wallet Core setup and password, but that restored
+  session is not eligible for a database-open permit until Overview authenticates
+  the saved loopback node and verifies the compiled chain and genesis. A failed
+  check remains on Overview; lock and inactivity remove the in-memory session.
 - New-wallet admission is scoped to one serialized creation attempt, expires after
   15 monotonic minutes, and is invalidated whenever that command exits. Software
   creation/recovery, external-signer creation,
@@ -45,7 +45,7 @@ wallet session is not an admission.
   those wallets share the selected wallet's Core configuration.
 - Stable `node_admission_required` and `mainnet_disabled` errors are represented at
   the frontend contract. RPC credentials remain native and are zeroized on every
-  admission exit.
+  admission exit. Existing-wallet RPC fields never appear on the lock screen.
 - Explicit hardware-operation cancellation also clears pending Core admission, so
   returning to wallet creation requires a fresh preflight.
 - Mainnet onboarding never offers cross-wallet network-setup adoption, and both

@@ -534,6 +534,7 @@ struct ActiveForegroundSync {
 struct NodeAuthSession {
     config: CoreNodeConfig,
     password: Zeroizing<String>,
+    mainnet_node_verified: bool,
 }
 
 #[derive(Clone)]
@@ -1872,6 +1873,13 @@ fn admission_allows_selected_wallet(
         && admission.config == *saved_config
 }
 
+fn node_auth_session_allows_database_open(
+    session: &NodeAuthSession,
+    saved_config: &CoreNodeConfig,
+) -> bool {
+    session.config == *saved_config && session.mainnet_node_verified
+}
+
 fn database_open_permit_for_new_wallet(state: &AppState) -> ApiResult<DatabaseOpenPermit> {
     if NETWORK != Network::Bitcoin {
         return Ok(DatabaseOpenPermit {
@@ -1914,11 +1922,11 @@ fn database_open_permit_for_selected_wallet(app: &AppHandle) -> ApiResult<Databa
             .lock()
             .map_err(internal)?
             .get(&selected.id)
-            .is_some_and(|session| session.config == saved_config);
+            .is_some_and(|session| node_auth_session_allows_database_open(session, &saved_config));
     if !pending_matches && !active_matches {
         return Err(api_error(
             "node_admission_required",
-            "Verify this wallet's saved local Bitcoin Core connection before unlocking it.",
+            "Verify this wallet's saved local Bitcoin Core connection before reading wallet data.",
         ));
     }
     crate::release_policy::ensure_database_open_enabled(NETWORK, true)
@@ -2344,7 +2352,11 @@ fn load_node_auth_session(
                 "Protected RPC credentials are invalid.",
             ));
         }
-        Some(NodeAuthSession { config, password })
+        Some(NodeAuthSession {
+            config,
+            password,
+            mainnet_node_verified: false,
+        })
     } else {
         None
     };

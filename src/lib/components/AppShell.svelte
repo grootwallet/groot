@@ -9,8 +9,7 @@
     LayoutGrid,
     Plus,
     Settings,
-    ShieldCheck,
-    TriangleAlert
+    ShieldCheck
   } from '@lucide/svelte';
   import BrandLockup from './BrandLockup.svelte';
   import BuildIdentity from './BuildIdentity.svelte';
@@ -433,7 +432,6 @@
   class:onboarding-shell={onboardingRoute}
   class:mobile-actions-visible={showQuickActions}
   class:prototype-shell={isPrototypeWallet}
-  class:mainnet-shell={defaultConfig.network === 'mainnet'}
   class:locked-setup-visible={showSetupResume && lockedRoute}
   class:navigation-pending={navigationPending}
 >
@@ -451,18 +449,6 @@
     </div>
   {:else}
     <div class="navigation-progress" aria-hidden="true"></div>
-    {#if defaultConfig.network === 'mainnet'}
-      <div class="mainnet-banner" role="alert">
-        <TriangleAlert size={15} />
-        <strong>{translate($locale, 'MAINNET · REAL BITCOIN')}</strong>
-        <span
-          >{translate(
-            $locale,
-            'Verify the recipient, amount, fee, and signing device before every payment.'
-          )}</span
-        >
-      </div>
-    {/if}
     <aside class="sidebar">
       <a class="brand" href="/" aria-label={translate($locale, 'Groot home')}><BrandLockup /></a>
       {#if profiles.length}

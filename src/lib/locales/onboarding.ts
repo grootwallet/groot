@@ -319,20 +319,10 @@ export const onboardingCopy = {
       fr: 'Groot authentifiera votre nœud local et vérifiera la chaîne de genèse Bitcoin exacte avant de créer tout fichier de portefeuille.',
       es: 'Groot autenticará tu nodo local y verificará la cadena génesis exacta de Bitcoin antes de crear archivos de cartera.'
     },
-  'MAINNET · REAL BITCOIN': { fr: 'MAINNET · BITCOIN RÉEL', es: 'MAINNET · BITCOIN REAL' },
-  'Verify the recipient, amount, fee, and signing device before every payment.': {
-    fr: 'Vérifiez le destinataire, le montant, les frais et l’appareil de signature avant chaque paiement.',
-    es: 'Verifica el destinatario, el importe, la comisión y el dispositivo firmante antes de cada pago.'
-  },
   'Compact-filter and remote-node fallbacks are disabled so the reviewed trust boundary cannot change silently.':
     {
       fr: 'Les solutions de secours par filtres compacts et nœuds distants sont désactivées afin que la limite de confiance examinée ne change pas silencieusement.',
       es: 'Las alternativas de filtros compactos y nodos remotos están desactivadas para que el límite de confianza revisado no cambie silenciosamente.'
-    },
-  'Enter this wallet’s saved local RPC connection exactly. Groot requires a synchronized mainnet node and never falls back to a remote service.':
-    {
-      fr: 'Saisissez exactement la connexion RPC locale enregistrée de ce portefeuille. Groot exige un nœud mainnet synchronisé et ne se replie jamais sur un service distant.',
-      es: 'Introduce exactamente la conexión RPC local guardada de esta cartera. Groot requiere un nodo mainnet sincronizado y nunca recurre a un servicio remoto.'
     },
   mainnet: { fr: 'mainnet', es: 'mainnet' },
   'Mainnet requires a Bitcoin Core RPC endpoint on this Mac. Credentials in URLs are rejected.': {
@@ -346,16 +336,6 @@ export const onboardingCopy = {
   'Must be a loopback address on this Mac.': {
     fr: 'Doit être une adresse de bouclage sur ce Mac.',
     es: 'Debe ser una dirección de bucle local en este Mac.'
-  },
-  'Saved RPC URL': { fr: 'URL RPC enregistrée', es: 'URL RPC guardada' },
-  'Saved RPC username': { fr: 'Nom d’utilisateur RPC enregistré', es: 'Usuario RPC guardado' },
-  'Used once to verify Core; never stored in this screen.': {
-    fr: 'Utilisé une fois pour vérifier Core ; jamais conservé dans cet écran.',
-    es: 'Se usa una vez para verificar Core; nunca se guarda en esta pantalla.'
-  },
-  'Verify local Bitcoin Core before opening.': {
-    fr: 'Vérifiez Bitcoin Core local avant l’ouverture.',
-    es: 'Verifica Bitcoin Core local antes de abrir.'
   },
   "wpkh([fingerprint/84'/0'/0']xpub…/<0;1>/*)": {
     fr: "wpkh([fingerprint/84'/0'/0']xpub…/<0;1>/*)",

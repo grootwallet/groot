@@ -21,6 +21,7 @@
     "build:mainnet": "vite build --mode mainnet",
     "build:native:signet": "node scripts/release/build-signet.mjs",
     "build:native:testnet4": "node scripts/release/build-testnet4-portable.mjs",
+    "build:native:mainnet:internal": "node scripts/release/build-mainnet-internal-rc.mjs",
     "brand:icons": "bash scripts/brand/generate_app_icons.sh",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
@@ -66,7 +67,7 @@
     "release:verify:macos": "bash scripts/release/verify-macos-package.sh",
     "release:test:macos-lifecycle": "bash scripts/release/test-macos-packaged-lifecycle.sh",
     "release:test:update": "node scripts/release/test-update-bundle.mjs",
-    "release:test:hwi": "node scripts/release/test-hwi-artifact.mjs && node --test scripts/release/verify-packaged-hwi.test.mjs",
+    "release:test:hwi": "node scripts/release/test-hwi-artifact.mjs && node --test scripts/release/verify-packaged-hwi.test.mjs scripts/release/build-mainnet-internal-rc.test.mjs",
     "release:verify:packaged-hwi": "node scripts/release/verify-packaged-hwi.mjs",
     "release:test:compare": "bash scripts/release/test-compare-unsigned.sh && bash scripts/release/test-reproducible-rust-env.sh",
     "tauri": "tauri"

@@ -100,6 +100,12 @@ describe('foreground wallet navigation', () => {
       'isMainnet ? Promise.resolve([]) : walletService.networkSetupSources()'
     );
     expect(overview).toMatch(/nodeReady\s*=\s*\n\s*isMainnet\s*\|\|/);
+    expect(
+      overview.indexOf('if (isMainnet) await walletService.testNodeConnection()')
+    ).toBeLessThan(overview.indexOf('walletService.paymentDraft()'));
+    expect(
+      overview.indexOf('if (isMainnet) await walletService.testNodeConnection()')
+    ).toBeLessThan(overview.indexOf('walletService.snapshot()'));
   });
 
   it('does not start a second compact-filter scan after reattaching to an inherited scan', () => {

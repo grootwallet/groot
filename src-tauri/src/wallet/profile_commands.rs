@@ -903,6 +903,7 @@ pub(super) fn persist_mainnet_node_admission_for_new_profile(
         NodeAuthSession {
             config: pending.config,
             password: pending.password,
+            mainnet_node_verified: true,
         },
     );
     Ok(true)
@@ -1247,6 +1248,7 @@ pub async fn node_config_save(
         }
         write_private_json(&node_config_path(&app)?, &config)?;
         load_node_auth_session(&app, &state, credential.as_str())?;
+        mark_selected_mainnet_node_verified(&app, &state)?;
         Ok(status)
     })
     .await
@@ -1462,7 +1464,14 @@ pub(super) fn adopt_network_setup_for_new_profile(
 
     let mut sessions = state.node_auth.lock().map_err(internal)?;
     if let Some(password) = password {
-        sessions.insert(destination, NodeAuthSession { config, password });
+        sessions.insert(
+            destination,
+            NodeAuthSession {
+                config,
+                password,
+                mainnet_node_verified: true,
+            },
+        );
     } else {
         sessions.remove(&destination);
     }
@@ -1471,7 +1480,35 @@ pub(super) fn adopt_network_setup_for_new_profile(
 
 pub(crate) fn node_test(app: &AppHandle, state: &State<'_, AppState>) -> ApiResult<NodeStatusDto> {
     let config = read_node_config(app)?;
-    checked_node_status(&rpc_client(app, state)?, config)
+    let status = checked_node_status(&rpc_client(app, state)?, config)?;
+    mark_selected_mainnet_node_verified(app, state)?;
+    Ok(status)
+}
+
+fn mark_selected_mainnet_node_verified(
+    app: &AppHandle,
+    state: &State<'_, AppState>,
+) -> ApiResult<()> {
+    if NETWORK != Network::Bitcoin {
+        return Ok(());
+    }
+    let profile = selected_profile(app)?;
+    let saved_config = read_node_config_for(app, profile.id)?;
+    let mut sessions = state.node_auth.lock().map_err(internal)?;
+    let session = sessions.get_mut(&profile.id).ok_or_else(|| {
+        api_error(
+            "wallet_locked",
+            "Unlock the wallet again to load its protected RPC credentials.",
+        )
+    })?;
+    if session.config != saved_config {
+        return Err(api_error(
+            "invalid_node_config",
+            "The Bitcoin Core connection changed after unlock. Review and save it again before connecting.",
+        ));
+    }
+    session.mainnet_node_verified = true;
+    Ok(())
 }
 
 #[tauri::command]

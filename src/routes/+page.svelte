@@ -344,6 +344,7 @@
       syncSource = nextSyncSource;
       selectedProfile =
         registry.wallets.find((wallet) => wallet.id === registry.selectedWalletId) ?? null;
+      if (isMainnet) await walletService.testNodeConnection();
       // A successful mainnet wallet-data read is already gated by the exact
       // selected wallet's authenticated, retained Core setup in Rust. Mainnet
       // deliberately rejects cross-wallet setup discovery, so do not call that

@@ -1,6 +1,6 @@
 # ADR 0055: Authorize an isolated mainnet certification candidate
 
-- Status: accepted for certification only; distribution remains blocked
+- Status: accepted for certification only; distribution remains blocked; existing-wallet unlock presentation and the persistent banner are superseded by ADR 0056
 - Date: 2026-09-03
 - Extends: ADR 0012, ADR 0026, ADR 0052, ADR 0053, ADR 0054
 

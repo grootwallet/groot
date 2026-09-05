@@ -33,6 +33,12 @@ Secret-envelope units prove portable version-3 round trips, wrong-credential rej
 
 `pnpm test:sbom` generates the target-specific CycloneDX inventory twice and requires byte-identical output, unique component references, declared dependency licenses, Cargo registry checksums, npm SHA-512 lockfile integrity, the exact Git commit, both lockfile SHA-256 digests, and a fixture executable hash. Optional packages locked for other operating systems are recorded as a lock/package-count property but are not falsely listed as installed components for the current artifact. Generated CycloneDX/SPDX outputs are build evidence rather than source: the gate rejects tracked output so a stale checked-in copy cannot become authoritative. Native Signet/Testnet4 packaging and the unsigned-release script require a clean source worktree and generate fresh SBOMs after their executable exists; each SBOM embeds that executable's SHA-256, and the unsigned evidence set also hashes the binary and SBOM together in `SHA256SUMS`. This is inventory evidence, not provenance, reproducibility, or signing evidence.
 
+`pnpm build:native:mainnet:internal` creates only a non-distributable ad-hoc
+physical-test candidate from a clean exact commit. It packages the pinned HWI,
+compiles the runtime signing requirement as `REHEARSAL_ONLY`, verifies that marker
+and the copied app seal, and records a small local build identity. It performs no
+Developer ID signing, notarization, stapling, publishing, or remote Git action.
+
 `pnpm test:supply-chain` is the fast policy gate included in every `pnpm validate`: direct Node and Rust requirements and the Node/pnpm toolchain must be exact, lifecycle scripts and loose engine installs remain disabled, package-store integrity stays enabled, and every CI Action reference must be a full commit SHA under read-only default permissions without persisted checkout credentials.
 
 The whole Rust library is reported and regression-gated separately with `pnpm test:coverage:rust:all` at 55% lines, 51% functions, and 51% regions. Environment adapters and Tauri `AppHandle` orchestration are not included in the near-100% deterministic-core percentage; their behavior is covered through boundary units, restart/corruption tests, regtest, and E2E. The scoped score must never be presented as whole-crate coverage. The 2026-08-11 deterministic-core baseline is 99.69% lines / 100% functions / 97.61% regions. The refreshed whole-library baseline is 59.33% lines / 54.71% functions / 56.14% regions.

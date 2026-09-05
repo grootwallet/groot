@@ -12,17 +12,10 @@
   import { isPrototypeWallet, walletService } from '$lib/wallet';
   import { page } from '$app/state';
   import { useWalletShellContext } from '$lib/wallet/shell-context';
-  import type {
-    CoreNodeConfig,
-    WalletProfile,
-    WalletProfileCompatibility
-  } from '$lib/wallet/contracts';
+  import type { WalletProfile, WalletProfileCompatibility } from '$lib/wallet/contracts';
   const walletShell = useWalletShellContext();
 
   let credential = $state('');
-  let coreRpcUrl = $state('http://127.0.0.1:8332');
-  let coreUsername = $state('');
-  let corePassword = $state('');
   let error = $state('');
   let busy = $state(false);
   let showReset = $state(false);
@@ -47,7 +40,6 @@
     selectedWalletId = registry.selectedWalletId;
     if (selectionChanged) {
       credential = '';
-      corePassword = '';
       error = '';
       resetConfirmation = '';
       showReset = false;
@@ -68,32 +60,14 @@
 
   onDestroy(() => {
     credential = '';
-    corePassword = '';
     resetConfirmation = '';
-    if (defaultConfig.network === 'mainnet') void walletService.clearMainnetCoreAdmission();
   });
 
   async function unlock() {
-    if (
-      busy ||
-      !credential ||
-      (defaultConfig.network === 'mainnet' &&
-        (!coreRpcUrl.trim() || !coreUsername.trim() || !corePassword))
-    )
-      return;
+    if (busy || !credential) return;
     busy = true;
     error = '';
     try {
-      if (defaultConfig.network === 'mainnet') {
-        const config: CoreNodeConfig = {
-          backend: { type: 'local_core', url: coreRpcUrl.trim() },
-          auth: 'user_pass',
-          username: coreUsername.trim(),
-          torProxy: null
-        };
-        await walletService.admitMainnetCore(config, corePassword, 'open_existing_wallet');
-        corePassword = '';
-      }
       await walletService.unlock(credential);
       credential = '';
       const requested = page.url.searchParams.get('next');
@@ -105,8 +79,6 @@
     } catch (cause) {
       error = localizedError(cause, $locale, 'Could not unlock wallet.');
       credential = '';
-      corePassword = '';
-      if (defaultConfig.network === 'mainnet') await walletService.clearMainnetCoreAdmission();
     } finally {
       busy = false;
     }
@@ -183,36 +155,6 @@
             unlock();
           }}
         >
-          {#if defaultConfig.network === 'mainnet'}
-            <div class="warning-box danger">
-              <strong>{translate($locale, 'Verify local Bitcoin Core before opening.')}</strong>
-              {translate(
-                $locale,
-                'Enter this wallet’s saved local RPC connection exactly. Groot requires a synchronized mainnet node and never falls back to a remote service.'
-              )}
-            </div>
-            <label class="field"
-              ><span>{translate($locale, 'Saved RPC URL')}</span><input
-                bind:value={coreRpcUrl}
-                autocomplete="off"
-                spellcheck="false"
-              /><small>{translate($locale, 'Must be a loopback address on this Mac.')}</small
-              ></label
-            >
-            <label class="field"
-              ><span>{translate($locale, 'Saved RPC username')}</span><input
-                bind:value={coreUsername}
-                autocomplete="off"
-                spellcheck="false"
-              /></label
-            >
-            <PasswordField
-              label={translate($locale, 'RPC password')}
-              bind:value={corePassword}
-              autocomplete="current-password"
-              hint={translate($locale, 'Used once to verify Core; never stored in this screen.')}
-            />
-          {/if}
           <PasswordField
             label={credentialLabel}
             tooltip={isSoftwareWallet
@@ -235,9 +177,7 @@
             type="submit"
             size="large"
             class="full"
-            disabled={!credential ||
-              (defaultConfig.network === 'mainnet' &&
-                (!coreRpcUrl.trim() || !coreUsername.trim() || !corePassword))}
+            disabled={!credential}
             loading={busy}
             loadingLabel={translate($locale, 'Unlocking wallet…')}
             >{translate($locale, 'Unlock wallet')}</Button

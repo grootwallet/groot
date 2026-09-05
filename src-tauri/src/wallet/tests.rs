@@ -4381,6 +4381,31 @@ fn protected_rpc_password_is_bound_to_the_complete_node_config() {
 }
 
 #[test]
+fn restored_mainnet_node_auth_requires_fresh_verification_before_database_open() {
+    let config = CoreNodeConfig {
+        backend: ChainBackend::LocalCore {
+            url: "http://127.0.0.1:8332".to_owned(),
+        },
+        auth: RpcAuthMode::UserPass,
+        username: Some("groot".to_owned()),
+        tor_proxy: None,
+    };
+    let mut session = NodeAuthSession {
+        config: config.clone(),
+        password: Zeroizing::new("secret".to_owned()),
+        mainnet_node_verified: false,
+    };
+    assert!(!node_auth_session_allows_database_open(&session, &config));
+
+    session.mainnet_node_verified = true;
+    assert!(node_auth_session_allows_database_open(&session, &config));
+
+    let mut changed = config.clone();
+    changed.username = Some("other".to_owned());
+    assert!(!node_auth_session_allows_database_open(&session, &changed));
+}
+
+#[test]
 fn psbt_filename_is_bounded_and_cannot_escape_the_save_location() {
     assert_eq!(
         validate_psbt_filename("payment.psbt").unwrap(),

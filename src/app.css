@@ -791,39 +791,6 @@ code {
 .demo-banner span {
   color: var(--muted);
 }
-.mainnet-banner {
-  position: fixed;
-  inset: 0 0 auto;
-  z-index: 80;
-  min-height: 34px;
-  padding: 7px 18px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  border-bottom: 1px solid color-mix(in srgb, var(--danger) 42%, var(--border));
-  color: var(--danger);
-  background: color-mix(in srgb, var(--danger) 10%, var(--bg));
-  font-size: 10px;
-  line-height: 1.35;
-  text-align: center;
-}
-.mainnet-banner strong {
-  letter-spacing: 0.08em;
-}
-.mainnet-banner span {
-  color: var(--text-soft);
-}
-.app-shell.mainnet-shell .sidebar,
-.app-shell.mainnet-shell .onboarding-overlay {
-  top: 34px;
-}
-.app-shell.mainnet-shell .main {
-  padding-top: 34px;
-}
-.app-shell.mainnet-shell.onboarding-shell .main {
-  padding-top: 0;
-}
 .page {
   max-width: 980px;
   margin: 0 auto;
