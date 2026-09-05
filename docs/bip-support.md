@@ -156,10 +156,14 @@ The following nearby wallet BIPs are deliberately not current candidates:
   on deployed Bitcoin consensus through its node and libraries without presenting
   every consensus rule as an implemented wallet feature.
 
-The internal mainnet RC Overview status-observer follow-up has no BIP impact. It
-changes only presentation timing for an existing native sync operation and does not
-change network access, wallet discovery, descriptors, transaction handling, or
-interoperability evidence.
+The internal mainnet RC post-unlock sync-presentation follow-up has no BIP impact.
+It changes only when one existing native sync begins and is visibly presented;
+later foreground cycles remain quiet. Network access policy, wallet discovery,
+descriptors, transaction handling, and interoperability evidence are unchanged.
+
+The internal mainnet RC lock-scheduling and credential-focus follow-up has no BIP
+impact. It preserves the existing atomic sync-cancellation and wallet-session rules
+while moving their wait off the native UI thread and focusing an existing field.
 
 ## Maintenance rule
 

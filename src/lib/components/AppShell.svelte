@@ -88,6 +88,7 @@
   let desktopPlatform = false;
   let shortcutLockPending = false;
   let walletSelectionTask: Promise<void> | undefined;
+  let pendingUnlockSyncWalletId: string | null = null;
   let runtimeIdentity = $state<RuntimePlatform | null>(null);
   let startupFailure = $state('');
   let selectedProfile = $derived(profiles.find((wallet) => wallet.id === selectedWalletId));
@@ -319,12 +320,22 @@
       activeHardwareReviews = Math.max(0, activeHardwareReviews - 1);
     };
   }
+  function requestUnlockSync(walletId: string) {
+    pendingUnlockSyncWalletId = walletId;
+  }
+  function consumeUnlockSync(walletId: string) {
+    if (pendingUnlockSyncWalletId !== walletId) return false;
+    pendingUnlockSyncWalletId = null;
+    return true;
+  }
   provideWalletShellContext({
     profiles: () => profiles,
     selectedWalletId: () => selectedWalletId,
     refreshProfiles,
     selectWallet,
-    beginHardwareReview
+    beginHardwareReview,
+    requestUnlockSync,
+    consumeUnlockSync
   });
 
   async function resolveStartupRoute() {

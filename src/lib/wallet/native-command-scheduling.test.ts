@@ -35,6 +35,7 @@ function commandSource(source: string, command: string): string {
 
 describe('native command scheduling', () => {
   it.each([
+    ['wallet_lock', profileCommands],
     ['wallet_select', profileCommands],
     ['wallet_sync', profileCommands],
     ['wallet_full_rescan', profileCommands],
@@ -54,6 +55,14 @@ describe('native command scheduling', () => {
     ['node_connection_test', profileCommands]
   ])('%s keeps blocking disk and RPC work off the native UI thread', (command, source) => {
     expect(commandSource(source, command)).toContain('tauri::async_runtime::spawn_blocking');
+  });
+
+  it('wallet locking cancels automatic sync before waiting for the wallet-operation lock', () => {
+    const source = commandSource(profileCommands, 'wallet_lock');
+    expect(source.indexOf('cancel_foreground_sync(&state)?')).toBeGreaterThan(-1);
+    expect(source.indexOf('cancel_foreground_sync(&state)?')).toBeLessThan(
+      source.indexOf('operation_guard(&state)?')
+    );
   });
 
   it('node saving cancels automatic sync before waiting for the wallet-operation lock', () => {

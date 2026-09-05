@@ -45,12 +45,12 @@ Wallet is the common top-level container. Software-key, hardware-key, multisig, 
 
 `wallet list → select wallet → focused unlock card → credential check in Rust → wallet` or `invalid_credential → focused unlock card`
 
-For a mainnet candidate profile, unlock first asks for the exact saved loopback RPC
-URL and username plus the current RPC password. Rust compares the public
-configuration with the selected wallet, authenticates Core, verifies sync state and
-the exact genesis, and only then permits the credential check/database open. The RPC
-password is cleared from renderer state immediately and no remote or compact-filter
-fallback is offered.
+For a mainnet candidate profile, unlock asks only for the selected wallet's existing
+passphrase or app PIN and focuses that credential field after the profile loads. Rust
+uses the credential to open the authentication throttle and decrypt the persisted
+per-wallet Core setup. Overview then authenticates Core, verifies sync state and the
+exact genesis, and only then permits wallet-data database reads. No remote or
+compact-filter fallback is offered.
 
 For a legacy disposable Regtest hardware or multisig profile missing current public metadata or its local PIN verifier: `select profile → explicit unsupported-format explanation → recreate/recover guidance or explicit delete`. Credential entry is disabled. Groot does not infer missing identity metadata, reset the PIN, or mutate the saved files before deletion.
 
@@ -59,6 +59,11 @@ The locked screen's central card names only the selected profile. The persistent
 `unlocked wallet → Settings → wallet details / Lock now / backup information / recovery controls / wallet node / appearance`
 
 Settings clearly labels scope. **Wallet details → Wallet name** updates the selected unlocked wallet's local display name and immediately refreshes the title and wallet switcher; it never rewrites cryptographic identity or recovery artifacts. **Lock now** and the desktop Command/Ctrl+L shortcut affect only the selected wallet. Once accepted, the shortcut blocks concurrent wallet selection, cancels coordinated hardware and sync work, and invokes the same native lock boundary before showing the unlock route. It remains inert in editable fields and dialogs and is neither shown nor active in browser prototypes or mobile builds. **Automatic lock** is global and sets the shared duration used by every wallet's independent inactivity clock. Appearance is also global. Backup, credential, and node controls apply to the selected wallet; Groot never displays the wallet passphrase, and it re-presents recovery words only after fresh authentication through the trusted native privacy gate and backup sheet. Wallet switching and **Add wallet** stay in the persistent wallet list, and policy creation/recovery starts from that add-wallet flow rather than a generic Settings section.
+
+The native lock boundary requests ordinary sync cancellation and performs any wait
+for the serialized wallet-operation lock on a blocking worker, keeping the macOS
+window event loop responsive. A cancelled sync leaves the last successfully
+committed snapshot and timestamp unchanged.
 
 `settings → delete warning → credential + type DELETE → Rust verification/deletion → unlock next wallet / welcome`
 
@@ -157,7 +162,7 @@ Coldcard signers are marked during USB import or recognized from their public **
 
 Policy creation automatically saves one local public draft after meaningful changes. Returning after route navigation, app shutdown, or restart restores Policy, Signers, Verify, or Back up with imported signers and completed descriptor-bound setup evidence intact. The app shell exposes one stable generic notice above every locked-wallet screen because creation is app-level and independent of the selected wallet; after unlock, the notice may show the draft name, step, and signer count. The notice offers direct resume and confirmed discard actions without requiring an unrelated wallet unlock. Rust revalidates the complete draft and regenerates previews; the UI never restores an app PIN or transient hardware prompt. **Discard setup** requires confirmation, explains that signer imports must be repeated, and removes only the unfinished public draft. Creating the wallet clears the draft.
 
-Overview, Activity, and Coins are read-only with respect to the foreground wallet scan. Moving among them preserves a first Bitcoin Core history scan, and returning to Overview observes the native percentage instead of starting over or triggering another refresh. While Overview is mounted, its existing refresh icon spins and its label and progress follow either an automatic or manual sync; idle status checks do not perform network work. Overview shows **Never synced** until a scan commits, then derives **Updated now** or an elapsed minute/hour/day label from the persisted successful-sync timestamp; the exact local and UTC time remains available as detail. Settings, Receive, Send, onboarding, lock, automatic lock, and wallet selection cancel the current scan before taking exclusive wallet state. A fresh descriptor import can therefore require one full historical pass even when it copied another wallet's network configuration, while later scans resume from its own committed checkpoint.
+Overview, Activity, and Coins are read-only with respect to the foreground wallet scan. Moving among them preserves a first Bitcoin Core history scan, and returning to Overview observes an already-active native percentage instead of starting over or triggering another refresh. After each successful wallet unlock, Overview first paints the persisted snapshot and then starts one immediate automatic sync using the same visible spinner and progress as manual refresh. The ten-second foreground polling cycles that follow remain silent unless they update the committed snapshot; navigating away and back does not replay the post-unlock animation. Overview shows **Never synced** until a scan commits, then derives **Updated now** or an elapsed minute/hour/day label from the persisted successful-sync timestamp; the exact local and UTC time remains available as detail. Settings, Receive, Send, onboarding, lock, automatic lock, and wallet selection cancel the current scan before taking exclusive wallet state. A fresh descriptor import can therefore require one full historical pass even when it copied another wallet's network configuration, while later scans resume from its own committed checkpoint.
 
 Hardware policy readiness follows the device's actual model instead of presenting one generic **Ready** state:
 

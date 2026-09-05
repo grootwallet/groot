@@ -9,6 +9,8 @@ export type WalletShellContext = {
   refreshProfiles: () => Promise<void>;
   selectWallet: (walletId: string) => Promise<void>;
   beginHardwareReview: () => () => void;
+  requestUnlockSync: (walletId: string) => void;
+  consumeUnlockSync: (walletId: string) => boolean;
 };
 
 export function provideWalletShellContext(context: WalletShellContext) {

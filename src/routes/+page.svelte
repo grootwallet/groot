@@ -314,7 +314,10 @@
   onMount(() => {
     syncClock = Date.now();
     const clock = window.setInterval(() => (syncClock = Date.now()), 30_000);
-    startSyncStatusPolling();
+    void (async () => {
+      const status = await refreshSyncStatus();
+      if (syncStatusIsActive(status)) startSyncStatusPolling();
+    })();
     return () => {
       window.clearInterval(clock);
       ++syncPollToken;
@@ -395,7 +398,12 @@
       if (syncSource.type === 'bitcoin_core' && !snapshot?.syncedAt) {
         await loadRecoveryState();
       }
-      if (syncSource.type === 'compact_filters' && !inheritedSyncObserved) void sync(false);
+      if (
+        selectedProfile &&
+        walletShell.consumeUnlockSync(selectedProfile.id) &&
+        !inheritedSyncObserved
+      )
+        void sync(false);
     } catch (cause) {
       if (cause instanceof WalletError && cause.code === 'wallet_locked') {
         await goto('/unlock');
@@ -579,10 +587,8 @@
   async function pollSyncStatus(token: number) {
     while (token === syncPollToken) {
       await refreshSyncStatus();
-      if (token !== syncPollToken) return;
-      await new Promise((resolve) =>
-        setTimeout(resolve, syncing || syncStatusIsActive(syncStatus) ? 250 : 1_000)
-      );
+      if (!syncing && !syncStatusIsActive(syncStatus)) return;
+      await new Promise((resolve) => setTimeout(resolve, 250));
     }
   }
   function startSyncStatusPolling() {

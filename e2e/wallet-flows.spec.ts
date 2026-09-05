@@ -226,6 +226,8 @@ test('keeps recovery words out of the webview and unlock rejects the wrong crede
   await expect(page.getByLabel('Wallet passphrase', { exact: true })).toHaveValue('');
 
   await page.goto('/unlock?fixture-locked-wallet-switch=1');
+  const unlockCredential = page.getByLabel('Wallet passphrase', { exact: true });
+  await expect(unlockCredential).toBeFocused();
   await expect(page.getByRole('link', { name: 'Overview' })).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'Activity' })).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'Coins' })).toHaveCount(0);
@@ -246,12 +248,17 @@ test('keeps recovery words out of the webview and unlock rejects the wrong crede
     'type',
     'text'
   );
-  await page.getByLabel('Wallet passphrase', { exact: true }).fill('wrong');
+  await unlockCredential.fill('wrong');
   await page.getByRole('button', { name: 'Unlock wallet' }).click();
   await expect(page.getByText('Incorrect passphrase / PIN.')).toBeVisible();
-  await page.getByLabel('Wallet passphrase', { exact: true }).fill('prototype-passphrase');
-  await page.getByLabel('Wallet passphrase', { exact: true }).press('Enter');
+  await unlockCredential.fill('prototype-passphrase');
+  await unlockCredential.press('Enter');
   await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Syncing' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Updated now' })).toBeVisible();
+  await page.getByRole('link', { name: 'Activity' }).click();
+  await page.getByRole('link', { name: 'Overview' }).click();
+  await expect(page.getByRole('button', { name: 'Syncing' })).toHaveCount(0);
 });
 
 test('protected-storage denial stays locked and permits an explicit unlock retry', async ({

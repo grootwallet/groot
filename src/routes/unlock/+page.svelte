@@ -3,7 +3,7 @@
   import { translate, localizedError } from '$lib/i18n-catalog';
   import { LockKeyhole, Trash2 } from '@lucide/svelte';
   import { afterNavigate, goto } from '$app/navigation';
-  import { onDestroy, onMount } from 'svelte';
+  import { onDestroy, onMount, tick } from 'svelte';
   import { fly } from 'svelte/transition';
   import Button from '$lib/components/Button.svelte';
   import Modal from '$lib/components/Modal.svelte';
@@ -24,6 +24,7 @@
   let profiles = $state<WalletProfile[]>([]);
   let selectedWalletId = $state<string | null>(null);
   let compatibility = $state<WalletProfileCompatibility | null>(null);
+  let credentialForm = $state<HTMLFormElement | null>(null);
   let selectedProfile = $derived(profiles.find((wallet) => wallet.id === selectedWalletId));
   let isSoftwareWallet = $derived(selectedProfile?.kind === 'single_key');
   let credentialLabel = $derived(
@@ -45,6 +46,8 @@
       showReset = false;
     }
     compatibility = selectedWalletId ? await walletService.profileCompatibility() : null;
+    await tick();
+    credentialForm?.querySelector<HTMLInputElement>('input')?.focus();
   }
 
   onMount(async () => {
@@ -75,6 +78,7 @@
         requested?.startsWith('/') && !requested.startsWith('//') && requested !== '/multisig'
           ? requested
           : '/';
+      if (next === '/' && selectedWalletId) walletShell.requestUnlockSync(selectedWalletId);
       await goto(next);
     } catch (cause) {
       error = localizedError(cause, $locale, 'Could not unlock wallet.');
@@ -150,6 +154,7 @@
         </p>{/if}
       {#if compatibility?.supported !== false}
         <form
+          bind:this={credentialForm}
           onsubmit={(event) => {
             event.preventDefault();
             unlock();

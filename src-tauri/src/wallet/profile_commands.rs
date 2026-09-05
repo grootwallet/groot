@@ -443,11 +443,17 @@ pub fn wallet_unlock(
 }
 
 #[tauri::command]
-pub fn wallet_lock(app: AppHandle, state: State<'_, AppState>) -> ApiResult<()> {
-    let _operation = operation_guard(&state)?;
-    state.proposals.lock().map_err(internal)?.clear();
-    let selected = selected_profile(&app)?.id;
-    lock_wallet(&state, selected)
+pub async fn wallet_lock(app: AppHandle) -> ApiResult<()> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        cancel_foreground_sync(&state)?;
+        let _operation = operation_guard(&state)?;
+        state.proposals.lock().map_err(internal)?.clear();
+        let selected = selected_profile(&app)?.id;
+        lock_wallet(&state, selected)
+    })
+    .await
+    .map_err(internal)?
 }
 
 #[tauri::command]
