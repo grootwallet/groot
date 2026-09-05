@@ -20,6 +20,7 @@ use super::{api_error, internal, missing_hwi_value, ApiError};
 
 pub(super) const RPC_UNAVAILABLE_MESSAGE: &str = "Could not connect to Bitcoin Core. Check that the node is running and review the RPC address, authentication, and network settings.";
 pub(super) const RPC_PERMISSION_MESSAGE: &str = "Bitcoin Core accepted the RPC credentials, but this user is missing a required RPC permission. Add Groot's documented RPC methods to the user's rpcwhitelist and restart Bitcoin Core.";
+pub(super) const RPC_PRUNED_HISTORY_MESSAGE: &str = "Bitcoin Core no longer stores the blocks needed for this scan. Choose a birthday above the retained prune height, or connect an archival node.";
 
 pub(super) fn rpc_unavailable() -> ApiError {
     api_error("network_unavailable", RPC_UNAVAILABLE_MESSAGE)
@@ -31,6 +32,13 @@ pub(super) fn rpc_api_error(error: CoreRpcError) -> ApiError {
             if response.message.contains("not allowed to call method") =>
         {
             api_error("invalid_node_config", RPC_PERMISSION_MESSAGE)
+        }
+        CoreRpcError::JsonRpc(jsonrpc::Error::Rpc(response))
+            if response
+                .message
+                .contains("Block not available (pruned data)") =>
+        {
+            api_error("node_history_unavailable", RPC_PRUNED_HISTORY_MESSAGE)
         }
         _ => rpc_unavailable(),
     }

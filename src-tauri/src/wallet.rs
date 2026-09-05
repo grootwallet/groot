@@ -2530,6 +2530,50 @@ fn ensure_core_history_available(
     Ok(())
 }
 
+fn recovery_scan_anchor_height(birthday_height: u32) -> u32 {
+    birthday_height.saturating_sub(1)
+}
+
+fn ensure_recovery_scan_history_available(
+    pruned: bool,
+    prune_height: Option<u64>,
+    birthday_height: u32,
+) -> ApiResult<()> {
+    let anchor_height = recovery_scan_anchor_height(birthday_height);
+    if pruned && prune_height.is_some_and(|height| u64::from(anchor_height) < height) {
+        return Err(api_error(
+            "node_history_unavailable",
+            RPC_PRUNED_HISTORY_MESSAGE,
+        ));
+    }
+    Ok(())
+}
+
+fn recovery_scan_checkpoint(
+    client: &Client,
+    genesis: BlockHash,
+    birthday_height: u32,
+) -> ApiResult<CheckPoint> {
+    let anchor_height = recovery_scan_anchor_height(birthday_height);
+    let genesis_checkpoint = CheckPoint::new(BlockId {
+        height: 0,
+        hash: genesis,
+    });
+    if anchor_height == 0 {
+        return Ok(genesis_checkpoint);
+    }
+    let anchor_hash = retry_transient_core_rpc(
+        || client.get_block_hash(u64::from(anchor_height)),
+        std::thread::sleep,
+    )?;
+    genesis_checkpoint
+        .push(BlockId {
+            height: anchor_height,
+            hash: anchor_hash,
+        })
+        .map_err(|_| internal("The recovery scan checkpoint could not be constructed."))
+}
+
 fn rewind_stale_core_checkpoints(
     client: &Client,
     wallet: &Wallet,
@@ -5163,7 +5207,11 @@ fn full_rescan_loaded_wallet(
             "Wallet birthday cannot be above the node's current block height.",
         ));
     }
-    ensure_core_history_available(chain.pruned, chain.prune_height, settings.birthday_height)?;
+    ensure_recovery_scan_history_available(
+        chain.pruned,
+        chain.prune_height,
+        settings.birthday_height,
+    )?;
     let target_height = u32::try_from(tip)
         .map_err(|_| internal("The node height exceeds the supported recovery range."))?;
     let previous = reconcile_recovery_scan_record(db, None)?.map(|record| record.status);
@@ -5203,10 +5251,7 @@ fn full_rescan_loaded_wallet(
         } else {
             start_recovery_scan_record(db, run_id, settings, target_height)?;
             (
-                CheckPoint::new(BlockId {
-                    height: 0,
-                    hash: genesis,
-                }),
+                recovery_scan_checkpoint(rpc.as_ref(), genesis, settings.birthday_height)?,
                 settings.birthday_height,
                 0,
             )
@@ -5217,6 +5262,12 @@ fn full_rescan_loaded_wallet(
     )
     .map_err(internal)?;
     *wallet = load_wallet(db)?;
+    wallet
+        .apply_update(Update {
+            chain: Some(checkpoint.clone()),
+            ..Default::default()
+        })
+        .map_err(internal)?;
     let expected_mempool = wallet
         .transactions()
         .filter(|tx| tx.chain_position.is_unconfirmed());

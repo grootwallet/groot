@@ -27,6 +27,27 @@ The `c7406209` signed candidate is failed diagnostic evidence and must not be
 distributed or relabeled; fresh final-commit reproducibility and signing evidence
 remain required.
 
+Internal mainnet RC `ab73515a` confirmed that the Overview correction reaches
+the mandatory first-history-scan chooser and that the retained loopback Core
+configuration still authenticates successfully. It also exposed a separate
+pruned-node scanner defect before any block, transaction, balance, or funds
+were applied: a new scan always gave BDK a genesis checkpoint, causing BDK to
+request the full genesis block even when the chosen birthday was near the
+current tip. A pruned Core correctly returned `Block not available (pruned
+data)`, which the app misleadingly translated as a connection failure. New
+scans now anchor at the block immediately before the chosen birthday, reject a
+birthday at or below the prune boundary because that anchor is unavailable,
+and translate Core's pruned-block response to the stable actionable
+`node_history_unavailable` error. Existing wallet/profile data and failed scan
+records remain compatible; retrying creates a fresh authoritative scan record.
+No migration is required. This changes neither descriptors nor standards
+support, so the BIP matrix is unaffected. `ab73515a` is internal diagnostic
+evidence, not a distributable release candidate; the corrected exact commit
+passes the pinned `pnpm validate` suite, Clippy with warnings denied, 399
+non-ignored Rust tests, and all 12 isolated funded/descriptor Regtest cases.
+Exact-diff review and live repetition against the retained mainnet pruned range
+remain required.
+
 Final-candidate preflight now compiles the mainnet release-policy branches only
 into the dedicated mainnet build and the fail-closed rejection branches only
 into rehearsal builds, instead of retaining both sides of a constant `cfg!`

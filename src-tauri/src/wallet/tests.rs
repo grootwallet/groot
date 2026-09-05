@@ -366,7 +366,8 @@ fn serve_one_http_response(response: Option<&'static [u8]>) -> String {
     format!("http://{address}")
 }
 
-fn serve_one_json(body: &'static str) -> String {
+fn serve_one_json(body: impl AsRef<str>) -> String {
+    let body = body.as_ref();
     let response = format!(
         "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
         body.len()
@@ -455,6 +456,32 @@ fn wallet_history_rejects_only_blocks_absent_from_a_pruned_node() {
     let unavailable = ensure_core_history_available(true, Some(140_000), 0).unwrap_err();
     assert_eq!(unavailable.code, "node_history_unavailable");
     assert!(unavailable.message.contains("archival node"));
+}
+
+#[test]
+fn recovery_scan_anchors_immediately_before_the_birthday() {
+    assert_eq!(recovery_scan_anchor_height(0), 0);
+    assert_eq!(recovery_scan_anchor_height(1), 0);
+    assert_eq!(recovery_scan_anchor_height(965_600), 965_599);
+
+    assert!(ensure_recovery_scan_history_available(true, Some(960_062), 965_600).is_ok());
+    let boundary =
+        ensure_recovery_scan_history_available(true, Some(960_062), 960_062).unwrap_err();
+    assert_eq!(boundary.code, "node_history_unavailable");
+    assert!(boundary.message.contains("above the retained prune height"));
+
+    let anchor_hash = "1111111111111111111111111111111111111111111111111111111111111111";
+    let endpoint = serve_one_json(format!(
+        r#"{{"result":"{anchor_hash}","error":null,"id":"groot"}}"#
+    ));
+    let client = build_rpc_client(&endpoint, Auth::None, None).unwrap();
+    let genesis = genesis_block(Network::Bitcoin).block_hash();
+    let checkpoint = recovery_scan_checkpoint(&client, genesis, 965_600).unwrap();
+    assert_eq!(checkpoint.height(), 965_599);
+    assert_eq!(checkpoint.hash().to_string(), anchor_hash);
+    let base = checkpoint.prev().unwrap();
+    assert_eq!(base.height(), 0);
+    assert_eq!(base.hash(), genesis);
 }
 
 #[test]
@@ -551,6 +578,23 @@ fn rpc_whitelist_rejection_is_actionable_without_exposing_core_details() {
     assert_eq!(error.code, "invalid_node_config");
     assert_eq!(error.message, RPC_PERMISSION_MESSAGE);
     for internal_detail in ["private-user", "getmempoolinfo", "JSON-RPC", "code -1"] {
+        assert!(!error.message.contains(internal_detail));
+    }
+}
+
+#[test]
+fn pruned_block_rpc_failure_is_actionable_without_exposing_core_details() {
+    let error = rpc_api_error(CoreRpcError::JsonRpc(jsonrpc::Error::Rpc(
+        jsonrpc::error::RpcError {
+            code: -1,
+            message: "Block not available (pruned data)".to_owned(),
+            data: None,
+        },
+    )));
+
+    assert_eq!(error.code, "node_history_unavailable");
+    assert_eq!(error.message, RPC_PRUNED_HISTORY_MESSAGE);
+    for internal_detail in ["JSON-RPC", "code -1", "Block not available"] {
         assert!(!error.message.contains(internal_detail));
     }
 }
