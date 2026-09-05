@@ -70,6 +70,10 @@ describe('foreground wallet navigation', () => {
     expect(overview).toContain("'Wallet sync progress'");
     expect(overview).toContain('syncStatusIsActive(syncStatus)');
     expect(overview).toContain('startSyncStatusPolling()');
+    expect(overview).toContain(
+      'setTimeout(resolve, syncing || syncStatusIsActive(syncStatus) ? 250 : 1_000)'
+    );
+    expect(overview).not.toContain('if (!syncing && !syncStatusIsActive(syncStatus)) return;');
     expect(overview).toContain('syncAge(snapshot?.syncedAt ?? null, syncClock)');
     expect(overview).toContain("status.failureCode === 'invalid_node_config'");
     expect(overview).toContain("status.failureCode === 'node_syncing'");

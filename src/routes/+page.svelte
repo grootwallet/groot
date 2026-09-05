@@ -314,10 +314,7 @@
   onMount(() => {
     syncClock = Date.now();
     const clock = window.setInterval(() => (syncClock = Date.now()), 30_000);
-    void (async () => {
-      const status = await refreshSyncStatus();
-      if (syncStatusIsActive(status)) startSyncStatusPolling();
-    })();
+    startSyncStatusPolling();
     return () => {
       window.clearInterval(clock);
       ++syncPollToken;
@@ -582,8 +579,10 @@
   async function pollSyncStatus(token: number) {
     while (token === syncPollToken) {
       await refreshSyncStatus();
-      if (!syncing && !syncStatusIsActive(syncStatus)) return;
-      await new Promise((resolve) => setTimeout(resolve, 250));
+      if (token !== syncPollToken) return;
+      await new Promise((resolve) =>
+        setTimeout(resolve, syncing || syncStatusIsActive(syncStatus) ? 250 : 1_000)
+      );
     }
   }
   function startSyncStatusPolling() {

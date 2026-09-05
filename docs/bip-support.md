@@ -156,6 +156,11 @@ The following nearby wallet BIPs are deliberately not current candidates:
   on deployed Bitcoin consensus through its node and libraries without presenting
   every consensus rule as an implemented wallet feature.
 
+The internal mainnet RC Overview status-observer follow-up has no BIP impact. It
+changes only presentation timing for an existing native sync operation and does not
+change network access, wallet discovery, descriptors, transaction handling, or
+interoperability evidence.
+
 ## Maintenance rule
 
 Every feature, interoperability, signer, descriptor, transaction, payment request,
