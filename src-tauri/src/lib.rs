@@ -114,6 +114,7 @@ pub fn run() {
             wallet::profile_commands::wallet_sync_source,
             wallet::profile_commands::wallet_sync_source_save,
             wallet::payjoin_uri_inspect,
+            payjoin_support::payment_request_inspect,
             wallet::profile_commands::recovery_scan_settings,
             wallet::profile_commands::recovery_scan_settings_save,
             wallet::profile_commands::recovery_scan_status,

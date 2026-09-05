@@ -12,6 +12,7 @@ const remediationErrorCodes = [
   'fee_rate_too_low',
   'invalid_signature',
   'invalid_payjoin_uri',
+  'invalid_payment_request',
   'invalid_scan_settings',
   'hardware_timeout',
   'hardware_pairing_required',

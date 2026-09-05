@@ -43,6 +43,7 @@ import type {
   CoreNodeConfig,
   NodeStatus,
   PayjoinUriInspection,
+  PaymentRequestInspection,
   WalletSyncSource,
   WalletSyncStatus
 } from './contracts';
@@ -255,6 +256,9 @@ export class TauriWalletAdapter implements WalletPort {
   }
   inspectPayjoinUri(value: string) {
     return command<PayjoinUriInspection>('payjoin_uri_inspect', { value });
+  }
+  inspectPaymentRequest(value: string) {
+    return command<PaymentRequestInspection>('payment_request_inspect', { value });
   }
   recoveryScanSettings() {
     return command<import('./contracts').RecoveryScanSettings>('recovery_scan_settings');

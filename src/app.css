@@ -2310,6 +2310,38 @@ code {
 .field input {
   height: 44px;
 }
+.address-input-control {
+  position: relative;
+}
+.address-input-control input {
+  padding-right: 48px;
+}
+.address-input-control button {
+  position: absolute;
+  top: 50%;
+  right: 7px;
+  width: 32px;
+  height: 32px;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+}
+.address-input-control button:hover {
+  color: var(--text);
+  background: var(--surface-icon);
+}
+.address-input-control button:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+.field > .payment-request-result {
+  color: var(--success);
+}
 .password-control {
   position: relative;
   display: block;

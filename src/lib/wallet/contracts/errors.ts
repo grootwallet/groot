@@ -48,6 +48,7 @@ export const WALLET_ERROR_CODES = [
   'invalid_node_config',
   'invalid_scan_settings',
   'invalid_payjoin_uri',
+  'invalid_payment_request',
   'hardware_unavailable',
   'hardware_pairing_required',
   'hardware_policy_unsupported',

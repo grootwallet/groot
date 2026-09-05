@@ -367,6 +367,14 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       'The browser fixture does not run Payjoin protocol parsing.'
     );
   }
+  async inspectPaymentRequest(
+    _value: string
+  ): Promise<import('./contracts').PaymentRequestInspection> {
+    throw new WalletError(
+      'invalid_payment_request',
+      'The browser fixture does not run trusted payment-request parsing.'
+    );
+  }
   async recoveryScanSettings() {
     return { ...this._scanSettings };
   }

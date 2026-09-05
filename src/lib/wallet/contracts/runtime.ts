@@ -90,6 +90,13 @@ export type PayjoinUriInspection = {
   endpoint: string;
   version: 'v2';
 };
+export type PaymentRequestInspection = {
+  address: string;
+  amountSats: string | null;
+  label: string | null;
+  message: string | null;
+  payjoin: boolean;
+};
 export type RecoveryScanSettings = { birthdayHeight: number; gapLimit: number };
 export type RecoveryScanStatus = {
   status: 'idle' | 'running' | 'cancelling' | 'cancelled' | 'completed' | 'interrupted' | 'failed';

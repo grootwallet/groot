@@ -30,6 +30,7 @@ import type {
   NodeStatus,
   NetworkSetupSource,
   PayjoinUriInspection,
+  PaymentRequestInspection,
   RecoveryScanSettings,
   RecoveryScanStatus,
   RuntimePlatform,
@@ -92,6 +93,7 @@ export interface WalletNetworkPort {
   syncStatus(): Promise<WalletSyncStatus | null>;
   saveSyncSource(source: WalletSyncSource, credential: string): Promise<WalletSyncSource>;
   inspectPayjoinUri(value: string): Promise<PayjoinUriInspection>;
+  inspectPaymentRequest(value: string): Promise<PaymentRequestInspection>;
   recoveryScanSettings(): Promise<RecoveryScanSettings>;
   saveRecoveryScanSettings(
     birthdayHeight: number,

@@ -660,6 +660,10 @@ const errorCategoryCopy = {
     fr: 'L’adresse Bitcoin n’est pas valide pour ce réseau.',
     es: 'La dirección de Bitcoin no es válida para esta red.'
   },
+  invalid_payment_request: {
+    fr: 'Le code QR n’est pas une demande de paiement Bitcoin valide pour ce réseau.',
+    es: 'El código QR no es una solicitud de pago de Bitcoin válida para esta red.'
+  },
   insufficient_funds: {
     fr: 'Le portefeuille ne dispose pas de fonds suffisants pour ce paiement et ses frais.',
     es: 'La cartera no tiene fondos suficientes para este pago y su comisión.'

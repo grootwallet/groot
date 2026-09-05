@@ -62,14 +62,29 @@ export function walletPolicyPresentation(wallet: MultisigWallet): WalletPolicyPr
   };
 }
 
-export function addressPrefixForNetwork(network: SupportedNetwork): 'bcrt1' | 'tb1' {
+export function addressPrefixForNetwork(network: SupportedNetwork): 'bc1' | 'bcrt1' | 'tb1' {
+  if (network === 'mainnet') return 'bc1';
   return network === 'regtest' ? 'bcrt1' : 'tb1';
 }
 
 export function hasAddressPrefixForNetwork(address: string, network: SupportedNetwork): boolean {
   const normalized = address.trim().toLowerCase();
-  const prefix = addressPrefixForNetwork(network);
-  return normalized.startsWith(prefix) && normalized.length > prefix.length + 8;
+  if (network === 'mainnet') {
+    return (
+      (normalized.startsWith('bc1') && normalized.length > 11) ||
+      (/^[13]/.test(address.trim()) && normalized.length >= 26)
+    );
+  }
+  if (network === 'regtest') {
+    return (
+      (normalized.startsWith('bcrt1') && normalized.length > 13) ||
+      (/^[mn2]/.test(address.trim()) && normalized.length >= 26)
+    );
+  }
+  return (
+    (normalized.startsWith('tb1') && normalized.length > 11) ||
+    (/^[mn2]/.test(address.trim()) && normalized.length >= 26)
+  );
 }
 
 export function normalizePermanentLabel(label: string): string {

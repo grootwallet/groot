@@ -635,5 +635,33 @@ export const sendCopy = {
   'The system browser could not open the explorer.': {
     fr: 'Le navigateur du système n’a pas pu ouvrir l’explorateur.',
     es: 'El navegador del sistema no pudo abrir el explorador.'
+  },
+  'Scan Bitcoin payment QR': {
+    fr: 'Scanner le QR de paiement Bitcoin',
+    es: 'Escanear QR de pago de Bitcoin'
+  },
+  'Scan payment request': {
+    fr: 'Scanner la demande de paiement',
+    es: 'Escanear solicitud de pago'
+  },
+  'Scan a Bitcoin address or payment URI. You will review every imported detail before sending.': {
+    fr: 'Scannez une adresse Bitcoin ou un URI de paiement. Vous vérifierez chaque détail importé avant l’envoi.',
+    es: 'Escanea una dirección de Bitcoin o un URI de pago. Revisarás cada dato importado antes de enviar.'
+  },
+  'Point the camera at a Bitcoin payment QR': {
+    fr: 'Pointez la caméra vers un QR de paiement Bitcoin',
+    es: 'Apunta la cámara a un QR de pago de Bitcoin'
+  },
+  'Reading payment request…': {
+    fr: 'Lecture de la demande de paiement…',
+    es: 'Leyendo solicitud de pago…'
+  },
+  'Payment request scanned': {
+    fr: 'Demande de paiement scannée',
+    es: 'Solicitud de pago escaneada'
+  },
+  'QR code rejected': {
+    fr: 'Code QR refusé',
+    es: 'Código QR rechazado'
   }
 } as const satisfies CatalogSection;

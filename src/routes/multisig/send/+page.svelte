@@ -27,6 +27,7 @@
   import PasswordField from '$lib/components/PasswordField.svelte';
   import AnimatedUrQr from '$lib/components/AnimatedUrQr.svelte';
   import UrQrScanner from '$lib/components/UrQrScanner.svelte';
+  import PaymentRequestQrScanner from '$lib/components/PaymentRequestQrScanner.svelte';
   import RecipientAddressModal from '$lib/components/RecipientAddressModal.svelte';
   import SendProgress from '$lib/components/SendProgress.svelte';
   import SignerSummary from '$lib/components/SignerSummary.svelte';
@@ -60,6 +61,7 @@
   import {
     addressPrefixForNetwork,
     hasAddressPrefixForNetwork,
+    normalizePermanentLabel,
     validPolicyMaturity
   } from '$lib/wallet/policy';
   import { compactAddress, compactIdentifier } from '$lib/address-display';
@@ -150,12 +152,15 @@
     importOpen = $state(false),
     qrOpen = $state(false),
     qrScanOpen = $state(false),
+    paymentScanOpen = $state(false),
     cancelOpen = $state(false),
     exitOpen = $state(false),
     devices = $state<HardwareDevice[]>([]),
     activeHardwareDevice = $state<HardwareDevice | null>(null),
     urFrames = $state<string[]>([]),
     scannedFrames = $state<string[]>([]);
+  let paymentScanError = $state('');
+  let paymentRequestNotice = $state('');
   let pinOpen = $state(false),
     pinBusy = $state(false),
     pinChallenge = $state(''),
@@ -579,6 +584,60 @@
     } catch (cause) {
       draftStep = 1;
       error = localizedError(cause, $locale, 'Could not save payment draft.');
+    }
+  }
+  async function receivePaymentRequest(value: string) {
+    paymentScanError = '';
+    try {
+      const request = await walletService.inspectPaymentRequest(value);
+      if (request.payjoin) {
+        throw new WalletError(
+          'invalid_payment_request',
+          'This request requires Payjoin, which this Groot release cannot safely complete. Ask the recipient for a standard Bitcoin payment request instead.'
+        );
+      }
+      address = request.address;
+      amount = '';
+      maxSpendRequestRevision += 1;
+      maxSpendActive = false;
+      maxSpendQuote = null;
+      if (request.amountSats !== null) {
+        const parsedAmount = Number(request.amountSats);
+        if (!Number.isSafeInteger(parsedAmount) || parsedAmount < 0) {
+          throw new WalletError(
+            'invalid_payment_request',
+            'The payment request amount is outside Groot’s supported range.'
+          );
+        }
+        if (parsedAmount > 0) amount = amountInputValue(parsedAmount, $denomination);
+      }
+
+      const requestedLabel = request.message ?? request.label;
+      let labelNote = '';
+      if (submissionLabels.length === 0 && requestedLabel) {
+        try {
+          label = normalizePermanentLabel(requestedLabel);
+          selectedLabels = [];
+        } catch {
+          labelNote = ' Its description is too long for a Groot label, so enter a label manually.';
+        }
+      } else if (submissionLabels.length > 0 && requestedLabel) {
+        labelNote = ' Your existing payment label was kept.';
+      }
+      paymentRequestNotice = `Payment request scanned. Review the recipient${request.amountSats === null ? '' : ' and amount'}.${labelNote}`;
+      error = '';
+      paymentScanOpen = false;
+      toast({
+        title: 'Payment request scanned',
+        description: paymentRequestNotice,
+        tone: 'success'
+      });
+    } catch (cause) {
+      paymentScanError = localizedError(
+        cause,
+        $locale,
+        'This QR code is not a valid payment request for this wallet network.'
+      );
     }
   }
   async function saveCurrentDraft() {
@@ -1960,19 +2019,36 @@
         translate($locale, 'e.g. Hardware purchase, Pay Alex, Test transaction'),
         translate($locale, 'Required · cannot be changed')
       )}
-      <label class="field"
-        ><span>{translate($locale, 'Bitcoin address')}</span><input
-          aria-label={translate($locale, 'Bitcoin address')}
-          bind:value={address}
-          oninput={clearDraftError}
-          onkeydown={submitIntentOnEnter}
-          placeholder="{addressPrefixForNetwork(defaultConfig.network)}q…"
-        />{#if address && !addressValid}<em
+      <div class="field">
+        <span>{translate($locale, 'Bitcoin address')}</span>
+        <div class="address-input-control">
+          <input
+            aria-label={translate($locale, 'Bitcoin address')}
+            bind:value={address}
+            oninput={() => {
+              clearDraftError();
+              paymentRequestNotice = '';
+            }}
+            onkeydown={submitIntentOnEnter}
+            placeholder="{addressPrefixForNetwork(defaultConfig.network)}q…"
+          /><button
+            type="button"
+            aria-label={translate($locale, 'Scan Bitcoin payment QR')}
+            title={translate($locale, 'Scan Bitcoin payment QR')}
+            onclick={() => {
+              paymentScanError = '';
+              paymentScanOpen = true;
+            }}><QrCode size={19} /></button
+          >
+        </div>
+        {#if address && !addressValid}<em
             >{translate($locale, 'Enter a valid')}
             {networkName(defaultConfig.network)}
             {translate($locale, 'address')}</em
-          >{/if}</label
-      >
+          >{/if}{#if paymentRequestNotice}<small class="payment-request-result" role="status"
+            >{paymentRequestNotice}</small
+          >{/if}
+      </div>
       <Button type="submit" size="large" class="full" disabled={!intentValid}
         >{translate($locale, 'Continue to amount')}</Button
       >
@@ -2761,6 +2837,24 @@
   description={translate($locale, 'Scan with an offline signer. No private data is encoded.')}
   onclose={() => (qrOpen = false)}><AnimatedUrQr frames={urFrames} /></Modal
 >
+<Modal
+  open={paymentScanOpen}
+  title={translate($locale, 'Scan payment request')}
+  description={translate(
+    $locale,
+    'Scan a Bitcoin address or payment URI. You will review every imported detail before sending.'
+  )}
+  onclose={() => (paymentScanOpen = false)}
+>
+  <PaymentRequestQrScanner onscan={receivePaymentRequest} />
+  {#if paymentScanError}<div class="hardware-inline-error" role="alert">
+      <AlertTriangle size={18} /><span
+        ><strong>{translate($locale, 'QR code rejected')}</strong><small>{paymentScanError}</small
+        ></span
+      >
+    </div>{/if}
+</Modal>
+
 <Modal
   open={qrScanOpen}
   title={translate($locale, 'Scan signed PSBT')}

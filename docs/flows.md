@@ -271,7 +271,7 @@ Passport Core uses QR or microSD. Trezor Model One host passphrase entry is unav
 
 The later recovery, durable-cache, direct-P2P-broadcast, adversarial-peer, public-network, and platform work is explicitly gated by [`compact-filter-deferred-work.md`](compact-filter-deferred-work.md). None is an implicit fallback from this flow.
 
-Payjoin V2 BIP21 requests are parsed and network-checked only inside Rust. Until ADR 0031's encrypted-session, transport, fresh-review, fallback-consent, and interoperability gates are met, Groot does not advertise or initiate Payjoin sessions.
+Plain-address and BIP21 payment QR requests are parsed and network-checked only inside Rust before Send prefills the reviewed recipient, optional amount, and an editable label suggestion. Unknown required parameters fail closed. Payjoin V2 BIP21 requests are recognized, but until ADR 0031's encrypted-session, transport, fresh-review, fallback-consent, and interoperability gates are met, Groot rejects them rather than advertising, initiating, or silently downgrading a Payjoin session.
 
 ## Sort coins
 
