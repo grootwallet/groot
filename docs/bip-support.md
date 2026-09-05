@@ -165,6 +165,10 @@ The internal mainnet RC lock-scheduling and credential-focus follow-up has no BI
 impact. It preserves the existing atomic sync-cancellation and wallet-session rules
 while moving their wait off the native UI thread and focusing an existing field.
 
+The internal mainnet RC Receive refresh follow-up has no BIP impact. It exposes an
+explicit UI trigger for the existing authoritative sync operation without changing
+address derivation, mempool interpretation, descriptors, or interoperability.
+
 ## Maintenance rule
 
 Every feature, interoperability, signer, descriptor, transaction, payment request,

@@ -8,6 +8,7 @@
     Copy,
     Plus,
     QrCode,
+    RefreshCw,
     Shield,
     ShieldCheck,
     Trash2
@@ -24,7 +25,8 @@
   import HardwareReceiveVerification from '$lib/components/HardwareReceiveVerification.svelte';
   import PermanentLabelTags from '$lib/components/PermanentLabelTags.svelte';
   import { compactAddress } from '$lib/address-display';
-  import { walletService } from '$lib/wallet';
+  import { goto } from '$app/navigation';
+  import { walletService, WalletError } from '$lib/wallet';
   import { useWalletShellContext } from '$lib/wallet/shell-context';
   import { awaitingPaymentAddresses } from '$lib/wallet/policy';
   import {
@@ -47,6 +49,7 @@
   let submissionLabels = $derived(permanentLabelsForSubmission(selectedLabels, label));
   let qrDataUrl = $state('');
   let busy = $state(false);
+  let syncing = $state(false);
   let showGenerate = $state(false);
   let showDiscard = $state(false);
   let showQr = $state(false);
@@ -123,6 +126,36 @@
         description: localizedError(cause, $locale),
         tone: 'danger'
       });
+    }
+  }
+  async function syncNow() {
+    if (syncing || busy) return;
+    syncing = true;
+    try {
+      const [snapshot] = await Promise.all([
+        walletService.sync(),
+        new Promise((resolve) => setTimeout(resolve, 1_200))
+      ]);
+      applyAddresses(snapshot.receiveAddresses);
+      labelSuggestions = snapshot.labelSuggestions;
+      toast({
+        title: 'Wallet is up to date',
+        description: 'Incoming payments and receive addresses refreshed.',
+        tone: 'success'
+      });
+    } catch (cause) {
+      if (cause instanceof WalletError && cause.code === 'sync_cancelled') return;
+      if (cause instanceof WalletError && cause.code === 'wallet_locked') {
+        await goto('/unlock?next=/receive');
+        return;
+      }
+      toast({
+        title: 'Sync failed',
+        description: localizedError(cause, $locale),
+        tone: 'danger'
+      });
+    } finally {
+      syncing = false;
     }
   }
   function applyAddresses(nextAddresses: ReceiveAddress[]) {
@@ -232,6 +265,12 @@
       <h1>{translate($locale, 'Receive bitcoin')}</h1>
       <p class="subtitle">{translate($locale, 'Create a labeled address for one payment.')}</p>
     </div>
+    <button class="sync-button" disabled={syncing || busy} onclick={syncNow}
+      ><RefreshCw size={15} class={syncing ? 'spin' : ''} />{translate(
+        $locale,
+        syncing ? 'Refreshing payments…' : 'Refresh payments'
+      )}</button
+    >
   </header>
   {#if current}
     <section class="receive-card" bind:this={receiveCard}>

@@ -315,6 +315,18 @@ export const copyCatalog = {
     fr: 'Sélectionnez et copiez l’adresse manuellement.',
     es: 'Selecciona y copia la dirección manualmente.'
   },
+  'Incoming payments and receive addresses refreshed.': {
+    fr: 'Les paiements entrants et les adresses de réception ont été actualisés.',
+    es: 'Se actualizaron los pagos entrantes y las direcciones de recepción.'
+  },
+  'Refresh payments': {
+    fr: 'Actualiser les paiements',
+    es: 'Actualizar pagos'
+  },
+  'Refreshing payments…': {
+    fr: 'Actualisation des paiements…',
+    es: 'Actualizando pagos…'
+  },
   'Setup discarded': { fr: 'Configuration abandonnée', es: 'Configuración descartada' },
   'Signature added': { fr: 'Signature ajoutée', es: 'Firma añadida' },
   'Signed PSBT file loaded': {

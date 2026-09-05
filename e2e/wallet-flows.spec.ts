@@ -1518,6 +1518,15 @@ test('receive label suggestions expose aligned tooltips only when truncated', as
   expect(tooltipGap!).toBeLessThanOrEqual(12);
 });
 
+test('manually refreshes incoming payments without leaving Receive', async ({ page }) => {
+  await page.goto('/receive');
+  const refresh = page.getByRole('button', { name: 'Refresh payments' });
+  await refresh.click();
+  await expect(page.getByRole('button', { name: 'Refreshing payments…' })).toBeDisabled();
+  await expect(page.getByText('Incoming payments and receive addresses refreshed.')).toBeVisible();
+  await expect(page).toHaveURL(/\/receive$/);
+});
+
 test('receive keeps multiple labeled payment requests and discards them independently', async ({
   page
 }) => {

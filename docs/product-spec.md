@@ -114,6 +114,7 @@ A persisted global discreet mode hides wallet amounts across Overview and activi
    used normalized text intentionally reuses that stable label entity. Submitted address assignments
    are permanent and atomic; reuse expresses a relationship and does not imply that separate addresses
    are already linked onchain.
+10. Receive provides one explicit manual refresh. It runs the selected wallet's existing sync operation, keeps the automatic scheduler paused on this foreground-action route, and replaces the address list from the returned authoritative snapshot so a newly observed mempool payment appears without navigating to Overview.
 
 ## Send
 
