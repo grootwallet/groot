@@ -26,7 +26,7 @@ const pinnedPolicySources = new Map([
   ],
   ['src-tauri/src/network.rs', 'dcf011fb789a0b690b1832a9245df5fc0199318f03a820d10f9a3b1c90f5d76b'],
   ['src-tauri/src/registry.rs', '343aea20f5d09df6abd5c9fdba3b093efc6729c9ece8f180b27a150061753a18'],
-  ['src-tauri/src/wallet.rs', '9c1c405e0fcd56cf8ebafd25e6be48da938f17fa7c375cf9e07a5316bb21c650'],
+  ['src-tauri/src/wallet.rs', 'c8e436d792f7baffb92cd44fec39f810b022ef9ca084b52c260b8ea5064ba7a3'],
   [
     'src-tauri/src/wallet/error_translation.rs',
     'fb7189be7f8756eab6d5c83bae48732337f1a03efa679f06d89a6568a6a957ca'
@@ -296,14 +296,34 @@ export function validateWalletOpenGuardSource(source) {
   if (/\btype\s+\w+\s*=\s*(?:\w+::)*Connection\b|\buse\b[^;]*\bConnection\s+as\s+\w+/.test(code)) {
     throw new Error('wallet database source may not alias Connection');
   }
-  const functions = ['open_wallet_database', 'open_existing_wallet_database_read_only'].map(
-    (name) => rustFunction(source, name)
-  );
-  for (const { body, signature } of functions) {
-    if (!/permit\s*:\s*&\s*DatabaseOpenPermit/.test(signature)) {
+  const functions = [
+    {
+      name: 'open_wallet_database',
+      permit: 'DatabaseOpenPermit',
+      guard: 'validate_database_open_permit',
+      result: 'Connection'
+    },
+    {
+      name: 'open_existing_wallet_database_read_only',
+      permit: 'DatabaseOpenPermit',
+      guard: 'validate_database_open_permit',
+      result: 'Connection'
+    },
+    {
+      name: 'open_authentication_database',
+      permit: 'AuthenticationDatabaseOpenPermit',
+      guard: 'validate_authentication_database_open_permit',
+      result: 'AuthenticationDatabase'
+    }
+  ].map((expected) => ({ ...rustFunction(source, expected.name), ...expected }));
+  for (const { body, signature, permit, guard: validator, result } of functions) {
+    if (!new RegExp(`permit\\s*:\\s*&\\s*${permit}`).test(signature)) {
       throw new Error('wallet database opener does not require a typed admission permit');
     }
-    const guard = body.search(/validate_database_open_permit\s*\(\s*permit\s*\)/);
+    if (!new RegExp(`->\\s*ApiResult\\s*<\\s*${result}\\s*>`).test(signature)) {
+      throw new Error('wallet database opener does not preserve its purpose-bound result type');
+    }
+    const guard = body.search(new RegExp(`${validator}\\s*\\(\\s*permit\\s*\\)`));
     const opens = [
       ...body.matchAll(/(?:\bConnection\s*|<\s*Connection\s*>)\s*::\s*open(?:_with_flags)?\b/g)
     ];

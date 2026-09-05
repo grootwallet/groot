@@ -79,12 +79,13 @@ Incorrect entry uses the credential term appropriate to the selected wallet with
 
 The locked screen names only the selected wallet in its central card. The persistent desktop wallet list remains available for profile switching, but wallet-scoped Overview, Activity, Coins, Policy, and Settings navigation is hidden until authentication. Saved descriptors, signer xpubs, transaction data, and node configuration cannot be read while locked. Only profile switching/creation, theme selection, and a privacy-preserving network status control remain available. The status control may show public fee policy while locked, but node connection details and credentials stay sealed until unlock; unsupported metrics are never invented. A wallet that has never saved a node configuration has no encrypted RPC credential and must still unlock normally. Once username/password node settings are saved, a missing encrypted RPC secret fails closed and requires explicit reconnection. The unlock card has no redundant Back or add-wallet action: adding or recovering another wallet starts from **Add wallet** in the persistent wallet list. The fresh-install chooser is inaccessible once at least one wallet exists unless that explicit add-wallet route is active. Existing-wallet setup can be closed from every step without completing or replacing the selected wallet. A software wallet labels its credential **Wallet passphrase** and explains that it belongs with the recovery words; multisig and external-hardware wallets label theirs **App PIN** and explain that it is local protection only. Every credential field has an explicit show/hide control.
 
-Mainnet does not add RPC fields to the locked screen. After PIN-only wallet
-authentication, Rust decrypts the selected wallet's saved Core setup and Overview
-authenticates that exact loopback node and Bitcoin genesis before the first wallet
-database read of the session. An unavailable or invalid node remains an Overview
-connection failure with retry and Settings recovery; the encrypted password never
-returns to the renderer.
+Mainnet does not add RPC fields to the locked screen. The existing authentication
+throttle is checked through a Rust-only, throttle-table database path; it does not
+read wallet state. After PIN-only wallet authentication, Rust decrypts the selected
+wallet's saved Core setup and Overview authenticates that exact loopback node and
+Bitcoin genesis before the first wallet-data database read of the session. An
+unavailable or invalid node remains an Overview connection failure with retry and
+Settings recovery; the encrypted password never returns to the renderer.
 
 Hardware and multisig profiles created before the current UUID-scoped public-metadata and encrypted-PIN-verifier format are unsupported disposable Regtest data. Groot identifies that incompatibility before credential entry, does not guess the missing metadata or reset the verifier, and leaves the profile files untouched until explicit deletion. Persisted-format compatibility changes require an approved ADR and migration-versus-discard decision before implementation.
 

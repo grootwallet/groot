@@ -976,8 +976,9 @@ fn transaction_kind_distinguishes_fee_only_self_spends_from_payments() {
 
 #[test]
 fn authentication_throttle_round_trips_through_wallet_storage() {
-    let mut db = Connection::open_in_memory().unwrap();
+    let db = Connection::open_in_memory().unwrap();
     init_app_schema(&db).unwrap();
+    let mut db = AuthenticationDatabase(db);
     let mut throttle = AuthThrottle::default();
     for _ in 0..7 {
         throttle.failed(100);
@@ -4403,6 +4404,41 @@ fn restored_mainnet_node_auth_requires_fresh_verification_before_database_open()
     let mut changed = config.clone();
     changed.username = Some("other".to_owned());
     assert!(!node_auth_session_allows_database_open(&session, &changed));
+}
+
+#[test]
+fn authentication_database_permit_is_short_lived_and_does_not_require_node_admission() {
+    let permit = authentication_database_open_permit().unwrap();
+    validate_authentication_database_open_permit(&permit).unwrap();
+
+    let directory = std::env::temp_dir().join(format!("groot-auth-db-test-{}", Uuid::new_v4()));
+    fs::create_dir_all(&directory).unwrap();
+    let path = directory.join("wallet.sqlite");
+    let wallet_db = open_wallet_database(&path, &database_open_permit_for_test()).unwrap();
+    wallet_db
+        .execute_batch(
+            "CREATE TABLE groot_auth_throttle (
+                singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
+                failures INTEGER NOT NULL CHECK(failures >= 0),
+                retry_at INTEGER NOT NULL CHECK(retry_at >= 0)
+            );",
+        )
+        .unwrap();
+    drop(wallet_db);
+    let auth_db = open_authentication_database(&path, &permit).unwrap();
+    assert_eq!(load_auth_throttle(&auth_db).unwrap().snapshot(), (0, 0));
+    drop(auth_db);
+    fs::remove_dir_all(directory).unwrap();
+
+    let expired = AuthenticationDatabaseOpenPermit {
+        issued_at: Instant::now() - MAINNET_NODE_ADMISSION_LIFETIME - Duration::from_secs(1),
+    };
+    assert_eq!(
+        validate_authentication_database_open_permit(&expired)
+            .unwrap_err()
+            .code,
+        "internal_error"
+    );
 }
 
 #[test]

@@ -22,17 +22,24 @@ recipient, amount, fee, and signer at the decision point.
 
 Existing wallets unlock with only their wallet passphrase or app PIN. Rust uses
 that credential to decrypt the wallet's saved Core route and RPC password. On
-Overview, before the first mainnet database read in a new unlocked session, Groot
-authenticates that exact saved loopback Core configuration and verifies the
-compiled network and Bitcoin genesis. Only a successful check marks the in-memory
-node session as eligible for a database-open permit. Failure remains on Overview
-with the normal retry and Settings paths; RPC credentials never cross back into
-the webview or appear on the lock screen.
+Overview, before the first mainnet wallet-data database read in a new unlocked
+session, Groot authenticates that exact saved loopback Core configuration and
+verifies the compiled network and Bitcoin genesis. Only a successful check marks
+the in-memory node session as eligible for a wallet-data database-open permit.
+Failure remains on Overview with the normal retry and Settings paths; RPC
+credentials never cross back into the webview or appear on the lock screen.
+
+The existing persisted authentication throttle is the sole pre-admission SQLite
+exception. A separate short-lived Rust-only permit opens the selected regular
+database only for the throttle table so restart-resistant PIN delay can be checked
+and updated before authentication. That path performs no general schema
+initialization and exposes no wallet data. It cannot satisfy any wallet-data
+database opener.
 
 New-wallet creation retains ADR 0055's explicit, one-shot, purpose-bound Core
 admission before any wallet files are created. Existing-wallet sessions retain
-the same permit-before-SQLite invariant, but the preflight is sourced from the
-encrypted per-wallet setup after PIN-only authentication rather than repeated
+the same permit-before-wallet-data invariant, but the preflight is sourced from
+the encrypted per-wallet setup after PIN-only authentication rather than repeated
 renderer input.
 
 The persistent global mainnet banner is removed. The normal Mainnet network

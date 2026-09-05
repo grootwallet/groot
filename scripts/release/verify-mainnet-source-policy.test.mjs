@@ -196,15 +196,29 @@ const MAINNET_ENABLED: bool = true;`),
 });
 
 test('database guards must precede every production wallet opener', () => {
-  const guarded = (name, open) => `
-fn ${name}(path: &Path, permit: &DatabaseOpenPermit) {
-  validate_database_open_permit(permit)?;
+  const guarded = (
+    name,
+    open,
+    permit = 'DatabaseOpenPermit',
+    validator = 'validate_database_open_permit',
+    result = 'Connection'
+  ) => `
+fn ${name}(path: &Path, permit: &${permit}) -> ApiResult<${result}> {
+  ${validator}(permit)?;
   let value = ${open}(path)?;
 }`;
+  const authenticationOpener = guarded(
+    'open_authentication_database',
+    'Connection::open',
+    'AuthenticationDatabaseOpenPermit',
+    'validate_authentication_database_open_permit',
+    'AuthenticationDatabase'
+  );
   assert.doesNotThrow(() =>
     validateWalletOpenGuardSource(
       `${guarded('open_wallet_database', 'Connection::open')}
-${guarded('open_existing_wallet_database_read_only', 'Connection::open_with_flags')}`
+${guarded('open_existing_wallet_database_read_only', 'Connection::open_with_flags')}
+${authenticationOpener}`
     )
   );
   assert.throws(
@@ -212,6 +226,7 @@ ${guarded('open_existing_wallet_database_read_only', 'Connection::open_with_flag
       validateWalletOpenGuardSource(`
 ${guarded('open_wallet_database', 'Connection::open')}
 ${guarded('open_existing_wallet_database_read_only', 'Connection::open_with_flags')}
+${authenticationOpener}
 fn bypass(path: &Path) { Connection::open(path); }`),
     /outside the guarded helpers/
   );
@@ -220,6 +235,7 @@ fn bypass(path: &Path) { Connection::open(path); }`),
       validateWalletOpenGuardSource(`
 ${guarded('open_wallet_database', 'Connection::open')}
 ${guarded('open_existing_wallet_database_read_only', 'Connection::open_with_flags')}
+${authenticationOpener}
 fn bypass(path: &Path) { (Connection::open)(path); }`),
     /outside the guarded helpers/
   );
@@ -228,6 +244,7 @@ fn bypass(path: &Path) { (Connection::open)(path); }`),
       validateWalletOpenGuardSource(`
 ${guarded('open_wallet_database', 'Connection::open')}
 ${guarded('open_existing_wallet_database_read_only', 'Connection::open_with_flags')}
+${authenticationOpener}
 fn bypass(path: &Path) { <Connection>::open(path); }`),
     /outside the guarded helpers/
   );
@@ -238,18 +255,41 @@ fn open_wallet_database(path: &Path) {
   validate_database_open_permit(&permit)?;
   Connection::open(path);
 }
-${guarded('open_existing_wallet_database_read_only', 'Connection::open_with_flags')}`),
+${guarded('open_existing_wallet_database_read_only', 'Connection::open_with_flags')}
+${authenticationOpener}`),
     /typed admission permit/
   );
   assert.throws(
     () =>
       validateWalletOpenGuardSource(`
-fn open_wallet_database(path: &Path, permit: &DatabaseOpenPermit) {
+fn open_wallet_database(path: &Path, permit: &DatabaseOpenPermit) -> ApiResult<Connection> {
   Connection::open(path);
   validate_database_open_permit(permit)?;
 }
-${guarded('open_existing_wallet_database_read_only', 'Connection::open_with_flags')}`),
+${guarded('open_existing_wallet_database_read_only', 'Connection::open_with_flags')}
+${authenticationOpener}`),
     /admission-guarded before opening/
+  );
+  assert.throws(
+    () =>
+      validateWalletOpenGuardSource(`
+${guarded('open_wallet_database', 'Connection::open')}
+${guarded('open_existing_wallet_database_read_only', 'Connection::open_with_flags')}
+${guarded('open_authentication_database', 'Connection::open')}`),
+    /typed admission permit/
+  );
+  assert.throws(
+    () =>
+      validateWalletOpenGuardSource(`
+${guarded('open_wallet_database', 'Connection::open')}
+${guarded('open_existing_wallet_database_read_only', 'Connection::open_with_flags')}
+${guarded(
+  'open_authentication_database',
+  'Connection::open',
+  'AuthenticationDatabaseOpenPermit',
+  'validate_authentication_database_open_permit'
+)}`),
+    /purpose-bound result type/
   );
 });
 

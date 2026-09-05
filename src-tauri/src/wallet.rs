@@ -555,6 +555,12 @@ struct DatabaseOpenPermit {
     issued_at: Instant,
 }
 
+struct AuthenticationDatabaseOpenPermit {
+    issued_at: Instant,
+}
+
+struct AuthenticationDatabase(Connection);
+
 struct NewWalletAdmissionCleanup<'a> {
     state: &'a AppState,
 }
@@ -1972,6 +1978,23 @@ fn validate_database_open_permit(permit: &DatabaseOpenPermit) -> ApiResult<()> {
         .map_err(database_admission_error)
 }
 
+fn authentication_database_open_permit() -> ApiResult<AuthenticationDatabaseOpenPermit> {
+    crate::release_policy::ensure_runtime_network_enabled(NETWORK)
+        .map_err(database_admission_error)?;
+    Ok(AuthenticationDatabaseOpenPermit {
+        issued_at: Instant::now(),
+    })
+}
+
+fn validate_authentication_database_open_permit(
+    permit: &AuthenticationDatabaseOpenPermit,
+) -> ApiResult<()> {
+    if permit.issued_at.elapsed() > MAINNET_NODE_ADMISSION_LIFETIME {
+        return Err(internal("The authentication database permit expired."));
+    }
+    crate::release_policy::ensure_runtime_network_enabled(NETWORK).map_err(database_admission_error)
+}
+
 #[cfg(test)]
 fn database_open_permit_for_test() -> DatabaseOpenPermit {
     DatabaseOpenPermit {
@@ -2000,6 +2023,31 @@ fn open_wallet_database(path: &Path, permit: &DatabaseOpenPermit) -> ApiResult<C
     db.execute_batch("PRAGMA trusted_schema = OFF;")
         .map_err(internal)?;
     Ok(db)
+}
+
+fn open_authentication_database(
+    path: &Path,
+    permit: &AuthenticationDatabaseOpenPermit,
+) -> ApiResult<AuthenticationDatabase> {
+    validate_authentication_database_open_permit(permit)?;
+    let metadata = fs::symlink_metadata(path).map_err(internal)?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return Err(internal("Wallet database storage is not a regular file."));
+    }
+    let db = Connection::open(path).map_err(internal)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(path, fs::Permissions::from_mode(0o600)).map_err(internal)?;
+    }
+    db.busy_timeout(Duration::from_secs(5)).map_err(internal)?;
+    db.set_db_config(DbConfig::SQLITE_DBCONFIG_DEFENSIVE, true)
+        .map_err(internal)?;
+    db.set_db_config(DbConfig::SQLITE_DBCONFIG_ENABLE_FKEY, true)
+        .map_err(internal)?;
+    db.execute_batch("PRAGMA trusted_schema = OFF;")
+        .map_err(internal)?;
+    Ok(AuthenticationDatabase(db))
 }
 
 fn open_existing_wallet_database_read_only(
@@ -3124,7 +3172,7 @@ fn reset_auth_throttle(app: &AppHandle, state: &State<'_, AppState>) -> ApiResul
     Ok(())
 }
 
-fn open_auth_db(app: &AppHandle) -> ApiResult<Connection> {
+fn open_auth_db(app: &AppHandle) -> ApiResult<AuthenticationDatabase> {
     let profile = selected_profile(app)?;
     let path = profile_directory(app, profile.id)?.join("wallet.sqlite");
     if !path.is_file() {
@@ -3133,15 +3181,22 @@ fn open_auth_db(app: &AppHandle) -> ApiResult<Connection> {
             "The selected wallet database could not be found.",
         ));
     }
-    let permit = database_open_permit_for_selected_wallet(app)?;
-    let db = open_wallet_database(&path, &permit)?;
-    init_app_schema(&db)?;
+    let permit = authentication_database_open_permit()?;
+    let db = open_authentication_database(&path, &permit)?;
+    db.0.execute_batch(
+        "CREATE TABLE IF NOT EXISTS groot_auth_throttle (
+            singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
+            failures INTEGER NOT NULL CHECK(failures >= 0),
+            retry_at INTEGER NOT NULL CHECK(retry_at >= 0)
+        );",
+    )
+    .map_err(internal)?;
     Ok(db)
 }
 
-fn load_auth_throttle(db: &Connection) -> ApiResult<AuthThrottle> {
-    let persisted = db
-        .query_row(
+fn load_auth_throttle(db: &AuthenticationDatabase) -> ApiResult<AuthThrottle> {
+    let persisted =
+        db.0.query_row(
             "SELECT failures, retry_at FROM groot_auth_throttle WHERE singleton = 1",
             [],
             |row| Ok((row.get::<_, u32>(0)?, row.get::<_, u64>(1)?)),
@@ -3153,14 +3208,15 @@ fn load_auth_throttle(db: &Connection) -> ApiResult<AuthThrottle> {
         .unwrap_or_default())
 }
 
-fn save_auth_throttle(db: &mut Connection, throttle: &AuthThrottle) -> ApiResult<()> {
+fn save_auth_throttle(db: &mut AuthenticationDatabase, throttle: &AuthThrottle) -> ApiResult<()> {
     let (failures, retry_at) = throttle.snapshot();
-    db.execute(
+    db.0
+        .execute(
         "INSERT INTO groot_auth_throttle(singleton, failures, retry_at) VALUES(1, ?1, ?2)\
          ON CONFLICT(singleton) DO UPDATE SET failures = excluded.failures, retry_at = excluded.retry_at",
         params![failures, retry_at],
-    )
-    .map_err(internal)?;
+        )
+        .map_err(internal)?;
     Ok(())
 }
 

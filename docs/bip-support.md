@@ -25,6 +25,8 @@ The 2026-09-05 internal-RC correction restores encrypted saved-node reuse during
 PIN-only unlock, moves existing-wallet Core preflight back to Overview, removes a
 global banner, and corrects ad-hoc HWI packaging. It changes no BIP behavior,
 descriptor, derivation, PSBT, backup, or interoperability evidence.
+The follow-up authentication-throttle permit fixes a mainnet-only unlock ordering
+bug without changing any persisted format or BIP behavior.
 
 Status: canonical implementation and candidate inventory as of 2026-09-02.
 

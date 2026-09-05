@@ -4,22 +4,30 @@ Status: implemented and independently reviewed on the isolated preparation branc
 ADR 0055 permits enabled-path certification in a non-distributable candidate.
 Internal RC `6d11ecf` passed the initial saved-wallet scan against the retained
 pruned mainnet range. ADR 0056 subsequently corrected existing-wallet admission
-presentation without weakening the database-open permit.
+presentation without weakening the wallet-data database-open permit. The first
+replacement RC exposed that the persisted PIN throttle itself had been placed
+behind that permit, creating a mainnet-only circular dependency before the PIN
+could decrypt the saved Core secret; ADR 0056 now records the bounded
+authentication-metadata exception.
 
 ## Security invariant
 
-No mainnet wallet SQLite file may be created, opened for mutation, or opened for
-identity inspection until trusted Rust has authenticated the approved local
-Bitcoin Core backend and verified the exact compiled network and genesis. A
-renderer assertion, environment toggle, saved public configuration, or unrelated
-wallet session is not an admission.
+No mainnet wallet SQLite file may be created or opened for wallet-state mutation
+or identity inspection until trusted Rust has authenticated the approved local
+Bitcoin Core backend and verified the exact compiled network and genesis. The
+only pre-admission open is a separately typed, short-lived native path limited to
+the existing restart-resistant PIN-throttle table. A renderer assertion,
+environment toggle, saved public configuration, or unrelated wallet session is
+not an admission.
 
 ## Implementation
 
-- Both production SQLite constructors require a private `DatabaseOpenPermit` and
-  validate it before calling SQLite. The release source-policy gate recognizes
-  and byte-pins this boundary and rejects unpermitted, late-guarded, or alternate
-  `Connection::open` calls. Its reviewed snapshot pins `wallet.rs` plus every
+- Both wallet-data SQLite constructors require a private `DatabaseOpenPermit` and
+  validate it before calling SQLite. A third constructor requires the distinct
+  `AuthenticationDatabaseOpenPermit` and is used only by the PIN-throttle path;
+  it performs no general wallet schema initialization. The release source-policy
+  gate recognizes and byte-pins these boundaries and rejects unpermitted,
+  late-guarded, or alternate `Connection::open` calls. Its reviewed snapshot pins `wallet.rs` plus every
   production child module under `src-tauri/src/wallet`, and a crate-wide scan
   rejects alternate production SQLite disk opens; the three explicitly compiled
   wallet test/benchmark modules are excluded.
@@ -29,7 +37,7 @@ wallet session is not an admission.
   chain and genesis are checked before admission is stored.
 - Existing wallets authenticate with only their wallet passphrase or app PIN.
   Rust decrypts the exact per-wallet Core setup and password, but that restored
-  session is not eligible for a database-open permit until Overview authenticates
+  session is not eligible for a wallet-data database-open permit until Overview authenticates
   the saved loopback node and verifies the compiled chain and genesis. A failed
   check remains on Overview; lock and inactivity remove the in-memory session.
 - New-wallet admission is scoped to one serialized creation attempt, expires after

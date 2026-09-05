@@ -379,8 +379,9 @@ ADR 0055 authorizes one dedicated, non-distributable mainnet build so the ADR 00
 exit conditions can be exercised. The compile-time identity, isolated bundle and
 storage ID, pre-database local-Core admission, and excluded sync/backend choices
 are explicit; no runtime preference can activate mainnet elsewhere. ADR 0056
-restores the existing PIN-only unlock flow: Rust decrypts the persisted per-wallet
-Core setup, Overview verifies it before the first database read, and node failures
+restores the existing PIN-only unlock flow: a separate native permit accesses only
+the persisted authentication throttle, Rust decrypts the persisted per-wallet Core
+setup, Overview verifies it before the first wallet-data database read, and node failures
 remain on Overview rather than requesting RPC fields on the lock screen. It also
 removes the global mainnet banner while retaining the normal Mainnet network
 identity and exact payment review. The internal RC builder now compiles an
