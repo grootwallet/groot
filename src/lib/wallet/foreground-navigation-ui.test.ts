@@ -94,6 +94,14 @@ describe('foreground wallet navigation', () => {
     expect(overview).toContain("'Never synced'");
   });
 
+  it('opens a newly created mainnet wallet without querying cross-wallet setup reuse', () => {
+    expect(overview).toContain("const isMainnet = defaultConfig.network === 'mainnet'");
+    expect(overview).toContain(
+      'isMainnet ? Promise.resolve([]) : walletService.networkSetupSources()'
+    );
+    expect(overview).toMatch(/nodeReady\s*=\s*\n\s*isMainnet\s*\|\|/);
+  });
+
   it('does not start a second compact-filter scan after reattaching to an inherited scan', () => {
     expect(overview).toContain('if (syncStatusIsActive(syncStatus)) inheritedSyncObserved = true;');
     expect(overview).toContain(

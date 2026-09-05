@@ -1,5 +1,6 @@
 <script lang="ts">
   import { translate, localizedError } from '$lib/i18n-catalog';
+  import { defaultConfig } from '$lib/config';
   import {
     Activity,
     ArrowDownToLine,
@@ -67,6 +68,7 @@
   import { fly } from 'svelte/transition';
   import { presentLocalTimestamp, syncAge } from '$lib/date-time';
   const walletShell = useWalletShellContext();
+  const isMainnet = defaultConfig.network === 'mainnet';
   let syncing = $state(false);
   let snapshot = $state<WalletSnapshot | null>(null);
   let multisigWallet = $state<MultisigWallet | null>(null);
@@ -337,17 +339,23 @@
       }
       const [nextSyncSource, networkSetupSources] = await Promise.all([
         walletService.syncSource(),
-        walletService.networkSetupSources()
+        isMainnet ? Promise.resolve([]) : walletService.networkSetupSources()
       ]);
       syncSource = nextSyncSource;
       selectedProfile =
         registry.wallets.find((wallet) => wallet.id === registry.selectedWalletId) ?? null;
-      nodeReady = Boolean(
-        selectedProfile &&
-        networkSetupSources.some(
-          (source) => source.walletId === selectedProfile?.id && source.ready
-        )
-      );
+      // A successful mainnet wallet-data read is already gated by the exact
+      // selected wallet's authenticated, retained Core setup in Rust. Mainnet
+      // deliberately rejects cross-wallet setup discovery, so do not call that
+      // test-network-only API merely to derive presentation state.
+      nodeReady =
+        isMainnet ||
+        Boolean(
+          selectedProfile &&
+          networkSetupSources.some(
+            (source) => source.walletId === selectedProfile?.id && source.ready
+          )
+        );
       activeDraft = selectedProfile ? await walletService.paymentDraft() : null;
       multisig = selectedProfile?.kind === 'multisig';
       if (multisig) {

@@ -7,6 +7,26 @@ candidate Bitcoin Improvement Proposals is
 [`bip-support.md`](bip-support.md). Any feature or dependency change that alters
 BIP support or its evidence updates that matrix and this ledger together.
 
+The first signed/notarized mainnet certification run of v0.4.92 commit
+`c7406209` authenticated a fully synchronized, pruned, loopback Bitcoin Core
+node and created a BIP84 Ledger external-signer profile, but exposed an
+Overview routing defect before any history scan or funds were used. Overview
+unconditionally queried the cross-wallet network-setup reuse API even though
+mainnet deliberately rejects that API, so it replaced the valid retained
+per-wallet Core setup with a false **Wallet data is unavailable** state. A
+manual refresh could then reach normal sync without the authoritative snapshot
+and surface `initial_scan_required` instead of the first-scan chooser. Overview
+now skips cross-wallet setup discovery on mainnet and treats a successful
+Rust-gated wallet-data read as proof that the selected wallet retained its own
+authenticated Core setup. The existing snapshot then opens the required
+birthday chooser and prevents ordinary sync from bypassing it. This is a
+presentation/orchestration correction only: the trusted admission, encrypted
+RPC secret, descriptors, profiles, databases, transactions, and recovery
+formats are unchanged, no migration is required, and BIP support is unaffected.
+The `c7406209` signed candidate is failed diagnostic evidence and must not be
+distributed or relabeled; fresh final-commit reproducibility and signing evidence
+remain required.
+
 Final-candidate preflight now compiles the mainnet release-policy branches only
 into the dedicated mainnet build and the fail-closed rejection branches only
 into rehearsal builds, instead of retaining both sides of a constant `cfg!`
