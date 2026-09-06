@@ -61,7 +61,24 @@
         toast({
           title: translate($locale, 'Diagnostics exported'),
           description: translate($locale, 'The sanitized diagnostic log was saved.'),
-          tone: 'success'
+          tone: 'success',
+          action:
+            result.revealToken && result.revealLabel
+              ? {
+                  label: result.revealLabel,
+                  run: async () => {
+                    try {
+                      await walletService.revealSavedFile(result.revealToken!);
+                    } catch (cause) {
+                      toast({
+                        title: translate($locale, 'Could not show saved file'),
+                        description: localizedError(cause, $locale),
+                        tone: 'danger'
+                      });
+                    }
+                  }
+                }
+              : undefined
         });
         await load();
       }
@@ -178,37 +195,39 @@
                 ></td
               >
               <td>
-                <span
-                  >{translate($locale, '{network} · {platform} · v{version}', {
-                    network: record.compiledNetwork,
-                    platform: record.platform,
-                    version: record.appVersion
-                  })}</span
-                >
-                {#if record.walletKind}<span>{translate($locale, record.walletKind)}</span>{/if}
-                <span
-                  >{translate($locale, 'Trigger: {trigger}', {
-                    trigger: translate($locale, record.trigger)
-                  })}</span
-                >
-                {#if record.syncSource}<span>{record.syncSource}</span>{/if}
-                {#if record.progressPercent !== undefined}<span>{record.progressPercent}%</span
-                  >{/if}
-                {#if record.itemCount !== undefined}<span
-                    >{translate(
-                      $locale,
-                      record.event === 'receive_address_generated'
-                        ? '{count} permanent labels assigned'
-                        : '{count} items',
-                      { count: record.itemCount }
-                    )}</span
-                  >{/if}
-                {#if record.exportFormat}<span
-                    >{translate($locale, '{format} export', {
-                      format: record.exportFormat.toUpperCase()
+                <div class="diagnostic-context">
+                  <span
+                    >{translate($locale, '{network} · {platform} · v{version}', {
+                      network: record.compiledNetwork,
+                      platform: record.platform,
+                      version: record.appVersion
                     })}</span
-                  >{/if}
-                {#if record.errorCode}<code>{record.errorCode}</code>{/if}
+                  >
+                  {#if record.walletKind}<span>{translate($locale, record.walletKind)}</span>{/if}
+                  <span
+                    >{translate($locale, 'Trigger: {trigger}', {
+                      trigger: translate($locale, record.trigger)
+                    })}</span
+                  >
+                  {#if record.syncSource}<span>{record.syncSource}</span>{/if}
+                  {#if record.progressPercent !== undefined}<span>{record.progressPercent}%</span
+                    >{/if}
+                  {#if record.itemCount !== undefined}<span
+                      >{translate(
+                        $locale,
+                        record.event === 'receive_address_generated'
+                          ? '{count} permanent labels assigned'
+                          : '{count} items',
+                        { count: record.itemCount }
+                      )}</span
+                    >{/if}
+                  {#if record.exportFormat}<span
+                      >{translate($locale, '{format} export', {
+                        format: record.exportFormat.toUpperCase()
+                      })}</span
+                    >{/if}
+                  {#if record.errorCode}<code>{record.errorCode}</code>{/if}
+                </div>
               </td>
             </tr>
           {/each}
@@ -319,7 +338,7 @@
   tr:last-child td {
     border-bottom: 0;
   }
-  td:last-child {
+  .diagnostic-context {
     display: flex;
     flex-wrap: wrap;
     gap: 6px 10px;

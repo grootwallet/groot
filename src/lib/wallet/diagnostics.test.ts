@@ -57,6 +57,13 @@ describe('diagnostic event boundary', () => {
     expect(route).toContain('exportDiagnostics(format)');
     expect(route).toContain("exportLog('csv')");
     expect(route).toContain("exportLog('json')");
+    expect(route).toContain('walletService.revealSavedFile(result.revealToken!)');
+    expect(route).toContain('label: result.revealLabel');
     expect(rust).toContain('csv_export_is_deterministic_and_quotes_every_field');
+  });
+
+  it('keeps table dividers continuous across the safe-context column', () => {
+    expect(route).toContain('<div class="diagnostic-context">');
+    expect(route).not.toMatch(/td:last-child\s*\{[^}]*display:\s*flex/s);
   });
 });

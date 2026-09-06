@@ -114,7 +114,11 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     ];
   }
   async exportDiagnostics(_format: 'json' | 'csv') {
-    return { saved: true, revealToken: null, revealLabel: null };
+    return {
+      saved: true,
+      revealToken: 'fixture-diagnostics-export-reveal',
+      revealLabel: 'Show in Finder'
+    };
   }
   async savePaymentDraft(draft: PaymentDraft) {
     if (!this._selectedWalletId || draft.walletId !== this._selectedWalletId)

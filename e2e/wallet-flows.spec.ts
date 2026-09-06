@@ -81,6 +81,24 @@ test('copies the public build identity with inline retry feedback', async ({ pag
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(displayedIdentity);
 });
 
+test('exports diagnostics with a Finder action and continuous table rows', async ({ page }) => {
+  await page.goto('/diagnostics');
+  const table = page.getByRole('table');
+  await expect(table).toBeVisible();
+
+  const firstRowBottoms = await table
+    .locator('tbody tr')
+    .first()
+    .locator('td')
+    .evaluateAll((cells) => cells.map((cell) => Math.round(cell.getBoundingClientRect().bottom)));
+  expect(new Set(firstRowBottoms).size).toBe(1);
+
+  await page.getByRole('button', { name: 'Export CSV' }).click();
+  const toast = page.locator('.toast').filter({ hasText: 'Diagnostics exported' });
+  await expect(toast.getByRole('button', { name: 'Show in Finder' })).toBeVisible();
+  await toast.getByRole('button', { name: 'Show in Finder' }).click();
+});
+
 test('creates a 24-word wallet and clears onboarding secrets', async ({ page }) => {
   await page.goto('/welcome?fixture-empty=1');
   await expect(
