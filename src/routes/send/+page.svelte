@@ -2078,6 +2078,7 @@
 >
 <Modal
   open={paymentScanOpen}
+  wide
   title={translate($locale, 'Scan payment request')}
   description={translate(
     $locale,

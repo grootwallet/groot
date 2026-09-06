@@ -186,6 +186,10 @@ UI thread, hides an RBF action that was already ineligible for self-spends, and 
 existing loading and amount-unit presentation explicit without changing BIP125
 construction, CPFP policy, PSBT handling, descriptors, or interoperability evidence.
 
+The internal mainnet RC payment-scanner sizing follow-up has no BIP impact. It changes
+only the camera viewport and targeting-guide presentation; BIP21 parsing, address
+validation, network checks, and imported payment-request data are unchanged.
+
 ## Maintenance rule
 
 Every feature, interoperability, signer, descriptor, transaction, payment request,

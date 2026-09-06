@@ -59,13 +59,15 @@
 </script>
 
 <div class="scanner">
-  <video
-    bind:this={video}
-    muted
-    playsinline
-    aria-label={translate($locale, 'Payment QR camera preview')}
-  ></video>
-  <div class="scan-guide" aria-hidden="true"></div>
+  <div class="camera-frame">
+    <video
+      bind:this={video}
+      muted
+      playsinline
+      aria-label={translate($locale, 'Payment QR camera preview')}
+    ></video>
+    <div class="scan-guide" aria-hidden="true"></div>
+  </div>
   <div class="scan-status" role="status">
     {#if error}<CameraOff size={16} /><span>{error}</span>{:else}<Camera size={16} /><span
         >{translate(
@@ -82,17 +84,27 @@
     display: grid;
     gap: 0.75rem;
   }
-  .scanner video {
+  .camera-frame {
+    position: relative;
     width: 100%;
-    min-height: 260px;
-    max-height: 55vh;
-    object-fit: cover;
+    aspect-ratio: 1;
+    overflow: hidden;
     border-radius: 1rem;
     background: #05070a;
   }
+  .scanner video {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
   .scan-guide {
     position: absolute;
-    inset: 12% 18% 5rem;
+    width: 68%;
+    aspect-ratio: 1;
+    top: 16%;
+    left: 50%;
+    transform: translateX(-50%);
     border: 2px solid color-mix(in srgb, var(--link) 75%, white);
     border-radius: 1rem;
     pointer-events: none;

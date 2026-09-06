@@ -1873,6 +1873,26 @@ test('an address copied from Receive completes the browser send flow', async ({ 
   await expect(page.getByText('Remaining wallet balance: 2,455,253 sats')).toBeVisible();
 });
 
+test('payment QR scanner uses a large square camera target', async ({ page }) => {
+  await page.goto('/send');
+  await page.getByRole('button', { name: 'Scan Bitcoin payment QR' }).click();
+
+  const dialog = page.getByRole('dialog', { name: 'Scan payment request' });
+  const camera = dialog.locator('.camera-frame');
+  const guide = dialog.locator('.scan-guide');
+  await expect(camera).toBeVisible();
+
+  const cameraBox = await camera.boundingBox();
+  const guideBox = await guide.boundingBox();
+  expect(cameraBox).not.toBeNull();
+  expect(guideBox).not.toBeNull();
+  expect(Math.abs(cameraBox!.width - cameraBox!.height)).toBeLessThanOrEqual(1);
+  expect(Math.abs(guideBox!.width - guideBox!.height)).toBeLessThanOrEqual(1);
+  expect(cameraBox!.width).toBeGreaterThanOrEqual(
+    (page.viewportSize()?.width ?? 1180) > 760 ? 540 : 320
+  );
+});
+
 test('custom fees validate and wallet deletion requires typed confirmation', async ({ page }) => {
   await page.goto('/send');
   await page.getByLabel('Bitcoin address').fill('bcrt1qreceiver0000000000000000000000000000000');

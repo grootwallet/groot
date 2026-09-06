@@ -5,7 +5,15 @@
   import { lockModalScroll } from './modal-scroll-lock';
   import { onDestroy } from 'svelte';
   import { fly } from 'svelte/transition';
-  let { open, title, description = '', onclose, attentionSignal = 0, children } = $props();
+  let {
+    open,
+    title,
+    description = '',
+    onclose,
+    attentionSignal = 0,
+    wide = false,
+    children
+  } = $props();
   let dialog = $state<HTMLDivElement>();
   let documentTop = $state(-32);
   let attentionActive = $state(false);
@@ -110,6 +118,7 @@
     <div
       bind:this={dialog}
       class="modal"
+      class:modal-wide={wide}
       class:modal-attention={attentionActive}
       role="dialog"
       aria-modal="true"
