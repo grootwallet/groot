@@ -170,6 +170,11 @@ The internal mainnet RC Receive refresh follow-up has no BIP impact. It exposes 
 explicit UI trigger for the existing authoritative sync operation without changing
 address derivation, mempool interpretation, descriptors, or interoperability.
 
+The internal mainnet RC sync-coordination, recovery-status scheduling, and Mainnet
+explorer follow-up has no BIP impact. It serializes existing sync triggers, moves an
+existing read off the native UI thread, and permits an explicit txid-only explorer
+lookup without changing wallet protocol behavior or interoperability evidence.
+
 ## Maintenance rule
 
 Every feature, interoperability, signer, descriptor, transaction, payment request,

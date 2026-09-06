@@ -1029,27 +1029,29 @@ pub(crate) fn validate_recovery_birthday(birthday_height: u32, tip: u64) -> ApiR
 }
 
 #[tauri::command]
-pub fn recovery_scan_status(
-    app: AppHandle,
-    state: State<'_, AppState>,
-) -> ApiResult<RecoveryScanStatusDto> {
-    require_unlocked(&app, &state)?;
-    let profile = selected_profile(&app)?;
-    let db = match profile.kind {
-        WalletKind::Multisig => open_multisig_db(&app)?,
-        WalletKind::SingleKey | WalletKind::WatchOnly => open_db(&app)?,
-    };
-    let settings = load_recovery_scan_settings(&db)?;
-    let active_run_id = state
-        .recovery_scans
-        .lock()
-        .map_err(internal)?
-        .get(&profile.id)
-        .map(|active| active.run_id.clone());
-    let Some(record) = reconcile_recovery_scan_record(&db, active_run_id.as_deref())? else {
-        return Ok(idle_recovery_scan_status(&settings));
-    };
-    Ok(record.status)
+pub async fn recovery_scan_status(app: AppHandle) -> ApiResult<RecoveryScanStatusDto> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        require_unlocked(&app, &state)?;
+        let profile = selected_profile(&app)?;
+        let db = match profile.kind {
+            WalletKind::Multisig => open_multisig_db(&app)?,
+            WalletKind::SingleKey | WalletKind::WatchOnly => open_db(&app)?,
+        };
+        let settings = load_recovery_scan_settings(&db)?;
+        let active_run_id = state
+            .recovery_scans
+            .lock()
+            .map_err(internal)?
+            .get(&profile.id)
+            .map(|active| active.run_id.clone());
+        let Some(record) = reconcile_recovery_scan_record(&db, active_run_id.as_deref())? else {
+            return Ok(idle_recovery_scan_status(&settings));
+        };
+        Ok(record.status)
+    })
+    .await
+    .map_err(internal)?
 }
 
 #[tauri::command]

@@ -328,6 +328,12 @@
     pendingUnlockSyncWalletId = null;
     return true;
   }
+  async function pauseAutomaticSync() {
+    await liveSync?.stopAndWait();
+  }
+  function resumeAutomaticSync() {
+    if (!isPrototypeWallet && !syncPausedRoute) liveSync?.start();
+  }
   provideWalletShellContext({
     profiles: () => profiles,
     selectedWalletId: () => selectedWalletId,
@@ -335,7 +341,9 @@
     selectWallet,
     beginHardwareReview,
     requestUnlockSync,
-    consumeUnlockSync
+    consumeUnlockSync,
+    pauseAutomaticSync,
+    resumeAutomaticSync
   });
 
   async function resolveStartupRoute() {

@@ -198,6 +198,38 @@ describe('live wallet sync', () => {
     expect(wallet.cancelSync).toHaveBeenCalledOnce();
   });
 
+  it('cancels and drains an automatic sync before a manual refresh takes ownership', async () => {
+    let rejectSync!: (cause: unknown) => void;
+    let markStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    const wallet = {
+      exists: vi.fn().mockResolvedValue(true),
+      profiles: vi.fn().mockResolvedValue(registry('single_key')),
+      sync: vi.fn().mockImplementation(
+        () =>
+          new Promise<void>((_resolve, reject) => {
+            rejectSync = reject;
+            markStarted();
+          })
+      ),
+      cancelSync: vi.fn().mockImplementation(async () => {
+        rejectSync({ code: 'sync_cancelled' });
+      }),
+      syncMultisig: vi.fn()
+    };
+    const controller = createLiveSync(wallet, 60_000);
+    controller.start();
+    void controller.runNow();
+    await started;
+
+    await controller.stopAndWait();
+
+    expect(wallet.cancelSync).toHaveBeenCalledOnce();
+    expect(wallet.sync).toHaveBeenCalledOnce();
+  });
+
   it('defers the newly selected wallet sync until its cached route data can load', async () => {
     vi.useFakeTimers();
     let release!: () => void;

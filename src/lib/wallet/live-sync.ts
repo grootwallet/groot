@@ -4,6 +4,7 @@ export type LiveSyncController = {
   start(): void;
   restart(): void;
   stop(): void;
+  stopAndWait(): Promise<void>;
   runNow(): Promise<void>;
 };
 
@@ -99,6 +100,14 @@ export function createLiveSync(
       enabled = false;
       clearTimer();
       if (active) void wallet.cancelSync().catch(() => undefined);
+    },
+    async stopAndWait() {
+      enabled = false;
+      clearTimer();
+      const pending = active;
+      if (!pending) return;
+      await wallet.cancelSync().catch(() => undefined);
+      await pending;
     },
     runNow
   };

@@ -26,6 +26,7 @@ export const defaultConfig: AppConfig = {
 };
 
 export function explorerUrlForNetwork(network: SupportedNetwork): string | null {
+  if (network === 'mainnet') return 'https://mempool.space';
   if (network === 'signet') return 'https://mempool.space/signet';
   if (network === 'testnet4') return 'https://mempool.space/testnet4';
   return null;

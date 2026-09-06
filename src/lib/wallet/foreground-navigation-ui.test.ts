@@ -77,6 +77,8 @@ describe('foreground wallet navigation', () => {
     expect(overview).toContain("'Wallet sync progress'");
     expect(overview).toContain('let manualSyncDetailsVisible = $state(false)');
     expect(overview).toContain('manualSyncDetailsVisible = manual');
+    expect(overview).toContain('if (manual) await walletShell.pauseAutomaticSync()');
+    expect(overview).toContain('if (manual) walletShell.resumeAutomaticSync()');
     expect(overview).toContain('void sync(false)');
     expect(overview).toContain(
       'onclick={() => (initialHistoryRequired ? openInitialScan() : sync(true))}'

@@ -11,6 +11,8 @@ export type WalletShellContext = {
   beginHardwareReview: () => () => void;
   requestUnlockSync: (walletId: string) => void;
   consumeUnlockSync: (walletId: string) => boolean;
+  pauseAutomaticSync: () => Promise<void>;
+  resumeAutomaticSync: () => void;
 };
 
 export function provideWalletShellContext(context: WalletShellContext) {

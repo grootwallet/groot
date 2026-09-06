@@ -604,8 +604,9 @@
     if (syncInProgress) return;
     manualSyncDetailsVisible = manual;
     syncing = true;
-    startSyncStatusPolling();
     try {
+      if (manual) await walletShell.pauseAutomaticSync();
+      startSyncStatusPolling();
       const [nextSnapshot] = await Promise.all([
         multisig ? walletService.syncMultisig() : walletService.sync(),
         new Promise((resolve) => setTimeout(resolve, 1_200))
@@ -633,6 +634,7 @@
       await refreshSyncStatus();
       syncing = false;
       if (syncStatus?.state !== 'failed') manualSyncDetailsVisible = false;
+      if (manual) walletShell.resumeAutomaticSync();
     }
   };
   async function verifyBackup() {
