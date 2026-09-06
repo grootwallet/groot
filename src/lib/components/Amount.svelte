@@ -21,9 +21,7 @@
 
 {#snippet formattedAmount()}
   <strong>{hidden ? '••••••' : `${sign}${formatAmount(value, $denomination)}`}</strong>
-  {#if unit}<small
-      ><span class="amount-unit-gap" aria-hidden="true"></span>{amountUnit($denomination)}</small
-    >{/if}
+  {#if unit}<small>{amountUnit($denomination)}</small>{/if}
 {/snippet}
 
 {#if interactive && !hidden}
@@ -44,12 +42,7 @@
   .formatted-amount > small {
     display: inline-flex;
     align-items: baseline;
-  }
-
-  .formatted-amount > small > .amount-unit-gap {
-    display: inline-block;
-    flex: 0 0 0.5rem;
-    width: 0.5rem;
+    margin-left: 0.5rem;
   }
 
   .interactive-amount {

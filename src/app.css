@@ -817,15 +817,11 @@ code {
 .formatted-amount small {
   display: inline-flex;
   align-items: baseline;
+  margin-left: 0.5rem;
   color: var(--muted);
   font-size: 0.72em;
   font-weight: 600;
   text-transform: none;
-}
-.formatted-amount small > .amount-unit-gap {
-  display: inline-block;
-  flex: 0 0 0.5rem;
-  width: 0.5rem;
 }
 .activity-controls {
   display: grid;
@@ -10445,6 +10441,9 @@ code {
     top: 58px;
     bottom: auto;
     width: auto;
+  }
+  .app-shell.prototype-shell .locked-mobile-utilities .network-popover {
+    top: 98px;
   }
   .mobile-actions {
     position: fixed;
