@@ -360,8 +360,13 @@ test('shows skeletons while a restored wallet loads its first synced data', asyn
   // Start observing after navigation commits rather than after every resource
   // finishes, because the fixture intentionally makes this state transient.
   await page.goto('/?fixture-delayed-wallet-data=1', { waitUntil: 'commit' });
-  await expect(page.locator('.wallet-skeleton.balance')).toBeVisible();
-  await expect(page.locator('.wallet-skeleton.transactions')).toBeVisible();
+  await expect
+    .poll(() =>
+      page
+        .locator('.wallet-skeleton')
+        .evaluateAll((skeletons) => skeletons.map((item) => item.className).sort())
+    )
+    .toEqual(['wallet-skeleton balance', 'wallet-skeleton transactions']);
   await expect(page.getByText('Hardware order', { exact: true })).toBeVisible();
   await expect(page.locator('.wallet-skeleton')).toHaveCount(0);
 });
