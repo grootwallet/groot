@@ -764,7 +764,7 @@
       busy = false;
     }
   }
-  async function useMaxAmount(requestedFeeRate = selectedRateNumber) {
+  async function useMaxAmount(requestedFeeRate = selectedRateNumber, announce = true) {
     if (!addressValid || requestedFeeRate <= 0) return;
     const requestRevision = ++maxSpendRequestRevision;
     error = '';
@@ -795,6 +795,16 @@
       maxSpendQuote = quote;
       maxSpendActive = true;
       amount = amountInputValue(quote.amount, $denomination);
+      if (announce) {
+        toast({
+          title: 'Maximum spendable amount selected',
+          description:
+            frozenAmount > 0
+              ? 'Frozen coins remain in this wallet. Unfreeze them first to include them.'
+              : 'The amount uses all spendable coins after the network fee.',
+          tone: 'success'
+        });
+      }
     } catch (cause) {
       error = localizedError(cause, $locale, 'Maximum amount could not be calculated.');
     }
@@ -811,7 +821,7 @@
     const refreshMaximum = maxSpendActive;
     selectedRate = rate;
     clearDraftError();
-    if (refreshMaximum && Number.isFinite(rate) && rate > 0) void useMaxAmount(rate);
+    if (refreshMaximum && Number.isFinite(rate) && rate > 0) void useMaxAmount(rate, false);
   }
   async function prepareCustomAcceleration() {
     const request = accelerationRequest;
@@ -2151,6 +2161,14 @@
             >{/if}</small
         ></label
       >
+      {#if maxSpendActive}<p class="max-spend-guidance" role="status">
+          {translate(
+            $locale,
+            frozenAmount > 0
+              ? 'Maximum spendable amount selected. Frozen coins remain in this wallet.'
+              : 'Maximum spendable amount selected after the network fee.'
+          )}
+        </p>{/if}
       <div class="coin-control-field">
         <span>{translate($locale, 'Coin selection')}</span><button
           type="button"

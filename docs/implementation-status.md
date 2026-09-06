@@ -14,6 +14,11 @@ also uses a structural unit spacer across review, detail, signed, and broadcast
 success surfaces so native WebView styling cannot collapse the amount/unit gap.
 No persisted format or migration changes.
 
+The same RC makes the existing maximum-spend invariant explicit after selection:
+single-key and multisig sends identify the result as the maximum spendable amount
+and state when frozen coins remain excluded. Transaction construction and frozen
+state are unchanged; no persisted format or migration changes.
+
 The first signed/notarized mainnet certification run of v0.4.92 commit
 `c7406209` authenticated a fully synchronized, pruned, loopback Bitcoin Core
 node and created a BIP84 Ledger external-signer profile, but exposed an

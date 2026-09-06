@@ -196,6 +196,10 @@ construction by using Bitcoin's integer sat/kwu representation consistently, whi
 preserving authoritative effective-fee review and existing relay-policy failures.
 The amount-unit change is presentation-only.
 
+The maximum-spend clarification has no BIP support impact. It adds durable inline
+and toast feedback for the existing rule that frozen outputs remain excluded from
+transaction construction; no transaction, fee, descriptor, or protocol behavior changes.
+
 ## Maintenance rule
 
 Every feature, interoperability, signer, descriptor, transaction, payment request,

@@ -958,6 +958,12 @@ test('selects and freezes multisig coins before entering the send flow', async (
   await expect(page.locator('.coin-mode')).toContainText('More private');
   await page.getByRole('button', { name: 'Max' }).click();
   await expect(page.getByLabel('Amount', { exact: true })).toHaveValue('2479707');
+  await expect(page.locator('.max-spend-guidance')).toContainText(
+    'Maximum spendable amount selected'
+  );
+  await expect(
+    page.locator('.toast').filter({ hasText: 'Maximum spendable amount selected' })
+  ).toBeVisible();
   await expect(page.getByRole('button', { name: 'Review payment' })).toBeEnabled();
   await page.getByRole('button', { name: 'Custom' }).click();
   await page.getByLabel('Custom fee rate').fill('3');

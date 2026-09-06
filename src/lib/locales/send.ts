@@ -145,6 +145,26 @@ export const sendCopy = {
     fr: 'Examiner les pièces gelées',
     es: 'Revisar monedas congeladas'
   },
+  'Maximum spendable amount selected': {
+    fr: 'Montant maximal disponible sélectionné',
+    es: 'Importe máximo disponible seleccionado'
+  },
+  'Frozen coins remain in this wallet. Unfreeze them first to include them.': {
+    fr: 'Les pièces gelées restent dans ce portefeuille. Dégelez-les d’abord pour les inclure.',
+    es: 'Las monedas congeladas permanecen en esta cartera. Descongélalas primero para incluirlas.'
+  },
+  'The amount uses all spendable coins after the network fee.': {
+    fr: 'Le montant utilise toutes les pièces disponibles après les frais de réseau.',
+    es: 'El importe usa todas las monedas disponibles después de la comisión de red.'
+  },
+  'Maximum spendable amount selected. Frozen coins remain in this wallet.': {
+    fr: 'Montant maximal disponible sélectionné. Les pièces gelées restent dans ce portefeuille.',
+    es: 'Importe máximo disponible seleccionado. Las monedas congeladas permanecen en esta cartera.'
+  },
+  'Maximum spendable amount selected after the network fee.': {
+    fr: 'Montant maximal disponible sélectionné après les frais de réseau.',
+    es: 'Importe máximo disponible seleccionado después de la comisión de red.'
+  },
   '{count} more signature required': {
     fr: 'Encore {count} signature requise',
     es: 'Se necesita {count} firma más'
