@@ -278,4 +278,14 @@ mod tests {
         assert!(inspected.payjoin);
         assert_eq!(inspected.amount_sats, None);
     }
+
+    #[test]
+    fn payment_request_command_maps_parser_errors_to_the_stable_api_contract() {
+        let error = payment_request_inspect(String::new()).unwrap_err();
+        assert_eq!(error.code, "invalid_payment_request");
+        assert_eq!(
+            error.message,
+            PaymentRequestError::InvalidLength.to_string()
+        );
+    }
 }
