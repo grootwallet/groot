@@ -182,6 +182,8 @@ While the unlocked desktop app is running, one centralized foreground scheduler 
 
 An explicit Overview refresh cancels and fully drains any scheduler-owned ordinary sync before starting the user-visible operation, then restores the normal automatic interval afterward. Recovery-scan progress reads run away from the native UI thread so frequent status polling does not interrupt animation or input responsiveness.
 
+Freezing or unfreezing coins also pauses and drains the scheduler before changing persistent spendability. The native database mutation runs off the UI thread, and the Coins route applies the confirmed state before automatic sync resumes, so an older snapshot cannot replace the newly frozen state.
+
 ## Delete wallet
 
 Require the selected wallet credential, explicit typed confirmation, and a backup warning. Close handles, zeroize/clear in-memory keys, remove encrypted secret material and local wallet database, and return to onboarding. Multisig settings opens a dedicated deletion page that links to wallet-backup export, quotes the exact-name prompt, and makes a successful recovery test for the exact current descriptor an explicit prerequisite rather than a hidden disabled-button condition. Deletion affects only this device and cannot recall broadcast transactions or guarantee physical flash erasure.

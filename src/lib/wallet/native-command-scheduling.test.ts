@@ -39,6 +39,8 @@ describe('native command scheduling', () => {
     ['wallet_select', profileCommands],
     ['wallet_sync', profileCommands],
     ['recovery_scan_status', profileCommands],
+    ['coin_set_frozen', profileCommands],
+    ['multisig_coin_set_frozen', profileCommands],
     ['wallet_full_rescan', profileCommands],
     ['wallet_notifications', profileCommands],
     ['wallet_notifications_ack', profileCommands],

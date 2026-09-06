@@ -175,6 +175,11 @@ explorer follow-up has no BIP impact. It serializes existing sync triggers, move
 existing read off the native UI thread, and permits an explicit txid-only explorer
 lookup without changing wallet protocol behavior or interoperability evidence.
 
+The internal mainnet RC coin-freeze follow-up has no BIP impact. It serializes the
+existing persistent spendability mutation against automatic sync and moves its
+database work off the native UI thread without changing coin-selection policy,
+transaction construction, descriptors, or interoperability evidence.
+
 ## Maintenance rule
 
 Every feature, interoperability, signer, descriptor, transaction, payment request,

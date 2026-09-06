@@ -301,6 +301,7 @@
     if (!intent || intent.outpoints.length === 0) return;
     busy = true;
     try {
+      await walletShell.pauseAutomaticSync();
       const update = multisig
         ? walletService.setMultisigCoinFrozen.bind(walletService)
         : walletService.setCoinFrozen.bind(walletService);
@@ -325,6 +326,7 @@
       });
     } finally {
       busy = false;
+      walletShell.resumeAutomaticSync();
     }
   }
 

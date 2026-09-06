@@ -623,16 +623,16 @@ pub fn address_discard(app: AppHandle, state: State<'_, AppState>, id: u32) -> A
 }
 
 #[tauri::command]
-pub fn coin_set_frozen(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    outpoint: String,
-    frozen: bool,
-) -> ApiResult<()> {
-    let _operation = operation_guard(&state)?;
-    require_unlocked(&app, &state)?;
-    let mut db = open_db(&app)?;
-    set_coin_frozen(&mut db, &outpoint, frozen)
+pub async fn coin_set_frozen(app: AppHandle, outpoint: String, frozen: bool) -> ApiResult<()> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let _operation = operation_guard(&state)?;
+        require_unlocked(&app, &state)?;
+        let mut db = open_db(&app)?;
+        set_coin_frozen(&mut db, &outpoint, frozen)
+    })
+    .await
+    .map_err(internal)?
 }
 
 pub(crate) fn set_coin_frozen(db: &mut Connection, outpoint: &str, frozen: bool) -> ApiResult<()> {
@@ -662,16 +662,20 @@ pub(crate) fn set_coin_frozen(db: &mut Connection, outpoint: &str, frozen: bool)
 }
 
 #[tauri::command]
-pub fn multisig_coin_set_frozen(
+pub async fn multisig_coin_set_frozen(
     app: AppHandle,
-    state: State<'_, AppState>,
     outpoint: String,
     frozen: bool,
 ) -> ApiResult<()> {
-    let _operation = operation_guard(&state)?;
-    require_unlocked(&app, &state)?;
-    let mut db = open_multisig_db(&app)?;
-    set_coin_frozen(&mut db, &outpoint, frozen)
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let _operation = operation_guard(&state)?;
+        require_unlocked(&app, &state)?;
+        let mut db = open_multisig_db(&app)?;
+        set_coin_frozen(&mut db, &outpoint, frozen)
+    })
+    .await
+    .map_err(internal)?
 }
 
 pub(crate) fn core_fee_rate(fee_rate: Option<Amount>) -> ApiResult<f64> {

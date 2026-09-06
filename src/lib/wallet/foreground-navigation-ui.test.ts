@@ -103,6 +103,19 @@ describe('foreground wallet navigation', () => {
     expect(overview).toContain('syncFailureDescription(syncStatus)');
   });
 
+  it('gives coin freezing exclusive ownership before applying its local state', () => {
+    const start = coins.indexOf('async function confirmFrozenState()');
+    const end = coins.indexOf('function beginObservedReceiveClaim', start);
+    const mutation = coins.slice(start, end);
+    expect(mutation.indexOf('await walletShell.pauseAutomaticSync()')).toBeGreaterThan(-1);
+    expect(mutation.indexOf('await walletShell.pauseAutomaticSync()')).toBeLessThan(
+      mutation.indexOf('walletService.setCoinFrozen.bind(walletService)')
+    );
+    expect(mutation.indexOf('utxos = utxos.map')).toBeLessThan(
+      mutation.indexOf('walletShell.resumeAutomaticSync()')
+    );
+  });
+
   it('requires an explicit first-scan start and presents resumable recovery progress', () => {
     expect(overview).toContain("initialScanMode = $state<'new' | 'birthday' | 'full'>('new')");
     expect(overview).toContain('let showManualScanOptions = $state(false)');
