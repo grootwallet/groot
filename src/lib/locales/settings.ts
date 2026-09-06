@@ -7,6 +7,19 @@ export const settingsCopy = {
     fr: 'Journal des événements de diagnostic',
     es: 'Registro de eventos de diagnóstico'
   },
+  'Review and export sanitized app events without wallet identifiers or secrets.': {
+    fr: 'Consultez et exportez les événements assainis de l’app sans identifiants de portefeuille ni secrets.',
+    es: 'Revisa y exporta eventos depurados de la app sin identificadores de cartera ni secretos.'
+  },
+  'Recorded event types': {
+    fr: 'Types d’événements enregistrés',
+    es: 'Tipos de eventos registrados'
+  },
+  'Only these durable lifecycle and operation categories are recorded. Sensitive values and passive polling are excluded.':
+    {
+      fr: 'Seules ces catégories durables de cycle de vie et d’opération sont enregistrées. Les valeurs sensibles et l’interrogation passive sont exclues.',
+      es: 'Solo se registran estas categorías duraderas de ciclo de vida y operación. Se excluyen los valores sensibles y el sondeo pasivo.'
+    },
   'Sanitized wallet-operation history for troubleshooting. It never includes secrets or full wallet identifiers.':
     {
       fr: 'Historique assaini des opérations du portefeuille pour le dépannage. Il ne contient jamais de secrets ni d’identifiants complets.',
@@ -62,6 +75,14 @@ export const settingsCopy = {
     fr: 'Adresse de réception générée',
     es: 'Dirección de recepción generada'
   },
+  receive_address_generated: {
+    fr: 'receive_address_generated',
+    es: 'receive_address_generated'
+  },
+  'Receive address discarded': {
+    fr: 'Adresse de réception écartée',
+    es: 'Dirección de recepción descartada'
+  },
   'Receive address verified': {
     fr: 'Adresse de réception vérifiée',
     es: 'Dirección de recepción verificada'
@@ -82,6 +103,15 @@ export const settingsCopy = {
   succeeded: { fr: 'réussi', es: 'correcto' },
   failed: { fr: 'échoué', es: 'fallido' },
   cancelled: { fr: 'annulé', es: 'cancelado' },
+  automatic: { fr: 'automatique', es: 'automático' },
+  startup: { fr: 'démarrage', es: 'inicio' },
+  'Trigger: {trigger}': { fr: 'Déclencheur : {trigger}', es: 'Origen: {trigger}' },
+  '{count} permanent labels assigned': {
+    fr: '{count} libellés permanents attribués',
+    es: '{count} etiquetas permanentes asignadas'
+  },
+  '{count} items': { fr: '{count} éléments', es: '{count} elementos' },
+  '{format} export': { fr: 'Export {format}', es: 'Exportación {format}' },
   software: { fr: 'logiciel', es: 'software' },
   hardware: { fr: 'matériel', es: 'hardware' },
   multisig: { fr: 'multisignature', es: 'multifirma' },

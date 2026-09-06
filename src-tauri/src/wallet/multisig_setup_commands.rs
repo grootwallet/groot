@@ -1372,6 +1372,7 @@ pub fn multisig_address_create(
         diagnostics::DiagnosticOutcome::Succeeded,
         diagnostics::DiagnosticContext {
             wallet_kind: Some(diagnostics::DiagnosticWalletKind::Multisig),
+            item_count: u32::try_from(response.labels.len()).ok(),
             ..Default::default()
         },
         None,
@@ -1498,5 +1499,16 @@ pub fn multisig_address_discard(
             "Only an unused address awaiting payment can be discarded.",
         ));
     }
+    diagnostics::record(
+        &app,
+        &state,
+        diagnostics::DiagnosticEventKind::ReceiveAddressDiscarded,
+        diagnostics::DiagnosticOutcome::Succeeded,
+        diagnostics::DiagnosticContext {
+            wallet_kind: Some(diagnostics::DiagnosticWalletKind::Multisig),
+            ..Default::default()
+        },
+        None,
+    );
     Ok(())
 }

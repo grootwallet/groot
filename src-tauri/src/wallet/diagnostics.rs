@@ -28,6 +28,7 @@ pub(crate) enum DiagnosticEventKind {
     TransactionSigned,
     TransactionBroadcast,
     ReceiveAddressGenerated,
+    ReceiveAddressDiscarded,
     ReceiveAddressVerified,
     CoinFrozen,
     CoinUnfrozen,

@@ -25,10 +25,18 @@ addresses, txids, outpoints, device paths/identifiers, wallet IDs/names, labels,
 amounts. Dependency diagnostics are not forwarded. Records stop rather than rotate
 at a 16 MiB bound, preserving append-only history without unbounded writes.
 
-The utility route is available from the application shell while locked and treats
-network status as locked. It reads only the sanitized app-level file. Native export
-produces deterministic JSON or CSV through an explicit save dialog. Automatic sync
-records one start and terminal outcome per bounded run; polling ticks are not events.
+An event is recorded when a durable user-visible state changes, or when a bounded
+operation needs start, coarse-progress, and terminal evidence to diagnose failure or
+interruption. Passive reads, UI form edits, repeated status polling, and reconstructed
+wallet history are not events. Receive-address creation records only the number of
+permanent labels assigned; it never records label text, the address, or its index.
+Successfully retiring an eligible unused address records a separate discard event.
+
+The utility route's only normal navigation entry is a standalone Settings section
+immediately before wallet deletion; it is not in the persistent desktop or mobile
+shell. The route reads only the sanitized app-level file. Native export produces
+deterministic JSON or CSV through an explicit save dialog. Automatic sync records
+one start and terminal outcome per bounded run; polling ticks are not events.
 
 ## Compatibility and consequences
 
@@ -36,4 +44,9 @@ No wallet database, registry, proposal, backup, descriptor, node-setting, or sec
 envelope format changes. Existing profiles require no migration. Removing a wallet
 does not erase the sanitized app history. The log is diagnostic rather than an
 authoritative transaction ledger and cannot be used to reconstruct wallet state.
+The new discard enum value and optional generation count are additive version-1 log
+records: current readers retain compatibility with every existing record, so the
+file needs neither migration nor discard. A downgrade that encounters the newer
+enum may make the diagnostic viewer unavailable, but it cannot affect wallet data
+and preserves the file for a current build.
 Mainnet distribution remains governed by ADR 0012 and the internal candidate gate.

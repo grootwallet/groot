@@ -9,7 +9,6 @@
     LayoutGrid,
     Plus,
     Settings,
-    ScrollText,
     ShieldCheck
   } from '@lucide/svelte';
   import BrandLockup from './BrandLockup.svelte';
@@ -507,12 +506,6 @@
             aria-current={active('/settings') ? 'page' : undefined}
             ><Settings size={17} /><span>{t('settings', $locale)}</span></a
           >{/if}
-        <a
-          href="/diagnostics"
-          class:active={active('/diagnostics')}
-          aria-current={active('/diagnostics') ? 'page' : undefined}
-          ><ScrollText size={17} /><span>{translate($locale, 'Diagnostics')}</span></a
-        >
         <div class="preference-toggles">
           <ThemeToggle /><DiscreetModeToggle />
         </div>
@@ -580,9 +573,6 @@
       </nav>{/if}
 
     {#if restrictedUtilityRoute}<div class="locked-mobile-utilities">
-        {#if !diagnosticsRoute}<a class="button ghost small" href="/diagnostics"
-            ><ScrollText size={16} />{translate($locale, 'Diagnostics')}</a
-          >{/if}
         <ThemeToggle /><DiscreetModeToggle /><NetworkStatus
           network={defaultConfig.network}
           locked

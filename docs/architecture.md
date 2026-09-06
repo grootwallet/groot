@@ -6,9 +6,11 @@ The native boundary owns an app-scoped `diagnostics-v1.jsonl` file separate from
 wallet databases and registry state. Call sites select closed event/outcome enums;
 the renderer cannot submit log messages or context. Fixed scalar metadata and a
 stable-error allowlist are serialized before IPC, with unknown errors reduced to
-`internal_error`. The locked diagnostics route reads only this sanitized file and
-exports deterministic JSON or CSV through a native save dialog. ADR 0058 defines
-the prohibited data classes, append-only size bound, and compatibility decision.
+`internal_error`. Settings owns the only normal navigation entry, immediately before
+wallet deletion. The route reads only this sanitized file and exports deterministic
+JSON or CSV through a native save dialog. ADR 0058 defines the event-selection
+heuristic, prohibited data classes, append-only size bound, and compatibility
+decision.
 
 Brand adoption and the intentionally stable storage namespace are recorded in [`groot-rename-audit.md`](groot-rename-audit.md) and ADR 0023.
 

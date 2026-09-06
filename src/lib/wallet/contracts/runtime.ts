@@ -48,6 +48,7 @@ export type DiagnosticRecord = {
     | 'transaction_signed'
     | 'transaction_broadcast'
     | 'receive_address_generated'
+    | 'receive_address_discarded'
     | 'receive_address_verified'
     | 'coin_frozen'
     | 'coin_unfrozen'

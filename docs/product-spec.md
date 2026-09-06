@@ -7,11 +7,17 @@ Status: canonical for the current prototype and first live integration build.
 Groot is an onchain-only Bitcoin wallet and multisig coordinator. It prioritizes the smallest understandable flows for receiving, sending, reviewing activity, inspecting coins, and coordinating descriptor-based hardware signers. There are no cloud backups, Lightning, address books, or editable labels in the first release.
 
 Groot keeps a local sanitized diagnostic event log for materially useful lifecycle
-and wallet-operation outcomes. It is viewable while locked, exports deterministic
-JSON or CSV, and never contains credentials, recovery material, descriptors, keys,
+and wallet-operation outcomes. Its normal entry is a standalone Settings section
+immediately before wallet deletion; it exports deterministic JSON or CSV and never
+contains credentials, recovery material, descriptors, keys,
 RPC authentication or endpoints, PSBT/raw transaction data, full wallet/onchain
 identifiers, device identifiers, wallet names, labels, or amounts. The log is not an
-authoritative wallet ledger and automatic polling ticks are not recorded.
+authoritative wallet ledger and automatic polling ticks are not recorded. Events
+cover durable user-visible state transitions plus bounded operation start,
+coarse-progress, and terminal outcomes when failure diagnosis matters. Passive
+reads, form edits, and identifiers are excluded. Receive generation records only
+the permanent-label count, never its text; successful eligible-address discard is
+recorded as a distinct event.
 
 The distributed macOS application includes Groot's exact reviewed Bitcoin Core HWI dependency for USB hardware signers. A user does not install HWI, Homebrew, or a privileged helper separately. Groot verifies the bundled executable and containing signed app before use and fails closed rather than searching the host system.
 

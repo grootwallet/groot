@@ -3789,7 +3789,8 @@ code {
 .settings-list > button {
   cursor: pointer;
 }
-.settings-list > button:hover {
+.settings-list > button:hover,
+.settings-list > a.setting-row:hover {
   background: var(--panel-2);
 }
 .settings-list > :last-child {
@@ -3857,7 +3858,8 @@ code {
   font-weight: 650;
   line-height: 1;
 }
-.settings-list > button > svg:last-child {
+.settings-list > button > svg:last-child,
+.settings-list > a.setting-row > svg:last-child {
   color: var(--muted-2);
 }
 .setting-row-status {

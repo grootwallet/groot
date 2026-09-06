@@ -715,6 +715,7 @@ pub fn address_create(
         diagnostics::DiagnosticOutcome::Succeeded,
         diagnostics::DiagnosticContext {
             wallet_kind: Some(diagnostics::wallet_kind(selected_profile(&app)?.kind)),
+            item_count: u32::try_from(response.labels.len()).ok(),
             ..Default::default()
         },
         None,
@@ -739,6 +740,17 @@ pub fn address_discard(app: AppHandle, state: State<'_, AppState>, id: u32) -> A
             "Only an unused address awaiting payment can be discarded.",
         ));
     }
+    diagnostics::record(
+        &app,
+        &state,
+        diagnostics::DiagnosticEventKind::ReceiveAddressDiscarded,
+        diagnostics::DiagnosticOutcome::Succeeded,
+        diagnostics::DiagnosticContext {
+            wallet_kind: Some(diagnostics::wallet_kind(selected_profile(&app)?.kind)),
+            ..Default::default()
+        },
+        None,
+    );
     Ok(())
 }
 

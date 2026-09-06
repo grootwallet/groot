@@ -73,10 +73,36 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     return draft ? structuredClone(draft) : null;
   }
   async diagnostics() {
+    const timestamp = Math.floor(Date.now() / 1000);
     return [
       {
         schemaVersion: 1 as const,
-        timestamp: Math.floor(Date.now() / 1000),
+        timestamp: timestamp - 120,
+        event: 'receive_address_generated' as const,
+        outcome: 'succeeded' as const,
+        trigger: 'manual' as const,
+        walletKind: 'software' as const,
+        itemCount: 1,
+        appVersion: APP_VERSION,
+        buildCommit: 'development',
+        compiledNetwork: defaultConfig.network,
+        platform: 'browser' as const
+      },
+      {
+        schemaVersion: 1 as const,
+        timestamp: timestamp - 60,
+        event: 'receive_address_discarded' as const,
+        outcome: 'succeeded' as const,
+        trigger: 'manual' as const,
+        walletKind: 'software' as const,
+        appVersion: APP_VERSION,
+        buildCommit: 'development',
+        compiledNetwork: defaultConfig.network,
+        platform: 'browser' as const
+      },
+      {
+        schemaVersion: 1 as const,
+        timestamp,
         event: 'app_started' as const,
         outcome: 'succeeded' as const,
         trigger: 'startup' as const,

@@ -19,6 +19,7 @@
     Pencil,
     Plus,
     RefreshCw,
+    ScrollText,
     ShieldCheck,
     Sun,
     Trash2,
@@ -1359,6 +1360,23 @@
           )}</span
         ></button
       >
+    </div>
+  </section>
+  <section class="settings-group">
+    <h2>{translate($locale, 'Diagnostics')}</h2>
+    <div class="settings-list">
+      <a class="setting-row" href="/diagnostics">
+        <ScrollText class="setting-icon" size={17} />
+        <span
+          ><strong>{translate($locale, 'Diagnostic event log')}</strong><small
+            >{translate(
+              $locale,
+              'Review and export sanitized app events without wallet identifiers or secrets.'
+            )}</small
+          ></span
+        >
+        <ChevronRight size={16} />
+      </a>
     </div>
   </section>
   {#if selectedProfile?.kind !== 'multisig'}<section class="settings-group danger-zone">

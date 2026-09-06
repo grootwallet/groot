@@ -14,35 +14,32 @@
   let error = $state('');
   let exporting = $state<'json' | 'csv' | null>(null);
 
-  const eventLabel = (event: DiagnosticRecord['event']) =>
-    translate(
-      $locale,
-      (
-        {
-          app_started: 'App started',
-          wallet_created: 'Wallet created',
-          wallet_recovered: 'Wallet recovered',
-          wallet_removed: 'Wallet removed',
-          wallet_unlocked: 'Wallet unlocked',
-          wallet_locked: 'Wallet locked',
-          sync: 'Wallet sync',
-          recovery_scan: 'Recovery scan',
-          transaction_prepared: 'Transaction prepared',
-          transaction_signed: 'Transaction signed',
-          transaction_broadcast: 'Transaction broadcast',
-          receive_address_generated: 'Receive address generated',
-          receive_address_verified: 'Receive address verified',
-          coin_frozen: 'Coin frozen',
-          coin_unfrozen: 'Coin unfrozen',
-          backup_exported: 'Backup exported',
-          backup_imported: 'Backup imported',
-          backup_verified: 'Backup verified',
-          recovery_tested: 'Recovery tested',
-          network_configuration_changed: 'Network configuration changed',
-          diagnostics_exported: 'Diagnostics exported'
-        } as const
-      )[event]
-    );
+  const eventLabels = {
+    app_started: 'App started',
+    wallet_created: 'Wallet created',
+    wallet_recovered: 'Wallet recovered',
+    wallet_removed: 'Wallet removed',
+    wallet_unlocked: 'Wallet unlocked',
+    wallet_locked: 'Wallet locked',
+    sync: 'Wallet sync',
+    recovery_scan: 'Recovery scan',
+    transaction_prepared: 'Transaction prepared',
+    transaction_signed: 'Transaction signed',
+    transaction_broadcast: 'Transaction broadcast',
+    receive_address_generated: 'Receive address generated',
+    receive_address_discarded: 'Receive address discarded',
+    receive_address_verified: 'Receive address verified',
+    coin_frozen: 'Coin frozen',
+    coin_unfrozen: 'Coin unfrozen',
+    backup_exported: 'Backup exported',
+    backup_imported: 'Backup imported',
+    backup_verified: 'Backup verified',
+    recovery_tested: 'Recovery tested',
+    network_configuration_changed: 'Network configuration changed',
+    diagnostics_exported: 'Diagnostics exported'
+  } as const satisfies Record<DiagnosticRecord['event'], string>;
+  const supportedEventKinds = Object.keys(eventLabels) as DiagnosticRecord['event'][];
+  const eventLabel = (event: DiagnosticRecord['event']) => translate($locale, eventLabels[event]);
 
   async function load() {
     loading = true;
@@ -129,6 +126,23 @@
     </div>
   </section>
 
+  <section class="diagnostic-event-catalog" aria-labelledby="recorded-event-types">
+    <div>
+      <h2 id="recorded-event-types">{translate($locale, 'Recorded event types')}</h2>
+      <p>
+        {translate(
+          $locale,
+          'Only these durable lifecycle and operation categories are recorded. Sensitive values and passive polling are excluded.'
+        )}
+      </p>
+    </div>
+    <ul>
+      {#each supportedEventKinds as event}
+        <li>{eventLabel(event)}</li>
+      {/each}
+    </ul>
+  </section>
+
   {#if loading}
     <div class="diagnostics-state" role="status">{translate($locale, 'Loading diagnostics…')}</div>
   {:else if error}
@@ -172,8 +186,27 @@
                   })}</span
                 >
                 {#if record.walletKind}<span>{translate($locale, record.walletKind)}</span>{/if}
+                <span
+                  >{translate($locale, 'Trigger: {trigger}', {
+                    trigger: translate($locale, record.trigger)
+                  })}</span
+                >
                 {#if record.syncSource}<span>{record.syncSource}</span>{/if}
                 {#if record.progressPercent !== undefined}<span>{record.progressPercent}%</span
+                  >{/if}
+                {#if record.itemCount !== undefined}<span
+                    >{translate(
+                      $locale,
+                      record.event === 'receive_address_generated'
+                        ? '{count} permanent labels assigned'
+                        : '{count} items',
+                      { count: record.itemCount }
+                    )}</span
+                  >{/if}
+                {#if record.exportFormat}<span
+                    >{translate($locale, '{format} export', {
+                      format: record.exportFormat.toUpperCase()
+                    })}</span
                   >{/if}
                 {#if record.errorCode}<code>{record.errorCode}</code>{/if}
               </td>
@@ -216,6 +249,36 @@
     display: flex;
     gap: 8px;
     flex-wrap: wrap;
+  }
+  .diagnostic-event-catalog {
+    margin-top: 16px;
+    padding: 16px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--panel);
+  }
+  .diagnostic-event-catalog h2 {
+    margin: 0;
+    font-size: 14px;
+  }
+  .diagnostic-event-catalog p {
+    margin: 5px 0 0;
+    color: var(--text-muted);
+    font-size: 11px;
+  }
+  .diagnostic-event-catalog ul {
+    margin: 14px 0 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 7px 16px;
+    list-style: none;
+    font-size: 11px;
+  }
+  .diagnostic-event-catalog li::before {
+    content: '·';
+    margin-right: 6px;
+    color: var(--accent);
   }
   .diagnostics-state {
     margin-top: 16px;
@@ -285,6 +348,9 @@
     }
     .diagnostics-table {
       min-width: 650px;
+    }
+    .diagnostic-event-catalog ul {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
 </style>

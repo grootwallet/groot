@@ -2,11 +2,15 @@
 
 ## Diagnostics
 
-1. Open **Diagnostics** from the application utility area before or after unlock.
+1. Open **Settings → Diagnostics → Diagnostic event log**. It appears immediately
+   before wallet deletion and is not a persistent shell or main-menu destination.
 2. Groot reads only sanitized app-level records; wallet snapshot, descriptor, node,
    signer, transaction, and address APIs are not called.
-3. Review timestamp, event, outcome, compiled network, platform, build, wallet kind,
-   sync source, coarse progress, and safe stable error code when present.
+3. Review the complete allowlisted event-category inventory, then inspect timestamp,
+   event, outcome, trigger, compiled network, platform, build, wallet kind, sync
+   source, coarse progress/count, export format, and safe stable error code when
+   present. Receive generation exposes only the number of permanent labels assigned,
+   never label text; a successful eligible-address discard is its own event.
 4. Choose **Export CSV** or **Export JSON** and confirm a native save location.
    Cancellation changes nothing; success appends one sanitized export event.
 

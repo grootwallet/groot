@@ -10,6 +10,18 @@ const route = readFileSync(
   'utf8'
 );
 const shell = readFileSync(new URL('../components/AppShell.svelte', import.meta.url), 'utf8');
+const settings = readFileSync(
+  new URL('../../routes/settings/+page.svelte', import.meta.url),
+  'utf8'
+);
+const profileCommands = readFileSync(
+  new URL('../../../src-tauri/src/wallet/profile_commands.rs', import.meta.url),
+  'utf8'
+);
+const multisigCommands = readFileSync(
+  new URL('../../../src-tauri/src/wallet/multisig_setup_commands.rs', import.meta.url),
+  'utf8'
+);
 
 describe('diagnostic event boundary', () => {
   it('uses a native fixed-field schema and strict error allowlist', () => {
@@ -24,8 +36,21 @@ describe('diagnostic event boundary', () => {
   it('keeps diagnostics accessible without unlocking wallet data', () => {
     expect(shell).toContain("page.url.pathname === '/diagnostics'");
     expect(shell).toContain('locked={restrictedUtilityRoute}');
+    expect(shell).not.toContain('href="/diagnostics"');
+    expect(settings).toContain('href="/diagnostics"');
+    expect(settings.indexOf('href="/diagnostics"')).toBeLessThan(
+      settings.indexOf("translate($locale, 'Wallet deletion')")
+    );
     expect(route).toContain('walletService.diagnostics()');
     expect(route).not.toContain('walletService.snapshot()');
+  });
+
+  it('records receive creation and discard without address or label values', () => {
+    expect(rust).toContain('ReceiveAddressDiscarded');
+    expect(profileCommands).toContain('diagnostics::DiagnosticEventKind::ReceiveAddressDiscarded');
+    expect(multisigCommands).toContain('diagnostics::DiagnosticEventKind::ReceiveAddressDiscarded');
+    expect(profileCommands).toContain('item_count: u32::try_from(response.labels.len()).ok()');
+    expect(multisigCommands).toContain('item_count: u32::try_from(response.labels.len()).ok()');
   });
 
   it('offers deterministic native CSV and JSON exports', () => {

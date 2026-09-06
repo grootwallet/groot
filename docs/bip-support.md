@@ -206,7 +206,9 @@ The v0.4.92 sanitized diagnostic event log has no BIP impact. It records only
 allowlisted operation categories, outcomes, build/platform context, and coarse sync
 metadata; it does not change descriptors, PSBTs, transaction construction,
 recovery/backup interoperability, sync protocols, network policy, or supporting
-evidence for any BIP.
+evidence for any BIP. Adding a sanitized receive-address discard category, exposing
+only the permanent-label count on generation, and relocating the navigation entry
+to Settings likewise have no BIP impact.
 
 Every feature, interoperability, signer, descriptor, transaction, payment request,
 backup/recovery, sync/backend, network, or dependency change must assess BIP impact.
