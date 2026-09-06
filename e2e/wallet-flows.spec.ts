@@ -81,8 +81,36 @@ test('copies the public build identity with inline retry feedback', async ({ pag
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(displayedIdentity);
 });
 
-test('exports diagnostics with a Finder action and continuous table rows', async ({ page }) => {
+test('browses, copies, and exports app logs inside the regular shell', async ({ page }) => {
+  await page.addInitScript(() => {
+    let copied = '';
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: async (value: string) => {
+          copied = value;
+        },
+        readText: async () => copied
+      }
+    });
+  });
   await page.goto('/diagnostics');
+  await expect(page.getByRole('heading', { name: 'App logs' })).toBeVisible();
+  const mobile = (page.viewportSize()?.width ?? 1180) <= 760;
+  const navigation = page.locator(mobile ? '.mobile-nav' : '.side-nav');
+  await expect(navigation.getByText('Overview')).toBeVisible();
+  await expect(navigation.getByText('Activity')).toBeVisible();
+  await expect(navigation.getByText('Coins')).toBeVisible();
+  await expect(
+    page.locator(mobile ? '.mobile-nav a[href="/settings"]' : '.sidebar-bottom a[href="/settings"]')
+  ).toHaveAttribute('aria-current', 'page');
+
+  const eventInventory = page.locator('.diagnostic-event-catalog');
+  await expect(eventInventory).not.toHaveAttribute('open', '');
+  await eventInventory.getByText('Recorded event types').click();
+  await expect(eventInventory).toHaveAttribute('open', '');
+  await expect(eventInventory.getByText('Receive address discarded')).toBeVisible();
+
   const table = page.getByRole('table');
   await expect(table).toBeVisible();
 
@@ -93,10 +121,42 @@ test('exports diagnostics with a Finder action and continuous table rows', async
     .evaluateAll((cells) => cells.map((cell) => Math.round(cell.getBoundingClientRect().bottom)));
   expect(new Set(firstRowBottoms).size).toBe(1);
 
+  await page.getByLabel('Date order').selectOption('oldest');
+  await expect(table.locator('tbody tr').first()).toContainText('Receive address generated');
+
+  await page.getByText('All event types').click();
+  await page.getByLabel('Receive address generated', { exact: true }).check();
+  await page.getByLabel('Receive address discarded', { exact: true }).check();
+  await page.getByRole('button', { name: 'Done' }).click();
+  await expect(table.locator('tbody tr')).toHaveCount(2);
+  await page.getByLabel('Search logs').fill('discarded');
+  await expect(table.locator('tbody tr')).toHaveCount(1);
+  await expect(table.locator('tbody tr').first()).toContainText('Receive address discarded');
+  await page.getByLabel('Search logs').fill('');
+
+  await page.getByRole('button', { name: 'Raw JSON' }).click();
+  const rawJson = page.getByLabel('Raw app log JSON');
+  await expect(rawJson).toBeVisible();
+  expect(JSON.parse(await rawJson.inputValue())).toHaveLength(2);
+  await page.getByRole('button', { name: 'Copy JSON' }).click();
+  expect(JSON.parse(await page.evaluate(() => navigator.clipboard.readText()))).toHaveLength(2);
+
   await page.getByRole('button', { name: 'Export CSV' }).click();
-  const toast = page.locator('.toast').filter({ hasText: 'Diagnostics exported' });
+  const toast = page.locator('.toast').filter({ hasText: 'App logs exported' });
   await expect(toast.getByRole('button', { name: 'Show in Finder' })).toBeVisible();
   await toast.getByRole('button', { name: 'Show in Finder' }).click();
+
+  await page.goto('/settings');
+  const logSetting = page.locator('a.setting-row[href="/diagnostics"]');
+  await expect(logSetting.getByText('View app logs')).toBeVisible();
+  const iconSizes = await logSetting
+    .locator('.setting-icon, .setting-icon svg')
+    .evaluateAll((items) => items.map((item) => Math.round(item.getBoundingClientRect().width)));
+  expect(iconSizes).toEqual([33, 18]);
+
+  await page.goto('/diagnostics?fixture-locked-wallet-switch=1');
+  await expect(page.getByRole('heading', { name: 'App logs' })).toBeVisible();
+  await expect(page.locator(mobile ? '.mobile-nav' : '.side-nav')).toBeHidden();
 });
 
 test('creates a 24-word wallet and clears onboarding secrets', async ({ page }) => {

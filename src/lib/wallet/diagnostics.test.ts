@@ -14,6 +14,7 @@ const settings = readFileSync(
   new URL('../../routes/settings/+page.svelte', import.meta.url),
   'utf8'
 );
+const clipboard = readFileSync(new URL('../clipboard.ts', import.meta.url), 'utf8');
 const profileCommands = readFileSync(
   new URL('../../../src-tauri/src/wallet/profile_commands.rs', import.meta.url),
   'utf8'
@@ -33,11 +34,15 @@ describe('diagnostic event boundary', () => {
     );
   });
 
-  it('keeps diagnostics accessible without unlocking wallet data', () => {
+  it('keeps app logs in Settings while retaining the ordinary unlocked shell', () => {
     expect(shell).toContain("page.url.pathname === '/diagnostics'");
-    expect(shell).toContain('locked={restrictedUtilityRoute}');
+    expect(shell).toContain('lockedRoute || (diagnosticsRoute && !selectedWalletUnlocked)');
+    expect(shell).toContain('selectedWalletUnlocked = selection.unlocked;');
+    expect(shell).toContain("page.url.pathname === href || page.url.pathname === '/diagnostics'");
     expect(shell).not.toContain('href="/diagnostics"');
     expect(settings).toContain('href="/diagnostics"');
+    expect(settings).toContain("translate($locale, 'App logs')");
+    expect(settings).toContain('<span class="setting-icon"><ScrollText size={18} /></span>');
     expect(settings.indexOf('href="/diagnostics"')).toBeLessThan(
       settings.indexOf("translate($locale, 'Wallet deletion')")
     );
@@ -60,6 +65,21 @@ describe('diagnostic event boundary', () => {
     expect(route).toContain('walletService.revealSavedFile(result.revealToken!)');
     expect(route).toContain('label: result.revealLabel');
     expect(rust).toContain('csv_export_is_deterministic_and_quotes_every_field');
+  });
+
+  it('supports bounded raw JSON copy and local search, multi-filter, and date order', () => {
+    expect(route).toContain('filterAndSortDiagnosticRecords(');
+    expect(route).toContain("let selectedEventKinds = $state<DiagnosticRecord['event'][]>([])");
+    expect(route).toContain("let sortOrder = $state<DiagnosticSortOrder>('newest')");
+    expect(route).toContain("let view = $state<'table' | 'raw'>('table')");
+    expect(route).toContain("await copyText(rawJson, 'app-logs')");
+    expect(clipboard).toContain("'app-logs': { label: 'Sanitized Groot app logs'");
+  });
+
+  it('keeps the event inventory collapsed behind a 90-degree disclosure', () => {
+    expect(route).toContain('<details class="diagnostic-event-catalog">');
+    expect(route).toContain('.diagnostic-event-catalog[open] summary :global(.catalog-chevron)');
+    expect(route).toContain('transform: rotate(90deg);');
   });
 
   it('keeps table dividers continuous across the safe-context column', () => {

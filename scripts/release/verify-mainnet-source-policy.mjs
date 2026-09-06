@@ -102,11 +102,11 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src/lib/components/AppShell.svelte',
-    'bbbedb1bcfe793d736b2c081372e9c5c02f166d915050388ee2bf64e10dfcd47'
+    '5000f1e339495f3eea7fa80ea0bb866010490be7ba531efab54079cd482f88b7'
   ],
   [
     'src/routes/diagnostics/+page.svelte',
-    '8fa85e4c881b6544ebbaf80e517e87a7177ab1b566c4b078eb449cb1c6b9820d'
+    'e551e8bf147f29a2384b229897ae0efaed17991160a83e24e83c6238b36f9a3d'
   ],
   [
     'src/routes/welcome/+page.svelte',
@@ -119,7 +119,7 @@ const pinnedPolicySources = new Map([
   ['src/routes/+page.svelte', '0af4dc01bbc8eb7ee344877db710fa29de1ba5405f0a725a40e967c1aea83f56'],
   [
     'src/routes/settings/+page.svelte',
-    '5ac2453fda408cf7a6146c71a99e0ea5a744121f12df076b1ce38ad927ad8b0e'
+    '9eebc5f56d3e3d903fe4c51d08921dd037ff996611d32b062881713c5f7d87c2'
   ],
   [
     'src/routes/hardware/new/+page.svelte',

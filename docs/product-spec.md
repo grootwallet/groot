@@ -6,9 +6,12 @@ Status: canonical for the current prototype and first live integration build.
 
 Groot is an onchain-only Bitcoin wallet and multisig coordinator. It prioritizes the smallest understandable flows for receiving, sending, reviewing activity, inspecting coins, and coordinating descriptor-based hardware signers. There are no cloud backups, Lightning, address books, or editable labels in the first release.
 
-Groot keeps a local sanitized diagnostic event log for materially useful lifecycle
-and wallet-operation outcomes. Its normal entry is a standalone Settings section
-immediately before wallet deletion; it exports deterministic JSON or CSV and never
+Groot keeps local sanitized **App logs** for materially useful lifecycle and
+wallet-operation outcomes. Its normal entry is a standalone Settings section
+immediately before wallet deletion; the standard unlocked navigation remains visible
+while viewing it. Users can search safe context, combine event-type filters, order by
+date, inspect and explicitly copy the exact sanitized JSON records in-app, or export
+deterministic JSON or CSV. The log never
 contains credentials, recovery material, descriptors, keys,
 RPC authentication or endpoints, PSBT/raw transaction data, full wallet/onchain
 identifiers, device identifiers, wallet names, labels, or amounts. The log is not an

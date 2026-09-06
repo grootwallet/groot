@@ -1,11 +1,26 @@
 <script lang="ts">
-  import { ArrowLeft, Download, RefreshCw } from '@lucide/svelte';
+  import {
+    ArrowLeft,
+    Check,
+    ChevronDown,
+    ChevronRight,
+    Copy,
+    Download,
+    Filter,
+    RefreshCw,
+    Search
+  } from '@lucide/svelte';
   import Button from '$lib/components/Button.svelte';
+  import { copyText } from '$lib/clipboard';
   import LocalTimestamp from '$lib/components/LocalTimestamp.svelte';
   import { locale } from '$lib/i18n';
   import { localizedError, translate } from '$lib/i18n-catalog';
   import { walletService } from '$lib/wallet';
   import type { DiagnosticRecord } from '$lib/wallet/contracts';
+  import {
+    filterAndSortDiagnosticRecords,
+    type DiagnosticSortOrder
+  } from '$lib/wallet/diagnostic-view';
   import { toast } from '$lib/stores/toasts';
   import { onMount } from 'svelte';
 
@@ -13,6 +28,10 @@
   let loading = $state(true);
   let error = $state('');
   let exporting = $state<'json' | 'csv' | null>(null);
+  let query = $state('');
+  let selectedEventKinds = $state<DiagnosticRecord['event'][]>([]);
+  let sortOrder = $state<DiagnosticSortOrder>('newest');
+  let view = $state<'table' | 'raw'>('table');
 
   const eventLabels = {
     app_started: 'App started',
@@ -36,16 +55,39 @@
     backup_verified: 'Backup verified',
     recovery_tested: 'Recovery tested',
     network_configuration_changed: 'Network configuration changed',
-    diagnostics_exported: 'Diagnostics exported'
+    diagnostics_exported: 'App logs exported'
   } as const satisfies Record<DiagnosticRecord['event'], string>;
   const supportedEventKinds = Object.keys(eventLabels) as DiagnosticRecord['event'][];
   const eventLabel = (event: DiagnosticRecord['event']) => translate($locale, eventLabels[event]);
+  const visibleRecords = $derived(
+    filterAndSortDiagnosticRecords(records, query, selectedEventKinds, sortOrder, eventLabel)
+  );
+  const rawJson = $derived(JSON.stringify(visibleRecords, null, 2));
+
+  function toggleEventKind(event: DiagnosticRecord['event']) {
+    selectedEventKinds = selectedEventKinds.includes(event)
+      ? selectedEventKinds.filter((kind) => kind !== event)
+      : [...selectedEventKinds, event];
+  }
+
+  async function copyRawJson() {
+    try {
+      await copyText(rawJson, 'app-logs');
+      toast({ title: translate($locale, 'App logs copied'), tone: 'success' });
+    } catch (cause) {
+      toast({
+        title: translate($locale, 'Could not copy app logs'),
+        description: localizedError(cause, $locale),
+        tone: 'danger'
+      });
+    }
+  }
 
   async function load() {
     loading = true;
     error = '';
     try {
-      records = (await walletService.diagnostics()).toReversed();
+      records = await walletService.diagnostics();
     } catch (cause) {
       error = localizedError(cause, $locale, 'Could not load diagnostics.');
     } finally {
@@ -59,8 +101,8 @@
       const result = await walletService.exportDiagnostics(format);
       if (result.saved) {
         toast({
-          title: translate($locale, 'Diagnostics exported'),
-          description: translate($locale, 'The sanitized diagnostic log was saved.'),
+          title: translate($locale, 'App logs exported'),
+          description: translate($locale, 'The sanitized app logs were saved.'),
           tone: 'success',
           action:
             result.revealToken && result.revealLabel
@@ -84,7 +126,7 @@
       }
     } catch (cause) {
       toast({
-        title: translate($locale, 'Could not export diagnostics'),
+        title: translate($locale, 'Could not export app logs'),
         description: localizedError(cause, $locale),
         tone: 'danger'
       });
@@ -99,8 +141,8 @@
 <div class="page diagnostics-page">
   <header class="page-header diagnostics-header">
     <div>
-      <p class="eyebrow">{translate($locale, 'APP DIAGNOSTICS')}</p>
-      <h1>{translate($locale, 'Diagnostic event log')}</h1>
+      <p class="eyebrow">{translate($locale, 'APP LOGS')}</p>
+      <h1>{translate($locale, 'App logs')}</h1>
       <p class="subtitle">
         {translate(
           $locale,
@@ -113,7 +155,7 @@
     </Button>
   </header>
 
-  <section class="diagnostics-summary" aria-label={translate($locale, 'Diagnostic log summary')}>
+  <section class="diagnostics-summary" aria-label={translate($locale, 'App log summary')}>
     <div>
       <strong>{translate($locale, '{count} events', { count: records.length })}</strong>
       <small
@@ -143,22 +185,27 @@
     </div>
   </section>
 
-  <section class="diagnostic-event-catalog" aria-labelledby="recorded-event-types">
-    <div>
-      <h2 id="recorded-event-types">{translate($locale, 'Recorded event types')}</h2>
+  <details class="diagnostic-event-catalog">
+    <summary id="recorded-event-types">
+      <span>{translate($locale, 'Recorded event types')}</span><ChevronRight
+        class="catalog-chevron"
+        size={14}
+      />
+    </summary>
+    <div class="diagnostic-event-catalog-content">
       <p>
         {translate(
           $locale,
           'Only these durable lifecycle and operation categories are recorded. Sensitive values and passive polling are excluded.'
         )}
       </p>
+      <ul>
+        {#each supportedEventKinds as event}
+          <li>{eventLabel(event)}</li>
+        {/each}
+      </ul>
     </div>
-    <ul>
-      {#each supportedEventKinds as event}
-        <li>{eventLabel(event)}</li>
-      {/each}
-    </ul>
-  </section>
+  </details>
 
   {#if loading}
     <div class="diagnostics-state" role="status">{translate($locale, 'Loading diagnostics…')}</div>
@@ -174,66 +221,175 @@
       {translate($locale, 'No diagnostic events have been recorded yet.')}
     </div>
   {:else}
-    <div class="diagnostics-table-wrap">
-      <table class="diagnostics-table">
-        <thead>
-          <tr>
-            <th>{translate($locale, 'Time')}</th>
-            <th>{translate($locale, 'Event')}</th>
-            <th>{translate($locale, 'Outcome')}</th>
-            <th>{translate($locale, 'Safe context')}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {#each records as record}
+    <section class="log-browser" aria-label={translate($locale, 'Browse app logs')}>
+      <div class="log-controls">
+        <label class="log-search">
+          <span>{translate($locale, 'Search logs')}</span>
+          <span class="log-search-input"
+            ><Search size={15} /><input
+              type="search"
+              bind:value={query}
+              placeholder={translate($locale, 'Search events and safe context')}
+            /></span
+          >
+        </label>
+        <details class="event-filter">
+          <summary>
+            <Filter size={15} /><span
+              >{selectedEventKinds.length
+                ? translate($locale, '{count} event types', { count: selectedEventKinds.length })
+                : translate($locale, 'All event types')}</span
+            ><ChevronDown class="event-filter-chevron" size={14} />
+          </summary>
+          <div class="event-filter-menu">
+            <div>
+              <strong>{translate($locale, 'Filter by event type')}</strong>
+              <span>
+                {#if selectedEventKinds.length}<button
+                    type="button"
+                    onclick={() => (selectedEventKinds = [])}>{translate($locale, 'Clear')}</button
+                  >{/if}
+                <button
+                  type="button"
+                  onclick={(event) =>
+                    event.currentTarget.closest('details')?.removeAttribute('open')}
+                  >{translate($locale, 'Done')}</button
+                >
+              </span>
+            </div>
+            {#each supportedEventKinds as event}
+              <label>
+                <input
+                  type="checkbox"
+                  checked={selectedEventKinds.includes(event)}
+                  onchange={() => toggleEventKind(event)}
+                />
+                <span>{eventLabel(event)}</span>
+                {#if selectedEventKinds.includes(event)}<Check
+                    class="filter-check"
+                    size={14}
+                  />{/if}
+              </label>
+            {/each}
+          </div>
+        </details>
+        <label class="log-sort">
+          <span>{translate($locale, 'Date order')}</span>
+          <select bind:value={sortOrder}>
+            <option value="newest">{translate($locale, 'Newest first')}</option>
+            <option value="oldest">{translate($locale, 'Oldest first')}</option>
+          </select>
+        </label>
+        <div class="log-view" role="group" aria-label={translate($locale, 'Log view')}>
+          <button type="button" class:active={view === 'table'} onclick={() => (view = 'table')}
+            >{translate($locale, 'Table')}</button
+          ><button type="button" class:active={view === 'raw'} onclick={() => (view = 'raw')}
+            >{translate($locale, 'Raw JSON')}</button
+          >
+        </div>
+      </div>
+      <p class="log-results" aria-live="polite">
+        {translate($locale, 'Showing {visible} of {total} events', {
+          visible: visibleRecords.length,
+          total: records.length
+        })}
+      </p>
+    </section>
+
+    {#if visibleRecords.length === 0}
+      <div class="diagnostics-state filtered-empty">
+        <span>{translate($locale, 'No app logs match these filters.')}</span>
+        <Button
+          variant="secondary"
+          size="small"
+          onclick={() => {
+            query = '';
+            selectedEventKinds = [];
+          }}>{translate($locale, 'Clear filters')}</Button
+        >
+      </div>
+    {:else if view === 'raw'}
+      <section class="raw-log" aria-labelledby="raw-log-heading">
+        <div>
+          <span
+            ><strong id="raw-log-heading">{translate($locale, 'Raw JSON')}</strong><small
+              >{translate(
+                $locale,
+                'The exact sanitized records shown by the current filters.'
+              )}</small
+            ></span
+          ><Button variant="secondary" size="small" onclick={copyRawJson}
+            ><Copy size={15} />{translate($locale, 'Copy JSON')}</Button
+          >
+        </div>
+        <textarea
+          aria-label={translate($locale, 'Raw app log JSON')}
+          readonly
+          spellcheck="false"
+          value={rawJson}></textarea>
+      </section>
+    {:else}
+      <div class="diagnostics-table-wrap">
+        <table class="diagnostics-table">
+          <thead>
             <tr>
-              <td><LocalTimestamp value={String(record.timestamp)} /></td>
-              <td><strong>{eventLabel(record.event)}</strong></td>
-              <td
-                ><span class="diagnostic-outcome" class:failed={record.outcome === 'failed'}
-                  >{translate($locale, record.outcome)}</span
-                ></td
-              >
-              <td>
-                <div class="diagnostic-context">
-                  <span
-                    >{translate($locale, '{network} · {platform} · v{version}', {
-                      network: record.compiledNetwork,
-                      platform: record.platform,
-                      version: record.appVersion
-                    })}</span
-                  >
-                  {#if record.walletKind}<span>{translate($locale, record.walletKind)}</span>{/if}
-                  <span
-                    >{translate($locale, 'Trigger: {trigger}', {
-                      trigger: translate($locale, record.trigger)
-                    })}</span
-                  >
-                  {#if record.syncSource}<span>{record.syncSource}</span>{/if}
-                  {#if record.progressPercent !== undefined}<span>{record.progressPercent}%</span
-                    >{/if}
-                  {#if record.itemCount !== undefined}<span
-                      >{translate(
-                        $locale,
-                        record.event === 'receive_address_generated'
-                          ? '{count} permanent labels assigned'
-                          : '{count} items',
-                        { count: record.itemCount }
-                      )}</span
-                    >{/if}
-                  {#if record.exportFormat}<span
-                      >{translate($locale, '{format} export', {
-                        format: record.exportFormat.toUpperCase()
-                      })}</span
-                    >{/if}
-                  {#if record.errorCode}<code>{record.errorCode}</code>{/if}
-                </div>
-              </td>
+              <th>{translate($locale, 'Time')}</th>
+              <th>{translate($locale, 'Event')}</th>
+              <th>{translate($locale, 'Outcome')}</th>
+              <th>{translate($locale, 'Safe context')}</th>
             </tr>
-          {/each}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {#each visibleRecords as record}
+              <tr>
+                <td><LocalTimestamp value={String(record.timestamp)} /></td>
+                <td><strong>{eventLabel(record.event)}</strong></td>
+                <td
+                  ><span class="diagnostic-outcome" class:failed={record.outcome === 'failed'}
+                    >{translate($locale, record.outcome)}</span
+                  ></td
+                >
+                <td>
+                  <div class="diagnostic-context">
+                    <span
+                      >{translate($locale, '{network} · {platform} · v{version}', {
+                        network: record.compiledNetwork,
+                        platform: record.platform,
+                        version: record.appVersion
+                      })}</span
+                    >
+                    {#if record.walletKind}<span>{translate($locale, record.walletKind)}</span>{/if}
+                    <span
+                      >{translate($locale, 'Trigger: {trigger}', {
+                        trigger: translate($locale, record.trigger)
+                      })}</span
+                    >
+                    {#if record.syncSource}<span>{record.syncSource}</span>{/if}
+                    {#if record.progressPercent !== undefined}<span>{record.progressPercent}%</span
+                      >{/if}
+                    {#if record.itemCount !== undefined}<span
+                        >{translate(
+                          $locale,
+                          record.event === 'receive_address_generated'
+                            ? '{count} permanent labels assigned'
+                            : '{count} items',
+                          { count: record.itemCount }
+                        )}</span
+                      >{/if}
+                    {#if record.exportFormat}<span
+                        >{translate($locale, '{format} export', {
+                          format: record.exportFormat.toUpperCase()
+                        })}</span
+                      >{/if}
+                    {#if record.errorCode}<code>{record.errorCode}</code>{/if}
+                  </div>
+                </td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
+    {/if}
   {/if}
 </div>
 
@@ -271,17 +427,38 @@
   }
   .diagnostic-event-catalog {
     margin-top: 16px;
+    width: fit-content;
+  }
+  .diagnostic-event-catalog summary {
+    display: flex;
+    width: fit-content;
+    align-items: center;
+    gap: 5px;
+    color: var(--link);
+    font-size: 11px;
+    font-weight: 650;
+    cursor: pointer;
+    list-style: none;
+  }
+  .diagnostic-event-catalog summary::-webkit-details-marker {
+    display: none;
+  }
+  .diagnostic-event-catalog summary :global(.catalog-chevron) {
+    transition: transform 150ms ease;
+  }
+  .diagnostic-event-catalog[open] summary :global(.catalog-chevron) {
+    transform: rotate(90deg);
+  }
+  .diagnostic-event-catalog-content {
+    width: min(980px, calc(100vw - 280px));
+    margin-top: 10px;
     padding: 16px;
     border: 1px solid var(--border);
     border-radius: 12px;
     background: var(--panel);
   }
-  .diagnostic-event-catalog h2 {
-    margin: 0;
-    font-size: 14px;
-  }
   .diagnostic-event-catalog p {
-    margin: 5px 0 0;
+    margin: 0;
     color: var(--text-muted);
     font-size: 11px;
   }
@@ -310,8 +487,224 @@
     justify-content: space-between;
     gap: 12px;
   }
-  .diagnostics-table-wrap {
+  .filtered-empty {
+    margin-top: 8px;
+  }
+  .log-browser {
     margin-top: 16px;
+    padding: 14px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--panel);
+  }
+  .log-controls {
+    display: grid;
+    grid-template-columns: minmax(220px, 1fr) auto auto auto;
+    align-items: end;
+    gap: 10px;
+  }
+  .log-search,
+  .log-sort {
+    min-width: 0;
+    display: grid;
+    gap: 6px;
+    color: var(--text-muted);
+    font-size: 10px;
+    font-weight: 650;
+  }
+  .log-search-input {
+    height: 38px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 10px;
+    border: 1px solid var(--control-border);
+    border-radius: 8px;
+    background: var(--surface-control);
+    color: var(--text-muted);
+  }
+  .log-search-input:focus-within {
+    outline: 2px solid var(--focus);
+    outline-offset: 1px;
+  }
+  .log-search-input input {
+    width: 100%;
+    min-width: 0;
+    border: 0;
+    outline: 0;
+    color: var(--text);
+    background: transparent;
+    font: inherit;
+    font-size: 12px;
+  }
+  .log-sort select,
+  .event-filter > summary,
+  .log-view {
+    min-height: 38px;
+    border: 1px solid var(--control-border);
+    border-radius: 8px;
+    background: var(--surface-control);
+  }
+  .log-sort select {
+    min-width: 126px;
+    padding: 0 28px 0 10px;
+    color: var(--text);
+    font: inherit;
+    font-size: 11px;
+    font-weight: 650;
+  }
+  .event-filter {
+    position: relative;
+  }
+  .event-filter > summary {
+    min-width: 142px;
+    padding: 0 10px;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    color: var(--text-soft);
+    font-size: 11px;
+    font-weight: 650;
+    cursor: pointer;
+    list-style: none;
+  }
+  .event-filter > summary::-webkit-details-marker {
+    display: none;
+  }
+  .event-filter > summary span {
+    flex: 1;
+  }
+  :global(.event-filter-chevron) {
+    transition: transform 150ms ease;
+  }
+  .event-filter[open] :global(.event-filter-chevron) {
+    transform: rotate(180deg);
+  }
+  .event-filter-menu {
+    position: absolute;
+    z-index: 40;
+    top: calc(100% + 6px);
+    right: 0;
+    width: 285px;
+    max-height: 330px;
+    overflow-y: auto;
+    padding: 6px;
+    border: 1px solid var(--border-strong);
+    border-radius: 10px;
+    background: var(--panel-2);
+    box-shadow: 0 18px 40px rgb(0 0 0 / 24%);
+  }
+  .event-filter-menu > div {
+    position: sticky;
+    z-index: 1;
+    top: -6px;
+    padding: 7px 8px 9px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    background: var(--panel-2);
+    font-size: 10px;
+  }
+  .event-filter-menu > div span {
+    display: flex;
+    gap: 12px;
+  }
+  .event-filter-menu > div button {
+    padding: 0;
+    border: 0;
+    color: var(--link);
+    background: transparent;
+    font: inherit;
+    font-weight: 650;
+    cursor: pointer;
+  }
+  .event-filter-menu label {
+    min-height: 34px;
+    padding: 6px 8px;
+    display: grid;
+    grid-template-columns: 16px minmax(0, 1fr) 14px;
+    align-items: center;
+    gap: 8px;
+    border-radius: 7px;
+    color: var(--text-soft);
+    font-size: 11px;
+    cursor: pointer;
+  }
+  .event-filter-menu label:hover {
+    background: var(--surface-hover);
+  }
+  .event-filter-menu input {
+    accent-color: var(--fr-blue);
+  }
+  .event-filter-menu label > :global(.filter-check) {
+    color: var(--fr-blue);
+  }
+  .log-view {
+    padding: 3px;
+    display: flex;
+  }
+  .log-view button {
+    padding: 0 9px;
+    border: 0;
+    border-radius: 5px;
+    color: var(--text-muted);
+    background: transparent;
+    font: inherit;
+    font-size: 11px;
+    font-weight: 650;
+    cursor: pointer;
+  }
+  .log-view button.active {
+    color: white;
+    background: var(--fr-blue);
+  }
+  .log-results {
+    margin: 10px 0 0;
+    color: var(--text-muted);
+    font-size: 10px;
+  }
+  .raw-log {
+    margin-top: 8px;
+    padding: 14px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--panel);
+  }
+  .raw-log > div {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 10px;
+  }
+  .raw-log > div > span {
+    display: grid;
+    gap: 3px;
+  }
+  .raw-log strong {
+    font-size: 12px;
+  }
+  .raw-log small {
+    color: var(--text-muted);
+    font-size: 10px;
+  }
+  .raw-log textarea {
+    width: 100%;
+    min-height: 390px;
+    resize: vertical;
+    padding: 12px;
+    border: 1px solid var(--control-border);
+    border-radius: 8px;
+    color: var(--text-soft);
+    background: var(--surface-inset);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 10px;
+    line-height: 1.55;
+    white-space: pre;
+  }
+  .diagnostics-table-wrap {
+    margin-top: 8px;
     overflow-x: auto;
     border: 1px solid var(--border);
     border-radius: 12px;
@@ -353,6 +746,21 @@
   code {
     font-size: 11px;
   }
+  @media (max-width: 900px) {
+    .log-controls {
+      grid-template-columns: 1fr 1fr;
+    }
+    .log-search {
+      grid-column: 1 / -1;
+    }
+    .log-view {
+      grid-column: 1 / -1;
+    }
+    .log-view button {
+      flex: 1;
+      min-height: 30px;
+    }
+  }
   @media (max-width: 640px) {
     .diagnostics-page {
       padding-bottom: calc(24px + env(safe-area-inset-bottom));
@@ -370,6 +778,30 @@
     }
     .diagnostic-event-catalog ul {
       grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .diagnostic-event-catalog-content {
+      width: calc(100vw - 36px);
+    }
+    .event-filter-menu {
+      position: fixed;
+      z-index: 90;
+      top: auto;
+      right: 18px;
+      bottom: calc(76px + env(safe-area-inset-bottom));
+      left: 18px;
+      width: auto;
+      max-height: calc(100dvh - 130px);
+    }
+    .log-sort select,
+    .event-filter > summary {
+      width: 100%;
+    }
+    .raw-log > div {
+      align-items: stretch;
+      flex-direction: column;
+    }
+    .raw-log textarea {
+      min-height: 340px;
     }
   }
 </style>

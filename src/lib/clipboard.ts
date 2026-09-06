@@ -1,6 +1,7 @@
 import { writeText as writeTauriText } from '@tauri-apps/plugin-clipboard-manager';
 
 export type ClipboardContent =
+  | 'app-logs'
   | 'bitcoin-address'
   | 'build-information'
   | 'identifier'
@@ -8,6 +9,7 @@ export type ClipboardContent =
   | 'transaction-data';
 
 const clipboardPolicy: Record<ClipboardContent, { label: string; maxBytes: number }> = {
+  'app-logs': { label: 'Sanitized Groot app logs', maxBytes: 32 * 1_024 * 1_024 },
   'bitcoin-address': { label: 'Bitcoin address', maxBytes: 128 },
   'build-information': { label: 'Groot build information', maxBytes: 256 },
   identifier: { label: 'Wallet identifier', maxBytes: 1_024 },

@@ -15,10 +15,14 @@ v0.4.92 adds a trusted, app-scoped diagnostic event log for wallet lifecycle,
 sync/recovery scans, transaction preparation/signing/broadcast, receive generation,
 eligible-address discard and hardware verification, coin freeze state, backup/recovery operations, network
 configuration, and diagnostic export. Rust uses a fixed allowlisted schema and
-stable-error redaction; no renderer-authored strings enter records. The log remains
-entered from its standalone Settings section and exports deterministic JSON or CSV.
-The page shows the complete allowlisted category inventory and safe context,
-including receive-generation label count without label text. It is a separate
+stable-error redaction; no renderer-authored strings enter records. The user-facing
+feature is **App logs**. It remains entered from its standalone Settings section,
+preserves the regular unlocked shell navigation, and exports deterministic JSON or
+CSV. The page can search all safe fixed-field context, combine closed event-type
+filters, reverse date order, switch between an aligned table and the exact sanitized
+JSON, and explicitly copy the current JSON result. The complete allowlisted category
+inventory is collapsed as optional insight. Receive generation shows label count
+without label text. The log is a separate
 owner-only append-only JSONL file capped at 16 MiB, so wallet, registry, proposal,
 backup, descriptor, node-setting, and secret-envelope formats are unchanged and no
 migration is required. This has no BIP support impact.

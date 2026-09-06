@@ -45,12 +45,17 @@ Tokens live in `src/app.css`. Component surfaces must use semantic tokens such a
 
 Desktop uses a 224-pixel persistent navigation rail and a centered content area. Coordinator screens may use a main column plus a narrow safety sidebar. Mobile removes the rail, uses four fixed navigation destinations, preserves safe-area padding, and places high-frequency Receive/Send actions above the tab bar.
 
-Diagnostics is a Settings utility, not a wallet destination or persistent shell
-item. Its only normal navigation entry is a standalone Settings section immediately
-before wallet deletion. The page leads with the privacy boundary, a complete list
-of allowlisted event categories, a durable event count, explicit CSV/JSON exports,
-and an accessible table with local-time detail. Mobile may scroll the table inside
-its bordered container but the page itself must not overflow horizontally.
+App logs is a Settings utility, not a separate wallet destination or navigation
+item. Its only normal entry is a standalone Settings section immediately before
+wallet deletion, and opening it retains the regular unlocked desktop rail or mobile
+tabs with Settings selected. The page leads with the privacy boundary and durable
+event count. The complete allowlisted category inventory is optional insight behind
+the standard blue disclosure label and a chevron that turns 90 degrees when open.
+Search covers event names and every displayed safe-context value; event filtering
+allows multiple categories; date order supports newest or oldest first. Users can
+switch between an accessible aligned table and readonly raw JSON, explicitly copy the
+current JSON result, or export CSV/JSON. Mobile may scroll the table and raw JSON
+inside bordered containers, but the page itself must not overflow horizontally.
 
 The desktop rail ends with a quiet, tabular-numeric native build identity (`Groot v… · commit`) below network status. The same shared control remains visible on shell-less welcome/setup/recovery flows and at the end of Settings, including mobile Settings, so a packaged candidate can always be identified without exposing wallet data. Activating it copies exactly that public version-and-commit string for debugging or customer support, with inline status and a toast; no wallet, device, node, or profile data is included.
 

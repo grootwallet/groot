@@ -1,17 +1,22 @@
 # Wallet and coordinator flows
 
-## Diagnostics
+## App logs
 
-1. Open **Settings → Diagnostics → Diagnostic event log**. It appears immediately
-   before wallet deletion and is not a persistent shell or main-menu destination.
+1. Open **Settings → App logs → View app logs**. It appears immediately before wallet
+   deletion. App logs is not a separate navigation destination, but the regular
+   unlocked rail or mobile tabs remain visible with Settings selected.
 2. Groot reads only sanitized app-level records; wallet snapshot, descriptor, node,
    signer, transaction, and address APIs are not called.
-3. Review the complete allowlisted event-category inventory, then inspect timestamp,
+3. Optionally expand the complete allowlisted event-category inventory. Search event
+   names or safe context, select any combination of event types, and order the result
+   newest or oldest first. Inspect timestamp,
    event, outcome, trigger, compiled network, platform, build, wallet kind, sync
    source, coarse progress/count, export format, and safe stable error code when
    present. Receive generation exposes only the number of permanent labels assigned,
    never label text; a successful eligible-address discard is its own event.
-4. Choose **Export CSV** or **Export JSON** and confirm a native save location.
+4. Switch to **Raw JSON** to inspect or explicitly copy the exact sanitized records
+   in the current result. Choose **Export CSV** or **Export JSON** to save the complete
+   log through a native location chooser.
    Cancellation changes nothing; success appends one sanitized export event.
 
 This document describes user-visible state transitions. The product specification owns behavior; Rust owns wallet truth; these flows own presentation and navigation.

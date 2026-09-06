@@ -3,6 +3,9 @@ import { validateClipboardText } from './clipboard';
 
 describe('clipboard export policy', () => {
   it('assigns an explicit platform label to each allowed public-data class', () => {
+    expect(validateClipboardText('[{"event":"app_started"}]', 'app-logs')).toBe(
+      'Sanitized Groot app logs'
+    );
     expect(validateClipboardText('bc1qexample', 'bitcoin-address')).toBe('Bitcoin address');
     expect(validateClipboardText('Groot v0.4.89 · c9309d3d', 'build-information')).toBe(
       'Groot build information'

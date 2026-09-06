@@ -65,13 +65,16 @@
     pathname === '/diagnostics' ||
     foregroundWalletRoutes.has(pathname);
   const active = (href: string) =>
-    href === '/multisig'
-      ? page.url.pathname === href ||
-        page.url.pathname.startsWith('/multisig/policy') ||
-        page.url.pathname.startsWith('/multisig/backup')
-      : page.url.pathname === href;
+    href === '/settings'
+      ? page.url.pathname === href || page.url.pathname === '/diagnostics'
+      : href === '/multisig'
+        ? page.url.pathname === href ||
+          page.url.pathname.startsWith('/multisig/policy') ||
+          page.url.pathname.startsWith('/multisig/backup')
+        : page.url.pathname === href;
   let profiles = $state<WalletProfile[]>([]);
   let selectedWalletId = $state<string | null>(null);
+  let selectedWalletUnlocked = $state(false);
   let multisigSetupDraft = $state<MultisigSetupDraft | null>(null);
   let discardSetupOpen = $state(false);
   let discardingSetup = $state(false);
@@ -101,7 +104,9 @@
   let onboardingRoute = $derived(walletSetupRoutes.has(page.url.pathname));
   let lockedRoute = $derived(page.url.pathname === '/unlock');
   let diagnosticsRoute = $derived(page.url.pathname === '/diagnostics');
-  let restrictedUtilityRoute = $derived(lockedRoute || diagnosticsRoute);
+  let restrictedUtilityRoute = $derived(
+    lockedRoute || (diagnosticsRoute && !selectedWalletUnlocked)
+  );
   let syncPausedRoute = $derived(
     onboardingRoute ||
       lockedRoute ||
@@ -273,6 +278,12 @@
     // can actually mutate those shell-level records.
     if (previousPath && profileMutatingRoutes.has(previousPath)) void refreshProfiles();
     if (previousPath === '/multisig/new') void refreshSetupDraft();
+    if (previousPath === '/unlock') {
+      void walletService
+        .session()
+        .then((selection) => (selectedWalletUnlocked = selection.unlocked))
+        .catch(() => (selectedWalletUnlocked = false));
+    }
     if (!liveSync || isPrototypeWallet) return;
     if (syncPausedRoute) liveSync.stop();
     else liveSync.start();
@@ -303,6 +314,7 @@
       // Change the routed wallet context only after Rust has atomically selected
       // the same profile. The keyed route then reloads against one wallet kind.
       selectedWalletId = selection.profile.id;
+      selectedWalletUnlocked = selection.unlocked;
       await goto(selection.unlocked ? '/' : '/unlock');
       if (!isPrototypeWallet && selection.unlocked) {
         liveSync?.restart();
@@ -375,6 +387,7 @@
       }
       await refreshProfiles();
       const selection = await walletService.session();
+      selectedWalletUnlocked = selection.unlocked;
       if (!selection.unlocked && !onboardingRoute && !lockedRoute && !diagnosticsRoute) {
         await goto('/unlock');
       } else if (selection.unlocked && lockedRoute) {
@@ -421,6 +434,7 @@
       walletService,
       async (selection) => {
         if (selection.profile.id !== selectedWalletId || lockedRoute) return;
+        selectedWalletUnlocked = false;
         liveSync?.stop();
         await walletService.cancelSync().catch(() => undefined);
         await goto('/unlock');

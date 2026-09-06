@@ -208,7 +208,10 @@ metadata; it does not change descriptors, PSBTs, transaction construction,
 recovery/backup interoperability, sync protocols, network policy, or supporting
 evidence for any BIP. Adding a sanitized receive-address discard category, exposing
 only the permanent-label count on generation, and relocating the navigation entry
-to Settings likewise have no BIP impact.
+to Settings likewise have no BIP impact. Renaming the viewer to App logs, retaining
+the ordinary shell, and adding renderer-local search, filtering, ordering, raw JSON,
+and explicit sanitized-log copy change presentation only and likewise have no BIP
+impact.
 
 Every feature, interoperability, signer, descriptor, transaction, payment request,
 backup/recovery, sync/backend, network, or dependency change must assess BIP impact.

@@ -1,6 +1,9 @@
 import type { CatalogSection } from './types';
 
 export const settingsCopy = {
+  'App logs': { fr: 'Journaux de l’app', es: 'Registros de la app' },
+  'APP LOGS': { fr: 'JOURNAUX DE L’APP', es: 'REGISTROS DE LA APP' },
+  'View app logs': { fr: 'Voir les journaux de l’app', es: 'Ver registros de la app' },
   Diagnostics: { fr: 'Diagnostics', es: 'Diagnóstico' },
   'APP DIAGNOSTICS': { fr: 'DIAGNOSTIC DE L’APP', es: 'DIAGNÓSTICO DE LA APP' },
   'Diagnostic event log': {
@@ -29,6 +32,64 @@ export const settingsCopy = {
     fr: 'Résumé du journal de diagnostic',
     es: 'Resumen del registro de diagnóstico'
   },
+  'App log summary': {
+    fr: 'Résumé des journaux de l’app',
+    es: 'Resumen de los registros de la app'
+  },
+  'Browse app logs': {
+    fr: 'Parcourir les journaux de l’app',
+    es: 'Explorar los registros de la app'
+  },
+  'Search logs': { fr: 'Rechercher dans les journaux', es: 'Buscar en los registros' },
+  'Search events and safe context': {
+    fr: 'Rechercher des événements et du contexte sûr',
+    es: 'Buscar eventos y contexto seguro'
+  },
+  'All event types': {
+    fr: 'Tous les types d’événements',
+    es: 'Todos los tipos de eventos'
+  },
+  '{count} event types': {
+    fr: '{count} types d’événements',
+    es: '{count} tipos de eventos'
+  },
+  'Filter by event type': {
+    fr: 'Filtrer par type d’événement',
+    es: 'Filtrar por tipo de evento'
+  },
+  Done: { fr: 'Terminé', es: 'Listo' },
+  'Date order': { fr: 'Ordre des dates', es: 'Orden de fecha' },
+  'Newest first': { fr: 'Plus récents d’abord', es: 'Más recientes primero' },
+  'Oldest first': { fr: 'Plus anciens d’abord', es: 'Más antiguos primero' },
+  'Log view': { fr: 'Vue des journaux', es: 'Vista de registros' },
+  Table: { fr: 'Tableau', es: 'Tabla' },
+  'Raw JSON': { fr: 'JSON brut', es: 'JSON sin procesar' },
+  'Showing {visible} of {total} events': {
+    fr: 'Affichage de {visible} événements sur {total}',
+    es: 'Mostrando {visible} de {total} eventos'
+  },
+  'No app logs match these filters.': {
+    fr: 'Aucun journal de l’app ne correspond à ces filtres.',
+    es: 'Ningún registro de la app coincide con estos filtros.'
+  },
+  'Clear filters': { fr: 'Effacer les filtres', es: 'Borrar filtros' },
+  'The exact sanitized records shown by the current filters.': {
+    fr: 'Les enregistrements assainis exacts affichés par les filtres actuels.',
+    es: 'Los registros depurados exactos mostrados por los filtros actuales.'
+  },
+  'Raw app log JSON': {
+    fr: 'JSON brut des journaux de l’app',
+    es: 'JSON sin procesar de los registros de la app'
+  },
+  'Copy JSON': { fr: 'Copier le JSON', es: 'Copiar JSON' },
+  'App logs copied': {
+    fr: 'Journaux de l’app copiés',
+    es: 'Registros de la app copiados'
+  },
+  'Could not copy app logs': {
+    fr: 'Impossible de copier les journaux de l’app',
+    es: 'No se pudieron copiar los registros de la app'
+  },
   '{count} events': { fr: '{count} événements', es: '{count} eventos' },
   '{network} · {platform} · v{version}': {
     fr: '{network} · {platform} · v{version}',
@@ -53,9 +114,17 @@ export const settingsCopy = {
     fr: 'Le journal de diagnostic assaini a été enregistré.',
     es: 'Se guardó el registro de diagnóstico depurado.'
   },
+  'The sanitized app logs were saved.': {
+    fr: 'Les journaux assainis de l’app ont été enregistrés.',
+    es: 'Se guardaron los registros depurados de la app.'
+  },
   'Could not export diagnostics': {
     fr: 'Impossible d’exporter le diagnostic',
     es: 'No se pudo exportar el diagnóstico'
+  },
+  'Could not export app logs': {
+    fr: 'Impossible d’exporter les journaux de l’app',
+    es: 'No se pudieron exportar los registros de la app'
   },
   Time: { fr: 'Heure', es: 'Hora' },
   Event: { fr: 'Événement', es: 'Evento' },
@@ -98,6 +167,10 @@ export const settingsCopy = {
     es: 'Configuración de red modificada'
   },
   'Diagnostics exported': { fr: 'Diagnostic exporté', es: 'Diagnóstico exportado' },
+  'App logs exported': {
+    fr: 'Journaux de l’app exportés',
+    es: 'Registros de la app exportados'
+  },
   started: { fr: 'démarré', es: 'iniciado' },
   progress: { fr: 'en cours', es: 'en curso' },
   succeeded: { fr: 'réussi', es: 'correcto' },

@@ -1363,12 +1363,12 @@
     </div>
   </section>
   <section class="settings-group">
-    <h2>{translate($locale, 'Diagnostics')}</h2>
+    <h2>{translate($locale, 'App logs')}</h2>
     <div class="settings-list">
       <a class="setting-row" href="/diagnostics">
-        <ScrollText class="setting-icon" size={17} />
+        <span class="setting-icon"><ScrollText size={18} /></span>
         <span
-          ><strong>{translate($locale, 'Diagnostic event log')}</strong><small
+          ><strong>{translate($locale, 'View app logs')}</strong><small
             >{translate(
               $locale,
               'Review and export sanitized app events without wallet identifiers or secrets.'
