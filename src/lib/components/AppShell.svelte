@@ -9,6 +9,7 @@
     LayoutGrid,
     Plus,
     Settings,
+    ScrollText,
     ShieldCheck
   } from '@lucide/svelte';
   import BrandLockup from './BrandLockup.svelte';
@@ -62,6 +63,7 @@
     walletSetupRoutes.has(pathname) ||
     pathname === '/unlock' ||
     pathname === '/settings' ||
+    pathname === '/diagnostics' ||
     foregroundWalletRoutes.has(pathname);
   const active = (href: string) =>
     href === '/multisig'
@@ -99,20 +101,25 @@
   let mobileItems = $derived(policyContext ? nav : nav.slice(0, 3));
   let onboardingRoute = $derived(walletSetupRoutes.has(page.url.pathname));
   let lockedRoute = $derived(page.url.pathname === '/unlock');
+  let diagnosticsRoute = $derived(page.url.pathname === '/diagnostics');
+  let restrictedUtilityRoute = $derived(lockedRoute || diagnosticsRoute);
   let syncPausedRoute = $derived(
     onboardingRoute ||
       lockedRoute ||
+      diagnosticsRoute ||
       page.url.pathname === '/settings' ||
       foregroundWalletRoutes.has(page.url.pathname)
   );
   const showQuickActions = $derived(
-    !lockedRoute && (page.url.pathname === '/' || page.url.pathname === '/coins')
+    !restrictedUtilityRoute && (page.url.pathname === '/' || page.url.pathname === '/coins')
   );
   const receiveHref = $derived(
     selectedProfile?.kind === 'multisig' ? '/multisig/receive' : '/receive'
   );
   const sendHref = $derived(selectedProfile?.kind === 'multisig' ? '/multisig/send' : '/send');
-  const showSetupResume = $derived(Boolean(multisigSetupDraft) && !onboardingRoute);
+  const showSetupResume = $derived(
+    Boolean(multisigSetupDraft) && !onboardingRoute && !diagnosticsRoute
+  );
   function handleKeyboardShortcut(event: KeyboardEvent) {
     const primaryModifier = commandModifier
       ? event.metaKey && !event.ctrlKey
@@ -122,6 +129,7 @@
       startupState !== 'ready' ||
       onboardingRoute ||
       lockedRoute ||
+      diagnosticsRoute ||
       event.defaultPrevented ||
       event.repeat ||
       event.altKey ||
@@ -361,14 +369,14 @@
       }
       await refreshSetupDraft();
       if (!(await walletService.exists())) {
-        await goto('/welcome');
+        if (!diagnosticsRoute) await goto('/welcome');
         await holdStartupGate();
         startupState = 'ready';
         return;
       }
       await refreshProfiles();
       const selection = await walletService.session();
-      if (!selection.unlocked && !onboardingRoute && !lockedRoute) {
+      if (!selection.unlocked && !onboardingRoute && !lockedRoute && !diagnosticsRoute) {
         await goto('/unlock');
       } else if (selection.unlocked && lockedRoute) {
         await goto('/');
@@ -480,7 +488,7 @@
           <a href="/welcome?add=1"><Plus size={14} />{t('addWallet', $locale)}</a>
         </div>
       {/if}
-      {#if !lockedRoute}
+      {#if !restrictedUtilityRoute}
         <nav class="side-nav">
           {#each visibleNav as item}
             <a
@@ -493,16 +501,22 @@
         </nav>
       {/if}
       <div class="sidebar-bottom">
-        {#if !lockedRoute}<a
+        {#if !restrictedUtilityRoute}<a
             href="/settings"
             class:active={active('/settings')}
             aria-current={active('/settings') ? 'page' : undefined}
             ><Settings size={17} /><span>{t('settings', $locale)}</span></a
           >{/if}
+        <a
+          href="/diagnostics"
+          class:active={active('/diagnostics')}
+          aria-current={active('/diagnostics') ? 'page' : undefined}
+          ><ScrollText size={17} /><span>{translate($locale, 'Diagnostics')}</span></a
+        >
         <div class="preference-toggles">
           <ThemeToggle /><DiscreetModeToggle />
         </div>
-        <NetworkStatus network={defaultConfig.network} locked={lockedRoute} />
+        <NetworkStatus network={defaultConfig.network} locked={restrictedUtilityRoute} />
         <BuildIdentity runtime={runtimeIdentity} placement="sidebar" />
       </div>
     </aside>
@@ -548,7 +562,7 @@
 
     {#if onboardingRoute}<BuildIdentity runtime={runtimeIdentity} placement="onboarding" />{/if}
 
-    {#if !lockedRoute}<nav class="mobile-nav" class:policy-nav={policyContext}>
+    {#if !restrictedUtilityRoute}<nav class="mobile-nav" class:policy-nav={policyContext}>
         {#each mobileItems as item}
           <a
             href={item.href}
@@ -565,7 +579,10 @@
         >
       </nav>{/if}
 
-    {#if lockedRoute}<div class="locked-mobile-utilities">
+    {#if restrictedUtilityRoute}<div class="locked-mobile-utilities">
+        {#if !diagnosticsRoute}<a class="button ghost small" href="/diagnostics"
+            ><ScrollText size={16} />{translate($locale, 'Diagnostics')}</a
+          >{/if}
         <ThemeToggle /><DiscreetModeToggle /><NetworkStatus
           network={defaultConfig.network}
           locked

@@ -107,10 +107,10 @@ export interface WalletNetworkPort {
 
 export interface WalletSnapshotPort {
   snapshot(): Promise<WalletSnapshot>;
-  sync(): Promise<WalletSnapshot>;
+  sync(automatic?: boolean): Promise<WalletSnapshot>;
   cancelSync(): Promise<void>;
   multisigSnapshot(): Promise<WalletSnapshot>;
-  syncMultisig(): Promise<WalletSnapshot>;
+  syncMultisig(automatic?: boolean): Promise<WalletSnapshot>;
 }
 
 export interface WalletTransactionsPort {
@@ -333,6 +333,11 @@ export interface WalletEventsPort {
   subscribe(listener: (event: WalletEvent) => void): () => void;
 }
 
+export interface WalletDiagnosticsPort {
+  diagnostics(): Promise<import('./runtime').DiagnosticRecord[]>;
+  exportDiagnostics(format: 'json' | 'csv'): Promise<SavedFileResult>;
+}
+
 export interface WalletPort
   extends
     WalletProfilesPort,
@@ -342,4 +347,5 @@ export interface WalletPort
     WalletHardwarePort,
     WalletMultisigPort,
     WalletFileTransportPort,
+    WalletDiagnosticsPort,
     WalletEventsPort {}

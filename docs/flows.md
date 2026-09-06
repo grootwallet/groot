@@ -1,5 +1,15 @@
 # Wallet and coordinator flows
 
+## Diagnostics
+
+1. Open **Diagnostics** from the application utility area before or after unlock.
+2. Groot reads only sanitized app-level records; wallet snapshot, descriptor, node,
+   signer, transaction, and address APIs are not called.
+3. Review timestamp, event, outcome, compiled network, platform, build, wallet kind,
+   sync source, coarse progress, and safe stable error code when present.
+4. Choose **Export CSV** or **Export JSON** and confirm a native save location.
+   Cancellation changes nothing; success appends one sanitized export event.
+
 This document describes user-visible state transitions. The product specification owns behavior; Rust owns wallet truth; these flows own presentation and navigation.
 
 ## Single-key onboarding

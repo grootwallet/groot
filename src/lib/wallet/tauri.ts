@@ -145,6 +145,12 @@ export class TauriWalletAdapter implements WalletPort {
   paymentDraft() {
     return command<PaymentDraft | null>('payment_draft');
   }
+  diagnostics() {
+    return command<import('./contracts').DiagnosticRecord[]>('diagnostics_list');
+  }
+  exportDiagnostics(format: 'json' | 'csv') {
+    return command<import('./contracts').SavedFileResult>('diagnostics_export', { format });
+  }
   savePaymentDraft(draft: PaymentDraft) {
     return command<PaymentDraft>('payment_draft_save', { draft });
   }
@@ -294,9 +300,9 @@ export class TauriWalletAdapter implements WalletPort {
     await this.#drainNotifications(false);
     return snapshot;
   }
-  async sync() {
+  async sync(automatic = false) {
     const walletId = this.#selectedWalletId;
-    const snapshot = normalizeSnapshot(await command<WalletSnapshot>('wallet_sync'));
+    const snapshot = normalizeSnapshot(await command<WalletSnapshot>('wallet_sync', { automatic }));
     if (walletId && walletId === this.#selectedWalletId) {
       this.#last = snapshot;
       await this.#drainNotifications(false);
@@ -699,9 +705,11 @@ export class TauriWalletAdapter implements WalletPort {
     await this.#drainNotifications(true);
     return snapshot;
   }
-  async syncMultisig() {
+  async syncMultisig(automatic = false) {
     const walletId = this.#selectedWalletId;
-    const snapshot = normalizeSnapshot(await command<WalletSnapshot>('multisig_sync'));
+    const snapshot = normalizeSnapshot(
+      await command<WalletSnapshot>('multisig_sync', { automatic })
+    );
     if (walletId && walletId === this.#selectedWalletId) {
       this.#last = snapshot;
       await this.#drainNotifications(true);

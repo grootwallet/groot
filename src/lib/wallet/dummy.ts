@@ -72,6 +72,24 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     const draft = this._selectedWalletId ? this.paymentDrafts.get(this._selectedWalletId) : null;
     return draft ? structuredClone(draft) : null;
   }
+  async diagnostics() {
+    return [
+      {
+        schemaVersion: 1 as const,
+        timestamp: Math.floor(Date.now() / 1000),
+        event: 'app_started' as const,
+        outcome: 'succeeded' as const,
+        trigger: 'startup' as const,
+        appVersion: APP_VERSION,
+        buildCommit: 'development',
+        compiledNetwork: defaultConfig.network,
+        platform: 'browser' as const
+      }
+    ];
+  }
+  async exportDiagnostics(_format: 'json' | 'csv') {
+    return { saved: true, revealToken: null, revealLabel: null };
+  }
   async savePaymentDraft(draft: PaymentDraft) {
     if (!this._selectedWalletId || draft.walletId !== this._selectedWalletId)
       throw new WalletError('wallet_not_found', 'The payment draft belongs to another wallet.');
@@ -579,7 +597,7 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     return snapshot;
   }
 
-  async sync(): Promise<WalletSnapshot> {
+  async sync(_automatic = false): Promise<WalletSnapshot> {
     return this.snapshot();
   }
 
@@ -1800,7 +1818,7 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
   async multisigSnapshot() {
     return this.snapshot();
   }
-  async syncMultisig() {
+  async syncMultisig(_automatic = false) {
     return this.snapshot();
   }
   async createMultisigAddress(labels: string[]) {

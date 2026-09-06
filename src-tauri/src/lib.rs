@@ -68,11 +68,25 @@ pub fn run() {
         .setup(|app| {
             let lock = process_lock::ProcessLock::acquire_for_app(app.handle())?;
             app.manage(lock);
+            let state = app.state::<wallet::AppState>();
+            wallet::diagnostics::record(
+                app.handle(),
+                &state,
+                wallet::diagnostics::DiagnosticEventKind::AppStarted,
+                wallet::diagnostics::DiagnosticOutcome::Succeeded,
+                wallet::diagnostics::DiagnosticContext {
+                    trigger: wallet::diagnostics::DiagnosticTrigger::Startup,
+                    ..Default::default()
+                },
+                None,
+            );
             Ok(())
         })
         .manage(wallet::AppState::default())
         .invoke_handler(tauri::generate_handler![
             runtime_platform,
+            wallet::diagnostics::diagnostics_list,
+            wallet::diagnostics::diagnostics_export,
             wallet::profile_commands::wallet_exists,
             wallet::ur_encode_psbt,
             wallet::ur_decode_psbt,

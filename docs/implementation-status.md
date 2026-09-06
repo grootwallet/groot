@@ -1,5 +1,15 @@
 # Implementation status
 
+v0.4.92 adds a trusted, app-scoped diagnostic event log for wallet lifecycle,
+sync/recovery scans, transaction preparation/signing/broadcast, receive generation
+and hardware verification, coin freeze state, backup/recovery operations, network
+configuration, and diagnostic export. Rust uses a fixed allowlisted schema and
+stable-error redaction; no renderer-authored strings enter records. The log remains
+viewable while locked and exports deterministic JSON or CSV. It is a separate
+owner-only append-only JSONL file capped at 16 MiB, so wallet, registry, proposal,
+backup, descriptor, node-setting, and secret-envelope formats are unchanged and no
+migration is required. This has no BIP support impact.
+
 This ledger prevents prototype UI from being mistaken for production wallet behavior. “Implemented” means wired through the real Tauri adapter; “browser fixture” means deterministic UI behavior only.
 
 The canonical inventory of implemented, partial, inherited, in-progress, and

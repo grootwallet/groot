@@ -2224,6 +2224,17 @@ pub fn external_signer_create(
     finish_new_profile_attempt(&state, id, &dir, result.is_ok())?;
     result?;
     unlock_selected(&app, &state)?;
+    diagnostics::record(
+        &app,
+        &state,
+        diagnostics::DiagnosticEventKind::WalletCreated,
+        diagnostics::DiagnosticOutcome::Succeeded,
+        diagnostics::DiagnosticContext {
+            wallet_kind: Some(diagnostics::DiagnosticWalletKind::Hardware),
+            ..Default::default()
+        },
+        None,
+    );
     Ok(metadata)
 }
 
@@ -2291,7 +2302,19 @@ pub fn external_signer_export_descriptor(
     let verified = verify_external_signer_credential(&app, credential.as_str());
     record_auth_result(&app, &state, &verified)?;
     verified?;
-    external_signer_backup(read_external_signer_metadata(&app)?.external_descriptor)
+    let backup = external_signer_backup(read_external_signer_metadata(&app)?.external_descriptor)?;
+    diagnostics::record(
+        &app,
+        &state,
+        diagnostics::DiagnosticEventKind::BackupExported,
+        diagnostics::DiagnosticOutcome::Succeeded,
+        diagnostics::DiagnosticContext {
+            wallet_kind: Some(diagnostics::DiagnosticWalletKind::Hardware),
+            ..Default::default()
+        },
+        None,
+    );
+    Ok(backup)
 }
 
 pub(crate) fn external_proposal_dto(
@@ -2551,44 +2574,67 @@ pub async fn hardware_sign_external(
     device_id: String,
     reviewed_psbt: String,
 ) -> ApiResult<MultisigProposalDto> {
-    require_unlocked(&app, &state)?;
-    let metadata = read_external_signer_metadata(&app)?;
-    let mut db = open_db(&app)?;
-    let proposal = load_external_proposal(&mut db, &metadata, &proposal_id)?;
-    require_reviewed_psbt_unchanged(
-        &proposal.psbt,
-        &reviewed_psbt,
-        "The proposal changed after review. Reload it before signing.",
-    )?;
-    drop(db);
-    let reviewed = decode_psbt(&proposal.psbt).map_err(proposal_api_error)?;
-    let encoded = proposal.psbt;
-    let expected_signer = metadata.signer;
-    let hwi = hwi_cli(&app)?;
-    let device = recently_scanned_hardware_device(&state, &device_id)?;
-    let signed = tauri::async_runtime::spawn_blocking(move || {
-        let operation = hwi.begin_signing_operation().map_err(hardware_api_error)?;
-        let identity =
-            prove_live_external_signer_identity(&hwi, &operation, &device, &expected_signer)?;
-        let output = hwi
-            .sign_psbt_in_operation(&operation, &identity.device_type, &device.path, &encoded)
-            .map_err(|error| hardware_device_api_error(error, &identity.device_type))?;
-        let response: HwiPsbt = serde_json::from_slice(&output).map_err(internal)?;
-        response.psbt.ok_or_else(|| {
-            drop(response.error);
-            missing_hardware_psbt(
-                &identity.device_type,
-                response.code,
-                "The device did not return a signed PSBT.",
-            )
+    let context = diagnostics::DiagnosticContext {
+        wallet_kind: Some(diagnostics::DiagnosticWalletKind::Hardware),
+        ..Default::default()
+    };
+    diagnostics::record(
+        &app,
+        &state,
+        diagnostics::DiagnosticEventKind::TransactionSigned,
+        diagnostics::DiagnosticOutcome::Started,
+        context,
+        None,
+    );
+    let result = async {
+        require_unlocked(&app, &state)?;
+        let metadata = read_external_signer_metadata(&app)?;
+        let mut db = open_db(&app)?;
+        let proposal = load_external_proposal(&mut db, &metadata, &proposal_id)?;
+        require_reviewed_psbt_unchanged(
+            &proposal.psbt,
+            &reviewed_psbt,
+            "The proposal changed after review. Reload it before signing.",
+        )?;
+        drop(db);
+        let reviewed = decode_psbt(&proposal.psbt).map_err(proposal_api_error)?;
+        let encoded = proposal.psbt;
+        let expected_signer = metadata.signer;
+        let hwi = hwi_cli(&app)?;
+        let device = recently_scanned_hardware_device(&state, &device_id)?;
+        let signed = tauri::async_runtime::spawn_blocking(move || {
+            let operation = hwi.begin_signing_operation().map_err(hardware_api_error)?;
+            let identity =
+                prove_live_external_signer_identity(&hwi, &operation, &device, &expected_signer)?;
+            let output = hwi
+                .sign_psbt_in_operation(&operation, &identity.device_type, &device.path, &encoded)
+                .map_err(|error| hardware_device_api_error(error, &identity.device_type))?;
+            let response: HwiPsbt = serde_json::from_slice(&output).map_err(internal)?;
+            response.psbt.ok_or_else(|| {
+                drop(response.error);
+                missing_hardware_psbt(
+                    &identity.device_type,
+                    response.code,
+                    "The device did not return a signed PSBT.",
+                )
+            })
         })
-    })
-    .await
-    .map_err(internal)??;
-    let returned = decode_psbt(&signed).map_err(proposal_api_error)?;
-    let signatures_only =
-        hardware_signature_response(&reviewed, returned).map_err(proposal_api_error)?;
-    import_external_proposal(&app, &proposal_id, &encode_psbt(&signatures_only))
+        .await
+        .map_err(internal)??;
+        let returned = decode_psbt(&signed).map_err(proposal_api_error)?;
+        let signatures_only =
+            hardware_signature_response(&reviewed, returned).map_err(proposal_api_error)?;
+        import_external_proposal(&app, &proposal_id, &encode_psbt(&signatures_only))
+    }
+    .await;
+    diagnostics::record_result(
+        &app,
+        &state,
+        diagnostics::DiagnosticEventKind::TransactionSigned,
+        context,
+        &result,
+    );
+    result
 }
 
 #[tauri::command]
@@ -2599,7 +2645,20 @@ pub async fn external_signer_proposal_broadcast(
     credential: String,
 ) -> ApiResult<BroadcastResultDto> {
     let credential = Zeroizing::new(credential);
-    tauri::async_runtime::spawn_blocking(move || {
+    let diagnostic_app = app.clone();
+    let context = diagnostics::DiagnosticContext {
+        wallet_kind: Some(diagnostics::DiagnosticWalletKind::Hardware),
+        ..Default::default()
+    };
+    diagnostics::record(
+        &app,
+        &app.state::<AppState>(),
+        diagnostics::DiagnosticEventKind::TransactionBroadcast,
+        diagnostics::DiagnosticOutcome::Started,
+        context,
+        None,
+    );
+    let result = tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
         let _operation = operation_guard(&state)?;
         require_unlocked(&app, &state)?;
@@ -2698,7 +2757,16 @@ pub async fn external_signer_proposal_broadcast(
         })
     })
     .await
-    .map_err(internal)?
+    .map_err(internal)?;
+    let state = diagnostic_app.state::<AppState>();
+    diagnostics::record_result(
+        &diagnostic_app,
+        &state,
+        diagnostics::DiagnosticEventKind::TransactionBroadcast,
+        context,
+        &result,
+    );
+    result
 }
 
 #[tauri::command]
@@ -2830,11 +2898,23 @@ pub async fn hardware_verify_multisig_address(
             "The receive address changed during hardware verification. Verify it again.",
         ));
     }
-    hardware_operation
+    let verified = hardware_operation
         .complete_if_active(|| {
             record_address_verification(&mut db, address_id, &identity, &actual, true)
         })
-        .map_err(hardware_api_error)?
+        .map_err(hardware_api_error)??;
+    diagnostics::record(
+        &app,
+        &state,
+        diagnostics::DiagnosticEventKind::ReceiveAddressVerified,
+        diagnostics::DiagnosticOutcome::Succeeded,
+        diagnostics::DiagnosticContext {
+            wallet_kind: Some(diagnostics::DiagnosticWalletKind::Multisig),
+            ..Default::default()
+        },
+        None,
+    );
+    Ok(verified)
 }
 
 #[tauri::command]
@@ -3263,11 +3343,23 @@ pub async fn hardware_verify_external_address(
             "The receive address changed during hardware verification. Verify it again.",
         ));
     }
-    hardware_operation
+    let verified = hardware_operation
         .complete_if_active(|| {
             record_address_verification(&mut db, address_id, &identity, &actual, false)
         })
-        .map_err(hardware_api_error)?
+        .map_err(hardware_api_error)??;
+    diagnostics::record(
+        &app,
+        &state,
+        diagnostics::DiagnosticEventKind::ReceiveAddressVerified,
+        diagnostics::DiagnosticOutcome::Succeeded,
+        diagnostics::DiagnosticContext {
+            wallet_kind: Some(diagnostics::DiagnosticWalletKind::Hardware),
+            ..Default::default()
+        },
+        None,
+    );
+    Ok(verified)
 }
 
 #[cfg(test)]

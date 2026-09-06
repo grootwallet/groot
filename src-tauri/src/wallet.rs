@@ -119,6 +119,8 @@ const NODE_HEALTH_ATTEMPTS: usize = 3;
 const NODE_HEALTH_RETRY_DELAY: Duration = Duration::from_millis(200);
 const MAINNET_NODE_ADMISSION_LIFETIME: Duration = Duration::from_secs(15 * 60);
 
+#[path = "wallet/diagnostics.rs"]
+pub mod diagnostics;
 #[path = "wallet/export_commands.rs"]
 mod export_commands;
 #[cfg(any(target_os = "macos", test))]
@@ -376,6 +378,7 @@ pub struct AppState {
     runtime_auth_retry_at: Mutex<HashMap<Uuid, Instant>>,
     pending_policy_verifications: Mutex<HashMap<String, SignerPolicyVerificationDto>>,
     sync_status: Arc<Mutex<Option<WalletSyncStatusDto>>>,
+    diagnostic_log: Mutex<()>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -6159,6 +6162,17 @@ pub fn wallet_delete(
     let dir = profile_directory(&app, profile.id)?;
     delete_registered_wallet(&app, profile.id, &dir)?;
     lock_wallet(&state, profile.id)?;
+    diagnostics::record(
+        &app,
+        &state,
+        diagnostics::DiagnosticEventKind::WalletRemoved,
+        diagnostics::DiagnosticOutcome::Succeeded,
+        diagnostics::DiagnosticContext {
+            wallet_kind: Some(diagnostics::wallet_kind(profile.kind)),
+            ..Default::default()
+        },
+        None,
+    );
     Ok(())
 }
 
@@ -6174,6 +6188,17 @@ pub fn wallet_reset_regtest(
     let profile = selected_profile(&app)?;
     delete_registered_wallet(&app, profile.id, &profile_directory(&app, profile.id)?)?;
     lock_wallet(&state, profile.id)?;
+    diagnostics::record(
+        &app,
+        &state,
+        diagnostics::DiagnosticEventKind::WalletRemoved,
+        diagnostics::DiagnosticOutcome::Succeeded,
+        diagnostics::DiagnosticContext {
+            wallet_kind: Some(diagnostics::wallet_kind(profile.kind)),
+            ..Default::default()
+        },
+        None,
+    );
     Ok(())
 }
 

@@ -42,8 +42,8 @@ export function createLiveSync(
       const registry = await wallet.profiles();
       const selected = registry.wallets.find((profile) => profile.id === registry.selectedWalletId);
       if (!selected) return true;
-      if (selected.kind === 'multisig') await wallet.syncMultisig();
-      else await wallet.sync();
+      if (selected.kind === 'multisig') await wallet.syncMultisig(true);
+      else await wallet.sync(true);
       return true;
     } catch (cause) {
       if (

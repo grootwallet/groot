@@ -202,6 +202,12 @@ transaction construction; no transaction, fee, descriptor, or protocol behavior 
 
 ## Maintenance rule
 
+The v0.4.92 sanitized diagnostic event log has no BIP impact. It records only
+allowlisted operation categories, outcomes, build/platform context, and coarse sync
+metadata; it does not change descriptors, PSBTs, transaction construction,
+recovery/backup interoperability, sync protocols, network policy, or supporting
+evidence for any BIP.
+
 Every feature, interoperability, signer, descriptor, transaction, payment request,
 backup/recovery, sync/backend, network, or dependency change must assess BIP impact.
 If it adds, removes, expands, narrows, or changes evidence for a BIP:

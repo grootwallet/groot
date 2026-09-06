@@ -801,7 +801,19 @@ pub fn multisig_export(
         network: NETWORK_NAME.to_owned(),
         wallet: read_multisig_metadata(&app)?,
     };
-    serde_json::to_string_pretty(&backup).map_err(internal)
+    let encoded = serde_json::to_string_pretty(&backup).map_err(internal)?;
+    diagnostics::record(
+        &app,
+        &state,
+        diagnostics::DiagnosticEventKind::BackupExported,
+        diagnostics::DiagnosticOutcome::Succeeded,
+        diagnostics::DiagnosticContext {
+            wallet_kind: Some(diagnostics::DiagnosticWalletKind::Multisig),
+            ..Default::default()
+        },
+        None,
+    );
+    Ok(encoded)
 }
 
 #[tauri::command]
@@ -815,13 +827,25 @@ pub fn multisig_export_bsms(
     authorize_multisig_operation(&app, &state, credential.as_str())?;
     let wallet = read_multisig_metadata(&app)?;
     let first_address = first_multisig_address(&wallet)?;
-    DescriptorRecord::from_descriptor_pair(
+    let encoded = DescriptorRecord::from_descriptor_pair(
         &wallet.external_descriptor,
         &wallet.internal_descriptor,
         &first_address,
     )
     .map(|record| record.encode())
-    .map_err(bsms_api_error)
+    .map_err(bsms_api_error)?;
+    diagnostics::record(
+        &app,
+        &state,
+        diagnostics::DiagnosticEventKind::BackupExported,
+        diagnostics::DiagnosticOutcome::Succeeded,
+        diagnostics::DiagnosticContext {
+            wallet_kind: Some(diagnostics::DiagnosticWalletKind::Multisig),
+            ..Default::default()
+        },
+        None,
+    );
+    Ok(encoded)
 }
 
 pub(crate) fn parse_public_descriptor_record(encoded: &str) -> ApiResult<DescriptorRecord> {
@@ -902,6 +926,17 @@ pub fn multisig_bsms_inspect(
             .map_err(internal)?
             .insert(wallet_id, descriptor);
     }
+    diagnostics::record(
+        &app,
+        &state,
+        diagnostics::DiagnosticEventKind::RecoveryTested,
+        diagnostics::DiagnosticOutcome::Succeeded,
+        diagnostics::DiagnosticContext {
+            wallet_kind: Some(diagnostics::DiagnosticWalletKind::Multisig),
+            ..Default::default()
+        },
+        None,
+    );
     Ok(RecoveryDrillDto {
         first_address: derived_first,
         matches_current_wallet,
@@ -995,6 +1030,30 @@ pub fn multisig_recover_bsms(
     let wallet = result?;
     unlock_selected(&app, &state)?;
     reset_auth_throttle(&app, &state)?;
+    diagnostics::record(
+        &app,
+        &state,
+        diagnostics::DiagnosticEventKind::BackupImported,
+        diagnostics::DiagnosticOutcome::Succeeded,
+        diagnostics::DiagnosticContext {
+            trigger: diagnostics::DiagnosticTrigger::Recovery,
+            wallet_kind: Some(diagnostics::DiagnosticWalletKind::Multisig),
+            ..Default::default()
+        },
+        None,
+    );
+    diagnostics::record(
+        &app,
+        &state,
+        diagnostics::DiagnosticEventKind::WalletRecovered,
+        diagnostics::DiagnosticOutcome::Succeeded,
+        diagnostics::DiagnosticContext {
+            trigger: diagnostics::DiagnosticTrigger::Recovery,
+            wallet_kind: Some(diagnostics::DiagnosticWalletKind::Multisig),
+            ..Default::default()
+        },
+        None,
+    );
     Ok(wallet)
 }
 
@@ -1019,6 +1078,17 @@ pub fn multisig_recovery_drill(
             .map_err(internal)?
             .insert(wallet_id, backup.wallet.external_descriptor.clone());
     }
+    diagnostics::record(
+        &app,
+        &state,
+        diagnostics::DiagnosticEventKind::RecoveryTested,
+        diagnostics::DiagnosticOutcome::Succeeded,
+        diagnostics::DiagnosticContext {
+            wallet_kind: Some(diagnostics::DiagnosticWalletKind::Multisig),
+            ..Default::default()
+        },
+        None,
+    );
     Ok(RecoveryDrillDto {
         first_address,
         matches_current_wallet,
@@ -1097,6 +1167,30 @@ pub fn multisig_recover(
     finish_new_profile_attempt(&state, id, &dir, result.is_ok())?;
     let wallet = result?;
     unlock_selected(&app, &state)?;
+    diagnostics::record(
+        &app,
+        &state,
+        diagnostics::DiagnosticEventKind::BackupImported,
+        diagnostics::DiagnosticOutcome::Succeeded,
+        diagnostics::DiagnosticContext {
+            trigger: diagnostics::DiagnosticTrigger::Recovery,
+            wallet_kind: Some(diagnostics::DiagnosticWalletKind::Multisig),
+            ..Default::default()
+        },
+        None,
+    );
+    diagnostics::record(
+        &app,
+        &state,
+        diagnostics::DiagnosticEventKind::WalletRecovered,
+        diagnostics::DiagnosticOutcome::Succeeded,
+        diagnostics::DiagnosticContext {
+            trigger: diagnostics::DiagnosticTrigger::Recovery,
+            wallet_kind: Some(diagnostics::DiagnosticWalletKind::Multisig),
+            ..Default::default()
+        },
+        None,
+    );
     Ok(wallet)
 }
 
@@ -1142,6 +1236,17 @@ pub fn multisig_delete(
         .map_err(internal)?
         .remove(&wallet_id);
     lock_wallet(&state, wallet_id)?;
+    diagnostics::record(
+        &app,
+        &state,
+        diagnostics::DiagnosticEventKind::WalletRemoved,
+        diagnostics::DiagnosticOutcome::Succeeded,
+        diagnostics::DiagnosticContext {
+            wallet_kind: Some(diagnostics::DiagnosticWalletKind::Multisig),
+            ..Default::default()
+        },
+        None,
+    );
     Ok(())
 }
 
@@ -1161,10 +1266,51 @@ pub async fn multisig_snapshot(app: AppHandle) -> ApiResult<WalletSnapshotDto> {
 }
 
 #[tauri::command]
-pub async fn multisig_sync(app: AppHandle) -> ApiResult<WalletSnapshotDto> {
+pub async fn multisig_sync(
+    app: AppHandle,
+    automatic: Option<bool>,
+) -> ApiResult<WalletSnapshotDto> {
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
-        run_foreground_sync(&app, &state, true)
+        let source = read_sync_source(&app)?;
+        let context = diagnostics::DiagnosticContext {
+            trigger: if automatic.unwrap_or(false) {
+                diagnostics::DiagnosticTrigger::Automatic
+            } else {
+                diagnostics::DiagnosticTrigger::Manual
+            },
+            wallet_kind: Some(diagnostics::DiagnosticWalletKind::Multisig),
+            sync_source: Some(diagnostics::sync_source(&source)),
+            ..Default::default()
+        };
+        diagnostics::record(
+            &app,
+            &state,
+            diagnostics::DiagnosticEventKind::Sync,
+            diagnostics::DiagnosticOutcome::Started,
+            context,
+            None,
+        );
+        diagnostics::record(
+            &app,
+            &state,
+            diagnostics::DiagnosticEventKind::Sync,
+            diagnostics::DiagnosticOutcome::Progress,
+            diagnostics::DiagnosticContext {
+                progress_percent: Some(0),
+                ..context
+            },
+            None,
+        );
+        let result = run_foreground_sync(&app, &state, true);
+        diagnostics::record_result(
+            &app,
+            &state,
+            diagnostics::DiagnosticEventKind::Sync,
+            context,
+            &result,
+        );
+        result
     })
     .await
     .map_err(internal)?
@@ -1207,7 +1353,7 @@ pub fn multisig_address_create(
     .map_err(internal)?;
     wallet.persist(&mut transaction).map_err(internal)?;
     transaction.commit().map_err(internal)?;
-    Ok(ReceiveAddressDto {
+    let response = ReceiveAddressDto {
         id: info.index,
         testnet_alias: regtest_testnet_address_alias(&info.address.to_string()),
         address: info.address.to_string(),
@@ -1218,7 +1364,19 @@ pub fn multisig_address_create(
         derivation_path: format!("{MULTISIG_ACCOUNT_PATH}/0/{}", info.index),
         hardware_verified_at: None,
         hardware_verified_by: None,
-    })
+    };
+    diagnostics::record(
+        &app,
+        &state,
+        diagnostics::DiagnosticEventKind::ReceiveAddressGenerated,
+        diagnostics::DiagnosticOutcome::Succeeded,
+        diagnostics::DiagnosticContext {
+            wallet_kind: Some(diagnostics::DiagnosticWalletKind::Multisig),
+            ..Default::default()
+        },
+        None,
+    );
+    Ok(response)
 }
 
 pub(crate) fn claim_observed_receive_output(

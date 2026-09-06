@@ -10418,6 +10418,9 @@ code {
     align-items: center;
     gap: 6px;
   }
+  .app-shell.prototype-shell .locked-mobile-utilities {
+    top: max(56px, calc(env(safe-area-inset-top) + 44px));
+  }
   .locked-mobile-utilities .shell-theme-toggle {
     margin: 0;
     background: var(--panel);

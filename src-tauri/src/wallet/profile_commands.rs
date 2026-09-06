@@ -296,6 +296,17 @@ pub fn wallet_create(
         .map_err(internal)?
         .insert(selected, authenticated_descriptors);
     unlock_selected(&app, &state)?;
+    diagnostics::record(
+        &app,
+        &state,
+        diagnostics::DiagnosticEventKind::WalletCreated,
+        diagnostics::DiagnosticOutcome::Succeeded,
+        diagnostics::DiagnosticContext {
+            wallet_kind: Some(diagnostics::DiagnosticWalletKind::Software),
+            ..Default::default()
+        },
+        None,
+    );
     Ok(())
 }
 
@@ -336,6 +347,18 @@ pub fn wallet_recover(
         .map_err(internal)?
         .insert(selected, authenticated_descriptors);
     unlock_selected(&app, &state)?;
+    diagnostics::record(
+        &app,
+        &state,
+        diagnostics::DiagnosticEventKind::WalletRecovered,
+        diagnostics::DiagnosticOutcome::Succeeded,
+        diagnostics::DiagnosticContext {
+            trigger: diagnostics::DiagnosticTrigger::Recovery,
+            wallet_kind: Some(diagnostics::DiagnosticWalletKind::Software),
+            ..Default::default()
+        },
+        None,
+    );
     Ok(())
 }
 
@@ -369,6 +392,17 @@ pub fn wallet_verify_backup(
         .ok_or_else(|| registry_api_error(RegistryError::UnknownSelection))?;
     selected.backup_verified = true;
     save_registry(&app, &registry)?;
+    diagnostics::record(
+        &app,
+        &state,
+        diagnostics::DiagnosticEventKind::BackupVerified,
+        diagnostics::DiagnosticOutcome::Succeeded,
+        diagnostics::DiagnosticContext {
+            wallet_kind: Some(diagnostics::DiagnosticWalletKind::Software),
+            ..Default::default()
+        },
+        None,
+    );
     Ok(true)
 }
 
@@ -403,6 +437,17 @@ pub fn wallet_reveal_and_verify_backup(
         .ok_or_else(|| registry_api_error(RegistryError::UnknownSelection))?;
     selected.backup_verified = true;
     save_registry(&app, &registry)?;
+    diagnostics::record(
+        &app,
+        &state,
+        diagnostics::DiagnosticEventKind::BackupVerified,
+        diagnostics::DiagnosticOutcome::Succeeded,
+        diagnostics::DiagnosticContext {
+            wallet_kind: Some(diagnostics::DiagnosticWalletKind::Software),
+            ..Default::default()
+        },
+        None,
+    );
     Ok(true)
 }
 
@@ -439,6 +484,18 @@ pub fn wallet_unlock(
     }
     unlock_selected(&app, &state)?;
     clear_mainnet_node_admission(&state)?;
+    let kind = diagnostics::wallet_kind(selected_profile(&app)?.kind);
+    diagnostics::record(
+        &app,
+        &state,
+        diagnostics::DiagnosticEventKind::WalletUnlocked,
+        diagnostics::DiagnosticOutcome::Succeeded,
+        diagnostics::DiagnosticContext {
+            wallet_kind: Some(kind),
+            ..Default::default()
+        },
+        None,
+    );
     Ok(())
 }
 
@@ -449,8 +506,20 @@ pub async fn wallet_lock(app: AppHandle) -> ApiResult<()> {
         cancel_foreground_sync(&state)?;
         let _operation = operation_guard(&state)?;
         state.proposals.lock().map_err(internal)?.clear();
-        let selected = selected_profile(&app)?.id;
-        lock_wallet(&state, selected)
+        let profile = selected_profile(&app)?;
+        lock_wallet(&state, profile.id)?;
+        diagnostics::record(
+            &app,
+            &state,
+            diagnostics::DiagnosticEventKind::WalletLocked,
+            diagnostics::DiagnosticOutcome::Succeeded,
+            diagnostics::DiagnosticContext {
+                wallet_kind: Some(diagnostics::wallet_kind(profile.kind)),
+                ..Default::default()
+            },
+            None,
+        );
+        Ok(())
     })
     .await
     .map_err(internal)?
@@ -471,10 +540,49 @@ pub async fn wallet_snapshot(app: AppHandle) -> ApiResult<WalletSnapshotDto> {
 }
 
 #[tauri::command]
-pub async fn wallet_sync(app: AppHandle) -> ApiResult<WalletSnapshotDto> {
+pub async fn wallet_sync(app: AppHandle, automatic: Option<bool>) -> ApiResult<WalletSnapshotDto> {
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
-        run_foreground_sync(&app, &state, false)
+        let profile = selected_profile(&app)?;
+        let source = read_sync_source(&app)?;
+        let context = diagnostics::DiagnosticContext {
+            trigger: if automatic.unwrap_or(false) {
+                diagnostics::DiagnosticTrigger::Automatic
+            } else {
+                diagnostics::DiagnosticTrigger::Manual
+            },
+            wallet_kind: Some(diagnostics::wallet_kind(profile.kind)),
+            sync_source: Some(diagnostics::sync_source(&source)),
+            ..Default::default()
+        };
+        diagnostics::record(
+            &app,
+            &state,
+            diagnostics::DiagnosticEventKind::Sync,
+            diagnostics::DiagnosticOutcome::Started,
+            context,
+            None,
+        );
+        diagnostics::record(
+            &app,
+            &state,
+            diagnostics::DiagnosticEventKind::Sync,
+            diagnostics::DiagnosticOutcome::Progress,
+            diagnostics::DiagnosticContext {
+                progress_percent: Some(0),
+                ..context
+            },
+            None,
+        );
+        let result = run_foreground_sync(&app, &state, false);
+        diagnostics::record_result(
+            &app,
+            &state,
+            diagnostics::DiagnosticEventKind::Sync,
+            context,
+            &result,
+        );
+        result
     })
     .await
     .map_err(internal)?
@@ -588,7 +696,7 @@ pub fn address_create(
     .map_err(internal)?;
     wallet.persist(&mut transaction).map_err(internal)?;
     transaction.commit().map_err(internal)?;
-    Ok(ReceiveAddressDto {
+    let response = ReceiveAddressDto {
         id: info.index,
         testnet_alias: regtest_testnet_address_alias(&info.address.to_string()),
         address: info.address.to_string(),
@@ -599,7 +707,19 @@ pub fn address_create(
         derivation_path: format!("{SINGLESIG_ACCOUNT_PATH}/0/{}", info.index),
         hardware_verified_at: None,
         hardware_verified_by: None,
-    })
+    };
+    diagnostics::record(
+        &app,
+        &state,
+        diagnostics::DiagnosticEventKind::ReceiveAddressGenerated,
+        diagnostics::DiagnosticOutcome::Succeeded,
+        diagnostics::DiagnosticContext {
+            wallet_kind: Some(diagnostics::wallet_kind(selected_profile(&app)?.kind)),
+            ..Default::default()
+        },
+        None,
+    );
+    Ok(response)
 }
 
 #[tauri::command]
@@ -629,7 +749,23 @@ pub async fn coin_set_frozen(app: AppHandle, outpoint: String, frozen: bool) -> 
         let _operation = operation_guard(&state)?;
         require_unlocked(&app, &state)?;
         let mut db = open_db(&app)?;
-        set_coin_frozen(&mut db, &outpoint, frozen)
+        set_coin_frozen(&mut db, &outpoint, frozen)?;
+        diagnostics::record(
+            &app,
+            &state,
+            if frozen {
+                diagnostics::DiagnosticEventKind::CoinFrozen
+            } else {
+                diagnostics::DiagnosticEventKind::CoinUnfrozen
+            },
+            diagnostics::DiagnosticOutcome::Succeeded,
+            diagnostics::DiagnosticContext {
+                wallet_kind: Some(diagnostics::wallet_kind(selected_profile(&app)?.kind)),
+                ..Default::default()
+            },
+            None,
+        );
+        Ok(())
     })
     .await
     .map_err(internal)?
@@ -672,7 +808,23 @@ pub async fn multisig_coin_set_frozen(
         let _operation = operation_guard(&state)?;
         require_unlocked(&app, &state)?;
         let mut db = open_multisig_db(&app)?;
-        set_coin_frozen(&mut db, &outpoint, frozen)
+        set_coin_frozen(&mut db, &outpoint, frozen)?;
+        diagnostics::record(
+            &app,
+            &state,
+            if frozen {
+                diagnostics::DiagnosticEventKind::CoinFrozen
+            } else {
+                diagnostics::DiagnosticEventKind::CoinUnfrozen
+            },
+            diagnostics::DiagnosticOutcome::Succeeded,
+            diagnostics::DiagnosticContext {
+                wallet_kind: Some(diagnostics::DiagnosticWalletKind::Multisig),
+                ..Default::default()
+            },
+            None,
+        );
+        Ok(())
     })
     .await
     .map_err(internal)?
@@ -944,6 +1096,17 @@ pub fn wallet_sync_source_save(
     record_auth_result(&app, &state, &verified)?;
     verified?;
     write_private_json(&sync_source_path(&app)?, &source)?;
+    diagnostics::record(
+        &app,
+        &state,
+        diagnostics::DiagnosticEventKind::NetworkConfigurationChanged,
+        diagnostics::DiagnosticOutcome::Succeeded,
+        diagnostics::DiagnosticContext {
+            sync_source: Some(diagnostics::sync_source(&source)),
+            ..Default::default()
+        },
+        None,
+    );
     Ok(source)
 }
 
@@ -1097,7 +1260,31 @@ pub async fn wallet_full_rescan(
     credential: String,
 ) -> ApiResult<WalletSnapshotDto> {
     let credential = Zeroizing::new(credential);
-    tauri::async_runtime::spawn_blocking(move || {
+    let diagnostic_app = app.clone();
+    let context = diagnostics::DiagnosticContext {
+        trigger: diagnostics::DiagnosticTrigger::Recovery,
+        ..Default::default()
+    };
+    diagnostics::record(
+        &app,
+        &app.state::<AppState>(),
+        diagnostics::DiagnosticEventKind::RecoveryScan,
+        diagnostics::DiagnosticOutcome::Started,
+        context,
+        None,
+    );
+    diagnostics::record(
+        &app,
+        &app.state::<AppState>(),
+        diagnostics::DiagnosticEventKind::RecoveryScan,
+        diagnostics::DiagnosticOutcome::Progress,
+        diagnostics::DiagnosticContext {
+            progress_percent: Some(0),
+            ..context
+        },
+        None,
+    );
+    let result = tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
         cancel_foreground_sync(&state)?;
         let (
@@ -1196,7 +1383,16 @@ pub async fn wallet_full_rescan(
         }
     })
     .await
-    .map_err(internal)?
+    .map_err(internal)?;
+    let state = diagnostic_app.state::<AppState>();
+    diagnostics::record_result(
+        &diagnostic_app,
+        &state,
+        diagnostics::DiagnosticEventKind::RecoveryScan,
+        context,
+        &result,
+    );
+    result
 }
 
 #[tauri::command]
@@ -1261,6 +1457,17 @@ pub async fn node_config_save(
         write_private_json(&node_config_path(&app)?, &config)?;
         load_node_auth_session(&app, &state, credential.as_str())?;
         mark_selected_mainnet_node_verified(&app, &state)?;
+        diagnostics::record(
+            &app,
+            &state,
+            diagnostics::DiagnosticEventKind::NetworkConfigurationChanged,
+            diagnostics::DiagnosticOutcome::Succeeded,
+            diagnostics::DiagnosticContext {
+                sync_source: Some(diagnostics::DiagnosticSyncSource::BitcoinCore),
+                ..Default::default()
+            },
+            None,
+        );
         Ok(status)
     })
     .await

@@ -45,6 +45,13 @@ Tokens live in `src/app.css`. Component surfaces must use semantic tokens such a
 
 Desktop uses a 224-pixel persistent navigation rail and a centered content area. Coordinator screens may use a main column plus a narrow safety sidebar. Mobile removes the rail, uses four fixed navigation destinations, preserves safe-area padding, and places high-frequency Receive/Send actions above the tab bar.
 
+Diagnostics is a global utility, not a wallet destination. Its shell link remains
+available while locked; opening it suppresses wallet navigation and uses locked
+network presentation. The page leads with the privacy boundary, a durable event
+count, explicit CSV/JSON exports, and an accessible table with local-time detail.
+Mobile may scroll the table inside its bordered container but the page itself must
+not overflow horizontally.
+
 The desktop rail ends with a quiet, tabular-numeric native build identity (`Groot v… · commit`) below network status. The same shared control remains visible on shell-less welcome/setup/recovery flows and at the end of Settings, including mobile Settings, so a packaged candidate can always be identified without exposing wallet data. Activating it copies exactly that public version-and-commit string for debugging or customer support, with inline status and a toast; no wallet, device, node, or profile data is included.
 
 Required review sizes are 1180×780 and 390×844. At mobile width, content must have no horizontal overflow, long identifiers must truncate or wrap, and actions must remain above the keyboard/safe area.

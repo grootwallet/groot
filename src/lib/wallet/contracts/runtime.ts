@@ -32,6 +32,44 @@ export type RuntimePlatform = {
   version: string;
   commit: string;
 };
+export type DiagnosticRecord = {
+  schemaVersion: 1;
+  timestamp: number;
+  event:
+    | 'app_started'
+    | 'wallet_created'
+    | 'wallet_recovered'
+    | 'wallet_removed'
+    | 'wallet_unlocked'
+    | 'wallet_locked'
+    | 'sync'
+    | 'recovery_scan'
+    | 'transaction_prepared'
+    | 'transaction_signed'
+    | 'transaction_broadcast'
+    | 'receive_address_generated'
+    | 'receive_address_verified'
+    | 'coin_frozen'
+    | 'coin_unfrozen'
+    | 'backup_exported'
+    | 'backup_imported'
+    | 'backup_verified'
+    | 'recovery_tested'
+    | 'network_configuration_changed'
+    | 'diagnostics_exported';
+  outcome: 'started' | 'progress' | 'succeeded' | 'failed' | 'cancelled';
+  trigger: 'automatic' | 'manual' | 'startup' | 'recovery';
+  walletKind?: 'software' | 'hardware' | 'multisig';
+  syncSource?: 'bitcoin_core' | 'compact_filters';
+  progressPercent?: number;
+  itemCount?: number;
+  exportFormat?: 'json' | 'csv';
+  errorCode?: string;
+  appVersion: string;
+  buildCommit: string;
+  compiledNetwork: SupportedNetwork;
+  platform: RuntimePlatform['platform'];
+};
 export type CoreNodeConfig = {
   backend: { type: 'local_core' | 'remote_core'; url: string };
   auth: 'cookie' | 'user_pass';
