@@ -87,6 +87,7 @@ describe('wallet invariants', () => {
     expect(hasAddressPrefixForNetwork('tb1qfixtureaddress000', 'testnet4')).toBe(true);
     expect(hasAddressPrefixForNetwork('tb1qfixtureaddress000', 'regtest')).toBe(false);
     expect(hasAddressPrefixForNetwork('bcrt1short', 'regtest')).toBe(false);
+    expect(hasAddressPrefixForNetwork('mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn', 'regtest')).toBe(true);
     expect(
       hasAddressPrefixForNetwork('bc1qrur4qp60xej8v5st3e58xh6vnaqsfh0mf8w6kj', 'mainnet')
     ).toBe(true);
