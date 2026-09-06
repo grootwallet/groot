@@ -988,43 +988,52 @@ pub async fn hardware_sign_multisig(
 }
 
 #[tauri::command]
-pub fn multisig_proposal_broadcast(
+pub async fn multisig_proposal_broadcast(
     app: AppHandle,
-    state: State<'_, AppState>,
     proposal_id: String,
     reviewed_psbt: String,
     credential: String,
 ) -> ApiResult<BroadcastResultDto> {
     let credential = Zeroizing::new(credential);
-    let _operation = operation_guard(&state)?;
-    require_unlocked(&app, &state)?;
-    check_auth_throttle(&app, &state)?;
-    let credential_result = verify_multisig_credential(&app, credential.as_str());
-    record_auth_result(&app, &state, &credential_result)?;
-    credential_result?;
-    let metadata = read_multisig_metadata(&app)?;
-    let mut db = open_multisig_db(&app)?;
-    let transaction =
-        finalized_multisig_proposal_transaction(&mut db, &metadata, &proposal_id, &reviewed_psbt)?;
-    let txid = broadcast_transaction(&app, &state, &transaction)?;
-    let delayed_policy = delayed_policy_context(&metadata)?;
-    let snapshot = commit_multisig_broadcast(
-        &mut db,
-        &transaction,
-        &proposal_id,
-        &txid,
-        None,
-        delayed_policy.as_ref(),
-    )?;
-    let (snapshot, sync_pending) = match sync_wallet_atomically(&app, &state, &mut db, true, None) {
-        Ok(snapshot) => (snapshot, false),
-        Err(_) => (snapshot, true),
-    };
-    Ok(BroadcastResultDto {
-        txid: txid.to_string(),
-        snapshot,
-        sync_pending,
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let _operation = operation_guard(&state)?;
+        require_unlocked(&app, &state)?;
+        check_auth_throttle(&app, &state)?;
+        let credential_result = verify_multisig_credential(&app, credential.as_str());
+        record_auth_result(&app, &state, &credential_result)?;
+        credential_result?;
+        let metadata = read_multisig_metadata(&app)?;
+        let mut db = open_multisig_db(&app)?;
+        let transaction = finalized_multisig_proposal_transaction(
+            &mut db,
+            &metadata,
+            &proposal_id,
+            &reviewed_psbt,
+        )?;
+        let txid = broadcast_transaction(&app, &state, &transaction)?;
+        let delayed_policy = delayed_policy_context(&metadata)?;
+        let snapshot = commit_multisig_broadcast(
+            &mut db,
+            &transaction,
+            &proposal_id,
+            &txid,
+            None,
+            delayed_policy.as_ref(),
+        )?;
+        let (snapshot, sync_pending) =
+            match sync_wallet_atomically(&app, &state, &mut db, true, None) {
+                Ok(snapshot) => (snapshot, false),
+                Err(_) => (snapshot, true),
+            };
+        Ok(BroadcastResultDto {
+            txid: txid.to_string(),
+            snapshot,
+            sync_pending,
+        })
     })
+    .await
+    .map_err(internal)?
 }
 
 #[tauri::command]

@@ -19,6 +19,7 @@
   } from '@lucide/svelte';
   import { onDestroy, onMount } from 'svelte';
   import { goto } from '$app/navigation';
+  import { page } from '$app/state';
   import Button from '$lib/components/Button.svelte';
   import PermanentLabelEditor from '$lib/components/PermanentLabelEditor.svelte';
   import HardwareActionPrompt from '$lib/components/HardwareActionPrompt.svelte';
@@ -118,6 +119,12 @@
   import { useWalletShellContext } from '$lib/wallet/shell-context';
 
   const walletShell = useWalletShellContext();
+  const initialAcceleration: { txid: string; method: 'rbf' | 'cpfp' } | null = (() => {
+    const method = page.url.searchParams.get('accelerate');
+    const txid = page.url.searchParams.get('txid');
+    if (!txid || (method !== 'rbf' && method !== 'cpfp')) return null;
+    return { txid, method };
+  })();
   let wallet = $state<MultisigWallet | null>(null),
     proposal = $state<MultisigProposal | null>(null),
     estimates = $state<FeeEstimates | null>(null);
@@ -178,7 +185,10 @@
     coldcardSetupBusy = $state(false),
     coldcardSetupError = $state(''),
     coldcardSetupDevice = $state<HardwareDevice | null>(null);
-  let accelerationRequest = $state<{ txid: string; method: 'rbf' | 'cpfp' } | null>(null);
+  let accelerationRequest = $state<{ txid: string; method: 'rbf' | 'cpfp' } | null>(
+    initialAcceleration
+  );
+  let accelerationLoading = $state(Boolean(initialAcceleration));
   let rbfQuote = $state<AccelerationQuote | null>(null);
   let cpfpQuote = $state<CpfpAccelerationQuote | null>(null);
   const broadcastExplorerUrl = $derived(
@@ -566,6 +576,8 @@
           tone: 'danger'
         });
       } else error = localizedError(cause, $locale, 'Could not load wallet.');
+    } finally {
+      accelerationLoading = false;
     }
   });
   function submitIntentOnEnter(event: KeyboardEvent) {
@@ -1512,7 +1524,10 @@
   </header>
   {#if !txid && ((!renewalMode && !delayedSpendMode) || proposal)}<SendProgress
       current={progressStep}
-    />{#if wallet && !proposal && !renewalMode && !delayedSpendMode}<SignerSummary
+    />{#if accelerationLoading}<SignerSummary
+        signers={[]}
+        loading
+      />{:else if wallet && !proposal && !renewalMode && !delayedSpendMode}<SignerSummary
         signers={signerItems}
         required={regularRequired}
         signedFingerprints={[]}
@@ -1679,6 +1694,23 @@
             {translate($locale, 'Opening this shares the transaction lookup with mempool.space.')}
           </p>
         </div>{/if}
+    </section>
+  {:else if accelerationLoading}<section
+      class="form-card send-stage-card acceleration-loading-card"
+      aria-live="polite"
+    >
+      <RefreshCw class="spin" size={28} />
+      <div class="send-stage-heading">
+        <span>{translate($locale, 'FEE ACCELERATION')}</span>
+        <h2>{translate($locale, 'Preparing fee acceleration')}</h2>
+        <p>
+          {translate(
+            $locale,
+            'Reading the original transaction and current fee policy from Bitcoin Core.'
+          )}
+        </p>
+      </div>
+      <div class="acceleration-loading-lines" aria-hidden="true"><i></i><i></i><i></i></div>
     </section>
   {:else if accelerationRequest}<form
       class="form-card send-stage-card"

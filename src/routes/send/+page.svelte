@@ -14,12 +14,14 @@
     ExternalLink,
     LockKeyhole,
     QrCode,
+    RefreshCw,
     ScanLine,
     Trash2,
     X
   } from '@lucide/svelte';
   import { onDestroy, onMount } from 'svelte';
   import { goto } from '$app/navigation';
+  import { page } from '$app/state';
   import Button from '$lib/components/Button.svelte';
   import PermanentLabelEditor from '$lib/components/PermanentLabelEditor.svelte';
   import HardwareActionPrompt from '$lib/components/HardwareActionPrompt.svelte';
@@ -103,6 +105,12 @@
   import { useWalletShellContext } from '$lib/wallet/shell-context';
 
   const walletShell = useWalletShellContext();
+  const initialAcceleration: { txid: string; method: 'rbf' | 'cpfp' } | null = (() => {
+    const method = page.url.searchParams.get('accelerate');
+    const txid = page.url.searchParams.get('txid');
+    if (!txid || (method !== 'rbf' && method !== 'cpfp')) return null;
+    return { txid, method };
+  })();
 
   let step = $state(1);
   let draftStep = $state<1 | 2>(1);
@@ -143,8 +151,11 @@
   let broadcastExplorerError = $state('');
   let sentAmount = $state(0);
   let balanceSyncPending = $state(false);
-  let accelerationMethod = $state<'rbf' | 'cpfp' | null>(null);
-  let accelerationRequest = $state<{ txid: string; method: 'rbf' | 'cpfp' } | null>(null);
+  let accelerationMethod = $state<'rbf' | 'cpfp' | null>(initialAcceleration?.method ?? null);
+  let accelerationRequest = $state<{ txid: string; method: 'rbf' | 'cpfp' } | null>(
+    initialAcceleration
+  );
+  let accelerationLoading = $state(Boolean(initialAcceleration));
   let rbfQuote = $state<AccelerationQuote | null>(null);
   let cpfpQuote = $state<CpfpAccelerationQuote | null>(null);
   const broadcastExplorerUrl = $derived(
@@ -419,6 +430,8 @@
       } else {
         toast({ title: 'Could not load wallet', description, tone: 'danger' });
       }
+    } finally {
+      accelerationLoading = false;
     }
   });
 
@@ -1049,7 +1062,7 @@
       signers={signerItems}
       signedFingerprints={externalProposal?.signedFingerprints ?? []}
       collecting={externalSigner && Boolean(proposal)}
-      loading={!signerSummaryReady}
+      loading={!signerSummaryReady || accelerationLoading}
       ondiscard={externalSigner
         ? () => {
             discardSignatureError = '';
@@ -1058,7 +1071,22 @@
         : undefined}
     />{/if}
 
-  {#if step === 1 && accelerationRequest}
+  {#if accelerationLoading}
+    <section class="form-card send-stage-card acceleration-loading-card" aria-live="polite">
+      <RefreshCw class="spin" size={28} />
+      <div class="send-stage-heading">
+        <span>{translate($locale, 'FEE ACCELERATION')}</span>
+        <h2>{translate($locale, 'Preparing fee acceleration')}</h2>
+        <p>
+          {translate(
+            $locale,
+            'Reading the original transaction and current fee policy from Bitcoin Core.'
+          )}
+        </p>
+      </div>
+      <div class="acceleration-loading-lines" aria-hidden="true"><i></i><i></i><i></i></div>
+    </section>
+  {:else if step === 1 && accelerationRequest}
     <form
       class="form-card send-stage-card"
       onsubmit={(event) => {

@@ -180,6 +180,12 @@ existing persistent spendability mutation against automatic sync and moves its
 database work off the native UI thread without changing coin-selection policy,
 transaction construction, descriptors, or interoperability evidence.
 
+The internal mainnet RC broadcast-scheduling and acceleration-presentation follow-up
+has no BIP impact. It moves existing signing/broadcast/persistence work off the native
+UI thread, hides an RBF action that was already ineligible for self-spends, and makes
+existing loading and amount-unit presentation explicit without changing BIP125
+construction, CPFP policy, PSBT handling, descriptors, or interoperability evidence.
+
 ## Maintenance rule
 
 Every feature, interoperability, signer, descriptor, transaction, payment request,

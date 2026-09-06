@@ -518,7 +518,7 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
                   walletInputAmount: 40_000,
                   walletOutputAmount: 39_890,
                   locktime: 0,
-                  rbf: false,
+                  rbf: true,
                   intentLabel: null,
                   provenance: {
                     state: 'unknown',
@@ -858,6 +858,12 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
   }
 
   async quoteRbf(txid: string, selectedRate?: ReturnType<typeof feeRate>) {
+    if (
+      typeof location !== 'undefined' &&
+      new URLSearchParams(location.search).has('fixture-acceleration-loading')
+    ) {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
     if (
       typeof location !== 'undefined' &&
       new URLSearchParams(location.search).has('fixture-rbf-insufficient-funds')

@@ -1,6 +1,14 @@
 import type { CatalogSection } from './types';
 
 export const sendCopy = {
+  'Preparing fee acceleration': {
+    fr: 'Préparation de l’accélération des frais',
+    es: 'Preparando la aceleración de comisión'
+  },
+  'Reading the original transaction and current fee policy from Bitcoin Core.': {
+    fr: 'Lecture de la transaction d’origine et de la politique de frais actuelle depuis Bitcoin Core.',
+    es: 'Leyendo la transacción original y la política de comisiones actual desde Bitcoin Core.'
+  },
   'Self-transfer': { fr: 'Transfert interne', es: 'Transferencia interna' },
   Consolidating: { fr: 'Consolidation', es: 'Consolidación' },
   'Self-transfer recipient': {

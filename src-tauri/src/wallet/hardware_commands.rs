@@ -2592,109 +2592,113 @@ pub async fn hardware_sign_external(
 }
 
 #[tauri::command]
-pub fn external_signer_proposal_broadcast(
+pub async fn external_signer_proposal_broadcast(
     app: AppHandle,
-    state: State<'_, AppState>,
     proposal_id: String,
     reviewed_psbt: String,
     credential: String,
 ) -> ApiResult<BroadcastResultDto> {
     let credential = Zeroizing::new(credential);
-    let _operation = operation_guard(&state)?;
-    require_unlocked(&app, &state)?;
-    check_auth_throttle(&app, &state)?;
-    let verified = verify_external_signer_credential(&app, credential.as_str());
-    record_auth_result(&app, &state, &verified)?;
-    verified?;
-    let metadata = read_external_signer_metadata(&app)?;
-    let mut db = open_db(&app)?;
-    let proposal = load_external_proposal(&mut db, &metadata, &proposal_id)?;
-    require_reviewed_psbt_unchanged(
-        &proposal.psbt,
-        &reviewed_psbt,
-        "The signed proposal changed after review. Reload it before broadcast.",
-    )?;
-    if !proposal.can_finalize {
-        return Err(api_error(
-            "insufficient_signatures",
-            "Sign the transaction before broadcasting.",
-        ));
-    }
-    let mut psbt = decode_psbt(&proposal.psbt).map_err(proposal_api_error)?;
-    let wallet = load_wallet(&mut db)?;
-    let acceleration = proposal_acceleration_method(&db, &proposal_id)?;
-    if matches!(acceleration, Some(AccelerationMethod::Rbf)) {
-        validate_rbf_original_intent(
-            &db,
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let _operation = operation_guard(&state)?;
+        require_unlocked(&app, &state)?;
+        check_auth_throttle(&app, &state)?;
+        let verified = verify_external_signer_credential(&app, credential.as_str());
+        record_auth_result(&app, &state, &verified)?;
+        verified?;
+        let metadata = read_external_signer_metadata(&app)?;
+        let mut db = open_db(&app)?;
+        let proposal = load_external_proposal(&mut db, &metadata, &proposal_id)?;
+        require_reviewed_psbt_unchanged(
+            &proposal.psbt,
+            &reviewed_psbt,
+            "The signed proposal changed after review. Reload it before broadcast.",
+        )?;
+        if !proposal.can_finalize {
+            return Err(api_error(
+                "insufficient_signatures",
+                "Sign the transaction before broadcasting.",
+            ));
+        }
+        let mut psbt = decode_psbt(&proposal.psbt).map_err(proposal_api_error)?;
+        let wallet = load_wallet(&mut db)?;
+        let acceleration = proposal_acceleration_method(&db, &proposal_id)?;
+        if matches!(acceleration, Some(AccelerationMethod::Rbf)) {
+            validate_rbf_original_intent(
+                &db,
+                &wallet,
+                &proposal_id,
+                &proposal.recipient,
+                proposal.amount,
+            )?;
+        }
+        validate_release_spend(
             &wallet,
-            &proposal_id,
+            &psbt,
             &proposal.recipient,
             proposal.amount,
+            acceleration,
         )?;
-    }
-    validate_release_spend(
-        &wallet,
-        &psbt,
-        &proposal.recipient,
-        proposal.amount,
-        acceleration,
-    )?;
-    validate_psbt_excludes_frozen(&psbt, &frozen_outpoints(&db)?)?;
-    if !wallet
-        .finalize_psbt(&mut psbt, SignOptions::default())
-        .map_err(internal)?
-    {
-        return Err(api_error(
-            "finalization_failed",
-            "The signed transaction does not satisfy the wallet descriptor.",
-        ));
-    }
-    let transaction = psbt.extract_tx().map_err(internal)?;
-    let txid = broadcast_transaction(&app, &state, &transaction)?;
-    let mut persisted = db.transaction().map_err(internal)?;
-    let mut wallet = load_wallet_transaction(&mut persisted)?;
-    apply_locally_broadcast_transaction(&mut wallet, &transaction);
-    let changed = persisted.execute(
-        "UPDATE groot_proposals SET status = 'broadcast', txid = ?1 WHERE proposal_id = ?2 AND status = 'ready'",
-        params![txid.to_string(), proposal_id],
-    ).map_err(internal)?;
-    if changed != 1 {
-        return Err(api_error(
-            "proposal_mismatch",
-            "The proposal changed while it was being broadcast.",
-        ));
-    }
-    label_provenance::bind_broadcast_transaction(
-        &persisted,
-        &proposal_id,
-        &txid.to_string(),
-        now(),
-    )
-    .map_err(internal)?;
-    record_replacement(&persisted, &proposal_id, &txid)?;
-    let snapshot = snapshot_from(&wallet, &persisted, None, false, None)?;
-    notifications::enqueue(
-        &persisted,
-        &WalletNotification::TransactionBroadcast {
+        validate_psbt_excludes_frozen(&psbt, &frozen_outpoints(&db)?)?;
+        if !wallet
+            .finalize_psbt(&mut psbt, SignOptions::default())
+            .map_err(internal)?
+        {
+            return Err(api_error(
+                "finalization_failed",
+                "The signed transaction does not satisfy the wallet descriptor.",
+            ));
+        }
+        let transaction = psbt.extract_tx().map_err(internal)?;
+        let txid = broadcast_transaction(&app, &state, &transaction)?;
+        let mut persisted = db.transaction().map_err(internal)?;
+        let mut wallet = load_wallet_transaction(&mut persisted)?;
+        apply_locally_broadcast_transaction(&mut wallet, &transaction);
+        let changed = persisted.execute(
+            "UPDATE groot_proposals SET status = 'broadcast', txid = ?1 WHERE proposal_id = ?2 AND status = 'ready'",
+            params![txid.to_string(), proposal_id],
+        ).map_err(internal)?;
+        if changed != 1 {
+            return Err(api_error(
+                "proposal_mismatch",
+                "The proposal changed while it was being broadcast.",
+            ));
+        }
+        label_provenance::bind_broadcast_transaction(
+            &persisted,
+            &proposal_id,
+            &txid.to_string(),
+            now(),
+        )
+        .map_err(internal)?;
+        record_replacement(&persisted, &proposal_id, &txid)?;
+        let snapshot = snapshot_from(&wallet, &persisted, None, false, None)?;
+        notifications::enqueue(
+            &persisted,
+            &WalletNotification::TransactionBroadcast {
+                txid: txid.to_string(),
+                balance: snapshot.balance.total,
+            },
+            now(),
+        )
+        .map_err(internal)?;
+        wallet.persist(&mut persisted).map_err(internal)?;
+        drop(wallet);
+        persisted.commit().map_err(internal)?;
+        let (snapshot, sync_pending) =
+            match sync_wallet_atomically(&app, &state, &mut db, false, None) {
+                Ok(snapshot) => (snapshot, false),
+                Err(_) => (snapshot, true),
+            };
+        Ok(BroadcastResultDto {
             txid: txid.to_string(),
-            balance: snapshot.balance.total,
-        },
-        now(),
-    )
-    .map_err(internal)?;
-    wallet.persist(&mut persisted).map_err(internal)?;
-    drop(wallet);
-    persisted.commit().map_err(internal)?;
-    let (snapshot, sync_pending) = match sync_wallet_atomically(&app, &state, &mut db, false, None)
-    {
-        Ok(snapshot) => (snapshot, false),
-        Err(_) => (snapshot, true),
-    };
-    Ok(BroadcastResultDto {
-        txid: txid.to_string(),
-        snapshot,
-        sync_pending,
+            snapshot,
+            sync_pending,
+        })
     })
+    .await
+    .map_err(internal)?
 }
 
 #[tauri::command]

@@ -1205,7 +1205,14 @@ test('RBF starts safely and presents one payment row with durable lineage', asyn
   await page.getByRole('link', { name: 'View transaction' }).click();
 
   await page.locator('.tx-row').filter({ hasText: 'RBF target fixture' }).first().click();
-  await page.getByRole('link', { name: 'Increase fee (RBF)' }).click();
+  const rbfLink = page.getByRole('link', { name: 'Increase fee (RBF)' });
+  await rbfLink.evaluate((link) => {
+    const href = link.getAttribute('href');
+    if (href) link.setAttribute('href', `${href}&fixture-acceleration-loading=1`);
+  });
+  await rbfLink.click();
+  await expect(page.getByRole('heading', { name: 'Preparing fee acceleration' })).toBeVisible();
+  await expect(page.getByText('Checking wallet identity…')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Speed up transaction' })).toBeVisible();
   await expect(page.getByText('You will spend this much more', { exact: true })).toBeVisible();
   await expect(page.getByText('Your payment amount and recipient will not change.')).toBeVisible();
@@ -1501,6 +1508,9 @@ test('overview counts a pending CPFP self-spend fee exactly once', async ({ page
   await expect(page.getByText('220 sats outgoing')).toHaveCount(0);
   const acceleration = page.locator('.tx-row').filter({ hasText: 'Fee acceleration' });
   await expect(acceleration).toContainText('−110 sats');
+  await acceleration.click();
+  await expect(page.getByRole('link', { name: 'Increase fee (RBF)' })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Spend output (CPFP)' })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true
   );

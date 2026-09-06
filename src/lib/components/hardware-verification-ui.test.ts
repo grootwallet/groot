@@ -452,7 +452,7 @@ describe('hardware receive verification UI', () => {
   });
 
   it('reserves the signer summary while the send wallet identity loads', () => {
-    expect(singleKeySend).toContain('loading={!signerSummaryReady}');
+    expect(singleKeySend).toContain('loading={!signerSummaryReady || accelerationLoading}');
     expect(singleKeySend).not.toContain('step < 4 && signerSummaryReady');
     expect(signerSummary).toContain('aria-busy={loading}');
     expect(signerSummary).toContain('class="send-signer-placeholder"');

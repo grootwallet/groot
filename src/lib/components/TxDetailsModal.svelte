@@ -33,6 +33,7 @@
   let canIncreaseFee = $derived(
     transaction?.status === 'pending' &&
       transaction.direction === 'sent' &&
+      !isSelfSpend &&
       transaction.rbf === true
   );
   let canSpendOutput = $derived(

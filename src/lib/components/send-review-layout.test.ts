@@ -13,10 +13,10 @@ const multisigSend = readFileSync(
 describe('send review layout', () => {
   it('keeps the denomination separated from the amount', () => {
     expect(amount).toMatch(
-      /\.formatted-amount\s*\{[^}]*display: inline-flex;[^}]*align-items: baseline;[^}]*column-gap: 0\.375rem;/s
+      /\.formatted-amount\s*\{[^}]*display: inline-flex;[^}]*align-items: baseline;/s
     );
-    expect(amount).toMatch(/\.formatted-amount > small\s*\{[^}]*margin-inline-start: 0;/s);
-    expect(appCss).toMatch(/\.formatted-amount\s*\{[^}]*column-gap: 0\.375rem;/s);
+    expect(amount).toMatch(/\.formatted-amount > small\s*\{[^}]*margin-inline-start: 0\.375rem;/s);
+    expect(appCss).toMatch(/\.formatted-amount small\s*\{[^}]*margin-inline-start: 0\.375rem;/s);
   });
 
   it('separates adjacent setup warnings and onboarding fields', () => {
@@ -99,5 +99,20 @@ describe('send review layout', () => {
       expect(route).toContain('variant="secondary" href="/activity"');
     }
     expect(appCss).toMatch(/\.success-state \.success-amount\s*\{[^}]*font-size: 24px/s);
+  });
+
+  it('shows an explicit fee-acceleration loading state before quote details are ready', () => {
+    for (const route of [singleSend, multisigSend]) {
+      expect(route).toContain('let accelerationLoading = $state(Boolean(initialAcceleration))');
+      expect(route).toContain('class="form-card send-stage-card acceleration-loading-card"');
+      expect(route).toContain("'Preparing fee acceleration'");
+      expect(route).toContain(
+        "'Reading the original transaction and current fee policy from Bitcoin Core.'"
+      );
+    }
+    expect(appCss).toMatch(/\.acceleration-loading-card\s*\{[^}]*min-height: 260px/s);
+    expect(appCss).toMatch(
+      /\.send-signers\.loading::after\s*\{[^}]*skeleton-shimmer 1\.15s linear/s
+    );
   });
 });
