@@ -7,6 +7,13 @@ candidate Bitcoin Improvement Proposals is
 [`bip-support.md`](bip-support.md). Any feature or dependency change that alters
 BIP support or its evidence updates that matrix and this ledger together.
 
+The current internal mainnet RC preserves decimal and sub-1 sat/vB custom rates
+through normal single-signer, multisig, maximum-spend, and delayed-policy
+preparation instead of rounding them to whole sat/vB. The shared amount renderer
+also uses a structural unit spacer across review, detail, signed, and broadcast
+success surfaces so native WebView styling cannot collapse the amount/unit gap.
+No persisted format or migration changes.
+
 The first signed/notarized mainnet certification run of v0.4.92 commit
 `c7406209` authenticated a fully synchronized, pruned, loopback Bitcoin Core
 node and created a BIP84 Ledger external-signer profile, but exposed an

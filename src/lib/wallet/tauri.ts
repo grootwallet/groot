@@ -337,7 +337,7 @@ export class TauriWalletAdapter implements WalletPort {
   maxSpend(recipient: string, feeRate: FeeRate, coinSelection: CoinSelection = { mode: 'auto' }) {
     return command<import('./contracts').MaxSpend>('tx_max_spend', {
       recipient,
-      feeRate,
+      feeRate: String(feeRate),
       coinSelection
     });
   }
@@ -348,7 +348,7 @@ export class TauriWalletAdapter implements WalletPort {
   ) {
     return command<import('./contracts').MaxSpend>('multisig_tx_max_spend', {
       recipient,
-      feeRate,
+      feeRate: String(feeRate),
       coinSelection
     });
   }
@@ -363,7 +363,7 @@ export class TauriWalletAdapter implements WalletPort {
       recipient,
       labels,
       amount,
-      feeRate,
+      feeRate: String(feeRate),
       coinSelection
     });
   }
@@ -737,7 +737,7 @@ export class TauriWalletAdapter implements WalletPort {
       recipient,
       labels,
       amount,
-      feeRate,
+      feeRate: String(feeRate),
       coinSelection
     });
   }
@@ -746,7 +746,7 @@ export class TauriWalletAdapter implements WalletPort {
     return command<MultisigProposal>('multisig_policy_renewal_prepare', {
       outpoint,
       labels,
-      feeRate: Number(feeRate)
+      feeRate: String(feeRate)
     });
   }
   prepareMultisigDelayedSpend(
@@ -759,7 +759,7 @@ export class TauriWalletAdapter implements WalletPort {
       outpoint,
       recipient,
       labels,
-      feeRate: Number(feeRate)
+      feeRate: String(feeRate)
     });
   }
   prepareMultisigAcceleration(

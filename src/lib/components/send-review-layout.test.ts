@@ -15,8 +15,13 @@ describe('send review layout', () => {
     expect(amount).toMatch(
       /\.formatted-amount\s*\{[^}]*display: inline-flex;[^}]*align-items: baseline;/s
     );
-    expect(amount).toMatch(/\.formatted-amount > small\s*\{[^}]*margin-inline-start: 0\.375rem;/s);
-    expect(appCss).toMatch(/\.formatted-amount small\s*\{[^}]*margin-inline-start: 0\.375rem;/s);
+    expect(amount).toContain('class="amount-unit-gap" aria-hidden="true"');
+    expect(amount).toMatch(
+      /\.formatted-amount > small > \.amount-unit-gap\s*\{[^}]*flex: 0 0 0\.5rem;[^}]*width: 0\.5rem;/s
+    );
+    expect(appCss).toMatch(
+      /\.formatted-amount small > \.amount-unit-gap\s*\{[^}]*flex: 0 0 0\.5rem;[^}]*width: 0\.5rem;/s
+    );
   });
 
   it('separates adjacent setup warnings and onboarding fields', () => {

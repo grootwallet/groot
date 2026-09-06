@@ -190,6 +190,12 @@ The internal mainnet RC payment-scanner sizing follow-up has no BIP impact. It c
 only the camera viewport and targeting-guide presentation; BIP21 parsing, address
 validation, network checks, and imported payment-request data are unchanged.
 
+The internal mainnet RC fee-precision and amount-spacing follow-up has no BIP support
+scope impact. It removes unintended whole-sat/vB rounding from existing transaction
+construction by using Bitcoin's integer sat/kwu representation consistently, while
+preserving authoritative effective-fee review and existing relay-policy failures.
+The amount-unit change is presentation-only.
+
 ## Maintenance rule
 
 Every feature, interoperability, signer, descriptor, transaction, payment request,

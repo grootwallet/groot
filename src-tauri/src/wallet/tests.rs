@@ -1439,22 +1439,28 @@ fn cpfp_ownership_requires_one_descriptor_derived_wallet_output() {
 }
 
 #[test]
-fn acceleration_rates_and_error_classes_fail_closed() {
+fn fee_rates_preserve_decimal_and_sub_one_precision_and_errors_fail_closed() {
     for invalid in ["NaN", "inf", "-1", "0", "10000.1"] {
         assert_eq!(
-            validate_acceleration_rate(invalid).unwrap_err().code,
+            validate_fee_rate(invalid).unwrap_err().code,
             "invalid_amount"
         );
     }
-    let (applied, rate) = validate_acceleration_rate("1.01").unwrap();
+    let (applied, rate) = validate_fee_rate("1.01").unwrap();
     assert_eq!(applied, 1.012);
     assert_eq!(rate.to_sat_per_kwu(), 253);
-    let (applied, rate) = validate_acceleration_rate("2.5").unwrap();
+    let (applied, rate) = validate_fee_rate("2.5").unwrap();
     assert_eq!(applied, 2.5);
     assert_eq!(rate.to_sat_per_kwu(), 625);
-    let (applied, rate) = validate_acceleration_rate("2.501").unwrap();
+    let (applied, rate) = validate_fee_rate("2.501").unwrap();
     assert_eq!(applied, 2.504);
     assert_eq!(rate.to_sat_per_kwu(), 626);
+    let (applied, rate) = validate_fee_rate("2.45").unwrap();
+    assert_eq!(applied, 2.452);
+    assert_eq!(rate.to_sat_per_kwu(), 613);
+    let (applied, rate) = validate_fee_rate("0.5").unwrap();
+    assert_eq!(applied, 0.5);
+    assert_eq!(rate.to_sat_per_kwu(), 125);
     assert_eq!(
         acceleration_error("transaction confirmed").code,
         "transaction_confirmed"

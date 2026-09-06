@@ -4,12 +4,17 @@ async function expectAmountUnitsSeparated(scope: Locator) {
   const gaps = await scope.locator('.formatted-amount').evaluateAll((elements) =>
     elements.flatMap((element) => {
       const amount = element.querySelector('strong')?.getBoundingClientRect();
-      const unit = element.querySelector('small')?.getBoundingClientRect();
-      return amount && unit ? [unit.left - amount.right] : [];
+      const unitText = [...(element.querySelector('small')?.childNodes ?? [])].find(
+        (node) => node.nodeType === Node.TEXT_NODE && node.textContent?.trim()
+      );
+      if (!amount || !unitText) return [];
+      const range = document.createRange();
+      range.selectNode(unitText);
+      return [range.getBoundingClientRect().left - amount.right];
     })
   );
   expect(gaps.length).toBeGreaterThan(0);
-  for (const gap of gaps) expect(gap).toBeGreaterThanOrEqual(5);
+  for (const gap of gaps) expect(gap).toBeGreaterThanOrEqual(7.5);
 }
 
 async function confirmGeneratedBackup(page: Page) {
@@ -1905,8 +1910,13 @@ test('custom fees validate and wallet deletion requires typed confirmation', asy
   await page.getByRole('button', { name: /Custom/ }).click();
   await page.getByLabel('Custom fee rate').fill('0');
   await expect(page.getByRole('button', { name: 'Review payment' })).toBeDisabled();
-  await page.getByLabel('Custom fee rate').fill('3.5');
+  await page.getByLabel('Custom fee rate').fill('0.5');
   await expect(page.getByRole('button', { name: 'Review payment' })).toBeEnabled();
+  await page.getByLabel('Custom fee rate').fill('2.45');
+  await page.getByRole('button', { name: 'Review payment' }).click();
+  await page.getByText('View more details', { exact: true }).click();
+  await expect(page.getByText('2.45 sat/vB', { exact: true })).toBeVisible();
+  await expectAmountUnitsSeparated(page.locator('.form-card').first());
 
   await page.goto('/settings');
   await page.getByRole('button', { name: 'Delete', exact: true }).click();

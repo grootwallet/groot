@@ -3,8 +3,8 @@ use super::multisig_proposal_commands::{
     import_multisig_proposal_in_db,
 };
 use super::transaction_commands::{
-    core_incremental_relay_fee, prepare_persisted_multisig_acceleration,
-    validate_acceleration_rate, AccelerationRatePolicy,
+    core_incremental_relay_fee, prepare_persisted_multisig_acceleration, validate_fee_rate,
+    AccelerationRatePolicy,
 };
 use super::*;
 use crate::multisig::{CosignerInput, CosignerSource, MULTISIG_ACCOUNT_PATH};
@@ -964,7 +964,7 @@ fn funded_rbf_and_cpfp_cross_groot_proposal_boundaries() {
     sync(&mut wallet, &mut db, Arc::clone(&rpc));
 
     let incremental_fee = rpc.get_network_info().unwrap().incremental_fee.to_sat();
-    let (applied, rate) = validate_acceleration_rate("5").unwrap();
+    let (applied, rate) = validate_fee_rate("5").unwrap();
     let rbf = prepare_persisted_multisig_acceleration(
         &mut db,
         &metadata,
@@ -1101,7 +1101,7 @@ fn funded_rbf_and_cpfp_cross_groot_proposal_boundaries() {
     );
 
     let parent_fee = rpc.get_mempool_entry(&replacement_txid).unwrap().fees.base;
-    let (applied, rate) = validate_acceleration_rate("9").unwrap();
+    let (applied, rate) = validate_fee_rate("9").unwrap();
     let cpfp = prepare_persisted_multisig_acceleration(
         &mut db,
         &metadata,

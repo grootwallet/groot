@@ -1,3 +1,4 @@
+use super::transaction_commands::validate_fee_rate;
 use super::*;
 
 #[derive(Serialize)]
@@ -5,45 +6,6 @@ use super::*;
 pub struct MultisigCreationDto {
     wallet: MultisigWalletDto,
     network_setup_copied: bool,
-}
-
-fn validated_multisig_fee_rate(fee_rate: f64) -> ApiResult<(f64, FeeRate)> {
-    if !fee_rate.is_finite() || fee_rate <= 0.0 || fee_rate > 10_000.0 {
-        return Err(api_error(
-            "invalid_amount",
-            "Fee rate must be between 0 and 10,000 sat/vB.",
-        ));
-    }
-    let applied = fee_rate.ceil();
-    let rate = FeeRate::from_sat_per_vb(applied as u64)
-        .ok_or_else(|| api_error("invalid_amount", "Fee rate must be greater than zero."))?;
-    Ok((applied, rate))
-}
-
-#[cfg(test)]
-mod validation_tests {
-    use super::*;
-
-    #[test]
-    fn multisig_fee_rate_validation_covers_boundaries_and_rounding() {
-        for invalid in [
-            f64::NAN,
-            f64::INFINITY,
-            f64::NEG_INFINITY,
-            -1.0,
-            0.0,
-            10_000.1,
-        ] {
-            assert_eq!(
-                validated_multisig_fee_rate(invalid).unwrap_err().code,
-                "invalid_amount"
-            );
-        }
-        let (applied, rate) = validated_multisig_fee_rate(1.01).unwrap();
-        assert_eq!(applied, 2.0);
-        assert_eq!(rate.to_sat_per_vb_ceil(), 2);
-        assert_eq!(validated_multisig_fee_rate(10_000.0).unwrap().0, 10_000.0);
-    }
 }
 
 fn copy_network_setup_before_profile_commit(
@@ -154,7 +116,7 @@ pub fn multisig_tx_prepare(
     recipient: String,
     labels: Vec<String>,
     amount: u64,
-    fee_rate: f64,
+    fee_rate: String,
     coin_selection: CoinSelectionInput,
 ) -> ApiResult<MultisigProposalDto> {
     let _operation = operation_guard(&state)?;
@@ -181,7 +143,7 @@ pub fn multisig_tx_prepare(
             format!("The address is not for {NETWORK_NAME}."),
         )
     })?;
-    let (applied_fee_rate, rate) = validated_multisig_fee_rate(fee_rate)?;
+    let (applied_fee_rate, rate) = validate_fee_rate(&fee_rate)?;
     let metadata = read_multisig_metadata(&app)?;
     let uses_delayed_policy = delayed_policy_context(&metadata)?.is_some();
     let mut db = open_multisig_db(&app)?;
@@ -310,13 +272,13 @@ pub fn multisig_policy_renewal_prepare(
     state: State<'_, AppState>,
     outpoint: String,
     labels: Vec<String>,
-    fee_rate: f64,
+    fee_rate: String,
 ) -> ApiResult<MultisigProposalDto> {
     let _operation = operation_guard(&state)?;
     require_unlocked(&app, &state)?;
     let labels = normalize_labels(labels)?;
     let label = labels[0].clone();
-    let (applied_fee_rate, rate) = validated_multisig_fee_rate(fee_rate)?;
+    let (applied_fee_rate, rate) = validate_fee_rate(&fee_rate)?;
     let selected = OutPoint::from_str(outpoint.trim()).map_err(|_| {
         api_error(
             "coin_unavailable",
@@ -418,7 +380,7 @@ pub fn multisig_delayed_spend_prepare(
     outpoint: String,
     recipient: String,
     labels: Vec<String>,
-    fee_rate: f64,
+    fee_rate: String,
 ) -> ApiResult<MultisigProposalDto> {
     let _operation = operation_guard(&state)?;
     require_unlocked(&app, &state)?;
@@ -438,7 +400,7 @@ pub fn multisig_delayed_spend_prepare(
                 format!("The address is not for {NETWORK_NAME}."),
             )
         })?;
-    let (applied_fee_rate, rate) = validated_multisig_fee_rate(fee_rate)?;
+    let (applied_fee_rate, rate) = validate_fee_rate(&fee_rate)?;
     let selected = OutPoint::from_str(outpoint.trim()).map_err(|_| {
         api_error(
             "coin_unavailable",
@@ -536,7 +498,7 @@ pub fn multisig_tx_max_spend(
     app: AppHandle,
     state: State<'_, AppState>,
     recipient: String,
-    fee_rate: f64,
+    fee_rate: String,
     coin_selection: CoinSelectionInput,
 ) -> ApiResult<MaxSpendDto> {
     let _operation = operation_guard(&state)?;
@@ -555,7 +517,7 @@ pub fn multisig_tx_max_spend(
                 format!("The address is not for {NETWORK_NAME}."),
             )
         })?;
-    let (_applied, rate) = validated_multisig_fee_rate(fee_rate)?;
+    let (_applied, rate) = validate_fee_rate(&fee_rate)?;
     let uses_delayed_policy = selected_delayed_policy_context(&app)?.is_some();
     let mut db = open_multisig_db(&app)?;
     let mut transaction = db.transaction().map_err(internal)?;

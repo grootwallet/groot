@@ -55,7 +55,7 @@ pub fn tx_prepare(
     recipient: String,
     labels: Vec<String>,
     amount: u64,
-    fee_rate: f64,
+    fee_rate: String,
     coin_selection: CoinSelectionInput,
 ) -> ApiResult<PaymentProposalDto> {
     let _operation = operation_guard(&state)?;
@@ -70,12 +70,6 @@ pub fn tx_prepare(
             "Amount must be greater than zero.",
         ));
     }
-    if !fee_rate.is_finite() || fee_rate <= 0.0 || fee_rate > 10_000.0 {
-        return Err(api_error(
-            "invalid_amount",
-            "Fee rate must be between 0 and 10,000 sat/vB.",
-        ));
-    }
     let unchecked = Address::from_str(recipient.trim()).map_err(|_| {
         api_error(
             "invalid_address",
@@ -88,9 +82,7 @@ pub fn tx_prepare(
             format!("The address is not for {NETWORK_NAME}."),
         )
     })?;
-    let applied_fee_rate = fee_rate.ceil();
-    let rate = FeeRate::from_sat_per_vb(applied_fee_rate as u64)
-        .ok_or_else(|| api_error("invalid_amount", "Fee rate must be greater than zero."))?;
+    let (_applied_fee_rate, rate) = validate_fee_rate(&fee_rate)?;
     let mut db = open_db(&app)?;
     let mut transaction = db.transaction().map_err(internal)?;
     let selection_strategy = coin_selection.strategy_name().to_owned();
@@ -242,7 +234,7 @@ pub fn tx_max_spend(
     app: AppHandle,
     state: State<'_, AppState>,
     recipient: String,
-    fee_rate: f64,
+    fee_rate: String,
     coin_selection: CoinSelectionInput,
 ) -> ApiResult<MaxSpendDto> {
     let _operation = operation_guard(&state)?;
@@ -261,15 +253,7 @@ pub fn tx_max_spend(
                 format!("The address is not for {NETWORK_NAME}."),
             )
         })?;
-    let applied = fee_rate.ceil();
-    let rate = FeeRate::from_sat_per_vb(applied as u64)
-        .filter(|_| fee_rate.is_finite() && fee_rate > 0.0 && fee_rate <= 10_000.0)
-        .ok_or_else(|| {
-            api_error(
-                "invalid_amount",
-                "Fee rate must be between 0 and 10,000 sat/vB.",
-            )
-        })?;
+    let (_applied, rate) = validate_fee_rate(&fee_rate)?;
     let mut db = open_db(&app)?;
     let mut transaction = db.transaction().map_err(internal)?;
     let frozen = frozen_outpoints(&transaction)?;
@@ -325,7 +309,7 @@ pub fn tx_max_spend(
     Ok(MaxSpendDto { amount, fee })
 }
 
-pub(crate) fn validate_acceleration_rate(fee_rate: &str) -> ApiResult<(f64, FeeRate)> {
+pub(crate) fn validate_fee_rate(fee_rate: &str) -> ApiResult<(f64, FeeRate)> {
     let value = fee_rate.trim();
     let (whole, fraction) = value.split_once('.').unwrap_or((value, ""));
     if whole.is_empty()
@@ -498,7 +482,7 @@ fn quote_rbf(
     };
     let minimum_rate = minimum_kwu as f64 / 250.0;
     let (target_rate, target, source) = if let Some(requested) = requested_rate {
-        let (applied, rate) = validate_acceleration_rate(requested)?;
+        let (applied, rate) = validate_fee_rate(requested)?;
         if rate.to_sat_per_kwu() < minimum_kwu {
             return Err(api_error(
                 "fee_rate_too_low",
@@ -958,7 +942,7 @@ fn quote_cpfp(
         .max(FeeRate::BROADCAST_MIN.to_sat_per_kwu());
     let minimum_rate = minimum_kwu as f64 / 250.0;
     let (target_rate, target, source) = if let Some(requested) = requested_rate {
-        let (applied, rate) = validate_acceleration_rate(requested)?;
+        let (applied, rate) = validate_fee_rate(requested)?;
         if rate.to_sat_per_kwu() < minimum_kwu {
             return Err(api_error(
                 "fee_rate_too_low",
@@ -1191,7 +1175,7 @@ pub fn tx_acceleration_prepare(
     require_unlocked(&app, &state)?;
     let txid = Txid::from_str(&txid)
         .map_err(|_| api_error("acceleration_unavailable", "Enter a valid transaction ID."))?;
-    let (applied, _rate) = validate_acceleration_rate(&fee_rate)?;
+    let (applied, _rate) = validate_fee_rate(&fee_rate)?;
     let mut db = open_db(&app)?;
     if let Some(proposal_id) = active_acceleration_proposal_id(&db, &txid, method)? {
         let wallet = load_wallet(&mut db)?;
@@ -1305,7 +1289,7 @@ pub fn multisig_acceleration_prepare(
     require_unlocked(&app, &state)?;
     let txid = Txid::from_str(&txid)
         .map_err(|_| api_error("acceleration_unavailable", "Enter a valid transaction ID."))?;
-    let (applied, rate) = validate_acceleration_rate(&fee_rate)?;
+    let (applied, rate) = validate_fee_rate(&fee_rate)?;
     let metadata = read_multisig_metadata(&app)?;
     let mut db = open_multisig_db(&app)?;
     let wallet = load_wallet(&mut db)?;
