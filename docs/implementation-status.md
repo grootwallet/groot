@@ -438,4 +438,15 @@ blocks distribution and merge to `main`. The existing portable-profile Argon2id
 parameters and persisted formats are unchanged. No BIP family support changes in
 this correction.
 
+## Registry contract maintenance
+
+Shared synthetic fixtures now check native registry/profile serialization against
+frontend field consumption, including all three wallet kinds and default/allowed
+inactivity timeouts. The browser adapter now mirrors native timeout choices
+(1, 5, 15, 30, or 60 minutes) and requires the selected wallet to be unlocked
+before saving them. Rejected changes preserve the registry. Native command and
+session-expiry behavior are unchanged; mocked IPC does not establish native
+end-to-end conformance. No persisted format, migration, dependency, BIP support,
+or BIP evidence changes are involved.
+
 Update this table in the same change whenever a capability crosses a boundary.

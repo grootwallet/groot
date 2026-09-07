@@ -1,0 +1,43 @@
+{
+  "timeoutChoices": [1, 5, 15, 30, 60],
+  "emptyRegistry": {
+    "version": 1,
+    "selectedWalletId": null,
+    "wallets": [],
+    "inactivityTimeoutMinutes": 5
+  },
+  "registry": {
+    "version": 1,
+    "selectedWalletId": "00000000-0000-0000-0000-000000000001",
+    "wallets": [
+      {
+        "id": "00000000-0000-0000-0000-000000000001",
+        "name": "Software fixture",
+        "network": "signet",
+        "kind": "single_key",
+        "descriptorChecksum": "00000000",
+        "createdAt": 1700000000,
+        "backupVerified": false
+      },
+      {
+        "id": "00000000-0000-0000-0000-000000000002",
+        "name": "Multisig fixture",
+        "network": "signet",
+        "kind": "multisig",
+        "descriptorChecksum": "00000000",
+        "createdAt": 1700000001,
+        "backupVerified": true
+      },
+      {
+        "id": "00000000-0000-0000-0000-000000000003",
+        "name": "Hardware fixture",
+        "network": "signet",
+        "kind": "watch_only",
+        "descriptorChecksum": "00000000",
+        "createdAt": 1700000002,
+        "backupVerified": true
+      }
+    ],
+    "inactivityTimeoutMinutes": 5
+  }
+}

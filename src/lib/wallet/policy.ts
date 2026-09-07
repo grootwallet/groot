@@ -5,6 +5,9 @@ import type { SupportedNetwork } from '$lib/config';
 import type { WalletSnapshot } from './contracts';
 import type { MultisigWallet } from './contracts';
 
+// Browser policy mirrors Rust's registry choices; shared contract fixtures test parity.
+export const INACTIVITY_TIMEOUT_CHOICES: readonly number[] = [1, 5, 15, 30, 60];
+
 export type WalletPolicyPresentation = {
   delayed: boolean;
   primaryThreshold: number;
