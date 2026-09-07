@@ -45,6 +45,23 @@ The whole Rust library is reported and regression-gated separately with `pnpm te
 
 ### Integration tests
 
+The restored-wallet skeleton acceptance test holds the browser fixture's data
+timer with Playwright's clock until the loading state is asserted, then advances
+time and requires loaded data with no remaining skeleton. The multisig menu test
+verifies its dismissal click is outside the menu bounds; it must not force a click
+through an overlay. Neither test relies on runner speed or skips its UI assertion.
+
+The synthetic `src/lib/wallet/fixtures/registry-contract.json` is shared by
+`src-tauri/tests/registry_contract.rs` and the frontend registry contract tests.
+The Rust integration test serializes real registry/profile types, checks every
+wallet-kind representation and the empty/default registry, and exercises native
+timeout validation. Frontend tests read those fields through `TauriWalletAdapter`
+with mocked IPC and check browser-adapter timeout parity, including locked-wallet
+and invalid-input rejection without mutation. This is serializer/domain and
+mocked-adapter evidence, not live Tauri IPC or session-expiry evidence. Run the
+native fixture with `cargo test --locked --test registry_contract` from
+`src-tauri`; the frontend fixture runs in `pnpm test`.
+
 Two dependency-free, ignored Rust benchmarks provide repeatable local evidence for the SQLite queries most likely to grow with long-lived use: receive-address history with latest hardware evidence, and latest policy-verification evidence per signer. Run `cargo test --lib wallet::performance_tests -- --ignored --nocapture` from `src-tauri`; `GROOT_BENCH_ADDRESS_ROWS` and `GROOT_BENCH_SIGNERS` may raise or lower the bounded fixture sizes. The harness reports elapsed time and per-row cost but deliberately has no machine-independent pass threshold. Release optimization decisions require measurements from representative signed builds and datasets; the benchmark exists to compare revisions on the same controlled machine without encouraging unsafe caching of descriptors or secrets.
 
 `cargo test --locked --test adversarial_inputs` runs a deterministic shared hostile-input corpus across PSBT, BSMS, external-signer, UR, and multipart boundaries. It includes malformed ASCII, Unicode/control text, duplicate JSON fields, deep nesting, boundary sizes, and fixed xorshift mutations. The corpus is reproducible and dependency-free; it complements parser-specific semantic regressions and future external continuous fuzzing without adding code to the application binary.

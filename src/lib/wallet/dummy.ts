@@ -4,6 +4,7 @@ import {
   addressPrefixForNetwork,
   canDiscardAddress,
   hasAddressPrefixForNetwork,
+  INACTIVITY_TIMEOUT_CHOICES,
   normalizePermanentLabel
 } from './policy';
 import {
@@ -168,10 +169,13 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     return renamed;
   }
   async saveInactivityTimeout(minutes: number) {
-    if (!Number.isInteger(minutes) || minutes < 1 || minutes > 60) {
+    if (!this._selectedWalletId || !this._unlockedWalletIds.has(this._selectedWalletId)) {
+      throw new WalletError('wallet_locked', 'Unlock this wallet before changing automatic lock.');
+    }
+    if (!INACTIVITY_TIMEOUT_CHOICES.includes(minutes)) {
       throw new WalletError(
         'invalid_inactivity_timeout',
-        'Automatic lock must be between 1 and 60 minutes.'
+        'Automatic lock must be 1, 5, 15, 30, or 60 minutes.'
       );
     }
     this._inactivityTimeoutMinutes = minutes;
