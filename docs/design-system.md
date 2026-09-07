@@ -52,8 +52,10 @@ tabs with Settings selected. The page leads with the privacy boundary and durabl
 event count. The complete allowlisted category inventory is optional insight behind
 the standard blue disclosure label and a chevron that turns 90 degrees when open.
 Search covers event names and every displayed safe-context value; event filtering
-allows multiple categories; date order supports newest or oldest first. Users can
-switch between an accessible aligned table and readonly raw JSON, explicitly copy the
+allows multiple categories; date order supports newest or oldest first.
+Search and date order use matching 38-pixel fields with aligned visible labels;
+the date selector uses a styled control surface and chevron across browser engines.
+Users can switch between an accessible aligned table and readonly raw JSON, explicitly copy the
 current JSON result, or export CSV/JSON. Mobile may scroll the table and raw JSON
 inside bordered containers, but the page itself must not overflow horizontally.
 

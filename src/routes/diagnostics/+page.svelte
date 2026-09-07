@@ -275,10 +275,13 @@
         </details>
         <label class="log-sort">
           <span>{translate($locale, 'Date order')}</span>
-          <select bind:value={sortOrder}>
-            <option value="newest">{translate($locale, 'Newest first')}</option>
-            <option value="oldest">{translate($locale, 'Oldest first')}</option>
-          </select>
+          <span class="log-sort-input">
+            <select bind:value={sortOrder}>
+              <option value="newest">{translate($locale, 'Newest first')}</option>
+              <option value="oldest">{translate($locale, 'Oldest first')}</option>
+            </select>
+            <ChevronDown size={14} aria-hidden="true" />
+          </span>
         </label>
         <div class="log-view" role="group" aria-label={translate($locale, 'Log view')}>
           <button type="button" class:active={view === 'table'} onclick={() => (view = 'table')}
@@ -546,12 +549,27 @@
     background: var(--surface-control);
   }
   .log-sort select {
+    appearance: none;
+    -webkit-appearance: none;
+    height: 38px;
+    width: 100%;
     min-width: 126px;
     padding: 0 28px 0 10px;
     color: var(--text);
     font: inherit;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 650;
+  }
+  .log-sort-input {
+    position: relative;
+    display: block;
+  }
+  .log-sort-input :global(svg) {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    pointer-events: none;
   }
   .event-filter {
     position: relative;
