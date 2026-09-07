@@ -45,6 +45,12 @@ The whole Rust library is reported and regression-gated separately with `pnpm te
 
 ### Integration tests
 
+The restored-wallet skeleton acceptance test holds the browser fixture's data
+timer with Playwright's clock until the loading state is asserted, then advances
+time and requires loaded data with no remaining skeleton. The multisig menu test
+verifies its dismissal click is outside the menu bounds; it must not force a click
+through an overlay. Neither test relies on runner speed or skips its UI assertion.
+
 The synthetic `src/lib/wallet/fixtures/registry-contract.json` is shared by
 `src-tauri/tests/registry_contract.rs` and the frontend registry contract tests.
 The Rust integration test serializes real registry/profile types, checks every

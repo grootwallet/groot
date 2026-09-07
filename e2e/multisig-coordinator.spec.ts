@@ -883,7 +883,19 @@ test('uses the same wallet navigation for a multisig policy', async ({ page }) =
   ).toBeVisible();
   await overviewDescriptors.getByRole('button', { name: 'Close' }).click();
   await moreActions.click();
-  await page.getByRole('heading', { name: 'Overview' }).click();
+  // The upward-opening desktop menu may cover the heading. Verify a genuinely
+  // outside point instead of asking Playwright to click through the menu.
+  const outside = { x: (page.viewportSize()?.width ?? 1180) - 8, y: 8 };
+  const menuBounds = await moreMenu.boundingBox();
+  expect(menuBounds).not.toBeNull();
+  expect(
+    menuBounds &&
+      outside.x >= menuBounds.x &&
+      outside.x <= menuBounds.x + menuBounds.width &&
+      outside.y >= menuBounds.y &&
+      outside.y <= menuBounds.y + menuBounds.height
+  ).toBe(false);
+  await page.mouse.click(outside.x, outside.y);
   await expect(moreMenu).toBeHidden();
   await moreActions.click();
   await page.keyboard.press('Escape');
