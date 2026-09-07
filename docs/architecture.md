@@ -102,6 +102,36 @@ blocking worker pool rather than the native window event loop.
 
 Commands return typed errors with stable codes. Svelte translates those into inline validation and toasts.
 
+The frontend error allowlist lives in `src/lib/wallet/contracts/errors.ts`.
+`native-error-contract.test.ts` checks native literal API errors, direct `ApiError`
+codes, and domain `code()` mappings against it, and exercises error propagation
+through the real Tauri adapter with mocked IPC. This is a source tripwire plus an
+adapter test, not native execution or a general Rust parser. New computed-code
+idioms require explicit test coverage. Unknown IPC codes still become
+`internal_error`; diagnostics retain their separate, narrower redaction allowlist.
+
+### Locking and repeated review checks
+
+`AppState.operations` serializes selected-wallet authorization and durable
+mutations. Its field mutexes protect shorter-lived sessions, capabilities, and
+progress; cancellation and status must remain accessible while a wallet operation
+is busy. A field mutex cannot substitute for the operation guard when using
+selected-wallet state. Release short-lived field guards before waiting for the
+operation guard. Hardware work that releases wallet serialization must revalidate
+its captured wallet and proposal context before persisting a result (ADR 0041).
+
+Keep `require_reviewed_psbt_unchanged` at each import, signature-removal, signing,
+and broadcast boundary. A successful earlier check does not cover another command
+or a proposal revision after device interaction. Likewise, each final broadcast
+path must repeat `validate_release_spend` on the actual persisted PSBT together
+with the frozen-input check. Preparation and device signatures do not replace
+fresh release-policy, intent, and ownership validation. ADR 0041 owns the context
+binding; ADR 0048 changes the hardware review deadline only.
+
+The release source-policy gate pins the reviewed Rust files byte-for-byte. Even
+comment-only edits require reevaluating those pins, so maintenance documentation
+belongs here until a deliberate native change receives its own review.
+
 Groot has no REST application server. Native clients cross a typed Tauri IPC boundary through `WalletPort`; browser development swaps only the adapter at the composition root. Introducing HTTP application endpoints, hosted persistence, or a multi-tenant service changes the trust boundary and requires a dedicated ADR, authentication/authorization model, deny-by-default tenant isolation, and integration tests.
 
 Groot has no fiat-price or market-data integration. The native command surface and frontend do not contact a price provider, and wallet balances are displayed only as integer-satoshi-derived sats or BTC values. Reintroducing exchange-rate data would add a third-party network-observation boundary and requires a new ADR and an explicitly private, user-controlled design.

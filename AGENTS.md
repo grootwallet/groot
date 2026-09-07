@@ -33,7 +33,7 @@ If code and documentation disagree, stop and resolve the mismatch in the same ch
 
 - `src/routes/` — presentation and route-level orchestration only.
 - `src/lib/components/` — reusable, shadcn-svelte-style UI primitives.
-- `src/lib/wallet/contracts.ts` — frontend wallet API and stable error/event types.
+- `src/lib/wallet/contracts/` — frontend wallet API and stable error/event types; `contracts.ts` is its public barrel.
 - `src/lib/wallet/policy.ts` — pure product/security invariants.
 - `src/lib/wallet/dummy.ts` — deterministic UI adapter; never import it directly from routes.
 - `src/lib/wallet/index.ts` — composition root. Swap the adapter here.

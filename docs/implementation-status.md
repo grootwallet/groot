@@ -1,5 +1,16 @@
 # Implementation status
 
+The 2026-09-06 contract-maintenance follow-up preserves fourteen existing native
+error codes that previously normalized to `internal_error` in the frontend.
+Source-contract and mocked-IPC adapter tests cover the allowlist, including the
+existing explorer, label-interchange, export, hardware-context, and proposal
+failures. The architecture guide explains wallet-operation locking and intentionally
+repeated review/release checks while preserving the release-pinned Rust sources.
+Native validation, signing, scheduling, diagnostics
+redaction, and persisted formats are unchanged; no migration or BIP support/evidence
+change is introduced. The remaining audit work is sequenced in
+[`code-quality-plan-2026-09-06.md`](code-quality-plan-2026-09-06.md).
+
 v0.4.92 adds a trusted, app-scoped diagnostic event log for wallet lifecycle,
 sync/recovery scans, transaction preparation/signing/broadcast, receive generation,
 eligible-address discard and hardware verification, coin freeze state, backup/recovery operations, network
