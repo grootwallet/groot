@@ -8,6 +8,11 @@ starts at local `main` commit `44e631d` (app-log inspection), one commit ahead o
 branch. The earlier audit targeted `2832acb` plus security-remediation WIP; its line
 numbers, counts, grades, and work ordering are historical.
 
+For PR delivery on 2026-09-07, only the maintenance commit was replayed onto
+published main `bdae856` as `codex/error-contract-parity`. The unrelated local
+app-log inspection commit `44e631d` remains on local main and is not included in
+that PR. The branch comparisons below record the original inspection baseline.
+
 | Branch                                                                                                 | Inspected head | Relationship to local main                     |
 | ------------------------------------------------------------------------------------------------------ | -------------- | ---------------------------------------------- |
 | `codex/continuity-policies-v1`                                                                         | `0cf4ae2`      | 3 commits unique to branch; 91 unique to main  |
