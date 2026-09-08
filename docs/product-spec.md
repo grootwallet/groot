@@ -116,6 +116,23 @@ Regtest builds expose a locked-screen deletion action for the selected disposabl
 
 ## Overview
 
+The first authenticated Overview read returns balance, complete pending-debit
+accounting, current coin-policy state, and only the three most recent transactions.
+Receive-address history and label suggestions are not fetched for this view.
+Draft/proposal, saved signer, and health details load independently after that
+read; failure leaves the balance visible with a durable details retry. Native
+session and exact-wallet mainnet Core admission remain mandatory. The existing
+1.8-second startup branding gate is unchanged.
+
+Activity loads 50 transactions at a time through a native cursor endpoint (at
+most 100 per request). Search and direction/date/amount ordering apply to the
+complete history before paging. A changed history, query, wallet, or unlock
+session invalidates the cursor and requires refreshing the list. Page failures
+retain already displayed rows and offer retry. Equal sort values use transaction
+identity as a stable tie-breaker; missing observation times remain unknown.
+Pagination is a presentation boundary, never a limit on native accounting,
+recovery monitoring, coin selection, or transaction review.
+
 Show confirmed and total balance using the global sats/BTC preference; accounting stays in integer satoshis. The Overview total balance itself toggles that global preference on click, tap, Space, or Enter. Do not fetch or display fiat prices or market data. Explain mempool accounting rather than collapsing it into one ambiguous pending number: unconfirmed incoming outputs, wallet-controlled change, and outgoing amount plus fee are distinct labels. A Rust-classified self-spend already reports its fee as the complete wallet debit, so pending accounting counts that debit exactly once instead of adding the same fee again. Show sync recency and the latest three transactions. Receive and Send are the primary actions. When the selected multisig or external-signer wallet has a persisted proposal that is still collecting signatures or is fully signed but not broadcast, show a compact status above those actions. It exposes only signature progress, distinguishes **Signing in progress** from **Payment ready to broadcast**, and resumes the exact proposal when opened.
 
 A persisted global discreet mode hides wallet amounts across Overview and activity surfaces. It remains available as a quick desktop-shell control and from the balance card; it does not alter wallet accounting or transaction data.

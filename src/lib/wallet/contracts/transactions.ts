@@ -20,6 +20,25 @@ export type WalletSnapshot = {
   };
 };
 
+export type WalletOverview = Pick<
+  WalletSnapshot,
+  'network' | 'balance' | 'transactions' | 'utxos' | 'syncedAt' | 'chainTip'
+> & { pendingOutgoing: Sats };
+export type ActivityCursor = { revision: string; after: string };
+export type ActivityRequest = {
+  walletId: string;
+  filter: 'all' | 'received' | 'sent';
+  query: string;
+  sort: 'newest' | 'oldest' | 'largest' | 'smallest';
+  limit: number;
+  cursor: ActivityCursor | null;
+};
+export type ActivityPage = {
+  transactions: Transaction[];
+  nextCursor: ActivityCursor | null;
+  total: number;
+};
+
 export type FeeEstimates = {
   economy: FeeRate;
   standard: FeeRate;

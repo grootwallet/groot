@@ -163,7 +163,7 @@
 
   .coin-sort-menu button.active {
     background: color-mix(in srgb, var(--fr-blue) 11%, var(--panel));
-    color: var(--fr-blue);
+    color: var(--link);
   }
 
   @media (max-width: 560px) {

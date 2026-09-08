@@ -1,5 +1,22 @@
 # Bitcoin Improvement Proposal support
 
+The approved 2026-09-08 application design refresh has no BIP support or protocol
+evidence impact: only local presentation assets/tokens change. Rust, WalletPort,
+transaction facts, integer-satoshi formatting, recovery and signer validation,
+transport policies and all persisted formats remain unchanged by this refresh.
+
+The 2026-09-08 provenance-query follow-up has no BIP support or evidence-level
+impact. It preserves the existing labels, privacy clusters, address-reuse history,
+transaction accounting and database format while reducing query work. Protocol,
+PSBT, derivation, network and signer behavior are unchanged.
+
+The 2026-09-08 notification/navigation changes have no BIP support-level impact:
+wallet/session-bound delivery, worker scheduling, and paged public history DTOs
+change neither derivation nor PSBT, RBF/CPFP, recovery, or transport semantics.
+Full native wallet state remains authoritative regardless of UI page size.
+Existing BIP125/BIP174 regression coverage exercises the shared transaction logic;
+no new physical, public-network, Tor, or mobile evidence is implied.
+
 The 2026-09-03 independent-review remediation and isolated mainnet preparation
 change evidence, not supported BIP families. BIP84/BIP48 hardware admission is
 narrowed for a future mainnet build to trusted hardware identifiers. ADR 0054

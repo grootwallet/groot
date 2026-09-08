@@ -20,6 +20,7 @@
     X
   } from '@lucide/svelte';
   import { onDestroy, onMount } from 'svelte';
+  import LoadFailure from '$lib/components/LoadFailure.svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import Button from '$lib/components/Button.svelte';
@@ -292,27 +293,41 @@
       });
   });
 
-  onMount(async () => {
+  let walletLoadError = $state('');
+  let walletLoading = $state(true);
+  let walletLoadGeneration = 0;
+  onMount(loadWallet);
+  async function loadWallet() {
+    const generation = ++walletLoadGeneration;
+    let dataLoaded = false;
+    walletLoadError = '';
+    walletLoading = true;
     try {
       const shellWallets = walletShell.profiles();
       const shellSelectedWalletId = walletShell.selectedWalletId();
-      const [snapshot, registry] = await Promise.all([
-        walletService.snapshot(),
+      const registry =
         shellWallets.length && shellSelectedWalletId
-          ? Promise.resolve({ wallets: shellWallets, selectedWalletId: shellSelectedWalletId })
-          : walletService.profiles()
-      ]);
+          ? { wallets: shellWallets, selectedWalletId: shellSelectedWalletId }
+          : await walletService.profiles();
+      if (generation !== walletLoadGeneration) return;
       externalSigner =
         registry.wallets.find((profile) => profile.id === registry.selectedWalletId)?.kind ===
         'watch_only';
       draftWalletId = registry.selectedWalletId ?? '';
-      try {
-        externalWallet = await walletService.externalSignerWallet();
-        externalSigner = true;
-      } catch {
-        /* selected wallet is not externally signed */
-      }
-      signerSummaryReady = true;
+      // Saved public identity is independent of the expensive coin snapshot.
+      // It never asserts that a physical device is currently connected.
+      const identity = externalSigner
+        ? walletService.externalSignerWallet().then((value) => {
+            if (generation !== walletLoadGeneration) return;
+            externalWallet = value;
+            signerSummaryReady = true;
+          })
+        : Promise.resolve().then(() => {
+            signerSummaryReady = true;
+          });
+      const [snapshot] = await Promise.all([walletService.snapshot(), identity]);
+      if (generation !== walletLoadGeneration) return;
+      dataLoaded = true;
       coins = snapshot.utxos;
       labelSuggestions = snapshot.labelSuggestions;
       const requested =
@@ -340,6 +355,7 @@
           tone: 'danger'
         });
       }
+      if (generation !== walletLoadGeneration) return;
       const url = new URL(window.location.href);
       const requestedProposalId = url.searchParams.get('proposal');
       const acceleration = url.searchParams.get('accelerate');
@@ -360,6 +376,7 @@
         }
       } else if (externalSigner) {
         const proposals = await walletService.externalSignerProposals();
+        if (generation !== walletLoadGeneration) return;
         const activeProposal = requestedProposalId
           ? (proposals.find((item) => item.proposalId === requestedProposalId) ?? null)
           : latestActiveProposal(proposals);
@@ -375,6 +392,7 @@
         }
       } else {
         const proposals = await walletService.paymentProposals();
+        if (generation !== walletLoadGeneration) return;
         const activeProposal = requestedProposalId
           ? (proposals.find((item) => item.proposalId === requestedProposalId) ?? null)
           : (proposals[0] ?? null);
@@ -389,7 +407,9 @@
         }
       }
       if (!proposal && !accelerationRequest && draftWalletId) {
+        if (generation !== walletLoadGeneration) return;
         const savedDraft = await walletService.paymentDraft();
+        if (generation !== walletLoadGeneration) return;
         if (savedDraft?.kind === 'single_key') {
           hasPaymentDraft = true;
           address = savedDraft.address;
@@ -414,7 +434,11 @@
         }
       }
     } catch (cause) {
-      signerSummaryReady = true;
+      if (generation !== walletLoadGeneration) return;
+      walletLoadError =
+        accelerationRequest && dataLoaded
+          ? ''
+          : localizedError(cause, $locale, 'The wallet data could not be read.');
       const description = accelerationRequest
         ? accelerationUnavailableDescription(accelerationRequest.method, cause, $locale)
         : cause instanceof WalletError && cause.code === 'insufficient_funds'
@@ -431,11 +455,15 @@
         toast({ title: 'Could not load wallet', description, tone: 'danger' });
       }
     } finally {
-      accelerationLoading = false;
+      if (generation === walletLoadGeneration) {
+        accelerationLoading = false;
+        walletLoading = false;
+      }
     }
-  });
+  }
 
   onDestroy(() => {
+    ++walletLoadGeneration;
     if (!suppressDraftSave) void saveCurrentDraft();
     hardwareScanGeneration += 1;
     passphrase = '';
@@ -1068,11 +1096,11 @@
       </div>{/if}
   </header>
   {#if step < 4}<SendProgress current={progressStep} />{/if}
-  {#if step < 4}<SignerSummary
+  {#if step < 4 && (!walletLoadError || signerSummaryReady)}<SignerSummary
       signers={signerItems}
       signedFingerprints={externalProposal?.signedFingerprints ?? []}
       collecting={externalSigner && Boolean(proposal)}
-      loading={!signerSummaryReady || accelerationLoading}
+      loading={!signerSummaryReady && !walletLoadError}
       ondiscard={externalSigner
         ? () => {
             discardSignatureError = '';
@@ -1081,6 +1109,13 @@
         : undefined}
     />{/if}
 
+  {#if walletLoadError}
+    <LoadFailure
+      title={translate($locale, 'Wallet details are unavailable')}
+      description={walletLoadError}
+      onretry={loadWallet}
+    />
+  {/if}
   {#if accelerationLoading}
     <section class="form-card send-stage-card acceleration-loading-card" aria-live="polite">
       <RefreshCw class="spin" size={28} />
@@ -1331,8 +1366,11 @@
             >{paymentRequestNotice}</small
           >{/if}
       </div>
-      <Button type="submit" disabled={!intentValid} size="large" class="full"
-        >{translate($locale, 'Continue to amount')}<ArrowRight size={17} /></Button
+      <Button
+        type="submit"
+        disabled={!intentValid || walletLoading || Boolean(walletLoadError)}
+        size="large"
+        class="full">{translate($locale, 'Continue to amount')}<ArrowRight size={17} /></Button
       >
       {#if draftError}<div class="hardware-inline-error send-form-error" role="alert">
           <AlertTriangle size={18} /><span

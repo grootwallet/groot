@@ -2239,12 +2239,15 @@ pub fn external_signer_create(
 }
 
 #[tauri::command]
-pub fn external_signer_wallet(
-    app: AppHandle,
-    state: State<'_, AppState>,
-) -> ApiResult<ExternalSignerWallet> {
-    require_unlocked(&app, &state)?;
-    read_external_signer_metadata(&app)
+pub async fn external_signer_wallet(app: AppHandle) -> ApiResult<ExternalSignerWallet> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let _operation = operation_guard(&state)?;
+        require_unlocked(&app, &state)?;
+        read_external_signer_metadata(&app)
+    })
+    .await
+    .map_err(internal)?
 }
 
 pub(crate) fn normalize_external_signer_label(value: &str) -> ApiResult<String> {

@@ -1,6 +1,6 @@
 import { parseTimestamp } from '$lib/date-time';
 import type { Transaction, Utxo } from '$lib/types';
-import type { Sats, WalletSnapshot } from './contracts';
+import type { Sats, WalletSnapshot, WalletOverview } from './contracts';
 
 export type CoinSortOrder =
   'newest' | 'oldest' | 'largest' | 'smallest' | 'label-asc' | 'label-desc';
@@ -23,22 +23,29 @@ export type PendingBalanceBreakdown = {
 };
 
 /** Explain mempool state without presenting wallet-owned change as an incoming payment. */
-export function pendingBalanceBreakdown(snapshot: WalletSnapshot): PendingBalanceBreakdown {
+export function pendingBalanceBreakdown(
+  snapshot: WalletSnapshot | WalletOverview
+): PendingBalanceBreakdown {
   const pending = Number(pendingBalance(snapshot.balance));
   const trustedPending = Number(snapshot.balance.trustedPending);
   const change = Number.isSafeInteger(trustedPending)
     ? Math.min(pending, Math.max(0, trustedPending))
     : 0;
-  const outgoing = snapshot.transactions
-    .filter((transaction) => transaction.status === 'pending' && transaction.direction === 'sent')
-    .reduce(
-      (total, transaction) =>
-        total +
-        (transaction.kind === 'self_spend'
-          ? Number(transaction.amount)
-          : Number(transaction.amount) + Number(transaction.fee ?? 0)),
-      0
-    );
+  const outgoing =
+    'pendingOutgoing' in snapshot
+      ? snapshot.pendingOutgoing
+      : snapshot.transactions
+          .filter(
+            (transaction) => transaction.status === 'pending' && transaction.direction === 'sent'
+          )
+          .reduce(
+            (total, transaction) =>
+              total +
+              (transaction.kind === 'self_spend'
+                ? Number(transaction.amount)
+                : Number(transaction.amount) + Number(transaction.fee ?? 0)),
+            0
+          );
 
   return {
     incoming: Math.max(0, pending - change) as Sats,

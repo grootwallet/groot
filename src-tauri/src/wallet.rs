@@ -97,6 +97,8 @@ use verification_evidence::*;
 #[path = "wallet/proposal_review.rs"]
 mod proposal_review;
 use proposal_review::*;
+#[path = "wallet/activity.rs"]
+pub(crate) mod activity;
 
 const MAX_PRIVATE_JSON_BYTES: u64 = 256 * 1024;
 const MAX_CREDENTIAL_BYTES: usize = 1_024;
@@ -358,6 +360,45 @@ fn require_unlocked_for_background_sync(
     state: &State<'_, AppState>,
 ) -> ApiResult<Uuid> {
     require_unlocked_with_activity(app, state, false)
+}
+
+// Call under operation_guard, before opening any selected-wallet database.
+fn require_wallet_read_context(
+    app: &AppHandle,
+    state: &State<'_, AppState>,
+    wallet_id: Uuid,
+    session_id: Option<Uuid>,
+) -> ApiResult<Uuid> {
+    validate_read_wallet(selected_profile(app)?.id, wallet_id)?;
+    require_unlocked_for_background_sync(app, state)?;
+    let current = state
+        .unlocked_wallets
+        .lock()
+        .map_err(internal)?
+        .identity(wallet_id);
+    validate_read_session(current, session_id)
+}
+
+fn validate_read_wallet(current: Uuid, expected: Uuid) -> ApiResult<()> {
+    if current != expected {
+        return Err(api_error(
+            "wallet_selection_changed",
+            "The selected wallet changed. Retry from the current wallet.",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_read_session(current: Option<Uuid>, expected: Option<Uuid>) -> ApiResult<Uuid> {
+    let current = current
+        .ok_or_else(|| api_error("wallet_locked", "Unlock the wallet before continuing."))?;
+    if expected.is_some_and(|expected| expected != current) {
+        return Err(api_error(
+            "wallet_selection_changed",
+            "The wallet session changed. Retry from the current wallet.",
+        ));
+    }
+    Ok(current)
 }
 
 fn unlock_selected(app: &AppHandle, state: &State<'_, AppState>) -> ApiResult<()> {
@@ -5587,127 +5628,31 @@ fn snapshot_from(
     multisig: bool,
     delayed_policy: Option<&DelayedPolicyContext>,
 ) -> ApiResult<WalletSnapshotDto> {
+    snapshot_for_view(wallet, db, synced_at, multisig, delayed_policy, false)
+}
+
+// The overview-only intermediate is projected to WalletOverviewDto before IPC;
+// it is never returned to a full-snapshot consumer such as coin selection.
+fn snapshot_for_view(
+    wallet: &Wallet,
+    db: &Connection,
+    synced_at: Option<String>,
+    multisig: bool,
+    delayed_policy: Option<&DelayedPolicyContext>,
+    overview_only: bool,
+) -> ApiResult<WalletSnapshotDto> {
     label_provenance::reconcile_wallet_outputs(wallet, db, now()).map_err(internal)?;
     let provenance_context = label_provenance::summary_context(db).map_err(internal)?;
     let balance = wallet.balance();
     let tip = wallet.latest_checkpoint().height();
     let chain_tip = chain_tip_dto(db, tip, synced_at.as_deref())?;
-    let addresses = address_rows(db, multisig)?;
+    let addresses = if overview_only {
+        Vec::new()
+    } else {
+        address_rows(db, multisig)?
+    };
 
-    let mut transactions = Vec::new();
-    for tx in wallet.transactions_sort_by(|a, b| b.chain_position.cmp(&a.chain_position)) {
-        let transaction = tx.tx_node.tx.as_ref();
-        let (sent, received) = wallet.sent_and_received(transaction);
-        let is_received = received > sent;
-        let transaction_fee = wallet.calculate_fee(transaction).ok();
-        let transaction_vbytes = transaction.weight().to_vbytes_ceil();
-        let fee_rate = transaction_fee.and_then(|fee| {
-            (transaction_vbytes > 0).then(|| {
-                ((fee.to_sat() as f64 / transaction_vbytes as f64) * 100.0).round() / 100.0
-            })
-        });
-        let has_external_value_output = transaction.output.iter().any(|output| {
-            output.value > Amount::ZERO
-                && wallet
-                    .derivation_of_spk(output.script_pubkey.clone())
-                    .is_none()
-        });
-        let kind = transaction_kind(is_received, has_external_value_output);
-        let amount = if kind == "self_spend" {
-            transaction_fee.unwrap_or(Amount::ZERO)
-        } else if is_received {
-            received - sent
-        } else {
-            (sent - received)
-                .checked_sub(transaction_fee.unwrap_or(Amount::ZERO))
-                .unwrap_or(Amount::ZERO)
-        };
-        let txid = tx.tx_node.txid.to_string();
-        let observed_at = transaction_observed_at(db, &txid)?;
-        let (confirmations, block, date) = confirmations(&tx.chain_position, tip, observed_at);
-        let intent_label = (!is_received)
-            .then(|| label_provenance::payment_label_for_txid(db, &txid).map_err(internal))
-            .transpose()?
-            .flatten();
-        let provenance_outpoints = if is_received {
-            transaction
-                .output
-                .iter()
-                .enumerate()
-                .filter(|(_, output)| {
-                    wallet
-                        .derivation_of_spk(output.script_pubkey.clone())
-                        .is_some()
-                })
-                .map(|(vout, _)| format!("{}:{vout}", tx.tx_node.txid))
-                .collect::<Vec<_>>()
-        } else {
-            transaction
-                .input
-                .iter()
-                .map(|input| input.previous_output.to_string())
-                .collect::<Vec<_>>()
-        };
-        let mut provenance = label_provenance::funding_summary_with_context(
-            db,
-            &provenance_outpoints,
-            &provenance_context,
-        )
-        .map_err(internal)?;
-        provenance.context = if is_received { "received" } else { "funding" }.to_owned();
-        let (address, fallback_label) = tx_counterparty(wallet, db, transaction, is_received);
-        let label = if let Some(intent) = &intent_label {
-            intent.text.clone()
-        } else if is_received && provenance.labels.len() == 1 {
-            provenance.labels[0].text.clone()
-        } else if is_received && provenance.labels.len() > 1 {
-            format!("Received to {} labels", provenance.labels.len())
-        } else if kind == "self_spend" {
-            "Self-spend".to_owned()
-        } else {
-            fallback_label
-        };
-        transactions.push(TransactionDto {
-            id: txid,
-            kind: kind.to_owned(),
-            direction: if is_received { "received" } else { "sent" }.to_owned(),
-            amount: amount.to_sat(),
-            fee: if is_received {
-                None
-            } else {
-                transaction_fee.map(Amount::to_sat)
-            },
-            status: if confirmations > 0 {
-                "confirmed"
-            } else {
-                "pending"
-            }
-            .to_owned(),
-            confirmations,
-            date,
-            address,
-            label,
-            intent_label,
-            provenance,
-            block,
-            replaced_by: None,
-            replaces: None,
-            input_count: Some(transaction.input.len()),
-            output_count: Some(transaction.output.len()),
-            fee_rate,
-            wallet_input_amount: (sent > Amount::ZERO).then(|| sent.to_sat()),
-            wallet_output_amount: (received > Amount::ZERO).then(|| received.to_sat()),
-            locktime: Some(transaction.lock_time.to_consensus_u32()),
-            rbf: Some(
-                transaction
-                    .input
-                    .iter()
-                    .any(|input| input.sequence.is_rbf()),
-            ),
-            rbf_history: None,
-        });
-    }
-    apply_replacement_history(db, &mut transactions)?;
+    let transactions = activity::transactions_from(wallet, db, &provenance_context)?;
 
     let mut utxos = Vec::new();
     let frozen = {
@@ -5806,7 +5751,11 @@ fn snapshot_from(
         transactions,
         utxos,
         receive_addresses: addresses,
-        label_suggestions: label_provenance::label_suggestions(db, None).map_err(internal)?,
+        label_suggestions: if overview_only {
+            Vec::new()
+        } else {
+            label_provenance::label_suggestions(db, None).map_err(internal)?
+        },
         synced_at: chain_tip.observed_at.clone(),
         chain_tip,
     })

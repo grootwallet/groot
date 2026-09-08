@@ -25,6 +25,7 @@ export const WALLET_ERROR_CODES = [
   'invalid_inactivity_timeout',
   'wallet_not_found',
   'wallet_selection_changed',
+  'history_changed',
   'wallet_policy_changed',
   'invalid_mnemonic',
   'invalid_label',

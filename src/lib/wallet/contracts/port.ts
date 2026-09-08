@@ -103,6 +103,10 @@ export interface WalletNetworkPort {
 }
 
 export interface WalletSnapshotPort {
+  overview(walletId: string): Promise<import('./transactions').WalletOverview>;
+  activity(
+    request: import('./transactions').ActivityRequest
+  ): Promise<import('./transactions').ActivityPage>;
   snapshot(): Promise<WalletSnapshot>;
   sync(automatic?: boolean): Promise<WalletSnapshot>;
   cancelSync(): Promise<void>;

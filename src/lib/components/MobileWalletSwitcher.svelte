@@ -119,7 +119,7 @@
     gap: 8px;
     padding: 0 12px;
     border: 1px solid var(--control-border);
-    border-radius: 8px;
+    border-radius: var(--radius-control);
     color: var(--text);
     background: var(--surface-control);
     font: inherit;
@@ -153,7 +153,7 @@
     overflow-y: auto;
     padding: 6px;
     border: 1px solid var(--border-strong);
-    border-radius: 11px;
+    border-radius: var(--radius-inset);
     background: var(--panel-2);
     box-shadow: 0 18px 48px rgba(0, 0, 0, 0.3);
   }
@@ -167,7 +167,7 @@
     gap: 9px;
     padding: 8px 10px;
     border: 0;
-    border-radius: 7px;
+    border-radius: var(--radius-control);
     color: var(--text);
     background: transparent;
     font: inherit;
@@ -188,7 +188,7 @@
     height: 29px;
     display: grid;
     place-items: center;
-    border-radius: 7px;
+    border-radius: var(--radius-control);
     color: var(--muted);
     background: var(--surface-icon);
   }
@@ -200,13 +200,13 @@
   }
   .mobile-wallet-menu strong {
     overflow: hidden;
-    font-size: 10px;
+    font-size: var(--font-size-meta);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
   .mobile-wallet-menu small {
     color: var(--muted);
-    font-size: 8px;
+    font-size: var(--font-size-meta);
   }
   @media (max-width: 760px) {
     .mobile-wallet-switcher {

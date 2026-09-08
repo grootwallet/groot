@@ -1266,7 +1266,7 @@ test('opens and checks an imported hardware signer during setup', async ({ page 
   const cardRow = signerCard.locator('..');
   await expect(signerCard).toHaveCSS('appearance', 'none');
   await signerCard.hover();
-  await expect(cardRow).toHaveCSS('box-shadow', /rgb\(36, 89, 169\)/);
+  await expect(cardRow).toHaveCSS('box-shadow', /rgb\(27, 86, 197\)/);
   const rowBounds = await cardRow.boundingBox();
   const detailsBounds = await signerCard.boundingBox();
   const removeBounds = await page
@@ -1760,7 +1760,7 @@ test('keeps assisted recovery honest and offers simple recovery waits', async ({
   const recoveryWait = page.getByRole('group', { name: 'Recovery key wait' });
   await expect(recoveryWait).toBeVisible();
   await expect(recoveryWait.locator('.recovery-delay-title')).toHaveCSS('font-size', '11px');
-  await expect(recoveryWait.getByRole('button').first()).toHaveCSS('border-radius', '14px');
+  await expect(recoveryWait.getByRole('button').first()).toHaveCSS('border-radius', '12px');
   await page.getByRole('button', { name: /About 3 months/ }).click();
   await expect(page.getByText('13,140 blocks', { exact: true }).first()).toBeVisible();
   await expect(page.locator('body')).not.toContainText('About one year');

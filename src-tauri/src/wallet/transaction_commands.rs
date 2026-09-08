@@ -595,76 +595,102 @@ pub(super) fn core_incremental_relay_fee(client: &Client) -> ApiResult<u64> {
 }
 
 #[tauri::command]
-pub fn rbf_acceleration_quote(
+pub async fn rbf_acceleration_quote(
     app: AppHandle,
-    state: State<'_, AppState>,
+    wallet_id: Uuid,
     txid: String,
     fee_rate: Option<String>,
 ) -> ApiResult<AccelerationQuoteDto> {
-    let _operation = operation_guard(&state)?;
-    require_unlocked(&app, &state)?;
-    let txid = Txid::from_str(&txid)
-        .map_err(|_| api_error("acceleration_unavailable", "Enter a valid transaction ID."))?;
-    let (incremental_fee, priority) = core_replacement_policy(&app, &state)?;
-    let profile = selected_profile(&app)?;
-    let mut db = match profile.kind {
-        WalletKind::Multisig => open_multisig_db(&app)?,
-        WalletKind::SingleKey | WalletKind::WatchOnly => open_db(&app)?,
-    };
-    let mut transaction = db.transaction().map_err(internal)?;
-    let frozen = frozen_outpoints(&transaction)?;
-    let mut wallet = load_wallet_transaction(&mut transaction)?;
-    let (quote, psbt) = quote_rbf(
-        &mut wallet,
-        txid,
-        fee_rate.as_deref(),
-        incremental_fee,
-        priority,
-        &frozen,
-    )?;
-    validate_psbt_excludes_frozen(&psbt, &frozen)?;
-    Ok(quote)
+    let session_id = app
+        .state::<AppState>()
+        .unlocked_wallets
+        .lock()
+        .map_err(internal)?
+        .identity(wallet_id);
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let _operation = operation_guard(&state)?;
+        let session_id = validate_read_session(session_id, None)?;
+        require_wallet_read_context(&app, &state, wallet_id, Some(session_id))?;
+        require_unlocked(&app, &state)?;
+        let txid = Txid::from_str(&txid)
+            .map_err(|_| api_error("acceleration_unavailable", "Enter a valid transaction ID."))?;
+        let (incremental_fee, priority) = core_replacement_policy(&app, &state)?;
+        let profile = selected_profile(&app)?;
+        let mut db = match profile.kind {
+            WalletKind::Multisig => open_multisig_db(&app)?,
+            WalletKind::SingleKey | WalletKind::WatchOnly => open_db(&app)?,
+        };
+        let mut transaction = db.transaction().map_err(internal)?;
+        let frozen = frozen_outpoints(&transaction)?;
+        let mut wallet = load_wallet_transaction(&mut transaction)?;
+        let (quote, psbt) = quote_rbf(
+            &mut wallet,
+            txid,
+            fee_rate.as_deref(),
+            incremental_fee,
+            priority,
+            &frozen,
+        )?;
+        validate_psbt_excludes_frozen(&psbt, &frozen)?;
+        Ok(quote)
+    })
+    .await
+    .map_err(internal)?
 }
 
 #[tauri::command]
-pub fn cpfp_acceleration_quote(
+pub async fn cpfp_acceleration_quote(
     app: AppHandle,
-    state: State<'_, AppState>,
+    wallet_id: Uuid,
     txid: String,
     fee_rate: Option<String>,
 ) -> ApiResult<CpfpAccelerationQuoteDto> {
-    let _operation = operation_guard(&state)?;
-    require_unlocked(&app, &state)?;
-    let txid = Txid::from_str(&txid)
-        .map_err(|_| api_error("acceleration_unavailable", "Enter a valid transaction ID."))?;
-    let priority = if IS_REGTEST {
-        Some(5.0)
-    } else {
-        let client = rpc_client(&app, &state)?;
-        checked_chain_identity(&client)?;
-        profile_commands::estimate_core_fee(&client, 2, EstimateMode::Economical).ok()
-    };
-    let profile = selected_profile(&app)?;
-    let mut db = match profile.kind {
-        WalletKind::Multisig => open_multisig_db(&app)?,
-        WalletKind::SingleKey | WalletKind::WatchOnly => open_db(&app)?,
-    };
-    let wallet = load_wallet(&mut db)?;
-    let parent_fee = cpfp_parent_fee(&app, &state, &wallet, txid)?;
-    drop(wallet);
-    let mut transaction = db.transaction().map_err(internal)?;
-    let frozen = frozen_outpoints(&transaction)?;
-    let mut wallet = load_wallet_transaction(&mut transaction)?;
-    let (quote, psbt) = quote_cpfp(
-        &mut wallet,
-        txid,
-        parent_fee,
-        fee_rate.as_deref(),
-        priority,
-        &frozen,
-    )?;
-    validate_psbt_excludes_frozen(&psbt, &frozen)?;
-    Ok(quote)
+    let session_id = app
+        .state::<AppState>()
+        .unlocked_wallets
+        .lock()
+        .map_err(internal)?
+        .identity(wallet_id);
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let _operation = operation_guard(&state)?;
+        let session_id = validate_read_session(session_id, None)?;
+        require_wallet_read_context(&app, &state, wallet_id, Some(session_id))?;
+        require_unlocked(&app, &state)?;
+        let txid = Txid::from_str(&txid)
+            .map_err(|_| api_error("acceleration_unavailable", "Enter a valid transaction ID."))?;
+        let priority = if IS_REGTEST {
+            Some(5.0)
+        } else {
+            let client = rpc_client(&app, &state)?;
+            checked_chain_identity(&client)?;
+            profile_commands::estimate_core_fee(&client, 2, EstimateMode::Economical).ok()
+        };
+        let profile = selected_profile(&app)?;
+        let mut db = match profile.kind {
+            WalletKind::Multisig => open_multisig_db(&app)?,
+            WalletKind::SingleKey | WalletKind::WatchOnly => open_db(&app)?,
+        };
+        let wallet = load_wallet(&mut db)?;
+        let parent_fee = cpfp_parent_fee(&app, &state, &wallet, txid)?;
+        drop(wallet);
+        let mut transaction = db.transaction().map_err(internal)?;
+        let frozen = frozen_outpoints(&transaction)?;
+        let mut wallet = load_wallet_transaction(&mut transaction)?;
+        let (quote, psbt) = quote_cpfp(
+            &mut wallet,
+            txid,
+            parent_fee,
+            fee_rate.as_deref(),
+            priority,
+            &frozen,
+        )?;
+        validate_psbt_excludes_frozen(&psbt, &frozen)?;
+        Ok(quote)
+    })
+    .await
+    .map_err(internal)?
 }
 
 pub(crate) fn acceleration_error(error: impl ToString) -> ApiError {

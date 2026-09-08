@@ -526,7 +526,7 @@
     gap: 16px;
     padding: 16px;
     border: 1px solid var(--border);
-    border-radius: 12px;
+    border-radius: var(--radius-panel);
     background: var(--panel);
   }
   .diagnostics-summary > div:first-child {
@@ -570,7 +570,7 @@
     margin-top: 10px;
     padding: 16px;
     border: 1px solid var(--border);
-    border-radius: 12px;
+    border-radius: var(--radius-panel);
     background: var(--panel);
   }
   .diagnostic-event-catalog p {
@@ -596,7 +596,7 @@
     margin-top: 16px;
     padding: 28px;
     border: 1px solid var(--border);
-    border-radius: 12px;
+    border-radius: var(--radius-panel);
     background: var(--panel);
     display: flex;
     align-items: center;
@@ -610,7 +610,7 @@
     margin-top: 16px;
     padding: 14px;
     border: 1px solid var(--border);
-    border-radius: 12px;
+    border-radius: var(--radius-panel);
     background: var(--panel);
   }
   .log-controls {
@@ -625,7 +625,7 @@
     display: grid;
     gap: 6px;
     color: var(--muted);
-    font-size: 10px;
+    font-size: var(--font-size-meta);
     font-weight: 650;
   }
   .log-search-input {
@@ -635,7 +635,7 @@
     gap: 8px;
     padding: 0 10px;
     border: 1px solid var(--control-border);
-    border-radius: 8px;
+    border-radius: var(--radius-control);
     background: var(--surface-control);
     color: var(--muted);
   }
@@ -658,7 +658,7 @@
   .log-view {
     min-height: 38px;
     border: 1px solid var(--control-border);
-    border-radius: 8px;
+    border-radius: var(--radius-control);
     background: var(--surface-control);
   }
   .log-sort select {
@@ -727,7 +727,7 @@
     overflow-y: auto;
     padding: 6px;
     border: 1px solid var(--border-strong);
-    border-radius: 10px;
+    border-radius: var(--radius-inset);
     background: var(--panel-2);
     box-shadow: 0 18px 40px rgb(0 0 0 / 24%);
   }
@@ -741,7 +741,7 @@
     justify-content: space-between;
     gap: 12px;
     background: var(--panel-2);
-    font-size: 10px;
+    font-size: var(--font-size-meta);
   }
   .event-filter-menu > div span {
     display: flex;
@@ -763,7 +763,7 @@
     grid-template-columns: 16px minmax(0, 1fr) 14px;
     align-items: center;
     gap: 8px;
-    border-radius: 7px;
+    border-radius: var(--radius-control);
     color: var(--text-soft);
     font-size: 11px;
     cursor: pointer;
@@ -775,7 +775,7 @@
     accent-color: var(--fr-blue);
   }
   .event-filter-menu label > :global(.filter-check) {
-    color: var(--fr-blue);
+    color: var(--link);
   }
   .log-view {
     padding: 3px;
@@ -799,13 +799,13 @@
   .log-results {
     margin: 10px 0 0;
     color: var(--muted);
-    font-size: 10px;
+    font-size: var(--font-size-meta);
   }
   .raw-log {
     margin-top: 8px;
     padding: 14px;
     border: 1px solid var(--border);
-    border-radius: 12px;
+    border-radius: var(--radius-inset);
     background: var(--panel);
   }
   .raw-log > div {
@@ -824,7 +824,7 @@
   }
   .raw-log small {
     color: var(--muted);
-    font-size: 10px;
+    font-size: var(--font-size-meta);
   }
   .raw-log textarea {
     width: 100%;
@@ -832,11 +832,11 @@
     resize: vertical;
     padding: 12px;
     border: 1px solid var(--control-border);
-    border-radius: 8px;
+    border-radius: var(--radius-control);
     color: var(--text-soft);
     background: var(--surface-inset);
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    font-size: 10px;
+    font-size: var(--font-size-meta);
     line-height: 1.55;
     white-space: pre;
   }
@@ -844,7 +844,7 @@
     margin-top: 8px;
     overflow-x: auto;
     border: 1px solid var(--border);
-    border-radius: 12px;
+    border-radius: var(--radius-inset);
     background: var(--panel);
   }
   .diagnostics-table {
@@ -861,7 +861,7 @@
   }
   th {
     color: var(--muted);
-    font-size: 10px;
+    font-size: var(--font-size-meta);
     text-transform: uppercase;
     letter-spacing: 0.06em;
   }
@@ -881,13 +881,13 @@
     margin-top: 3px;
     padding: 9px 10px;
     border: 1px solid color-mix(in srgb, var(--danger) 34%, var(--border));
-    border-radius: 8px;
+    border-radius: var(--radius-control);
     color: var(--text-soft);
     background: color-mix(in srgb, var(--danger) 7%, var(--surface-control));
   }
   .diagnostic-error > strong {
     color: var(--danger);
-    font-size: 10px;
+    font-size: var(--font-size-meta);
   }
   .diagnostic-error > span {
     line-height: 1.45;

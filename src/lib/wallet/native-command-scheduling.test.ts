@@ -46,6 +46,9 @@ describe('native command scheduling', () => {
     ['wallet_notifications_ack', profileCommands],
     ['multisig_sync', multisigCommands],
     ['tx_proposals', transactionCommands],
+    ['rbf_acceleration_quote', transactionCommands],
+    ['cpfp_acceleration_quote', transactionCommands],
+    ['external_signer_wallet', hardwareCommands],
     ['tx_sign_and_broadcast', transactionCommands],
     ['multisig_proposals', multisigProposalCommands],
     ['multisig_proposal_broadcast', multisigProposalCommands],
@@ -70,6 +73,21 @@ describe('native command scheduling', () => {
       source.indexOf('operation_guard(&state)?')
     );
   });
+
+  it.each(['wallet_notifications', 'wallet_notifications_ack'])(
+    '%s binds identity before opening the database',
+    (command) => {
+      const source = commandSource(profileCommands, command);
+      expect(source).toContain('wallet_id: Uuid');
+      expect(source.indexOf('require_wallet_read_context')).toBeGreaterThan(
+        source.indexOf('operation_guard(&state)?')
+      );
+      expect(source.indexOf('require_wallet_read_context')).toBeLessThan(
+        source.indexOf('open_multisig_db')
+      );
+      if (command.endsWith('_ack')) expect(source).toContain('Some(session_id)');
+    }
+  );
 
   it('node saving cancels automatic sync before waiting for the wallet-operation lock', () => {
     const source = commandSource(profileCommands, 'node_config_save');

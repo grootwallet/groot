@@ -73,7 +73,12 @@
   const isMainnet = defaultConfig.network === 'mainnet';
   let syncing = $state(false);
   let manualSyncDetailsVisible = $state(false);
-  let snapshot = $state<WalletSnapshot | null>(null);
+  let snapshot = $state<WalletSnapshot | import('$lib/wallet/contracts').WalletOverview | null>(
+    null
+  );
+  let loadGeneration = 0;
+  let secondaryError = $state('');
+  let secondaryLoading = $state(false);
   let multisigWallet = $state<MultisigWallet | null>(null);
   let hardwareSignerWallet = $state<ExternalSignerWallet | null>(null);
   let signerDetailsOpen = $state(false);
@@ -311,6 +316,7 @@
 
   onDestroy(() => {
     verifyCredential = '';
+    ++loadGeneration;
   });
   onDestroy(() => {
     initialScanCredential = '';
@@ -329,6 +335,7 @@
     };
   });
   async function loadSnapshot() {
+    const generation = ++loadGeneration;
     loadError = '';
     initialDataLoading = true;
     try {
@@ -336,6 +343,7 @@
       // authoritative registry here so this route cannot race that refresh and
       // query the newly selected wallet using the previous wallet's kind.
       const registry = await walletService.profiles();
+      if (generation !== loadGeneration) return;
       if (!registry.wallets.length || !registry.selectedWalletId) {
         if (!(await walletService.exists())) {
           await goto('/welcome');
@@ -346,10 +354,12 @@
         walletService.syncSource(),
         isMainnet ? Promise.resolve([]) : walletService.networkSetupSources()
       ]);
+      if (generation !== loadGeneration) return;
       syncSource = nextSyncSource;
       selectedProfile =
         registry.wallets.find((wallet) => wallet.id === registry.selectedWalletId) ?? null;
       if (isMainnet) await walletService.testNodeConnection();
+      if (generation !== loadGeneration) return;
       // A successful mainnet wallet-data read is already gated by the exact
       // selected wallet's authenticated, retained Core setup in Rust. Mainnet
       // deliberately rejects cross-wallet setup discovery, so do not call that
@@ -362,44 +372,14 @@
             (source) => source.walletId === selectedProfile?.id && source.ready
           )
         );
-      activeDraft = selectedProfile ? await walletService.paymentDraft() : null;
       multisig = selectedProfile?.kind === 'multisig';
-      if (multisig) {
-        const [nextSnapshot, nextWallet, proposals] = await Promise.all([
-          walletService.multisigSnapshot(),
-          walletService.multisigWallet(),
-          walletService.multisigProposals()
-        ]);
-        snapshot = nextSnapshot;
-        multisigWallet = nextWallet;
-        hardwareSignerWallet = null;
-        setHardwareHealthChecks([]);
-        activeProposal = latestActiveProposal(proposals);
-      } else {
-        multisigWallet = null;
-        const [nextSnapshot, proposals, nextHardwareSignerWallet, nextHealthChecks] =
-          await Promise.all([
-            walletService.snapshot(),
-            selectedProfile?.kind === 'watch_only'
-              ? walletService.externalSignerProposals()
-              : walletService.paymentProposals(),
-            selectedProfile?.kind === 'watch_only'
-              ? walletService.externalSignerWallet()
-              : Promise.resolve(null),
-            selectedProfile?.kind === 'watch_only'
-              ? walletService.hardwareHealthChecks()
-              : Promise.resolve([])
-          ]);
-        snapshot = nextSnapshot;
-        hardwareSignerWallet = nextHardwareSignerWallet;
-        setHardwareHealthChecks(nextHealthChecks);
-        activeProposal =
-          selectedProfile?.kind === 'watch_only'
-            ? latestActiveProposal(proposals as MultisigProposal[])
-            : ((proposals as PaymentProposal[])[0] ?? null);
-      }
-      if (activeProposal) activeDraft = null;
+      if (!selectedProfile)
+        throw new WalletError('wallet_not_found', 'The selected wallet does not exist.');
+      const nextSnapshot = await walletService.overview(selectedProfile.id);
+      if (generation !== loadGeneration) return;
+      snapshot = nextSnapshot;
       initialDataLoading = false;
+      void loadSecondaryDetails(generation);
       if (syncSource.type === 'bitcoin_core' && !snapshot?.syncedAt) {
         await loadRecoveryState();
       }
@@ -410,6 +390,7 @@
       )
         void sync(false);
     } catch (cause) {
+      if (generation !== loadGeneration) return;
       if (cause instanceof WalletError && cause.code === 'wallet_locked') {
         await goto('/unlock');
         return;
@@ -417,6 +398,64 @@
       loadError = localizedError(cause, $locale, 'The wallet data could not be read.');
       initialDataLoading = false;
       toast({ title: 'Could not open wallet', description: loadError, tone: 'danger' });
+    }
+  }
+
+  async function loadSecondaryDetails(generation = loadGeneration) {
+    const profile = selectedProfile;
+    if (!profile) return;
+    secondaryError = '';
+    secondaryLoading = true;
+    const current = () =>
+      generation === loadGeneration && profile.id === walletShell.selectedWalletId();
+    const results = await Promise.allSettled([
+      Promise.all([
+        walletService.paymentDraft(),
+        profile.kind === 'multisig'
+          ? walletService.multisigProposals()
+          : profile.kind === 'watch_only'
+            ? walletService.externalSignerProposals()
+            : walletService.paymentProposals()
+      ]).then(([draft, proposals]) => {
+        if (!current()) return;
+        activeProposal =
+          profile.kind === 'single_key'
+            ? ((proposals as PaymentProposal[])[0] ?? null)
+            : latestActiveProposal(proposals as MultisigProposal[]);
+        activeDraft = activeProposal ? null : draft;
+      }),
+      (profile.kind === 'multisig' ? walletService.multisigWallet() : Promise.resolve(null)).then(
+        (value) => {
+          if (current()) multisigWallet = value;
+        }
+      ),
+      (profile.kind === 'watch_only'
+        ? walletService.externalSignerWallet()
+        : Promise.resolve(null)
+      ).then((value) => {
+        if (current()) hardwareSignerWallet = value;
+      }),
+      (profile.kind === 'watch_only'
+        ? walletService.hardwareHealthChecks()
+        : Promise.resolve([])
+      ).then((value) => {
+        if (current()) setHardwareHealthChecks(value);
+      })
+    ]);
+    if (!current()) return;
+    secondaryLoading = false;
+    const failure = results.find((result) => result.status === 'rejected');
+    if (failure?.status === 'rejected') {
+      if (failure.reason instanceof WalletError && failure.reason.code === 'wallet_locked') {
+        await goto('/unlock');
+        return;
+      }
+      secondaryError = localizedError(
+        failure.reason,
+        $locale,
+        'The wallet data could not be read.'
+      );
+      toast({ title: 'Could not load wallet', description: secondaryError, tone: 'danger' });
     }
   }
 
@@ -996,6 +1035,15 @@
     <WalletSkeleton variant="balance" />
   {/if}
   {#if !loadError}
+    {#if secondaryLoading}
+      <p role="status">{translate($locale, 'Loading wallet details…')}</p>
+    {:else if secondaryError}
+      <LoadFailure
+        title={translate($locale, 'Wallet details are unavailable')}
+        description={secondaryError}
+        onretry={() => loadSecondaryDetails()}
+      />
+    {/if}
     {#if activeProposal}
       <a
         class="active-proposal-callout"

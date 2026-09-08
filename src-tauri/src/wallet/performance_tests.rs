@@ -98,13 +98,36 @@ fn snapshot_history_fixture(rows: usize, samples: usize, report: bool) {
         assert_eq!(snapshot.utxos.len(), rows);
         assert_eq!(snapshot.balance.total, rows as u64 * 10_000);
         assert!(
-            statements <= 30 * rows as u64 + 10,
+            statements <= 20 * rows as u64 + 10,
             "independent receives exceeded linear SQL budget: {statements} for {rows}"
+        );
+        let full_bytes = serde_json::to_vec(&snapshot).unwrap().len();
+        let overview = activity::overview_from_snapshot(snapshot).unwrap();
+        let overview_bytes = serde_json::to_vec(&overview).unwrap().len();
+        let request = serde_json::from_value(serde_json::json!({
+            "walletId": Uuid::nil(), "filter": "all", "query": "", "sort": "newest", "limit": 50, "cursor": null,
+        })).unwrap();
+        SNAPSHOT_STATEMENTS.with(|count| count.set(0));
+        let activity_started = Instant::now();
+        let page = activity::activity_from_wallet(&wallet, &db, &request, Uuid::nil()).unwrap();
+        let activity_elapsed = activity_started.elapsed();
+        let activity_statements = SNAPSHOT_STATEMENTS.with(std::cell::Cell::get);
+        let page_json = serde_json::to_value(&page).unwrap();
+        let page_bytes = serde_json::to_vec(&page).unwrap().len();
+        assert_eq!(
+            page_json["transactions"].as_array().unwrap().len(),
+            rows.min(50)
+        );
+        assert!(activity_statements < statements);
+        assert!(
+            activity_statements <= 13 * rows as u64 + 10,
+            "independent receive page exceeded SQL budget: {activity_statements} for {rows}"
         );
         if report {
             let _ = writeln!(std::io::stderr(),
             "snapshot_history rows={rows} sample={sample} elapsed_us={} statements={statements}",
             elapsed.as_micros());
+            let _ = writeln!(std::io::stderr(), "history_page rows={rows} sample={sample} elapsed_us={} statements={activity_statements} full_bytes={full_bytes} overview_bytes={overview_bytes} page_bytes={page_bytes}", activity_elapsed.as_micros());
         }
     }
     // SAFETY: the same live connection is exclusively owned by this test.

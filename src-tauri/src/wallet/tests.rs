@@ -1089,6 +1089,73 @@ fn notification_acknowledgement_command_bounds_are_inclusive() {
 }
 
 #[test]
+fn stale_notification_context_cannot_acknowledge_another_wallets_colliding_row() {
+    let first_id = Uuid::new_v4();
+    let second_id = Uuid::new_v4();
+    let mut first = Connection::open_in_memory().unwrap();
+    let mut second = Connection::open_in_memory().unwrap();
+    for db in [&first, &second] {
+        notifications::init(db).unwrap();
+        notifications::enqueue(
+            db,
+            &WalletNotification::PaymentReceived {
+                txid: "synthetic".into(),
+                amount: 1,
+                balance: 1,
+            },
+            1,
+        )
+        .unwrap();
+    }
+    let ids: Vec<_> = notifications::pending(&first)
+        .unwrap()
+        .into_iter()
+        .map(|row| row.id)
+        .collect();
+    assert_eq!(ids[0], notifications::pending(&second).unwrap()[0].id);
+    let ack = |current, expected, db: &mut Connection| -> ApiResult<()> {
+        validate_read_wallet(current, expected)?;
+        notifications::acknowledge(db, &ids).map_err(internal)?;
+        Ok(())
+    };
+    assert_eq!(
+        ack(second_id, first_id, &mut second).unwrap_err().code,
+        "wallet_selection_changed"
+    );
+    assert_eq!(notifications::pending(&second).unwrap().len(), 1);
+    ack(first_id, first_id, &mut first).unwrap();
+    assert!(notifications::pending(&first).unwrap().is_empty());
+    assert_eq!(notifications::pending(&second).unwrap().len(), 1);
+}
+
+#[test]
+fn queued_reads_and_notification_acknowledgements_reject_a_replaced_unlock_session() {
+    let wallet_id = Uuid::new_v4();
+    let mut sessions = WalletSessions::default();
+    sessions.unlock(wallet_id);
+    let first = sessions.identity(wallet_id).unwrap();
+    assert_eq!(
+        validate_read_session(sessions.identity(wallet_id), Some(first)).unwrap(),
+        first
+    );
+    sessions.lock(wallet_id);
+    assert_eq!(
+        validate_read_session(sessions.identity(wallet_id), Some(first))
+            .unwrap_err()
+            .code,
+        "wallet_locked"
+    );
+    sessions.unlock(wallet_id);
+    assert_eq!(
+        validate_read_session(sessions.identity(wallet_id), Some(first))
+            .unwrap_err()
+            .code,
+        "wallet_selection_changed"
+    );
+    assert!(validate_read_session(sessions.identity(wallet_id), None).is_ok());
+}
+
+#[test]
 fn recovery_scan_progress_is_persisted_and_terminal_transitions_are_guarded() {
     let db = Connection::open_in_memory().unwrap();
     init_app_schema(&db).unwrap();

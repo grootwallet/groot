@@ -195,6 +195,176 @@ fn work_queue_matches_legacy_for_chains_mixed_unknown_reuse_and_replacement() {
     }
 }
 
+// Frozen three-query read oracle, independent of the optimized compound query.
+fn legacy_source_provenance(
+    db: &Connection,
+    outpoint: &str,
+) -> Result<SourceProvenance, bdk_wallet::rusqlite::Error> {
+    let state = db
+        .query_row(
+            "SELECT provenance_state FROM groot_output_lineage WHERE outpoint = ?1",
+            params![outpoint],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()?;
+    let Some(state) = state else {
+        return Ok(SourceProvenance::unknown());
+    };
+    let labels: BTreeSet<String> = {
+        let mut statement = db.prepare(
+            "SELECT label_id FROM groot_output_provenance WHERE outpoint = ?1 ORDER BY label_id",
+        )?;
+        let values = statement
+            .query_map(params![outpoint], |row| row.get::<_, String>(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+        values.into_iter().collect()
+    };
+    let clusters: BTreeSet<String> = {
+        let mut statement = db.prepare(
+            "SELECT cluster_id FROM groot_output_clusters WHERE outpoint = ?1 ORDER BY cluster_id",
+        )?;
+        let values = statement
+            .query_map(params![outpoint], |row| row.get::<_, String>(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+        values.into_iter().collect()
+    };
+    if clusters.is_empty() || (state != "unknown" && labels.is_empty()) {
+        return Err(bdk_wallet::rusqlite::Error::InvalidQuery);
+    }
+    Ok(SourceProvenance {
+        labels,
+        clusters,
+        unknown: state == "unknown",
+    })
+}
+
+#[test]
+fn compound_provenance_read_matches_legacy_and_rejects_incomplete_evidence() {
+    for state in [None, Some("unknown"), Some("known"), Some("mixed")] {
+        for label_count in [0, 1, 3] {
+            for cluster_count in [0, 1, 4] {
+                let db = fixture_db();
+                // Deliberately permit orphan rows to verify the missing-lineage
+                // behavior of corrupt/partially imported fixture data as well.
+                db.execute_batch("PRAGMA foreign_keys=OFF").unwrap();
+                if let Some(state) = state {
+                    db.execute("INSERT INTO groot_output_lineage(outpoint,source_txid,context,provenance_state) VALUES('synthetic:0','synthetic','received',?1)", [state]).unwrap();
+                }
+                for index in 0..label_count {
+                    db.execute(
+                        "INSERT INTO groot_output_provenance VALUES('synthetic:0',?1)",
+                        [format!("label-{index}")],
+                    )
+                    .unwrap();
+                }
+                for index in 0..cluster_count {
+                    db.execute(
+                        "INSERT INTO groot_output_clusters VALUES('synthetic:0',?1)",
+                        [format!("cluster-{index}")],
+                    )
+                    .unwrap();
+                }
+                let expected = legacy_source_provenance(&db, "synthetic:0");
+                let actual = source_provenance(&db, "synthetic:0");
+                match (expected, actual) {
+                    (Ok(expected), Ok(actual)) => assert_eq!(actual, expected),
+                    (Err(expected), Err(actual)) => {
+                        assert_eq!(actual.to_string(), expected.to_string())
+                    }
+                    (expected, actual) => panic!("read mismatch: {expected:?} / {actual:?}"),
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn compound_provenance_read_does_not_cache_wallet_data_or_hide_corruption() {
+    let db = fixture_db();
+    assert_eq!(
+        source_provenance(&db, "synthetic:0").unwrap(),
+        SourceProvenance::unknown()
+    );
+    db.execute("INSERT INTO groot_output_lineage(outpoint,source_txid,context,provenance_state) VALUES('synthetic:0','synthetic','received','unknown')", []).unwrap();
+    assert!(source_provenance(&db, "synthetic:0").is_err());
+    db.execute("INSERT INTO groot_privacy_clusters VALUES('cluster',1)", [])
+        .unwrap();
+    db.execute(
+        "INSERT INTO groot_output_clusters VALUES('synthetic:0','cluster')",
+        [],
+    )
+    .unwrap();
+    assert!(source_provenance(&db, "synthetic:0").unwrap().unknown);
+    db.execute(
+        "UPDATE groot_output_lineage SET provenance_state='known'",
+        [],
+    )
+    .unwrap();
+    assert!(source_provenance(&db, "synthetic:0").is_err());
+    db.execute(
+        "INSERT INTO groot_output_provenance VALUES('synthetic:0','label-0')",
+        [],
+    )
+    .unwrap();
+    assert!(!source_provenance(&db, "synthetic:0").unwrap().unknown);
+    let other = fixture_db();
+    assert_eq!(
+        source_provenance(&other, "synthetic:0").unwrap(),
+        SourceProvenance::unknown()
+    );
+    db.execute_batch("PRAGMA foreign_keys=OFF; UPDATE groot_output_clusters SET cluster_id=x'80'")
+        .unwrap();
+    assert!(legacy_source_provenance(&db, "synthetic:0").is_err());
+    assert!(source_provenance(&db, "synthetic:0").is_err());
+}
+
+#[test]
+fn grouped_reuse_refresh_matches_legacy_and_skips_unchanged_row_writes() {
+    let db = fixture_db();
+    for (index, (address, reused)) in [
+        (Some(0), 0),
+        (Some(0), 0),
+        (Some(1), 1),
+        (None, 1),
+        (Some(2), 0),
+        (Some(2), 1),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        db.execute("INSERT INTO groot_output_lineage(outpoint,source_txid,context,provenance_state,address_idx,address_reused) VALUES(?1,'synthetic','received','unknown',?2,?3)", params![format!("synthetic:{index}"),address,reused]).unwrap();
+    }
+    assert_eq!(refresh_address_reuse(&db).unwrap(), 5);
+    assert_eq!(refresh_address_reuse(&db).unwrap(), 0);
+    let before = persisted_rows(&db);
+    db.execute("UPDATE groot_output_lineage SET address_reused = CASE WHEN address_idx IS NOT NULL AND (SELECT COUNT(*) FROM groot_output_lineage sibling WHERE sibling.address_idx = groot_output_lineage.address_idx) > 1 THEN 1 ELSE 0 END", []).unwrap();
+    assert_eq!(persisted_rows(&db), before);
+    db.execute_batch(
+        "BEGIN; UPDATE groot_output_lineage SET address_idx=3 WHERE outpoint='synthetic:5'",
+    )
+    .unwrap();
+    assert_eq!(refresh_address_reuse(&db).unwrap(), 2);
+    db.execute_batch("ROLLBACK").unwrap();
+    assert_eq!(persisted_rows(&db), before);
+    assert_eq!(refresh_address_reuse(&db).unwrap(), 0);
+}
+
+#[test]
+fn grouped_reuse_plan_has_no_per_output_correlated_scan() {
+    let db = fixture_db();
+    let mut statement = db
+        .prepare(&format!("EXPLAIN QUERY PLAN {REFRESH_ADDRESS_REUSE_SQL}"))
+        .unwrap();
+    let plan = statement
+        .query_map([], |row| row.get::<_, String>(3))
+        .unwrap()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap()
+        .join("\n");
+    assert!(plan.contains("MATERIALIZE reused"), "{plan}");
+    assert!(!plan.contains("CORRELATED"), "{plan}");
+}
+
 fn legacy_reconcile_wallet_outputs(
     wallet: &Wallet,
     db: &Connection,
@@ -208,7 +378,7 @@ fn legacy_reconcile_wallet_outputs(
             let input_sources = transaction
                 .input
                 .iter()
-                .map(|input| source_provenance(db, &input.previous_output.to_string()))
+                .map(|input| legacy_source_provenance(db, &input.previous_output.to_string()))
                 .collect::<Result<Vec<_>, _>>()?;
             let derived = derive_change_provenance(&input_sources);
             record_cluster_links(db, &derived.clusters, &txid, created_at)?;

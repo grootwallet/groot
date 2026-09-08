@@ -51,7 +51,7 @@
     align-items: center;
     gap: 11px;
     border: 1px solid color-mix(in srgb, var(--accent) 34%, var(--border));
-    border-radius: 9px;
+    border-radius: var(--radius-control);
     background: color-mix(in srgb, var(--accent-soft) 72%, var(--panel));
   }
   .resume-setup-icon {
@@ -59,7 +59,7 @@
     height: 32px;
     display: grid;
     place-items: center;
-    border-radius: 8px;
+    border-radius: var(--radius-control);
     color: var(--accent);
     background: var(--surface-control);
   }
@@ -70,7 +70,7 @@
   }
   .resume-setup-copy small {
     color: var(--accent);
-    font-size: 8px;
+    font-size: var(--font-size-meta);
     font-weight: 750;
     letter-spacing: 0.08em;
   }
@@ -83,7 +83,7 @@
   }
   .resume-setup-copy > span {
     color: var(--muted);
-    font-size: 9px;
+    font-size: var(--font-size-meta);
   }
   .resume-setup-notice.locked {
     position: fixed;
@@ -99,7 +99,7 @@
     gap: 7px;
   }
   .resume-setup-actions :global(.button) {
-    font-size: 10px;
+    font-size: var(--font-size-meta);
     font-weight: 650;
   }
 

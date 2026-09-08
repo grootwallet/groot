@@ -260,6 +260,18 @@ Address reuse never blocks selection or spending. Every affected row inherits it
 
 ## Notifications
 
+Pending delivery is bound to the wallet and current unlock session. Switching,
+locking, deleting or replacing the session invalidates old frontend deliveries;
+native acknowledgements also check both identities. A slow or failed notification
+drain leaves committed wallet data available and retries later without turning a
+successful broadcast into a failure.
+
+Overview paints authenticated core data before loading drafts/proposals and saved
+signer/health details. A secondary failure retains the balance with a details retry.
+Send starts saved signer identity independently of coin loading and fee/acceleration
+requests. Activity loads 50-row pages; global search/sort resets the cursor, failed
+later pages retain the current list, and changed-history cursors require a refresh.
+
 - Broadcast: immediately after accepted broadcast, including updated balance.
 - Payment received: first observation only, including updated balance.
 - First confirmation: zero-to-one confirmation transition only, including updated balance.

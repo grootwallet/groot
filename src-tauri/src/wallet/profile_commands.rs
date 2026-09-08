@@ -606,21 +606,32 @@ pub fn wallet_sync_status(
         .cloned())
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NotificationPage {
+    session_id: Uuid,
+    envelopes: Vec<notifications::NotificationEnvelope>,
+}
+
 #[tauri::command]
 pub async fn wallet_notifications(
     app: AppHandle,
+    wallet_id: Uuid,
     multisig: bool,
-) -> ApiResult<Vec<notifications::NotificationEnvelope>> {
+) -> ApiResult<NotificationPage> {
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
         let _operation = operation_guard(&state)?;
-        require_unlocked_for_background_sync(&app, &state)?;
+        let session_id = require_wallet_read_context(&app, &state, wallet_id, None)?;
         let db = if multisig {
             open_multisig_db(&app)?
         } else {
             open_db(&app)?
         };
-        notifications::pending(&db).map_err(internal)
+        Ok(NotificationPage {
+            session_id,
+            envelopes: notifications::pending(&db).map_err(internal)?,
+        })
     })
     .await
     .map_err(internal)?
@@ -629,13 +640,15 @@ pub async fn wallet_notifications(
 #[tauri::command]
 pub async fn wallet_notifications_ack(
     app: AppHandle,
+    wallet_id: Uuid,
+    session_id: Uuid,
     multisig: bool,
     ids: Vec<String>,
 ) -> ApiResult<()> {
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
         let _operation = operation_guard(&state)?;
-        require_unlocked_for_background_sync(&app, &state)?;
+        require_wallet_read_context(&app, &state, wallet_id, Some(session_id))?;
         validate_notification_acknowledgements(&ids)?;
         let mut db = if multisig {
             open_multisig_db(&app)?

@@ -18,7 +18,7 @@ describe('credential teardown discipline', () => {
     const successClears = overview.match(/verifyBackup[\s\S]*?verifyCredential = '';/);
     expect(successClears).not.toBeNull();
     expect(overview).toContain('finally');
-    expect(overview).toContain("onDestroy(() => {\n    verifyCredential = '';\n  });");
+    expect(overview).toMatch(/onDestroy\(\(\) => \{\s*verifyCredential = '';[\s\S]*?\}\);/);
   });
 
   it('unlock clears its credential fields on component teardown', () => {

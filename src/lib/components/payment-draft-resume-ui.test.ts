@@ -26,7 +26,8 @@ describe('unfinished payment resume UI', () => {
   });
 
   it('loads the restart-safe draft and offers separate overview resume and discard actions', () => {
-    expect(overview).toContain('await walletService.paymentDraft()');
+    expect(overview).toContain('walletService.paymentDraft()');
+    expect(overview).toContain('activeDraft = activeProposal ? null : draft');
     expect(overview).toContain("'Payment draft in progress'");
     expect(overview).toContain("'Recipient and labels saved'");
     expect(overview).toContain("activeDraft.kind === 'multisig' ? '/multisig/send' : '/send'");

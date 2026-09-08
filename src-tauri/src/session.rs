@@ -12,11 +12,17 @@ use uuid::Uuid;
 #[derive(Default)]
 pub(crate) struct WalletSessions {
     last_activity: HashMap<Uuid, Instant>,
+    identities: HashMap<Uuid, Uuid>,
 }
 
 impl WalletSessions {
     pub(crate) fn unlock(&mut self, wallet_id: Uuid) {
         self.last_activity.insert(wallet_id, Instant::now());
+        self.identities.insert(wallet_id, Uuid::new_v4());
+    }
+
+    pub(crate) fn identity(&self, wallet_id: Uuid) -> Option<Uuid> {
+        self.identities.get(&wallet_id).copied()
     }
 
     pub(crate) fn authorize_at(
@@ -31,6 +37,7 @@ impl WalletSessions {
         };
         if now.duration_since(*last_activity) > idle_timeout {
             self.last_activity.remove(&wallet_id);
+            self.identities.remove(&wallet_id);
             return false;
         }
         if record_activity {
@@ -48,11 +55,15 @@ impl WalletSessions {
             }
             keep
         });
+        for wallet_id in &expired {
+            self.identities.remove(wallet_id);
+        }
         expired
     }
 
     pub(crate) fn lock(&mut self, wallet_id: Uuid) {
         self.last_activity.remove(&wallet_id);
+        self.identities.remove(&wallet_id);
     }
 
     pub(crate) fn is_unlocked(&self, wallet_id: Uuid) -> bool {

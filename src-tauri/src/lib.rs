@@ -111,6 +111,8 @@ pub fn run() {
             wallet::profile_commands::wallet_sync_cancel,
             wallet::profile_commands::wallet_sync_status,
             wallet::profile_commands::wallet_notifications,
+            wallet::activity::wallet_activity,
+            wallet::activity::wallet_overview,
             wallet::profile_commands::wallet_notifications_ack,
             wallet::profile_commands::address_create,
             wallet::profile_commands::address_discard,

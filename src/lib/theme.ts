@@ -2,8 +2,8 @@ export type Theme = 'light' | 'dark';
 
 export const THEME_STORAGE_KEY = 'groot-theme';
 export const THEME_COLORS: Record<Theme, string> = {
-  light: '#f4f1e9',
-  dark: '#0d1118'
+  light: '#fbfbfa',
+  dark: '#091625'
 };
 
 export function resolveTheme(saved: string | null, prefersLight: boolean): Theme {

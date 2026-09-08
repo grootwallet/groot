@@ -63,13 +63,25 @@ import {
   prototypeCredential
 } from './dummy-state';
 import type { PaymentDraft } from './payment-draft';
+import { pendingBalanceBreakdown, sortTransactions } from './presentation';
 
 export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
   private multisigSetupDraftValue: import('./contracts').MultisigSetupDraft | null = null;
   private paymentDrafts = new Map<string, PaymentDraft>();
   private multisigPolicyVerificationRecords: SignerPolicyVerification[] = [];
   private hardwareHealthCheckRecords = new Map<string, HardwareHealthCheckRecord>();
+  private detailFixtureFailed = false;
+  private activityFixtureFailed = false;
   async paymentDraft() {
+    if (typeof location !== 'undefined') {
+      const params = new URLSearchParams(location.search);
+      if (params.has('fixture-delayed-wallet-details'))
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+      if (params.has('fixture-wallet-details-error') && !this.detailFixtureFailed) {
+        this.detailFixtureFailed = true;
+        throw new WalletError('internal_error', 'Synthetic wallet details failure.');
+      }
+    }
     const draft = this._selectedWalletId ? this.paymentDrafts.get(this._selectedWalletId) : null;
     return draft ? structuredClone(draft) : null;
   }
@@ -1881,6 +1893,95 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
   }
   async multisigSnapshot() {
     return this.snapshot();
+  }
+  async overview(walletId: string): Promise<import('./contracts').WalletOverview> {
+    if (walletId !== this._selectedWalletId)
+      throw new WalletError('wallet_selection_changed', 'The selected wallet changed.');
+    const snapshot = await this.snapshot();
+    return {
+      network: snapshot.network,
+      balance: snapshot.balance,
+      utxos: snapshot.utxos,
+      transactions: sortTransactions(snapshot.transactions, 'newest').slice(0, 3),
+      syncedAt: snapshot.syncedAt,
+      chainTip: snapshot.chainTip,
+      pendingOutgoing: pendingBalanceBreakdown(snapshot).outgoing
+    };
+  }
+  async activity(
+    request: import('./contracts').ActivityRequest
+  ): Promise<import('./contracts').ActivityPage> {
+    if (request.walletId !== this._selectedWalletId)
+      throw new WalletError('wallet_selection_changed', 'The selected wallet changed.');
+    if (
+      !Number.isInteger(request.limit) ||
+      request.limit < 1 ||
+      request.limit > 100 ||
+      [...request.query].length > 128
+    )
+      throw new WalletError('invalid_transaction', 'The history request is invalid.');
+    const snapshot = await this.snapshot();
+    const query = request.query.trim().toLowerCase();
+    if (typeof location !== 'undefined') {
+      const params = new URLSearchParams(location.search);
+      if (params.has('fixture-large-history') && snapshot.transactions[0]) {
+        snapshot.transactions = Array.from({ length: 120 }, (_, index) => ({
+          ...snapshot.transactions[0],
+          id: index.toString(16).padStart(64, '0'),
+          label: `Synthetic history ${index}`,
+          intentLabel: null,
+          provenance: { ...snapshot.transactions[0].provenance, labels: [] },
+          direction: index % 2 ? 'sent' : 'received',
+          status: 'confirmed',
+          confirmations: 1,
+          amount: sats(index + 1),
+          date: '2026-09-01T00:00:00.000Z'
+        }));
+      }
+      if (
+        params.has('fixture-history-page-error') &&
+        request.cursor &&
+        !this.activityFixtureFailed
+      ) {
+        this.activityFixtureFailed = true;
+        throw new WalletError('internal_error', 'Synthetic history page failure.');
+      }
+    }
+    const transactions = sortTransactions(
+      snapshot.transactions
+        .filter(
+          (tx) =>
+            (request.filter === 'all' || request.filter === tx.direction) &&
+            [
+              tx.label,
+              tx.intentLabel?.text,
+              ...tx.provenance.labels.map((label) => label.text)
+            ].some((label) => label?.toLowerCase().includes(query))
+        )
+        .sort((a, b) => a.id.localeCompare(b.id)),
+      request.sort
+    );
+    const encoded = new TextEncoder().encode(
+      JSON.stringify([request.walletId, request.filter, query, request.sort, transactions])
+    );
+    const digest = await crypto.subtle.digest('SHA-256', encoded);
+    const revision = Array.from(new Uint8Array(digest), (byte) =>
+      byte.toString(16).padStart(2, '0')
+    ).join('');
+    const index = request.cursor
+      ? transactions.findIndex((tx) => tx.id === request.cursor?.after)
+      : -1;
+    if (request.cursor && (request.cursor.revision !== revision || index < 0))
+      throw new WalletError('history_changed', 'History changed. Refresh the transaction list.');
+    const page = transactions.slice(index + 1, index + 1 + request.limit);
+    return {
+      transactions: page,
+      total: transactions.length,
+      nextCursor:
+        index + 1 + page.length < transactions.length
+          ? { revision, after: page[page.length - 1].id }
+          : null
+    };
   }
   async syncMultisig(_automatic = false) {
     return this.snapshot();

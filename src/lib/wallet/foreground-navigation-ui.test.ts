@@ -143,7 +143,7 @@ describe('foreground wallet navigation', () => {
     ).toBeLessThan(overview.indexOf('walletService.paymentDraft()'));
     expect(
       overview.indexOf('if (isMainnet) await walletService.testNodeConnection()')
-    ).toBeLessThan(overview.indexOf('walletService.snapshot()'));
+    ).toBeLessThan(overview.indexOf('walletService.overview(selectedProfile.id)'));
   });
 
   it('does not start a second post-unlock scan after reattaching to an inherited scan', () => {

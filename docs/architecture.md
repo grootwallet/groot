@@ -182,12 +182,48 @@ Routes and reusable components may not import concrete wallet adapters, invoke T
 
 ## Sync and notifications
 
+Notification reads and acknowledgements carry an immutable wallet UUID; Rust
+checks it under the existing operation guard before opening either wallet
+database. Reads return an ephemeral unlock-session UUID, which acknowledgements
+must match. Unlock replaces that UUID and lock/expiry removes it; it is not a
+credential and is never persisted. Adapter delivery generations invalidate work
+at lifecycle transitions, including switch-away-and-back, and protect every
+event/ack boundary. Background delivery never renews inactivity. Notification
+failures cannot reject an already successful snapshot or broadcast, and rows
+remain retryable at the next successful read/sync. No listener means no drain.
+
+`wallet/activity.rs` shares authoritative transaction DTO construction with full
+snapshots. `wallet_activity` omits UTXO/address/suggestion construction and returns
+bounded pages after Rust filtering and ordering. Content-bound cursors include the
+wallet, unlock session, query/order, and complete filtered transaction facts in
+their revision hash; reorgs, replacements, label changes and re-unlock invalidate
+them. There is no persistent index or renderer cache. Full graph loading and
+provenance reconciliation remain native work, so pagination does not imply
+page-sized database cost. `wallet_overview` skips receive history and suggestions,
+returns three recent transactions, and computes pending outgoing totals before
+truncation. Full snapshots remain authoritative for spending and coin-policy data.
+
+Read-only acceleration quotes capture the initiating wallet's unlock-session
+identity, then check wallet/session again under serialization on the blocking
+worker before RPC, wallet loading and BDK construction. Existing fee, frozen-coin,
+network and PSBT validation remains unchanged. Saved external-signer metadata
+also reads under authorization/serialization on a worker. Send starts saved
+identity reads before its coin snapshot and does not hide a completed identity
+while acceleration quotes load; saved identity never proves live device presence.
+
 Snapshot provenance reconciliation uses a call-scoped dependency work queue.
 Every canonical transaction is visited; further propagation follows consumers
 of processed parents and skips unchanged sources. Original pass/index ordering
 preserves append-only intermediate cluster evidence. The cache does not survive
 the operation, so restart, new labels, and chain changes are re-evaluated from
 the authoritative wallet and database without a persisted cache or migration.
+
+Provenance source reads use one prepared compound SELECT with separate state,
+label and cluster rows, not a labels-by-clusters Cartesian join. Only the prepared
+statement is connection-cached; wallet data is read afresh each time. Missing
+lineage remains unknown and incomplete evidence remains an error. Address-reuse
+reconciliation groups all stored output history once and updates only changed
+flags, preserving historical monitoring and the existing transaction boundary.
 
 Frontend background controllers bind pending work to a lifecycle generation.
 Stopping a session monitor invalidates its pending reply, and expiry delivery
@@ -198,7 +234,7 @@ authorization and wallet-operation serialization remain authoritative.
 
 `AppShell` owns one bounded foreground scheduler for the selected wallet. It syncs every ten seconds, wakes when the document becomes visible, pauses and cancels an in-flight automatic sync on onboarding, lock, Settings, Receive, Send, or wallet selection, and coalesces concurrent wake-ups. The scheduler consumes the already-loaded selected profile kind from its shell owner instead of repeating wallet-existence and registry IPC reads on every cycle; the chosen native sync command still revalidates the selected profile, session, network setup, and wallet state in Rust. Read-only Overview, Activity, and Coins navigation does not cancel the ordinary foreground scan. A fresh Core wallet returns stable `initial_scan_required` scheduler state until Overview records an explicit birthday/full-history choice and starts the separate resumable scanner; the scheduler also treats an active recovery scan as expected state rather than a failure. Overview reattaches to ordinary atomic progress or persisted recovery progress and never starts a duplicate scan. Automatic lock still cancels an ordinary foreground sync, but it does not cancel an already-authenticated recovery scan; after unlock the route reattaches while the session deadline remains non-refreshing. Expected initial-choice, active-scan, cancellation, and lock responses do not become error toasts. Profile selection returns the target's non-renewing session state with its public profile, allowing the shell to route directly to Overview or unlock without mounting a wallet-data route as a lock probe. Selecting a profile keys the mounted route to the immutable wallet ID, so the previous route state is destroyed before the target snapshot is read. A successful unlock records one in-memory, wallet-bound refresh request; after Overview paints the persisted snapshot, it consumes that request, starts one immediate sync, and presents its existing progress UI. Later scheduler cycles stay quiet, and read-only route navigation does not create another visible or immediate refresh. A successful adapter sync or full rescan publishes the authoritative snapshot plus its captured wallet ID as an in-process `wallet_updated` event; routes ignore an event unless that ID is still selected. Overview derives its relative last-update label only from the snapshot's persisted successful-sync timestamp and refreshes that presentation clock locally; route mounting is not a sync observation.
 
-Rust sync persists durable markers for receipts and first confirmations before returning. A profile's first successful sync atomically seeds existing history as already delivered and marks the baseline initialized, preventing recovery or descriptor import from replaying historical toasts; later changes use the normal pending-event path. The adapter serializes notification draining per wallet kind in 256-row pages, explicitly acknowledges each page before requesting another, and caps one foreground drain at 32 pages so a long-offline queue cannot monopolize the UI; the next sync resumes any remainder. Delivery is at-least-once across a crash boundary, database uniqueness prevents duplicate rows, and persistent transaction state remains authoritative. Node polling failures are quiet; explicit user sync surfaces its error. Fully terminated background execution remains out of scope.
+Rust sync persists durable markers for receipts and first confirmations before returning. A profile's first successful sync atomically seeds existing history as already delivered and marks the baseline initialized, preventing recovery or descriptor import from replaying historical toasts; later changes use the normal pending-event path. The adapter serializes notification draining per wallet UUID, kind and delivery generation in 256-row pages, explicitly acknowledges each page before requesting another, and caps one drain at 32 pages; the next successful read/sync resumes any remainder. Delivery runs independently of snapshot/broadcast completion. Delivery is at-least-once across a crash boundary, database uniqueness prevents duplicate rows, and persistent transaction state remains authoritative. Node polling failures are quiet; explicit user sync surfaces its error. Fully terminated background execution remains out of scope.
 
 For a verified guided Recovery or Inheritance descriptor, Rust derives one delayed-policy context by recompiling the persisted template and requiring its descriptors and spending paths to match exactly. Snapshot construction then computes each current BDK output's confirmation age, remaining relative-lock blocks, maturity height, and state from the wallet checkpoint. The webview receives only this derived public DTO; it does not calculate policy eligibility. A chain observation table stores the last successfully synced height and time. A snapshot whose BDK height disagrees with that observation, whose timestamp is hostile, or whose policy metadata fails recompilation returns `wallet_corrupt`. Observations older than 30 minutes are explicitly stale.
 

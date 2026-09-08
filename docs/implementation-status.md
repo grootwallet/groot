@@ -1,5 +1,35 @@
 # Implementation status
 
+The approved 2026-09-08 design refresh applies locally bundled Source Sans 3,
+Blue Ink/ivory light and dark semantic tokens, shared radii and readable supporting
+type across existing application routes and reusable components. Wallet operations,
+native secret-entry sheets, startup timing and backup print output are unchanged.
+No persisted format or network/dependency change is introduced. Browser evidence
+and physical-webview limitations: [`design-refresh-2026-09-08.md`](design-refresh-2026-09-08.md).
+
+The subsequent 2026-09-08 query follow-up combines indexed provenance reads,
+removes a redundant output-lineage lookup, and replaces correlated address-reuse
+recounts with one grouped calculation that skips unchanged row writes. Frozen
+read/reconciliation oracles, corruption and rollback fixtures, and query-plan and
+statement budgets protect the same persisted results. No schema, transport,
+dependency, BIP behavior or production UI change is introduced. See
+[`provenance-query-follow-up-2026-09-08.md`](provenance-query-follow-up-2026-09-08.md).
+
+The 2026-09-08 navigation follow-up binds notification read/ack to wallet UUID
+and ephemeral unlock-session identity, invalidates stale frontend delivery work,
+and removes notification latency/failure from snapshot and broadcast completion.
+Native Overview returns recent-three activity plus complete pending accounting;
+native Activity filters/sorts the complete transaction history and exposes bounded,
+revision-bound cursor pages without constructing receive/coin/suggestion DTOs.
+RBF/CPFP quotes and saved external-signer reads run on blocking workers. Overview
+secondary details and Send public signer identity no longer wait behind unrelated
+reads. The 1.8-second startup gate is unchanged. These are shared Rust/frontend
+paths, not a claim of mobile or physical-hardware certification. No persisted
+format, dependency or network transport changes; no migration or BIP support-level
+change. The two new read endpoints bring the registered command count to 133.
+Evidence and remaining performance work are recorded in
+[`navigation-performance-2026-09-08.md`](navigation-performance-2026-09-08.md).
+
 The 2026-09-08 maintenance follow-up removes two registered native commands with no
 current caller: the legacy Payjoin-specific inspection wrapper superseded in Send by
 the general bounded payment-request parser, and a standalone mainnet-admission clear

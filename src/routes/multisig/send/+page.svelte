@@ -410,7 +410,9 @@
     selectedCoins = [candidate.outpoint];
     error = '';
   }
+  let walletLoadActive = true;
   onDestroy(() => {
+    walletLoadActive = false;
     if (!suppressDraftSave) void saveCurrentDraft();
     hardwareScanGeneration += 1;
     pin = '';
@@ -420,12 +422,16 @@
   });
   onMount(async () => {
     try {
-      const [snapshot, loadedWallet, proposals, registry] = await Promise.all([
+      const [loadedWallet, snapshot, proposals, registry] = await Promise.all([
+        walletService.multisigWallet().then((value) => {
+          if (walletLoadActive) wallet = value;
+          return value;
+        }),
         walletService.multisigSnapshot(),
-        walletService.multisigWallet(),
         walletService.multisigProposals(),
         walletService.profiles()
       ]);
+      if (!walletLoadActive) return;
       wallet = loadedWallet;
       const selectedProfile = registry.wallets.find(
         (profile) => profile.id === registry.selectedWalletId

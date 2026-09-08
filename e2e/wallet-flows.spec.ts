@@ -915,7 +915,7 @@ test('unlocks a Trezor before choosing its standard single-key wallet', async ({
       gap: previousBounds ? bounds.top - previousBounds.bottom : 0
     };
   });
-  expect(setupGuideStyle.fontSize).toBe(10);
+  expect(setupGuideStyle.fontSize).toBe(11);
   expect(setupGuideStyle.height).toBeGreaterThanOrEqual(38);
   expect(setupGuideStyle.gap).toBeGreaterThanOrEqual(12);
   await setupGuides.click();
@@ -1355,7 +1355,8 @@ test('RBF starts safely and presents one payment row with durable lineage', asyn
   });
   await rbfLink.click();
   await expect(page.getByRole('heading', { name: 'Preparing fee acceleration' })).toBeVisible();
-  await expect(page.getByText('Checking wallet identity…')).toBeVisible();
+  await expect(page.locator('.send-signers')).not.toHaveClass(/loading/);
+  await expect(page.locator('.send-signers')).toContainText('Groot app');
   await expect(page.getByRole('heading', { name: 'Speed up transaction' })).toBeVisible();
   await expect(page.getByText('You will spend this much more', { exact: true })).toBeVisible();
   await expect(page.getByText('Your payment amount and recipient will not change.')).toBeVisible();

@@ -6,7 +6,8 @@
   import type { Transaction } from '$lib/types';
   import { toast } from '$lib/stores/toasts';
   import { walletService, WalletError } from '$lib/wallet';
-  import { sortTransactions, type TransactionSortOrder } from '$lib/wallet/presentation';
+  import type { TransactionSortOrder } from '$lib/wallet/presentation';
+  import Button from '$lib/components/Button.svelte';
   import { onMount } from 'svelte';
   import { Activity } from '@lucide/svelte';
   import LoadFailure from '$lib/components/LoadFailure.svelte';
@@ -22,62 +23,94 @@
   let multisig = $state(false);
   let loading = $state(true);
   let loadError = $state('');
-  const visibleTransactions = $derived(
-    sortTransactions(
-      transactions.filter((transaction) => {
-        if (filter !== 'all' && transaction.direction !== filter) return false;
-        const needle = query.trim().toLocaleLowerCase();
-        if (!needle) return true;
-        return [
-          transaction.label,
-          transaction.intentLabel?.text,
-          ...transaction.provenance.labels.map((label) => label.text)
-        ]
-          .filter(Boolean)
-          .some((value) => value?.toLocaleLowerCase().includes(needle));
-      }),
-      sortOrder
-    )
-  );
-  onMount(load);
-  async function load() {
+  let walletId = '';
+  let mounted = $state(false);
+  let generation = 0;
+  let cursor = $state<import('$lib/wallet/contracts').ActivityCursor | null>(null);
+  let loadingMore = $state(false);
+  let pageError = $state('');
+  let restartRequired = $state(false);
+  onMount(() => {
+    let disposed = false;
+    void walletService
+      .profiles()
+      .then((registry) => {
+        if (disposed) return;
+        walletId = registry.selectedWalletId ?? '';
+        multisig = registry.wallets.find((profile) => profile.id === walletId)?.kind === 'multisig';
+        mounted = true;
+      })
+      .catch((cause) => {
+        if (disposed) return;
+        loading = false;
+        loadError = localizedError(cause, $locale, 'Transaction history could not be read.');
+      });
+    const unsubscribe = walletService.subscribe((event) => {
+      if (mounted && event.type === 'wallet_updated' && event.walletId === walletId) void load();
+    });
+    return () => {
+      disposed = true;
+      ++generation;
+      unsubscribe();
+    };
+  });
+  $effect(() => {
+    const selection = { filter, query, sortOrder };
+    if (!mounted) return;
+    ++generation;
+    selected = null;
+    cursor = null;
     loading = true;
+    const timer = setTimeout(() => void load(), selection.query.trim() ? 180 : 0);
+    return () => clearTimeout(timer);
+  });
+  async function load(more = false) {
+    const requestGeneration = ++generation;
+    if (more) loadingMore = true;
+    else {
+      loading = true;
+      cursor = null;
+    }
     loadError = '';
+    pageError = '';
+    restartRequired = false;
     try {
-      const shellWallets = walletShell.profiles();
-      const shellSelectedWalletId = walletShell.selectedWalletId();
-      const registry =
-        shellWallets.length && shellSelectedWalletId
-          ? { wallets: shellWallets, selectedWalletId: shellSelectedWalletId }
-          : await walletService.profiles();
-      multisig =
-        registry.wallets.find((wallet) => wallet.id === registry.selectedWalletId)?.kind ===
-        'multisig';
-      const snapshot = multisig
-        ? await walletService.multisigSnapshot()
-        : await walletService.snapshot();
-      transactions = snapshot.transactions;
+      if (!walletId) {
+        const registry = await walletService.profiles();
+        if (requestGeneration !== generation) return;
+        walletId = registry.selectedWalletId ?? '';
+        multisig = registry.wallets.find((profile) => profile.id === walletId)?.kind === 'multisig';
+      }
+      const page = await walletService.activity({
+        walletId,
+        filter,
+        query,
+        sort: sortOrder,
+        limit: 50,
+        cursor: more ? cursor : null
+      });
+      if (requestGeneration !== generation || walletId !== walletShell.selectedWalletId()) return;
+      transactions = more ? [...transactions, ...page.transactions] : page.transactions;
+      cursor = page.nextCursor;
     } catch (cause) {
+      if (requestGeneration !== generation) return;
       if (cause instanceof WalletError && cause.code === 'wallet_locked') {
         await goto('/unlock');
         return;
       }
-      loadError = localizedError(cause, $locale, 'Transaction history could not be read.');
-      toast({ title: 'Could not load transactions', description: loadError, tone: 'danger' });
+      const message = localizedError(cause, $locale, 'Transaction history could not be read.');
+      if (more) {
+        pageError = message;
+        restartRequired = cause instanceof WalletError && cause.code === 'history_changed';
+      } else loadError = message;
+      toast({ title: 'Could not load transactions', description: message, tone: 'danger' });
     } finally {
-      loading = false;
+      if (requestGeneration === generation) {
+        loading = false;
+        loadingMore = false;
+      }
     }
   }
-  onMount(() =>
-    walletService.subscribe((event) => {
-      if (event.type === 'wallet_updated' && event.walletId === walletShell.selectedWalletId()) {
-        multisig = event.walletKind === 'multisig';
-        transactions = event.snapshot.transactions;
-        loadError = '';
-        loading = false;
-      }
-    })
-  );
 </script>
 
 <div class="page">
@@ -100,6 +133,7 @@
     <label
       ><span>{translate($locale, 'Search')}</span><input
         bind:value={query}
+        maxlength={128}
         placeholder={translate($locale, 'Search labels')}
       /></label
     >
@@ -121,10 +155,10 @@
       <LoadFailure
         title={translate($locale, 'Transactions are unavailable')}
         description={loadError}
-        onretry={load}
+        onretry={() => load()}
       />
-    {:else if visibleTransactions.length}
-      <TxList items={visibleTransactions} onselect={(tx) => (selected = tx)} />
+    {:else if transactions.length}
+      <TxList items={transactions} onselect={(tx) => (selected = tx)} />
     {:else}
       <EmptyState
         title={query.trim()
@@ -148,6 +182,20 @@
       >
         {#snippet icon()}<Activity size={24} />{/snippet}
       </EmptyState>
+    {/if}
+    {#if !loading && !loadError && pageError}
+      <LoadFailure
+        title={translate($locale, 'Transactions are unavailable')}
+        description={pageError}
+        onretry={() => load(!restartRequired)}
+      />
+    {:else if !loading && !loadError && cursor}
+      <Button
+        variant="secondary"
+        loading={loadingMore}
+        loadingLabel={translate($locale, 'Loading…')}
+        onclick={() => load(true)}>{translate($locale, 'Load more')}</Button
+      >
     {/if}
   </section>
 </div>

@@ -640,33 +640,41 @@ fn source_provenance(
     db: &Connection,
     outpoint: &str,
 ) -> Result<SourceProvenance, bdk_wallet::rusqlite::Error> {
-    let state = db
-        .query_row(
-            "SELECT provenance_state FROM groot_output_lineage WHERE outpoint = ?1",
-            params![outpoint],
-            |row| row.get::<_, String>(0),
-        )
-        .optional()?;
+    // One indexed read with separate row kinds avoids both repeated prepares and
+    // the labels × clusters fan-out of joining two one-to-many relationships.
+    // Missing lineage must still mean unknown, regardless of orphan child rows.
+    let mut statement = db.prepare_cached(
+        "WITH source AS MATERIALIZED (
+           SELECT provenance_state FROM groot_output_lineage WHERE outpoint = ?1
+         )
+         SELECT 0, provenance_state FROM source
+         UNION ALL
+         SELECT 1, label_id FROM groot_output_provenance
+           WHERE outpoint = ?1 AND EXISTS (SELECT 1 FROM source)
+         UNION ALL
+         SELECT 2, cluster_id FROM groot_output_clusters
+           WHERE outpoint = ?1 AND EXISTS (SELECT 1 FROM source)",
+    )?;
+    let mut state = None;
+    let mut labels = BTreeSet::new();
+    let mut clusters = BTreeSet::new();
+    for row in statement.query_map(params![outpoint], |row| {
+        Ok((row.get::<_, u8>(0)?, row.get::<_, String>(1)?))
+    })? {
+        let (kind, value) = row?;
+        match kind {
+            0 => state = Some(value),
+            1 => {
+                labels.insert(value);
+            }
+            2 => {
+                clusters.insert(value);
+            }
+            _ => return Err(bdk_wallet::rusqlite::Error::InvalidQuery),
+        }
+    }
     let Some(state) = state else {
         return Ok(SourceProvenance::unknown());
-    };
-    let labels: BTreeSet<String> = {
-        let mut statement = db.prepare(
-            "SELECT label_id FROM groot_output_provenance WHERE outpoint = ?1 ORDER BY label_id",
-        )?;
-        let values = statement
-            .query_map(params![outpoint], |row| row.get::<_, String>(0))?
-            .collect::<Result<Vec<_>, _>>()?;
-        values.into_iter().collect()
-    };
-    let clusters: BTreeSet<String> = {
-        let mut statement = db.prepare(
-            "SELECT cluster_id FROM groot_output_clusters WHERE outpoint = ?1 ORDER BY cluster_id",
-        )?;
-        let values = statement
-            .query_map(params![outpoint], |row| row.get::<_, String>(0))?
-            .collect::<Result<Vec<_>, _>>()?;
-        values.into_iter().collect()
     };
     if clusters.is_empty() || (state != "unknown" && labels.is_empty()) {
         return Err(bdk_wallet::rusqlite::Error::InvalidQuery);
@@ -888,15 +896,23 @@ pub fn reconcile_wallet_outputs(
         }
     }
 
-    db.execute(
-        "UPDATE groot_output_lineage
-         SET address_reused = CASE WHEN address_idx IS NOT NULL AND (
-           SELECT COUNT(*) FROM groot_output_lineage sibling
-           WHERE sibling.address_idx = groot_output_lineage.address_idx
-         ) > 1 THEN 1 ELSE 0 END",
-        [],
-    )?;
+    refresh_address_reuse(db)?;
     Ok(())
+}
+
+// Group once instead of counting all siblings again for every stored output.
+// Historical rows remain included, and unchanged flags incur no row writes.
+const REFRESH_ADDRESS_REUSE_SQL: &str =
+    "WITH reused AS MATERIALIZED (
+       SELECT address_idx FROM groot_output_lineage
+       WHERE address_idx IS NOT NULL GROUP BY address_idx HAVING COUNT(*) > 1
+     )
+     UPDATE groot_output_lineage
+     SET address_reused = CASE WHEN address_idx IN (SELECT address_idx FROM reused) THEN 1 ELSE 0 END
+     WHERE address_reused <> CASE WHEN address_idx IN (SELECT address_idx FROM reused) THEN 1 ELSE 0 END";
+
+fn refresh_address_reuse(db: &Connection) -> Result<usize, bdk_wallet::rusqlite::Error> {
+    db.execute(REFRESH_ADDRESS_REUSE_SQL, [])
 }
 
 fn cluster_links(db: &Connection) -> Result<Vec<(String, String)>, bdk_wallet::rusqlite::Error> {
@@ -936,25 +952,21 @@ pub fn output_summary_with_context(
 ) -> Result<ProvenanceSummaryDto, bdk_wallet::rusqlite::Error> {
     let lineage = db
         .query_row(
-            "SELECT context, provenance_state, address_reused FROM groot_output_lineage WHERE outpoint = ?1",
+            "SELECT context, provenance_state, address_reused, source_txid FROM groot_output_lineage WHERE outpoint = ?1",
             params![outpoint],
             |row| {
                 Ok((
                     row.get::<_, String>(0)?,
                     row.get::<_, String>(1)?,
                     row.get::<_, bool>(2)?,
+                    row.get::<_, String>(3)?,
                 ))
             },
         )
         .optional()?;
-    let Some((context, state, address_reused)) = lineage else {
+    let Some((context, state, address_reused, source_transaction_id)) = lineage else {
         return Ok(ProvenanceSummaryDto::unknown("unknown"));
     };
-    let source_transaction_id = db.query_row(
-        "SELECT source_txid FROM groot_output_lineage WHERE outpoint = ?1",
-        params![outpoint],
-        |row| row.get::<_, String>(0),
-    )?;
     let labels = {
         let mut statement = db.prepare(
             "SELECT label.label_id, label.text, 'receive'

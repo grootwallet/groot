@@ -1,5 +1,27 @@
 # Testing and coverage methodology
 
+The 2026-09-08 application refresh adds exact font digest/license and local-only
+loading assertions, expanded semantic contrast pairs, every-route light/dark browser
+checks, font-failure fallback, compact translated layouts and keyboard/reduced-motion
+checks. These complement the existing complete flow suite; screenshots and browser
+fixtures do not certify native secret sheets or physical mobile webviews. See
+[`design-refresh-2026-09-08.md`](design-refresh-2026-09-08.md).
+
+The provenance-query follow-up adds a frozen three-query read oracle, 36
+state/label/cluster combinations, stale-data/cross-database and corruption checks,
+grouped-reuse equivalence, zero unchanged-row writes, rollback preservation and
+an EXPLAIN query-plan check against per-output correlated scans. Existing funded
+history/replacement/reorg tests remain required. Synthetic snapshot/Activity
+statement budgets are 20N+10 and 13N+10 respectively; timing is not a CI threshold.
+Evidence: [`provenance-query-follow-up-2026-09-08.md`](provenance-query-follow-up-2026-09-08.md).
+
+The 2026-09-08 navigation regressions add deferred mocked-IPC notification races,
+cross-wallet colliding-row and unlock-session native tests, bounded native history
+cursor/filter/order tests, and browser pagination/retry, independent Overview
+details, and early Send-identity scenarios at desktop/mobile sizes. See
+[`navigation-performance-2026-09-08.md`](navigation-performance-2026-09-08.md) for
+exact execution evidence and the distinction between paged IPC and full-graph work.
+
 Groot uses two independent release measures:
 
 1. **Flow coverage:** every documented user flow has executable evidence. The target is 100%; a flow without evidence blocks release.

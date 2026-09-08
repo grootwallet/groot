@@ -63,7 +63,7 @@
     flex: 0 0 auto;
     padding: 3px;
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: var(--radius-control);
     background: var(--surface-inset);
   }
   .language-toggle button {
