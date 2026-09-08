@@ -1,4 +1,4 @@
-import type { WalletProfilesPort, WalletSnapshotPort } from './contracts';
+import type { WalletProfile, WalletSnapshotPort } from './contracts';
 
 export type LiveSyncController = {
   start(): void;
@@ -8,8 +8,7 @@ export type LiveSyncController = {
   runNow(): Promise<void>;
 };
 
-type LiveSyncPort = Pick<WalletProfilesPort, 'exists' | 'profiles'> &
-  Pick<WalletSnapshotPort, 'sync' | 'cancelSync' | 'syncMultisig'>;
+type LiveSyncPort = Pick<WalletSnapshotPort, 'sync' | 'cancelSync' | 'syncMultisig'>;
 
 /**
  * Runs one bounded wallet sync at a time. Repeated wake-ups are coalesced so a
@@ -17,6 +16,7 @@ type LiveSyncPort = Pick<WalletProfilesPort, 'exists' | 'profiles'> &
  */
 export function createLiveSync(
   wallet: LiveSyncPort,
+  selectedWalletKind: () => WalletProfile['kind'] | null,
   intervalMs = 10_000,
   onError: (cause: unknown) => void = () => undefined
 ): LiveSyncController {
@@ -38,11 +38,9 @@ export function createLiveSync(
 
   const perform = async (): Promise<boolean> => {
     try {
-      if (!(await wallet.exists())) return true;
-      const registry = await wallet.profiles();
-      const selected = registry.wallets.find((profile) => profile.id === registry.selectedWalletId);
-      if (!selected) return true;
-      if (selected.kind === 'multisig') await wallet.syncMultisig(true);
+      const kind = selectedWalletKind();
+      if (!kind) return true;
+      if (kind === 'multisig') await wallet.syncMultisig(true);
       else await wallet.sync(true);
       return true;
     } catch (cause) {

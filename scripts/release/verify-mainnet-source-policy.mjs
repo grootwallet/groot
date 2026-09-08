@@ -102,7 +102,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src/lib/components/AppShell.svelte',
-    '5000f1e339495f3eea7fa80ea0bb866010490be7ba531efab54079cd482f88b7'
+    'af279b41331aa308add6c40039147c7dfcb1dcbccbc0ee2fc0c4e73752dff7d5'
   ],
   [
     'src/routes/diagnostics/+page.svelte',

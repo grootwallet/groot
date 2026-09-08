@@ -480,4 +480,13 @@ session-expiry behavior are unchanged; mocked IPC does not establish native
 end-to-end conformance. No persisted format, migration, dependency, BIP support,
 or BIP evidence changes are involved.
 
+## Foreground scheduler maintenance
+
+The ten-second live-sync scheduler now consumes the selected wallet kind already
+owned by `AppShell`, eliminating the preceding `wallet_exists` and
+`wallet_profiles` calls from each cycle. The invoked Rust sync command remains
+authoritative for current selection, session, network, and wallet-state checks.
+No profile means no scheduled native work. This changes no persisted format,
+public DTO, stable error, dependency, BIP behavior, or user-visible flow.
+
 Update this table in the same change whenever a capability crosses a boundary.

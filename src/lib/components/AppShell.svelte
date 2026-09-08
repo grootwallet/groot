@@ -424,12 +424,17 @@
           profile.id === event.profile.id ? event.profile : profile
         );
     });
-    liveSync = createLiveSync(walletService, 10_000, (cause) => {
-      if (cause instanceof WalletError && cause.code === 'wallet_locked') {
-        liveSync?.stop();
-        void goto('/unlock');
+    liveSync = createLiveSync(
+      walletService,
+      () => selectedProfile?.kind ?? null,
+      10_000,
+      (cause) => {
+        if (cause instanceof WalletError && cause.code === 'wallet_locked') {
+          liveSync?.stop();
+          void goto('/unlock');
+        }
       }
-    });
+    );
     sessionMonitor = createSessionMonitor(
       walletService,
       async (selection) => {

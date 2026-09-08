@@ -158,3 +158,26 @@ payment drafts, node settings, and secret envelopes. There is no schema migratio
 UI change, dependency change, or release-policy change. BIP impact: none; the
 bounded BIP174/UR PSBT transport and existing interoperability evidence are
 unchanged.
+
+## 2026-09-08 live-sync read follow-up
+
+Measurement of the ten-second foreground scheduler found two avoidable native
+reads before every attempted sync: `wallet_exists` and `wallet_profiles`. The
+shell already owns the selected profile and updates that state only after Rust
+commits selection, so those reads repeated registry work without adding an
+authority check. At a steady ten-second cadence they accounted for up to 720
+extra IPC calls per active hour.
+
+The scheduler now receives only the selected profile kind from its `AppShell`
+owner and skips work when no profile is selected. The selected native sync
+command remains authoritative: Rust still resolves the current selected profile,
+requires its live session, validates its protected network setup, serializes the
+wallet operation, and emits the wallet-ID-bound snapshot. Selection still stops
+and cancels the old scheduler before the shell exposes the newly committed native
+selection. Tests retain single-key/multisig routing, no-selection behavior,
+failure backoff, cancellation, coalescing, and restart deferral.
+
+Compatibility is exact for every persisted format and public contract. There is
+no schema migration, UI change, dependency change, native command removal, or
+BIP impact. This reduces periodic coordination work and makes scheduler ownership
+explicit; it does not move wallet authority into the webview.
