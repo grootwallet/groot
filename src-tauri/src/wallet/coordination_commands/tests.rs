@@ -17,7 +17,8 @@ fn staging_pin_attempts_are_throttled_per_session_and_reset_on_success() {
     let state = AppState::default();
     let session = Uuid::new_v4();
     let other = Uuid::new_v4();
-    let wrong: Result<Vec<u8>, SecureStoreError> = Err(SecureStoreError::InvalidCredential);
+    let wrong: Result<Zeroizing<Vec<u8>>, SecureStoreError> =
+        Err(SecureStoreError::InvalidCredential);
 
     for attempt in 0..4 {
         check_staging_auth_throttle(&state, session).unwrap_or_else(|error| {
@@ -31,7 +32,7 @@ fn staging_pin_attempts_are_throttled_per_session_and_reset_on_success() {
     // Sessions are independent: another pairing session is unaffected.
     check_staging_auth_throttle(&state, other).unwrap();
 
-    let ok: Result<Vec<u8>, SecureStoreError> = Ok(vec![1]);
+    let ok: Result<Zeroizing<Vec<u8>>, SecureStoreError> = Ok(Zeroizing::new(vec![1]));
     record_staging_attempt(&state, session, &ok).unwrap();
     check_staging_auth_throttle(&state, session).unwrap();
 }
@@ -41,7 +42,7 @@ fn staging_pin_corruption_is_not_a_guessing_oracle() {
     let state = AppState::default();
     let session = Uuid::new_v4();
     for _ in 0..10 {
-        let corrupt: Result<Vec<u8>, SecureStoreError> = Err(SecureStoreError::Corrupt);
+        let corrupt: Result<Zeroizing<Vec<u8>>, SecureStoreError> = Err(SecureStoreError::Corrupt);
         record_staging_attempt(&state, session, &corrupt).unwrap();
         check_staging_auth_throttle(&state, session).unwrap();
     }

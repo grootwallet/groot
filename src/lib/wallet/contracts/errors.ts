@@ -63,6 +63,7 @@ export const WALLET_ERROR_CODES = [
   'pairing_session_not_found',
   'pairing_replay',
   'pairing_incomplete',
+  'pairing_in_progress',
   'invalid_node_config',
   'invalid_scan_settings',
   'invalid_payjoin_uri',

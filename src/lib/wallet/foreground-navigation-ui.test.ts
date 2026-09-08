@@ -96,9 +96,7 @@ describe('foreground wallet navigation', () => {
     expect(overview).toContain('if (manual) await walletShell.pauseAutomaticSync()');
     expect(overview).toContain('if (manual) walletShell.resumeAutomaticSync()');
     expect(overview).toContain('void sync(false)');
-    expect(overview).toContain(
-      'onclick={() => (initialHistoryRequired ? openInitialScan() : sync(true))}'
-    );
+    expect(overview).toContain('onclick={nodeReady ? openInitialScan : undefined}');
     expect(overview).toContain(
       "{#if manualSyncDetailsVisible && syncStatus && (syncInProgress || syncStatus.state === 'failed')}"
     );
@@ -166,7 +164,9 @@ describe('foreground wallet navigation', () => {
   });
 
   it('hides experimental compact filters on mobile and rejects hidden native entry points', () => {
-    expect(settings).toContain("syncSourceType = mobileRuntime ? 'bitcoin_core' : syncSource.type");
+    expect(settings).toContain(
+      "mobileRuntime || defaultConfig.network === 'mainnet' ? 'bitcoin_core' : syncSource.type"
+    );
     expect(settings).toContain('{#if !mobileRuntime}<button');
     expect(settings).toContain('Compact filters · Experimental');
     expect(settings).toContain("!mobileRuntime || source.syncSource.type === 'bitcoin_core'");

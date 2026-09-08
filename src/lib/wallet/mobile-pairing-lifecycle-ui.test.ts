@@ -133,7 +133,7 @@ describe('mobile pairing lifecycle UI', () => {
     expect(desktopRouteSource).toMatch(/open=\{mobilePairOpen\}[\s\S]*?dismissible=\{false\}/);
     expect(desktopRouteSource).toContain("translate($locale, 'Cancel pairing')");
     expect(modalSource).toContain('if (dismissible)');
-    expect(modalSource).toContain('showAttention();');
+    expect(modalSource).toContain('activateAttention();');
   });
 
   it('retries camera permission and centers non-zooming phone inputs in the visible viewport', () => {

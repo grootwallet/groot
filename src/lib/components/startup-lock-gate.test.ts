@@ -35,7 +35,7 @@ describe('startup wallet lock gate', () => {
 
   it('shows native build identity and keeps wallet creation reachable while locked', () => {
     expect(shell).toContain('runtimeIdentity?.network ?? defaultConfig.network');
-    expect(shell).toContain("'Groot v{version} · {commit}'");
+    expect(buildIdentity).toContain("'Groot v{version} · {commit}'");
     expect(unlockRoute).toContain('href="/welcome?add=1"');
     expect(unlockRoute).toContain("translate($locale, 'Add another wallet')");
     const lockedCardClose = unlockRoute.indexOf('</main>');
