@@ -649,9 +649,9 @@
                   ><FlaskConical size={15} /><span
                     ><strong>{translate($locale, 'Recovery policy lab')}</strong><small
                       >{translate($locale, 'Explore guided Miniscript paths')}</small
-                  ></span
-                ></a
-              >{/if}
+                    ></span
+                  ></a
+                >{/if}
             </div>{/if}
         </div>
         <Button variant="secondary" href="/multisig/receive">{translate($locale, 'Receive')}</Button

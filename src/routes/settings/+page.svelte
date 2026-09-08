@@ -1775,8 +1775,8 @@
         class:active={syncSourceType === 'bitcoin_core'}
         onclick={() => (syncSourceType = 'bitcoin_core')}>Bitcoin Core</button
       >{#if !mobileRuntime}<button
-        class:active={syncSourceType === 'compact_filters'}
-        onclick={() => (syncSourceType = 'compact_filters')}
+          class:active={syncSourceType === 'compact_filters'}
+          onclick={() => (syncSourceType = 'compact_filters')}
           >{translate($locale, 'Compact filters · Experimental')}</button
         >{/if}
     </div>{/if}

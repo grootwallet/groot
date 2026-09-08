@@ -8,7 +8,7 @@ if [[ "${1:-}" == "--" ]]; then
 fi
 
 if [[ "$#" -ne 1 || -z "${1}" || "${1}" == -* ]]; then
-  echo "Usage: pnpm dev:native:ios:regtest -- <simulator-or-device-name>" >&2
+  echo "Usage: bash scripts/dev/tauri-ios-regtest.sh <simulator-or-device-name>" >&2
   echo "An explicit target is required so Tauri cannot select a connected iPhone by accident." >&2
   exit 1
 fi

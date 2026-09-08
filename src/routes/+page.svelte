@@ -416,9 +416,7 @@
       if (syncSource.type === 'bitcoin_core' && !snapshot?.syncedAt) {
         await loadRecoveryState();
       }
-      const resumeUnlockSync =
-        selectedProfile &&
-        walletShell.consumeUnlockSync(selectedProfile.id);
+      const resumeUnlockSync = selectedProfile && walletShell.consumeUnlockSync(selectedProfile.id);
       if (
         !inheritedSyncObserved &&
         ((syncSource.type === 'compact_filters' && !mobileRuntime) || resumeUnlockSync)
