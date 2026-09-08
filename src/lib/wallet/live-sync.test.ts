@@ -2,6 +2,31 @@ import { describe, expect, it, vi } from 'vitest';
 import { createLiveSync } from './live-sync';
 
 describe('live wallet sync', () => {
+  it('ignores an old wallet failure after selection restarts the scheduler', async () => {
+    vi.useFakeTimers();
+    let reject!: (cause: unknown) => void;
+    const wallet = {
+      sync: vi
+        .fn()
+        .mockImplementationOnce(() => new Promise<void>((_, fail) => (reject = fail)))
+        .mockResolvedValue(undefined),
+      syncMultisig: vi.fn(),
+      cancelSync: vi.fn().mockResolvedValue(undefined)
+    };
+    const onError = vi.fn();
+    const controller = createLiveSync(wallet, () => 'single_key', 1_000, onError);
+    controller.start();
+    const oldWallet = controller.runNow();
+    controller.stop();
+    controller.restart();
+    reject({ code: 'wallet_locked' });
+    await oldWallet;
+    expect(onError).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(wallet.sync).toHaveBeenCalledTimes(2);
+    controller.stop();
+    vi.useRealTimers();
+  });
   it('syncs the selected single-key or multisig wallet', async () => {
     for (const kind of ['single_key', 'multisig'] as const) {
       const wallet = {

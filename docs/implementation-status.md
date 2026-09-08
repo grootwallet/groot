@@ -482,6 +482,15 @@ or BIP evidence changes are involved.
 
 ## Foreground scheduler maintenance
 
+The follow-up lifecycle assurance pass rejects session responses that settle
+after monitor stop/restart or while hardware review pauses expiry handling.
+Obsolete sync failures also cannot redirect the next wallet or alter its retry
+cadence. Deferred-promise frontend tests reproduce the old behavior and verify
+the fix. The synthetic snapshot benchmark and its confirmed quadratic SQL work
+are recorded in `assurance-baseline-2026-09-08.md`; provenance optimization remains
+a separate implementation with equivalence tests. No persisted format or BIP
+behavior changes.
+
 The ten-second live-sync scheduler now consumes the selected wallet kind already
 owned by `AppShell`, eliminating the preceding `wallet_exists` and
 `wallet_profiles` calls from each cycle. The invoked Rust sync command remains

@@ -1,5 +1,10 @@
 # Code-quality maintenance plan — 2026-09-06
 
+Latest measured follow-up: [session lifecycle and snapshot baseline](assurance-baseline-2026-09-08.md).
+Two stale-response lifecycle defects are fixed with frontend regressions.
+Snapshot provenance reconciliation has confirmed quadratic SQL growth and is
+the next performance priority; it requires dependency-order equivalence tests.
+
 ## 2026-09-08 current-source follow-up
 
 Inspection at local `main` commit `87c775e`, after fetching `origin/main` at

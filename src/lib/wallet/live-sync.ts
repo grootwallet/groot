@@ -24,6 +24,7 @@ export function createLiveSync(
   let timer: ReturnType<typeof setTimeout> | undefined;
   let active: Promise<boolean> | undefined;
   let consecutiveFailures = 0;
+  let generation = 0;
 
   const clearTimer = () => {
     if (timer !== undefined) clearTimeout(timer);
@@ -36,7 +37,7 @@ export function createLiveSync(
     if (enabled) timer = setTimeout(() => void runNow(), intervalMs * backoff);
   };
 
-  const perform = async (): Promise<boolean> => {
+  const perform = async (startedGeneration: number): Promise<boolean> => {
     try {
       const kind = selectedWalletKind();
       if (!kind) return true;
@@ -44,6 +45,7 @@ export function createLiveSync(
       else await wallet.sync(true);
       return true;
     } catch (cause) {
+      if (!enabled || startedGeneration !== generation) return true;
       if (
         typeof cause === 'object' &&
         cause !== null &&
@@ -68,10 +70,13 @@ export function createLiveSync(
       await active;
       return;
     }
-    const pending = perform();
+    const startedGeneration = generation;
+    const pending = perform(startedGeneration);
     active = pending;
     try {
-      consecutiveFailures = (await pending) ? 0 : consecutiveFailures + 1;
+      const succeeded = await pending;
+      if (startedGeneration === generation)
+        consecutiveFailures = succeeded ? 0 : consecutiveFailures + 1;
     } finally {
       if (active === pending) active = undefined;
       if (enabled) schedule();
@@ -87,6 +92,7 @@ export function createLiveSync(
       if (!active) schedule();
     },
     restart() {
+      generation += 1;
       enabled = true;
       consecutiveFailures = 0;
       clearTimer();
@@ -95,11 +101,13 @@ export function createLiveSync(
       if (!active) schedule();
     },
     stop() {
+      generation += 1;
       enabled = false;
       clearTimer();
       if (active) void wallet.cancelSync().catch(() => undefined);
     },
     async stopAndWait() {
+      generation += 1;
       enabled = false;
       clearTimer();
       const pending = active;

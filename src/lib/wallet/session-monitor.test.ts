@@ -18,6 +18,34 @@ function selection(unlocked: boolean): WalletSelection {
 }
 
 describe('wallet session monitor', () => {
+  it.each(['stop', 'restart', 'review'] as const)(
+    'discards a pending expiry response after %s',
+    async (transition) => {
+      let resolve!: (value: WalletSelection) => void;
+      let paused = false;
+      const wallet = {
+        session: vi
+          .fn()
+          .mockImplementationOnce(() => new Promise<WalletSelection>((done) => (resolve = done)))
+          .mockResolvedValue(selection(false))
+      };
+      const onLocked = vi.fn();
+      const monitor = createSessionMonitor(wallet, onLocked, () => paused);
+      monitor.start();
+      const pending = monitor.runNow();
+      if (transition === 'review') paused = true;
+      else monitor.stop();
+      if (transition === 'restart') monitor.start();
+      resolve(selection(false));
+      await pending;
+      expect(onLocked).not.toHaveBeenCalled();
+      paused = false;
+      monitor.start();
+      await monitor.runNow();
+      expect(onLocked).toHaveBeenCalledOnce();
+      monitor.stop();
+    }
+  );
   it('routes an expired session even when network sync is not running', async () => {
     vi.useFakeTimers();
     const wallet = { session: vi.fn().mockResolvedValue(selection(false)) };
