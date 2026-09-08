@@ -29,7 +29,6 @@ import type {
   WalletProfileCompatibility,
   NodeStatus,
   NetworkSetupSource,
-  PayjoinUriInspection,
   PaymentRequestInspection,
   RecoveryScanSettings,
   RecoveryScanStatus,
@@ -83,7 +82,6 @@ export interface WalletNetworkPort {
     password: string,
     purpose: 'open_existing_wallet' | 'create_new_wallet'
   ): Promise<NodeStatus>;
-  clearMainnetCoreAdmission(): Promise<void>;
   networkSetupSources(): Promise<NetworkSetupSource[]>;
   adoptNetworkSetup(sourceWalletId: string, credential: string): Promise<NodeStatus>;
   nodeConfig(): Promise<CoreNodeConfig>;
@@ -92,7 +90,6 @@ export interface WalletNetworkPort {
   syncSource(): Promise<WalletSyncSource>;
   syncStatus(): Promise<WalletSyncStatus | null>;
   saveSyncSource(source: WalletSyncSource, credential: string): Promise<WalletSyncSource>;
-  inspectPayjoinUri(value: string): Promise<PayjoinUriInspection>;
   inspectPaymentRequest(value: string): Promise<PaymentRequestInspection>;
   recoveryScanSettings(): Promise<RecoveryScanSettings>;
   saveRecoveryScanSettings(

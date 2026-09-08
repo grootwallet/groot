@@ -1025,12 +1025,6 @@ pub async fn mainnet_core_admit(
     .map_err(internal)?
 }
 
-#[tauri::command]
-pub fn mainnet_core_admission_clear(state: State<'_, AppState>) -> ApiResult<()> {
-    let _operation = operation_guard(&state)?;
-    clear_mainnet_node_admission(&state)
-}
-
 pub(super) fn persist_mainnet_node_admission_for_new_profile(
     app: &AppHandle,
     state: &State<'_, AppState>,

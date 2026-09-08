@@ -368,7 +368,6 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     this._nodeConfig = { ...config, backend: { ...config.backend } };
     return this.testNodeConnection();
   }
-  async clearMainnetCoreAdmission() {}
   async networkSetupSources() {
     if (
       typeof location !== 'undefined' &&
@@ -434,12 +433,6 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       throw new WalletError('invalid_credential', 'Incorrect app PIN.');
     this._syncSource = structuredClone(source);
     return structuredClone(this._syncSource);
-  }
-  async inspectPayjoinUri(_value: string): Promise<import('./contracts').PayjoinUriInspection> {
-    throw new WalletError(
-      'invalid_payjoin_uri',
-      'The browser fixture does not run Payjoin protocol parsing.'
-    );
   }
   async inspectPaymentRequest(
     _value: string

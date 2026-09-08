@@ -1,5 +1,17 @@
 # Implementation status
 
+The 2026-09-08 maintenance follow-up removes two registered native commands with no
+current caller: the legacy Payjoin-specific inspection wrapper superseded in Send by
+the general bounded payment-request parser, and a standalone mainnet-admission clear
+wrapper whose cleanup remains owned by every relevant lifecycle path. The active
+V2-only payment-request parser and its Payjoin detection test remain; its dead
+specialized DTO/parser and duplicate tests are removed, and no Payjoin transport or
+session is enabled. Export filenames now share one private validator for the unchanged length,
+path, NUL, trimming, and allowlisted-extension rules. Registered native commands
+decrease from 133 to 131. Persisted formats, dependencies, UI behavior, wallet and
+network policy, transaction behavior, and BIP support/evidence are unchanged; no
+migration is required.
+
 The 2026-09-06 contract-maintenance follow-up preserves fourteen existing native
 error codes that previously normalized to `internal_error` in the frontend.
 Source-contract and mocked-IPC adapter tests cover the allowlist, including the

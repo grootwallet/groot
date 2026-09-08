@@ -123,14 +123,6 @@ export type WalletSyncStatus = {
   failureCode: string | null;
   updatedAt: number;
 };
-export type PayjoinUriInspection = {
-  address: string;
-  amount: number | null;
-  label: string | null;
-  message: string | null;
-  endpoint: string;
-  version: 'v2';
-};
 export type PaymentRequestInspection = {
   address: string;
   amountSats: string | null;

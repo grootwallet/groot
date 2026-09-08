@@ -1017,14 +1017,6 @@ pub struct NodeStatusDto {
     block_filter_index: &'static str,
 }
 
-#[tauri::command]
-pub fn payjoin_uri_inspect(
-    value: String,
-) -> ApiResult<crate::payjoin_support::PayjoinUriInspection> {
-    crate::payjoin_support::inspect_uri(&value, NETWORK)
-        .map_err(|error| api_error("invalid_payjoin_uri", error))
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RecoveryScanSettingsDto {

@@ -51,52 +51,39 @@ pub(super) struct SavedFileReveal {
     pub(super) saved_at: Instant,
 }
 
-pub(super) fn validate_public_backup_filename(value: &str) -> ApiResult<&str> {
+fn validate_export_filename<'a>(
+    value: &'a str,
+    extensions: &[&str],
+    message: &'static str,
+) -> ApiResult<&'a str> {
     let trimmed = value.trim();
-    let valid_extension =
-        trimmed.ends_with(".bsms") || trimmed.ends_with(".json") || trimmed.ends_with(".txt");
     if trimmed.is_empty()
         || trimmed.len() > 128
         || trimmed.contains(['/', '\\', '\0'])
-        || !valid_extension
+        || !extensions
+            .iter()
+            .any(|extension| trimmed.ends_with(extension))
     {
-        return Err(api_error(
-            "invalid_backup",
-            "Choose a valid .bsms, .json, or .txt backup name.",
-        ));
+        return Err(api_error("invalid_backup", message));
     }
     Ok(trimmed)
+}
+
+pub(super) fn validate_public_backup_filename(value: &str) -> ApiResult<&str> {
+    validate_export_filename(
+        value,
+        &[".bsms", ".json", ".txt"],
+        "Choose a valid .bsms, .json, or .txt backup name.",
+    )
 }
 
 #[cfg(any(target_os = "macos", test))]
 pub(super) fn validate_public_backup_pdf_filename(value: &str) -> ApiResult<&str> {
-    let trimmed = value.trim();
-    if trimmed.is_empty()
-        || trimmed.len() > 128
-        || trimmed.contains(['/', '\\', '\0'])
-        || !trimmed.ends_with(".pdf")
-    {
-        return Err(api_error(
-            "invalid_backup",
-            "Choose a valid .pdf backup name.",
-        ));
-    }
-    Ok(trimmed)
+    validate_export_filename(value, &[".pdf"], "Choose a valid .pdf backup name.")
 }
 
 pub(super) fn validate_psbt_filename(value: &str) -> ApiResult<&str> {
-    let trimmed = value.trim();
-    if trimmed.is_empty()
-        || trimmed.len() > 128
-        || trimmed.contains(['/', '\\', '\0'])
-        || !trimmed.ends_with(".psbt")
-    {
-        return Err(api_error(
-            "invalid_backup",
-            "Choose a valid .psbt filename.",
-        ));
-    }
-    Ok(trimmed)
+    validate_export_filename(value, &[".psbt"], "Choose a valid .psbt filename.")
 }
 
 pub(super) fn write_public_export(path: &Path, content: &[u8]) -> ApiResult<()> {

@@ -202,6 +202,13 @@ transaction construction; no transaction, fee, descriptor, or protocol behavior 
 
 ## Maintenance rule
 
+The 2026-09-08 command-surface and export-validation maintenance has no BIP impact.
+The active bounded BIP21 payment-request parser retains its V2-only Payjoin detection
+and no-fallback test; an uncalled Payjoin-specific IPC wrapper and its now-dead
+specialized parser, DTO, error enum, and duplicate tests are removed. Sharing the
+unchanged export filename rules does not alter BSMS, PSBT, descriptor, backup,
+transaction, recovery, or interoperability behavior or evidence.
+
 The v0.4.92 sanitized diagnostic event log has no BIP impact. It records only
 allowlisted operation categories, outcomes, build/platform context, and coarse sync
 metadata; it does not change descriptors, PSBTs, transaction construction,

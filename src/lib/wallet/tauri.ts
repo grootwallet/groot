@@ -42,7 +42,6 @@ import type {
 import type {
   CoreNodeConfig,
   NodeStatus,
-  PayjoinUriInspection,
   PaymentRequestInspection,
   WalletSyncSource,
   WalletSyncStatus
@@ -242,9 +241,6 @@ export class TauriWalletAdapter implements WalletPort {
   ) {
     return command<NodeStatus>('mainnet_core_admit', { config, password, purpose });
   }
-  clearMainnetCoreAdmission() {
-    return command<void>('mainnet_core_admission_clear');
-  }
   networkSetupSources() {
     return command<import('./contracts').NetworkSetupSource[]>('network_setup_sources');
   }
@@ -265,9 +261,6 @@ export class TauriWalletAdapter implements WalletPort {
   }
   saveSyncSource(source: WalletSyncSource, credential: string) {
     return command<WalletSyncSource>('wallet_sync_source_save', { source, credential });
-  }
-  inspectPayjoinUri(value: string) {
-    return command<PayjoinUriInspection>('payjoin_uri_inspect', { value });
   }
   inspectPaymentRequest(value: string) {
     return command<PaymentRequestInspection>('payment_request_inspect', { value });

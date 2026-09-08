@@ -1,5 +1,33 @@
 # Code-quality maintenance plan — 2026-09-06
 
+## 2026-09-08 current-source follow-up
+
+Inspection at local `main` commit `87c775e`, after fetching `origin/main` at
+`fc02ed1`, found 133 registered native commands. Every registration had an adapter
+mapping, but `payjoin_uri_inspect` and `mainnet_core_admission_clear` had no product,
+route, component, test-fixture, or script caller. The active Send flow uses the
+bounded `payment_request_inspect` command and its V2-only Payjoin URI detection;
+the now-dead specialized parser, DTO, error enum, and three duplicate tests are
+removed. Mainnet admission is already cleared
+by onboarding cancellation, failed admission, wallet creation/recovery cleanup,
+unlock, and session locking. Removing the two unused IPC wrappers reduces the
+registered command surface to 131 and removes their unused frontend contract,
+adapter, fixture, DTO, and error-code branches without changing either underlying
+policy.
+
+The same pass found no safe dependency or supported feature removal. All five
+frontend runtime dependencies and the Rust dependency families remain tied to
+current product or ADR-owned capabilities. Three export filename validators did
+repeat the same length, path-separator, NUL, trimming, and extension checks; one
+private pure validator now owns those common rules while the existing public-backup,
+PDF, and PSBT wrappers retain their exact extensions and stable messages.
+
+Compatibility remains exact for all persisted profiles, wallets, proposals,
+backups, registries, payment drafts, diagnostics, and secrets. No migration, schema,
+network behavior, transaction behavior, dependency, UI, or BIP support/evidence
+change is introduced. The continuity-policy and cross-platform-coordination branches
+remain separate; this pass does not merge or rewrite either line.
+
 ## Baseline
 
 Read-only branch inspection followed a fresh origin fetch. This maintenance branch

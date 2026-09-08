@@ -11,7 +11,6 @@ const remediationErrorCodes = [
   'coin_unavailable',
   'fee_rate_too_low',
   'invalid_signature',
-  'invalid_payjoin_uri',
   'invalid_payment_request',
   'invalid_scan_settings',
   'hardware_timeout',
