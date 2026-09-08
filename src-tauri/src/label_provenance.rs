@@ -783,78 +783,106 @@ pub fn reconcile_wallet_outputs(
     db: &Connection,
     created_at: u64,
 ) -> Result<(), bdk_wallet::rusqlite::Error> {
-    let transaction_count = wallet.transactions().count();
-    for _ in 0..transaction_count.saturating_add(1) {
-        for canonical in wallet.transactions() {
-            let transaction = canonical.tx_node.tx.as_ref();
-            let txid = transaction.compute_txid().to_string();
-            let input_sources = transaction
-                .input
-                .iter()
-                .map(|input| source_provenance(db, &input.previous_output.to_string()))
-                .collect::<Result<Vec<_>, _>>()?;
-            let derived = derive_change_provenance(&input_sources);
-            record_cluster_links(db, &derived.clusters, &txid, created_at)?;
-            for input in &transaction.input {
-                db.execute(
-                    "INSERT OR IGNORE INTO groot_transaction_inputs(txid, outpoint) VALUES(?1, ?2)",
-                    params![txid, input.previous_output.to_string()],
+    let transactions = wallet.transactions().collect::<Vec<_>>();
+    let mut dependents = HashMap::<_, BTreeSet<usize>>::new();
+    for (index, canonical) in transactions.iter().enumerate() {
+        for input in &canonical.tx_node.tx.input {
+            dependents
+                .entry(input.previous_output.txid)
+                .or_default()
+                .insert(index);
+        }
+    }
+    // Preserve the old pass/index order, including append-only cluster evidence
+    // produced before a parent's provenance settles. Revisit only consumers of
+    // processed parents, and skip materialization when their sources are unchanged.
+    // All caches are scoped to this reconciliation; every call visits every tx.
+    let mut pending = (0..transactions.len())
+        .map(|index| (0, index))
+        .collect::<BTreeSet<_>>();
+    let mut previous_sources = vec![None; transactions.len()];
+    while let Some((pass, index)) = pending.pop_first() {
+        let canonical = &transactions[index];
+        let transaction = canonical.tx_node.tx.as_ref();
+        let txid = transaction.compute_txid().to_string();
+        let input_sources = transaction
+            .input
+            .iter()
+            .map(|input| source_provenance(db, &input.previous_output.to_string()))
+            .collect::<Result<Vec<_>, _>>()?;
+        if previous_sources[index].as_ref() == Some(&input_sources) {
+            continue;
+        }
+        let derived = derive_change_provenance(&input_sources);
+        previous_sources[index] = Some(input_sources);
+        record_cluster_links(db, &derived.clusters, &txid, created_at)?;
+        for input in &transaction.input {
+            db.execute(
+                "INSERT OR IGNORE INTO groot_transaction_inputs(txid, outpoint) VALUES(?1, ?2)",
+                params![txid, input.previous_output.to_string()],
+            )?;
+        }
+
+        for (vout, output) in transaction.output.iter().enumerate() {
+            let Some((keychain, derivation_index)) =
+                wallet.derivation_of_spk(output.script_pubkey.clone())
+            else {
+                continue;
+            };
+            let outpoint = OutPoint {
+                txid: transaction.compute_txid(),
+                vout: vout as u32,
+            }
+            .to_string();
+            if keychain == KeychainKind::External {
+                let labels = labels_for_subject(db, "address", &derivation_index.to_string())?;
+                let provenance = if labels.is_empty() {
+                    DerivedProvenance {
+                        labels: BTreeSet::new(),
+                        clusters: BTreeSet::new(),
+                        state: ProvenanceState::Unknown,
+                    }
+                } else {
+                    DerivedProvenance {
+                        labels: labels.into_iter().map(|label| label.id).collect(),
+                        clusters: BTreeSet::new(),
+                        state: ProvenanceState::Known,
+                    }
+                };
+                let receive_cluster =
+                    BTreeSet::from([format!("cluster-address-{derivation_index}")]);
+                materialize_output(
+                    db,
+                    OutputMaterialization {
+                        outpoint: &outpoint,
+                        txid: &txid,
+                        context: "received",
+                        address_idx: Some(derivation_index),
+                        provenance: &provenance,
+                        clusters: &receive_cluster,
+                        created_at,
+                    },
+                )?;
+            } else {
+                materialize_output(
+                    db,
+                    OutputMaterialization {
+                        outpoint: &outpoint,
+                        txid: &txid,
+                        context: "change",
+                        address_idx: None,
+                        provenance: &derived,
+                        clusters: &derived.clusters,
+                        created_at,
+                    },
                 )?;
             }
-
-            for (vout, output) in transaction.output.iter().enumerate() {
-                let Some((keychain, derivation_index)) =
-                    wallet.derivation_of_spk(output.script_pubkey.clone())
-                else {
-                    continue;
-                };
-                let outpoint = OutPoint {
-                    txid: transaction.compute_txid(),
-                    vout: vout as u32,
-                }
-                .to_string();
-                if keychain == KeychainKind::External {
-                    let labels = labels_for_subject(db, "address", &derivation_index.to_string())?;
-                    let provenance = if labels.is_empty() {
-                        DerivedProvenance {
-                            labels: BTreeSet::new(),
-                            clusters: BTreeSet::new(),
-                            state: ProvenanceState::Unknown,
-                        }
-                    } else {
-                        DerivedProvenance {
-                            labels: labels.into_iter().map(|label| label.id).collect(),
-                            clusters: BTreeSet::new(),
-                            state: ProvenanceState::Known,
-                        }
-                    };
-                    let receive_cluster =
-                        BTreeSet::from([format!("cluster-address-{derivation_index}")]);
-                    materialize_output(
-                        db,
-                        OutputMaterialization {
-                            outpoint: &outpoint,
-                            txid: &txid,
-                            context: "received",
-                            address_idx: Some(derivation_index),
-                            provenance: &provenance,
-                            clusters: &receive_cluster,
-                            created_at,
-                        },
-                    )?;
-                } else {
-                    materialize_output(
-                        db,
-                        OutputMaterialization {
-                            outpoint: &outpoint,
-                            txid: &txid,
-                            context: "change",
-                            address_idx: None,
-                            provenance: &derived,
-                            clusters: &derived.clusters,
-                            created_at,
-                        },
-                    )?;
+        }
+        if let Some(children) = dependents.get(&canonical.tx_node.txid) {
+            for &child in children {
+                let next_pass = pass + usize::from(child <= index);
+                if next_pass <= transactions.len() {
+                    pending.insert((next_pass, child));
                 }
             }
         }
@@ -1141,6 +1169,10 @@ pub fn connected_cluster_count(
         .collect::<HashSet<_>>()
         .len()
 }
+
+#[cfg(test)]
+#[path = "label_provenance/tests.rs"]
+mod equivalence_tests;
 
 #[cfg(test)]
 mod tests {

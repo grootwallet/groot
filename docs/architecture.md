@@ -182,6 +182,13 @@ Routes and reusable components may not import concrete wallet adapters, invoke T
 
 ## Sync and notifications
 
+Snapshot provenance reconciliation uses a call-scoped dependency work queue.
+Every canonical transaction is visited; further propagation follows consumers
+of processed parents and skips unchanged sources. Original pass/index ordering
+preserves append-only intermediate cluster evidence. The cache does not survive
+the operation, so restart, new labels, and chain changes are re-evaluated from
+the authoritative wallet and database without a persisted cache or migration.
+
 Frontend background controllers bind pending work to a lifecycle generation.
 Stopping a session monitor invalidates its pending reply, and expiry delivery
 rechecks pause state after the native read so a newly active hardware review is

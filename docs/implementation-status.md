@@ -482,6 +482,14 @@ or BIP evidence changes are involved.
 
 ## Foreground scheduler maintenance
 
+The measured snapshot follow-up replaces unconditional full-history provenance
+passes with a transient dependency work queue that preserves legacy pass order
+and skips unchanged sources. Exact persisted-table comparisons protect permanent
+cluster evidence, labels, and replacement behavior. Independent-receive snapshots
+at 300 transactions dropped from 817,507 to 7,507 SQL statements. There is no
+persisted-format, schema, BIP support, or dependency change. Measurements and
+scope limitations are recorded in `assurance-baseline-2026-09-08.md`.
+
 The follow-up lifecycle assurance pass rejects session responses that settle
 after monitor stop/restart or while hardware review pauses expiry handling.
 Obsolete sync failures also cannot redirect the next wallet or alter its retry

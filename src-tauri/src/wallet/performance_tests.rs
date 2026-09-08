@@ -22,12 +22,26 @@ unsafe extern "C" fn count_snapshot_statement(
 #[test]
 #[ignore = "synthetic snapshot benchmark; run alone with --ignored --nocapture"]
 fn snapshot_history_benchmark() {
+    snapshot_history_fixture(
+        benchmark_size("GROOT_BENCH_TRANSACTIONS", 100).min(1_000),
+        4,
+        true,
+    );
+}
+
+#[test]
+fn independent_receive_snapshots_keep_a_linear_statement_budget() {
+    for rows in [10, 100] {
+        snapshot_history_fixture(rows, 2, false);
+    }
+}
+
+fn snapshot_history_fixture(rows: usize, samples: usize, report: bool) {
     use bdk_wallet::bitcoin::{
         absolute::LockTime, hashes::Hash, transaction::Version, ScriptBuf, Sequence, TxOut, Witness,
     };
     use bdk_wallet::rusqlite::ffi;
 
-    let rows = benchmark_size("GROOT_BENCH_TRANSACTIONS", 100).min(1_000);
     let mnemonic = Mnemonic::from_entropy(&[0; 32]).unwrap();
     let master = root_key(&mnemonic, "synthetic benchmark").unwrap();
     let mut db = Connection::open_in_memory().unwrap();
@@ -74,7 +88,7 @@ fn snapshot_history_benchmark() {
             ffi::SQLITE_OK
         );
     }
-    for sample in 0..4 {
+    for sample in 0..samples {
         SNAPSHOT_STATEMENTS.with(|count| count.set(0));
         let started = Instant::now();
         let snapshot = black_box(snapshot_from(&wallet, &db, None, false, None).unwrap());
@@ -83,10 +97,15 @@ fn snapshot_history_benchmark() {
         assert_eq!(snapshot.transactions.len(), rows);
         assert_eq!(snapshot.utxos.len(), rows);
         assert_eq!(snapshot.balance.total, rows as u64 * 10_000);
-        let _ =
-            writeln!(std::io::stderr(),
+        assert!(
+            statements <= 30 * rows as u64 + 10,
+            "independent receives exceeded linear SQL budget: {statements} for {rows}"
+        );
+        if report {
+            let _ = writeln!(std::io::stderr(),
             "snapshot_history rows={rows} sample={sample} elapsed_us={} statements={statements}",
             elapsed.as_micros());
+        }
     }
     // SAFETY: the same live connection is exclusively owned by this test.
     unsafe {

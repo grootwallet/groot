@@ -62,6 +62,9 @@ transactions. Start with 10 or 100 because the baseline scales poorly.
 
 ## Next performance change
 
+The baseline proposal below is superseded by the implemented follow-up at the
+end of this report. The original measurements remain unchanged.
+
 `label_provenance::reconcile_wallet_outputs` visits every canonical transaction
 `transaction_count + 1` times on every snapshot. Repeated passes propagate
 provenance through dependent change outputs, but also repeat all SQL work for
@@ -88,3 +91,43 @@ library plus three integration tests executed; 17 tests were ignored, including
 the explicitly manual benchmarks and real-Core scenarios. The snapshot benchmark
 was separately executed at all three sizes above. No native production Rust code
 changed, and this pass did not rerun the real-Core or physical-device campaigns.
+
+## Implemented reconciliation optimization
+
+The follow-up uses a transient dependency work queue. Every canonical transaction
+is visited on each reconciliation. Further visits are scheduled only for
+consumers of processed parents; unchanged input provenance skips redundant
+materialization. The queue retains the original pass/index ordering and pass
+bound. This matters because intermediate passes can append permanent privacy
+cluster evidence: simply sorting parents first would not necessarily preserve
+the exact historical database behavior.
+
+No state is cached across snapshots, and no table, index, migration, public DTO,
+transaction construction, or policy rule changes. The frozen legacy algorithm
+is retained only in tests. Eight synthetic wallet graphs compare every persisted
+table and public output provenance after initial/repeated reconciliation, mixed
+and unknown sources, chained change, output-label assignment, replacement,
+eviction, and address reuse. A regular regression test enforces a linear SQL
+statement budget for independent receives at 10 and 100 transactions.
+
+Same machine and debug-build measurement method:
+
+| Transactions | Before statements | After statements | Before warm time | After warm time |
+| ------------ | ----------------- | ---------------- | ---------------- | --------------- |
+| 300          | 817,507           | 7,507            | 21.8–21.9 s      | 186–187 ms      |
+| 1,000        | Not measured      | 25,007           | Not measured     | 692–694 ms      |
+
+At 300 transactions this removes approximately 99.1% of statements and improves
+observed debug latency roughly 117-fold. These fixtures do not prove linear
+complexity for every dependency graph: cold, unfavorably ordered deep chains
+can still require repeated propagation to preserve legacy intermediate evidence.
+The existing address-reuse query and snapshot rendering also remain potential
+scaling costs. Further optimization or native pagination should use measured
+workloads rather than weakening provenance or adding persistent caches.
+
+Follow-up validation passed: `pnpm validate` (550 frontend tests), Rust fmt,
+warnings-as-errors clippy, and 408 executed all-feature Rust tests. The complete
+isolated Bitcoin Core Regtest campaign also passed, covering compact-filter
+reorg/restart, funded RBF/CPFP, clean recovery, initial/repeated scans, checkpoint
+recovery, delayed-policy reorgs, and four multisig integration scenarios. This is
+automated synthetic/Regtest evidence, not physical-device certification.

@@ -2,8 +2,9 @@
 
 Latest measured follow-up: [session lifecycle and snapshot baseline](assurance-baseline-2026-09-08.md).
 Two stale-response lifecycle defects are fixed with frontend regressions.
-Snapshot provenance reconciliation has confirmed quadratic SQL growth and is
-the next performance priority; it requires dependency-order equivalence tests.
+Snapshot provenance reconciliation's unconditional repeated passes are now
+replaced by a dependency work queue with legacy persisted-state equivalence tests.
+The linked report records the measured improvement and remaining limits.
 
 ## 2026-09-08 current-source follow-up
 
