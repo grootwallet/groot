@@ -216,6 +216,19 @@ fn hwi_cli(app: &AppHandle) -> ApiResult<HwiCli> {
         .map_err(hardware_api_error)
 }
 
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ApiErrorDetails {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    requested_birthday_block: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    required_block: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    earliest_retained_block: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    minimum_birthday_block: Option<u32>,
+}
+
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ApiError {
@@ -223,6 +236,8 @@ pub struct ApiError {
     message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     existing_wallet_id: Option<Uuid>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    details: Option<ApiErrorDetails>,
 }
 
 type ApiResult<T> = Result<T, ApiError>;
@@ -236,6 +251,20 @@ fn api_error(code: &'static str, message: impl ToString) -> ApiError {
         code,
         message: message.to_string(),
         existing_wallet_id: None,
+        details: None,
+    }
+}
+
+fn api_error_with_details(
+    code: &'static str,
+    message: impl ToString,
+    details: ApiErrorDetails,
+) -> ApiError {
+    ApiError {
+        code,
+        message: message.to_string(),
+        existing_wallet_id: None,
+        details: Some(details),
     }
 }
 
@@ -244,6 +273,7 @@ fn wallet_already_exists(profile: &WalletProfile) -> ApiError {
         code: "wallet_already_exists",
         message: "This exact descriptor wallet already exists on this device.".to_owned(),
         existing_wallet_id: Some(profile.id),
+        details: None,
     }
 }
 
@@ -2585,9 +2615,14 @@ fn ensure_core_history_available(
     first_required_height: u32,
 ) -> ApiResult<()> {
     if pruned && prune_height.is_some_and(|height| u64::from(first_required_height) < height) {
-        return Err(api_error(
+        return Err(api_error_with_details(
             "node_history_unavailable",
             "Bitcoin Core no longer stores the blocks needed for this scan. Use a birthday at or above the retained block height, or connect an archival node.",
+            ApiErrorDetails {
+                required_block: Some(first_required_height),
+                earliest_retained_block: prune_height.and_then(|height| u32::try_from(height).ok()),
+                ..Default::default()
+            },
         ));
     }
     Ok(())
@@ -2604,9 +2639,17 @@ fn ensure_recovery_scan_history_available(
 ) -> ApiResult<()> {
     let anchor_height = recovery_scan_anchor_height(birthday_height);
     if pruned && prune_height.is_some_and(|height| u64::from(anchor_height) < height) {
-        return Err(api_error(
+        return Err(api_error_with_details(
             "node_history_unavailable",
             RPC_PRUNED_HISTORY_MESSAGE,
+            ApiErrorDetails {
+                requested_birthday_block: Some(birthday_height),
+                required_block: Some(anchor_height),
+                earliest_retained_block: prune_height.and_then(|height| u32::try_from(height).ok()),
+                minimum_birthday_block: prune_height
+                    .and_then(|height| u32::try_from(height).ok())
+                    .and_then(|height| height.checked_add(1)),
+            },
         ));
     }
     Ok(())

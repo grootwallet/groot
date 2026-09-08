@@ -456,6 +456,9 @@ fn wallet_history_rejects_only_blocks_absent_from_a_pruned_node() {
     let unavailable = ensure_core_history_available(true, Some(140_000), 0).unwrap_err();
     assert_eq!(unavailable.code, "node_history_unavailable");
     assert!(unavailable.message.contains("archival node"));
+    let details = unavailable.details.unwrap();
+    assert_eq!(details.required_block, Some(0));
+    assert_eq!(details.earliest_retained_block, Some(140_000));
 }
 
 #[test]
@@ -469,6 +472,11 @@ fn recovery_scan_anchors_immediately_before_the_birthday() {
         ensure_recovery_scan_history_available(true, Some(960_062), 960_062).unwrap_err();
     assert_eq!(boundary.code, "node_history_unavailable");
     assert!(boundary.message.contains("above the retained prune height"));
+    let details = boundary.details.unwrap();
+    assert_eq!(details.requested_birthday_block, Some(960_062));
+    assert_eq!(details.required_block, Some(960_061));
+    assert_eq!(details.earliest_retained_block, Some(960_062));
+    assert_eq!(details.minimum_birthday_block, Some(960_063));
 
     let anchor_hash = "1111111111111111111111111111111111111111111111111111111111111111";
     let endpoint = serve_one_json(format!(

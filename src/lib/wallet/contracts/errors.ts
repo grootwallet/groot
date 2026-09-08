@@ -126,6 +126,13 @@ export const WALLET_ERROR_CODES = [
 
 export type WalletErrorCode = (typeof WALLET_ERROR_CODES)[number];
 
+export type WalletErrorDetails = {
+  requestedBirthdayBlock?: number;
+  requiredBlock?: number;
+  earliestRetainedBlock?: number;
+  minimumBirthdayBlock?: number;
+};
+
 const walletErrorCodes = new Set<string>(WALLET_ERROR_CODES);
 
 export function walletErrorCode(value: unknown): WalletErrorCode {
@@ -138,7 +145,8 @@ export class WalletError extends Error {
   constructor(
     public readonly code: WalletErrorCode,
     message: string,
-    public readonly existingWalletId: string | null = null
+    public readonly existingWalletId: string | null = null,
+    public readonly details: WalletErrorDetails | null = null
   ) {
     super(message);
     this.name = 'WalletError';

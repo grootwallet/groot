@@ -53,6 +53,9 @@ export const settingsCopy = {
     fr: '{count} types d’événements',
     es: '{count} tipos de eventos'
   },
+  'All outcomes': { fr: 'Tous les résultats', es: 'Todos los resultados' },
+  '{count} outcomes': { fr: '{count} résultats', es: '{count} resultados' },
+  'Filter by outcome': { fr: 'Filtrer par résultat', es: 'Filtrar por resultado' },
   'Filter by event type': {
     fr: 'Filtrer par type d’événement',
     es: 'Filtrar por tipo de evento'
@@ -91,9 +94,9 @@ export const settingsCopy = {
     es: 'No se pudieron copiar los registros de la app'
   },
   '{count} events': { fr: '{count} événements', es: '{count} eventos' },
-  '{network} · {platform} · v{version}': {
-    fr: '{network} · {platform} · v{version}',
-    es: '{network} · {platform} · v{version}'
+  '{network} · {platform} · v{version} · {commit}': {
+    fr: '{network} · {platform} · v{version} · {commit}',
+    es: '{network} · {platform} · v{version} · {commit}'
   },
   'Stored locally as append-only JSONL. New records stop at the 16 MiB safety limit.': {
     fr: 'Stocké localement en JSONL à ajout seul. Les nouveaux enregistrements s’arrêtent à la limite de sécurité de 16 Mio.',
@@ -130,6 +133,31 @@ export const settingsCopy = {
   Event: { fr: 'Événement', es: 'Evento' },
   Outcome: { fr: 'Résultat', es: 'Resultado' },
   'Safe context': { fr: 'Contexte sûr', es: 'Contexto seguro' },
+  'Error details': { fr: 'Détails de l’erreur', es: 'Detalles del error' },
+  'Required block history is unavailable': {
+    fr: 'L’historique de blocs requis est indisponible',
+    es: 'El historial de bloques requerido no está disponible'
+  },
+  'Full rescan failed': { fr: 'Échec du rescannage complet', es: 'Falló el reescaneo completo' },
+  'Wallet-history scan failed': {
+    fr: 'Échec de l’analyse de l’historique du portefeuille',
+    es: 'Falló el escaneo del historial de la cartera'
+  },
+  'Requested birthday': { fr: 'Anniversaire demandé', es: 'Fecha de creación solicitada' },
+  'Required anchor': { fr: 'Ancrage requis', es: 'Ancla requerida' },
+  'Bitcoin Core retains full blocks from': {
+    fr: 'Bitcoin Core conserve les blocs complets à partir de',
+    es: 'Bitcoin Core conserva bloques completos desde'
+  },
+  'Retained full blocks from': {
+    fr: 'Blocs complets conservés à partir de',
+    es: 'Bloques completos conservados desde'
+  },
+  'Earliest usable birthday': {
+    fr: 'Premier anniversaire utilisable',
+    es: 'Primera fecha de creación utilizable'
+  },
+  'Block {height}': { fr: 'Bloc {height}', es: 'Bloque {height}' },
   'App started': { fr: 'App démarrée', es: 'App iniciada' },
   'Wallet created': { fr: 'Portefeuille créé', es: 'Cartera creada' },
   'Wallet recovered': { fr: 'Portefeuille récupéré', es: 'Cartera recuperada' },

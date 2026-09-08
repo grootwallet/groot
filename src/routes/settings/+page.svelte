@@ -22,6 +22,7 @@
     ScrollText,
     ShieldCheck,
     Sun,
+    TriangleAlert,
     Trash2,
     Upload,
     WalletCards
@@ -50,6 +51,7 @@
     NodeStatus,
     RecoveryScanSettings,
     RecoveryScanStatus,
+    WalletErrorDetails,
     WalletProfile,
     WalletSyncSource
   } from '$lib/wallet/contracts';
@@ -176,6 +178,8 @@
   let scanOpen = $state(false),
     scanCredential = $state(''),
     scanError = $state(''),
+    scanErrorCode = $state(''),
+    scanErrorDetails = $state<WalletErrorDetails | null>(null),
     scan = $state<RecoveryScanSettings>({ birthdayHeight: 0, gapLimit: 20 }),
     scanDraft = $state<RecoveryScanSettings>({ birthdayHeight: 0, gapLimit: 20 });
   let scanStatus = $state<RecoveryScanStatus>({
@@ -740,6 +744,8 @@
   async function runFullRescan() {
     scanning = true;
     scanError = '';
+    scanErrorCode = '';
+    scanErrorDetails = null;
     try {
       scan = await walletService.saveRecoveryScanSettings(
         Number(scanDraft.birthdayHeight),
@@ -762,6 +768,8 @@
       });
     } catch (cause) {
       scanError = localizedError(cause, $locale, 'The full rescan failed.');
+      scanErrorCode = cause instanceof WalletError ? cause.code : 'internal_error';
+      scanErrorDetails = cause instanceof WalletError ? cause.details : null;
       try {
         scanStatus = await walletService.recoveryScanStatus();
       } catch {
@@ -787,6 +795,8 @@
   async function cancelFullRescan() {
     cancellingScan = true;
     scanError = '';
+    scanErrorCode = '';
+    scanErrorDetails = null;
     try {
       scanStatus = await walletService.cancelFullRescan();
     } catch (cause) {
@@ -797,6 +807,8 @@
   function openFullRescan() {
     scanCredential = '';
     scanError = '';
+    scanErrorCode = '';
+    scanErrorDetails = null;
     scanDraft = { ...scan };
     scanOpen = true;
   }
@@ -804,6 +816,8 @@
     if (scanning) return;
     scanCredential = '';
     scanError = '';
+    scanErrorCode = '';
+    scanErrorDetails = null;
     scanDraft = { ...scan };
     scanOpen = false;
   }
@@ -1939,7 +1953,54 @@
       </div>
     {/if}
   </div>
-  {#if scanError}<p class="form-error" aria-live="polite">{scanError}</p>{/if}
+  {#if scanError}<div class="hardware-inline-error scan-error-card" role="alert" aria-live="polite">
+      <TriangleAlert size={18} />
+      <span>
+        <strong
+          >{translate(
+            $locale,
+            scanErrorCode === 'node_history_unavailable'
+              ? 'Required block history is unavailable'
+              : 'Full rescan failed'
+          )}</strong
+        >
+        <small>{scanError}</small>
+        {#if scanErrorDetails}<dl class="scan-error-details">
+            {#if scanErrorDetails.requestedBirthdayBlock !== undefined}<div>
+                <dt>{translate($locale, 'Requested birthday')}</dt>
+                <dd>
+                  {translate($locale, 'Block {height}', {
+                    height: formatInteger(scanErrorDetails.requestedBirthdayBlock, $locale)
+                  })}
+                </dd>
+              </div>{/if}
+            {#if scanErrorDetails.requiredBlock !== undefined}<div>
+                <dt>{translate($locale, 'Required anchor')}</dt>
+                <dd>
+                  {translate($locale, 'Block {height}', {
+                    height: formatInteger(scanErrorDetails.requiredBlock, $locale)
+                  })}
+                </dd>
+              </div>{/if}
+            {#if scanErrorDetails.earliestRetainedBlock !== undefined}<div>
+                <dt>{translate($locale, 'Bitcoin Core retains full blocks from')}</dt>
+                <dd>
+                  {translate($locale, 'Block {height}', {
+                    height: formatInteger(scanErrorDetails.earliestRetainedBlock, $locale)
+                  })}
+                </dd>
+              </div>{/if}
+            {#if scanErrorDetails.minimumBirthdayBlock !== undefined}<div>
+                <dt>{translate($locale, 'Earliest usable birthday')}</dt>
+                <dd>
+                  {translate($locale, 'Block {height}', {
+                    height: formatInteger(scanErrorDetails.minimumBirthdayBlock, $locale)
+                  })}
+                </dd>
+              </div>{/if}
+          </dl>{/if}
+      </span>
+    </div>{/if}
   <div class="modal-footer">
     {#if scanning}<Button
         variant="secondary"

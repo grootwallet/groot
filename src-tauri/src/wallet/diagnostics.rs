@@ -1,4 +1,6 @@
-use super::{api_error, internal, now, ApiResult, AppState, SavedFileDto};
+use super::{
+    api_error, internal, now, ApiError, ApiErrorDetails, ApiResult, AppState, SavedFileDto,
+};
 use crate::{network::WalletSyncSource, registry::WalletKind};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -112,6 +114,10 @@ pub struct DiagnosticRecordDto {
     export_format: Option<DiagnosticExportFormat>,
     #[serde(skip_serializing_if = "Option::is_none")]
     error_code: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error_message: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error_details: Option<ApiErrorDetails>,
     app_version: String,
     build_commit: String,
     compiled_network: String,
@@ -162,6 +168,46 @@ fn safe_error_code(code: &str) -> &'static str {
     }
 }
 
+fn safe_error_message(code: &str) -> &'static str {
+    match code {
+        "address_not_discardable" => "Only an unused receive address that is still awaiting payment can be discarded.",
+        "backup_verification_failed" => "The supplied recovery backup did not reproduce the expected wallet.",
+        "hardware_rejected" => "The signer rejected the requested action on the device.",
+        "hardware_signature_missing" => "The signer returned without adding the required transaction signature.",
+        "hardware_unavailable" => "The expected hardware signer could not be reached or was not ready.",
+        "initial_scan_required" => "Wallet history must be scanned before this operation can continue.",
+        "insufficient_funds" => "The wallet does not have enough spendable bitcoin for the payment and fee.",
+        "insufficient_signatures" => "The proposal does not yet contain enough valid signatures to finalize.",
+        "invalid_address" => "The recipient address is invalid for the compiled Bitcoin network.",
+        "invalid_amount" => "The requested amount is outside the accepted transaction range.",
+        "invalid_coin" => "The selected coin is invalid or no longer available for this operation.",
+        "invalid_credential" => "Wallet authentication failed; the wallet remained locked.",
+        "invalid_fee_rate" => "The requested fee rate is outside the accepted range.",
+        "invalid_node_config" => "The Bitcoin Core configuration or RPC permissions are incomplete or invalid.",
+        "network_unavailable" => "The configured network service could not be reached or verified.",
+        "node_history_unavailable" => "Bitcoin Core has pruned a block required by this scan. The attached block heights identify the unavailable range and earliest usable birthday.",
+        "proposal_not_found" => "The saved payment proposal no longer exists or is no longer active.",
+        "rate_limited" => "This wallet temporarily rejected another authentication attempt after repeated failures.",
+        "scan_cancelled" => "The recovery scan was cancelled without applying a partial result.",
+        "scan_in_progress" => "A recovery scan is already active for this wallet.",
+        "sync_cancelled" => "The wallet sync was cancelled without applying a partial result.",
+        "sync_in_progress" => "A wallet sync is already active for this wallet.",
+        "wallet_locked" => "The selected wallet must be unlocked before this operation can continue.",
+        "wallet_selection_changed" => "The selected wallet changed before the operation completed.",
+        _ => "Groot encountered an unexpected internal failure. Retry the operation and export these app logs if it repeats.",
+    }
+}
+
+fn sanitized_error_fields(error: &ApiError) -> (String, String, Option<ApiErrorDetails>) {
+    let code = safe_error_code(error.code);
+    let details = (code == error.code).then_some(error.details).flatten();
+    (
+        code.to_owned(),
+        safe_error_message(code).to_owned(),
+        details,
+    )
+}
+
 fn log_path(app: &AppHandle) -> ApiResult<PathBuf> {
     Ok(app
         .path()
@@ -192,9 +238,10 @@ pub(crate) fn record(
     event: DiagnosticEventKind,
     outcome: DiagnosticOutcome,
     mut context: DiagnosticContext,
-    error_code: Option<&str>,
+    error: Option<&ApiError>,
 ) {
     context.progress_percent = context.progress_percent.map(|value| value.min(100));
+    let safe_error = error.map(sanitized_error_fields);
     let record = DiagnosticRecordDto {
         schema_version: 1,
         timestamp: now(),
@@ -206,7 +253,9 @@ pub(crate) fn record(
         progress_percent: context.progress_percent,
         item_count: context.item_count,
         export_format: context.export_format,
-        error_code: error_code.map(|code| safe_error_code(code).to_owned()),
+        error_code: safe_error.as_ref().map(|(code, _, _)| code.clone()),
+        error_message: safe_error.as_ref().map(|(_, message, _)| message.clone()),
+        error_details: safe_error.and_then(|(_, _, details)| details),
         app_version: env!("CARGO_PKG_VERSION").to_owned(),
         build_commit: env!("GROOT_BUILD_COMMIT").to_owned(),
         compiled_network: crate::build_network::NAME.to_owned(),
@@ -286,9 +335,9 @@ pub(crate) fn record_result<T>(
                 "sync_cancelled" | "scan_cancelled" | "onboarding_cancelled"
             ) =>
         {
-            (DiagnosticOutcome::Cancelled, Some(error.code))
+            (DiagnosticOutcome::Cancelled, Some(error))
         }
-        Err(error) => (DiagnosticOutcome::Failed, Some(error.code)),
+        Err(error) => (DiagnosticOutcome::Failed, Some(error)),
     };
     record(app, state, event, outcome, context, error);
 }
@@ -352,7 +401,7 @@ fn export_bytes(
     match format {
         DiagnosticExportFormat::Json => serde_json::to_vec_pretty(records).map_err(internal),
         DiagnosticExportFormat::Csv => {
-            let mut output = String::from("schema_version,timestamp_unix_seconds,event,outcome,trigger,wallet_kind,sync_source,progress_percent,item_count,export_format,error_code,app_version,build_commit,compiled_network,platform\n");
+            let mut output = String::from("schema_version,timestamp_unix_seconds,event,outcome,trigger,wallet_kind,sync_source,progress_percent,item_count,export_format,error_code,error_message,requested_birthday_block,required_block,earliest_retained_block,minimum_birthday_block,app_version,build_commit,compiled_network,platform\n");
             for record in records {
                 let row = [
                     record.schema_version.to_string(),
@@ -384,6 +433,27 @@ fn export_bytes(
                         .transpose()?
                         .unwrap_or_default(),
                     record.error_code.clone().unwrap_or_default(),
+                    record.error_message.clone().unwrap_or_default(),
+                    record
+                        .error_details
+                        .and_then(|details| details.requested_birthday_block)
+                        .map(|value| value.to_string())
+                        .unwrap_or_default(),
+                    record
+                        .error_details
+                        .and_then(|details| details.required_block)
+                        .map(|value| value.to_string())
+                        .unwrap_or_default(),
+                    record
+                        .error_details
+                        .and_then(|details| details.earliest_retained_block)
+                        .map(|value| value.to_string())
+                        .unwrap_or_default(),
+                    record
+                        .error_details
+                        .and_then(|details| details.minimum_birthday_block)
+                        .map(|value| value.to_string())
+                        .unwrap_or_default(),
                     record.app_version.clone(),
                     record.build_commit.clone(),
                     record.compiled_network.clone(),
@@ -459,6 +529,42 @@ mod tests {
     }
 
     #[test]
+    fn unknown_errors_drop_free_form_messages_and_structured_details() {
+        let error = super::super::api_error_with_details(
+            "secret=correct horse battery staple",
+            "private RPC and device output",
+            ApiErrorDetails {
+                required_block: Some(42),
+                ..Default::default()
+            },
+        );
+        let (code, message, details) = sanitized_error_fields(&error);
+        assert_eq!(code, "internal_error");
+        assert_eq!(message, safe_error_message("internal_error"));
+        assert!(details.is_none());
+        assert!(!message.contains("private RPC"));
+    }
+
+    #[test]
+    fn allowlisted_scan_errors_keep_safe_block_details() {
+        let details = ApiErrorDetails {
+            requested_birthday_block: Some(96_600),
+            required_block: Some(96_599),
+            earliest_retained_block: Some(960_062),
+            minimum_birthday_block: Some(960_063),
+        };
+        let error = super::super::api_error_with_details(
+            "node_history_unavailable",
+            "unpersisted backend message",
+            details,
+        );
+        let (code, message, persisted_details) = sanitized_error_fields(&error);
+        assert_eq!(code, "node_history_unavailable");
+        assert!(message.contains("pruned a block"));
+        assert_eq!(persisted_details.unwrap().required_block, Some(96_599));
+    }
+
+    #[test]
     fn record_schema_has_no_free_form_diagnostic_fields() {
         let record = DiagnosticRecordDto {
             schema_version: 1,
@@ -472,6 +578,8 @@ mod tests {
             item_count: None,
             export_format: None,
             error_code: Some(safe_error_code("not-allowlisted").to_owned()),
+            error_message: Some(safe_error_message("internal_error").to_owned()),
+            error_details: None,
             app_version: "1.0.0".to_owned(),
             build_commit: "deadbeef".to_owned(),
             compiled_network: "signet".to_owned(),
@@ -503,14 +611,21 @@ mod tests {
             schema_version: 1,
             timestamp: 42,
             event: DiagnosticEventKind::Sync,
-            outcome: DiagnosticOutcome::Succeeded,
+            outcome: DiagnosticOutcome::Failed,
             trigger: DiagnosticTrigger::Automatic,
             wallet_kind: Some(DiagnosticWalletKind::Multisig),
             sync_source: Some(DiagnosticSyncSource::BitcoinCore),
             progress_percent: Some(100),
             item_count: None,
             export_format: None,
-            error_code: None,
+            error_code: Some("node_history_unavailable".to_owned()),
+            error_message: Some(safe_error_message("node_history_unavailable").to_owned()),
+            error_details: Some(ApiErrorDetails {
+                requested_birthday_block: Some(96_600),
+                required_block: Some(96_599),
+                earliest_retained_block: Some(960_062),
+                minimum_birthday_block: Some(960_063),
+            }),
             app_version: "1.0.0".to_owned(),
             build_commit: "abc".to_owned(),
             compiled_network: "regtest".to_owned(),
@@ -522,5 +637,8 @@ mod tests {
         assert!(String::from_utf8(first)
             .unwrap()
             .contains("\"42\",\"sync\""));
+        let csv = String::from_utf8(second).unwrap();
+        assert!(csv.contains("error_message,requested_birthday_block,required_block"));
+        assert!(csv.contains("\"96600\",\"96599\",\"960062\",\"960063\""));
     }
 }

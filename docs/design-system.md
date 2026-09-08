@@ -51,12 +51,15 @@ wallet deletion, and opening it retains the regular unlocked desktop rail or mob
 tabs with Settings selected. The page leads with the privacy boundary and durable
 event count. The complete allowlisted category inventory is optional insight behind
 the standard blue disclosure label and a chevron that turns 90 degrees when open.
-Search covers event names and every displayed safe-context value; event filtering
-allows multiple categories; date order supports newest or oldest first.
+Search covers event names and every displayed safe-context value; event and outcome
+filtering each allow multiple selections; date order supports newest or oldest first.
 Search and date order use matching 38-pixel fields with aligned visible labels;
 the date selector uses a styled control surface and chevron across browser engines.
 Users can switch between an accessible aligned table and readonly raw JSON, explicitly copy the
-current JSON result, or export CSV/JSON. Mobile may scroll the table and raw JSON
+current JSON result, or export CSV/JSON. Failed rows group the safe code, stable
+explanation, and allowlisted scalar details in a restrained error surface. Recovery
+scan failures use the existing durable inline error pattern and show retained-history
+heights when supplied. Mobile may scroll the table and raw JSON
 inside bordered containers, but the page itself must not overflow horizontally.
 
 The desktop rail ends with a quiet, tabular-numeric native build identity (`Groot v… · commit`) below network status. The same shared control remains visible on shell-less welcome/setup/recovery flows and at the end of Settings, including mobile Settings, so a packaged candidate can always be identified without exposing wallet data. Activating it copies exactly that public version-and-commit string for debugging or customer support, with inline status and a toast; no wallet, device, node, or profile data is included.

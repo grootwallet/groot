@@ -40,4 +40,21 @@ describe('wallet error contract', () => {
     expect(walletErrorCode(null)).toBe('internal_error');
     expect(new Set(WALLET_ERROR_CODES).size).toBe(WALLET_ERROR_CODES.length);
   });
+
+  it('carries structured recovery context without changing the stable error code', () => {
+    const error = new WalletError('node_history_unavailable', 'Pruned history.', null, {
+      requestedBirthdayBlock: 96_600,
+      requiredBlock: 96_599,
+      earliestRetainedBlock: 960_062,
+      minimumBirthdayBlock: 960_063
+    });
+
+    expect(error.code).toBe('node_history_unavailable');
+    expect(error.details).toEqual({
+      requestedBirthdayBlock: 96_600,
+      requiredBlock: 96_599,
+      earliestRetainedBlock: 960_062,
+      minimumBirthdayBlock: 960_063
+    });
+  });
 });

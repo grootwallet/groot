@@ -111,6 +111,28 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
         buildCommit: 'development',
         compiledNetwork: defaultConfig.network,
         platform: 'browser' as const
+      },
+      {
+        schemaVersion: 1 as const,
+        timestamp: timestamp - 30,
+        event: 'recovery_scan' as const,
+        outcome: 'failed' as const,
+        trigger: 'recovery' as const,
+        walletKind: 'software' as const,
+        syncSource: 'bitcoin_core' as const,
+        errorCode: 'node_history_unavailable',
+        errorMessage:
+          'Bitcoin Core has pruned a block required by this scan. The attached block heights identify the unavailable range and earliest usable birthday.',
+        errorDetails: {
+          requestedBirthdayBlock: 96_600,
+          requiredBlock: 96_599,
+          earliestRetainedBlock: 960_062,
+          minimumBirthdayBlock: 960_063
+        },
+        appVersion: APP_VERSION,
+        buildCommit: 'development',
+        compiledNetwork: defaultConfig.network,
+        platform: 'browser' as const
       }
     ];
   }
@@ -454,6 +476,21 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       throw new WalletError(
         'scan_in_progress',
         'A recovery scan is already running for this wallet.'
+      );
+    if (
+      typeof location !== 'undefined' &&
+      new URLSearchParams(location.search).has('fixture-pruned-history')
+    )
+      throw new WalletError(
+        'node_history_unavailable',
+        'Bitcoin Core no longer stores the blocks needed for this scan. Choose a birthday above the retained prune height, or connect an archival node.',
+        null,
+        {
+          requestedBirthdayBlock: this._scanSettings.birthdayHeight,
+          requiredBlock: Math.max(0, this._scanSettings.birthdayHeight - 1),
+          earliestRetainedBlock: 960_062,
+          minimumBirthdayBlock: 960_063
+        }
       );
     const startedAt = Math.floor(Date.now() / 1000);
     const totalBlocks = 8;

@@ -66,6 +66,8 @@ export type DiagnosticRecord = {
   itemCount?: number;
   exportFormat?: 'json' | 'csv';
   errorCode?: string;
+  errorMessage?: string;
+  errorDetails?: import('./errors').WalletErrorDetails;
   appVersion: string;
   buildCommit: string;
   compiledNetwork: SupportedNetwork;

@@ -121,6 +121,36 @@ test('browses, copies, and exports app logs inside the regular shell', async ({ 
     .evaluateAll((cells) => cells.map((cell) => Math.round(cell.getBoundingClientRect().bottom)));
   expect(new Set(firstRowBottoms).size).toBe(1);
 
+  const outcomeFilter = page.locator('.outcome-filter');
+  await outcomeFilter.getByText('All outcomes').click();
+  await outcomeFilter.getByLabel('failed', { exact: true }).check();
+  await outcomeFilter.getByRole('button', { name: 'Done' }).click();
+  await expect(table.locator('tbody tr')).toHaveCount(1);
+  await expect(table.locator('tbody tr').first()).toContainText('Recovery scan');
+  await expect(table.locator('tbody tr').first()).toContainText('node_history_unavailable');
+  await expect(table.locator('tbody tr').first()).toContainText('Retained full blocks from');
+  await expect(table.locator('tbody tr').first()).toContainText('Block 960,062');
+
+  await page.getByRole('button', { name: 'Raw JSON' }).click();
+  let rawJson = page.getByLabel('Raw app log JSON');
+  const failedRecord = JSON.parse(await rawJson.inputValue());
+  expect(failedRecord).toHaveLength(1);
+  expect(failedRecord[0]).toMatchObject({
+    event: 'recovery_scan',
+    outcome: 'failed',
+    errorCode: 'node_history_unavailable',
+    errorDetails: {
+      requestedBirthdayBlock: 96600,
+      requiredBlock: 96599,
+      earliestRetainedBlock: 960062,
+      minimumBirthdayBlock: 960063
+    }
+  });
+  await page.getByRole('button', { name: 'Table' }).click();
+  await outcomeFilter.getByText('1 outcomes').click();
+  await outcomeFilter.getByRole('button', { name: 'Clear' }).click();
+  await outcomeFilter.getByRole('button', { name: 'Done' }).click();
+
   await page.getByLabel('Date order').selectOption('oldest');
   await expect(table.locator('tbody tr').first()).toContainText('Receive address generated');
 
@@ -135,7 +165,7 @@ test('browses, copies, and exports app logs inside the regular shell', async ({ 
   await page.getByLabel('Search logs').fill('');
 
   await page.getByRole('button', { name: 'Raw JSON' }).click();
-  const rawJson = page.getByLabel('Raw app log JSON');
+  rawJson = page.getByLabel('Raw app log JSON');
   await expect(rawJson).toBeVisible();
   expect(JSON.parse(await rawJson.inputValue())).toHaveLength(2);
   await page.getByRole('button', { name: 'Copy JSON' }).click();
@@ -1118,6 +1148,28 @@ test('overview, activity, UTXOs, and settings expose durable states', async ({ p
   expect(filterHeights.input).toBe(filterHeights.select);
   await page.getByRole('link', { name: 'Settings' }).click();
   await expect(page.getByText('Delete wallet', { exact: true })).toBeVisible();
+});
+
+test('pruned recovery errors show retained history and remain easy to trace', async ({ page }) => {
+  await page.goto('/settings?fixture-pruned-history=1');
+  await page.getByRole('button', { name: /Recovery scan/ }).click();
+  const recoveryScan = page.getByRole('dialog', { name: 'Full wallet rescan' });
+  await recoveryScan.getByLabel('Wallet birthday block').fill('96600');
+  await recoveryScan.getByLabel('Wallet passphrase', { exact: true }).fill('prototype-passphrase');
+  await recoveryScan.getByRole('button', { name: 'Save & rescan' }).click();
+
+  const alert = recoveryScan.getByRole('alert');
+  await expect(alert).toContainText('Required block history is unavailable');
+  await expect(alert.getByText('Requested birthday', { exact: true })).toBeVisible();
+  await expect(alert.getByText('Block 96,600', { exact: true })).toBeVisible();
+  await expect(alert.getByText('Required anchor', { exact: true })).toBeVisible();
+  await expect(alert.getByText('Block 96,599', { exact: true })).toBeVisible();
+  await expect(
+    alert.getByText('Bitcoin Core retains full blocks from', { exact: true })
+  ).toBeVisible();
+  await expect(alert.getByText('Block 960,062', { exact: true })).toBeVisible();
+  await expect(alert.getByText('Earliest usable birthday', { exact: true })).toBeVisible();
+  await expect(alert.getByText('Block 960,063', { exact: true })).toBeVisible();
 });
 
 test('settings clears credentials and confirmations after every modal dismissal', async ({

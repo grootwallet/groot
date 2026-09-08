@@ -211,7 +211,10 @@ only the permanent-label count on generation, and relocating the navigation entr
 to Settings likewise have no BIP impact. Renaming the viewer to App logs, retaining
 the ordinary shell, and adding renderer-local search, filtering, ordering, raw JSON,
 and explicit sanitized-log copy change presentation only and likewise have no BIP
-impact.
+impact. Adding outcome filtering, fixed sanitized failure explanations, structured
+pruned-history block heights, and the matching recovery-error presentation does not
+change descriptor derivation, recovery inputs, scanning semantics, transaction data,
+or any BIP support/evidence and therefore likewise has no BIP impact.
 
 Every feature, interoperability, signer, descriptor, transaction, payment request,
 backup/recovery, sync/backend, network, or dependency change must assess BIP impact.

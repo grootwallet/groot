@@ -31,14 +31,14 @@ describe('diagnostic log presentation', () => {
 
   it('searches event labels and every safe fixed-field context value', () => {
     expect(
-      filterAndSortDiagnosticRecords(records, 'address generated', [], 'newest', label)
+      filterAndSortDiagnosticRecords(records, 'address generated', [], [], 'newest', label)
     ).toEqual([records[1]]);
-    expect(filterAndSortDiagnosticRecords(records, 'bitcoin_core', [], 'newest', label)).toEqual([
-      records[0]
-    ]);
-    expect(filterAndSortDiagnosticRecords(records, 'sync_cancelled', [], 'newest', label)).toEqual([
-      records[0]
-    ]);
+    expect(
+      filterAndSortDiagnosticRecords(records, 'bitcoin_core', [], [], 'newest', label)
+    ).toEqual([records[0]]);
+    expect(
+      filterAndSortDiagnosticRecords(records, 'sync_cancelled', [], [], 'newest', label)
+    ).toEqual([records[0]]);
   });
 
   it('combines multiple event selections and preserves append order for equal dates', () => {
@@ -47,6 +47,7 @@ describe('diagnostic log presentation', () => {
         records,
         '',
         ['sync', 'receive_address_generated'],
+        [],
         'newest',
         label
       )
@@ -54,9 +55,25 @@ describe('diagnostic log presentation', () => {
   });
 
   it('sorts the same filtered records oldest first', () => {
-    expect(filterAndSortDiagnosticRecords(records, '', ['sync'], 'oldest', label)).toEqual([
+    expect(filterAndSortDiagnosticRecords(records, '', ['sync'], [], 'oldest', label)).toEqual([
       records[0],
       records[2]
     ]);
+  });
+
+  it('combines multiple outcome selections with event and text filters', () => {
+    const failed = record('sync', 30, {
+      outcome: 'failed',
+      errorMessage: 'Bitcoin Core has pruned a required block.'
+    });
+    const cancelled = record('sync', 25, { outcome: 'cancelled' });
+    const candidates = [...records, failed, cancelled];
+
+    expect(
+      filterAndSortDiagnosticRecords(candidates, '', [], ['failed', 'cancelled'], 'newest', label)
+    ).toEqual([failed, cancelled]);
+    expect(
+      filterAndSortDiagnosticRecords(candidates, 'pruned', ['sync'], ['failed'], 'newest', label)
+    ).toEqual([failed]);
   });
 });

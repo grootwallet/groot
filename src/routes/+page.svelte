@@ -14,6 +14,7 @@
     HeartPulse,
     RefreshCw,
     ShieldCheck,
+    TriangleAlert,
     Trash2
   } from '@lucide/svelte';
   import Button from '$lib/components/Button.svelte';
@@ -29,6 +30,7 @@
   import {
     walletService,
     WalletError,
+    type WalletErrorDetails,
     type CosignerHealthCheck,
     type ExternalSignerWallet,
     type MultisigProposal,
@@ -121,6 +123,8 @@
   let initialGapLimit = $state(20);
   let initialScanCredential = $state('');
   let initialScanError = $state('');
+  let initialScanErrorCode = $state('');
+  let initialScanErrorDetails = $state<WalletErrorDetails | null>(null);
   let initialScanStarting = $state(false);
   let nodeReady = $state(false);
   const recoveryScanIsActive = (status: RecoveryScanStatus) =>
@@ -500,6 +504,8 @@
         $locale,
         'Could not read the saved recovery-scan state.'
       );
+      initialScanErrorCode = cause instanceof WalletError ? cause.code : 'internal_error';
+      initialScanErrorDetails = cause instanceof WalletError ? cause.details : null;
     }
   }
   async function refreshRecoveryStatus() {
@@ -526,6 +532,8 @@
   }
   function openInitialScan() {
     initialScanError = '';
+    initialScanErrorCode = '';
+    initialScanErrorDetails = null;
     if (!nodeReady) {
       void goto('/settings');
       return;
@@ -546,6 +554,8 @@
   async function startInitialScan() {
     initialScanStarting = true;
     initialScanError = '';
+    initialScanErrorCode = '';
+    initialScanErrorDetails = null;
     const credential = initialScanCredential;
     try {
       if (!savedRecoveryCanResume) {
@@ -578,6 +588,8 @@
     } catch (cause) {
       if (cause instanceof WalletError && cause.code === 'wallet_locked') return;
       initialScanError = localizedError(cause, $locale, 'The wallet-history scan could not start.');
+      initialScanErrorCode = cause instanceof WalletError ? cause.code : 'internal_error';
+      initialScanErrorDetails = cause instanceof WalletError ? cause.details : null;
       initialScanOpen = true;
       await refreshRecoveryStatus();
     } finally {
@@ -1236,6 +1248,8 @@
     initialScanOpen = false;
     initialScanCredential = '';
     initialScanError = '';
+    initialScanErrorCode = '';
+    initialScanErrorDetails = null;
   }}
 >
   {#if savedRecoveryCanResume}
@@ -1363,7 +1377,58 @@
     disabled={initialScanStarting}
     hint={translate($locale, 'Used only to authenticate this saved recovery operation.')}
   />
-  {#if initialScanError}<p class="form-error" role="alert">{initialScanError}</p>{/if}
+  {#if initialScanError}<div
+      class="hardware-inline-error scan-error-card"
+      role="alert"
+      aria-live="polite"
+    >
+      <TriangleAlert size={18} />
+      <span>
+        <strong
+          >{translate(
+            $locale,
+            initialScanErrorCode === 'node_history_unavailable'
+              ? 'Required block history is unavailable'
+              : 'Wallet-history scan failed'
+          )}</strong
+        >
+        <small>{initialScanError}</small>
+        {#if initialScanErrorDetails}<dl class="scan-error-details">
+            {#if initialScanErrorDetails.requestedBirthdayBlock !== undefined}<div>
+                <dt>{translate($locale, 'Requested birthday')}</dt>
+                <dd>
+                  {translate($locale, 'Block {height}', {
+                    height: formatInteger(initialScanErrorDetails.requestedBirthdayBlock, $locale)
+                  })}
+                </dd>
+              </div>{/if}
+            {#if initialScanErrorDetails.requiredBlock !== undefined}<div>
+                <dt>{translate($locale, 'Required anchor')}</dt>
+                <dd>
+                  {translate($locale, 'Block {height}', {
+                    height: formatInteger(initialScanErrorDetails.requiredBlock, $locale)
+                  })}
+                </dd>
+              </div>{/if}
+            {#if initialScanErrorDetails.earliestRetainedBlock !== undefined}<div>
+                <dt>{translate($locale, 'Bitcoin Core retains full blocks from')}</dt>
+                <dd>
+                  {translate($locale, 'Block {height}', {
+                    height: formatInteger(initialScanErrorDetails.earliestRetainedBlock, $locale)
+                  })}
+                </dd>
+              </div>{/if}
+            {#if initialScanErrorDetails.minimumBirthdayBlock !== undefined}<div>
+                <dt>{translate($locale, 'Earliest usable birthday')}</dt>
+                <dd>
+                  {translate($locale, 'Block {height}', {
+                    height: formatInteger(initialScanErrorDetails.minimumBirthdayBlock, $locale)
+                  })}
+                </dd>
+              </div>{/if}
+          </dl>{/if}
+      </span>
+    </div>{/if}
   <div class="modal-footer">
     <Button
       variant="secondary"
@@ -1371,6 +1436,9 @@
       onclick={() => {
         initialScanOpen = false;
         initialScanCredential = '';
+        initialScanError = '';
+        initialScanErrorCode = '';
+        initialScanErrorDetails = null;
       }}>{translate($locale, 'Not now')}</Button
     ><Button
       disabled={!initialScanCredential ||

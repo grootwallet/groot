@@ -55,7 +55,12 @@ import {
 } from './multisig-setup';
 import type { PaymentDraft } from './payment-draft';
 
-type BackendError = { code?: string; message?: string; existingWalletId?: string };
+type BackendError = {
+  code?: string;
+  message?: string;
+  existingWalletId?: string;
+  details?: import('./contracts').WalletErrorDetails;
+};
 type NotificationEnvelope = { id: string; event: WalletEvent };
 const NOTIFICATION_BATCH_SIZE = 256;
 const MAX_NOTIFICATION_BATCHES_PER_DRAIN = 32;
@@ -68,7 +73,8 @@ async function command<T>(name: string, args?: Record<string, unknown>): Promise
     throw new WalletError(
       walletErrorCode(backend?.code),
       backend?.message ?? (typeof error === 'string' ? error : 'The wallet command failed.'),
-      typeof backend?.existingWalletId === 'string' ? backend.existingWalletId : null
+      typeof backend?.existingWalletId === 'string' ? backend.existingWalletId : null,
+      backend?.details && typeof backend.details === 'object' ? backend.details : null
     );
   }
 }

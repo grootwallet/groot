@@ -6168,6 +6168,35 @@ code {
 .hardware-inline-error .button {
   align-self: center;
 }
+.scan-error-card {
+  grid-template-columns: 22px minmax(0, 1fr);
+}
+.scan-error-details {
+  margin: 6px 0 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 14px;
+  color: var(--text);
+}
+.scan-error-details > div {
+  display: grid;
+  gap: 1px;
+}
+.scan-error-details dt {
+  color: var(--muted);
+  font-size: 9px;
+}
+.scan-error-details dd {
+  margin: 0;
+  font-size: 10px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 640px) {
+  .scan-error-details {
+    grid-template-columns: 1fr;
+  }
+}
 .hardware-phase-reference {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

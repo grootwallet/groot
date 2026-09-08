@@ -29,6 +29,8 @@ describe('diagnostic event boundary', () => {
     expect(rust).toContain('pub struct DiagnosticRecordDto');
     expect(rust).toContain('fn safe_error_code(code: &str)');
     expect(rust).toContain('_ => "internal_error"');
+    expect(rust).toContain('fn safe_error_message(code: &str)');
+    expect(rust).toContain('error_details: Option<ApiErrorDetails>');
     expect(rust).not.toMatch(
       /pub struct DiagnosticRecordDto[\s\S]*?(credential|mnemonic|seed|descriptor|psbt|txid|outpoint|device_id|rpc_url)\s*:/
     );
@@ -70,6 +72,8 @@ describe('diagnostic event boundary', () => {
   it('supports bounded raw JSON copy and local search, multi-filter, and date order', () => {
     expect(route).toContain('filterAndSortDiagnosticRecords(');
     expect(route).toContain("let selectedEventKinds = $state<DiagnosticRecord['event'][]>([])");
+    expect(route).toContain("let selectedOutcomes = $state<DiagnosticRecord['outcome'][]>([])");
+    expect(route).toContain("'failed'");
     expect(route).toContain("let sortOrder = $state<DiagnosticSortOrder>('newest')");
     expect(route).toContain("let view = $state<'table' | 'raw'>('table')");
     expect(route).toContain("await copyText(rawJson, 'app-logs')");

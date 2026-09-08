@@ -19,8 +19,12 @@ stable-error redaction; no renderer-authored strings enter records. The user-fac
 feature is **App logs**. It remains entered from its standalone Settings section,
 preserves the regular unlocked shell navigation, and exports deterministic JSON or
 CSV. The page can search all safe fixed-field context, combine closed event-type
-filters, reverse date order, switch between an aligned table and the exact sanitized
-JSON, and explicitly copy the current JSON result. The complete allowlisted category
+and outcome filters, reverse date order, switch between an aligned table and the exact
+sanitized JSON, and explicitly copy the current JSON result. Allowlisted failures add
+a fixed safe explanation and closed scalar context. Pruned recovery failures include
+the requested birthday, required anchor, earliest retained full block, and earliest
+usable birthday in the app log and durable modal error; raw backend strings remain
+excluded. The complete allowlisted category
 inventory is collapsed as optional insight. Receive generation shows label count
 without label text. The log is a separate
 owner-only append-only JSONL file capped at 16 MiB, so wallet, registry, proposal,

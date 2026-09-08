@@ -13,7 +13,7 @@
   import Button from '$lib/components/Button.svelte';
   import { copyText } from '$lib/clipboard';
   import LocalTimestamp from '$lib/components/LocalTimestamp.svelte';
-  import { locale } from '$lib/i18n';
+  import { formatInteger, locale } from '$lib/i18n';
   import { localizedError, translate } from '$lib/i18n-catalog';
   import { walletService } from '$lib/wallet';
   import type { DiagnosticRecord } from '$lib/wallet/contracts';
@@ -30,6 +30,7 @@
   let exporting = $state<'json' | 'csv' | null>(null);
   let query = $state('');
   let selectedEventKinds = $state<DiagnosticRecord['event'][]>([]);
+  let selectedOutcomes = $state<DiagnosticRecord['outcome'][]>([]);
   let sortOrder = $state<DiagnosticSortOrder>('newest');
   let view = $state<'table' | 'raw'>('table');
 
@@ -58,9 +59,23 @@
     diagnostics_exported: 'App logs exported'
   } as const satisfies Record<DiagnosticRecord['event'], string>;
   const supportedEventKinds = Object.keys(eventLabels) as DiagnosticRecord['event'][];
+  const supportedOutcomes: DiagnosticRecord['outcome'][] = [
+    'started',
+    'progress',
+    'succeeded',
+    'failed',
+    'cancelled'
+  ];
   const eventLabel = (event: DiagnosticRecord['event']) => translate($locale, eventLabels[event]);
   const visibleRecords = $derived(
-    filterAndSortDiagnosticRecords(records, query, selectedEventKinds, sortOrder, eventLabel)
+    filterAndSortDiagnosticRecords(
+      records,
+      query,
+      selectedEventKinds,
+      selectedOutcomes,
+      sortOrder,
+      eventLabel
+    )
   );
   const rawJson = $derived(JSON.stringify(visibleRecords, null, 2));
 
@@ -68,6 +83,12 @@
     selectedEventKinds = selectedEventKinds.includes(event)
       ? selectedEventKinds.filter((kind) => kind !== event)
       : [...selectedEventKinds, event];
+  }
+
+  function toggleOutcome(outcome: DiagnosticRecord['outcome']) {
+    selectedOutcomes = selectedOutcomes.includes(outcome)
+      ? selectedOutcomes.filter((candidate) => candidate !== outcome)
+      : [...selectedOutcomes, outcome];
   }
 
   async function copyRawJson() {
@@ -273,6 +294,46 @@
             {/each}
           </div>
         </details>
+        <details class="event-filter outcome-filter">
+          <summary>
+            <Filter size={15} /><span
+              >{selectedOutcomes.length
+                ? translate($locale, '{count} outcomes', { count: selectedOutcomes.length })
+                : translate($locale, 'All outcomes')}</span
+            ><ChevronDown class="event-filter-chevron" size={14} />
+          </summary>
+          <div class="event-filter-menu">
+            <div>
+              <strong>{translate($locale, 'Filter by outcome')}</strong>
+              <span>
+                {#if selectedOutcomes.length}<button
+                    type="button"
+                    onclick={() => (selectedOutcomes = [])}>{translate($locale, 'Clear')}</button
+                  >{/if}
+                <button
+                  type="button"
+                  onclick={(event) =>
+                    event.currentTarget.closest('details')?.removeAttribute('open')}
+                  >{translate($locale, 'Done')}</button
+                >
+              </span>
+            </div>
+            {#each supportedOutcomes as outcome}
+              <label>
+                <input
+                  type="checkbox"
+                  checked={selectedOutcomes.includes(outcome)}
+                  onchange={() => toggleOutcome(outcome)}
+                />
+                <span>{translate($locale, outcome)}</span>
+                {#if selectedOutcomes.includes(outcome)}<Check
+                    class="filter-check"
+                    size={14}
+                  />{/if}
+              </label>
+            {/each}
+          </div>
+        </details>
         <label class="log-sort">
           <span>{translate($locale, 'Date order')}</span>
           <span class="log-sort-input">
@@ -308,6 +369,7 @@
           onclick={() => {
             query = '';
             selectedEventKinds = [];
+            selectedOutcomes = [];
           }}>{translate($locale, 'Clear filters')}</Button
         >
       </div>
@@ -355,10 +417,11 @@
                 <td>
                   <div class="diagnostic-context">
                     <span
-                      >{translate($locale, '{network} · {platform} · v{version}', {
+                      >{translate($locale, '{network} · {platform} · v{version} · {commit}', {
                         network: record.compiledNetwork,
                         platform: record.platform,
-                        version: record.appVersion
+                        version: record.appVersion,
+                        commit: record.buildCommit.slice(0, 8)
                       })}</span
                     >
                     {#if record.walletKind}<span>{translate($locale, record.walletKind)}</span>{/if}
@@ -384,7 +447,57 @@
                           format: record.exportFormat.toUpperCase()
                         })}</span
                       >{/if}
-                    {#if record.errorCode}<code>{record.errorCode}</code>{/if}
+                    {#if record.errorCode}<div class="diagnostic-error">
+                        <strong>{translate($locale, 'Error details')}</strong>
+                        <code>{record.errorCode}</code>
+                        {#if record.errorMessage}<span>{record.errorMessage}</span>{/if}
+                        {#if record.errorDetails}<dl>
+                            {#if record.errorDetails.requestedBirthdayBlock !== undefined}<div>
+                                <dt>{translate($locale, 'Requested birthday')}</dt>
+                                <dd>
+                                  {translate($locale, 'Block {height}', {
+                                    height: formatInteger(
+                                      record.errorDetails.requestedBirthdayBlock,
+                                      $locale
+                                    )
+                                  })}
+                                </dd>
+                              </div>{/if}
+                            {#if record.errorDetails.requiredBlock !== undefined}<div>
+                                <dt>{translate($locale, 'Required anchor')}</dt>
+                                <dd>
+                                  {translate($locale, 'Block {height}', {
+                                    height: formatInteger(
+                                      record.errorDetails.requiredBlock,
+                                      $locale
+                                    )
+                                  })}
+                                </dd>
+                              </div>{/if}
+                            {#if record.errorDetails.earliestRetainedBlock !== undefined}<div>
+                                <dt>{translate($locale, 'Retained full blocks from')}</dt>
+                                <dd>
+                                  {translate($locale, 'Block {height}', {
+                                    height: formatInteger(
+                                      record.errorDetails.earliestRetainedBlock,
+                                      $locale
+                                    )
+                                  })}
+                                </dd>
+                              </div>{/if}
+                            {#if record.errorDetails.minimumBirthdayBlock !== undefined}<div>
+                                <dt>{translate($locale, 'Earliest usable birthday')}</dt>
+                                <dd>
+                                  {translate($locale, 'Block {height}', {
+                                    height: formatInteger(
+                                      record.errorDetails.minimumBirthdayBlock,
+                                      $locale
+                                    )
+                                  })}
+                                </dd>
+                              </div>{/if}
+                          </dl>{/if}
+                      </div>{/if}
                   </div>
                 </td>
               </tr>
@@ -421,7 +534,7 @@
     gap: 4px;
   }
   .diagnostics-summary small {
-    color: var(--text-muted);
+    color: var(--muted);
   }
   .diagnostics-actions {
     display: flex;
@@ -462,7 +575,7 @@
   }
   .diagnostic-event-catalog p {
     margin: 0;
-    color: var(--text-muted);
+    color: var(--muted);
     font-size: 11px;
   }
   .diagnostic-event-catalog ul {
@@ -502,7 +615,7 @@
   }
   .log-controls {
     display: grid;
-    grid-template-columns: minmax(220px, 1fr) auto auto auto;
+    grid-template-columns: minmax(190px, 1fr) auto auto auto auto;
     align-items: end;
     gap: 10px;
   }
@@ -511,7 +624,7 @@
     min-width: 0;
     display: grid;
     gap: 6px;
-    color: var(--text-muted);
+    color: var(--muted);
     font-size: 10px;
     font-weight: 650;
   }
@@ -524,7 +637,7 @@
     border: 1px solid var(--control-border);
     border-radius: 8px;
     background: var(--surface-control);
-    color: var(--text-muted);
+    color: var(--muted);
   }
   .log-search-input:focus-within {
     outline: 2px solid var(--focus);
@@ -573,6 +686,12 @@
   }
   .event-filter {
     position: relative;
+  }
+  .outcome-filter > summary {
+    min-width: 126px;
+  }
+  .outcome-filter .event-filter-menu {
+    width: 230px;
   }
   .event-filter > summary {
     min-width: 142px;
@@ -666,7 +785,7 @@
     padding: 0 9px;
     border: 0;
     border-radius: 5px;
-    color: var(--text-muted);
+    color: var(--muted);
     background: transparent;
     font: inherit;
     font-size: 11px;
@@ -679,7 +798,7 @@
   }
   .log-results {
     margin: 10px 0 0;
-    color: var(--text-muted);
+    color: var(--muted);
     font-size: 10px;
   }
   .raw-log {
@@ -704,7 +823,7 @@
     font-size: 12px;
   }
   .raw-log small {
-    color: var(--text-muted);
+    color: var(--muted);
     font-size: 10px;
   }
   .raw-log textarea {
@@ -741,7 +860,7 @@
     border-bottom: 1px solid var(--border);
   }
   th {
-    color: var(--text-muted);
+    color: var(--muted);
     font-size: 10px;
     text-transform: uppercase;
     letter-spacing: 0.06em;
@@ -753,7 +872,44 @@
     display: flex;
     flex-wrap: wrap;
     gap: 6px 10px;
-    color: var(--text-muted);
+    color: var(--muted);
+  }
+  .diagnostic-error {
+    flex: 1 0 100%;
+    display: grid;
+    gap: 5px;
+    margin-top: 3px;
+    padding: 9px 10px;
+    border: 1px solid color-mix(in srgb, var(--danger) 34%, var(--border));
+    border-radius: 8px;
+    color: var(--text-soft);
+    background: color-mix(in srgb, var(--danger) 7%, var(--surface-control));
+  }
+  .diagnostic-error > strong {
+    color: var(--danger);
+    font-size: 10px;
+  }
+  .diagnostic-error > span {
+    line-height: 1.45;
+  }
+  .diagnostic-error dl {
+    margin: 2px 0 0;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 5px 14px;
+  }
+  .diagnostic-error dl div {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .diagnostic-error dt {
+    color: var(--muted);
+  }
+  .diagnostic-error dd {
+    margin: 0;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
   }
   .diagnostic-outcome {
     text-transform: capitalize;
@@ -817,6 +973,9 @@
     .raw-log > div {
       align-items: stretch;
       flex-direction: column;
+    }
+    .diagnostic-error dl {
+      grid-template-columns: 1fr;
     }
     .raw-log textarea {
       min-height: 340px;
