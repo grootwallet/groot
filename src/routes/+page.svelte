@@ -615,7 +615,7 @@
   }
   const sync = async (manual = true) => {
     if (mobileSyncSetupRequired) {
-      await goto('/settings#network-services');
+      if (manual) await goto('/settings#network-services');
       return;
     }
     if (initialHistoryRequired) {

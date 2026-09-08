@@ -291,9 +291,14 @@ test('keeps recovery words out of the webview and unlock rejects the wrong crede
   await unlockCredential.fill('prototype-passphrase');
   await unlockCredential.press('Enter');
   await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Syncing' })).toBeVisible();
-  await expect(page.locator('.sync-progress')).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Updated now' })).toBeVisible();
+  if ((page.viewportSize()?.width ?? 1180) <= 760) {
+    await expect(page.getByRole('button', { name: 'Set up sync' })).toBeVisible();
+    await expect(page.getByText('Set up wallet sync', { exact: true })).toBeVisible();
+  } else {
+    await expect(page.getByRole('button', { name: 'Syncing' })).toBeVisible();
+    await expect(page.locator('.sync-progress')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Updated now' })).toBeVisible();
+  }
   await page.getByRole('link', { name: 'Activity' }).click();
   await page.getByRole('link', { name: 'Overview' }).click();
   await expect(page.getByRole('button', { name: 'Syncing' })).toHaveCount(0);

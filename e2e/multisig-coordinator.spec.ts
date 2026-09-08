@@ -743,16 +743,7 @@ test('shows signer details without offering checks for non-interactive signers',
   expect(xpubBounds!.y).toBeGreaterThanOrEqual(0);
   expect(xpubBounds!.y + xpubBounds!.height).toBeLessThanOrEqual(xpubViewport!.height);
   await xpubDialog.getByRole('button', { name: 'Close' }).click();
-  await expect(coldcardDialog.getByText('Not checked yet', { exact: true })).toBeVisible();
-  await coldcardDialog.getByRole('button', { name: 'Check signer' }).click();
-  await expect(coldcardDialog.getByRole('status', { name: 'Checking signer' })).toContainText(
-    'Checking signer'
-  );
-  await expect(
-    coldcardDialog.locator('.health-card').getByText('Signer matches this wallet.')
-  ).toBeVisible();
-  await expect(coldcardDialog.locator('.health-heading strong')).toHaveCSS('font-size', '11px');
-  await expect(coldcardDialog.getByText(/Last checked/)).toBeVisible();
+  await expect(coldcardDialog.getByRole('button', { name: 'Check signer' })).toHaveCount(0);
   await coldcardDialog.getByRole('button', { name: 'Close' }).click();
 
   await page.getByRole('button', { name: 'View Offline backup details' }).click();
@@ -763,8 +754,8 @@ test('shows signer details without offering checks for non-interactive signers',
 
   await page.reload();
   await page.getByRole('button', { name: 'View Coldcard details' }).click();
-  const restoredHealth = page.getByRole('dialog', { name: 'Coldcard' });
-  await expect(restoredHealth.getByText('Not checked yet', { exact: true })).toBeVisible();
+  const restoredDetails = page.getByRole('dialog', { name: 'Coldcard' });
+  await expect(restoredDetails.getByRole('button', { name: 'Check signer' })).toHaveCount(0);
 });
 
 test('uses the same wallet navigation for a multisig policy', async ({ page }) => {

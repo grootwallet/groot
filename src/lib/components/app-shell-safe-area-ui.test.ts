@@ -21,4 +21,10 @@ describe('app shell safe areas', () => {
       /\.mobile-nav a\s*\{[\s\S]*?height:\s*calc\(56px \+ env\(safe-area-inset-bottom\)\);[\s\S]*?padding:\s*4px 2px calc\(3px \+ env\(safe-area-inset-bottom\)\);/
     );
   });
+
+  it('keeps prototype lock-screen utilities from stretching across the form', () => {
+    expect(styles).toMatch(
+      /\.app-shell\.prototype-shell \.locked-mobile-utilities\s*\{[\s\S]*?top:\s*max\(56px, calc\(env\(safe-area-inset-top\) \+ 44px\)\);[\s\S]*?bottom:\s*auto;/
+    );
+  });
 });

@@ -156,6 +156,7 @@ describe('foreground wallet navigation', () => {
     expect(overview).toContain("syncSource?.type === 'bitcoin_core'");
     expect(overview).toContain("syncSource?.type === 'compact_filters'");
     expect(overview).toContain("nodeConfig?.backend.type === 'local_core'");
+    expect(overview).toContain("if (manual) await goto('/settings#network-services')");
     expect(overview).toContain("await goto('/settings#network-services')");
     expect(overview).toContain("translate($locale, 'Set up wallet sync')");
     expect(overview).toContain(

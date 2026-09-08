@@ -10489,6 +10489,7 @@ code {
   }
   .app-shell.prototype-shell .locked-mobile-utilities {
     top: max(56px, calc(env(safe-area-inset-top) + 44px));
+    bottom: auto;
   }
   .locked-mobile-utilities .shell-theme-toggle {
     margin: 0;

@@ -54,26 +54,7 @@ struct HardwareKey {
     account_public: Xpub,
 }
 
-struct TemporaryDatabase(PathBuf);
-
 struct TemporaryPairingDirectory(PathBuf);
-
-impl TemporaryDatabase {
-    fn new() -> Self {
-        Self(std::env::temp_dir().join(format!(
-            "groot-mobile-coordination-{}.sqlite",
-            Uuid::new_v4()
-        )))
-    }
-}
-
-impl Drop for TemporaryDatabase {
-    fn drop(&mut self) {
-        let _ = fs::remove_file(&self.0);
-        let _ = fs::remove_file(self.0.with_extension("sqlite-shm"));
-        let _ = fs::remove_file(self.0.with_extension("sqlite-wal"));
-    }
-}
 
 impl TemporaryPairingDirectory {
     fn new() -> Self {
@@ -710,8 +691,7 @@ fn mobile_signing_adds_only_the_expected_signatures_without_private_descriptors(
 fn funded_mobile_cosigner_round_trip_reviews_merges_finalizes_and_broadcasts() {
     assert!(std::env::var_os("GROOT_RUN_REGTEST").is_some());
     let (mnemonic, hardware, metadata, coordination) = coordinated_wallet();
-    let database = TemporaryDatabase::new();
-    let mut db = Connection::open(&database.0).unwrap();
+    let mut db = Connection::open_in_memory().unwrap();
     let mut coordinator = Wallet::create(
         metadata.external_descriptor.clone(),
         metadata.internal_descriptor.clone(),
