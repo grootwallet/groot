@@ -282,7 +282,7 @@ fn rename_cosigner_label(
     signer_id: &str,
     label: &str,
 ) -> ApiResult<()> {
-    let normalized = label.split_whitespace().collect::<Vec<_>>().join(" ");
+    let normalized = normalize_label_text(label);
     if normalized.is_empty() || normalized.chars().count() > 48 {
         return Err(api_error(
             "invalid_label",

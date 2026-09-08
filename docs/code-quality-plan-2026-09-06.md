@@ -117,3 +117,44 @@ Every implementation slice runs `pnpm validate`; Rust changes also follow the
 format/lint/test and applicable real-Core harness in `agent-harness.md`. UI changes
 require desktop/mobile inspection. Keep evidence tied to the tested commit and do
 not transfer physical-device or release approval from earlier candidates.
+
+## 2026-09-08 simplification follow-up
+
+At the shared `87c775e` base, an independent current-source reachability pass also
+found 133 registered native commands and a matching production adapter invocation
+for every command. After the preceding two-command cleanup, all 131 remaining
+registrations retain a matching production adapter invocation. The clipboard,
+dialog, and opener plugins each retain a production caller, and all five frontend
+production dependencies retain direct imports. An all-target Cargo feature graph
+likewise confirmed the intentionally documented wallet, Tauri, HWI, Core,
+compact-filter, Payjoin V2, TLS, and UR families. No plugin, dependency, or feature
+was removed merely to reduce counts.
+
+One orphan was proven instead: `src-tauri/src/airgap.rs` was referenced only by its
+own units and one integration test written specifically for that unused generic
+decoder. It had no Tauri registration, adapter path, persisted data, or product
+documentation contract. The live animated-QR path is `ur_transport.rs`, whose
+existing tests retain out-of-order/redundant fountain frames, canonical CBOR,
+frame/payload bounds, hostile header rejection, and PSBT validation. Removing the
+orphan deletes 114 production-source and 28 dead-test lines without reducing
+coverage of a reachable boundary.
+
+The Rust coverage classifier also retained `airgap.rs` in its adapter allowlist
+after the file disappeared. The gate now requires every classified top-level
+module to exist as well as requiring every existing module to be classified, so a
+future deletion or rename cannot leave stale coverage policy behind. The matching
+low-level architecture artifact now names only the active BSMS and UR modules.
+
+Three Rust callers also repeated the same whitespace-collapse expression for
+permanent labels, multisig signer labels, and hardware signer labels. They now use
+one pure helper; caller-specific empty/48-character validation and exact stable
+errors remain at each authority boundary and keep their existing tests. This is a
+maintainability/review-surface improvement, not a claim of stronger runtime
+security: the orphan had no reachable application path, release link-time removal
+could already omit it, and no trust boundary moved.
+
+Compatibility is exact for wallets, profiles, proposals, registries, backups,
+payment drafts, node settings, and secret envelopes. There is no schema migration,
+UI change, dependency change, or release-policy change. BIP impact: none; the
+bounded BIP174/UR PSBT transport and existing interoperability evidence are
+unchanged.

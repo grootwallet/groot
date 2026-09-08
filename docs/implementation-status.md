@@ -12,6 +12,17 @@ decrease from 133 to 131. Persisted formats, dependencies, UI behavior, wallet a
 network policy, transaction behavior, and BIP support/evidence are unchanged; no
 migration is required.
 
+The 2026-09-08 simplification follow-up removes the unused generic `airgap`
+multipart decoder. It had no command registration, adapter call, production
+caller, persisted representation, or documentation-owned product behavior; the
+active animated-QR implementation remains the bounded `crypto-psbt` UR transport
+and retains its multipart ordering, redundancy, CBOR, PSBT, and resource tests.
+The same follow-up gives permanent-label, multisig-signer, and hardware-signer
+renaming one pure whitespace-normalization helper while preserving their distinct
+bounds and stable errors. No command, dependency, capability, DTO, persisted
+format, protocol behavior, or BIP support/evidence changes; no migration is
+required.
+
 The 2026-09-06 contract-maintenance follow-up preserves fourteen existing native
 error codes that previously normalized to `internal_error` in the frontend.
 Source-contract and mocked-IPC adapter tests cover the allowlist, including the

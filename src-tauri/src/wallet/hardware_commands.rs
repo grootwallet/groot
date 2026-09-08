@@ -2248,7 +2248,7 @@ pub fn external_signer_wallet(
 }
 
 pub(crate) fn normalize_external_signer_label(value: &str) -> ApiResult<String> {
-    let normalized = value.split_whitespace().collect::<Vec<_>>().join(" ");
+    let normalized = normalize_label_text(value);
     if normalized.is_empty() || normalized.chars().count() > 48 {
         return Err(api_error(
             "invalid_label",

@@ -1,7 +1,6 @@
 use serde::Serialize;
 use tauri::Manager as _;
 
-pub mod airgap;
 mod auth;
 pub mod bsms;
 mod build_network;

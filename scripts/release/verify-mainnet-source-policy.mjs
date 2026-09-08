@@ -10,7 +10,7 @@ const repoRoot = resolve(fileURLToPath(new URL('../../', import.meta.url)));
 const pinnedPolicySources = new Map([
   ['.env.mainnet', '1623f3f97de588daea2bbeae1f9c56ebc896b6bc2c22ac238563b46b688ced85'],
   ['package.json', '41daa643f2c41c283aefe3045d53892be6abf7f423b211266655982700d21fa9'],
-  ['src-tauri/src/lib.rs', 'c1dbf9763cf0cb4f2e8b70e0d37437e6cc596e0b01d9406ffb34cd52df38e130'],
+  ['src-tauri/src/lib.rs', 'b8d25e9defc2e528d223f4daeb67d19b6f592976e7fa1439b9d40090b3d5875c'],
   [
     'scripts/network/check-native-builds.sh',
     '82b8b5de52c786b2c6d18fb8da90fd32f32a8c4714a3ed02866e923c9e81db36'
@@ -27,7 +27,7 @@ const pinnedPolicySources = new Map([
   ],
   ['src-tauri/src/network.rs', 'dcf011fb789a0b690b1832a9245df5fc0199318f03a820d10f9a3b1c90f5d76b'],
   ['src-tauri/src/registry.rs', '343aea20f5d09df6abd5c9fdba3b093efc6729c9ece8f180b27a150061753a18'],
-  ['src-tauri/src/wallet.rs', '022b40674f1897af6493d52cde4cea8d3b737c218c84086075690dd06d6d9582'],
+  ['src-tauri/src/wallet.rs', '2852085d606c6fd0929af7ac5a080572d54fa930765a8cf9adfd11991d713c52'],
   [
     'src-tauri/src/wallet/diagnostics.rs',
     'ee71b116c3431a4476504199fcad6fa854fbfe214b08640a7d4e6d9a67d17f52'
@@ -46,7 +46,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src-tauri/src/wallet/hardware_commands.rs',
-    '973861f13664ed3aa4e7b9b27dd15a90a95a8cc20470a499ee65d5cd7273169c'
+    '9bd44b2f645ac645b686d551a375afd319669fd8104b9c2850cd44754ad13d41'
   ],
   [
     'src-tauri/src/wallet/label_interchange.rs',
@@ -54,7 +54,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src-tauri/src/wallet/multisig_setup_commands.rs',
-    'f41ecd39745512f1a800515d6628c5f4fb26154e7a741c03deeb8d8254a5f57d'
+    'f072edbc0417d19580f5c3f67140f329f70a7dd5cf39aa20bc0d8200f8233514'
   ],
   [
     'src-tauri/src/wallet/multisig_proposal_commands.rs',

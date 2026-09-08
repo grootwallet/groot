@@ -2842,8 +2842,12 @@ fn now() -> u64 {
         .as_secs()
 }
 
+fn normalize_label_text(label: &str) -> String {
+    label.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
 fn normalize_label(label: &str) -> ApiResult<String> {
-    let label = label.split_whitespace().collect::<Vec<_>>().join(" ");
+    let label = normalize_label_text(label);
     if label.is_empty() {
         return Err(api_error("invalid_label", "A permanent label is required."));
     }
