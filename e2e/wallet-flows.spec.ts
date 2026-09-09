@@ -366,8 +366,11 @@ test('keeps recovery words out of the webview and unlock rejects the wrong crede
   await networkStatus.click();
   const statusPanel = page.locator('.network-popover');
   await expect(statusPanel.getByText('Priority fee')).toBeVisible();
-  await expect(statusPanel.locator('dd').nth(0)).toHaveText('Available after unlock');
-  await expect(statusPanel.getByText('Unlock to check')).toBeVisible();
+  await expect(statusPanel.locator('dd').nth(0)).toHaveText('Unlock to check');
+  await expect(statusPanel.locator('dd').nth(1)).toHaveText('Unlock to check');
+  await expect(statusPanel.getByText('Direct connection')).toBeVisible();
+  await expect(statusPanel.getByText('Bitcoin Core RPC')).toBeVisible();
+  await expect(statusPanel.getByText('Local Bitcoin Core')).toBeVisible();
   await expect(
     statusPanel.getByText('Node credentials remain sealed until a wallet is unlocked.')
   ).toBeVisible();
@@ -1047,6 +1050,10 @@ test('overview, activity, UTXOs, and settings expose durable states', async ({ p
   await expect(overviewDetails.getByText('Transaction ID', { exact: true })).toBeHidden();
   await expect(overviewDetails.getByText('Inputs', { exact: true })).toBeHidden();
   await overviewDetails.getByText('View more details', { exact: true }).click();
+  await expect(overviewDetails.locator('.transaction-more-details > .details-list')).toHaveCSS(
+    'border-top-width',
+    '0px'
+  );
   await expect(overviewDetails.getByText('Transaction ID', { exact: true })).toBeVisible();
   await expect(overviewDetails.getByText('Inputs', { exact: true })).toBeVisible();
   await expect(overviewDetails.getByText('Outputs', { exact: true })).toBeVisible();

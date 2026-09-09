@@ -967,8 +967,7 @@ pub fn fees_estimate(app: AppHandle, state: State<'_, AppState>) -> ApiResult<Fe
 }
 
 #[tauri::command]
-pub fn node_config(app: AppHandle, state: State<'_, AppState>) -> ApiResult<CoreNodeConfig> {
-    require_unlocked(&app, &state)?;
+pub fn node_config(app: AppHandle) -> ApiResult<CoreNodeConfig> {
     read_node_config(&app)
 }
 
@@ -1091,11 +1090,7 @@ pub(super) fn persist_mainnet_node_admission_for_new_profile(
 }
 
 #[tauri::command]
-pub fn wallet_sync_source(
-    app: AppHandle,
-    state: State<'_, AppState>,
-) -> ApiResult<WalletSyncSource> {
-    require_unlocked(&app, &state)?;
+pub fn wallet_sync_source(app: AppHandle) -> ApiResult<WalletSyncSource> {
     read_sync_source(&app)
 }
 

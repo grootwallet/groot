@@ -29,5 +29,6 @@ describe('transaction details denomination', () => {
       /\.transaction-summary-list > div:last-child\s*\{[^}]*border-bottom: 0;/s
     );
     expect(appCss).toMatch(/\.transaction-more-details\s*\{[^}]*border-bottom: 0;/s);
+    expect(appCss).toMatch(/\.transaction-more-details > \.details-list\s*\{[^}]*border-top: 0;/s);
   });
 });

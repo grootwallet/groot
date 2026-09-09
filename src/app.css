@@ -3472,6 +3472,9 @@ code {
   margin-top: 12px;
   border-bottom: 0;
 }
+.transaction-more-details > .details-list {
+  border-top: 0;
+}
 .transaction-summary-list > div:last-child {
   border-bottom: 0;
 }

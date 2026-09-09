@@ -33,6 +33,10 @@ service architecture, but it does not decrypt or reveal the saved endpoint,
 username, credentials, private topology, reachability, fee, or tip information.
 Those values remain available only after unlock.
 
+This locked-summary restriction is superseded by ADR 0062 only for saved non-secret
+node configuration and the activity-sync method. Credentialed reachability, fee, and
+tip checks remain unavailable while locked.
+
 The reviewed implementation may merge to `main` under the user's explicit
 2026-09-09 authorization because mainnet remains reachable only through the
 dedicated compile-time candidate identity and the release gate still fails closed

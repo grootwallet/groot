@@ -33,7 +33,23 @@ function commandSource(source: string, command: string): string {
   return source.slice(start, nextCommand === -1 ? source.length : nextCommand);
 }
 
+function synchronousCommandSource(source: string, command: string): string {
+  const start = source.indexOf(`pub fn ${command}`);
+  expect(start, `${command} must remain a native command`).toBeGreaterThan(-1);
+  const nextCommand = source.indexOf('#[tauri::command]', start);
+  return source.slice(start, nextCommand === -1 ? source.length : nextCommand);
+}
+
 describe('native command scheduling', () => {
+  it.each(['node_config', 'wallet_sync_source'])(
+    '%s exposes only saved non-secret network configuration while locked',
+    (command) => {
+      const source = synchronousCommandSource(profileCommands, command);
+      expect(source).not.toContain('require_unlocked');
+      expect(source).toMatch(/read_(node_config|sync_source)\(&app\)/);
+    }
+  );
+
   it.each([
     ['wallet_lock', profileCommands],
     ['wallet_select', profileCommands],

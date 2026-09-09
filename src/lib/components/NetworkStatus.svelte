@@ -58,13 +58,17 @@
     if (loading) return;
     loading = true;
     try {
-      if (locked) {
-        priorityFee = null;
-        nodeHeight = null;
+      try {
+        nodeConfig = await walletService.nodeConfig();
+      } catch {
         nodeConfig = null;
+      }
+      try {
+        syncSource = await walletService.syncSource();
+      } catch {
         syncSource = null;
-        nodeReachable = null;
-      } else {
+      }
+      if (!locked) {
         try {
           const fees = await walletService.estimateFees();
           priorityFee = Number(fees.priority);
@@ -72,23 +76,17 @@
           priorityFee = null;
         }
         try {
-          syncSource = await walletService.syncSource();
-        } catch {
-          syncSource = null;
-        }
-        try {
-          const [config, status] = await Promise.all([
-            walletService.nodeConfig(),
-            walletService.testNodeConnection()
-          ]);
-          nodeConfig = config;
+          const status = await walletService.testNodeConnection();
           nodeHeight = status.blocks;
           nodeReachable = status.connected;
         } catch {
           nodeHeight = null;
-          nodeConfig = null;
           nodeReachable = false;
         }
+      } else {
+        priorityFee = null;
+        nodeHeight = null;
+        nodeReachable = null;
       }
     } finally {
       checked = true;
@@ -175,7 +173,7 @@
           <dd>
             {priorityFee === null
               ? locked
-                ? translate($locale, 'Available after unlock')
+                ? translate($locale, 'Unlock to check')
                 : loading
                   ? translate($locale, 'Checking…')
                   : translate($locale, 'Unavailable')
