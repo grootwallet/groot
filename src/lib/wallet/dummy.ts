@@ -370,6 +370,9 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
   async nodeConfig() {
     return structuredClone(this._nodeConfig);
   }
+  async publicNetworkStatus() {
+    return { priorityFee: 12, networkTip: 301 };
+  }
   async admitMainnetCore(
     config: CoreNodeConfig,
     password: string,

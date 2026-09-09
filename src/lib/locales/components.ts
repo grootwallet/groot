@@ -52,6 +52,8 @@ export const componentCopy = {
   'Checking node…': { fr: 'Vérification du nœud…', es: 'Comprobando nodo…' },
   'Checking…': { fr: 'Vérification…', es: 'Comprobando…' },
   'Unlock to check': { fr: 'Déverrouillez pour vérifier', es: 'Desbloquea para comprobar' },
+  'View less details': { fr: 'Voir moins de détails', es: 'Ver menos detalles' },
+  'Network tip': { fr: 'Sommet du réseau', es: 'Altura de la red' },
   'Check again': { fr: 'Vérifier à nouveau', es: 'Comprobar de nuevo' },
   'Label hidden': { fr: 'Libellé masqué', es: 'Etiqueta oculta' },
   '{network} network status': { fr: 'État du réseau {network}', es: 'Estado de la red {network}' },

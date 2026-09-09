@@ -30,5 +30,6 @@ describe('transaction details denomination', () => {
     );
     expect(appCss).toMatch(/\.transaction-more-details\s*\{[^}]*border-bottom: 0;/s);
     expect(appCss).toMatch(/\.transaction-more-details > \.details-list\s*\{[^}]*border-top: 0;/s);
+    expect(component).toContain("showMore ? 'View less details' : 'View more details'");
   });
 });

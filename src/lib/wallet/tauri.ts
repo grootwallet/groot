@@ -257,6 +257,9 @@ export class TauriWalletAdapter implements WalletPort {
   nodeConfig() {
     return command<CoreNodeConfig>('node_config');
   }
+  publicNetworkStatus() {
+    return command<import('./contracts').PublicNetworkStatus>('network_public_status');
+  }
   admitMainnetCore(
     config: CoreNodeConfig,
     password: string,

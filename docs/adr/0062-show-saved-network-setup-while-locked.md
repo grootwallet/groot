@@ -28,6 +28,10 @@ Credentialed live operations remain locked. Priority-fee and Core-tip rows say t
 unlock is required to check them, and the popover states that node credentials remain
 sealed. Unlock, lock, and wallet switch continue to clear the native RPC-auth session.
 
+ADR 0063 supersedes the empty locked metric rows: they may show the last successfully
+verified public priority fee and network tip from an owner-only per-wallet cache.
+Fresh credentialed checks still require unlock.
+
 ## Compatibility and consequences
 
 This changes no wallet, registry, node-configuration, secret-envelope, proposal, or

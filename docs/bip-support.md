@@ -224,6 +224,11 @@ checks, descriptors, transactions, and recovery semantics as loopback Core. This
 widens a transport release policy only; it does not change BIP support or promote
 the still-pending remote-endpoint evidence.
 
+The locked public-network-observation cache and transaction-disclosure copy have no
+BIP support impact. They persist and render only a previously verified fee rate and
+chain height; transaction construction, descriptors, recovery, signing, broadcast,
+and protocol interoperability are unchanged.
+
 ## Maintenance rule
 
 The 2026-09-08 command-surface and export-validation maintenance has no BIP impact.

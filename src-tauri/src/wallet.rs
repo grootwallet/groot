@@ -1029,13 +1029,20 @@ struct DelayedPolicyContext {
     delay_blocks: u32,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FeeEstimatesDto {
     economy: f64,
     standard: f64,
     priority: f64,
     source: &'static str,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PublicNetworkStatusDto {
+    priority_fee: Option<f64>,
+    network_tip: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -2319,6 +2326,60 @@ fn sync_source_path(app: &AppHandle) -> ApiResult<PathBuf> {
 
 fn sync_source_path_for(app: &AppHandle, wallet_id: Uuid) -> ApiResult<PathBuf> {
     Ok(profile_directory(app, wallet_id)?.join("sync-source.json"))
+}
+
+fn public_network_status_path(app: &AppHandle) -> ApiResult<PathBuf> {
+    let profile = selected_profile(app)?;
+    Ok(profile_directory(app, profile.id)?.join("network-status.json"))
+}
+
+fn read_public_network_status(app: &AppHandle) -> ApiResult<PublicNetworkStatusDto> {
+    let path = public_network_status_path(app)?;
+    if !path.exists() {
+        return Ok(PublicNetworkStatusDto::default());
+    }
+    let status: PublicNetworkStatusDto =
+        serde_json::from_str(&read_private_text(&path)?).map_err(internal)?;
+    if status
+        .priority_fee
+        .is_some_and(|rate| !rate.is_finite() || rate <= 0.0)
+    {
+        return Err(internal("Saved public network status is invalid."));
+    }
+    Ok(status)
+}
+
+fn update_public_network_status(
+    app: &AppHandle,
+    priority_fee: Option<f64>,
+    network_tip: Option<u64>,
+) -> ApiResult<()> {
+    let mut status = read_public_network_status(app)?;
+    if let Some(priority_fee) = priority_fee {
+        status.priority_fee = Some(priority_fee);
+    }
+    if let Some(network_tip) = network_tip {
+        status.network_tip = Some(network_tip);
+    }
+    write_public_network_status(app, &status)
+}
+
+fn replace_public_network_status(
+    app: &AppHandle,
+    priority_fee: Option<f64>,
+    network_tip: Option<u64>,
+) -> ApiResult<()> {
+    write_public_network_status(
+        app,
+        &PublicNetworkStatusDto {
+            priority_fee,
+            network_tip,
+        },
+    )
+}
+
+fn write_public_network_status(app: &AppHandle, status: &PublicNetworkStatusDto) -> ApiResult<()> {
+    write_private_json(&public_network_status_path(app)?, status)
 }
 
 fn compact_filter_cache_dir(app: &AppHandle) -> ApiResult<PathBuf> {

@@ -251,7 +251,7 @@
         >
       </div>{/if}
     <details class="proposal-review-details transaction-more-details" bind:open={showMore}>
-      <summary>{translate($locale, 'View more details')}</summary>
+      <summary>{translate($locale, showMore ? 'View less details' : 'View more details')}</summary>
       <dl class="details-list">
         {#if transaction.inputCount != null}<div>
             <dt>{translate($locale, 'Inputs')}</dt>

@@ -59,6 +59,14 @@
     loading = true;
     try {
       try {
+        const status = await walletService.publicNetworkStatus();
+        priorityFee = status.priorityFee;
+        nodeHeight = status.networkTip;
+      } catch {
+        priorityFee = null;
+        nodeHeight = null;
+      }
+      try {
         nodeConfig = await walletService.nodeConfig();
       } catch {
         nodeConfig = null;
@@ -84,8 +92,6 @@
           nodeReachable = false;
         }
       } else {
-        priorityFee = null;
-        nodeHeight = null;
         nodeReachable = null;
       }
     } finally {
@@ -107,6 +113,7 @@
   $effect(() => {
     if (locked) {
       checked = false;
+      priorityFee = null;
       nodeHeight = null;
       nodeConfig = null;
       syncSource = null;
@@ -172,21 +179,17 @@
           <dt><Gauge size={14} /><span>{translate($locale, 'Priority fee')}</span></dt>
           <dd>
             {priorityFee === null
-              ? locked
-                ? translate($locale, 'Unlock to check')
-                : loading
-                  ? translate($locale, 'Checking…')
-                  : translate($locale, 'Unavailable')
+              ? loading
+                ? translate($locale, 'Checking…')
+                : translate($locale, 'Unavailable')
               : translate($locale, '{rate} sat/vB', { rate: priorityFee })}
           </dd>
         </div>
         <div>
-          <dt><Blocks size={14} /><span>{translate($locale, 'Core service tip')}</span></dt>
+          <dt><Blocks size={14} /><span>{translate($locale, 'Network tip')}</span></dt>
           <dd>
             {nodeHeight === null
-              ? locked
-                ? translate($locale, 'Unlock to check')
-                : translate($locale, 'Unavailable')
+              ? translate($locale, 'Unavailable')
               : formatInteger(nodeHeight, $locale)}
           </dd>
         </div>

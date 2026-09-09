@@ -89,6 +89,10 @@ export type NodeStatus = {
   sizeOnDisk: number;
   blockFilterIndex: 'synced' | 'building' | 'disabled' | 'unknown';
 };
+export type PublicNetworkStatus = {
+  priorityFee: number | null;
+  networkTip: number | null;
+};
 export type WalletSyncSource =
   | { type: 'bitcoin_core' }
   | {

@@ -9,6 +9,7 @@ describe('locked network status', () => {
     const refreshEnd = component.indexOf('\n  function show()', refreshStart);
     const refresh = component.slice(refreshStart, refreshEnd);
 
+    expect(refresh.indexOf('walletService.publicNetworkStatus()')).toBeGreaterThan(-1);
     expect(refresh.indexOf('walletService.nodeConfig()')).toBeGreaterThan(-1);
     expect(refresh.indexOf('walletService.syncSource()')).toBeGreaterThan(-1);
     expect(refresh.indexOf('walletService.nodeConfig()')).toBeLessThan(
@@ -17,7 +18,7 @@ describe('locked network status', () => {
     expect(refresh.indexOf('walletService.syncSource()')).toBeLessThan(
       refresh.indexOf('if (!locked)')
     );
-    expect(component).toContain("translate($locale, 'Unlock to check')");
+    expect(component).toContain("translate($locale, 'Network tip')");
   });
 
   it('keeps credentialed live checks behind unlock', () => {

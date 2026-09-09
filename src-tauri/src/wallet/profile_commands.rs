@@ -574,7 +574,10 @@ pub async fn wallet_sync(app: AppHandle, automatic: Option<bool>) -> ApiResult<W
             },
             None,
         );
-        let result = run_foreground_sync(&app, &state, false);
+        let result = run_foreground_sync(&app, &state, false).and_then(|snapshot| {
+            update_public_network_status(&app, None, Some(snapshot.chain_tip.height.into()))?;
+            Ok(snapshot)
+        });
         diagnostics::record_result(
             &app,
             &state,
@@ -932,12 +935,14 @@ pub(crate) fn current_mempool_fee_rate(
 #[tauri::command]
 pub fn fees_estimate(app: AppHandle, state: State<'_, AppState>) -> ApiResult<FeeEstimatesDto> {
     if IS_REGTEST {
-        return Ok(FeeEstimatesDto {
+        let estimates = FeeEstimatesDto {
             economy: 1.0,
             standard: 2.0,
             priority: 5.0,
             source: "Regtest policy",
-        });
+        };
+        update_public_network_status(&app, Some(estimates.priority), None)?;
+        return Ok(estimates);
     }
     require_unlocked(&app, &state)?;
     let client = rpc_client(&app, &state)?;
@@ -958,17 +963,24 @@ pub fn fees_estimate(app: AppHandle, state: State<'_, AppState>) -> ApiResult<Fe
     let (economy, standard, priority) = current_mempool_rate
         .map(|rate| (rate, rate, rate))
         .unwrap_or(historical);
-    Ok(FeeEstimatesDto {
+    let estimates = FeeEstimatesDto {
         economy,
         standard,
         priority,
         source: "Bitcoin Core",
-    })
+    };
+    update_public_network_status(&app, Some(estimates.priority), None)?;
+    Ok(estimates)
 }
 
 #[tauri::command]
 pub fn node_config(app: AppHandle) -> ApiResult<CoreNodeConfig> {
     read_node_config(&app)
+}
+
+#[tauri::command]
+pub fn network_public_status(app: AppHandle) -> ApiResult<PublicNetworkStatusDto> {
+    read_public_network_status(&app)
 }
 
 #[tauri::command]
@@ -1471,6 +1483,7 @@ pub async fn node_config_save(
         write_private_json(&node_config_path(&app)?, &config)?;
         load_node_auth_session(&app, &state, credential.as_str())?;
         mark_selected_mainnet_node_verified(&app, &state)?;
+        replace_public_network_status(&app, None, Some(status.blocks))?;
         diagnostics::record(
             &app,
             &state,
@@ -1599,6 +1612,7 @@ pub async fn network_setup_adopt(
         write_private_json(&node_config_path_for(&app, destination)?, &config)?;
         write_private_json(&sync_source_path_for(&app, destination)?, &sync_source)?;
         load_node_auth_session(&app, &state, credential.as_str())?;
+        replace_public_network_status(&app, None, Some(status.blocks))?;
         Ok(status)
     })
     .await
@@ -1715,6 +1729,7 @@ pub(crate) fn node_test(app: &AppHandle, state: &State<'_, AppState>) -> ApiResu
     let config = read_node_config(app)?;
     let status = checked_node_status(&rpc_client(app, state)?, config)?;
     mark_selected_mainnet_node_verified(app, state)?;
+    update_public_network_status(app, None, Some(status.blocks))?;
     Ok(status)
 }
 
