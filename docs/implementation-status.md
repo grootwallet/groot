@@ -215,9 +215,10 @@ device metadata is derived from the admission rather than trusted from the backu
 Guided delayed/recovery Miniscript backups remain recoverable on test networks but
 are rejected before profile creation on mainnet, preserving the standard-BIP48-only
 first-release scope.
-Final mainnet CPFP validation requires one descriptor-derived wallet output, and
-a non-loopback or non-HTTP Core backend is rejected before any
-genesis RPC. Test-network behavior and every persisted format are unchanged; no
+Final mainnet CPFP validation requires one descriptor-derived wallet output. ADR
+0061 admits either loopback HTTP or direct HTTPS Core before any genesis RPC while
+still rejecting remote plaintext, Tor/onion, Esplora, and automatic fallback.
+Test-network behavior and every persisted format are unchanged; no
 migration is required. The follow-up Core-admission branch now requires a typed
 Rust-owned permit at both SQLite constructors, binds existing-wallet admission to
 the selected wallet and exact saved Core configuration, consumes new-wallet
@@ -535,5 +536,10 @@ owned by `AppShell`, eliminating the preceding `wallet_exists` and
 authoritative for current selection, session, network, and wallet-state checks.
 No profile means no scheduled native work. This changes no persisted format,
 public DTO, stable error, dependency, BIP behavior, or user-visible flow.
+
+ADR 0061 supersedes the Mainnet table row's local-only transport description:
+the isolated candidate now admits loopback HTTP or direct HTTPS Core, with no
+automatic fallback. Its remote-endpoint, network-observation, exact-candidate,
+and independent-review evidence remains open, so distribution remains blocked.
 
 Update this table in the same change whenever a capability crosses a boundary.

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { translate } from '$lib/i18n-catalog';
-  import { Blocks, Gauge, LockKeyhole, Network, Route, Server } from '@lucide/svelte';
+  import { Blocks, Gauge, LockKeyhole, Network, Route, Server, X } from '@lucide/svelte';
   import { networkName, type SupportedNetwork } from '$lib/config';
   import { formatInteger, locale } from '$lib/i18n';
   import { walletService } from '$lib/wallet';
@@ -15,6 +15,7 @@
   let nodeConfig = $state<CoreNodeConfig | null>(null);
   let syncSource = $state<WalletSyncSource | null>(null);
   let nodeReachable = $state<boolean | null>(null);
+  let statusRoot: HTMLDivElement;
 
   const backendLabel = $derived(
     translate(
@@ -23,7 +24,9 @@
         ? 'Trusted remote node'
         : nodeConfig?.backend.type === 'local_core'
           ? 'Local Bitcoin Core'
-          : 'Available after unlock'
+          : locked && network === 'mainnet'
+            ? 'Bitcoin Core'
+            : 'Available after unlock'
     )
   );
   const transportLabel = $derived(
@@ -33,7 +36,9 @@
         ? nodeConfig.torProxy
           ? 'Tor configured'
           : 'Direct connection'
-        : 'Available after unlock'
+        : locked && network === 'mainnet'
+          ? 'Local or remote TLS'
+          : 'Available after unlock'
     )
   );
   const syncLabel = $derived(
@@ -43,7 +48,9 @@
         ? 'P2P compact filters'
         : syncSource?.type === 'bitcoin_core'
           ? 'Bitcoin Core RPC'
-          : 'Available after unlock'
+          : locked && network === 'mainnet'
+            ? 'Bitcoin Core RPC'
+            : 'Available after unlock'
     )
   );
 
@@ -51,18 +58,19 @@
     if (loading) return;
     loading = true;
     try {
-      try {
-        const fees = await walletService.estimateFees();
-        priorityFee = Number(fees.priority);
-      } catch {
-        priorityFee = null;
-      }
       if (locked) {
+        priorityFee = null;
         nodeHeight = null;
         nodeConfig = null;
         syncSource = null;
         nodeReachable = null;
       } else {
+        try {
+          const fees = await walletService.estimateFees();
+          priorityFee = Number(fees.priority);
+        } catch {
+          priorityFee = null;
+        }
         try {
           syncSource = await walletService.syncSource();
         } catch {
@@ -109,7 +117,14 @@
   });
 </script>
 
+<svelte:window
+  onpointerdown={(event) => {
+    if (open && !statusRoot?.contains(event.target as Node)) open = false;
+  }}
+/>
+
 <div
+  bind:this={statusRoot}
   class="network-status"
   class:open
   role="group"
@@ -147,15 +162,23 @@
                   : translate($locale, 'Checking node…')}</small
           >
         </div>
+        <button
+          type="button"
+          class="network-popover-close"
+          aria-label={translate($locale, 'Close')}
+          onclick={() => (open = false)}><X size={15} /></button
+        >
       </header>
       <dl>
         <div>
           <dt><Gauge size={14} /><span>{translate($locale, 'Priority fee')}</span></dt>
           <dd>
             {priorityFee === null
-              ? loading
-                ? translate($locale, 'Checking…')
-                : translate($locale, 'Unavailable')
+              ? locked
+                ? translate($locale, 'Available after unlock')
+                : loading
+                  ? translate($locale, 'Checking…')
+                  : translate($locale, 'Unavailable')
               : translate($locale, '{rate} sat/vB', { rate: priorityFee })}
           </dd>
         </div>

@@ -1904,7 +1904,7 @@ fn current_mainnet_node_admission(state: &AppState) -> ApiResult<PendingMainnetN
     admission.take();
     Err(api_error(
         "node_admission_required",
-        "Connect and verify the approved local Bitcoin Core node before opening a mainnet wallet.",
+        "Connect and verify an approved Bitcoin Core node before opening a mainnet wallet.",
     ))
 }
 
@@ -1926,7 +1926,7 @@ fn database_admission_error(error: crate::release_policy::ReleasePolicyError) ->
     match error {
         crate::release_policy::ReleasePolicyError::BackendAdmissionRequired => api_error(
             "node_admission_required",
-            "Connect and verify the approved local Bitcoin Core node before opening a mainnet wallet.",
+            "Connect and verify an approved Bitcoin Core node before opening a mainnet wallet.",
         ),
         _ => internal("This build is not authorized to open a mainnet wallet database."),
     }
@@ -1962,7 +1962,7 @@ fn database_open_permit_for_new_wallet(state: &AppState) -> ApiResult<DatabaseOp
     if !admission_allows_new_wallet(&admission) {
         return Err(api_error(
             "node_admission_required",
-            "Verify the local Bitcoin Core node specifically for new mainnet wallet creation.",
+            "Verify the Bitcoin Core node specifically for new mainnet wallet creation.",
         ));
     }
     crate::release_policy::ensure_database_open_enabled(NETWORK, true)
@@ -1998,7 +1998,7 @@ fn database_open_permit_for_selected_wallet(app: &AppHandle) -> ApiResult<Databa
     if !pending_matches && !active_matches {
         return Err(api_error(
             "node_admission_required",
-            "Verify this wallet's saved local Bitcoin Core connection before reading wallet data.",
+            "Verify this wallet's saved Bitcoin Core connection before reading wallet data.",
         ));
     }
     crate::release_policy::ensure_database_open_enabled(NETWORK, true)
@@ -2026,7 +2026,7 @@ fn database_open_permit_for_identity_inspection(app: &AppHandle) -> ApiResult<Da
         if !pending && !active {
             return Err(api_error(
                 "node_admission_required",
-                "Connect and verify the approved local Bitcoin Core node before inspecting mainnet wallet identities.",
+                "Connect and verify an approved Bitcoin Core node before inspecting mainnet wallet identities.",
             ));
         }
     }
@@ -2593,7 +2593,7 @@ fn validate_first_mainnet_rpc_endpoint(backend: &ChainBackend) -> ApiResult<()> 
     crate::release_policy::validate_first_mainnet_backend_endpoint(backend).map_err(|_| {
         api_error(
             "invalid_node_config",
-            "The first mainnet release requires a loopback Bitcoin Core node.",
+            "Mainnet requires either loopback Bitcoin Core or a trusted remote HTTPS Core endpoint.",
         )
     })
 }
@@ -2606,7 +2606,7 @@ fn validate_first_mainnet_rpc_backend(client: &Client, backend: &ChainBackend) -
     crate::release_policy::validate_first_mainnet_backend(backend, observed_genesis).map_err(|_| {
         api_error(
             "invalid_node_config",
-            "The first mainnet release requires a loopback Bitcoin Core node on the exact Bitcoin genesis chain.",
+            "Mainnet requires an admitted Bitcoin Core endpoint on the exact Bitcoin genesis chain.",
         )
     })
 }

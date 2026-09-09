@@ -217,6 +217,13 @@ The maximum-spend clarification has no BIP support impact. It adds durable inlin
 and toast feedback for the existing rule that frozen outputs remain excluded from
 transaction construction; no transaction, fee, descriptor, or protocol behavior changes.
 
+The 2026-09-09 RC legibility, transaction-detail, bounded-zoom, recovery-result,
+locked network-summary, and direct-HTTPS Mainnet Core changes have no BIP support
+impact. The remote service uses the same Bitcoin Core RPC discovery, exact-chain
+checks, descriptors, transactions, and recovery semantics as loopback Core. This
+widens a transport release policy only; it does not change BIP support or promote
+the still-pending remote-endpoint evidence.
+
 ## Maintenance rule
 
 The 2026-09-08 command-surface and export-validation maintenance has no BIP impact.

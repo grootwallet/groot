@@ -36,13 +36,14 @@
   .formatted-amount {
     display: inline-flex;
     align-items: baseline;
+    gap: 0.25rem;
     max-width: 100%;
   }
 
   .formatted-amount > small {
     display: inline-flex;
     align-items: baseline;
-    margin-left: 0.5rem;
+    margin-left: 0;
   }
 
   .interactive-amount {

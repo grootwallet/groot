@@ -28,11 +28,13 @@ pub enum ReleasePolicyError {
 pub fn validate_first_mainnet_backend_endpoint(
     backend: &ChainBackend,
 ) -> Result<(), ReleasePolicyError> {
-    let ChainBackend::LocalCore { url } = backend else {
-        return Err(ReleasePolicyError::UnsupportedBackend);
+    let (url, required_scheme) = match backend {
+        ChainBackend::LocalCore { url } => (url, "http"),
+        ChainBackend::RemoteCore { url } => (url, "https"),
+        ChainBackend::Esplora { .. } => return Err(ReleasePolicyError::UnsupportedBackend),
     };
     let parsed = url::Url::parse(url).map_err(|_| ReleasePolicyError::UnsupportedBackend)?;
-    if parsed.scheme() != "http" || backend.validate().is_err() {
+    if parsed.scheme() != required_scheme || backend.validate().is_err() {
         return Err(ReleasePolicyError::UnsupportedBackend);
     }
     Ok(())
@@ -217,7 +219,7 @@ mod tests {
     }
 
     #[test]
-    fn candidate_backend_requires_exact_mainnet_genesis_and_local_core() {
+    fn candidate_backend_requires_exact_mainnet_genesis_and_an_admitted_core_transport() {
         let local = ChainBackend::LocalCore {
             url: "http://127.0.0.1:8332".into(),
         };
@@ -229,6 +231,13 @@ mod tests {
         assert_eq!(
             validate_first_mainnet_backend(&local, genesis_block(Network::Testnet).block_hash()),
             Err(ReleasePolicyError::WrongGenesis)
+        );
+        let remote = ChainBackend::RemoteCore {
+            url: "https://node.example:8332".into(),
+        };
+        assert_eq!(
+            validate_first_mainnet_backend(&remote, mainnet_genesis),
+            Ok(())
         );
         for backend in [
             ChainBackend::LocalCore {
@@ -244,7 +253,11 @@ mod tests {
                 url: "not-a-url".into(),
             },
             ChainBackend::RemoteCore {
-                url: "https://node.example".into(),
+                url: "http://node.example:8332".into(),
+            },
+            ChainBackend::RemoteCore {
+                url: "http://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.onion:8332"
+                    .into(),
             },
             ChainBackend::Esplora {
                 url: "https://mempool.space/api".into(),

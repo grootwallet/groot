@@ -240,10 +240,18 @@
     const password = corePassword;
     corePassword = '';
     try {
+      const endpoint = coreConfig.backend.url.trim();
+      coreConfig = {
+        ...coreConfig,
+        backend: {
+          type: endpoint.toLowerCase().startsWith('https://') ? 'remote_core' : 'local_core',
+          url: endpoint
+        }
+      };
       await walletService.admitMainnetCore(coreConfig, password, 'create_new_wallet');
       return true;
     } catch (cause) {
-      error = localizedError(cause, $locale, 'Could not verify the local Bitcoin Core node.');
+      error = localizedError(cause, $locale, 'Could not verify the Bitcoin Core node.');
       return false;
     }
   }
@@ -427,21 +435,26 @@
       <p>
         {translate(
           $locale,
-          'Groot must authenticate your local, fully synchronized mainnet node before it can create any wallet files.'
+          'Groot must authenticate your fully synchronized mainnet node before it can create any wallet files.'
         )}
       </p>
       <div class="warning-box danger" role="alert">
         <strong>{translate($locale, 'Real bitcoin network')}</strong>
         {translate(
           $locale,
-          'Only continue with a Bitcoin Core node you control on this Mac. Remote nodes and fallback services are disabled.'
+          'Use a node you control: loopback HTTP or a trusted remote HTTPS endpoint. Fallback services remain disabled.'
         )}
       </div>
       <div class="credential-form">
         <label class="field">
-          <span>{translate($locale, 'Local RPC URL')}</span>
+          <span>{translate($locale, 'RPC URL')}</span>
           <input bind:value={coreConfig.backend.url} autocomplete="off" />
-          <small>{translate($locale, 'Plain HTTP is accepted only on a loopback address.')}</small>
+          <small
+            >{translate(
+              $locale,
+              'Plain HTTP is accepted only on loopback. Remote nodes require HTTPS with a system-trusted certificate.'
+            )}</small
+          >
         </label>
         <label class="field">
           <span>{translate($locale, 'RPC username')}</span>
@@ -829,7 +842,7 @@
             )}
           </div>
           <label class="field">
-            <span>{translate($locale, 'Local RPC URL')}</span>
+            <span>{translate($locale, 'RPC URL')}</span>
             <input bind:value={coreConfig.backend.url} autocomplete="off" />
           </label>
           <label class="field">
@@ -925,11 +938,11 @@
             <strong>{translate($locale, 'Mainnet Core verification required')}</strong>
             {translate(
               $locale,
-              'Groot will authenticate your local node and verify the exact Bitcoin genesis chain before creating any wallet files.'
+              'Groot will authenticate your node and verify the exact Bitcoin genesis chain before creating any wallet files.'
             )}
           </div>
           <label class="field">
-            <span>{translate($locale, 'Local RPC URL')}</span>
+            <span>{translate($locale, 'RPC URL')}</span>
             <input bind:value={coreConfig.backend.url} autocomplete="off" />
           </label>
           <label class="field">

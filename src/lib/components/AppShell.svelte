@@ -37,8 +37,10 @@
   import {
     isDesktopPlatform,
     matchKeyboardShortcut,
+    matchZoomShortcut,
     usesCommandModifier
   } from '$lib/keyboard-shortcuts';
+  import { applyZoom, changeZoom, initZoom } from '$lib/zoom';
   let { children } = $props();
   const nav: Array<{ href: string; label: MessageKey; icon: typeof LayoutGrid }> = [
     { href: '/', label: 'overview', icon: LayoutGrid },
@@ -90,6 +92,7 @@
   let navigationPending = $state(false);
   let commandModifier = false;
   let desktopPlatform = false;
+  let currentZoom = 1;
   let shortcutLockPending = false;
   let walletSelectionTask: Promise<void> | undefined;
   let pendingUnlockSyncWalletId: string | null = null;
@@ -129,6 +132,19 @@
       ? event.metaKey && !event.ctrlKey
       : event.ctrlKey && !event.metaKey;
     const target = event.target as HTMLElement | null;
+    const zoomShortcut = matchZoomShortcut(event);
+    if (
+      desktopPlatform &&
+      !event.defaultPrevented &&
+      !event.repeat &&
+      !event.altKey &&
+      primaryModifier &&
+      zoomShortcut
+    ) {
+      event.preventDefault();
+      currentZoom = applyZoom(changeZoom(currentZoom, zoomShortcut));
+      return;
+    }
     if (
       startupState !== 'ready' ||
       onboardingRoute ||
@@ -145,6 +161,9 @@
 
     const shortcut = matchKeyboardShortcut(event);
     if (!shortcut) return;
+
+    if (shortcut.id === 'zoom_in' || shortcut.id === 'zoom_out' || shortcut.id === 'zoom_reset')
+      return;
 
     if (shortcut.id === 'lock') {
       if (isPrototypeWallet || !desktopPlatform || navigationPending || shortcutLockPending) return;
@@ -416,6 +435,7 @@
       navigator.userAgent,
       navigator.maxTouchPoints
     );
+    if (desktopPlatform) currentZoom = initZoom();
     const unsubscribe = walletService.subscribe((event) => {
       const presentation = walletEventPresentation(event, $locale, $denomination, goto);
       if (presentation) toast(presentation);

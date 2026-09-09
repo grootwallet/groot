@@ -16,7 +16,7 @@
   --radius-control: 10px;
   --radius-inset: 12px;
   --radius-panel: 20px;
-  --font-size-meta: 11px;
+  --font-size-meta: 12px;
   color-scheme: dark;
   color: var(--text);
   background: var(--bg);
@@ -32,6 +32,7 @@
   --muted-2: #a5b5c9;
   --accent: #f1d18b;
   --accent-soft: #382d16;
+  --progress: #ffd54a;
   --fr-blue: #1b56c5;
   --fr-red: #ff8a95;
   --success: #85d6aa;
@@ -56,6 +57,17 @@
   --focus: #a9c7ff;
   --fr-blue-soft: color-mix(in srgb, var(--link) 10%, transparent);
   --modal-document-top: -32px;
+}
+
+button:not(:disabled),
+a[href]:not([aria-disabled='true']),
+summary,
+[role='button']:not([aria-disabled='true']) {
+  cursor: pointer;
+}
+button:disabled,
+a[aria-disabled='true'] {
+  cursor: not-allowed;
 }
 
 .descriptor-viewer details {
@@ -709,8 +721,25 @@ code {
   display: grid;
   gap: 2px;
 }
+.network-popover-close {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-control);
+  color: var(--muted);
+  background: transparent;
+}
+.network-popover-close:hover,
+.network-popover-close:focus-visible {
+  color: var(--text);
+  background: var(--surface-hover);
+}
 .network-popover header strong {
-  font-size: 12px;
+  font-size: 14px;
 }
 .network-popover header small {
   color: var(--muted);
@@ -738,7 +767,7 @@ code {
   align-items: center;
   gap: 8px;
   color: var(--text-soft);
-  font-size: 11px;
+  font-size: 13px;
 }
 .network-popover dt svg {
   color: var(--muted);
@@ -746,7 +775,7 @@ code {
 .network-popover dd {
   margin: 0;
   color: var(--muted);
-  font-size: var(--font-size-meta);
+  font-size: 12px;
   text-align: right;
 }
 .network-popover > p {
@@ -824,6 +853,7 @@ code {
 .formatted-amount {
   display: inline-flex;
   align-items: baseline;
+  gap: 0.25rem;
   min-width: 0;
   max-width: 100%;
   font-variant-numeric: tabular-nums;
@@ -838,7 +868,7 @@ code {
 .formatted-amount small {
   display: inline-flex;
   align-items: baseline;
-  margin-left: 0.5rem;
+  margin-left: 0;
   color: var(--muted);
   font-size: 0.72em;
   font-weight: 600;
@@ -953,7 +983,7 @@ code {
 }
 .sync-progress strong {
   color: var(--text);
-  font-size: 11px;
+  font-size: 13px;
 }
 .sync-progress small {
   color: var(--muted);
@@ -963,7 +993,7 @@ code {
 .sync-progress progress {
   width: 100%;
   height: 5px;
-  accent-color: var(--accent);
+  accent-color: var(--progress);
 }
 .sync-progress.failed {
   border-color: color-mix(in srgb, var(--danger) 38%, var(--border));
@@ -985,7 +1015,7 @@ code {
 }
 .initial-history-scan strong {
   color: var(--text);
-  font-size: 11px;
+  font-size: 13px;
 }
 .initial-history-scan small {
   color: var(--muted);
@@ -996,7 +1026,7 @@ code {
   grid-column: 1 / -1;
   width: 100%;
   height: 5px;
-  accent-color: var(--accent);
+  accent-color: var(--progress);
 }
 .unverified-balance {
   display: flex;
@@ -1073,7 +1103,7 @@ code {
 .scan-resume-summary progress {
   width: 100%;
   height: 5px;
-  accent-color: var(--accent);
+  accent-color: var(--progress);
 }
 .initial-history-scan + .backup-verification-banner,
 .sync-progress + .backup-verification-banner {
@@ -1081,6 +1111,9 @@ code {
 }
 .spin {
   animation: spin 0.8s linear infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+  will-change: transform;
 }
 @keyframes spin {
   to {
@@ -1497,18 +1530,18 @@ code {
   align-items: baseline;
 }
 .scan-progress strong {
-  font-size: 11px;
+  font-size: 13px;
   color: var(--text-soft);
 }
 .scan-progress small {
-  font-size: var(--font-size-meta);
+  font-size: 12px;
   color: var(--muted);
   text-align: right;
 }
 .scan-progress progress {
   width: 100%;
   height: 6px;
-  accent-color: var(--accent);
+  accent-color: var(--progress);
 }
 .button.ghost-danger {
   background: transparent;
@@ -3127,11 +3160,11 @@ code {
 }
 .details-list dt {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 13px;
 }
 .details-list dd {
   margin: 0;
-  font-size: 11px;
+  font-size: 13px;
   text-align: right;
   max-width: 65%;
 }
@@ -3257,7 +3290,7 @@ code {
   box-sizing: border-box;
   padding: 15px 0;
   color: var(--link);
-  font-size: var(--font-size-meta);
+  font-size: 13px;
   font-weight: 700;
   cursor: pointer;
 }
@@ -3437,6 +3470,10 @@ code {
 }
 .transaction-more-details {
   margin-top: 12px;
+  border-bottom: 0;
+}
+.transaction-summary-list > div:last-child {
+  border-bottom: 0;
 }
 .transaction-more-details > .details-list:empty {
   display: none;
@@ -3818,11 +3855,11 @@ code {
   gap: 5px;
 }
 .settings-list strong {
-  font-size: 12px;
+  font-size: 14px;
 }
 .settings-list small {
   color: var(--muted);
-  font-size: var(--font-size-meta);
+  font-size: 13px;
   line-height: 1.4;
 }
 .keyboard-shortcut-row {
@@ -3830,10 +3867,10 @@ code {
   padding-block: 14px !important;
 }
 .keyboard-shortcut-grid {
-  width: 250px;
+  width: min(390px, 44%);
   margin: 0;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(150px, 1fr));
   gap: 8px 16px;
 }
 .keyboard-shortcut-grid > div {
@@ -3844,11 +3881,9 @@ code {
   gap: 8px;
 }
 .keyboard-shortcut-grid dt {
-  overflow: hidden;
   color: var(--muted);
-  font-size: var(--font-size-meta);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: 12px;
+  white-space: normal;
 }
 .keyboard-shortcut-grid dd {
   margin: 0;
@@ -10114,6 +10149,7 @@ code {
   --muted-2: #5b6d82;
   --accent: #795200;
   --accent-soft: #fff6df;
+  --progress: #f2b705;
   --fr-red: #d3293a;
   --success: #20633f;
   --danger: #b82937;
@@ -10819,6 +10855,7 @@ code {
     grid-column: 2 / -1;
     width: 100%;
     margin-top: 8px;
+    grid-template-columns: 1fr;
   }
   .settings-page .danger-zone > div {
     min-height: 0;

@@ -277,17 +277,33 @@ export const onboardingCopy = {
       fr: 'Groot doit authentifier votre nœud mainnet local entièrement synchronisé avant de créer tout fichier de portefeuille.',
       es: 'Groot debe autenticar tu nodo mainnet local totalmente sincronizado antes de crear archivos de cartera.'
     },
+  'Groot must authenticate your fully synchronized mainnet node before it can create any wallet files.':
+    {
+      fr: 'Groot doit authentifier votre nœud mainnet entièrement synchronisé avant de créer tout fichier de portefeuille.',
+      es: 'Groot debe autenticar tu nodo mainnet totalmente sincronizado antes de crear archivos de cartera.'
+    },
   'Real bitcoin network': { fr: 'Réseau bitcoin réel', es: 'Red bitcoin real' },
   'Only continue with a Bitcoin Core node you control on this Mac. Remote nodes and fallback services are disabled.':
     {
       fr: 'Continuez uniquement avec un nœud Bitcoin Core que vous contrôlez sur ce Mac. Les nœuds distants et services de secours sont désactivés.',
       es: 'Continúa solo con un nodo Bitcoin Core que controles en este Mac. Los nodos remotos y servicios alternativos están desactivados.'
     },
+  'Use a node you control: loopback HTTP or a trusted remote HTTPS endpoint. Fallback services remain disabled.':
+    {
+      fr: 'Utilisez un nœud que vous contrôlez : HTTP en boucle locale ou point de terminaison HTTPS distant de confiance. Les services de secours restent désactivés.',
+      es: 'Usa un nodo que controles: HTTP local o un endpoint HTTPS remoto de confianza. Los servicios alternativos siguen desactivados.'
+    },
   'Local RPC URL': { fr: 'URL RPC locale', es: 'URL RPC local' },
   'Plain HTTP is accepted only on a loopback address.': {
     fr: 'Le HTTP simple est accepté uniquement sur une adresse de bouclage.',
     es: 'HTTP sin cifrar solo se acepta en una dirección de bucle local.'
   },
+  'Plain HTTP is accepted only on loopback. Remote nodes require HTTPS with a system-trusted certificate.':
+    {
+      fr: 'Le HTTP simple est accepté uniquement en boucle locale. Les nœuds distants exigent HTTPS avec un certificat approuvé par le système.',
+      es: 'HTTP sin cifrar solo se acepta localmente. Los nodos remotos requieren HTTPS con un certificado de confianza del sistema.'
+    },
+  'RPC URL': { fr: 'URL RPC', es: 'URL RPC' },
   'RPC username': { fr: 'Nom d’utilisateur RPC', es: 'Usuario RPC' },
   'RPC password': { fr: 'Mot de passe RPC', es: 'Contraseña RPC' },
   'Used only by trusted native code and encrypted into the new wallet profile.': {
@@ -319,19 +335,42 @@ export const onboardingCopy = {
       fr: 'Groot authentifiera votre nœud local et vérifiera la chaîne de genèse Bitcoin exacte avant de créer tout fichier de portefeuille.',
       es: 'Groot autenticará tu nodo local y verificará la cadena génesis exacta de Bitcoin antes de crear archivos de cartera.'
     },
+  'Groot will authenticate your node and verify the exact Bitcoin genesis chain before creating any wallet files.':
+    {
+      fr: 'Groot authentifiera votre nœud et vérifiera la chaîne de genèse Bitcoin exacte avant de créer tout fichier de portefeuille.',
+      es: 'Groot autenticará tu nodo y verificará la cadena génesis exacta de Bitcoin antes de crear archivos de cartera.'
+    },
+  'Could not verify the Bitcoin Core node.': {
+    fr: 'Impossible de vérifier le nœud Bitcoin Core.',
+    es: 'No se pudo verificar el nodo Bitcoin Core.'
+  },
   'Compact-filter and remote-node fallbacks are disabled so the reviewed trust boundary cannot change silently.':
     {
       fr: 'Les solutions de secours par filtres compacts et nœuds distants sont désactivées afin que la limite de confiance examinée ne change pas silencieusement.',
       es: 'Las alternativas de filtros compactos y nodos remotos están desactivadas para que el límite de confianza revisado no cambie silenciosamente.'
+    },
+  'Compact-filter fallbacks are disabled. Activity, fees, and broadcast use only the Core endpoint you explicitly configure.':
+    {
+      fr: 'Les filtres compacts de secours sont désactivés. L’activité, les frais et la diffusion utilisent uniquement le point de terminaison Core configuré explicitement.',
+      es: 'Los filtros compactos alternativos están desactivados. La actividad, las comisiones y la difusión usan solo el endpoint Core configurado explícitamente.'
     },
   mainnet: { fr: 'mainnet', es: 'mainnet' },
   'Mainnet requires a Bitcoin Core RPC endpoint on this Mac. Credentials in URLs are rejected.': {
     fr: 'Mainnet exige un point de terminaison RPC Bitcoin Core sur ce Mac. Les identifiants dans les URL sont refusés.',
     es: 'Mainnet requiere un endpoint RPC de Bitcoin Core en este Mac. Se rechazan credenciales en las URL.'
   },
+  'Mainnet accepts loopback HTTP or a trusted remote HTTPS endpoint. Credentials in URLs are rejected.':
+    {
+      fr: 'Mainnet accepte HTTP en boucle locale ou un point de terminaison HTTPS distant de confiance. Les identifiants dans les URL sont refusés.',
+      es: 'Mainnet acepta HTTP local o un endpoint HTTPS remoto de confianza. Se rechazan credenciales en las URL.'
+    },
   'Mainnet requires the admitted local Bitcoin Core node.': {
     fr: 'Mainnet exige le nœud Bitcoin Core local admis.',
     es: 'Mainnet requiere el nodo Bitcoin Core local admitido.'
+  },
+  'Mainnet requires an admitted Bitcoin Core node.': {
+    fr: 'Mainnet exige un nœud Bitcoin Core admis.',
+    es: 'Mainnet requiere un nodo Bitcoin Core admitido.'
   },
   'Must be a loopback address on this Mac.': {
     fr: 'Doit être une adresse de bouclage sur ce Mac.',

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { locale } from '$lib/i18n';
+  import { formatInteger, locale } from '$lib/i18n';
   import { translate } from '$lib/i18n-catalog';
   import { ArrowRight, ArrowUp, Copy, ExternalLink, Layers } from '@lucide/svelte';
   import Modal from './Modal.svelte';
@@ -214,7 +214,7 @@
         </details>
       </aside>
     {/if}
-    <dl class="details-list">
+    <dl class="details-list transaction-summary-list">
       <div>
         <dt>{translate($locale, 'Date')}</dt>
         <dd><LocalTimestamp value={transaction.date} /></dd>
@@ -322,7 +322,7 @@
           </div>{/if}
         {#if transaction.block}<div>
             <dt>{translate($locale, 'Block')}</dt>
-            <dd>{transaction.block}</dd>
+            <dd>{formatInteger(transaction.block, $locale)}</dd>
           </div>{/if}
         {#if isSelfSpend}<div>
             <dt>{translate($locale, 'Transaction type')}</dt>

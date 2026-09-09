@@ -1,6 +1,6 @@
 # ADR 0053: Proposed limited mainnet enablement
 
-- Status: proposed and blocked for release; an ADR 0055 certification build exists
+- Status: proposed and blocked for release; remote-Core exclusions superseded by ADR 0061
 - Date: 2026-09-02
 - Would supersede: ADR 0012 only after every exit condition below is met
 - Extends: ADR 0026, ADR 0037, ADR 0052
@@ -25,15 +25,15 @@ revision of this ADR may authorize one dedicated mainnet build with:
 
 - a mainnet-specific bundle identifier and isolated application-data location;
 - exact Bitcoin mainnet genesis verification before any wallet database opens;
-- user-controlled, loopback-only Bitcoin Core and no explorer or fallback
-  backend;
+- user-controlled Bitcoin Core through admitted loopback HTTP or direct HTTPS,
+  with no automatic fallback backend;
 - exactly one external recipient, a positive amount, no batch spending, and a
   maximum of 1,000,000 satoshis per transaction;
 - BIP84 software single-key wallets, approved BIP84 USB hardware wallets under
   the exact-model policy plus ADR 0054's two family exceptions, and standard
   BIP48 hardware multisig only;
-- no guided delayed/recovery Miniscript, Payjoin, compact filters, remote Core,
-  Tor/onion Core, public Esplora, mobile, Windows, or automatic updates; and
+- no guided delayed/recovery Miniscript, Payjoin, compact filters, Tor/onion Core,
+  public Esplora backend, mobile, Windows, or automatic updates; and
 - a visible mainnet identity and warning on onboarding, lock, wallet, review,
   signing, and settings surfaces.
 

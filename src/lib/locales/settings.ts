@@ -294,6 +294,9 @@ export const settingsCopy = {
     es: 'Navega y bloquea sin dejar el teclado.'
   },
   'Lock wallet': { fr: 'Verrouiller le portefeuille', es: 'Bloquear cartera' },
+  'Zoom in': { fr: 'Agrandir', es: 'Acercar' },
+  'Zoom out': { fr: 'Réduire', es: 'Alejar' },
+  'Reset zoom': { fr: 'Réinitialiser le zoom', es: 'Restablecer zoom' },
   'Wallet not locked': { fr: 'Portefeuille non verrouillé', es: 'Cartera no bloqueada' },
   'Could not lock this wallet.': {
     fr: 'Impossible de verrouiller ce portefeuille.',

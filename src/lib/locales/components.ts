@@ -45,6 +45,8 @@ export const componentCopy = {
   'Direct connection': { fr: 'Connexion directe', es: 'Conexión directa' },
   'P2P compact filters': { fr: 'Filtres compacts P2P', es: 'Filtros compactos P2P' },
   'Bitcoin Core RPC': { fr: 'RPC Bitcoin Core', es: 'RPC de Bitcoin Core' },
+  'Bitcoin Core': { fr: 'Bitcoin Core', es: 'Bitcoin Core' },
+  'Local or remote TLS': { fr: 'Local ou TLS distant', es: 'Local o TLS remoto' },
   'Wallet locked': { fr: 'Portefeuille verrouillé', es: 'Cartera bloqueada' },
   'Node reachable': { fr: 'Nœud accessible', es: 'Nodo accesible' },
   'Checking node…': { fr: 'Vérification du nœud…', es: 'Comprobando nodo…' },

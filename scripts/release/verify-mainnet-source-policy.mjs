@@ -24,7 +24,7 @@ const pinnedPolicySources = new Map([
   ['src-tauri/build.rs', '1432516ef85a004cee6e9ee945dc30b7e48477c0b78429267a4fbe513cebdbce'],
   [
     'src-tauri/src/release_policy.rs',
-    'b9f8a7f5f1fbf21b4546808e595419b7ec076cd388884e8cf2578644d89e3de1'
+    '68c9abb4e4572de588ece5574a292ebf41967a93f0672b1d389c984df89a5e43'
   ],
   [
     'src-tauri/src/build_network.rs',
@@ -32,14 +32,14 @@ const pinnedPolicySources = new Map([
   ],
   ['src-tauri/src/network.rs', 'dcf011fb789a0b690b1832a9245df5fc0199318f03a820d10f9a3b1c90f5d76b'],
   ['src-tauri/src/registry.rs', '343aea20f5d09df6abd5c9fdba3b093efc6729c9ece8f180b27a150061753a18'],
-  ['src-tauri/src/wallet.rs', '09637bd833d2b8dc6b773f43cdcefeb2b508fb84382810c2619835c88c854c55'],
+  ['src-tauri/src/wallet.rs', '07d3373567252b9988fcbc32367f6a1e4260d56b830530e1d9c1e942c1105d69'],
   [
     'src-tauri/src/wallet/diagnostics.rs',
     'ee71b116c3431a4476504199fcad6fa854fbfe214b08640a7d4e6d9a67d17f52'
   ],
   [
     'src-tauri/src/wallet/error_translation.rs',
-    'fb7189be7f8756eab6d5c83bae48732337f1a03efa679f06d89a6568a6a957ca'
+    'fdeeee01e5a62607f8a805f3ed84e7c853856aba4e2e2963c989afe154abfc84'
   ],
   [
     'src-tauri/src/wallet/explorer_commands.rs',
@@ -67,7 +67,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src-tauri/src/wallet/profile_commands.rs',
-    '6b18de80c35fbaafc48157ad1e7b4b73d41cd347ffbd5fd7e3d5afffaa7c19cc'
+    'c69aadc52a31a396b36bb675958dbb9a6fbcc4df0eabc1369597b6b81a7756ba'
   ],
   [
     'src-tauri/src/wallet/payment_draft_commands.rs',
@@ -107,7 +107,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src/lib/components/AppShell.svelte',
-    'af279b41331aa308add6c40039147c7dfcb1dcbccbc0ee2fc0c4e73752dff7d5'
+    'b6298149c0c1a910ca9c1eed1ffa177431ebebac6fce7236b11b40310a2befa5'
   ],
   [
     'src/routes/diagnostics/+page.svelte',
@@ -115,7 +115,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src/routes/welcome/+page.svelte',
-    'c09dfb653683c98ab6bb626b9f83ead724906f2853c447c651973439b15e9b1a'
+    '0c92e21ca32099a3f2062634f56498960682381a9c6299bc5006e56d598c2759'
   ],
   [
     'src/routes/unlock/+page.svelte',
@@ -124,7 +124,7 @@ const pinnedPolicySources = new Map([
   ['src/routes/+page.svelte', 'fe42dcfb8451fea27a2427c373d1974a0e86d2577060448ab7d79d3b557b6ba3'],
   [
     'src/routes/settings/+page.svelte',
-    'f8e66901ad7b94a7cc5cbeb53222e32cab176e769c468599d0de8139d13beeb9'
+    '117063157c4e5f8e73afedee23f8e99ada8900776af1ce512fe4afed522f8bfa'
   ],
   [
     'src/routes/hardware/new/+page.svelte',
@@ -144,7 +144,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src/lib/locales/onboarding.ts',
-    '16855dee74c1786545cbbfe1ed1cff158d36cd61e26452de00dc34928b7f7a27'
+    '4c25e17475131bd3d74bff35a6c7412dd5821e24a34da0ac58c76a4ff4f7c70f'
   ],
   [
     'scripts/release/build-mainnet-internal-rc.mjs',

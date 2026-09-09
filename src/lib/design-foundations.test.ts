@@ -28,7 +28,7 @@ describe('approved wallet design foundations', () => {
 
   it('shares typography and geometry without changing backup print typography', () => {
     expect(css).toContain('font-family: var(--font-ui)');
-    expect(css).toContain('--font-size-meta: 11px');
+    expect(css).toContain('--font-size-meta: 12px');
     expect(css).toContain('--radius-panel: 20px');
     expect(css).toContain('--radius-control: 10px');
     expect(css).not.toContain("'DM Mono'");

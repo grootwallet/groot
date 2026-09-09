@@ -100,7 +100,7 @@ pub(super) fn network_config_api_error(error: NetworkConfigError) -> ApiError {
             "Tor compact-filter sync requires manual numeric peers with public discovery disabled to prevent local DNS leaks."
         }
         NetworkConfigError::UnsupportedSyncSource => {
-            "Mainnet wallets require the explicitly admitted local Bitcoin Core node for activity sync."
+            "Mainnet wallets require an explicitly admitted Bitcoin Core node for activity sync."
         }
     };
     api_error("invalid_node_config", message)

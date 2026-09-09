@@ -1,6 +1,6 @@
 # ADR 0055: Authorize an isolated mainnet certification candidate
 
-- Status: accepted for certification only; distribution remains blocked; existing-wallet unlock presentation and the persistent banner are superseded by ADR 0056
+- Status: accepted for certification only; distribution remains blocked; unlock presentation, remote-Core exclusion, and the source-merge prohibition are partly superseded by ADR 0056 and ADR 0061
 - Date: 2026-09-03
 - Extends: ADR 0012, ADR 0026, ADR 0052, ADR 0053, ADR 0054
 
@@ -21,10 +21,11 @@ isolated enablement branch for review and certification. It uses bundle identifi
 
 The candidate includes only the software, hardware, and standard multisig scope in
 ADR 0052. Before any mainnet wallet database is created or opened, Rust must admit
-an authenticated, synchronized, loopback-only Bitcoin Core instance with the exact
+an authenticated, synchronized Bitcoin Core instance over admitted loopback HTTP or
+direct HTTPS with the exact
 mainnet genesis. The admission is purpose-, wallet-, configuration-, and
-time-bound. Mainnet activity sync uses that Core instance only. Remote Core,
-Esplora, Tor, compact filters, Payjoin, batch payments, guided Miniscript policies,
+time-bound. Mainnet activity sync uses that Core instance only. Esplora backend,
+Tor, compact filters, Payjoin, batch payments, guided Miniscript policies,
 mobile, Windows, and automatic updates remain unavailable.
 
 Every payment remains subject to the trusted one-recipient, positive-amount,
@@ -34,7 +35,7 @@ high-visibility mainnet warning distinguishes real bitcoin from rehearsals.
 This authorization permits source review, two-machine unsigned reproducibility,
 Developer ID packaging/notarization, exact-candidate lifecycle tests, approved
 physical-device tests, and a deliberately minimal-value owner-controlled mainnet
-rehearsal. It does not authorize public distribution, a merge to `main`, broader
+rehearsal. It does not authorize public distribution, broader
 wallet/device claims, or use of meaningful funds.
 
 ## Exit and rollback boundary
@@ -46,9 +47,10 @@ evidence. Any mismatch, unresolved finding, signing/provenance concern, unexpect
 network path, or accounting discrepancy stops testing and invalidates the
 candidate. Test data must be disposable and sanitized.
 
-ADR 0012 continues to block distribution and merge to `main`. ADR 0053 remains the
-release decision and may be accepted only after all of its exit conditions and the
-mainnet release checklist are complete.
+ADR 0012 continues to block distribution. ADR 0061 separately authorizes merging
+its compile-time-isolated candidate implementation to `main` without accepting a
+release decision. ADR 0053 remains the release decision and may be accepted only
+after all of its exit conditions and the mainnet release checklist are complete.
 
 ## Consequences
 

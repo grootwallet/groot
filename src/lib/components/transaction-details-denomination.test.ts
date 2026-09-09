@@ -20,4 +20,14 @@ describe('transaction details denomination', () => {
     expect(appCss).toMatch(/\.detail-hero \.detail-amount:focus-visible\s*\{/);
     expect(appCss).toMatch(/\.detail-hero \.detail-amount\.replaced\s*\{/);
   });
+
+  it('formats block height and removes redundant compact and explorer separators', () => {
+    expect(component).toContain("import { formatInteger, locale } from '$lib/i18n'");
+    expect(component).toContain('class="details-list transaction-summary-list"');
+    expect(component).toContain('formatInteger(transaction.block, $locale)');
+    expect(appCss).toMatch(
+      /\.transaction-summary-list > div:last-child\s*\{[^}]*border-bottom: 0;/s
+    );
+    expect(appCss).toMatch(/\.transaction-more-details\s*\{[^}]*border-bottom: 0;/s);
+  });
 });

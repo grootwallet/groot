@@ -14,7 +14,10 @@ async function expectAmountUnitsSeparated(scope: Locator) {
     })
   );
   expect(gaps.length).toBeGreaterThan(0);
-  for (const gap of gaps) expect(gap).toBeGreaterThanOrEqual(7.5);
+  for (const gap of gaps) {
+    expect(gap).toBeGreaterThanOrEqual(2);
+    expect(gap).toBeLessThanOrEqual(6);
+  }
 }
 
 async function confirmGeneratedBackup(page: Page) {
@@ -363,11 +366,12 @@ test('keeps recovery words out of the webview and unlock rejects the wrong crede
   await networkStatus.click();
   const statusPanel = page.locator('.network-popover');
   await expect(statusPanel.getByText('Priority fee')).toBeVisible();
-  await expect(statusPanel.getByText(/\d+ sat\/vB/)).toBeVisible();
+  await expect(statusPanel.locator('dd').nth(0)).toHaveText('Available after unlock');
   await expect(statusPanel.getByText('Unlock to check')).toBeVisible();
   await expect(
     statusPanel.getByText('Node credentials remain sealed until a wallet is unlocked.')
   ).toBeVisible();
+  await statusPanel.getByRole('button', { name: 'Close' }).click();
   await page.getByRole('button', { name: 'Show Wallet passphrase' }).click();
   await expect(page.getByLabel('Wallet passphrase', { exact: true })).toHaveAttribute(
     'type',
@@ -915,7 +919,7 @@ test('unlocks a Trezor before choosing its standard single-key wallet', async ({
       gap: previousBounds ? bounds.top - previousBounds.bottom : 0
     };
   });
-  expect(setupGuideStyle.fontSize).toBe(11);
+  expect(setupGuideStyle.fontSize).toBe(12);
   expect(setupGuideStyle.height).toBeGreaterThanOrEqual(38);
   expect(setupGuideStyle.gap).toBeGreaterThanOrEqual(12);
   await setupGuides.click();
@@ -957,7 +961,7 @@ test('unlocks a Trezor before choosing its standard single-key wallet', async ({
 
 test('global keyboard shortcuts navigate safely and match the Settings reference', async ({
   page
-}) => {
+}, testInfo) => {
   await page.goto('/');
   const primary = (await page.evaluate(() => /Mac|iPhone|iPad|iPod/i.test(navigator.platform)))
     ? 'Meta'
@@ -979,9 +983,21 @@ test('global keyboard shortcuts navigate safely and match the Settings reference
     'Coins',
     'Settings',
     'Receive',
-    'Send'
+    'Send',
+    'Zoom in',
+    'Zoom out',
+    'Reset zoom'
   ]);
   await expect(shortcuts.getByText('Lock wallet', { exact: true })).toHaveCount(0);
+
+  if (testInfo.project.name === 'desktop') {
+    await page.keyboard.down(primary);
+    await page.keyboard.press('Equal');
+    await page.keyboard.up(primary);
+    await expect.poll(() => page.evaluate(() => document.documentElement.style.zoom)).toBe('1.1');
+    await page.keyboard.press(`${primary}+0`);
+    await expect.poll(() => page.evaluate(() => document.documentElement.style.zoom)).toBe('1');
+  }
 
   await page.keyboard.press(`${primary}+Shift+R`);
   await expect(page).toHaveURL(/\/receive$/);

@@ -31,7 +31,7 @@ This document describes user-visible state transitions. The product specificatio
 
 In the isolated ADR 0055 mainnet candidate, every software, hardware, or standard
 multisig create/recover entry first requires the user to authenticate a synchronized
-Bitcoin Core RPC service on loopback. Rust verifies the exact mainnet genesis and
+Bitcoin Core RPC service over loopback HTTP or direct HTTPS. Rust verifies the exact mainnet genesis and
 issues a short-lived one-attempt creation admission before navigation or database
 creation. Mainnet never offers reuse of another wallet's setup.
 

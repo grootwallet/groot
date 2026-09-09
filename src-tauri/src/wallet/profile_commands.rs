@@ -96,7 +96,7 @@ pub fn network_setup_sources(
     if NETWORK == Network::Bitcoin {
         return Err(api_error(
             "unsupported_wallet_policy",
-            "Mainnet wallets must verify and retain their own local Bitcoin Core setup.",
+            "Mainnet wallets must verify and retain their own Bitcoin Core setup.",
         ));
     }
     require_unlocked(&app, &state)?;
@@ -997,7 +997,7 @@ pub async fn mainnet_core_admit(
         {
             return Err(api_error(
                 "invalid_node_config",
-                "The first mainnet release requires protected RPC credentials for a local Bitcoin Core node.",
+                "Mainnet requires protected RPC credentials for an admitted Bitcoin Core node.",
             ));
         }
         config.validate().map_err(network_config_api_error)?;
@@ -1050,14 +1050,14 @@ pub(super) fn persist_mainnet_node_admission_for_new_profile(
     crate::release_policy::ensure_database_open_enabled(NETWORK, true).map_err(|_| {
         api_error(
             "node_admission_required",
-            "Connect and verify the approved local Bitcoin Core node before creating a mainnet wallet.",
+            "Connect and verify an approved Bitcoin Core node before creating a mainnet wallet.",
         )
     })?;
     let pending = current_mainnet_node_admission(state)?;
     if pending.scope != MainnetNodeAdmissionScope::NewWallet {
         return Err(api_error(
             "node_admission_required",
-            "Verify the local Bitcoin Core node specifically for new mainnet wallet creation.",
+            "Verify the Bitcoin Core node specifically for new mainnet wallet creation.",
         ));
     }
     let protected = Zeroizing::new(

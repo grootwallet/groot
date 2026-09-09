@@ -3,6 +3,7 @@ import {
   keyboardShortcuts,
   isDesktopPlatform,
   matchKeyboardShortcut,
+  matchZoomShortcut,
   shortcutKeys,
   usesCommandModifier
 } from './keyboard-shortcuts';
@@ -13,6 +14,14 @@ describe('keyboard shortcuts', () => {
     expect(usesCommandModifier('iPhone')).toBe(true);
     expect(usesCommandModifier('Win32')).toBe(false);
     expect(usesCommandModifier('Linux x86_64')).toBe(false);
+  });
+
+  it('matches standard zoom keys across keyboard layouts', () => {
+    expect(matchZoomShortcut({ key: '+', code: 'Equal' })).toBe('in');
+    expect(matchZoomShortcut({ key: '=', code: 'Equal' })).toBe('in');
+    expect(matchZoomShortcut({ key: '-', code: 'Minus' })).toBe('out');
+    expect(matchZoomShortcut({ key: '0', code: 'Digit0' })).toBe('reset');
+    expect(matchZoomShortcut({ key: '1', code: 'Digit1' })).toBeUndefined();
   });
 
   it('keeps the immediate lock shortcut on desktop platforms', () => {

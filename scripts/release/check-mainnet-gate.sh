@@ -37,7 +37,9 @@ node scripts/release/verify-mainnet-source-policy.mjs
 contains_fixed "NAME as NETWORK_NAME, NETWORK, PARAMETERS," src-tauri/src/wallet.rs \
   || fail "the wallet no longer consumes the compile-time network identity"
 contains_fixed "backend.validate().is_err()" src-tauri/src/release_policy.rs \
-  || fail "the first-mainnet local-Core policy no longer revalidates its loopback endpoint"
+  || fail "the first-mainnet Core policy no longer revalidates its selected endpoint"
+contains_fixed 'ChainBackend::RemoteCore { url } => (url, "https")' src-tauri/src/release_policy.rs \
+  || fail "the first-mainnet remote-Core policy is not visibly HTTPS-only"
 contains_fixed ".estimate_smart_fee(blocks, Some(mode))" src-tauri/src/wallet/profile_commands.rs \
   || fail "public-network fees no longer come from the configured Bitcoin Core node"
 contains_fixed "if IS_REGTEST" src-tauri/src/wallet/profile_commands.rs \
@@ -78,8 +80,10 @@ contains_fixed "The first limited mainnet candidate includes:" docs/adr/0052-fir
   || fail "the first-release software and hardware wallet scope decision is missing"
 contains_fixed "mainnet candidate remains blocked from distribution" docs/adr/0052-first-mainnet-software-and-hardware-scope.md \
   || fail "the software and hardware scope decision no longer preserves the distribution lock"
-contains_fixed "- [x] User-controlled Bitcoin Core is the only first-release mainnet backend" docs/mainnet-release-checklist.md \
-  || fail "the evidence-backed first-mainnet backend scope is no longer locked"
+contains_fixed "- [ ] User-controlled Bitcoin Core is the only first-release mainnet backend" docs/mainnet-release-checklist.md \
+  || fail "the expanded first-mainnet backend evidence is not visibly blocking"
+contains_fixed "Tor/onion Core remains excluded" docs/mainnet-release-checklist.md \
+  || fail "the first-mainnet Tor exclusion is missing"
 contains_fixed "The first production target is a **macOS Apple-silicon desktop release with both software and approved hardware wallets" docs/roadmap.md \
   || fail "the roadmap no longer matches the first-release platform scope"
 contains_fixed "A second Groot process cannot concurrently mutate" docs/mainnet-release-checklist.md \

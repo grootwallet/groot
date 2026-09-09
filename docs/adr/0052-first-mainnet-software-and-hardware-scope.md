@@ -1,6 +1,6 @@
 # ADR 0052: First mainnet software and hardware wallet scope
 
-- Status: accepted as a release-scope constraint; distribution remains blocked
+- Status: accepted as a release-scope constraint; remote-Core exclusion superseded by ADR 0061; distribution remains blocked
 - Date: 2026-09-02
 - Extends: ADR 0012, ADR 0026, ADR 0037
 
@@ -29,13 +29,13 @@ The first limited mainnet candidate includes:
 - standard BIP48 hardware-backed multisig using only approved signers.
 
 Guided delayed/recovery Miniscript policies, Payjoin, compact-filter sync,
-remote Core, public Esplora, Tor/onion Core, mobile, Windows, and batch spending
+public Esplora, Tor/onion Core, mobile, Windows, and batch spending
 are not included unless a later explicit release-scope ADR adds them with their
 own evidence.
 
 Every included wallet type uses the same trusted mainnet constraints: exact
-mainnet genesis verification before database opening, user-controlled
-loopback-only Bitcoin Core, exactly one external recipient, a positive amount,
+mainnet genesis verification before database opening, user-controlled Bitcoin
+Core over loopback HTTP or direct HTTPS, exactly one external recipient, a positive amount,
 and the 1,000,000-satoshi per-transaction ceiling. The ceiling is a loss limiter,
 not a recommended test amount or readiness claim.
 

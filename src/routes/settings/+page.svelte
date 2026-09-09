@@ -756,7 +756,12 @@
       const rescan = walletService.fullRescan(scanCredential);
       void pollFullRescan();
       const snapshot = await rescan;
-      scanStatus = await walletService.recoveryScanStatus();
+      try {
+        scanStatus = await walletService.recoveryScanStatus();
+      } catch {
+        // A status refresh is observational. It must not relabel a completed
+        // foreground rescan as failed.
+      }
       scanOpen = false;
       toast({
         title: 'Full rescan complete',
@@ -1762,11 +1767,10 @@
     </div>{/if}
   {#if defaultConfig.network === 'mainnet'}
     <div class="warning-box danger">
-      <strong>{translate($locale, 'Mainnet requires the admitted local Bitcoin Core node.')}</strong
-      >
+      <strong>{translate($locale, 'Mainnet requires an admitted Bitcoin Core node.')}</strong>
       {translate(
         $locale,
-        'Compact-filter and remote-node fallbacks are disabled so the reviewed trust boundary cannot change silently.'
+        'Compact-filter fallbacks are disabled. Activity, fees, and broadcast use only the Core endpoint you explicitly configure.'
       )}
     </div>
   {:else if syncSourceType === 'compact_filters'}
@@ -2096,11 +2100,12 @@
     <button
       class:active={node.backend.type === 'local_core'}
       onclick={() => setNodeLocation('local_core')}>{translate($locale, 'This Mac')}</button
+    ><button
+      class:active={node.backend.type === 'remote_core' && !node.torProxy}
+      onclick={() => setNodeLocation('remote_core')}>{translate($locale, 'Remote TLS')}</button
     >{#if defaultConfig.network !== 'mainnet'}<button
-        class:active={node.backend.type === 'remote_core' && !node.torProxy}
-        onclick={() => setNodeLocation('remote_core')}>{translate($locale, 'Remote TLS')}</button
-      ><button class:active={!!node.torProxy} onclick={() => setNodeLocation('tor')}
-        >{translate($locale, 'Tor onion')}</button
+        class:active={!!node.torProxy}
+        onclick={() => setNodeLocation('tor')}>{translate($locale, 'Tor onion')}</button
       >{/if}
   </div>
   <label class="field"
@@ -2118,7 +2123,7 @@
       >{translate(
         $locale,
         defaultConfig.network === 'mainnet'
-          ? 'Mainnet requires a Bitcoin Core RPC endpoint on this Mac. Credentials in URLs are rejected.'
+          ? 'Mainnet accepts loopback HTTP or a trusted remote HTTPS endpoint. Credentials in URLs are rejected.'
           : 'Credentials in URLs are rejected. TLS uses system trust roots; Tor accepts only .onion\n      destinations.'
       )}</small
     ></label
