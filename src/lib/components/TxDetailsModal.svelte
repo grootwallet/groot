@@ -306,7 +306,7 @@
         {#if transaction.locktime != null && transaction.rbf != null}<div>
             <dt>{translate($locale, 'Locktime / RBF')}</dt>
             <dd>
-              {transaction.locktime}{' · '}{translate(
+              {formatInteger(transaction.locktime, $locale)}{' · '}{translate(
                 $locale,
                 transaction.rbf ? 'Enabled' : 'Disabled'
               )}
