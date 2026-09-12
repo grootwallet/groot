@@ -61,3 +61,17 @@ ADR 0055 permits this scope in one isolated certification build. The mainnet can
 ## Implementation clarification — 2026-09-03
 
 Exact-model approval is enforced in the trusted HWI discovery boundary, not inferred from display copy. New mainnet single-key and multisig hardware wallets also require recent in-memory live-HWI admission bound to the exact fingerprint, account xpub, derivation path, and device family; renderer-supplied QR, file, manual, or replayed metadata cannot substitute for that proof. HWI 3.2.0 provides adequate distinct model identifiers for the approved Ledger Nano S Plus, Trezor Model One/Safe 3, and Bitcoin-only BitBox02 variants. It exposes only family-level identities for Coldcard and Jade. ADR 0054 explicitly accepts those two exact family records for the limited-mainnet runtime while retaining model-specific certification and disclosure. Firmware versions remain exact release-evidence assertions; HWI does not securely attest them at runtime.
+
+HWI's Trezor model identifier is derived from the device protocol code rather
+than its retail name. For the accepted scope, Model One is `trezor_1`; Safe 3
+revision A is `trezor_t2b1` and revision B is `trezor_t3b1`. The earlier
+`trezor_safe_3` spelling was not emitted by HWI 3.2.0 and is not an admitted
+alias. This corrects the implementation identifier without expanding the model
+scope or transferring evidence between revisions.
+
+HWI's Trezor model identifier is derived from the device protocol code rather
+than its retail name. For the accepted scope, Model One is `trezor_1`; Safe 3
+revision A is `trezor_t2b1` and revision B is `trezor_t3b1`. The earlier
+`trezor_safe_3` spelling was not emitted by HWI 3.2.0 and is not an admitted
+alias. This corrects the implementation identifier without expanding the model
+scope or transferring evidence between revisions.

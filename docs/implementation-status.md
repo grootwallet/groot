@@ -1,5 +1,19 @@
 # Implementation status
 
+The 2026-09-12 hardware follow-up corrects two Mainnet-candidate blockers found
+on older internal build `v0.4.94 · 27f821be`. HWI 3.2.0 identifies Trezor Safe 3
+revisions as `trezor_t2b1`/`trezor_t3b1`, not `trezor_safe_3`; the trusted
+allowlist now admits those exact revisions while continuing to reject other
+Trezor models. Saved-signer discovery no longer destroys the other exact,
+time-bounded admissions accumulated for one multisig draft, and a successful
+live policy/address proof renews only the proven signer. No renderer metadata can
+create admission. Shared dialogs now portal through the existing reusable modal,
+the shared loading animation is namespaced, and hardware setup copy names only
+the release-target models with network-correct Ledger instructions. No persisted
+format, migration, dependency, command, descriptor, or PSBT behavior changes.
+The exact old-build evidence and required corrected-build repetition are in
+[`hardware-certification-mainnet-2026-09-12.md`](hardware-certification-mainnet-2026-09-12.md).
+
 The approved 2026-09-08 design refresh applies locally bundled Source Sans 3,
 Blue Ink/ivory light and dark semantic tokens, shared radii and readable supporting
 type across existing application routes and reusable components. Wallet operations,

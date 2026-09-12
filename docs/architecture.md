@@ -67,6 +67,24 @@ flowchart LR
 
 ## Trust boundary
 
+Mainnet new-wallet hardware admission is memory-only and bound to the exact live
+HWI device family, fingerprint, account xpub, and derivation path. Starting a new
+device-import discovery clears every pending admission. A saved-signer lookup
+within one multisig draft invalidates only its opaque path scan and preserves the
+other still-valid exact admissions; a successful live policy/address proof
+renews only the signer it just proved. Final creation rechecks every admission,
+so preservation never lets renderer metadata, a substituted xpub, or an expired
+proof cross the trusted boundary.
+
+Mainnet new-wallet hardware admission is memory-only and bound to the exact live
+HWI device family, fingerprint, account xpub, and derivation path. Starting a new
+device-import discovery clears every pending admission. A saved-signer lookup
+within one multisig draft invalidates only its opaque path scan and preserves the
+other still-valid exact admissions; a successful live policy/address proof
+renews only the signer it just proved. Final creation rechecks every admission,
+so preservation never lets renderer metadata, a substituted xpub, or an expired
+proof cross the trusted boundary.
+
 The webview may receive addresses, balances, transactions, UTXOs, public descriptors, public cosigner metadata, PSBT summaries, and status events. It must never receive a generated, re-presented, or recovered mnemonic, seed, extended private key, private descriptor, or decrypted signing material. Production onboarding displays generated words through a platform-native backup sheet attached to the Groot window and the command returns no secret. Deferred backup re-presentation requires fresh authentication, decrypts in Rust, reuses the native privacy gate and backup sheet, and returns only whether the subsequent native proof succeeded. Software recovery likewise collects the 24 words in a native sheet and passes them directly to Rust wallet construction; platforms without that native boundary fail closed. Browser-only deterministic fixtures are the explicit test exception.
 
 Immediately before software signing or external-signer/multisig final broadcast, Rust reloads the exact persisted proposal and re-derives release recipient/count/amount policy from its PSBT, rejects every frozen input, and re-proves an RBF replacement's original external recipient and value. CPFP is validated as a distinct wallet-owned fee child. Every successful broadcast then applies the exact signed transaction to BDK as unconfirmed and persists it atomically with proposal status, permanent intent binding, replacement lineage, and the broadcast notification. The returned snapshot therefore includes Groot's own pending spend even when compact-filter mode cannot discover arbitrary mempool activity or the best-effort follow-up sync fails. A restart test reloads that pending transaction from SQLite. Successful RBF broadcast also persists public original-to-replacement lineage. Rust reconciles that intent with BDK's current canonical graph into one payment DTO: the replacement is the representative when it is canonical or still the broadcast candidate, while a confirmed original becomes the representative if it wins the race. The DTO carries an additive, non-persisted RBF-history view with both public identifiers, authoritative available rates, and the outcome so Overview and Activity do not double-count while transaction details retain the full timeline. Persisted broadcast lineage never overrides later chain truth.
@@ -147,6 +165,18 @@ Signer-bound HWI discovery is a native allowlisted boundary, not a UI-only filte
 The process-wide hardware coordinator admits at most one active operation and prioritizes interactive work over discovery. Absolute deadlines start before admission, excess work fails with `hardware_busy`, and modal close, navigation, or wallet switching cancels queued/running work, terminates the process tree, clears transient capabilities, and prevents late prompts or persistence. A vendor trusted-display prompt that cannot be dismissed remotely is the exception to immediate modal close: Groot keeps the modal visible, asks for on-device rejection, and lets the owning process drain the reply before releasing its lease. HWI 3.2.0's Jade serial disconnect does not dismiss an active address review. Dynamic HWI selectors and sensitive public transaction metadata are quoted into HWI's stdin protocol; process argv remains the fixed non-sensitive `--stdin` selector except for initial BitBox single-key import. That one operation uses HWI's documented argv mode with a fixed BIP84 command containing no device path, fingerprint, address, descriptor, account key, PSBT, password, or other identifier, and it is allowed only when the scan contains exactly one BitBox family row. Cached paths are hints only: immediately before health, address display, policy verification, or signing, Groot verifies type, fingerprint, requested derivation, and full saved account xpub, then performs the action under the same exclusive lease. Most devices reopen the exact cached path. Saved BitBox address display instead reopens through HWI's exact fingerprint selector after the full live identity proof because physical testing showed that the original model can reject the cached HID path between proof and trusted display. The selector and descriptor remain in HWI's private stdin protocol; process argv stays fixed and the returned address must still match Rust's derivation. Rust revalidates the wallet/proposal/address context before persistence. Hardware-health results are derived and persisted by that native operation; the renderer cannot submit an arbitrary healthy record. No device path or public identifier is logged.
 
 ## Frontend state and component boundaries
+
+All dialogs, including complete identifier views opened from another dialog,
+compose the shared `Modal` component. Its layer is portaled to `document.body`
+so transformed route containers cannot change viewport centering or split the
+backdrop. The component's reference-counted scroll lock remains active until the
+last nested dialog closes.
+
+All dialogs, including complete identifier views opened from another dialog,
+compose the shared `Modal` component. Its layer is portaled to `document.body`
+so transformed route containers cannot change viewport centering or split the
+backdrop. The component's reference-counted scroll lock remains active until the
+last nested dialog closes.
 
 `AppShell` owns a non-refreshing native-session monitor that routes an expired selected wallet to unlock even when route policy pauses network sync. The monitor defers only while an actual hardware transaction review is pending, then checks the authoritative deadline as soon as that review finishes.
 

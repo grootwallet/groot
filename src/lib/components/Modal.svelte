@@ -21,6 +21,15 @@
   let attentionFrame: number | null = null;
   let attentionTimer: ReturnType<typeof setTimeout> | null = null;
 
+  function portal(node: HTMLElement) {
+    document.body.appendChild(node);
+    return {
+      destroy() {
+        node.remove();
+      }
+    };
+  }
+
   function clearAttentionSchedule() {
     if (attentionFrame !== null) cancelAnimationFrame(attentionFrame);
     if (attentionTimer !== null) clearTimeout(attentionTimer);
@@ -111,6 +120,7 @@
 {#if open}
   <div
     class="modal-layer"
+    use:portal
     style:--modal-document-top={`${documentTop}px`}
     role="presentation"
     onclick={(e) => e.target === e.currentTarget && onclose()}

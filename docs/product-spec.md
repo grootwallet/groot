@@ -231,6 +231,15 @@ Ledger policy and signing review initially shortens the first-address reference 
 
 ## Multisig coordinator
 
+In an isolated Mainnet candidate, each USB signer added to a new coordinator
+requires a recent memory-only admission bound to its live HWI family,
+fingerprint, BIP48 account xpub, and derivation path. Looking up or proving one
+saved signer during that same draft must not erase other still-valid exact
+admissions. A successful live policy registration and first-address proof
+renews only that signer. New-device discovery, wallet switch, lock, cancellation,
+expiry, and creation completion retain their existing fail-closed cleanup, and
+final creation revalidates every exact admission.
+
 1. User names the wallet and chooses a recommended 2-of-3 or 3-of-5 recipe, or opens advanced M-of-N controls within the safe v1 envelope of 2–7 signatures and 3–7 signers. Groot does not offer 1-of-N because one stolen key could spend alone; users who want one key should create a single-key wallet.
 2. Add each signer through a Rust hardware transport or import its master fingerprint and BIP48 account tpub through bounded mounted file/manual flows. Coldcard file import accepts its public **Export XPUB** JSON, including descriptor-style `p2wsh_desc` output, but rejects private material, mainnet xpubs, and noncanonical origins with an actionable re-export instruction. Air-gapped PSBT exchange supports bounded `crypto-psbt` UR v2 animation and camera scanning through Groot's bundled local decoder; text and file fallback remain available until every target platform is certified.
    Draft progress is neutral before review. Missing-field and policy errors appear only after the user attempts **Review wallet**. Imported-key cards identify the device fingerprint and connection/import method and make the complete public account key readable without horizontal overflow.

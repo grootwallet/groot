@@ -42,6 +42,7 @@
 
   const walletShell = useWalletShellContext();
   const hardwareSteps = ['Connect signer', 'Review identity', 'Protect app'];
+  const ledgerAppName = defaultConfig.network === 'mainnet' ? 'Bitcoin' : 'Bitcoin Test';
 
   let step = $state(1),
     busy = $state(false),
@@ -347,7 +348,7 @@
           <span
             >{translate(
               $locale,
-              'Before connecting, initialize and unlock the signer. Select any hardware passphrase\n            on-device. Groot imports public data only.'
+              'Before connecting, initialize and unlock the signer, select any hardware passphrase\n            on-device, and finish its recovery backup. Groot imports public data only.'
             )}</span
           >
         </p>
@@ -369,7 +370,7 @@
             ><strong>{translate($locale, 'Connect with cable')}</strong><small
               >{translate(
                 $locale,
-                'Jade, BitBox02, Trezor, Ledger, and HWI-compatible devices'
+                'Connect one initialized and unlocked signer directly to this computer'
               )}</small
             ></span
           ><ArrowRight size={17} /></button
@@ -377,7 +378,7 @@
         <label class="source-button"
           ><FileUp size={20} /><span
             ><strong>{translate($locale, 'Import public backup')}</strong><small
-              >{translate($locale, 'From this computer, an SD card, or a connected drive')}</small
+              >{translate($locale, 'Choose a descriptor or signer-export file')}</small
             ></span
           ><ArrowRight size={17} /><input
             aria-label={translate($locale, 'Import public backup file')}
@@ -708,7 +709,10 @@
 <Modal
   open={scanOpen}
   title={translate($locale, 'Connect hardware signer')}
-  description={translate($locale, 'Quit other wallet apps so Groot can use USB.')}
+  description={translate(
+    $locale,
+    'Connect one initialized and unlocked signer directly to this computer.'
+  )}
   onclose={closeHardwareScan}
 >
   {#if busy}<HardwareActionPrompt
@@ -718,7 +722,9 @@
         hardwareProgress.startsWith('Scanning')
           ? 'Follow any unlock prompt on the signer. Keep other wallet apps closed.'
           : hardwareProgress.includes('Ledger')
-            ? 'Keep Bitcoin Test open for Regtest and follow any prompt on the Ledger screen.'
+            ? ledgerAppName === 'Bitcoin'
+              ? 'Keep Bitcoin open and follow any prompt on the Ledger screen.'
+              : 'Keep Bitcoin Test open and follow any prompt on the Ledger screen.'
             : hardwareProgress.toLowerCase().includes('bitbox')
               ? 'BitBox may request its password again for this new secure connection. Enter it only on BitBox.'
               : 'Keep the signer connected and unlocked.'
@@ -837,40 +843,42 @@
   title={translate($locale, 'Prepare your signer')}
   description={translate(
     $locale,
-    'Use the device’s own screen to confirm identity and passphrase wallet.'
+    'Supported Mainnet models must be initialized, unlocked, and backed up first.'
   )}
   onclose={() => (guideOpen = false)}
 >
   <div class="guide-list">
     <p>
-      <strong>Jade</strong><span
-        >{translate(
-          $locale,
-          'Log in on Jade, then connect USB or import its BIP84 xpub by QR.'
-        )}</span
+      <strong>{translate($locale, 'Blockstream Jade Classic')}</strong><span
+        >{translate($locale, 'Connect by USB and enter the PIN on-device when prompted.')}</span
       >
     </p>
     <p>
-      <strong>BitBox02</strong><span
+      <strong>{translate($locale, 'BitBox02 Bitcoin-only / Nova Bitcoin-only')}</strong><span
         >{translate($locale, 'Unlock BitBox and quit BitBoxApp, then scan.')}</span
       >
     </p>
     <p>
-      <strong>Trezor</strong><span
+      <strong>{translate($locale, 'Trezor Model One / Safe 3 Bitcoin-only')}</strong><span
         >{translate(
           $locale,
-          'Unlock on-device. Model One hidden-wallet passphrases are not supported.'
+          'Quit Trezor Suite. Model One uses Groot’s PIN matrix; Safe 3 unlocks on-device.'
         )}</span
       >
     </p>
     <p>
-      <strong>Ledger</strong><span
-        >{translate($locale, 'Quit Ledger Live, unlock Ledger, and open Bitcoin Test.')}</span
+      <strong>{translate($locale, 'Ledger Nano S Plus')}</strong><span
+        >{translate(
+          $locale,
+          ledgerAppName === 'Bitcoin'
+            ? 'Quit Ledger Live, unlock the device, and open Bitcoin.'
+            : 'Quit Ledger Live, unlock the device, and open Bitcoin Test.'
+        )}</span
       >
     </p>
     <p>
-      <strong>{translate($locale, 'Passport')}</strong><span
-        >{translate($locale, 'Import a BIP84 descriptor or xpub by microSD or QR.')}</span
+      <strong>{translate($locale, 'Coldcard Mk4')}</strong><span
+        >{translate($locale, 'Sign in, enable USB, and leave the device at its main menu.')}</span
       >
     </p>
   </div>

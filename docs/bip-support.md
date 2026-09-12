@@ -1,5 +1,12 @@
 # Bitcoin Improvement Proposal support
 
+The 2026-09-12 hardware correction changes no BIP, descriptor, PSBT, backup, or
+persisted-wallet semantics. It corrects the HWI 3.2.0 Trezor Safe 3 protocol
+model identifiers used by the existing Mainnet BIP84/BIP48 admission gate and
+prevents saved-signer scans from erasing other exact, time-bounded admissions in
+one BIP48 draft. The old-build physical results remain candidate-specific and do
+not raise an implementation or interoperability status.
+
 The approved 2026-09-08 application design refresh has no BIP support or protocol
 evidence impact: only local presentation assets/tokens change. Rust, WalletPort,
 transaction facts, integer-satoshi formatting, recovery and signer validation,

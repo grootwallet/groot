@@ -2,6 +2,102 @@ import type { CatalogSection } from './types';
 
 export const hardwareCopy = {
   bitbox: { fr: 'bitbox', es: 'bitbox' },
+  Bitcoin: { fr: 'Bitcoin', es: 'Bitcoin' },
+  'Blockstream Jade Classic': {
+    fr: 'Blockstream Jade Classic',
+    es: 'Blockstream Jade Classic'
+  },
+  'BitBox02 Bitcoin-only / Nova Bitcoin-only': {
+    fr: 'BitBox02 Bitcoin-only / Nova Bitcoin-only',
+    es: 'BitBox02 Bitcoin-only / Nova Bitcoin-only'
+  },
+  'Trezor Model One / Safe 3 Bitcoin-only': {
+    fr: 'Trezor Model One / Safe 3 Bitcoin-only',
+    es: 'Trezor Model One / Safe 3 Bitcoin-only'
+  },
+  'Ledger Nano S Plus': { fr: 'Ledger Nano S Plus', es: 'Ledger Nano S Plus' },
+  'Coldcard Mk4': { fr: 'Coldcard Mk4', es: 'Coldcard Mk4' },
+  'Before connecting, initialize and unlock the signer, select any hardware passphrase on-device, and finish its recovery backup. Groot imports public data only.':
+    {
+      fr: 'Avant de le connecter, initialisez et déverrouillez le signataire, choisissez toute phrase secrète directement sur l’appareil et terminez la sauvegarde de récupération. Groot importe uniquement des données publiques.',
+      es: 'Antes de conectarlo, inicializa y desbloquea el firmante, elige cualquier frase de contraseña en el dispositivo y completa su copia de recuperación. Groot solo importa datos públicos.'
+    },
+  'Choose a descriptor or signer-export file': {
+    fr: 'Choisissez un descripteur ou un fichier exporté par le signataire',
+    es: 'Elige un descriptor o un archivo exportado por el firmante'
+  },
+  'Choose a signer-export JSON file · 256 KiB maximum': {
+    fr: 'Choisissez un fichier JSON exporté par le signataire · 256 Kio maximum',
+    es: 'Elige un archivo JSON exportado por el firmante · máximo 256 KiB'
+  },
+  'Connect an initialized, unlocked signer directly by cable.': {
+    fr: 'Connectez directement par câble un signataire initialisé et déverrouillé.',
+    es: 'Conecta directamente por cable un firmante inicializado y desbloqueado.'
+  },
+  'Connect by USB and enter the PIN on-device when prompted.': {
+    fr: 'Connectez-le en USB et saisissez le PIN sur l’appareil lorsqu’il le demande.',
+    es: 'Conéctalo por USB e introduce el PIN en el dispositivo cuando se solicite.'
+  },
+  'Connect one initialized and unlocked signer directly to this computer': {
+    fr: 'Connectez directement à cet ordinateur un signataire initialisé et déverrouillé',
+    es: 'Conecta directamente a este ordenador un firmante inicializado y desbloqueado'
+  },
+  'Connect one initialized and unlocked signer directly to this computer.': {
+    fr: 'Connectez directement à cet ordinateur un signataire initialisé et déverrouillé.',
+    es: 'Conecta directamente a este ordenador un firmante inicializado y desbloqueado.'
+  },
+  'Enter an account xpub, fingerprint, and BIP48 path': {
+    fr: 'Saisissez une xpub de compte, une empreinte et un chemin BIP48',
+    es: 'Introduce una xpub de cuenta, una huella y una ruta BIP48'
+  },
+  'It must be initialized, unlocked, and have its recovery backup saved.': {
+    fr: 'Il doit être initialisé, déverrouillé et disposer d’une sauvegarde de récupération enregistrée.',
+    es: 'Debe estar inicializado, desbloqueado y tener guardada su copia de recuperación.'
+  },
+  'Keep Bitcoin open and confirm the export on the device screen.': {
+    fr: 'Gardez Bitcoin ouvert et confirmez l’export sur l’écran de l’appareil.',
+    es: 'Mantén Bitcoin abierto y confirma la exportación en la pantalla del dispositivo.'
+  },
+  'Keep Bitcoin Test open and confirm the export on the device screen.': {
+    fr: 'Gardez Bitcoin Test ouvert et confirmez l’export sur l’écran de l’appareil.',
+    es: 'Mantén Bitcoin Test abierto y confirma la exportación en la pantalla del dispositivo.'
+  },
+  'Keep Bitcoin open and follow any prompt on the Ledger screen.': {
+    fr: 'Gardez Bitcoin ouvert et suivez les instructions sur l’écran Ledger.',
+    es: 'Mantén Bitcoin abierto y sigue las indicaciones de la pantalla de Ledger.'
+  },
+  'Keep Bitcoin Test open and follow any prompt on the Ledger screen.': {
+    fr: 'Gardez Bitcoin Test ouvert et suivez les instructions sur l’écran Ledger.',
+    es: 'Mantén Bitcoin Test abierto y sigue las indicaciones de la pantalla de Ledger.'
+  },
+  'Prepare the signer first.': {
+    fr: 'Préparez d’abord le signataire.',
+    es: 'Prepara primero el firmante.'
+  },
+  'Quit Ledger Live, unlock the device, and open Bitcoin.': {
+    fr: 'Quittez Ledger Live, déverrouillez l’appareil et ouvrez Bitcoin.',
+    es: 'Cierra Ledger Live, desbloquea el dispositivo y abre Bitcoin.'
+  },
+  'Quit Ledger Live, unlock the device, and open Bitcoin Test.': {
+    fr: 'Quittez Ledger Live, déverrouillez l’appareil et ouvrez Bitcoin Test.',
+    es: 'Cierra Ledger Live, desbloquea el dispositivo y abre Bitcoin Test.'
+  },
+  'Quit Trezor Suite. Model One uses Groot’s PIN matrix; Safe 3 unlocks on-device.': {
+    fr: 'Quittez Trezor Suite. Le Model One utilise la matrice PIN de Groot ; le Safe 3 se déverrouille sur l’appareil.',
+    es: 'Cierra Trezor Suite. Model One usa la matriz de PIN de Groot; Safe 3 se desbloquea en el dispositivo.'
+  },
+  'Sign in, enable USB, and leave the device at its main menu.': {
+    fr: 'Connectez-vous, activez l’USB et laissez l’appareil dans son menu principal.',
+    es: 'Inicia sesión, activa USB y deja el dispositivo en su menú principal.'
+  },
+  'Supported Mainnet models must be initialized, unlocked, and backed up first.': {
+    fr: 'Les modèles Mainnet pris en charge doivent d’abord être initialisés, déverrouillés et sauvegardés.',
+    es: 'Los modelos Mainnet compatibles deben estar inicializados, desbloqueados y respaldados.'
+  },
+  'Use a cable and quit other wallet apps before scanning.': {
+    fr: 'Utilisez un câble et quittez les autres applications de portefeuille avant la recherche.',
+    es: 'Usa un cable y cierra las demás aplicaciones de cartera antes de buscar.'
+  },
   'Scanning all USB hardware signers…': {
     fr: 'Recherche de tous les signataires matériels USB…',
     es: 'Buscando todos los firmantes físicos USB…'
@@ -68,6 +164,10 @@ export const hardwareCopy = {
     fr: 'Détecté. Groot vérifie que Bitcoin Test est ouvert lors de la lecture de la clé publique du compte.',
     es: 'Detectado. Groot verifica que Bitcoin Test esté abierto al leer la clave pública de la cuenta.'
   },
+  'Detected. Groot verifies that Bitcoin is open when it reads the public account key.': {
+    fr: 'Détecté. Groot vérifie que Bitcoin est ouvert lors de la lecture de la clé publique du compte.',
+    es: 'Detectado. Groot verifica que Bitcoin esté abierto al leer la clave pública de la cuenta.'
+  },
   'Ready to import the public account key.': {
     fr: 'Prêt à importer la clé publique du compte.',
     es: 'Listo para importar la clave pública de la cuenta.'
@@ -128,6 +228,10 @@ export const hardwareCopy = {
   'Select this signer, unlock Ledger, and open Bitcoin Test—not Bitcoin—to continue.': {
     fr: 'Sélectionnez ce signataire, déverrouillez Ledger et ouvrez Bitcoin Test — pas Bitcoin — pour continuer.',
     es: 'Selecciona este firmante, desbloquea Ledger y abre Bitcoin Test —no Bitcoin— para continuar.'
+  },
+  'Select this signer, unlock Ledger, and open Bitcoin to continue.': {
+    fr: 'Sélectionnez ce signataire, déverrouillez Ledger et ouvrez Bitcoin pour continuer.',
+    es: 'Selecciona este firmante, desbloquea Ledger y abre Bitcoin para continuar.'
   },
   usb: { fr: 'USB', es: 'USB' },
   qr: { fr: 'QR', es: 'QR' },

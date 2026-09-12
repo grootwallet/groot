@@ -1114,12 +1114,14 @@ code {
   margin-top: 0;
 }
 .spin {
-  animation: spin 0.8s linear infinite;
+  display: block;
+  flex: 0 0 auto;
+  animation: groot-spinner-rotation 0.8s linear infinite;
   transform-box: view-box;
   transform-origin: center;
   will-change: transform;
 }
-@keyframes spin {
+@keyframes groot-spinner-rotation {
   to {
     transform: rotate(360deg);
   }
@@ -5761,7 +5763,8 @@ code {
 }
 .source-list strong {
   color: var(--text);
-  font-size: 11px;
+  font-size: 13px;
+  line-height: 1.35;
 }
 .source-list small {
   color: var(--muted);
@@ -6989,7 +6992,22 @@ code {
   background: var(--surface-inset);
 }
 .hardware-guide-body strong {
-  font-size: 12px;
+  font-size: 13px;
+}
+.hardware-guide-models {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 7px;
+}
+.hardware-guide-models span {
+  padding: 3px 7px;
+  color: var(--text-soft);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-control);
+  font-size: 11px;
+  line-height: 1.2;
 }
 .hardware-guide-body ol {
   margin: 9px 0 0;

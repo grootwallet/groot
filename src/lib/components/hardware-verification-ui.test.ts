@@ -87,6 +87,40 @@ describe('hardware receive verification UI', () => {
     }
   });
 
+  it('keeps Mainnet hardware preparation exact, brief, and model-specific', () => {
+    for (const model of [
+      'Coldcard',
+      'Mk4',
+      'BitBox02',
+      'Nova Bitcoin-only',
+      'Nano S Plus',
+      'Model One',
+      'Safe 3 Bitcoin-only',
+      'Jade Classic'
+    ]) {
+      expect(multisigSetup).toContain(model);
+    }
+    expect(multisigSetup).toContain(
+      "const ledgerAppName = defaultConfig.network === 'mainnet' ? 'Bitcoin' : 'Bitcoin Test'"
+    );
+    expect(multisigSetup).toContain('Choose a signer-export JSON file · 256 KiB maximum');
+    expect(multisigSetup).toContain('Enter an account xpub, fingerprint, and BIP48 path');
+    expect(multisigSetup).toContain(
+      'It must be initialized, unlocked, and have its recovery backup saved.'
+    );
+    expect(multisigSetup).not.toContain('Never enter a seed into Groot.');
+    expect(multisigSetup).not.toContain('Coldcard XPUB JSON or Groot signer JSON');
+  });
+
+  it('keeps source hierarchy and loading rotation in shared styles', () => {
+    expect(appCss).toMatch(/\.source-list strong\s*\{[\s\S]*?font-size:\s*13px/);
+    expect(appCss).toMatch(/\.source-list small\s*\{[\s\S]*?font-size:\s*12px/);
+    expect(appCss).toMatch(
+      /\.spin\s*\{[\s\S]*?animation:\s*groot-spinner-rotation 0\.8s linear infinite/
+    );
+    expect(appCss).toContain('@keyframes groot-spinner-rotation');
+  });
+
   it('keeps the Trezor PIN matrix instruction short and position-focused', () => {
     const pinModal = readFileSync(new URL('./TrezorPinModal.svelte', import.meta.url), 'utf8');
     expect(pinModal).toContain('Match locations, not numbers');
@@ -429,7 +463,7 @@ describe('hardware receive verification UI', () => {
     expect(normalizedSetup).toContain('is required here. After setup');
     expect(normalizedSetup).toContain("isBitBoxNova ? 'Use this Nova wallet'");
     expect(normalizedSetup).toContain(
-      "description={translate($locale, 'Quit other wallet apps so Groot can use USB.')}"
+      "description={translate( $locale, 'Connect one initialized and unlocked signer directly to this computer.' )}"
     );
     expect(normalizedSetup).toContain("'Keep the signer connected and unlocked.'");
   });

@@ -1505,10 +1505,30 @@ fn hwi_warns_about_empty_passphrase(device: &HwiDevice) -> bool {
 
 fn hardware_device_dto(device: HwiDevice) -> HardwareDeviceDto {
     let device_type = device.device_type.to_ascii_lowercase();
-    let label = if device.model.is_empty() {
-        device.device_type.clone()
+    let normalized_model = device.model.trim().to_ascii_lowercase();
+    let label = match (device_type.as_str(), normalized_model.as_str()) {
+        ("coldcard", "coldcard") => "Coldcard".to_owned(),
+        ("bitbox02", "bitbox02_btconly") => "BitBox02 Bitcoin-only".to_owned(),
+        ("bitbox02", "bitbox02_nova_btconly") => "BitBox02 Nova Bitcoin-only".to_owned(),
+        ("ledger", "ledger_nano_s_plus") => "Ledger Nano S Plus".to_owned(),
+        ("trezor", "trezor_1") => "Trezor Model One".to_owned(),
+        ("trezor", "trezor_t2b1" | "trezor_t3b1") => "Trezor Safe 3".to_owned(),
+        // HWI exposes only a Jade family identity. Do not falsely claim that a
+        // connected device was authenticated as the physically certified
+        // Jade Classic model.
+        ("jade", "jade") => "Blockstream Jade".to_owned(),
+        _ if device.model.is_empty() => device.device_type.clone(),
+        _ => device.model.clone(),
+    };
+    let ledger_ready_message = if NETWORK == Network::Bitcoin {
+        "Detected. Groot verifies that Bitcoin is open when it reads the public account key."
     } else {
-        device.model.clone()
+        "Detected. Groot verifies that Bitcoin Test is open when it reads the public account key."
+    };
+    let ledger_unlock_message = if NETWORK == Network::Bitcoin {
+        "Select this signer, unlock Ledger, and open Bitcoin to continue."
+    } else {
+        "Select this signer, unlock Ledger, and open Bitcoin Test—not Bitcoin—to continue."
     };
     // A locked Trezor can report both PIN and passphrase requirements. PIN must
     // be resolved first because no wallet fingerprint exists until it is unlocked.
@@ -1547,11 +1567,7 @@ fn hardware_device_dto(device: HwiDevice) -> HardwareDeviceDto {
             "confirm_empty_passphrase",
         )
     } else if device.fingerprint.is_some() && device_type == "ledger" {
-        (
-            "detected",
-            "Detected. Groot verifies that Bitcoin Test is open when it reads the public account key.",
-            "import",
-        )
+        ("detected", ledger_ready_message, "import")
     } else if device.fingerprint.is_some() {
         ("ready", "Ready to import the public account key.", "import")
     } else if device_type == "bitbox02" {
@@ -1567,11 +1583,7 @@ fn hardware_device_dto(device: HwiDevice) -> HardwareDeviceDto {
             "unlock",
         )
     } else if device_type == "ledger" {
-        (
-            "needs_device_unlock",
-            "Select this signer, unlock Ledger, and open Bitcoin Test—not Bitcoin—to continue.",
-            "unlock",
-        )
+        ("needs_device_unlock", ledger_unlock_message, "unlock")
     } else if device_type == "coldcard" {
         (
             "needs_device_unlock",

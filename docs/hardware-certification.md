@@ -14,6 +14,17 @@ records while still binding the live public signer identity. That deliberate
 family-level exception does not transfer either model's physical evidence or a
 support claim to another family member.
 
+The 2026-09-12 release-owner Mainnet checkpoint was performed on the older
+internal build `v0.4.94 · 27f821be`. It passed BIP48 public-key sharing for
+Ledger Nano S Plus and BitBox02 Nova, passed Coldcard Mk4 wrong-network rejection
+and subsequent Mainnet import, and passed policy registration for a Mk4 + Nano S
+Plus + Nova 2-of-3 draft. It also exposed a Trezor Safe 3 HWI model-identifier
+mismatch, a Jade Classic pre-login failure, destructive cross-signer admission
+cleanup at final creation, and nested-dialog/loading presentation regressions.
+The exact results, source corrections, limitations, and required repetition are
+recorded in the [sanitized Mainnet checkpoint](hardware-certification-mainnet-2026-09-12.md).
+None of this older-build evidence transfers to the corrected candidate.
+
 ## Hardware certification matrix
 
 | Exact model                                 | Primary transport                                                                   | Credential rule                                                                                  | Local Regtest                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | Open work                                                                                                                                                               |

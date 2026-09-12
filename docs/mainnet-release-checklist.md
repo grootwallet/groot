@@ -38,6 +38,16 @@ fallback rejected; its review and exact-candidate evidence are open.
 
 ## Hardware certification
 
+Internal build `v0.4.94 · 27f821be` supplied limited release-owner preparation
+evidence and exposed two release blockers: HWI Safe 3 protocol identifiers were
+not admitted, and saved-signer scans erased other verified signers' pending
+Mainnet admissions before final multisig creation. Corrected source accepts only
+Safe 3's exact `trezor_t2b1`/`trezor_t3b1` identifiers and preserves/renews only
+exact, memory-only, time-bounded admissions. Jade Classic still requires a
+physical retry because its old-build login failed before the PIN flow completed.
+No checkbox is closed; follow the exact-build repetition in
+[`hardware-certification-mainnet-2026-09-12.md`](hardware-certification-mainnet-2026-09-12.md).
+
 User-reported internal RC `ab830d32` preparation evidence passed Mainnet software
 wallet creation, native recovery, automatic and manual sync, labeled address
 generation, receive detection, first confirmation, external send, self-spend,

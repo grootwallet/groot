@@ -84,35 +84,49 @@
   } from '$lib/hardware/policy-readiness';
 
   type HardwareGuideId = 'coldcard' | 'bitbox02' | 'ledger' | 'trezor' | 'jade';
-  const hardwareGuides: Array<{ id: HardwareGuideId; name: string; steps: string[] }> = [
+  const ledgerAppName = defaultConfig.network === 'mainnet' ? 'Bitcoin' : 'Bitcoin Test';
+  const hardwareGuides: Array<{
+    id: HardwareGuideId;
+    name: string;
+    models: string[];
+    steps: string[];
+  }> = [
     {
       id: 'coldcard',
       name: 'Coldcard',
-      steps: ['Sign in and enable USB.', 'Leave Coldcard at its main menu.']
+      models: ['Mk4'],
+      steps: ['Sign in, enable USB, and leave the device at its main menu.']
     },
     {
       id: 'bitbox02',
       name: 'BitBox02',
+      models: ['Bitcoin-only', 'Nova Bitcoin-only'],
       steps: ['Connect and unlock BitBox.', 'Quit BitBoxApp, then continue.']
     },
     {
       id: 'ledger',
       name: 'Ledger',
-      steps: ['Quit Ledger Live and open Bitcoin Test.', 'Approve the public-key export on Ledger.']
+      models: ['Nano S Plus'],
+      steps: [
+        `Quit Ledger Live, unlock the device, and open ${ledgerAppName}.`,
+        'Approve the public-key export on-device.'
+      ]
     },
     {
       id: 'trezor',
       name: 'Trezor',
+      models: ['Model One', 'Safe 3 Bitcoin-only'],
       steps: [
-        'Quit Trezor Suite and reconnect.',
-        'For Model One, unlock from its Groot card.',
-        'Choose the standard or on-device hidden wallet.'
+        'Quit Trezor Suite, connect, and unlock the device.',
+        'For Model One, complete Groot’s PIN matrix.',
+        'Choose the intended standard or hidden wallet.'
       ]
     },
     {
       id: 'jade',
-      name: 'Jade',
-      steps: ['Log in on Jade.', 'Keep Jade connected while Groot imports the key.']
+      name: 'Blockstream Jade',
+      models: ['Jade Classic'],
+      steps: ['Connect Jade Classic and continue.', 'Enter its PIN on-device when prompted.']
     }
   ];
   const creationSteps = ['Policy', 'Signers', 'Verify', 'Back up'];
@@ -2167,7 +2181,10 @@
     {#if templateKind === 'standard'}<button onclick={scanHardware}
         ><Cpu size={18} /><span
           ><strong>{translate($locale, 'Connect hardware device')}</strong><small
-            >{translate($locale, 'Desktop · Bitcoin Core HWI')}</small
+            >{translate(
+              $locale,
+              'Connect an initialized, unlocked signer directly by cable.'
+            )}</small
           ></span
         ><ChevronRight size={15} /></button
       >{:else}<div class="warning-box" role="note">
@@ -2186,7 +2203,7 @@
     <label class="source-button"
       ><FileUp size={18} /><span
         ><strong>{translate($locale, 'Import public-key file')}</strong><small
-          >{translate($locale, 'Coldcard XPUB JSON or Groot signer JSON · 256 KiB maximum')}</small
+          >{translate($locale, 'Choose a signer-export JSON file · 256 KiB maximum')}</small
         ></span
       ><ChevronRight size={15} /><input
         aria-label={translate($locale, 'Public signer file')}
@@ -2198,7 +2215,7 @@
     <button onclick={() => chooseSource('manual')}
       ><FileKey size={18} /><span
         ><strong>{translate($locale, 'Enter public key')}</strong><small
-          >{translate($locale, 'Paste an account xpub and fingerprint')}</small
+          >{translate($locale, 'Enter an account xpub, fingerprint, and BIP48 path')}</small
         ></span
       ><ChevronRight size={15} /></button
     >
@@ -2249,16 +2266,16 @@
 <Modal
   open={hardwareOpen}
   title={translate($locale, 'Connect hardware device')}
-  description={translate($locale, 'Connect one signer. Groot verifies it before adding it.')}
+  description={translate(
+    $locale,
+    'Connect one initialized and unlocked signer directly to this computer.'
+  )}
   onclose={closeHardwareScan}
 >
   <div class="hardware-readiness">
     <Usb size={18} /><span
       ><strong>{translate($locale, 'Keep USB free')}</strong><small
-        >{translate(
-          $locale,
-          'Unlock the signer and quit other wallet apps before scanning.'
-        )}</small
+        >{translate($locale, 'Use a cable and quit other wallet apps before scanning.')}</small
       ></span
     ><button onclick={() => openHardwareHelp(true)}>{translate($locale, 'Device help')}</button>
   </div>
@@ -2274,7 +2291,9 @@
       detail={translate(
         $locale,
         hardwareProgress.includes('Ledger')
-          ? 'Keep Bitcoin Test open for Regtest and confirm the export on the device screen.'
+          ? ledgerAppName === 'Bitcoin'
+            ? 'Keep Bitcoin open and confirm the export on the device screen.'
+            : 'Keep Bitcoin Test open and confirm the export on the device screen.'
           : 'Keep the signer connected and unlocked.'
       )}
       label={translate($locale, 'Hardware signer setup in progress')}
@@ -2444,14 +2463,17 @@
       <span class="device-number"><Usb size={15} /></span>
       <div>
         <strong>{selectedHardwareGuide.name}</strong>
+        <div class="hardware-guide-models">
+          {#each selectedHardwareGuide.models as model}<span>{model}</span>{/each}
+        </div>
         <ol>
           {#each selectedHardwareGuide.steps as step}<li>{step}</li>{/each}
         </ol>
       </div>
     </div>
     <p>
-      <strong>{translate($locale, 'Never enter a seed into Groot.')}</strong>
-      {translate($locale, 'Initialize or restore only with trusted vendor tools.')}
+      <strong>{translate($locale, 'Prepare the signer first.')}</strong>
+      {translate($locale, 'It must be initialized, unlocked, and have its recovery backup saved.')}
     </p>
     <Button
       class="full"

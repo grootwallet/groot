@@ -130,6 +130,22 @@ Transaction kind is authoritative snapshot data, not a UI guess from labels or z
 
 ## Multisig setup
 
+For the first Mainnet desktop target, preparation help names only Coldcard Mk4,
+original BitBox02 Bitcoin-only, BitBox02 Nova Bitcoin-only, Ledger Nano S Plus,
+Trezor Model One, Trezor Safe 3 Bitcoin-only, and Blockstream Jade Classic.
+Ledger instructions say **Bitcoin** on Mainnet and **Bitcoin Test** on test
+networks. File import means a bounded signer-export JSON record; manual entry
+means the account xpub, fingerprint, and BIP48 path. Neither is described as a
+descriptor import.
+
+For the first Mainnet desktop target, preparation help names only Coldcard Mk4,
+original BitBox02 Bitcoin-only, BitBox02 Nova Bitcoin-only, Ledger Nano S Plus,
+Trezor Model One, Trezor Safe 3 Bitcoin-only, and Blockstream Jade Classic.
+Ledger instructions say **Bitcoin** on Mainnet and **Bitcoin Test** on test
+networks. File import means a bounded signer-export JSON record; manual entry
+means the account xpub, fingerprint, and BIP48 path. Neither is described as a
+descriptor import.
+
 For Standard policies, signer enrollment and device preparation follow the HWI
 flows below. For Recovery and legacy Inheritance, Groot explains that the
 pinned HWI release cannot execute the delayed Miniscript descriptor, omits USB

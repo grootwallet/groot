@@ -1062,20 +1062,27 @@ test('explains hardware readiness before scanning', async ({ page }) => {
   await page.getByRole('button', { name: 'Hardware setup help' }).click();
   const help = page.getByRole('dialog', { name: 'Prepare your hardware signer' });
   await expect(help).toBeVisible();
-  await expect(help.getByText(/Never enter a seed into Groot/)).toBeVisible();
+  await expect(
+    help.getByText('It must be initialized, unlocked, and have its recovery backup saved.')
+  ).toBeVisible();
   await help.getByRole('button', { name: 'Ledger' }).click();
-  await expect(help.getByText(/open Bitcoin Test/)).toBeVisible();
+  await expect(help.getByText(/Nano S Plus/)).toBeVisible();
+  await expect(help.getByText(/open Bitcoin(?: Test)?/)).toBeVisible();
   await help.getByRole('button', { name: 'BitBox02' }).click();
   await expect(help.getByText(/Connect and unlock BitBox/)).toBeVisible();
   await expect(help.getByText(/Quit BitBoxApp/)).toBeVisible();
   await help.getByRole('button', { name: 'Trezor' }).click();
-  await expect(help.getByText(/Quit Trezor Suite and reconnect/)).toBeVisible();
-  await expect(help.getByText(/For Model One, unlock from its Groot card/)).toBeVisible();
-  await expect(help.getByText(/Never enter a seed into Groot/)).toBeVisible();
+  await expect(help.getByText('Model One', { exact: true })).toBeVisible();
+  await expect(help.getByText('Safe 3 Bitcoin-only', { exact: true })).toBeVisible();
+  await expect(help.getByText(/Quit Trezor Suite, connect, and unlock/)).toBeVisible();
+  await expect(help.getByText(/complete Groot’s PIN matrix/)).toBeVisible();
+  await expect(
+    help.getByText('It must be initialized, unlocked, and have its recovery backup saved.')
+  ).toBeVisible();
   await help.getByRole('button', { name: 'Scan for devices' }).click();
   const scan = page.getByRole('dialog', { name: 'Connect hardware device' });
   await expect(scan.getByText('Keep USB free', { exact: true })).toBeVisible();
-  await expect(scan.getByText(/Unlock the signer and quit other wallet apps/)).toBeVisible();
+  await expect(scan.getByText(/Use a cable and quit other wallet apps/)).toBeVisible();
   expect(await scan.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
   expect(
     await scan

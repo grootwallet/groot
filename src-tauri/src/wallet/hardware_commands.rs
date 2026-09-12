@@ -193,7 +193,10 @@ fn approved_hwi_model(network: Network, device_type: &str, model: &str) -> bool 
     }
     match device_type.as_str() {
         "ledger" => model == "ledger_nano_s_plus",
-        "trezor" => matches!(model.as_str(), "trezor_1" | "trezor_safe_3"),
+        // HWI forms this identifier from Trezor's protocol-level model code.
+        // Safe 3 revision A reports T2B1 and revision B reports T3B1; it never
+        // reports the retail name `safe_3` here.
+        "trezor" => matches!(model.as_str(), "trezor_1" | "trezor_t2b1" | "trezor_t3b1"),
         "bitbox02" => matches!(model.as_str(), "bitbox02_btconly" | "bitbox02_nova_btconly"),
         // ADR 0054 deliberately approves HWI 3.2.0's family-level identities
         // for Coldcard and Jade. Physical evidence remains model-specific,
@@ -560,17 +563,30 @@ fn remember_discovered_hardware_devices(
 }
 
 fn forget_hardware_scan(state: &AppState) -> ApiResult<u64> {
+    forget_hardware_scan_with_admissions(state, true)
+}
+
+fn forget_hardware_scan_preserving_admissions(state: &AppState) -> ApiResult<u64> {
+    forget_hardware_scan_with_admissions(state, false)
+}
+
+fn forget_hardware_scan_with_admissions(
+    state: &AppState,
+    clear_hardware_admissions: bool,
+) -> ApiResult<u64> {
     let mut scans = state.recent_hardware_scan.lock().map_err(internal)?;
     let request_epoch = state
         .hardware_scan_epoch
         .fetch_add(1, Ordering::SeqCst)
         .wrapping_add(1);
     *scans = None;
-    state
-        .pending_hardware_admissions
-        .lock()
-        .map_err(internal)?
-        .clear();
+    if clear_hardware_admissions {
+        state
+            .pending_hardware_admissions
+            .lock()
+            .map_err(internal)?
+            .clear();
+    }
     Ok(request_epoch)
 }
 
@@ -719,7 +735,9 @@ pub async fn hardware_find_saved_device(
     // This command resolves only an opaque path hint. The following health,
     // display, or signing command must freshly prove the complete account
     // identity and perform its action under one exclusive native lease.
-    let request_epoch = forget_hardware_scan(&state)?;
+    // It must not erase the other exact live admissions collected for this
+    // multisig setup; every admission remains identity-bound and time-bounded.
+    let request_epoch = forget_hardware_scan_preserving_admissions(&state)?;
     let hwi = hwi_cli(&app)?;
     let requested_type = device_type.clone();
     let requested_fingerprint = fingerprint.clone();
@@ -1016,6 +1034,16 @@ mod targeted_scan_tests {
         assert!(approved_hwi_model(Network::Bitcoin, "trezor", "trezor_1"));
         assert!(approved_hwi_model(
             Network::Bitcoin,
+            "trezor",
+            "trezor_t2b1"
+        ));
+        assert!(approved_hwi_model(
+            Network::Bitcoin,
+            "trezor",
+            "trezor_t3b1"
+        ));
+        assert!(approved_hwi_model(
+            Network::Bitcoin,
             "bitbox02",
             "bitbox02_nova_btconly"
         ));
@@ -1023,7 +1051,8 @@ mod targeted_scan_tests {
         assert!(approved_hwi_model(Network::Bitcoin, "jade", "jade"));
         for (device_type, model) in [
             ("ledger", "ledger_nano_x"),
-            ("trezor", ""),
+            ("trezor", "trezor_safe_3"),
+            ("trezor", "trezor_t3t1"),
             ("coldcard", "coldcard_q"),
             ("jade", "jade_plus"),
             ("bitbox02", "bitbox02_nova_multi"),
@@ -1079,6 +1108,45 @@ mod targeted_scan_tests {
             "approved-xpub",
             SINGLESIG_ACCOUNT_PATH,
             Some("trezor")
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn saved_signer_lookup_scan_preserves_exact_multisig_admissions() {
+        let state = AppState::default();
+        for (fingerprint, xpub) in [("a1b2c3d4", "first-xpub"), ("deadbeef", "second-xpub")] {
+            remember_hardware_admission_for_network(
+                &state,
+                Network::Bitcoin,
+                fingerprint,
+                xpub,
+                crate::multisig::MULTISIG_ACCOUNT_PATH,
+                Some("ledger"),
+            )
+            .unwrap();
+        }
+
+        forget_hardware_scan_preserving_admissions(&state).unwrap();
+
+        for (fingerprint, xpub) in [("a1b2c3d4", "first-xpub"), ("deadbeef", "second-xpub")] {
+            assert!(require_hardware_admission_for_network(
+                &state,
+                Network::Bitcoin,
+                fingerprint,
+                xpub,
+                crate::multisig::MULTISIG_ACCOUNT_PATH,
+                Some("ledger")
+            )
+            .is_ok());
+        }
+        assert!(require_hardware_admission_for_network(
+            &state,
+            Network::Bitcoin,
+            "a1b2c3d4",
+            "substituted-xpub",
+            crate::multisig::MULTISIG_ACCOUNT_PATH,
+            Some("ledger")
         )
         .is_err());
     }
@@ -3178,6 +3246,8 @@ pub async fn hardware_verify_multisig_draft_policy(
         })
         .ok_or_else(unknown_hardware_signer)?;
     let expected_signer = signer.clone();
+    let admission_xpub = expected_signer.xpub.clone();
+    let admission_path = expected_signer.derivation_path.clone();
     let expected = first_multisig_address(&wallet)?;
     let descriptor = Descriptor::<DescriptorPublicKey>::from_str(&wallet.external_descriptor)
         .map_err(internal)?
@@ -3213,14 +3283,27 @@ pub async fn hardware_verify_multisig_draft_policy(
         displayed_address: Some(actual),
     };
     let key = policy_verification_key(&wallet, &verification.signer_fingerprint)?;
-    complete_policy_verification_if_active(&hardware_operation, || {
+    let verification = complete_policy_verification_if_active(&hardware_operation, || {
         state
             .pending_policy_verifications
             .lock()
             .map_err(internal)?
             .insert(key, verification.clone());
         Ok(verification)
-    })
+    })?;
+    // Policy registration and on-device address review can legitimately take
+    // longer than the discovery capability lifetime. This successful live
+    // identity-and-address proof is stronger and more recent than the original
+    // import, so renew the exact in-memory Mainnet admission instead of making
+    // the user disconnect and import the same signer again at final creation.
+    remember_mainnet_hardware_admission(
+        &state,
+        &verification.signer_fingerprint,
+        &admission_xpub,
+        &admission_path,
+        Some(&verification.device_type),
+    )?;
+    Ok(verification)
 }
 
 #[tauri::command]
