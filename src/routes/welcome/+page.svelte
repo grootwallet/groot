@@ -698,7 +698,7 @@
           autocomplete="new-password"
           hint={translate(
             $locale,
-            'Use at least 16 characters. Letters-only passphrases are allowed. Keep it with your recovery words; it also unlocks Groot on this device.'
+            'Use at least 16 characters. Letters-only passphrases are allowed.'
           )}
           error={passphraseError}
         />
@@ -709,25 +709,14 @@
           autocomplete="new-password"
           error={confirmation && passphrase !== confirmation ? 'Passphrases do not match.' : ''}
         />
-        <div class="credential-warning" role="note">
-          <ShieldCheck size={16} />
-          <p>
-            <strong>{translate($locale, 'Choose a memorable, unique passphrase.')}</strong><span
-              >{translate(
-                $locale,
-                'A unique passphrase keeps a copied profile harder to guess. Keep it with your recovery words.'
-              )}</span
-            >
-          </p>
-        </div>
       </div>
       <label class="credential-warning credential-ack"
         ><input type="checkbox" bind:checked={backupAcknowledged} /><ShieldCheck size={16} />
         <p>
-          <strong>{translate($locale, 'Keep it with your backup.')}</strong><span
+          <strong>{translate($locale, 'Keep a unique passphrase with your backup.')}</strong><span
             >{translate(
               $locale,
-              'I understand this exact passphrase is required with my 24 words. It cannot be reset; a\n            different passphrase opens a different wallet.'
+              'Anyone with a copied profile can guess this passphrase offline. I understand this exact passphrase is required with my 24 words, cannot be reset, and a different one opens a different wallet.'
             )}</span
           >
         </p></label

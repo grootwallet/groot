@@ -293,6 +293,9 @@ test('creates a 24-word wallet and clears onboarding secrets', async ({ page }) 
   await expect(page.getByText('Passphrases do not match.')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Create wallet' })).toBeDisabled();
   await page.getByLabel('Confirm wallet passphrase', { exact: true }).fill('abcdefghijklmnop');
+  await expect(page.locator('.credential-warning')).toHaveCount(1);
+  await expect(page.getByText('Keep a unique passphrase with your backup.')).toBeVisible();
+  await expect(page.getByText(/can guess this passphrase offline/)).toBeVisible();
   await page.getByLabel(/I understand this exact passphrase/).check();
   await page.getByRole('button', { name: 'Create wallet' }).click();
   await openCreatedSoftwareWallet(page);
@@ -308,6 +311,7 @@ test('can defer seed verification and complete it later from the wallet', async 
   await page.getByRole('button', { name: 'I wrote them down' }).click();
   await page.getByRole('button', { name: 'Verify later' }).click();
   await expect(page.getByText('Backup not verified yet')).toBeVisible();
+  await expect(page.locator('.credential-warning')).toHaveCount(1);
   await page.getByPlaceholder('My wallet').fill('Deferred backup wallet');
   await page.getByLabel('Wallet passphrase', { exact: true }).fill('deferred-backup-passphrase');
   await page

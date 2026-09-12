@@ -44,14 +44,15 @@ export const onboardingCopy = {
       fr: 'Une empreinte principale est un identifiant public de 8 caractères dérivé de vos mots de récupération et de votre phrase secrète. Comparez-la après une restauration pour confirmer que vous avez ouvert le même portefeuille ; elle ne permet ni de restaurer le portefeuille ni de dépenser des bitcoins.',
       es: 'Una huella maestra es un identificador público de 8 caracteres derivado de tus palabras de recuperación y tu frase de contraseña. Compárala después de una restauración para confirmar que abriste la misma cartera; no permite restaurar la cartera ni gastar bitcoin.'
     },
-  'Choose a memorable, unique passphrase.': {
-    fr: 'Choisissez une phrase secrète unique et mémorable.',
-    es: 'Elige una frase de contraseña única y fácil de recordar.'
+  'Keep a unique passphrase with your backup.': {
+    fr: 'Conservez une phrase secrète unique avec votre sauvegarde.',
+    es: 'Guarda una frase de contraseña única con tu copia de seguridad.'
   },
-  'A unique passphrase keeps a copied profile harder to guess. Keep it with your recovery words.': {
-    fr: 'Une phrase secrète unique rend une copie du profil plus difficile à deviner. Conservez-la avec vos mots de récupération.',
-    es: 'Una frase de contraseña única dificulta adivinar una copia del perfil. Guárdala con tus palabras de recuperación.'
-  },
+  'Anyone with a copied profile can guess this passphrase offline. I understand this exact passphrase is required with my 24 words, cannot be reset, and a different one opens a different wallet.':
+    {
+      fr: 'Toute personne possédant une copie du profil peut tenter de deviner cette phrase secrète hors ligne. Je comprends que la phrase exacte est requise avec mes 24 mots, qu’elle ne peut pas être réinitialisée et qu’une phrase différente ouvre un autre portefeuille.',
+      es: 'Cualquiera que tenga una copia del perfil puede intentar adivinar esta frase de contraseña sin conexión. Entiendo que la frase exacta es necesaria junto con mis 24 palabras, no se puede restablecer y una diferente abre otra cartera.'
+    },
   'Enter this wallet’s passphrase to continue.': {
     fr: 'Saisissez la phrase secrète de ce portefeuille pour continuer.',
     es: 'Introduce la frase de contraseña de esta cartera para continuar.'
@@ -97,11 +98,6 @@ export const onboardingCopy = {
       fr: 'Choisissez la phrase secrète BIP39 qui complète cette sauvegarde. La même phrase secrète déverrouille Groot.',
       es: 'Elige la frase de contraseña BIP39 que completa esta copia. La misma frase desbloquea Groot.'
     },
-  'Use at least 16 characters. Letters-only passphrases are allowed. Keep it with your recovery words; it also unlocks Groot on this device.':
-    {
-      fr: 'Utilisez au moins 16 caractères. Une phrase composée uniquement de lettres est acceptée. Conservez-la avec vos mots de récupération ; elle déverrouille aussi Groot sur cet appareil.',
-      es: 'Usa al menos 16 caracteres. Se permiten frases formadas solo por letras. Guárdala con tus palabras de recuperación; también desbloquea Groot en este dispositivo.'
-    },
   'Use at least 16 characters. Letters-only passphrases are allowed.': {
     fr: 'Utilisez au moins 16 caractères. Une phrase composée uniquement de lettres est acceptée.',
     es: 'Usa al menos 16 caracteres. Se permiten frases formadas solo por letras.'
@@ -127,11 +123,6 @@ export const onboardingCopy = {
     {
       fr: 'Groot générera 24 mots de récupération de manière sécurisée sur cet appareil. Notez-les dans l’ordre et conservez-les hors ligne.',
       es: 'Groot generará 24 palabras de recuperación de forma segura en este dispositivo. Anótalas en orden y mantenlas sin conexión.'
-    },
-  'I understand this exact passphrase is required with my 24 words. It cannot be reset; a different passphrase opens a different wallet.':
-    {
-      fr: 'Je comprends que cette phrase secrète exacte est requise avec mes 24 mots. Elle ne peut pas être réinitialisée ; une autre phrase secrète ouvre un autre portefeuille.',
-      es: 'Entiendo que esta frase de contraseña exacta es necesaria junto con mis 24 palabras. No se puede restablecer; otra frase abre una cartera diferente.'
     },
   'Only reveal your recovery words in a private place. Make sure no person, camera, or screen sharing can see them.':
     {
@@ -212,10 +203,6 @@ export const onboardingCopy = {
     es: 'Estoy en privado — mostrar palabras'
   },
   'Hardware signer': { fr: 'Signataire matériel', es: 'Firmante físico' },
-  'Keep it with your backup.': {
-    fr: 'Conservez-le avec votre sauvegarde.',
-    es: 'Guárdalo con tu copia de seguridad.'
-  },
   'Keys stay on this device · Open source': {
     fr: 'Les clés restent sur cet appareil · Code source ouvert',
     es: 'Las claves permanecen en este dispositivo · Código abierto'
