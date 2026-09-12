@@ -3,6 +3,9 @@ import type { Sats, WalletSnapshot } from './transactions';
 
 export type MnemonicPresentation =
   { mode: 'native'; backupVerified: boolean } | { mode: 'fixture'; words: string[] };
+export type SoftwareWalletCreation = {
+  masterFingerprint: string;
+};
 export type WalletProfile = {
   id: string;
   name: string;

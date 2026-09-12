@@ -2632,6 +2632,19 @@ fn persisted_descriptors_are_watch_only() {
 }
 
 #[test]
+fn software_master_fingerprint_is_stable_and_bound_to_the_wallet_passphrase() {
+    let mnemonic = Mnemonic::parse(WORDS).expect("valid public test mnemonic");
+    let first = software_wallet_master_fingerprint(&mnemonic, "wallet passphrase").unwrap();
+    let repeated = software_wallet_master_fingerprint(&mnemonic, "wallet passphrase").unwrap();
+    let alternate = software_wallet_master_fingerprint(&mnemonic, "different passphrase").unwrap();
+
+    assert_eq!(first.len(), 8);
+    assert!(first.bytes().all(|byte| byte.is_ascii_hexdigit()));
+    assert_eq!(first, repeated);
+    assert_ne!(first, alternate);
+}
+
+#[test]
 fn software_descriptor_identity_is_stable_and_bound_to_the_wallet_passphrase() {
     let mnemonic = Mnemonic::parse(
         "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",

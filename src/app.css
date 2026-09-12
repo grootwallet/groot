@@ -4960,6 +4960,48 @@ code {
 .credential-form .field small {
   min-height: 14px;
 }
+.wallet-created-confirmation {
+  display: grid;
+  justify-items: center;
+  gap: 16px;
+  text-align: center;
+}
+.wallet-created-confirmation > h1,
+.wallet-created-confirmation > p {
+  margin: 0;
+}
+.wallet-created-icon {
+  display: grid;
+  width: 52px;
+  height: 52px;
+  place-items: center;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--success) 10%, transparent);
+  color: var(--success);
+}
+.master-fingerprint-result {
+  display: grid;
+  width: 100%;
+  gap: 8px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-inset);
+  background: var(--surface-inset);
+}
+.master-fingerprint-result span,
+.fingerprint-check-note {
+  color: var(--muted);
+  font-size: var(--font-size-meta);
+}
+.master-fingerprint-result code {
+  color: var(--text);
+  font-size: 24px;
+  font-weight: 750;
+  letter-spacing: 0.12em;
+}
+.fingerprint-check-note {
+  line-height: 1.5;
+}
 .credential-form .field-error {
   color: var(--danger);
 }

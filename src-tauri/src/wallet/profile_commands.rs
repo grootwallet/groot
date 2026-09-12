@@ -22,6 +22,12 @@ pub struct NetworkSetupSource {
     ready: bool,
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SoftwareWalletCreation {
+    master_fingerprint: String,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum MainnetCoreAdmissionPurpose {
@@ -248,7 +254,7 @@ pub fn wallet_create(
     state: State<'_, AppState>,
     name: String,
     credential: String,
-) -> ApiResult<()> {
+) -> ApiResult<SoftwareWalletCreation> {
     let credential = Zeroizing::new(credential);
     let _operation = operation_guard(&state)?;
     let _admission_cleanup = clear_new_wallet_admission_on_exit(&state);
@@ -271,6 +277,7 @@ pub fn wallet_create(
         ));
     }
     let mnemonic = Mnemonic::parse(pending.words.as_str()).map_err(internal)?;
+    let master_fingerprint = software_wallet_master_fingerprint(&mnemonic, credential.as_str())?;
     let authenticated_descriptors = software_wallet_descriptors(&mnemonic, credential.as_str())?;
     if let Err(error) = create_from_mnemonic(
         &app,
@@ -301,7 +308,7 @@ pub fn wallet_create(
         },
         None,
     );
-    Ok(())
+    Ok(SoftwareWalletCreation { master_fingerprint })
 }
 
 #[tauri::command]

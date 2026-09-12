@@ -94,9 +94,9 @@ describe('deferred backup verification', () => {
     await expect(adapter.createWallet('Too short', 'abcdefghijklmno', true)).rejects.toMatchObject({
       code: 'invalid_credential'
     });
-    await expect(adapter.createWallet('Letters only', 'abcdefghijklmnop', true)).resolves.toBe(
-      undefined
-    );
+    await expect(adapter.createWallet('Letters only', 'abcdefghijklmnop', true)).resolves.toEqual({
+      masterFingerprint: '0fe7e3d2'
+    });
   });
 
   it('keeps re-presentation secret-free and marks the fixture verified only after its proof', async () => {

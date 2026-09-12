@@ -42,9 +42,9 @@
     utf8ByteLength,
     type RecoveryWord
   } from '$lib/mnemonic-verification';
-  let mode = $state<'home' | 'choose' | 'create' | 'words' | 'verify' | 'passphrase' | 'recover'>(
-    'home'
-  );
+  let mode = $state<
+    'home' | 'choose' | 'create' | 'words' | 'verify' | 'passphrase' | 'created' | 'recover'
+  >('home');
   let revealed = $state(false);
   let passphrase = $state('');
   let confirmation = $state('');
@@ -64,6 +64,7 @@
   let supplementalOutcomes = $state('');
   let networkSetupSource = $state<NetworkSetupSource | null>(null);
   let reuseNetworkSetup = $state(true);
+  let createdMasterFingerprint = $state('');
   const softwareSteps = ['Generate', 'Back up', 'Protect'];
   let passphraseError = $derived(
     utf8ByteLength(passphrase) > MAX_WALLET_PASSPHRASE_BYTES
@@ -228,8 +229,9 @@
     busy = true;
     error = '';
     try {
-      await walletService.createWallet(walletName, passphrase, backupVerified);
+      const creation = await walletService.createWallet(walletName, passphrase, backupVerified);
       const networkSetupCopied = await adoptNetworkSetup(passphrase);
+      createdMasterFingerprint = creation.masterFingerprint;
       words = [];
       passphrase = '';
       confirmation = '';
@@ -245,7 +247,7 @@
             : 'Your wallet is ready. Verify its recovery backup soon.',
         tone: networkSetupCopied ? 'success' : 'default'
       });
-      await goto('/?initial=new');
+      mode = 'created';
     } catch (cause) {
       error = localizedError(cause, $locale, 'Could not create wallet.');
     } finally {
@@ -757,6 +759,36 @@
         loadingLabel={translate($locale, 'Creating wallet…')}
         onclick={finishCreate}><Check size={17} />{translate($locale, 'Create wallet')}</Button
       >
+    {:else if mode === 'created'}
+      <SetupProgress
+        steps={softwareSteps}
+        current={3}
+        label={translate($locale, 'Software wallet setup progress')}
+        context="SOFTWARE WALLET"
+      />
+      <div class="wallet-created-confirmation">
+        <span class="wallet-created-icon"><Check size={24} /></span>
+        <h1>{translate($locale, 'Wallet created')}</h1>
+        <p>
+          {translate(
+            $locale,
+            'Record this master fingerprint with your recovery words. It identifies the wallet produced by your 24 words and exact passphrase.'
+          )}
+        </p>
+        <div class="master-fingerprint-result">
+          <span>{translate($locale, 'Master fingerprint')}</span>
+          <code>{createdMasterFingerprint}</code>
+        </div>
+        <p class="fingerprint-check-note">
+          {translate(
+            $locale,
+            'When restoring elsewhere, a matching fingerprint confirms that the recovery words and passphrase opened the same wallet.'
+          )}
+        </p>
+        <Button size="large" class="full" onclick={() => goto('/?initial=new')}
+          >{translate($locale, 'Open wallet')}<ArrowRight size={17} /></Button
+        >
+      </div>
     {:else}
       <button class="back-link" onclick={() => (mode = 'home')}
         ><ArrowLeft size={16} />{translate($locale, 'Back')}</button

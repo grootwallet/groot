@@ -221,7 +221,10 @@ export class TauriWalletAdapter implements WalletPort {
   }
   createWallet(name: string, credential: string, _backupVerified: boolean) {
     this.#generation++;
-    return command<void>('wallet_create', { name, credential });
+    return command<import('./contracts').SoftwareWalletCreation>('wallet_create', {
+      name,
+      credential
+    });
   }
   verifyBackup(credential: string) {
     return command<boolean>('wallet_verify_backup', { credential });

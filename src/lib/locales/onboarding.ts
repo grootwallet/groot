@@ -25,6 +25,16 @@ export const onboardingCopy = {
     fr: 'Votre portefeuille est prêt. Vérifiez bientôt sa sauvegarde de récupération.',
     es: 'Tu cartera está lista. Verifica pronto su copia de recuperación.'
   },
+  'Record this master fingerprint with your recovery words. It identifies the wallet produced by your 24 words and exact passphrase.':
+    {
+      fr: 'Notez cette empreinte principale avec vos mots de récupération. Elle identifie le portefeuille produit par vos 24 mots et votre phrase secrète exacte.',
+      es: 'Anota esta huella maestra junto con tus palabras de recuperación. Identifica la cartera producida por tus 24 palabras y tu frase de contraseña exacta.'
+    },
+  'When restoring elsewhere, a matching fingerprint confirms that the recovery words and passphrase opened the same wallet.':
+    {
+      fr: 'Lors d’une restauration ailleurs, une empreinte correspondante confirme que les mots de récupération et la phrase secrète ont ouvert le même portefeuille.',
+      es: 'Al restaurar en otro lugar, una huella coincidente confirma que las palabras de recuperación y la frase de contraseña abrieron la misma cartera.'
+    },
   'Choose a memorable, unique passphrase.': {
     fr: 'Choisissez une phrase secrète unique et mémorable.',
     es: 'Elige una frase de contraseña única y fácil de recordar.'

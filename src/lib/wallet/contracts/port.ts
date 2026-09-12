@@ -35,6 +35,7 @@ import type {
   RecoveryScanStatus,
   RuntimePlatform,
   SupplementalEntropyInput,
+  SoftwareWalletCreation,
   WalletEvent,
   WalletProfile,
   WalletRegistry,
@@ -67,7 +68,11 @@ export interface WalletProfilesPort {
   selectWallet(walletId: string): Promise<WalletSelection>;
   generateMnemonic(supplementalEntropy?: SupplementalEntropyInput): Promise<MnemonicPresentation>;
   cancelOnboarding(preserveMainnetAdmission?: boolean): Promise<void>;
-  createWallet(name: string, credential: string, backupVerified: boolean): Promise<void>;
+  createWallet(
+    name: string,
+    credential: string,
+    backupVerified: boolean
+  ): Promise<SoftwareWalletCreation>;
   verifyBackup(credential: string): Promise<boolean>;
   revealAndVerifyBackup(credential: string): Promise<boolean>;
   recoverWallet(name: string, credential: string): Promise<void>;

@@ -3529,6 +3529,12 @@ fn root_key(mnemonic: &Mnemonic, credential: &str) -> ApiResult<Xpriv> {
     Xpriv::new_master(PARAMETERS.extended_key_network, seed.as_ref()).map_err(internal)
 }
 
+fn software_wallet_master_fingerprint(mnemonic: &Mnemonic, credential: &str) -> ApiResult<String> {
+    Ok(root_key(mnemonic, credential)?
+        .fingerprint(&Secp256k1::new())
+        .to_string())
+}
+
 fn watch_templates(
     mnemonic: &Mnemonic,
     credential: &str,

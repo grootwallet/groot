@@ -281,6 +281,7 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     this._credentials.set(profile.id, credential);
     this._unlockedWalletIds.add(profile.id);
     this._exists = true;
+    return { masterFingerprint: '0fe7e3d2' };
   }
   async recoverWallet(_name: string, _credential: string) {
     throw new WalletError(

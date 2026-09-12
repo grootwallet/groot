@@ -53,6 +53,14 @@ async function chooseSoftwareWallet(page: Page) {
   await page.getByRole('button', { name: /Software wallet/ }).click();
 }
 
+async function openCreatedSoftwareWallet(page: Page) {
+  await expect(page.getByRole('heading', { name: 'Wallet created' })).toBeVisible();
+  await expect(page.getByText('Master fingerprint', { exact: true })).toBeVisible();
+  await expect(page.locator('.master-fingerprint-result code')).toHaveText(/^[0-9a-f]{8}$/);
+  await expect(page.getByText(/matching fingerprint confirms/)).toBeVisible();
+  await page.getByRole('button', { name: 'Open wallet' }).click();
+}
+
 test('copies the public build identity with inline retry feedback', async ({ page }) => {
   test.skip((page.viewportSize()?.width ?? 0) <= 760, 'The build identity is desktop-only.');
   await page.addInitScript(() => {
@@ -280,6 +288,7 @@ test('creates a 24-word wallet and clears onboarding secrets', async ({ page }) 
   await page.getByLabel('Confirm wallet passphrase', { exact: true }).fill('abcdefghijklmnop');
   await page.getByLabel(/I understand this exact passphrase/).check();
   await page.getByRole('button', { name: 'Create wallet' }).click();
+  await openCreatedSoftwareWallet(page);
   await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible();
 });
 
@@ -299,6 +308,7 @@ test('can defer seed verification and complete it later from the wallet', async 
     .fill('deferred-backup-passphrase');
   await page.getByLabel(/I understand this exact passphrase/).check();
   await page.getByRole('button', { name: 'Create wallet' }).click();
+  await openCreatedSoftwareWallet(page);
 
   const backupStatus = page.getByRole('region', { name: 'Recovery backup status' });
   await expect(backupStatus.getByText('Recovery backup not verified')).toBeVisible();
@@ -568,6 +578,7 @@ test('creates, switches, unlocks, and deletes isolated wallet profiles', async (
   await page.getByLabel('Confirm wallet passphrase', { exact: true }).fill('savings-passphrase');
   await page.getByLabel(/I understand this exact passphrase/).check();
   await page.getByRole('button', { name: 'Create wallet' }).click();
+  await openCreatedSoftwareWallet(page);
   await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible();
   if (isMobile) {
     await page.getByRole('link', { name: 'Settings' }).click();
