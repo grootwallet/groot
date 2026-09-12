@@ -44,14 +44,14 @@ export const onboardingCopy = {
       fr: 'Une empreinte principale est un identifiant public de 8 caractères dérivé de vos mots de récupération et de votre phrase secrète. Comparez-la après une restauration pour confirmer que vous avez ouvert le même portefeuille ; elle ne permet ni de restaurer le portefeuille ni de dépenser des bitcoins.',
       es: 'Una huella maestra es un identificador público de 8 caracteres derivado de tus palabras de recuperación y tu frase de contraseña. Compárala después de una restauración para confirmar que abriste la misma cartera; no permite restaurar la cartera ni gastar bitcoin.'
     },
-  'Keep a unique passphrase with your backup.': {
-    fr: 'Conservez une phrase secrète unique avec votre sauvegarde.',
-    es: 'Guarda una frase de contraseña única con tu copia de seguridad.'
+  'Keep it with your backup.': {
+    fr: 'Conservez-la avec votre sauvegarde.',
+    es: 'Guárdala con tu copia de seguridad.'
   },
-  'Anyone with a copied profile can guess this passphrase offline. I understand this exact passphrase is required with my 24 words, cannot be reset, and a different one opens a different wallet.':
+  'I understand this exact passphrase is required with my 24 words. It cannot be reset; a different passphrase opens a different wallet.':
     {
-      fr: 'Toute personne possédant une copie du profil peut tenter de deviner cette phrase secrète hors ligne. Je comprends que la phrase exacte est requise avec mes 24 mots, qu’elle ne peut pas être réinitialisée et qu’une phrase différente ouvre un autre portefeuille.',
-      es: 'Cualquiera que tenga una copia del perfil puede intentar adivinar esta frase de contraseña sin conexión. Entiendo que la frase exacta es necesaria junto con mis 24 palabras, no se puede restablecer y una diferente abre otra cartera.'
+      fr: 'Je comprends que cette phrase secrète exacte est requise avec mes 24 mots. Elle ne peut pas être réinitialisée ; une phrase différente ouvre un autre portefeuille.',
+      es: 'Entiendo que esta frase de contraseña exacta es necesaria junto con mis 24 palabras. No se puede restablecer; una frase diferente abre otra cartera.'
     },
   'Enter this wallet’s passphrase to continue.': {
     fr: 'Saisissez la phrase secrète de ce portefeuille pour continuer.',
@@ -147,10 +147,6 @@ export const onboardingCopy = {
     fr: 'Notez-les dans l’ordre. Ne les conservez jamais dans une capture d’écran ni un gestionnaire de mots de passe.',
     es: 'Anótalas en orden. Nunca las guardes en una captura de pantalla ni en un gestor de contraseñas.'
   },
-  'You can use the wallet now, but Groot will keep reminding you to verify the written words.': {
-    fr: 'Vous pouvez utiliser le portefeuille maintenant, mais Groot continuera à vous rappeler de vérifier les mots écrits.',
-    es: 'Ya puedes usar la cartera, pero Groot seguirá recordándote que verifiques las palabras escritas.'
-  },
   'Your 24 recovery words are entered in a native system window so they never enter Groot’s web interface.':
     {
       fr: 'Vos 24 mots de récupération sont saisis dans une fenêtre native du système afin de ne jamais entrer dans l’interface web de Groot.',
@@ -165,10 +161,6 @@ export const onboardingCopy = {
   'Anyone with them can spend your funds.': {
     fr: 'Toute personne qui les possède peut dépenser vos fonds.',
     es: 'Cualquiera que las tenga puede gastar tus fondos.'
-  },
-  'Backup not verified yet': {
-    fr: 'Sauvegarde pas encore vérifiée',
-    es: 'Copia de seguridad aún sin verificar'
   },
   'Check your surroundings': { fr: 'Vérifiez votre environnement', es: 'Comprueba tu entorno' },
   'Choose your wallet': {

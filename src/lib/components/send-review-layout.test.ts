@@ -22,13 +22,11 @@ describe('send review layout', () => {
     expect(appCss).toMatch(/\.review-amount > span\s*\{/s);
   });
 
-  it('separates adjacent setup warnings and onboarding fields', () => {
+  it('separates adjacent setup warnings', () => {
     expect(appCss).toMatch(
       /\.initial-history-scan \+ \.backup-verification-banner,[\s\S]*?\.sync-progress \+ \.backup-verification-banner\s*\{[^}]*margin-top: 0;/s
     );
-    expect(appCss).toMatch(
-      /\.backup-unverified-note \+ \.credential-form\s*\{[^}]*margin-top: 18px;/s
-    );
+    expect(appCss).not.toContain('.backup-unverified-note');
   });
 
   it('loads the authoritative selected profile before wallet-kind operations', () => {

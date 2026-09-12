@@ -38,3 +38,13 @@ Wallet, database, registry, descriptor, proposal, backup, node-config, and
 secret-envelope formats are unchanged; no migration is required. Exact-node
 admission remains mandatory before any Mainnet chain-derived wallet state is
 available. ADR 0061 remote Core evidence remains blocking.
+
+## 2026-09-12 clarification: offline duplicate detection
+
+Creating or importing a profile compares its candidate public descriptor with
+the public descriptors already stored in same-network wallet databases. This
+exact-identity check opens those existing databases read-only and does not read
+balance, history, proposals, or chain state. It therefore uses the same offline
+local-data exception as creation of the empty candidate database and does not
+require Core admission. Selected-wallet data access and every chain-derived read
+remain admission-gated.

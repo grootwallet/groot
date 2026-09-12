@@ -231,13 +231,13 @@
     error = '';
     try {
       const creation = await walletService.createWallet(walletName, passphrase, backupVerified);
-      const networkSetupCopied = await adoptNetworkSetup(passphrase);
       createdMasterFingerprint = creation.masterFingerprint;
+      mode = 'created';
+      const networkSetupCopied = await adoptNetworkSetup(passphrase);
       words = [];
       passphrase = '';
       confirmation = '';
       backupAcknowledged = false;
-      mode = 'created';
       toast({
         title: 'Wallet created',
         description: !networkSetupCopied
@@ -249,7 +249,6 @@
             : 'Your wallet is ready. Verify its recovery backup soon.',
         tone: networkSetupCopied ? 'success' : 'default'
       });
-      mode = 'created';
     } catch (cause) {
       error = localizedError(cause, $locale, 'Could not create wallet.');
     } finally {
@@ -671,16 +670,6 @@
           'Choose the BIP39 wallet passphrase that completes this backup. The same passphrase unlocks\n        Groot.'
         )}
       </p>
-      {#if !backupVerified}<div class="backup-unverified-note" role="status">
-          <ShieldCheck size={17} /><span
-            ><strong>{translate($locale, 'Backup not verified yet')}</strong><small
-              >{translate(
-                $locale,
-                'You can use the wallet now, but Groot will keep reminding you to verify the written\n              words.'
-              )}</small
-            ></span
-          >
-        </div>{/if}
       <div class="credential-form">
         <label class="field">
           <span>{translate($locale, 'Wallet name')}</span>
@@ -713,10 +702,10 @@
       <label class="credential-warning credential-ack"
         ><input type="checkbox" bind:checked={backupAcknowledged} /><ShieldCheck size={16} />
         <p>
-          <strong>{translate($locale, 'Keep a unique passphrase with your backup.')}</strong><span
+          <strong>{translate($locale, 'Keep it with your backup.')}</strong><span
             >{translate(
               $locale,
-              'Anyone with a copied profile can guess this passphrase offline. I understand this exact passphrase is required with my 24 words, cannot be reset, and a different one opens a different wallet.'
+              'I understand this exact passphrase is required with my 24 words. It cannot be reset; a different passphrase opens a different wallet.'
             )}</span
           >
         </p></label

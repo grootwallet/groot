@@ -1762,14 +1762,13 @@ fn multisig_db_path(app: &AppHandle) -> ApiResult<PathBuf> {
 }
 
 fn profile_from_directory(
-    app: &AppHandle,
     directory: &Path,
     id: Uuid,
     kind: WalletKind,
 ) -> ApiResult<WalletProfile> {
     let (name, checksum) = match kind {
         WalletKind::SingleKey => {
-            let permit = database_open_permit_for_identity_inspection(app)?;
+            let permit = database_open_permit_for_offline_identity_inspection()?;
             let mut db = open_wallet_database(&directory.join("wallet.sqlite"), &permit)?;
             let wallet = load_wallet(&mut db)?;
             (
@@ -1836,9 +1835,8 @@ fn ensure_registry_migrated(app: &AppHandle) -> ApiResult<()> {
             ));
         }
         let id = Uuid::new_v4();
-        let profile = profile_from_directory(app, &legacy_directory, id, kind)?;
-        let (external_descriptor, _) =
-            descriptor_pair_from_directory(app, &legacy_directory, &profile)?;
+        let profile = profile_from_directory(&legacy_directory, id, kind)?;
+        let (external_descriptor, _) = descriptor_pair_from_directory(&legacy_directory, &profile)?;
         if let Some((_, existing)) = legacy_identities
             .iter()
             .find(|(existing_descriptor, _)| existing_descriptor == &external_descriptor)
@@ -2007,28 +2005,11 @@ fn database_open_permit_for_selected_wallet(app: &AppHandle) -> ApiResult<Databa
     })
 }
 
-fn database_open_permit_for_identity_inspection(app: &AppHandle) -> ApiResult<DatabaseOpenPermit> {
-    if NETWORK == Network::Bitcoin {
-        let state = app.state::<AppState>();
-        let pending = current_mainnet_node_admission(&state).is_ok();
-        let authenticated_wallets = state
-            .node_auth
-            .lock()
-            .map_err(internal)?
-            .keys()
-            .copied()
-            .collect::<Vec<_>>();
-        let sessions = state.unlocked_wallets.lock().map_err(internal)?;
-        let active = authenticated_wallets
-            .iter()
-            .any(|wallet_id| sessions.is_unlocked(*wallet_id));
-        if !pending && !active {
-            return Err(api_error(
-                "node_admission_required",
-                "Connect and verify an approved Bitcoin Core node before inspecting mainnet wallet identities.",
-            ));
-        }
-    }
+fn database_open_permit_for_offline_identity_inspection() -> ApiResult<DatabaseOpenPermit> {
+    // Exact-identity checks read only the public descriptors already stored in
+    // local wallet databases. They do not read chain state, so requiring a live
+    // Core admission here would prevent an offline wallet from being created or
+    // imported whenever another profile already exists.
     crate::release_policy::ensure_database_open_enabled(NETWORK, NETWORK == Network::Bitcoin)
         .map_err(database_admission_error)?;
     Ok(DatabaseOpenPermit {
@@ -2141,15 +2122,14 @@ fn profile_descriptor_pair(
     profile: &WalletProfile,
 ) -> ApiResult<(String, String)> {
     let directory = profile_directory(app, profile.id)?;
-    descriptor_pair_from_directory(app, &directory, profile)
+    descriptor_pair_from_directory(&directory, profile)
 }
 
 fn descriptor_pair_from_directory(
-    app: &AppHandle,
     directory: &Path,
     profile: &WalletProfile,
 ) -> ApiResult<(String, String)> {
-    let permit = database_open_permit_for_identity_inspection(app)?;
+    let permit = database_open_permit_for_offline_identity_inspection()?;
     let mut db =
         open_existing_wallet_database_read_only(&directory.join("wallet.sqlite"), &permit)?;
     let wallet = load_wallet(&mut db)?;

@@ -2001,6 +2001,13 @@ fn exact_identity_inspection_never_creates_a_missing_wallet_database() {
 }
 
 #[test]
+fn offline_identity_inspection_does_not_require_node_session_state() {
+    let permit = database_open_permit_for_offline_identity_inspection()
+        .expect("public descriptor identity checks remain available offline");
+    assert!(validate_database_open_permit(&permit).is_ok());
+}
+
+#[test]
 fn loaded_hardware_wallet_descriptors_must_match_receive_and_change_identity() {
     let external = "wpkh(key)#12345678";
     let internal_descriptor = "wpkh(change)#87654321";

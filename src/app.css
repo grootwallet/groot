@@ -4951,9 +4951,6 @@ code {
   display: grid;
   gap: 15px;
 }
-.backup-unverified-note + .credential-form {
-  margin-top: 18px;
-}
 .credential-form .field {
   margin: 0;
 }
@@ -5016,8 +5013,8 @@ code {
   grid-template-columns: 18px minmax(0, 1fr);
   gap: 10px;
   align-items: start;
-  margin: 20px 0;
-  padding: 13px 14px;
+  margin: 16px 0;
+  padding: 10px 12px;
   color: var(--accent);
   background: var(--accent-soft);
   border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
@@ -5037,30 +5034,6 @@ code {
   font-size: var(--font-size-meta);
 }
 .credential-warning span {
-  color: var(--muted);
-  font-size: var(--font-size-meta);
-  line-height: 1.45;
-}
-.backup-unverified-note {
-  display: grid;
-  grid-template-columns: 24px minmax(0, 1fr);
-  align-items: start;
-  gap: 10px;
-  padding: 12px;
-  border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--border));
-  border-radius: var(--radius-control);
-  color: var(--accent);
-  background: var(--accent-soft);
-}
-.backup-unverified-note span {
-  display: grid;
-  gap: 4px;
-}
-.backup-unverified-note strong {
-  color: var(--text);
-  font-size: var(--font-size-meta);
-}
-.backup-unverified-note small {
   color: var(--muted);
   font-size: var(--font-size-meta);
   line-height: 1.45;
