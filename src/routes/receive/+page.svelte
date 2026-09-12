@@ -72,11 +72,7 @@
   onMount(load);
   onMount(() =>
     walletService.subscribe((event) => {
-      if (
-        event.type !== 'wallet_updated' ||
-        event.walletKind !== 'single_key' ||
-        event.walletId !== walletShell.selectedWalletId()
-      )
+      if (event.type !== 'wallet_updated' || event.walletId !== walletShell.selectedWalletId())
         return;
       applyAddresses(event.snapshot.receiveAddresses);
       labelSuggestions = event.snapshot.labelSuggestions;

@@ -1939,10 +1939,6 @@ fn database_admission_error(error: crate::release_policy::ReleasePolicyError) ->
     }
 }
 
-fn admission_allows_new_wallet(admission: &PendingMainnetNodeAdmission) -> bool {
-    admission.scope == MainnetNodeAdmissionScope::NewWallet
-}
-
 fn admission_allows_selected_wallet(
     admission: &PendingMainnetNodeAdmission,
     selected_wallet: Uuid,
@@ -1959,19 +1955,15 @@ fn node_auth_session_allows_database_open(
     session.config == *saved_config && session.mainnet_node_verified
 }
 
-fn database_open_permit_for_new_wallet(state: &AppState) -> ApiResult<DatabaseOpenPermit> {
+fn database_open_permit_for_new_wallet(_state: &AppState) -> ApiResult<DatabaseOpenPermit> {
     if NETWORK != Network::Bitcoin {
         return Ok(DatabaseOpenPermit {
             issued_at: Instant::now(),
         });
     }
-    let admission = current_mainnet_node_admission(state)?;
-    if !admission_allows_new_wallet(&admission) {
-        return Err(api_error(
-            "node_admission_required",
-            "Verify the Bitcoin Core node specifically for new mainnet wallet creation.",
-        ));
-    }
+    // Creating an empty, descriptor-bound database does not read chain data.
+    // Mainnet admission remains mandatory before this database can be opened
+    // through any selected-wallet data path.
     crate::release_policy::ensure_database_open_enabled(NETWORK, true)
         .map_err(database_admission_error)?;
     Ok(DatabaseOpenPermit {

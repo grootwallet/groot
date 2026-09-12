@@ -25,14 +25,20 @@ describe('foreground wallet navigation', () => {
     expect(unlock.indexOf('await tick()')).toBeLessThan(unlock.indexOf('.focus()'));
   });
 
-  it('cancels automatic sync before entering receive and send routes', () => {
+  it('keeps automatic sync active across receive, send, and settings routes', () => {
     for (const route of ['/receive', '/send', '/multisig/receive', '/multisig/send']) {
       expect(appShell).toContain(`'${route}'`);
     }
-    expect(appShell).toContain(
+    expect(appShell).not.toContain(
       'if (to && foregroundWalletRoutes.has(to.url.pathname)) liveSync?.stop();'
     );
-    expect(appShell).toContain('foregroundWalletRoutes.has(page.url.pathname)');
+    const paused = appShell.slice(
+      appShell.indexOf('let syncPausedRoute'),
+      appShell.indexOf('const showQuickActions')
+    );
+    expect(paused).not.toContain('foregroundWalletRoutes');
+    expect(paused).not.toContain("'/settings'");
+    expect(appShell).toContain('5_000');
   });
 
   it('keeps scans alive across read-only routes and cancels before exclusive routes or lock', () => {
@@ -80,9 +86,7 @@ describe('foreground wallet navigation', () => {
     expect(overview).toContain('if (manual) await walletShell.pauseAutomaticSync()');
     expect(overview).toContain('if (manual) walletShell.resumeAutomaticSync()');
     expect(overview).toContain('void sync(false)');
-    expect(overview).toContain(
-      'onclick={() => (initialHistoryRequired ? openInitialScan() : sync(true))}'
-    );
+    expect(overview).toContain('onclick={() => sync(true)}');
     expect(overview).toContain(
       "{#if manualSyncDetailsVisible && syncStatus && (syncInProgress || syncStatus.state === 'failed')}"
     );
@@ -116,7 +120,7 @@ describe('foreground wallet navigation', () => {
     );
   });
 
-  it('requires an explicit first-scan start and presents resumable recovery progress', () => {
+  it('starts the safe initial scan automatically and presents resumable progress', () => {
     expect(overview).toContain("initialScanMode = $state<'new' | 'birthday' | 'full'>('new')");
     expect(overview).toContain('let showManualScanOptions = $state(false)');
     expect(overview).toContain('let showAdvancedScanOptions = $state(false)');
@@ -125,7 +129,12 @@ describe('foreground wallet navigation', () => {
     expect(overview).toContain("'Full history · safest'");
     expect(overview).toContain("'Address discovery options'");
     expect(overview).toContain('!snapshot?.syncedAt && nodeReady');
-    expect(overview).toContain("href={nodeReady ? undefined : '/settings'}");
+    expect(overview).toContain("page.url.searchParams.get('initial') === 'new'");
+    expect(overview).toContain('void startInitialScan()');
+    expect(overview).toContain(
+      "href={nodeReady && savedRecoveryCanResume ? undefined : '/settings'}"
+    );
+    expect(overview).toContain("const credential = ''");
     expect(overview).toContain('walletService.fullRescan(credential)');
     expect(overview).toContain('recoveryStatus.processedBlocks');
     expect(overview).toContain('<Amount value={0} hidden={$discreetMode} />');

@@ -86,7 +86,6 @@
   let hardwareScanGeneration = 0;
 
   onMount(async () => {
-    if (defaultConfig.network === 'mainnet') return;
     try {
       networkSetupSource =
         (await walletService.networkSetupSources()).find((source) => source.ready) ?? null;
@@ -279,7 +278,7 @@
         { ...signer, label: walletName },
         pin
       );
-      if (defaultConfig.network !== 'mainnet' && reuseNetworkSetup && networkSetupSource) {
+      if (reuseNetworkSetup && networkSetupSource) {
         try {
           await walletService.adoptNetworkSetup(networkSetupSource.walletId, pin);
         } catch {

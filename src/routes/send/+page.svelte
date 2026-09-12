@@ -325,6 +325,7 @@
         : Promise.resolve().then(() => {
             signerSummaryReady = true;
           });
+      if (initialAcceleration) await walletService.sync().catch(() => undefined);
       const [snapshot] = await Promise.all([walletService.snapshot(), identity]);
       if (generation !== walletLoadGeneration) return;
       dataLoaded = true;
@@ -1187,7 +1188,7 @@
                 accelerationRequest.method === 'cpfp' ? 'Package fee rate' : 'New fee rate'
               )}</span
             >
-            <div class="amount-input">
+            <div class="amount-input fee-rate-input">
               <input
                 aria-label={translate($locale, 'Custom acceleration fee rate')}
                 bind:value={customFee}
@@ -1289,7 +1290,7 @@
       {:else}
         <label class="field"
           ><span>{translate($locale, 'Custom fee rate')}</span>
-          <div class="amount-input">
+          <div class="amount-input fee-rate-input">
             <input
               aria-label={translate($locale, 'Custom acceleration fee rate')}
               bind:value={customFee}
@@ -1301,7 +1302,11 @@
           ></label
         >
       {/if}
-      {#if feeEstimateError}<p class="form-error" role="alert">{feeEstimateError}</p>{/if}
+      {#if feeEstimateError}<LoadFailure
+          title={accelerationUnavailableTitle(accelerationRequest.method)}
+          description={feeEstimateError}
+          onretry={loadWallet}
+        />{/if}
       <Button
         type="submit"
         disabled={!customFeeValid}
@@ -1585,9 +1590,7 @@
   {:else if step === 2 && proposal}
     <section class="form-card">
       <div class="review-amount">
-        <span>{translate($locale, 'You send')}</span><strong
-          ><Amount value={proposal.amount} interactive /></strong
-        >
+        <span>{translate($locale, 'You send')}</span><Amount value={proposal.amount} interactive />
       </div>
       <dl class="details-list">
         <div>

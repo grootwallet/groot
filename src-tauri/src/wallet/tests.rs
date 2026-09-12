@@ -216,9 +216,10 @@ fn compiled_network_rejects_foreign_registry_and_public_reset() {
 }
 
 #[test]
-fn core_fee_rates_fail_closed_and_round_up_to_integer_sat_per_vbyte() {
-    assert_eq!(core_fee_rate(Some(Amount::from_sat(1_001))).unwrap(), 2.0);
+fn core_fee_rates_fail_closed_and_preserve_sub_sat_per_vbyte_precision() {
+    assert_eq!(core_fee_rate(Some(Amount::from_sat(1_001))).unwrap(), 1.001);
     assert_eq!(core_fee_rate(Some(Amount::from_sat(1_000))).unwrap(), 1.0);
+    assert_eq!(core_fee_rate(Some(Amount::from_sat(200))).unwrap(), 0.2);
     for unavailable in [None, Some(Amount::ZERO)] {
         assert_eq!(
             core_fee_rate(unavailable).unwrap_err().code,
@@ -391,7 +392,7 @@ fn core_fee_estimator_uses_rpc_and_never_falls_back() {
     let client = build_rpc_client(&available, Auth::None, None).unwrap();
     assert_eq!(
         estimate_core_fee(&client, 2, EstimateMode::Conservative).unwrap(),
-        2.0
+        1.001
     );
 
     let unavailable = serve_one_json(
@@ -3231,19 +3232,6 @@ fn test_mainnet_admission(
         created_at: Instant::now(),
         scope,
     }
-}
-
-#[test]
-fn new_wallet_admission_rejects_an_existing_wallet_scope() {
-    let admission = test_mainnet_admission(
-        MainnetNodeAdmissionScope::ExistingWallet(Uuid::new_v4()),
-        default_node_config(),
-    );
-    assert!(!admission_allows_new_wallet(&admission));
-    assert!(admission_allows_new_wallet(&test_mainnet_admission(
-        MainnetNodeAdmissionScope::NewWallet,
-        default_node_config(),
-    )));
 }
 
 #[test]

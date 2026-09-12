@@ -27,8 +27,6 @@
     MIN_SUPPLEMENTAL_COIN_FLIPS,
     MIN_SUPPLEMENTAL_DICE_ROLLS,
     walletService,
-    WalletError,
-    type CoreNodeConfig,
     type NetworkSetupSource,
     type SupplementalEntropyInput
   } from '$lib/wallet';
@@ -44,9 +42,9 @@
     utf8ByteLength,
     type RecoveryWord
   } from '$lib/mnemonic-verification';
-  let mode = $state<
-    'home' | 'choose' | 'create' | 'words' | 'verify' | 'passphrase' | 'recover' | 'core'
-  >('home');
+  let mode = $state<'home' | 'choose' | 'create' | 'words' | 'verify' | 'passphrase' | 'recover'>(
+    'home'
+  );
   let revealed = $state(false);
   let passphrase = $state('');
   let confirmation = $state('');
@@ -54,7 +52,7 @@
   let nativeBackup = $state(false);
   let busy = $state(false);
   let error = $state('');
-  let walletName = $state('My wallet');
+  let walletName = $state('');
   let hasExistingWallet = $state(false);
   let backupAcknowledged = $state(false);
   let backupVerified = $state(false);
@@ -66,16 +64,6 @@
   let supplementalOutcomes = $state('');
   let networkSetupSource = $state<NetworkSetupSource | null>(null);
   let reuseNetworkSetup = $state(true);
-  const isMainnet = defaultConfig.network === 'mainnet';
-  let coreConfig = $state<CoreNodeConfig>({
-    backend: { type: 'local_core', url: 'http://127.0.0.1:8332' },
-    auth: 'user_pass',
-    username: '',
-    torProxy: null
-  });
-  let corePassword = $state('');
-  let mainnetNext = $state<'/hardware/new' | '/multisig/new' | null>(null);
-  let preserveMainnetAdmission = false;
   const softwareSteps = ['Generate', 'Back up', 'Protect'];
   let passphraseError = $derived(
     utf8ByteLength(passphrase) > MAX_WALLET_PASSPHRASE_BYTES
@@ -99,7 +87,7 @@
   onMount(async () => {
     hasExistingWallet = await walletService.exists();
     if (hasExistingWallet && page.url.searchParams.get('add') !== '1') await goto('/unlock');
-    if (hasExistingWallet && !isMainnet) {
+    if (hasExistingWallet) {
       try {
         networkSetupSource =
           (await walletService.networkSetupSources()).find((source) => source.ready) ?? null;
@@ -108,20 +96,13 @@
       }
     }
   });
-  beforeNavigate(({ to }) => {
-    preserveMainnetAdmission = Boolean(
-      isMainnet &&
-      to &&
-      ['/hardware/new', '/multisig/new', '/multisig/recover'].includes(to.url.pathname)
-    );
-  });
+  beforeNavigate(() => undefined);
   onDestroy(() => {
-    void walletService.cancelOnboarding(preserveMainnetAdmission);
+    void walletService.cancelOnboarding(false);
     words = [];
     passphrase = '';
     confirmation = '';
     supplementalOutcomes = '';
-    corePassword = '';
     backupAcknowledged = false;
     backupVerified = false;
   });
@@ -205,6 +186,11 @@
     verificationWords = [];
     backupVerified = true;
     mode = 'passphrase';
+    toast({
+      title: 'Recovery backup verified',
+      description: 'Your written words matched this wallet.',
+      tone: 'success'
+    });
   }
 
   function verifyLater() {
@@ -225,7 +211,6 @@
   }
 
   async function adoptNetworkSetup(credential: string) {
-    if (isMainnet) return true;
     if (!reuseNetworkSetup || !networkSetupSource) return true;
     try {
       await walletService.adoptNetworkSetup(networkSetupSource.walletId, credential);
@@ -235,55 +220,14 @@
     }
   }
 
-  async function verifyMainnetCore(): Promise<boolean> {
-    if (!isMainnet) return true;
-    const password = corePassword;
-    corePassword = '';
-    try {
-      const endpoint = coreConfig.backend.url.trim();
-      coreConfig = {
-        ...coreConfig,
-        backend: {
-          type: endpoint.toLowerCase().startsWith('https://') ? 'remote_core' : 'local_core',
-          url: endpoint
-        }
-      };
-      await walletService.admitMainnetCore(coreConfig, password, 'create_new_wallet');
-      return true;
-    } catch (cause) {
-      error = localizedError(cause, $locale, 'Could not verify the Bitcoin Core node.');
-      return false;
-    }
-  }
-
   function beginExternalWalletSetup(next: '/hardware/new' | '/multisig/new') {
-    if (!isMainnet) {
-      void goto(next);
-      return;
-    }
-    mainnetNext = next;
-    corePassword = '';
-    error = '';
-    mode = 'core';
-  }
-
-  async function continueExternalWalletSetup() {
-    if (!mainnetNext || busy) return;
-    busy = true;
-    error = '';
-    try {
-      if (!(await verifyMainnetCore())) return;
-      await goto(mainnetNext);
-    } finally {
-      busy = false;
-    }
+    void goto(next);
   }
 
   async function finishCreate() {
     busy = true;
     error = '';
     try {
-      if (!(await verifyMainnetCore())) return;
       await walletService.createWallet(walletName, passphrase, backupVerified);
       const networkSetupCopied = await adoptNetworkSetup(passphrase);
       words = [];
@@ -295,16 +239,15 @@
         description: !networkSetupCopied
           ? 'Network setup was not copied. Configure it in Settings.'
           : backupVerified
-            ? 'Your regtest wallet is ready.'
+            ? translate($locale, 'Your {network} wallet is ready.', {
+                network: networkName(defaultConfig.network)
+              })
             : 'Your wallet is ready. Verify its recovery backup soon.',
         tone: networkSetupCopied ? 'success' : 'default'
       });
-      await goto('/');
+      await goto('/?initial=new');
     } catch (cause) {
       error = localizedError(cause, $locale, 'Could not create wallet.');
-      if (cause instanceof WalletError && cause.code === 'node_admission_required') {
-        corePassword = '';
-      }
     } finally {
       passphrase = '';
       confirmation = '';
@@ -317,7 +260,6 @@
     busy = true;
     error = '';
     try {
-      if (!(await verifyMainnetCore())) return;
       await walletService.recoverWallet(walletName, passphrase);
       const networkSetupCopied = await adoptNetworkSetup(passphrase);
       passphrase = '';
@@ -328,7 +270,7 @@
           : 'Network setup was not copied. Configure it in Settings.',
         tone: networkSetupCopied ? 'success' : 'default'
       });
-      await goto('/');
+      await goto('/?initial=recovered');
     } catch (cause) {
       error = localizedError(cause, $locale, 'Could not recover wallet.');
     } finally {
@@ -426,65 +368,6 @@
           <ArrowRight class="wallet-type-arrow" size={17} />
         </button>
       </div>
-    {:else if mode === 'core'}
-      <button class="back-link" onclick={() => (mode = 'choose')}
-        ><ArrowLeft size={16} />{translate($locale, 'Back')}</button
-      >
-      <span class="setup-step">{translate($locale, 'MAINNET PREFLIGHT')}</span>
-      <h1>{translate($locale, 'Connect your Bitcoin Core node')}</h1>
-      <p>
-        {translate(
-          $locale,
-          'Groot must authenticate your fully synchronized mainnet node before it can create any wallet files.'
-        )}
-      </p>
-      <div class="warning-box danger" role="alert">
-        <strong>{translate($locale, 'Real bitcoin network')}</strong>
-        {translate(
-          $locale,
-          'Use a node you control: loopback HTTP or a trusted remote HTTPS endpoint. Fallback services remain disabled.'
-        )}
-      </div>
-      <div class="credential-form">
-        <label class="field">
-          <span>{translate($locale, 'RPC URL')}</span>
-          <input bind:value={coreConfig.backend.url} autocomplete="off" />
-          <small
-            >{translate(
-              $locale,
-              'Plain HTTP is accepted only on loopback. Remote nodes require HTTPS with a system-trusted certificate.'
-            )}</small
-          >
-        </label>
-        <label class="field">
-          <span>{translate($locale, 'RPC username')}</span>
-          <input
-            value={coreConfig.username ?? ''}
-            oninput={(event) =>
-              (coreConfig = { ...coreConfig, username: event.currentTarget.value })}
-            autocomplete="off"
-          />
-        </label>
-        <PasswordField
-          label={translate($locale, 'RPC password')}
-          bind:value={corePassword}
-          autocomplete="new-password"
-          hint={translate(
-            $locale,
-            'Used only by trusted native code and encrypted into the new wallet profile.'
-          )}
-        />
-      </div>
-      {#if error}<p class="form-error" role="alert">{error}</p>{/if}
-      <Button
-        size="large"
-        class="full"
-        disabled={!coreConfig.backend.url || !coreConfig.username || !corePassword}
-        loading={busy}
-        loadingLabel={translate($locale, 'Verifying mainnet Core…')}
-        onclick={continueExternalWalletSetup}
-        >{translate($locale, 'Verify Core and continue')}<ArrowRight size={17} /></Button
-      >
     {:else if mode === 'create'}
       <button
         class="back-link"
@@ -825,45 +708,14 @@
         <div class="credential-warning" role="note">
           <ShieldCheck size={16} />
           <p>
-            <strong>{translate($locale, 'Use a unique, long passphrase.')}</strong><span
+            <strong>{translate($locale, 'Choose a memorable, unique passphrase.')}</strong><span
               >{translate(
                 $locale,
-                'Anyone with a copy of this encrypted profile can guess its passphrase offline. Groot’s lockout timer cannot protect a stolen copy.'
+                'A unique passphrase keeps a copied profile harder to guess. Keep it with your recovery words.'
               )}</span
             >
           </p>
         </div>
-        {#if isMainnet}
-          <div class="warning-box danger" role="alert">
-            <strong>{translate($locale, 'Mainnet Core verification required')}</strong>
-            {translate(
-              $locale,
-              'Groot will verify the exact Bitcoin genesis chain before creating the wallet.'
-            )}
-          </div>
-          <label class="field">
-            <span>{translate($locale, 'RPC URL')}</span>
-            <input bind:value={coreConfig.backend.url} autocomplete="off" />
-          </label>
-          <label class="field">
-            <span>{translate($locale, 'RPC username')}</span>
-            <input
-              value={coreConfig.username ?? ''}
-              oninput={(event) =>
-                (coreConfig = { ...coreConfig, username: event.currentTarget.value })}
-              autocomplete="off"
-            />
-          </label>
-          <PasswordField
-            label={translate($locale, 'RPC password')}
-            bind:value={corePassword}
-            autocomplete="new-password"
-            hint={translate(
-              $locale,
-              'Sent only to trusted native code for this immediate Core preflight.'
-            )}
-          />
-        {/if}
       </div>
       <label class="credential-warning credential-ack"
         ><input type="checkbox" bind:checked={backupAcknowledged} /><ShieldCheck size={16} />
@@ -900,8 +752,7 @@
           !passphrase ||
           !!passphraseError ||
           passphrase !== confirmation ||
-          !backupAcknowledged ||
-          (isMainnet && (!coreConfig.backend.url || !coreConfig.username || !corePassword))}
+          !backupAcknowledged}
         loading={busy}
         loadingLabel={translate($locale, 'Creating wallet…')}
         onclick={finishCreate}><Check size={17} />{translate($locale, 'Create wallet')}</Button
@@ -933,37 +784,7 @@
           'This exact BIP39 passphrase is required with the recovery words and also unlocks Groot.'
         )}
         error={passphraseError}
-      />{#if isMainnet}<div class="credential-form mainnet-recovery-core">
-          <div class="warning-box danger" role="alert">
-            <strong>{translate($locale, 'Mainnet Core verification required')}</strong>
-            {translate(
-              $locale,
-              'Groot will authenticate your node and verify the exact Bitcoin genesis chain before creating any wallet files.'
-            )}
-          </div>
-          <label class="field">
-            <span>{translate($locale, 'RPC URL')}</span>
-            <input bind:value={coreConfig.backend.url} autocomplete="off" />
-          </label>
-          <label class="field">
-            <span>{translate($locale, 'RPC username')}</span>
-            <input
-              value={coreConfig.username ?? ''}
-              oninput={(event) =>
-                (coreConfig = { ...coreConfig, username: event.currentTarget.value })}
-              autocomplete="off"
-            />
-          </label>
-          <PasswordField
-            label={translate($locale, 'RPC password')}
-            bind:value={corePassword}
-            autocomplete="new-password"
-            hint={translate(
-              $locale,
-              'Sent only to trusted native code for this immediate Core preflight.'
-            )}
-          />
-        </div>{/if}{#if networkSetupSource}<label class="credential-warning credential-ack"
+      />{#if networkSetupSource}<label class="credential-warning credential-ack"
           ><input type="checkbox" bind:checked={reuseNetworkSetup} /><Network size={16} />
           <p>
             <strong
@@ -981,10 +802,7 @@
         </p>{/if}<Button
         size="large"
         class="full"
-        disabled={!walletName.trim() ||
-          !passphrase ||
-          !!passphraseError ||
-          (isMainnet && (!coreConfig.backend.url || !coreConfig.username || !corePassword))}
+        disabled={!walletName.trim() || !passphrase || !!passphraseError}
         loading={busy}
         loadingLabel={translate($locale, 'Recovering wallet…')}
         onclick={recoverWallet}

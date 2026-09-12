@@ -31,6 +31,10 @@ proposal format and no upstream BIP status changed. See
 The subsequent pre-wallet Core-admission interlock changes only backend/storage
 authorization order. It does not change descriptors, derivation, PSBT semantics,
 backup interchange, or support for any BIP.
+ADR 0064 permits creation of an empty descriptor-bound profile before node setup,
+but preserves exact-node admission before any Mainnet wallet-data open. Automatic
+first-scan defaults, Mainnet setup reuse, and sub-sat/vB fee presentation change
+no descriptor, derivation, PSBT, backup, transaction, or interoperability semantics.
 ADR 0055 makes the already reviewed BIP84/BIP48 mainnet parameter row reachable
 only in an isolated certification build. This changes network availability, not
 BIP semantics or the evidence status of any wallet, signer, or recovery path.

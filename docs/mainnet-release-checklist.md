@@ -8,6 +8,14 @@ Candidate scope: first mainnet release is macOS desktop on Apple silicon, includ
 
 ## Network and transaction safety
 
+ADR 0064 supersedes the new-wallet portion of the older Core-admission rows below:
+Groot may create an empty descriptor-bound encrypted profile before node setup,
+but every chain-derived Mainnet wallet-data open remains blocked until the
+selected wallet has an admitted exact-chain Core session. Creation and recovery
+no longer request RPC fields. A valid same-network setup may be revalidated and
+encrypted as an independent per-wallet Mainnet copy. Local and ADR 0061 remote
+exact-candidate repetition plus independent review remain blocking.
+
 - [ ] Signet create/recover/sync/receive/send/restart/delete suite passes against the production backend adapter. The native adapter now compiles with one allowlisted Signet identity across storage metadata, BDK, Core genesis checks, HWI, backups, and proposal DTOs; its frontend and application storage are isolated by a dedicated Tauri build. The live funded suite in [`public-network-rehearsal.md`](public-network-rehearsal.md) remains pending.
 - [ ] Testnet4 repeats the complete suite, including reorg, stale backend, fee failure, and cross-network rejection. The same compile-time and storage-isolation evidence exists for Testnet4, and CI compiles both public rehearsal targets plus Regtest. Exact packaged v0.4.89 commit `c9309d3` passed full-history rescans for every exercised wallet with Core fully synchronized. The broader live funded/reorg/failure suite remains pending.
 - [x] Compact-filter sync is excluded from the first mainnet release. It remains confirmed-only and test-network-only until the separate evidence in [`compact-filter-deferred-work.md`](compact-filter-deferred-work.md) is complete. Evidence: [ADR 0052](adr/0052-first-mainnet-software-and-hardware-scope.md).
@@ -29,6 +37,15 @@ direct HTTPS and keeps plaintext remote, Tor/onion, Esplora, and automatic
 fallback rejected; its review and exact-candidate evidence are open.
 
 ## Hardware certification
+
+User-reported internal RC `ab830d32` preparation evidence passed Mainnet software
+wallet creation, native recovery, automatic and manual sync, labeled address
+generation, receive detection, first confirmation, external send, self-spend,
+accounting, and restart-visible state. This reduces duplicate exploratory work
+but does not transfer to the corrected or signed candidate. The corrected
+onboarding, word-selection, automatic first-scan, five-second background sync,
+fee acceleration, remote HTTPS Core after IBD, and full signed lifecycle still
+require exact-candidate acceptance.
 
 The release owner approved seven desktop-USB model targets: Coldcard Mk4, Trezor Model One, Ledger Nano S Plus, original Bitcoin-only BitBox02, original Blockstream Jade Classic, Trezor Safe 3 Bitcoin-only, and BitBox02 Nova. Frozen firmware exists for Coldcard Mk4 5.6.1, original BitBox02 9.26.3, Jade Classic 1.0.40, Safe 3 2.12.3, and Nova 9.26.3. The release owner has declared Trezor Model One firmware 1.14.1 and Ledger Nano S Plus firmware 1.6.1 with Bitcoin app 2.5.0 as release-target versions; these declarations are not physical certification evidence. HWI is pinned to 3.2.0. The trusted future-mainnet boundary rejects unlisted families and exact-model identifiers outside the approved Ledger, Trezor, and Bitcoin-only BitBox set. ADR 0054 deliberately also admits only HWI's exact `coldcard`/`coldcard` and `jade`/`jade` family records because HWI cannot identify Mk4 and Jade Classic more narrowly. New hardware-wallet creation still requires recent live-HWI admission bound to the exact public account identity. Physical and release evidence remains specific to Mk4 and Jade Classic and is not inherited by other family models. Release notes must disclose the family-level runtime boundary. No BLE, QR, NFC, or unlisted family inherits USB evidence.
 

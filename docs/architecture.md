@@ -244,6 +244,14 @@ For a verified guided Recovery or Inheritance descriptor, Rust derives one delay
 
 Two additive SQLite tables hold delayed-policy alert state and pending notifications. Each output has a monotonic state rank within a generation. Forward crossings enqueue an approaching or mature event once; refresh and restart reuse the same generation and cannot duplicate it. A backward reorg lowers the rank and advances the generation without notifying, so a later forward recross creates exactly one new event. A complete authoritative UTXO snapshot also regresses a previously tracked output that is now absent; pending delivery exposes only the active generation and rank, so an undelivered alert from a superseded generation cannot survive a reorg or output disappearance. This state, the BDK update, output provenance, transaction notifications, and wallet changeset commit in the same sync transaction. Existing wallet JSON, profiles, public backups, proposals, and registry formats are unchanged; older databases acquire the new tables through compatible schema initialization.
 
+ADR 0064 supersedes the earlier scheduler cadence, paused-route list, and
+explicit first-scan-choice requirement. `AppShell` now schedules every five
+seconds across Settings, Receive, and Send as well as read-only routes. Shared
+exclusive operations pause and resume it explicitly. Overview automatically
+records the safe initial policy and starts the resumable scan with a narrowly
+initial-only no-credential path; later settings changes and rescans still
+require authentication.
+
 ## Transaction flow
 
 Proposal summaries expose Rust-derived recipient ownership and the recipient output's PSBT key-origin paths. The renderer presents a wallet-owned recipient as a self-transfer and states that only the network fee leaves the wallet; it never infers ownership from labels, address text, or the presence of change.

@@ -21,6 +21,7 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import Button from '$lib/components/Button.svelte';
+  import LoadFailure from '$lib/components/LoadFailure.svelte';
   import PermanentLabelEditor from '$lib/components/PermanentLabelEditor.svelte';
   import HardwareActionPrompt from '$lib/components/HardwareActionPrompt.svelte';
   import TransactionReviewDetails from '$lib/components/TransactionReviewDetails.svelte';
@@ -1783,7 +1784,7 @@
                 accelerationRequest.method === 'cpfp' ? 'Package fee rate' : 'New fee rate'
               )}</span
             >
-            <div class="amount-input">
+            <div class="amount-input fee-rate-input">
               <input
                 aria-label={translate($locale, 'Custom acceleration fee rate')}
                 bind:value={selectedRate}
@@ -1885,7 +1886,7 @@
       {:else}
         <label class="field"
           ><span>{translate($locale, 'Custom fee rate')}</span>
-          <div class="amount-input">
+          <div class="amount-input fee-rate-input">
             <input
               aria-label={translate($locale, 'Custom acceleration fee rate')}
               bind:value={selectedRate}
@@ -1897,7 +1898,11 @@
           ></label
         >
       {/if}
-      {#if feeEstimateError}<p class="form-error" role="alert">{feeEstimateError}</p>{/if}<Button
+      {#if feeEstimateError}<LoadFailure
+          title={accelerationUnavailableTitle(accelerationRequest.method)}
+          description={feeEstimateError}
+          onretry={() => window.location.reload()}
+        />{/if}<Button
         type="submit"
         size="large"
         class="full"
@@ -2363,7 +2368,7 @@
                   ? 'Recipient receives'
                   : 'You send'
             )}</span
-          ><strong><Amount value={Number(proposal.amount)} interactive /></strong>
+          ><Amount value={Number(proposal.amount)} interactive />
         </div>
         <dl class="details-list proposal-review-primary">
           <div>

@@ -57,6 +57,7 @@
   import { policyMaturitySummary } from '$lib/wallet/policy';
   import { onDestroy, onMount } from 'svelte';
   import { goto } from '$app/navigation';
+  import { page } from '$app/state';
   import type { Transaction } from '$lib/types';
   import { discreetMode, setDiscreetMode } from '$lib/privacy';
   import MobileWalletSwitcher from '$lib/components/MobileWalletSwitcher.svelte';
@@ -207,7 +208,7 @@
     if (initialHistoryRequired && !nodeReady && !recoveryScanIsActive(recoveryStatus))
       return translate($locale, 'Connect Bitcoin Core');
     if (initialHistoryRequired && !recoveryScanIsActive(recoveryStatus))
-      return translate($locale, savedRecoveryCanResume ? 'Resume scan' : 'Choose scan');
+      return translate($locale, savedRecoveryCanResume ? 'Resume scan' : 'Scan settings');
     if (recoveryScanIsActive(recoveryStatus)) return `${recoveryPercent}%`;
     if (
       syncInProgress &&
@@ -395,9 +396,17 @@
         await goto('/unlock');
         return;
       }
-      loadError = localizedError(cause, $locale, 'The wallet data could not be read.');
+      const nodeSetupRequired =
+        cause instanceof WalletError && cause.code === 'node_admission_required';
+      loadError = nodeSetupRequired
+        ? 'Connect this wallet to Bitcoin Core in Settings to load network data.'
+        : localizedError(cause, $locale, 'The wallet data could not be read.');
       initialDataLoading = false;
-      toast({ title: 'Could not open wallet', description: loadError, tone: 'danger' });
+      toast({
+        title: nodeSetupRequired ? 'Connect Bitcoin Core' : 'Could not open wallet',
+        description: loadError,
+        tone: nodeSetupRequired ? 'default' : 'danger'
+      });
     }
   }
 
@@ -535,7 +544,12 @@
       if (recoveryScanIsActive(status)) {
         startRecoveryStatusPolling();
       } else if (!snapshot?.syncedAt && nodeReady) {
-        initialScanOpen = true;
+        // If setup navigation was interrupted, scan conservatively. Only an
+        // explicit new-wallet hint may skip history before the current tip.
+        initialScanMode = page.url.searchParams.get('initial') === 'new' ? 'new' : 'full';
+        showManualScanOptions = false;
+        showAdvancedScanOptions = false;
+        void startInitialScan();
       }
     } catch (cause) {
       initialScanError = localizedError(
@@ -595,7 +609,7 @@
     initialScanError = '';
     initialScanErrorCode = '';
     initialScanErrorDetails = null;
-    const credential = initialScanCredential;
+    const credential = '';
     try {
       if (!savedRecoveryCanResume) {
         let birthdayHeight = 0;
@@ -629,7 +643,12 @@
       initialScanError = localizedError(cause, $locale, 'The wallet-history scan could not start.');
       initialScanErrorCode = cause instanceof WalletError ? cause.code : 'internal_error';
       initialScanErrorDetails = cause instanceof WalletError ? cause.details : null;
-      initialScanOpen = true;
+      initialScanOpen = false;
+      toast({
+        title: 'Wallet-history scan paused',
+        description: initialScanError,
+        tone: 'danger'
+      });
       await refreshRecoveryStatus();
     } finally {
       initialScanCredential = '';
@@ -649,7 +668,13 @@
   }
   const sync = async (manual = true) => {
     if (initialHistoryRequired) {
-      openInitialScan();
+      if (!nodeReady) {
+        await goto('/settings');
+      } else if (savedRecoveryCanResume) {
+        await startInitialScan();
+      } else {
+        await goto('/settings');
+      }
       return;
     }
     if (syncInProgress) return;
@@ -788,7 +813,7 @@
       class="sync-button"
       disabled={syncInProgress || recoveryScanIsActive(recoveryStatus)}
       title={syncButtonTitle}
-      onclick={() => (initialHistoryRequired ? openInitialScan() : sync(true))}
+      onclick={() => sync(true)}
       ><RefreshCw
         size={15}
         class={syncInProgress || recoveryScanIsActive(recoveryStatus) ? 'spin' : ''}
@@ -838,14 +863,14 @@
         <Button
           size="small"
           variant="secondary"
-          href={nodeReady ? undefined : '/settings'}
-          onclick={nodeReady ? openInitialScan : undefined}
+          href={nodeReady && savedRecoveryCanResume ? undefined : '/settings'}
+          onclick={nodeReady && savedRecoveryCanResume ? startInitialScan : undefined}
           >{translate(
             $locale,
             nodeReady
               ? savedRecoveryCanResume
                 ? 'Resume scan'
-                : 'Choose scan'
+                : 'Scan settings'
               : 'Connect Bitcoin Core'
           )}</Button
         >

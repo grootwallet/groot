@@ -46,6 +46,7 @@ async function confirmGeneratedBackup(page: Page) {
   }
   await expect(page.getByRole('button', { name: 'Confirm order' })).toBeEnabled();
   await page.getByRole('button', { name: 'Confirm order' }).click();
+  await expect(page.getByText('Recovery backup verified', { exact: true })).toBeVisible();
 }
 
 async function chooseSoftwareWallet(page: Page) {
@@ -244,7 +245,10 @@ test('creates a 24-word wallet and clears onboarding secrets', async ({ page }) 
   await expect(setupProgress.locator('[aria-current="step"]')).toContainText('Protect');
   await expect(setupProgress).not.toContainText('Step 3 of 3');
   await expect(page.getByRole('heading', { name: 'Protect your wallet' })).toBeVisible();
-  await expect(page.getByText('Backup confirmed')).toHaveCount(0);
+  const walletName = page.getByPlaceholder('My wallet');
+  await expect(walletName).toHaveValue('');
+  await expect(walletName).toHaveAttribute('placeholder', 'My wallet');
+  await walletName.fill('Main wallet');
   const acknowledgement = page.locator('.credential-ack');
   const acknowledgementWidths = await acknowledgement.evaluate((element) => {
     const copy = element.querySelector('p');
@@ -288,6 +292,7 @@ test('can defer seed verification and complete it later from the wallet', async 
   await page.getByRole('button', { name: 'I wrote them down' }).click();
   await page.getByRole('button', { name: 'Verify later' }).click();
   await expect(page.getByText('Backup not verified yet')).toBeVisible();
+  await page.getByPlaceholder('My wallet').fill('Deferred backup wallet');
   await page.getByLabel('Wallet passphrase', { exact: true }).fill('deferred-backup-passphrase');
   await page
     .getByLabel('Confirm wallet passphrase', { exact: true })
@@ -348,6 +353,7 @@ test('keeps recovery words out of the webview and unlock rejects the wrong crede
   await page.goto('/welcome?fixture-empty=1');
   await page.getByRole('button', { name: 'Recover software wallet' }).click();
   await expect(page.getByLabel('Recovery words')).toHaveCount(0);
+  await page.getByPlaceholder('Recovered wallet').fill('Recovered wallet');
   await page.getByLabel('Wallet passphrase', { exact: true }).fill('prototype-passphrase');
   await page.getByRole('button', { name: 'Enter recovery words securely' }).click();
   await expect(page.getByText(/native recovery window/)).toBeVisible();
@@ -1585,37 +1591,20 @@ test('recovery scan and private network controls preserve explicit safety choice
   await expect(page.getByText(/Trusted remote server/)).toBeVisible();
 });
 
-test('first Bitcoin Core scan requires an explicit range and never presents partial data', async ({
+test('first Bitcoin Core scan starts automatically without requesting a passphrase', async ({
   page
 }) => {
-  await page.goto('/?fixture-initial-history-required=1');
+  await page.goto('/?fixture-initial-history-required=1&initial=new');
 
   await expect(page.getByText('Never synced')).toBeVisible();
   await expect(page.getByText('Wallet history not verified')).toBeVisible();
   await expect(page.getByLabel('Unverified balance')).toContainText('0 sats');
+  await expect(page.getByRole('dialog', { name: 'First wallet-history scan' })).toHaveCount(0);
+  await expect(page.getByLabel('Wallet passphrase', { exact: true })).toHaveCount(0);
 
-  const scan = page.getByRole('dialog', { name: 'First wallet-history scan' });
-  await expect(scan).toBeVisible();
-  await expect(scan.getByRole('radio', { name: /New wallet · no earlier activity/ })).toBeChecked();
-  await expect(scan.getByRole('button', { name: 'Start scan' })).toBeDisabled();
-  await expect(scan.getByRole('radio', { name: /Existing wallet/ })).toHaveCount(0);
-  await expect(scan.getByLabel('Address gap limit')).toHaveCount(0);
-
-  await scan.getByRole('button', { name: 'Existing wallet options' }).click();
-  await scan.getByRole('radio', { name: /Existing wallet · use a birthday block/ }).click();
-  await scan.getByLabel('Wallet birthday block').fill('200');
-  await scan.getByRole('button', { name: 'Address discovery options' }).click();
-  await scan.getByLabel('Address gap limit').fill('19');
-  await scan.getByLabel('Wallet passphrase', { exact: true }).fill('prototype-passphrase');
-  await expect(scan.getByRole('button', { name: 'Start scan' })).toBeDisabled();
-  await scan.getByLabel('Address gap limit').fill('20');
-  await scan.getByRole('button', { name: 'Start scan' }).click();
-
-  await expect(page.getByText('Scanning wallet history')).toBeVisible();
-  await expect(page.getByText('Never synced')).toBeVisible();
-  await expect(page.getByText('Wallet history not verified')).toBeVisible();
-  await expect(page.getByText('Wallet history verified')).toBeVisible();
+  await expect(page.getByText('Wallet history verified', { exact: true })).toBeVisible();
   await expect(page.getByText('Never synced')).toHaveCount(0);
+  await expect(page.getByText('Wallet history not verified')).toHaveCount(0);
 
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true

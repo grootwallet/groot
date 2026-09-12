@@ -61,11 +61,7 @@
     '/multisig/send'
   ]);
   const routeCancelsSync = (pathname: string) =>
-    walletSetupRoutes.has(pathname) ||
-    pathname === '/unlock' ||
-    pathname === '/settings' ||
-    pathname === '/diagnostics' ||
-    foregroundWalletRoutes.has(pathname);
+    walletSetupRoutes.has(pathname) || pathname === '/unlock' || pathname === '/diagnostics';
   const active = (href: string) =>
     href === '/settings'
       ? page.url.pathname === href || page.url.pathname === '/diagnostics'
@@ -110,13 +106,7 @@
   let restrictedUtilityRoute = $derived(
     lockedRoute || (diagnosticsRoute && !selectedWalletUnlocked)
   );
-  let syncPausedRoute = $derived(
-    onboardingRoute ||
-      lockedRoute ||
-      diagnosticsRoute ||
-      page.url.pathname === '/settings' ||
-      foregroundWalletRoutes.has(page.url.pathname)
-  );
+  let syncPausedRoute = $derived(onboardingRoute || lockedRoute || diagnosticsRoute);
   const showQuickActions = $derived(
     !restrictedUtilityRoute && (page.url.pathname === '/' || page.url.pathname === '/coins')
   );
@@ -286,7 +276,6 @@
     void walletService.cancelHardwareOperations(preserveMainnetAdmission);
     if (navigationPending && to && routeCancelsSync(to.url.pathname) && !isPrototypeWallet)
       void walletService.cancelSync().catch(() => undefined);
-    if (to && foregroundWalletRoutes.has(to.url.pathname)) liveSync?.stop();
   });
 
   afterNavigate(({ from }) => {
@@ -447,7 +436,7 @@
     liveSync = createLiveSync(
       walletService,
       () => selectedProfile?.kind ?? null,
-      10_000,
+      5_000,
       (cause) => {
         if (cause instanceof WalletError && cause.code === 'wallet_locked') {
           liveSync?.stop();

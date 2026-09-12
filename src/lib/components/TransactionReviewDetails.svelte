@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { locale } from '$lib/i18n';
+  import { formatInteger, locale } from '$lib/i18n';
   import { translate } from '$lib/i18n-catalog';
   import { compactAddress } from '$lib/address-display';
   import Amount from './Amount.svelte';
@@ -26,6 +26,7 @@
   ]);
   const recipientPaths = $derived([...new Set(proposal.recipientDerivationPaths ?? [])]);
   const changePaths = $derived([...new Set(proposal.changeDerivationPaths?.flat() ?? [])]);
+  let open = $state(false);
 </script>
 
 {#if proposal.recipientIsWalletOwned}<aside class="self-transfer-notice">
@@ -61,8 +62,8 @@
       )}</small
     >
   </aside>{/if}
-<details class:hardware-review-details={compact} class:proposal-review-details={!compact}>
-  <summary>{translate($locale, 'View more details')}</summary>
+<details bind:open class:hardware-review-details={compact} class:proposal-review-details={!compact}>
+  <summary>{translate($locale, open ? 'View less details' : 'View more details')}</summary>
   <dl class:details-list={!compact}>
     {#if proposal.acceleration?.method === 'rbf'}
       <div>
@@ -178,7 +179,12 @@
       </div>{/if}
     <div>
       <dt>{translate($locale, 'Locktime / RBF')}</dt>
-      <dd>{proposal.locktime}{' · '}{translate($locale, proposal.rbf ? 'Enabled' : 'Disabled')}</dd>
+      <dd>
+        {formatInteger(proposal.locktime, $locale)}{' · '}{translate(
+          $locale,
+          proposal.rbf ? 'Enabled' : 'Disabled'
+        )}
+      </dd>
     </div>
     {#if policy}<div>
         <dt>{translate($locale, 'Wallet policy')}</dt>

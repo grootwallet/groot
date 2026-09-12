@@ -1111,7 +1111,7 @@ code {
 }
 .spin {
   animation: spin 0.8s linear infinite;
-  transform-box: fill-box;
+  transform-box: view-box;
   transform-origin: center;
   will-change: transform;
 }
@@ -3007,6 +3007,13 @@ code {
   font-size: 20px;
   padding-right: 100px;
 }
+.fee-rate-input input {
+  padding-right: 76px;
+  font-size: 13px;
+}
+.fee-rate-input b {
+  right: 14px;
+}
 .amount-input b,
 .amount-input .amount-unit-toggle {
   position: absolute;
@@ -3234,7 +3241,7 @@ code {
   font-weight: 600;
 }
 .proposal-review-details {
-  border-bottom: 1px solid var(--border);
+  border-bottom: 0;
 }
 .self-transfer-notice {
   display: grid;
@@ -3298,7 +3305,7 @@ code {
   color: var(--link);
 }
 .proposal-review-details > .details-list {
-  border-top: 1px solid var(--border);
+  border-top: 0;
 }
 .proposal-review-details > .details-list > div:last-child {
   border-bottom: 0;
@@ -3476,6 +3483,19 @@ code {
   border-top: 0;
 }
 .transaction-summary-list > div:last-child {
+  border-bottom: 0;
+}
+.transaction-summary-list {
+  border-top: 0;
+}
+.form-card > .review-amount + .details-list,
+.proposal-review-primary,
+.signed-transaction-review > .details-list {
+  border-top: 0;
+}
+.form-card > .review-amount + .details-list > div:last-child,
+.proposal-review-primary > div:last-child,
+.signed-transaction-review > .details-list > div:last-child {
   border-bottom: 0;
 }
 .transaction-more-details > .details-list:empty {
@@ -3893,6 +3913,8 @@ code {
   display: flex;
   align-items: center;
   gap: 3px;
+  justify-content: flex-end;
+  min-width: max-content;
 }
 .keyboard-shortcut-grid kbd {
   min-width: 21px;

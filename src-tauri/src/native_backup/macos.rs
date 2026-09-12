@@ -840,7 +840,10 @@ fn verify_backup_order(parent: &NSWindow, words: &[String], mtm: MainThreadMarke
     let error = add_label(
         &root,
         "",
-        rect(28.0, 80.0, width - 56.0, 24.0),
+        // Keep this label below the last shuffled-word row. Even an empty
+        // NSTextField participates in hit testing and previously intercepted
+        // clicks across that row.
+        rect(28.0, 55.0, width - 56.0, 20.0),
         &NSFont::systemFontOfSize_weight(10.0, 0.0),
         &NSColor::systemRedColor(),
         mtm,

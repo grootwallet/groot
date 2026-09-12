@@ -29,18 +29,19 @@ This document describes user-visible state transitions. The product specificatio
 
 `welcome → Generate software wallet → private recovery-word reveal → verify all 24 words now or defer → wallet passphrase → created → overview`
 
-In the isolated ADR 0055 mainnet candidate, every software, hardware, or standard
-multisig create/recover entry first requires the user to authenticate a synchronized
-Bitcoin Core RPC service over loopback HTTP or direct HTTPS. Rust verifies the exact mainnet genesis and
-issues a short-lived one-attempt creation admission before navigation or database
-creation. Mainnet never offers reuse of another wallet's setup.
+Under ADR 0064, software, hardware, and standard-multisig creation/recovery can
+create an empty encrypted profile without asking for Bitcoin Core credentials.
+Chain-derived Mainnet wallet data remains unavailable until Rust authenticates
+the selected wallet's loopback-HTTP or direct-HTTPS Core setup and verifies the
+exact Mainnet genesis. A ready same-network setup from another unlocked wallet
+may be revalidated and encrypted as an independent copy for the new profile.
 
 The generated words remain hidden until the user confirms their surroundings are private. After writing them down, the user is strongly encouraged to reconstruct all 24 from a shuffled pool in the exact original order, but may choose **Verify later** without blocking creation. Deferred verification offers two freshly authenticated native paths: users with the written backup go directly to the shuffled proof, while users who did not finish writing it down first revisit the privacy gate and ordered native backup sheet and then continue to the same proof. Merely viewing the words never marks the backup verified. The deterministic browser fixture supports tap/click and drag-and-drop. Production macOS performs presentation and challenge in native sheets so recovery words never cross Tauri IPC or enter webview state. A deferred wallet carries a persistent **Recovery backup not verified** warning on Overview and in Settings.
 
 - The wallet-type chooser uses three equal decision cards: software, hardware, and shared/recovery. Each card keeps its icon, title, one consequence-focused subtitle, and complexity cue inside the same target; helper copy is not detached below the action.
 - Software onboarding keeps a persistent, labeled three-stage progress indicator visible on every step: **Generate → Back up → Protect**. Completed, current, and upcoming stages are distinct, so users can estimate what remains before beginning.
 - Hardware-wallet onboarding uses the same persistent component with stages **Connect signer → Review identity → Protect app**. The labels distinguish importing public account data, reviewing the signer identity, and setting Groot's local app PIN. Single-key hardware setup asks for one wallet name only and reuses it as the initial internal signer label; a cable import defaults the empty name to the detected device model. Settings later exposes the wallet name and hardware-signer name separately, because the signer name identifies the key on signing and verification screens. Renaming either is local metadata and never changes fingerprints, public keys, descriptors, or wallet identity. The final step asks only for the Groot app PIN and explains that sending still requires the hardware signer. Ledger Nano and Trezor devices do not display their master fingerprint during this import for an independent comparison, so their reviews bind the public identity returned by the connected device without claiming a device-screen match and require first-address verification on the signer before use. Coldcard retains the explicit fingerprint comparison because Mk4 exposes its eight-character Master Key Fingerprint under **Advanced/Tools → View Identity**; the review provides those steps behind an optional disclosure before enabling the existing confirmation action. Other devices may retain a fingerprint comparison action only when that value is actually available on-device or through an independently trusted export. If the same public descriptor is already registered, creation fails without mutation and the final step presents a prominent duplicate-wallet explanation with a direct route back to the existing wallet.
-- Software create always uses 256 bits of OS randomness to generate exactly 24 BIP39 words and one credential as BIP39 passphrase plus app unlock/signing PIN. Before creation, the protection step explicitly warns that possession of the encrypted profile permits offline passphrase guessing and that Groot's lockout timer cannot protect a stolen copy; it tells the user to choose a unique, long passphrase. An optional collapsed advanced panel accepts 128–256 recorded physical coin flips or 50–100 physical six-sided-die rolls. It shows bounded progress and recent outcomes, permits undo/clear, explains that the OS source remains mandatory, and clears the transcript after every generation attempt.
+- Software create always uses 256 bits of OS randomness to generate exactly 24 BIP39 words and one credential as BIP39 passphrase plus app unlock/signing PIN. The protection step positively asks for a memorable, unique passphrase and reminds the user to keep it with the recovery words. An optional collapsed advanced panel accepts 128–256 recorded physical coin flips or 50–100 physical six-sided-die rolls. It shows bounded progress and recent outcomes, permits undo/clear, explains that the OS source remains mandatory, and clears the transcript after every generation attempt.
 - **Use hardware signer** is a separate single-key path. It imports only public account data and never generates or accepts the hardware device's seed.
 - Recover requires exactly 24 words and the original credential.
 - Generated words stay in a zeroized Rust pending session. A secret-free native privacy gate first requires confirmation that no person, camera, or screen sharing can observe the display; only then does the attached native sheet reveal the words. The three columns read vertically as 1–8, 9–16, and 17–24. Browser fixture words exist only for deterministic UI testing and follow the same concealed-first interaction.
@@ -279,6 +280,14 @@ later pages retain the current list, and changed-history cursors require a refre
 The page/list is durable truth. Unique markers persist in Rust until explicitly acknowledged. Delivery is at-least-once across a crash before acknowledgement and consumers use stable IDs idempotently; background/resume scheduling remains a platform integration gate.
 
 While an unlocked desktop session is open, a single ten-second foreground loop syncs only the selected wallet. Unlock and wallet selection paint the persisted snapshot before the first scheduled network refresh; selecting another wallet first cancels the previous wallet's automatic sync. A fresh Core scan reports progress from that wallet's own persisted checkpoint; copying another profile's network setup never copies scan state. Returning to the app wakes sync immediately. The returned authoritative snapshot updates the current Overview, Activity, Coins, or Receive view, and durable notification markers produce the receipt/confirmation toast once. Sync and notification reads validate the five-minute session but never refresh its idle deadline; an expired session stops polling, cancels the foreground scan, and returns to that wallet's unlock screen without stacked route errors. Sync pauses on onboarding or lock and never overlaps a previous native sync. Fully terminated push/background execution remains a later platform gate.
+
+ADR 0064 supersedes the earlier scheduler and initial-scan presentation details.
+Automatic sync now runs every five seconds across Settings, Receive, and Send;
+exclusive mutations retain shared pause/resume ownership. A first Core scan
+starts automatically after the node is ready, using the current verified tip
+for a generated wallet and full history for recovery. No additional credential
+or first-scan modal is shown. Settings retains manual birthday, gap-limit, and
+full-history control.
 
 ### Add a single hardware signer
 

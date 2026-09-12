@@ -1,6 +1,7 @@
 import type { CatalogSection } from './types';
 
 export const walletCopy = {
+  'Scan settings': { fr: 'Réglages d’analyse', es: 'Ajustes de escaneo' },
   'Loading wallet details…': {
     fr: 'Chargement des détails du portefeuille…',
     es: 'Cargando los detalles de la cartera…'

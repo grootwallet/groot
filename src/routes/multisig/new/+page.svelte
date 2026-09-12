@@ -495,13 +495,11 @@
   }
 
   onMount(async () => {
-    if (defaultConfig.network !== 'mainnet') {
-      try {
-        networkSetupSource =
-          (await walletService.networkSetupSources()).find((source) => source.ready) ?? null;
-      } catch {
-        networkSetupSource = null;
-      }
+    try {
+      networkSetupSource =
+        (await walletService.networkSetupSources()).find((source) => source.ready) ?? null;
+    } catch {
+      networkSetupSource = null;
     }
     try {
       const draft = await walletService.multisigSetupDraft();

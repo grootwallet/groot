@@ -93,12 +93,6 @@ pub fn network_setup_sources(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> ApiResult<Vec<NetworkSetupSource>> {
-    if NETWORK == Network::Bitcoin {
-        return Err(api_error(
-            "unsupported_wallet_policy",
-            "Mainnet wallets must verify and retain their own Bitcoin Core setup.",
-        ));
-    }
     require_unlocked(&app, &state)?;
     let registry = load_registry(&app)?;
     let unlocked = state.unlocked_wallets.lock().map_err(internal)?;
@@ -868,14 +862,14 @@ pub(crate) fn core_fee_rate(fee_rate: Option<Amount>) -> ApiResult<f64> {
                 "Bitcoin Core does not have a fee estimate for this target yet. Enter a custom sat/vB rate or try again later.",
             )
         })?;
-    let sats_per_vbyte = sats_per_kvb.div_ceil(1_000);
-    if sats_per_vbyte > 10_000 {
+    let sats_per_vbyte = sats_per_kvb as f64 / 1_000.0;
+    if sats_per_vbyte > 10_000.0 {
         return Err(api_error(
             "fee_estimate_unavailable",
             "Bitcoin Core returned a fee estimate outside Groot's safe range. Enter a custom sat/vB rate or try again later.",
         ));
     }
-    Ok(sats_per_vbyte as f64)
+    Ok(sats_per_vbyte)
 }
 
 pub(crate) fn estimate_core_fee(
@@ -1064,7 +1058,11 @@ pub(super) fn persist_mainnet_node_admission_for_new_profile(
             "Connect and verify an approved Bitcoin Core node before creating a mainnet wallet.",
         )
     })?;
-    let pending = current_mainnet_node_admission(state)?;
+    let pending = match current_mainnet_node_admission(state) {
+        Ok(pending) => pending,
+        Err(error) if error.code == "node_admission_required" => return Ok(false),
+        Err(error) => return Err(error),
+    };
     if pending.scope != MainnetNodeAdmissionScope::NewWallet {
         return Err(api_error(
             "node_admission_required",
@@ -1164,15 +1162,24 @@ pub fn recovery_scan_settings_save(
     validate_recovery_gap_limit(gap_limit)?;
     let tip = checked_block_height(&rpc_client(&app, &state)?)?;
     validate_recovery_birthday(birthday_height, tip)?;
-    check_auth_throttle(&app, &state)?;
-    let verified = verify_selected_credential(&app, credential.as_str());
-    record_auth_result(&app, &state, &verified)?;
-    verified?;
     let profile = selected_profile(&app)?;
     let mut db = match profile.kind {
         WalletKind::Multisig => open_multisig_db(&app)?,
         WalletKind::SingleKey | WalletKind::WatchOnly => open_db(&app)?,
     };
+    if credential.is_empty() {
+        if has_completed_sync(&db)? {
+            return Err(api_error(
+                "invalid_credential",
+                "Enter the wallet credential before changing recovery-scan settings.",
+            ));
+        }
+    } else {
+        check_auth_throttle(&app, &state)?;
+        let verified = verify_selected_credential(&app, credential.as_str());
+        record_auth_result(&app, &state, &verified)?;
+        verified?;
+    }
     let external_required = required_recovery_gap(&db, None)?;
     let wallet = load_wallet(&mut db)?;
     let internal_required = wallet
@@ -1326,15 +1333,24 @@ pub async fn wallet_full_rescan(
         ) = {
             let _operation = operation_guard(&state)?;
             require_unlocked(&app, &state)?;
-            check_auth_throttle(&app, &state)?;
-            let verified = verify_selected_credential(&app, credential.as_str());
-            record_auth_result(&app, &state, &verified)?;
-            verified?;
             let profile = selected_profile(&app)?;
             let (mut db, is_multisig) = match profile.kind {
                 WalletKind::Multisig => (open_multisig_db(&app)?, true),
                 WalletKind::SingleKey | WalletKind::WatchOnly => (open_db(&app)?, false),
             };
+            if credential.is_empty() {
+                if has_completed_sync(&db)? {
+                    return Err(api_error(
+                        "invalid_credential",
+                        "Enter the wallet credential before starting another full rescan.",
+                    ));
+                }
+            } else {
+                check_auth_throttle(&app, &state)?;
+                let verified = verify_selected_credential(&app, credential.as_str());
+                record_auth_result(&app, &state, &verified)?;
+                verified?;
+            }
             let settings = load_recovery_scan_settings(&db)?;
             let run_id = Uuid::new_v4().to_string();
             let cancel = Arc::new(AtomicBool::new(false));
@@ -1508,12 +1524,6 @@ pub async fn network_setup_adopt(
     credential: String,
 ) -> ApiResult<NodeStatusDto> {
     let credential = Zeroizing::new(credential);
-    if NETWORK == Network::Bitcoin {
-        return Err(api_error(
-            "unsupported_wallet_policy",
-            "Mainnet wallets cannot copy another wallet's Bitcoin Core setup.",
-        ));
-    }
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
         cancel_foreground_sync(&state)?;

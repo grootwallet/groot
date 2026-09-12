@@ -120,6 +120,10 @@
       nodeReachable = null;
     }
   });
+
+  $effect(() => {
+    if (!locked && !checked) void refresh();
+  });
 </script>
 
 <svelte:window

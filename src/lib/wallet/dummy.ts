@@ -461,7 +461,15 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     return { ...this._scanSettings };
   }
   async saveRecoveryScanSettings(birthdayHeight: number, gapLimit: number, credential: string) {
-    if (!this._selectedWalletId || credential !== this._credentials.get(this._selectedWalletId))
+    const initialFixtureScan =
+      !this._initialHistoryCompleted &&
+      typeof location !== 'undefined' &&
+      new URLSearchParams(location.search).has('fixture-initial-history-required');
+    if (
+      !this._selectedWalletId ||
+      (credential !== this._credentials.get(this._selectedWalletId) &&
+        !(initialFixtureScan && credential === ''))
+    )
       throw new WalletError('invalid_credential', 'Incorrect app PIN.');
     if (
       !Number.isInteger(birthdayHeight) ||
@@ -478,7 +486,15 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     return structuredClone(this._scanStatus);
   }
   async fullRescan(credential: string) {
-    if (!this._selectedWalletId || credential !== this._credentials.get(this._selectedWalletId))
+    const initialFixtureScan =
+      !this._initialHistoryCompleted &&
+      typeof location !== 'undefined' &&
+      new URLSearchParams(location.search).has('fixture-initial-history-required');
+    if (
+      !this._selectedWalletId ||
+      (credential !== this._credentials.get(this._selectedWalletId) &&
+        !(initialFixtureScan && credential === ''))
+    )
       throw new WalletError('invalid_credential', 'Incorrect app PIN.');
     if (this._scanStatus.status === 'running' || this._scanStatus.status === 'cancelling')
       throw new WalletError(

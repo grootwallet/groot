@@ -17,9 +17,21 @@ export const onboardingCopy = {
     fr: 'Votre portefeuille regtest est prêt.',
     es: 'Tu cartera regtest está lista.'
   },
+  'Your {network} wallet is ready.': {
+    fr: 'Votre portefeuille {network} est prêt.',
+    es: 'Tu cartera {network} está lista.'
+  },
   'Your wallet is ready. Verify its recovery backup soon.': {
     fr: 'Votre portefeuille est prêt. Vérifiez bientôt sa sauvegarde de récupération.',
     es: 'Tu cartera está lista. Verifica pronto su copia de recuperación.'
+  },
+  'Choose a memorable, unique passphrase.': {
+    fr: 'Choisissez une phrase secrète unique et mémorable.',
+    es: 'Elige una frase de contraseña única y fácil de recordar.'
+  },
+  'A unique passphrase keeps a copied profile harder to guess. Keep it with your recovery words.': {
+    fr: 'Une phrase secrète unique rend une copie du profil plus difficile à deviner. Conservez-la avec vos mots de récupération.',
+    es: 'Una frase de contraseña única dificulta adivinar una copia del perfil. Guárdala con tus palabras de recuperación.'
   },
   'Enter this wallet’s passphrase to continue.': {
     fr: 'Saisissez la phrase secrète de ce portefeuille pour continuer.',
