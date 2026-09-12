@@ -113,6 +113,10 @@ describe('protected network setup reuse', () => {
     expect(nativeCommands).toContain('pub(super) fn copy_network_setup_before_profile_commit(');
     expect(nativeCommands).toContain('return Ok(true);');
     expect(nativeCommands).toContain('return Ok(false);');
+    expect(nativeCommands).toContain(
+      'diagnostics::DiagnosticEventKind::NetworkConfigurationChanged'
+    );
+    expect(nativeCommands).toContain('diagnostics::DiagnosticOutcome::Failed');
   });
 
   it('leaves multisig refresh ownership with the global live-sync scheduler', () => {
@@ -126,5 +130,23 @@ describe('protected network setup reuse', () => {
     expect(settings).toContain('Wallet data stays separate.');
     expect(settings).toContain('Unlock the source wallet first.');
     expect(settings).toContain('source.ready');
+    expect(settings).not.toContain(
+      "defaultConfig.network === 'mainnet'\n        ? Promise.resolve([])"
+    );
+    expect(settings).not.toContain(
+      "defaultConfig.network !== 'mainnet' && reusableNetworkSetups.length > 0"
+    );
+    expect(settings).toContain("page.url.searchParams.get('networkSetup') === '1'");
+    expect(settings).toContain('if (reusableNetworkSetups.length > 0) openNetworkReuse()');
+  });
+
+  it('keeps the public descriptor behind the standard progressive disclosure', () => {
+    expect(welcome).toContain('class="proposal-review-details created-wallet-details"');
+    expect(welcome).toContain(
+      "createdWalletDetailsOpen ? 'View less details' : 'View more details'"
+    );
+    expect(welcome.indexOf('{#if descriptorCopied}')).toBeGreaterThan(
+      welcome.indexOf('class="proposal-review-details created-wallet-details"')
+    );
   });
 });

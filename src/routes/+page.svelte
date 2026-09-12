@@ -96,6 +96,7 @@
   let moreTrigger = $state<HTMLButtonElement | null>(null);
   let showDescriptors = $state(false);
   let loadError = $state('');
+  let networkSetupRequired = $state(false);
   let selectedProfile = $state<WalletProfile | null>(null);
   let verifyOpen = $state(false);
   let verifyCredential = $state('');
@@ -338,6 +339,7 @@
   async function loadSnapshot() {
     const generation = ++loadGeneration;
     loadError = '';
+    networkSetupRequired = false;
     initialDataLoading = true;
     try {
       // Profile-mutating routes refresh the shell after navigation. Read the
@@ -353,26 +355,20 @@
       }
       const [nextSyncSource, networkSetupSources] = await Promise.all([
         walletService.syncSource(),
-        isMainnet ? Promise.resolve([]) : walletService.networkSetupSources()
+        walletService.networkSetupSources()
       ]);
       if (generation !== loadGeneration) return;
       syncSource = nextSyncSource;
       selectedProfile =
         registry.wallets.find((wallet) => wallet.id === registry.selectedWalletId) ?? null;
-      if (isMainnet) await walletService.testNodeConnection();
+      nodeReady = Boolean(
+        selectedProfile &&
+        networkSetupSources.some(
+          (source) => source.walletId === selectedProfile?.id && source.ready
+        )
+      );
+      if (isMainnet && nodeReady) await walletService.testNodeConnection();
       if (generation !== loadGeneration) return;
-      // A successful mainnet wallet-data read is already gated by the exact
-      // selected wallet's authenticated, retained Core setup in Rust. Mainnet
-      // deliberately rejects cross-wallet setup discovery, so do not call that
-      // test-network-only API merely to derive presentation state.
-      nodeReady =
-        isMainnet ||
-        Boolean(
-          selectedProfile &&
-          networkSetupSources.some(
-            (source) => source.walletId === selectedProfile?.id && source.ready
-          )
-        );
       multisig = selectedProfile?.kind === 'multisig';
       if (!selectedProfile)
         throw new WalletError('wallet_not_found', 'The selected wallet does not exist.');
@@ -396,18 +392,29 @@
         await goto('/unlock');
         return;
       }
-      const nodeSetupRequired =
-        cause instanceof WalletError && cause.code === 'node_admission_required';
-      loadError = nodeSetupRequired
+      networkSetupRequired =
+        cause instanceof WalletError &&
+        [
+          'invalid_node_config',
+          'network_unavailable',
+          'node_admission_required',
+          'wallet_corrupt'
+        ].includes(cause.code);
+      nodeReady = false;
+      loadError = networkSetupRequired
         ? 'Connect this wallet to Bitcoin Core in Settings to load network data.'
         : localizedError(cause, $locale, 'The wallet data could not be read.');
       initialDataLoading = false;
       toast({
-        title: nodeSetupRequired ? 'Connect Bitcoin Core' : 'Could not open wallet',
+        title: networkSetupRequired ? 'Connect Bitcoin Core' : 'Could not open wallet',
         description: loadError,
-        tone: nodeSetupRequired ? 'default' : 'danger'
+        tone: networkSetupRequired ? 'default' : 'danger'
       });
     }
+  }
+
+  async function openNetworkSetup() {
+    await goto('/settings?networkSetup=1');
   }
 
   async function loadSecondaryDetails(generation = loadGeneration) {
@@ -667,9 +674,13 @@
     void pollSyncStatus(token);
   }
   const sync = async (manual = true) => {
+    if (manual && networkSetupRequired) {
+      await openNetworkSetup();
+      return;
+    }
     if (initialHistoryRequired) {
       if (!nodeReady) {
-        await goto('/settings');
+        await openNetworkSetup();
       } else if (savedRecoveryCanResume) {
         await startInitialScan();
       } else {
@@ -698,6 +709,19 @@
       if (cause instanceof WalletError && cause.code === 'sync_cancelled') return;
       if (cause instanceof WalletError && cause.code === 'wallet_locked') {
         await goto('/unlock');
+        return;
+      }
+      const setupRequired =
+        cause instanceof WalletError &&
+        [
+          'invalid_node_config',
+          'network_unavailable',
+          'node_admission_required',
+          'wallet_corrupt'
+        ].includes(cause.code);
+      if (manual && setupRequired) {
+        networkSetupRequired = true;
+        await openNetworkSetup();
         return;
       }
       if (manual)
@@ -1003,7 +1027,7 @@
     <LoadFailure
       title={translate($locale, 'Wallet data is unavailable')}
       description={loadError}
-      onretry={loadSnapshot}
+      onretry={networkSetupRequired ? openNetworkSetup : loadSnapshot}
     />
   {:else if snapshot && !initialDataLoading}
     <section class="balance-card content-reveal">

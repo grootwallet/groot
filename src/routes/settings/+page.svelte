@@ -40,7 +40,8 @@
   import { formatInteger, locale, t } from '$lib/i18n';
   import { defaultConfig, networkName } from '$lib/config';
   import { isPrototypeWallet, walletService, WalletError } from '$lib/wallet';
-  import { goto } from '$app/navigation';
+  import { goto, replaceState } from '$app/navigation';
+  import { page } from '$app/state';
   import { onDestroy, onMount } from 'svelte';
   import { useWalletShellContext } from '$lib/wallet/shell-context';
   import type {
@@ -273,13 +274,16 @@
     [node, syncSource, networkSetupSources] = await Promise.all([
       walletService.nodeConfig(),
       walletService.syncSource(),
-      defaultConfig.network === 'mainnet'
-        ? Promise.resolve([])
-        : walletService.networkSetupSources()
+      walletService.networkSetupSources()
     ]);
     scan = await walletService.recoveryScanSettings();
     scanDraft = { ...scan };
     scanStatus = await walletService.recoveryScanStatus();
+    if (page.url.searchParams.get('networkSetup') === '1') {
+      if (reusableNetworkSetups.length > 0) openNetworkReuse();
+      else openNodeSettings();
+      replaceState('/settings', {});
+    }
   });
 
   async function exportLabels() {
@@ -1331,8 +1335,7 @@
           ></span
         ><ChevronRight size={16} /></button
       >
-      {#if defaultConfig.network !== 'mainnet' && reusableNetworkSetups.length > 0}<button
-          onclick={openNetworkReuse}
+      {#if reusableNetworkSetups.length > 0}<button onclick={openNetworkReuse}
           ><span class="setting-icon"><RefreshCw size={18} /></span><span
             ><strong>{translate($locale, 'Use an existing network setup')}</strong><small
               >{translate(

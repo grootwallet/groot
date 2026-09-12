@@ -35,6 +35,8 @@ ADR 0064 permits creation of an empty descriptor-bound profile before node setup
 but preserves exact-node admission before any Mainnet wallet-data open. Automatic
 first-scan defaults, Mainnet setup reuse, and sub-sat/vB fee presentation change
 no descriptor, derivation, PSBT, backup, transaction, or interoperability semantics.
+The follow-up Mainnet setup-reuse UI, actionable sanitized setup diagnostics, and
+collapsed descriptor presentation likewise change no BIP implementation or evidence.
 ADR 0055 makes the already reviewed BIP84/BIP48 mainnet parameter row reachable
 only in an isolated certification build. This changes network availability, not
 BIP semantics or the evidence status of any wallet, signer, or recovery path.

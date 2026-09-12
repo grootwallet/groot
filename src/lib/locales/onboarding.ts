@@ -47,6 +47,10 @@ export const onboardingCopy = {
     fr: 'Ce descripteur public en lecture seule ne peut pas dépenser, mais il révèle toutes les adresses du portefeuille.',
     es: 'Este descriptor público de solo lectura no puede gastar, pero revela todas las direcciones de la cartera.'
   },
+  'Technical recovery tools can import this public descriptor to watch the same wallet.': {
+    fr: 'Les outils techniques de récupération peuvent importer ce descripteur public pour surveiller le même portefeuille.',
+    es: 'Las herramientas técnicas de recuperación pueden importar este descriptor público para observar la misma cartera.'
+  },
   'About the master fingerprint': {
     fr: 'À propos de l’empreinte principale',
     es: 'Acerca de la huella maestra'

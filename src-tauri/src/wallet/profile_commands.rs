@@ -1771,17 +1771,27 @@ pub(super) fn copy_network_setup_before_profile_commit(
     credential: &str,
 ) -> ApiResult<bool> {
     if let Some(source_wallet_id) = source_wallet_id {
-        if adopt_network_setup_for_new_profile(
+        let adoption = adopt_network_setup_for_new_profile(
             app,
             state,
             source_wallet_id,
             destination,
             credential,
-        )
-        .is_ok()
-        {
+        );
+        if adoption.is_ok() {
             return Ok(true);
         }
+        diagnostics::record(
+            app,
+            state,
+            diagnostics::DiagnosticEventKind::NetworkConfigurationChanged,
+            diagnostics::DiagnosticOutcome::Failed,
+            diagnostics::DiagnosticContext {
+                sync_source: Some(diagnostics::DiagnosticSyncSource::BitcoinCore),
+                ..Default::default()
+            },
+            adoption.as_ref().err(),
+        );
         for path in [
             node_config_path_for(app, destination)?,
             node_secret_path_for(app, destination)?,

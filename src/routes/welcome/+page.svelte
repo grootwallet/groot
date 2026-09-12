@@ -5,6 +5,7 @@
     ArrowLeft,
     ArrowRight,
     Check,
+    ChevronRight,
     Copy,
     Cpu,
     Eye,
@@ -73,6 +74,7 @@
   let createdWalletDescriptor = $state('');
   let fingerprintCopied = $state(false);
   let descriptorCopied = $state(false);
+  let createdWalletDetailsOpen = $state(false);
   const softwareSteps = ['Generate', 'Back up', 'Protect'];
   let passphraseError = $derived(
     utf8ByteLength(passphrase) > MAX_WALLET_PASSPHRASE_BYTES
@@ -812,20 +814,37 @@
             'When restoring elsewhere, a matching fingerprint confirms that the recovery words and passphrase opened the same wallet.'
           )}
         </p>
-        <div class="created-wallet-export">
-          <Button variant="secondary" class="full" onclick={copyCreatedDescriptor}
-            >{#if descriptorCopied}<Check size={16} />{:else}<Copy size={16} />{/if}{translate(
+        <details
+          bind:open={createdWalletDetailsOpen}
+          class="proposal-review-details created-wallet-details"
+        >
+          <summary
+            ><ChevronRight size={14} class={createdWalletDetailsOpen ? 'rotated' : ''} />{translate(
               $locale,
-              'Copy wallet descriptor'
-            )}</Button
+              createdWalletDetailsOpen ? 'View less details' : 'View more details'
+            )}</summary
           >
-          <span>
-            {translate(
-              $locale,
-              'This public watch-only descriptor cannot spend, but it reveals every address in the wallet.'
-            )}
-          </span>
-        </div>
+          <div class="created-wallet-export">
+            <p>
+              {translate(
+                $locale,
+                'Technical recovery tools can import this public descriptor to watch the same wallet.'
+              )}
+            </p>
+            <Button variant="secondary" class="full" onclick={copyCreatedDescriptor}
+              >{#if descriptorCopied}<Check size={16} />{:else}<Copy size={16} />{/if}{translate(
+                $locale,
+                'Copy wallet descriptor'
+              )}</Button
+            >
+            <span>
+              {translate(
+                $locale,
+                'This public watch-only descriptor cannot spend, but it reveals every address in the wallet.'
+              )}
+            </span>
+          </div>
+        </details>
         <Button size="large" class="full" onclick={() => goto('/?initial=new')}
           >{translate($locale, 'Open wallet')}<ArrowRight size={17} /></Button
         >

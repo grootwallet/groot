@@ -68,8 +68,11 @@ async function openCreatedSoftwareWallet(page: Page) {
       .getByRole('button', { name: 'Copy exact Master fingerprint' })
       .locator('.readable-address-groups')
   ).toHaveText(/^[0-9a-f]{8}$/);
-  await expect(page.getByRole('button', { name: 'Copy wallet descriptor' })).toBeVisible();
   await expect(page.getByText(/matching fingerprint confirms/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Copy wallet descriptor' })).toHaveCount(0);
+  await page.getByText('View more details', { exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Copy wallet descriptor' })).toBeVisible();
+  await expect(page.getByText(/public descriptor to watch the same wallet/)).toBeVisible();
   await page.getByRole('button', { name: 'Open wallet' }).click();
 }
 
@@ -1671,6 +1674,18 @@ test('Settings keeps saved locked network setups visible with unlock guidance', 
   await expect(reuse.getByText('Unlock the source wallet first.')).toBeVisible();
   await expect(reuse.getByLabel('Wallet passphrase', { exact: true })).toBeDisabled();
   await expect(reuse.getByRole('button', { name: 'Use setup' })).toBeDisabled();
+});
+
+test('an expected network-setup retry opens the reusable setup or Core dialog directly', async ({
+  page
+}) => {
+  await page.goto('/settings?networkSetup=1');
+  await expect(page.getByRole('dialog', { name: 'Use existing network setup' })).toBeVisible();
+  await expect(page).toHaveURL(/\/settings$/);
+
+  await page.goto('/settings?networkSetup=1&fixture-no-network-setup=1');
+  await expect(page.getByRole('dialog', { name: 'Connect Bitcoin Core' })).toBeVisible();
+  await expect(page).toHaveURL(/\/settings$/);
 });
 
 test('activity explains its empty state', async ({ page }) => {

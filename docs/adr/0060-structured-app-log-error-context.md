@@ -42,3 +42,13 @@ profiles, proposals, backups, descriptors, node settings, and secret envelopes a
 unchanged. The record remains bounded by the existing per-record and 16 MiB file
 limits. New error-detail fields require the same threat review and allowlist treatment
 before they can be persisted. This changes no scan semantics or BIP support evidence.
+
+## 2026-09-12 clarification: actionable setup failures
+
+The stable `node_admission_required`, `wallet_corrupt`, and `wallet_not_found` codes
+and their fixed explanations are approved for the diagnostic allowlist. A failed
+attempt to copy a same-network setup while creating a profile records a failed
+`network_configuration_changed` event before the candidate continues offline. This
+distinguishes missing admission, missing protected node material, and a stale source
+without persisting RPC output, endpoints, credentials, wallet identifiers, or
+arbitrary native messages. No version-1 field or persisted wallet format changes.

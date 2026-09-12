@@ -141,17 +141,19 @@ describe('foreground wallet navigation', () => {
     expect(overview).toContain("'Never synced'");
   });
 
-  it('opens a newly created mainnet wallet without querying cross-wallet setup reuse', () => {
+  it('checks the selected Mainnet wallet setup instead of assuming Mainnet is ready', () => {
     expect(overview).toContain("const isMainnet = defaultConfig.network === 'mainnet'");
+    expect(overview).toContain('walletService.networkSetupSources()');
+    expect(overview).not.toContain('isMainnet ? Promise.resolve([])');
     expect(overview).toContain(
-      'isMainnet ? Promise.resolve([]) : walletService.networkSetupSources()'
+      'if (isMainnet && nodeReady) await walletService.testNodeConnection()'
     );
-    expect(overview).toMatch(/nodeReady\s*=\s*\n\s*isMainnet\s*\|\|/);
+    expect(overview).toContain("await goto('/settings?networkSetup=1')");
     expect(
-      overview.indexOf('if (isMainnet) await walletService.testNodeConnection()')
+      overview.indexOf('if (isMainnet && nodeReady) await walletService.testNodeConnection()')
     ).toBeLessThan(overview.indexOf('walletService.paymentDraft()'));
     expect(
-      overview.indexOf('if (isMainnet) await walletService.testNodeConnection()')
+      overview.indexOf('if (isMainnet && nodeReady) await walletService.testNodeConnection()')
     ).toBeLessThan(overview.indexOf('walletService.overview(selectedProfile.id)'));
   });
 

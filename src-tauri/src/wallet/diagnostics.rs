@@ -155,6 +155,7 @@ fn safe_error_code(code: &str) -> &'static str {
         "invalid_fee_rate" => "invalid_fee_rate",
         "invalid_node_config" => "invalid_node_config",
         "network_unavailable" => "network_unavailable",
+        "node_admission_required" => "node_admission_required",
         "node_history_unavailable" => "node_history_unavailable",
         "proposal_not_found" => "proposal_not_found",
         "rate_limited" => "rate_limited",
@@ -163,6 +164,8 @@ fn safe_error_code(code: &str) -> &'static str {
         "sync_cancelled" => "sync_cancelled",
         "sync_in_progress" => "sync_in_progress",
         "wallet_locked" => "wallet_locked",
+        "wallet_corrupt" => "wallet_corrupt",
+        "wallet_not_found" => "wallet_not_found",
         "wallet_selection_changed" => "wallet_selection_changed",
         _ => "internal_error",
     }
@@ -185,6 +188,7 @@ fn safe_error_message(code: &str) -> &'static str {
         "invalid_fee_rate" => "The requested fee rate is outside the accepted range.",
         "invalid_node_config" => "The Bitcoin Core configuration or RPC permissions are incomplete or invalid.",
         "network_unavailable" => "The configured network service could not be reached or verified.",
+        "node_admission_required" => "This wallet has no currently admitted Bitcoin Core connection. Configure or copy a verified same-network setup before reading wallet data.",
         "node_history_unavailable" => "Bitcoin Core has pruned a block required by this scan. The attached block heights identify the unavailable range and earliest usable birthday.",
         "proposal_not_found" => "The saved payment proposal no longer exists or is no longer active.",
         "rate_limited" => "This wallet temporarily rejected another authentication attempt after repeated failures.",
@@ -193,6 +197,8 @@ fn safe_error_message(code: &str) -> &'static str {
         "sync_cancelled" => "The wallet sync was cancelled without applying a partial result.",
         "sync_in_progress" => "A wallet sync is already active for this wallet.",
         "wallet_locked" => "The selected wallet must be unlocked before this operation can continue.",
+        "wallet_corrupt" => "Required local wallet data or protected node credentials are missing, invalid, or unsupported.",
+        "wallet_not_found" => "The wallet or setup source required by this operation is no longer available.",
         "wallet_selection_changed" => "The selected wallet changed before the operation completed.",
         _ => "Groot encountered an unexpected internal failure. Retry the operation and export these app logs if it repeats.",
     }
@@ -521,6 +527,10 @@ mod tests {
     #[test]
     fn error_codes_are_strictly_allowlisted() {
         assert_eq!(safe_error_code("invalid_credential"), "invalid_credential");
+        assert_eq!(
+            safe_error_code("node_admission_required"),
+            "node_admission_required"
+        );
         assert_eq!(
             safe_error_code("secret=correct horse battery staple"),
             "internal_error"
