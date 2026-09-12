@@ -35,6 +35,15 @@ export const onboardingCopy = {
       fr: 'Lors d’une restauration ailleurs, une empreinte correspondante confirme que les mots de récupération et la phrase secrète ont ouvert le même portefeuille.',
       es: 'Al restaurar en otro lugar, una huella coincidente confirma que las palabras de recuperación y la frase de contraseña abrieron la misma cartera.'
     },
+  'About the master fingerprint': {
+    fr: 'À propos de l’empreinte principale',
+    es: 'Acerca de la huella maestra'
+  },
+  'A master fingerprint is a public 8-character identifier derived from your recovery words and passphrase. Match it after recovery to confirm you opened the same wallet; it cannot restore the wallet or spend bitcoin.':
+    {
+      fr: 'Une empreinte principale est un identifiant public de 8 caractères dérivé de vos mots de récupération et de votre phrase secrète. Comparez-la après une restauration pour confirmer que vous avez ouvert le même portefeuille ; elle ne permet ni de restaurer le portefeuille ni de dépenser des bitcoins.',
+      es: 'Una huella maestra es un identificador público de 8 caracteres derivado de tus palabras de recuperación y tu frase de contraseña. Compárala después de una restauración para confirmar que abriste la misma cartera; no permite restaurar la cartera ni gastar bitcoin.'
+    },
   'Choose a memorable, unique passphrase.': {
     fr: 'Choisissez une phrase secrète unique et mémorable.',
     es: 'Elige una frase de contraseña única y fácil de recordar.'

@@ -56,6 +56,13 @@ async function chooseSoftwareWallet(page: Page) {
 async function openCreatedSoftwareWallet(page: Page) {
   await expect(page.getByRole('heading', { name: 'Wallet created' })).toBeVisible();
   await expect(page.getByText('Master fingerprint', { exact: true })).toBeVisible();
+  const fingerprintHelp = page.getByRole('button', { name: 'About the master fingerprint' });
+  await expect(fingerprintHelp).toBeVisible();
+  if ((page.viewportSize()?.width ?? 0) <= 760) await fingerprintHelp.click();
+  else await fingerprintHelp.hover();
+  await expect(
+    page.getByRole('tooltip').filter({ hasText: 'A master fingerprint is a public 8-character' })
+  ).toBeVisible();
   await expect(page.locator('.master-fingerprint-result code')).toHaveText(/^[0-9a-f]{8}$/);
   await expect(page.getByText(/matching fingerprint confirms/)).toBeVisible();
   await page.getByRole('button', { name: 'Open wallet' }).click();

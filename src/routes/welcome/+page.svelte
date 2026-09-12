@@ -15,6 +15,7 @@
   } from '@lucide/svelte';
   import Button from '$lib/components/Button.svelte';
   import FieldCounter from '$lib/components/FieldCounter.svelte';
+  import InsightTip from '$lib/components/InsightTip.svelte';
   import BrandMark from '$lib/components/BrandMark.svelte';
   import BrandLockup from '$lib/components/BrandLockup.svelte';
   import PasswordField from '$lib/components/PasswordField.svelte';
@@ -776,7 +777,16 @@
           )}
         </p>
         <div class="master-fingerprint-result">
-          <span>{translate($locale, 'Master fingerprint')}</span>
+          <div class="master-fingerprint-label">
+            <span>{translate($locale, 'Master fingerprint')}</span>
+            <InsightTip
+              label={translate($locale, 'About the master fingerprint')}
+              text={translate(
+                $locale,
+                'A master fingerprint is a public 8-character identifier derived from your recovery words and passphrase. Match it after recovery to confirm you opened the same wallet; it cannot restore the wallet or spend bitcoin.'
+              )}
+            />
+          </div>
           <code>{createdMasterFingerprint}</code>
         </div>
         <p class="fingerprint-check-note">

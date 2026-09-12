@@ -4988,10 +4988,16 @@ code {
   border-radius: var(--radius-inset);
   background: var(--surface-inset);
 }
-.master-fingerprint-result span,
+.master-fingerprint-label > span,
 .fingerprint-check-note {
   color: var(--muted);
   font-size: var(--font-size-meta);
+}
+.master-fingerprint-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
 }
 .master-fingerprint-result code {
   color: var(--text);

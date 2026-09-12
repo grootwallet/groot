@@ -115,7 +115,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src/routes/welcome/+page.svelte',
-    'cd4b25cbec18984c1c7ab565c50b1ed10e8bf41aafe3ebe3577071181c0f9715'
+    '99d8f543a2b7f2f477087c0f94427f2f18d0ddce7e5fe7901dac7e4dcae44862'
   ],
   [
     'src/routes/unlock/+page.svelte',
@@ -144,7 +144,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src/lib/locales/onboarding.ts',
-    '4e6433c5bf7aa9687f2eaa3af86e950b9f46997d8195f7a893fd600e16870714'
+    '81d46b5e88f75e6514ca52e761ca83f77a334cbb9713985006aceee3c494eaee'
   ],
   [
     'scripts/release/build-mainnet-internal-rc.mjs',
