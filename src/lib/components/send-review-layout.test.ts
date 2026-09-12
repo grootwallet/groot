@@ -15,9 +15,11 @@ describe('send review layout', () => {
     expect(amount).toMatch(
       /\.formatted-amount\s*\{[^}]*display: inline-flex;[^}]*align-items: baseline;/s
     );
-    expect(amount).toMatch(/\.formatted-amount\s*\{[^}]*gap: 0\.25rem;/s);
-    expect(amount).toMatch(/\.formatted-amount > small\s*\{[^}]*margin-left: 0;/s);
-    expect(appCss).toMatch(/\.formatted-amount small\s*\{[^}]*margin-left: 0;/s);
+    expect(amount).toMatch(/\.formatted-amount\s*\{[^}]*gap: 0;/s);
+    expect(amount).toMatch(/\.formatted-amount > small\s*\{[^}]*margin-inline-start: 0\.25rem;/s);
+    expect(appCss).toMatch(/\.formatted-amount small\s*\{[^}]*margin-inline-start: 0\.25rem;/s);
+    expect(appCss).toMatch(/\.review-amount\s*\{[^}]*align-items: center;/s);
+    expect(appCss).toMatch(/\.review-amount > span\s*\{/s);
   });
 
   it('separates adjacent setup warnings and onboarding fields', () => {

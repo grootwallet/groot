@@ -1284,6 +1284,16 @@ test('amount denomination stays consistent across wallet surfaces', async ({ pag
   await page.getByRole('button', { name: 'Review payment' }).click();
   const reviewedAmount = page.locator('.review-amount .formatted-amount');
   await expect(reviewedAmount).toContainText('0.00008000 BTC');
+  await expectAmountUnitsSeparated(page.locator('.form-card').first());
+  expect(
+    await reviewedAmount.evaluate((amount) => {
+      const amountBox = amount.getBoundingClientRect();
+      const reviewBox = amount.closest('.review-amount')?.getBoundingClientRect();
+      return reviewBox
+        ? Math.abs(amountBox.left + amountBox.width / 2 - (reviewBox.left + reviewBox.width / 2))
+        : Infinity;
+    })
+  ).toBeLessThanOrEqual(1);
   expect(
     await reviewedAmount.evaluate((amount) => {
       const strong = amount.querySelector<HTMLElement>('strong');
