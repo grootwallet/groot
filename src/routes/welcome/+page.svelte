@@ -237,6 +237,7 @@
       passphrase = '';
       confirmation = '';
       backupAcknowledged = false;
+      mode = 'created';
       toast({
         title: 'Wallet created',
         description: !networkSetupCopied
