@@ -17,4 +17,9 @@ describe('hardware signer error styling', () => {
     expect(declaration('.warning-box.danger')).toContain('color: var(--danger)');
     expect(appCss).not.toContain('--danger-soft-text');
   });
+
+  it('separates a wallet-creation error from both the active step and retry action', () => {
+    expect(declaration('.hardware-create-error')).toContain('margin: 18px 0 0');
+    expect(declaration('.backup-create-action')).toContain('margin-top: 18px');
+  });
 });

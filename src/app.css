@@ -6382,7 +6382,7 @@ code {
   line-height: 1.4;
 }
 .hardware-create-error {
-  margin: 0 0 18px;
+  margin: 18px 0 0;
 }
 .hardware-policy-registration {
   display: grid;
