@@ -153,7 +153,11 @@
     aria-haspopup="dialog"
     onclick={activate}
   >
-    <i class:online={nodeReachable === true} class:offline={nodeReachable === false}></i>
+    <i
+      class:mainnet={network === 'mainnet'}
+      class:online={nodeReachable === true}
+      class:offline={nodeReachable === false}
+    ></i>
     <span>{networkName(network)}</span>
   </button>
   {#if open}

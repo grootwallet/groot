@@ -26,6 +26,9 @@ pub struct NetworkSetupSource {
 #[serde(rename_all = "camelCase")]
 pub struct SoftwareWalletCreation {
     master_fingerprint: String,
+    external_descriptor: String,
+    internal_descriptor: String,
+    network_setup_copied: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -254,6 +257,7 @@ pub fn wallet_create(
     state: State<'_, AppState>,
     name: String,
     credential: String,
+    network_setup_source_wallet_id: Option<String>,
 ) -> ApiResult<SoftwareWalletCreation> {
     let credential = Zeroizing::new(credential);
     let _operation = operation_guard(&state)?;
@@ -279,23 +283,27 @@ pub fn wallet_create(
     let mnemonic = Mnemonic::parse(pending.words.as_str()).map_err(internal)?;
     let master_fingerprint = software_wallet_master_fingerprint(&mnemonic, credential.as_str())?;
     let authenticated_descriptors = software_wallet_descriptors(&mnemonic, credential.as_str())?;
-    if let Err(error) = create_from_mnemonic(
+    let network_setup_copied = match create_from_mnemonic(
         &app,
         &state,
         name,
         mnemonic,
         credential.as_str(),
         pending.backup_verified,
+        network_setup_source_wallet_id.as_deref(),
     ) {
-        *state.pending_mnemonic.lock().map_err(internal)? = Some(pending);
-        return Err(error);
-    }
+        Ok(network_setup_copied) => network_setup_copied,
+        Err(error) => {
+            *state.pending_mnemonic.lock().map_err(internal)? = Some(pending);
+            return Err(error);
+        }
+    };
     let selected = selected_profile_of_kind(&app, WalletKind::SingleKey)?.id;
     state
         .authenticated_software_descriptors
         .lock()
         .map_err(internal)?
-        .insert(selected, authenticated_descriptors);
+        .insert(selected, authenticated_descriptors.clone());
     unlock_selected(&app, &state)?;
     diagnostics::record(
         &app,
@@ -308,7 +316,12 @@ pub fn wallet_create(
         },
         None,
     );
-    Ok(SoftwareWalletCreation { master_fingerprint })
+    Ok(SoftwareWalletCreation {
+        master_fingerprint,
+        external_descriptor: authenticated_descriptors.0,
+        internal_descriptor: authenticated_descriptors.1,
+        network_setup_copied,
+    })
 }
 
 #[tauri::command]
@@ -340,7 +353,15 @@ pub fn wallet_recover(
         ));
     }
     let authenticated_descriptors = software_wallet_descriptors(&mnemonic, credential.as_str())?;
-    create_from_mnemonic(&app, &state, name, mnemonic, credential.as_str(), true)?;
+    create_from_mnemonic(
+        &app,
+        &state,
+        name,
+        mnemonic,
+        credential.as_str(),
+        true,
+        None,
+    )?;
     let selected = selected_profile_of_kind(&app, WalletKind::SingleKey)?.id;
     state
         .authenticated_software_descriptors
@@ -1740,6 +1761,48 @@ pub(super) fn adopt_network_setup_for_new_profile(
         sessions.remove(&destination);
     }
     Ok(())
+}
+
+pub(super) fn copy_network_setup_before_profile_commit(
+    app: &AppHandle,
+    state: &State<'_, AppState>,
+    source_wallet_id: Option<&str>,
+    destination: Uuid,
+    credential: &str,
+) -> ApiResult<bool> {
+    if let Some(source_wallet_id) = source_wallet_id {
+        if adopt_network_setup_for_new_profile(
+            app,
+            state,
+            source_wallet_id,
+            destination,
+            credential,
+        )
+        .is_ok()
+        {
+            return Ok(true);
+        }
+        for path in [
+            node_config_path_for(app, destination)?,
+            node_secret_path_for(app, destination)?,
+            sync_source_path_for(app, destination)?,
+        ] {
+            if path.exists() {
+                fs::remove_file(path).map_err(internal)?;
+            }
+        }
+        state
+            .node_auth
+            .lock()
+            .map_err(internal)?
+            .remove(&destination);
+        return Ok(false);
+    }
+
+    if NETWORK == Network::Bitcoin {
+        return persist_mainnet_node_admission_for_new_profile(app, state, destination, credential);
+    }
+    Ok(true)
 }
 
 pub(crate) fn node_test(app: &AppHandle, state: &State<'_, AppState>) -> ApiResult<NodeStatusDto> {

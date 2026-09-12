@@ -63,7 +63,12 @@ async function openCreatedSoftwareWallet(page: Page) {
   await expect(
     page.getByRole('tooltip').filter({ hasText: 'A master fingerprint is a public 8-character' })
   ).toBeVisible();
-  await expect(page.locator('.master-fingerprint-result code')).toHaveText(/^[0-9a-f]{8}$/);
+  await expect(
+    page
+      .getByRole('button', { name: 'Copy exact Master fingerprint' })
+      .locator('.readable-address-groups')
+  ).toHaveText(/^[0-9a-f]{8}$/);
+  await expect(page.getByRole('button', { name: 'Copy wallet descriptor' })).toBeVisible();
   await expect(page.getByText(/matching fingerprint confirms/)).toBeVisible();
   await page.getByRole('button', { name: 'Open wallet' }).click();
 }

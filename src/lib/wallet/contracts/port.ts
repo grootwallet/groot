@@ -71,7 +71,8 @@ export interface WalletProfilesPort {
   createWallet(
     name: string,
     credential: string,
-    backupVerified: boolean
+    backupVerified: boolean,
+    networkSetupSourceWalletId?: string
   ): Promise<SoftwareWalletCreation>;
   verifyBackup(credential: string): Promise<boolean>;
   revealAndVerifyBackup(credential: string): Promise<boolean>;

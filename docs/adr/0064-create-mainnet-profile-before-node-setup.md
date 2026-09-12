@@ -48,3 +48,13 @@ balance, history, proposals, or chain state. It therefore uses the same offline
 local-data exception as creation of the empty candidate database and does not
 require Core admission. Selected-wallet data access and every chain-derived read
 remain admission-gated.
+
+## 2026-09-12 clarification: inherited setup before publication
+
+When an eligible unlocked same-network wallet is selected as the setup source,
+software and multisig creation revalidate and protect that setup before the new
+profile is committed or returned to the renderer. This inherited exact-chain
+setup satisfies the existing admission boundary for the destination; it does
+not introduce a default remote service or weaken the rule that chain-derived
+wallet data requires authenticated Bitcoin Core. If reuse fails, the candidate
+is cleaned and committed offline with the existing explicit setup action.

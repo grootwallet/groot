@@ -4993,7 +4993,8 @@ fn create_from_mnemonic(
     mnemonic: Mnemonic,
     credential: &str,
     backup_verified: bool,
-) -> ApiResult<()> {
+    network_setup_source_wallet_id: Option<&str>,
+) -> ApiResult<bool> {
     let name = name.trim();
     if name.is_empty() || name.chars().count() > 48 {
         return Err(api_error(
@@ -5014,8 +5015,12 @@ fn create_from_mnemonic(
             .map_err(internal)?;
         let words = Zeroizing::new(mnemonic.to_string());
         persist_secret_material(&dir.join("secret.json"), words.as_bytes(), credential)?;
-        profile_commands::persist_mainnet_node_admission_for_new_profile(
-            app, state, id, credential,
+        let network_setup_copied = profile_commands::copy_network_setup_before_profile_commit(
+            app,
+            state,
+            network_setup_source_wallet_id,
+            id,
+            credential,
         )?;
         commit_profile(
             app,
@@ -5031,7 +5036,8 @@ fn create_from_mnemonic(
                 backup_verified,
             },
             &wallet.public_descriptor(KeychainKind::External).to_string(),
-        )
+        )?;
+        Ok(network_setup_copied)
     })();
     finish_new_profile_attempt(state, id, &dir, result.is_ok())?;
     result

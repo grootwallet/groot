@@ -35,6 +35,18 @@ export const onboardingCopy = {
       fr: 'Lors d’une restauration ailleurs, une empreinte correspondante confirme que les mots de récupération et la phrase secrète ont ouvert le même portefeuille.',
       es: 'Al restaurar en otro lugar, una huella coincidente confirma que las palabras de recuperación y la frase de contraseña abrieron la misma cartera.'
     },
+  'Master fingerprint copied': {
+    fr: 'Empreinte principale copiée',
+    es: 'Huella maestra copiada'
+  },
+  'Wallet descriptor copied': {
+    fr: 'Descripteur du portefeuille copié',
+    es: 'Descriptor de la cartera copiado'
+  },
+  'This public watch-only descriptor cannot spend, but it reveals every address in the wallet.': {
+    fr: 'Ce descripteur public en lecture seule ne peut pas dépenser, mais il révèle toutes les adresses du portefeuille.',
+    es: 'Este descriptor público de solo lectura no puede gastar, pero revela todas las direcciones de la cartera.'
+  },
   'About the master fingerprint': {
     fr: 'À propos de l’empreinte principale',
     es: 'Acerca de la huella maestra'

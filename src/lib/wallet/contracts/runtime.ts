@@ -5,6 +5,9 @@ export type MnemonicPresentation =
   { mode: 'native'; backupVerified: boolean } | { mode: 'fixture'; words: string[] };
 export type SoftwareWalletCreation = {
   masterFingerprint: string;
+  externalDescriptor: string;
+  internalDescriptor: string;
+  networkSetupCopied: boolean;
 };
 export type WalletProfile = {
   id: string;

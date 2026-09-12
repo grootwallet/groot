@@ -8,53 +8,6 @@ pub struct MultisigCreationDto {
     network_setup_copied: bool,
 }
 
-fn copy_network_setup_before_profile_commit(
-    app: &AppHandle,
-    state: &State<'_, AppState>,
-    source_wallet_id: Option<&str>,
-    destination: Uuid,
-    credential: &str,
-) -> ApiResult<bool> {
-    if NETWORK == Network::Bitcoin {
-        profile_commands::persist_mainnet_node_admission_for_new_profile(
-            app,
-            state,
-            destination,
-            credential,
-        )?;
-        return Ok(true);
-    }
-    let Some(source_wallet_id) = source_wallet_id else {
-        return Ok(true);
-    };
-    if profile_commands::adopt_network_setup_for_new_profile(
-        app,
-        state,
-        source_wallet_id,
-        destination,
-        credential,
-    )
-    .is_ok()
-    {
-        return Ok(true);
-    }
-    for path in [
-        node_config_path_for(app, destination)?,
-        node_secret_path_for(app, destination)?,
-        sync_source_path_for(app, destination)?,
-    ] {
-        if path.exists() {
-            fs::remove_file(path).map_err(internal)?;
-        }
-    }
-    state
-        .node_auth
-        .lock()
-        .map_err(internal)?
-        .remove(&destination);
-    Ok(false)
-}
-
 pub(crate) fn build_policy_renewal(
     wallet: &mut Wallet,
     selected: OutPoint,
@@ -1181,7 +1134,7 @@ pub async fn multisig_create(
                 spending_paths: Vec::new(),
             };
             write_private_json(&dir.join("wallet.json"), &wallet)?;
-            let network_setup_copied = copy_network_setup_before_profile_commit(
+            let network_setup_copied = profile_commands::copy_network_setup_before_profile_commit(
                 &app,
                 &state,
                 network_setup_source_wallet_id.as_deref(),
@@ -1288,7 +1241,7 @@ pub async fn multisig_recovery_create(
                 spending_paths: analysis.paths,
             };
             write_private_json(&dir.join("wallet.json"), &wallet)?;
-            let network_setup_copied = copy_network_setup_before_profile_commit(
+            let network_setup_copied = profile_commands::copy_network_setup_before_profile_commit(
                 &app,
                 &state,
                 network_setup_source_wallet_id.as_deref(),

@@ -23,3 +23,7 @@ This operation writes the existing `node.json`, `node-secret.json`, and `sync-so
 ## Consequences
 
 The common multi-wallet setup is one checked choice instead of repeated endpoint and credential entry. Wallets can still diverge later. Locking or deleting one wallet removes only its own decrypted session and persisted copy; another wallet does not depend on it after adoption.
+
+## 2026-09-12 clarification: creation publication boundary
+
+Software and multisig creation use the same native pre-commit copy operation. The destination profile is not committed, selected, returned as successful, or exposed to frontend refresh until the copy attempt finishes. If the source becomes invalid, Rust removes any partial destination node files and session before committing the otherwise valid wallet offline. This closes a UI-navigation race without changing any persisted format.

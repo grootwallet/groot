@@ -684,6 +684,10 @@ code {
   background: var(--success);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 10%, transparent);
 }
+.network-trigger i.mainnet:not(.offline) {
+  background: var(--success);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 10%, transparent);
+}
 .network-trigger i.offline {
   background: var(--danger);
   box-shadow: 0 0 0 3px rgba(214, 62, 73, 0.1);
@@ -4960,19 +4964,31 @@ code {
 .wallet-created-confirmation {
   display: grid;
   justify-items: center;
-  gap: 16px;
+  gap: 14px;
+  margin-top: 24px;
   text-align: center;
 }
 .wallet-created-confirmation > h1,
 .wallet-created-confirmation > p {
   margin: 0;
 }
+.wallet-created-confirmation > h1 {
+  font-size: 24px;
+  line-height: 1.2;
+  letter-spacing: -0.03em;
+}
+.wallet-created-confirmation > p {
+  max-width: 390px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
 .wallet-created-icon {
   display: grid;
-  width: 52px;
-  height: 52px;
+  width: 46px;
+  height: 46px;
   place-items: center;
-  border-radius: 16px;
+  border-radius: var(--radius-inset);
   background: color-mix(in srgb, var(--success) 10%, transparent);
   color: var(--success);
 }
@@ -4980,10 +4996,6 @@ code {
   display: grid;
   width: 100%;
   gap: 8px;
-  padding: 18px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-inset);
-  background: var(--surface-inset);
 }
 .master-fingerprint-label > span,
 .fingerprint-check-note {
@@ -4996,14 +5008,30 @@ code {
   justify-content: center;
   gap: 3px;
 }
-.master-fingerprint-result code {
-  color: var(--text);
-  font-size: 24px;
+.master-fingerprint-result .readable-address-block {
+  width: 100%;
+}
+.master-fingerprint-result .readable-address {
+  min-height: 58px;
+}
+.master-fingerprint-result .readable-address-groups {
+  gap: 12px;
+  font-size: 22px;
   font-weight: 750;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.08em;
 }
 .fingerprint-check-note {
   line-height: 1.5;
+}
+.created-wallet-export {
+  width: 100%;
+  display: grid;
+  gap: 7px;
+}
+.created-wallet-export > span {
+  color: var(--muted-2);
+  font-size: var(--font-size-meta);
+  line-height: 1.45;
 }
 .credential-form .field-error {
   color: var(--danger);

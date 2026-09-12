@@ -219,11 +219,17 @@ export class TauriWalletAdapter implements WalletPort {
     this.#generation++;
     return command<void>('wallet_cancel_onboarding', { preserveMainnetAdmission });
   }
-  createWallet(name: string, credential: string, _backupVerified: boolean) {
+  createWallet(
+    name: string,
+    credential: string,
+    _backupVerified: boolean,
+    networkSetupSourceWalletId?: string
+  ) {
     this.#generation++;
     return command<import('./contracts').SoftwareWalletCreation>('wallet_create', {
       name,
-      credential
+      credential,
+      networkSetupSourceWalletId
     });
   }
   verifyBackup(credential: string) {

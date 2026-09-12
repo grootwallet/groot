@@ -257,7 +257,12 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     };
   }
   async cancelOnboarding(_preserveMainnetAdmission = false) {}
-  async createWallet(name: string, credential: string, backupVerified: boolean) {
+  async createWallet(
+    name: string,
+    credential: string,
+    backupVerified: boolean,
+    _networkSetupSourceWalletId?: string
+  ) {
     if (!name.trim()) throw new WalletError('invalid_wallet_name', 'A wallet name is required.');
     if (!credential) throw new WalletError('invalid_credential', 'A passphrase / PIN is required.');
     if (unicodeCharacterLength(credential) < MIN_NEW_WALLET_PASSPHRASE_CHARACTERS)
@@ -281,7 +286,12 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     this._credentials.set(profile.id, credential);
     this._unlockedWalletIds.add(profile.id);
     this._exists = true;
-    return { masterFingerprint: '0fe7e3d2' };
+    return {
+      masterFingerprint: '0fe7e3d2',
+      externalDescriptor: "wpkh([0fe7e3d2/84'/1'/0']tpub-groot-demo/0/*)#c4z9ljqv",
+      internalDescriptor: "wpkh([0fe7e3d2/84'/1'/0']tpub-groot-demo/1/*)#xkgxenf9",
+      networkSetupCopied: true
+    };
   }
   async recoverWallet(_name: string, _credential: string) {
     throw new WalletError(

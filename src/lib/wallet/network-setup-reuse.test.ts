@@ -18,6 +18,7 @@ const directAdoptionRoutes = [
   readFileSync(new URL('../../routes/welcome/+page.svelte', import.meta.url), 'utf8'),
   readFileSync(new URL('../../routes/hardware/new/+page.svelte', import.meta.url), 'utf8')
 ];
+const welcome = directAdoptionRoutes[0];
 const multisigCreationRoute = readFileSync(
   new URL('../../routes/multisig/new/+page.svelte', import.meta.url),
   'utf8'
@@ -68,19 +69,37 @@ describe('protected network setup reuse', () => {
         'Copies its node and sync method. This wallet protects its own copy.'
       );
     }
-    for (const route of directAdoptionRoutes) {
-      expect(route).toContain('walletService.adoptNetworkSetup(');
-    }
+    expect(welcome).toContain('networkSetupSource?.walletId');
+    expect(welcome).toContain('creation.networkSetupCopied');
+    expect(directAdoptionRoutes[1]).toContain('walletService.adoptNetworkSetup(');
     expect(multisigCreationRoute).toContain('networkSetupSourceWalletId');
     expect(multisigCreationRoute).not.toContain('walletService.adoptNetworkSetup(');
   });
 
   it('copies multisig network setup before publishing the new profile', () => {
-    const copy = multisigCommands.indexOf('copy_network_setup_before_profile_commit(');
+    const copy = multisigCommands.indexOf(
+      'profile_commands::copy_network_setup_before_profile_commit('
+    );
     const commit = multisigCommands.indexOf('commit_multisig_profile(&app, id, &wallet)?;', copy);
 
     expect(copy).toBeGreaterThan(-1);
     expect(commit).toBeGreaterThan(copy);
+  });
+
+  it('finishes software network setup inside native creation before publishing success', () => {
+    const createStart = nativeCommands.indexOf('pub fn wallet_create');
+    const createEnd = nativeCommands.indexOf('#[tauri::command]', createStart);
+    const create = nativeCommands.slice(createStart, createEnd);
+    const nativeCopy = create.indexOf('create_from_mnemonic(');
+    const nativeResult = create.indexOf('Ok(SoftwareWalletCreation {');
+    const successScreen = welcome.indexOf("mode = 'created';");
+    const createCall = welcome.indexOf('await walletService.createWallet(');
+
+    expect(nativeCopy).toBeGreaterThan(-1);
+    expect(nativeResult).toBeGreaterThan(nativeCopy);
+    expect(successScreen).toBeGreaterThan(createCall);
+    expect(create).toContain('network_setup_source_wallet_id.as_deref()');
+    expect(welcome.slice(createCall, successScreen)).not.toContain('adoptNetworkSetup(');
   });
 
   it('creates a multisig wallet offline when a previously offered source is no longer ready', () => {
@@ -91,8 +110,9 @@ describe('protected network setup reuse', () => {
 
     expect(standardCreate).not.toContain('if network_setup_source_wallet_id.is_some()');
     expect(standardCreate).toContain('copy_network_setup_before_profile_commit(');
-    expect(multisigCommands).toContain('return Ok(true);');
-    expect(multisigCommands).toContain('Ok(false)');
+    expect(nativeCommands).toContain('pub(super) fn copy_network_setup_before_profile_commit(');
+    expect(nativeCommands).toContain('return Ok(true);');
+    expect(nativeCommands).toContain('return Ok(false);');
   });
 
   it('leaves multisig refresh ownership with the global live-sync scheduler', () => {

@@ -8,11 +8,13 @@
     value,
     label,
     copied = false,
+    showHint = true,
     oncopy
   } = $props<{
     value: string;
     label: string;
     copied?: boolean;
+    showHint?: boolean;
     oncopy: () => void | Promise<void>;
   }>();
   let groups = $derived(groupIdentifierForDisplay(value));
@@ -33,5 +35,7 @@
     <span class="sr-only">{value}</span>
     {#if copied}<Check size={17} />{:else}<Copy size={17} />{/if}
   </button>
-  <p>{translate($locale, 'Spaces are visual only. Copy always uses the exact value.')}</p>
+  {#if showHint}<p>
+      {translate($locale, 'Spaces are visual only. Copy always uses the exact value.')}
+    </p>{/if}
 </div>

@@ -5,6 +5,7 @@
     ArrowLeft,
     ArrowRight,
     Check,
+    Copy,
     Cpu,
     Eye,
     EyeOff,
@@ -16,10 +17,13 @@
   import Button from '$lib/components/Button.svelte';
   import FieldCounter from '$lib/components/FieldCounter.svelte';
   import InsightTip from '$lib/components/InsightTip.svelte';
+  import ReadableIdentifier from '$lib/components/ReadableIdentifier.svelte';
   import BrandMark from '$lib/components/BrandMark.svelte';
   import BrandLockup from '$lib/components/BrandLockup.svelte';
   import PasswordField from '$lib/components/PasswordField.svelte';
   import SetupProgress from '$lib/components/SetupProgress.svelte';
+  import { copyText } from '$lib/clipboard';
+  import { combineDescriptorBranches } from '$lib/descriptors';
   import { toast } from '$lib/stores/toasts';
   import { defaultConfig, networkName } from '$lib/config';
   import {
@@ -66,6 +70,9 @@
   let networkSetupSource = $state<NetworkSetupSource | null>(null);
   let reuseNetworkSetup = $state(true);
   let createdMasterFingerprint = $state('');
+  let createdWalletDescriptor = $state('');
+  let fingerprintCopied = $state(false);
+  let descriptorCopied = $state(false);
   const softwareSteps = ['Generate', 'Back up', 'Protect'];
   let passphraseError = $derived(
     utf8ByteLength(passphrase) > MAX_WALLET_PASSPHRASE_BYTES
@@ -230,24 +237,31 @@
     busy = true;
     error = '';
     try {
-      const creation = await walletService.createWallet(walletName, passphrase, backupVerified);
+      const creation = await walletService.createWallet(
+        walletName,
+        passphrase,
+        backupVerified,
+        reuseNetworkSetup ? networkSetupSource?.walletId : undefined
+      );
       createdMasterFingerprint = creation.masterFingerprint;
+      createdWalletDescriptor =
+        combineDescriptorBranches(creation.externalDescriptor, creation.internalDescriptor) ??
+        creation.externalDescriptor;
       mode = 'created';
-      const networkSetupCopied = await adoptNetworkSetup(passphrase);
       words = [];
       passphrase = '';
       confirmation = '';
       backupAcknowledged = false;
       toast({
         title: 'Wallet created',
-        description: !networkSetupCopied
+        description: !creation.networkSetupCopied
           ? 'Network setup was not copied. Configure it in Settings.'
           : backupVerified
             ? translate($locale, 'Your {network} wallet is ready.', {
                 network: networkName(defaultConfig.network)
               })
             : 'Your wallet is ready. Verify its recovery backup soon.',
-        tone: networkSetupCopied ? 'success' : 'default'
+        tone: creation.networkSetupCopied ? 'success' : 'default'
       });
     } catch (cause) {
       error = localizedError(cause, $locale, 'Could not create wallet.');
@@ -257,6 +271,24 @@
       words = [];
       busy = false;
     }
+  }
+
+  async function copyCreatedFingerprint() {
+    await copyText(createdMasterFingerprint, 'identifier');
+    fingerprintCopied = true;
+    toast({ title: translate($locale, 'Master fingerprint copied'), tone: 'success' });
+    setTimeout(() => (fingerprintCopied = false), 1_500);
+  }
+
+  async function copyCreatedDescriptor() {
+    await copyText(createdWalletDescriptor, 'public-wallet-data');
+    descriptorCopied = true;
+    toast({
+      title: translate($locale, 'Wallet descriptor copied'),
+      description: 'Public watch-only descriptor copied.',
+      tone: 'success'
+    });
+    setTimeout(() => (descriptorCopied = false), 1_500);
   }
 
   async function recoverWallet() {
@@ -766,7 +798,13 @@
               )}
             />
           </div>
-          <code>{createdMasterFingerprint}</code>
+          <ReadableIdentifier
+            value={createdMasterFingerprint}
+            label={translate($locale, 'Master fingerprint')}
+            copied={fingerprintCopied}
+            showHint={false}
+            oncopy={copyCreatedFingerprint}
+          />
         </div>
         <p class="fingerprint-check-note">
           {translate(
@@ -774,6 +812,20 @@
             'When restoring elsewhere, a matching fingerprint confirms that the recovery words and passphrase opened the same wallet.'
           )}
         </p>
+        <div class="created-wallet-export">
+          <Button variant="secondary" class="full" onclick={copyCreatedDescriptor}
+            >{#if descriptorCopied}<Check size={16} />{:else}<Copy size={16} />{/if}{translate(
+              $locale,
+              'Copy wallet descriptor'
+            )}</Button
+          >
+          <span>
+            {translate(
+              $locale,
+              'This public watch-only descriptor cannot spend, but it reveals every address in the wallet.'
+            )}
+          </span>
+        </div>
         <Button size="large" class="full" onclick={() => goto('/?initial=new')}
           >{translate($locale, 'Open wallet')}<ArrowRight size={17} /></Button
         >
