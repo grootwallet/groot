@@ -16,8 +16,8 @@ describe('send review layout', () => {
       /\.formatted-amount\s*\{[^}]*display: inline-flex;[^}]*align-items: baseline;/s
     );
     expect(amount).toMatch(/\.formatted-amount\s*\{[^}]*gap: 0;/s);
-    expect(amount).toMatch(/\.formatted-amount > small\s*\{[^}]*margin-inline-start: 0\.25rem;/s);
-    expect(appCss).toMatch(/\.formatted-amount small\s*\{[^}]*margin-inline-start: 0\.25rem;/s);
+    expect(amount).toMatch(/\.formatted-amount > small\s*\{[^}]*margin-inline-start: 0\.5rem;/s);
+    expect(appCss).toMatch(/\.formatted-amount small\s*\{[^}]*margin-inline-start: 0\.5rem;/s);
     expect(appCss).toMatch(/\.review-amount\s*\{[^}]*align-items: center;/s);
     expect(appCss).toMatch(/\.review-amount > span\s*\{/s);
   });

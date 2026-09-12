@@ -15,8 +15,8 @@ async function expectAmountUnitsSeparated(scope: Locator) {
   );
   expect(gaps.length).toBeGreaterThan(0);
   for (const gap of gaps) {
-    expect(gap).toBeGreaterThanOrEqual(2);
-    expect(gap).toBeLessThanOrEqual(6);
+    expect(gap).toBeGreaterThanOrEqual(7);
+    expect(gap).toBeLessThanOrEqual(10);
   }
 }
 

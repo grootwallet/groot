@@ -43,7 +43,7 @@
   .formatted-amount > small {
     display: inline-flex;
     align-items: baseline;
-    margin-inline-start: 0.25rem;
+    margin-inline-start: 0.5rem;
   }
 
   .interactive-amount {
