@@ -1,7 +1,7 @@
 <script lang="ts">
   import { locale } from '$lib/i18n';
   import { translate } from '$lib/i18n-catalog';
-  import { AlertTriangle, Check, Download, ShieldCheck } from '@lucide/svelte';
+  import { AlertTriangle, Check, ChevronRight, Download, ShieldCheck } from '@lucide/svelte';
   import type { CosignerDraft } from '$lib/multisig/policy';
   import type { MultisigWallet } from '$lib/wallet';
   import Button from './Button.svelte';
@@ -13,6 +13,7 @@
     signer,
     busy = false,
     error = '',
+    completionLabel = 'Continue to signing',
     ondownload,
     onconfirm,
     onback
@@ -21,13 +22,15 @@
     signer: CosignerDraft;
     busy?: boolean;
     error?: string;
+    completionLabel?: string;
     ondownload?: () => void;
     onconfirm?: () => void;
     onback?: () => void;
   }>();
   let acknowledged = $state(false);
+  let signerDetailsOpen = $state(false);
   const steps = $derived([
-    'Save the public policy file below and copy it to Coldcard’s microSD card.',
+    'Save the public policy file and copy it to Coldcard’s microSD card or enabled Virtual Disk.',
     'On Coldcard, open Settings → Multisig Wallets → Import.',
     `Match ${wallet.name}, the ${wallet.threshold}-of-${wallet.cosigners.length} threshold, and every signer fingerprint.`
   ]);
@@ -56,11 +59,22 @@
     >
   </InstructionCard>
 
-  <PolicySignerList
-    signers={wallet.cosigners}
-    currentFingerprint={signer.fingerprint}
-    detailMode="fingerprint"
-  />
+  <details class="policy-signer-details" bind:open={signerDetailsOpen}>
+    <summary
+      ><span
+        ><strong>{translate($locale, 'Signer key reference')}</strong><small
+          >{translate($locale, 'Inspect fingerprints, paths, and xpubs before approving.')}</small
+        ></span
+      ><span class="policy-signer-details-state"
+        ><em>{translate($locale, signerDetailsOpen ? 'Hide' : 'Review')}</em><ChevronRight
+          class="policy-signer-details-chevron"
+          size={15}
+          aria-hidden="true"
+        /></span
+      ></summary
+    >
+    <PolicySignerList signers={wallet.cosigners} currentFingerprint={signer.fingerprint} />
+  </details>
 
   <label class="policy-review-confirmation"
     ><input type="checkbox" bind:checked={acknowledged} /><span
@@ -88,7 +102,7 @@
       disabled={!acknowledged}
       loading={busy}
       loadingLabel={translate($locale, 'Saving confirmation…')}
-      onclick={onconfirm}><Check size={15} />{translate($locale, 'Continue to signing')}</Button
+      onclick={onconfirm}><Check size={15} />{translate($locale, completionLabel)}</Button
     >
   </div>
 </section>

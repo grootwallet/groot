@@ -1277,6 +1277,14 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     );
   }
   async multisigSignerPolicyVerifications() {
+    if (
+      typeof location !== 'undefined' &&
+      location.search.includes('fixture-policy-status-offline')
+    )
+      throw new WalletError(
+        'node_admission_required',
+        'Verify this wallet’s Bitcoin Core connection.'
+      );
     return structuredClone(this.multisigPolicyVerificationRecords);
   }
   async multisigPolicyVerificationAddress() {
@@ -1922,6 +1930,14 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     this._recoveryVerified = false;
   }
   async multisigSnapshot() {
+    if (
+      typeof location !== 'undefined' &&
+      location.search.includes('fixture-policy-status-offline')
+    )
+      throw new WalletError(
+        'node_admission_required',
+        'Verify this wallet’s Bitcoin Core connection.'
+      );
     return this.snapshot();
   }
   async overview(walletId: string): Promise<import('./contracts').WalletOverview> {

@@ -63,11 +63,11 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src-tauri/src/wallet/multisig_proposal_commands.rs',
-    'f7ffc59601ca81eb971d1fe7b7eeca747479b7ef16a105400689eed3765ff200'
+    '1972d5b689e5b1d154e8c87b1e392e45e9bbffd0aa88265fd0fe619f3b8ed422'
   ],
   [
     'src-tauri/src/wallet/profile_commands.rs',
-    'a116b4760aa6c7d9c082e047e0d5786c510bf7da8ccacb6a39bc554a8c109201'
+    '17c0f29438eeffab39a743fc91458bcacbc84268180dadd6b30b0946077e75d4'
   ],
   [
     'src-tauri/src/wallet/payment_draft_commands.rs',
@@ -132,7 +132,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src/routes/multisig/new/+page.svelte',
-    'a57b626ebce6434ce8ffbeda7ffb403ed1ab614b1788d4bb287f09c92f982afc'
+    '35bed610371d7e9248fcea7be724af5782fe86d9c12e6261cb04c30d89596d89'
   ],
   [
     'src/lib/multisig/policy.ts',

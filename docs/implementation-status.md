@@ -595,3 +595,18 @@ automatic fallback. Its remote-endpoint, network-observation, exact-candidate,
 and independent-review evidence remains open, so distribution remains blocked.
 
 Update this table in the same change whenever a capability crosses a boundary.
+
+## 2026-09-13 Mainnet multisig setup and Policy correction
+
+The exact packaged `08f45e1` candidate created the watch-only wallet but did
+not copy a previously working network setup; Policy status, health status,
+Coldcard acknowledgement, and snapshot reads then failed the unchanged
+Mainnet database permit. The Policy route could also present a found Ledger or
+Nova signer as “not found” when a coupled status read discarded the separately
+available public first-address reference. ADR 0066 records the
+corrected copy precondition, existing-wallet adoption session order, independent
+reference read, single automatic error, and Coldcard reference/CTA copy. No HWI
+binary, model allowlist, fingerprint matching, descriptor, database, draft,
+node-secret, or wallet-backup format changes. These are source and browser/native
+test claims only until the new packaged app is retested with the exact devices
+and Core connection; Mainnet GA remains blocked.

@@ -40,6 +40,38 @@ test('routes receive address creation through the selected wallet kind', async (
   await expect(page.getByRole('button', { name: 'New receive address' })).toBeVisible();
 });
 
+test('offline policy keeps the public reference available and shows one actionable warning', async ({
+  page
+}) => {
+  await page.goto('/multisig?fixture-policy-status-offline=1');
+  await expect(page.getByText('Wallet data is unavailable', { exact: true })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Open network settings' })).toBeVisible();
+  await expect(page.locator('.toast')).toHaveCount(1);
+
+  await page.getByRole('button', { name: 'View Coldcard details' }).click();
+  await page.getByRole('button', { name: 'Review setup' }).click();
+  const policy = page.getByRole('dialog', { name: 'Prepare Coldcard for this wallet' });
+  await expect(policy.getByText('microSD card or enabled Virtual Disk')).toBeVisible();
+  await expect(policy.getByRole('button', { name: 'Complete policy registration' })).toBeDisabled();
+  await policy.getByText('Signer key reference').click();
+  await expect(
+    policy.getByRole('button', { name: 'Public account key (xpub)' }).first()
+  ).toBeVisible();
+});
+
+test('Coldcard policy registration completes with an explicit on-device confirmation', async ({
+  page
+}) => {
+  await page.goto('/multisig');
+  await page.getByRole('button', { name: 'View Coldcard details' }).click();
+  await page.getByRole('button', { name: 'Review setup' }).click();
+  const policy = page.getByRole('dialog', { name: 'Prepare Coldcard for this wallet' });
+  await policy.getByRole('checkbox').check();
+  await policy.getByRole('button', { name: 'Complete policy registration' }).click();
+  await expect(policy).not.toBeVisible();
+  await expect(page.getByText('Coldcard policy recorded', { exact: true })).toBeVisible();
+});
+
 test('uses signer terminology across multisig user flows', async ({ page }) => {
   for (const route of [
     '/multisig',

@@ -85,12 +85,38 @@ signing, recovery, and the ordinary wrong-device/wrong-network checks on the
 exact packaged commit. Do not fund the test wallet until the trusted displays
 match the intended descriptor and address.
 
+## 2026-09-13 `08f45e1` observed follow-up and retest requirement
+
+The reviewer reports that the exact internal `08f45e1` app created the Mk4 +
+Nano S Plus + Nova 2-of-3 coordinator, but it opened without the expected
+copied Core setup. Coldcard policy acknowledgement was rejected by the node
+permit; the Policy page displayed multiple offline warnings and potentially
+misleading “Saved signer not found” states for Nano S Plus and Nova.
+This does **not** establish that HWI stopped detecting either device: the
+previous UI conflated a missing policy-address reference with a missing HWI
+result. No device-policy pass is recorded for this build.
+
+Retest the replacement candidate in this order: unlock the source wallet and
+verify its exact Mainnet Core connection; return to the existing offline
+coordinator and adopt that saved setup in Settings; reopen Policy and confirm
+one status message at most; import and explicitly compare the Mk4 policy file
+using microSD or enabled Virtual Disk, then record it; verify Nano S Plus and
+Nova policy and first address on-device; close and reopen Groot, check the
+durable per-signer states and Core-backed overview, and only then attempt a new
+labeled receive address. A fresh multisig creation must separately exercise
+both a ready copied source and a deliberately locked or failing source, proving
+that selected reuse never silently publishes an offline wallet. Continue the
+existing funding, signing, backup, recovery, and adversarial gates afterward.
+No Mainnet release or physical certification gate is closed by this source fix.
+
 ## Reviewed source-policy snapshot
 
-The Mainnet source-policy tripwire was deliberately refreshed only for the four
-reviewed candidate files changed by this correction: `wallet.rs`
-(`9a7ccf338e8f…`), `hardware_commands.rs` (`0bc4bc6017bf…`), the hardware
-onboarding route (`cb0beb5e2faa…`), and the multisig onboarding route
-(`a57b626ebce6…`). The full hashes remain executable policy in
+This correction refreshes the Mainnet source-policy tripwire for only three
+reviewed files: multisig profile creation (`1972d5b689e5…`), network setup
+adoption (`17c0f29438ee…`), and the multisig onboarding route
+(`35bed610371d…`). These changes fail closed on a requested but unsuccessful
+network copy, retain the checked Core session after adoption, and expose a
+saved source even when it must first be unlocked. HWI and device identity code
+is unchanged. The full hashes remain executable policy in
 `verify-mainnet-source-policy.mjs`; this shortened documentation is not a second
 authority. The release gate must pass after any later byte change.

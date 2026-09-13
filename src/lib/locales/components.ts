@@ -103,6 +103,14 @@ export const componentCopy = {
   Confirmations: { fr: 'Confirmations', es: 'Confirmaciones' },
   Connection: { fr: 'Connexion', es: 'Conexión' },
   'Continue to signing': { fr: 'Continuer vers la signature', es: 'Continuar a la firma' },
+  'Complete policy registration': {
+    fr: 'Terminer l’enregistrement de la politique',
+    es: 'Completar el registro de la política'
+  },
+  'Inspect fingerprints, paths, and xpubs before approving.': {
+    fr: 'Vérifiez les empreintes, chemins et xpubs avant d’approuver.',
+    es: 'Comprueba huellas, rutas y xpubs antes de aprobar.'
+  },
   'Copy change descriptor': {
     fr: 'Copier le descripteur de monnaie',
     es: 'Copiar descriptor de cambio'

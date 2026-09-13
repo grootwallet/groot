@@ -510,8 +510,8 @@
 
   onMount(async () => {
     try {
-      networkSetupSource =
-        (await walletService.networkSetupSources()).find((source) => source.ready) ?? null;
+      const sources = await walletService.networkSetupSources();
+      networkSetupSource = sources.find((source) => source.ready) ?? sources[0] ?? null;
     } catch {
       networkSetupSource = null;
     }
@@ -1188,6 +1188,16 @@
     createErrorTitle = '';
     try {
       await flushCurrentDraft();
+      if (reuseNetworkSetup && networkSetupSource) {
+        const source = (await walletService.networkSetupSources()).find(
+          (candidate) => candidate.walletId === networkSetupSource?.walletId
+        );
+        if (!source?.ready)
+          throw new WalletError(
+            'wallet_locked',
+            'Unlock the wallet providing this network setup, then resume this setup or turn off reuse to create offline.'
+          );
+      }
       const networkSetupSourceWalletId =
         reuseNetworkSetup && networkSetupSource ? networkSetupSource.walletId : undefined;
       const creation = recoveryTemplate
@@ -1200,15 +1210,15 @@
           )
         : await walletService.createMultisig(policy, credential, networkSetupSourceWalletId);
       hasDraft = false;
-      toast({
-        title: 'Multisig wallet created',
-        description: creation.networkSetupCopied
-          ? templateKind === 'standard'
-            ? `${threshold} signatures are required to spend.`
-            : '2 of 3 primary keys work now. The recovery key becomes available after the chosen wait.'
-          : 'Network setup was not copied. Configure it in Settings.',
-        tone: creation.networkSetupCopied ? 'success' : 'default'
-      });
+      if (creation.networkSetupCopied)
+        toast({
+          title: 'Multisig wallet created',
+          description:
+            templateKind === 'standard'
+              ? `${threshold} signatures are required to spend.`
+              : '2 of 3 primary keys work now. The recovery key becomes available after the chosen wait.',
+          tone: 'success'
+        });
       await goto('/multisig');
     } catch (cause) {
       if (cause instanceof WalletError && cause.code === 'wallet_corrupt') {
@@ -2105,10 +2115,15 @@
                   >{translate($locale, 'Use')}
                   {networkSetupSource.walletName}{translate($locale, '’s network setup.')}</strong
                 ><span
-                  >{translate(
-                    $locale,
-                    'Copies its node and sync method. This wallet protects its own copy.'
-                  )}</span
+                  >{networkSetupSource.ready
+                    ? translate(
+                        $locale,
+                        'Copies its node and sync method. This wallet protects its own copy.'
+                      )
+                    : translate(
+                        $locale,
+                        'Unlock this wallet first, then resume setup. Or uncheck to create offline.'
+                      )}</span
                 >
               </p></label
             >{/if}

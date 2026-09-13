@@ -59,6 +59,9 @@ describe('protected network setup reuse', () => {
     expect(source).toContain('node_secret_path_for(&app, destination)');
     expect(source).toContain('credential.as_str()');
     expect(source).toContain('sync_source_path_for(&app, destination)');
+    expect(
+      source.indexOf('load_node_auth_session(&app, &state, credential.as_str())')
+    ).toBeLessThan(source.indexOf('mark_selected_mainnet_node_verified(&app, &state)'));
   });
 
   it('offers the same default choice for software, hardware, and multisig creation', () => {
@@ -102,14 +105,16 @@ describe('protected network setup reuse', () => {
     expect(welcome.slice(createCall, successScreen)).not.toContain('adoptNetworkSetup(');
   });
 
-  it('creates a multisig wallet offline when a previously offered source is no longer ready', () => {
+  it('rolls back a selected multisig copy failure while retaining the explicit offline option', () => {
     const standardCreate = multisigCommands.slice(
       multisigCommands.indexOf('pub async fn multisig_create'),
       multisigCommands.indexOf('pub async fn multisig_recovery_create')
     );
 
-    expect(standardCreate).not.toContain('if network_setup_source_wallet_id.is_some()');
     expect(standardCreate).toContain('copy_network_setup_before_profile_commit(');
+    expect(standardCreate.indexOf('require_requested_network_setup(')).toBeLessThan(
+      standardCreate.indexOf('commit_multisig_profile(&app, id, &wallet)?;')
+    );
     expect(nativeCommands).toContain('pub(super) fn copy_network_setup_before_profile_commit(');
     expect(nativeCommands).toContain('return Ok(true);');
     expect(nativeCommands).toContain('return Ok(false);');
@@ -117,6 +122,21 @@ describe('protected network setup reuse', () => {
       'diagnostics::DiagnosticEventKind::NetworkConfigurationChanged'
     );
     expect(nativeCommands).toContain('diagnostics::DiagnosticOutcome::Failed');
+  });
+
+  it('does not silently publish a multisig wallet when the user selected setup reuse', () => {
+    expect(multisigCreationRoute).toContain('sources.find((source) => source.ready) ?? sources[0]');
+    expect(multisigCreationRoute).toContain('if (!source?.ready)');
+    expect(multisigCommands).toContain('require_requested_network_setup(');
+    expect(multisigCommands).toContain('commit_multisig_profile(&app, id, &wallet)?;');
+  });
+
+  it('does not mistake an offline policy-status read for a missing hardware signer', () => {
+    expect(multisigPolicyRoute).toContain('Promise.allSettled([');
+    expect(multisigPolicyRoute).toContain(
+      "if (address.status === 'fulfilled') policyAddress = address.value"
+    );
+    expect(multisigPolicyRoute).toContain('policySigner && policyDevice}<div class="device-scan"');
   });
 
   it('leaves multisig refresh ownership with the global live-sync scheduler', () => {

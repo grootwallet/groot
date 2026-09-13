@@ -36,6 +36,15 @@ the selected wallet's loopback-HTTP or direct-HTTPS Core setup and verifies the
 exact Mainnet genesis. A ready same-network setup from another unlocked wallet
 may be revalidated and encrypted as an independent copy for the new profile.
 
+In multisig creation, a saved but locked source remains visible. Selecting it
+requires unlocking the source before finishing; a failed selected copy leaves
+the draft intact rather than creating an unexpectedly offline profile. The
+checkbox can be cleared for intentional offline creation. For an already-created
+offline wallet, Settings can copy from a ready, unlocked source. The Policy page
+then shows one actionable network failure rather than cascading status toasts,
+and it never calls a found hardware signer missing because a separate wallet
+status read failed.
+
 The generated words remain hidden until the user confirms their surroundings are private. After writing them down, the user is strongly encouraged to reconstruct all 24 from a shuffled pool in the exact original order, but may choose **Verify later** without blocking creation. Deferred verification offers two freshly authenticated native paths: users with the written backup go directly to the shuffled proof, while users who did not finish writing it down first revisit the privacy gate and ordered native backup sheet and then continue to the same proof. Merely viewing the words never marks the backup verified. The deterministic browser fixture supports tap/click and drag-and-drop. Production macOS performs presentation and challenge in native sheets so recovery words never cross Tauri IPC or enter webview state. A deferred wallet carries a persistent **Recovery backup not verified** warning on Overview and in Settings.
 
 - The wallet-type chooser uses three equal decision cards: software, hardware, and shared/recovery. Each card keeps its icon, title, one consequence-focused subtitle, and complexity cue inside the same target; helper copy is not detached below the action.

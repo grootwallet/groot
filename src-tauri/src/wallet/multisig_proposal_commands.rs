@@ -1040,6 +1040,29 @@ pub fn multisig_proposal_cancel(
     }
 }
 
+fn require_requested_network_setup(source_wallet_id: Option<&str>, copied: bool) -> ApiResult<()> {
+    if source_wallet_id.is_some() && !copied {
+        return Err(api_error(
+            "invalid_node_config",
+            "The selected network setup could not be copied. Check that wallet's Bitcoin Core connection and retry, or turn off reuse to create offline.",
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod network_setup_copy_tests {
+    use super::require_requested_network_setup;
+
+    #[test]
+    fn explicitly_selected_setup_must_copy_before_multisig_profile_is_published() {
+        let error = require_requested_network_setup(Some("source-wallet"), false).unwrap_err();
+        assert_eq!(error.code, "invalid_node_config");
+        assert!(require_requested_network_setup(Some("source-wallet"), true).is_ok());
+        assert!(require_requested_network_setup(None, false).is_ok());
+    }
+}
+
 #[tauri::command]
 pub async fn multisig_create(
     app: AppHandle,
@@ -1141,6 +1164,10 @@ pub async fn multisig_create(
                 network_setup_source_wallet_id.as_deref(),
                 id,
                 credential.as_str(),
+            )?;
+            require_requested_network_setup(
+                network_setup_source_wallet_id.as_deref(),
+                network_setup_copied,
             )?;
             commit_multisig_profile(&app, id, &wallet)?;
             Ok((wallet, network_setup_copied))
@@ -1249,6 +1276,7 @@ pub async fn multisig_recovery_create(
                 id,
                 credential.as_str(),
             )?;
+            require_requested_network_setup(network_setup_source_wallet_id.as_deref(), network_setup_copied)?;
             commit_multisig_profile(&app, id, &wallet)?;
             Ok((wallet, network_setup_copied))
         })();

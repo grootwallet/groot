@@ -72,6 +72,7 @@
   const walletShell = useWalletShellContext();
   let wallet = $state<MultisigWallet | null>(null);
   let snapshot = $state<WalletSnapshot | null>(null);
+  let statusError = $state('');
   let selectedSigner = $state<CosignerDraft | null>(null);
   let showDescriptors = $state(false);
   let moreOpen = $state(false);
@@ -108,37 +109,29 @@
   onMount(async () => {
     wallet = await walletService.multisigWallet();
     if (!wallet) return;
-    try {
-      const [nextPolicyVerifications, nextPolicyAddress] = await Promise.all([
-        walletService.multisigSignerPolicyVerifications(),
-        walletService.multisigPolicyVerificationAddress()
-      ]);
-      policyVerifications = nextPolicyVerifications;
-      policyAddress = nextPolicyAddress;
-    } catch (cause) {
-      toast({
-        title: 'Policy status unavailable',
-        description: localizedError(cause, $locale),
-        tone: 'danger'
-      });
-    }
-    try {
-      setHardwareHealthChecks(await walletService.hardwareHealthChecks());
-    } catch (cause) {
-      toast({
-        title: 'Health-check status unavailable',
-        description: localizedError(cause, $locale),
-        tone: 'danger'
-      });
-    }
-    try {
-      snapshot = await walletService.multisigSnapshot();
-    } catch (cause) {
-      toast({
-        title: 'Wallet is offline',
-        description: localizedError(cause, $locale),
-        tone: 'danger'
-      });
+    const [verifications, address, health, walletSnapshot] = await Promise.allSettled([
+      walletService.multisigSignerPolicyVerifications(),
+      walletService.multisigPolicyVerificationAddress(),
+      walletService.hardwareHealthChecks(),
+      walletService.multisigSnapshot()
+    ]);
+    if (verifications.status === 'fulfilled') policyVerifications = verifications.value;
+    if (address.status === 'fulfilled') policyAddress = address.value;
+    if (health.status === 'fulfilled') setHardwareHealthChecks(health.value);
+    if (walletSnapshot.status === 'fulfilled') snapshot = walletSnapshot.value;
+    const firstFailure =
+      walletSnapshot.status === 'rejected'
+        ? { title: 'Wallet is offline', cause: walletSnapshot.reason }
+        : verifications.status === 'rejected'
+          ? { title: 'Policy status unavailable', cause: verifications.reason }
+          : address.status === 'rejected'
+            ? { title: 'Policy status unavailable', cause: address.reason }
+            : health.status === 'rejected'
+              ? { title: 'Health-check status unavailable', cause: health.reason }
+              : null;
+    if (firstFailure) {
+      statusError = localizedError(firstFailure.cause, $locale);
+      toast({ title: firstFailure.title, description: statusError, tone: 'danger' });
     }
   });
   onMount(() =>
@@ -456,6 +449,11 @@
         </p>
       </div>
     </header>
+    {#if statusError}<div class="warning-box" role="status">
+        <strong>{translate($locale, 'Wallet data is unavailable')}</strong>
+        <span>{statusError}</span>
+        <a href="/settings">{translate($locale, 'Open network settings')}</a>
+      </div>{/if}
     <section class="vault-hero">
       <span><ShieldCheck size={22} /></span>
       <div class="vault-summary">
@@ -808,6 +806,7 @@
       signer={policySigner}
       busy={policyBusy}
       error={policyError}
+      completionLabel="Complete policy registration"
       ondownload={saveColdcardPolicy}
       onconfirm={confirmColdcardPolicy}
     />
@@ -828,6 +827,14 @@
       error={policyError}
       onverify={verifySignerPolicy}
     />
+  {:else if policySigner && policyDevice}<div class="device-scan">
+      <Cpu size={20} /><strong>{translate($locale, 'Policy reference unavailable')}</strong><span
+        >{translate(
+          $locale,
+          'Groot found the signer, but could not load this wallet’s first address. Check the wallet connection and try again.'
+        )}</span
+      >
+    </div>
   {:else if policySigner}<div class="device-scan">
       <Cpu size={20} /><strong>{translate($locale, 'Saved signer not found')}</strong><span
         >{translate(

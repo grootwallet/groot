@@ -2,6 +2,16 @@
 
 ## Diagnostic boundary
 
+ADR 0066 tightens the existing Mainnet setup-copy path for multisig creation:
+an explicitly selected source must pass the native exact-chain recheck and
+credential re-encryption before registry publication, or the candidate rolls
+back with its public draft intact. An existing-wallet adoption marks its newly
+loaded node-auth session verified after that same preflight. The Policy route
+loads its public first-address reference separately from database-gated policy,
+health, and snapshot reads; an offline status failure cannot be misreported as
+an HWI identity failure. Persisted representations and signer identity checks
+are unchanged.
+
 The native boundary owns an app-scoped `diagnostics-v1.jsonl` file separate from
 wallet databases and registry state. Call sites select closed event/outcome enums;
 the renderer cannot submit log messages or context. Fixed scalar metadata and a

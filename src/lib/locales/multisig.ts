@@ -854,6 +854,23 @@ export const multisigCopy = {
     fr: 'Signataire enregistré introuvable',
     es: 'No se encontró el firmante guardado'
   },
+  'Policy reference unavailable': {
+    fr: 'Référence de politique indisponible',
+    es: 'Referencia de política no disponible'
+  },
+  'Groot found the signer, but could not load this wallet’s first address. Check the wallet connection and try again.':
+    {
+      fr: 'Groot a trouvé le signataire, mais ne peut pas charger la première adresse de ce portefeuille. Vérifiez la connexion et réessayez.',
+      es: 'Groot encontró el firmante, pero no pudo cargar la primera dirección de esta cartera. Comprueba la conexión e inténtalo de nuevo.'
+    },
+  'Unlock this wallet first, then resume setup. Or uncheck to create offline.': {
+    fr: 'Déverrouillez d’abord ce portefeuille, puis reprenez la configuration. Ou décochez pour créer hors ligne.',
+    es: 'Desbloquea primero esta cartera y reanuda la configuración. O desmarca para crear sin conexión.'
+  },
+  'Open network settings': {
+    fr: 'Ouvrir les réglages réseau',
+    es: 'Abrir ajustes de red'
+  },
   'Scan for devices': { fr: 'Rechercher des appareils', es: 'Buscar dispositivos' },
   'Settings → Multisig Wallets → Import': {
     fr: 'Réglages → Portefeuilles multisignatures → Importer',

@@ -73,7 +73,26 @@ The native app version and short source commit remain visible through one shared
 
 Wallet uniqueness is the exact canonical public receive descriptor on the compiled network. The eight-character descriptor checksum remains an integrity check only; checksum equality cannot establish wallet equality. Creation and recovery compare exact descriptors inside Rust against every authoritative profile representation. A true duplicate returns the existing immutable wallet ID so the shell can select that exact profile; a missing or stale match never falls back to the currently selected wallet.
 
-When another unlocked wallet has a saved protected network setup, new software, hardware, and multisig wallets offer to reuse its Bitcoin Core connection and activity-sync method by default. The user may opt out. Groot rechecks the exact Core chain before copying, keeps wallet databases and scan state isolated, and re-encrypts any RPC password with the new wallet credential inside Rust; node credentials never enter the webview. A new software or multisig profile is not selected, shown as successfully created, or exposed to automatic refresh until this protected copy attempt finishes. If the offered source locks, expires, changes, or fails validation before creation completes, copy failure still creates the wallet offline and surfaces one setup action. Settings lists saved setups on every compiled network, including Mainnet, without exposing their node details or credentials, marks whether each source is ready, and directs the user to unlock a source before adoption when needed. From an offline wallet, manual sync and the durable Overview retry open that setup choice directly, falling back to the existing Core configuration dialog when no reusable source exists. The result remains a per-wallet copy, so either wallet can later choose a different node or sync method without changing the other.
+When another unlocked wallet has a saved protected network setup, new software,
+hardware, and multisig wallets offer to reuse its Bitcoin Core connection and
+activity-sync method by default. Multisig creation also shows a saved but locked
+source with an unlock instruction; the user may opt out and create offline.
+Groot rechecks the exact Core chain before copying, keeps wallet databases and
+scan state isolated, and re-encrypts any RPC password with the new wallet
+credential inside Rust; node credentials never enter the webview. A new software
+or multisig profile is not selected, shown as successfully created, or exposed
+to automatic refresh until this protected copy attempt finishes. For multisig
+creation, an explicitly selected reuse that locks, expires, changes, or fails
+validation rolls back the candidate and preserves the draft instead of silently
+publishing an offline wallet. Software and single-key hardware creation retain
+their existing offline fallback on copy failure. Settings lists saved setups on
+every compiled network, including Mainnet, without exposing their node details
+or credentials, marks whether each source is ready, and directs the user to
+unlock a source before adoption when needed. From an offline wallet, manual sync
+and the durable Overview retry open that setup choice directly, falling back to
+the existing Core configuration dialog when no reusable source exists. The
+result remains a per-wallet copy, so either wallet can later choose a different
+node or sync method without changing the other.
 
 Desktop navigation lists wallet profiles directly instead of hiding them in a native select. The active profile is visually identified; choosing another profile immediately removes the previous wallet's balance, activity, coins, and addresses from presentation, then shows the target wallet's loading, unlock, empty, or populated state. A late sync result from the wallet being left must never update the newly selected wallet's routes.
 

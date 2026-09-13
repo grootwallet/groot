@@ -1650,6 +1650,7 @@ pub async fn network_setup_adopt(
         write_private_json(&node_config_path_for(&app, destination)?, &config)?;
         write_private_json(&sync_source_path_for(&app, destination)?, &sync_source)?;
         load_node_auth_session(&app, &state, credential.as_str())?;
+        mark_selected_mainnet_node_verified(&app, &state)?;
         replace_public_network_status(&app, None, Some(status.blocks))?;
         Ok(status)
     })

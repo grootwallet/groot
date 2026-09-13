@@ -1,5 +1,11 @@
 # Bitcoin Improvement Proposal support
 
+ADR 0066 changes only Mainnet multisig setup-copy failure handling, in-memory
+Core admission order after existing-wallet adoption, and Policy/Coldcard
+presentation. It does not change BIP48 keys, descriptors, policy, PSBTs,
+interchange, recovery, or supported signer identities. It adds no BIP support
+or interoperability evidence; physical retesting remains required.
+
 ADR 0065 changes the timing of BIP48 standard multisig Mainnet admission in the
 isolated candidate: an offline public draft may become a watch-only coordinator
 after restart, but native address issuance requires a threshold of durable
