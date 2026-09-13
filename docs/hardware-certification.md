@@ -25,6 +25,15 @@ The exact results, source corrections, limitations, and required repetition are
 recorded in the [sanitized Mainnet checkpoint](hardware-certification-mainnet-2026-09-12.md).
 None of this older-build evidence transfers to the corrected candidate.
 
+The later owner-operated internal `v0.4.94 · 4630bf95` Mainnet checkpoint
+records Mk4 policy-file import acknowledgement, exact Nova and Nano S Plus
+policy verification, and a labeled first receive address matched on the Nano
+S Plus. Nova and Mk4 display of that saved receive address, funded lifecycle,
+restart, recovery, and independent review remain open. The Mk4 acknowledgement
+must not be equated with an interactive first-address proof. See the same
+[sanitized Mainnet checkpoint](hardware-certification-mainnet-2026-09-12.md);
+these results do not certify other device models or later packages.
+
 ## Hardware certification matrix
 
 | Exact model                                 | Primary transport                                                                   | Credential rule                                                                                  | Local Regtest                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | Open work                                                                                                                                                               |

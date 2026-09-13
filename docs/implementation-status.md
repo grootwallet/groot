@@ -598,6 +598,16 @@ Update this table in the same change whenever a capability crosses a boundary.
 
 ## 2026-09-13 Mainnet multisig setup and Policy correction
 
+Owner-operated internal `v0.4.94 · 4630bf95` testing subsequently displayed
+the Mk4 policy-file acknowledgement and verified Nano S Plus/Nova policy
+states, then a permanently labeled first multisig receive address verified on
+the Nano S Plus. The Nova and Mk4 receive-address comparisons, funded signing,
+restart, recovery, and independent Mainnet gates remain open. The subsequent
+shared-button indicator and policy-review wording change is presentation-only;
+it does not change HWI, wallet formats, or protocol behavior. Candidate-bound
+details and the next physical steps are in the sanitized Mainnet hardware
+checkpoint.
+
 The exact packaged `08f45e1` candidate created the watch-only wallet but did
 not copy a previously working network setup; Policy status, health status,
 Coldcard acknowledgement, and snapshot reads then failed the unchanged

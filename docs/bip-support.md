@@ -1,5 +1,11 @@
 # Bitcoin Improvement Proposal support
 
+The 2026-09-13 policy-review copy and shared loading-indicator adjustment have
+no BIP, descriptor, key-derivation, HWI, PSBT, persisted-format, or protocol
+impact. The owner-reported exact `4630bf95` Mainnet policy and Ledger receive
+checks are candidate-specific physical UI/device evidence, not new BIP support
+or an interoperability-status change.
+
 ADR 0066 changes only Mainnet multisig setup-copy failure handling, in-memory
 Core admission order after existing-wallet adoption, and Policy/Coldcard
 presentation. It does not change BIP48 keys, descriptors, policy, PSBTs,

@@ -139,7 +139,7 @@
           )}
         </p>{/if}
       {#if action === 'sign'}<p>
-          {translate($locale, 'Open the signer key reference below while Ledger shows each key.')}
+          {translate($locale, 'Review all signer public keys below while Ledger shows each key.')}
         </p>{/if}
     </div>
   {:else if isBitBox}
@@ -172,7 +172,7 @@
   >
     <summary
       ><span
-        ><strong>{translate($locale, 'Signer key reference')}</strong><small
+        ><strong>{translate($locale, 'Review all signer public keys')}</strong><small
           >{translate($locale, 'Open while reviewing the values shown by the device.')}</small
         ></span
       ><span class="policy-signer-details-state"

@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { copyCatalog } from '$lib/i18n-catalog';
 
 const appCss = readFileSync(new URL('../../app.css', import.meta.url), 'utf8');
+const sharedButton = readFileSync(new URL('./Button.svelte', import.meta.url), 'utf8');
 const emptyState = readFileSync(
   new URL('./HardwareDeviceEmptyState.svelte', import.meta.url),
   'utf8'
@@ -119,6 +120,12 @@ describe('hardware receive verification UI', () => {
       /\.spin\s*\{[\s\S]*?animation:\s*groot-spinner-rotation 0\.8s linear infinite/
     );
     expect(appCss).toContain('@keyframes groot-spinner-rotation');
+    expect(appCss).toMatch(
+      /\.button-loading-indicator\s*\{[\s\S]*?animation:\s*groot-spinner-rotation 1s linear infinite/
+    );
+    expect(sharedButton.match(/class="button-loading-indicator"/g)).toHaveLength(2);
+    expect(sharedButton).toContain('disabled={unavailable}');
+    expect(sharedButton).toContain('aria-busy={loading}');
   });
 
   it('keeps the Trezor PIN matrix instruction short and position-focused', () => {

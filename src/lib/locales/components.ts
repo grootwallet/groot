@@ -335,17 +335,17 @@ export const componentCopy = {
     fr: 'Clés de signataires à comparer',
     es: 'Claves de firmantes para comparar'
   },
-  'Signer key reference': {
-    fr: 'Référence des clés de signature',
-    es: 'Referencia de claves de firma'
+  'Review all signer public keys': {
+    fr: 'Vérifier toutes les clés publiques des signataires',
+    es: 'Revisar todas las claves públicas de los firmantes'
   },
   'Open while reviewing the values shown by the device.': {
     fr: 'Ouvrez pendant la vérification des valeurs affichées par l’appareil.',
     es: 'Ábrela mientras revisas los valores mostrados por el dispositivo.'
   },
-  'Open the signer key reference below while Ledger shows each key.': {
-    fr: 'Ouvrez la référence des clés de signataire ci-dessous pendant que Ledger affiche chaque clé.',
-    es: 'Abre la referencia de claves de firmantes mientras Ledger muestra cada clave.'
+  'Review all signer public keys below while Ledger shows each key.': {
+    fr: 'Vérifiez toutes les clés publiques des signataires ci-dessous pendant que Ledger affiche chaque clé.',
+    es: 'Revisa todas las claves públicas de los firmantes mientras Ledger muestra cada clave.'
   },
   'First address reference': {
     fr: 'Référence de la première adresse',

@@ -62,7 +62,7 @@
   <details class="policy-signer-details" bind:open={signerDetailsOpen}>
     <summary
       ><span
-        ><strong>{translate($locale, 'Signer key reference')}</strong><small
+        ><strong>{translate($locale, 'Review all signer public keys')}</strong><small
           >{translate($locale, 'Inspect fingerprints, paths, and xpubs before approving.')}</small
         ></span
       ><span class="policy-signer-details-state"

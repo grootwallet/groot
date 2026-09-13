@@ -252,6 +252,13 @@ rows.
 
 ## Current decision
 
+The release owner separately reported **Policy verified** for the exact Nova
+Bitcoin-only on internal Mainnet app `v0.4.94 · 4630bf95`. This is a later,
+candidate-bound policy result only. The newly labeled receive address was
+verified on a Ledger Nano S Plus; a Nova on-device comparison of that saved
+receive address remains open. No Nova Mainnet spend, firmware version for this
+session, restart, recovery, or independent certification is inferred.
+
 **LOCAL REGTEST USB CORE PASS WITH LIMITATIONS — NOT RELEASE CERTIFIED.**
 
 The exact Nova passed the funded BIP84 and BIP48 USB core journeys, including

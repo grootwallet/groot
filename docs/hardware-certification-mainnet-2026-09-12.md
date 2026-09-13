@@ -120,3 +120,32 @@ saved source even when it must first be unlocked. HWI and device identity code
 is unchanged. The full hashes remain executable policy in
 `verify-mainnet-source-policy.mjs`; this shortened documentation is not a second
 authority. The release gate must pass after any later byte change.
+
+## 2026-09-13 exact `4630bf95` owner-operated checkpoint
+
+The release owner tested the internal Mainnet app displaying `v0.4.94 ·
+4630bf95`. The existing Mk4 + Nano S Plus + Nova 2-of-3 coordinator opened with
+an admitted Core connection. Its Policy page showed the Mk4 policy file as
+**Policy imported**, and the Nano S Plus and exact BitBox02 Nova Bitcoin-only
+policies as **Policy verified**. These are three separately reported outcomes:
+the Mk4 status is a manual on-device import acknowledgement, not a
+cryptographic USB address proof. The owner then generated a permanently labeled
+first receive address and reported a complete match on the Nano S Plus trusted
+display; Groot showed **Verified on hardware** and retained the verification
+time. The submitted screen recording shows the shared loading indicator
+rotating during a long Nova operation, although its previous near-uniform ring
+looked stalled to the owner. The package's visual policy status and Ledger
+receive evidence are not a funded-spend, restart, recovery, or independent
+certification pass. No firmware version was reported for this exact session.
+
+Next on this wallet: compare that same saved receive address in full on the
+exact Nova and Mk4 displays, recording separately what each device can prove;
+repeat the Policy and Receive states after quit/relaunch and correct-PIN unlock;
+confirm Core sync and permanent label retention. Do not fund until the
+descriptor backup and every intended device display agree. After that, run a
+minimal-value receive, confirmation, 2-of-3 PSBT review/signature combinations,
+rejection and wrong-device/changed-PSBT checks, broadcast, restart/accounting,
+and independent clean-profile public-backup recovery. The exact replacement
+build must first pass its own spinner and policy-copy UI checks; none of the
+physical `4630bf95` outcomes automatically transfer to it. Mainnet GA remains
+blocked by the release checklist.

@@ -1121,6 +1121,27 @@ code {
   transform-origin: center;
   will-change: transform;
 }
+.button-loading-indicator {
+  position: relative;
+  display: block;
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: groot-spinner-rotation 1s linear infinite;
+}
+.button-loading-indicator::after {
+  position: absolute;
+  top: -3px;
+  left: 5px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+  content: '';
+}
 @keyframes groot-spinner-rotation {
   to {
     transform: rotate(360deg);

@@ -40,6 +40,35 @@ test('routes receive address creation through the selected wallet kind', async (
   await expect(page.getByRole('button', { name: 'New receive address' })).toBeVisible();
 });
 
+test('disabled loading buttons keep visibly rotating until the operation ends', async ({
+  page
+}) => {
+  await page.goto('/multisig');
+  const indicator = page.locator('.button-loading-indicator');
+  await page.evaluate(() => {
+    const button = document.createElement('button');
+    button.className = 'button';
+    button.disabled = true;
+    button.setAttribute('aria-busy', 'true');
+    button.innerHTML =
+      '<span class="button-loading-indicator" aria-hidden="true"></span><span>Working…</span>';
+    document.body.append(button);
+  });
+  await expect(indicator).toBeVisible();
+  const transforms = new Set<string>();
+  for (let frame = 0; frame < 5; frame += 1) {
+    transforms.add(await indicator.evaluate((element) => getComputedStyle(element).transform));
+    await page.waitForTimeout(170);
+  }
+  expect(transforms.size).toBeGreaterThanOrEqual(3);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  const reducedDuration = await indicator.evaluate(
+    (element) => getComputedStyle(element).animationDuration
+  );
+  expect(parseFloat(reducedDuration)).toBeLessThanOrEqual(0.001);
+  await expect(page.getByRole('button', { name: 'Working…' })).toBeDisabled();
+});
+
 test('offline policy keeps the public reference available and shows one actionable warning', async ({
   page
 }) => {
@@ -53,7 +82,7 @@ test('offline policy keeps the public reference available and shows one actionab
   const policy = page.getByRole('dialog', { name: 'Prepare Coldcard for this wallet' });
   await expect(policy.getByText('microSD card or enabled Virtual Disk')).toBeVisible();
   await expect(policy.getByRole('button', { name: 'Complete policy registration' })).toBeDisabled();
-  await policy.getByText('Signer key reference').click();
+  await policy.getByText('Review all signer public keys').click();
   await expect(
     policy.getByRole('button', { name: 'Public account key (xpub)' }).first()
   ).toBeVisible();
@@ -1475,7 +1504,7 @@ test('creates and verifies a simple 2-of-3 descriptor wallet', async ({ page }) 
     signingPolicyReview.getByText('Reject if any value differs on Ledger.')
   ).toBeVisible();
   await expect(
-    signingPolicyReview.getByText('Signer key reference', { exact: true })
+    signingPolicyReview.getByText('Review all signer public keys', { exact: true })
   ).toBeVisible();
   await expect(
     signingPolicyReview.getByLabel('I compared the threshold and every signer key')
