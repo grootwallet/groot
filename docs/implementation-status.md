@@ -598,6 +598,20 @@ Update this table in the same change whenever a capability crosses a boundary.
 
 ## 2026-09-13 Mainnet multisig setup and Policy correction
 
+The subsequent internal UI follow-up retains the current native wallet, signer,
+PSBT, and Bitcoin Core paths. The shared disabled-button indicator is again one
+open spinning circle without a decorative dot. The multisig Policy route shows
+the existing wallet skeleton while its selected-wallet lookup is pending and an
+actionable error if that lookup fails, never the single-key fallback for an
+unresolved lookup. Standard sortedmulti wallets already hide the Miniscript-only
+Recovery policy lab in the card and overflow menu; the browser regression now
+also watches for a transient false fallback. Export & verify authorizes both
+existing public BSMS and Groot JSON commands with one app PIN, clears that PIN,
+and switches between the two transient records without new authorization or a
+persisted schema change. The existing shared modal enlarges the receive
+descriptor QR. These are source/browser presentation and orchestration checks,
+not physical certification of the replacement Mainnet binary.
+
 Owner-operated internal `v0.4.94 · 4630bf95` testing subsequently displayed
 the Mk4 policy-file acknowledgement and verified Nano S Plus/Nova policy
 states, then a permanently labeled first multisig receive address verified on

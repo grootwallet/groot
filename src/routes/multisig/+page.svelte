@@ -71,6 +71,8 @@
   const MATURITY_UNCONFIRMED = 'unconfirmed';
   const walletShell = useWalletShellContext();
   let wallet = $state<MultisigWallet | null>(null);
+  let walletLoading = $state(true);
+  let walletLoadError = $state('');
   let snapshot = $state<WalletSnapshot | null>(null);
   let statusError = $state('');
   let selectedSigner = $state<CosignerDraft | null>(null);
@@ -106,8 +108,17 @@
     healthPinChallenge = '';
     healthPinPositions = '';
   });
-  onMount(async () => {
-    wallet = await walletService.multisigWallet();
+  async function loadPolicyWallet() {
+    walletLoading = true;
+    walletLoadError = '';
+    try {
+      wallet = await walletService.multisigWallet();
+    } catch (cause) {
+      walletLoadError = localizedError(cause, $locale, 'Could not load this wallet policy.');
+      return;
+    } finally {
+      walletLoading = false;
+    }
     if (!wallet) return;
     const [verifications, address, health, walletSnapshot] = await Promise.allSettled([
       walletService.multisigSignerPolicyVerifications(),
@@ -133,6 +144,9 @@
       statusError = localizedError(firstFailure.cause, $locale);
       toast({ title: firstFailure.title, description: statusError, tone: 'danger' });
     }
+  }
+  onMount(() => {
+    void loadPolicyWallet();
   });
   onMount(() =>
     walletService.subscribe((event) => {
@@ -738,6 +752,35 @@
           >{/if}
       </aside>
     </div>
+  {:else if walletLoading}
+    <section
+      class="policy-loading-skeleton"
+      aria-label={translate($locale, 'Loading wallet policy')}
+      role="status"
+    >
+      <div class="wallet-skeleton balance" aria-hidden="true">
+        <span class="skeleton-line label"></span>
+        <span class="skeleton-line amount"></span>
+        <span class="skeleton-line pending"></span>
+      </div>
+      <div class="wallet-skeleton transactions" aria-hidden="true">
+        {#each [1, 2, 3] as row (row)}<div class="skeleton-row">
+            <span class="skeleton-block icon"></span>
+            <span class="skeleton-copy"
+              ><span class="skeleton-line primary"></span><span class="skeleton-line secondary"
+              ></span></span
+            >
+          </div>{/each}
+      </div>
+    </section>
+  {:else if walletLoadError}
+    <section class="empty-state vault-empty" role="alert">
+      <h2>{translate($locale, 'Wallet policy unavailable')}</h2>
+      <p>{walletLoadError}</p>
+      <Button variant="secondary" onclick={loadPolicyWallet}
+        >{translate($locale, 'Try again')}</Button
+      >
+    </section>
   {:else}
     <section class="empty-state vault-empty">
       <span class="empty-icon"><Usb size={24} /></span>

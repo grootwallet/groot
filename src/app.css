@@ -1132,16 +1132,6 @@ code {
   border-radius: 50%;
   animation: groot-spinner-rotation 1s linear infinite;
 }
-.button-loading-indicator::after {
-  position: absolute;
-  top: -3px;
-  left: 5px;
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: currentColor;
-  content: '';
-}
 @keyframes groot-spinner-rotation {
   to {
     transform: rotate(360deg);
@@ -1762,6 +1752,10 @@ code {
   border: 1px solid var(--border);
   border-radius: var(--radius-panel);
   background: var(--panel);
+}
+.policy-loading-skeleton {
+  display: grid;
+  gap: 16px;
 }
 .wallet-skeleton::after {
   content: '';
@@ -7647,6 +7641,21 @@ code {
   padding: 6px;
   border-radius: var(--radius-control);
   background: #fff;
+}
+.descriptor-qr-preview .descriptor-qr-trigger {
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  cursor: zoom-in;
+}
+.descriptor-qr-preview .descriptor-qr-trigger:focus-visible {
+  outline: 2px solid var(--link);
+  outline-offset: 3px;
+}
+.descriptor-qr-modal img {
+  background: #fff;
+  padding: 8px;
 }
 .descriptor-copy-row {
   min-width: 0;

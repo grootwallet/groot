@@ -172,3 +172,28 @@ under repeated amount/fee changes and for readable review rows on both
 confirmation and signing screens. Continue with on-chain confirmation, then
 the planned 2-of-3 spend, failure/rejection, restart/accounting, and
 clean-profile recovery checks. Mainnet GA remains blocked.
+
+## 2026-09-13 exact `15a87375` owner-operated spend checkpoint
+
+The release owner reports that the earlier multisig deposit confirmed. With the
+internal Mainnet app displaying `v0.4.94 · 15a87375`, the owner then prepared
+and broadcast one standard 2-of-3 multisig payment signed by the Ledger Nano S
+Plus and BitBox02 Nova Bitcoin-only. Groot displayed broadcast success; the
+owner-controlled Ledger single-key receiving wallet observed the payment as
+unconfirmed, with accounting matching expectations. After quitting and
+relaunching, the owner reported the wallet state and accounting persisted. This
+is an exact-build, owner-operated funded-send result, not a confirmed outgoing
+transaction, an adversarial-PSBT pass, clean-profile recovery, firmware-specific
+certification, independent review, or a pass for the later replacement build.
+No amount, address, fingerprint, descriptor, PSBT, or transaction ID is retained.
+
+The owner also reported that the shared button spinner's decorative dot is
+unwanted; a BSMS export could not switch to Groot JSON without leaving the
+flow; the receive-descriptor QR did not expand; Policy briefly showed a false
+single-key state; and the standard multisig Recovery policy lab link was
+confusing. The last link is already guarded by `hasMiniscriptPolicy` in the
+current source and must remain absent for standard sortedmulti; source/browser
+checks of the UI changes do not transfer any physical result. Continue with
+bounded altered/foreign/stale PSBT rejection, rapid amount/fee changes,
+confirmation and restart reconciliation, and independent clean-profile public
+descriptor recovery before advancing any Mainnet release checklist row.

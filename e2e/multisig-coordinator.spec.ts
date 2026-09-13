@@ -55,6 +55,9 @@ test('disabled loading buttons keep visibly rotating until the operation ends', 
     document.body.append(button);
   });
   await expect(indicator).toBeVisible();
+  expect(await indicator.evaluate((element) => getComputedStyle(element, '::after').content)).toBe(
+    'none'
+  );
   const transforms = new Set<string>();
   for (let frame = 0; frame < 5; frame += 1) {
     transforms.add(await indicator.evaluate((element) => getComputedStyle(element).transform));
@@ -1665,11 +1668,46 @@ test('exports and validates the recommended BSMS record', async ({ page }) => {
   await expect(page.getByLabel('Descriptor backup', { exact: true })).toHaveValue(
     /\/0\/\*,\/1\/\*/
   );
+  const bsms = await page.getByLabel('Descriptor backup', { exact: true }).inputValue();
+  await page.getByRole('button', { name: /Groot JSON/ }).click();
+  await expect(page.getByLabel('Backup app PIN')).toHaveCount(0);
+  await expect(page.getByLabel('Descriptor backup', { exact: true })).toHaveValue(
+    /"network": "regtest"/
+  );
+  const json = await page.getByLabel('Descriptor backup', { exact: true }).inputValue();
+  expect(json).not.toBe(bsms);
+  await page.getByRole('button', { name: /BSMS 1\.0/ }).click();
+  await expect(page.getByLabel('Descriptor backup', { exact: true })).toHaveValue(bsms);
+  await page.getByRole('button', { name: 'Enlarge receive descriptor QR' }).click();
+  const qrDialog = page.getByRole('dialog', { name: 'Receive descriptor QR' });
+  await expect(qrDialog.getByAltText('Large QR code for the receive descriptor')).toBeVisible();
+  await qrDialog.getByRole('button', { name: 'Close' }).click();
+  await expect(qrDialog).toHaveCount(0);
   const downloadPromise = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Download BSMS' }).click();
   await expect((await downloadPromise).suggestedFilename()).toBe('family-wallet.bsms');
   await page.getByRole('button', { name: 'Test recovery' }).click();
   await expect(page.getByText('Backup verified')).toBeVisible();
+});
+
+test('policy navigation never shows a single-key fallback before loading multisig', async ({
+  page
+}) => {
+  await page.addInitScript(() => {
+    const flashes: string[] = [];
+    (window as typeof window & { policyFallbackFlashes: string[] }).policyFallbackFlashes = flashes;
+    new MutationObserver(() => {
+      if (document.body?.textContent?.includes('Single-key policy')) flashes.push('single-key');
+    }).observe(document, { subtree: true, childList: true, characterData: true });
+  });
+  await page.goto('/multisig');
+  await expect(page.getByRole('heading', { name: 'Family wallet' })).toBeVisible();
+  expect(
+    await page.evaluate(
+      () => (window as typeof window & { policyFallbackFlashes: string[] }).policyFallbackFlashes
+    )
+  ).toEqual([]);
+  await expect(page.getByRole('link', { name: 'Recovery policy lab' })).toHaveCount(0);
 });
 
 test('shows one authoritative failure when a BSMS record belongs to another wallet', async ({

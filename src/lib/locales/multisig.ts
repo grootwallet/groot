@@ -449,6 +449,26 @@ export const multisigCopy = {
     fr: 'QR du descripteur de réception',
     es: 'QR del descriptor de recepción'
   },
+  'Enlarge receive descriptor QR': {
+    fr: 'Agrandir le QR du descripteur de réception',
+    es: 'Ampliar el QR del descriptor de recepción'
+  },
+  'Large QR code for the receive descriptor': {
+    fr: 'Grand code QR du descripteur de réception',
+    es: 'Código QR grande del descriptor de recepción'
+  },
+  'Loading wallet policy': {
+    fr: 'Chargement de la politique du portefeuille',
+    es: 'Cargando la política de la cartera'
+  },
+  'Wallet policy unavailable': {
+    fr: 'Politique du portefeuille indisponible',
+    es: 'Política de la cartera no disponible'
+  },
+  'Public watch-only descriptor. Anyone who sees it can follow this wallet’s addresses.': {
+    fr: 'Descripteur public en lecture seule. Toute personne qui le voit peut suivre les adresses de ce portefeuille.',
+    es: 'Descriptor público de solo lectura. Quien lo vea puede seguir las direcciones de esta cartera.'
+  },
   'Recover multisig wallet': {
     fr: 'Récupérer un portefeuille multisignature',
     es: 'Recuperar cartera multifirma'

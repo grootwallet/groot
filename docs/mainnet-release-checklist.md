@@ -69,6 +69,14 @@ not an interactive policy proof; confirmation, a 2-of-3 Mainnet spend, recovery,
 exact signed-candidate repetition, and independent review remain open. See the
 [sanitized Mainnet checkpoint](hardware-certification-mainnet-2026-09-12.md).
 
+The owner later reported that the deposit confirmed and exact internal
+`15a87375` successfully broadcast one Ledger Nano S Plus + BitBox02 Nova
+2-of-3 payment. An owner-controlled single-key wallet observed the receipt
+unconfirmed; accounting and state persisted after quit/relaunch. This closes
+neither a checklist row nor the still-open altered-PSBT, clean-profile recovery,
+recipient-confirmation, later exact-build, firmware, and independent-review
+evidence. See the same sanitized checkpoint for the bounded report.
+
 - [ ] Coldcard Mk4 certification record complete and sanitized summary reviewed.
 - [ ] Trezor Model One firmware 1.14.1 certification record complete and sanitized summary reviewed.
 - [ ] Ledger Nano S Plus firmware 1.6.1 with Bitcoin app 2.5.0 certification record complete and sanitized summary reviewed.

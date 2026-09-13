@@ -295,6 +295,13 @@ coalesces renderer preview requests during amount edits, and changes only
 review-row presentation. PSBT construction, fee selection rules, descriptors,
 signing, and protocol data are unchanged.
 
+The subsequent spinner, Policy loading-state, BSMS/Groot JSON export-switching,
+and receive-descriptor QR presentation follow-up has no BIP support impact.
+Both already-supported public backup commands run under the same app PIN once;
+their bytes, parsers, descriptor semantics, recovery checks, and BIP129/BIP380/
+BIP389 interoperability evidence are unchanged. The observed Mainnet spend and
+confirmation are exact-build owner reports, not new standards certification.
+
 Every feature, interoperability, signer, descriptor, transaction, payment request,
 backup/recovery, sync/backend, network, or dependency change must assess BIP impact.
 If it adds, removes, expands, narrows, or changes evidence for a BIP:

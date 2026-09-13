@@ -18,6 +18,7 @@
   import QRCode from 'qrcode';
   import { onDestroy } from 'svelte';
   import Button from '$lib/components/Button.svelte';
+  import Modal from '$lib/components/Modal.svelte';
   import PasswordField from '$lib/components/PasswordField.svelte';
   import InsightTip from '$lib/components/InsightTip.svelte';
   import { copyText } from '$lib/clipboard';
@@ -43,6 +44,8 @@
   let exportError = $state('');
   let drillError = $state('');
   let backupFormat = $state<'bsms' | 'groot'>('bsms');
+  let exportedBackups = $state<{ bsms: string; groot: string } | null>(null);
+  let showReceiveQr = $state(false);
   let receiveQr = $state('');
   let changeQr = $state('');
   let receivePrintQr = $state<PrintableQr | null>(null);
@@ -53,6 +56,7 @@
   onDestroy(() => {
     pin = '';
     backup = '';
+    exportedBackups = null;
   });
 
   $effect(() => {
@@ -98,23 +102,35 @@
   }
 
   async function exportBackup() {
+    if (busy) return;
     busy = true;
     exportError = '';
+    const credential = pin;
+    pin = '';
     try {
-      backup =
-        backupFormat === 'bsms'
-          ? await walletService.exportMultisigBsms(pin)
-          : await walletService.exportMultisig(pin);
+      const bsms = await walletService.exportMultisigBsms(credential);
+      const groot = await walletService.exportMultisig(credential);
+      exportedBackups = { bsms, groot };
+      backup = exportedBackups[backupFormat];
       loadedBackupName = '';
       drill = null;
-      pin = '';
       toast({ title: 'Descriptor backup ready', tone: 'success' });
     } catch (cause) {
       exportError = exportErrorMessage(cause);
-      pin = '';
     } finally {
       busy = false;
     }
+  }
+
+  function selectBackupFormat(format: 'bsms' | 'groot') {
+    if (busy) return;
+    backupFormat = format;
+    exportError = '';
+    if (!exportedBackups) return;
+    backup = exportedBackups[format];
+    loadedBackupName = '';
+    drill = null;
+    drillError = '';
   }
 
   async function verifyBackup() {
@@ -244,43 +260,39 @@
         </div>
         <FileKey size={19} />
       </div>
-      {#if !backup}
-        <div
-          class="backup-format-grid"
-          role="radiogroup"
-          aria-label={translate($locale, 'Backup format')}
+      <div
+        class="backup-format-grid"
+        role="radiogroup"
+        aria-label={translate($locale, 'Backup format')}
+      >
+        <button
+          class:active={backupFormat === 'bsms'}
+          aria-pressed={backupFormat === 'bsms'}
+          disabled={busy}
+          onclick={() => selectBackupFormat('bsms')}
+          ><span><FileText size={18} /></span><strong>BSMS 1.0</strong><small
+            >{translate($locale, 'Most interoperable · recommended')}</small
+          ></button
+        ><button
+          class:active={backupFormat === 'groot'}
+          aria-pressed={backupFormat === 'groot'}
+          disabled={busy}
+          onclick={() => selectBackupFormat('groot')}
+          ><span><Braces size={18} /></span><strong>{translate($locale, 'Groot JSON')}</strong
+          ><small>{translate($locale, 'Descriptors plus Groot metadata')}</small></button
         >
-          <button
-            class:active={backupFormat === 'bsms'}
-            aria-pressed={backupFormat === 'bsms'}
-            onclick={() => {
-              backupFormat = 'bsms';
-              exportError = '';
-            }}
-            ><span><FileText size={18} /></span><strong>BSMS 1.0</strong><small
-              >{translate($locale, 'Most interoperable · recommended')}</small
-            ></button
-          ><button
-            class:active={backupFormat === 'groot'}
-            aria-pressed={backupFormat === 'groot'}
-            onclick={() => {
-              backupFormat = 'groot';
-              exportError = '';
-            }}
-            ><span><Braces size={18} /></span><strong>{translate($locale, 'Groot JSON')}</strong
-            ><small>{translate($locale, 'Descriptors plus Groot metadata')}</small></button
-          >
-        </div>
-        <p class="optional-insight">
-          {translate($locale, 'Backup formats')}
-          <InsightTip
-            label={translate($locale, 'About backup formats')}
-            text={translate(
-              $locale,
-              'BSMS is a portable public descriptor record supported by compatible coordinators. Groot JSON also preserves Groot-specific labels and metadata. Neither contains private keys.'
-            )}
-          />
-        </p>
+      </div>
+      <p class="optional-insight">
+        {translate($locale, 'Backup formats')}
+        <InsightTip
+          label={translate($locale, 'About backup formats')}
+          text={translate(
+            $locale,
+            'BSMS is a portable public descriptor record supported by compatible coordinators. Groot JSON also preserves Groot-specific labels and metadata. Neither contains private keys.'
+          )}
+        />
+      </p>
+      {#if !backup}
         <div class="backup-security-note">
           <ShieldCheck size={18} /><span
             ><strong>{translate($locale, 'Re-authenticate this export')}</strong><small
@@ -348,10 +360,15 @@
             <span
               ><QrCode size={16} /><strong>{translate($locale, 'Receive descriptor QR')}</strong
               ></span
-            >{#if receiveQr}<img
-                src={receiveQr}
-                alt={translate($locale, 'QR code for the receive descriptor')}
-              />{:else}<small
+            >{#if receiveQr}<button
+                class="descriptor-qr-trigger"
+                aria-label={translate($locale, 'Enlarge receive descriptor QR')}
+                onclick={() => (showReceiveQr = true)}
+                ><img
+                  src={receiveQr}
+                  alt={translate($locale, 'QR code for the receive descriptor')}
+                /></button
+              >{:else}<small
                 >{translate(
                   $locale,
                   'QR unavailable for this descriptor size. Use the downloaded file.'
@@ -530,3 +547,21 @@
       <Button href="/multisig">{translate($locale, 'Return to wallet')}</Button>
     </section>{/if}
 </div>
+
+<Modal
+  open={showReceiveQr && Boolean(receiveQr)}
+  title={translate($locale, 'Receive descriptor QR')}
+  description={translate(
+    $locale,
+    'Public watch-only descriptor. Anyone who sees it can follow this wallet’s addresses.'
+  )}
+  onclose={() => (showReceiveQr = false)}
+  >{#if receiveQr}<div class="large-qr descriptor-qr-modal">
+      <img src={receiveQr} alt={translate($locale, 'Large QR code for the receive descriptor')} />
+      <Button
+        variant="secondary"
+        onclick={() => wallet && copyDescriptor(wallet.externalDescriptor, 'Receive')}
+        ><Copy size={15} />{translate($locale, 'Copy receive descriptor')}</Button
+      >
+    </div>{/if}</Modal
+>
