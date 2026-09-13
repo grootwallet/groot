@@ -28,9 +28,13 @@ None of this older-build evidence transfers to the corrected candidate.
 The later owner-operated internal `v0.4.94 · 4630bf95` Mainnet checkpoint
 records Mk4 policy-file import acknowledgement, exact Nova and Nano S Plus
 policy verification, and a labeled first receive address matched on the Nano
-S Plus. Nova and Mk4 display of that saved receive address, funded lifecycle,
-restart, recovery, and independent review remain open. The Mk4 acknowledgement
-must not be equated with an interactive first-address proof. See the same
+S Plus. On the still later internal `v0.4.94 · e9b9c3c2` build, the owner
+reported the same saved receive address matched independently on the Mk4,
+Nova, and Nano S Plus, followed by a visible unconfirmed deposit and retained
+Core-backed wallet state after restart/unlock. Confirmation, a Mainnet 2-of-3
+spend, clean-profile recovery, and independent review remain open. The Mk4
+policy-file acknowledgement must not be equated with an interactive policy
+proof. See the same
 [sanitized Mainnet checkpoint](hardware-certification-mainnet-2026-09-12.md);
 these results do not certify other device models or later packages.
 

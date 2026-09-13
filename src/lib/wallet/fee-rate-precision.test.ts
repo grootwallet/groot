@@ -15,10 +15,10 @@ describe('normal payment fee-rate precision', () => {
   it('sends exact decimal text across every native payment boundary', () => {
     expect(tauriAdapter.match(/feeRate: String\(feeRate\)/g)?.length).toBeGreaterThanOrEqual(8);
     expect(transactionCommands).toMatch(
-      /pub fn tx_prepare\([\s\S]*?fee_rate: String,[\s\S]*?validate_fee_rate\(&fee_rate\)/
+      /pub async fn tx_prepare\([\s\S]*?fee_rate: String,[\s\S]*?validate_fee_rate\(&fee_rate\)/
     );
     expect(transactionCommands).toMatch(
-      /pub fn tx_max_spend\([\s\S]*?fee_rate: String,[\s\S]*?validate_fee_rate\(&fee_rate\)/
+      /pub async fn tx_max_spend\([\s\S]*?fee_rate: String,[\s\S]*?validate_fee_rate\(&fee_rate\)/
     );
     for (const command of [
       'multisig_tx_prepare',

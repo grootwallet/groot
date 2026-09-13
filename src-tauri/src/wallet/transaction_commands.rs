@@ -49,15 +49,30 @@ pub fn tx_proposal_cancel(
 }
 
 #[tauri::command]
-pub fn tx_prepare(
+pub async fn tx_prepare(
     app: AppHandle,
-    state: State<'_, AppState>,
     recipient: String,
     labels: Vec<String>,
     amount: u64,
     fee_rate: String,
     coin_selection: CoinSelectionInput,
 ) -> ApiResult<PaymentProposalDto> {
+    tauri::async_runtime::spawn_blocking(move || {
+        tx_prepare_blocking(app, recipient, labels, amount, fee_rate, coin_selection)
+    })
+    .await
+    .map_err(internal)?
+}
+
+fn tx_prepare_blocking(
+    app: AppHandle,
+    recipient: String,
+    labels: Vec<String>,
+    amount: u64,
+    fee_rate: String,
+    coin_selection: CoinSelectionInput,
+) -> ApiResult<PaymentProposalDto> {
+    let state = app.state::<AppState>();
     let _operation = operation_guard(&state)?;
     require_unlocked(&app, &state)?;
     let context = diagnostics::DiagnosticContext {
@@ -252,13 +267,26 @@ pub fn tx_prepare(
 }
 
 #[tauri::command]
-pub fn tx_max_spend(
+pub async fn tx_max_spend(
     app: AppHandle,
-    state: State<'_, AppState>,
     recipient: String,
     fee_rate: String,
     coin_selection: CoinSelectionInput,
 ) -> ApiResult<MaxSpendDto> {
+    tauri::async_runtime::spawn_blocking(move || {
+        tx_max_spend_blocking(app, recipient, fee_rate, coin_selection)
+    })
+    .await
+    .map_err(internal)?
+}
+
+fn tx_max_spend_blocking(
+    app: AppHandle,
+    recipient: String,
+    fee_rate: String,
+    coin_selection: CoinSelectionInput,
+) -> ApiResult<MaxSpendDto> {
+    let state = app.state::<AppState>();
     let _operation = operation_guard(&state)?;
     require_unlocked(&app, &state)?;
     let address = Address::from_str(recipient.trim())

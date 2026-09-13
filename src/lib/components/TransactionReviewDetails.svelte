@@ -118,14 +118,14 @@
     {/if}
     <div>
       <dt>{translate($locale, 'Inputs')}</dt>
-      <dd>
-        {proposal.inputs.length}{' · '}<Amount
+      <dd class="transaction-review-input-total">
+        <span>{proposal.inputs.length} ·</span><Amount
           value={proposal.inputs.reduce((sum, input) => sum + Number(input.amount), 0)}
           interactive={interactiveAmounts}
         />
       </dd>
     </div>
-    {#if inputPaths.length}<div>
+    {#if inputPaths.length}<div class="transaction-review-path-row">
         <dt>
           {translate($locale, 'Input')}
           {translate($locale, inputPaths.length === 1 ? 'path' : 'paths')}
@@ -138,7 +138,7 @@
       <dt>{translate($locale, 'Outputs')}</dt>
       <dd>{proposal.outputCount}</dd>
     </div>
-    {#if recipientPaths.length}<div>
+    {#if recipientPaths.length}<div class="transaction-review-path-row">
         <dt>
           {translate($locale, recipientPaths.length === 1 ? 'Receive path' : 'Receive paths')}
         </dt>
@@ -168,7 +168,7 @@
         </dd>
       </div>
     {/if}
-    {#if changePaths.length}<div>
+    {#if changePaths.length}<div class="transaction-review-path-row">
         <dt>
           {translate($locale, 'Change')}
           {translate($locale, changePaths.length === 1 ? 'path' : 'paths')}

@@ -3,6 +3,10 @@ import { describe, expect, it } from 'vitest';
 
 const appCss = readFileSync(new URL('../../app.css', import.meta.url), 'utf8');
 const amount = readFileSync(new URL('./Amount.svelte', import.meta.url), 'utf8');
+const reviewDetails = readFileSync(
+  new URL('./TransactionReviewDetails.svelte', import.meta.url),
+  'utf8'
+);
 const overview = readFileSync(new URL('../../routes/+page.svelte', import.meta.url), 'utf8');
 const singleSend = readFileSync(new URL('../../routes/send/+page.svelte', import.meta.url), 'utf8');
 const multisigSend = readFileSync(
@@ -11,6 +15,26 @@ const multisigSend = readFileSync(
 );
 
 describe('send review layout', () => {
+  it('gives derivation paths breathable separated rows and aligns the input total', () => {
+    expect(reviewDetails.match(/class="transaction-review-path-row"/g)?.length).toBe(3);
+    expect(reviewDetails).toContain('class="transaction-review-input-total"');
+    expect(appCss).toMatch(
+      /\.details-list > \.transaction-review-path-row\s*\{[^}]*padding-block: 12px/s
+    );
+    expect(appCss).toMatch(
+      /\.hardware-review-details > dl > \.transaction-review-path-row\s*\{[^}]*padding-block: 12px;[^}]*border-bottom:/s
+    );
+    expect(appCss).toMatch(/\.transaction-review-input-total\s*\{[^}]*align-items: baseline;/s);
+    expect(appCss).toMatch(/\.derivation-paths code\s*\{[^}]*font-size: 1em;/s);
+  });
+
+  it('coalesces manual coin previews while the amount changes in either send flow', () => {
+    for (const source of [singleSend, multisigSend]) {
+      expect(source).toContain('window.setTimeout(() => {');
+      expect(source).toContain('}, 200);');
+      expect(source).toContain('return () => window.clearTimeout(timer);');
+    }
+  });
   it('keeps the denomination separated from the amount', () => {
     expect(amount).toMatch(
       /\.formatted-amount\s*\{[^}]*display: inline-flex;[^}]*align-items: baseline;/s

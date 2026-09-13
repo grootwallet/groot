@@ -288,6 +288,13 @@ pruned-history block heights, and the matching recovery-error presentation does 
 change descriptor derivation, recovery inputs, scanning semantics, transaction data,
 or any BIP support/evidence and therefore likewise has no BIP impact.
 
+The 2026-09-13 Mainnet send-responsiveness and review-spacing follow-up has no
+BIP support or interoperability impact. It moves existing PSBT preparation,
+maximum-spend quoting, and coin-selection previews off the native UI thread,
+coalesces renderer preview requests during amount edits, and changes only
+review-row presentation. PSBT construction, fee selection rules, descriptors,
+signing, and protocol data are unchanged.
+
 Every feature, interoperability, signer, descriptor, transaction, payment request,
 backup/recovery, sync/backend, network, or dependency change must assess BIP impact.
 If it adds, removes, expands, narrows, or changes evidence for a BIP:

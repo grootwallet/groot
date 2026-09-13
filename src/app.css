@@ -3183,6 +3183,9 @@ code {
   align-items: center;
   gap: 28px;
 }
+.details-list > .transaction-review-path-row {
+  padding-block: 12px;
+}
 .details-list > .label-details-row {
   padding-block: 8px;
 }
@@ -6288,6 +6291,11 @@ code {
   gap: 12px;
   padding: 7px 0;
 }
+.hardware-review-details > dl > .transaction-review-path-row {
+  padding-block: 12px;
+  border-bottom: 1px solid var(--border);
+  align-items: center;
+}
 .hardware-review-details dt,
 .hardware-review-details dd {
   margin: 0;
@@ -6309,11 +6317,22 @@ code {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 3px;
+  gap: 5px;
+  line-height: 1.5;
 }
 .derivation-paths code {
   color: inherit;
-  font-size: inherit;
+  font-size: 1em;
+  font-weight: inherit;
+  line-height: inherit;
+}
+.transaction-review-input-total {
+  display: inline-flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 5px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 .hardware-inline-error {
   display: grid;

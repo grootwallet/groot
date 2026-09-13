@@ -283,14 +283,18 @@
       selectionPreview = null;
       return;
     }
-    void walletService
-      .previewCoinSelection(outpoints, sats(target))
-      .then((preview) => {
-        if (revision === selectionPreviewRevision) selectionPreview = preview;
-      })
-      .catch(() => {
-        if (revision === selectionPreviewRevision) selectionPreview = null;
-      });
+    selectionPreview = null;
+    const timer = window.setTimeout(() => {
+      void walletService
+        .previewCoinSelection(outpoints, sats(target))
+        .then((preview) => {
+          if (revision === selectionPreviewRevision) selectionPreview = preview;
+        })
+        .catch(() => {
+          if (revision === selectionPreviewRevision) selectionPreview = null;
+        });
+    }, 200);
+    return () => window.clearTimeout(timer);
   });
 
   let walletLoadError = $state('');

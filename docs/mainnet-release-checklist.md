@@ -60,12 +60,13 @@ require exact-candidate acceptance.
 The release owner approved seven desktop-USB model targets: Coldcard Mk4, Trezor Model One, Ledger Nano S Plus, original Bitcoin-only BitBox02, original Blockstream Jade Classic, Trezor Safe 3 Bitcoin-only, and BitBox02 Nova. Frozen firmware exists for Coldcard Mk4 5.6.1, original BitBox02 9.26.3, Jade Classic 1.0.40, Safe 3 2.12.3, and Nova 9.26.3. The release owner has declared Trezor Model One firmware 1.14.1 and Ledger Nano S Plus firmware 1.6.1 with Bitcoin app 2.5.0 as release-target versions; these declarations are not physical certification evidence. HWI is pinned to 3.2.0. The trusted future-mainnet boundary rejects unlisted families and exact-model identifiers outside the approved Ledger, Trezor, and Bitcoin-only BitBox set. ADR 0054 deliberately also admits only HWI's exact `coldcard`/`coldcard` and `jade`/`jade` family records because HWI cannot identify Mk4 and Jade Classic more narrowly. New hardware-wallet creation still requires recent live-HWI admission bound to the exact public account identity. Physical and release evidence remains specific to Mk4 and Jade Classic and is not inherited by other family models. Release notes must disclose the family-level runtime boundary. No BLE, QR, NFC, or unlisted family inherits USB evidence.
 
 The owner-operated internal Mainnet `4630bf95` checkpoint confirms three
-separate policy states for a Mk4 + Nano S Plus + Nova coordinator and one
-permanently labeled first receive-address match on the Nano S Plus. It does
-not close any checklist box: the Mk4 status is a manual policy-file
-acknowledgement, the Nova and Mk4 saved receive-address checks remain open,
-and the funded, recovery, exact signed-candidate, and independent-review rows
-still need their own evidence. See the
+separate policy states for a Mk4 + Nano S Plus + Nova coordinator. On exact
+`e9b9c3c2`, the owner reported the same permanently labeled first receive
+address matched on all three trusted displays, saved Core-backed wallet state
+after restart/unlock, and a small unconfirmed deposit observed. This does not
+close any checklist box: the Mk4 status is a manual policy-file acknowledgement,
+not an interactive policy proof; confirmation, a 2-of-3 Mainnet spend, recovery,
+exact signed-candidate repetition, and independent review remain open. See the
 [sanitized Mainnet checkpoint](hardware-certification-mainnet-2026-09-12.md).
 
 - [ ] Coldcard Mk4 certification record complete and sanitized summary reviewed.

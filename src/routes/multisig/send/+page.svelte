@@ -391,14 +391,18 @@
       selectionPreview = null;
       return;
     }
-    void walletService
-      .previewMultisigCoinSelection(outpoints, sats(target))
-      .then((preview) => {
-        if (revision === selectionPreviewRevision) selectionPreview = preview;
-      })
-      .catch(() => {
-        if (revision === selectionPreviewRevision) selectionPreview = null;
-      });
+    selectionPreview = null;
+    const timer = window.setTimeout(() => {
+      void walletService
+        .previewMultisigCoinSelection(outpoints, sats(target))
+        .then((preview) => {
+          if (revision === selectionPreviewRevision) selectionPreview = preview;
+        })
+        .catch(() => {
+          if (revision === selectionPreviewRevision) selectionPreview = null;
+        });
+    }, 200);
+    return () => window.clearTimeout(timer);
   });
   function clearDraftError() {
     error = '';

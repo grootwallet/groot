@@ -6137,31 +6137,39 @@ fn fee_difference(fee: u64, private_fee: Option<u64>) -> ApiResult<Option<i64>> 
 }
 
 #[tauri::command]
-pub fn coin_selection_preview(
+pub async fn coin_selection_preview(
     app: AppHandle,
-    state: State<'_, AppState>,
     outpoints: Vec<String>,
     amount: u64,
 ) -> ApiResult<CoinSelectionPreviewDto> {
-    let _operation = operation_guard(&state)?;
-    require_unlocked(&app, &state)?;
-    let mut db = open_db(&app)?;
-    let wallet = load_wallet(&mut db)?;
-    manual_selection_preview(&db, &wallet, &outpoints, amount)
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let _operation = operation_guard(&state)?;
+        require_unlocked(&app, &state)?;
+        let mut db = open_db(&app)?;
+        let wallet = load_wallet(&mut db)?;
+        manual_selection_preview(&db, &wallet, &outpoints, amount)
+    })
+    .await
+    .map_err(internal)?
 }
 
 #[tauri::command]
-pub fn multisig_coin_selection_preview(
+pub async fn multisig_coin_selection_preview(
     app: AppHandle,
-    state: State<'_, AppState>,
     outpoints: Vec<String>,
     amount: u64,
 ) -> ApiResult<CoinSelectionPreviewDto> {
-    let _operation = operation_guard(&state)?;
-    require_unlocked(&app, &state)?;
-    let mut db = open_multisig_db(&app)?;
-    let wallet = load_wallet(&mut db)?;
-    manual_selection_preview(&db, &wallet, &outpoints, amount)
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let _operation = operation_guard(&state)?;
+        require_unlocked(&app, &state)?;
+        let mut db = open_multisig_db(&app)?;
+        let wallet = load_wallet(&mut db)?;
+        manual_selection_preview(&db, &wallet, &outpoints, amount)
+    })
+    .await
+    .map_err(internal)?
 }
 
 #[path = "wallet/multisig_proposal_commands.rs"]

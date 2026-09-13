@@ -149,3 +149,26 @@ and independent clean-profile public-backup recovery. The exact replacement
 build must first pass its own spinner and policy-copy UI checks; none of the
 physical `4630bf95` outcomes automatically transfer to it. Mainnet GA remains
 blocked by the release checklist.
+
+## 2026-09-13 exact `e9b9c3c` owner-operated receive checkpoint
+
+The release owner tested the internal Mainnet app displaying `v0.4.94 ·
+e9b9c3c2`. The same saved, permanently labeled multisig receive address was
+independently compared on the Nano S Plus, Mk4, and Nova trusted displays and
+reported matching on all three. The owner also confirmed the saved policy and
+Core-backed wallet state after restart and unlock. A small deposit sent from
+another Groot single-key wallet appeared in the 2-of-3 coordinator as
+unconfirmed. This proves Mainnet receive observation for this exact build; it
+does **not** prove confirmation, multisig spending, fee correctness, recovery,
+or broader model certification. Exact addresses, keys, fingerprints, and
+transaction identifiers remain out of this checkpoint.
+
+During the source-wallet send, the owner observed a macOS beachball while
+entering the amount, selecting a fee, and preparing the PSBT. The detailed
+transaction review also compressed three derivation paths and misaligned the
+input count with its satoshi total. These are implementation follow-ups, not
+physical passes. The replacement build must be checked for responsiveness
+under repeated amount/fee changes and for readable review rows on both
+confirmation and signing screens. Continue with on-chain confirmation, then
+the planned 2-of-3 spend, failure/rejection, restart/accounting, and
+clean-profile recovery checks. Mainnet GA remains blocked.
