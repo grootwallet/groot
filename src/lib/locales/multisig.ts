@@ -593,6 +593,11 @@ export const multisigCopy = {
   Add: { fr: 'Ajouter', es: 'Añadir' },
   'Add key': { fr: 'Ajouter une clé', es: 'Añadir clave' },
   'Back to policy': { fr: 'Retour à la politique', es: 'Volver a la política' },
+  'Open Policy': { fr: 'Ouvrir la politique', es: 'Abrir la política' },
+  'Verify the signer policies, then return to create this labeled address.': {
+    fr: 'Vérifiez les politiques des signataires, puis revenez créer cette adresse étiquetée.',
+    es: 'Verifica las políticas de los firmantes y vuelve para crear esta dirección etiquetada.'
+  },
   'Back to signers': { fr: 'Retour aux signataires', es: 'Volver a los firmantes' },
   'Back to verification': { fr: 'Retour à la vérification', es: 'Volver a la verificación' },
   'BACK UP': { fr: 'SAUVEGARDE', es: 'COPIA DE SEGURIDAD' },

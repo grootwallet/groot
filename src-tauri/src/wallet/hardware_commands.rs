@@ -119,22 +119,6 @@ fn require_hardware_admission_for_network(
     }
 }
 
-pub(super) fn require_mainnet_cosigner_admissions(
-    state: &AppState,
-    cosigners: &[crate::multisig::CosignerInput],
-) -> ApiResult<()> {
-    for cosigner in cosigners {
-        require_mainnet_hardware_admission(
-            state,
-            &cosigner.fingerprint,
-            &cosigner.xpub,
-            &cosigner.derivation_path,
-            cosigner.device_type.as_deref(),
-        )?;
-    }
-    Ok(())
-}
-
 pub(super) fn reconcile_mainnet_recovery_cosigners(
     state: &AppState,
     cosigners: &[crate::multisig::CosignerInput],

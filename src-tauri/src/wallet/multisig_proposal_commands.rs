@@ -1054,7 +1054,8 @@ pub async fn multisig_create(
         let _admission_cleanup = clear_new_wallet_admission_on_exit(&state);
         validate_credential(credential.as_str())?;
         reject_virtual_cosigners(&policy.cosigners)?;
-        hardware_commands::require_mainnet_cosigner_admissions(&state, &policy.cosigners)?;
+        // An offline, watch-only coordinator does not need a short-lived HWI
+        // admission. Mainnet receive remains gated on durable device evidence.
         let preview = policy.preview().map_err(policy_api_error)?;
         let coldcard_registered =
             multisig_setup_commands::coldcard_registration_for_preview(&app, &preview)?;

@@ -1325,6 +1325,11 @@ pub fn multisig_address_create(
     let _operation = operation_guard(&state)?;
     require_unlocked(&app, &state)?;
     let labels = normalize_labels(labels)?;
+    let metadata = read_multisig_metadata(&app)?;
+    let db = open_multisig_db(&app)?;
+    let verifications = signer_policy_verification_rows(&db)?;
+    require_multisig_receive_readiness(NETWORK, &metadata, &verifications)?;
+    drop(db);
     let label = labels[0].clone();
     let mut db = open_multisig_db(&app)?;
     let mut transaction = db.transaction().map_err(internal)?;

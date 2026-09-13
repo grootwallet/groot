@@ -4647,6 +4647,64 @@ fn coldcard_policy_acknowledgement_is_distinct_from_address_evidence() {
 }
 
 #[test]
+fn mainnet_receive_requires_a_verified_spendable_quorum_and_coldcard_import() {
+    let mut wallet = descriptor_backup().wallet;
+    wallet.cosigners[0].device_type = Some("ledger".to_owned());
+    wallet.cosigners[1].device_type = Some("bitbox02".to_owned());
+    wallet.cosigners[2].device_type = Some("coldcard".to_owned());
+    wallet.cosigners[3].device_type = Some("trezor".to_owned());
+    let first_address = first_multisig_address(&wallet).unwrap();
+    let evidence = |index: usize, address: &str| SignerPolicyVerificationDto {
+        signer_fingerprint: wallet.cosigners[index].fingerprint.clone(),
+        device_type: wallet.cosigners[index].device_type.clone().unwrap(),
+        verified_at: "1".to_owned(),
+        scope: "policy_and_address",
+        displayed_address: Some(address.to_owned()),
+    };
+    let coldcard_import = SignerPolicyVerificationDto {
+        signer_fingerprint: wallet.cosigners[2].fingerprint.clone(),
+        device_type: "coldcard".to_owned(),
+        verified_at: "1".to_owned(),
+        scope: "policy_file_acknowledgement",
+        displayed_address: None,
+    };
+    assert!(require_multisig_receive_readiness(Network::Regtest, &wallet, &[]).is_ok());
+    assert!(require_multisig_receive_readiness(Network::Bitcoin, &wallet, &[]).is_err());
+    assert!(require_multisig_receive_readiness(
+        Network::Bitcoin,
+        &wallet,
+        &[evidence(0, &first_address), coldcard_import.clone()]
+    )
+    .is_err());
+    assert!(require_multisig_receive_readiness(
+        Network::Bitcoin,
+        &wallet,
+        &[evidence(0, &first_address), evidence(1, &first_address)]
+    )
+    .is_err());
+    assert!(require_multisig_receive_readiness(
+        Network::Bitcoin,
+        &wallet,
+        &[
+            evidence(0, &first_address),
+            evidence(1, &first_address),
+            coldcard_import.clone()
+        ]
+    )
+    .is_ok());
+    assert!(require_multisig_receive_readiness(
+        Network::Bitcoin,
+        &wallet,
+        &[
+            evidence(0, &first_address),
+            evidence(1, "bc1qwrong"),
+            coldcard_import
+        ]
+    )
+    .is_err());
+}
+
+#[test]
 fn coldcard_policy_acknowledgement_accepts_recognized_and_legacy_file_imports() {
     let signer = |source, device_type: Option<&str>| CosignerInput {
         id: "signer".to_owned(),

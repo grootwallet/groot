@@ -67,15 +67,20 @@ flowchart LR
 
 ## Trust boundary
 
-Mainnet new-wallet hardware admission is memory-only and bound to the exact live
-HWI device family, fingerprint, account xpub, and derivation path. Device
-discovery invalidates only opaque scan capabilities; it preserves the other
-still-valid exact admissions within one multisig setup. A successful live
-policy/address proof renews only the signer it just proved. Leaving setup,
-explicit cancellation, app restart, and expiry clear admissions. Final
-creation rechecks every identity, so preservation never lets renderer metadata,
-a substituted xpub, or an expired
-proof cross the trusted boundary.
+Mainnet HWI import admission is memory-only and bound to the exact live family,
+fingerprint, account xpub, and derivation path. Device discovery invalidates
+only opaque scan capabilities and preserves other still-valid admissions in a
+multisig draft. A live policy/address proof renews only that signer. Leaving
+setup, cancellation, restart, and expiry clear admissions. Standard multisig
+creation may nevertheless commit a validated **watch-only** profile from its
+public saved draft: no transient admission is interpreted as durable proof.
+Rust gates newly issued Mainnet multisig receive addresses on a threshold of
+persisted, descriptor-matching interactive policy/first-address proofs and all
+Coldcard file-import acknowledgements; unsupported quorums fail closed. The
+existing live-admission rule remains for external-signer creation and Mainnet
+recovery import. Public descriptor export still permits out-of-app address
+derivation, so the in-app receive gate does not replace independent device
+comparison. See ADR 0065.
 
 The webview may receive addresses, balances, transactions, UTXOs, public descriptors, public cosigner metadata, PSBT summaries, and status events. It must never receive a generated, re-presented, or recovered mnemonic, seed, extended private key, private descriptor, or decrypted signing material. Production onboarding displays generated words through a platform-native backup sheet attached to the Groot window and the command returns no secret. Deferred backup re-presentation requires fresh authentication, decrypts in Rust, reuses the native privacy gate and backup sheet, and returns only whether the subsequent native proof succeeded. Software recovery likewise collects the 24 words in a native sheet and passes them directly to Rust wallet construction; platforms without that native boundary fail closed. Browser-only deterministic fixtures are the explicit test exception.
 

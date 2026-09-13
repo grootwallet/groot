@@ -52,6 +52,7 @@
   let busy = $state(false);
   let ready = $state(false);
   let generateError = $state('');
+  let policyVerificationNeeded = $state(false);
   let showGenerate = $state(false);
   let showDiscard = $state(false);
   let showQr = $state(false);
@@ -143,6 +144,7 @@
     if (busy || !ready || !submissionLabels.length) return;
     busy = true;
     generateError = '';
+    policyVerificationNeeded = false;
     try {
       current = await walletService.createMultisigAddress(submissionLabels);
       addresses = [current, ...addresses];
@@ -162,6 +164,8 @@
         tone: 'success'
       });
     } catch (cause) {
+      policyVerificationNeeded =
+        cause instanceof WalletError && cause.code === 'hardware_not_approved';
       generateError = localizedError(cause, $locale, 'Could not generate the address.');
       toast({ title: 'Could not generate address', description: generateError, tone: 'danger' });
     } finally {
@@ -439,6 +443,15 @@
       }}
     />
     {#if generateError}<p class="form-error" role="alert">{generateError}</p>{/if}
+    {#if policyVerificationNeeded && generateError}<div class="privacy-note">
+        <p>
+          {translate(
+            $locale,
+            'Verify the signer policies, then return to create this labeled address.'
+          )}
+        </p>
+        <Button variant="secondary" href="/multisig">{translate($locale, 'Open Policy')}</Button>
+      </div>{/if}
     <div class="modal-footer">
       <Button
         variant="secondary"

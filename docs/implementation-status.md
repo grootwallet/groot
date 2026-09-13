@@ -1,13 +1,17 @@
 # Implementation status
 
-The added Mainnet multisig coordinator-PIN signer checklist and its native
-readiness/recheck endpoints have been removed. Device discovery still preserves
-other unexpired exact in-memory approvals from initial import and policy
-verification, correcting the scan lifecycle bug without an extra setup step.
-Existing Mainnet final-creation admission remains in force. A draft reopened
-after app restart has only public signer metadata, not live approvals, so its
-restart behavior remains unresolved pending an explicit security-policy choice.
-No persisted format changed and no physical certification evidence transfers.
+The rejected Mainnet multisig coordinator-PIN live-signer checklist remains
+removed. Standard multisig creation no longer depends on a 15-minute
+process-memory HWI admission, so a validated saved draft can become an offline
+watch-only coordinator after restart. Rust now rejects a new Mainnet multisig
+receive address until at least the spending threshold has durable matching
+interactive policy/first-address proof and each Coldcard policy file has its
+separate acknowledgement. The receive form links an unmet gate to Policy.
+Trezor and Coldcard cannot count toward the interactive quorum in this candidate;
+such signer combinations remain receive-blocked until a reviewed device path
+exists. External-signer and recovery admission are unchanged. No persisted
+format changes or physical certification evidence transfer; exact packaged
+restart/resume and funding tests are still required (ADR 0065).
 
 The 2026-09-12 hardware follow-up corrects two Mainnet-candidate blockers found
 on older internal build `v0.4.94 · 27f821be`. HWI 3.2.0 identifies Trezor Safe 3

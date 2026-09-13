@@ -245,6 +245,68 @@ pub(super) fn has_coldcard_policy_acknowledgement(
         })
 }
 
+/// A Mainnet coordinator may be stored before its signers are available, but
+/// Groot must not hand out receive addresses until a spendable quorum has
+/// proved the complete descriptor's first address on trusted devices. Every
+/// Coldcard in the policy must also have its separate policy-file acknowledgement.
+pub(super) fn require_multisig_receive_readiness(
+    network: Network,
+    wallet: &MultisigWalletDto,
+    verifications: &[SignerPolicyVerificationDto],
+) -> ApiResult<()> {
+    if network != Network::Bitcoin {
+        return Ok(());
+    }
+    let first_address = first_multisig_address(wallet)?;
+    let mut verified_signers = 0usize;
+    for signer in &wallet.cosigners {
+        let Some(device_type) = signer.device_type.as_deref() else {
+            return Err(api_error(
+                "hardware_not_approved",
+                "Verify the wallet policy with enough saved hardware signers before receiving bitcoin.",
+            ));
+        };
+        if device_type.eq_ignore_ascii_case("coldcard") {
+            let imported = verifications.iter().any(|verification| {
+                verification.scope == "policy_file_acknowledgement"
+                    && verification
+                        .signer_fingerprint
+                        .eq_ignore_ascii_case(&signer.fingerprint)
+                    && verification.device_type.eq_ignore_ascii_case("coldcard")
+            });
+            if !imported {
+                return Err(api_error(
+                    "hardware_not_approved",
+                    "Import and acknowledge every Coldcard policy before receiving bitcoin.",
+                ));
+            }
+        }
+        let first_address_verified = verifications.iter().any(|verification| {
+            verification.scope == "policy_and_address"
+                && verification
+                    .signer_fingerprint
+                    .eq_ignore_ascii_case(&signer.fingerprint)
+                && verification.device_type.eq_ignore_ascii_case(device_type)
+                && verification
+                    .displayed_address
+                    .as_deref()
+                    .is_some_and(|address| {
+                        hardware_display_matches_expected_address(&first_address, address)
+                    })
+        });
+        if records_interactive_policy_verification(device_type) && first_address_verified {
+            verified_signers += 1;
+        }
+    }
+    if verified_signers < wallet.threshold {
+        return Err(api_error(
+            "hardware_not_approved",
+            "Verify the complete wallet policy and first address on enough hardware signers before receiving bitcoin.",
+        ));
+    }
+    Ok(())
+}
+
 pub(super) fn supports_coldcard_policy_acknowledgement(signer: &CosignerInput) -> bool {
     signer
         .device_type

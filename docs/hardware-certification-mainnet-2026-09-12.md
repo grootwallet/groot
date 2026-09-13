@@ -32,8 +32,9 @@ transaction identifier, or device path is retained here.
   memory-only admission. Subsequent device scans preserve other unexpired exact
   approvals gathered during the same setup, without an additional PIN-step
   signer checklist. Explicit cancellation, leaving setup, app restart, and the
-  15-minute timeout still clear admissions; final creation still requires every
-  fingerprint, BIP48 path, account xpub, and device family to match.
+  15-minute timeout still clear admissions. The earlier requirement to recheck
+  every admission at final creation was superseded by ADR 0065 after saved-draft
+  restart testing showed it could never survive a normal relaunch.
 - Shared dialogs are portaled to the document body while retaining the shared
   reference-counted scroll lock, preventing a nested identifier dialog from
   inheriting a transformed parent or creating a second partial backdrop.
@@ -60,6 +61,29 @@ transaction identifier, or device path is retained here.
    scroll, restored parent scroll, keyboard focus containment, and Escape/close.
 
 This checkpoint does not close any Mainnet distribution gate.
+
+## 2026-09-13 saved-draft follow-up (new source candidate; no physical pass yet)
+
+The 2026-09-12 correction above did not solve a draft reopened after Groot
+restarted: all memory-only admissions had expired by design. ADR 0065 now
+allows that public draft to create an offline watch-only coordinator without
+adding a PIN-page live-device checklist. Native Mainnet address creation is
+blocked until enough distinct Ledger/BitBox02/Jade signers have persisted an
+exact first-address policy proof to reach the spending threshold, and every
+Coldcard policy file has its separate acknowledgement. Coldcard and Trezor do
+not count toward that interactive quorum in this candidate. No signing,
+recovery, node, or device-specific certification evidence is inherited.
+
+The release owner must test the **same saved draft**, not only a fresh setup:
+close Groot at the coordinator PIN step, relaunch, resume, create with the PIN,
+and confirm the new wallet opens without rescanning merely for creation. Before
+the required policy proofs, attempt a labeled receive address and confirm the
+native denial plus Policy-page recovery action; after verifying Nano S Plus and
+Nova's complete first address and acknowledging the Mk4 policy, create and
+independently verify the first receive address. Repeat restart, sync, PSBT
+signing, recovery, and the ordinary wrong-device/wrong-network checks on the
+exact packaged commit. Do not fund the test wallet until the trusted displays
+match the intended descriptor and address.
 
 ## Reviewed source-policy snapshot
 

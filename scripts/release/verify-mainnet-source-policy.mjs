@@ -51,7 +51,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src-tauri/src/wallet/hardware_commands.rs',
-    'ac83ca03cf986d115d11fb9793f14307aba9e156f8aa595f74d4aa6ff73cb598'
+    '0d0462e8832ec3709a39a3374f40fa6581a69cb33f6e72911b9b6323072eef98'
   ],
   [
     'src-tauri/src/wallet/label_interchange.rs',
@@ -59,11 +59,11 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src-tauri/src/wallet/multisig_setup_commands.rs',
-    'f072edbc0417d19580f5c3f67140f329f70a7dd5cf39aa20bc0d8200f8233514'
+    '06c09bd4a8161d4c32af249815452abaa8215e1a13d04df4ede3a4a43eabc66d'
   ],
   [
     'src-tauri/src/wallet/multisig_proposal_commands.rs',
-    '308b39a4dc6ae19f3bda287dea6b665788a7a7fb82f5ea89ef25d6678b3a4a61'
+    'f7ffc59601ca81eb971d1fe7b7eeca747479b7ef16a105400689eed3765ff200'
   ],
   [
     'src-tauri/src/wallet/profile_commands.rs',
@@ -87,7 +87,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src-tauri/src/wallet/verification_evidence.rs',
-    '174dcb84686f4e4c7ae8707f9c79b659177ddc18851e4797fed5d1ca9b640b7c'
+    'faf67fac28c5dbd3fca75c1f4026b8c1061d6b656b61197c6f2c651e807c6b2f'
   ],
   [
     'src-tauri/tauri.mainnet.conf.json',

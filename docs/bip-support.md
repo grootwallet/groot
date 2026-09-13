@@ -1,10 +1,15 @@
 # Bitcoin Improvement Proposal support
 
-Removing the added coordinator-PIN signer checklist changes no BIP, derivation,
-descriptor, PSBT, or interoperability support. Sequential device scans preserve
-other unexpired BIP48 hardware admissions gathered during initial import or
-policy verification. No physical certification evidence transfers to this source
-candidate.
+ADR 0065 changes the timing of BIP48 standard multisig Mainnet admission in the
+isolated candidate: an offline public draft may become a watch-only coordinator
+after restart, but native address issuance requires a threshold of durable
+descriptor-matching policy/first-address proofs plus each Coldcard policy-file
+acknowledgement. It changes no BIP48 derivation, descriptor, PSBT, or backup
+format and adds no interoperability evidence. Trezor and Coldcard do not count
+as interactive-quorum proof in this HWI build, so affected combinations remain
+receive-blocked pending certification. The rejected coordinator-PIN signer
+checklist remains removed; sequential scans still preserve other unexpired
+initial-import admissions. No physical evidence transfers to this candidate.
 
 The 2026-09-12 hardware correction changes no BIP, descriptor, PSBT, backup, or
 persisted-wallet semantics. It corrects the HWI 3.2.0 Trezor Safe 3 protocol

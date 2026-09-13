@@ -231,14 +231,18 @@ Ledger policy and signing review initially shortens the first-address reference 
 
 ## Multisig coordinator
 
-In an isolated Mainnet candidate, each USB signer added to a new coordinator
-requires a recent memory-only admission bound to its live HWI family,
-fingerprint, BIP48 account xpub, and derivation path. Looking up or proving one
-saved signer during that same draft must not erase other still-valid exact
-admissions. A successful live policy registration and first-address proof
-renews only that signer. New-device discovery, wallet switch, lock, cancellation,
-expiry, and creation completion retain their existing fail-closed cleanup, and
-final creation revalidates every exact admission.
+In the isolated Mainnet candidate, a validated public BIP48 draft may create an
+offline watch-only coordinator even when its short-lived initial-import HWI
+admissions expired during a restart. Looking up or proving one saved signer
+during setup still must not erase other still-valid exact admissions. Before
+Groot issues a new labeled Mainnet multisig receive address, Rust requires
+descriptor-matching policy-and-first-address evidence from at least the
+spending threshold of distinct Ledger, BitBox02, or Jade signers and the saved
+policy-file acknowledgement of each Coldcard in the policy. Trezor and Coldcard
+do not count toward this durable interactive quorum in the current HWI build;
+unsupported Mainnet signer combinations remain receive-blocked pending a
+reviewed device-specific path. External-signer creation and recovery import
+retain their live-admission rules. See ADR 0065.
 
 1. User names the wallet and chooses a recommended 2-of-3 or 3-of-5 recipe, or opens advanced M-of-N controls within the safe v1 envelope of 2–7 signatures and 3–7 signers. Groot does not offer 1-of-N because one stolen key could spend alone; users who want one key should create a single-key wallet.
 2. Add each signer through a Rust hardware transport or import its master fingerprint and BIP48 account tpub through bounded mounted file/manual flows. Coldcard file import accepts its public **Export XPUB** JSON, including descriptor-style `p2wsh_desc` output, but rejects private material, mainnet xpubs, and noncanonical origins with an actionable re-export instruction. Air-gapped PSBT exchange supports bounded `crypto-psbt` UR v2 animation and camera scanning through Groot's bundled local decoder; text and file fallback remain available until every target platform is certified.
