@@ -1,6 +1,23 @@
 import type { CatalogSection } from './types';
 
 export const multisigCopy = {
+  'Check each saved signer on its device before setting the PIN. Live checks expire after 15 minutes and are not saved with the draft.':
+    {
+      fr: 'Vérifiez chaque signataire enregistré sur son appareil avant de définir le code PIN. Les vérifications expirent après 15 minutes et ne sont pas enregistrées avec le brouillon.',
+      es: 'Comprueba cada firmante guardado en su dispositivo antes de establecer el PIN. Las comprobaciones caducan a los 15 minutos y no se guardan con el borrador.'
+    },
+  'Live account key matches': {
+    fr: 'La clé de compte de l’appareil correspond',
+    es: 'La clave de cuenta del dispositivo coincide'
+  },
+  'Live check required': {
+    fr: 'Vérification de l’appareil requise',
+    es: 'Se requiere comprobar el dispositivo'
+  },
+  'The coordinator PIN becomes available after each saved signer passes a fresh device check.': {
+    fr: 'Le code PIN du coordinateur sera disponible après une nouvelle vérification de chaque signataire enregistré sur son appareil.',
+    es: 'El PIN del coordinador estará disponible cuando cada firmante guardado supere una nueva comprobación en su dispositivo.'
+  },
   'When the extra key can spend': {
     fr: 'Quand la clé supplémentaire peut dépenser',
     es: 'Cuándo puede gastar la clave adicional'

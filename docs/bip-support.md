@@ -1,5 +1,11 @@
 # Bitcoin Improvement Proposal support
 
+The resumed-draft fix changes no BIP, derivation, descriptor, PSBT, or
+interoperability support. It retains the same BIP48 identity gate while letting
+each saved hardware signer renew its memory-only admission through a fresh exact
+device check. Sequential scans no longer erase other unexpired approvals. No
+physical certification evidence transfers to this new source candidate.
+
 The 2026-09-12 hardware correction changes no BIP, descriptor, PSBT, backup, or
 persisted-wallet semantics. It corrects the HWI 3.2.0 Trezor Safe 3 protocol
 model identifiers used by the existing Mainnet BIP84/BIP48 admission gate and

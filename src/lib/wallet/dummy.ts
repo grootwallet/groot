@@ -1219,6 +1219,14 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
     this._trezorPinUnlocked = true;
   }
   async cancelHardwareOperations(_preserveMainnetAdmission = false) {}
+  async reapproveMultisigDraftSigner(signerId: string, deviceId: string) {
+    const signer = this.multisigSetupDraftValue?.cosigners.find((entry) => entry.id === signerId);
+    if (!signer) throw new WalletError('unknown_signer', 'The saved signer is not available.');
+    return this.checkHardwareCosigner(signer, deviceId);
+  }
+  async multisigDraftMissingAdmissions() {
+    return [];
+  }
   async checkHardwareCosigner(cosigner: PolicyDraft['cosigners'][number], deviceId: string) {
     await new Promise((resolve) => setTimeout(resolve, 200));
     const checkedAt = new Date().toISOString();

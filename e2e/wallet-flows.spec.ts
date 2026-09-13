@@ -895,11 +895,12 @@ test('creates an external-signer wallet, signs by cable, and configures its isol
     identifierDialog.getByRole('button', { name: 'Copy exact Descriptor' })
   ).toBeVisible();
   await identifierDialog.getByRole('button', { name: 'Close' }).click();
+  await expect(identifierDialog).not.toBeVisible();
   const descriptorDownload = page.waitForEvent('download');
   await descriptorDialog.getByRole('button', { name: 'Save descriptor' }).click();
   await expect((await descriptorDownload).suggestedFilename()).toBe('groot-hardware-wallet.json');
   await expect(page.getByText('Descriptor backup saved', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Close' }).click();
+  await descriptorDialog.getByRole('button', { name: 'Close' }).click();
   await page.getByRole('button', { name: /Fee and broadcast node/ }).click();
   await page.getByRole('button', { name: 'Remote TLS' }).click();
   await page.getByLabel('RPC URL').fill('https://regtest-node.example:18443');

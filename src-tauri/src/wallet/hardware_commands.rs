@@ -135,6 +135,42 @@ pub(super) fn require_mainnet_cosigner_admissions(
     Ok(())
 }
 
+#[tauri::command]
+pub fn hardware_multisig_draft_missing_admissions(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> ApiResult<Vec<String>> {
+    let _operation = operation_guard(&state)?;
+    let cosigners = multisig_setup_commands::saved_multisig_setup_cosigners(&app)?;
+    missing_hardware_admissions_for_network(&state, NETWORK, &cosigners)
+}
+
+fn missing_hardware_admissions_for_network(
+    state: &AppState,
+    network: Network,
+    cosigners: &[crate::multisig::CosignerInput],
+) -> ApiResult<Vec<String>> {
+    if network != Network::Bitcoin {
+        return Ok(Vec::new());
+    }
+    let mut missing = Vec::new();
+    for signer in cosigners {
+        match require_hardware_admission_for_network(
+            state,
+            network,
+            &signer.fingerprint,
+            &signer.xpub,
+            &signer.derivation_path,
+            signer.device_type.as_deref(),
+        ) {
+            Ok(()) => (),
+            Err(error) if error.code == "hardware_not_approved" => missing.push(signer.id.clone()),
+            Err(error) => return Err(error),
+        }
+    }
+    Ok(missing)
+}
+
 pub(super) fn reconcile_mainnet_recovery_cosigners(
     state: &AppState,
     cosigners: &[crate::multisig::CosignerInput],
@@ -219,12 +255,12 @@ pub async fn hardware_cancel_operations(
         .map_err(internal)?
         .clear();
     *state.recent_hardware_scan.lock().map_err(internal)? = None;
-    state
-        .pending_hardware_admissions
-        .lock()
-        .map_err(internal)?
-        .clear();
     if preserve_mainnet_admission != Some(true) {
+        state
+            .pending_hardware_admissions
+            .lock()
+            .map_err(internal)?
+            .clear();
         clear_mainnet_node_admission(&state)?;
     }
     tauri::async_runtime::spawn_blocking(crate::hardware::cancel_hardware_operations_and_wait)
@@ -563,30 +599,12 @@ fn remember_discovered_hardware_devices(
 }
 
 fn forget_hardware_scan(state: &AppState) -> ApiResult<u64> {
-    forget_hardware_scan_with_admissions(state, true)
-}
-
-fn forget_hardware_scan_preserving_admissions(state: &AppState) -> ApiResult<u64> {
-    forget_hardware_scan_with_admissions(state, false)
-}
-
-fn forget_hardware_scan_with_admissions(
-    state: &AppState,
-    clear_hardware_admissions: bool,
-) -> ApiResult<u64> {
     let mut scans = state.recent_hardware_scan.lock().map_err(internal)?;
     let request_epoch = state
         .hardware_scan_epoch
         .fetch_add(1, Ordering::SeqCst)
         .wrapping_add(1);
     *scans = None;
-    if clear_hardware_admissions {
-        state
-            .pending_hardware_admissions
-            .lock()
-            .map_err(internal)?
-            .clear();
-    }
     Ok(request_epoch)
 }
 
@@ -737,7 +755,7 @@ pub async fn hardware_find_saved_device(
     // identity and perform its action under one exclusive native lease.
     // It must not erase the other exact live admissions collected for this
     // multisig setup; every admission remains identity-bound and time-bounded.
-    let request_epoch = forget_hardware_scan_preserving_admissions(&state)?;
+    let request_epoch = forget_hardware_scan(&state)?;
     let hwi = hwi_cli(&app)?;
     let requested_type = device_type.clone();
     let requested_fingerprint = fingerprint.clone();
@@ -1109,6 +1127,16 @@ mod targeted_scan_tests {
             SINGLESIG_ACCOUNT_PATH,
             Some("trezor")
         )
+        .is_ok());
+        state.pending_hardware_admissions.lock().unwrap().clear();
+        assert!(require_hardware_admission_for_network(
+            &state,
+            Network::Bitcoin,
+            "a1b2c3d4",
+            "approved-xpub",
+            SINGLESIG_ACCOUNT_PATH,
+            Some("trezor")
+        )
         .is_err());
     }
 
@@ -1127,7 +1155,7 @@ mod targeted_scan_tests {
             .unwrap();
         }
 
-        forget_hardware_scan_preserving_admissions(&state).unwrap();
+        forget_hardware_scan(&state).unwrap();
 
         for (fingerprint, xpub) in [("a1b2c3d4", "first-xpub"), ("deadbeef", "second-xpub")] {
             assert!(require_hardware_admission_for_network(
@@ -1149,6 +1177,57 @@ mod targeted_scan_tests {
             Some("ledger")
         )
         .is_err());
+    }
+
+    #[test]
+    fn resumed_draft_needs_fresh_exact_admissions_but_scans_keep_earlier_signers() {
+        use crate::multisig::{CosignerInput, CosignerSource};
+
+        let state = AppState::default();
+        let signers = ["first-xpub", "second-xpub"]
+            .into_iter()
+            .enumerate()
+            .map(|(index, xpub)| CosignerInput {
+                id: format!("signer-{index}"),
+                label: format!("Signer {index}"),
+                fingerprint: if index == 0 { "a1b2c3d4" } else { "deadbeef" }.into(),
+                xpub: xpub.into(),
+                derivation_path: crate::multisig::MULTISIG_ACCOUNT_PATH.into(),
+                source: CosignerSource::Usb,
+                device_type: Some("ledger".into()),
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            missing_hardware_admissions_for_network(&state, Network::Bitcoin, &signers).unwrap(),
+            ["signer-0", "signer-1"]
+        );
+        for signer in &signers {
+            forget_hardware_scan(&state).unwrap();
+            remember_hardware_admission_for_network(
+                &state,
+                Network::Bitcoin,
+                &signer.fingerprint,
+                &signer.xpub,
+                &signer.derivation_path,
+                signer.device_type.as_deref(),
+            )
+            .unwrap();
+        }
+        assert!(
+            missing_hardware_admissions_for_network(&state, Network::Bitcoin, &signers)
+                .unwrap()
+                .is_empty()
+        );
+        state.pending_hardware_admissions.lock().unwrap().clear();
+        assert_eq!(
+            missing_hardware_admissions_for_network(&state, Network::Bitcoin, &signers).unwrap(),
+            ["signer-0", "signer-1"]
+        );
+        assert!(
+            missing_hardware_admissions_for_network(&state, Network::Testnet4, &signers)
+                .unwrap()
+                .is_empty()
+        );
     }
 
     #[test]
@@ -1396,6 +1475,45 @@ pub async fn hardware_send_pin(
             ));
         }
         Ok(())
+    })
+    .await
+    .map_err(internal)?
+}
+
+#[tauri::command]
+pub async fn hardware_reapprove_multisig_draft_signer(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    signer_id: String,
+    device_id: String,
+) -> ApiResult<CosignerHealthDto> {
+    let hwi = hwi_cli(&app)?;
+    let device = recently_scanned_hardware_device(&state, &device_id)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let native_state = app.state::<AppState>();
+        let _wallet_operation = operation_guard(&native_state)?;
+        let signer = multisig_setup_commands::saved_multisig_setup_cosigners(&app)?
+            .into_iter()
+            .find(|saved| saved.id == signer_id)
+            .ok_or_else(unknown_hardware_signer)?;
+        let operation = hwi
+            .begin_interactive_operation()
+            .map_err(hardware_api_error)?;
+        let identity = prove_live_cosigner_identity(&hwi, &operation, &device, &signer)?;
+        complete_policy_verification_if_active(&operation, || {
+            remember_mainnet_hardware_admission(
+                &native_state,
+                &identity.fingerprint,
+                &signer.xpub,
+                &signer.derivation_path,
+                Some(&identity.device_type),
+            )?;
+            Ok(CosignerHealthDto {
+                status: "healthy",
+                checked_at: now().to_string(),
+                summary: "Signer matches the saved setup.".to_owned(),
+            })
+        })
     })
     .await
     .map_err(internal)?

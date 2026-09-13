@@ -15,7 +15,7 @@ const pinnedPolicySources = new Map([
   ['src-tauri/src/session.rs', '38b9faf9091ec5d379d2444418f7260d650a4cc151252571bb476a9426ddb19c'],
   ['.env.mainnet', '1623f3f97de588daea2bbeae1f9c56ebc896b6bc2c22ac238563b46b688ced85'],
   ['package.json', '2802bdb2222bd335951dbc890418cc034d829fa21928ad90d4add079825326f3'],
-  ['src-tauri/src/lib.rs', 'b3d1b6f04a5f5162e1debf7f42c78fb87fb1bea302765e0e3eb6de23d5acd538'],
+  ['src-tauri/src/lib.rs', 'fe412c55ba69ecf635329600a9601a25363d9535426eaf4e4ed119445b456ed4'],
   [
     'scripts/network/check-native-builds.sh',
     '82b8b5de52c786b2c6d18fb8da90fd32f32a8c4714a3ed02866e923c9e81db36'
@@ -51,7 +51,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src-tauri/src/wallet/hardware_commands.rs',
-    '0bc4bc6017bf06c7c8ba1bc193aafe8fecdbfd5d8227238d5d7400d0c43d996f'
+    '7dc34b24dd4602296ad261d67e5f5dbaf4154dfc7d937189f0defb8269033d8f'
   ],
   [
     'src-tauri/src/wallet/label_interchange.rs',
@@ -59,7 +59,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src-tauri/src/wallet/multisig_setup_commands.rs',
-    'f072edbc0417d19580f5c3f67140f329f70a7dd5cf39aa20bc0d8200f8233514'
+    '29a2106881bb75d3d54922a2a93ee1d709c2f57439386091ccf2db20e14810a8'
   ],
   [
     'src-tauri/src/wallet/multisig_proposal_commands.rs',
@@ -132,7 +132,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src/routes/multisig/new/+page.svelte',
-    'a57b626ebce6434ce8ffbeda7ffb403ed1ab614b1788d4bb287f09c92f982afc'
+    '6f3cdc08744882a50aafb70de9ce1a44c757c4324c0e5f193c9f786597e29609'
   ],
   [
     'src/lib/multisig/policy.ts',
