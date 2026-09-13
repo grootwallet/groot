@@ -68,15 +68,13 @@ flowchart LR
 ## Trust boundary
 
 Mainnet new-wallet hardware admission is memory-only and bound to the exact live
-HWI device family, fingerprint, account xpub, and derivation path. A device
+HWI device family, fingerprint, account xpub, and derivation path. Device
 discovery invalidates only opaque scan capabilities; it preserves the other
-still-valid exact admissions within one multisig setup. After restart, the saved
-public draft supplies the expected account identities but not approvals: the
-native recheck command reads the validated draft, proves each saved identity on
-the live device, and renews only that signer. Successful live policy/address
-proof also renews only the signer it just proved. Explicit cancellation outside
-setup and expiry clear admissions. Final creation rechecks every identity, so
-preservation never lets renderer metadata, a substituted xpub, or an expired
+still-valid exact admissions within one multisig setup. A successful live
+policy/address proof renews only the signer it just proved. Leaving setup,
+explicit cancellation, app restart, and expiry clear admissions. Final
+creation rechecks every identity, so preservation never lets renderer metadata,
+a substituted xpub, or an expired
 proof cross the trusted boundary.
 
 The webview may receive addresses, balances, transactions, UTXOs, public descriptors, public cosigner metadata, PSBT summaries, and status events. It must never receive a generated, re-presented, or recovered mnemonic, seed, extended private key, private descriptor, or decrypted signing material. Production onboarding displays generated words through a platform-native backup sheet attached to the Groot window and the command returns no secret. Deferred backup re-presentation requires fresh authentication, decrypts in Rust, reuses the native privacy gate and backup sheet, and returns only whether the subsequent native proof succeeded. Software recovery likewise collects the 24 words in a native sheet and passes them directly to Rust wallet construction; platforms without that native boundary fail closed. Browser-only deterministic fixtures are the explicit test exception.

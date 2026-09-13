@@ -51,17 +51,11 @@ describe('resumable multisig setup', () => {
     expect(draftBuilder).not.toContain('device.id');
   });
 
-  it('requires fresh native signer approval before accepting a Mainnet coordinator PIN', () => {
-    expect(setup).toContain('walletService.multisigDraftMissingAdmissions()');
-    expect(setup).toContain('walletService.reapproveMultisigDraftSigner(signer.id, device.id)');
-    expect(setup).toContain(
-      'admissionStatusReady && !admissionStatusError && missingAdmissionIds.length === 0'
-    );
-    expect(setup).toContain('saved && policyReadinessAcknowledged && liveSignersReady');
-    expect(setup).toContain(
-      'Live checks expire after 15 minutes and are not saved with the draft.'
-    );
-    expect(setup).toContain('Your wallet draft and backup remain intact.');
+  it('does not add another signer-check step before the coordinator PIN', () => {
+    expect(setup).not.toContain('walletService.multisigDraftMissingAdmissions()');
+    expect(setup).not.toContain('walletService.reapproveMultisigDraftSigner(signer.id, device.id)');
+    expect(setup).toContain('saved && policyReadinessAcknowledged');
+    expect(setup).not.toContain('Check each saved signer on its device before setting the PIN');
   });
 
   it('surfaces unfinished setup from the app shell with a direct app-level resume action', () => {

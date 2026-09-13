@@ -162,9 +162,6 @@
   let signerPendingRemoval = $state<CosignerDraft | null>(null);
   let checkingSigner = $state(false);
   let healthChecks = $state<Record<string, CosignerHealthCheck>>({});
-  let missingAdmissionIds = $state<string[]>([]);
-  let admissionStatusReady = $state(false);
-  let admissionStatusError = $state('');
   let source = $state<CosignerSource>('manual');
   let label = $state('');
   let fingerprint = $state('');
@@ -299,11 +296,7 @@
   const policyReadinessAcknowledged = $derived(
     !hasOptionalPolicySetup || policySetupComplete || policyVerificationDeferred
   );
-  const liveSignersReady = $derived(
-    defaultConfig.network !== 'mainnet' ||
-      (admissionStatusReady && !admissionStatusError && missingAdmissionIds.length === 0)
-  );
-  const pinAvailable = $derived(saved && policyReadinessAcknowledged && liveSignersReady);
+  const pinAvailable = $derived(saved && policyReadinessAcknowledged);
   const coldcardStep = 2;
   const interactivePolicyStep = $derived(coldcardRegistrationRequired ? 3 : 2);
   const pinStep = $derived(
@@ -485,9 +478,6 @@
     confirmation = '';
     error = '';
     createErrorTitle = '';
-    missingAdmissionIds = [];
-    admissionStatusReady = false;
-    admissionStatusError = '';
     draftSaveError = '';
     discardDraftError = '';
   }
@@ -531,7 +521,6 @@
         applySetupDraft(draft);
         await previewRestoredDraft(draft);
         hasDraft = true;
-        if (defaultConfig.network === 'mainnet') await refreshAdmissionStatus();
         toast({
           title: 'Multisig setup resumed',
           description: translate($locale, 'Returned to {stage}.', {
@@ -556,25 +545,6 @@
       draftReady = true;
     }
   });
-
-  onMount(() => {
-    const admissionTimer = window.setInterval(() => {
-      if (stage === 'backup' && defaultConfig.network === 'mainnet') void refreshAdmissionStatus();
-    }, 15_000);
-    return () => window.clearInterval(admissionTimer);
-  });
-
-  async function refreshAdmissionStatus() {
-    if (defaultConfig.network !== 'mainnet') return;
-    try {
-      missingAdmissionIds = await walletService.multisigDraftMissingAdmissions();
-      admissionStatusReady = true;
-      admissionStatusError = '';
-    } catch (cause) {
-      admissionStatusReady = false;
-      admissionStatusError = localizedError(cause, $locale, 'Could not check saved signers.');
-    }
-  }
 
   $effect(() => {
     if (!draftReady || discardingDraft) return;
@@ -825,11 +795,9 @@
           'hardware_unavailable',
           'This signer has no interactive USB device type.'
         );
-      await flushCurrentDraft();
       const device = await walletService.findSavedHardwareDevice(signer);
-      const result = await walletService.reapproveMultisigDraftSigner(signer.id, device.id);
+      const result = await walletService.checkHardwareCosigner(signer, device.id);
       healthChecks[signer.id] = result;
-      await refreshAdmissionStatus();
       toast({
         title: 'Signer verified',
         description: translate($locale, '{signerName} matches this wallet.', {
@@ -986,10 +954,6 @@
         allowEmptyPassphrase
       );
       if (!appendCosigner(candidate, (message) => (error = message))) return;
-      if (defaultConfig.network === 'mainnet') {
-        await flushCurrentDraft();
-        await refreshAdmissionStatus();
-      }
       hardwareOpen = false;
       standardWalletOpen = false;
       standardWalletDevice = null;
@@ -1251,11 +1215,6 @@
         createErrorTitle = 'Hardware verification needs attention';
         error =
           'Groot could not safely restore the saved verification. Open “Verify hardware signer policies” and verify the signer again.';
-      } else if (cause instanceof WalletError && cause.code === 'hardware_not_approved') {
-        createErrorTitle = 'Signer check expired';
-        error =
-          'Check each saved signer on its device again. Your wallet draft and backup remain intact.';
-        await refreshAdmissionStatus();
       } else {
         createErrorTitle = 'Wallet could not be created';
         error = localizedError(
@@ -1921,11 +1880,8 @@
       <div class="coordinator-actions">
         <Button variant="secondary" onclick={() => (stage = 'keys')}
           ><ArrowLeft size={16} />{translate($locale, 'Back to signers')}</Button
-        ><Button
-          onclick={() => {
-            stage = 'backup';
-            void refreshAdmissionStatus();
-          }}>{translate($locale, 'Continue to backup')}<ChevronRight size={16} /></Button
+        ><Button onclick={() => (stage = 'backup')}
+          >{translate($locale, 'Continue to backup')}<ChevronRight size={16} /></Button
         >
       </div>
     </section>
@@ -2120,40 +2076,8 @@
             'This PIN protects local Groot data. It is separate from every hardware-signer credential.'
           )}
           state={pinAvailable ? 'current' : 'upcoming'}
-          status={pinAvailable
-            ? 'Current step'
-            : saved && policyReadinessAcknowledged && defaultConfig.network === 'mainnet'
-              ? 'Check signers first'
-              : 'Available after earlier steps'}
+          status={pinAvailable ? 'Current step' : 'Available after earlier steps'}
         >
-          {#if defaultConfig.network === 'mainnet' && saved && policyReadinessAcknowledged}<div
-              class="signer-readiness-list"
-            >
-              <p>
-                {translate(
-                  $locale,
-                  'Check each saved signer on its device before setting the PIN. Live checks expire after 15 minutes and are not saved with the draft.'
-                )}
-              </p>
-              {#each cosigners as signer}<article
-                  class:complete={admissionStatusReady && !missingAdmissionIds.includes(signer.id)}
-                >
-                  <span><ShieldCheck size={17} /></span>
-                  <div>
-                    <strong>{signer.label}</strong><small
-                      >{admissionStatusReady && !missingAdmissionIds.includes(signer.id)
-                        ? translate($locale, 'Live account key matches')
-                        : translate($locale, 'Live check required')}</small
-                    >
-                  </div>
-                  <Button variant="secondary" size="small" onclick={() => (selectedSigner = signer)}
-                    >{translate($locale, 'Check signer')}</Button
-                  >
-                </article>{/each}
-              {#if admissionStatusError}<p class="form-error" role="alert">
-                  {admissionStatusError}
-                </p>{/if}
-            </div>{/if}
           <div class="credential-grid">
             <PasswordField
               label={translate($locale, 'App PIN')}
@@ -2196,20 +2120,11 @@
             ><small>{error}</small></span
           >
         </div>{/if}
-      {#if defaultConfig.network === 'mainnet' && !liveSignersReady && !admissionStatusError}<p
-          class="review-intro"
-        >
-          {translate(
-            $locale,
-            'The coordinator PIN becomes available after each saved signer passes a fresh device check.'
-          )}
-        </p>{/if}
       <Button
         class="full backup-create-action"
         size="large"
         disabled={!saved ||
           !policyReadinessAcknowledged ||
-          !liveSignersReady ||
           !credential ||
           credential !== confirmation}
         loading={busy}

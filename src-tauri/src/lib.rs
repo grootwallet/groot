@@ -141,8 +141,6 @@ pub fn run() {
             wallet::hardware_commands::hardware_prompt_pin,
             wallet::hardware_commands::hardware_send_pin,
             wallet::hardware_commands::hardware_check_cosigner,
-            wallet::hardware_commands::hardware_reapprove_multisig_draft_signer,
-            wallet::hardware_commands::hardware_multisig_draft_missing_admissions,
             wallet::hardware_commands::hardware_check_external_signer,
             wallet::hardware_commands::hardware_health_checks,
             wallet::hardware_commands::hardware_import_cosigner,

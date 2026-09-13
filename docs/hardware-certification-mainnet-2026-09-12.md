@@ -29,13 +29,10 @@ transaction identifier, or device path is retained here.
   Safe 3 revision identifiers `trezor_t2b1`/`trezor_t3b1`; other Trezor model
   identifiers remain rejected.
 - A successful live signer policy/address proof renews that exact signer's
-  memory-only admission. Saved-signer lookup scans preserve the other exact,
-  time-bounded admissions collected for the same draft. New-device discovery
-  also preserves those exact approvals so a resumed draft can recheck its saved
-  signers sequentially without repeating policy registration. The PIN step
-  lists the missing signers before accepting an app PIN. Explicit cancellation,
-  leaving setup, and the 15-minute timeout still clear admissions; final creation
-  still requires every
+  memory-only admission. Subsequent device scans preserve other unexpired exact
+  approvals gathered during the same setup, without an additional PIN-step
+  signer checklist. Explicit cancellation, leaving setup, app restart, and the
+  15-minute timeout still clear admissions; final creation still requires every
   fingerprint, BIP48 path, account xpub, and device family to match.
 - Shared dialogs are portaled to the document body while retaining the shared
   reference-counted scroll lock, preventing a nested identifier dialog from

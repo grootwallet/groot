@@ -1,15 +1,13 @@
 # Implementation status
 
-The resumed Mainnet multisig draft now requires fresh live checks of each saved
-signer before enabling the coordinator PIN. Native checks read exact validated
-signers from the saved draft, prove their complete BIP48 account identities on
-the connected devices, and issue only short-lived memory approvals. Sequential
-new-device scans retain still-valid approvals for the other signers; explicit
-cancellation, leaving setup, and expiry still remove them. A native readiness
-query drives the visible checklist while final creation independently rechecks
-the exact identities. The saved public draft, policy verification, descriptor,
-and PIN formats are unchanged; no migration is needed. This is a source-level
-fix awaiting packaged physical repetition, not a Mainnet certification pass.
+The added Mainnet multisig coordinator-PIN signer checklist and its native
+readiness/recheck endpoints have been removed. Device discovery still preserves
+other unexpired exact in-memory approvals from initial import and policy
+verification, correcting the scan lifecycle bug without an extra setup step.
+Existing Mainnet final-creation admission remains in force. A draft reopened
+after app restart has only public signer metadata, not live approvals, so its
+restart behavior remains unresolved pending an explicit security-policy choice.
+No persisted format changed and no physical certification evidence transfers.
 
 The 2026-09-12 hardware follow-up corrects two Mainnet-candidate blockers found
 on older internal build `v0.4.94 · 27f821be`. HWI 3.2.0 identifies Trezor Safe 3

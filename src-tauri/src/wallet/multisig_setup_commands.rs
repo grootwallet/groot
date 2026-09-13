@@ -70,25 +70,6 @@ fn multisig_setup_draft_path(app: &AppHandle) -> ApiResult<PathBuf> {
     Ok(app_data_dir(app)?.join("multisig-setup-draft.json"))
 }
 
-pub(super) fn saved_multisig_setup_cosigners(app: &AppHandle) -> ApiResult<Vec<CosignerInput>> {
-    let path = multisig_setup_draft_path(app)?;
-    if !path.exists() {
-        return Err(api_error(
-            "hardware_not_approved",
-            "No saved multisig setup is available.",
-        ));
-    }
-    let encoded = read_private_text(&path)?;
-    let draft: MultisigSetupDraft = serde_json::from_str(&encoded).map_err(|_| {
-        api_error(
-            "wallet_corrupt",
-            "The saved multisig setup is corrupt. Discard it and start again.",
-        )
-    })?;
-    validate_multisig_setup_draft(&draft)?;
-    Ok(draft.cosigners)
-}
-
 fn expected_setup_cosigners(draft: &MultisigSetupDraft) -> usize {
     match draft.template_kind {
         MultisigSetupTemplate::Recovery | MultisigSetupTemplate::Inheritance => 4,
