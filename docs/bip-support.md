@@ -331,6 +331,13 @@ command scheduling change without changing descriptors, transaction semantics,
 wallet formats, node admission, or interoperability evidence. The owner's
 connected-node report is not evidence of a completed remote wallet rescan.
 
+The subsequent remote-Core 99% follow-up also has no BIP support impact. It
+batches existing `getrawtransaction` reads during the same full mempool
+reconciliation and exposes only the last committed wallet state through
+read-only snapshots while that reconciliation runs. It changes no descriptor,
+transaction, recovery, node-admission, or standards behavior; the remote-node
+completion and packaged-user-interface outcome still require physical retest.
+
 Every feature, interoperability, signer, descriptor, transaction, payment request,
 backup/recovery, sync/backend, network, or dependency change must assess BIP impact.
 If it adds, removes, expands, narrows, or changes evidence for a BIP:

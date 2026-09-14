@@ -41,7 +41,7 @@ use std::{
     str::FromStr,
     sync::{
         atomic::{AtomicBool, AtomicU64, Ordering},
-        Arc, Mutex, MutexGuard,
+        Arc, Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard,
     },
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
@@ -102,6 +102,7 @@ pub(crate) mod activity;
 
 const MAX_PRIVATE_JSON_BYTES: u64 = 256 * 1024;
 const MAX_CREDENTIAL_BYTES: usize = 1_024;
+const MEMPOOL_RPC_BATCH_SIZE: usize = 32;
 const MIN_NEW_WALLET_PASSPHRASE_CHARACTERS: usize = 16;
 const MAX_MNEMONIC_INPUT_BYTES: usize = 4_096;
 const ONBOARDING_SESSION_SECONDS: u64 = 15 * 60;
@@ -295,6 +296,37 @@ fn operation_guard<'a>(state: &'a State<'_, AppState>) -> ApiResult<MutexGuard<'
     state.operations.lock().map_err(internal)
 }
 
+// A Core refresh stages its BDK update in memory until one SQLite commit. A
+// separate read-only connection can therefore show the last committed state
+// without waiting for remote RPC calls. Recovery scans and ordinary mutations
+// continue to use the operation lock.
+fn foreground_persisted_read_guard(
+    state: &AppState,
+    wallet_id: Uuid,
+) -> ApiResult<Option<RwLockReadGuard<'_, ()>>> {
+    let active = state.foreground_sync.lock().map_err(internal)?;
+    let safe = active.as_ref().is_some_and(|sync| {
+        sync.wallet_id == wallet_id && sync.persisted_reads_safe.load(Ordering::Acquire)
+    });
+    if safe {
+        Ok(Some(state.persisted_sync_reads.read().map_err(internal)?))
+    } else {
+        Ok(None)
+    }
+}
+
+fn stop_persisted_sync_reads(state: &AppState) -> ApiResult<RwLockWriteGuard<'_, ()>> {
+    {
+        let active = state.foreground_sync.lock().map_err(internal)?;
+        if let Some(sync) = active.as_ref() {
+            sync.persisted_reads_safe.store(false, Ordering::Release);
+        }
+    }
+    // Existing readers complete before the writer can apply its atomic update
+    // or release the ordinary wallet-operation lock.
+    state.persisted_sync_reads.write().map_err(internal)
+}
+
 fn require_unlocked_with_activity(
     app: &AppHandle,
     state: &State<'_, AppState>,
@@ -362,7 +394,8 @@ fn require_unlocked_for_background_sync(
     require_unlocked_with_activity(app, state, false)
 }
 
-// Call under operation_guard, before opening any selected-wallet database.
+// Call under operation_guard or the foreground persisted-read gate, before
+// opening any selected-wallet database.
 fn require_wallet_read_context(
     app: &AppHandle,
     state: &State<'_, AppState>,
@@ -431,6 +464,7 @@ fn lock_wallet(state: &State<'_, AppState>, wallet_id: Uuid) -> ApiResult<()> {
 pub struct AppState {
     operations: Mutex<()>,
     foreground_sync: Mutex<Option<ActiveForegroundSync>>,
+    persisted_sync_reads: RwLock<()>,
     proposals: Mutex<HashMap<String, PendingProposal>>,
     unlocked_wallets: Mutex<WalletSessions>,
     pending_mnemonic: Mutex<Option<PendingMnemonic>>,
@@ -620,6 +654,7 @@ struct ActiveRecoveryScan {
 struct ActiveForegroundSync {
     wallet_id: Uuid,
     cancel: Arc<AtomicBool>,
+    persisted_reads_safe: Arc<AtomicBool>,
 }
 
 struct NodeAuthSession {
@@ -2852,6 +2887,67 @@ fn retry_transient_core_rpc<T>(
 struct CancellableCoreClient<'a> {
     client: &'a Client,
     cancel: &'a AtomicBool,
+    mempool: Mutex<MempoolPrefetch>,
+}
+
+#[derive(Default)]
+struct MempoolPrefetch {
+    txids: Vec<Txid>,
+    positions: HashMap<Txid, usize>,
+    next: usize,
+    cached: HashMap<Txid, String>,
+    batch_supported: bool,
+}
+
+impl CancellableCoreClient<'_> {
+    fn prefetched_transaction(&self, txid: Txid) -> Option<String> {
+        let batch = {
+            let mut mempool = self.mempool.lock().ok()?;
+            if let Some(hex) = mempool.cached.remove(&txid) {
+                return Some(hex);
+            }
+            let &position = mempool.positions.get(&txid)?;
+            if !mempool.batch_supported || position < mempool.next {
+                return None;
+            }
+            // BDK walks the mempool in this order. Any results left from the
+            // preceding batch were already known to its snapshot and skipped.
+            mempool.cached.clear();
+            let end = (position + MEMPOOL_RPC_BATCH_SIZE).min(mempool.txids.len());
+            let batch = mempool.txids[position..end].to_vec();
+            mempool.next = end;
+            batch
+        };
+        if self.cancel.load(Ordering::Acquire) {
+            return None;
+        }
+        let jsonrpc = self.client.get_jsonrpc_client();
+        let params = batch
+            .iter()
+            .map(|id| serde_json::value::to_raw_value(&serde_json::json!([id.to_string(), false])))
+            .collect::<Result<Vec<_>, _>>()
+            .ok()?;
+        let requests = params
+            .iter()
+            .map(|params| jsonrpc.build_request("getrawtransaction", Some(params.as_ref())))
+            .collect::<Vec<_>>();
+        let responses = match jsonrpc.send_batch(&requests) {
+            Ok(responses) => responses,
+            Err(_) => {
+                if let Ok(mut mempool) = self.mempool.lock() {
+                    mempool.batch_supported = false;
+                }
+                return None;
+            }
+        };
+        let mut mempool = self.mempool.lock().ok()?;
+        for (id, response) in batch.into_iter().zip(responses) {
+            if let Some(Ok(hex)) = response.map(|response| response.result::<String>()) {
+                mempool.cached.insert(id, hex);
+            }
+        }
+        mempool.cached.remove(&txid)
+    }
 }
 
 impl RpcApi for CancellableCoreClient<'_> {
@@ -2865,6 +2961,33 @@ impl RpcApi for CancellableCoreClient<'_> {
                 std::io::ErrorKind::Interrupted,
                 "Wallet scan cancelled",
             )));
+        }
+        if command == "getrawmempool" && args.is_empty() {
+            let raw: serde_json::Value = self.client.call(command, args)?;
+            let txids: Vec<Txid> = serde_json::from_value(raw.clone())?;
+            if let Ok(mut mempool) = self.mempool.lock() {
+                *mempool = MempoolPrefetch {
+                    positions: txids.iter().enumerate().map(|(i, id)| (*id, i)).collect(),
+                    txids,
+                    batch_supported: true,
+                    ..Default::default()
+                };
+            }
+            return serde_json::from_value(raw).map_err(CoreRpcError::from);
+        }
+        if command == "getrawtransaction" && args.len() >= 2 {
+            if let Ok(txid) = serde_json::from_value::<Txid>(args[0].clone()) {
+                if let Some(hex) = self.prefetched_transaction(txid) {
+                    if self.cancel.load(Ordering::Acquire) {
+                        return Err(CoreRpcError::Io(std::io::Error::new(
+                            std::io::ErrorKind::Interrupted,
+                            "Wallet scan cancelled",
+                        )));
+                    }
+                    return serde_json::from_value(serde_json::Value::String(hex))
+                        .map_err(CoreRpcError::from);
+                }
+            }
         }
         self.client.call(command, args)
     }
@@ -3424,6 +3547,28 @@ fn open_multisig_db(app: &AppHandle) -> ApiResult<Connection> {
     init_app_schema(&db)?;
     compact_persisted_checkpoints(&mut db)?;
     validate_selected_wallet_database_identity(app, &mut db, WalletKind::Multisig)?;
+    Ok(db)
+}
+
+fn open_selected_db_for_persisted_read(app: &AppHandle, multisig: bool) -> ApiResult<Connection> {
+    let path = if multisig {
+        multisig_db_path(app)?
+    } else {
+        db_path(app)?
+    };
+    let permit = database_open_permit_for_selected_wallet(app)?;
+    let mut db = open_existing_wallet_database_read_only(&path, &permit)?;
+    // The foreground read gate prevents the writer's commit until this read
+    // finishes; BDK starts its own load transaction on this connection.
+    validate_selected_wallet_database_identity(
+        app,
+        &mut db,
+        if multisig {
+            WalletKind::Multisig
+        } else {
+            WalletKind::SingleKey
+        },
+    )?;
     Ok(db)
 }
 
@@ -5159,6 +5304,7 @@ fn run_foreground_sync(
 ) -> ApiResult<WalletSnapshotDto> {
     let wallet_id = require_unlocked_for_background_sync(app, state)?;
     let cancel = Arc::new(AtomicBool::new(false));
+    let persisted_reads_safe = Arc::new(AtomicBool::new(false));
     {
         let mut active = state.foreground_sync.lock().map_err(internal)?;
         if active.is_some() {
@@ -5170,6 +5316,7 @@ fn run_foreground_sync(
         *active = Some(ActiveForegroundSync {
             wallet_id,
             cancel: Arc::clone(&cancel),
+            persisted_reads_safe: Arc::clone(&persisted_reads_safe),
         });
     }
 
@@ -5207,14 +5354,18 @@ fn run_foreground_sync(
                 "Choose a wallet birthday before the first Bitcoin Core history scan.",
             ));
         }
-        sync_wallet_with_status(
+        let core_sync = matches!(read_sync_source(app)?, WalletSyncSource::BitcoinCore);
+        persisted_reads_safe.store(core_sync, Ordering::Release);
+        let result = sync_wallet_with_status(
             app,
             state,
             &mut db,
             multisig,
             wallet_id,
             Some(cancel.as_ref()),
-        )
+        );
+        let _readers = stop_persisted_sync_reads(state)?;
+        result
     })();
 
     if let Ok(mut active) = state.foreground_sync.lock() {
@@ -5296,6 +5447,7 @@ fn sync_wallet_with_core(
     let client = CancellableCoreClient {
         client: rpc.as_ref(),
         cancel: cancel.unwrap_or(&uncancelled),
+        mempool: Mutex::new(MempoolPrefetch::default()),
     };
     let mut emitter = Emitter::new(
         &client,
@@ -5336,6 +5488,7 @@ fn sync_wallet_with_core(
         target_height,
     );
     ensure_foreground_sync_not_cancelled(cancel)?;
+    let _readers = stop_persisted_sync_reads(state)?;
     let transaction = db.transaction().map_err(internal)?;
     mark_observed_addresses(&wallet, &transaction)?;
     label_provenance::reconcile_wallet_outputs(&wallet, &transaction, now()).map_err(internal)?;
@@ -5551,6 +5704,7 @@ fn full_rescan_loaded_wallet(
     let client = CancellableCoreClient {
         client: rpc.as_ref(),
         cancel,
+        mempool: Mutex::new(MempoolPrefetch::default()),
     };
     let mut emitter = Emitter::new(&client, checkpoint, start_height, expected_mempool);
     while let Some(block) = {
@@ -5774,7 +5928,7 @@ fn snapshot_from(
     multisig: bool,
     delayed_policy: Option<&DelayedPolicyContext>,
 ) -> ApiResult<WalletSnapshotDto> {
-    snapshot_for_view(wallet, db, synced_at, multisig, delayed_policy, false)
+    snapshot_for_view(wallet, db, synced_at, multisig, delayed_policy, false, true)
 }
 
 // The overview-only intermediate is projected to WalletOverviewDto before IPC;
@@ -5786,8 +5940,11 @@ fn snapshot_for_view(
     multisig: bool,
     delayed_policy: Option<&DelayedPolicyContext>,
     overview_only: bool,
+    reconcile_provenance: bool,
 ) -> ApiResult<WalletSnapshotDto> {
-    label_provenance::reconcile_wallet_outputs(wallet, db, now()).map_err(internal)?;
+    if reconcile_provenance {
+        label_provenance::reconcile_wallet_outputs(wallet, db, now()).map_err(internal)?;
+    }
     let provenance_context = label_provenance::summary_context(db).map_err(internal)?;
     let balance = wallet.balance();
     let tip = wallet.latest_checkpoint().height();

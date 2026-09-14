@@ -109,7 +109,8 @@ fn snapshot_history_fixture(rows: usize, samples: usize, report: bool) {
         })).unwrap();
         SNAPSHOT_STATEMENTS.with(|count| count.set(0));
         let activity_started = Instant::now();
-        let page = activity::activity_from_wallet(&wallet, &db, &request, Uuid::nil()).unwrap();
+        let page =
+            activity::activity_from_wallet(&wallet, &db, &request, Uuid::nil(), true).unwrap();
         let activity_elapsed = activity_started.elapsed();
         let activity_statements = SNAPSHOT_STATEMENTS.with(std::cell::Cell::get);
         let page_json = serde_json::to_value(&page).unwrap();

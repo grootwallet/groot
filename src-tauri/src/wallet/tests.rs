@@ -12,6 +12,205 @@ use bdk_wallet::bitcoin::NetworkKind;
 use bdk_wallet::error::CreateTxError;
 use std::{net::TcpListener, thread};
 
+struct MempoolBatchFixture {
+    txids: Vec<Txid>,
+    singles: Arc<AtomicU64>,
+    batches: Arc<AtomicU64>,
+    reject_batch: bool,
+}
+
+impl jsonrpc::client::Transport for MempoolBatchFixture {
+    fn send_request(
+        &self,
+        request: jsonrpc::Request<'_>,
+    ) -> Result<jsonrpc::Response, jsonrpc::Error> {
+        let result = match request.method {
+            "getrawmempool" => serde_json::to_value(&self.txids)?,
+            "getrawtransaction" => {
+                self.singles.fetch_add(1, Ordering::Relaxed);
+                let params: Vec<serde_json::Value> =
+                    serde_json::from_str(request.params.expect("transaction parameters").get())?;
+                params[0].clone()
+            }
+            other => panic!("unexpected fixture RPC: {other}"),
+        };
+        Ok(serde_json::from_value(serde_json::json!({
+            "result": result,
+            "error": null,
+            "id": request.id,
+            "jsonrpc": "2.0"
+        }))?)
+    }
+
+    fn send_batch(
+        &self,
+        requests: &[jsonrpc::Request<'_>],
+    ) -> Result<Vec<jsonrpc::Response>, jsonrpc::Error> {
+        self.batches.fetch_add(1, Ordering::Relaxed);
+        if self.reject_batch {
+            return Err(jsonrpc::Error::WrongBatchResponseSize);
+        }
+        requests
+            .iter()
+            .map(|request| self.send_request_for_batch(request))
+            .collect()
+    }
+
+    fn fmt_target(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("mempool fixture")
+    }
+}
+
+impl MempoolBatchFixture {
+    fn send_request_for_batch(
+        &self,
+        request: &jsonrpc::Request<'_>,
+    ) -> Result<jsonrpc::Response, jsonrpc::Error> {
+        assert_eq!(request.method, "getrawtransaction");
+        let params: Vec<serde_json::Value> =
+            serde_json::from_str(request.params.expect("transaction parameters").get())?;
+        Ok(serde_json::from_value(serde_json::json!({
+            "result": params[0],
+            "error": null,
+            "id": request.id,
+            "jsonrpc": "2.0"
+        }))?)
+    }
+}
+
+#[test]
+fn core_mempool_transactions_are_batched_and_direct_rpc_remains_a_fallback() {
+    for reject_batch in [false, true] {
+        let txids = (1u8..=65)
+            .map(|byte| Txid::from_byte_array([byte; 32]))
+            .collect::<Vec<_>>();
+        let singles = Arc::new(AtomicU64::new(0));
+        let batches = Arc::new(AtomicU64::new(0));
+        let fixture = MempoolBatchFixture {
+            txids: txids.clone(),
+            singles: Arc::clone(&singles),
+            batches: Arc::clone(&batches),
+            reject_batch,
+        };
+        let rpc = Client::from_jsonrpc(jsonrpc::client::Client::with_transport(fixture));
+        let cancelled = AtomicBool::new(false);
+        let client = CancellableCoreClient {
+            client: &rpc,
+            cancel: &cancelled,
+            mempool: Mutex::new(MempoolPrefetch::default()),
+        };
+        assert_eq!(client.get_raw_mempool().unwrap(), txids);
+        for txid in &txids {
+            assert_eq!(
+                client.get_raw_transaction_hex(txid, None).unwrap(),
+                txid.to_string()
+            );
+        }
+        if reject_batch {
+            assert_eq!(batches.load(Ordering::Relaxed), 1);
+            assert_eq!(singles.load(Ordering::Relaxed), 65);
+        } else {
+            assert_eq!(batches.load(Ordering::Relaxed), 3);
+            assert_eq!(singles.load(Ordering::Relaxed), 0);
+        }
+    }
+}
+
+#[test]
+fn core_mempool_batch_starts_at_first_unknown_transaction() {
+    let txids = (1u8..=65)
+        .map(|byte| Txid::from_byte_array([byte; 32]))
+        .collect::<Vec<_>>();
+    let singles = Arc::new(AtomicU64::new(0));
+    let batches = Arc::new(AtomicU64::new(0));
+    let fixture = MempoolBatchFixture {
+        txids: txids.clone(),
+        singles: Arc::clone(&singles),
+        batches: Arc::clone(&batches),
+        reject_batch: false,
+    };
+    let rpc = Client::from_jsonrpc(jsonrpc::client::Client::with_transport(fixture));
+    let cancelled = AtomicBool::new(false);
+    let client = CancellableCoreClient {
+        client: &rpc,
+        cancel: &cancelled,
+        mempool: Mutex::new(MempoolPrefetch::default()),
+    };
+    assert_eq!(client.get_raw_mempool().unwrap(), txids);
+    // BDK already knows the earlier mempool transactions and never requests them.
+    assert_eq!(
+        client.get_raw_transaction_hex(&txids[64], None).unwrap(),
+        txids[64].to_string()
+    );
+    assert_eq!(batches.load(Ordering::Relaxed), 1);
+    assert_eq!(singles.load(Ordering::Relaxed), 0);
+}
+
+#[test]
+fn persisted_snapshot_and_activity_can_read_while_sync_stages_a_write() {
+    let path = std::env::temp_dir().join(format!("groot-sync-read-{}.sqlite", Uuid::new_v4()));
+    let mut writer = Connection::open(&path).unwrap();
+    init_app_schema(&writer).unwrap();
+    let mnemonic = Mnemonic::from_entropy(&[0; 32]).unwrap();
+    let master = root_key(&mnemonic, "persisted read fixture").unwrap();
+    let mut wallet = Wallet::create(
+        Bip84(master, KeychainKind::External),
+        Bip84(master, KeychainKind::Internal),
+    )
+    .network(NETWORK)
+    .create_wallet(&mut writer)
+    .unwrap();
+    wallet.persist(&mut writer).unwrap();
+    drop(wallet);
+
+    writer.execute_batch("BEGIN IMMEDIATE TRANSACTION").unwrap();
+    let mut reader = Connection::open_with_flags(&path, OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
+    let loaded = load_wallet(&mut reader).unwrap();
+    let snapshot = snapshot_for_view(&loaded, &reader, None, false, None, false, false).unwrap();
+    assert_eq!(snapshot.balance.total, 0);
+    let request = serde_json::from_value(serde_json::json!({
+        "walletId": Uuid::nil(), "filter": "all", "query": "", "sort": "newest", "limit": 50, "cursor": null
+    }))
+    .unwrap();
+    let page =
+        activity::activity_from_wallet(&loaded, &reader, &request, Uuid::nil(), false).unwrap();
+    assert!(serde_json::to_value(page).unwrap()["transactions"]
+        .as_array()
+        .unwrap()
+        .is_empty());
+    drop(loaded);
+    drop(reader);
+    writer.execute_batch("ROLLBACK").unwrap();
+    drop(writer);
+    std::fs::remove_file(path).unwrap();
+}
+
+#[test]
+fn foreground_sync_read_gate_closes_before_the_writer_commits() {
+    let state = AppState::default();
+    let wallet_id = Uuid::new_v4();
+    let reads_safe = Arc::new(AtomicBool::new(true));
+    state
+        .foreground_sync
+        .lock()
+        .unwrap()
+        .replace(ActiveForegroundSync {
+            wallet_id,
+            cancel: Arc::new(AtomicBool::new(false)),
+            persisted_reads_safe: Arc::clone(&reads_safe),
+        });
+    let reader = foreground_persisted_read_guard(&state, wallet_id)
+        .unwrap()
+        .unwrap();
+    assert!(state.persisted_sync_reads.try_write().is_err());
+    drop(reader);
+    let _writer = stop_persisted_sync_reads(&state).unwrap();
+    assert!(!reads_safe.load(Ordering::Acquire));
+    assert!(foreground_persisted_read_guard(&state, wallet_id)
+        .unwrap()
+        .is_none());
+}
+
 #[test]
 fn mainnet_core_admission_rejects_initial_block_download() {
     let error = ensure_mainnet_core_ready_for_admission(true).unwrap_err();
@@ -266,6 +465,7 @@ fn foreground_sync_cancellation_is_immediate_and_idempotent() {
         .replace(ActiveForegroundSync {
             wallet_id: Uuid::new_v4(),
             cancel: Arc::clone(&cancel),
+            persisted_reads_safe: Arc::new(AtomicBool::new(false)),
         });
 
     assert!(cancel_foreground_sync(&state).unwrap());
@@ -504,6 +704,7 @@ fn cancelled_core_emitter_stops_before_a_remote_rpc_call() {
     let client = CancellableCoreClient {
         client: &client,
         cancel: &cancelled,
+        mempool: Mutex::new(MempoolPrefetch::default()),
     };
     let error = client.get_block_count().unwrap_err();
     assert!(matches!(error, CoreRpcError::Io(io) if io.kind() == std::io::ErrorKind::Interrupted));

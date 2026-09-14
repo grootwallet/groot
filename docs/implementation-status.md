@@ -672,3 +672,14 @@ binary, model allowlist, fingerprint matching, descriptor, database, draft,
 node-secret, or wallet-backup format changes. These are source and browser/native
 test claims only until the new packaged app is retested with the exact devices
 and Core connection; Mainnet GA remains blocked.
+
+The owner then reported that internal Mainnet candidate `dacb5cac` remained at
+99% during a remote-Core unlock scan while Activity and Coins stayed in loading
+skeletons. The follow-up keeps the last committed wallet state readable via an
+authenticated read-only SQLite connection gated against the final commit during the in-memory Core refresh,
+and prefetches raw mempool transactions in bounded 32-call RPC batches with a
+direct-call fallback. It does not skip pending-transaction reconciliation or
+promote 99% to completion. No persisted wallet, profile, proposal, registry,
+backup, descriptor, or node-settings format and no frontend DTO or stable error
+changes. Source/regression tests do not certify the replacement package against
+the owner's remote node; physical retest remains required.

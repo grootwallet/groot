@@ -376,17 +376,27 @@ pub async fn wallet_activity(app: AppHandle, request: ActivityRequest) -> ApiRes
         .identity(request.wallet_id);
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
-        let _operation = operation_guard(&state)?;
         let session_id = validate_read_session(session_id, None)?;
+        let _persisted_guard = foreground_persisted_read_guard(&state, request.wallet_id)?;
+        let persisted_read = _persisted_guard.is_some();
+        let _operation = if persisted_read {
+            None
+        } else {
+            Some(operation_guard(&state)?)
+        };
         require_wallet_read_context(&app, &state, request.wallet_id, Some(session_id))?;
         let multisig = selected_profile(&app)?.kind == WalletKind::Multisig;
-        let mut db = if multisig {
+        let mut db = if persisted_read {
+            open_selected_db_for_persisted_read(&app, multisig)?
+        } else if multisig {
             open_multisig_db(&app)?
         } else {
             open_db(&app)?
         };
         let wallet = load_wallet(&mut db)?;
-        activity_from_wallet(&wallet, &db, &request, session_id)
+        let page = activity_from_wallet(&wallet, &db, &request, session_id, !persisted_read)?;
+        require_wallet_read_context(&app, &state, request.wallet_id, Some(session_id))?;
+        Ok(page)
     })
     .await
     .map_err(internal)?
@@ -397,8 +407,11 @@ pub(super) fn activity_from_wallet(
     db: &Connection,
     request: &ActivityRequest,
     session_id: Uuid,
+    reconcile_provenance: bool,
 ) -> ApiResult<ActivityPage> {
-    label_provenance::reconcile_wallet_outputs(wallet, db, now()).map_err(internal)?;
+    if reconcile_provenance {
+        label_provenance::reconcile_wallet_outputs(wallet, db, now()).map_err(internal)?;
+    }
     let context = label_provenance::summary_context(db).map_err(internal)?;
     page_from(
         transactions_from(wallet, db, &context)?,
@@ -417,11 +430,19 @@ pub async fn wallet_overview(app: AppHandle, wallet_id: Uuid) -> ApiResult<Walle
         .identity(wallet_id);
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
-        let _operation = operation_guard(&state)?;
         let session_id = validate_read_session(session_id, None)?;
+        let _persisted_guard = foreground_persisted_read_guard(&state, wallet_id)?;
+        let persisted_read = _persisted_guard.is_some();
+        let _operation = if persisted_read {
+            None
+        } else {
+            Some(operation_guard(&state)?)
+        };
         require_wallet_read_context(&app, &state, wallet_id, Some(session_id))?;
         let multisig = selected_profile(&app)?.kind == WalletKind::Multisig;
-        let mut db = if multisig {
+        let mut db = if persisted_read {
+            open_selected_db_for_persisted_read(&app, multisig)?
+        } else if multisig {
             open_multisig_db(&app)?
         } else {
             open_db(&app)?
@@ -432,14 +453,17 @@ pub async fn wallet_overview(app: AppHandle, wallet_id: Uuid) -> ApiResult<Walle
         } else {
             None
         };
-        overview_from_snapshot(snapshot_for_view(
+        let overview = overview_from_snapshot(snapshot_for_view(
             &wallet,
             &db,
             None,
             multisig,
             policy.as_ref(),
             true,
-        )?)
+            !persisted_read,
+        )?)?;
+        require_wallet_read_context(&app, &state, wallet_id, Some(session_id))?;
+        Ok(overview)
     })
     .await
     .map_err(internal)?

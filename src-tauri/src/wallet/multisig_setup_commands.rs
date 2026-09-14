@@ -1254,12 +1254,33 @@ pub fn multisig_delete(
 pub async fn multisig_snapshot(app: AppHandle) -> ApiResult<WalletSnapshotDto> {
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
-        let _operation = operation_guard(&state)?;
-        require_unlocked(&app, &state)?;
-        let mut db = open_multisig_db(&app)?;
+        let wallet_id = require_unlocked(&app, &state)?;
+        let _persisted_guard = foreground_persisted_read_guard(&state, wallet_id)?;
+        let persisted_read = _persisted_guard.is_some();
+        let _operation = if persisted_read {
+            None
+        } else {
+            Some(operation_guard(&state)?)
+        };
+        require_wallet_read_context(&app, &state, wallet_id, None)?;
+        let mut db = if persisted_read {
+            open_selected_db_for_persisted_read(&app, true)?
+        } else {
+            open_multisig_db(&app)?
+        };
         let wallet = load_wallet(&mut db)?;
         let delayed_policy = selected_delayed_policy_context(&app)?;
-        snapshot_from(&wallet, &db, None, true, delayed_policy.as_ref())
+        let snapshot = snapshot_for_view(
+            &wallet,
+            &db,
+            None,
+            true,
+            delayed_policy.as_ref(),
+            false,
+            !persisted_read,
+        )?;
+        require_wallet_read_context(&app, &state, wallet_id, None)?;
+        Ok(snapshot)
     })
     .await
     .map_err(internal)?
