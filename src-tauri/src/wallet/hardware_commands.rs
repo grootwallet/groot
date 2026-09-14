@@ -2403,6 +2403,8 @@ pub(crate) fn external_proposal_dto(
         .into_iter()
         .map(|label| label.text)
         .collect();
+    let acceleration = super::load_acceleration_review(db, &proposal_id, fee, fee_rate)?;
+    let inputs_available = acceleration.is_some() || proposal_inputs_available(wallet, &psbt);
     Ok(MultisigProposalDto {
         proposal_id: proposal_id.clone(),
         recipient,
@@ -2427,6 +2429,7 @@ pub(crate) fn external_proposal_dto(
             .iter()
             .map(|input| input.previous_output.to_string())
             .collect(),
+        inputs_available,
         inputs,
         locktime,
         rbf,
@@ -2441,7 +2444,7 @@ pub(crate) fn external_proposal_dto(
         status,
         created_at: created_at.to_string(),
         selection_impact,
-        acceleration: super::load_acceleration_review(db, &proposal_id, fee, fee_rate)?,
+        acceleration,
     })
 }
 

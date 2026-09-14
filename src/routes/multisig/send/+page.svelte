@@ -116,7 +116,7 @@
     parseAmountInput,
     setDenomination
   } from '$lib/denomination';
-  import { latestActiveProposal } from '$lib/wallet/proposal-resume';
+  import { latestActiveProposal, proposalInputsUnavailable } from '$lib/wallet/proposal-resume';
   import { useWalletShellContext } from '$lib/wallet/shell-context';
 
   const walletShell = useWalletShellContext();
@@ -206,7 +206,9 @@
   let automaticStrategy = $state<AutomaticSelectionStrategy>('balanced');
   let maxSpendQuote = $state<MaxSpendQuote | null>(null);
   let maxSpendActive = $state(false);
+  let maxSpendRefreshing = $state(false);
   let maxSpendRequestRevision = 0;
+  let maxSpendFeeTimer: ReturnType<typeof setTimeout> | undefined;
   let renewalMode = $state(false),
     renewalCoin = $state<Utxo | null>(null);
   let delayedSpendMode = $state(false),
@@ -299,7 +301,9 @@
         Number.isSafeInteger(amountSats) &&
         amountSats > 0 &&
         amountSats + estimatedFee <= available &&
-        customFeeValid
+        customFeeValid &&
+        !maxSpendRefreshing &&
+        (!maxSpendActive || quotedMaxFee !== null)
     );
   const intentValid = $derived(addressValid && submissionLabels.length > 0);
   const progressStep = $derived<1 | 2 | 3>(proposal ? 3 : draftStep);
@@ -418,6 +422,7 @@
   let walletLoadActive = true;
   onDestroy(() => {
     walletLoadActive = false;
+    if (maxSpendFeeTimer) clearTimeout(maxSpendFeeTimer);
     if (!suppressDraftSave) void saveCurrentDraft();
     hardwareScanGeneration += 1;
     pin = '';
@@ -777,7 +782,10 @@
   }
   async function useMaxAmount(requestedFeeRate = selectedRateNumber, announce = true) {
     if (!addressValid || requestedFeeRate <= 0) return;
+    if (maxSpendFeeTimer) clearTimeout(maxSpendFeeTimer);
+    maxSpendFeeTimer = undefined;
     const requestRevision = ++maxSpendRequestRevision;
+    maxSpendRefreshing = true;
     error = '';
     const request = {
       recipient: address,
@@ -817,7 +825,10 @@
         });
       }
     } catch (cause) {
-      error = localizedError(cause, $locale, 'Maximum amount could not be calculated.');
+      if (requestRevision === maxSpendRequestRevision)
+        error = localizedError(cause, $locale, 'Maximum amount could not be calculated.');
+    } finally {
+      if (requestRevision === maxSpendRequestRevision) maxSpendRefreshing = false;
     }
   }
 
@@ -832,7 +843,16 @@
     const refreshMaximum = maxSpendActive;
     selectedRate = rate;
     clearDraftError();
-    if (refreshMaximum && Number.isFinite(rate) && rate > 0) void useMaxAmount(rate, false);
+    if (maxSpendFeeTimer) clearTimeout(maxSpendFeeTimer);
+    if (refreshMaximum) {
+      // Invalid intermediate edits must not leave the previous fee's maximum spendable.
+      maxSpendRequestRevision += 1;
+      maxSpendQuote = null;
+      maxSpendRefreshing = Number.isFinite(rate) && rate > 0;
+      if (maxSpendRefreshing) {
+        maxSpendFeeTimer = setTimeout(() => void useMaxAmount(rate, false), 180);
+      }
+    }
   }
   async function prepareCustomAcceleration() {
     const request = accelerationRequest;
@@ -2144,8 +2164,10 @@
             aria-label={translate($locale, 'Amount')}
             bind:value={amount}
             oninput={() => {
+              if (maxSpendFeeTimer) clearTimeout(maxSpendFeeTimer);
               maxSpendRequestRevision += 1;
               maxSpendActive = false;
+              maxSpendRefreshing = false;
               maxSpendQuote = null;
               clearDraftError();
             }}
@@ -2330,6 +2352,9 @@
         error={feeEstimateError}
         onchange={updatePaymentFeeRate}
       />
+      {#if maxSpendRefreshing}<p class="available-balance-summary" role="status">
+          {translate($locale, 'Updating the maximum spendable amount for this fee…')}
+        </p>{/if}
       {#if error}<div class="hardware-inline-error send-form-error" role="alert">
           <AlertTriangle size={18} /><span
             ><strong>{translate($locale, 'Payment could not be prepared')}</strong><small
@@ -2479,83 +2504,99 @@
               : `${wallet?.threshold} of ${wallet?.cosigners.length}`}
           onChangeAddress={() => (changeAddressOpen = true)}
         />
-        {#if !proposal.canFinalize}<div class="psbt-actions">
-            {#if !wallet?.recoveryTemplate}<Button variant="secondary" onclick={scan}
-                ><Cpu size={16} />{translate($locale, 'Sign with device')}</Button
-              >{/if}<Button variant="secondary" onclick={showPsbtQr}
-              ><QrCode size={16} />{translate($locale, 'Show unsigned QR')}</Button
-            ><Button
-              variant="secondary"
-              onclick={() => {
-                scannedFrames = [];
-                qrScanOpen = true;
-              }}><ScanLine size={16} />{translate($locale, 'Scan signed QR')}</Button
-            ><Button variant="secondary" onclick={openPsbtImport}
-              ><FileUp size={16} />{translate($locale, 'Import signed PSBT')}</Button
-            ><Button variant="secondary" onclick={copyPsbt}
-              ><Copy size={16} />{translate($locale, 'Copy PSBT')}</Button
-            ><Button
-              variant="secondary"
-              loading={savingPsbt}
-              loadingLabel={translate($locale, 'Saving PSBT…')}
-              onclick={saveProposalPsbt}
-              ><Download size={16} />{translate($locale, 'Save PSBT')}</Button
-            >
-          </div>{/if}
-        {#if !proposal.canFinalize && wallet?.recoveryTemplate}<div
-            class="selection-review"
-            role="note"
+        {#if proposalInputsUnavailable(proposal)}<div
+            class="hardware-inline-error signing-transport-error"
+            role="alert"
           >
-            <strong
-              >{translate($locale, 'Use offline PSBT signing for this delayed policy.')}</strong
-            ><span
-              >{translate(
-                $locale,
-                'USB hardware signing is blocked because Groot’s pinned HWI release cannot execute this Miniscript policy safely.'
-              )}</span
-            >
-          </div>{/if}
-        {#if proposal.canFinalize}<div class="ready-panel">
-            <LockKeyhole size={18} />
-            <div>
-              <strong>{translate($locale, 'Ready to finalize')}</strong><small
+            <AlertTriangle size={18} /><span
+              ><strong>{translate($locale, 'Payment inputs unavailable')}</strong><small
                 >{translate(
                   $locale,
-                  'Enter the coordinator app PIN. Hardware signatures are already inside the PSBT.'
+                  'This proposal uses coins no longer available in this wallet. Sync, then cancel it and prepare a new payment. Do not sign or broadcast this PSBT.'
                 )}</small
-              >
-            </div>
-          </div>
-          <Button
-            variant="secondary"
-            class="full signed-psbt-export"
-            loading={savingPsbt}
-            loadingLabel={translate($locale, 'Saving signed PSBT…')}
-            onclick={saveProposalPsbt}
-            ><Download size={16} />{translate($locale, 'Save signed PSBT')}</Button
-          ><PasswordField
-            label={translate($locale, 'App PIN')}
-            inputLabel="App PIN"
-            bind:value={pin}
-            autocomplete="current-password"
-          /><Button
-            size="large"
-            class="full"
-            disabled={!pin}
-            loading={busy}
-            loadingLabel={translate($locale, 'Finalizing & broadcasting…')}
-            onclick={broadcast}>{translate($locale, 'Finalize & broadcast')}</Button
-          >{:else}<Button
-            size="large"
-            class="full signature-requirement-action"
-            disabled
-            ariaLabel={signatureRequirementLabel}>{signatureRequirementLabel}</Button
-          >{/if}{#if error}<div class="hardware-inline-error signing-transport-error" role="alert">
-            <AlertTriangle size={18} /><span
-              ><strong>{translate($locale, 'Payment action failed')}</strong><small>{error}</small
               ></span
             >
-          </div>{/if}<Button
+          </div>{:else}
+          {#if !proposal.canFinalize}<div class="psbt-actions">
+              {#if !wallet?.recoveryTemplate}<Button variant="secondary" onclick={scan}
+                  ><Cpu size={16} />{translate($locale, 'Sign with device')}</Button
+                >{/if}<Button variant="secondary" onclick={showPsbtQr}
+                ><QrCode size={16} />{translate($locale, 'Show unsigned QR')}</Button
+              ><Button
+                variant="secondary"
+                onclick={() => {
+                  scannedFrames = [];
+                  qrScanOpen = true;
+                }}><ScanLine size={16} />{translate($locale, 'Scan signed QR')}</Button
+              ><Button variant="secondary" onclick={openPsbtImport}
+                ><FileUp size={16} />{translate($locale, 'Import signed PSBT')}</Button
+              ><Button variant="secondary" onclick={copyPsbt}
+                ><Copy size={16} />{translate($locale, 'Copy PSBT')}</Button
+              ><Button
+                variant="secondary"
+                loading={savingPsbt}
+                loadingLabel={translate($locale, 'Saving PSBT…')}
+                onclick={saveProposalPsbt}
+                ><Download size={16} />{translate($locale, 'Save PSBT')}</Button
+              >
+            </div>{/if}
+          {#if !proposal.canFinalize && wallet?.recoveryTemplate}<div
+              class="selection-review"
+              role="note"
+            >
+              <strong
+                >{translate($locale, 'Use offline PSBT signing for this delayed policy.')}</strong
+              ><span
+                >{translate(
+                  $locale,
+                  'USB hardware signing is blocked because Groot’s pinned HWI release cannot execute this Miniscript policy safely.'
+                )}</span
+              >
+            </div>{/if}
+          {#if proposal.canFinalize}<div class="ready-panel">
+              <LockKeyhole size={18} />
+              <div>
+                <strong>{translate($locale, 'Ready to finalize')}</strong><small
+                  >{translate(
+                    $locale,
+                    'Enter the coordinator app PIN. Hardware signatures are already inside the PSBT.'
+                  )}</small
+                >
+              </div>
+            </div>
+            <Button
+              variant="secondary"
+              class="full signed-psbt-export"
+              loading={savingPsbt}
+              loadingLabel={translate($locale, 'Saving signed PSBT…')}
+              onclick={saveProposalPsbt}
+              ><Download size={16} />{translate($locale, 'Save signed PSBT')}</Button
+            ><PasswordField
+              label={translate($locale, 'App PIN')}
+              inputLabel="App PIN"
+              bind:value={pin}
+              autocomplete="current-password"
+            /><Button
+              size="large"
+              class="full"
+              disabled={!pin}
+              loading={busy}
+              loadingLabel={translate($locale, 'Finalizing & broadcasting…')}
+              onclick={broadcast}>{translate($locale, 'Finalize & broadcast')}</Button
+            >{:else}<Button
+              size="large"
+              class="full signature-requirement-action"
+              disabled
+              ariaLabel={signatureRequirementLabel}>{signatureRequirementLabel}</Button
+            >{/if}{#if error}<div
+              class="hardware-inline-error signing-transport-error"
+              role="alert"
+            >
+              <AlertTriangle size={18} /><span
+                ><strong>{translate($locale, 'Payment action failed')}</strong><small>{error}</small
+                ></span
+              >
+            </div>{/if}{/if}<Button
           variant="ghost-danger"
           class="full proposal-cancel-action"
           disabled={busy}

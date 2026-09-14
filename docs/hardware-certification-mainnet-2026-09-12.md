@@ -197,3 +197,45 @@ checks of the UI changes do not transfer any physical result. Continue with
 bounded altered/foreign/stale PSBT rejection, rapid amount/fee changes,
 confirmation and restart reconciliation, and independent clean-profile public
 descriptor recovery before advancing any Mainnet release checklist row.
+
+## 2026-09-14 owner-operated Sparrow interoperability checkpoint
+
+The release owner reports that the same Mainnet 2-of-3 coordinator was recovered
+from its public descriptors in Sparrow, then a payment was signed with the exact
+BitBox02 Nova and Coldcard Mk4 and broadcast through Sparrow. Groot subsequently
+observed the outgoing payment and an empty spendable balance. This is a positive
+owner-operated descriptor-recovery and cross-application signing/broadcast
+checkpoint, not a separately isolated empty Groot profile restore, negative
+PSBT campaign, fresh-build hardware certification, confirmation/reorg proof,
+or Mainnet distribution approval. Do not store the descriptor, PSBT, signer
+fingerprints, pairing code, transaction ID, or node credentials in this record.
+
+The owner observed that Groot retained a different unsigned, zero-signature
+proposal referencing the now-spent coins. Do **not** sign that proposal: sync,
+inspect the unavailable-input warning, then cancel it explicitly. A later
+candidate must prove that neither hardware signing, signed-PSBT import, nor
+broadcast accepts missing standard-proposal inputs, while normal RBF/CPFP
+replacement paths still use their own original-transaction checks. An
+outgoing transaction created in Sparrow without a Groot proposal naturally
+has Groot's generic outgoing display label; no guessed permanent label should
+be attached to it.
+
+The owner's next ordered test on the replacement internal build is: (1) sync
+the recovered wallet and confirm the exact external payment, balance,
+notifications, and prior labels persist across quit/relaunch; (2) open the
+saved proposal, confirm the unavailable-input message, ensure there is no
+sign/import/broadcast action, and cancel it, retaining transaction history;
+(3) exercise rapid custom-fee changes with MAX and Review payment on a
+**funded, unspent** test wallet, observing responsiveness and an exact
+reviewed amount/fee; (4) check the cancel dialog has spacing before its first
+row and no outer table borders; (5) on a separately safe amount, test a
+foreign/altered PSBT rejection and unchanged signature count, then a normal
+two-signer retry; (6) separately test the remote Core connection's exact
+Mainnet chain and full-history state before any spend. Keep the fresh Groot
+profile recovery and hardware negative/interruption rows open.
+
+This source change refreshed the exact Mainnet source-policy pins only for
+`wallet.rs`, `hardware_commands.rs` (the shared proposal DTO),
+`multisig_proposal_commands.rs`, and the Overview route after review. It did not alter the compiled
+network allowlist, HWI pairing/identity logic, PSBT encoding, profile schema,
+or release gate. Passing the source tripwire is not physical certification.

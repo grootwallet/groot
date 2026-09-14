@@ -25,6 +25,8 @@ export type MultisigPreview = {
 };
 
 export type MultisigProposal = PaymentProposal & {
+  /** False when an ordinary proposal references a coin missing from the current wallet UTXO set. */
+  inputsAvailable?: boolean;
   psbt: string;
   signed: number;
   required: number;

@@ -633,6 +633,20 @@ test('requires explicit confirmation before discarding a multisig proposal', asy
   await page.getByRole('button', { name: 'Cancel payment' }).click();
   const dialog = page.getByRole('dialog', { name: 'Cancel this payment?' });
   await expect(dialog.getByText('Cancel confirmation test', { exact: true })).toBeVisible();
+  const firstRow = dialog.locator('.cancel-proposal-details > div').first();
+  const lastRow = dialog.locator('.cancel-proposal-details > div').last();
+  expect(
+    await firstRow.evaluate((element) => getComputedStyle(element.parentElement!).borderTopWidth)
+  ).toBe('0px');
+  expect(await lastRow.evaluate((element) => getComputedStyle(element).borderBottomWidth)).toBe(
+    '0px'
+  );
+  const warning = dialog.locator('.warning-box');
+  expect(await firstRow.boundingBox()).not.toBeNull();
+  expect(
+    (await firstRow.boundingBox())!.y -
+      ((await warning.boundingBox())!.y + (await warning.boundingBox())!.height)
+  ).toBeGreaterThanOrEqual(12);
   await expect(dialog.getByText('25,000 sats', { exact: true })).toBeVisible();
   await expect(dialog.getByText('1 of 2 collected', { exact: true })).toBeVisible();
   await dialog.getByRole('button', { name: 'Keep payment' }).click();
@@ -1044,7 +1058,13 @@ test('selects and freezes multisig coins before entering the send flow', async (
   ).toBeVisible();
   await expect(page.getByRole('button', { name: 'Review payment' })).toBeEnabled();
   await page.getByRole('button', { name: 'Custom' }).click();
+  await page.getByLabel('Custom fee rate').fill('8');
+  await page.getByLabel('Custom fee rate').fill('2');
   await page.getByLabel('Custom fee rate').fill('3');
+  await expect(page.getByRole('button', { name: 'Review payment' })).toBeDisabled();
+  await expect(page.locator('.available-balance-summary[role="status"]')).toContainText(
+    'Updating the maximum spendable amount for this fee'
+  );
   await expect(page.getByLabel('Amount', { exact: true })).toHaveValue('2480583');
   await expect(page.getByText('Estimated fee 657 sats')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Review payment' })).toBeEnabled();

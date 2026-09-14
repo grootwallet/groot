@@ -349,6 +349,68 @@ fn exact_drain_preview_amount_can_be_prepared_at_the_same_fee_rate() {
     assert_eq!(max_amount + max_fee, Amount::from_sat(143_622));
 }
 
+#[test]
+fn an_external_spend_invalidates_a_saved_psbt_without_erasing_it() {
+    use bdk_wallet::bitcoin::{
+        absolute::LockTime, hashes::Hash, transaction::Version, ScriptBuf, Sequence, TxIn, TxOut,
+        Witness,
+    };
+
+    let mnemonic = Mnemonic::parse(WORDS).unwrap();
+    let master = root_key(&mnemonic, "external-spend-guard").unwrap();
+    let mut wallet = Wallet::create(
+        Bip84(master, KeychainKind::External),
+        Bip84(master, KeychainKind::Internal),
+    )
+    .network(Network::Regtest)
+    .create_wallet_no_persist()
+    .unwrap();
+    let receive = wallet.reveal_next_address(KeychainKind::External).address;
+    let funding = Transaction {
+        version: Version::TWO,
+        lock_time: LockTime::ZERO,
+        input: vec![TxIn {
+            previous_output: OutPoint::new(Txid::from_byte_array([23; 32]), 0),
+            script_sig: ScriptBuf::new(),
+            sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
+            witness: Witness::new(),
+        }],
+        output: vec![TxOut {
+            value: Amount::from_sat(50_000),
+            script_pubkey: receive.script_pubkey(),
+        }],
+    };
+    let funding_outpoint = OutPoint::new(funding.compute_txid(), 0);
+    wallet.apply_unconfirmed_txs([(funding, 1)]);
+    let destination = wallet.next_unused_address(KeychainKind::Internal).address;
+    let mut builder = wallet.build_tx();
+    builder
+        .drain_wallet()
+        .drain_to(destination.script_pubkey())
+        .fee_rate(FeeRate::from_sat_per_vb(1).unwrap());
+    let saved_psbt = builder.finish().unwrap();
+    assert!(proposal_inputs_available(&wallet, &saved_psbt));
+
+    let outside_spend = Transaction {
+        version: Version::TWO,
+        lock_time: LockTime::ZERO,
+        input: vec![TxIn {
+            previous_output: funding_outpoint,
+            ..Default::default()
+        }],
+        output: vec![TxOut {
+            value: Amount::from_sat(49_000),
+            script_pubkey: ScriptBuf::new(),
+        }],
+    };
+    wallet.apply_unconfirmed_txs([(outside_spend, 2)]);
+    assert!(!proposal_inputs_available(&wallet, &saved_psbt));
+    assert_eq!(
+        saved_psbt.unsigned_tx.input[0].previous_output,
+        funding_outpoint
+    );
+}
+
 const WORDS: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art";
 
 fn serve_one_http_response(response: Option<&'static [u8]>) -> String {

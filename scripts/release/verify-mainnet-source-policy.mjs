@@ -32,7 +32,7 @@ const pinnedPolicySources = new Map([
   ],
   ['src-tauri/src/network.rs', 'dcf011fb789a0b690b1832a9245df5fc0199318f03a820d10f9a3b1c90f5d76b'],
   ['src-tauri/src/registry.rs', '343aea20f5d09df6abd5c9fdba3b093efc6729c9ece8f180b27a150061753a18'],
-  ['src-tauri/src/wallet.rs', 'bb4f3277c8d28b81fbf7d03b83ffca1621d842e5bb74bacc9423f03ae3ea896f'],
+  ['src-tauri/src/wallet.rs', '849f0dcb0751c050d471e3d942313cb6d091ec7766bcbc0dc4bdf1d351556637'],
   [
     'src-tauri/src/wallet/diagnostics.rs',
     'fc421b13979a623e3478e0428a3cb8ce2cc9a9294980d5c61ffab0aeceb19073'
@@ -51,7 +51,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src-tauri/src/wallet/hardware_commands.rs',
-    '0d0462e8832ec3709a39a3374f40fa6581a69cb33f6e72911b9b6323072eef98'
+    'b733d7b52daf2cf3427bbc69414ab0c1e85e79391dba7a103055c887ea838262'
   ],
   [
     'src-tauri/src/wallet/label_interchange.rs',
@@ -63,7 +63,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src-tauri/src/wallet/multisig_proposal_commands.rs',
-    '1972d5b689e5b1d154e8c87b1e392e45e9bbffd0aa88265fd0fe619f3b8ed422'
+    'c2c0173d2164b8a7e46c3c724ff33a03054a4b6111110e7fea3af3cfa5cea620'
   ],
   [
     'src-tauri/src/wallet/profile_commands.rs',
@@ -121,7 +121,7 @@ const pinnedPolicySources = new Map([
     'src/routes/unlock/+page.svelte',
     '32953a75c52de1df3c557ab6b6edb3a7aef88676e93fad5aa82204c742ca7b3b'
   ],
-  ['src/routes/+page.svelte', '82b40e7deb3e57748e9be32a80db430b76b48f7689831507d051273d8d7d51da'],
+  ['src/routes/+page.svelte', '90e39515189ef9007fec74a3bc6d5dc0c49beba4689d6fb42104ff63762b3bdb'],
   [
     'src/routes/settings/+page.svelte',
     '982e5aa2422d5b94fdfba05f3fa71dcdc480567b86cf84ed10c1b7a52440c16b'

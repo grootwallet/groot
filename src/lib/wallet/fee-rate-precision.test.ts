@@ -26,7 +26,10 @@ describe('normal payment fee-rate precision', () => {
       'multisig_delayed_spend_prepare',
       'multisig_tx_max_spend'
     ]) {
-      const start = multisigCommands.indexOf(`pub fn ${command}`);
+      const asynchronous = multisigCommands.indexOf(`pub async fn ${command}`);
+      const start =
+        asynchronous === -1 ? multisigCommands.indexOf(`pub fn ${command}`) : asynchronous;
+      expect(start).toBeGreaterThanOrEqual(0);
       const end = multisigCommands.indexOf('#[tauri::command]', start + 1);
       const source = multisigCommands.slice(start, end === -1 ? undefined : end);
       expect(source).toContain('fee_rate: String');

@@ -63,7 +63,31 @@ pub(crate) fn build_delayed_policy_sweep(
 }
 
 #[tauri::command]
-pub fn multisig_tx_prepare(
+pub async fn multisig_tx_prepare(
+    app: AppHandle,
+    recipient: String,
+    labels: Vec<String>,
+    amount: u64,
+    fee_rate: String,
+    coin_selection: CoinSelectionInput,
+) -> ApiResult<MultisigProposalDto> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        multisig_tx_prepare_blocking(
+            app.clone(),
+            state,
+            recipient,
+            labels,
+            amount,
+            fee_rate,
+            coin_selection,
+        )
+    })
+    .await
+    .map_err(internal)?
+}
+
+fn multisig_tx_prepare_blocking(
     app: AppHandle,
     state: State<'_, AppState>,
     recipient: String,
@@ -469,7 +493,21 @@ pub fn multisig_delayed_spend_prepare(
 }
 
 #[tauri::command]
-pub fn multisig_tx_max_spend(
+pub async fn multisig_tx_max_spend(
+    app: AppHandle,
+    recipient: String,
+    fee_rate: String,
+    coin_selection: CoinSelectionInput,
+) -> ApiResult<MaxSpendDto> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        multisig_tx_max_spend_blocking(app.clone(), state, recipient, fee_rate, coin_selection)
+    })
+    .await
+    .map_err(internal)?
+}
+
+fn multisig_tx_max_spend_blocking(
     app: AppHandle,
     state: State<'_, AppState>,
     recipient: String,
@@ -622,6 +660,7 @@ pub(crate) fn import_multisig_proposal_in_db(
     signed_psbt: &str,
 ) -> ApiResult<MultisigProposalDto> {
     let current = load_multisig_proposal(db, metadata, proposal_id)?;
+    require_available_proposal_inputs(&current)?;
     let original_encoded = current.psbt.clone();
     let mut original = decode_psbt(&original_encoded).map_err(proposal_api_error)?;
     let imported = decode_psbt(signed_psbt).map_err(proposal_api_error)?;
@@ -671,6 +710,7 @@ pub(crate) fn finalized_multisig_proposal_transaction(
     reviewed_psbt: &str,
 ) -> ApiResult<Transaction> {
     let proposal = load_multisig_proposal(db, metadata, proposal_id)?;
+    require_available_proposal_inputs(&proposal)?;
     require_reviewed_psbt_unchanged(
         &proposal.psbt,
         reviewed_psbt,
@@ -743,6 +783,17 @@ pub(crate) fn finalized_multisig_proposal_transaction(
         ));
     }
     psbt.extract_tx().map_err(internal)
+}
+
+fn require_available_proposal_inputs(proposal: &MultisigProposalDto) -> ApiResult<()> {
+    if proposal.inputs_available {
+        Ok(())
+    } else {
+        Err(api_error(
+            "coin_unavailable",
+            "This payment uses coins no longer available in the wallet. Sync, then cancel it and prepare a new payment; no signatures were changed.",
+        ))
+    }
 }
 
 #[tauri::command]
@@ -843,6 +894,7 @@ pub async fn hardware_sign_multisig(
     require_hwi_supported_multisig_policy(&metadata)?;
     let mut db = open_multisig_db(&app)?;
     let proposal = load_multisig_proposal(&mut db, &metadata, &proposal_id)?;
+    require_available_proposal_inputs(&proposal)?;
     require_reviewed_psbt_unchanged(
         &proposal.psbt,
         &reviewed_psbt,
@@ -1060,6 +1112,40 @@ mod network_setup_copy_tests {
         assert_eq!(error.code, "invalid_node_config");
         assert!(require_requested_network_setup(Some("source-wallet"), true).is_ok());
         assert!(require_requested_network_setup(None, false).is_ok());
+    }
+}
+
+#[cfg(test)]
+mod stale_proposal_tests {
+    use super::*;
+    use bdk_wallet::bitcoin::{absolute::LockTime, transaction::Version, TxIn};
+
+    #[test]
+    fn an_externally_spent_input_cannot_remain_available_in_a_saved_proposal() {
+        let first = OutPoint::from_str(&format!("{}:0", "11".repeat(32))).unwrap();
+        let second = OutPoint::from_str(&format!("{}:1", "22".repeat(32))).unwrap();
+        let psbt = Psbt::from_unsigned_tx(Transaction {
+            version: Version::TWO,
+            lock_time: LockTime::ZERO,
+            input: vec![
+                TxIn {
+                    previous_output: first,
+                    ..Default::default()
+                },
+                TxIn {
+                    previous_output: second,
+                    ..Default::default()
+                },
+            ],
+            output: vec![],
+        })
+        .unwrap();
+        assert!(proposal_inputs_present(
+            &psbt,
+            &HashSet::from([first, second])
+        ));
+        assert!(!proposal_inputs_present(&psbt, &HashSet::from([first])));
+        assert!(!proposal_inputs_present(&psbt, &HashSet::new()));
     }
 }
 

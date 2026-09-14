@@ -3177,6 +3177,13 @@ code {
   align-items: center;
   gap: 28px;
 }
+.cancel-proposal-details {
+  margin-top: 14px;
+  border-top: 0;
+}
+.cancel-proposal-details > div:last-child {
+  border-bottom: 0;
+}
 .details-list > .transaction-review-path-row {
   padding-block: 12px;
 }

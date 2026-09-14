@@ -1,6 +1,23 @@
 import type { CatalogSection } from './types';
 
 export const multisigCopy = {
+  'Payment inputs unavailable': {
+    fr: 'Les fonds de ce paiement ne sont plus disponibles',
+    es: 'Los fondos de este pago ya no están disponibles'
+  },
+  'Sync and cancel this payment; its coins were spent elsewhere.': {
+    fr: 'Synchronisez puis annulez ce paiement ; ses fonds ont été dépensés ailleurs.',
+    es: 'Sincroniza y cancela este pago; sus fondos se gastaron en otra aplicación.'
+  },
+  'This proposal uses coins no longer available in this wallet. Sync, then cancel it and prepare a new payment. Do not sign or broadcast this PSBT.':
+    {
+      fr: 'Cette proposition utilise des fonds qui ne sont plus disponibles dans ce portefeuille. Synchronisez, annulez-la et préparez un nouveau paiement. Ne signez ni ne diffusez ce PSBT.',
+      es: 'Esta propuesta usa fondos que ya no están disponibles en esta cartera. Sincroniza, cancélala y prepara un pago nuevo. No firmes ni difundas este PSBT.'
+    },
+  'Updating the maximum spendable amount for this fee…': {
+    fr: 'Mise à jour du montant maximal disponible pour ces frais…',
+    es: 'Actualizando el importe máximo disponible con esta comisión…'
+  },
   'Check each saved signer on its device before setting the PIN. Live checks expire after 15 minutes and are not saved with the draft.':
     {
       fr: 'Vérifiez chaque signataire enregistré sur son appareil avant de définir le code PIN. Les vérifications expirent après 15 minutes et ne sont pas enregistrées avec le brouillon.',

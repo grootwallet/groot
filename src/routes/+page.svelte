@@ -51,7 +51,7 @@
     recordHardwareHealthCheck,
     setHardwareHealthChecks
   } from '$lib/hardware/health-check-state';
-  import { latestActiveProposal } from '$lib/wallet/proposal-resume';
+  import { latestActiveProposal, proposalInputsUnavailable } from '$lib/wallet/proposal-resume';
   import type { PaymentDraft } from '$lib/wallet/payment-draft';
   import { pendingBalanceBreakdown, sortTransactionsNewestFirst } from '$lib/wallet/presentation';
   import { policyMaturitySummary } from '$lib/wallet/policy';
@@ -288,28 +288,40 @@
   const proposalCanFinalize = $derived(
     Boolean(activeProposal && 'canFinalize' in activeProposal && activeProposal.canFinalize)
   );
+  const activeProposalInputsUnavailable = $derived(
+    Boolean(
+      multisig &&
+      activeProposal &&
+      'canFinalize' in activeProposal &&
+      proposalInputsUnavailable(activeProposal)
+    )
+  );
   const proposalTitle = $derived(
     translate(
       $locale,
-      activeProposal && !('canFinalize' in activeProposal)
-        ? 'Payment ready to sign'
-        : proposalCanFinalize
-          ? 'Payment ready to broadcast'
-          : 'Signing in progress'
+      activeProposalInputsUnavailable
+        ? 'Payment inputs unavailable'
+        : activeProposal && !('canFinalize' in activeProposal)
+          ? 'Payment ready to sign'
+          : proposalCanFinalize
+            ? 'Payment ready to broadcast'
+            : 'Signing in progress'
     )
   );
   const proposalProgress = $derived(
-    activeProposal
-      ? 'signed' in activeProposal
-        ? translate($locale, '{signed} of {required} signatures collected', {
-            signed: activeProposal.signed,
-            required: activeProposal.required
-          })
-        : translate($locale, '{signed} of {required} signatures collected', {
-            signed: 0,
-            required: 1
-          })
-      : ''
+    activeProposalInputsUnavailable
+      ? translate($locale, 'Sync and cancel this payment; its coins were spent elsewhere.')
+      : activeProposal
+        ? 'signed' in activeProposal
+          ? translate($locale, '{signed} of {required} signatures collected', {
+              signed: activeProposal.signed,
+              required: activeProposal.required
+            })
+          : translate($locale, '{signed} of {required} signatures collected', {
+              signed: 0,
+              required: 1
+            })
+        : ''
   );
   const proposalLabel = $derived(
     activeProposal ? ($discreetMode ? 'Label hidden' : activeProposal.label) : ''
@@ -1096,7 +1108,7 @@
     {#if activeProposal}
       <a
         class="active-proposal-callout"
-        class:ready={proposalCanFinalize}
+        class:ready={proposalCanFinalize && !activeProposalInputsUnavailable}
         href={proposalHref}
         aria-label={translate($locale, 'Resume payment, {label}, {progress}', {
           label: proposalLabel,

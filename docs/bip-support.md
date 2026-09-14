@@ -1,5 +1,16 @@
 # Bitcoin Improvement Proposal support
 
+The 2026-09-14 stale-multisig-proposal safeguard changes no descriptor, BIP48
+key, PSBT serialization or signature verification, backup format, or persisted
+schema. It checks a saved proposal's selected outpoints against the current BDK
+unspent set before further signing/import/broadcast; accelerator replacements
+continue under their separate original-transaction validation. The owner's
+reported Sparrow recovery of this exact Mainnet 2-of-3 descriptor, Nova and
+Coldcard Mk4 signing, and successful external broadcast adds limited
+owner-operated interoperability evidence, not general BIP support or a release
+certification pass. Async command dispatch and fee-quote debounce are UI
+responsiveness changes only.
+
 The 2026-09-14 presentation follow-up changes no BIP support or evidence:
 standard multisig hides the Miniscript-only lab for a native-null recovery
 template, public BSMS/Groot export copy is format-specific, and Receive/Send

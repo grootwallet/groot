@@ -1,5 +1,9 @@
 import type { MultisigProposal } from './contracts';
 
+export function proposalInputsUnavailable(proposal: MultisigProposal | null): boolean {
+  return proposal?.inputsAvailable === false;
+}
+
 export function latestActiveProposal(proposals: MultisigProposal[]): MultisigProposal | null {
   return (
     proposals

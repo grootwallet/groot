@@ -1314,6 +1314,7 @@ pub struct MultisigProposalDto {
     change_derivation_paths: Vec<Vec<String>>,
     output_count: usize,
     selected_outpoints: Vec<String>,
+    inputs_available: bool,
     inputs: Vec<ProposalInputDto>,
     locktime: u32,
     rbf: bool,
@@ -4175,6 +4176,7 @@ fn proposal_dto(
         .map(|label| label.text)
         .collect();
     let acceleration = load_acceleration_review(db, &proposal_id, fee, fee_rate)?;
+    let inputs_available = acceleration.is_some() || proposal_inputs_available(wallet, &psbt);
     Ok(MultisigProposalDto {
         proposal_id,
         recipient,
@@ -4199,6 +4201,7 @@ fn proposal_dto(
             .iter()
             .map(|input| input.previous_output.to_string())
             .collect(),
+        inputs_available,
         inputs,
         locktime,
         rbf,
@@ -4215,6 +4218,18 @@ fn proposal_dto(
         selection_impact,
         acceleration,
     })
+}
+
+fn proposal_inputs_available(wallet: &Wallet, psbt: &Psbt) -> bool {
+    let spendable: HashSet<_> = wallet.list_unspent().map(|coin| coin.outpoint).collect();
+    proposal_inputs_present(psbt, &spendable)
+}
+
+fn proposal_inputs_present(psbt: &Psbt, spendable: &HashSet<OutPoint>) -> bool {
+    psbt.unsigned_tx
+        .input
+        .iter()
+        .all(|input| spendable.contains(&input.previous_output))
 }
 
 fn selection_impact(
