@@ -1163,77 +1163,84 @@ pub fn wallet_sync_source_save(
 }
 
 #[tauri::command]
-pub fn recovery_scan_settings(
-    app: AppHandle,
-    state: State<'_, AppState>,
-) -> ApiResult<RecoveryScanSettingsDto> {
-    require_unlocked(&app, &state)?;
-    let profile = selected_profile(&app)?;
-    let db = match profile.kind {
-        WalletKind::Multisig => open_multisig_db(&app)?,
-        WalletKind::SingleKey | WalletKind::WatchOnly => open_db(&app)?,
-    };
-    load_recovery_scan_settings(&db)
+pub async fn recovery_scan_settings(app: AppHandle) -> ApiResult<RecoveryScanSettingsDto> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        require_unlocked(&app, &state)?;
+        let profile = selected_profile(&app)?;
+        let db = match profile.kind {
+            WalletKind::Multisig => open_multisig_db(&app)?,
+            WalletKind::SingleKey | WalletKind::WatchOnly => open_db(&app)?,
+        };
+        load_recovery_scan_settings(&db)
+    })
+    .await
+    .map_err(internal)?
 }
 
 #[tauri::command]
-pub fn recovery_scan_settings_save(
+pub async fn recovery_scan_settings_save(
     app: AppHandle,
-    state: State<'_, AppState>,
     birthday_height: u32,
     gap_limit: u32,
     credential: String,
 ) -> ApiResult<RecoveryScanSettingsDto> {
     let credential = Zeroizing::new(credential);
-    let _operation = operation_guard(&state)?;
-    require_unlocked(&app, &state)?;
-    validate_recovery_gap_limit(gap_limit)?;
-    let tip = checked_block_height(&rpc_client(&app, &state)?)?;
-    validate_recovery_birthday(birthday_height, tip)?;
-    let profile = selected_profile(&app)?;
-    let mut db = match profile.kind {
-        WalletKind::Multisig => open_multisig_db(&app)?,
-        WalletKind::SingleKey | WalletKind::WatchOnly => open_db(&app)?,
-    };
-    if credential.is_empty() {
-        if has_completed_sync(&db)? {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        cancel_foreground_sync(&state)?;
+        let _operation = operation_guard(&state)?;
+        require_unlocked(&app, &state)?;
+        validate_recovery_gap_limit(gap_limit)?;
+        let tip = checked_block_height(&rpc_client(&app, &state)?)?;
+        validate_recovery_birthday(birthday_height, tip)?;
+        let profile = selected_profile(&app)?;
+        let mut db = match profile.kind {
+            WalletKind::Multisig => open_multisig_db(&app)?,
+            WalletKind::SingleKey | WalletKind::WatchOnly => open_db(&app)?,
+        };
+        if credential.is_empty() {
+            if has_completed_sync(&db)? {
+                return Err(api_error(
+                    "invalid_credential",
+                    "Enter the wallet credential before changing recovery-scan settings.",
+                ));
+            }
+        } else {
+            check_auth_throttle(&app, &state)?;
+            let verified = verify_selected_credential(&app, credential.as_str());
+            record_auth_result(&app, &state, &verified)?;
+            verified?;
+        }
+        let external_required = required_recovery_gap(&db, None)?;
+        let wallet = load_wallet(&mut db)?;
+        let internal_required = wallet
+            .derivation_index(KeychainKind::Internal)
+            .map(|index| required_keychain_gap(&wallet, KeychainKind::Internal, index))
+            .transpose()?
+            .unwrap_or(0);
+        let required = external_required.max(internal_required);
+        if gap_limit < required {
             return Err(api_error(
-                "invalid_credential",
-                "Enter the wallet credential before changing recovery-scan settings.",
+                "invalid_scan_settings",
+                format!(
+                    "This wallet has revealed addresses that require a gap limit of at least {required}."
+                ),
             ));
         }
-    } else {
-        check_auth_throttle(&app, &state)?;
-        let verified = verify_selected_credential(&app, credential.as_str());
-        record_auth_result(&app, &state, &verified)?;
-        verified?;
-    }
-    let external_required = required_recovery_gap(&db, None)?;
-    let wallet = load_wallet(&mut db)?;
-    let internal_required = wallet
-        .derivation_index(KeychainKind::Internal)
-        .map(|index| required_keychain_gap(&wallet, KeychainKind::Internal, index))
-        .transpose()?
-        .unwrap_or(0);
-    let required = external_required.max(internal_required);
-    if gap_limit < required {
-        return Err(api_error(
-            "invalid_scan_settings",
-            format!(
-                "This wallet has revealed addresses that require a gap limit of at least {required}."
-            ),
-        ));
-    }
-    db.execute(
-        "INSERT INTO groot_recovery_settings (singleton, birthday_height, gap_limit) VALUES (1, ?1, ?2)
+        db.execute(
+            "INSERT INTO groot_recovery_settings (singleton, birthday_height, gap_limit) VALUES (1, ?1, ?2)
          ON CONFLICT(singleton) DO UPDATE SET birthday_height = excluded.birthday_height, gap_limit = excluded.gap_limit",
-        params![birthday_height, gap_limit],
-    )
-    .map_err(internal)?;
-    Ok(RecoveryScanSettingsDto {
-        birthday_height,
-        gap_limit,
+            params![birthday_height, gap_limit],
+        )
+        .map_err(internal)?;
+        Ok(RecoveryScanSettingsDto {
+            birthday_height,
+            gap_limit,
+        })
     })
+    .await
+    .map_err(internal)?
 }
 
 pub(crate) fn validate_recovery_gap_limit(gap_limit: u32) -> ApiResult<()> {
@@ -1283,36 +1290,38 @@ pub async fn recovery_scan_status(app: AppHandle) -> ApiResult<RecoveryScanStatu
 }
 
 #[tauri::command]
-pub fn wallet_full_rescan_cancel(
-    app: AppHandle,
-    state: State<'_, AppState>,
-) -> ApiResult<RecoveryScanStatusDto> {
-    require_unlocked(&app, &state)?;
-    let profile = selected_profile(&app)?;
-    let (run_id, cancel) = {
-        let scans = state.recovery_scans.lock().map_err(internal)?;
-        let active = scans.get(&profile.id).ok_or_else(|| {
-            api_error(
-                "scan_not_running",
-                "There is no active recovery scan to cancel.",
-            )
-        })?;
-        (active.run_id.clone(), Arc::clone(&active.cancel))
-    };
-    cancel.store(true, Ordering::Release);
-    let db = match profile.kind {
-        WalletKind::Multisig => open_multisig_db(&app)?,
-        WalletKind::SingleKey | WalletKind::WatchOnly => open_db(&app)?,
-    };
-    db.execute(
-        "UPDATE groot_recovery_scans SET status = 'cancelling', updated_at = ?1
+pub async fn wallet_full_rescan_cancel(app: AppHandle) -> ApiResult<RecoveryScanStatusDto> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        require_unlocked(&app, &state)?;
+        let profile = selected_profile(&app)?;
+        let (run_id, cancel) = {
+            let scans = state.recovery_scans.lock().map_err(internal)?;
+            let active = scans.get(&profile.id).ok_or_else(|| {
+                api_error(
+                    "scan_not_running",
+                    "There is no active recovery scan to cancel.",
+                )
+            })?;
+            (active.run_id.clone(), Arc::clone(&active.cancel))
+        };
+        cancel.store(true, Ordering::Release);
+        let db = match profile.kind {
+            WalletKind::Multisig => open_multisig_db(&app)?,
+            WalletKind::SingleKey | WalletKind::WatchOnly => open_db(&app)?,
+        };
+        db.execute(
+            "UPDATE groot_recovery_scans SET status = 'cancelling', updated_at = ?1
          WHERE singleton = 1 AND run_id = ?2 AND status = 'running'",
-        params![now(), run_id],
-    )
-    .map_err(internal)?;
-    load_recovery_scan_record(&db)?
-        .map(|record| record.status)
-        .ok_or_else(|| internal("The recovery scan status is unavailable."))
+            params![now(), run_id],
+        )
+        .map_err(internal)?;
+        load_recovery_scan_record(&db)?
+            .map(|record| record.status)
+            .ok_or_else(|| internal("The recovery scan status is unavailable."))
+    })
+    .await
+    .map_err(internal)?
 }
 
 #[tauri::command]

@@ -139,7 +139,7 @@
   let recoveryPercent = $derived(
     recoveryStatus.totalBlocks > 0
       ? Math.min(
-          100,
+          recoveryScanIsActive(recoveryStatus) ? 99 : 100,
           Math.round((recoveryStatus.processedBlocks / recoveryStatus.totalBlocks) * 100)
         )
       : 0
@@ -159,8 +159,12 @@
   );
   const syncStatusIsActive = (status: WalletSyncStatus | null) =>
     Boolean(
-      status && ['connecting', 'syncing', 'checking_matches', 'applying'].includes(status.state)
+      status &&
+      ['connecting', 'syncing', 'checking_pending', 'checking_matches', 'applying'].includes(
+        status.state
+      )
     );
+  let syncCheckingPending = $derived(syncStatus?.state === 'checking_pending');
   const syncFailureDescription = (status: WalletSyncStatus) => {
     if (status.lastVerifiedHeight === 0 && !snapshot?.syncedAt) {
       return translate(
@@ -922,7 +926,9 @@
             syncStatus.source === 'bitcoin_core'
               ? syncStatus.state === 'failed'
                 ? 'Wallet sync stopped'
-                : 'Scanning Bitcoin Core history'
+                : syncCheckingPending
+                  ? 'Checking pending transactions…'
+                  : 'Scanning Bitcoin Core history'
               : syncStatus.state === 'connecting'
                 ? 'Connecting to filter peers'
                 : syncStatus.state === 'checking_matches'

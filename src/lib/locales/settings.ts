@@ -321,6 +321,10 @@ export const settingsCopy = {
     fr: 'Analyse des blocs · {percent} %',
     es: 'Escaneando bloques · {percent} %'
   },
+  'Checking pending transactions…': {
+    fr: 'Vérification des transactions en attente…',
+    es: 'Comprobando transacciones pendientes…'
+  },
   unknown: { fr: 'inconnu', es: 'desconocido' },
   'Verify RPC authentication, retained block history, IBD, disk use, and filter-index status.': {
     fr: 'Vérifiez l’authentification RPC, l’historique de blocs conservé, l’IBD, l’utilisation du disque et l’état de l’index de filtres.',

@@ -552,6 +552,22 @@ blocks distribution and merge to `main`. The existing portable-profile Argon2id
 parameters and persisted formats are unchanged. No BIP family support changes in
 this correction.
 
+## 2026-09-14 remote-Core recovery scan responsiveness
+
+The owner reports the trusted Mainnet remote Core endpoint connected at block
+966,930 with full history in the prior internal build. The subsequent wallet
+rescan from birthday 966,900 stalled visually at 100% and the app beachballed;
+that is **not** a completed remote-node wallet certification. The follow-up
+moves recovery-settings validation and scan cancellation off the native UI
+event loop, pauses automatic sync during explicit rescans, makes Core emitter
+RPC calls interruptible between requests, and labels block-tip completion as
+pending-transaction reconciliation until the atomic result is committed.
+Activity gains a manual sync action using the existing wallet-specific path.
+The owner's prior steps 1–4 (including cancellation presentation) passed on
+the earlier build; remote rescan and clean-profile recovery remain open for
+physical retest. No persisted wallet, profile, registry, proposal, or backup
+format changes; no BIP support change.
+
 ## Registry contract maintenance
 
 Shared synthetic fixtures now check native registry/profile serialization against

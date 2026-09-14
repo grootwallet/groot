@@ -1057,6 +1057,28 @@ test('global keyboard shortcuts navigate safely and match the Settings reference
   await expect(page).toHaveURL(/\/send$/);
 });
 
+test('Activity can refresh its selected wallet without losing filters', async ({ page }) => {
+  await page.goto('/activity');
+  await expect(page.getByRole('heading', { name: 'Activity' })).toBeVisible();
+  const refresh = page.getByRole('button', { name: 'Refresh activity' });
+  await expect(refresh).toBeEnabled();
+  if (process.env.GROOT_VISUAL_QA === '1') {
+    const viewport = page.viewportSize();
+    await page.screenshot({ path: `/private/tmp/groot-activity-${viewport?.width}.png` });
+  }
+  await page.getByRole('button', { name: 'Received', exact: true }).click();
+  await refresh.click();
+  await expect(page.getByRole('button', { name: 'Received', exact: true })).toHaveClass(/active/);
+  await expect(page.getByRole('button', { name: 'Refresh activity' })).toBeEnabled();
+  await expect(page.getByText('Transactions refreshed.')).toBeVisible();
+  const viewport = page.viewportSize();
+  if (viewport) {
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+      viewport.width
+    );
+  }
+});
+
 test('overview, activity, UTXOs, and settings expose durable states', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible();

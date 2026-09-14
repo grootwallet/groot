@@ -491,10 +491,27 @@ fn core_replacement_policy_uses_mempool_incremental_relay_fee() {
 fn core_sync_progress_is_relative_to_the_persisted_wallet_tip() {
     assert_eq!(core_sync_progress_percent(20, 20, 120), 0);
     assert_eq!(core_sync_progress_percent(20, 70, 120), 50);
-    assert_eq!(core_sync_progress_percent(20, 120, 120), 100);
-    assert_eq!(core_sync_progress_percent(20, 130, 120), 100);
+    assert_eq!(core_sync_progress_percent(20, 120, 120), 99);
+    assert_eq!(core_sync_progress_percent(20, 130, 120), 99);
     assert_eq!(core_sync_progress_percent(20, 10, 120), 0);
-    assert_eq!(core_sync_progress_percent(120, 120, 120), 100);
+    assert_eq!(core_sync_progress_percent(120, 120, 120), 99);
+}
+
+#[test]
+fn cancelled_core_emitter_stops_before_a_remote_rpc_call() {
+    let client = build_rpc_client("http://127.0.0.1:1", Auth::None, None).unwrap();
+    let cancelled = AtomicBool::new(true);
+    let client = CancellableCoreClient {
+        client: &client,
+        cancel: &cancelled,
+    };
+    let error = client.get_block_count().unwrap_err();
+    assert!(matches!(error, CoreRpcError::Io(io) if io.kind() == std::io::ErrorKind::Interrupted));
+    let result = retry_transient_core_rpc(
+        || client.get_block_count(),
+        |_| panic!("Cancellation must not retry an interrupted request"),
+    );
+    assert_eq!(result.unwrap_err().code, "sync_cancelled");
 }
 
 #[test]

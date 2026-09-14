@@ -120,6 +120,7 @@ export type WalletSyncStatus = {
   state:
     | 'connecting'
     | 'syncing'
+    | 'checking_pending'
     | 'checking_matches'
     | 'applying'
     | 'completed'

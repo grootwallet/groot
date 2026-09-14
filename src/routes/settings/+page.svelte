@@ -200,8 +200,17 @@
   let destroyed = false;
   let scanPercent = $derived(
     scanStatus.totalBlocks > 0
-      ? Math.min(100, Math.round((scanStatus.processedBlocks / scanStatus.totalBlocks) * 100))
+      ? Math.min(
+          scanning && scanStatus.status === 'running' ? 99 : 100,
+          Math.round((scanStatus.processedBlocks / scanStatus.totalBlocks) * 100)
+        )
       : 0
+  );
+  let scanCheckingPending = $derived(
+    scanning &&
+      scanStatus.status === 'running' &&
+      scanStatus.totalBlocks > 0 &&
+      scanStatus.processedBlocks >= scanStatus.totalBlocks
   );
   let verifyOpen = $state(false),
     verifyCredential = $state(''),
@@ -750,7 +759,10 @@
     scanError = '';
     scanErrorCode = '';
     scanErrorDetails = null;
+    let automaticSyncPaused = false;
     try {
+      await walletShell.pauseAutomaticSync();
+      automaticSyncPaused = true;
       scan = await walletService.saveRecoveryScanSettings(
         Number(scanDraft.birthdayHeight),
         Number(scanDraft.gapLimit),
@@ -790,6 +802,7 @@
       scanCredential = '';
       scanning = false;
       cancellingScan = false;
+      if (automaticSyncPaused) walletShell.resumeAutomaticSync();
     }
   }
   async function pollFullRescan() {
@@ -1938,7 +1951,11 @@
                     ? 'Scan cancelled'
                     : scanStatus.status === 'failed'
                       ? 'Previous scan failed'
-                      : translate($locale, 'Scanning blocks · {percent}%', { percent: scanPercent })
+                      : scanCheckingPending
+                        ? 'Checking pending transactions…'
+                        : translate($locale, 'Scanning blocks · {percent}%', {
+                            percent: scanPercent
+                          })
             )}</strong
           ><small
             >{formatInteger(scanStatus.processedBlocks, $locale)} of {formatInteger(

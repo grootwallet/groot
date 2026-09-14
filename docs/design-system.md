@@ -91,6 +91,9 @@ Transaction-review action grids respond to the width of their own card, not only
   focus restoration, complete viewport backdrop, and reference-counted page
   scroll lock must not be reimplemented in a route.
 
+Activity's upper-right manual sync uses the existing secondary sync-button
+pattern, wraps beside the filter at narrow widths, and keeps loaded rows
+visible during progress or error.
 Activity uses the existing secondary Button for **Load more** after each 50-row
 page and the existing LoadFailure pattern for retry. A later-page error keeps
 earlier rows visible. Overview secondary-details loading and retry do not replace

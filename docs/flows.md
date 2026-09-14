@@ -269,6 +269,15 @@ BSMS is the interoperable public standard for a standard sortedmulti wallet. The
 
 Before the first Core scan Groot shows no numeric verified balance and does not let the normal scheduler silently start from genesis. **New wallet** uses the tested node tip only after the user confirms there is no earlier activity; **Existing wallet** requires a birthday block before the earliest possible payment; **Full history** uses height `0` and warns that it can take tens of minutes. Editing is draft-only until authenticated save. A birthday after the first payment can omit history. Gap limits are bounded from 20 through 1,000; 20 is standard and affects derived-address discovery, not block-range speed. Groot waits while Core is in initial block download or below the wallet's last verified checkpoint. A recovery scan anchors immediately before its birthday, so a pruned node rejects a birthday at or below its retained prune height with an actionable archival-node alternative. Each applied block and its progress checkpoint are persisted. Inactivity may lock the wallet UI without cancelling the already-authorized scan. Re-unlock reattaches to its live status. Cancellation, failure, or process interruption remains visible; retry continues after the last persisted block only when that checkpoint still agrees with Core and otherwise restarts from the configured birthday.
 
+Core's block percentage stays below 100% while its pending-transaction pass
+reconciles unconfirmed spends and receipts. The UI names that phase instead
+of showing an apparently finished scan; 100% belongs to a committed result.
+Settings saves and cancellation run outside the native UI thread, and the
+explicit rescan pauses automatic sync until its terminal state. Cancelling
+checks between remote RPC calls, with one in-flight request still bounded by
+the node timeout. Existing verified history is not presented as a new scan
+result until the entire reconciliation succeeds.
+
 ## Coin privacy insight
 
 `Coins → detect two or more UTXOs at one known address → mark each affected coin → optional linked-coin detail`
@@ -300,6 +309,12 @@ signer/health details. A secondary failure retains the balance with a details re
 Send starts saved signer identity independently of coin loading and fee/acceleration
 requests. Activity loads 50-row pages; global search/sort resets the cursor, failed
 later pages retain the current list, and changed-history cursors require a refresh.
+
+Activity also offers a manual sync action at the upper right. It uses the
+selected wallet's existing sync operation without changing search, sort, or
+loaded page state until refreshed data arrives; an error keeps existing rows
+visible and provides a retry. Automatic sync pauses during the explicit action
+and resumes afterward.
 
 - Broadcast: immediately after accepted broadcast, including updated balance.
 - Payment received: first observation only, including updated balance.

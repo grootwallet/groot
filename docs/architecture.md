@@ -290,6 +290,16 @@ records the safe initial policy and starts the resumable scan with a narrowly
 initial-only no-credential path; later settings changes and rescans still
 require authentication.
 
+For explicit Core recovery rescans, Settings validation and cancellation are
+dispatched to blocking workers: remote height validation and SQLite contention
+must not run on the native UI event loop. The automatic scheduler is paused
+while the user-authorized rescan runs. Core block progress is distinct from the
+pending-transaction reconciliation phase; its serial wallet operation remains
+exclusive, and no intermediate scan snapshot is exposed as complete. A
+cancellation-aware RPC adapter checks between Core emitter calls, while the
+in-flight remote request retains the existing timeout. This changes scheduling
+and presentation only, not persisted wallet or checkpoint formats.
+
 ## Transaction flow
 
 Proposal summaries expose Rust-derived recipient ownership and the recipient output's PSBT key-origin paths. The renderer presents a wallet-owned recipient as a self-transfer and states that only the network fee leaves the wallet; it never infers ownership from labels, address text, or the presence of change.

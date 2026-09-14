@@ -198,6 +198,23 @@ bounded altered/foreign/stale PSBT rejection, rapid amount/fee changes,
 confirmation and restart reconciliation, and independent clean-profile public
 descriptor recovery before advancing any Mainnet release checklist row.
 
+## 2026-09-14 remote-Core rescan follow-up (owner report)
+
+The owner reports that steps 1–4 of the replacement-build checklist passed,
+including the cleaned-up cancel dialog. A trusted remote Mainnet Core
+connection then reported full block history at height 966,930. The wallet
+rescan configured at birthday 966,900/gap 20 appeared to freeze and Overview
+remained at 100% loading. The remote connection check alone does not certify
+wallet-history reconciliation or a usable remote wallet. Step 6 and the
+separately clean Groot-profile descriptor recovery were not performed.
+
+The next candidate changes native rescan scheduling, between-RPC cancellation,
+progress phase, and Activity's manual sync only. Do not transfer the earlier
+device, signing, or interoperability pass to the replacement binary. Retest
+responsive cancellation and completed remote scan, then compare history,
+balance, and labels through relaunch before considering another spend. Do not
+put the endpoint, credentials, descriptors, or PSBTs in this record.
+
 ## 2026-09-14 owner-operated Sparrow interoperability checkpoint
 
 The release owner reports that the same Mainnet 2-of-3 coordinator was recovered

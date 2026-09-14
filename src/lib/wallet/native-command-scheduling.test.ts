@@ -27,7 +27,7 @@ const walletCore = readFileSync(
 );
 
 function commandSource(source: string, command: string): string {
-  const start = source.indexOf(`pub async fn ${command}`);
+  const start = source.indexOf(`pub async fn ${command}(`);
   expect(start, `${command} must remain an asynchronous native command`).toBeGreaterThan(-1);
   const nextCommand = source.indexOf('#[tauri::command]', start);
   return source.slice(start, nextCommand === -1 ? source.length : nextCommand);
@@ -55,6 +55,9 @@ describe('native command scheduling', () => {
     ['wallet_select', profileCommands],
     ['wallet_sync', profileCommands],
     ['recovery_scan_status', profileCommands],
+    ['recovery_scan_settings', profileCommands],
+    ['recovery_scan_settings_save', profileCommands],
+    ['wallet_full_rescan_cancel', profileCommands],
     ['coin_set_frozen', profileCommands],
     ['multisig_coin_set_frozen', profileCommands],
     ['wallet_full_rescan', profileCommands],
@@ -149,5 +152,14 @@ describe('native command scheduling', () => {
     expect(guard).toBeGreaterThan(-1);
     expect(setupScopeEnd).toBeGreaterThan(guard);
     expect(scan).toBeGreaterThan(setupScopeEnd);
+  });
+
+  it('keeps remote birthday validation off the native UI thread and cancels ordinary sync first', () => {
+    const source = commandSource(profileCommands, 'recovery_scan_settings_save');
+    expect(source.indexOf('spawn_blocking(move ||')).toBeGreaterThan(-1);
+    expect(source.indexOf('cancel_foreground_sync(&state)?')).toBeLessThan(
+      source.indexOf('operation_guard(&state)?')
+    );
+    expect(source.indexOf('checked_block_height(&rpc_client(')).toBeGreaterThan(-1);
   });
 });

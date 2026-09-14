@@ -9,7 +9,7 @@
   import type { TransactionSortOrder } from '$lib/wallet/presentation';
   import Button from '$lib/components/Button.svelte';
   import { onMount } from 'svelte';
-  import { Activity } from '@lucide/svelte';
+  import { Activity, RefreshCw } from '@lucide/svelte';
   import LoadFailure from '$lib/components/LoadFailure.svelte';
   import EmptyState from '$lib/components/EmptyState.svelte';
   import { useWalletShellContext } from '$lib/wallet/shell-context';
@@ -22,6 +22,8 @@
   let sortOrder = $state<TransactionSortOrder>('newest');
   let multisig = $state(false);
   let loading = $state(true);
+  let syncing = $state(false);
+  let syncError = $state('');
   let loadError = $state('');
   let walletId = '';
   let mounted = $state(false);
@@ -111,24 +113,65 @@
       }
     }
   }
+  async function syncNow() {
+    if (syncing || loading) return;
+    syncing = true;
+    syncError = '';
+    try {
+      await walletShell.pauseAutomaticSync();
+      if (multisig) await walletService.syncMultisig();
+      else await walletService.sync();
+      // The subscription also refreshes Activity on wallet_updated; do not
+      // schedule a second read of the same snapshot here.
+      toast({
+        title: 'Wallet is up to date',
+        description: 'Transactions refreshed.',
+        tone: 'success'
+      });
+    } catch (cause) {
+      if (cause instanceof WalletError && cause.code === 'sync_cancelled') return;
+      if (cause instanceof WalletError && cause.code === 'wallet_locked') {
+        await goto('/unlock');
+        return;
+      }
+      syncError = localizedError(cause, $locale, 'Could not refresh activity.');
+      toast({ title: 'Sync failed', description: syncError, tone: 'danger' });
+    } finally {
+      syncing = false;
+      walletShell.resumeAutomaticSync();
+    }
+  }
 </script>
 
-<div class="page">
+<div class="page activity-page">
   <header class="page-header">
     <div>
       <p class="eyebrow">{translate($locale, 'HISTORY')}</p>
       <h1>{translate($locale, 'Activity')}</h1>
     </div>
-    <div class="segmented">
-      <button class:active={filter === 'all'} onclick={() => (filter = 'all')}
-        >{translate($locale, 'All')}</button
-      ><button class:active={filter === 'received'} onclick={() => (filter = 'received')}
-        >{translate($locale, 'Received')}</button
-      ><button class:active={filter === 'sent'} onclick={() => (filter = 'sent')}
-        >{translate($locale, 'Sent')}</button
+    <div class="page-header-actions activity-header-actions">
+      <button class="sync-button" disabled={syncing || loading} onclick={syncNow}
+        ><RefreshCw size={15} class={syncing ? 'spin' : ''} />{translate(
+          $locale,
+          syncing ? 'Refreshing activity…' : 'Refresh activity'
+        )}</button
       >
+      <div class="segmented">
+        <button class:active={filter === 'all'} onclick={() => (filter = 'all')}
+          >{translate($locale, 'All')}</button
+        ><button class:active={filter === 'received'} onclick={() => (filter = 'received')}
+          >{translate($locale, 'Received')}</button
+        ><button class:active={filter === 'sent'} onclick={() => (filter = 'sent')}
+          >{translate($locale, 'Sent')}</button
+        >
+      </div>
     </div>
   </header>
+  {#if syncError}<section class="sync-progress failed" role="alert" aria-live="polite">
+      <strong>{translate($locale, 'Sync failed')}</strong>
+      <span>{syncError}</span>
+      <Button variant="secondary" onclick={syncNow}>{translate($locale, 'Try again')}</Button>
+    </section>{/if}
   <section class="activity-controls" aria-label={translate($locale, 'Search and sort activity')}>
     <label
       ><span>{translate($locale, 'Search')}</span><input

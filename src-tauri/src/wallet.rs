@@ -538,13 +538,27 @@ fn update_compact_filter_sync_status(
 
 fn core_sync_progress_percent(start_height: u32, current_height: u32, target_height: u32) -> u8 {
     if target_height <= start_height {
-        return 100;
+        return 99;
     }
     let completed = current_height
         .clamp(start_height, target_height)
         .saturating_sub(start_height);
     let total = target_height.saturating_sub(start_height);
-    u8::try_from(u64::from(completed) * 100 / u64::from(total)).unwrap_or(100)
+    u8::try_from(u64::from(completed) * 100 / u64::from(total))
+        .unwrap_or(99)
+        .min(99)
+}
+
+fn mark_core_pending_status(status: &Arc<Mutex<Option<WalletSyncStatusDto>>>) {
+    if let Ok(mut status) = status.lock() {
+        if let Some(current) = status.as_mut() {
+            if current.source == "bitcoin_core" && current.state == "syncing" {
+                current.state = "checking_pending";
+                current.progress_percent = Some(99);
+                current.updated_at = now();
+            }
+        }
+    }
 }
 
 fn update_core_sync_status(
@@ -590,6 +604,9 @@ fn finish_sync_status(
         Err(error) if error.code == "sync_cancelled" => "cancelled",
         Err(_) => "failed",
     };
+    if result.is_ok() {
+        current.progress_percent = Some(100);
+    }
     current.failure_code = result.as_ref().err().map(|error| error.code);
     current.last_verified_height = verified_height;
     current.updated_at = now();
@@ -2812,6 +2829,10 @@ fn retry_transient_core_rpc<T>(
         match operation() {
             Ok(value) => return Ok(value),
             Err(error) => {
+                if matches!(&error, CoreRpcError::Io(io) if io.kind() == std::io::ErrorKind::Interrupted)
+                {
+                    return Err(api_error("sync_cancelled", "Wallet scan cancelled."));
+                }
                 let error = rpc_api_error(error);
                 if error.code == "network_unavailable" && attempt + 1 < NODE_HEALTH_ATTEMPTS {
                     pause(NODE_HEALTH_RETRY_DELAY);
@@ -2822,6 +2843,31 @@ fn retry_transient_core_rpc<T>(
         }
     }
     unreachable!("Core RPC attempts are non-zero")
+}
+
+// BDK's Core emitter reads every unknown mempool transaction. On a busy remote
+// node that may be thousands of RPC round trips after block progress reaches
+// the tip. Check between requests so navigation, lock, and scan cancellation
+// do not have to wait for the entire remote mempool traversal.
+struct CancellableCoreClient<'a> {
+    client: &'a Client,
+    cancel: &'a AtomicBool,
+}
+
+impl RpcApi for CancellableCoreClient<'_> {
+    fn call<T: for<'de> Deserialize<'de>>(
+        &self,
+        command: &str,
+        args: &[serde_json::Value],
+    ) -> Result<T, CoreRpcError> {
+        if self.cancel.load(Ordering::Acquire) {
+            return Err(CoreRpcError::Io(std::io::Error::new(
+                std::io::ErrorKind::Interrupted,
+                "Wallet scan cancelled",
+            )));
+        }
+        self.client.call(command, args)
+    }
 }
 
 fn checked_node_status_once(client: &Client, backend: CoreNodeConfig) -> ApiResult<NodeStatusDto> {
@@ -5246,8 +5292,13 @@ fn sync_wallet_with_core(
         start_height,
         target_height,
     );
+    let uncancelled = AtomicBool::new(false);
+    let client = CancellableCoreClient {
+        client: rpc.as_ref(),
+        cancel: cancel.unwrap_or(&uncancelled),
+    };
     let mut emitter = Emitter::new(
-        rpc,
+        &client,
         wallet_tip,
         scan_birthday,
         wallet
@@ -5272,7 +5323,10 @@ fn sync_wallet_with_core(
         );
     }
     ensure_foreground_sync_not_cancelled(cancel)?;
-    let mempool = retry_transient_core_rpc(|| emitter.mempool(), std::thread::sleep)?;
+    mark_core_pending_status(&state.sync_status);
+    let mempool_result = retry_transient_core_rpc(|| emitter.mempool(), std::thread::sleep);
+    ensure_foreground_sync_not_cancelled(cancel)?;
+    let mempool = mempool_result?;
     wallet.apply_evicted_txs(mempool.evicted);
     wallet.apply_unconfirmed_txs(mempool.update);
     update_core_sync_status(
@@ -5494,8 +5548,21 @@ fn full_rescan_loaded_wallet(
     let expected_mempool = wallet
         .transactions()
         .filter(|tx| tx.chain_position.is_unconfirmed());
-    let mut emitter = Emitter::new(rpc, checkpoint, start_height, expected_mempool);
-    while let Some(block) = retry_transient_core_rpc(|| emitter.next_block(), std::thread::sleep)? {
+    let client = CancellableCoreClient {
+        client: rpc.as_ref(),
+        cancel,
+    };
+    let mut emitter = Emitter::new(&client, checkpoint, start_height, expected_mempool);
+    while let Some(block) = {
+        let next = retry_transient_core_rpc(|| emitter.next_block(), std::thread::sleep);
+        if cancel.load(Ordering::Acquire) {
+            return Err(api_error(
+                "scan_cancelled",
+                "Recovery scan cancelled. Saved progress remains safe; start it again to continue.",
+            ));
+        }
+        next?
+    } {
         if cancel.load(Ordering::Acquire) {
             return Err(api_error(
                 "scan_cancelled",
@@ -5515,7 +5582,14 @@ fn full_rescan_loaded_wallet(
             "Recovery scan cancelled. Saved progress remains safe; start it again to continue.",
         ));
     }
-    let mempool = retry_transient_core_rpc(|| emitter.mempool(), std::thread::sleep)?;
+    let mempool_result = retry_transient_core_rpc(|| emitter.mempool(), std::thread::sleep);
+    if cancel.load(Ordering::Acquire) {
+        return Err(api_error(
+            "scan_cancelled",
+            "Recovery scan cancelled. Saved progress remains safe; start it again to continue.",
+        ));
+    }
+    let mempool = mempool_result?;
     wallet.apply_evicted_txs(mempool.evicted);
     wallet.apply_unconfirmed_txs(mempool.update);
     wallet.persist(db).map_err(internal)?;

@@ -926,6 +926,9 @@ code {
   justify-content: flex-end;
   gap: 10px;
 }
+.activity-header-actions {
+  flex-wrap: wrap;
+}
 .secondary-link {
   min-height: 34px;
   display: inline-flex;
@@ -10590,6 +10593,13 @@ code {
   }
   .page-header h1 {
     font-size: 25px;
+  }
+  .activity-page .page-header {
+    flex-wrap: wrap;
+  }
+  .activity-header-actions {
+    width: 100%;
+    justify-content: space-between;
   }
   .desktop-only {
     display: none;

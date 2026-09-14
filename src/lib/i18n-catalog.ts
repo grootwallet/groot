@@ -323,6 +323,19 @@ export const copyCatalog = {
     fr: 'Actualiser les paiements',
     es: 'Actualizar pagos'
   },
+  'Refresh activity': { fr: 'Actualiser l’activité', es: 'Actualizar actividad' },
+  'Refreshing activity…': {
+    fr: 'Actualisation de l’activité…',
+    es: 'Actualizando actividad…'
+  },
+  'Transactions refreshed.': {
+    fr: 'Transactions actualisées.',
+    es: 'Transacciones actualizadas.'
+  },
+  'Could not refresh activity.': {
+    fr: 'Impossible d’actualiser l’activité.',
+    es: 'No se pudo actualizar la actividad.'
+  },
   'Refreshing payments…': {
     fr: 'Actualisation des paiements…',
     es: 'Actualizando pagos…'

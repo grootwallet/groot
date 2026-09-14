@@ -324,6 +324,13 @@ support impact. It changes only Settings presentation of the existing Core RPC
 transport; chain identity, wallet discovery, descriptors, and transaction
 standards remain unchanged. A browser fixture is not real-node evidence.
 
+The 2026-09-14 remote-Core rescan responsiveness and Activity manual-sync
+follow-up has no BIP support impact. The scan still reconciles confirmed blocks
+and pending transactions before reporting completion; cancellation and native
+command scheduling change without changing descriptors, transaction semantics,
+wallet formats, node admission, or interoperability evidence. The owner's
+connected-node report is not evidence of a completed remote wallet rescan.
+
 Every feature, interoperability, signer, descriptor, transaction, payment request,
 backup/recovery, sync/backend, network, or dependency change must assess BIP impact.
 If it adds, removes, expands, narrows, or changes evidence for a BIP:
