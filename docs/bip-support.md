@@ -338,6 +338,11 @@ read-only snapshots while that reconciliation runs. It changes no descriptor,
 transaction, recovery, node-admission, or standards behavior; the remote-node
 completion and packaged-user-interface outcome still require physical retest.
 
+The later saved-node outage handling has no BIP support impact. It bounds the
+selected-wallet Core health check and clarifies offline presentation; it does
+not relax Mainnet admission, change the chain or descriptor rules, alter wallet
+data or interoperability formats, or establish new remote-node evidence.
+
 Every feature, interoperability, signer, descriptor, transaction, payment request,
 backup/recovery, sync/backend, network, or dependency change must assess BIP impact.
 If it adds, removes, expands, narrows, or changes evidence for a BIP:

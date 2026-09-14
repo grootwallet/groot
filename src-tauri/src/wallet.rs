@@ -118,7 +118,9 @@ const MAX_SUPPLEMENTAL_DICE_ROLLS: usize = 100;
 const SUPPLEMENTAL_TRANSCRIPT_DOMAIN: &[u8] = b"Groot supplemental entropy transcript v1";
 const SUPPLEMENTAL_MIX_DOMAIN: &[u8] = b"Groot BIP39 entropy mix v1";
 const RPC_TIMEOUT: Duration = Duration::from_secs(15);
-const NODE_HEALTH_ATTEMPTS: usize = 3;
+const NODE_HEALTH_RPC_TIMEOUT: Duration = Duration::from_secs(8);
+const NODE_HEALTH_ATTEMPTS: usize = 2;
+const CORE_RPC_ATTEMPTS: usize = 3;
 const NODE_HEALTH_RETRY_DELAY: Duration = Duration::from_millis(200);
 const MAINNET_NODE_ADMISSION_LIFETIME: Duration = Duration::from_secs(15 * 60);
 
@@ -2598,6 +2600,14 @@ fn saved_userpass_config_has_required_secret(
 }
 
 fn rpc_client(app: &AppHandle, state: &State<'_, AppState>) -> ApiResult<Client> {
+    rpc_client_with_timeout(app, state, RPC_TIMEOUT)
+}
+
+fn rpc_client_with_timeout(
+    app: &AppHandle,
+    state: &State<'_, AppState>,
+    timeout: Duration,
+) -> ApiResult<Client> {
     let config = read_node_config(app)?;
     validate_first_mainnet_rpc_endpoint(&config.backend)?;
     let url = config
@@ -2641,7 +2651,7 @@ fn rpc_client(app: &AppHandle, state: &State<'_, AppState>) -> ApiResult<Client>
                 session.config.username.as_deref(),
                 Some(session.password.as_str()),
                 config.tor_proxy.as_deref(),
-                RPC_TIMEOUT,
+                timeout,
             )
         }
     }?;
@@ -2860,7 +2870,7 @@ fn retry_transient_core_rpc<T>(
     mut operation: impl FnMut() -> Result<T, CoreRpcError>,
     mut pause: impl FnMut(Duration),
 ) -> ApiResult<T> {
-    for attempt in 0..NODE_HEALTH_ATTEMPTS {
+    for attempt in 0..CORE_RPC_ATTEMPTS {
         match operation() {
             Ok(value) => return Ok(value),
             Err(error) => {
@@ -2869,7 +2879,7 @@ fn retry_transient_core_rpc<T>(
                     return Err(api_error("sync_cancelled", "Wallet scan cancelled."));
                 }
                 let error = rpc_api_error(error);
-                if error.code == "network_unavailable" && attempt + 1 < NODE_HEALTH_ATTEMPTS {
+                if error.code == "network_unavailable" && attempt + 1 < CORE_RPC_ATTEMPTS {
                     pause(NODE_HEALTH_RETRY_DELAY);
                     continue;
                 }

@@ -1840,7 +1840,10 @@ pub(super) fn copy_network_setup_before_profile_commit(
 
 pub(crate) fn node_test(app: &AppHandle, state: &State<'_, AppState>) -> ApiResult<NodeStatusDto> {
     let config = read_node_config(app)?;
-    let status = checked_node_status(&rpc_client(app, state)?, config)?;
+    let status = checked_node_status(
+        &rpc_client_with_timeout(app, state, NODE_HEALTH_RPC_TIMEOUT)?,
+        config,
+    )?;
     mark_selected_mainnet_node_verified(app, state)?;
     update_public_network_status(app, None, Some(status.blocks))?;
     Ok(status)

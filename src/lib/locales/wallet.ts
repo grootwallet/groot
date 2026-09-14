@@ -1,6 +1,12 @@
 import type { CatalogSection } from './types';
 
 export const walletCopy = {
+  'Sync unavailable': { fr: 'Synchronisation indisponible', es: 'Sincronización no disponible' },
+  'The saved Bitcoin Core node is unreachable. Check that it is running and reachable, then try again.':
+    {
+      fr: 'Le nœud Bitcoin Core enregistré est inaccessible. Vérifiez qu’il fonctionne et qu’il est joignable, puis réessayez.',
+      es: 'No se puede acceder al nodo Bitcoin Core guardado. Comprueba que esté funcionando y sea accesible, y vuelve a intentarlo.'
+    },
   'Scan settings': { fr: 'Réglages d’analyse', es: 'Ajustes de escaneo' },
   'Loading wallet details…': {
     fr: 'Chargement des détails du portefeuille…',

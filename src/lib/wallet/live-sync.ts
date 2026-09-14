@@ -54,6 +54,18 @@ export function createLiveSync(
       ) {
         return true;
       }
+      // A Mainnet wallet cannot read chain state until the saved Core endpoint
+      // passes its exact-chain preflight. Repeating the gated sync every few
+      // seconds cannot repair an offline node; the Overview retry performs the
+      // preflight when the user is ready to try again.
+      if (
+        typeof cause === 'object' &&
+        cause !== null &&
+        'code' in cause &&
+        cause.code === 'node_admission_required'
+      ) {
+        consecutiveFailures = Math.max(consecutiveFailures, 4);
+      }
       try {
         onError(cause);
       } catch {

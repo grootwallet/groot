@@ -160,6 +160,13 @@ Show confirmed and total balance using the global sats/BTC preference; accountin
 
 A persisted global discreet mode hides wallet amounts across Overview and activity surfaces. It remains available as a quick desktop-shell control and from the balance card; it does not alter wallet accounting or transaction data.
 
+If the saved Core endpoint is unreachable on unlock, Mainnet wallet-data reads
+remain admission-gated. Overview must identify the node outage, stop its loading
+skeleton, and offer a direct retry of the saved connection. It must not label the
+wallet “Never synced” merely because this session could not load its persisted
+snapshot. The connection check has a bounded timeout and must not hold the
+renderer thread. No failed network check may erase or replace committed history.
+
 ## Receive
 
 1. User requests a new address.

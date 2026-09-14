@@ -903,15 +903,15 @@ fn core_scanner_retries_transient_transport_failures_and_sanitizes_exhaustion() 
     )
     .unwrap_err();
 
-    assert_eq!(attempts, NODE_HEALTH_ATTEMPTS);
-    assert_eq!(pauses, vec![NODE_HEALTH_RETRY_DELAY; 2]);
+    assert_eq!(attempts, CORE_RPC_ATTEMPTS);
+    assert_eq!(pauses, vec![NODE_HEALTH_RETRY_DELAY; CORE_RPC_ATTEMPTS - 1]);
     assert_sanitized_rpc_error(result);
 
     let mut recovering_attempts = 0;
     let recovered = retry_transient_core_rpc(
         || {
             recovering_attempts += 1;
-            if recovering_attempts < NODE_HEALTH_ATTEMPTS {
+            if recovering_attempts < CORE_RPC_ATTEMPTS {
                 Err(CoreRpcError::JsonRpc(jsonrpc::Error::Transport(Box::new(
                     std::io::Error::other("temporary transport detail"),
                 ))))
@@ -943,7 +943,10 @@ fn node_health_retries_only_transient_transport_failures() {
     .unwrap();
     assert_eq!(result, 149_142);
     assert_eq!(attempts, NODE_HEALTH_ATTEMPTS);
-    assert_eq!(pauses, vec![NODE_HEALTH_RETRY_DELAY; 2]);
+    assert_eq!(
+        pauses,
+        vec![NODE_HEALTH_RETRY_DELAY; NODE_HEALTH_ATTEMPTS - 1]
+    );
 
     let mut attempts = 0;
     let error = retry_transient_node_health(

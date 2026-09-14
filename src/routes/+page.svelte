@@ -96,6 +96,7 @@
   let moreTrigger = $state<HTMLButtonElement | null>(null);
   let showDescriptors = $state(false);
   let loadError = $state('');
+  let loadErrorCode = $state('');
   let networkSetupRequired = $state(false);
   let selectedProfile = $state<WalletProfile | null>(null);
   let verifyOpen = $state(false);
@@ -210,6 +211,9 @@
   let syncInProgress = $derived(syncing || syncStatusIsActive(syncStatus));
   let syncAgeValue = $derived(syncAge(snapshot?.syncedAt ?? null, syncClock));
   let syncButtonLabel = $derived.by(() => {
+    if (initialDataLoading) return translate($locale, isMainnet ? 'Checking node…' : 'Loading…');
+    if (loadErrorCode === 'network_unavailable') return translate($locale, 'Node unavailable');
+    if (loadError && !snapshot) return translate($locale, 'Sync unavailable');
     if (initialHistoryRequired && !nodeReady && !recoveryScanIsActive(recoveryStatus))
       return translate($locale, 'Connect Bitcoin Core');
     if (initialHistoryRequired && !recoveryScanIsActive(recoveryStatus))
@@ -231,9 +235,10 @@
     return translate($locale, 'Updated {count} d ago', { count: syncAgeValue.value });
   });
   let syncButtonTitle = $derived(
-    snapshot?.syncedAt
-      ? presentLocalTimestamp(snapshot.syncedAt).detail
-      : translate($locale, 'This wallet has not completed a sync yet.')
+    loadError ||
+      (snapshot?.syncedAt
+        ? presentLocalTimestamp(snapshot.syncedAt).detail
+        : translate($locale, 'This wallet has not completed a sync yet.'))
   );
   let hardwareSignerDetails = $derived.by<CosignerDraft | null>(() =>
     hardwareSignerWallet
@@ -355,6 +360,7 @@
   async function loadSnapshot() {
     const generation = ++loadGeneration;
     loadError = '';
+    loadErrorCode = '';
     networkSetupRequired = false;
     initialDataLoading = true;
     try {
@@ -408,21 +414,28 @@
         await goto('/unlock');
         return;
       }
+      loadErrorCode = cause instanceof WalletError ? cause.code : 'internal_error';
       networkSetupRequired =
         cause instanceof WalletError &&
-        [
-          'invalid_node_config',
-          'network_unavailable',
-          'node_admission_required',
-          'wallet_corrupt'
-        ].includes(cause.code);
+        ['invalid_node_config', 'node_admission_required', 'wallet_corrupt'].includes(cause.code);
       nodeReady = false;
-      loadError = networkSetupRequired
-        ? 'Connect this wallet to Bitcoin Core in Settings to load network data.'
-        : localizedError(cause, $locale, 'The wallet data could not be read.');
+      loadError =
+        loadErrorCode === 'network_unavailable'
+          ? translate(
+              $locale,
+              'The saved Bitcoin Core node is unreachable. Check that it is running and reachable, then try again.'
+            )
+          : networkSetupRequired
+            ? 'Connect this wallet to Bitcoin Core in Settings to load network data.'
+            : localizedError(cause, $locale, 'The wallet data could not be read.');
       initialDataLoading = false;
       toast({
-        title: networkSetupRequired ? 'Connect Bitcoin Core' : 'Could not open wallet',
+        title:
+          loadErrorCode === 'network_unavailable'
+            ? 'Node unavailable'
+            : networkSetupRequired
+              ? 'Connect Bitcoin Core'
+              : 'Could not open wallet',
         description: loadError,
         tone: networkSetupRequired ? 'default' : 'danger'
       });
@@ -523,6 +536,7 @@
         multisig = event.walletKind === 'multisig';
         snapshot = event.snapshot;
         loadError = '';
+        loadErrorCode = '';
         initialDataLoading = false;
       }
     })
@@ -692,6 +706,10 @@
   const sync = async (manual = true) => {
     if (manual && networkSetupRequired) {
       await openNetworkSetup();
+      return;
+    }
+    if (manual && loadErrorCode === 'network_unavailable') {
+      await loadSnapshot();
       return;
     }
     if (initialHistoryRequired) {

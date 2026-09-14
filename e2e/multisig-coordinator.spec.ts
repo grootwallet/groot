@@ -1559,7 +1559,9 @@ test('creates and verifies a simple 2-of-3 descriptor wallet', async ({ page }) 
   const exportCard = page.locator('.backup-export-card');
   await page.getByRole('button', { name: /Groot JSON/ }).click();
   await expect(exportCard.getByText('Re-authenticate this export')).toBeVisible();
-  await expect(exportCard.getByText(/exported descriptor is not encrypted/)).toBeVisible();
+  await expect(
+    exportCard.getByText(/Groot JSON includes public descriptors and wallet metadata/)
+  ).toBeVisible();
   await page.getByLabel('Backup app PIN', { exact: true }).fill('wrong-pin');
   await page.getByRole('button', { name: 'Authorize & prepare backup' }).click();
   await expect(exportCard.getByText('That app PIN does not match Family vault.')).toBeVisible();

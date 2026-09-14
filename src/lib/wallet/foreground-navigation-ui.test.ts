@@ -157,6 +157,21 @@ describe('foreground wallet navigation', () => {
     ).toBeLessThan(overview.indexOf('walletService.overview(selectedProfile.id)'));
   });
 
+  it('shows a saved-node outage instead of claiming a gated wallet never synced', () => {
+    expect(overview).toContain(
+      "if (initialDataLoading) return translate($locale, isMainnet ? 'Checking node…' : 'Loading…')"
+    );
+    expect(overview).toContain(
+      "if (loadErrorCode === 'network_unavailable') return translate($locale, 'Node unavailable')"
+    );
+    expect(overview).toContain(
+      "'The saved Bitcoin Core node is unreachable. Check that it is running and reachable, then try again.'"
+    );
+    expect(overview).toContain('onretry={networkSetupRequired ? openNetworkSetup : loadSnapshot}');
+    expect(overview).toContain("if (manual && loadErrorCode === 'network_unavailable') {");
+    expect(overview).toContain('await loadSnapshot();');
+  });
+
   it('does not start a second post-unlock scan after reattaching to an inherited scan', () => {
     expect(overview).toContain('if (syncStatusIsActive(syncStatus)) inheritedSyncObserved = true;');
     expect(overview).toMatch(

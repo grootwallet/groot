@@ -137,6 +137,28 @@ describe('live wallet sync', () => {
     vi.useRealTimers();
   });
 
+  it('backs off a Mainnet admission failure until the user can retry node verification', async () => {
+    vi.useFakeTimers();
+    const wallet = {
+      sync: vi.fn(),
+      cancelSync: vi.fn().mockResolvedValue(undefined),
+      syncMultisig: vi
+        .fn()
+        .mockRejectedValueOnce({ code: 'node_admission_required' })
+        .mockResolvedValue(undefined)
+    };
+    const controller = createLiveSync(wallet, () => 'multisig', 1_000);
+    controller.start();
+    await controller.runNow();
+    expect(wallet.syncMultisig).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(29_999);
+    expect(wallet.syncMultisig).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(wallet.syncMultisig).toHaveBeenCalledTimes(2);
+    controller.stop();
+    vi.useRealTimers();
+  });
+
   it('coalesces concurrent wake-ups instead of overlapping native syncs', async () => {
     let release!: () => void;
     let markStarted!: () => void;

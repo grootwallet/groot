@@ -683,3 +683,17 @@ promote 99% to completion. No persisted wallet, profile, proposal, registry,
 backup, descriptor, or node-settings format and no frontend DTO or stable error
 changes. Source/regression tests do not certify the replacement package against
 the owner's remote node; physical retest remains required.
+
+The owner-supplied sanitized log from exact Mainnet build `6edf79d8` shows
+unlock succeeded but every subsequent automatic sync failed at 0% with
+`node_admission_required`; it did not reach a block or mempool scan. A separate
+unauthenticated reachability check from the same Mac resolved the saved remote
+hostname but timed out connecting to TCP 443 while unrelated HTTPS responded.
+This observation establishes an endpoint/network outage at the time of the
+check, not a remote-server root cause or proof of wallet-data loss. The follow-up
+shortens selected-wallet node-health timeouts, distinguishes an unreachable saved
+node from absent setup in Overview, and suppresses misleading “Never synced”
+while the persisted snapshot remains admission-gated. Existing persisted formats
+and wallet-data admission requirements are unchanged. This does not certify the
+remote node, rescan, or the new package; owner retest remains necessary once the
+endpoint is reachable.
