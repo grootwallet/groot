@@ -123,7 +123,8 @@ The locked screen names only the selected wallet in its central card. The persis
 Mainnet does not add RPC fields to the locked screen. The existing authentication
 throttle is checked through a Rust-only, throttle-table database path; it does not
 read wallet state. After PIN-only wallet authentication, Rust decrypts the selected
-wallet's saved Core setup and Overview authenticates that exact loopback node and
+wallet's saved Core setup and Overview authenticates that exact admitted loopback
+HTTP or direct HTTPS node and
 Bitcoin genesis before the first wallet-data database read of the session. An
 unavailable or invalid node remains an Overview connection failure with retry and
 Settings recovery; the encrypted password never returns to the renderer.

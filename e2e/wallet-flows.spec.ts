@@ -1272,6 +1272,29 @@ test('settings clears credentials and confirmations after every modal dismissal'
   await expect(dialog.getByRole('button', { name: 'Delete wallet' })).toBeDisabled();
 });
 
+test('mainnet can select and save direct remote TLS without exposing Tor', async ({ page }) => {
+  test.skip(process.env.E2E_MAINNET !== '1', 'Run against a Mainnet-mode browser build.');
+  await page.goto('/settings');
+  await page.getByRole('button', { name: /Fee and broadcast node/ }).click();
+  const dialog = page.getByRole('dialog', { name: 'Connect Bitcoin Core' });
+  const remote = dialog.getByRole('button', { name: 'Remote TLS' });
+  await expect(dialog.getByRole('button', { name: 'Tor onion' })).toHaveCount(0);
+  await remote.click();
+  await expect(remote).toHaveClass(/active/);
+  await expect(dialog.getByLabel('RPC URL')).toHaveValue('https://');
+  await dialog.getByLabel('RPC URL').fill('https://node.example.test:8332');
+  await dialog.getByLabel('RPC username').fill('groot-test');
+  await dialog.getByLabel('RPC password', { exact: true }).fill('fixture-rpc-password');
+  await dialog.getByLabel('Wallet passphrase', { exact: true }).fill('prototype-passphrase');
+  await dialog.getByRole('button', { name: 'Save & test' }).click();
+  await expect(dialog).not.toBeVisible();
+  await expect(page.getByText('Trusted remote server')).toBeVisible();
+  await page.getByRole('button', { name: /Fee and broadcast node/ }).click();
+  await expect(dialog.getByLabel('RPC URL')).toHaveValue('https://node.example.test:8332');
+  await expect(dialog.getByLabel('RPC password', { exact: true })).toHaveValue('');
+  await expect(dialog.getByLabel('Wallet passphrase', { exact: true })).toHaveValue('');
+});
+
 test('amount denomination stays consistent across wallet surfaces', async ({ page }) => {
   await page.goto('/settings');
   const amountDisplay = page.getByLabel('Amount display');

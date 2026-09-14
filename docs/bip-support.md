@@ -302,6 +302,11 @@ their bytes, parsers, descriptor semantics, recovery checks, and BIP129/BIP380/
 BIP389 interoperability evidence are unchanged. The observed Mainnet spend and
 confirmation are exact-build owner reports, not new standards certification.
 
+Restoring the already-admitted Mainnet direct-HTTPS Core selector has no BIP
+support impact. It changes only Settings presentation of the existing Core RPC
+transport; chain identity, wallet discovery, descriptors, and transaction
+standards remain unchanged. A browser fixture is not real-node evidence.
+
 Every feature, interoperability, signer, descriptor, transaction, payment request,
 backup/recovery, sync/backend, network, or dependency change must assess BIP impact.
 If it adds, removes, expands, narrows, or changes evidence for a BIP:

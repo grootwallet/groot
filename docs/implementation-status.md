@@ -598,6 +598,15 @@ Update this table in the same change whenever a capability crosses a boundary.
 
 ## 2026-09-13 Mainnet multisig setup and Policy correction
 
+The subsequent remote-Core Settings correction restores the already-accepted
+ADR 0061 Mainnet direct-HTTPS selection: the Mainnet-only UI guard now excludes
+Tor but permits Remote TLS, consistent with Rust's existing exact-genesis,
+credential, certificate, and pre-database admission policy. A Mainnet-mode
+browser regression covers selection, save, reopening, and credential clearing;
+this fixture is not a live remote-node certification. Local Core and saved
+remote configurations retain their existing behavior. No wallet, registry,
+credential, node-configuration, descriptor, or backup format changes occur.
+
 The subsequent internal UI follow-up retains the current native wallet, signer,
 PSBT, and Bitcoin Core paths. The shared disabled-button indicator is again one
 open spinning circle without a decorative dot. The multisig Policy route shows

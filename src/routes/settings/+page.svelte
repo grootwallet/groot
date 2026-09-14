@@ -438,7 +438,7 @@
     }
   }
   function setNodeLocation(type: 'local_core' | 'remote_core' | 'tor') {
-    if (defaultConfig.network === 'mainnet' && type !== 'local_core') return;
+    if (defaultConfig.network === 'mainnet' && type === 'tor') return;
     node =
       type === 'local_core'
         ? localNodeConfig()
