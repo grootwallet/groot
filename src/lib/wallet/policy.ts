@@ -17,9 +17,9 @@ export type WalletPolicyPresentation = {
 };
 
 export function hasMiniscriptPolicy(
-  wallet: Pick<MultisigWallet, 'recoveryTemplate'> | null | undefined
+  wallet: Pick<MultisigWallet, 'recoveryTemplate'> | { recoveryTemplate: null } | null | undefined
 ): boolean {
-  return wallet?.recoveryTemplate !== undefined;
+  return wallet?.recoveryTemplate != null;
 }
 
 export function walletPolicyPresentation(wallet: MultisigWallet): WalletPolicyPresentation {

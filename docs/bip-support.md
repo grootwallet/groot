@@ -1,5 +1,11 @@
 # Bitcoin Improvement Proposal support
 
+The 2026-09-14 presentation follow-up changes no BIP support or evidence:
+standard multisig hides the Miniscript-only lab for a native-null recovery
+template, public BSMS/Groot export copy is format-specific, and Receive/Send
+loading acknowledgement changes no descriptor, address, signer, PSBT,
+transaction, or persisted format.
+
 The 2026-09-13 policy-review copy and shared loading-indicator adjustment have
 no BIP, descriptor, key-derivation, HWI, PSBT, persisted-format, or protocol
 impact. The owner-reported exact `4630bf95` Mainnet policy and Ledger receive

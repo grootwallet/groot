@@ -765,6 +765,8 @@ test('keeps advanced wallet actions compact and makes both descriptors inspectab
   await page.getByRole('button', { name: 'More wallet actions' }).click();
   await expect(page.getByRole('menuitem', { name: /Show descriptors/ })).toBeVisible();
   await expect(page.getByRole('menuitem', { name: /Export & verify/ })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: /Recovery policy lab/ })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Recovery policy lab' })).toHaveCount(0);
   await page.getByRole('menuitem', { name: /Show descriptors/ }).click();
   const descriptors = page.getByRole('dialog', { name: 'Wallet descriptors' });
   await expect(descriptors.getByText('Portable wallet descriptor', { exact: true })).toBeVisible();
@@ -1662,6 +1664,11 @@ test('creates and verifies a simple 2-of-3 descriptor wallet', async ({ page }) 
 
 test('exports and validates the recommended BSMS record', async ({ page }) => {
   await page.goto('/multisig/backup');
+  await expect(page.getByText(/BSMS is an unencrypted public descriptor/)).toBeVisible();
+  await page.getByRole('button', { name: /Groot JSON/ }).click();
+  await expect(page.getByText(/Groot JSON includes public descriptors/)).toBeVisible();
+  await expect(page.getByText(/BSMS is an unencrypted public descriptor/)).toHaveCount(0);
+  await page.getByRole('button', { name: /BSMS 1\.0/ }).click();
   await page.getByLabel('Backup app PIN', { exact: true }).fill('prototype-passphrase');
   await page.getByRole('button', { name: 'Authorize & prepare backup' }).click();
   await expect(page.getByLabel('Descriptor backup', { exact: true })).toHaveValue(/^BSMS 1\.0\n/);

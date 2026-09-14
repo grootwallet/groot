@@ -16,6 +16,7 @@
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
   import Button from '$lib/components/Button.svelte';
+  import WalletSkeleton from '$lib/components/WalletSkeleton.svelte';
   import PermanentLabelEditor from '$lib/components/PermanentLabelEditor.svelte';
   import Modal from '$lib/components/Modal.svelte';
   import ReadableAddress from '$lib/components/ReadableAddress.svelte';
@@ -51,6 +52,7 @@
   let qrDataUrl = $state('');
   let busy = $state(false);
   let ready = $state(false);
+  let loadError = $state('');
   let generateError = $state('');
   let policyVerificationNeeded = $state(false);
   let showGenerate = $state(false);
@@ -101,14 +103,16 @@
           await goto('/receive', { replaceState: true });
           return;
         }
-        const [state, savedWallet] = await Promise.all([
-          walletService.multisigSnapshot(),
+        const [, savedWallet] = await Promise.all([
+          walletService.multisigSnapshot().then((state) => {
+            if (!active) return;
+            applyAddresses(state.receiveAddresses);
+            labelSuggestions = state.labelSuggestions;
+          }),
           walletService.multisigWallet()
         ]);
         if (!active) return;
         wallet = savedWallet;
-        applyAddresses(state.receiveAddresses);
-        labelSuggestions = state.labelSuggestions;
         ready = true;
       } catch (cause) {
         if (!active) return;
@@ -116,9 +120,10 @@
           await goto('/receive', { replaceState: true });
           return;
         }
+        loadError = localizedError(cause, $locale);
         toast({
           title: 'Could not load wallet',
-          description: localizedError(cause, $locale),
+          description: loadError,
           tone: 'danger'
         });
       }
@@ -230,7 +235,14 @@
     </div>
     <Button variant="secondary" href="/">{translate($locale, 'Back to overview')}</Button>
   </header>
-  {#if current}<section class="receive-card">
+  {#if loadError}<section class="empty-state" role="alert">
+      <h2>{translate($locale, 'Could not load wallet')}</h2>
+      <p>{loadError}</p>
+      <Button variant="secondary" onclick={() => window.location.reload()}
+        >{translate($locale, 'Try again')}</Button
+      >
+    </section>
+  {:else if current}<section class="receive-card">
       <button
         class="qr-placeholder qr-button"
         aria-label={translate($locale, 'Enlarge QR code')}
@@ -304,6 +316,7 @@
           {translate($locale, 'Verify on a wallet signer before sharing this address.')}
         </p>{/if}
     </section>
+  {:else if !ready}<WalletSkeleton variant="balance" />
   {:else}<section class="empty-state">
       <span class="empty-icon"><QrCode size={24} /></span>
       <h2>
@@ -325,90 +338,90 @@
         }}><Plus size={17} />{translate($locale, 'New address')}</Button
       >
     </section>{/if}
-  <div class="section-heading compact">
-    <div>
-      <h2>{translate($locale, 'Awaiting payment')}</h2>
-      <p>
-        {awaiting.length}
-        {translate($locale, 'active')}
-        {translate($locale, awaiting.length === 1 ? 'address' : 'addresses')}
-      </p>
+  {#if ready}<div class="section-heading compact">
+      <div>
+        <h2>{translate($locale, 'Awaiting payment')}</h2>
+        <p>
+          {awaiting.length}
+          {translate($locale, 'active')}
+          {translate($locale, awaiting.length === 1 ? 'address' : 'addresses')}
+        </p>
+      </div>
+      <Button
+        variant="secondary"
+        size="small"
+        disabled={!ready}
+        onclick={() => {
+          generateError = '';
+          showGenerate = true;
+        }}
+        ariaLabel="New receive address"><Plus size={15} />{translate($locale, 'New')}</Button
+      >
     </div>
-    <Button
-      variant="secondary"
-      size="small"
-      disabled={!ready}
-      onclick={() => {
-        generateError = '';
-        showGenerate = true;
-      }}
-      ariaLabel="New receive address"><Plus size={15} />{translate($locale, 'New')}</Button
-    >
-  </div>
-  <div class="awaiting-addresses">
-    {#each awaiting as address}<article class:active={current?.id === address.id}>
-        <button
-          class="awaiting-select"
-          aria-label={`${translate($locale, 'View {label}', { label: address.label })}${
-            supportsHardwareVerification
-              ? `. ${translate(
-                  $locale,
-                  address.hardwareVerifiedAt ? 'Hardware verified' : 'Hardware not verified'
-                )}`
-              : ''
-          }`}
-          onclick={() => {
-            current = address;
-            showDetails = false;
-          }}
-          ><span class="status-dot"></span><span
+    <div class="awaiting-addresses">
+      {#each awaiting as address}<article class:active={current?.id === address.id}>
+          <button
+            class="awaiting-select"
+            aria-label={`${translate($locale, 'View {label}', { label: address.label })}${
+              supportsHardwareVerification
+                ? `. ${translate(
+                    $locale,
+                    address.hardwareVerifiedAt ? 'Hardware verified' : 'Hardware not verified'
+                  )}`
+                : ''
+            }`}
+            onclick={() => {
+              current = address;
+              showDetails = false;
+            }}
+            ><span class="status-dot"></span><span
+              ><PermanentLabelTags labels={address.labels ?? [address.label]} prominent /><small
+                >{compactAddress(address.address)}</small
+              ></span
+            ><span class="right-meta"
+              >{#if supportsHardwareVerification}<span
+                  class="address-verification-state"
+                  class:verified={Boolean(address.hardwareVerifiedAt)}
+                  >{#if address.hardwareVerifiedAt}<ShieldCheck size={12} />{translate(
+                      $locale,
+                      'Hardware verified'
+                    )}{:else}<Shield size={12} />{translate(
+                      $locale,
+                      'Hardware not verified'
+                    )}{/if}</span
+                >{:else}{translate($locale, 'Awaiting')}{/if}<small
+                ><LocalTimestamp value={address.created} /></small
+              ></span
+            ></button
+          ><button
+            class="awaiting-discard"
+            aria-label={translate($locale, 'Discard {label}', { label: address.label })}
+            onclick={() => requestDiscard(address)}><Trash2 size={15} /></button
+          >
+        </article>{:else}<p class="list-empty">
+          {translate($locale, 'No active payment requests.')}
+        </p>{/each}
+    </div>{:else if !loadError}<WalletSkeleton variant="transactions" count={2} />{/if}
+  {#if ready}<div class="section-heading compact">
+      <div>
+        <h2>{translate($locale, 'Address history')}</h2>
+        <p>{translate($locale, 'Used and discarded addresses remain monitored.')}</p>
+      </div>
+    </div>
+    <div class="address-history">
+      {#each history as address}<button
+          class="address-history-row"
+          aria-label={translate($locale, 'View details for {label}', { label: address.label })}
+          onclick={() => (detailAddress = address)}
+          ><span class="status-dot" class:used={address.status === 'used'}></span><span
             ><PermanentLabelTags labels={address.labels ?? [address.label]} prominent /><small
               >{compactAddress(address.address)}</small
             ></span
           ><span class="right-meta"
-            >{#if supportsHardwareVerification}<span
-                class="address-verification-state"
-                class:verified={Boolean(address.hardwareVerifiedAt)}
-                >{#if address.hardwareVerifiedAt}<ShieldCheck size={12} />{translate(
-                    $locale,
-                    'Hardware verified'
-                  )}{:else}<Shield size={12} />{translate(
-                    $locale,
-                    'Hardware not verified'
-                  )}{/if}</span
-              >{:else}{translate($locale, 'Awaiting')}{/if}<small
-              ><LocalTimestamp value={address.created} /></small
-            ></span
-          ></button
-        ><button
-          class="awaiting-discard"
-          aria-label={translate($locale, 'Discard {label}', { label: address.label })}
-          onclick={() => requestDiscard(address)}><Trash2 size={15} /></button
-        >
-      </article>{:else}<p class="list-empty">
-        {translate($locale, 'No active payment requests.')}
-      </p>{/each}
-  </div>
-  <div class="section-heading compact">
-    <div>
-      <h2>{translate($locale, 'Address history')}</h2>
-      <p>{translate($locale, 'Used and discarded addresses remain monitored.')}</p>
-    </div>
-  </div>
-  <div class="address-history">
-    {#each history as address}<button
-        class="address-history-row"
-        aria-label={translate($locale, 'View details for {label}', { label: address.label })}
-        onclick={() => (detailAddress = address)}
-        ><span class="status-dot" class:used={address.status === 'used'}></span><span
-          ><PermanentLabelTags labels={address.labels ?? [address.label]} prominent /><small
-            >{compactAddress(address.address)}</small
-          ></span
-        ><span class="right-meta"
-          >{address.status}<small><LocalTimestamp value={address.created} /></small></span
-        ><ChevronRight size={15} /></button
-      >{:else}<p class="list-empty">{translate($locale, 'No past addresses yet.')}</p>{/each}
-  </div>
+            >{address.status}<small><LocalTimestamp value={address.created} /></small></span
+          ><ChevronRight size={15} /></button
+        >{:else}<p class="list-empty">{translate($locale, 'No past addresses yet.')}</p>{/each}
+    </div>{/if}
 </div>
 
 <Modal

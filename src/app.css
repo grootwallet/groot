@@ -7458,6 +7458,10 @@ code {
   color: var(--success);
   background: color-mix(in srgb, var(--success) 5%, transparent);
 }
+.backup-export-card > .optional-insight {
+  margin: 16px 0 10px;
+  gap: 6px;
+}
 .backup-format-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;

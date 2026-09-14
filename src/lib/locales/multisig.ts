@@ -441,6 +441,16 @@ export const multisigCopy = {
     fr: 'Réautoriser cet export',
     es: 'Volver a autenticar esta exportación'
   },
+  'BSMS is an unencrypted public descriptor: it cannot spend, but reveals wallet addresses. Enter the app PIN and keep the export private.':
+    {
+      fr: 'BSMS est un descripteur public non chiffré : il ne peut pas dépenser, mais révèle les adresses du portefeuille. Saisissez le PIN de l’application et gardez cet export privé.',
+      es: 'BSMS es un descriptor público sin cifrar: no puede gastar, pero revela las direcciones de la cartera. Introduce el PIN de la aplicación y mantén privada esta exportación.'
+    },
+  'Groot JSON includes public descriptors and wallet metadata. It cannot spend, but reveals wallet activity. Enter the app PIN and keep the export private.':
+    {
+      fr: 'Le JSON Groot contient des descripteurs publics et des métadonnées du portefeuille. Il ne peut pas dépenser, mais révèle l’activité du portefeuille. Saisissez le PIN de l’application et gardez cet export privé.',
+      es: 'El JSON de Groot incluye descriptores públicos y metadatos de la cartera. No puede gastar, pero revela la actividad de la cartera. Introduce el PIN de la aplicación y mantén privada esta exportación.'
+    },
   'Ready-to-test demo wallet': {
     fr: 'Portefeuille de démonstration prêt à tester',
     es: 'Cartera de demostración lista para probar'

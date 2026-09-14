@@ -931,7 +931,6 @@
     }
   }
   async function scan() {
-    if (!(await hardwareSessionIsUnlocked())) return;
     const generation = ++hardwareScanGeneration;
     deviceOpen = true;
     activeHardwareDevice = null;
@@ -939,6 +938,8 @@
     busy = true;
     deviceError = '';
     try {
+      if (!(await hardwareSessionIsUnlocked())) return;
+      if (generation !== hardwareScanGeneration || !deviceOpen) return;
       const discovered = await walletService.listHardwareDevices();
       if (generation !== hardwareScanGeneration || !deviceOpen) return;
       devices = discovered;

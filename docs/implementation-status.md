@@ -598,6 +598,18 @@ Update this table in the same change whenever a capability crosses a boundary.
 
 ## 2026-09-13 Mainnet multisig setup and Policy correction
 
+The 2026-09-14 presentation correction fixes the policy-lab eligibility check
+for Rust's `null` absent recovery template, so standard multisig shows no lab
+entry in either Policy action location. The backup format label now precedes the
+two choices with explicit spacing, and its shorter security note changes with
+the selected public export format. Single-key and multisig Receive use the
+existing wallet skeleton during initial reads instead of claiming an empty
+address list. Multisig Send opens the existing hardware progress dialog before
+session validation and device enumeration; actual HWI discovery remains
+asynchronous and unchanged. No persisted wallet, backup, descriptor, proposal,
+network, or signer format changes occur; physical performance remains to be
+measured on device.
+
 The subsequent remote-Core Settings correction restores the already-accepted
 ADR 0061 Mainnet direct-HTTPS selection: the Mainnet-only UI guard now excludes
 Tor but permits Remote TLS, consistent with Rust's existing exact-genesis,
@@ -612,8 +624,9 @@ PSBT, and Bitcoin Core paths. The shared disabled-button indicator is again one
 open spinning circle without a decorative dot. The multisig Policy route shows
 the existing wallet skeleton while its selected-wallet lookup is pending and an
 actionable error if that lookup fails, never the single-key fallback for an
-unresolved lookup. Standard sortedmulti wallets already hide the Miniscript-only
-Recovery policy lab in the card and overflow menu; the browser regression now
+unresolved lookup. Standard sortedmulti wallets hide the Miniscript-only
+Recovery policy lab in the card and overflow menu once both missing and native-null
+recovery templates are treated as absent; the browser regression now
 also watches for a transient false fallback. Export & verify authorizes both
 existing public BSMS and Groot JSON commands with one app PIN, clears that PIN,
 and switches between the two transient records without new authorization or a

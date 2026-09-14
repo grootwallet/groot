@@ -260,6 +260,16 @@
         </div>
         <FileKey size={19} />
       </div>
+      <p class="optional-insight">
+        {translate($locale, 'Backup formats')}
+        <InsightTip
+          label={translate($locale, 'About backup formats')}
+          text={translate(
+            $locale,
+            'BSMS is a portable public descriptor record supported by compatible coordinators. Groot JSON also preserves Groot-specific labels and metadata. Neither contains private keys.'
+          )}
+        />
+      </p>
       <div
         class="backup-format-grid"
         role="radiogroup"
@@ -282,24 +292,15 @@
           ><small>{translate($locale, 'Descriptors plus Groot metadata')}</small></button
         >
       </div>
-      <p class="optional-insight">
-        {translate($locale, 'Backup formats')}
-        <InsightTip
-          label={translate($locale, 'About backup formats')}
-          text={translate(
-            $locale,
-            'BSMS is a portable public descriptor record supported by compatible coordinators. Groot JSON also preserves Groot-specific labels and metadata. Neither contains private keys.'
-          )}
-        />
-      </p>
       {#if !backup}
         <div class="backup-security-note">
           <ShieldCheck size={18} /><span
             ><strong>{translate($locale, 'Re-authenticate this export')}</strong><small
-              >{translate($locale, 'Use')}
-              {wallet.name}{translate(
+              >{translate(
                 $locale,
-                '’s app PIN. This protects access to private financial metadata even\n              while the wallet screen is open. The exported descriptor is not encrypted: it cannot\n              spend, but it reveals addresses and should remain private.'
+                backupFormat === 'bsms'
+                  ? 'BSMS is an unencrypted public descriptor: it cannot spend, but reveals wallet addresses. Enter the app PIN and keep the export private.'
+                  : 'Groot JSON includes public descriptors and wallet metadata. It cannot spend, but reveals wallet activity. Enter the app PIN and keep the export private.'
               )}</small
             ></span
           >
