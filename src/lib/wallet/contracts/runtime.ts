@@ -35,6 +35,7 @@ export type RuntimePlatform = {
   platform: 'ios' | 'android' | 'macos' | 'windows' | 'linux' | 'browser';
   mobile: boolean;
   network: SupportedNetwork;
+  networkSwitching: boolean;
   version: string;
   commit: string;
 };

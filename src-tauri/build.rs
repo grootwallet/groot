@@ -6,12 +6,14 @@ fn main() {
     println!("cargo:rerun-if-env-changed=GROOT_MACOS_SIGNING_TEAM_ID");
     watch_git_identity();
     println!(
-        "cargo:rustc-check-cfg=cfg(groot_network, values(\"regtest\", \"signet\", \"testnet4\", \"mainnet\"))"
+        "cargo:rustc-check-cfg=cfg(groot_network, values(\"regtest\", \"signet\", \"testnet4\", \"mainnet\", \"multi\"))"
     );
     let network = std::env::var("GROOT_BUILD_NETWORK").unwrap_or_else(|_| "regtest".to_owned());
     match network.as_str() {
-        "regtest" | "signet" | "testnet4" | "mainnet" => {}
-        _ => panic!("GROOT_BUILD_NETWORK must be exactly regtest, signet, testnet4, or mainnet"),
+        "regtest" | "signet" | "testnet4" | "mainnet" | "multi" => {}
+        _ => panic!(
+            "GROOT_BUILD_NETWORK must be exactly regtest, signet, testnet4, mainnet, or multi"
+        ),
     }
     println!("cargo:rustc-cfg=groot_network=\"{network}\"");
     let compiled_team_id = std::env::var("GROOT_MACOS_SIGNING_TEAM_ID")

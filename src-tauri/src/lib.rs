@@ -32,8 +32,63 @@ struct RuntimePlatformDto {
     platform: &'static str,
     mobile: bool,
     network: &'static str,
+    network_switching: bool,
     version: &'static str,
     commit: &'static str,
+}
+
+#[derive(Debug, Serialize)]
+struct NetworkSelectionApiError {
+    code: &'static str,
+    message: String,
+}
+
+fn network_selection_api_error(
+    error: build_network::NetworkSelectionError,
+) -> NetworkSelectionApiError {
+    NetworkSelectionApiError {
+        code: error.code(),
+        message: error.to_string(),
+    }
+}
+
+fn initialize_network(app: &tauri::AppHandle) -> Result<(), build_network::NetworkSelectionError> {
+    if !build_network::switching_enabled()
+        || std::env::var_os("GROOT_REGTEST_APP_DATA_DIR").is_some()
+    {
+        return Ok(());
+    }
+    let root = app
+        .path()
+        .app_data_dir()
+        .map_err(|_| build_network::NetworkSelectionError::Io)?;
+    build_network::activate_selection(&root)
+}
+
+#[tauri::command]
+fn bitcoin_network_switch(
+    app: tauri::AppHandle,
+    selected_network: String,
+) -> Result<(), NetworkSelectionApiError> {
+    if !build_network::switching_enabled()
+        || std::env::var_os("GROOT_REGTEST_APP_DATA_DIR").is_some()
+    {
+        return Err(network_selection_api_error(
+            build_network::NetworkSelectionError::Unavailable,
+        ));
+    }
+    let selected =
+        build_network::parse_selectable(&selected_network).map_err(network_selection_api_error)?;
+    if selected == build_network::network() {
+        return Ok(());
+    }
+    let root = app
+        .path()
+        .app_data_dir()
+        .map_err(|_| network_selection_api_error(build_network::NetworkSelectionError::Io))?;
+    build_network::save_selection_at(&root, selected).map_err(network_selection_api_error)?;
+    app.request_restart();
+    Ok(())
 }
 
 #[tauri::command]
@@ -52,7 +107,8 @@ fn runtime_platform() -> RuntimePlatformDto {
     RuntimePlatformDto {
         platform,
         mobile: cfg!(mobile),
-        network: build_network::NAME,
+        network: build_network::name(),
+        network_switching: build_network::switching_enabled(),
         version: env!("CARGO_PKG_VERSION"),
         commit: env!("GROOT_BUILD_COMMIT"),
     }
@@ -65,6 +121,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
+            initialize_network(app.handle())?;
             let lock = process_lock::ProcessLock::acquire_for_app(app.handle())?;
             app.manage(lock);
             let state = app.state::<wallet::AppState>();
@@ -84,6 +141,7 @@ pub fn run() {
         .manage(wallet::AppState::default())
         .invoke_handler(tauri::generate_handler![
             runtime_platform,
+            bitcoin_network_switch,
             wallet::diagnostics::diagnostics_list,
             wallet::diagnostics::diagnostics_export,
             wallet::profile_commands::wallet_exists,
@@ -229,7 +287,8 @@ mod runtime_tests {
     #[test]
     fn runtime_identity_is_native_public_build_metadata() {
         let identity = runtime_platform();
-        assert_eq!(identity.network, build_network::NAME);
+        assert_eq!(identity.network, build_network::name());
+        assert_eq!(identity.network_switching, cfg!(groot_network = "multi"));
         assert_eq!(identity.version, env!("CARGO_PKG_VERSION"));
         let commit = identity
             .commit

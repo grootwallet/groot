@@ -5,7 +5,7 @@ use bdk_bitcoind_rpc::bitcoincore_rpc::{jsonrpc, Error as CoreRpcError};
 use bdk_wallet::error::CreateTxError;
 
 use crate::bsms::BsmsError;
-use crate::build_network::{NAME as NETWORK_NAME, NETWORK};
+use crate::build_network::{name as network_name, network};
 use crate::external_signer::ExternalSignerError;
 use crate::hardware::HardwareError;
 use crate::multisig::PolicyError;
@@ -118,7 +118,7 @@ pub(super) fn policy_api_error(error: PolicyError) -> ApiError {
         PolicyError::DuplicateFingerprint => "Every signer must have a unique master fingerprint.",
         PolicyError::DuplicateXpub => "Every signer must have a unique account xpub.",
         PolicyError::InvalidDescriptor => {
-            if NETWORK == bdk_wallet::bitcoin::Network::Bitcoin {
+            if network() == bdk_wallet::bitcoin::Network::Bitcoin {
                 "A key or descriptor is invalid. Use a mainnet BIP48 account xpub."
             } else {
                 "A key or descriptor is invalid. Use the compiled test-network BIP48 account tpub."
@@ -198,14 +198,14 @@ pub(super) fn external_signer_api_error(error: ExternalSignerError) -> ApiError 
             "The signer fingerprint must contain exactly 8 hexadecimal characters."
         }
         ExternalSignerError::InvalidDerivation => {
-            if NETWORK == bdk_wallet::bitcoin::Network::Bitcoin {
+            if network() == bdk_wallet::bitcoin::Network::Bitcoin {
                 "Use the mainnet BIP84 account path m/84'/0'/0'."
             } else {
                 "Use the test-chain BIP84 account path m/84'/1'/0'."
             }
         }
         ExternalSignerError::WrongNetwork => {
-            if NETWORK == bdk_wallet::bitcoin::Network::Bitcoin {
+            if network() == bdk_wallet::bitcoin::Network::Bitcoin {
                 "Use a mainnet account xpub, not a test-network tpub."
             } else {
                 "Use a test-chain account tpub, not a mainnet xpub."
@@ -359,12 +359,13 @@ pub(super) fn hardware_device_api_error(error: HardwareError, device_type: &str)
 pub(super) fn missing_hardware_fingerprint(device_type: &str) -> ApiError {
     let message = match device_type.to_ascii_lowercase().as_str() {
         "ledger" => format!(
-            "Unlock Ledger and open {} for this {NETWORK_NAME} wallet, then scan again.",
-            if NETWORK == bdk_wallet::bitcoin::Network::Bitcoin {
+            "Unlock Ledger and open {} for this {} wallet, then scan again.",
+            if network() == bdk_wallet::bitcoin::Network::Bitcoin {
                 "Bitcoin"
             } else {
                 "Bitcoin Test—not Bitcoin"
-            }
+            },
+            network_name()
         ),
         "bitbox02" => "Unlock BitBox, then try again.".to_owned(),
         "jade" => "Jade is still locked. Select it again and enter your PIN on Jade when prompted."

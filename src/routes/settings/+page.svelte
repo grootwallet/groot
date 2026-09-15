@@ -38,7 +38,12 @@
   import LocalTimestamp from '$lib/components/LocalTimestamp.svelte';
   import { toast } from '$lib/stores/toasts';
   import { formatInteger, locale, t } from '$lib/i18n';
-  import { defaultConfig, networkName } from '$lib/config';
+  import {
+    defaultConfig,
+    networkName,
+    SWITCHABLE_NETWORKS,
+    type SwitchableNetwork
+  } from '$lib/config';
   import { isPrototypeWallet, walletService, WalletError } from '$lib/wallet';
   import { goto, replaceState } from '$app/navigation';
   import { page } from '$app/state';
@@ -52,6 +57,7 @@
     NodeStatus,
     RecoveryScanSettings,
     RecoveryScanStatus,
+    RuntimePlatform,
     WalletErrorDetails,
     WalletProfile,
     WalletSyncSource
@@ -139,6 +145,11 @@
     nodePassword = $state(''),
     walletCredential = $state(''),
     nodeError = $state('');
+  let runtime = $state<RuntimePlatform | null>(null);
+  let networkSwitchOpen = $state(false),
+    networkSwitchTarget = $state<SwitchableNetwork | null>(null),
+    networkSwitchError = $state(''),
+    networkSwitching = $state(false);
   const localRpcUrl =
     defaultConfig.network === 'regtest'
       ? 'http://127.0.0.1:18443'
@@ -262,8 +273,12 @@
     );
     const generation = ++profileReadGeneration;
     theme = currentTheme();
-    const registry = await walletService.profiles();
+    const [nextRuntime, registry] = await Promise.all([
+      walletService.runtimePlatform(),
+      walletService.profiles()
+    ]);
     if (generation !== profileReadGeneration) return;
+    runtime = nextRuntime;
     profiles = registry.wallets;
     selectedWalletId = registry.selectedWalletId;
     inactivityTimeoutMinutes = registry.inactivityTimeoutMinutes;
@@ -294,6 +309,38 @@
       replaceState('/settings', {});
     }
   });
+
+  function openNetworkSwitch(target: SwitchableNetwork) {
+    if (!runtime?.networkSwitching || target === defaultConfig.network) return;
+    networkSwitchTarget = target;
+    networkSwitchError = '';
+    networkSwitchOpen = true;
+  }
+
+  async function confirmNetworkSwitch() {
+    if (!networkSwitchTarget || networkSwitching) return;
+    networkSwitching = true;
+    networkSwitchError = '';
+    let syncPaused = false;
+    try {
+      await walletShell.pauseAutomaticSync();
+      syncPaused = true;
+      await walletService.switchNetwork(networkSwitchTarget);
+    } catch (cause) {
+      networkSwitchError = localizedError(
+        cause,
+        $locale,
+        'Groot could not save the Bitcoin network selection.'
+      );
+      toast({
+        title: 'Network not changed',
+        description: networkSwitchError,
+        tone: 'danger'
+      });
+      if (syncPaused) walletShell.resumeAutomaticSync();
+      networkSwitching = false;
+    }
+  }
 
   async function exportLabels() {
     labelInterchangeBusy = true;
@@ -1326,6 +1373,33 @@
   <section class="settings-group">
     <h2>{translate($locale, 'Network services')}</h2>
     <div class="settings-list">
+      <div class="setting-row bitcoin-network-row">
+        <span class="setting-icon"><Network size={18} /></span><span
+          ><strong>{translate($locale, 'Bitcoin network')}</strong><small
+            >{runtime?.networkSwitching
+              ? translate(
+                  $locale,
+                  'Changing networks restarts Groot. Wallets and node settings stay isolated per network.'
+                )
+              : translate($locale, 'This release is fixed to {network}.', {
+                  network: networkName(defaultConfig.network)
+                })}</small
+          ></span
+        ><span
+          class="theme-choice network-choice"
+          role="radiogroup"
+          aria-label={translate($locale, 'Bitcoin network')}
+        >
+          {#each SWITCHABLE_NETWORKS as candidate}<button
+              type="button"
+              role="radio"
+              aria-checked={defaultConfig.network === candidate}
+              class:active={defaultConfig.network === candidate}
+              disabled={!runtime?.networkSwitching || networkSwitching}
+              onclick={() => openNetworkSwitch(candidate)}>{networkName(candidate)}</button
+            >{/each}
+        </span>
+      </div>
       <button onclick={openSyncSource}
         ><span class="setting-icon"><RefreshCw size={18} /></span><span
           ><strong>{translate($locale, 'Wallet activity sync')}</strong><small
@@ -1444,6 +1518,56 @@
     </section>{/if}
   <BuildIdentity placement="settings" />
 </div>
+
+<Modal
+  open={networkSwitchOpen}
+  title={translate($locale, 'Switch to {network}?', {
+    network: networkName(networkSwitchTarget ?? defaultConfig.network)
+  })}
+  description={translate(
+    $locale,
+    'Groot will restart and open only the wallets and node settings saved for that network.'
+  )}
+  onclose={() => {
+    if (networkSwitching) return;
+    networkSwitchOpen = false;
+    networkSwitchTarget = null;
+    networkSwitchError = '';
+  }}
+>
+  {#if networkSwitchTarget === 'mainnet'}<div class="warning-box">
+      <strong>{translate($locale, 'Mainnet uses real bitcoin.')}</strong>
+      {translate(
+        $locale,
+        'Confirm the Bitcoin Core network and every address before receiving, signing, or broadcasting.'
+      )}
+    </div>{:else}<p class="modal-supporting-copy">
+      {translate(
+        $locale,
+        'The current network stays unchanged on disk. Switching back restores its wallets exactly as they were.'
+      )}
+    </p>{/if}
+  {#if networkSwitchError}<p class="form-error" role="alert">{networkSwitchError}</p>{/if}
+  <div class="modal-footer">
+    <Button
+      variant="secondary"
+      disabled={networkSwitching}
+      onclick={() => {
+        networkSwitchOpen = false;
+        networkSwitchTarget = null;
+        networkSwitchError = '';
+      }}>{translate($locale, 'Cancel')}</Button
+    ><Button
+      disabled={!networkSwitchTarget}
+      loading={networkSwitching}
+      loadingLabel={translate($locale, 'Restarting…')}
+      onclick={confirmNetworkSwitch}
+      >{translate($locale, 'Restart in {network}', {
+        network: networkName(networkSwitchTarget ?? defaultConfig.network)
+      })}</Button
+    >
+  </div>
+</Modal>
 
 <Modal
   open={labelInterchangeOpen}

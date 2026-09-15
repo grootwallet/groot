@@ -6,8 +6,8 @@ use bdk_wallet::{
 use serde::{Deserialize, Serialize};
 use std::{collections::HashSet, fmt, str::FromStr};
 
-pub use crate::build_network::MULTISIG_ACCOUNT_PATH;
-use crate::build_network::PARAMETERS;
+pub use crate::build_network::multisig_account_path;
+use crate::build_network::parameters;
 const MIN_COSIGNERS: usize = 3;
 const MAX_COSIGNERS: usize = 7;
 
@@ -38,13 +38,13 @@ impl CosignerInput {
     pub fn parse_for_validation(&self) -> Result<(), PolicyError> {
         let account_xpub =
             Xpub::from_str(self.xpub.trim()).map_err(|_| PolicyError::InvalidDescriptor)?;
-        if self.derivation_path != MULTISIG_ACCOUNT_PATH
+        if self.derivation_path != multisig_account_path()
             || self.id.trim().is_empty()
             || self.id.len() > 128
             || self.label.trim().is_empty()
             || self.label.chars().count() > 48
             || Fingerprint::from_str(self.fingerprint.trim()).is_err()
-            || account_xpub.network != PARAMETERS.extended_key_network
+            || account_xpub.network != parameters().extended_key_network
         {
             return Err(PolicyError::InvalidDescriptor);
         }
@@ -93,7 +93,7 @@ impl PolicyInput {
         if self
             .cosigners
             .iter()
-            .any(|key| key.derivation_path != MULTISIG_ACCOUNT_PATH)
+            .any(|key| key.derivation_path != multisig_account_path())
         {
             return Err(PolicyError::InvalidDescriptor);
         }
@@ -263,7 +263,7 @@ impl MultisigPolicy {
                 format!(
                     "[{}/{}]{}/{branch}/*",
                     cosigner.fingerprint,
-                    MULTISIG_ACCOUNT_PATH.trim_start_matches("m/"),
+                    multisig_account_path().trim_start_matches("m/"),
                     cosigner.account_xpub
                 )
             })
@@ -293,7 +293,7 @@ mod tests {
         let secp = Secp256k1::new();
         let master = Xpriv::new_master(NetworkKind::Test, &[index; 32]).expect("master key");
         let fingerprint = master.fingerprint(&secp);
-        let path = DerivationPath::from_str(MULTISIG_ACCOUNT_PATH).expect("BIP48 path");
+        let path = DerivationPath::from_str(multisig_account_path()).expect("BIP48 path");
         let account = master.derive_priv(&secp, &path).expect("account key");
         CosignerKey {
             id: format!("device-{index}"),
@@ -401,7 +401,7 @@ mod tests {
             label: key.label.clone(),
             fingerprint: key.fingerprint.to_string(),
             xpub: key.account_xpub.to_string(),
-            derivation_path: MULTISIG_ACCOUNT_PATH.to_owned(),
+            derivation_path: multisig_account_path().to_owned(),
             source: key.source,
             device_type: None,
         };
@@ -475,7 +475,7 @@ mod tests {
                     label: key.label.clone(),
                     fingerprint: key.fingerprint.to_string(),
                     xpub: key.account_xpub.to_string(),
-                    derivation_path: MULTISIG_ACCOUNT_PATH.into(),
+                    derivation_path: multisig_account_path().into(),
                     source: key.source,
                     device_type: None,
                 })

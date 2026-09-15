@@ -723,7 +723,7 @@ pub fn address_create(
     let mut db = open_db(&app)?;
     let mut transaction = db.transaction().map_err(internal)?;
     let mut wallet = Wallet::load()
-        .check_network(NETWORK)
+        .check_network(network())
         .load_wallet(&mut transaction)
         .map_err(internal)?
         .ok_or_else(|| api_error("wallet_not_found", "Wallet database is empty."))?;
@@ -756,7 +756,7 @@ pub fn address_create(
         labels,
         created: created.to_string(),
         status: "awaiting".to_owned(),
-        derivation_path: format!("{SINGLESIG_ACCOUNT_PATH}/0/{}", info.index),
+        derivation_path: format!("{}/0/{}", singlesig_account_path(), info.index),
         hardware_verified_at: None,
         hardware_verified_by: None,
     };
@@ -970,7 +970,7 @@ pub(crate) fn current_mempool_fee_rate(
 
 #[tauri::command]
 pub fn fees_estimate(app: AppHandle, state: State<'_, AppState>) -> ApiResult<FeeEstimatesDto> {
-    if IS_REGTEST {
+    if is_regtest() {
         let estimates = FeeEstimatesDto {
             economy: 1.0,
             standard: 2.0,
@@ -1031,13 +1031,13 @@ pub async fn mainnet_core_admit(
         let state = app.state::<AppState>();
         let _operation = operation_guard(&state)?;
         clear_mainnet_node_admission(&state)?;
-        crate::release_policy::ensure_runtime_network_enabled(NETWORK).map_err(|_| {
+        crate::release_policy::ensure_runtime_network_enabled(network()).map_err(|_| {
             api_error(
                 "mainnet_disabled",
                 "This Groot build is not authorized to connect a mainnet wallet.",
             )
         })?;
-        if NETWORK != Network::Bitcoin
+        if network() != Network::Bitcoin
             || config.auth != RpcAuthMode::UserPass
             || password.is_empty()
             || password.len() > 1024
@@ -1091,10 +1091,10 @@ pub(super) fn persist_mainnet_node_admission_for_new_profile(
     destination: Uuid,
     credential: &str,
 ) -> ApiResult<bool> {
-    if NETWORK != Network::Bitcoin {
+    if network() != Network::Bitcoin {
         return Ok(false);
     }
-    crate::release_policy::ensure_database_open_enabled(NETWORK, true).map_err(|_| {
+    crate::release_policy::ensure_database_open_enabled(network(), true).map_err(|_| {
         api_error(
             "node_admission_required",
             "Connect and verify an approved Bitcoin Core node before creating a mainnet wallet.",
@@ -1156,7 +1156,9 @@ pub fn wallet_sync_source_save(
     let credential = Zeroizing::new(credential);
     let _operation = operation_guard(&state)?;
     require_unlocked(&app, &state)?;
-    source.validate(NETWORK).map_err(network_config_api_error)?;
+    source
+        .validate(network())
+        .map_err(network_config_api_error)?;
     check_auth_throttle(&app, &state)?;
     let verified = verify_selected_credential(&app, credential.as_str());
     record_auth_result(&app, &state, &verified)?;
@@ -1835,7 +1837,7 @@ pub(super) fn copy_network_setup_before_profile_commit(
         return Ok(false);
     }
 
-    if NETWORK == Network::Bitcoin {
+    if network() == Network::Bitcoin {
         return persist_mainnet_node_admission_for_new_profile(app, state, destination, credential);
     }
     Ok(true)
@@ -1856,7 +1858,7 @@ fn mark_selected_mainnet_node_verified(
     app: &AppHandle,
     state: &State<'_, AppState>,
 ) -> ApiResult<()> {
-    if NETWORK != Network::Bitcoin {
+    if network() != Network::Bitcoin {
         return Ok(());
     }
     let profile = selected_profile(app)?;

@@ -7,7 +7,7 @@ use super::transaction_commands::{
     AccelerationRatePolicy,
 };
 use super::*;
-use crate::multisig::{CosignerInput, CosignerSource, MULTISIG_ACCOUNT_PATH};
+use crate::multisig::{multisig_account_path, CosignerInput, CosignerSource};
 use crate::recovery::{SpendingPath, TimedSpendingPath};
 use bdk_bitcoind_rpc::bitcoincore_rpc::jsonrpc;
 use bdk_wallet::bitcoin::{
@@ -43,7 +43,7 @@ struct TestKey {
 
 fn test_keys_with_count(count: u8) -> Vec<TestKey> {
     let secp = Secp256k1::new();
-    let path = DerivationPath::from_str(MULTISIG_ACCOUNT_PATH).unwrap();
+    let path = DerivationPath::from_str(multisig_account_path()).unwrap();
     (1_u8..=count)
         .map(|index| {
             let mut seed = [0_u8; 32];
@@ -94,7 +94,7 @@ fn metadata(keys: &[TestKey]) -> MultisigWalletDto {
                 label: format!("Signer {}", index + 1),
                 fingerprint: key.fingerprint.clone(),
                 xpub: key.account_public.to_string(),
-                derivation_path: MULTISIG_ACCOUNT_PATH.to_owned(),
+                derivation_path: multisig_account_path().to_owned(),
                 source: CosignerSource::Virtual,
                 device_type: None,
             })
@@ -253,7 +253,7 @@ fn funded_delayed_policy_tracks_each_coin_restarts_and_rearms_after_reorg() {
             label: format!("Signer {}", index + 1),
             fingerprint: key.fingerprint.clone(),
             xpub: key.account_public.to_string(),
-            derivation_path: MULTISIG_ACCOUNT_PATH.to_owned(),
+            derivation_path: multisig_account_path().to_owned(),
             source: CosignerSource::Virtual,
             device_type: None,
         })

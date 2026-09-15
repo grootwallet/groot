@@ -111,7 +111,7 @@ fn multisig_tx_prepare_blocking(
         None,
     );
     let result = (|| {
-        crate::release_policy::validate_spend(NETWORK, 1, amount)
+        crate::release_policy::validate_spend(network(), 1, amount)
             .map_err(|_| api_error("invalid_amount", "This spend is blocked by release policy."))?;
         let labels = normalize_labels(labels)?;
         let label = labels[0].clone();
@@ -124,13 +124,13 @@ fn multisig_tx_prepare_blocking(
         let unchecked = Address::from_str(recipient.trim()).map_err(|_| {
             api_error(
                 "invalid_address",
-                format!("Enter a valid {NETWORK_NAME} Bitcoin address."),
+                format!("Enter a valid {} Bitcoin address.", network_name()),
             )
         })?;
-        let address = unchecked.require_network(NETWORK).map_err(|_| {
+        let address = unchecked.require_network(network()).map_err(|_| {
             api_error(
                 "invalid_address",
-                format!("The address is not for {NETWORK_NAME}."),
+                format!("The address is not for {}.", network_name()),
             )
         })?;
         let (applied_fee_rate, rate) = validate_fee_rate(&fee_rate)?;
@@ -344,7 +344,7 @@ pub fn multisig_policy_renewal_prepare(
                 "The selected coin cannot cover the network fee.",
             )
         })?;
-    crate::release_policy::validate_spend(NETWORK, 1, amount)
+    crate::release_policy::validate_spend(network(), 1, amount)
         .map_err(|_| api_error("invalid_amount", "This spend is blocked by release policy."))?;
     let fee = psbt
         .fee_amount()
@@ -389,14 +389,14 @@ pub fn multisig_delayed_spend_prepare(
         .map_err(|_| {
             api_error(
                 "invalid_address",
-                format!("Enter a valid {NETWORK_NAME} Bitcoin address."),
+                format!("Enter a valid {} Bitcoin address.", network_name()),
             )
         })?
-        .require_network(NETWORK)
+        .require_network(network())
         .map_err(|_| {
             api_error(
                 "invalid_address",
-                format!("The address is not for {NETWORK_NAME}."),
+                format!("The address is not for {}.", network_name()),
             )
         })?;
     let (applied_fee_rate, rate) = validate_fee_rate(&fee_rate)?;
@@ -458,7 +458,7 @@ pub fn multisig_delayed_spend_prepare(
         ));
     }
     let amount = psbt.unsigned_tx.output[0].value.to_sat();
-    crate::release_policy::validate_spend(NETWORK, 1, amount)
+    crate::release_policy::validate_spend(network(), 1, amount)
         .map_err(|_| api_error("invalid_amount", "This spend is blocked by release policy."))?;
     let fee = psbt
         .fee_amount()
@@ -520,14 +520,14 @@ fn multisig_tx_max_spend_blocking(
         .map_err(|_| {
             api_error(
                 "invalid_address",
-                format!("Enter a valid {NETWORK_NAME} Bitcoin address."),
+                format!("Enter a valid {} Bitcoin address.", network_name()),
             )
         })?
-        .require_network(NETWORK)
+        .require_network(network())
         .map_err(|_| {
             api_error(
                 "invalid_address",
-                format!("The address is not for {NETWORK_NAME}."),
+                format!("The address is not for {}.", network_name()),
             )
         })?;
     let (_applied, rate) = validate_fee_rate(&fee_rate)?;
@@ -1178,7 +1178,7 @@ pub async fn multisig_create(
                 preview.external_descriptor.clone(),
                 preview.internal_descriptor.clone(),
             )
-            .network(NETWORK)
+            .network(network())
             .create_wallet(&mut db)
             .map_err(internal)?;
 
@@ -1302,7 +1302,7 @@ pub async fn multisig_recovery_create(
         let _operation = operation_guard(&state)?;
         let _admission_cleanup = clear_new_wallet_admission_on_exit(&state);
         validate_credential(credential.as_str())?;
-        crate::release_policy::ensure_delayed_policy_creation_enabled(NETWORK).map_err(|_| {
+        crate::release_policy::ensure_delayed_policy_creation_enabled(network()).map_err(|_| {
             api_error(
                 "unsupported_wallet_policy",
                 "Guided recovery and inheritance wallets are not included in the first mainnet release.",
@@ -1332,7 +1332,7 @@ pub async fn multisig_recovery_create(
                 analysis.external_descriptor.clone(),
                 analysis.internal_descriptor.clone(),
             )
-            .network(NETWORK)
+            .network(network())
             .create_wallet(&mut db)
             .map_err(internal)?;
             let marker = format!("groot-multisig:{}", analysis.external_descriptor);

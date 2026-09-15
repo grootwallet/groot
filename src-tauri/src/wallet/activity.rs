@@ -141,7 +141,7 @@ mod tests {
         }
         transactions[1].kind = "self_spend".into();
         let snapshot = WalletSnapshotDto {
-            network: NETWORK_NAME,
+            network: network_name(),
             balance: BalanceDto {
                 confirmed: 100,
                 pending: 20,

@@ -264,7 +264,7 @@ pub(crate) fn record(
         error_details: safe_error.and_then(|(_, _, details)| details),
         app_version: env!("CARGO_PKG_VERSION").to_owned(),
         build_commit: env!("GROOT_BUILD_COMMIT").to_owned(),
-        compiled_network: crate::build_network::NAME.to_owned(),
+        compiled_network: crate::build_network::name().to_owned(),
         platform: platform().to_owned(),
     };
     let Ok(_guard) = state.diagnostic_log.lock() else {

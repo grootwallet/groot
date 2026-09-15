@@ -8,7 +8,7 @@ pub(super) fn proposal_change_details(
 ) -> ApiResult<(u64, Vec<String>)> {
     let recipient_script = Address::from_str(recipient)
         .map_err(|_| internal("The stored proposal recipient is invalid."))?
-        .require_network(NETWORK)
+        .require_network(network())
         .map_err(|_| internal("The stored proposal recipient is on the wrong network."))?
         .script_pubkey();
     let self_spend = amount == 0;
@@ -32,7 +32,7 @@ pub(super) fn proposal_change_details(
                 .checked_add(output.value.to_sat())
                 .ok_or_else(|| internal("The proposal output total overflowed."))?;
             change_addresses.push(
-                Address::from_script(&output.script_pubkey, NETWORK)
+                Address::from_script(&output.script_pubkey, network())
                     .map_err(|_| internal("A proposal change output has no displayable address."))?
                     .to_string(),
             );
@@ -56,15 +56,15 @@ pub(super) fn validate_release_spend(
 ) -> ApiResult<()> {
     proposal_change_details(wallet, psbt, recipient, amount)?;
     let policy = if matches!(acceleration, Some(AccelerationMethod::Cpfp)) {
-        let wallet_owned_output = if NETWORK == Network::Bitcoin {
+        let wallet_owned_output = if network() == Network::Bitcoin {
             validate_cpfp_output_ownership(wallet, psbt, recipient)?;
             true
         } else {
             false
         };
-        crate::release_policy::validate_cpfp(NETWORK, 0, amount, wallet_owned_output)
+        crate::release_policy::validate_cpfp(network(), 0, amount, wallet_owned_output)
     } else {
-        crate::release_policy::validate_spend(NETWORK, 1, amount)
+        crate::release_policy::validate_spend(network(), 1, amount)
     };
     policy.map_err(|_| api_error("invalid_amount", "This spend is blocked by release policy."))
 }
@@ -82,7 +82,7 @@ pub(super) fn validate_cpfp_output_ownership(
     }
     let expected_script = Address::from_str(recipient)
         .map_err(|_| internal("The stored fee-child recipient is invalid."))?
-        .require_network(NETWORK)
+        .require_network(network())
         .map_err(|_| internal("The stored fee-child recipient is on the wrong network."))?
         .script_pubkey();
     let output = &psbt.unsigned_tx.output[0];
@@ -137,7 +137,7 @@ pub(super) fn proposal_recipient_wallet_details(
 ) -> ApiResult<(bool, Vec<String>)> {
     let recipient_script = Address::from_str(recipient)
         .map_err(|_| internal("The stored proposal recipient is invalid."))?
-        .require_network(NETWORK)
+        .require_network(network())
         .map_err(|_| internal("The stored proposal recipient is on the wrong network."))?
         .script_pubkey();
     let self_spend = amount == 0;
@@ -205,7 +205,7 @@ pub(super) fn proposal_change_derivation_paths(
         .map(|address| {
             let script = Address::from_str(address)
                 .map_err(|_| internal("A proposal change address is invalid."))?
-                .require_network(NETWORK)
+                .require_network(network())
                 .map_err(|_| internal("A proposal change address is on the wrong network."))?
                 .script_pubkey();
             let output_index = psbt

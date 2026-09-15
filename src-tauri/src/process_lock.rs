@@ -44,10 +44,10 @@ pub(crate) struct ProcessLock {
 
 impl ProcessLock {
     pub(crate) fn acquire_for_app(app: &AppHandle) -> Result<Self, ProcessLockError> {
-        // Use the wallet boundary's validated resolver so the lock and every
-        // registry/database command always target the same exact directory.
+        // Lock the application root, not only the active network namespace, so
+        // two processes cannot race the global network selection.
         let app_data =
-            crate::wallet::app_data_dir(app).map_err(|_| ProcessLockError::UnsafePath)?;
+            crate::wallet::app_data_root(app).map_err(|_| ProcessLockError::UnsafePath)?;
         Self::acquire(&app_data)
     }
 

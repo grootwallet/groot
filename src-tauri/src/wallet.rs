@@ -54,18 +54,18 @@ use zeroize::{Zeroize, Zeroizing};
 use crate::auth::AuthThrottle;
 use crate::bsms::{DescriptorRecord, PublicDescriptorPair};
 use crate::build_network::{
-    DEFAULT_RPC_URL, IS_REGTEST, NAME as NETWORK_NAME, NETWORK, PARAMETERS,
+    default_rpc_url, is_regtest, name as network_name, network, parameters,
 };
 use crate::external_signer::{
-    self, ExternalSignerInput, ExternalSignerWallet, SignerSource, SINGLESIG_ACCOUNT_PATH,
+    self, singlesig_account_path, ExternalSignerInput, ExternalSignerWallet, SignerSource,
 };
 use crate::hardware::{HardwareError, HardwareTransport, HwiChain, HwiCli};
 use crate::label_provenance::{
     self, LabelOrigin, LabelSuggestionDto, PermanentLabelDto, ProvenanceState, ProvenanceSummaryDto,
 };
 use crate::multisig::{
-    CosignerInput, CosignerSource, MultisigPreviewDto, MultisigWalletDto, PolicyInput,
-    MULTISIG_ACCOUNT_PATH,
+    multisig_account_path, CosignerInput, CosignerSource, MultisigPreviewDto, MultisigWalletDto,
+    PolicyInput,
 };
 use crate::native_backup;
 use crate::network::{
@@ -206,7 +206,7 @@ pub fn public_backup_pdf_save(save_token: String, markup: String) -> ApiResult<S
 
 fn hwi_cli(app: &AppHandle) -> ApiResult<HwiCli> {
     let home = app.path().home_dir().map_err(internal)?;
-    let chain = HwiChain::for_network(NETWORK);
+    let chain = HwiChain::for_network(network());
     #[cfg(target_os = "macos")]
     let cli = if let Some(resource_name) = option_env!("GROOT_BUNDLED_HWI_RESOURCE") {
         let resource_dir = app.path().resource_dir().map_err(internal)?;
@@ -921,7 +921,7 @@ pub struct ReceiveAddressDto {
 }
 
 fn regtest_testnet_address_alias(address: &str) -> Option<String> {
-    if !IS_REGTEST {
+    if !is_regtest() {
         return None;
     }
     let address = Address::from_str(address)
@@ -947,7 +947,7 @@ fn proposal_testnet_aliases(
 }
 
 fn hardware_display_matches_expected_address(expected: &str, actual: &str) -> bool {
-    hardware_display_matches_expected_address_for_network(NETWORK, expected, actual)
+    hardware_display_matches_expected_address_for_network(network(), expected, actual)
 }
 
 fn hardware_display_matches_expected_address_for_network(
@@ -1505,26 +1505,26 @@ fn missing_hardware_xpub(
     }
     match device_type.to_ascii_lowercase().as_str() {
         "ledger" => {
-            let ledger_app = if NETWORK == Network::Bitcoin {
+            let ledger_app = if network() == Network::Bitcoin {
                 "Bitcoin"
             } else {
                 "Bitcoin Test—not Bitcoin"
             };
             let message = if code == Some(-7) || safe_detail.contains("bad argument") {
-                format!("Ledger rejected this {NETWORK_NAME} account path. Open the {ledger_app} app, then reconnect and try again.")
+                format!("Ledger rejected this {} account path. Open the {ledger_app} app, then reconnect and try again.", network_name())
             } else if code == Some(-13)
                 || safe_detail.contains("technical problem")
                 || safe_detail.contains("device failure")
             {
-                format!("Ledger is in the wrong app for this {NETWORK_NAME} wallet. Quit Ledger Live, open {ledger_app}, then reconnect and try again.")
+                format!("Ledger is in the wrong app for this {} wallet. Quit Ledger Live, open {ledger_app}, then reconnect and try again.", network_name())
             } else if safe_detail.contains("bitcoin test")
                 || safe_detail.contains("not in either the bitcoin")
             {
                 format!("Open {ledger_app} on Ledger, keep Ledger Live closed, then try again.")
             } else if derivation_path.starts_with("m/48'") {
-                format!("Ledger did not return the {NETWORK_NAME} multisig account key. Keep Ledger Live closed, open {ledger_app}, try again, then approve the public-key export if Ledger asks.")
+                format!("Ledger did not return the {} multisig account key. Keep Ledger Live closed, open {ledger_app}, try again, then approve the public-key export if Ledger asks.", network_name())
             } else {
-                format!("Ledger did not return the {NETWORK_NAME} BIP84 account key. Keep Ledger Live closed, open {ledger_app}, reconnect, then try again.")
+                format!("Ledger did not return the {} BIP84 account key. Keep Ledger Live closed, open {ledger_app}, reconnect, then try again.", network_name())
             };
             api_error("hardware_unavailable", message)
         }
@@ -1580,12 +1580,12 @@ fn hardware_device_dto(device: HwiDevice) -> HardwareDeviceDto {
         _ if device.model.is_empty() => device.device_type.clone(),
         _ => device.model.clone(),
     };
-    let ledger_ready_message = if NETWORK == Network::Bitcoin {
+    let ledger_ready_message = if network() == Network::Bitcoin {
         "Detected. Groot verifies that Bitcoin is open when it reads the public account key."
     } else {
         "Detected. Groot verifies that Bitcoin Test is open when it reads the public account key."
     };
-    let ledger_unlock_message = if NETWORK == Network::Bitcoin {
+    let ledger_unlock_message = if network() == Network::Bitcoin {
         "Select this signer, unlock Ledger, and open Bitcoin to continue."
     } else {
         "Select this signer, unlock Ledger, and open Bitcoin Test—not Bitcoin—to continue."
@@ -1683,7 +1683,7 @@ fn require_explicit_standard_wallet_selection(
 }
 
 fn validate_regtest_app_data_override(path: PathBuf) -> ApiResult<PathBuf> {
-    if !IS_REGTEST || !path.is_absolute() {
+    if !is_regtest() || !path.is_absolute() {
         return Err(internal("The regtest app-data override is unavailable."));
     }
     let filename = path
@@ -1714,11 +1714,15 @@ fn validate_regtest_app_data_override(path: PathBuf) -> ApiResult<PathBuf> {
     Ok(path)
 }
 
-pub(crate) fn app_data_dir(app: &AppHandle) -> ApiResult<PathBuf> {
+pub(crate) fn app_data_root(app: &AppHandle) -> ApiResult<PathBuf> {
     match std::env::var_os(REGTEST_APP_DATA_OVERRIDE) {
         Some(path) => validate_regtest_app_data_override(PathBuf::from(path)),
         None => app.path().app_data_dir().map_err(internal),
     }
+}
+
+pub(crate) fn app_data_dir(app: &AppHandle) -> ApiResult<PathBuf> {
+    Ok(crate::build_network::data_directory(app_data_root(app)?))
 }
 
 fn registry_path(app: &AppHandle) -> ApiResult<PathBuf> {
@@ -1748,14 +1752,15 @@ fn ensure_registry_network(registry: &WalletRegistry) -> ApiResult<()> {
     if registry
         .wallets
         .iter()
-        .all(|wallet| wallet.network == NETWORK_NAME)
+        .all(|wallet| wallet.network == network_name())
     {
         Ok(())
     } else {
         Err(api_error(
             "wrong_network",
             format!(
-                "This wallet registry does not belong to the compiled {NETWORK_NAME} network. No wallet was opened."
+                "This wallet registry does not belong to the active {} network. No wallet was opened.",
+                network_name()
             ),
         ))
     }
@@ -1868,7 +1873,7 @@ fn profile_from_directory(
     Ok(WalletProfile {
         id,
         name,
-        network: NETWORK_NAME.to_owned(),
+        network: network_name().to_owned(),
         kind,
         descriptor_checksum: checksum,
         created_at: now(),
@@ -1886,7 +1891,7 @@ fn ensure_registry_migrated(app: &AppHandle) -> ApiResult<()> {
         ensure_registry_network(&registry)?;
         return Ok(());
     }
-    if !IS_REGTEST {
+    if !is_regtest() {
         return save_registry(app, &WalletRegistry::default());
     }
     let legacy = [
@@ -2026,7 +2031,7 @@ fn node_auth_session_allows_database_open(
 }
 
 fn database_open_permit_for_new_wallet(_state: &AppState) -> ApiResult<DatabaseOpenPermit> {
-    if NETWORK != Network::Bitcoin {
+    if network() != Network::Bitcoin {
         return Ok(DatabaseOpenPermit {
             issued_at: Instant::now(),
         });
@@ -2034,7 +2039,7 @@ fn database_open_permit_for_new_wallet(_state: &AppState) -> ApiResult<DatabaseO
     // Creating an empty, descriptor-bound database does not read chain data.
     // Mainnet admission remains mandatory before this database can be opened
     // through any selected-wallet data path.
-    crate::release_policy::ensure_database_open_enabled(NETWORK, true)
+    crate::release_policy::ensure_database_open_enabled(network(), true)
         .map_err(database_admission_error)?;
     Ok(DatabaseOpenPermit {
         issued_at: Instant::now(),
@@ -2042,7 +2047,7 @@ fn database_open_permit_for_new_wallet(_state: &AppState) -> ApiResult<DatabaseO
 }
 
 fn database_open_permit_for_selected_wallet(app: &AppHandle) -> ApiResult<DatabaseOpenPermit> {
-    if NETWORK != Network::Bitcoin {
+    if network() != Network::Bitcoin {
         return Ok(DatabaseOpenPermit {
             issued_at: Instant::now(),
         });
@@ -2070,7 +2075,7 @@ fn database_open_permit_for_selected_wallet(app: &AppHandle) -> ApiResult<Databa
             "Verify this wallet's saved Bitcoin Core connection before reading wallet data.",
         ));
     }
-    crate::release_policy::ensure_database_open_enabled(NETWORK, true)
+    crate::release_policy::ensure_database_open_enabled(network(), true)
         .map_err(database_admission_error)?;
     Ok(DatabaseOpenPermit {
         issued_at: Instant::now(),
@@ -2082,7 +2087,7 @@ fn database_open_permit_for_offline_identity_inspection() -> ApiResult<DatabaseO
     // local wallet databases. They do not read chain state, so requiring a live
     // Core admission here would prevent an offline wallet from being created or
     // imported whenever another profile already exists.
-    crate::release_policy::ensure_database_open_enabled(NETWORK, NETWORK == Network::Bitcoin)
+    crate::release_policy::ensure_database_open_enabled(network(), network() == Network::Bitcoin)
         .map_err(database_admission_error)?;
     Ok(DatabaseOpenPermit {
         issued_at: Instant::now(),
@@ -2090,14 +2095,14 @@ fn database_open_permit_for_offline_identity_inspection() -> ApiResult<DatabaseO
 }
 
 fn validate_database_open_permit(permit: &DatabaseOpenPermit) -> ApiResult<()> {
-    let current = NETWORK != Network::Bitcoin
+    let current = network() != Network::Bitcoin
         || permit.issued_at.elapsed() <= MAINNET_NODE_ADMISSION_LIFETIME;
-    crate::release_policy::ensure_database_open_enabled(NETWORK, current)
+    crate::release_policy::ensure_database_open_enabled(network(), current)
         .map_err(database_admission_error)
 }
 
 fn authentication_database_open_permit() -> ApiResult<AuthenticationDatabaseOpenPermit> {
-    crate::release_policy::ensure_runtime_network_enabled(NETWORK)
+    crate::release_policy::ensure_runtime_network_enabled(network())
         .map_err(database_admission_error)?;
     Ok(AuthenticationDatabaseOpenPermit {
         issued_at: Instant::now(),
@@ -2110,7 +2115,8 @@ fn validate_authentication_database_open_permit(
     if permit.issued_at.elapsed() > MAINNET_NODE_ADMISSION_LIFETIME {
         return Err(internal("The authentication database permit expired."));
     }
-    crate::release_policy::ensure_runtime_network_enabled(NETWORK).map_err(database_admission_error)
+    crate::release_policy::ensure_runtime_network_enabled(network())
+        .map_err(database_admission_error)
 }
 
 #[cfg(test)]
@@ -2267,7 +2273,7 @@ fn find_exact_descriptor_profile_with(
     for profile in registry
         .wallets
         .iter()
-        .filter(|profile| profile.network == NETWORK_NAME)
+        .filter(|profile| profile.network == network_name())
     {
         let existing_external = read_external_descriptor(profile)?;
         if exact_descriptor_identity_matches(external_descriptor, &existing_external) {
@@ -2307,7 +2313,7 @@ fn commit_multisig_profile(app: &AppHandle, id: Uuid, wallet: &MultisigWalletDto
         WalletProfile {
             id,
             name: wallet.name.clone(),
-            network: NETWORK_NAME.to_owned(),
+            network: network_name().to_owned(),
             kind: WalletKind::Multisig,
             descriptor_checksum: descriptor_checksum(&wallet.external_descriptor)?,
             created_at: now(),
@@ -2429,15 +2435,15 @@ fn write_public_network_status(app: &AppHandle, status: &PublicNetworkStatusDto)
 fn compact_filter_cache_dir(app: &AppHandle) -> ApiResult<PathBuf> {
     Ok(app_data_dir(app)?
         .join("compact-filters")
-        .join(NETWORK_NAME))
+        .join(network_name()))
 }
 
 fn default_node_config() -> CoreNodeConfig {
     CoreNodeConfig {
         backend: ChainBackend::LocalCore {
-            url: DEFAULT_RPC_URL.to_owned(),
+            url: default_rpc_url().to_owned(),
         },
-        auth: if IS_REGTEST {
+        auth: if is_regtest() {
             RpcAuthMode::Cookie
         } else {
             RpcAuthMode::UserPass
@@ -2473,7 +2479,9 @@ fn read_sync_source_for(app: &AppHandle, wallet_id: Uuid) -> ApiResult<WalletSyn
     }
     let source: WalletSyncSource =
         serde_json::from_str(&read_private_text(&path)?).map_err(internal)?;
-    source.validate(NETWORK).map_err(network_config_api_error)?;
+    source
+        .validate(network())
+        .map_err(network_config_api_error)?;
     Ok(source)
 }
 
@@ -2621,7 +2629,7 @@ fn rpc_client_with_timeout(
         .to_string();
     let client = match config.auth {
         RpcAuthMode::Cookie => {
-            if !IS_REGTEST {
+            if !is_regtest() {
                 return Err(api_error(
                     "invalid_node_config",
                     "Automatic cookie discovery is available only in Regtest builds. Configure explicit protected RPC credentials for this public-network rehearsal.",
@@ -2672,7 +2680,7 @@ fn candidate_rpc_client(config: &CoreNodeConfig, password: &str) -> ApiResult<Cl
         .to_string();
     let client = match config.auth {
         RpcAuthMode::Cookie => {
-            if !IS_REGTEST {
+            if !is_regtest() {
                 return Err(api_error(
                     "invalid_node_config",
                     "Automatic cookie discovery is available only in Regtest builds. Configure explicit protected RPC credentials for this public-network rehearsal.",
@@ -2700,7 +2708,7 @@ fn candidate_rpc_client(config: &CoreNodeConfig, password: &str) -> ApiResult<Cl
 }
 
 fn validate_first_mainnet_rpc_endpoint(backend: &ChainBackend) -> ApiResult<()> {
-    if NETWORK != Network::Bitcoin {
+    if network() != Network::Bitcoin {
         return Ok(());
     }
     crate::release_policy::validate_first_mainnet_backend_endpoint(backend).map_err(|_| {
@@ -2712,7 +2720,7 @@ fn validate_first_mainnet_rpc_endpoint(backend: &ChainBackend) -> ApiResult<()> 
 }
 
 fn validate_first_mainnet_rpc_backend(client: &Client, backend: &ChainBackend) -> ApiResult<()> {
-    if NETWORK != Network::Bitcoin {
+    if network() != Network::Bitcoin {
         return Ok(());
     }
     let observed_genesis = client.get_block_hash(0).map_err(rpc_api_error)?;
@@ -2733,7 +2741,7 @@ fn checked_core_chain(client: &Client) -> ApiResult<(GetBlockchainInfoResult, Bl
     let info = get_blockchain_info(client).map_err(rpc_api_error)?;
     ensure_expected_network(info.chain)?;
     let observed_genesis = client.get_block_hash(0).map_err(rpc_api_error)?;
-    ensure_expected_genesis(NETWORK, observed_genesis)?;
+    ensure_expected_genesis(network(), observed_genesis)?;
     Ok((info, observed_genesis))
 }
 
@@ -3081,7 +3089,7 @@ fn checked_node_status_once(client: &Client, backend: CoreNodeConfig) -> ApiResu
     let info = get_blockchain_info(client).map_err(rpc_api_error)?;
     ensure_expected_network(info.chain)?;
     let observed_genesis = client.get_block_hash(0).map_err(rpc_api_error)?;
-    ensure_expected_genesis(NETWORK, observed_genesis)?;
+    ensure_expected_genesis(network(), observed_genesis)?;
     let block_filter_index = match client.get_index_info() {
         Ok(indexes) => indexes
             .basic_block_filter_index
@@ -3116,13 +3124,13 @@ fn checked_node_status(client: &Client, backend: CoreNodeConfig) -> ApiResult<No
     )
 }
 
-fn ensure_expected_network(network: Network) -> ApiResult<()> {
-    if network == NETWORK {
+fn ensure_expected_network(observed: Network) -> ApiResult<()> {
+    if observed == network() {
         Ok(())
     } else {
         Err(api_error(
             "wrong_network",
-            format!("The Bitcoin Core node is not running {NETWORK_NAME}."),
+            format!("The Bitcoin Core node is not running {}.", network_name()),
         ))
     }
 }
@@ -3773,7 +3781,7 @@ fn validate_loaded_descriptors(
 fn load_wallet(db: &mut Connection) -> ApiResult<PersistedWallet<Connection>> {
     let gap_limit = load_recovery_scan_settings(db)?.gap_limit;
     Wallet::load()
-        .check_network(NETWORK)
+        .check_network(network())
         .lookahead(gap_limit)
         .load_wallet(db)
         .map_err(internal)?
@@ -3785,7 +3793,7 @@ fn load_wallet_transaction<'db>(
 ) -> ApiResult<PersistedWallet<SqliteTransaction<'db>>> {
     let gap_limit = load_recovery_scan_settings(db)?.gap_limit;
     Wallet::load()
-        .check_network(NETWORK)
+        .check_network(network())
         .lookahead(gap_limit)
         .load_wallet(db)
         .map_err(internal)?
@@ -3794,7 +3802,7 @@ fn load_wallet_transaction<'db>(
 
 fn root_key(mnemonic: &Mnemonic, credential: &str) -> ApiResult<Xpriv> {
     let seed = Zeroizing::new(mnemonic.to_seed(credential));
-    Xpriv::new_master(PARAMETERS.extended_key_network, seed.as_ref()).map_err(internal)
+    Xpriv::new_master(parameters().extended_key_network, seed.as_ref()).map_err(internal)
 }
 
 fn software_wallet_master_fingerprint(mnemonic: &Mnemonic, credential: &str) -> ApiResult<String> {
@@ -3810,7 +3818,7 @@ fn watch_templates(
     let master = root_key(mnemonic, credential)?;
     let secp = Secp256k1::new();
     let fingerprint = master.fingerprint(&secp);
-    let account_path = DerivationPath::from_str(SINGLESIG_ACCOUNT_PATH).map_err(internal)?;
+    let account_path = DerivationPath::from_str(singlesig_account_path()).map_err(internal)?;
     let account_private = master.derive_priv(&secp, &account_path).map_err(internal)?;
     let account_public = Xpub::from_priv(&secp, &account_private);
     Ok((
@@ -3825,7 +3833,7 @@ fn software_wallet_descriptors(
 ) -> ApiResult<(String, String)> {
     let (external, internal_template) = watch_templates(mnemonic, credential)?;
     let wallet = Wallet::create(external, internal_template)
-        .network(NETWORK)
+        .network(network())
         .create_wallet_no_persist()
         .map_err(internal)?;
     Ok((
@@ -4111,7 +4119,7 @@ fn validate_multisig_backup(encoded: &str) -> ApiResult<MultisigBackupDto> {
     }
     let mut backup: MultisigBackupDto = serde_json::from_str(encoded)
         .map_err(|_| api_error("invalid_backup", "Enter a valid Groot descriptor backup."))?;
-    if backup.version != 1 || backup.network != NETWORK_NAME || backup.wallet.kind != "multisig" {
+    if backup.version != 1 || backup.network != network_name() || backup.wallet.kind != "multisig" {
         return Err(api_error(
             "invalid_backup",
             "This backup version or network is not supported.",
@@ -4193,7 +4201,7 @@ fn first_multisig_address(wallet: &MultisigWalletDto) -> ApiResult<String> {
         wallet.external_descriptor.clone(),
         wallet.internal_descriptor.clone(),
     )
-    .network(NETWORK)
+    .network(network())
     .create_wallet_no_persist()
     .map_err(internal)?;
     Ok(derived
@@ -4480,7 +4488,7 @@ fn proposal_dto(
         inputs,
         locktime,
         rbf,
-        network: NETWORK_NAME,
+        network: network_name(),
         psbt: encoded,
         signed: progress.signed,
         required: progress.required,
@@ -5100,7 +5108,7 @@ fn validate_rbf_original_intent(
         .collect::<Vec<_>>();
     let valid = external.len() == 1
         && external[0].value.to_sat() == amount
-        && Address::from_script(&external[0].script_pubkey, NETWORK)
+        && Address::from_script(&external[0].script_pubkey, network())
             .is_ok_and(|address| address.to_string() == recipient);
     if !valid {
         return Err(api_error(
@@ -5186,7 +5194,7 @@ fn load_payment_proposal_dto(
         inputs,
         locktime,
         rbf,
-        network: NETWORK_NAME,
+        network: network_name(),
         selection_impact,
         acceleration: load_acceleration_review(db, &proposal_id, fee, fee_rate)?,
     })
@@ -5312,7 +5320,7 @@ fn create_from_mnemonic(
         let mut db = open_wallet_database(&dir.join("wallet.sqlite"), &permit)?;
         init_app_schema(&db)?;
         let wallet = Wallet::create(external, internal_template)
-            .network(NETWORK)
+            .network(network())
             .create_wallet(&mut db)
             .map_err(internal)?;
         let words = Zeroizing::new(mnemonic.to_string());
@@ -5329,7 +5337,7 @@ fn create_from_mnemonic(
             WalletProfile {
                 id,
                 name: name.to_owned(),
-                network: NETWORK_NAME.to_owned(),
+                network: network_name().to_owned(),
                 kind: WalletKind::SingleKey,
                 descriptor_checksum: descriptor_checksum(
                     &wallet.public_descriptor(KeychainKind::External).to_string(),
@@ -5616,7 +5624,7 @@ fn sync_wallet_with_compact_filters(
     cancel: Option<&AtomicBool>,
 ) -> ApiResult<WalletSnapshotDto> {
     let config = source
-        .validate(NETWORK)
+        .validate(network())
         .map_err(network_config_api_error)?
         .ok_or_else(|| internal("The compact-filter sync source was not selected."))?;
     let cache_dir = compact_filter_cache_dir(app)?;
@@ -5624,7 +5632,7 @@ fn sync_wallet_with_compact_filters(
     let status = Arc::clone(&state.sync_status);
     let update = crate::compact_filters::sync_with_progress(
         &wallet,
-        NETWORK,
+        network(),
         &cache_dir,
         &config,
         cancel,
@@ -5942,7 +5950,7 @@ fn tx_counterparty(
                 .derivation_of_spk(output.script_pubkey.clone())
                 .is_none()
             {
-                if let Ok(address) = Address::from_script(&output.script_pubkey, NETWORK) {
+                if let Ok(address) = Address::from_script(&output.script_pubkey, network()) {
                     return (
                         Some(address.to_string()),
                         outgoing_label
@@ -6075,7 +6083,7 @@ fn snapshot_for_view(
     };
     for output in wallet.list_unspent() {
         let (output_confirmations, _, _) = confirmations(&output.chain_position, tip, None);
-        let address = Address::from_script(&output.txout.script_pubkey, NETWORK)
+        let address = Address::from_script(&output.txout.script_pubkey, network())
             .map(|address| address.to_string())
             .unwrap_or_else(|_| "Unknown".to_owned());
         let label = if output.keychain == KeychainKind::External {
@@ -6145,7 +6153,7 @@ fn snapshot_for_view(
     }
 
     Ok(WalletSnapshotDto {
-        network: NETWORK_NAME,
+        network: network_name(),
         balance: BalanceDto {
             confirmed: balance.confirmed.to_sat(),
             pending: aggregate_pending_balance(
@@ -6608,7 +6616,7 @@ pub fn wallet_reset_regtest(
 }
 
 fn validate_regtest_reset_confirmation(confirmation: &str) -> ApiResult<()> {
-    validate_regtest_reset_confirmation_for(IS_REGTEST, confirmation)
+    validate_regtest_reset_confirmation_for(is_regtest(), confirmation)
 }
 
 fn validate_regtest_reset_confirmation_for(is_regtest: bool, confirmation: &str) -> ApiResult<()> {

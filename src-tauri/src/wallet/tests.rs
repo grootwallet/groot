@@ -3,9 +3,9 @@ use super::multisig_setup_commands::claim_observed_receive_output;
 use super::profile_commands::*;
 use super::transaction_commands::*;
 use super::*;
-use crate::external_signer::{self, ExternalSignerInput, SignerSource, SINGLESIG_ACCOUNT_PATH};
+use crate::external_signer::{self, singlesig_account_path, ExternalSignerInput, SignerSource};
 use crate::multisig::PolicyError;
-use crate::multisig::{CosignerInput, CosignerSource, MULTISIG_ACCOUNT_PATH};
+use crate::multisig::{multisig_account_path, CosignerInput, CosignerSource};
 use crate::recovery::{SpendingPath, TimedSpendingPath};
 use crate::secure_store::SecureStoreError;
 use bdk_wallet::bitcoin::NetworkKind;
@@ -222,7 +222,7 @@ fn persisted_snapshot_and_activity_can_read_while_sync_stages_a_write() {
         Bip84(master, KeychainKind::External),
         Bip84(master, KeychainKind::Internal),
     )
-    .network(NETWORK)
+    .network(network())
     .create_wallet(&mut writer)
     .unwrap();
     wallet.persist(&mut writer).unwrap();
@@ -428,7 +428,7 @@ fn hardware_and_multisig_profiles_count_as_existing_without_software_secret_stor
         .add(WalletProfile {
             id: Uuid::new_v4(),
             name: "Hardware policy".to_owned(),
-            network: NETWORK_NAME.to_owned(),
+            network: network_name().to_owned(),
             kind: WalletKind::Multisig,
             descriptor_checksum: "abcd1234".to_owned(),
             created_at: 1,
@@ -444,7 +444,7 @@ fn compiled_network_rejects_foreign_registry_and_public_reset() {
     registry.wallets.push(WalletProfile {
         id: Uuid::new_v4(),
         name: "Foreign wallet".to_owned(),
-        network: if NETWORK_NAME == "signet" {
+        network: if network_name() == "signet" {
             "testnet4"
         } else {
             "signet"
@@ -467,7 +467,10 @@ fn compiled_network_rejects_foreign_registry_and_public_reset() {
         "wrong_network"
     );
 
-    let correct = format!(r#"{{"version":1,"network":"{NETWORK_NAME}","descriptor":"wpkh(key)"}}"#);
+    let correct = format!(
+        r#"{{"version":1,"network":"{}","descriptor":"wpkh(key)"}}"#,
+        network_name()
+    );
     assert!(validate_external_signer_import_network(&correct).is_ok());
     assert_eq!(
         validate_external_signer_import_network(
@@ -1651,7 +1654,7 @@ fn transaction_change_cannot_cross_the_configured_recovery_gap() {
         Bip84(master, KeychainKind::External),
         Bip84(master, KeychainKind::Internal),
     )
-    .network(NETWORK)
+    .network(network())
     .create_wallet_no_persist()
     .unwrap();
     let change = (0..=MIN_RECOVERY_GAP_LIMIT)
@@ -1687,7 +1690,7 @@ fn proposal_review_rejects_any_non_recipient_output_not_owned_by_the_wallet() {
             Bip84(master, KeychainKind::External),
             Bip84(master, KeychainKind::Internal),
         )
-        .network(NETWORK)
+        .network(network())
         .create_wallet_no_persist()
         .unwrap()
     }
@@ -1837,7 +1840,7 @@ fn cpfp_ownership_requires_one_descriptor_derived_wallet_output() {
         Bip84(master, KeychainKind::External),
         Bip84(master, KeychainKind::Internal),
     )
-    .network(NETWORK)
+    .network(network())
     .create_wallet_no_persist()
     .unwrap();
     let destination = wallet.peek_address(KeychainKind::Internal, 0).address;
@@ -2266,7 +2269,7 @@ fn descriptor_checksum_collision_is_not_an_exact_wallet_identity_match() {
     let profile = WalletProfile {
         id: Uuid::new_v4(),
         name: "Existing wallet".to_owned(),
-        network: NETWORK_NAME.to_owned(),
+        network: network_name().to_owned(),
         kind: WalletKind::WatchOnly,
         descriptor_checksum: "same0001".to_owned(),
         created_at: 1,
@@ -2288,7 +2291,7 @@ fn exact_identity_finder_scans_all_profiles_and_fails_closed_on_stale_checksums(
     let first = WalletProfile {
         id: Uuid::new_v4(),
         name: "First".to_owned(),
-        network: NETWORK_NAME.to_owned(),
+        network: network_name().to_owned(),
         kind: WalletKind::WatchOnly,
         descriptor_checksum: "first001".to_owned(),
         created_at: 1,
@@ -2825,7 +2828,7 @@ fn native_boundary_rejects_browser_only_virtual_cosigners() {
         label: "Browser fixture".to_owned(),
         fingerprint: "00000000".to_owned(),
         xpub: "fixture".to_owned(),
-        derivation_path: MULTISIG_ACCOUNT_PATH.to_owned(),
+        derivation_path: multisig_account_path().to_owned(),
         source: CosignerSource::Virtual,
         device_type: None,
     };
@@ -2979,7 +2982,7 @@ fn persisted_descriptors_are_watch_only() {
     let (external, internal_template) =
         watch_templates(&mnemonic, "public-regtest-pin").expect("templates");
     let wallet = Wallet::create(external, internal_template)
-        .network(NETWORK)
+        .network(network())
         .create_wallet_no_persist()
         .expect("wallet");
     for keychain in [KeychainKind::External, KeychainKind::Internal] {
@@ -3080,7 +3083,7 @@ fn manual_selection_rejects_empty_malformed_duplicate_and_frozen_outpoints() {
 
 fn descriptor_backup() -> MultisigBackupDto {
     let secp = Secp256k1::new();
-    let path = DerivationPath::from_str(MULTISIG_ACCOUNT_PATH).unwrap();
+    let path = DerivationPath::from_str(multisig_account_path()).unwrap();
     let cosigners = (1_u8..=4)
         .map(|index| {
             let master = Xpriv::new_master(NetworkKind::Test, &[index; 32]).unwrap();
@@ -3090,7 +3093,7 @@ fn descriptor_backup() -> MultisigBackupDto {
                 label: format!("Key {index}"),
                 fingerprint: master.fingerprint(&secp).to_string(),
                 xpub: Xpub::from_priv(&secp, &account).to_string(),
-                derivation_path: MULTISIG_ACCOUNT_PATH.to_owned(),
+                derivation_path: multisig_account_path().to_owned(),
                 source: CosignerSource::Manual,
                 device_type: None,
             }
@@ -3214,7 +3217,7 @@ fn legacy_hardware_profiles_are_explicitly_unsupported_without_current_lock_file
     let mut profile = WalletProfile {
         id: Uuid::new_v4(),
         name: "Legacy".to_owned(),
-        network: NETWORK_NAME.to_owned(),
+        network: network_name().to_owned(),
         kind: WalletKind::WatchOnly,
         descriptor_checksum: "abcd1234".to_owned(),
         created_at: 1,
@@ -3496,7 +3499,7 @@ fn exact_identity_inspection_reads_an_existing_wallet_database_without_mutating_
     let mnemonic = Mnemonic::parse(WORDS).unwrap();
     let (external, internal) = watch_templates(&mnemonic, "identity read only").unwrap();
     let wallet = Wallet::create(external, internal)
-        .network(NETWORK)
+        .network(network())
         .create_wallet(&mut writable)
         .unwrap();
     let expected = wallet.public_descriptor(KeychainKind::External).to_string();
@@ -3891,7 +3894,7 @@ fn compact_filter_update_and_app_metadata_roll_back_at_every_commit_stage() {
     let mnemonic = Mnemonic::parse(WORDS).unwrap();
     let (external, internal) = watch_templates(&mnemonic, "atomic compact filters").unwrap();
     let wallet = Wallet::create(external, internal)
-        .network(NETWORK)
+        .network(network())
         .create_wallet(&mut db)
         .unwrap();
     let original_tip = wallet.latest_checkpoint();
@@ -4478,7 +4481,7 @@ fn prepared_wallet_proposal_and_acceleration_roll_back_as_one_unit() {
     let mnemonic = Mnemonic::parse(WORDS).unwrap();
     let (external, internal) = watch_templates(&mnemonic, "atomic prepare").unwrap();
     Wallet::create(external, internal)
-        .network(NETWORK)
+        .network(network())
         .create_wallet(&mut db)
         .unwrap();
 
@@ -4752,14 +4755,14 @@ fn public_exports_atomically_replace_regular_files_with_owner_only_permissions()
 #[test]
 fn external_signer_json_backup_is_directly_importable() {
     let secp = Secp256k1::new();
-    let path = DerivationPath::from_str(SINGLESIG_ACCOUNT_PATH).unwrap();
+    let path = DerivationPath::from_str(singlesig_account_path()).unwrap();
     let master = Xpriv::new_master(NetworkKind::Test, &[42_u8; 32]).unwrap();
     let account = master.derive_priv(&secp, &path).unwrap();
     let signer = ExternalSignerInput {
         label: "Ledger".to_owned(),
         fingerprint: master.fingerprint(&secp).to_string(),
         xpub: Xpub::from_priv(&secp, &account).to_string(),
-        derivation_path: SINGLESIG_ACCOUNT_PATH.to_owned(),
+        derivation_path: singlesig_account_path().to_owned(),
         source: SignerSource::Usb,
         device_type: Some("ledger".to_owned()),
     };
@@ -4776,7 +4779,7 @@ fn external_signer_json_backup_is_directly_importable() {
 fn external_signer_command_rejects_oversized_json_before_network_parsing() {
     let oversized = format!(
         "{{\"version\":1,\"network\":\"{}\",\"descriptor\":\"{}\"}}",
-        NETWORK_NAME,
+        network_name(),
         "x".repeat(external_signer::MAX_IMPORT_BYTES)
     );
     let error = external_signer_parse_import(oversized, "Signer".to_owned(), SignerSource::File)
@@ -5062,7 +5065,7 @@ fn coldcard_policy_acknowledgement_accepts_recognized_and_legacy_file_imports() 
         label: "Coldcard MK4".to_owned(),
         fingerprint: "f00dbabe".to_owned(),
         xpub: "tpub-public".to_owned(),
-        derivation_path: MULTISIG_ACCOUNT_PATH.to_owned(),
+        derivation_path: multisig_account_path().to_owned(),
         source,
         device_type: device_type.map(str::to_owned),
     };

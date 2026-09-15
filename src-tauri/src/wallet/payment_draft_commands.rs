@@ -92,7 +92,7 @@ fn validate_payment_draft(
     }
     let address = Address::from_str(draft.address.trim())
         .map_err(|_| api_error("wallet_corrupt", "The saved payment recipient is invalid."))?
-        .require_network(NETWORK)
+        .require_network(network())
         .map_err(|_| {
             api_error(
                 "wallet_corrupt",
@@ -245,7 +245,7 @@ mod tests {
         WalletProfile {
             id: Uuid::new_v4(),
             name: "Draft wallet".to_owned(),
-            network: NETWORK_NAME.to_owned(),
+            network: network_name().to_owned(),
             kind,
             descriptor_checksum: "12345678".to_owned(),
             created_at: 1,
@@ -254,7 +254,7 @@ mod tests {
     }
 
     fn draft(profile: &WalletProfile, kind: PaymentDraftKind) -> PaymentDraftDto {
-        let address = if NETWORK == Network::Regtest {
+        let address = if network() == Network::Regtest {
             "bcrt1qf6n3a54f4nqc5976hjl556ukfdas8xsnf8k9mz"
         } else {
             "tb1qf6n3a54f4nqc5976hjl556ukfdas8xsntw0gvt"

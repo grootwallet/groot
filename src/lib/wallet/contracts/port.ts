@@ -1,4 +1,5 @@
 import type { ReceiveAddress } from '$lib/types';
+import type { SwitchableNetwork } from '$lib/config';
 import type { CosignerDraft, PolicyDraft } from '$lib/multisig/policy';
 import type {
   HardwareDevice,
@@ -59,6 +60,7 @@ import type { PaymentDraft } from '../payment-draft';
 
 export interface WalletProfilesPort {
   runtimePlatform(): Promise<RuntimePlatform>;
+  switchNetwork(network: SwitchableNetwork): Promise<void>;
   exists(): Promise<boolean>;
   profiles(): Promise<WalletRegistry>;
   profileCompatibility(): Promise<WalletProfileCompatibility>;

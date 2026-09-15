@@ -1150,7 +1150,7 @@ fn trusted_executable(program: &Path, source: &HwiSource) -> Result<PathBuf, Har
     }
     match source {
         HwiSource::External => {
-            if release_hwi_verification_required(crate::build_network::NETWORK) {
+            if release_hwi_verification_required(crate::build_network::network()) {
                 verify_release_hwi(&canonical, &metadata)?;
             }
         }

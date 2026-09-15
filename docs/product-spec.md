@@ -40,7 +40,7 @@ The distributed macOS application includes Groot's exact reviewed Bitcoin Core H
 - Signet is the first remote integration network.
 - Regtest creates deterministic high-volume histories in automated tests.
 - Testnet4 is used for final public-network rehearsal before any mainnet work.
-- Mainnet is not a supported selectable network. It requires ADR 0012, the threat model, physical hardware certification, reproducible release evidence, and the release checklist to be independently approved first.
+- Internal multi-network builds let a user choose Regtest, Testnet4, or Mainnet in Settings. The change is confirmation- and restart-bound, and every network owns a separate wallet/node-data namespace. Fixed release builds remain network-bound. Mainnet public distribution still requires ADR 0012, the threat model, physical hardware certification, reproducible release evidence, and the release checklist to be independently approved first.
 - Core RPC endpoints are configurable. Regtest uses an explicit deterministic test fee policy; public-network builds request economy, standard, and priority estimates from the configured, authenticated, exact-chain-verified Core node. If Core has insufficient estimation data, presets remain unavailable and the user may enter a validated custom sat/vB rate. Remote Core requires non-redirecting direct HTTPS or an explicit numeric loopback Tor SOCKS5 proxy for a v3 `.onion` endpoint. RPC operations and responses are bounded; neither transport silently falls back to another endpoint, route, or fee. Connection tests retry a bounded transient transport failure, but wrong-chain and missing-permission results fail immediately. Repeated background-sync failures use bounded exponential backoff so an unavailable or long-recovering node is not probed every ten seconds indefinitely.
 
 ## Onboarding
@@ -71,7 +71,7 @@ Wallets have immutable UUID identities, editable local display names, network an
 
 The native app version and short source commit remain visible through one shared build-identity control in the desktop rail, shell-less welcome/setup/recovery flows, and Settings. Activating it copies only that public build string with explicit feedback; it never includes wallet, signer, node, transaction, or profile information.
 
-Wallet uniqueness is the exact canonical public receive descriptor on the compiled network. The eight-character descriptor checksum remains an integrity check only; checksum equality cannot establish wallet equality. Creation and recovery compare exact descriptors inside Rust against every authoritative profile representation. A true duplicate returns the existing immutable wallet ID so the shell can select that exact profile; a missing or stale match never falls back to the currently selected wallet.
+Wallet uniqueness is the exact canonical public receive descriptor on the active Rust network. The eight-character descriptor checksum remains an integrity check only; checksum equality cannot establish wallet equality. Creation and recovery compare exact descriptors inside Rust against every authoritative profile representation. A true duplicate returns the existing immutable wallet ID so the shell can select that exact profile; a missing or stale match never falls back to the currently selected wallet.
 
 When another unlocked wallet has a saved protected network setup, new software,
 hardware, and multisig wallets offer to reuse its Bitcoin Core connection and
@@ -86,7 +86,7 @@ creation, an explicitly selected reuse that locks, expires, changes, or fails
 validation rolls back the candidate and preserves the draft instead of silently
 publishing an offline wallet. Software and single-key hardware creation retain
 their existing offline fallback on copy failure. Settings lists saved setups on
-every compiled network, including Mainnet, without exposing their node details
+every active network, including Mainnet, without exposing their node details
 or credentials, marks whether each source is ready, and directs the user to
 unlock a source before adoption when needed. From an offline wallet, manual sync
 and the durable Overview retry open that setup choice directly, falling back to
@@ -302,7 +302,7 @@ Standard multisig wallets export and recover the public four-line BIP129/BSMS 1.
 
 ## Out of scope
 
-Mainnet, Lightning, arbitrary custom Miniscript editing, editable labels, contacts, cloud sync, background push while fully terminated, Payjoin sender/receiver sessions, and fiat purchase/sale. Delayed-branch coordinator spending, decaying multisig, expanding multisig, and BIP129 encrypted signer rounds remain later work described in `docs/roadmap.md`. Optional compact-filter/P2P sync is a confirmed-only test-network feature gated by ADR 0031; Payjoin V2 URI parsing is foundation only and sends no protocol traffic.
+Public Mainnet distribution, Lightning, arbitrary custom Miniscript editing, editable labels, contacts, cloud sync, background push while fully terminated, Payjoin sender/receiver sessions, and fiat purchase/sale. Delayed-branch coordinator spending, decaying multisig, expanding multisig, and BIP129 encrypted signer rounds remain later work described in `docs/roadmap.md`. Optional compact-filter/P2P sync is a confirmed-only test-network feature gated by ADR 0031; Payjoin V2 URI parsing is foundation only and sends no protocol traffic.
 
 ## Language and local preferences
 
@@ -313,6 +313,7 @@ and successful-sync timestamp. After the selected profile loads, the locked rout
 focuses its credential input.
 
 - English, French, and Spanish are selected in the global **App appearance** section of Settings. The preference is stored locally, survives app relaunches, is applied before first paint, and is never synchronized over the network.
+- In the internal multi-network build, **Settings → Network services → Bitcoin network** offers Regtest, Testnet4, and Mainnet. Confirming a different network stores the non-secret choice natively and restarts Groot. The old network remains untouched and switching back restores only its isolated wallets and node settings. A Mainnet confirmation explicitly warns that it uses real bitcoin.
 - The unlocked desktop shell provides keyboard shortcuts: Command/Ctrl+1, +2, +3, and +4 open Overview, Activity, Coins, and Settings; Command/Ctrl+Shift+R or +S opens the selected wallet's Receive or Send flow; and Command/Ctrl+L immediately locks only the selected wallet. Settings presents the platform-correct keys. Shortcuts are inert during startup, onboarding, lock, text entry, and dialogs. Lock is the only shortcut that mutates wallet session state; it prevents a concurrent wallet selection, cancels coordinated hardware and sync work, and invokes the existing native lock command before showing the unlock route. It never submits, signs, broadcasts, or discards transaction data. The lock shortcut is neither shown nor active in browser prototypes and mobile builds.
 - On native launch, Groot renders the canonical SVG lockup on a neutral branded startup surface for about 1.8 seconds while Rust confirms the selected wallet's session state. The lockup reveals once from left to right; reduced-motion users receive the same brief gate with a static mark. Wallet balances, activity, actions, and other authenticated routes must never appear—even briefly—before the selected wallet is confirmed unlocked. A locked or expired session routes to the wallet lock screen before authenticated content mounts.
 - The shared localization boundary covers all frontend product copy, including routes, modals, loading and error states, toasts, accessibility names, recurring statuses, and grammatical count labels. English source copy is the stable catalog key; the localization quality gate rejects uncatalogued rendered English. Native errors are localized by stable category or a localized safe fallback without changing wallet contracts or trusted Rust behavior.

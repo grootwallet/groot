@@ -1,11 +1,11 @@
-use super::{api_error, internal, ApiResult, NETWORK_NAME};
+use super::{api_error, internal, network_name, ApiResult};
 use bdk_wallet::bitcoin::Txid;
 use std::str::FromStr;
 use tauri::AppHandle;
 use tauri_plugin_opener::OpenerExt;
 
 pub(crate) fn transaction_explorer_url(txid: &str) -> ApiResult<Option<String>> {
-    transaction_explorer_url_for_network(NETWORK_NAME, txid)
+    transaction_explorer_url_for_network(network_name(), txid)
 }
 
 fn transaction_explorer_url_for_network(network: &str, txid: &str) -> ApiResult<Option<String>> {

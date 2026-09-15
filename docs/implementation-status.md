@@ -534,6 +534,20 @@ v0.4.88 makes pre-PSBT payment drafts directly disposable. Overview now separate
 
 v0.4.89 closes the Core-configuration catch-up race observed during the packaged Testnet4 BIP84 recovery rehearsal. Before normal sync or any explicit full/birthday history scan, Rust now requires the configured Core node to be out of initial block download and its tip to have reached the wallet's last verified checkpoint. Full and birthday scans also reject a requested block range that a pruned node no longer stores. These cases return stable actionable `node_syncing` or `node_history_unavailable` errors and keep the previous verified wallet state untouched instead of surfacing a generic BDK reconciliation failure. This is compatible with every existing wallet, checkpoint, recovery-scan, descriptor, profile, registry, proposal, credential, and network-setting record; no migration is required.
 
+# Restart-bound internal network selection
+
+ADR 0068 adds an internal `multi` native identity whose Settings screen offers
+Regtest, Testnet4, and Mainnet. Rust persists the exact closed-set selection in an
+owner-only versioned file, loads it before the application-root process lock and
+wallet initialization, and restarts on change. Existing Regtest data stays in its
+compatible root; Testnet4 and Mainnet use separate named subdirectories. Foreign
+registries still fail before wallet open, frontend/native mismatch still blocks the
+shell, and malformed or unsafe selection storage aborts startup. Fixed release
+builds remain compile-time network-bound and cannot switch. The multi build is not
+approved for distribution, and Mainnet retains its exact-Core admission, policy,
+spend, HWI, and release gates. Wallet/profile/registry/database/secret formats are
+unchanged and no migration is required.
+
 # Isolated mainnet certification candidate
 
 ADR 0055 authorizes one dedicated, non-distributable mainnet build so the ADR 0053

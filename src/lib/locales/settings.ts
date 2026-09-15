@@ -520,6 +520,50 @@ export const settingsCopy = {
     fr: 'Nœud de frais et de diffusion',
     es: 'Nodo de comisiones y difusión'
   },
+  'Bitcoin network': { fr: 'Réseau Bitcoin', es: 'Red de Bitcoin' },
+  'Changing networks restarts Groot. Wallets and node settings stay isolated per network.': {
+    fr: 'Changer de réseau redémarre Groot. Les portefeuilles et réglages de nœud restent isolés par réseau.',
+    es: 'Cambiar de red reinicia Groot. Las carteras y los ajustes del nodo permanecen aislados por red.'
+  },
+  'This release is fixed to {network}.': {
+    fr: 'Cette version est limitée à {network}.',
+    es: 'Esta versión está limitada a {network}.'
+  },
+  'Switch to {network}?': {
+    fr: 'Passer à {network} ?',
+    es: '¿Cambiar a {network}?'
+  },
+  'Groot will restart and open only the wallets and node settings saved for that network.': {
+    fr: 'Groot redémarrera et ouvrira uniquement les portefeuilles et réglages de nœud enregistrés pour ce réseau.',
+    es: 'Groot se reiniciará y abrirá únicamente las carteras y los ajustes del nodo guardados para esa red.'
+  },
+  'Mainnet uses real bitcoin.': {
+    fr: 'Mainnet utilise de vrais bitcoins.',
+    es: 'Mainnet usa bitcoins reales.'
+  },
+  'Confirm the Bitcoin Core network and every address before receiving, signing, or broadcasting.':
+    {
+      fr: 'Vérifiez le réseau de Bitcoin Core et chaque adresse avant de recevoir, signer ou diffuser.',
+      es: 'Verifica la red de Bitcoin Core y cada dirección antes de recibir, firmar o transmitir.'
+    },
+  'The current network stays unchanged on disk. Switching back restores its wallets exactly as they were.':
+    {
+      fr: 'Le réseau actuel reste inchangé sur le disque. Y revenir restaure ses portefeuilles exactement dans leur état précédent.',
+      es: 'La red actual permanece sin cambios en el disco. Al volver, sus carteras se restauran exactamente como estaban.'
+    },
+  'Restart in {network}': {
+    fr: 'Redémarrer sur {network}',
+    es: 'Reiniciar en {network}'
+  },
+  'Restarting…': { fr: 'Redémarrage…', es: 'Reiniciando…' },
+  'Groot could not save the Bitcoin network selection.': {
+    fr: 'Groot n’a pas pu enregistrer le choix du réseau Bitcoin.',
+    es: 'Groot no pudo guardar la selección de red de Bitcoin.'
+  },
+  'Network not changed': {
+    fr: 'Réseau non modifié',
+    es: 'Red sin cambios'
+  },
   'from this device.': { fr: 'de cet appareil.', es: 'de este dispositivo.' },
   'Hardware signer identity & health': {
     fr: 'Identité et état du signataire matériel',

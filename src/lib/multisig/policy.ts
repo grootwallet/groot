@@ -1,7 +1,11 @@
-import { defaultConfig } from '$lib/config';
+import { defaultConfig, type SupportedNetwork } from '$lib/config';
 
-export const MULTISIG_ACCOUNT_PATH =
+export let MULTISIG_ACCOUNT_PATH =
   defaultConfig.network === 'mainnet' ? "m/48'/0'/0'/2'" : "m/48'/1'/0'/2'";
+
+export function applyMultisigNetwork(network: SupportedNetwork): void {
+  MULTISIG_ACCOUNT_PATH = network === 'mainnet' ? "m/48'/0'/0'/2'" : "m/48'/1'/0'/2'";
+}
 export const MIN_COSIGNERS = 3;
 export const MAX_COSIGNERS = 7;
 

@@ -31,18 +31,18 @@ reject_fixed() {
 
 contains_fixed "export const SUPPORTED_NETWORKS = ['signet', 'testnet4', 'regtest', 'mainnet'] as const;" src/lib/config.ts \
   || fail "the browser network allowlist changed"
-contains_fixed '"regtest" | "signet" | "testnet4" | "mainnet" => {}' src-tauri/build.rs \
+contains_fixed '"regtest" | "signet" | "testnet4" | "mainnet" | "multi" => {}' src-tauri/build.rs \
   || fail "the native compile-time network allowlist changed"
 node scripts/release/verify-mainnet-source-policy.mjs
-contains_fixed "NAME as NETWORK_NAME, NETWORK, PARAMETERS," src-tauri/src/wallet.rs \
-  || fail "the wallet no longer consumes the compile-time network identity"
+contains_fixed "default_rpc_url, is_regtest, name as network_name, network, parameters," src-tauri/src/wallet.rs \
+  || fail "the wallet no longer consumes the process-lifetime network identity"
 contains_fixed "backend.validate().is_err()" src-tauri/src/release_policy.rs \
   || fail "the first-mainnet Core policy no longer revalidates its selected endpoint"
 contains_fixed 'ChainBackend::RemoteCore { url } => (url, "https")' src-tauri/src/release_policy.rs \
   || fail "the first-mainnet remote-Core policy is not visibly HTTPS-only"
 contains_fixed ".estimate_smart_fee(blocks, Some(mode))" src-tauri/src/wallet/profile_commands.rs \
   || fail "public-network fees no longer come from the configured Bitcoin Core node"
-contains_fixed "if IS_REGTEST" src-tauri/src/wallet/profile_commands.rs \
+contains_fixed "if is_regtest()" src-tauri/src/wallet/profile_commands.rs \
   || fail "the deterministic fee policy is no longer visibly confined to Regtest"
 reject_fixed "estimates?.economy ?? 1" src/routes/send/+page.svelte \
   "the send flow silently restored a fallback economy fee"
@@ -52,6 +52,10 @@ reject_fixed "estimates?.priority ?? 5" src/routes/send/+page.svelte \
   "the send flow silently restored a fallback priority fee"
 contains_fixed '"beforeBuildCommand": "pnpm build:regtest"' src-tauri/tauri.conf.json \
   || fail "the native build is no longer pinned to regtest mode"
+contains_fixed '"beforeBuildCommand": "pnpm build:multi"' src-tauri/tauri.multi.conf.json \
+  || fail "the internal network-switching build is not pinned to multi mode"
+contains_fixed '"identifier": "app.groot.wallet"' src-tauri/tauri.multi.conf.json \
+  || fail "the internal network-switching build no longer shares the legacy Regtest namespace"
 contains_fixed '"identifier": "app.groot.wallet.signet"' src-tauri/tauri.signet.conf.json \
   || fail "the Signet rehearsal no longer has isolated application storage"
 contains_fixed '"identifier": "app.groot.wallet.testnet4"' src-tauri/tauri.testnet4.conf.json \

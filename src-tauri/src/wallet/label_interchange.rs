@@ -403,7 +403,7 @@ fn import_records(
                     .map_err(|_| {
                         api_error("label_import_invalid", "An imported address is invalid.")
                     })?
-                    .require_network(NETWORK)
+                    .require_network(network())
                     .map_err(|_| {
                         api_error(
                             "wrong_network",
@@ -709,7 +709,7 @@ mod tests {
             Bip84(master, KeychainKind::External),
             Bip84(master, KeychainKind::Internal),
         )
-        .network(NETWORK)
+        .network(network())
         .create_wallet(&mut db)
         .unwrap();
         let address = wallet

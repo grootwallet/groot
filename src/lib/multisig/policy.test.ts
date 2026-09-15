@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   MULTISIG_ACCOUNT_PATH,
+  applyMultisigNetwork,
   coordinatorProgress,
   descriptorPreview,
   findDuplicateCosigner,
@@ -30,6 +31,13 @@ describe('multisig policy invariants', () => {
   });
 
   it('uses the standard native-SegWit multisig account path', () => {
+    expect(MULTISIG_ACCOUNT_PATH).toBe("m/48'/1'/0'/2'");
+  });
+
+  it('updates the account path before a runtime-selected network mounts', () => {
+    applyMultisigNetwork('mainnet');
+    expect(MULTISIG_ACCOUNT_PATH).toBe("m/48'/0'/0'/2'");
+    applyMultisigNetwork('testnet4');
     expect(MULTISIG_ACCOUNT_PATH).toBe("m/48'/1'/0'/2'");
   });
 

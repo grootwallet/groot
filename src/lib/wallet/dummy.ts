@@ -169,9 +169,16 @@ export class DummyWalletAdapter extends DummyWalletState implements WalletPort {
       platform: 'browser' as const,
       mobile: false,
       network: defaultConfig.network,
+      networkSwitching: false,
       version: APP_VERSION,
       commit: 'development'
     };
+  }
+  async switchNetwork(_network: import('$lib/config').SwitchableNetwork) {
+    throw new WalletError(
+      'network_switch_unavailable',
+      'Network switching is available only in the native multi-network build.'
+    );
   }
   async exists() {
     return this._exists;

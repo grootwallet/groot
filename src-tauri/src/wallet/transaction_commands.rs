@@ -88,7 +88,7 @@ fn tx_prepare_blocking(
         None,
     );
     let result = (|| {
-        crate::release_policy::validate_spend(NETWORK, 1, amount)
+        crate::release_policy::validate_spend(network(), 1, amount)
             .map_err(|_| api_error("invalid_amount", "This spend is blocked by release policy."))?;
         let labels = normalize_labels(labels)?;
         let label = labels[0].clone();
@@ -101,13 +101,13 @@ fn tx_prepare_blocking(
         let unchecked = Address::from_str(recipient.trim()).map_err(|_| {
             api_error(
                 "invalid_address",
-                format!("Enter a valid {NETWORK_NAME} Bitcoin address."),
+                format!("Enter a valid {} Bitcoin address.", network_name()),
             )
         })?;
-        let address = unchecked.require_network(NETWORK).map_err(|_| {
+        let address = unchecked.require_network(network()).map_err(|_| {
             api_error(
                 "invalid_address",
-                format!("The address is not for {NETWORK_NAME}."),
+                format!("The address is not for {}.", network_name()),
             )
         })?;
         let (_applied_fee_rate, rate) = validate_fee_rate(&fee_rate)?;
@@ -238,7 +238,7 @@ fn tx_prepare_blocking(
             inputs,
             locktime,
             rbf,
-            network: NETWORK_NAME,
+            network: network_name(),
             selection_impact,
             acceleration: None,
         };
@@ -293,14 +293,14 @@ fn tx_max_spend_blocking(
         .map_err(|_| {
             api_error(
                 "invalid_address",
-                format!("Enter a valid {NETWORK_NAME} Bitcoin address."),
+                format!("Enter a valid {} Bitcoin address.", network_name()),
             )
         })?
-        .require_network(NETWORK)
+        .require_network(network())
         .map_err(|_| {
             api_error(
                 "invalid_address",
-                format!("The address is not for {NETWORK_NAME}."),
+                format!("The address is not for {}.", network_name()),
             )
         })?;
     let (_applied, rate) = validate_fee_rate(&fee_rate)?;
@@ -593,7 +593,7 @@ fn core_replacement_policy(
     let client = rpc_client(app, state)?;
     checked_chain_identity(&client)?;
     let incremental_fee = core_incremental_relay_fee(&client)?;
-    let priority = if IS_REGTEST {
+    let priority = if is_regtest() {
         Some(5.0)
     } else {
         profile_commands::estimate_core_fee(&client, 2, EstimateMode::Economical).ok()
@@ -688,7 +688,7 @@ pub async fn cpfp_acceleration_quote(
         require_unlocked(&app, &state)?;
         let txid = Txid::from_str(&txid)
             .map_err(|_| api_error("acceleration_unavailable", "Enter a valid transaction ID."))?;
-        let priority = if IS_REGTEST {
+        let priority = if is_regtest() {
             Some(5.0)
         } else {
             let client = rpc_client(&app, &state)?;
@@ -815,10 +815,13 @@ pub(crate) fn summarize_payment_psbt(
                 "The accelerated transaction has no output.",
             )
         })?;
-    let recipient = Address::from_script(&output.script_pubkey, NETWORK).map_err(|_| {
+    let recipient = Address::from_script(&output.script_pubkey, network()).map_err(|_| {
         api_error(
             "invalid_address",
-            format!("The transaction recipient is not a standard {NETWORK_NAME} address."),
+            format!(
+                "The transaction recipient is not a standard {} address.",
+                network_name()
+            ),
         )
     })?;
     let fee = psbt
@@ -868,7 +871,7 @@ pub(crate) fn summarize_payment_psbt(
         inputs,
         locktime,
         rbf,
-        network: NETWORK_NAME,
+        network: network_name(),
         selection_impact,
         acceleration: None,
     })
@@ -1430,7 +1433,7 @@ pub async fn tx_sign_and_broadcast(
             Bip84(master, KeychainKind::External),
             Bip84(master, KeychainKind::Internal),
         )
-        .network(NETWORK)
+        .network(network())
         .create_wallet_no_persist()
         .map_err(internal)?;
         let mut db = open_db(&app)?;

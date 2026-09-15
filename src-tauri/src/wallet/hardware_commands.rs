@@ -38,7 +38,7 @@ fn remember_mainnet_hardware_admission(
 ) -> ApiResult<()> {
     remember_hardware_admission_for_network(
         state,
-        NETWORK,
+        network(),
         fingerprint,
         xpub,
         derivation_path,
@@ -80,7 +80,7 @@ fn require_mainnet_hardware_admission(
 ) -> ApiResult<()> {
     require_hardware_admission_for_network(
         state,
-        NETWORK,
+        network(),
         fingerprint,
         xpub,
         derivation_path,
@@ -123,7 +123,7 @@ pub(super) fn reconcile_mainnet_recovery_cosigners(
     state: &AppState,
     cosigners: &[crate::multisig::CosignerInput],
 ) -> ApiResult<Vec<crate::multisig::CosignerInput>> {
-    reconcile_recovery_cosigners_for_network(state, NETWORK, cosigners)
+    reconcile_recovery_cosigners_for_network(state, network(), cosigners)
 }
 
 fn reconcile_recovery_cosigners_for_network(
@@ -285,7 +285,7 @@ fn validate_discovered_devices(mut devices: Vec<HwiDevice>) -> ApiResult<Vec<Hwi
     for device in &mut devices {
         device.device_type = device.device_type.trim().to_ascii_lowercase();
         if !SUPPORTED_HWI_DEVICE_TYPES.contains(&device.device_type.as_str())
-            || !approved_hwi_model(NETWORK, &device.device_type, &device.model)
+            || !approved_hwi_model(network(), &device.device_type, &device.model)
             || device.path.len() > 1024
             || device.model.chars().count() > 256
             || device.path.chars().any(char::is_control)
@@ -691,7 +691,7 @@ pub async fn hardware_find_saved_device(
             "The saved hardware signer account key is invalid.",
         )
     })?;
-    if expected_xpub.network != PARAMETERS.extended_key_network {
+    if expected_xpub.network != parameters().extended_key_network {
         return Err(api_error(
             "wrong_network",
             "The saved hardware signer account key is for the wrong network.",
@@ -1035,7 +1035,7 @@ mod targeted_scan_tests {
             Network::Bitcoin,
             "a1b2c3d4",
             "approved-xpub",
-            SINGLESIG_ACCOUNT_PATH,
+            singlesig_account_path(),
             Some("trezor")
         )
         .is_err());
@@ -1044,7 +1044,7 @@ mod targeted_scan_tests {
             Network::Bitcoin,
             "a1b2c3d4",
             "approved-xpub",
-            SINGLESIG_ACCOUNT_PATH,
+            singlesig_account_path(),
             Some("trezor"),
         )
         .unwrap();
@@ -1053,7 +1053,7 @@ mod targeted_scan_tests {
             Network::Bitcoin,
             "a1b2c3d4",
             "approved-xpub",
-            SINGLESIG_ACCOUNT_PATH,
+            singlesig_account_path(),
             Some("trezor")
         )
         .is_ok());
@@ -1062,7 +1062,7 @@ mod targeted_scan_tests {
             Network::Bitcoin,
             "a1b2c3d4",
             "renderer-substituted-xpub",
-            SINGLESIG_ACCOUNT_PATH,
+            singlesig_account_path(),
             Some("trezor")
         )
         .is_err());
@@ -1072,7 +1072,7 @@ mod targeted_scan_tests {
             Network::Bitcoin,
             "a1b2c3d4",
             "approved-xpub",
-            SINGLESIG_ACCOUNT_PATH,
+            singlesig_account_path(),
             Some("trezor")
         )
         .is_ok());
@@ -1082,7 +1082,7 @@ mod targeted_scan_tests {
             Network::Bitcoin,
             "a1b2c3d4",
             "approved-xpub",
-            SINGLESIG_ACCOUNT_PATH,
+            singlesig_account_path(),
             Some("trezor")
         )
         .is_err());
@@ -1097,7 +1097,7 @@ mod targeted_scan_tests {
                 Network::Bitcoin,
                 fingerprint,
                 xpub,
-                crate::multisig::MULTISIG_ACCOUNT_PATH,
+                crate::multisig::multisig_account_path(),
                 Some("ledger"),
             )
             .unwrap();
@@ -1111,7 +1111,7 @@ mod targeted_scan_tests {
                 Network::Bitcoin,
                 fingerprint,
                 xpub,
-                crate::multisig::MULTISIG_ACCOUNT_PATH,
+                crate::multisig::multisig_account_path(),
                 Some("ledger")
             )
             .is_ok());
@@ -1121,7 +1121,7 @@ mod targeted_scan_tests {
             Network::Bitcoin,
             "a1b2c3d4",
             "substituted-xpub",
-            crate::multisig::MULTISIG_ACCOUNT_PATH,
+            crate::multisig::multisig_account_path(),
             Some("ledger")
         )
         .is_err());
@@ -1141,7 +1141,7 @@ mod targeted_scan_tests {
                 "b1c2d3e4".to_owned()
             },
             xpub: xpub.to_owned(),
-            derivation_path: MULTISIG_ACCOUNT_PATH.to_owned(),
+            derivation_path: multisig_account_path().to_owned(),
             source: CosignerSource::Manual,
             device_type: None,
         });
@@ -1614,7 +1614,7 @@ fn parse_hwi_account_xpub(output: &[u8], device_type: &str) -> ApiResult<String>
         })?;
     let parsed = Xpub::from_str(xpub)
         .map_err(|_| api_error("invalid_descriptor", "HWI returned an invalid account key."))?;
-    if parsed.network != PARAMETERS.extended_key_network {
+    if parsed.network != parameters().extended_key_network {
         return Err(api_error(
             "wrong_network",
             "The hardware signer returned an account key for the wrong network.",
@@ -1683,7 +1683,7 @@ fn parse_hwi_account_keypool(
     let xpub = &key_tail[..xpub_end];
     let parsed = Xpub::from_str(xpub)
         .map_err(|_| api_error("invalid_descriptor", "HWI returned an invalid account key."))?;
-    if parsed.network != PARAMETERS.extended_key_network {
+    if parsed.network != parameters().extended_key_network {
         return Err(api_error(
             "wrong_network",
             "The hardware signer returned an account key for the wrong network.",
@@ -1882,7 +1882,7 @@ fn read_hardware_account_identity(
     }
 
     let is_bitbox_singlesig = device.device_type.eq_ignore_ascii_case("bitbox02")
-        && derivation_path == SINGLESIG_ACCOUNT_PATH;
+        && derivation_path == singlesig_account_path();
     if is_bitbox_singlesig {
         return read_bitbox_account_identity(hwi, &operation, device, derivation_path);
     }
@@ -2042,7 +2042,7 @@ fn read_hardware_cosigner(
     let (fingerprint, xpub) = read_hardware_account_identity(
         hwi,
         &device,
-        crate::multisig::MULTISIG_ACCOUNT_PATH,
+        crate::multisig::multisig_account_path(),
         compare_with_saved_identity,
     )?;
     let input = crate::multisig::CosignerInput {
@@ -2050,7 +2050,7 @@ fn read_hardware_cosigner(
         label: label.to_owned(),
         fingerprint: fingerprint.to_ascii_lowercase(),
         xpub,
-        derivation_path: crate::multisig::MULTISIG_ACCOUNT_PATH.to_owned(),
+        derivation_path: crate::multisig::multisig_account_path().to_owned(),
         source: crate::multisig::CosignerSource::Usb,
         device_type: Some(device.device_type),
     };
@@ -2119,7 +2119,7 @@ pub(crate) fn validate_external_signer_import_network(encoded: &str) -> ApiResul
     if !is_groot_backup {
         return Ok(());
     }
-    if value.get("network").and_then(|value| value.as_str()) == Some(NETWORK_NAME) {
+    if value.get("network").and_then(|value| value.as_str()) == Some(network_name()) {
         Ok(())
     } else {
         Err(api_error(
@@ -2173,14 +2173,14 @@ fn read_hardware_external_signer(
     let (fingerprint, xpub) = read_hardware_account_identity(
         hwi,
         &device,
-        SINGLESIG_ACCOUNT_PATH,
+        singlesig_account_path(),
         compare_with_saved_identity,
     )?;
     let input = ExternalSignerInput {
         label: label.to_owned(),
         fingerprint: fingerprint.to_ascii_lowercase(),
         xpub,
-        derivation_path: SINGLESIG_ACCOUNT_PATH.to_owned(),
+        derivation_path: singlesig_account_path().to_owned(),
         source: SignerSource::Usb,
         device_type: Some(device.device_type),
     };
@@ -2233,7 +2233,7 @@ pub fn external_signer_create(
             metadata.external_descriptor.clone(),
             metadata.internal_descriptor.clone(),
         )
-        .network(NETWORK)
+        .network(network())
         .create_wallet(&mut db)
         .map_err(internal)?;
         write_private_json(&dir.join("wallet.json"), &metadata)?;
@@ -2254,7 +2254,7 @@ pub fn external_signer_create(
             WalletProfile {
                 id,
                 name: metadata.name.clone(),
-                network: NETWORK_NAME.to_owned(),
+                network: network_name().to_owned(),
                 kind: WalletKind::WatchOnly,
                 descriptor_checksum: descriptor_checksum(
                     &wallet.public_descriptor(KeychainKind::External).to_string(),
@@ -2326,7 +2326,7 @@ pub fn external_signer_rename(
 pub(crate) fn external_signer_backup(descriptor: String) -> ApiResult<ExternalSignerBackupDto> {
     let content = serde_json::to_string_pretty(&ExternalSignerBackupRecord {
         version: 1,
-        network: NETWORK_NAME,
+        network: network_name(),
         descriptor: &descriptor,
     })
     .map_err(internal)?;
@@ -2433,7 +2433,7 @@ pub(crate) fn external_proposal_dto(
         inputs,
         locktime,
         rbf,
-        network: NETWORK_NAME,
+        network: network_name(),
         psbt: encoded,
         signed: progress.signed,
         required: 1,
@@ -3308,7 +3308,7 @@ pub async fn hardware_verify_external_address(
         .derivation_of_spk(
             Address::from_str(&expected)
                 .map_err(|_| api_error("wallet_corrupt", "The stored receive address is invalid."))?
-                .require_network(NETWORK)
+                .require_network(network())
                 .map_err(|_| {
                     api_error(
                         "wallet_corrupt",
@@ -3437,15 +3437,15 @@ mod health_check_tests {
 
     fn signer_from_seed(seed_byte: u8) -> CosignerInput {
         let secp = Secp256k1::new();
-        let master = Xpriv::new_master(PARAMETERS.network, &[seed_byte; 32]).unwrap();
-        let path = DerivationPath::from_str(MULTISIG_ACCOUNT_PATH).unwrap();
+        let master = Xpriv::new_master(parameters().network, &[seed_byte; 32]).unwrap();
+        let path = DerivationPath::from_str(multisig_account_path()).unwrap();
         let account = master.derive_priv(&secp, &path).unwrap();
         CosignerInput {
             id: format!("signer-{seed_byte}"),
             label: "Coldcard".to_owned(),
             fingerprint: master.fingerprint(&secp).to_string(),
             xpub: Xpub::from_priv(&secp, &account).to_string(),
-            derivation_path: MULTISIG_ACCOUNT_PATH.to_owned(),
+            derivation_path: multisig_account_path().to_owned(),
             source: CosignerSource::File,
             device_type: Some("coldcard".to_owned()),
         }
@@ -3453,14 +3453,14 @@ mod health_check_tests {
 
     fn external_signer_from_seed(seed_byte: u8) -> ExternalSignerInput {
         let secp = Secp256k1::new();
-        let master = Xpriv::new_master(PARAMETERS.network, &[seed_byte; 32]).unwrap();
-        let path = DerivationPath::from_str(SINGLESIG_ACCOUNT_PATH).unwrap();
+        let master = Xpriv::new_master(parameters().network, &[seed_byte; 32]).unwrap();
+        let path = DerivationPath::from_str(singlesig_account_path()).unwrap();
         let account = master.derive_priv(&secp, &path).unwrap();
         ExternalSignerInput {
             label: "Trezor Safe 3".to_owned(),
             fingerprint: master.fingerprint(&secp).to_string(),
             xpub: Xpub::from_priv(&secp, &account).to_string(),
-            derivation_path: SINGLESIG_ACCOUNT_PATH.to_owned(),
+            derivation_path: singlesig_account_path().to_owned(),
             source: SignerSource::Usb,
             device_type: Some("trezor".to_owned()),
         }
@@ -3502,7 +3502,7 @@ mod health_check_tests {
         };
 
         let identity =
-            read_hardware_account_identity(&hwi, &device, SINGLESIG_ACCOUNT_PATH, false).unwrap();
+            read_hardware_account_identity(&hwi, &device, singlesig_account_path(), false).unwrap();
         assert_eq!(
             identity,
             (expected.fingerprint.clone(), expected.xpub.clone())
@@ -3778,7 +3778,7 @@ mod health_check_tests {
     #[test]
     fn initial_keypool_response_atomically_binds_fingerprint_xpub_and_requested_path() {
         let signer = signer_from_seed(8);
-        let origin = MULTISIG_ACCOUNT_PATH.trim_start_matches("m/");
+        let origin = multisig_account_path().trim_start_matches("m/");
         let output = serde_json::to_vec(&serde_json::json!([{
             "desc": format!(
                 "wpkh([{}/{}]{}/0/*)",
@@ -3788,12 +3788,12 @@ mod health_check_tests {
         .unwrap();
 
         let (fingerprint, xpub) =
-            parse_hwi_account_keypool(&output, MULTISIG_ACCOUNT_PATH, "trezor").unwrap();
+            parse_hwi_account_keypool(&output, multisig_account_path(), "trezor").unwrap();
         assert_eq!(fingerprint, signer.fingerprint);
         assert_eq!(xpub, signer.xpub);
 
         let error =
-            parse_hwi_account_keypool(&output, SINGLESIG_ACCOUNT_PATH, "trezor").unwrap_err();
+            parse_hwi_account_keypool(&output, singlesig_account_path(), "trezor").unwrap_err();
         assert_eq!(error.code, "invalid_derivation_path");
 
         let secp = Secp256k1::new();
@@ -3801,7 +3801,7 @@ mod health_check_tests {
         let account = master
             .derive_priv(
                 &secp,
-                &DerivationPath::from_str(MULTISIG_ACCOUNT_PATH).unwrap(),
+                &DerivationPath::from_str(multisig_account_path()).unwrap(),
             )
             .unwrap();
         let wrong_xpub = Xpub::from_priv(&secp, &account);
@@ -3813,7 +3813,7 @@ mod health_check_tests {
         }]))
         .unwrap();
         assert_eq!(
-            parse_hwi_account_keypool(&wrong, MULTISIG_ACCOUNT_PATH, "trezor")
+            parse_hwi_account_keypool(&wrong, multisig_account_path(), "trezor")
                 .unwrap_err()
                 .code,
             "wrong_network"

@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import type { ReceiveAddress } from '$lib/types';
+import type { SwitchableNetwork } from '$lib/config';
 import {
   WalletError,
   walletErrorCode,
@@ -167,6 +168,9 @@ export class TauriWalletAdapter implements WalletPort {
 
   runtimePlatform() {
     return command<RuntimePlatform>('runtime_platform');
+  }
+  async switchNetwork(network: SwitchableNetwork) {
+    await command<void>('bitcoin_network_switch', { selectedNetwork: network });
   }
 
   exists() {

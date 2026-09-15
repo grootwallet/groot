@@ -20,7 +20,13 @@
   import ThemeToggle from './ThemeToggle.svelte';
   import DiscreetModeToggle from './DiscreetModeToggle.svelte';
   import ResumeSetupNotice from './ResumeSetupNotice.svelte';
-  import { APP_VERSION, defaultConfig } from '$lib/config';
+  import {
+    APP_VERSION,
+    applyRuntimeNetwork,
+    defaultConfig,
+    networkSwitchingBuild
+  } from '$lib/config';
+  import { applyMultisigNetwork } from '$lib/multisig/policy';
   import { onMount } from 'svelte';
   import { afterNavigate, beforeNavigate, goto } from '$app/navigation';
   import { isPrototypeWallet, walletService, WalletError } from '$lib/wallet';
@@ -379,6 +385,17 @@
     try {
       const runtime = await walletService.runtimePlatform();
       runtimeIdentity = runtime;
+      if (runtime.networkSwitching !== networkSwitchingBuild) {
+        startupFailure = translate(
+          $locale,
+          'The native and web app builds do not match. Restart Groot with the correct build.'
+        );
+        throw new Error('native/web build mismatch');
+      }
+      if (runtime.networkSwitching) {
+        applyRuntimeNetwork(runtime.network);
+        applyMultisigNetwork(runtime.network);
+      }
       if (runtime.network !== defaultConfig.network || runtime.version !== APP_VERSION) {
         startupFailure = translate(
           $locale,

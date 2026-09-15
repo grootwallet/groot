@@ -1,5 +1,12 @@
 # Bitcoin Improvement Proposal support
 
+ADR 0068's restart-bound internal network selection changes network availability
+and storage routing, not BIP semantics or evidence. Regtest, Testnet4, and Mainnet
+continue to use their existing BIP84/BIP48 derivations, address validation, BIP174
+review/signing checks, exact-genesis backend checks, and HWI chain arguments. No
+descriptor, PSBT, backup, registry, wallet database, or secret-envelope format
+changes, and no migration or new interoperability evidence, are implied.
+
 The 2026-09-14 stale-multisig-proposal safeguard changes no descriptor, BIP48
 key, PSBT serialization or signature verification, backup format, or persisted
 schema. It checks a saved proposal's selected outpoints against the current BDK

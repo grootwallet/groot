@@ -4,7 +4,7 @@ use payjoin::Uri;
 use serde::Serialize;
 use std::str::FromStr;
 
-use crate::build_network::NETWORK;
+use crate::build_network::network;
 
 const MAX_PAYJOIN_URI_BYTES: usize = 8 * 1024;
 
@@ -38,7 +38,7 @@ pub struct PaymentRequestApiError {
 pub fn payment_request_inspect(
     value: String,
 ) -> Result<PaymentRequestInspection, PaymentRequestApiError> {
-    inspect_payment_request(&value, NETWORK).map_err(|error| PaymentRequestApiError {
+    inspect_payment_request(&value, network()).map_err(|error| PaymentRequestApiError {
         code: "invalid_payment_request",
         message: error.to_string(),
     })

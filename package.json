@@ -1,7 +1,7 @@
 {
   "name": "groot-wallet",
   "private": true,
-  "version": "0.4.94",
+  "version": "0.4.95",
   "packageManager": "pnpm@11.13.1",
   "engines": {
     "node": "24.19.0",
@@ -12,6 +12,7 @@
     "dev": "vite",
     "dev:regtest": "vite --mode regtest",
     "dev:native:regtest": "bash scripts/dev/tauri-regtest.sh",
+    "dev:native:multi": "GROOT_BUILD_NETWORK=multi tauri dev --config src-tauri/tauri.multi.conf.json",
     "dev:native:signet": "GROOT_BUILD_NETWORK=signet tauri dev --config src-tauri/tauri.signet.conf.json",
     "dev:native:testnet4": "GROOT_BUILD_NETWORK=testnet4 tauri dev --config src-tauri/tauri.testnet4.conf.json",
     "build": "vite build",
@@ -19,6 +20,8 @@
     "build:signet": "vite build --mode signet",
     "build:testnet4": "vite build --mode testnet4",
     "build:mainnet": "vite build --mode mainnet",
+    "build:multi": "vite build --mode multi",
+    "build:native:multi": "GROOT_BUILD_NETWORK=multi tauri build --config src-tauri/tauri.multi.conf.json",
     "build:native:signet": "node scripts/release/build-signet.mjs",
     "build:native:testnet4": "node scripts/release/build-testnet4-portable.mjs",
     "build:native:mainnet:internal": "node scripts/release/build-mainnet-internal-rc.mjs",

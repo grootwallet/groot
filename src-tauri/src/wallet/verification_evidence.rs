@@ -23,7 +23,7 @@ pub(super) fn address_rows(db: &Connection, multisig: bool) -> ApiResult<Vec<Rec
             let address: String = row.get(1)?;
             let (hardware_verified_at, hardware_verified_by) =
                 validated_hardware_verification_metadata(
-                    NETWORK,
+                    network(),
                     &address,
                     row.get::<_, Option<String>>(7)?.as_deref(),
                     row.get(5)?,
@@ -45,9 +45,9 @@ pub(super) fn address_rows(db: &Connection, multisig: bool) -> ApiResult<Vec<Rec
                 created: row.get::<_, u64>(3)?.to_string(),
                 status: row.get(4)?,
                 derivation_path: if multisig {
-                    format!("{MULTISIG_ACCOUNT_PATH}/0/{}", row.get::<_, u32>(0)?)
+                    format!("{}/0/{}", multisig_account_path(), row.get::<_, u32>(0)?)
                 } else {
-                    format!("{SINGLESIG_ACCOUNT_PATH}/0/{}", row.get::<_, u32>(0)?)
+                    format!("{}/0/{}", singlesig_account_path(), row.get::<_, u32>(0)?)
                 },
                 hardware_verified_at,
                 hardware_verified_by,

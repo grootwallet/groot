@@ -50,7 +50,7 @@ fn snapshot_history_fixture(rows: usize, samples: usize, report: bool) {
         Bip84(master, KeychainKind::External),
         Bip84(master, KeychainKind::Internal),
     )
-    .network(NETWORK)
+    .network(network())
     .create_wallet(&mut db)
     .unwrap();
     for index in 0..rows {
