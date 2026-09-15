@@ -484,6 +484,11 @@ pub struct AppState {
     recovery_scans: Mutex<HashMap<Uuid, ActiveRecoveryScan>>,
     runtime_auth_retry_at: Mutex<HashMap<Uuid, Instant>>,
     pending_policy_verifications: Mutex<HashMap<String, SignerPolicyVerificationDto>>,
+    // Public transaction ids only. A completed snapshot lets the next refresh
+    // inspect the wallet's mempool delta instead of downloading every unchanged
+    // transaction again. The cache is deliberately process-local and contains
+    // no descriptors, addresses, credentials, or wallet transaction data.
+    core_mempool_snapshots: Mutex<HashMap<Uuid, HashSet<Txid>>>,
     sync_status: Arc<Mutex<Option<WalletSyncStatusDto>>>,
     diagnostic_log: Mutex<()>,
 }
@@ -2897,6 +2902,9 @@ fn retry_transient_core_rpc<T>(
 struct CancellableCoreClient<'a> {
     client: &'a Client,
     cancel: &'a AtomicBool,
+    prior_mempool: Option<HashSet<Txid>>,
+    expected_wallet_mempool: HashSet<Txid>,
+    observed_mempool: Mutex<Option<HashSet<Txid>>>,
     mempool: Mutex<MempoolPrefetch>,
 }
 
@@ -2910,6 +2918,10 @@ struct MempoolPrefetch {
 }
 
 impl CancellableCoreClient<'_> {
+    fn observed_mempool_snapshot(&self) -> Option<HashSet<Txid>> {
+        self.observed_mempool.lock().ok()?.clone()
+    }
+
     fn prefetched_transaction(&self, txid: Txid) -> Option<String> {
         let batch = {
             let mut mempool = self.mempool.lock().ok()?;
@@ -2974,16 +2986,36 @@ impl RpcApi for CancellableCoreClient<'_> {
         }
         if command == "getrawmempool" && args.is_empty() {
             let raw: serde_json::Value = self.client.call(command, args)?;
-            let txids: Vec<Txid> = serde_json::from_value(raw.clone())?;
+            let all_txids: Vec<Txid> = serde_json::from_value(raw)?;
+            let observed = all_txids.iter().copied().collect::<HashSet<_>>();
+            let txids = mempool_delta_for_wallet(
+                all_txids,
+                self.prior_mempool.as_ref(),
+                &self.expected_wallet_mempool,
+            );
+            let prefetch_txids = txids
+                .iter()
+                .filter(|txid| !self.expected_wallet_mempool.contains(*txid))
+                .copied()
+                .collect::<Vec<_>>();
             if let Ok(mut mempool) = self.mempool.lock() {
                 *mempool = MempoolPrefetch {
-                    positions: txids.iter().enumerate().map(|(i, id)| (*id, i)).collect(),
-                    txids,
+                    positions: prefetch_txids
+                        .iter()
+                        .enumerate()
+                        .map(|(i, id)| (*id, i))
+                        .collect(),
+                    txids: prefetch_txids,
                     batch_supported: true,
                     ..Default::default()
                 };
             }
-            return serde_json::from_value(raw).map_err(CoreRpcError::from);
+            if let Ok(mut snapshot) = self.observed_mempool.lock() {
+                *snapshot = Some(observed);
+            }
+            return serde_json::to_value(txids)
+                .and_then(serde_json::from_value)
+                .map_err(CoreRpcError::from);
         }
         if command == "getrawtransaction" && args.len() >= 2 {
             if let Ok(txid) = serde_json::from_value::<Txid>(args[0].clone()) {
@@ -3000,6 +3032,48 @@ impl RpcApi for CancellableCoreClient<'_> {
             }
         }
         self.client.call(command, args)
+    }
+}
+
+fn mempool_delta_for_wallet(
+    all_txids: Vec<Txid>,
+    prior_mempool: Option<&HashSet<Txid>>,
+    expected_wallet_mempool: &HashSet<Txid>,
+) -> Vec<Txid> {
+    let Some(prior_mempool) = prior_mempool else {
+        return all_txids;
+    };
+    all_txids
+        .into_iter()
+        .filter(|txid| !prior_mempool.contains(txid) || expected_wallet_mempool.contains(txid))
+        .collect()
+}
+
+fn cached_core_mempool_snapshot(state: &AppState, wallet_id: Uuid) -> Option<HashSet<Txid>> {
+    state
+        .core_mempool_snapshots
+        .lock()
+        .ok()?
+        .get(&wallet_id)
+        .cloned()
+}
+
+fn remember_core_mempool_snapshot(
+    state: &AppState,
+    wallet_id: Uuid,
+    snapshot: Option<HashSet<Txid>>,
+) {
+    let Some(snapshot) = snapshot else {
+        return;
+    };
+    if let Ok(mut snapshots) = state.core_mempool_snapshots.lock() {
+        snapshots.insert(wallet_id, snapshot);
+    }
+}
+
+fn forget_core_mempool_snapshot(state: &AppState, wallet_id: Uuid) {
+    if let Ok(mut snapshots) = state.core_mempool_snapshots.lock() {
+        snapshots.remove(&wallet_id);
     }
 }
 
@@ -5429,6 +5503,7 @@ fn sync_wallet_with_core(
     cancel: Option<&AtomicBool>,
 ) -> ApiResult<WalletSnapshotDto> {
     ensure_foreground_sync_not_cancelled(cancel)?;
+    let wallet_id = selected_profile(app)?.id;
     let rpc = Arc::new(rpc_client(app, state)?);
     let mut wallet = load_wallet(db)?;
     let (chain, _) = checked_core_chain(rpc.as_ref())?;
@@ -5454,19 +5529,24 @@ fn sync_wallet_with_core(
         target_height,
     );
     let uncancelled = AtomicBool::new(false);
+    let expected_mempool = wallet
+        .transactions()
+        .filter(|tx| tx.chain_position.is_unconfirmed())
+        .map(|tx| tx.tx_node.tx.clone())
+        .collect::<Vec<_>>();
+    let expected_wallet_mempool = expected_mempool
+        .iter()
+        .map(|tx| tx.compute_txid())
+        .collect();
     let client = CancellableCoreClient {
         client: rpc.as_ref(),
         cancel: cancel.unwrap_or(&uncancelled),
+        prior_mempool: cached_core_mempool_snapshot(state, wallet_id),
+        expected_wallet_mempool,
+        observed_mempool: Mutex::new(None),
         mempool: Mutex::new(MempoolPrefetch::default()),
     };
-    let mut emitter = Emitter::new(
-        &client,
-        wallet_tip,
-        scan_birthday,
-        wallet
-            .transactions()
-            .filter(|tx| tx.chain_position.is_unconfirmed()),
-    );
+    let mut emitter = Emitter::new(&client, wallet_tip, scan_birthday, expected_mempool);
     loop {
         ensure_foreground_sync_not_cancelled(cancel)?;
         let Some(block) = retry_transient_core_rpc(|| emitter.next_block(), std::thread::sleep)?
@@ -5489,6 +5569,7 @@ fn sync_wallet_with_core(
     let mempool_result = retry_transient_core_rpc(|| emitter.mempool(), std::thread::sleep);
     ensure_foreground_sync_not_cancelled(cancel)?;
     let mempool = mempool_result?;
+    let observed_mempool = client.observed_mempool_snapshot();
     wallet.apply_evicted_txs(mempool.evicted);
     wallet.apply_unconfirmed_txs(mempool.update);
     update_core_sync_status(
@@ -5522,6 +5603,7 @@ fn sync_wallet_with_core(
     }
     drop(wallet);
     transaction.commit().map_err(internal)?;
+    remember_core_mempool_snapshot(state, wallet_id, observed_mempool);
     Ok(snapshot)
 }
 
@@ -5633,7 +5715,7 @@ fn full_rescan_loaded_wallet(
     settings: &RecoveryScanSettingsDto,
     run_id: &str,
     cancel: &AtomicBool,
-) -> ApiResult<()> {
+) -> ApiResult<HashSet<Txid>> {
     let (chain, genesis) = checked_core_chain(rpc.as_ref())?;
     let tip = chain.blocks;
     ensure_core_ready_for_wallet_history(
@@ -5710,10 +5792,21 @@ fn full_rescan_loaded_wallet(
         .map_err(internal)?;
     let expected_mempool = wallet
         .transactions()
-        .filter(|tx| tx.chain_position.is_unconfirmed());
+        .filter(|tx| tx.chain_position.is_unconfirmed())
+        .map(|tx| tx.tx_node.tx.clone())
+        .collect::<Vec<_>>();
+    let expected_wallet_mempool = expected_mempool
+        .iter()
+        .map(|tx| tx.compute_txid())
+        .collect();
     let client = CancellableCoreClient {
         client: rpc.as_ref(),
         cancel,
+        // An explicit recovery scan may have expanded the watched script set,
+        // so it always establishes a fresh complete mempool baseline.
+        prior_mempool: None,
+        expected_wallet_mempool,
+        observed_mempool: Mutex::new(None),
         mempool: Mutex::new(MempoolPrefetch::default()),
     };
     let mut emitter = Emitter::new(&client, checkpoint, start_height, expected_mempool);
@@ -5757,7 +5850,8 @@ fn full_rescan_loaded_wallet(
     wallet.apply_evicted_txs(mempool.evicted);
     wallet.apply_unconfirmed_txs(mempool.update);
     wallet.persist(db).map_err(internal)?;
-    mark_observed_addresses(wallet, db)
+    mark_observed_addresses(wallet, db)?;
+    Ok(client.observed_mempool_snapshot().unwrap_or_default())
 }
 
 fn mark_observed_addresses(wallet: &Wallet, db: &Connection) -> ApiResult<()> {
@@ -6470,6 +6564,7 @@ pub fn wallet_delete(
     state.proposals.lock().map_err(internal)?.clear();
     let dir = profile_directory(&app, profile.id)?;
     delete_registered_wallet(&app, profile.id, &dir)?;
+    forget_core_mempool_snapshot(&state, profile.id);
     lock_wallet(&state, profile.id)?;
     diagnostics::record(
         &app,
@@ -6496,6 +6591,7 @@ pub fn wallet_reset_regtest(
     state.proposals.lock().map_err(internal)?.clear();
     let profile = selected_profile(&app)?;
     delete_registered_wallet(&app, profile.id, &profile_directory(&app, profile.id)?)?;
+    forget_core_mempool_snapshot(&state, profile.id);
     lock_wallet(&state, profile.id)?;
     diagnostics::record(
         &app,

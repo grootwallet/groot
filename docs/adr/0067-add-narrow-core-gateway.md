@@ -101,3 +101,18 @@ single-batch in-memory cache remain unchanged. This deliberately trades a
 larger bounded unit of authenticated Core work for eight times fewer TLS and
 credential-verification round trips; public-production admission still
 requires load and independent security review.
+
+The exact `c7376112` owner retest completed but showed that batching alone left
+an already-synced wallet at pending reconciliation for another three to four
+minutes. Groot now retains a process-local, wallet-scoped baseline containing
+only the public transaction ids from a successfully committed mempool pass.
+Ordinary refreshes submit to BDK only ids added since that baseline plus the
+wallet's own still-pending ids, so unchanged unrelated transactions are not
+downloaded again and relevant removals still become evictions. The candidate
+baseline replaces the prior one only after the atomic wallet commit. Revealing
+a receive address invalidates it, and an explicit recovery scan deliberately
+reads the complete mempool before establishing a new baseline. The cache is not
+persisted or shared between wallets and holds no raw transactions, scripts,
+addresses, descriptors, or credentials. This changes neither the gateway wire
+contract nor a persisted format; the first pass after process launch remains a
+complete scan.

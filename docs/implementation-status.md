@@ -730,3 +730,15 @@ bounds, exact RPC allowlisting, gateway concurrency/rate limits, atomic wallet
 commit semantics, and cancellation remain unchanged. No persisted format or
 stable error changes; a replacement exact build and live timing retest remain
 required.
+
+The exact `c7376112` owner retest confirmed that Overview and Activity remain
+usable and the refresh completes, but the pending phase still required roughly
+three to four minutes. The client now keeps a process-local public mempool-txid
+baseline per wallet after a successful atomic commit. Later ordinary refreshes
+scan only newly added transactions plus that wallet's still-pending
+transactions, so BDK retains correct eviction handling without redownloading
+unchanged unrelated transactions. Revealing a receive address invalidates the
+baseline; explicit recovery scans always perform a complete mempool pass and
+then seed the baseline. No raw transaction, address, descriptor, credential,
+or persisted-format cache is introduced. The first pass after process launch
+remains complete; exact-build warm-refresh timing still requires owner retest.

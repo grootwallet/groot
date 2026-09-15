@@ -1230,6 +1230,7 @@ pub fn multisig_delete(
     verified?;
     let dir = profile_directory(&app, wallet_id)?;
     delete_registered_wallet(&app, wallet_id, &dir)?;
+    forget_core_mempool_snapshot(&state, wallet_id);
     state
         .verified_recovery
         .lock()
@@ -1344,7 +1345,7 @@ pub fn multisig_address_create(
     labels: Vec<String>,
 ) -> ApiResult<ReceiveAddressDto> {
     let _operation = operation_guard(&state)?;
-    require_unlocked(&app, &state)?;
+    let wallet_id = require_unlocked(&app, &state)?;
     let labels = normalize_labels(labels)?;
     let metadata = read_multisig_metadata(&app)?;
     let db = open_multisig_db(&app)?;
@@ -1379,6 +1380,7 @@ pub fn multisig_address_create(
     .map_err(internal)?;
     wallet.persist(&mut transaction).map_err(internal)?;
     transaction.commit().map_err(internal)?;
+    forget_core_mempool_snapshot(&state, wallet_id);
     let response = ReceiveAddressDto {
         id: info.index,
         testnet_alias: regtest_testnet_address_alias(&info.address.to_string()),

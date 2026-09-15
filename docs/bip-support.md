@@ -357,6 +357,13 @@ the established loading/error presentation do not change descriptors, discovery,
 transaction interpretation, PSBTs, signing, recovery, or interoperability
 evidence.
 
+The wallet-scoped warm-mempool delta follow-up has no BIP support impact. It
+changes which already-inspected public mempool transaction ids are requested
+again during the same process lifetime while preserving the complete initial
+pass, wallet-pending rechecks, eviction handling, confirmed-chain scan,
+descriptors, transaction interpretation, recovery semantics, and persisted
+formats. It adds no interoperability evidence.
+
 Every feature, interoperability, signer, descriptor, transaction, payment request,
 backup/recovery, sync/backend, network, or dependency change must assess BIP impact.
 If it adds, removes, expands, narrows, or changes evidence for a BIP:

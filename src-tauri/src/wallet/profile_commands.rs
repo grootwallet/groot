@@ -717,7 +717,7 @@ pub fn address_create(
     labels: Vec<String>,
 ) -> ApiResult<ReceiveAddressDto> {
     let _operation = operation_guard(&state)?;
-    require_unlocked(&app, &state)?;
+    let wallet_id = require_unlocked(&app, &state)?;
     let labels = normalize_labels(labels)?;
     let label = labels[0].clone();
     let mut db = open_db(&app)?;
@@ -747,6 +747,7 @@ pub fn address_create(
     .map_err(internal)?;
     wallet.persist(&mut transaction).map_err(internal)?;
     transaction.commit().map_err(internal)?;
+    forget_core_mempool_snapshot(&state, wallet_id);
     let response = ReceiveAddressDto {
         id: info.index,
         testnet_alias: regtest_testnet_address_alias(&info.address.to_string()),
@@ -1440,7 +1441,9 @@ pub async fn wallet_full_rescan(
             )
         };
         let scan_result: ApiResult<WalletSnapshotDto> = (|| {
-            full_rescan_loaded_wallet(rpc, &mut wallet, &mut db, &settings, &run_id, &cancel)?;
+            let mempool_snapshot =
+                full_rescan_loaded_wallet(rpc, &mut wallet, &mut db, &settings, &run_id, &cancel)?;
+            remember_core_mempool_snapshot(&state, profile.id, Some(mempool_snapshot));
             let snapshot = snapshot_from(
                 &wallet,
                 &db,

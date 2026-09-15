@@ -101,6 +101,9 @@ fn core_mempool_transactions_are_batched_and_direct_rpc_remains_a_fallback() {
         let client = CancellableCoreClient {
             client: &rpc,
             cancel: &cancelled,
+            prior_mempool: None,
+            expected_wallet_mempool: HashSet::new(),
+            observed_mempool: Mutex::new(None),
             mempool: Mutex::new(MempoolPrefetch::default()),
         };
         assert_eq!(client.get_raw_mempool().unwrap(), txids);
@@ -138,10 +141,68 @@ fn core_mempool_batch_starts_at_first_unknown_transaction() {
     let client = CancellableCoreClient {
         client: &rpc,
         cancel: &cancelled,
+        prior_mempool: None,
+        expected_wallet_mempool: HashSet::new(),
+        observed_mempool: Mutex::new(None),
         mempool: Mutex::new(MempoolPrefetch::default()),
     };
     assert_eq!(client.get_raw_mempool().unwrap(), txids);
     // BDK already knows the earlier mempool transactions and never requests them.
+    assert_eq!(
+        client.get_raw_transaction_hex(&txids[64], None).unwrap(),
+        txids[64].to_string()
+    );
+    assert_eq!(batches.load(Ordering::Relaxed), 1);
+    assert_eq!(singles.load(Ordering::Relaxed), 0);
+}
+
+#[test]
+fn warm_core_mempool_scan_keeps_only_delta_and_wallet_pending_transactions() {
+    let unchanged = Txid::from_byte_array([1; 32]);
+    let wallet_pending = Txid::from_byte_array([2; 32]);
+    let newly_seen = Txid::from_byte_array([3; 32]);
+    let all = vec![unchanged, wallet_pending, newly_seen];
+    let prior = HashSet::from([unchanged, wallet_pending]);
+    let expected_wallet_mempool = HashSet::from([wallet_pending]);
+
+    assert_eq!(
+        mempool_delta_for_wallet(all.clone(), Some(&prior), &expected_wallet_mempool),
+        vec![wallet_pending, newly_seen]
+    );
+    assert_eq!(
+        mempool_delta_for_wallet(all.clone(), None, &expected_wallet_mempool),
+        all
+    );
+}
+
+#[test]
+fn warm_core_client_prefetches_only_new_mempool_transactions() {
+    let txids = (1u8..=65)
+        .map(|byte| Txid::from_byte_array([byte; 32]))
+        .collect::<Vec<_>>();
+    let prior_mempool = txids[..64].iter().copied().collect::<HashSet<_>>();
+    let expected_wallet_mempool = HashSet::from([txids[0]]);
+    let singles = Arc::new(AtomicU64::new(0));
+    let batches = Arc::new(AtomicU64::new(0));
+    let fixture = MempoolBatchFixture {
+        txids: txids.clone(),
+        singles: Arc::clone(&singles),
+        batches: Arc::clone(&batches),
+        reject_batch: false,
+    };
+    let rpc = Client::from_jsonrpc(jsonrpc::client::Client::with_transport(fixture));
+    let cancelled = AtomicBool::new(false);
+    let client = CancellableCoreClient {
+        client: &rpc,
+        cancel: &cancelled,
+        prior_mempool: Some(prior_mempool),
+        expected_wallet_mempool,
+        observed_mempool: Mutex::new(None),
+        mempool: Mutex::new(MempoolPrefetch::default()),
+    };
+
+    assert_eq!(client.get_raw_mempool().unwrap(), vec![txids[0], txids[64]]);
+    assert_eq!(client.observed_mempool_snapshot().unwrap().len(), 65);
     assert_eq!(
         client.get_raw_transaction_hex(&txids[64], None).unwrap(),
         txids[64].to_string()
@@ -708,6 +769,9 @@ fn cancelled_core_emitter_stops_before_a_remote_rpc_call() {
     let client = CancellableCoreClient {
         client: &client,
         cancel: &cancelled,
+        prior_mempool: None,
+        expected_wallet_mempool: HashSet::new(),
+        observed_mempool: Mutex::new(None),
         mempool: Mutex::new(MempoolPrefetch::default()),
     };
     let error = client.get_block_count().unwrap_err();
