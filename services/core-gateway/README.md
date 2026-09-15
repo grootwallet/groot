@@ -7,6 +7,8 @@ JSON-RPC batch and each method's parameters, reconstructs the request with a
 server-owned id and Bitcoin Core cookie, and returns a bounded response.
 NGINX limits connections and request rate per source; the process separately
 limits request rate per source/principal and caps handler and Core concurrency.
+Validated JSON-RPC batches are capped at 256 items; request and response byte
+limits still apply to the complete batch.
 
 It does not accept descriptors, addresses, wallet names, wallet RPC methods,
 notifications, arbitrary Core methods, redirects, or URL-selected upstreams.

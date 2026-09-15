@@ -1,4 +1,4 @@
-import type { WalletProfile, WalletSnapshotPort } from './contracts';
+import type { WalletProfile, WalletSnapshotPort, WalletSyncStatus } from './contracts';
 
 export type LiveSyncController = {
   start(): void;
@@ -8,7 +8,18 @@ export type LiveSyncController = {
   runNow(): Promise<void>;
 };
 
-type LiveSyncPort = Pick<WalletSnapshotPort, 'sync' | 'cancelSync' | 'syncMultisig'>;
+type LiveSyncPort = Pick<WalletSnapshotPort, 'sync' | 'cancelSync' | 'syncMultisig'> & {
+  syncStatus?: () => Promise<WalletSyncStatus | null>;
+};
+
+export function isWalletSyncActive(status: WalletSyncStatus | null): boolean {
+  return Boolean(
+    status &&
+    ['connecting', 'syncing', 'checking_pending', 'checking_matches', 'applying'].includes(
+      status.state
+    )
+  );
+}
 
 /**
  * Runs one bounded wallet sync at a time. Repeated wake-ups are coalesced so a
@@ -41,6 +52,16 @@ export function createLiveSync(
     try {
       const kind = selectedWalletKind();
       if (!kind) return true;
+      // A route-owned refresh survives read-only navigation. Observe that
+      // native single-flight operation instead of repeatedly invoking a second
+      // sync and filling diagnostics with expected sync_in_progress failures.
+      if (wallet.syncStatus) {
+        try {
+          if (isWalletSyncActive(await wallet.syncStatus())) return true;
+        } catch {
+          // The sync call remains authoritative when status polling is unavailable.
+        }
+      }
       if (kind === 'multisig') await wallet.syncMultisig(true);
       else await wallet.sync(true);
       return true;
@@ -50,7 +71,12 @@ export function createLiveSync(
         typeof cause === 'object' &&
         cause !== null &&
         'code' in cause &&
-        ['sync_cancelled', 'scan_in_progress', 'initial_scan_required'].includes(String(cause.code))
+        [
+          'sync_cancelled',
+          'sync_in_progress',
+          'scan_in_progress',
+          'initial_scan_required'
+        ].includes(String(cause.code))
       ) {
         return true;
       }

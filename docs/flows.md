@@ -314,7 +314,9 @@ Activity also offers a manual sync action at the upper right. It uses the
 selected wallet's existing sync operation without changing search, sort, or
 loaded page state until refreshed data arrives; an error keeps existing rows
 visible and provides a retry. Automatic sync pauses during the explicit action
-and resumes afterward.
+and resumes afterward. If Overview or the scheduler already owns the native
+single-flight refresh, Activity shows the existing action as busy and follows
+that operation to completion; `sync_in_progress` is not a user-facing failure.
 During a long Core pending-transaction pass, Overview, Activity, and Coins may
 show the last committed wallet state while the sync status remains in progress.
 The pages must not present that state as newly synchronized; the completed

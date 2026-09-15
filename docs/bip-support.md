@@ -350,6 +350,13 @@ shared service's direct public Core parser with a deny-by-default authenticated
 transport boundary. Esplora remains unwired, and no interoperability evidence
 is added by the gateway's local integration tests.
 
+The subsequent remote-refresh performance and single-flight presentation fix
+has no BIP support impact. Increasing the already-bounded raw-transaction batch,
+observing an active native refresh instead of invoking a duplicate, and reusing
+the established loading/error presentation do not change descriptors, discovery,
+transaction interpretation, PSBTs, signing, recovery, or interoperability
+evidence.
+
 Every feature, interoperability, signer, descriptor, transaction, payment request,
 backup/recovery, sync/backend, network, or dependency change must assess BIP impact.
 If it adds, removes, expands, narrows, or changes evidence for a BIP:

@@ -79,7 +79,6 @@
   );
   let loadGeneration = 0;
   let secondaryError = $state('');
-  let secondaryLoading = $state(false);
   let multisigWallet = $state<MultisigWallet | null>(null);
   let hardwareSignerWallet = $state<ExternalSignerWallet | null>(null);
   let signerDetailsOpen = $state(false);
@@ -450,7 +449,6 @@
     const profile = selectedProfile;
     if (!profile) return;
     secondaryError = '';
-    secondaryLoading = true;
     const current = () =>
       generation === loadGeneration && profile.id === walletShell.selectedWalletId();
     const results = await Promise.allSettled([
@@ -488,7 +486,6 @@
       })
     ]);
     if (!current()) return;
-    secondaryLoading = false;
     const failure = results.find((result) => result.status === 'rejected');
     if (failure?.status === 'rejected') {
       if (failure.reason instanceof WalletError && failure.reason.code === 'wallet_locked') {
@@ -1120,9 +1117,7 @@
     <WalletSkeleton variant="balance" />
   {/if}
   {#if !loadError}
-    {#if secondaryLoading}
-      <p role="status">{translate($locale, 'Loading wallet details…')}</p>
-    {:else if secondaryError}
+    {#if secondaryError}
       <LoadFailure
         title={translate($locale, 'Wallet details are unavailable')}
         description={secondaryError}

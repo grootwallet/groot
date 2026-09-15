@@ -316,7 +316,7 @@ class GatewayValidationTests(unittest.TestCase):
         rejected = [
             {"method": "getblockcount", "params": []},
             {"id": 1, "method": "getblockcount", "params": [], "wallet": "other"},
-            [{"id": index, "method": "getblockcount", "params": []} for index in range(33)],
+            [{"id": index, "method": "getblockcount", "params": []} for index in range(257)],
         ]
         for request in rejected:
             with self.subTest(type=type(request).__name__):

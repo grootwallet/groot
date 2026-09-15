@@ -5,7 +5,7 @@
   import TxList from '$lib/components/TxList.svelte';
   import type { Transaction } from '$lib/types';
   import { toast } from '$lib/stores/toasts';
-  import { walletService, WalletError } from '$lib/wallet';
+  import { walletService, WalletError, walletErrorCode } from '$lib/wallet';
   import type { TransactionSortOrder } from '$lib/wallet/presentation';
   import Button from '$lib/components/Button.svelte';
   import { onMount } from 'svelte';
@@ -14,6 +14,7 @@
   import EmptyState from '$lib/components/EmptyState.svelte';
   import { useWalletShellContext } from '$lib/wallet/shell-context';
   import { goto } from '$app/navigation';
+  import { isWalletSyncActive } from '$lib/wallet/live-sync';
   const walletShell = useWalletShellContext();
   let selected = $state<Transaction | null>(null);
   let transactions = $state<Transaction[]>([]);
@@ -32,6 +33,7 @@
   let loadingMore = $state(false);
   let pageError = $state('');
   let restartRequired = $state(false);
+  let syncWatchToken = 0;
   onMount(() => {
     let disposed = false;
     void walletService
@@ -41,6 +43,7 @@
         walletId = registry.selectedWalletId ?? '';
         multisig = registry.wallets.find((profile) => profile.id === walletId)?.kind === 'multisig';
         mounted = true;
+        void observeActiveSync();
       })
       .catch((cause) => {
         if (disposed) return;
@@ -53,6 +56,7 @@
     return () => {
       disposed = true;
       ++generation;
+      ++syncWatchToken;
       unsubscribe();
     };
   });
@@ -113,12 +117,43 @@
       }
     }
   }
+  async function observeActiveSync(refreshWhenDone = true) {
+    const initial = await walletService.syncStatus().catch(() => null);
+    if (!isWalletSyncActive(initial)) return false;
+    const token = ++syncWatchToken;
+    syncing = true;
+    syncError = '';
+    try {
+      while (token === syncWatchToken) {
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        const status = await walletService.syncStatus().catch(() => null);
+        if (token !== syncWatchToken) return true;
+        if (isWalletSyncActive(status)) continue;
+        if (status?.state === 'failed') {
+          syncError = localizedError(
+            new WalletError(
+              walletErrorCode(status.failureCode),
+              'The active wallet refresh did not complete.'
+            ),
+            $locale,
+            'Could not refresh activity.'
+          );
+        } else if (refreshWhenDone && status?.state === 'completed') await load();
+        return true;
+      }
+    } finally {
+      if (token === syncWatchToken) syncing = false;
+    }
+    return true;
+  }
   async function syncNow() {
     if (syncing || loading) return;
     syncing = true;
     syncError = '';
     try {
       await walletShell.pauseAutomaticSync();
+      if (await observeActiveSync()) return;
+      syncing = true;
       if (multisig) await walletService.syncMultisig();
       else await walletService.sync();
       // The subscription also refreshes Activity on wallet_updated; do not
@@ -130,6 +165,10 @@
       });
     } catch (cause) {
       if (cause instanceof WalletError && cause.code === 'sync_cancelled') return;
+      if (cause instanceof WalletError && cause.code === 'sync_in_progress') {
+        await observeActiveSync();
+        return;
+      }
       if (cause instanceof WalletError && cause.code === 'wallet_locked') {
         await goto('/unlock');
         return;
@@ -167,11 +206,11 @@
       </div>
     </div>
   </header>
-  {#if syncError}<section class="sync-progress failed" role="alert" aria-live="polite">
-      <strong>{translate($locale, 'Sync failed')}</strong>
-      <span>{syncError}</span>
-      <Button variant="secondary" onclick={syncNow}>{translate($locale, 'Try again')}</Button>
-    </section>{/if}
+  {#if syncError}<LoadFailure
+      title={translate($locale, 'Sync failed')}
+      description={syncError}
+      onretry={syncNow}
+    />{/if}
   <section class="activity-controls" aria-label={translate($locale, 'Search and sort activity')}>
     <label
       ><span>{translate($locale, 'Search')}</span><input

@@ -39,13 +39,16 @@ test('paged activity stays within the viewport in both themes', async ({ page })
   }
 });
 
-test('overview paints its balance while secondary details are still pending', async ({ page }) => {
+test('overview keeps committed wallet data calm while secondary details are still pending', async ({
+  page
+}) => {
   await page.clock.install({ time: new Date('2026-09-08T00:00:00Z') });
   await page.clock.pauseAt(new Date('2026-09-08T00:00:01Z'));
   await page.goto('/?fixture-delayed-wallet-details=1', { waitUntil: 'commit' });
   await expect(page.locator('.balance-card')).toBeVisible();
-  await expect(page.getByText('Loading wallet details…', { exact: true })).toBeVisible();
+  await expect(page.getByText('Loading wallet details…', { exact: true })).toHaveCount(0);
   await page.clock.runFor(1600);
+  await expect(page.locator('.balance-card')).toBeVisible();
   await expect(page.getByText('Loading wallet details…', { exact: true })).toHaveCount(0);
 });
 

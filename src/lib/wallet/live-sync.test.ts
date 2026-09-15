@@ -106,6 +106,50 @@ describe('live wallet sync', () => {
     controller.stop();
   });
 
+  it('observes a route-owned native sync instead of starting an overlapping refresh', async () => {
+    const wallet = {
+      sync: vi.fn().mockResolvedValue(undefined),
+      cancelSync: vi.fn().mockResolvedValue(undefined),
+      syncMultisig: vi.fn(),
+      syncStatus: vi.fn().mockResolvedValue({
+        walletId: 'wallet-1',
+        source: 'bitcoin_core',
+        state: 'checking_pending',
+        progressPercent: 99,
+        chainHeight: 1,
+        lastVerifiedHeight: 1,
+        connectedPeers: null,
+        requiredPeers: null,
+        failureCode: null,
+        updatedAt: 1
+      })
+    };
+    const controller = createLiveSync(wallet, () => 'single_key', 60_000);
+    controller.start();
+
+    await controller.runNow();
+
+    expect(wallet.syncStatus).toHaveBeenCalledOnce();
+    expect(wallet.sync).not.toHaveBeenCalled();
+    controller.stop();
+  });
+
+  it('treats a native single-flight race as expected scheduler state', async () => {
+    const onError = vi.fn();
+    const wallet = {
+      sync: vi.fn().mockRejectedValue({ code: 'sync_in_progress' }),
+      cancelSync: vi.fn().mockResolvedValue(undefined),
+      syncMultisig: vi.fn()
+    };
+    const controller = createLiveSync(wallet, () => 'single_key', 60_000, onError);
+    controller.start();
+
+    await controller.runNow();
+
+    expect(onError).not.toHaveBeenCalled();
+    controller.stop();
+  });
+
   it('backs off repeated failures and resets after a successful sync', async () => {
     vi.useFakeTimers();
     const wallet = {

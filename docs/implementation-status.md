@@ -716,3 +716,17 @@ and bounded overload behavior; a 60-request burst produced only successful or
 rate-limited responses and the service recovered immediately. Full Groot
 rescan/relaunch/broadcast testing and an independent security review remain open
 under ADR 0067, so this deployment is not public-production evidence.
+
+The owner then completed two exact `783f2010` remote-Core refreshes against the
+gateway: both preserved the last committed wallet state and ultimately reached
+100%, while the repeated pending-transaction phase remained near 99% for roughly
+twelve minutes. The follow-up aligns client and gateway on a 256-call bounded
+mempool batch to reduce authenticated HTTPS round trips eightfold. Automatic and
+Activity refreshes now inspect and follow the native single-flight status instead
+of producing repeated `sync_in_progress` failures, Activity uses the shared
+`LoadFailure` surface for real errors, and Overview removes its raw secondary-data
+loading sentence while retaining the committed snapshot. Request/response byte
+bounds, exact RPC allowlisting, gateway concurrency/rate limits, atomic wallet
+commit semantics, and cancellation remain unchanged. No persisted format or
+stable error changes; a replacement exact build and live timing retest remain
+required.

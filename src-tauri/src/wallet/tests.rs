@@ -81,8 +81,12 @@ impl MempoolBatchFixture {
 #[test]
 fn core_mempool_transactions_are_batched_and_direct_rpc_remains_a_fallback() {
     for reject_batch in [false, true] {
-        let txids = (1u8..=65)
-            .map(|byte| Txid::from_byte_array([byte; 32]))
+        let txids = (1u16..=257)
+            .map(|number| {
+                let mut bytes = [0u8; 32];
+                bytes[..2].copy_from_slice(&number.to_be_bytes());
+                Txid::from_byte_array(bytes)
+            })
             .collect::<Vec<_>>();
         let singles = Arc::new(AtomicU64::new(0));
         let batches = Arc::new(AtomicU64::new(0));
@@ -108,9 +112,9 @@ fn core_mempool_transactions_are_batched_and_direct_rpc_remains_a_fallback() {
         }
         if reject_batch {
             assert_eq!(batches.load(Ordering::Relaxed), 1);
-            assert_eq!(singles.load(Ordering::Relaxed), 65);
+            assert_eq!(singles.load(Ordering::Relaxed), 257);
         } else {
-            assert_eq!(batches.load(Ordering::Relaxed), 3);
+            assert_eq!(batches.load(Ordering::Relaxed), 2);
             assert_eq!(singles.load(Ordering::Relaxed), 0);
         }
     }

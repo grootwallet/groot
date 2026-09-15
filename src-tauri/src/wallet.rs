@@ -102,7 +102,7 @@ pub(crate) mod activity;
 
 const MAX_PRIVATE_JSON_BYTES: u64 = 256 * 1024;
 const MAX_CREDENTIAL_BYTES: usize = 1_024;
-const MEMPOOL_RPC_BATCH_SIZE: usize = 32;
+const MEMPOOL_RPC_BATCH_SIZE: usize = 256;
 const MIN_NEW_WALLET_PASSPHRASE_CHARACTERS: usize = 16;
 const MAX_MNEMONIC_INPUT_BYTES: usize = 4_096;
 const ONBOARDING_SESSION_SECONDS: u64 = 15 * 60;

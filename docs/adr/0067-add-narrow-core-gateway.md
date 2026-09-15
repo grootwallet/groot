@@ -36,7 +36,7 @@ front door for a future Groot-operated shared Core backend:
   both source addresses and authenticated principals. Shared application-wide
   credentials are not an admitted production configuration.
 - The gateway validates the entire batch before doing any upstream work. It
-  accepts at most 32 requests and only Groot's exact chain, block, mempool, fee,
+  accepts at most 256 requests and only Groot's exact chain, block, mempool, fee,
   transaction lookup, index-health, and broadcast methods with method-specific
   parameter bounds. Notifications, wallet RPC, administration, mining,
   arbitrary methods, extra fields, and caller-selected upstreams fail closed.
@@ -89,3 +89,15 @@ gateway now admits only the exact `[blockhash, 0]` raw-block and `[blockhash, 1]
 block-info shapes used by Groot; booleans, missing verbosity, and higher
 verbosity remain rejected. This changes no wallet, credential, profile,
 proposal, backup, or protocol format and has no BIP support impact.
+
+The first successful owner-operated remote scan then exposed a performance
+boundary rather than a correctness failure: pending reconciliation completed,
+but a busy mempool required enough 32-call HTTPS batches to hold the UI at the
+truthful 99% stage for roughly twelve minutes. The internal-alpha gateway and
+client now share a 256-call maximum. Whole-batch validation, the 2 MiB request
+limit, 16 MiB response limit, source/principal rate limits, handler/Core
+concurrency caps, exact method/parameter allowlist, cancellation points, and
+single-batch in-memory cache remain unchanged. This deliberately trades a
+larger bounded unit of authenticated Core work for eight times fewer TLS and
+credential-verification round trips; public-production admission still
+requires load and independent security review.

@@ -75,6 +75,15 @@ describe('foreground wallet navigation', () => {
     expect(coins).toContain("cause.code === 'sync_cancelled'");
     expect(coins).toContain("cause.code === 'wallet_locked'");
     expect(activity).toContain("cause.code === 'wallet_locked'");
+    expect(activity).toContain("cause.code === 'sync_in_progress'");
+  });
+
+  it('joins an active refresh and keeps route loading and failure presentation consistent', () => {
+    expect(activity).toContain('isWalletSyncActive');
+    expect(activity).toContain('await observeActiveSync()');
+    expect(activity).toContain('<LoadFailure');
+    expect(activity).not.toContain('<section class="sync-progress failed"');
+    expect(overview).not.toContain('Loading wallet details…');
   });
 
   it('keeps automatic sync compact and reserves detailed progress for manual refresh', () => {
