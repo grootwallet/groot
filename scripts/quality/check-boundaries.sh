@@ -49,4 +49,7 @@ if [[ -n "$unexpected_stores" ]]; then
   fail "process-wide Svelte stores require an explicit lifetime/identity decision; found: $unexpected_stores"
 fi
 
+python3 -m unittest discover -s services/core-gateway/tests -v ||
+  fail "narrow Core gateway boundary tests failed"
+
 echo "Architecture boundaries: clean."

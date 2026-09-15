@@ -1,0 +1,83 @@
+# Narrow Core gateway runbook
+
+This runbook applies to a Groot-operated shared backend. An owner who runs a
+private remote Core can continue to use ADR 0061's direct authenticated HTTPS
+route. Do not represent the temporary direct NGINX-to-Core bridge as the shared
+production architecture.
+
+## Required topology
+
+```text
+Groot client -- HTTPS/Basic --> NGINX :443
+                                  |
+                                  +-- HTTP loopback --> gateway :8432
+                                                          |
+                                                          +-- cookie RPC loopback --> Core :8332
+```
+
+- Public: NGINX ports 80/443 only. Port 80 redirects to 443.
+- Private: gateway `127.0.0.1:8432` and Core `127.0.0.1:8332` only.
+- Bitcoin P2P 8333 is independent of RPC and may remain public.
+- Firewall rules must not restrict 443 to one wallet user's changing IP. Abuse
+  control belongs at TLS, per-principal authentication, rate limits, and the
+  gateway allowlist.
+
+## Install and provision
+
+1. Create an unprivileged `groot-gateway` service account and a group that has
+   read-only access to the active Core cookie. Confirm the service account
+   cannot modify Core configuration, data, or the credential verifier file.
+   Configure Core's cookie for group-read access and keep the gateway in that
+   supplementary group; do not make the cookie world-readable.
+2. Install `services/core-gateway/gateway.py` and `provision_client.py` in
+   `/opt/groot-core-gateway`, owned by root and not writable by the service.
+   Keep `clients.json` owned by `root:groot-gateway` at mode `0640`; the
+   provisioning tool applies those access bits atomically.
+3. Install the supplied systemd unit after adapting only the Core cookie path
+   and group to the host. Confirm `systemd-analyze security` and the effective
+   unit before enabling it.
+4. Provision a unique client principal with the interactive command in the
+   service README. Enter the resulting username and password in Groot; never
+   put either secret in a URL or support log.
+5. Install the NGINX `limit_req_zone` in the global `http {}` scope and the
+   supplied exact `/` location in the dedicated TLS server. Keep redirects
+   disabled upstream and access logging off for this location.
+6. Keep Core's `rpcbind=127.0.0.1`, `rpcallowip=127.0.0.1`,
+   `rpcwhitelistdefault=1`, and a method whitelist matching ADR 0067. A cookie
+   is the gateway's preferred upstream authentication; a strong `rpcauth`
+   identity remains an operator recovery path, not a client credential.
+
+## Pre-cutover verification
+
+Run the repository boundary tests first:
+
+```sh
+pnpm test:boundaries
+```
+
+Then verify on the host and from a separate network:
+
+1. `ss -lntp` shows Core and the gateway on loopback only, and NGINX on 443.
+2. GET, HEAD, PUT, missing authentication, wrong authentication, malformed JSON,
+   a batch over 32, and `stop` all fail without a Core request.
+3. A valid `getblockchaininfo` succeeds and reports the expected chain and tip.
+4. A burst above both limits returns 429 and the service remains responsive.
+5. Groot connects, verifies exact Mainnet genesis, loads the last committed
+   state, completes a birthday-bounded rescan including mempool reconciliation,
+   estimates fees, relaunches, and reconnects.
+6. A disposable signed transaction is broadcast only after all read-only checks
+   pass. Confirm the expected txid independently.
+7. Review NGINX, gateway, systemd, and Core logs: no credentials, request bodies,
+   transaction ids, block hashes, descriptors, or addresses may appear.
+
+After the live and independent review gates pass, replace the direct proxy to
+8332 with the gateway route. Do not leave both public routes enabled and do not
+add an automatic client fallback.
+
+## Failure and rollback
+
+On a gateway failure, keep Core and wallet data untouched, restore the previous
+root-owned NGINX site atomically, validate with `nginx -t`, and reload NGINX.
+For a shared service, rollback means an outage until the gateway is restored;
+it never means exposing Core directly. User-owned direct Core endpoints remain
+separate ADR 0061 configurations.

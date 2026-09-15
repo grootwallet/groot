@@ -1,0 +1,34 @@
+[Unit]
+Description=Groot narrow Bitcoin Core gateway
+After=network.target bitcoind.service
+Requires=bitcoind.service
+
+[Service]
+Type=simple
+User=groot-gateway
+Group=groot-gateway
+SupplementaryGroups=bitcoin
+ExecStart=/usr/bin/python3 /opt/groot-core-gateway/gateway.py --clients /etc/groot-core-gateway/clients.json --core-cookie /var/lib/bitcoind/.cookie
+Restart=on-failure
+RestartSec=2s
+MemoryMax=512M
+TasksMax=64
+NoNewPrivileges=true
+PrivateDevices=true
+PrivateTmp=true
+ProtectClock=true
+ProtectControlGroups=true
+ProtectHome=true
+ProtectHostname=true
+ProtectKernelLogs=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectSystem=strict
+RestrictAddressFamilies=AF_INET AF_INET6
+RestrictNamespaces=true
+RestrictRealtime=true
+SystemCallArchitectures=native
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

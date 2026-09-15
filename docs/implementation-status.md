@@ -697,3 +697,17 @@ while the persisted snapshot remains admission-gated. Existing persisted formats
 and wallet-data admission requirements are unchanged. This does not certify the
 remote node, rescan, or the new package; owner retest remains necessary once the
 endpoint is reachable.
+
+The narrow Core gateway is now implemented under `services/core-gateway` as a
+dependency-free Python service with an NGINX/systemd deployment boundary. It is
+wire-compatible with Groot's existing bounded JSON-RPC transport but accepts
+only the exact chain/block/mempool/fee/index/broadcast calls and validated
+parameters Groot uses. It authenticates revocable per-client principals from
+salted scrypt verifiers, reconstructs requests with server-owned ids and Core's
+loopback cookie, disables request logging, rate limits source and principal,
+and structurally bounds responses. Integration tests cover valid single/batch
+traffic, all-or-nothing rejection, unsupported methods, invalid parameters,
+authentication, POST-only handling, client/Core credential separation, and
+error-data stripping. Live hosted cutover, abuse testing, and independent
+security review remain open under ADR 0067; the temporary direct NGINX-to-Core
+internal-alpha bridge is not production evidence.

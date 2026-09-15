@@ -343,6 +343,13 @@ selected-wallet Core health check and clarifies offline presentation; it does
 not relax Mainnet admission, change the chain or descriptor rules, alter wallet
 data or interoperability formats, or establish new remote-node evidence.
 
+The ADR 0067 narrow Core gateway has no BIP support impact. It preserves the
+existing client-side Core scan, exact-chain admission, descriptors, PSBTs,
+transaction construction, fee handling, and broadcasts while replacing a
+shared service's direct public Core parser with a deny-by-default authenticated
+transport boundary. Esplora remains unwired, and no interoperability evidence
+is added by the gateway's local integration tests.
+
 Every feature, interoperability, signer, descriptor, transaction, payment request,
 backup/recovery, sync/backend, network, or dependency change must assess BIP impact.
 If it adds, removes, expands, narrows, or changes evidence for a BIP:
