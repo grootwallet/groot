@@ -360,7 +360,13 @@ def nonnegative_int(value: Any) -> bool:
 
 
 def block_params(params: list[Any]) -> bool:
-    return len(params) == 2 and hash_value(params[0]) and params[1] == 0
+    return (
+        len(params) == 2
+        and hash_value(params[0])
+        and isinstance(params[1], int)
+        and not isinstance(params[1], bool)
+        and params[1] in {0, 1}
+    )
 
 
 def raw_transaction_params(params: list[Any]) -> bool:

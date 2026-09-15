@@ -81,3 +81,11 @@ ADR 0012.
 Esplora remains unwired. Enabling it would require its own ADR and address-query
 privacy, consistency, reorg, malicious-response, availability, and no-fallback
 test campaign.
+
+The internal-alpha scan check exposed one fail-closed integration omission:
+checkpoint reconciliation uses Bitcoin Core's read-only `getblock` call with
+verbosity `1` to confirm that saved checkpoints remain on the active chain. The
+gateway now admits only the exact `[blockhash, 0]` raw-block and `[blockhash, 1]`
+block-info shapes used by Groot; booleans, missing verbosity, and higher
+verbosity remain rejected. This changes no wallet, credential, profile,
+proposal, backup, or protocol format and has no BIP support impact.

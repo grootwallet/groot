@@ -297,6 +297,8 @@ class GatewayValidationTests(unittest.TestCase):
     def test_supported_method_parameter_contracts(self) -> None:
         accepted = [
             {"id": 1, "method": "getblockchaininfo", "params": []},
+            {"id": 1, "method": "getblock", "params": [HASH, 0]},
+            {"id": 1, "method": "getblock", "params": [HASH, 1]},
             {"id": 1, "method": "getrawmempool", "params": []},
             {"id": 1, "method": "getrawtransaction", "params": [HASH, False]},
             {"id": 1, "method": "getrawtransaction", "params": [HASH, True, HASH]},
@@ -324,6 +326,9 @@ class GatewayValidationTests(unittest.TestCase):
     def test_rejects_broader_core_options_groot_does_not_use(self) -> None:
         rejected = [
             {"id": 1, "method": "getrawmempool", "params": [True]},
+            {"id": 1, "method": "getblock", "params": [HASH]},
+            {"id": 1, "method": "getblock", "params": [HASH, True]},
+            {"id": 1, "method": "getblock", "params": [HASH, 2]},
             {"id": 1, "method": "getindexinfo", "params": ["basic block filter index"]},
             {"id": 1, "method": "sendrawtransaction", "params": ["0200", 0.1]},
         ]
