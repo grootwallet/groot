@@ -27,6 +27,16 @@ MAX_RESPONSE_BYTES = 16 * 1024 * 1024
 MAX_BATCH_SIZE = 32
 MAX_UPSTREAM_CONCURRENCY = 16
 MAX_HANDLER_CONCURRENCY = 16
+BUSY_RESPONSE_BODY = b'{"error":"gateway_busy"}'
+BUSY_RESPONSE = (
+    b"HTTP/1.1 503 Service Unavailable\r\n"
+    b"Content-Type: application/json\r\n"
+    + f"Content-Length: {len(BUSY_RESPONSE_BODY)}\r\n".encode("ascii")
+    + b"Cache-Control: no-store\r\n"
+    b"Connection: close\r\n"
+    b"\r\n"
+    + BUSY_RESPONSE_BODY
+)
 HEX_64 = re.compile(r"^[0-9a-fA-F]{64}$")
 TX_HEX = re.compile(r"^(?:[0-9a-fA-F]{2})+$")
 USERNAME = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
@@ -563,7 +573,16 @@ class GatewayServer(ThreadingHTTPServer):
 
     def process_request(self, request: Any, client_address: Any) -> None:
         if not self._handler_slots.acquire(blocking=False):
-            self.shutdown_request(request)
+            # Closing a saturated connection without an HTTP response makes
+            # NGINX surface a misleading 502. Return an explicit bounded busy
+            # response without allocating another handler thread.
+            try:
+                request.settimeout(1)
+                request.sendall(BUSY_RESPONSE)
+            except OSError:
+                pass
+            finally:
+                self.shutdown_request(request)
             return
         try:
             super().process_request(request, client_address)

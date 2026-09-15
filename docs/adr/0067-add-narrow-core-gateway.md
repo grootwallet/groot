@@ -1,6 +1,6 @@
 # ADR 0067: Add a narrow Groot Core gateway
 
-- Status: accepted for implementation; hosted cutover remains gated
+- Status: accepted; internal-alpha gateway deployed; public production remains gated
 - Date: 2026-09-15
 - Extends: ADR 0009, ADR 0031, and ADR 0061
 
@@ -64,12 +64,19 @@ which keeps rollback simple and avoids a persisted-data migration. A user-owned
 direct Core endpoint remains permitted by ADR 0061; a Groot-operated multi-client
 hostname must use the gateway.
 
-Production cutover requires a separately provisioned principal per test client,
-successful live exact-genesis/height/fee/full-rescan/restart/broadcast checks,
-invalid-auth and disallowed-method probes, timeout and oversized-response tests,
-rate-limit evidence, operator review of NGINX/systemd/Core bindings, and an
-independent security review. Only after that evidence may the direct NGINX-to-
-Core bridge be removed. Public distribution remains governed by ADR 0012.
+The internal-alpha hostname was cut over to the gateway on 2026-09-15. The
+direct NGINX-to-Core route was removed after external checks confirmed exact
+Mainnet genesis, current height, archival history, required indexes, fee and
+mempool responses, authentication isolation, method denial, malformed and
+oversized-batch rejection, explicit overload responses, and recovery after a
+request burst. NGINX, the gateway, and Core remain separate services with only
+NGINX publicly listening on the RPC hostname.
+
+Public production still requires a separately provisioned principal per client,
+successful live Groot full-rescan/restart/broadcast checks, timeout and
+oversized-Core-response tests, operator review of NGINX/systemd/Core bindings,
+and an independent security review. Public distribution remains governed by
+ADR 0012.
 
 Esplora remains unwired. Enabling it would require its own ADR and address-query
 privacy, consistency, reorg, malicious-response, availability, and no-fallback

@@ -21,6 +21,7 @@ from gateway import (  # noqa: E402
     Gateway,
     GatewayConfig,
     GatewayServer,
+    MAX_HANDLER_CONCURRENCY,
     RequestRejected,
     TokenBuckets,
     restore_response_identities,
@@ -242,6 +243,23 @@ class GatewayIntegrationTests(unittest.TestCase):
         self.assertEqual(status, 200)
         status, result, _ = self.request(request, auth=authorization())
         self.assertEqual((status, result), (429, {"error": "rate_limited"}))
+
+    def test_handler_saturation_returns_explicit_busy_response(self) -> None:
+        acquired = 0
+        try:
+            for _ in range(MAX_HANDLER_CONCURRENCY):
+                self.assertTrue(self.server._handler_slots.acquire(blocking=False))
+                acquired += 1
+            status, result, headers = self.request(
+                {"id": 1, "method": "getblockcount", "params": []},
+                auth=authorization(),
+            )
+            self.assertEqual((status, result), (503, {"error": "gateway_busy"}))
+            self.assertEqual(headers["Cache-Control"], "no-store")
+            self.assertEqual(headers["Connection"], "close")
+        finally:
+            for _ in range(acquired):
+                self.server._handler_slots.release()
 
     def test_rejects_an_oversized_core_response(self) -> None:
         request = {"id": 1, "method": "getblockcount", "params": []}

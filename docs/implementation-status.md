@@ -708,6 +708,11 @@ loopback cookie, disables request logging, rate limits source and principal,
 and structurally bounds responses. Integration tests cover valid single/batch
 traffic, all-or-nothing rejection, unsupported methods, invalid parameters,
 authentication, POST-only handling, client/Core credential separation, and
-error-data stripping. Live hosted cutover, abuse testing, and independent
-security review remain open under ADR 0067; the temporary direct NGINX-to-Core
-internal-alpha bridge is not production evidence.
+error-data stripping. The internal-alpha hostname was cut over from direct
+NGINX-to-Core proxying to this gateway on 2026-09-15. External probes verified
+authentication, method denial, exact Mainnet genesis, height, archival history,
+required indexes, fee and mempool data, malformed and oversized-batch rejection,
+and bounded overload behavior; a 60-request burst produced only successful or
+rate-limited responses and the service recovered immediately. Full Groot
+rescan/relaunch/broadcast testing and an independent security review remain open
+under ADR 0067, so this deployment is not public-production evidence.
