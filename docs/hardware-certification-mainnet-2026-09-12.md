@@ -283,9 +283,11 @@ is not a physical result until it is captured with the frozen package.
 
 ### Next physical session
 
-Use one dedicated fixed-network Mainnet package built from the frozen release
-commit. The ADR 0068 multi-network app is not the GA candidate. Do not recreate
-the already funded coordinator unless recovery itself is the row under test.
+Use the frozen ADR 0069 multi-network GA package with Mainnet selected. Record
+the active network before every hardware operation and repeat it after restart;
+the earlier fixed Mainnet packages remain supporting evidence only. Do not
+recreate the already funded coordinator unless recovery itself is the row under
+test.
 
 1. Record package commit/hash, macOS version, signature/notarization result,
    bundled HWI digest/version, exact model, exact firmware, transport, and

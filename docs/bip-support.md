@@ -7,6 +7,12 @@ review/signing checks, exact-genesis backend checks, and HWI chain arguments. No
 descriptor, PSBT, backup, registry, wallet database, or secret-envelope format
 changes, and no migration or new interoperability evidence, are implied.
 
+ADR 0069 changes the intended GA artifact from a fixed Mainnet build to that
+restart-bound multi-network identity. It adds release evidence for selector
+integrity, restart teardown, and cross-network isolation, but changes no BIP
+derivation, address, descriptor, PSBT, backup, signer, or interoperability
+semantics. Evidence on one selected network does not transfer to another.
+
 The 2026-09-14 stale-multisig-proposal safeguard changes no descriptor, BIP48
 key, PSBT serialization or signature verification, backup format, or persisted
 schema. It checks a saved proposal's selected outpoints against the current BDK

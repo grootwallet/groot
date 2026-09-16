@@ -536,17 +536,19 @@ v0.4.89 closes the Core-configuration catch-up race observed during the packaged
 
 # Restart-bound internal network selection
 
-ADR 0068 adds an internal `multi` native identity whose Settings screen offers
-Regtest, Testnet4, and Mainnet. Rust persists the exact closed-set selection in an
+ADR 0068 adds a `multi` native identity whose Settings screen offers Regtest,
+Testnet4, and Mainnet. ADR 0069 selects it as the intended GA artifact while
+leaving distribution blocked on expanded exact-package evidence. Rust persists the exact closed-set selection in an
 owner-only versioned file, loads it before the application-root process lock and
 wallet initialization, and restarts on change. Existing Regtest data stays in its
 compatible root; Testnet4 and Mainnet use separate named subdirectories. Foreign
 registries still fail before wallet open, frontend/native mismatch still blocks the
 shell, and malformed or unsafe selection storage aborts startup. Fixed release
-builds remain compile-time network-bound and cannot switch. The multi build is not
-approved for distribution, and Mainnet retains its exact-Core admission, policy,
-spend, HWI, and release gates. Wallet/profile/registry/database/secret formats are
-unchanged and no migration is required.
+builds remain compile-time network-bound and cannot switch. The current multi
+package is not approved for distribution until ADR 0069's selector, restart, and
+cross-network isolation evidence passes, and Mainnet retains its exact-Core
+admission, policy, spend, HWI, and release gates. Wallet/profile/registry/database/
+secret formats are unchanged and no migration is required.
 
 # Isolated mainnet certification candidate
 
@@ -649,8 +651,9 @@ frozen-package negative and recovery rows for Mk4/Nano S Plus/Nova, complete
 Mainnet records for Model One/original BitBox02/Jade Classic/Safe 3 or an
 explicitly reviewed scope reduction, the signed software/profile lifecycle,
 final-commit reproducibility and notarization, and independent recovery/security
-review. ADR 0068's multi-network application remains internal and is not the GA
-artifact. The canonical ordered resume point is in
+review. ADR 0069 now selects the restart-bound multi-network application as the
+intended GA artifact, so its selector integrity, restart teardown, and
+cross-network isolation become additional exact-package gates. The canonical ordered resume point is in
 `docs/mainnet-release-checklist.md`; model-specific detail is in
 `docs/hardware-certification-mainnet-2026-09-12.md`. This reconciliation adds no
 new runtime behavior, persisted format, dependency, or BIP support claim.
