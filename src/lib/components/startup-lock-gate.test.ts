@@ -64,6 +64,22 @@ describe('startup wallet lock gate', () => {
     expect(buildScript).toContain('directories.insert(encoded.into_owned())');
   });
 
+  it('keeps global Settings and public network status available while locked', () => {
+    expect(shell).toContain("let settingsRoute = $derived(page.url.pathname === '/settings')");
+    expect(shell).toContain('!settingsRoute &&');
+    expect(shell).toContain('locked={walletLocked}');
+    expect(shell).toContain('class="locked-settings-link"');
+    expect(settings).toContain('walletService.session()');
+    expect(settings).toContain(
+      '{#if walletUnlocked}<section class="settings-group wallet-details">'
+    );
+    expect(settings).toContain(
+      'Appearance and Bitcoin network remain available while your wallet is locked.'
+    );
+    expect(settings).toContain('Wallet-specific network details are locked');
+    expect(appCss).toContain('.locked-settings-link:focus-visible');
+  });
+
   it('holds the native launch mark briefly without slowing the browser prototype', () => {
     expect(shell).toContain('const minimumStartupGateMs = isPrototypeWallet ? 0 : 1_800');
     expect(shell).toContain('await holdStartupGate()');

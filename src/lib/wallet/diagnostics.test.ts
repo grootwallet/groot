@@ -38,7 +38,7 @@ describe('diagnostic event boundary', () => {
 
   it('keeps app logs in Settings while retaining the ordinary unlocked shell', () => {
     expect(shell).toContain("page.url.pathname === '/diagnostics'");
-    expect(shell).toContain('lockedRoute || (diagnosticsRoute && !selectedWalletUnlocked)');
+    expect(shell).toContain('lockedRoute || ((settingsRoute || diagnosticsRoute) && walletLocked)');
     expect(shell).toContain('selectedWalletUnlocked = selection.unlocked;');
     expect(shell).toContain("page.url.pathname === href || page.url.pathname === '/diagnostics'");
     expect(shell).not.toContain('href="/diagnostics"');

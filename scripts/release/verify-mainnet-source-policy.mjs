@@ -127,7 +127,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src/lib/components/AppShell.svelte',
-    '7b771c80c02f82859b3227b50db3b9d616a86a72e2b536229ed07288a259e29a'
+    '372801537d0bb1ab08e8cd54908580ae37c1286012fce9d9d2eb6fb63b72caca'
   ],
   ['src/lib/wallet/tauri.ts', 'be2ed274f59464fa0c6f16659765118af29860eeabc793643212a322d0853375'],
   [
@@ -161,7 +161,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src/routes/settings/+page.svelte',
-    'a4fe51f53820085a575c544925aeb1742568b5886c9ede44c06b99f7890d6c15'
+    '3c522ab87351df9abed7137b348dd341d9347da287671a5d20b8e862754afd28'
   ],
   [
     'src/routes/hardware/new/+page.svelte',

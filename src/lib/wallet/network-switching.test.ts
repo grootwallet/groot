@@ -25,6 +25,8 @@ describe('restart-bound Bitcoin network switching', () => {
     expect(settings).toContain('walletService.switchNetwork(networkSwitchTarget)');
     expect(settings).toContain('Wallets and node settings stay isolated per network.');
     expect(settings).toContain("loadingLabel={translate($locale, 'Restarting…')}");
+    expect(settings).toContain('walletService.session()');
+    expect(settings).toContain("walletUnlocked ? 'WALLET SETTINGS' : 'APP SETTINGS'");
   });
 
   it('applies native network endpoints before wallet routes mount', () => {

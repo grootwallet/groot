@@ -1,6 +1,20 @@
 import type { CatalogSection } from './types';
 
 export const settingsCopy = {
+  'APP SETTINGS': { fr: 'RÉGLAGES DE L’APP', es: 'AJUSTES DE LA APP' },
+  'Appearance and Bitcoin network remain available while your wallet is locked.': {
+    fr: 'L’apparence et le réseau Bitcoin restent disponibles lorsque votre portefeuille est verrouillé.',
+    es: 'La apariencia y la red Bitcoin siguen disponibles mientras tu cartera está bloqueada.'
+  },
+  'Wallet-specific network details are locked': {
+    fr: 'Les détails réseau du portefeuille sont verrouillés',
+    es: 'Los detalles de red de la cartera están bloqueados'
+  },
+  'Unlock the wallet to view its node route, sync source, credentials, or run a live connection check.':
+    {
+      fr: 'Déverrouillez le portefeuille pour afficher son nœud, sa source de synchronisation et ses identifiants, ou pour tester la connexion en direct.',
+      es: 'Desbloquea la cartera para ver su nodo, fuente de sincronización y credenciales, o para probar la conexión en directo.'
+    },
   'App logs': { fr: 'Journaux de l’app', es: 'Registros de la app' },
   'APP LOGS': { fr: 'JOURNAUX DE L’APP', es: 'REGISTROS DE LA APP' },
   'View app logs': { fr: 'Voir les journaux de l’app', es: 'Ver registros de la app' },

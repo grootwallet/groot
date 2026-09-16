@@ -626,6 +626,10 @@ and independent-review evidence remains open, so distribution remains blocked.
 
 Update this table in the same change whenever a capability crosses a boundary.
 
+## 2026-09-16 Locked global Settings and multi-network build correction
+
+The internal multi-network application now keeps global Settings reachable while the selected wallet is locked. The locked surface exposes only appearance, build identity, the active Bitcoin network, restart-bound network selection, sanitized logs, and cached public network status; wallet-specific node routes, sync configuration, credentials, recovery controls, exports, deletion, and live connection tests still require an unlocked session. Desktop and mobile shells retain a direct Settings entry and pass the locked state to the public network-status control. No wallet, profile, registry, proposal, descriptor, backup, credential, or network-selection format changes.
+
 ## 2026-09-13 Mainnet multisig setup and Policy correction
 
 The 2026-09-14 presentation correction fixes the policy-lab eligibility check

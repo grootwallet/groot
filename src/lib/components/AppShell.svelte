@@ -108,11 +108,15 @@
   let mobileItems = $derived(policyContext ? nav : nav.slice(0, 3));
   let onboardingRoute = $derived(walletSetupRoutes.has(page.url.pathname));
   let lockedRoute = $derived(page.url.pathname === '/unlock');
+  let settingsRoute = $derived(page.url.pathname === '/settings');
   let diagnosticsRoute = $derived(page.url.pathname === '/diagnostics');
+  let walletLocked = $derived(!selectedWalletUnlocked);
   let restrictedUtilityRoute = $derived(
-    lockedRoute || (diagnosticsRoute && !selectedWalletUnlocked)
+    lockedRoute || ((settingsRoute || diagnosticsRoute) && walletLocked)
   );
-  let syncPausedRoute = $derived(onboardingRoute || lockedRoute || diagnosticsRoute);
+  let syncPausedRoute = $derived(
+    onboardingRoute || lockedRoute || diagnosticsRoute || walletLocked
+  );
   const showQuickActions = $derived(
     !restrictedUtilityRoute && (page.url.pathname === '/' || page.url.pathname === '/coins')
   );
@@ -144,7 +148,7 @@
     if (
       startupState !== 'ready' ||
       onboardingRoute ||
-      lockedRoute ||
+      walletLocked ||
       diagnosticsRoute ||
       event.defaultPrevented ||
       event.repeat ||
@@ -413,7 +417,13 @@
       await refreshProfiles();
       const selection = await walletService.session();
       selectedWalletUnlocked = selection.unlocked;
-      if (!selection.unlocked && !onboardingRoute && !lockedRoute && !diagnosticsRoute) {
+      if (
+        !selection.unlocked &&
+        !onboardingRoute &&
+        !lockedRoute &&
+        !settingsRoute &&
+        !diagnosticsRoute
+      ) {
         await goto('/unlock');
       } else if (selection.unlocked && lockedRoute) {
         await goto('/');
@@ -545,16 +555,16 @@
         </nav>
       {/if}
       <div class="sidebar-bottom">
-        {#if !restrictedUtilityRoute}<a
-            href="/settings"
-            class:active={active('/settings')}
-            aria-current={active('/settings') ? 'page' : undefined}
-            ><Settings size={17} /><span>{t('settings', $locale)}</span></a
-          >{/if}
+        <a
+          href="/settings"
+          class:active={active('/settings')}
+          aria-current={active('/settings') ? 'page' : undefined}
+          ><Settings size={17} /><span>{t('settings', $locale)}</span></a
+        >
         <div class="preference-toggles">
           <ThemeToggle /><DiscreetModeToggle />
         </div>
-        <NetworkStatus network={defaultConfig.network} locked={restrictedUtilityRoute} />
+        <NetworkStatus network={defaultConfig.network} locked={walletLocked} />
         <BuildIdentity runtime={runtimeIdentity} placement="sidebar" />
       </div>
     </aside>
@@ -618,9 +628,13 @@
       </nav>{/if}
 
     {#if restrictedUtilityRoute}<div class="locked-mobile-utilities">
-        <ThemeToggle /><DiscreetModeToggle /><NetworkStatus
+        {#if lockedRoute}<a
+            class="locked-settings-link"
+            href="/settings"
+            aria-label={t('settings', $locale)}><Settings size={20} /></a
+          >{/if}<ThemeToggle /><DiscreetModeToggle /><NetworkStatus
           network={defaultConfig.network}
-          locked
+          locked={walletLocked}
         />
       </div>{/if}
 

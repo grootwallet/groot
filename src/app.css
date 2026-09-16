@@ -10701,6 +10701,20 @@ code {
     margin: 0;
     background: var(--panel);
   }
+  .locked-settings-link {
+    width: 34px;
+    height: 34px;
+    display: grid;
+    place-items: center;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    color: var(--muted);
+    background: var(--panel);
+  }
+  .locked-settings-link:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
   .locked-mobile-utilities .network-status {
     padding: 0;
     border: 0;
