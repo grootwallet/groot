@@ -4,5 +4,10 @@
   "build": {
     "beforeDevCommand": "pnpm dev --mode multi",
     "beforeBuildCommand": "pnpm build:multi"
+  },
+  "bundle": {
+    "resources": {
+      ".release-stage/hwi": "hwi"
+    }
   }
 }

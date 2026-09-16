@@ -82,11 +82,13 @@ Tauri's production
 `custom-protocol` feature so the evidence binary matches the packaged execution
 mode. Generated evidence remains untracked build artifacts.
 
-`pnpm build:native:mainnet:internal` is the separate non-distributable physical-
-testing builder. It requires a clean exact commit, bundles the pinned HWI,
-compiles the runtime signature requirement as `REHEARSAL_ONLY`, applies only an
-ad-hoc identity, and verifies the copied `.app`. It never signs with Developer ID,
-notarizes, staples, packages for distribution, or pushes source.
+`pnpm build:native:mainnet:internal` and `pnpm build:native:multi:internal` are
+the separate non-distributable physical-testing builders. Each requires a clean
+exact commit, bundles the pinned HWI, compiles the runtime signature requirement
+as `REHEARSAL_ONLY`, applies only an ad-hoc identity, and verifies the copied
+`.app`. The multi-network command is the ADR 0069 GA-candidate path; the fixed
+Mainnet command remains supporting evidence. Neither command signs with
+Developer ID, notarizes, staples, packages for distribution, or pushes source.
 
 The completed independent `2110eaf` Mainnet Build A/Build B run, including
 exact evidence hashes, validation totals, deviations, and path-leak results, is

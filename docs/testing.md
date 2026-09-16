@@ -55,11 +55,14 @@ Secret-envelope units prove portable version-3 round trips, wrong-credential rej
 
 `pnpm test:sbom` generates the target-specific CycloneDX inventory twice and requires byte-identical output, unique component references, declared dependency licenses, Cargo registry checksums, npm SHA-512 lockfile integrity, the exact Git commit, both lockfile SHA-256 digests, and a fixture executable hash. Optional packages locked for other operating systems are recorded as a lock/package-count property but are not falsely listed as installed components for the current artifact. Generated CycloneDX/SPDX outputs are build evidence rather than source: the gate rejects tracked output so a stale checked-in copy cannot become authoritative. Native Signet/Testnet4 packaging and the unsigned-release script require a clean source worktree and generate fresh SBOMs after their executable exists; each SBOM embeds that executable's SHA-256, and the unsigned evidence set also hashes the binary and SBOM together in `SHA256SUMS`. This is inventory evidence, not provenance, reproducibility, or signing evidence.
 
-`pnpm build:native:mainnet:internal` creates only a non-distributable ad-hoc
-physical-test candidate from a clean exact commit. It packages the pinned HWI,
-compiles the runtime signing requirement as `REHEARSAL_ONLY`, verifies that marker
-and the copied app seal, and records a small local build identity. It performs no
-Developer ID signing, notarization, stapling, publishing, or remote Git action.
+`pnpm build:native:mainnet:internal` and `pnpm build:native:multi:internal`
+create only non-distributable ad-hoc physical-test candidates from a clean exact
+commit. They package the pinned HWI, compile the runtime signing requirement as
+`REHEARSAL_ONLY`, verify that marker and the copied app seal, and record a small
+local build identity. The multi-network command produces the ADR 0069 candidate;
+the fixed Mainnet command remains supporting evidence. They perform no Developer
+ID signing, notarization, stapling, publishing, or remote Git action. This
+packaging-only distinction has no BIP or persisted-wallet-format impact.
 
 `pnpm test:supply-chain` is the fast policy gate included in every `pnpm validate`: direct Node and Rust requirements and the Node/pnpm toolchain must be exact, lifecycle scripts and loose engine installs remain disabled, package-store integrity stays enabled, and every CI Action reference must be a full commit SHA under read-only default permissions without persisted checkout credentials.
 

@@ -15,7 +15,7 @@ const pinnedPolicySources = new Map([
   ['src-tauri/src/session.rs', '38b9faf9091ec5d379d2444418f7260d650a4cc151252571bb476a9426ddb19c'],
   ['.env.mainnet', '1623f3f97de588daea2bbeae1f9c56ebc896b6bc2c22ac238563b46b688ced85'],
   ['.env.multi', '33fc3d5022968d9eaa25bfe749c0b01691c0570611a65255100718d2c50df723'],
-  ['package.json', 'a44a7d80e80c1e7bc5c608a2fd991f4a8f7c3681fca832e2ae498a9d3f8254fb'],
+  ['package.json', '11cd0626ef8f795919abaa142ab307bced9a589e81645f09617e2db26e192970'],
   ['src-tauri/src/lib.rs', 'a5938703c3e0cf141e2360ac0f2b7ba9b01594354bcc7b2ef93f809043db1d25'],
   [
     'scripts/network/check-native-builds.sh',
@@ -111,7 +111,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src-tauri/tauri.multi.conf.json',
-    '5842253a13764cf2872414e07021e9a433e3f0000065c41237eb3569842e4d82'
+    '1178ebebd4d261927b62e9d9a2d7c9c476daea0b87ae3b2449f0616fec2645ba'
   ],
   [
     'scripts/release/build-unsigned-mainnet.sh',
@@ -185,7 +185,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'scripts/release/build-mainnet-internal-rc.mjs',
-    'f1ce7f4e1ba6798f8fb56e63fc2df05042025a80ab0faa18c19c4ea95d4c4055'
+    '676a5d84c3bbf44899ca27c9fb43490343f29b2305162f504b98784fa1f6ad37'
   ],
   [
     'docs/adr/0068-restart-bound-multi-network-settings.md',

@@ -22,6 +22,7 @@
     "build:mainnet": "vite build --mode mainnet",
     "build:multi": "vite build --mode multi",
     "build:native:multi": "GROOT_BUILD_NETWORK=multi tauri build --config src-tauri/tauri.multi.conf.json",
+    "build:native:multi:internal": "node scripts/release/build-mainnet-internal-rc.mjs multi",
     "build:native:signet": "node scripts/release/build-signet.mjs",
     "build:native:testnet4": "node scripts/release/build-testnet4-portable.mjs",
     "build:native:mainnet:internal": "node scripts/release/build-mainnet-internal-rc.mjs",
