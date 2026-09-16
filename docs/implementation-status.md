@@ -630,6 +630,31 @@ Update this table in the same change whenever a capability crosses a boundary.
 
 The internal multi-network application now keeps global Settings reachable while the selected wallet is locked. The locked surface exposes only appearance, build identity, the active Bitcoin network, restart-bound network selection, sanitized logs, and cached public network status; wallet-specific node routes, sync configuration, credentials, recovery controls, exports, deletion, and live connection tests still require an unlocked session. Desktop and mobile shells retain a direct Settings entry and pass the locked state to the public network-status control. No wallet, profile, registry, proposal, descriptor, backup, credential, or network-selection format changes.
 
+## 2026-09-16 Mainnet GA campaign reconciliation
+
+The Mainnet campaign is not restarting from Testnet4. Existing owner-operated
+evidence includes the `ab830d32` software lifecycle, Sparrow 2.5.4 recovery of
+the exact `a735fb19` software wallet, a Mk4 + Nano S Plus + Nova BIP48 address
+match, a confirmed deposit, a Groot 2-of-3 payment signed by Nano S Plus + Nova
+and persisted after restart, and recovery/spending from the same public multisig
+descriptor in Sparrow with Nova + Mk4. The remote campaign also includes an
+archival Mainnet Core with synchronized indexes, bounded narrow-gateway probes,
+two completed `783f2010` Groot refreshes, and a completed but still slow
+`c7376112` refresh. These are retained as named-package evidence rather than
+being downgraded to pending exploratory work.
+
+The remaining GA delta is exact-artifact work: owner timing of the current
+warm-mempool optimization, the complete remote HTTPS failure/lifecycle matrix,
+frozen-package negative and recovery rows for Mk4/Nano S Plus/Nova, complete
+Mainnet records for Model One/original BitBox02/Jade Classic/Safe 3 or an
+explicitly reviewed scope reduction, the signed software/profile lifecycle,
+final-commit reproducibility and notarization, and independent recovery/security
+review. ADR 0068's multi-network application remains internal and is not the GA
+artifact. The canonical ordered resume point is in
+`docs/mainnet-release-checklist.md`; model-specific detail is in
+`docs/hardware-certification-mainnet-2026-09-12.md`. This reconciliation adds no
+new runtime behavior, persisted format, dependency, or BIP support claim.
+
 ## 2026-09-13 Mainnet multisig setup and Policy correction
 
 The 2026-09-14 presentation correction fixes the policy-lab eligibility check

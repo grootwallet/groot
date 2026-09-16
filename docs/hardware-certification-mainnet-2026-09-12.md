@@ -256,3 +256,56 @@ This source change refreshed the exact Mainnet source-policy pins only for
 `multisig_proposal_commands.rs`, and the Overview route after review. It did not alter the compiled
 network allowlist, HWI pairing/identity logic, PSBT encoding, profile schema,
 or release gate. Passing the source tripwire is not physical certification.
+
+## 2026-09-16 cumulative certification status and GA resume point
+
+The evidence above must be read cumulatively rather than treating the first
+failed checkpoint as the current state. The release owner has completed these
+positive Mainnet operations on named internal packages:
+
+| Model or boundary              | Owner-observed Mainnet evidence                                                                                                                                                                                                      | Still required for GA                                                                                                                                                                                 |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Coldcard Mk4                   | Wrong-Testnet4 rejection before Mainnet import; BIP48 public-key import; policy-file acknowledgement; exact receive-address comparison; Sparrow descriptor-wallet spend with Nova                                                    | Record exact firmware on the frozen package; Groot-native rejection, disconnect/reconnect, wrong-device, altered/foreign/stale-PSBT, confirmation/restart, and clean Groot-profile recovery rows      |
+| Ledger Nano S Plus             | BIP48 public-key import; policy verification; exact receive-address comparison; Groot 2-of-3 signing/broadcast with Nova; restart-visible accounting                                                                                 | Record firmware and Bitcoin app on the frozen package; explicit rejection, disconnect/reconnect, wrong-device, altered/foreign/stale-PSBT, final confirmation, and clean Groot-profile recovery rows  |
+| BitBox02 Nova Bitcoin-only     | BIP48 public-key import; policy verification; exact receive-address comparison; Groot 2-of-3 signing/broadcast with Nano S Plus; Sparrow signing/broadcast with Mk4                                                                  | Record exact firmware on the frozen package; rejection, disconnect/reconnect, wrong-device, altered/foreign/stale-PSBT, final confirmation, clean Groot-profile recovery, and independent review rows |
+| Trezor Safe 3 Bitcoin-only     | Earlier Testnet4 funded 2-of-3 and clean-profile recovery evidence exists; source now admits HWI's exact `trezor_t2b1`/`trezor_t3b1` identifiers                                                                                     | Complete the full Mainnet exact-package campaign; the identifier correction is not a physical pass                                                                                                    |
+| Trezor Model One               | Release target is 1.14.1                                                                                                                                                                                                             | Complete the full Mainnet exact-package campaign                                                                                                                                                      |
+| Original Bitcoin-only BitBox02 | Release target is 9.26.3                                                                                                                                                                                                             | Complete the full Mainnet exact-package campaign; Nova evidence does not transfer                                                                                                                     |
+| Blockstream Jade Classic       | Earlier Mainnet attempt reached discovery but failed before the expected PIN/login flow                                                                                                                                              | Complete the full Mainnet exact-package campaign and retain only Groot's stable error code if it fails                                                                                                |
+| BIP48 coordinator              | Same permanent receive address matched on Mk4, Nano S Plus, and Nova; funded deposit confirmed; Groot payment signed by Nano S Plus + Nova and broadcast; state/accounting persisted after relaunch                                  | Frozen signed-candidate repetition of critical rows, negative PSBT campaign, final confirmation/reconciliation, and clean Groot-profile recovery                                                      |
+| External interoperability      | Public multisig descriptor recovered in Sparrow; Nova + Mk4 signed and broadcast from Sparrow; Groot observed the spend. Exact packaged `a735fb19` software wallet also recovered in Sparrow 2.5.4 with matching history and balance | A second external coordinator/signer round trip and execution/sign-off by a reviewer independent of the release owner                                                                                 |
+
+Firmware versions were not re-reported during the owner sessions above. The
+release targets remain Mk4 5.6.1, Model One 1.14.1, Nano S Plus 1.6.1 with
+Bitcoin app 2.5.0, original Bitcoin-only BitBox02 9.26.3, Jade Classic 1.0.40,
+Safe 3 Bitcoin-only 2.12.3, Nova 9.26.3, and bundled HWI 3.2.0. A target version
+is not a physical result until it is captured with the frozen package.
+
+### Next physical session
+
+Use one dedicated fixed-network Mainnet package built from the frozen release
+commit. The ADR 0068 multi-network app is not the GA candidate. Do not recreate
+the already funded coordinator unless recovery itself is the row under test.
+
+1. Record package commit/hash, macOS version, signature/notarization result,
+   bundled HWI digest/version, exact model, exact firmware, transport, and
+   reviewer.
+2. Reopen the existing Mk4 + Nano S Plus + Nova wallet. Confirm the permanent
+   address/policy evidence, Core-backed balance/history/labels, and completed
+   outgoing transactions survive unlock and restart.
+3. On a disposable unspent output, exercise user rejection, cable interruption
+   and retry, wrong device, wrong network where the device supports it, foreign
+   PSBT, one-byte altered signature, stale/missing input, unchanged signature
+   count after every rejection, then a normal two-signer retry, broadcast,
+   confirmation, restart, and accounting.
+4. Recover the public coordinator backup into a genuinely clean Groot profile,
+   compare the first and a later receive address on hardware, rescan from a safe
+   birthday/gap, and reconcile balance, history, labels, and replacement lineage.
+   Restore and recheck the untouched source profile afterward.
+5. Complete equivalent exact-package records for Safe 3, Model One, original
+   BitBox02, and Jade Classic, or change the proposed first-release device scope
+   through an explicit reviewed ADR before GA. No model inherits another model's
+   pass.
+
+This updates the test resume point; it does not mark the seven-model matrix or
+Mainnet distribution gate complete.
