@@ -39,7 +39,7 @@ The browser-only command `pnpm dev:regtest` intentionally uses the dummy adapter
 The browser adapter opens with deterministic transactions, receive addresses, coins, and a funded 2-of-3 `Family vault`. It is the fastest way to inspect receive replacement, QR enlargement, derivation details, coin selection, freeze/unfreeze, single-key and multisig sending, themes, and coordinator templates without waiting for blocks. Fixture addresses always follow the configured network:
 
 ```sh
-cd /Users/thibm/Documents/Codex/2026-07-17/let
+cd /path/to/groot-app
 pnpm install
 pnpm dev:regtest
 ```

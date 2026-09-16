@@ -92,7 +92,7 @@ on-device rejection instruction, restart persistence, and repeat verification.
 ## Local preflight
 
 ```sh
-cd /Users/thibm/Documents/Codex/2026-07-17/let
+cd /path/to/groot-app
 pnpm hardware:preflight
 ```
 
@@ -118,12 +118,12 @@ For an already-paired BitBox02, connect it and scan directly in Groot; enter the
 Start Bitcoin Core regtest and Groot in separate terminals:
 
 ```sh
-cd /Users/thibm/Documents/Codex/2026-07-17/let
+cd /path/to/groot-app
 pnpm regtest:start
 ```
 
 ```sh
-cd /Users/thibm/Documents/Codex/2026-07-17/let
+cd /path/to/groot-app
 bash scripts/dev/tauri-regtest.sh
 ```
 

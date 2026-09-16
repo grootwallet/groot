@@ -5,7 +5,7 @@ This runbook produces test evidence; it does not enable mainnet. Use disposable 
 ## 1. Clean automated gate
 
 ```sh
-cd /Users/thibm/Documents/Codex/2026-07-17/let
+cd /path/to/groot-app
 corepack enable
 corepack prepare pnpm@11.13.1 --activate
 pnpm install --frozen-lockfile
@@ -17,7 +17,7 @@ pnpm test:regtest
 Rust must also pass directly:
 
 ```sh
-cd /Users/thibm/Documents/Codex/2026-07-17/let/src-tauri
+cd /path/to/groot-app/src-tauri
 cargo fmt --check
 cargo clippy --locked --all-targets --all-features -- -D warnings
 cargo test --locked --all-features
@@ -50,14 +50,14 @@ The canonical finding-to-fix map is [`security-hardening-2026-08-12.md`](securit
 Terminal 1:
 
 ```sh
-cd /Users/thibm/Documents/Codex/2026-07-17/let
+cd /path/to/groot-app
 pnpm regtest:start
 ```
 
 Terminal 2:
 
 ```sh
-cd /Users/thibm/Documents/Codex/2026-07-17/let
+cd /path/to/groot-app
 test_app_data="$(mktemp -d /tmp/groot-regtest-native.XXXXXX)"
 GROOT_REGTEST_APP_DATA_DIR="$test_app_data" \
 GROOT_HWI_PATH=/opt/homebrew/bin/hwi \
@@ -131,7 +131,7 @@ This is the next public-network rehearsal after the isolated Regtest stories pas
 Prepare a local report per model:
 
 ```sh
-cd /Users/thibm/Documents/Codex/2026-07-17/let
+cd /path/to/groot-app
 mkdir -p hardware-certification.local
 cp docs/hardware-certification-template.md hardware-certification.local/coldcard.md
 cp docs/hardware-certification-template.md hardware-certification.local/trezor-model-one.md
@@ -175,7 +175,7 @@ The recovered copy proves functional recovery for that exact model/package/envir
 Use a dedicated least-privilege RPC user, a valid hostname certificate, firewall allow-list/VPN, and a disposable test-chain node. Avoid literal passwords in shell history:
 
 ```sh
-cd /Users/thibm/Documents/Codex/2026-07-17/let
+cd /path/to/groot-app
 export GROOT_RPC_URL='https://node.example.test:8332'
 export GROOT_RPC_USER='groot-test'
 export GROOT_EXPECTED_CHAIN='regtest'
@@ -192,7 +192,7 @@ Then save the same endpoint per wallet in Settings, unlock, sync, compare genesi
 Start and independently verify a loopback Tor SOCKS5 listener, then:
 
 ```sh
-cd /Users/thibm/Documents/Codex/2026-07-17/let
+cd /path/to/groot-app
 export GROOT_RPC_URL='http://examplehiddenservice.onion:8332'
 export GROOT_TOR_PROXY='127.0.0.1:9050'
 export GROOT_RPC_USER='groot-test'
@@ -232,7 +232,7 @@ pnpm release:compare /absolute/path/to/build-a /absolute/path/to/build-b
 The comparator rejects symlinks, unexpected or missing files, stale recorded digests, different build environments, different SBOMs, and different binaries. Resolve any mismatch before signing. `pnpm release:test:compare` exercises those fail-closed boundaries, different linker UUID salts, tampered ad hoc code pages, and synthetic user/checkout/Cargo-home prefixes; it requires content-normalized byte-identical executables with valid ad hoc signatures and proves physical paths do not survive in them. The completed `2110eaf` two-machine run is recorded in [`reproducible-mainnet-builds-2026-09-04.md`](reproducible-mainnet-builds-2026-09-04.md). Signing/notarization requires the release owner's Apple identity and protected credentials. Verify the resulting package with:
 
 ```sh
-cd /Users/thibm/Documents/Codex/2026-07-17/let
+cd /path/to/groot-app
 pnpm release:verify:macos -- /absolute/path/to/Groot.app
 ```
 

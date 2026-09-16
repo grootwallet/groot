@@ -7,7 +7,7 @@ for the implementation scope and checks; `design-system.md` owns adopted tokens.
 
 ## Verified reference
 
-The marketing repository at `/Users/thibm/Documents/Codex/2026-07-17/groot-site`
+The canonical marketing repository, [`thibistaken/groot-site`](https://github.com/thibistaken/groot-site),
 is clean at `79aa7eda4826c5f9d665d0f331414671a6125cf0`, matching GitHub main
 checked with `git ls-remote` on this date. The August-directory checkout at
 `6e7a27f` is an older ancestor, not a newer design. References inspected include

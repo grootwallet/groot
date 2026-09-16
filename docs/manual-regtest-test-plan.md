@@ -5,7 +5,7 @@ This plan is ordered from the fastest UI proof to the real Rust/BDK/Bitcoin Core
 ## 0. Automated acceptance first
 
 ```sh
-cd /Users/thibm/Documents/Codex/2026-07-17/let
+cd /path/to/groot-app
 pnpm install
 pnpm validate
 pnpm test:coverage
@@ -18,14 +18,14 @@ Expected: TypeScript checks/build pass, policy coverage is 100%, the enforced Ru
 Run the real isolated multisig PSBT integration:
 
 ```sh
-cd /Users/thibm/Documents/Codex/2026-07-17/let
+cd /path/to/groot-app
 pnpm test:regtest
 ```
 
 ## 1. Browser prototype setup
 
 ```sh
-cd /Users/thibm/Documents/Codex/2026-07-17/let
+cd /path/to/groot-app
 pnpm dev:regtest
 ```
 
@@ -92,7 +92,7 @@ Stop the browser prototype with `Ctrl+C` in its terminal.
 Start the isolated Core node:
 
 ```sh
-cd /Users/thibm/Documents/Codex/2026-07-17/let
+cd /path/to/groot-app
 pnpm regtest:start
 pnpm regtest:status
 ```
@@ -100,7 +100,7 @@ pnpm regtest:status
 Start the native Tauri wallet in another terminal:
 
 ```sh
-cd /Users/thibm/Documents/Codex/2026-07-17/let
+cd /path/to/groot-app
 bash scripts/dev/tauri-regtest.sh
 ```
 
@@ -111,7 +111,7 @@ bash scripts/dev/tauri-regtest.sh
 3. Fund and confirm it:
 
 ```sh
-cd /Users/thibm/Documents/Codex/2026-07-17/let
+cd /path/to/groot-app
 pnpm regtest:send -- bcrt1YOUR_GROOT_ADDRESS 1.25 --mine
 ```
 
@@ -122,7 +122,7 @@ pnpm regtest:send -- bcrt1YOUR_GROOT_ADDRESS 1.25 --mine
 Create a Core-owned destination:
 
 ```sh
-cd /Users/thibm/Documents/Codex/2026-07-17/let
+cd /path/to/groot-app
 bitcoin-cli -regtest -datadir="$PWD/.regtest" -rpcwallet=groot-dev getnewaddress "Groot send acceptance" bech32
 ```
 
@@ -133,14 +133,14 @@ bitcoin-cli -regtest -datadir="$PWD/.regtest" -rpcwallet=groot-dev getnewaddress
 5. Confirm Core sees the transaction:
 
 ```sh
-cd /Users/thibm/Documents/Codex/2026-07-17/let
+cd /path/to/groot-app
 bitcoin-cli -regtest -datadir="$PWD/.regtest" getrawmempool
 ```
 
 6. Mine and sync:
 
 ```sh
-cd /Users/thibm/Documents/Codex/2026-07-17/let
+cd /path/to/groot-app
 pnpm regtest:mine
 ```
 
@@ -159,7 +159,7 @@ pnpm regtest:mine
 Check the external transport before opening Groot:
 
 ```sh
-cd /Users/thibm/Documents/Codex/2026-07-17/let
+cd /path/to/groot-app
 hwi --version
 hwi enumerate
 ```
@@ -169,7 +169,7 @@ For each available Coldcard, Trezor, Ledger, or BitBox02, record model, firmware
 ## 4. Cleanup
 
 ```sh
-cd /Users/thibm/Documents/Codex/2026-07-17/let
+cd /path/to/groot-app
 pnpm regtest:stop
 ```
 

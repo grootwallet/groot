@@ -146,14 +146,14 @@ The detailed current evidence and scope qualifications are recorded in [`docs/se
 Run the portable local gate with:
 
 ```sh
-cd /Users/thibm/Documents/Codex/2026-07-17/let
+cd /path/to/groot-app
 pnpm validate
 ```
 
 Run the Rust gate with:
 
 ```sh
-cd /Users/thibm/Documents/Codex/2026-07-17/let/src-tauri
+cd /path/to/groot-app/src-tauri
 cargo fmt --check
 cargo clippy --locked --all-targets --all-features -- -D warnings
 cargo test --locked --all-features
