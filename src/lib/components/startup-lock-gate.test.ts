@@ -80,6 +80,17 @@ describe('startup wallet lock gate', () => {
     expect(appCss).toContain('.locked-settings-link:focus-visible');
   });
 
+  it('keeps global Settings reachable when the selected network has no wallets', () => {
+    const welcome = readFileSync(
+      new URL('../../routes/welcome/+page.svelte', import.meta.url),
+      'utf8'
+    );
+    expect(welcome).toContain('class="onboarding-settings"');
+    expect(welcome).toContain('href="/settings"');
+    expect(welcome).toContain("aria-label={translate($locale, 'Settings')}");
+    expect(appCss).toContain('.onboarding-settings:focus-visible');
+  });
+
   it('holds the native launch mark briefly without slowing the browser prototype', () => {
     expect(shell).toContain('const minimumStartupGateMs = isPrototypeWallet ? 0 : 1_800');
     expect(shell).toContain('await holdStartupGate()');

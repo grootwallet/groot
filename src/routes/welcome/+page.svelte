@@ -12,6 +12,7 @@
     EyeOff,
     KeyRound,
     Network,
+    Settings,
     ShieldCheck,
     X
   } from '@lucide/svelte';
@@ -327,6 +328,8 @@
   <header class="onboarding-brand">
     <span class="onboarding-brand-lockup"><BrandLockup /></span><small
       >{networkName(defaultConfig.network).toUpperCase()}</small
+    ><a class="onboarding-settings" href="/settings" aria-label={translate($locale, 'Settings')}
+      ><Settings size={17} /></a
     >{#if hasExistingWallet}<button
         class="onboarding-exit"
         aria-label={translate($locale, 'Close wallet setup')}

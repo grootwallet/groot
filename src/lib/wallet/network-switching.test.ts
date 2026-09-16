@@ -8,6 +8,7 @@ const settings = readFileSync(
 );
 const adapter = readFileSync(new URL('./tauri.ts', import.meta.url), 'utf8');
 const shell = readFileSync(new URL('../components/AppShell.svelte', import.meta.url), 'utf8');
+const welcome = readFileSync(new URL('../../routes/welcome/+page.svelte', import.meta.url), 'utf8');
 const native = readFileSync(new URL('../../../src-tauri/src/lib.rs', import.meta.url), 'utf8');
 const nativeNetwork = readFileSync(
   new URL('../../../src-tauri/src/build_network.rs', import.meta.url),
@@ -27,6 +28,8 @@ describe('restart-bound Bitcoin network switching', () => {
     expect(settings).toContain("loadingLabel={translate($locale, 'Restarting…')}");
     expect(settings).toContain('walletService.session()');
     expect(settings).toContain("walletUnlocked ? 'WALLET SETTINGS' : 'APP SETTINGS'");
+    expect(welcome).toContain('class="onboarding-settings"');
+    expect(welcome).toContain('href="/settings"');
   });
 
   it('applies native network endpoints before wallet routes mount', () => {

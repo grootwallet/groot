@@ -148,7 +148,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src/routes/welcome/+page.svelte',
-    'dd63149666c3fa0ac5a989504306d2e16989d305c96e0985670cc42cc6824286'
+    '423d7867af4a63f03d8a7947589510668a1ff758ab4b76ddc62d83c8aaf1b487'
   ],
   [
     'src/routes/unlock/+page.svelte',

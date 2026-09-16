@@ -4291,6 +4291,7 @@ code {
   font-size: var(--font-size-meta);
   letter-spacing: 0.15em;
 }
+.onboarding-settings,
 .onboarding-exit {
   width: 34px;
   height: 34px;
@@ -4303,9 +4304,15 @@ code {
   background: var(--panel);
   cursor: pointer;
 }
+.onboarding-settings:hover,
 .onboarding-exit:hover {
   color: var(--text);
   border-color: var(--border-strong);
+}
+.onboarding-settings:focus-visible,
+.onboarding-exit:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
 }
 .onboarding-card {
   width: min(470px, calc(100% - 36px));

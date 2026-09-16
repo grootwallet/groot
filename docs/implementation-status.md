@@ -1,5 +1,13 @@
 # Implementation status
 
+The multi-network onboarding header now keeps global Settings reachable when the
+selected network has no wallet profiles. This closes the empty-namespace trap in
+which the shell correctly opened onboarding but provided no route to the
+restart-bound network selector. The Settings page continues to expose only app
+preferences and network selection until a wallet is unlocked. No wallet data is
+moved, copied, opened, or migrated; persisted formats, native commands,
+dependencies, transaction behavior, and BIP support are unchanged.
+
 The rejected Mainnet multisig coordinator-PIN live-signer checklist remains
 removed. Standard multisig creation no longer depends on a 15-minute
 process-memory HWI admission, so a validated saved draft can become an offline
