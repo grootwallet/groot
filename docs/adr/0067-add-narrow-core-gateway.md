@@ -116,3 +116,21 @@ persisted or shared between wallets and holds no raw transactions, scripts,
 addresses, descriptors, or credentials. This changes neither the gateway wire
 contract nor a persisted format; the first pass after process launch remains a
 complete scan.
+
+The next Mainnet owner run isolated a separate pre-mempool cost: a multisig
+wallet only 135 blocks behind its saved checkpoint spent more than eight
+minutes below 100%. The existing Core emitter issued serial HTTPS calls for
+block metadata and every raw block, so the delay scaled with network latency
+and transferred unrelated block bodies; it was not a wallet-size, CPU, disk,
+multisig, or node-capacity limit. When Core reports a synced basic block-filter
+index, Groot now batches at most 256 `getblockhash` and `getblockfilter` calls,
+matches those BIP158 filters locally against the wallet's derived scripts, and
+downloads only matching raw blocks. It verifies the active start and target
+hashes, checks every downloaded block against the filter chain, and stages the
+complete checkpoint plus relevant transactions for the existing atomic commit.
+An unsupported gateway, unavailable index, unsynced index, or batch failure
+falls back to the existing complete full-block scan. The gateway admits only
+`getblockfilter([blockhash])` or `getblockfilter([blockhash, "basic"])`; no
+descriptor, address, script, or private wallet data is sent. This changes no
+persisted format, recovery rule, or source selection and does not make the
+filter index a correctness dependency.

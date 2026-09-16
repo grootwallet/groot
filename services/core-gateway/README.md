@@ -46,7 +46,11 @@ size changes.
 
 Keep Core RPC bound to `127.0.0.1`. Once the gateway is verified, remove the
 NGINX route to port 8332. Core's own `rpcwhitelistdefault=1`, strong `rpcauth`,
-and exact Groot method whitelist remain defense in depth during rollback.
+and exact Groot method whitelist remain defense in depth during rollback. The
+whitelist includes read-only `getblockfilter` only for the `basic` filter type;
+Groot batches those public filters and matches wallet scripts locally, so the
+gateway never receives descriptors, addresses, or scripts. Core RPC nodes
+without a synced basic-filter index retain Groot's full-block fallback.
 
 Run the dependency-free tests directly with:
 

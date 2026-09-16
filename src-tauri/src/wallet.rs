@@ -6,7 +6,7 @@ use argon2::Argon2;
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use bdk_bitcoind_rpc::{
     bitcoincore_rpc::{
-        json::{EstimateMode, GetBlockchainInfoResult},
+        json::{EstimateMode, GetBlockFilterResult, GetBlockchainInfoResult},
         jsonrpc, Auth, Client, Error as CoreRpcError, RpcApi,
     },
     BitcoindRpcErrorExt, Emitter,
@@ -102,6 +102,7 @@ pub(crate) mod activity;
 
 const MAX_PRIVATE_JSON_BYTES: u64 = 256 * 1024;
 const MAX_CREDENTIAL_BYTES: usize = 1_024;
+const CORE_BLOCK_FILTER_BATCH_SIZE: usize = 256;
 const MEMPOOL_RPC_BATCH_SIZE: usize = 256;
 const MIN_NEW_WALLET_PASSPHRASE_CHARACTERS: usize = 16;
 const MAX_MNEMONIC_INPUT_BYTES: usize = 4_096;
@@ -2903,6 +2904,157 @@ fn retry_transient_core_rpc<T>(
     unreachable!("Core RPC attempts are non-zero")
 }
 
+struct CoreFilterBlockPlan {
+    checkpoint: CheckPoint,
+    matched_blocks: Vec<(u32, BlockHash, BlockHash)>,
+}
+
+fn core_batch_call<T: serde::de::DeserializeOwned>(
+    client: &Client,
+    method: &str,
+    params: &[serde_json::Value],
+) -> Option<Vec<T>> {
+    let jsonrpc = client.get_jsonrpc_client();
+    let raw_params = params
+        .iter()
+        .map(serde_json::value::to_raw_value)
+        .collect::<Result<Vec<_>, _>>()
+        .ok()?;
+    let requests = raw_params
+        .iter()
+        .map(|params| jsonrpc.build_request(method, Some(params.as_ref())))
+        .collect::<Vec<_>>();
+    let responses = jsonrpc.send_batch(&requests).ok()?;
+    if responses.len() != requests.len() {
+        return None;
+    }
+    responses
+        .into_iter()
+        .map(|response| response?.result::<T>().ok())
+        .collect()
+}
+
+fn wallet_filter_scripts(wallet: &Wallet) -> Vec<bdk_wallet::bitcoin::ScriptBuf> {
+    let lookahead = wallet.spk_index().lookahead();
+    [KeychainKind::External, KeychainKind::Internal]
+        .into_iter()
+        .flat_map(|keychain| {
+            let derived = wallet
+                .spk_index()
+                .last_revealed_index(keychain)
+                .map_or(lookahead, |index| {
+                    index.saturating_add(1).saturating_add(lookahead)
+                });
+            wallet
+                .unbounded_spk_iter(keychain)
+                .take(usize::try_from(derived).unwrap_or(usize::MAX))
+                .map(|(_, script)| script)
+        })
+        .collect()
+}
+
+fn try_core_filter_block_plan(
+    client: &Client,
+    wallet: &Wallet,
+    wallet_tip: &CheckPoint,
+    target_height: u32,
+    cancel: Option<&AtomicBool>,
+    status: &Arc<Mutex<Option<WalletSyncStatusDto>>>,
+) -> ApiResult<Option<CoreFilterBlockPlan>> {
+    let start_height = wallet_tip.height();
+    if start_height >= target_height {
+        return Ok(Some(CoreFilterBlockPlan {
+            checkpoint: wallet_tip.clone(),
+            matched_blocks: Vec::new(),
+        }));
+    }
+    let filter_index_ready = client
+        .get_index_info()
+        .ok()
+        .and_then(|indexes| indexes.basic_block_filter_index)
+        .is_some_and(|index| index.synced);
+    if !filter_index_ready {
+        return Ok(None);
+    }
+    ensure_foreground_sync_not_cancelled(cancel)?;
+    let scripts = wallet_filter_scripts(wallet);
+    if scripts.is_empty() {
+        return Ok(None);
+    }
+    let heights = (start_height.saturating_add(1)..=target_height).collect::<Vec<_>>();
+    let mut hashes = Vec::with_capacity(heights.len());
+    for batch in heights.chunks(CORE_BLOCK_FILTER_BATCH_SIZE) {
+        ensure_foreground_sync_not_cancelled(cancel)?;
+        let params = batch
+            .iter()
+            .map(|height| serde_json::json!([height]))
+            .collect::<Vec<_>>();
+        let Some(batch_hashes) = core_batch_call::<BlockHash>(client, "getblockhash", &params)
+        else {
+            return Ok(None);
+        };
+        hashes.extend(batch_hashes);
+    }
+    if hashes.len() != heights.len() {
+        return Ok(None);
+    }
+
+    let mut checkpoint = wallet_tip.clone();
+    let mut matched_blocks = Vec::new();
+    for (batch_index, hash_batch) in hashes.chunks(CORE_BLOCK_FILTER_BATCH_SIZE).enumerate() {
+        ensure_foreground_sync_not_cancelled(cancel)?;
+        let params = hash_batch
+            .iter()
+            .map(|hash| serde_json::json!([hash.to_string(), "basic"]))
+            .collect::<Vec<_>>();
+        let Some(filters) =
+            core_batch_call::<GetBlockFilterResult>(client, "getblockfilter", &params)
+        else {
+            return Ok(None);
+        };
+        if filters.len() != hash_batch.len() {
+            return Ok(None);
+        }
+        for (offset, (hash, filter)) in hash_batch.iter().zip(filters).enumerate() {
+            let index = batch_index * CORE_BLOCK_FILTER_BATCH_SIZE + offset;
+            let height = heights[index];
+            let previous_hash = checkpoint.hash();
+            checkpoint = checkpoint
+                .push(BlockId {
+                    height,
+                    hash: *hash,
+                })
+                .map_err(|_| internal("The Core filter checkpoint could not be constructed."))?;
+            let filter = filter.into_filter();
+            let matched = filter
+                .match_any(hash, scripts.iter().map(|script| script.as_bytes()))
+                .map_err(internal)?;
+            if matched {
+                matched_blocks.push((height, *hash, previous_hash));
+            }
+        }
+        update_core_sync_status(status, start_height, checkpoint.height(), target_height);
+    }
+    ensure_foreground_sync_not_cancelled(cancel)?;
+    let active_start = retry_transient_core_rpc(
+        || client.get_block_hash(u64::from(start_height)),
+        std::thread::sleep,
+    )?;
+    let active_target = retry_transient_core_rpc(
+        || client.get_block_hash(u64::from(target_height)),
+        std::thread::sleep,
+    )?;
+    if active_start != wallet_tip.hash() || active_target != checkpoint.hash() {
+        return Err(internal(
+            "Bitcoin Core changed chains during refresh. Refresh the wallet again.",
+        ));
+    }
+    Ok(Some(CoreFilterBlockPlan {
+        checkpoint,
+        matched_blocks,
+    }))
+}
+
 // BDK's Core emitter reads every unknown mempool transaction. On a busy remote
 // node that may be thousands of RPC round trips after block progress reaches
 // the tip. Check between requests so navigation, lock, and scan cancellation
@@ -5537,6 +5689,83 @@ fn sync_wallet_with_core(
         target_height,
     );
     let uncancelled = AtomicBool::new(false);
+    if let Some(plan) = try_core_filter_block_plan(
+        rpc.as_ref(),
+        &wallet,
+        &wallet_tip,
+        target_height,
+        cancel,
+        &state.sync_status,
+    )? {
+        let mut matched_blocks = Vec::with_capacity(plan.matched_blocks.len());
+        for (height, expected_hash, expected_previous_hash) in plan.matched_blocks {
+            ensure_foreground_sync_not_cancelled(cancel)?;
+            let block =
+                retry_transient_core_rpc(|| rpc.get_block(&expected_hash), std::thread::sleep)?;
+            if block.block_hash() != expected_hash
+                || block.header.prev_blockhash != expected_previous_hash
+            {
+                return Err(internal(
+                    "Bitcoin Core returned a block outside the verified compact-filter chain.",
+                ));
+            }
+            matched_blocks.push((height, block));
+        }
+        ensure_foreground_sync_not_cancelled(cancel)?;
+        let active_target = retry_transient_core_rpc(
+            || rpc.get_block_hash(u64::from(target_height)),
+            std::thread::sleep,
+        )?;
+        if active_target != plan.checkpoint.hash() {
+            return Err(internal(
+                "Bitcoin Core changed chains during refresh. Refresh the wallet again.",
+            ));
+        }
+        wallet
+            .apply_update(Update {
+                chain: Some(plan.checkpoint),
+                ..Default::default()
+            })
+            .map_err(internal)?;
+        for (height, block) in matched_blocks {
+            wallet.apply_block(&block, height).map_err(internal)?;
+        }
+    } else {
+        let block_client = CancellableCoreClient {
+            client: rpc.as_ref(),
+            cancel: cancel.unwrap_or(&uncancelled),
+            prior_mempool: None,
+            expected_wallet_mempool: HashSet::new(),
+            observed_mempool: Mutex::new(None),
+            mempool: Mutex::new(MempoolPrefetch::default()),
+        };
+        let mut block_emitter = Emitter::new(
+            &block_client,
+            wallet_tip,
+            scan_birthday,
+            Vec::<Arc<Transaction>>::new(),
+        );
+        loop {
+            ensure_foreground_sync_not_cancelled(cancel)?;
+            let Some(block) =
+                retry_transient_core_rpc(|| block_emitter.next_block(), std::thread::sleep)?
+            else {
+                break;
+            };
+            ensure_foreground_sync_not_cancelled(cancel)?;
+            wallet
+                .apply_block_connected_to(&block.block, block.block_height(), block.connected_to())
+                .map_err(internal)?;
+            update_core_sync_status(
+                &state.sync_status,
+                start_height,
+                block.block_height(),
+                target_height,
+            );
+        }
+    }
+    ensure_foreground_sync_not_cancelled(cancel)?;
+    mark_core_pending_status(&state.sync_status);
     let expected_mempool = wallet
         .transactions()
         .filter(|tx| tx.chain_position.is_unconfirmed())
@@ -5554,27 +5783,13 @@ fn sync_wallet_with_core(
         observed_mempool: Mutex::new(None),
         mempool: Mutex::new(MempoolPrefetch::default()),
     };
-    let mut emitter = Emitter::new(&client, wallet_tip, scan_birthday, expected_mempool);
-    loop {
-        ensure_foreground_sync_not_cancelled(cancel)?;
-        let Some(block) = retry_transient_core_rpc(|| emitter.next_block(), std::thread::sleep)?
-        else {
-            break;
-        };
-        ensure_foreground_sync_not_cancelled(cancel)?;
-        wallet
-            .apply_block_connected_to(&block.block, block.block_height(), block.connected_to())
-            .map_err(internal)?;
-        update_core_sync_status(
-            &state.sync_status,
-            start_height,
-            block.block_height(),
-            target_height,
-        );
-    }
-    ensure_foreground_sync_not_cancelled(cancel)?;
-    mark_core_pending_status(&state.sync_status);
-    let mempool_result = retry_transient_core_rpc(|| emitter.mempool(), std::thread::sleep);
+    let mut mempool_emitter = Emitter::new(
+        &client,
+        wallet.latest_checkpoint(),
+        scan_birthday,
+        expected_mempool,
+    );
+    let mempool_result = retry_transient_core_rpc(|| mempool_emitter.mempool(), std::thread::sleep);
     ensure_foreground_sync_not_cancelled(cancel)?;
     let mempool = mempool_result?;
     let observed_mempool = client.observed_mempool_snapshot();

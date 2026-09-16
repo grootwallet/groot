@@ -369,6 +369,14 @@ def block_params(params: list[Any]) -> bool:
     )
 
 
+def block_filter_params(params: list[Any]) -> bool:
+    return (
+        1 <= len(params) <= 2
+        and hash_value(params[0])
+        and (len(params) == 1 or params[1] == "basic")
+    )
+
+
 def raw_transaction_params(params: list[Any]) -> bool:
     return (
         2 <= len(params) <= 3
@@ -417,6 +425,7 @@ METHOD_VALIDATORS: dict[str, Callable[[list[Any]], bool]] = {
     "getblockcount": no_params,
     "getblockhash": lambda params: len(params) == 1 and nonnegative_int(params[0]),
     "getblock": block_params,
+    "getblockfilter": block_filter_params,
     "getrawmempool": raw_mempool_params,
     "getrawtransaction": raw_transaction_params,
     "getmempoolentry": lambda params: len(params) == 1 and hash_value(params[0]),

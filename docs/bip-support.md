@@ -363,6 +363,16 @@ shared service's direct public Core parser with a deny-by-default authenticated
 transport boundary. Esplora remains unwired, and no interoperability evidence
 is added by the gateway's local integration tests.
 
+The 2026-09-16 Core refresh optimization uses Core's authenticated BIP158 basic
+block filters only as an optional local matching accelerator. Groot still
+verifies the active Core chain, downloads every filter from the configured
+exact-chain node, downloads each matching raw block, and atomically applies the
+complete checkpoint with relevant transactions. An unavailable or unsynced
+filter index retains the full-block Core scan. This strengthens the existing
+BIP158 implementation evidence but is not BIP157 peer-protocol certification,
+does not change descriptors or discovery semantics, and makes no new public
+interoperability claim until exact-build live timing is recorded.
+
 The subsequent remote-refresh performance and single-flight presentation fix
 has no BIP support impact. Increasing the already-bounded raw-transaction batch,
 observing an active native refresh instead of invoking a duplicate, and reusing

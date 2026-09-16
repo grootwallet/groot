@@ -19,6 +19,160 @@ struct MempoolBatchFixture {
     reject_batch: bool,
 }
 
+struct BlockFilterBatchFixture {
+    genesis: BlockHash,
+    block_hash: BlockHash,
+    filter: GetBlockFilterResult,
+    batches: Arc<AtomicU64>,
+}
+
+impl BlockFilterBatchFixture {
+    fn response(
+        request: &jsonrpc::Request<'_>,
+        result: serde_json::Value,
+    ) -> Result<jsonrpc::Response, jsonrpc::Error> {
+        Ok(serde_json::from_value(serde_json::json!({
+            "result": result,
+            "error": null,
+            "id": request.id,
+            "jsonrpc": "2.0"
+        }))?)
+    }
+
+    fn block_hash_for_request(&self, request: &jsonrpc::Request<'_>) -> BlockHash {
+        let params: Vec<u64> =
+            serde_json::from_str(request.params.expect("block-height parameters").get()).unwrap();
+        match params.as_slice() {
+            [0] => self.genesis,
+            [1] => self.block_hash,
+            other => panic!("unexpected block-height parameters: {other:?}"),
+        }
+    }
+}
+
+impl jsonrpc::client::Transport for BlockFilterBatchFixture {
+    fn send_request(
+        &self,
+        request: jsonrpc::Request<'_>,
+    ) -> Result<jsonrpc::Response, jsonrpc::Error> {
+        match request.method {
+            "getindexinfo" => Self::response(
+                &request,
+                serde_json::json!({
+                    "basic block filter index": {
+                        "synced": true,
+                        "best_block_height": 1
+                    }
+                }),
+            ),
+            "getblockhash" => {
+                let hash = self.block_hash_for_request(&request);
+                Self::response(&request, serde_json::to_value(hash)?)
+            }
+            other => panic!("unexpected fixture RPC: {other}"),
+        }
+    }
+
+    fn send_batch(
+        &self,
+        requests: &[jsonrpc::Request<'_>],
+    ) -> Result<Vec<jsonrpc::Response>, jsonrpc::Error> {
+        self.batches.fetch_add(1, Ordering::Relaxed);
+        requests
+            .iter()
+            .map(|request| match request.method {
+                "getblockhash" => {
+                    let hash = self.block_hash_for_request(request);
+                    Self::response(request, serde_json::to_value(hash)?)
+                }
+                "getblockfilter" => Self::response(request, serde_json::to_value(&self.filter)?),
+                other => panic!("unexpected fixture batch RPC: {other}"),
+            })
+            .collect()
+    }
+
+    fn fmt_target(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("block-filter fixture")
+    }
+}
+
+#[test]
+fn core_filter_plan_batches_filters_and_keeps_matching_blocks() {
+    use bdk_wallet::bitcoin::{
+        absolute::LockTime,
+        bip158::BlockFilter,
+        block::{Header, Version as BlockVersion},
+        transaction::Version,
+        CompactTarget, FilterHash, ScriptBuf, Sequence, TxMerkleNode, TxOut, Witness,
+    };
+
+    let mnemonic = Mnemonic::from_entropy(&[42; 32]).unwrap();
+    let master = root_key(&mnemonic, "filter fixture").unwrap();
+    let mut wallet = Wallet::create(
+        Bip84(master, KeychainKind::External),
+        Bip84(master, KeychainKind::Internal),
+    )
+    .network(Network::Regtest)
+    .create_wallet_no_persist()
+    .unwrap();
+    let receive_script = wallet
+        .reveal_next_address(KeychainKind::External)
+        .address
+        .script_pubkey();
+    let genesis = genesis_block(Network::Regtest).block_hash();
+    let transaction = Transaction {
+        version: Version::TWO,
+        lock_time: LockTime::ZERO,
+        input: vec![TxIn {
+            previous_output: OutPoint::null(),
+            script_sig: ScriptBuf::new(),
+            sequence: Sequence::MAX,
+            witness: Witness::new(),
+        }],
+        output: vec![TxOut {
+            value: Amount::from_sat(50_000),
+            script_pubkey: receive_script,
+        }],
+    };
+    let block = bdk_wallet::bitcoin::Block {
+        header: Header {
+            version: BlockVersion::ONE,
+            prev_blockhash: genesis,
+            merkle_root: TxMerkleNode::all_zeros(),
+            time: 1,
+            bits: CompactTarget::from_consensus(0),
+            nonce: 0,
+        },
+        txdata: vec![transaction],
+    };
+    let block_hash = block.block_hash();
+    let filter = BlockFilter::new_script_filter(&block, |_| {
+        Ok::<ScriptBuf, bdk_wallet::bitcoin::bip158::Error>(ScriptBuf::new())
+    })
+    .unwrap();
+    let batches = Arc::new(AtomicU64::new(0));
+    let fixture = BlockFilterBatchFixture {
+        genesis,
+        block_hash,
+        filter: GetBlockFilterResult {
+            header: FilterHash::all_zeros(),
+            filter: filter.content,
+        },
+        batches: Arc::clone(&batches),
+    };
+    let rpc = Client::from_jsonrpc(jsonrpc::client::Client::with_transport(fixture));
+    let status = Arc::new(Mutex::new(None));
+    let plan =
+        try_core_filter_block_plan(&rpc, &wallet, &wallet.latest_checkpoint(), 1, None, &status)
+            .unwrap()
+            .unwrap();
+
+    assert_eq!(plan.checkpoint.height(), 1);
+    assert_eq!(plan.checkpoint.hash(), block_hash);
+    assert_eq!(plan.matched_blocks, vec![(1, block_hash, genesis)]);
+    assert_eq!(batches.load(Ordering::Relaxed), 2);
+}
+
 impl jsonrpc::client::Transport for MempoolBatchFixture {
     fn send_request(
         &self,

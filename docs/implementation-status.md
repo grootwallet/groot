@@ -796,3 +796,17 @@ baseline; explicit recovery scans always perform a complete mempool pass and
 then seed the baseline. No raw transaction, address, descriptor, credential,
 or persisted-format cache is introduced. The first pass after process launch
 remains complete; exact-build warm-refresh timing still requires owner retest.
+
+The 2026-09-16 Mainnet multisig run then showed 503 seconds of incomplete block
+progress while its durable checkpoint was only 135 blocks behind the connected
+node. That evidence isolates serial remote raw-block RPC as the bottleneck, not
+wallet size, multisig evaluation, client hardware, node storage, or the later
+mempool phase. Core refresh now uses a synced basic block-filter index when
+available: block hashes and BIP158 filters are read in bounded 256-call batches,
+wallet scripts are matched locally, and only matching raw blocks are fetched.
+Start/target chain identity and each fetched block link are verified before the
+complete chain checkpoint and relevant transactions enter the existing atomic
+commit. Gateway and client parameter tests keep `getblockfilter` read-only and
+basic-only. Nodes or gateways without the optional method/index keep the prior
+full-block fallback. This is source evidence until the updated gateway and exact
+packaged build complete the owner's live Mainnet timing retest.
