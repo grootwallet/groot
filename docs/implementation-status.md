@@ -822,3 +822,18 @@ is probed before batching so an undeployed/unsupported gateway falls back
 promptly. This is an implementation correction, not evidence that the live
 Mainnet timing gate has passed; the replacement exact package must still be
 tested against the gateway and Family Test wallet.
+
+The owner rejected client-side filter transfer as the default remote-Core UX
+and explicitly accepted public wallet-query disclosure to the trusted server.
+ADR 0070 now makes remote Core use `scanblocks` plus mempool-only
+`getdescriptoractivity`: Groot sends at most 4,096
+deduplicated `raw(script)` public scan objects, receives potentially matching
+block hashes, verifies them against its independently fetched active hash range,
+downloads only matching full blocks and matching pending transactions, and
+retains the existing atomic wallet reconciliation. The gateway rejects address/key descriptors, private
+material, other scan actions, unordered ranges, non-basic filters, and arbitrary
+options. Local Core and the separate P2P compact-filter source are unchanged.
+There is no persisted-format migration. The source and local gateway tests are
+not live evidence: Bitcoin Core 29+, `scanblocks`, `getdescriptoractivity`, the
+matching RPC whitelist, and the synced basic filter index must be deployed
+before the replacement Mainnet package can pass the Family Test timing gate.

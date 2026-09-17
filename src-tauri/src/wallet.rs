@@ -107,6 +107,7 @@ const MAX_CREDENTIAL_BYTES: usize = 1_024;
 // cannot approach the direct-RPC or gateway response-body limit.
 const CORE_BLOCK_HASH_BATCH_SIZE: usize = 256;
 const CORE_BLOCK_FILTER_BATCH_SIZE: usize = 8;
+const MAX_CORE_SCAN_SCRIPTS: usize = 4_096;
 const MEMPOOL_RPC_BATCH_SIZE: usize = 256;
 const MIN_NEW_WALLET_PASSPHRASE_CHARACTERS: usize = 16;
 const MAX_MNEMONIC_INPUT_BYTES: usize = 4_096;
@@ -2913,6 +2914,26 @@ struct CoreFilterBlockPlan {
     matched_blocks: Vec<(u32, BlockHash, BlockHash)>,
 }
 
+#[derive(Deserialize)]
+struct CoreScanBlocksResult {
+    from_height: u32,
+    to_height: u32,
+    relevant_blocks: Vec<BlockHash>,
+    completed: bool,
+}
+
+#[derive(Deserialize)]
+struct CoreDescriptorActivityResult {
+    activity: Vec<CoreDescriptorActivity>,
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "type", rename_all = "lowercase")]
+enum CoreDescriptorActivity {
+    Receive { txid: Txid },
+    Spend { spend_txid: Txid },
+}
+
 fn core_batch_call<T: serde::de::DeserializeOwned>(
     client: &Client,
     method: &str,
@@ -2955,6 +2976,192 @@ fn wallet_filter_scripts(wallet: &Wallet) -> Vec<bdk_wallet::bitcoin::ScriptBuf>
                 .map(|(_, script)| script)
         })
         .collect()
+}
+
+fn core_scan_objects(wallet: &Wallet) -> ApiResult<Vec<String>> {
+    let mut scan_objects = wallet_filter_scripts(wallet)
+        .into_iter()
+        .map(|script| format!("raw({})", script.to_hex_string()))
+        .collect::<Vec<_>>();
+    scan_objects.sort_unstable();
+    scan_objects.dedup();
+    if scan_objects.is_empty() || scan_objects.len() > MAX_CORE_SCAN_SCRIPTS {
+        return Err(api_error(
+            "invalid_scan_settings",
+            "The wallet script range is outside the supported remote scan limit.",
+        ));
+    }
+    Ok(scan_objects)
+}
+
+fn core_server_scan_block_plan(
+    client: &Client,
+    wallet: &Wallet,
+    wallet_tip: &CheckPoint,
+    target_height: u32,
+    cancel: Option<&AtomicBool>,
+    status: &Arc<Mutex<Option<WalletSyncStatusDto>>>,
+) -> ApiResult<CoreFilterBlockPlan> {
+    let start_height = wallet_tip.height();
+    if start_height >= target_height {
+        return Ok(CoreFilterBlockPlan {
+            checkpoint: wallet_tip.clone(),
+            matched_blocks: Vec::new(),
+        });
+    }
+    let filter_index_ready = client
+        .get_index_info()
+        .ok()
+        .and_then(|indexes| indexes.basic_block_filter_index)
+        .is_some_and(|index| index.synced);
+    if !filter_index_ready {
+        return Err(api_error(
+            "invalid_node_config",
+            "Remote Bitcoin Core sync requires a fully synced basic block-filter index.",
+        ));
+    }
+    ensure_foreground_sync_not_cancelled(cancel)?;
+    let scan_objects = core_scan_objects(wallet)?;
+
+    let first_height = start_height.saturating_add(1);
+    // A lost response may leave Core's global scan running. Do not retry
+    // `start` automatically and accidentally collide with that in-flight scan.
+    let scan = client
+        .call::<CoreScanBlocksResult>(
+            "scanblocks",
+            &[
+                serde_json::json!("start"),
+                serde_json::json!(scan_objects),
+                serde_json::json!(first_height),
+                serde_json::json!(target_height),
+                serde_json::json!("basic"),
+            ],
+        )
+        .map_err(rpc_api_error)?;
+    ensure_foreground_sync_not_cancelled(cancel)?;
+    if !scan.completed || scan.from_height != first_height || scan.to_height != target_height {
+        return Err(api_error(
+            "network_unavailable",
+            "Remote Bitcoin Core did not complete the requested wallet scan range.",
+        ));
+    }
+
+    let heights = (first_height..=target_height).collect::<Vec<_>>();
+    let mut hashes = Vec::with_capacity(heights.len());
+    for batch in heights.chunks(CORE_BLOCK_HASH_BATCH_SIZE) {
+        ensure_foreground_sync_not_cancelled(cancel)?;
+        let params = batch
+            .iter()
+            .map(|height| serde_json::json!([height]))
+            .collect::<Vec<_>>();
+        let batch_hashes = core_batch_call::<BlockHash>(client, "getblockhash", &params)
+            .ok_or_else(rpc_unavailable)?;
+        hashes.extend(batch_hashes);
+    }
+    if hashes.len() != heights.len() {
+        return Err(internal(
+            "Bitcoin Core returned an incomplete block-hash range.",
+        ));
+    }
+
+    let relevant = scan.relevant_blocks.into_iter().collect::<HashSet<_>>();
+    if relevant.len() > hashes.len() {
+        return Err(internal(
+            "Bitcoin Core returned too many relevant blocks for the scan range.",
+        ));
+    }
+    let mut checkpoint = wallet_tip.clone();
+    let mut matched_blocks = Vec::with_capacity(relevant.len());
+    for (height, hash) in heights.into_iter().zip(hashes) {
+        let previous_hash = checkpoint.hash();
+        checkpoint = checkpoint
+            .push(BlockId { height, hash })
+            .map_err(|_| internal("The Core scan checkpoint could not be constructed."))?;
+        if relevant.contains(&hash) {
+            matched_blocks.push((height, hash, previous_hash));
+        }
+    }
+    if matched_blocks.len() != relevant.len() {
+        return Err(internal(
+            "Bitcoin Core returned a relevant block outside the requested scan range.",
+        ));
+    }
+    update_core_sync_status(status, start_height, target_height, target_height);
+    ensure_foreground_sync_not_cancelled(cancel)?;
+    let active_start = retry_transient_core_rpc(
+        || client.get_block_hash(u64::from(start_height)),
+        std::thread::sleep,
+    )?;
+    let active_target = retry_transient_core_rpc(
+        || client.get_block_hash(u64::from(target_height)),
+        std::thread::sleep,
+    )?;
+    if active_start != wallet_tip.hash() || active_target != checkpoint.hash() {
+        return Err(internal(
+            "Bitcoin Core changed chains during refresh. Refresh the wallet again.",
+        ));
+    }
+    Ok(CoreFilterBlockPlan {
+        checkpoint,
+        matched_blocks,
+    })
+}
+
+fn sync_remote_core_mempool(
+    client: &Client,
+    wallet: &mut Wallet,
+    expected_mempool: &[Arc<Transaction>],
+    cancel: Option<&AtomicBool>,
+) -> ApiResult<()> {
+    ensure_foreground_sync_not_cancelled(cancel)?;
+    let scan_objects = core_scan_objects(wallet)?;
+    let result = client
+        .call::<CoreDescriptorActivityResult>(
+            "getdescriptoractivity",
+            &[
+                serde_json::json!([]),
+                serde_json::json!(scan_objects),
+                serde_json::json!(true),
+            ],
+        )
+        .map_err(rpc_api_error)?;
+    let relevant_txids = result
+        .activity
+        .into_iter()
+        .map(|activity| match activity {
+            CoreDescriptorActivity::Receive { txid } => txid,
+            CoreDescriptorActivity::Spend { spend_txid } => spend_txid,
+        })
+        .collect::<HashSet<_>>();
+    if relevant_txids.len() > 10_000 {
+        return Err(internal(
+            "Bitcoin Core returned too many remote mempool transactions.",
+        ));
+    }
+
+    let observed_at = now();
+    let mut relevant_transactions = Vec::with_capacity(relevant_txids.len());
+    for txid in &relevant_txids {
+        ensure_foreground_sync_not_cancelled(cancel)?;
+        let transaction = retry_transient_core_rpc(
+            || client.get_raw_transaction(txid, None),
+            std::thread::sleep,
+        )?;
+        if transaction.compute_txid() != *txid {
+            return Err(internal(
+                "Bitcoin Core returned a transaction with an unexpected identifier.",
+            ));
+        }
+        relevant_transactions.push((Arc::new(transaction), observed_at));
+    }
+    let evicted = expected_mempool
+        .iter()
+        .map(|transaction| transaction.compute_txid())
+        .filter(|txid| !relevant_txids.contains(txid))
+        .map(|txid| (txid, observed_at));
+    wallet.apply_evicted_txs(evicted);
+    wallet.apply_unconfirmed_txs(relevant_transactions);
+    Ok(())
 }
 
 fn try_core_filter_block_plan(
@@ -5712,14 +5919,30 @@ fn sync_wallet_with_core(
         target_height,
     );
     let uncancelled = AtomicBool::new(false);
-    if let Some(plan) = try_core_filter_block_plan(
-        rpc.as_ref(),
-        &wallet,
-        &wallet_tip,
-        target_height,
-        cancel,
-        &state.sync_status,
-    )? {
+    let remote_core = matches!(
+        read_node_config(app)?.backend,
+        ChainBackend::RemoteCore { .. }
+    );
+    let block_plan = if remote_core {
+        Some(core_server_scan_block_plan(
+            rpc.as_ref(),
+            &wallet,
+            &wallet_tip,
+            target_height,
+            cancel,
+            &state.sync_status,
+        )?)
+    } else {
+        try_core_filter_block_plan(
+            rpc.as_ref(),
+            &wallet,
+            &wallet_tip,
+            target_height,
+            cancel,
+            &state.sync_status,
+        )?
+    };
+    if let Some(plan) = block_plan {
         let mut matched_blocks = Vec::with_capacity(plan.matched_blocks.len());
         for (height, expected_hash, expected_previous_hash) in plan.matched_blocks {
             ensure_foreground_sync_not_cancelled(cancel)?;
@@ -5794,30 +6017,38 @@ fn sync_wallet_with_core(
         .filter(|tx| tx.chain_position.is_unconfirmed())
         .map(|tx| tx.tx_node.tx.clone())
         .collect::<Vec<_>>();
-    let expected_wallet_mempool = expected_mempool
-        .iter()
-        .map(|tx| tx.compute_txid())
-        .collect();
-    let client = CancellableCoreClient {
-        client: rpc.as_ref(),
-        cancel: cancel.unwrap_or(&uncancelled),
-        prior_mempool: cached_core_mempool_snapshot(state, wallet_id),
-        expected_wallet_mempool,
-        observed_mempool: Mutex::new(None),
-        mempool: Mutex::new(MempoolPrefetch::default()),
+    let observed_mempool = if remote_core {
+        sync_remote_core_mempool(rpc.as_ref(), &mut wallet, &expected_mempool, cancel)?;
+        forget_core_mempool_snapshot(state, wallet_id);
+        None
+    } else {
+        let expected_wallet_mempool = expected_mempool
+            .iter()
+            .map(|tx| tx.compute_txid())
+            .collect();
+        let client = CancellableCoreClient {
+            client: rpc.as_ref(),
+            cancel: cancel.unwrap_or(&uncancelled),
+            prior_mempool: cached_core_mempool_snapshot(state, wallet_id),
+            expected_wallet_mempool,
+            observed_mempool: Mutex::new(None),
+            mempool: Mutex::new(MempoolPrefetch::default()),
+        };
+        let mut mempool_emitter = Emitter::new(
+            &client,
+            wallet.latest_checkpoint(),
+            scan_birthday,
+            expected_mempool,
+        );
+        let mempool_result =
+            retry_transient_core_rpc(|| mempool_emitter.mempool(), std::thread::sleep);
+        ensure_foreground_sync_not_cancelled(cancel)?;
+        let mempool = mempool_result?;
+        let observed = client.observed_mempool_snapshot();
+        wallet.apply_evicted_txs(mempool.evicted);
+        wallet.apply_unconfirmed_txs(mempool.update);
+        observed
     };
-    let mut mempool_emitter = Emitter::new(
-        &client,
-        wallet.latest_checkpoint(),
-        scan_birthday,
-        expected_mempool,
-    );
-    let mempool_result = retry_transient_core_rpc(|| mempool_emitter.mempool(), std::thread::sleep);
-    ensure_foreground_sync_not_cancelled(cancel)?;
-    let mempool = mempool_result?;
-    let observed_mempool = client.observed_mempool_snapshot();
-    wallet.apply_evicted_txs(mempool.evicted);
-    wallet.apply_unconfirmed_txs(mempool.update);
     update_core_sync_status(
         &state.sync_status,
         start_height,

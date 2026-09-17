@@ -134,3 +134,9 @@ falls back to the existing complete full-block scan. The gateway admits only
 descriptor, address, script, or private wallet data is sent. This changes no
 persisted format, recovery rule, or source selection and does not make the
 filter index a correctness dependency.
+
+The preceding no-script remote discovery decision is superseded by ADR 0070.
+The product owner explicitly selected faster trusted-server scanning for remote
+Core, so the gateway now accepts only bounded public `raw(script)` scan objects
+for `scanblocks` and mempool-only `getdescriptoractivity`; local and peer-served
+compact-filter behavior remains separate.

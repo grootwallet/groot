@@ -46,6 +46,9 @@ Groot client -- HTTPS/Basic --> NGINX :443
    `rpcwhitelistdefault=1`, and a method whitelist matching ADR 0067. A cookie
    is the gateway's preferred upstream authentication; a strong `rpcauth`
    identity remains an operator recovery path, not a client credential.
+   Enable `blockfilterindex=1`, wait until the basic index is fully synced, and
+   include read-only `scanblocks` and `getdescriptoractivity` in the gateway's
+   Core whitelist. The remote node must run Bitcoin Core 29 or newer.
 
 ## Pre-cutover verification
 

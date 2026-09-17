@@ -377,6 +377,38 @@ def block_filter_params(params: list[Any]) -> bool:
     )
 
 
+def raw_scan_object(value: Any) -> bool:
+    if not isinstance(value, str) or not value.startswith("raw(") or not value.endswith(")"):
+        return False
+    script = value[4:-1]
+    return 2 <= len(script) <= 1040 and len(script) % 2 == 0 and TX_HEX.fullmatch(script) is not None
+
+
+def scan_blocks_params(params: list[Any]) -> bool:
+    return (
+        len(params) == 5
+        and params[0] == "start"
+        and isinstance(params[1], list)
+        and 1 <= len(params[1]) <= 4096
+        and all(raw_scan_object(item) for item in params[1])
+        and nonnegative_int(params[2])
+        and nonnegative_int(params[3])
+        and params[2] <= params[3]
+        and params[4] == "basic"
+    )
+
+
+def descriptor_activity_params(params: list[Any]) -> bool:
+    return (
+        len(params) == 3
+        and params[0] == []
+        and isinstance(params[1], list)
+        and 1 <= len(params[1]) <= 4096
+        and all(raw_scan_object(item) for item in params[1])
+        and params[2] is True
+    )
+
+
 def raw_transaction_params(params: list[Any]) -> bool:
     return (
         2 <= len(params) <= 3
@@ -426,6 +458,8 @@ METHOD_VALIDATORS: dict[str, Callable[[list[Any]], bool]] = {
     "getblockhash": lambda params: len(params) == 1 and nonnegative_int(params[0]),
     "getblock": block_params,
     "getblockfilter": block_filter_params,
+    "scanblocks": scan_blocks_params,
+    "getdescriptoractivity": descriptor_activity_params,
     "getrawmempool": raw_mempool_params,
     "getrawtransaction": raw_transaction_params,
     "getmempoolentry": lambda params: len(params) == 1 and hash_value(params[0]),

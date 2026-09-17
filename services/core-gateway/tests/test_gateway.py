@@ -301,6 +301,16 @@ class GatewayValidationTests(unittest.TestCase):
             {"id": 1, "method": "getblock", "params": [HASH, 1]},
             {"id": 1, "method": "getblockfilter", "params": [HASH]},
             {"id": 1, "method": "getblockfilter", "params": [HASH, "basic"]},
+            {
+                "id": 1,
+                "method": "scanblocks",
+                "params": ["start", ["raw(0014" + "11" * 20 + ")"], 100, 200, "basic"],
+            },
+            {
+                "id": 1,
+                "method": "getdescriptoractivity",
+                "params": [[], ["raw(0014" + "11" * 20 + ")"], True],
+            },
             {"id": 1, "method": "getrawmempool", "params": []},
             {"id": 1, "method": "getrawtransaction", "params": [HASH, False]},
             {"id": 1, "method": "getrawtransaction", "params": [HASH, True, HASH]},
@@ -333,6 +343,27 @@ class GatewayValidationTests(unittest.TestCase):
             {"id": 1, "method": "getblock", "params": [HASH, 2]},
             {"id": 1, "method": "getblockfilter", "params": []},
             {"id": 1, "method": "getblockfilter", "params": [HASH, "extended"]},
+            {"id": 1, "method": "scanblocks", "params": ["status"]},
+            {
+                "id": 1,
+                "method": "scanblocks",
+                "params": ["start", ["addr(bc1qexample)"], 100, 200, "basic"],
+            },
+            {
+                "id": 1,
+                "method": "scanblocks",
+                "params": ["start", ["raw(0014aa)"], 200, 100, "basic"],
+            },
+            {
+                "id": 1,
+                "method": "getdescriptoractivity",
+                "params": [[HASH], ["raw(0014" + "11" * 20 + ")"], True],
+            },
+            {
+                "id": 1,
+                "method": "getdescriptoractivity",
+                "params": [[], ["raw(0014" + "11" * 20 + ")"], False],
+            },
             {"id": 1, "method": "getindexinfo", "params": ["basic block filter index"]},
             {"id": 1, "method": "sendrawtransaction", "params": ["0200", 0.1]},
         ]

@@ -24,6 +24,58 @@ struct BlockFilterBatchFixture {
     block_hash: BlockHash,
     filter: GetBlockFilterResult,
     batches: Arc<AtomicU64>,
+    scan_params: Arc<Mutex<Vec<serde_json::Value>>>,
+}
+
+struct DescriptorActivityFixture {
+    transaction: Transaction,
+    activity_params: Arc<Mutex<Vec<serde_json::Value>>>,
+}
+
+impl jsonrpc::client::Transport for DescriptorActivityFixture {
+    fn send_request(
+        &self,
+        request: jsonrpc::Request<'_>,
+    ) -> Result<jsonrpc::Response, jsonrpc::Error> {
+        match request.method {
+            "getdescriptoractivity" => {
+                let params: Vec<serde_json::Value> = serde_json::from_str(
+                    request
+                        .params
+                        .expect("descriptor activity parameters")
+                        .get(),
+                )?;
+                *self.activity_params.lock().unwrap() = params;
+                BlockFilterBatchFixture::response(
+                    &request,
+                    serde_json::json!({
+                        "activity": [{
+                            "type": "receive",
+                            "txid": self.transaction.compute_txid()
+                        }]
+                    }),
+                )
+            }
+            "getrawtransaction" => BlockFilterBatchFixture::response(
+                &request,
+                serde_json::json!(bdk_wallet::bitcoin::consensus::encode::serialize_hex(
+                    &self.transaction
+                )),
+            ),
+            other => panic!("unexpected descriptor-activity fixture RPC: {other}"),
+        }
+    }
+
+    fn send_batch(
+        &self,
+        _requests: &[jsonrpc::Request<'_>],
+    ) -> Result<Vec<jsonrpc::Response>, jsonrpc::Error> {
+        Err(jsonrpc::Error::WrongBatchResponseSize)
+    }
+
+    fn fmt_target(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("descriptor-activity fixture")
+    }
 }
 
 impl BlockFilterBatchFixture {
@@ -70,6 +122,20 @@ impl jsonrpc::client::Transport for BlockFilterBatchFixture {
                 Self::response(&request, serde_json::to_value(hash)?)
             }
             "getblockfilter" => Self::response(&request, serde_json::to_value(&self.filter)?),
+            "scanblocks" => {
+                let params: Vec<serde_json::Value> =
+                    serde_json::from_str(request.params.expect("scanblocks parameters").get())?;
+                *self.scan_params.lock().unwrap() = params;
+                Self::response(
+                    &request,
+                    serde_json::json!({
+                        "from_height": 1,
+                        "to_height": 1,
+                        "relevant_blocks": [self.block_hash],
+                        "completed": true
+                    }),
+                )
+            }
             other => panic!("unexpected fixture RPC: {other}"),
         }
     }
@@ -128,7 +194,10 @@ fn core_filter_plan_batches_filters_and_keeps_matching_blocks() {
         version: Version::TWO,
         lock_time: LockTime::ZERO,
         input: vec![TxIn {
-            previous_output: OutPoint::null(),
+            previous_output: OutPoint {
+                txid: Txid::from_byte_array([9; 32]),
+                vout: 0,
+            },
             script_sig: ScriptBuf::new(),
             sequence: Sequence::MAX,
             witness: Witness::new(),
@@ -163,6 +232,7 @@ fn core_filter_plan_batches_filters_and_keeps_matching_blocks() {
             filter: filter.content,
         },
         batches: Arc::clone(&batches),
+        scan_params: Arc::new(Mutex::new(Vec::new())),
     };
     let rpc = Client::from_jsonrpc(jsonrpc::client::Client::with_transport(fixture));
     let status = Arc::new(Mutex::new(None));
@@ -175,6 +245,114 @@ fn core_filter_plan_batches_filters_and_keeps_matching_blocks() {
     assert_eq!(plan.checkpoint.hash(), block_hash);
     assert_eq!(plan.matched_blocks, vec![(1, block_hash, genesis)]);
     assert_eq!(batches.load(Ordering::Relaxed), 2);
+}
+
+#[test]
+fn remote_core_scan_sends_only_bounded_raw_scripts_and_keeps_matching_blocks() {
+    use bdk_wallet::bitcoin::{hashes::Hash, FilterHash};
+
+    let mnemonic = Mnemonic::from_entropy(&[43; 32]).unwrap();
+    let master = root_key(&mnemonic, "server scan fixture").unwrap();
+    let mut wallet = Wallet::create(
+        Bip84(master, KeychainKind::External),
+        Bip84(master, KeychainKind::Internal),
+    )
+    .network(Network::Regtest)
+    .create_wallet_no_persist()
+    .unwrap();
+    wallet.reveal_next_address(KeychainKind::External);
+    let genesis = genesis_block(Network::Regtest).block_hash();
+    let block_hash = BlockHash::from_byte_array([7; 32]);
+    let scan_params = Arc::new(Mutex::new(Vec::new()));
+    let fixture = BlockFilterBatchFixture {
+        genesis,
+        block_hash,
+        filter: GetBlockFilterResult {
+            header: FilterHash::all_zeros(),
+            filter: Vec::<u8>::new(),
+        },
+        batches: Arc::new(AtomicU64::new(0)),
+        scan_params: Arc::clone(&scan_params),
+    };
+    let rpc = Client::from_jsonrpc(jsonrpc::client::Client::with_transport(fixture));
+    let status = Arc::new(Mutex::new(None));
+    let plan =
+        core_server_scan_block_plan(&rpc, &wallet, &wallet.latest_checkpoint(), 1, None, &status)
+            .unwrap();
+
+    assert_eq!(plan.checkpoint.height(), 1);
+    assert_eq!(plan.checkpoint.hash(), block_hash);
+    assert_eq!(plan.matched_blocks, vec![(1, block_hash, genesis)]);
+    let params = scan_params.lock().unwrap();
+    assert_eq!(params[0], "start");
+    let scripts = params[1].as_array().unwrap();
+    assert!(!scripts.is_empty());
+    assert!(scripts.len() <= MAX_CORE_SCAN_SCRIPTS);
+    assert!(scripts.iter().all(|script| {
+        let script = script.as_str().unwrap();
+        script.starts_with("raw(") && script.ends_with(')') && !script.contains("pub")
+    }));
+    assert_eq!(params[2], 1);
+    assert_eq!(params[3], 1);
+    assert_eq!(params[4], "basic");
+}
+
+#[test]
+fn remote_core_mempool_requests_only_wallet_script_activity() {
+    use bdk_wallet::bitcoin::{
+        absolute::LockTime, transaction::Version, ScriptBuf, Sequence, TxOut, Witness,
+    };
+
+    let mnemonic = Mnemonic::from_entropy(&[44; 32]).unwrap();
+    let master = root_key(&mnemonic, "descriptor activity fixture").unwrap();
+    let mut wallet = Wallet::create(
+        Bip84(master, KeychainKind::External),
+        Bip84(master, KeychainKind::Internal),
+    )
+    .network(Network::Regtest)
+    .create_wallet_no_persist()
+    .unwrap();
+    let receive_script = wallet
+        .reveal_next_address(KeychainKind::External)
+        .address
+        .script_pubkey();
+    let transaction = Transaction {
+        version: Version::TWO,
+        lock_time: LockTime::ZERO,
+        input: vec![TxIn {
+            previous_output: OutPoint {
+                txid: Txid::from_byte_array([10; 32]),
+                vout: 0,
+            },
+            script_sig: ScriptBuf::new(),
+            sequence: Sequence::MAX,
+            witness: Witness::new(),
+        }],
+        output: vec![TxOut {
+            value: Amount::from_sat(21_000),
+            script_pubkey: receive_script,
+        }],
+    };
+    let txid = transaction.compute_txid();
+    let activity_params = Arc::new(Mutex::new(Vec::new()));
+    let fixture = DescriptorActivityFixture {
+        transaction,
+        activity_params: Arc::clone(&activity_params),
+    };
+    let rpc = Client::from_jsonrpc(jsonrpc::client::Client::with_transport(fixture));
+
+    sync_remote_core_mempool(&rpc, &mut wallet, &[], None).unwrap();
+
+    assert!(wallet
+        .transactions()
+        .any(|canonical| canonical.tx_node.txid == txid));
+    let params = activity_params.lock().unwrap();
+    assert_eq!(params[0], serde_json::json!([]));
+    assert_eq!(params[2], true);
+    assert!(params[1].as_array().unwrap().iter().all(|script| {
+        let script = script.as_str().unwrap();
+        script.starts_with("raw(") && script.ends_with(')') && !script.contains("pub")
+    }));
 }
 
 impl jsonrpc::client::Transport for MempoolBatchFixture {

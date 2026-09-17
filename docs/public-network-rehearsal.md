@@ -11,10 +11,10 @@ This runbook produces network-specific desktop builds without enabling mainnet. 
 If Bitcoin Core uses `rpcwhitelist`, Groot's RPC user must allow the following methods:
 
 ```ini
-rpcwhitelist=groot-testnet4:getblockchaininfo,getblockcount,getblockhash,getblock,getblockfilter,getrawmempool,getrawtransaction,getmempoolentry,getmempoolinfo,getindexinfo,estimatesmartfee,sendrawtransaction
+rpcwhitelist=groot-testnet4:getblockchaininfo,getblockcount,getblockhash,getblock,getblockfilter,scanblocks,getdescriptoractivity,getrawmempool,getrawtransaction,getmempoolentry,getmempoolinfo,getindexinfo,estimatesmartfee,sendrawtransaction
 ```
 
-Use the network-specific username in place of `groot-testnet4` where appropriate. Keep `rpcwhitelistdefault=1` and bind RPC only to the intended interface. Groot deliberately calls the modern typed `getblockchaininfo` response directly instead of adding the dependency's compatibility-only `getnetworkinfo` probe. RBF reads Core's authoritative incremental-relay replacement policy through the read-only `getmempoolinfo` method. The read-only `getblockfilter` entry is an optional BIP158 sync accelerator; an unavailable or unsynced index retains the full-block scan. The list above remains least privilege. A whitelist rejection becomes a stable permission message; Core's raw RPC response is never displayed.
+Use the network-specific username in place of `groot-testnet4` where appropriate. Keep `rpcwhitelistdefault=1` and bind RPC only to the intended interface. Groot deliberately calls the modern typed `getblockchaininfo` response directly instead of adding the dependency's compatibility-only `getnetworkinfo` probe. RBF reads Core's authoritative incremental-relay replacement policy through the read-only `getmempoolinfo` method. Remote Core activity sync requires Bitcoin Core 29+, uses read-only `scanblocks` and mempool-only `getdescriptoractivity` with bounded public output scripts, and requires a synced basic-filter index; the node operator can associate those scripts with the client connection. Local Core may use `getblockfilter` as an optional client-side accelerator and retains its full-block fallback. The list above remains least privilege. A whitelist rejection becomes a stable permission message; Core's raw RPC response is never displayed.
 
 ## Launch
 
@@ -57,7 +57,7 @@ Run this section only after choosing the peer set and, for the adversarial cases
 5. With a real loopback Tor daemon and host/network capture, prove numeric manual peers create no local DNS lookup and proxy rejection/loss creates no direct connection. Record stream-isolation behavior without identifiers.
 6. Repeat on Testnet4 and include a shallow reorg with retained transaction history and one exact re-anchor.
 7. Exercise packaged macOS suspend/resume, low-storage, retry, and restart behavior. Repeat separately on physical iOS/Android before claiming those platforms.
-8. Run the Core service matrix independently: local archival, local pruned, and authenticated remote archival. Record prune height versus wallet checkpoint, IBD, disk use, and filter-index state. Do not imply that Groot's Core RPC scan needs `blockfilterindex`.
+8. Run the Core service matrix independently: local archival, local pruned, and authenticated remote archival. Record prune height versus wallet checkpoint, IBD, disk use, and filter-index state. Remote Core requires `blockfilterindex`; local Core retains its full-block fallback.
 
 Use the Issue #7 completion gate in [`compact-filter-deferred-work.md`](compact-filter-deferred-work.md) for sign-off. A successful public smoke test does not substitute for the blocked deterministic post-handshake adversarial cases.
 

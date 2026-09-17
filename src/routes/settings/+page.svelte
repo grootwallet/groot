@@ -2008,7 +2008,9 @@
       <span
         >{translate(
           $locale,
-          'Groot uses the RPC node below for confirmed blocks\n      and mempool changes. It does not require Core’s block-filter index. A pruned node can sync while\n      it still retains every block newer than this wallet’s checkpoint; an older rescan needs an archival\n      node or a reindex/re-download with enough history.'
+          node.backend.type === 'remote_core'
+            ? 'Fast remote sync sends this wallet’s public output scripts to the trusted server. The server can associate those scripts and wallet activity with your connection. No private keys, labels, or signing material are sent. Bitcoin Core 29+ and a synced basic block-filter index are required.'
+            : 'Local Core sync matches wallet activity on this Mac. A pruned node can sync while it still retains every block newer than this wallet’s checkpoint; an older rescan needs an archival node or a reindex/re-download with enough history.'
         )}</span
       >
     </div>

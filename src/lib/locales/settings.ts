@@ -367,10 +367,15 @@ export const settingsCopy = {
       fr: 'Les identifiants dans les URL sont refusés. TLS utilise les autorités de confiance du système ; Tor accepte uniquement les destinations .onion.',
       es: 'Se rechazan credenciales en las URL. TLS usa las raíces de confianza del sistema; Tor solo acepta destinos .onion.'
     },
-  'Groot uses the RPC node below for confirmed blocks and mempool changes. It does not require Core’s block-filter index. A pruned node can sync while it still retains every block newer than this wallet’s checkpoint; an older rescan needs an archival node or a reindex/re-download with enough history.':
+  'Fast remote sync sends this wallet’s public output scripts to the trusted server. The server can associate those scripts and wallet activity with your connection. No private keys, labels, or signing material are sent. Bitcoin Core 29+ and a synced basic block-filter index are required.':
     {
-      fr: 'Groot utilise le nœud RPC ci-dessous pour les blocs confirmés et les changements de mempool. L’index des filtres de blocs de Core n’est pas requis. Un nœud élagué peut synchroniser tant qu’il conserve tous les blocs postérieurs au point de contrôle du portefeuille ; une analyse plus ancienne nécessite un nœud d’archive ou une réindexation/un nouveau téléchargement avec assez d’historique.',
-      es: 'Groot usa el nodo RPC inferior para bloques confirmados y cambios de mempool. No requiere el índice de filtros de bloques de Core. Un nodo podado puede sincronizar mientras conserve todos los bloques posteriores al punto de control de la cartera; un escaneo más antiguo necesita un nodo de archivo o una reindexación/nueva descarga con suficiente historial.'
+      fr: 'La synchronisation distante rapide envoie les scripts de sortie publics de ce portefeuille au serveur de confiance. Le serveur peut associer ces scripts et l’activité du portefeuille à votre connexion. Aucune clé privée, étiquette ou donnée de signature n’est envoyée. Bitcoin Core 29+ et un index de filtres de blocs de base entièrement synchronisé sont requis.',
+      es: 'La sincronización remota rápida envía los scripts de salida públicos de esta cartera al servidor de confianza. El servidor puede asociar esos scripts y la actividad de la cartera con tu conexión. No se envían claves privadas, etiquetas ni material de firma. Se requieren Bitcoin Core 29+ y un índice básico de filtros de bloques totalmente sincronizado.'
+    },
+  'Local Core sync matches wallet activity on this Mac. A pruned node can sync while it still retains every block newer than this wallet’s checkpoint; an older rescan needs an archival node or a reindex/re-download with enough history.':
+    {
+      fr: 'La synchronisation Core locale recherche l’activité du portefeuille sur ce Mac. Un nœud élagué peut se synchroniser tant qu’il conserve chaque bloc plus récent que le point de contrôle du portefeuille ; une analyse plus ancienne nécessite un nœud d’archive ou une réindexation/un nouveau téléchargement avec suffisamment d’historique.',
+      es: 'La sincronización Core local busca la actividad de la cartera en este Mac. Un nodo podado puede sincronizar mientras conserve todos los bloques posteriores al punto de control de la cartera; un escaneo más antiguo necesita un nodo de archivo o una reindexación/nueva descarga con suficiente historial.'
     },
   'Import this file in a clean disposable Groot profile and confirm the first receive address matches.':
     {

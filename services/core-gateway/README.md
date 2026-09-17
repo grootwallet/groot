@@ -10,8 +10,10 @@ limits request rate per source/principal and caps handler and Core concurrency.
 Validated JSON-RPC batches are capped at 256 items; request and response byte
 limits still apply to the complete batch.
 
-It does not accept descriptors, addresses, wallet names, wallet RPC methods,
-notifications, arbitrary Core methods, redirects, or URL-selected upstreams.
+It accepts only bounded raw public output scripts for Core's read-only
+`scanblocks` and mempool-only `getdescriptoractivity` methods. It does not accept address or key descriptors, wallet
+names, wallet RPC methods, notifications, arbitrary Core methods, redirects,
+or URL-selected upstreams.
 Request logging is disabled in both the service and supplied NGINX location.
 The node operator can still correlate a client's IP and timing with requested
 blocks or transaction identifiers, and sees transactions submitted for
@@ -47,10 +49,15 @@ size changes.
 Keep Core RPC bound to `127.0.0.1`. Once the gateway is verified, remove the
 NGINX route to port 8332. Core's own `rpcwhitelistdefault=1`, strong `rpcauth`,
 and exact Groot method whitelist remain defense in depth during rollback. The
-whitelist includes read-only `getblockfilter` only for the `basic` filter type;
-Groot batches those public filters and matches wallet scripts locally, so the
-gateway never receives descriptors, addresses, or scripts. Core RPC nodes
-without a synced basic-filter index retain Groot's full-block fallback.
+whitelist includes read-only `scanblocks`, `getdescriptoractivity`, and
+`getblockfilter` only for the
+`basic` filter type. Remote sync sends bounded `raw(script)` scan objects so
+Core performs the indexed match server-side; the service operator can associate
+those public scripts and matching activity with the authenticated principal.
+`getdescriptoractivity` returns only matching mempool transaction identifiers,
+which Groot retrieves and verifies individually instead of downloading the
+public mempool. Private keys, labels, wallet names, and signing material remain
+prohibited. The remote node must run Bitcoin Core 29 or newer.
 
 Run the dependency-free tests directly with:
 

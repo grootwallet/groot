@@ -380,6 +380,17 @@ bounded filter response before batching. This prevents a short Mainnet
 catch-up from approaching the RPC response-body limit without changing the
 verified chain, discovery range, matching rules, or persisted wallet format.
 
+ADR 0070 changes the remote-Core privacy and transport boundary without
+changing BIP support. The trusted server now performs the BIP158 match through
+Bitcoin Core `scanblocks` and mempool-only `getdescriptoractivity` against
+bounded public `raw(script)` scan objects; Groot still verifies the active hash
+range, downloads matching full blocks and pending transactions, and interprets
+them through the same BDK wallet. This discloses the
+queried public scripts to the remote operator but sends no private descriptor,
+key, label, PSBT, or signing material. It is not BIP157 peer-protocol evidence,
+does not change descriptors or wallet formats, and remains pending live gateway
+and exact-package timing evidence.
+
 The subsequent remote-refresh performance and single-flight presentation fix
 has no BIP support impact. Increasing the already-bounded raw-transaction batch,
 observing an active native refresh instead of invoking a duplicate, and reusing
