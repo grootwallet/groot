@@ -802,7 +802,8 @@ progress while its durable checkpoint was only 135 blocks behind the connected
 node. That evidence isolates serial remote raw-block RPC as the bottleneck, not
 wallet size, multisig evaluation, client hardware, node storage, or the later
 mempool phase. Core refresh now uses a synced basic block-filter index when
-available: block hashes and BIP158 filters are read in bounded 256-call batches,
+available: block hashes are read in bounded 256-call batches and variable-size
+BIP158 filters in separate eight-call batches,
 wallet scripts are matched locally, and only matching raw blocks are fetched.
 Start/target chain identity and each fetched block link are verified before the
 complete chain checkpoint and relevant transactions enter the existing atomic
@@ -810,3 +811,14 @@ commit. Gateway and client parameter tests keep `getblockfilter` read-only and
 basic-only. Nodes or gateways without the optional method/index keep the prior
 full-block fallback. This is source evidence until the updated gateway and exact
 packaged build complete the owner's live Mainnet timing retest.
+
+The first exact packaged filter build `f5544e6a` exposed a transport regression
+on that same wallet: its 135 filters were requested in one batch, the remote
+HTTPS response remained in a sustained read for more than five minutes, progress
+stayed at 0%, and the app appeared frozen until cancellation. The wallet's
+durable checkpoint and data remained intact. Hash and filter batch limits are now
+separate, filter responses are capped at eight calls per request, and one filter
+is probed before batching so an undeployed/unsupported gateway falls back
+promptly. This is an implementation correction, not evidence that the live
+Mainnet timing gate has passed; the replacement exact package must still be
+tested against the gateway and Family Test wallet.

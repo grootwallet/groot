@@ -69,6 +69,7 @@ impl jsonrpc::client::Transport for BlockFilterBatchFixture {
                 let hash = self.block_hash_for_request(&request);
                 Self::response(&request, serde_json::to_value(hash)?)
             }
+            "getblockfilter" => Self::response(&request, serde_json::to_value(&self.filter)?),
             other => panic!("unexpected fixture RPC: {other}"),
         }
     }
@@ -105,6 +106,9 @@ fn core_filter_plan_batches_filters_and_keeps_matching_blocks() {
         transaction::Version,
         CompactTarget, FilterHash, ScriptBuf, Sequence, TxMerkleNode, TxOut, Witness,
     };
+
+    assert_eq!(CORE_BLOCK_HASH_BATCH_SIZE, 256);
+    assert_eq!(CORE_BLOCK_FILTER_BATCH_SIZE, 8);
 
     let mnemonic = Mnemonic::from_entropy(&[42; 32]).unwrap();
     let master = root_key(&mnemonic, "filter fixture").unwrap();

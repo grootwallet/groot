@@ -102,7 +102,11 @@ pub(crate) mod activity;
 
 const MAX_PRIVATE_JSON_BYTES: u64 = 256 * 1024;
 const MAX_CREDENTIAL_BYTES: usize = 1_024;
-const CORE_BLOCK_FILTER_BATCH_SIZE: usize = 256;
+// Block hashes are tiny, while BIP158 filters are variable-size, hex-encoded
+// responses. Keep filter batches deliberately small so a busy mainnet range
+// cannot approach the direct-RPC or gateway response-body limit.
+const CORE_BLOCK_HASH_BATCH_SIZE: usize = 256;
+const CORE_BLOCK_FILTER_BATCH_SIZE: usize = 8;
 const MEMPOOL_RPC_BATCH_SIZE: usize = 256;
 const MIN_NEW_WALLET_PASSPHRASE_CHARACTERS: usize = 16;
 const MAX_MNEMONIC_INPUT_BYTES: usize = 4_096;
@@ -2983,7 +2987,7 @@ fn try_core_filter_block_plan(
     }
     let heights = (start_height.saturating_add(1)..=target_height).collect::<Vec<_>>();
     let mut hashes = Vec::with_capacity(heights.len());
-    for batch in heights.chunks(CORE_BLOCK_FILTER_BATCH_SIZE) {
+    for batch in heights.chunks(CORE_BLOCK_HASH_BATCH_SIZE) {
         ensure_foreground_sync_not_cancelled(cancel)?;
         let params = batch
             .iter()
@@ -2996,6 +3000,25 @@ fn try_core_filter_block_plan(
         hashes.extend(batch_hashes);
     }
     if hashes.len() != heights.len() {
+        return Ok(None);
+    }
+
+    // Probe one bounded response before issuing filter batches. A gateway that
+    // has not enabled getblockfilter, or a Core node whose filter index became
+    // unavailable after getindexinfo, should fall back without a large request.
+    let Some(target_hash) = hashes.last() else {
+        return Ok(None);
+    };
+    if client
+        .call::<GetBlockFilterResult>(
+            "getblockfilter",
+            &[
+                serde_json::json!(target_hash.to_string()),
+                serde_json::json!("basic"),
+            ],
+        )
+        .is_err()
+    {
         return Ok(None);
     }
 

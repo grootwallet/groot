@@ -373,6 +373,13 @@ BIP158 implementation evidence but is not BIP157 peer-protocol certification,
 does not change descriptors or discovery semantics, and makes no new public
 interoperability claim until exact-build live timing is recorded.
 
+The 2026-09-17 filter transport correction has no BIP support impact. It keeps
+the same authenticated BIP158 matching and full-block fallback, but separates
+small block-hash batches from variable-size filter batches and probes one
+bounded filter response before batching. This prevents a short Mainnet
+catch-up from approaching the RPC response-body limit without changing the
+verified chain, discovery range, matching rules, or persisted wallet format.
+
 The subsequent remote-refresh performance and single-flight presentation fix
 has no BIP support impact. Increasing the already-bounded raw-transaction batch,
 observing an active native refresh instead of invoking a duplicate, and reusing
