@@ -21,12 +21,23 @@ use super::{api_error, internal, missing_hwi_value, ApiError};
 pub(super) const RPC_UNAVAILABLE_MESSAGE: &str = "Could not connect to Bitcoin Core. Check that the node is running and review the RPC address, authentication, and network settings.";
 pub(super) const RPC_PERMISSION_MESSAGE: &str = "Bitcoin Core accepted the RPC credentials, but this user is missing a required RPC permission. Add Groot's documented RPC methods to the user's rpcwhitelist and restart Bitcoin Core.";
 pub(super) const RPC_PRUNED_HISTORY_MESSAGE: &str = "Bitcoin Core no longer stores the blocks needed for this scan. Choose a birthday above the retained prune height, or connect an archival node.";
+pub(super) const RPC_REMOTE_CAPABILITY_MESSAGE: &str = "The trusted remote server does not support Groot's indexed wallet-sync methods. Deploy the current Groot gateway, use Bitcoin Core 29 or newer, and allow the documented RPC methods.";
 
 pub(super) fn rpc_unavailable() -> ApiError {
     api_error("network_unavailable", RPC_UNAVAILABLE_MESSAGE)
 }
 
 pub(super) fn rpc_api_error(error: CoreRpcError) -> ApiError {
+    match crate::direct_rpc::rejected_http_status(&error) {
+        Some(403) => return api_error("invalid_node_config", RPC_REMOTE_CAPABILITY_MESSAGE),
+        Some(429) => {
+            return api_error(
+                "rate_limited",
+                "The trusted remote server is busy. Wait briefly, then refresh again.",
+            )
+        }
+        _ => {}
+    }
     match error {
         CoreRpcError::JsonRpc(jsonrpc::Error::Rpc(response))
             if response.message.contains("not allowed to call method") =>
@@ -39,6 +50,21 @@ pub(super) fn rpc_api_error(error: CoreRpcError) -> ApiError {
                 .contains("Block not available (pruned data)") =>
         {
             api_error("node_history_unavailable", RPC_PRUNED_HISTORY_MESSAGE)
+        }
+        CoreRpcError::JsonRpc(jsonrpc::Error::Rpc(response))
+            if response.code == -32601
+                || response.message.contains("Method not found")
+                || response.message.contains("Unknown command") =>
+        {
+            api_error("invalid_node_config", RPC_REMOTE_CAPABILITY_MESSAGE)
+        }
+        CoreRpcError::JsonRpc(jsonrpc::Error::Rpc(response))
+            if response.message.contains("Scan already in progress") =>
+        {
+            api_error(
+                "rate_limited",
+                "The trusted remote server is completing another wallet scan. Wait briefly, then refresh again.",
+            )
         }
         _ => rpc_unavailable(),
     }

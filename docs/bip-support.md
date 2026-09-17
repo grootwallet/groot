@@ -391,6 +391,13 @@ key, label, PSBT, or signing material. It is not BIP157 peer-protocol evidence,
 does not change descriptors or wallet formats, and remains pending live gateway
 and exact-package timing evidence.
 
+The follow-up timeout, capability-preflight, error-classification, and multisig
+retry-routing corrections have no additional BIP impact. They do not change
+descriptor derivation, script matching, transaction interpretation, signing,
+or persisted wallet data; they make the already selected trusted remote-Core
+transport fail fast when its deployed gateway is incompatible and allow its
+synchronous indexed scan enough time to return.
+
 The subsequent remote-refresh performance and single-flight presentation fix
 has no BIP support impact. Increasing the already-bounded raw-transaction batch,
 observing an active native refresh instead of invoking a duplicate, and reusing

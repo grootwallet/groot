@@ -267,6 +267,17 @@ class GatewayIntegrationTests(unittest.TestCase):
             status, result, _ = self.request(request, auth=authorization())
         self.assertEqual((status, result), (502, {"error": "core_unavailable"}))
 
+    def test_uses_the_extended_timeout_only_for_indexed_block_scans(self) -> None:
+        response = mock.Mock(status=200)
+        response.read.return_value = b"{}"
+        connection = mock.Mock()
+        connection.getresponse.return_value = response
+        with mock.patch("gateway.http.client.HTTPConnection", return_value=connection) as factory:
+            self.gateway._call_core({"id": 1, "method": "scanblocks", "params": []})
+            self.assertEqual(factory.call_args.kwargs["timeout"], 120.0)
+            self.gateway._call_core({"id": 2, "method": "getblockcount", "params": []})
+            self.assertEqual(factory.call_args.kwargs["timeout"], 10.0)
+
 
 class GatewayValidationTests(unittest.TestCase):
     def test_rejects_world_accessible_private_files(self) -> None:
@@ -311,6 +322,8 @@ class GatewayValidationTests(unittest.TestCase):
                 "method": "getdescriptoractivity",
                 "params": [[], ["raw(0014" + "11" * 20 + ")"], True],
             },
+            {"id": 1, "method": "help", "params": ["scanblocks"]},
+            {"id": 1, "method": "help", "params": ["getdescriptoractivity"]},
             {"id": 1, "method": "getrawmempool", "params": []},
             {"id": 1, "method": "getrawtransaction", "params": [HASH, False]},
             {"id": 1, "method": "getrawtransaction", "params": [HASH, True, HASH]},
@@ -364,6 +377,8 @@ class GatewayValidationTests(unittest.TestCase):
                 "method": "getdescriptoractivity",
                 "params": [[], ["raw(0014" + "11" * 20 + ")"], False],
             },
+            {"id": 1, "method": "help", "params": []},
+            {"id": 1, "method": "help", "params": ["stop"]},
             {"id": 1, "method": "getindexinfo", "params": ["basic block filter index"]},
             {"id": 1, "method": "sendrawtransaction", "params": ["0200", 0.1]},
         ]

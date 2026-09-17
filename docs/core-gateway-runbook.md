@@ -47,8 +47,10 @@ Groot client -- HTTPS/Basic --> NGINX :443
    is the gateway's preferred upstream authentication; a strong `rpcauth`
    identity remains an operator recovery path, not a client credential.
    Enable `blockfilterindex=1`, wait until the basic index is fully synced, and
-   include read-only `scanblocks` and `getdescriptoractivity` in the gateway's
-   Core whitelist. The remote node must run Bitcoin Core 29 or newer.
+   include read-only `scanblocks`, `getdescriptoractivity`, and `help` in the
+   gateway's Core whitelist. `help` is accepted by the gateway only for those
+   two indexed-sync method names so clients can fail capability checks before
+   a wallet scan. The remote node must run Bitcoin Core 29 or newer.
 
 ## Pre-cutover verification
 

@@ -837,3 +837,17 @@ There is no persisted-format migration. The source and local gateway tests are
 not live evidence: Bitcoin Core 29+, `scanblocks`, `getdescriptoractivity`, the
 matching RPC whitelist, and the synced basic filter index must be deployed
 before the replacement Mainnet package can pass the Family Test timing gate.
+
+The first packaged ADR 0070 run exposed three integration defects before that
+live gate: an offline Mainnet preflight left Overview's command-family flag at
+its single-key default and therefore sent a multisig retry to the wrong native
+command; the connection test checked only generic Core health and could report
+an outdated gateway as ready; and the gateway's ordinary ten-second upstream
+timeout could abandon a still-running synchronous `scanblocks` request. The
+follow-up binds retry dispatch to the selected profile before any preflight,
+checks the two indexed methods through exact allowlisted `help` calls, uses one
+five-second health attempt, maps rejected/missing capabilities to stable
+configuration guidance, and gives only `scanblocks` a 120-second client and
+gateway bound. No wallet, profile, proposal, registry, backup, descriptor,
+node-settings, or diagnostic format changes; no migration is required. Live
+gateway deployment and exact-package Mainnet timing evidence remain required.

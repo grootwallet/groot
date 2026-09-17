@@ -49,15 +49,18 @@ size changes.
 Keep Core RPC bound to `127.0.0.1`. Once the gateway is verified, remove the
 NGINX route to port 8332. Core's own `rpcwhitelistdefault=1`, strong `rpcauth`,
 and exact Groot method whitelist remain defense in depth during rollback. The
-whitelist includes read-only `scanblocks`, `getdescriptoractivity`, and
-`getblockfilter` only for the
+whitelist includes read-only `scanblocks`, `getdescriptoractivity`, narrowly
+scoped `help` probes for those two methods, and `getblockfilter` only for the
 `basic` filter type. Remote sync sends bounded `raw(script)` scan objects so
 Core performs the indexed match server-side; the service operator can associate
 those public scripts and matching activity with the authenticated principal.
 `getdescriptoractivity` returns only matching mempool transaction identifiers,
 which Groot retrieves and verifies individually instead of downloading the
 public mempool. Private keys, labels, wallet names, and signing material remain
-prohibited. The remote node must run Bitcoin Core 29 or newer.
+prohibited. The remote node must run Bitcoin Core 29 or newer. Ordinary
+upstream RPC remains bounded to ten seconds; only the synchronous indexed
+`scanblocks` call receives a 120-second upstream bound so a valid scan is not
+orphaned by the gateway's ordinary health-check timeout.
 
 Run the dependency-free tests directly with:
 

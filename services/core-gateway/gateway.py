@@ -208,6 +208,7 @@ class GatewayConfig:
     core_host: str = "127.0.0.1"
     core_port: int = 8332
     core_timeout_seconds: float = 10.0
+    scan_timeout_seconds: float = 120.0
 
 
 class Gateway:
@@ -255,6 +256,12 @@ class Gateway:
 
     def _call_core(self, request: Any) -> bytes:
         encoded = json.dumps(request, separators=(",", ":"), ensure_ascii=True).encode("ascii")
+        requests = request if isinstance(request, list) else [request]
+        timeout = (
+            self.config.scan_timeout_seconds
+            if any(item.get("method") == "scanblocks" for item in requests)
+            else self.config.core_timeout_seconds
+        )
         if not self.upstream_slots.acquire(blocking=False):
             raise RequestRejected(503, "gateway_busy")
         try:
@@ -263,7 +270,7 @@ class Gateway:
                 connection = http.client.HTTPConnection(
                     self.config.core_host,
                     self.config.core_port,
-                    timeout=self.config.core_timeout_seconds,
+                    timeout=timeout,
                 )
                 connection.request(
                     "POST",
@@ -409,6 +416,10 @@ def descriptor_activity_params(params: list[Any]) -> bool:
     )
 
 
+def help_params(params: list[Any]) -> bool:
+    return len(params) == 1 and params[0] in {"scanblocks", "getdescriptoractivity"}
+
+
 def raw_transaction_params(params: list[Any]) -> bool:
     return (
         2 <= len(params) <= 3
@@ -460,6 +471,7 @@ METHOD_VALIDATORS: dict[str, Callable[[list[Any]], bool]] = {
     "getblockfilter": block_filter_params,
     "scanblocks": scan_blocks_params,
     "getdescriptoractivity": descriptor_activity_params,
+    "help": help_params,
     "getrawmempool": raw_mempool_params,
     "getrawtransaction": raw_transaction_params,
     "getmempoolentry": lambda params: len(params) == 1 and hash_value(params[0]),

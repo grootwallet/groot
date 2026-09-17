@@ -1,4 +1,5 @@
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
+use bdk_bitcoind_rpc::bitcoincore_rpc::Error as CoreRpcError;
 use jsonrpc::{client::Transport, Error as JsonRpcError, Request, Response};
 use serde::{de::DeserializeOwned, Serialize};
 use std::{
@@ -22,7 +23,7 @@ enum DirectRpcError {
     #[error("the Bitcoin Core RPC response is too large")]
     ResponseTooLarge,
     #[error("the Bitcoin Core RPC endpoint rejected the request")]
-    HttpRejected,
+    HttpRejected(u16),
     #[error("the Bitcoin Core RPC transport failed")]
     TransportFailed,
     #[error("the Bitcoin Core RPC response is malformed")]
@@ -89,7 +90,9 @@ impl DirectRpcTransport {
             .send_lazy()
             .map_err(|_| transport_error(DirectRpcError::TransportFailed))?;
         if response.status_code != 200 {
-            return Err(transport_error(DirectRpcError::HttpRejected));
+            return Err(transport_error(DirectRpcError::HttpRejected(
+                u16::try_from(response.status_code).unwrap_or(0),
+            )));
         }
         let mut encoded = Vec::new();
         std::io::Read::take(&mut response, (MAX_RPC_BODY_BYTES + 1) as u64)
@@ -267,7 +270,7 @@ fn parse_loopback_header(encoded: &[u8]) -> Result<usize, JsonRpcError> {
         return Err(transport_error(DirectRpcError::MalformedResponse));
     }
     if status != 200 {
-        return Err(transport_error(DirectRpcError::HttpRejected));
+        return Err(transport_error(DirectRpcError::HttpRejected(status)));
     }
     let mut content_length = None;
     for line in lines {
@@ -325,6 +328,16 @@ impl Transport for DirectRpcTransport {
 
 fn transport_error(error: DirectRpcError) -> JsonRpcError {
     JsonRpcError::Transport(Box::new(error))
+}
+
+pub(crate) fn rejected_http_status(error: &CoreRpcError) -> Option<u16> {
+    let CoreRpcError::JsonRpc(JsonRpcError::Transport(source)) = error else {
+        return None;
+    };
+    match source.downcast_ref::<DirectRpcError>()? {
+        DirectRpcError::HttpRejected(status) => Some(*status),
+        _ => None,
+    }
 }
 
 #[cfg(test)]
@@ -478,6 +491,31 @@ mod tests {
             serde_json::from_str(response.result.unwrap().get()).unwrap();
         assert_eq!(result["chain"], "testnet4");
         release_sender.send(()).unwrap();
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn exposes_only_the_rejected_http_status_for_error_translation() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            read_http_request(&mut stream);
+            stream
+                .write_all(
+                    b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                )
+                .unwrap();
+        });
+        let transport = DirectRpcTransport::new(
+            &format!("http://{address}"),
+            Some("groot"),
+            Some("secret"),
+            Duration::from_secs(1),
+        );
+        let error = transport.send_request(rpc_request()).unwrap_err();
+        let error = CoreRpcError::JsonRpc(error);
+        assert_eq!(rejected_http_status(&error), Some(403));
         server.join().unwrap();
     }
 

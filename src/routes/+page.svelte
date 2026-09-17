@@ -382,6 +382,10 @@
       syncSource = nextSyncSource;
       selectedProfile =
         registry.wallets.find((wallet) => wallet.id === registry.selectedWalletId) ?? null;
+      // Set the command family before any network preflight can fail. Otherwise
+      // a retry after an offline preflight uses the single-key command for a
+      // selected multisig wallet and returns `wrong_wallet_kind`.
+      multisig = selectedProfile?.kind === 'multisig';
       nodeReady = Boolean(
         selectedProfile &&
         networkSetupSources.some(
@@ -390,7 +394,6 @@
       );
       if (isMainnet && nodeReady) await walletService.testNodeConnection();
       if (generation !== loadGeneration) return;
-      multisig = selectedProfile?.kind === 'multisig';
       if (!selectedProfile)
         throw new WalletError('wallet_not_found', 'The selected wallet does not exist.');
       const nextSnapshot = await walletService.overview(selectedProfile.id);

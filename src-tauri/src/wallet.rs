@@ -124,8 +124,9 @@ const MAX_SUPPLEMENTAL_DICE_ROLLS: usize = 100;
 const SUPPLEMENTAL_TRANSCRIPT_DOMAIN: &[u8] = b"Groot supplemental entropy transcript v1";
 const SUPPLEMENTAL_MIX_DOMAIN: &[u8] = b"Groot BIP39 entropy mix v1";
 const RPC_TIMEOUT: Duration = Duration::from_secs(15);
-const NODE_HEALTH_RPC_TIMEOUT: Duration = Duration::from_secs(8);
-const NODE_HEALTH_ATTEMPTS: usize = 2;
+const REMOTE_CORE_SCAN_RPC_TIMEOUT: Duration = Duration::from_secs(120);
+const NODE_HEALTH_RPC_TIMEOUT: Duration = Duration::from_secs(5);
+const NODE_HEALTH_ATTEMPTS: usize = 1;
 const CORE_RPC_ATTEMPTS: usize = 3;
 const NODE_HEALTH_RETRY_DELAY: Duration = Duration::from_millis(200);
 const MAINNET_NODE_ADMISSION_LIFETIME: Duration = Duration::from_secs(15 * 60);
@@ -2996,6 +2997,7 @@ fn core_scan_objects(wallet: &Wallet) -> ApiResult<Vec<String>> {
 
 fn core_server_scan_block_plan(
     client: &Client,
+    scan_client: &Client,
     wallet: &Wallet,
     wallet_tip: &CheckPoint,
     target_height: u32,
@@ -3026,7 +3028,7 @@ fn core_server_scan_block_plan(
     let first_height = start_height.saturating_add(1);
     // A lost response may leave Core's global scan running. Do not retry
     // `start` automatically and accidentally collide with that in-flight scan.
-    let scan = client
+    let scan = scan_client
         .call::<CoreScanBlocksResult>(
             "scanblocks",
             &[
@@ -3504,6 +3506,34 @@ fn checked_node_status(client: &Client, backend: CoreNodeConfig) -> ApiResult<No
         || checked_node_status_once(client, backend.clone()),
         std::thread::sleep,
     )
+}
+
+fn ensure_remote_core_sync_capabilities(client: &Client) -> ApiResult<()> {
+    let jsonrpc = client.get_jsonrpc_client();
+    let raw_params = ["scanblocks", "getdescriptoractivity"]
+        .into_iter()
+        .map(|method| serde_json::value::to_raw_value(&[method]).map_err(internal))
+        .collect::<ApiResult<Vec<_>>>()?;
+    let requests = raw_params
+        .iter()
+        .map(|params| jsonrpc.build_request("help", Some(params.as_ref())))
+        .collect::<Vec<_>>();
+    let responses = jsonrpc
+        .send_batch(&requests)
+        .map_err(|error| rpc_api_error(CoreRpcError::JsonRpc(error)))?;
+    if responses.len() != requests.len() {
+        return Err(api_error(
+            "invalid_node_config",
+            RPC_REMOTE_CAPABILITY_MESSAGE,
+        ));
+    }
+    for response in responses {
+        response
+            .ok_or_else(|| api_error("invalid_node_config", RPC_REMOTE_CAPABILITY_MESSAGE))?
+            .result::<String>()
+            .map_err(|error| rpc_api_error(CoreRpcError::JsonRpc(error)))?;
+    }
+    Ok(())
 }
 
 fn ensure_expected_network(observed: Network) -> ApiResult<()> {
@@ -5923,9 +5953,24 @@ fn sync_wallet_with_core(
         read_node_config(app)?.backend,
         ChainBackend::RemoteCore { .. }
     );
+    if remote_core {
+        ensure_remote_core_sync_capabilities(rpc.as_ref())?;
+    }
+    let remote_scan_rpc = if remote_core {
+        Some(rpc_client_with_timeout(
+            app,
+            state,
+            REMOTE_CORE_SCAN_RPC_TIMEOUT,
+        )?)
+    } else {
+        None
+    };
     let block_plan = if remote_core {
         Some(core_server_scan_block_plan(
             rpc.as_ref(),
+            remote_scan_rpc
+                .as_ref()
+                .expect("remote scan client exists for remote Core"),
             &wallet,
             &wallet_tip,
             target_height,

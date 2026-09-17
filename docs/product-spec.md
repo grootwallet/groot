@@ -164,8 +164,10 @@ If the saved Core endpoint is unreachable on unlock, Mainnet wallet-data reads
 remain admission-gated. Overview must identify the node outage, stop its loading
 skeleton, and offer a direct retry of the saved connection. It must not label the
 wallet “Never synced” merely because this session could not load its persisted
-snapshot. The connection check has a bounded timeout and must not hold the
-renderer thread. No failed network check may erase or replace committed history.
+snapshot. The connection check uses one five-second network attempt and must
+not hold the renderer thread. For remote Core activity sync it also verifies the
+two indexed-sync methods before reporting **Connected**. No failed network check
+may erase or replace committed history.
 
 ## Receive
 
@@ -256,8 +258,12 @@ pending transaction identifiers and raw transactions rather than the complete
 public mempool. The operator can associate those scripts and wallet activity
 with the connection. Settings discloses that tradeoff; private keys, labels,
 wallet names, PSBTs, and signing material are never sent. Remote Core requires
-Bitcoin Core 29+, a synced basic block-filter index, and both RPC permissions;
-it does not silently fall back to slow full-block or full-mempool scans. Local
+Bitcoin Core 29+, a synced basic block-filter index, both RPC permissions, and
+the narrowly scoped capability probes documented for the gateway. Only the
+synchronous indexed block scan receives a 120-second request bound; health and
+ordinary RPC remain short. An offline preflight must still select the correct
+single-key, hardware, or multisig command family on retry. Remote mode does not
+silently fall back to slow full-block or full-mempool scans. Local
 Core and the separate P2P compact-filter source retain their existing privacy
 and fallback behavior.
 

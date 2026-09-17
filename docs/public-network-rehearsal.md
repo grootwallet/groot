@@ -11,7 +11,7 @@ This runbook produces network-specific desktop builds without enabling mainnet. 
 If Bitcoin Core uses `rpcwhitelist`, Groot's RPC user must allow the following methods:
 
 ```ini
-rpcwhitelist=groot-testnet4:getblockchaininfo,getblockcount,getblockhash,getblock,getblockfilter,scanblocks,getdescriptoractivity,getrawmempool,getrawtransaction,getmempoolentry,getmempoolinfo,getindexinfo,estimatesmartfee,sendrawtransaction
+rpcwhitelist=groot-testnet4:getblockchaininfo,getblockcount,getblockhash,getblock,getblockfilter,scanblocks,getdescriptoractivity,help,getrawmempool,getrawtransaction,getmempoolentry,getmempoolinfo,getindexinfo,estimatesmartfee,sendrawtransaction
 ```
 
 Use the network-specific username in place of `groot-testnet4` where appropriate. Keep `rpcwhitelistdefault=1` and bind RPC only to the intended interface. Groot deliberately calls the modern typed `getblockchaininfo` response directly instead of adding the dependency's compatibility-only `getnetworkinfo` probe. RBF reads Core's authoritative incremental-relay replacement policy through the read-only `getmempoolinfo` method. Remote Core activity sync requires Bitcoin Core 29+, uses read-only `scanblocks` and mempool-only `getdescriptoractivity` with bounded public output scripts, and requires a synced basic-filter index; the node operator can associate those scripts with the client connection. Local Core may use `getblockfilter` as an optional client-side accelerator and retains its full-block fallback. The list above remains least privilege. A whitelist rejection becomes a stable permission message; Core's raw RPC response is never displayed.

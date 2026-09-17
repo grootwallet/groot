@@ -32,6 +32,61 @@ struct DescriptorActivityFixture {
     activity_params: Arc<Mutex<Vec<serde_json::Value>>>,
 }
 
+struct RemoteCapabilityFixture {
+    batches: Arc<AtomicU64>,
+    supported: bool,
+}
+
+impl jsonrpc::client::Transport for RemoteCapabilityFixture {
+    fn send_request(
+        &self,
+        request: jsonrpc::Request<'_>,
+    ) -> Result<jsonrpc::Response, jsonrpc::Error> {
+        panic!("unexpected capability fixture request: {}", request.method)
+    }
+
+    fn send_batch(
+        &self,
+        requests: &[jsonrpc::Request<'_>],
+    ) -> Result<Vec<jsonrpc::Response>, jsonrpc::Error> {
+        self.batches.fetch_add(1, Ordering::Relaxed);
+        if !self.supported {
+            return requests
+                .iter()
+                .map(|request| {
+                    serde_json::from_value(serde_json::json!({
+                        "result": null,
+                        "error": {
+                            "code": -32601,
+                            "message": "Method not found"
+                        },
+                        "id": request.id,
+                        "jsonrpc": "2.0"
+                    }))
+                    .map_err(jsonrpc::Error::Json)
+                })
+                .collect();
+        }
+        requests
+            .iter()
+            .map(|request| {
+                assert_eq!(request.method, "help");
+                let params: Vec<String> =
+                    serde_json::from_str(request.params.expect("help parameters").get())?;
+                assert!(matches!(
+                    params.as_slice(),
+                    [method] if method == "scanblocks" || method == "getdescriptoractivity"
+                ));
+                BlockFilterBatchFixture::response(request, serde_json::json!("supported"))
+            })
+            .collect()
+    }
+
+    fn fmt_target(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("remote capability fixture")
+    }
+}
+
 impl jsonrpc::client::Transport for DescriptorActivityFixture {
     fn send_request(
         &self,
@@ -276,9 +331,16 @@ fn remote_core_scan_sends_only_bounded_raw_scripts_and_keeps_matching_blocks() {
     };
     let rpc = Client::from_jsonrpc(jsonrpc::client::Client::with_transport(fixture));
     let status = Arc::new(Mutex::new(None));
-    let plan =
-        core_server_scan_block_plan(&rpc, &wallet, &wallet.latest_checkpoint(), 1, None, &status)
-            .unwrap();
+    let plan = core_server_scan_block_plan(
+        &rpc,
+        &rpc,
+        &wallet,
+        &wallet.latest_checkpoint(),
+        1,
+        None,
+        &status,
+    )
+    .unwrap();
 
     assert_eq!(plan.checkpoint.height(), 1);
     assert_eq!(plan.checkpoint.hash(), block_hash);
@@ -295,6 +357,29 @@ fn remote_core_scan_sends_only_bounded_raw_scripts_and_keeps_matching_blocks() {
     assert_eq!(params[2], 1);
     assert_eq!(params[3], 1);
     assert_eq!(params[4], "basic");
+}
+
+#[test]
+fn remote_core_capabilities_use_one_batch_and_fail_closed() {
+    let batches = Arc::new(AtomicU64::new(0));
+    let rpc = Client::from_jsonrpc(jsonrpc::client::Client::with_transport(
+        RemoteCapabilityFixture {
+            batches: Arc::clone(&batches),
+            supported: true,
+        },
+    ));
+    ensure_remote_core_sync_capabilities(&rpc).unwrap();
+    assert_eq!(batches.load(Ordering::Relaxed), 1);
+
+    let rpc = Client::from_jsonrpc(jsonrpc::client::Client::with_transport(
+        RemoteCapabilityFixture {
+            batches: Arc::new(AtomicU64::new(0)),
+            supported: false,
+        },
+    ));
+    let error = ensure_remote_core_sync_capabilities(&rpc).unwrap_err();
+    assert_eq!(error.code, "invalid_node_config");
+    assert_eq!(error.message, RPC_REMOTE_CAPABILITY_MESSAGE);
 }
 
 #[test]
@@ -1279,6 +1364,21 @@ fn rpc_whitelist_rejection_is_actionable_without_exposing_core_details() {
 }
 
 #[test]
+fn missing_remote_sync_method_is_actionable_without_exposing_core_details() {
+    let error = rpc_api_error(CoreRpcError::JsonRpc(jsonrpc::Error::Rpc(
+        jsonrpc::error::RpcError {
+            code: -32601,
+            message: "Method not found: getdescriptoractivity".to_owned(),
+            data: None,
+        },
+    )));
+
+    assert_eq!(error.code, "invalid_node_config");
+    assert_eq!(error.message, RPC_REMOTE_CAPABILITY_MESSAGE);
+    assert!(!error.message.contains("getdescriptoractivity"));
+}
+
+#[test]
 fn pruned_block_rpc_failure_is_actionable_without_exposing_core_details() {
     let error = rpc_api_error(CoreRpcError::JsonRpc(jsonrpc::Error::Rpc(
         jsonrpc::error::RpcError {
@@ -1333,27 +1433,20 @@ fn core_scanner_retries_transient_transport_failures_and_sanitizes_exhaustion() 
 }
 
 #[test]
-fn node_health_retries_only_transient_transport_failures() {
+fn node_health_uses_one_bounded_attempt_and_never_retries_policy_failures() {
     let mut attempts = 0;
     let mut pauses = Vec::new();
-    let result = retry_transient_node_health(
+    let error = retry_transient_node_health(
         || {
             attempts += 1;
-            if attempts < NODE_HEALTH_ATTEMPTS {
-                Err(rpc_unavailable())
-            } else {
-                Ok(149_142_u64)
-            }
+            Err::<(), _>(rpc_unavailable())
         },
         |delay| pauses.push(delay),
     )
-    .unwrap();
-    assert_eq!(result, 149_142);
+    .unwrap_err();
+    assert_eq!(error.code, "network_unavailable");
     assert_eq!(attempts, NODE_HEALTH_ATTEMPTS);
-    assert_eq!(
-        pauses,
-        vec![NODE_HEALTH_RETRY_DELAY; NODE_HEALTH_ATTEMPTS - 1]
-    );
+    assert!(pauses.is_empty());
 
     let mut attempts = 0;
     let error = retry_transient_node_health(

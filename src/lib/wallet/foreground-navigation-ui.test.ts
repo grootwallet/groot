@@ -157,6 +157,9 @@ describe('foreground wallet navigation', () => {
     expect(overview).toContain(
       'if (isMainnet && nodeReady) await walletService.testNodeConnection()'
     );
+    expect(overview.indexOf("multisig = selectedProfile?.kind === 'multisig'")).toBeLessThan(
+      overview.indexOf('if (isMainnet && nodeReady) await walletService.testNodeConnection()')
+    );
     expect(overview).toContain("await goto('/settings?networkSetup=1')");
     expect(
       overview.indexOf('if (isMainnet && nodeReady) await walletService.testNodeConnection()')
