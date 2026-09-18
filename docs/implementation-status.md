@@ -914,3 +914,17 @@ was reintroduced. No wallet, registry, descriptor,
 proposal, backup, node-setting, dependency, DTO, or schema format changes; no
 migration is required. Exact replacement-package repeat-scan timing and
 Mainnet hardware certification remain owner acceptance gates.
+
+The first exact `6a25085` owner retest then exposed a deployment mismatch rather
+than a wallet or Core performance limit: the client and gateway allowed each
+indexed range 120 seconds, but the live outer NGINX route still terminated reads
+after 15 seconds. Core continued that abandoned process-wide scan, so unlock
+refresh failed and the next birthday scan correctly encountered Core's active
+scanner. The live route now uses the repository's 125-second outer bound. The
+gateway additionally serializes its process-wide indexed scan slot and reports a
+concurrent request as `scan_in_progress` rather than a missing connection. A
+wallet-independent live check completed the selected-tip 64-block range in
+0.012 seconds and confirmed the chunked genesis workload progresses on the
+indexed Core path. No wallet, registry, descriptor, proposal, backup,
+node-setting, dependency, DTO, or schema format changes; no migration is
+required. Exact replacement-package wallet-script timing remains an owner gate.

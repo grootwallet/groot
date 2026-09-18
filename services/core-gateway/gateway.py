@@ -217,6 +217,10 @@ class Gateway:
         self.ip_limits = TokenBuckets(rate=10.0, burst=20.0)
         self.principal_limits = TokenBuckets(rate=25.0, burst=100.0)
         self.upstream_slots = threading.BoundedSemaphore(MAX_UPSTREAM_CONCURRENCY)
+        # Bitcoin Core exposes one process-wide scanblocks worker. Reject a
+        # second indexed scan at the gateway instead of letting it collide
+        # with Core or occupy a handler until the active scan finishes.
+        self.scan_slot = threading.BoundedSemaphore(1)
         self._id_lock = threading.Lock()
         self._next_id = 0
 
@@ -257,12 +261,20 @@ class Gateway:
     def _call_core(self, request: Any) -> bytes:
         encoded = json.dumps(request, separators=(",", ":"), ensure_ascii=True).encode("ascii")
         requests = request if isinstance(request, list) else [request]
+        indexed_scan = any(item.get("method") == "scanblocks" for item in requests)
         timeout = (
             self.config.scan_timeout_seconds
-            if any(item.get("method") == "scanblocks" for item in requests)
+            if indexed_scan
             else self.config.core_timeout_seconds
         )
+        scan_acquired = False
+        if indexed_scan:
+            scan_acquired = self.scan_slot.acquire(blocking=False)
+            if not scan_acquired:
+                raise RequestRejected(503, "gateway_busy")
         if not self.upstream_slots.acquire(blocking=False):
+            if scan_acquired:
+                self.scan_slot.release()
             raise RequestRejected(503, "gateway_busy")
         try:
             try:
@@ -289,6 +301,8 @@ class Gateway:
                 raise RequestRejected(502, "core_unavailable") from None
         finally:
             self.upstream_slots.release()
+            if scan_acquired:
+                self.scan_slot.release()
         if response.status != 200 or len(response_body) > MAX_RESPONSE_BYTES:
             raise RequestRejected(502, "core_unavailable")
         return response_body

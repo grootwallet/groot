@@ -60,7 +60,11 @@ public mempool. Private keys, labels, wallet names, and signing material remain
 prohibited. The remote node must run Bitcoin Core 29 or newer. Ordinary
 upstream RPC remains bounded to ten seconds; only the synchronous indexed
 `scanblocks` call receives a 120-second upstream bound so a valid scan is not
-orphaned by the gateway's ordinary health-check timeout.
+orphaned by the gateway's ordinary health-check timeout. The supplied NGINX
+location keeps its outer read timeout at 125 seconds, above that gateway bound.
+The gateway also admits only one `scanblocks` request at a time because Core's
+indexed scanner is process-wide; a concurrent request receives a bounded busy
+response before Core is contacted.
 
 Run the dependency-free tests directly with:
 

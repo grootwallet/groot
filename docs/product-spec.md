@@ -269,7 +269,7 @@ silently fall back to slow full-block or full-mempool scans. Local
 Core and the separate P2P compact-filter source retain their existing privacy
 and fallback behavior.
 
-Explicit birthday and genesis rescans use the same indexed remote-Core path as ordinary refresh: one bounded server-side `scanblocks` range, metadata and full-block downloads only for matching hashes, a sparse verified target checkpoint, and the bounded descriptor-activity mempool pass. Groot does not walk every height or download every block over HTTPS. Local Core keeps its complete block-by-block recovery path, with guarded per-block checkpoints for interruption recovery.
+Explicit birthday and genesis rescans use the same indexed remote-Core path as ordinary refresh: sequential bounded server-side `scanblocks` ranges, metadata and full-block downloads only for matching hashes, a sparse verified target checkpoint, and the bounded descriptor-activity mempool pass. Groot does not walk every height or download every block over HTTPS. The shared gateway admits one indexed scan at a time and its outer proxy timeout exceeds the scan-operation bound. Local Core keeps its complete block-by-block recovery path, with guarded per-block checkpoints for interruption recovery.
 
 An explicit Overview refresh cancels and fully drains any scheduler-owned ordinary sync before starting the user-visible operation, then restores the normal automatic interval afterward. Recovery-scan progress reads run away from the native UI thread so frequent status polling does not interrupt animation or input responsiveness.
 

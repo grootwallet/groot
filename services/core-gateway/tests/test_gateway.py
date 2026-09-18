@@ -261,6 +261,22 @@ class GatewayIntegrationTests(unittest.TestCase):
             for _ in range(acquired):
                 self.server._handler_slots.release()
 
+    def test_rejects_a_second_indexed_scan_before_contacting_core(self) -> None:
+        self.assertTrue(self.gateway.scan_slot.acquire(blocking=False))
+        try:
+            status, result, _ = self.request(
+                {
+                    "id": 1,
+                    "method": "scanblocks",
+                    "params": ["start", ["raw(0014" + "11" * 20 + ")"], 1, 100, "basic"],
+                },
+                auth=authorization(),
+            )
+            self.assertEqual((status, result), (503, {"error": "gateway_busy"}))
+            self.assertEqual(self.core.requests, [])
+        finally:
+            self.gateway.scan_slot.release()
+
     def test_rejects_an_oversized_core_response(self) -> None:
         request = {"id": 1, "method": "getblockcount", "params": []}
         with mock.patch("gateway.MAX_RESPONSE_BYTES", 16):
@@ -280,6 +296,11 @@ class GatewayIntegrationTests(unittest.TestCase):
 
 
 class GatewayValidationTests(unittest.TestCase):
+    def test_outer_proxy_timeout_exceeds_the_indexed_scan_timeout(self) -> None:
+        nginx = (SERVICE / "deploy" / "nginx-location.conf").read_text()
+        self.assertIn("scan_timeout_seconds: float = 120.0", (SERVICE / "gateway.py").read_text())
+        self.assertIn("proxy_read_timeout 125s;", nginx)
+
     def test_rejects_world_accessible_private_files(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "clients.json"

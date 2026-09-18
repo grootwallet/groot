@@ -22,21 +22,33 @@ pub(super) const RPC_UNAVAILABLE_MESSAGE: &str = "Could not connect to Bitcoin C
 pub(super) const RPC_PERMISSION_MESSAGE: &str = "Bitcoin Core accepted the RPC credentials, but this user is missing a required RPC permission. Add Groot's documented RPC methods to the user's rpcwhitelist and restart Bitcoin Core.";
 pub(super) const RPC_PRUNED_HISTORY_MESSAGE: &str = "Bitcoin Core no longer stores the blocks needed for this scan. Choose a birthday above the retained prune height, or connect an archival node.";
 pub(super) const RPC_REMOTE_CAPABILITY_MESSAGE: &str = "The trusted remote server does not support Groot's indexed wallet-sync methods. Deploy the current Groot gateway, use Bitcoin Core 29 or newer, and allow the documented RPC methods.";
+pub(super) const RPC_BUSY_MESSAGE: &str =
+    "The trusted remote server is completing another wallet scan. Wait briefly, then refresh again.";
+
+pub(super) fn rejected_http_api_error(status: u16) -> Option<ApiError> {
+    match status {
+        403 => Some(api_error(
+            "invalid_node_config",
+            RPC_REMOTE_CAPABILITY_MESSAGE,
+        )),
+        429 => Some(api_error(
+            "rate_limited",
+            "The trusted remote server is busy. Wait briefly, then refresh again.",
+        )),
+        503 => Some(api_error("scan_in_progress", RPC_BUSY_MESSAGE)),
+        _ => None,
+    }
+}
 
 pub(super) fn rpc_unavailable() -> ApiError {
     api_error("network_unavailable", RPC_UNAVAILABLE_MESSAGE)
 }
 
 pub(super) fn rpc_api_error(error: CoreRpcError) -> ApiError {
-    match crate::direct_rpc::rejected_http_status(&error) {
-        Some(403) => return api_error("invalid_node_config", RPC_REMOTE_CAPABILITY_MESSAGE),
-        Some(429) => {
-            return api_error(
-                "rate_limited",
-                "The trusted remote server is busy. Wait briefly, then refresh again.",
-            )
-        }
-        _ => {}
+    if let Some(error) =
+        crate::direct_rpc::rejected_http_status(&error).and_then(rejected_http_api_error)
+    {
+        return error;
     }
     match error {
         CoreRpcError::JsonRpc(jsonrpc::Error::Rpc(response))
@@ -61,10 +73,7 @@ pub(super) fn rpc_api_error(error: CoreRpcError) -> ApiError {
         CoreRpcError::JsonRpc(jsonrpc::Error::Rpc(response))
             if response.message.contains("Scan already in progress") =>
         {
-            api_error(
-                "rate_limited",
-                "The trusted remote server is completing another wallet scan. Wait briefly, then refresh again.",
-            )
+            api_error("scan_in_progress", RPC_BUSY_MESSAGE)
         }
         _ => rpc_unavailable(),
     }

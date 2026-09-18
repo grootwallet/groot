@@ -441,6 +441,11 @@ impact. It submits the same bounded public scripts to Core's indexed BIP158
 block hashes, and preserves the same descriptor derivation, matching, transaction
 interpretation, PSBT, signing, wallet-format, and interoperability behavior.
 
+The outer-proxy timeout and gateway scan-serialization correction has no BIP
+support impact. It preserves those exact BIP158 queries and wallet semantics,
+while ensuring the HTTPS proxy outlives the bounded upstream operation and a
+concurrent caller cannot collide with Core's process-wide indexed scanner.
+
 Every feature, interoperability, signer, descriptor, transaction, payment request,
 backup/recovery, sync/backend, network, or dependency change must assess BIP impact.
 If it adds, removes, expands, narrows, or changes evidence for a BIP:

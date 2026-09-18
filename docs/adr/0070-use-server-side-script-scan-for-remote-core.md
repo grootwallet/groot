@@ -88,7 +88,8 @@ The live gateway and Core whitelist must deploy `scanblocks`,
 usable. Ordinary gateway calls keep their ten-second upstream bound, while only
 `scanblocks` receives a 120-second gateway and client bound so the synchronous
 Core operation is not orphaned by the health-check timeout. Core still permits
-only one `scanblocks` job at a time; concurrent callers receive a sanitized busy
-result and must retry. Rate-limit capacity and exact Mainnet timing require live
-evidence before GA.
+only one `scanblocks` job at a time. The outer NGINX read timeout is 125 seconds,
+and the gateway serializes indexed scans so concurrent callers receive a
+sanitized busy result before Core is contacted. Rate-limit capacity and exact
+Mainnet timing require live evidence before GA.
 This decision changes no persisted data and requires no migration.

@@ -1455,6 +1455,23 @@ fn pruned_block_rpc_failure_is_actionable_without_exposing_core_details() {
 }
 
 #[test]
+fn concurrent_remote_scan_is_transient_without_becoming_a_connection_error() {
+    let core_busy = rpc_api_error(CoreRpcError::JsonRpc(jsonrpc::Error::Rpc(
+        jsonrpc::error::RpcError {
+            code: -8,
+            message: "Scan already in progress, use action 'abort' or 'status'".to_owned(),
+            data: None,
+        },
+    )));
+    assert_eq!(core_busy.code, "scan_in_progress");
+    assert_eq!(core_busy.message, RPC_BUSY_MESSAGE);
+
+    let gateway_busy = rejected_http_api_error(503).expect("gateway busy is recognized");
+    assert_eq!(gateway_busy.code, "scan_in_progress");
+    assert_eq!(gateway_busy.message, RPC_BUSY_MESSAGE);
+}
+
+#[test]
 fn core_scanner_retries_transient_transport_failures_and_sanitizes_exhaustion() {
     let mut attempts = 0;
     let mut pauses = Vec::new();

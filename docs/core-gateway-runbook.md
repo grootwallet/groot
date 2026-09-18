@@ -41,7 +41,10 @@ Groot client -- HTTPS/Basic --> NGINX :443
    put either secret in a URL or support log.
 5. Install the NGINX `limit_req_zone` in the global `http {}` scope and the
    supplied exact `/` location in the dedicated TLS server. Keep redirects
-   disabled upstream and access logging off for this location.
+   disabled upstream and access logging off for this location. Preserve the
+   supplied 125-second `proxy_read_timeout`: it must remain above the gateway's
+   120-second indexed-scan bound or NGINX can abandon a scan that Core continues
+   running.
 6. Keep Core's `rpcbind=127.0.0.1`, `rpcallowip=127.0.0.1`,
    `rpcwhitelistdefault=1`, and a method whitelist matching ADR 0067. A cookie
    is the gateway's preferred upstream authentication; a strong `rpcauth`
@@ -69,6 +72,8 @@ Then verify on the host and from a separate network:
 4. A single-source burst above the NGINX limits returns 429 and the service
    remains responsive. Cross-source handler saturation returns a bounded 503
    `gateway_busy` response, never an upstream-looking 502.
+   A second concurrent `scanblocks` request also returns that bounded busy
+   response without reaching Core.
 5. Groot connects, verifies exact Mainnet genesis, loads the last committed
    state, completes a birthday-bounded rescan including mempool reconciliation,
    estimates fees, relaunches, and reconnects.
