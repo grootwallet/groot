@@ -833,10 +833,17 @@ downloads only matching full blocks and matching pending transactions, and
 retains the existing atomic wallet reconciliation. The gateway rejects address/key descriptors, private
 material, other scan actions, unordered ranges, non-basic filters, and arbitrary
 options. Local Core and the separate P2P compact-filter source are unchanged.
-There is no persisted-format migration. The source and local gateway tests are
-not live evidence: Bitcoin Core 29+, `scanblocks`, `getdescriptoractivity`, the
-matching RPC whitelist, and the synced basic filter index must be deployed
-before the replacement Mainnet package can pass the Family Test timing gate.
+There is no persisted-format migration. On 2026-09-17 the owner-controlled
+Mainnet service deployed the required gateway at source commit `5f94581`, added
+`scanblocks`, `getdescriptoractivity`, scoped `help`, and `getblockfilter` to
+both Core RPC whitelists, and restarted only Core and the gateway. Bitcoin Core
+31.1 returned at height 967449 with transaction and basic-filter indexes
+synced. A reversible authenticated HTTPS probe with 256 public scripts then
+completed the four-call health/capability batch in 0.086 seconds, scanned blocks
+967180-967449 in 0.120 seconds, and completed mempool descriptor activity in
+2.662 seconds; the temporary principal was removed and the credential file was
+restored byte-for-byte. This closes the infrastructure deployment prerequisite,
+not the exact packaged Family Test timing gate.
 
 The first packaged ADR 0070 run exposed three integration defects before that
 live gate: an offline Mainnet preflight left Overview's command-family flag at
@@ -849,5 +856,6 @@ checks the two indexed methods through exact allowlisted `help` calls, uses one
 five-second health attempt, maps rejected/missing capabilities to stable
 configuration guidance, and gives only `scanblocks` a 120-second client and
 gateway bound. No wallet, profile, proposal, registry, backup, descriptor,
-node-settings, or diagnostic format changes; no migration is required. Live
-gateway deployment and exact-package Mainnet timing evidence remain required.
+node-settings, or diagnostic format changes; no migration is required. The live
+gateway deployment passed the bounded probe recorded above; exact-package
+Mainnet Family Test timing evidence remains required.
