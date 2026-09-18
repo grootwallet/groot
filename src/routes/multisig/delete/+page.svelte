@@ -105,7 +105,7 @@
       <p class="eyebrow">{translate($locale, 'WALLET DELETION')}</p>
       <h1>{translate($locale, 'Delete multisig wallet')}</h1>
       <p class="subtitle">
-        {translate($locale, 'Remove this watch-only wallet from Groot on this device.')}
+        {translate($locale, 'Remove this wallet from Groot on this device.')}
       </p>
     </div>
     <Button variant="secondary" href="/settings">{translate($locale, 'Back to settings')}</Button>

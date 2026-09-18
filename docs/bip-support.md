@@ -1,5 +1,11 @@
 # Bitcoin Improvement Proposal support
 
+The application-wide readability and copy-density follow-up has no BIP support or
+evidence impact. It changes shared typography, semantic color tokens, optional
+disclosure presentation, concise page copy, and selected-wallet visibility only;
+descriptors, derivation, signing, transactions, labels, backups, recovery, sync,
+and network behavior are unchanged.
+
 ADR 0068's restart-bound internal network selection changes network availability
 and storage routing, not BIP semantics or evidence. Regtest, Testnet4, and Mainnet
 continue to use their existing BIP84/BIP48 derivations, address validation, BIP174

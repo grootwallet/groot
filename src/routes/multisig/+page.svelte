@@ -456,10 +456,7 @@
         <p class="eyebrow">{translate($locale, 'WALLET POLICY')}</p>
         <h1>{wallet.name}</h1>
         <p class="subtitle">
-          {translate(
-            $locale,
-            'A watch-only wallet whose spending policy is enforced by independent keys.'
-          )}
+          {translate($locale, 'Independent keys enforce this wallet’s spending policy.')}
         </p>
       </div>
     </header>

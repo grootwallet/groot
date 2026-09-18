@@ -73,9 +73,7 @@ describe('startup wallet lock gate', () => {
     expect(settings).toContain(
       '{#if walletUnlocked}<section class="settings-group wallet-details">'
     );
-    expect(settings).toContain(
-      'Appearance and Bitcoin network remain available while your wallet is locked.'
-    );
+    expect(settings).toContain('Appearance and Bitcoin network.');
     expect(settings).toContain('Wallet-specific network details are locked');
     expect(appCss).toContain('.locked-settings-link:focus-visible');
   });

@@ -24,6 +24,7 @@ const routes = [
 async function settled(page: Page) {
   await expect(page.locator('h1').first()).toBeVisible();
   await expect(page.locator('.wallet-skeleton')).toHaveCount(0);
+  await page.waitForLoadState('networkidle');
 }
 
 async function contained(page: Page) {

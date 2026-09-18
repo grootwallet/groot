@@ -115,7 +115,7 @@ describe('hardware receive verification UI', () => {
 
   it('keeps source hierarchy and loading rotation in shared styles', () => {
     expect(appCss).toMatch(/\.source-list strong\s*\{[\s\S]*?font-size:\s*13px/);
-    expect(appCss).toMatch(/\.source-list small\s*\{[\s\S]*?font-size:\s*12px/);
+    expect(appCss).toMatch(/\.source-list small\s*\{[\s\S]*?font-size:\s*var\(--font-size-meta\)/);
     expect(appCss).toMatch(
       /\.spin\s*\{[\s\S]*?animation:\s*groot-spinner-rotation 0\.8s linear infinite/
     );

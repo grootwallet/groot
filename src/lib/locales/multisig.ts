@@ -270,13 +270,13 @@ export const multisigCopy = {
     fr: 'Une différence signifie qu’il ne s’agit pas du portefeuille que vous souhaitiez récupérer.',
     es: 'Una diferencia significa que no es la cartera que querías recuperar.'
   },
-  'A public descriptor backup reconstructs this wallet without exposing signing keys.': {
-    fr: 'Une sauvegarde du descripteur public reconstruit ce portefeuille sans exposer les clés de signature.',
-    es: 'Una copia del descriptor público reconstruye esta cartera sin exponer las claves de firma.'
+  'Export a public, watch-only wallet backup.': {
+    fr: 'Exportez une sauvegarde publique et d’observation du portefeuille.',
+    es: 'Exporta una copia pública y de solo lectura de la cartera.'
   },
-  'A watch-only wallet whose spending policy is enforced by independent keys.': {
-    fr: 'Un portefeuille d’observation dont la politique de dépense est imposée par des clés indépendantes.',
-    es: 'Una cartera de solo lectura cuya política de gasto se aplica mediante claves independientes.'
+  'Independent keys enforce this wallet’s spending policy.': {
+    fr: 'Des clés indépendantes appliquent la politique de dépense de ce portefeuille.',
+    es: 'Claves independientes aplican la política de gasto de esta cartera.'
   },
   'Active path requires': { fr: 'Le chemin actif requiert', es: 'La ruta activa requiere' },
   'Add another wallet': { fr: 'Ajouter un autre portefeuille', es: 'Añadir otra cartera' },
@@ -362,11 +362,10 @@ export const multisigCopy = {
     fr: 'Analyse expérimentale uniquement',
     es: 'Solo análisis experimental'
   },
-  'Compare reviewed Miniscript paths using this wallet’s public signers. Analysis never changes the selected wallet.':
-    {
-      fr: 'Comparez des chemins Miniscript vérifiés avec les signataires publics de ce portefeuille. L’analyse ne modifie jamais le portefeuille sélectionné.',
-      es: 'Compara rutas Miniscript revisadas usando los firmantes públicos de esta cartera. El análisis nunca cambia la cartera seleccionada.'
-    },
+  'Explore recovery paths without changing this wallet.': {
+    fr: 'Explorez les chemins de récupération sans modifier ce portefeuille.',
+    es: 'Explora rutas de recuperación sin cambiar esta cartera.'
+  },
   'Explore guided Miniscript paths': {
     fr: 'Explorer les chemins Miniscript guidés',
     es: 'Explorar rutas guiadas de Miniscript'
@@ -525,9 +524,9 @@ export const multisigCopy = {
       fr: 'Les délais relatifs démarrent indépendamment à la confirmation de chaque UTXO. Les estimations calendaires sont approximatives et ne déterminent jamais la possibilité de dépenser.',
       es: 'Los bloqueos temporales relativos empiezan por separado cuando se confirma cada UTXO. Las estimaciones de calendario son aproximadas y nunca determinan si se puede gastar.'
     },
-  'Remove this watch-only wallet from Groot on this device.': {
-    fr: 'Supprimez de Groot ce portefeuille d’observation sur cet appareil.',
-    es: 'Elimina de Groot esta cartera de solo lectura en este dispositivo.'
+  'Remove this wallet from Groot on this device.': {
+    fr: 'Supprimez ce portefeuille de Groot sur cet appareil.',
+    es: 'Elimina esta cartera de Groot en este dispositivo.'
   },
   'Return to settings': { fr: 'Retour aux réglages', es: 'Volver a ajustes' },
   'Sanity checked': { fr: 'Cohérence vérifiée', es: 'Coherencia verificada' },
@@ -599,9 +598,9 @@ export const multisigCopy = {
   'Timelocked recovery': { fr: 'Récupération différée', es: 'Recuperación con bloqueo temporal' },
   'V2 POLICY LAB': { fr: 'LABORATOIRE DE POLITIQUE V2', es: 'LABORATORIO DE POLÍTICAS V2' },
   'Validate backup': { fr: 'Valider la sauvegarde', es: 'Validar copia de seguridad' },
-  'Validate BSMS or public descriptor text, or restore complete Groot recovery metadata.': {
-    fr: 'Validez un texte BSMS ou un descripteur public, ou restaurez toutes les métadonnées de récupération Groot.',
-    es: 'Valida texto BSMS o un descriptor público, o restaura todos los metadatos de recuperación de Groot.'
+  'Restore this wallet from a public backup.': {
+    fr: 'Restaurez ce portefeuille depuis une sauvegarde publique.',
+    es: 'Restaura esta cartera desde una copia pública.'
   },
   'Verify on a wallet signer before sharing this address.': {
     fr: 'Vérifiez sur un signataire du portefeuille avant de communiquer cette adresse.',

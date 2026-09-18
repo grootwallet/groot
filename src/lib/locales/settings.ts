@@ -2,9 +2,9 @@ import type { CatalogSection } from './types';
 
 export const settingsCopy = {
   'APP SETTINGS': { fr: 'RÉGLAGES DE L’APP', es: 'AJUSTES DE LA APP' },
-  'Appearance and Bitcoin network remain available while your wallet is locked.': {
-    fr: 'L’apparence et le réseau Bitcoin restent disponibles lorsque votre portefeuille est verrouillé.',
-    es: 'La apariencia y la red Bitcoin siguen disponibles mientras tu cartera está bloqueada.'
+  'Appearance and Bitcoin network.': {
+    fr: 'Apparence et réseau Bitcoin.',
+    es: 'Apariencia y red Bitcoin.'
   },
   'Wallet-specific network details are locked': {
     fr: 'Les détails réseau du portefeuille sont verrouillés',
@@ -37,11 +37,10 @@ export const settingsCopy = {
       fr: 'Seules ces catégories durables de cycle de vie et d’opération sont enregistrées. Les valeurs sensibles et l’interrogation passive sont exclues.',
       es: 'Solo se registran estas categorías duraderas de ciclo de vida y operación. Se excluyen los valores sensibles y el sondeo pasivo.'
     },
-  'Sanitized wallet-operation history for troubleshooting. It never includes secrets or full wallet identifiers.':
-    {
-      fr: 'Historique assaini des opérations du portefeuille pour le dépannage. Il ne contient jamais de secrets ni d’identifiants complets.',
-      es: 'Historial depurado de operaciones de la cartera para diagnóstico. Nunca incluye secretos ni identificadores completos.'
-    },
+  'Sanitized activity for troubleshooting.': {
+    fr: 'Activité assainie pour le dépannage.',
+    es: 'Actividad depurada para diagnóstico.'
+  },
   'Diagnostic log summary': {
     fr: 'Résumé du journal de diagnostic',
     es: 'Resumen del registro de diagnóstico'
@@ -745,9 +744,9 @@ export const settingsCopy = {
   'Wallet deletion': { fr: 'Suppression du portefeuille', es: 'Eliminación de la cartera' },
   'Wallet details': { fr: 'Détails du portefeuille', es: 'Detalles de la cartera' },
   'Wallet name': { fr: 'Nom du portefeuille', es: 'Nombre de la cartera' },
-  'Wallet security and connection. Appearance is global.': {
-    fr: 'Sécurité et connexion du portefeuille. L’apparence est globale.',
-    es: 'Seguridad y conexión de la cartera. La apariencia es global.'
+  'Security and connection for this wallet.': {
+    fr: 'Sécurité et connexion de ce portefeuille.',
+    es: 'Seguridad y conexión de esta cartera.'
   },
   'WALLET SETTINGS': { fr: 'RÉGLAGES DU PORTEFEUILLE', es: 'AJUSTES DE LA CARTERA' },
   Wallets: { fr: 'Portefeuilles', es: 'Carteras' },

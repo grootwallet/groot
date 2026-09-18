@@ -75,7 +75,7 @@
     color: var(--muted);
     background: transparent;
     font: inherit;
-    font-size: 11px;
+    font-size: var(--font-size-meta);
     font-weight: 700;
     cursor: pointer;
   }

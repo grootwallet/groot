@@ -4,6 +4,7 @@
   import {
     Braces,
     Check,
+    ChevronRight,
     ClipboardCheck,
     Copy,
     Download,
@@ -243,10 +244,7 @@
       <p class="eyebrow">{translate($locale, 'WALLET BACKUP')}</p>
       <h1>{translate($locale, 'Export & verify')}</h1>
       <p class="subtitle">
-        {translate(
-          $locale,
-          'A public descriptor backup reconstructs this wallet without exposing signing keys.'
-        )}
+        {translate($locale, 'Export a public, watch-only wallet backup.')}
       </p>
     </div>
     <Button variant="secondary" href="/multisig">{translate($locale, 'Back to policy')}</Button>
@@ -260,16 +258,20 @@
         </div>
         <FileKey size={19} />
       </div>
-      <p class="optional-insight">
-        {translate($locale, 'Backup formats')}
-        <InsightTip
-          label={translate($locale, 'About backup formats')}
-          text={translate(
+      <details class="optional-insight-disclosure">
+        <summary
+          >{translate($locale, 'About backup formats')}<ChevronRight
+            size={14}
+            aria-hidden="true"
+          /></summary
+        >
+        <p>
+          {translate(
             $locale,
             'BSMS is a portable public descriptor record supported by compatible coordinators. Groot JSON also preserves Groot-specific labels and metadata. Neither contains private keys.'
           )}
-        />
-      </p>
+        </p>
+      </details>
       <div
         class="backup-format-grid"
         role="radiogroup"

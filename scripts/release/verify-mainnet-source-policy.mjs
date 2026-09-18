@@ -148,7 +148,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src/routes/diagnostics/+page.svelte',
-    '30d72f962c8cd142234f0e6b21d40bf67af380d340384a1ecc9a345608820e90'
+    '7d049349c65079908984c16516e2095ea86b1d0686fb5e5db6a37e1c41ea385c'
   ],
   [
     'src/routes/welcome/+page.svelte',
@@ -173,7 +173,7 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src/routes/settings/+page.svelte',
-    '674199445b525dad1ec7bd570a00ad3b3fa494c393a36490f68f02debf3ac55f'
+    '44f0041e98862e194bbf6bb9be0b310243e6dc7e0b7d8c06c5604d71c3095654'
   ],
   [
     'src/routes/hardware/new/+page.svelte',

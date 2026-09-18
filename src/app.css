@@ -16,7 +16,7 @@
   --radius-control: 10px;
   --radius-inset: 12px;
   --radius-panel: 20px;
-  --font-size-meta: 12px;
+  --font-size-meta: 13px;
   color-scheme: dark;
   color: var(--text);
   background: var(--bg);
@@ -28,8 +28,8 @@
   --panel-2: #142c47;
   --border: #34465d;
   --border-strong: #788ca7;
-  --muted: #bac6d6;
-  --muted-2: #a5b5c9;
+  --muted: #c4cfdd;
+  --muted-2: #b4c2d3;
   --accent: #f1d18b;
   --accent-soft: #382d16;
   --progress: #ffd54a;
@@ -133,7 +133,7 @@ a[aria-disabled='true'] {
   color: var(--text);
   background: var(--panel-2);
   box-shadow: 0 14px 34px rgba(0, 0, 0, 0.3);
-  font-size: 11px;
+  font-size: var(--font-size-meta);
   font-weight: 500;
   line-height: 1.5;
   opacity: 0;
@@ -172,6 +172,35 @@ a[aria-disabled='true'] {
   gap: 3px;
   color: var(--muted);
   font-size: var(--font-size-meta);
+}
+.optional-insight-disclosure {
+  margin: 12px 0;
+}
+.optional-insight-disclosure > summary {
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--link);
+  font-size: var(--font-size-meta);
+  font-weight: 700;
+  list-style: none;
+}
+.optional-insight-disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+.optional-insight-disclosure > summary svg {
+  transition: transform 140ms ease;
+}
+.optional-insight-disclosure[open] > summary svg {
+  transform: rotate(90deg);
+}
+.optional-insight-disclosure > p {
+  max-width: 62ch;
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: var(--font-size-meta);
+  line-height: 1.5;
 }
 
 * {
@@ -348,7 +377,7 @@ code {
   align-items: center;
   gap: 6px;
   color: var(--link);
-  font-size: 11px;
+  font-size: var(--font-size-meta);
 }
 .wallet-profile-list {
   display: grid;
@@ -358,14 +387,14 @@ code {
   list-style: none;
 }
 .wallet-profile-list.compact {
-  max-height: 166px;
+  max-height: 180px;
   overflow-y: auto;
   padding-right: 2px;
 }
 .wallet-profile-list button {
   width: 100%;
   min-width: 0;
-  min-height: 48px;
+  min-height: 52px;
   display: grid;
   grid-template-columns: 30px minmax(0, 1fr) 16px;
   align-items: center;
@@ -417,7 +446,7 @@ code {
 .wallet-profile-copy strong {
   overflow: hidden;
   color: inherit;
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -457,7 +486,7 @@ code {
 }
 .unlock-wallet-picker > span {
   color: var(--text-soft);
-  font-size: 11px;
+  font-size: var(--font-size-meta);
   font-weight: 600;
 }
 .brand {
@@ -671,7 +700,7 @@ code {
   border-radius: var(--radius-control);
   color: var(--muted);
   background: transparent;
-  font-size: 12px;
+  font-size: var(--font-size-meta);
   text-align: left;
   cursor: pointer;
 }
@@ -788,7 +817,7 @@ code {
 .network-popover dd {
   margin: 0;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--font-size-meta);
   text-align: right;
 }
 .network-popover > p {
@@ -883,7 +912,7 @@ code {
   align-items: baseline;
   margin-inline-start: 0.5rem;
   color: var(--muted);
-  font-size: 0.72em;
+  font-size: max(0.72em, var(--font-size-meta));
   font-weight: 600;
   text-transform: none;
 }
@@ -947,7 +976,7 @@ code {
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-control);
   color: var(--text);
-  font-size: 11px;
+  font-size: var(--font-size-meta);
   font-weight: 650;
   text-decoration: none;
   background: var(--panel);
@@ -977,7 +1006,7 @@ code {
   align-items: center;
   gap: 7px;
   padding: 9px;
-  font-size: 12px;
+  font-size: var(--font-size-meta);
   cursor: pointer;
 }
 .sync-button:disabled {
@@ -1055,7 +1084,7 @@ code {
 }
 .unverified-balance small {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--font-size-meta);
   font-weight: 600;
 }
 .initial-scan-options {
@@ -1083,7 +1112,7 @@ code {
   background: color-mix(in srgb, var(--focus) 9%, var(--surface-control));
 }
 .initial-scan-options > button strong {
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 600;
   line-height: 1.35;
 }
@@ -1177,7 +1206,7 @@ code {
 }
 .backup-verification-banner strong {
   color: var(--text);
-  font-size: 11px;
+  font-size: var(--font-size-meta);
 }
 .backup-verification-banner small {
   color: var(--muted);
@@ -1283,7 +1312,7 @@ code {
 }
 .pending-line {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--font-size-meta);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1351,7 +1380,7 @@ code {
   grid-area: labels;
 }
 .active-proposal-copy strong {
-  font-size: 11px;
+  font-size: var(--font-size-meta);
 }
 .active-proposal-copy small {
   color: var(--muted);
@@ -1480,7 +1509,7 @@ code {
   justify-content: center;
   gap: 8px;
   padding: 0 15px;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 550;
   cursor: pointer;
   white-space: nowrap;
@@ -1597,7 +1626,7 @@ code {
   color: var(--text-soft);
 }
 .scan-progress small {
-  font-size: 12px;
+  font-size: var(--font-size-meta);
   color: var(--muted);
   text-align: right;
 }
@@ -1630,7 +1659,7 @@ code {
 .button.small {
   min-height: 34px;
   padding: 0 11px;
-  font-size: 12px;
+  font-size: var(--font-size-meta);
 }
 .button.full {
   width: 100%;
@@ -1668,12 +1697,12 @@ code {
 }
 .section-heading p {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--font-size-meta);
   margin: 5px 0 0;
 }
 .section-heading > a {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--font-size-meta);
 }
 .tx-list {
   border: 1px solid var(--border);
@@ -1758,13 +1787,13 @@ code {
 }
 .tx-main strong,
 .tx-amount strong {
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 550;
 }
 .tx-main > small,
 .tx-amount > small {
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--font-size-meta);
   text-transform: capitalize;
   white-space: nowrap;
   overflow: hidden;
@@ -1923,7 +1952,7 @@ code {
   gap: 4px;
 }
 .load-failure strong {
-  font-size: 12px;
+  font-size: 14px;
 }
 .load-failure small {
   color: var(--muted);
@@ -1989,7 +2018,7 @@ code {
 }
 .address-label small {
   color: var(--accent);
-  font-size: 11px;
+  font-size: var(--font-size-meta);
 }
 .address-label .tooltip-anchor {
   align-self: center;
@@ -2005,7 +2034,7 @@ code {
   border-radius: 6px;
   color: var(--success);
   background: transparent;
-  font-size: 11px;
+  font-size: var(--font-size-meta);
   cursor: help;
 }
 .hardware-verification-status:hover {
@@ -2029,7 +2058,7 @@ code {
   cursor: pointer;
 }
 .address-box code {
-  font-size: 11px;
+  font-size: 12px;
   text-align: left;
   flex: 1;
   word-break: break-all;
@@ -2080,7 +2109,7 @@ code {
   min-width: 0;
 }
 .address-history strong {
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 550;
 }
 .address-history small {
@@ -2130,7 +2159,7 @@ code {
   min-width: 0;
 }
 .awaiting-select strong {
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 550;
 }
 .awaiting-select small {
@@ -2163,7 +2192,7 @@ code {
   padding: 22px 15px;
   color: var(--muted);
   background: var(--panel);
-  font-size: 11px;
+  font-size: var(--font-size-meta);
   text-align: center;
 }
 .status-dot {
@@ -2222,7 +2251,7 @@ code {
 }
 .empty-state.compact p {
   margin-bottom: 0;
-  font-size: 11px;
+  font-size: var(--font-size-meta);
 }
 .empty-icon,
 .sign-icon {
@@ -2252,7 +2281,7 @@ code {
 }
 .empty-state > a {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--font-size-meta);
   margin-top: 15px;
 }
 .activity-empty {
@@ -2333,13 +2362,13 @@ code {
 }
 .modal-header p {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--font-size-meta);
   line-height: 1.45;
   margin: 6px 0 0;
 }
 .modal-supporting-copy {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--font-size-meta);
   line-height: 1.45;
   margin: 16px 0 0;
 }
@@ -2382,7 +2411,7 @@ code {
   position: relative;
 }
 .field > span {
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 550;
 }
 .field > small {
@@ -2416,7 +2445,7 @@ code {
 .max-spend-guidance {
   margin: -10px 0 19px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--font-size-meta);
   font-weight: 650;
 }
 .field > em {
@@ -2526,7 +2555,7 @@ code {
   max-width: min(180px, 25%);
   padding: 7px 11px;
   color: var(--text);
-  font-size: 11px;
+  font-size: var(--font-size-meta);
   border: 1px solid var(--control-border);
   border-radius: var(--radius-control);
   background: var(--surface-control);
@@ -2587,7 +2616,7 @@ code {
   min-height: 28px;
   padding: 3px 9px;
   color: var(--text);
-  font-size: 11px;
+  font-size: var(--font-size-meta);
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2657,7 +2686,7 @@ code {
   color: var(--warning-text);
   border-radius: var(--radius-control);
   padding: 12px 14px;
-  font-size: 11px;
+  font-size: var(--font-size-meta);
   line-height: 1.55;
 }
 .verify-backup-warning {
@@ -2942,7 +2971,7 @@ code {
   min-width: 0;
 }
 .policy-renewal-banner strong {
-  font-size: 12px;
+  font-size: 14px;
 }
 .policy-renewal-banner p,
 .policy-renewal-banner ul,
@@ -3086,7 +3115,7 @@ code {
   position: absolute;
   right: 53px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--font-size-meta);
   font-weight: 500;
 }
 .amount-input b {
@@ -3158,7 +3187,7 @@ code {
   gap: 4px;
 }
 .fee-options strong {
-  font-size: 11px;
+  font-size: 14px;
 }
 .fee-options small {
   color: var(--muted);
@@ -3192,7 +3221,7 @@ code {
 }
 .review-amount > span {
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--font-size-meta);
 }
 .review-amount strong {
   color: var(--text);
@@ -3201,13 +3230,13 @@ code {
 }
 .review-amount small {
   color: var(--text);
-  font-size: 12px;
+  font-size: var(--font-size-meta);
   font-weight: 600;
   letter-spacing: 0;
 }
 .detail-hero .detail-amount small {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--font-size-meta);
   font-weight: 500;
   letter-spacing: 0;
 }
@@ -3334,7 +3363,7 @@ code {
   line-height: 1.45;
 }
 .self-transfer-notice > strong {
-  font-size: 11px;
+  font-size: var(--font-size-meta);
 }
 .self-transfer-notice > span {
   color: var(--muted);
@@ -3409,7 +3438,7 @@ code {
 }
 .sign-card > p {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--font-size-meta);
   line-height: 1.5;
   max-width: 380px;
   margin: 8px auto 24px;
@@ -3517,7 +3546,7 @@ code {
 .detail-hero p {
   color: var(--muted);
   margin: 6px 0 0;
-  font-size: 11px;
+  font-size: var(--font-size-meta);
 }
 .detail-hero-labels {
   max-width: 100%;
@@ -3638,7 +3667,7 @@ code {
   padding: 11px 13px;
 }
 .info-banner p {
-  font-size: 11px;
+  font-size: var(--font-size-meta);
   margin: 0;
 }
 .transaction-lineage {
@@ -3666,7 +3695,7 @@ code {
 .transaction-lineage-heading strong {
   display: block;
   color: var(--text);
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.35;
 }
 .transaction-lineage-heading p {
@@ -3871,7 +3900,7 @@ code {
   gap: 5px;
 }
 .coin-main strong {
-  font-size: 13px;
+  font-size: 15px;
 }
 .coin-main span,
 .coin-meta span {
@@ -3887,7 +3916,7 @@ code {
   text-align: right;
 }
 .coin-meta strong {
-  font-size: 12px;
+  font-size: 14px;
 }
 
 .settings-group {
@@ -3895,7 +3924,7 @@ code {
 }
 .settings-group h2 {
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--font-size-meta);
   margin: 0 0 9px 3px;
 }
 .settings-group h2:has(> span) {
@@ -3983,7 +4012,7 @@ code {
 }
 .keyboard-shortcut-grid dt {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--font-size-meta);
   white-space: normal;
 }
 .keyboard-shortcut-grid dd {
@@ -4185,7 +4214,7 @@ code {
   gap: 5px;
 }
 .settings-group strong {
-  font-size: 12px;
+  font-size: 14px;
 }
 .settings-group small {
   color: var(--muted);
@@ -4254,7 +4283,7 @@ code {
   gap: 3px;
 }
 .toast-copy strong {
-  font-size: 11px;
+  font-size: var(--font-size-meta);
 }
 .toast-copy span {
   overflow-wrap: anywhere;
@@ -4549,7 +4578,7 @@ code {
   align-items: center;
   gap: 6px;
   padding: 0;
-  font-size: 11px;
+  font-size: var(--font-size-meta);
   cursor: pointer;
 }
 .setup-step {
@@ -4669,7 +4698,7 @@ code {
   max-width: 600px;
   margin-bottom: 22px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--font-size-meta);
   line-height: 1.55;
 }
 .identifier-detail-view {
@@ -4715,7 +4744,7 @@ code {
 }
 .setup-points strong {
   color: var(--text-soft);
-  font-size: 11px;
+  font-size: var(--font-size-meta);
 }
 .setup-points small {
   font-size: var(--font-size-meta);
@@ -4808,7 +4837,7 @@ code {
 .entropy-outcomes small {
   flex: none;
   color: var(--muted-2);
-  font-size: 7px;
+  font-size: 11px;
 }
 .entropy-result-buttons {
   display: grid;
@@ -4981,7 +5010,7 @@ code {
 .verification-hint {
   margin: 0 0 14px !important;
   color: var(--muted-2) !important;
-  font-size: 9px !important;
+  font-size: var(--font-size-meta) !important;
 }
 .recovery-reveal-gate {
   display: grid;
@@ -5006,12 +5035,12 @@ code {
   display: block;
   margin: 1px 0 4px;
   color: var(--text);
-  font-size: 11px;
+  font-size: var(--font-size-meta);
 }
 .recovery-reveal-gate p {
   margin: 0 !important;
   color: var(--muted) !important;
-  font-size: 9px !important;
+  font-size: var(--font-size-meta) !important;
   line-height: 1.5 !important;
 }
 .recovery-reveal-gate .button {
@@ -5060,7 +5089,7 @@ code {
 .wallet-created-confirmation > p {
   max-width: 390px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--font-size-meta);
   line-height: 1.5;
 }
 .wallet-created-icon {
@@ -5192,7 +5221,7 @@ code {
   background: var(--panel-2);
   border: 1px solid var(--border);
   border-radius: var(--radius-control);
-  font-size: 10px !important;
+  font-size: var(--font-size-meta) !important;
   line-height: 1.4;
   overflow-wrap: anywhere;
 }
@@ -5388,7 +5417,7 @@ code {
 }
 .policy-recipes small {
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--font-size-meta);
   line-height: 1.4;
 }
 .policy-recipes em {
@@ -5407,7 +5436,7 @@ code {
   grid-column: 1 / -1;
   margin: 0 0 2px;
   color: var(--text-soft);
-  font-size: 11px;
+  font-size: var(--font-size-meta);
   font-weight: 650;
   line-height: 1.35;
 }
@@ -5435,11 +5464,11 @@ code {
 }
 .assisted-signing-plan strong {
   color: var(--text-soft);
-  font-size: 12px;
+  font-size: 14px;
 }
 .assisted-signing-plan small {
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--font-size-meta);
   line-height: 1.45;
 }
 .assisted-signing-plan > .insight-tip {
@@ -5456,7 +5485,7 @@ code {
 .policy-guidance {
   margin: 0 0 20px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--font-size-meta);
   line-height: 1.5;
 }
 .recipe-summary {
@@ -5471,7 +5500,7 @@ code {
   background: var(--surface-inset);
 }
 .recipe-summary strong {
-  font-size: 12px;
+  font-size: 14px;
 }
 .recipe-summary span {
   color: var(--muted);
@@ -5491,7 +5520,7 @@ code {
 }
 .key-heading p {
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--font-size-meta);
   margin: 4px 0 0;
 }
 .send-page .form-card {
@@ -5571,7 +5600,7 @@ code {
 }
 .cosigner-name {
   color: var(--text);
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.3;
 }
 .cosigner-metadata {
@@ -5664,7 +5693,7 @@ code {
   color: var(--muted);
   display: grid;
   place-items: center;
-  font-size: 11px;
+  font-size: var(--font-size-meta);
 }
 .cosigner-list .cosigner-trigger {
   width: 100%;
@@ -5996,7 +6025,7 @@ code {
 }
 .import-error strong {
   color: var(--danger);
-  font-size: 11px;
+  font-size: var(--font-size-meta);
 }
 .import-error b {
   color: var(--text);
@@ -6021,7 +6050,7 @@ code {
 }
 .device-scan strong {
   color: var(--text-soft);
-  font-size: 12px;
+  font-size: 14px;
 }
 .device-scan span {
   max-width: 330px;
@@ -6208,7 +6237,7 @@ code {
 }
 .hardware-action-copy strong {
   color: var(--text);
-  font-size: 11px;
+  font-size: var(--font-size-meta);
 }
 .hardware-action-copy small {
   max-width: 350px;
@@ -6270,7 +6299,7 @@ code {
   background: var(--surface-inset);
 }
 .hardware-review > strong {
-  font-size: 11px;
+  font-size: var(--font-size-meta);
 }
 .hardware-review dl {
   display: grid;
@@ -6468,7 +6497,7 @@ code {
   gap: 3px;
 }
 .hardware-phase-reference strong {
-  font-size: 11px;
+  font-size: var(--font-size-meta);
 }
 .hardware-phase-reference small {
   color: var(--muted);
@@ -6496,7 +6525,7 @@ code {
   gap: 8px;
 }
 .hardware-policy-registration strong {
-  font-size: 11px;
+  font-size: var(--font-size-meta);
 }
 .hardware-policy-registration p {
   margin: 0;
@@ -6646,7 +6675,7 @@ code {
 }
 .signer-policy-review > header small {
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--font-size-meta);
   line-height: 1.45;
 }
 .policy-device-expectation,
@@ -6660,7 +6689,7 @@ code {
 }
 .policy-device-expectation > strong,
 .instruction-card > strong {
-  font-size: 12px;
+  font-size: 14px;
 }
 .policy-device-expectation p {
   margin: 0;
@@ -6688,7 +6717,7 @@ code {
 }
 .policy-device-warning strong {
   color: var(--warning-text);
-  font-size: 12px;
+  font-size: 14px;
 }
 .policy-device-warning p {
   margin: 0;
@@ -6705,7 +6734,7 @@ code {
   display: grid;
   grid-template-columns: 110px minmax(0, 1fr);
   gap: 10px;
-  font-size: 11px;
+  font-size: var(--font-size-meta);
 }
 .policy-device-expectation dt {
   color: var(--muted);
@@ -6771,7 +6800,7 @@ code {
   gap: 3px;
 }
 .policy-address-check > div:first-child strong {
-  font-size: 12px;
+  font-size: 14px;
 }
 .policy-address-check small {
   color: var(--muted);
@@ -6815,7 +6844,7 @@ code {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 11px;
+  font-size: var(--font-size-meta);
 }
 .policy-signer-copy > strong em {
   color: var(--link);
@@ -6824,7 +6853,7 @@ code {
 }
 .policy-signer-copy > code {
   color: var(--text-soft);
-  font-size: 11px;
+  font-size: var(--font-size-meta);
 }
 .policy-signer-identifiers {
   display: grid;
@@ -6887,7 +6916,7 @@ code {
   gap: 3px;
 }
 .policy-review-confirmation strong {
-  font-size: 11px;
+  font-size: var(--font-size-meta);
 }
 .policy-review-confirmation small {
   color: var(--muted);
@@ -6919,7 +6948,7 @@ code {
   gap: 3px;
 }
 .policy-signer-details summary strong {
-  font-size: 12px;
+  font-size: 14px;
 }
 .policy-signer-details summary small {
   color: var(--muted);
@@ -7045,7 +7074,7 @@ code {
   gap: 4px;
 }
 .pin-error-card strong {
-  font-size: 11px;
+  font-size: var(--font-size-meta);
 }
 .pin-error-card small {
   color: var(--danger);
@@ -7100,7 +7129,7 @@ code {
   border: 1px solid var(--border);
   border-radius: 999px;
   background: var(--surface-control);
-  font-size: 11px;
+  font-size: var(--font-size-meta);
   line-height: 1.2;
 }
 .hardware-guide-body ol {
@@ -7131,7 +7160,7 @@ code {
 }
 .review-intro {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--font-size-meta);
 }
 .policy-summary {
   display: flex;
@@ -7518,9 +7547,8 @@ code {
   color: var(--success);
   background: color-mix(in srgb, var(--success) 5%, transparent);
 }
-.backup-export-card > .optional-insight {
+.backup-export-card > .optional-insight-disclosure {
   margin: 16px 0 10px;
-  gap: 6px;
 }
 .backup-format-grid {
   display: grid;
@@ -7555,7 +7583,7 @@ code {
 }
 .backup-format-grid button strong {
   align-self: end;
-  font-size: 11px;
+  font-size: var(--font-size-meta);
 }
 .backup-format-grid button small {
   align-self: start;
@@ -7632,7 +7660,7 @@ code {
   gap: 3px;
 }
 .backup-ready strong {
-  font-size: 11px;
+  font-size: var(--font-size-meta);
 }
 .backup-ready small {
   color: var(--muted);
@@ -7937,7 +7965,7 @@ code {
   gap: 4px;
 }
 .check-row strong {
-  font-size: 11px;
+  font-size: var(--font-size-meta);
 }
 .check-row small,
 .credential-note {
@@ -8056,7 +8084,7 @@ code {
 .policy-maturity-panel-heading p:not(.eyebrow) {
   margin-top: 2px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--font-size-meta);
   line-height: 1.4;
 }
 
@@ -8098,7 +8126,7 @@ code {
 .policy-maturity-details summary {
   cursor: pointer;
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--font-size-meta);
   font-weight: 600;
 }
 
@@ -8106,7 +8134,7 @@ code {
   max-width: 720px;
   margin: 8px 0 0;
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--font-size-meta);
   line-height: 1.5;
 }
 
@@ -8117,7 +8145,7 @@ code {
 .policy-access-coins h3 {
   margin: 0 0 7px;
   color: var(--text);
-  font-size: 11px;
+  font-size: var(--font-size-meta);
 }
 
 .policy-access-coins > div {
@@ -8150,11 +8178,11 @@ code {
 }
 
 .policy-access-coins article strong {
-  font-size: 11px;
+  font-size: var(--font-size-meta);
 }
 
 .policy-access-coins article .formatted-amount {
-  font-size: 11px;
+  font-size: var(--font-size-meta);
 }
 .vault-actions {
   display: flex;
@@ -8251,7 +8279,7 @@ code {
 }
 .descriptor-viewer section span {
   color: var(--text);
-  font-size: 11px;
+  font-size: var(--font-size-meta);
   font-weight: 650;
 }
 .descriptor-viewer section small {
@@ -8360,7 +8388,7 @@ code {
 }
 .saved-cosigner-copy strong {
   overflow: hidden;
-  font-size: 12px;
+  font-size: 14px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -8466,7 +8494,7 @@ code {
 .device-details dd {
   margin: 0;
   color: var(--text-soft);
-  font-size: 11px;
+  font-size: var(--font-size-meta);
 }
 .device-details dd code {
   color: var(--text);
@@ -8537,7 +8565,7 @@ code {
   gap: 2px;
 }
 .health-heading strong {
-  font-size: 11px;
+  font-size: var(--font-size-meta);
 }
 .health-heading small {
   color: var(--muted);
@@ -8574,7 +8602,7 @@ code {
 }
 .signer-name-editor strong {
   overflow: hidden;
-  font-size: 11px;
+  font-size: var(--font-size-meta);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -8597,7 +8625,7 @@ code {
   color: var(--text);
   background: var(--surface-inset);
   font: inherit;
-  font-size: 11px;
+  font-size: var(--font-size-meta);
 }
 .signer-name-editor form > div {
   display: flex;
@@ -8632,7 +8660,7 @@ code {
   gap: 3px;
 }
 .device-policy-status strong {
-  font-size: 11px;
+  font-size: var(--font-size-meta);
 }
 .device-policy-status small {
   color: var(--muted);
@@ -8699,7 +8727,7 @@ code {
   border-color: color-mix(in srgb, var(--success) 22%, transparent);
 }
 .signer-progress strong {
-  font-size: 11px;
+  font-size: var(--font-size-meta);
   color: var(--text-soft);
 }
 .signer-progress small {
@@ -8740,7 +8768,7 @@ code {
   border: 1px dashed var(--border);
   border-radius: var(--radius-control);
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--font-size-meta);
   cursor: pointer;
 }
 .file-action:hover {
@@ -8776,7 +8804,7 @@ code {
   text-align: left;
 }
 .ready-panel strong {
-  font-size: 11px;
+  font-size: var(--font-size-meta);
 }
 .ready-panel small {
   font-size: var(--font-size-meta);
@@ -8907,7 +8935,7 @@ code {
 .proposal-review-inputs summary {
   cursor: pointer;
   color: var(--text-soft);
-  font-size: 12px;
+  font-size: var(--font-size-meta);
 }
 .proposal-review-inputs dl {
   margin-top: 8px;
@@ -8958,7 +8986,7 @@ code {
   width: 260px;
 }
 .coin-toolbar strong {
-  font-size: 12px;
+  font-size: 14px;
 }
 .coin-toolbar span {
   color: var(--muted);
@@ -9016,7 +9044,7 @@ code {
   min-width: 0;
 }
 .privacy-insight-copy > strong {
-  font-size: 11px;
+  font-size: var(--font-size-meta);
 }
 .privacy-insight-copy > p {
   margin: 3px 0 0;
@@ -9152,7 +9180,7 @@ code {
   background: var(--surface-control);
   border: 1px solid var(--border);
   border-radius: 5px;
-  font-size: 9px !important;
+  font-size: var(--font-size-meta) !important;
   font-weight: 600;
   line-height: 1.2;
   text-overflow: ellipsis;
@@ -9168,7 +9196,7 @@ code {
   max-width: min(220px, 100%);
   padding: 5px 8px;
   border-radius: 6px;
-  font-size: 11px !important;
+  font-size: var(--font-size-meta) !important;
 }
 .address-label .permanent-label-tags.prominent {
   justify-content: center;
@@ -9178,7 +9206,7 @@ code {
   padding: 3px 6px;
   border: 1px solid var(--border);
   border-radius: 999px;
-  font-size: 8px !important;
+  font-size: var(--font-size-meta) !important;
   font-weight: 700;
   line-height: 1;
   white-space: nowrap;
@@ -9230,7 +9258,7 @@ code {
 }
 .coin-detail-heading strong {
   color: var(--text);
-  font-size: 11px;
+  font-size: var(--font-size-meta);
 }
 .coin-detail-heading small {
   color: var(--muted);
@@ -9265,7 +9293,7 @@ code {
   gap: 1px;
 }
 .coin-policy-renewal strong {
-  font-size: 11px;
+  font-size: var(--font-size-meta);
 }
 .coin-policy-renewal small {
   color: var(--muted);
@@ -9286,7 +9314,7 @@ code {
 }
 .coin-main > span {
   color: var(--text-soft);
-  font-size: 11px;
+  font-size: var(--font-size-meta);
 }
 .coin-main .coin-reuse {
   display: flex;
@@ -9582,7 +9610,7 @@ code {
 }
 
 .observed-receive-prompt strong {
-  font-size: 11px;
+  font-size: var(--font-size-meta);
 }
 
 .observed-receive-prompt small {
@@ -9644,7 +9672,7 @@ code {
 .coin-freeze-summary strong {
   overflow: hidden;
   color: var(--text);
-  font-size: 12px;
+  font-size: 14px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -9680,7 +9708,7 @@ code {
   gap: 3px;
 }
 .address-detail-status strong {
-  font-size: 12px;
+  font-size: 14px;
 }
 .address-detail-status small {
   color: var(--muted);
@@ -9748,7 +9776,7 @@ code {
 }
 .coin-control-field > span {
   display: block;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 550;
   margin-bottom: 8px;
 }
@@ -9776,7 +9804,7 @@ code {
   gap: 4px;
 }
 .coin-mode strong {
-  font-size: 11px;
+  font-size: var(--font-size-meta);
 }
 .coin-mode small {
   color: var(--muted);
@@ -9881,7 +9909,7 @@ code {
   background: var(--surface-inset);
 }
 .selection-review strong {
-  font-size: 11px;
+  font-size: var(--font-size-meta);
 }
 .selection-review span {
   color: var(--muted);
@@ -9976,7 +10004,7 @@ code {
   gap: 2px;
 }
 .recovery-key-option strong {
-  font-size: 11px;
+  font-size: var(--font-size-meta);
 }
 .recovery-key-option small {
   color: var(--muted);
@@ -10078,7 +10106,7 @@ code {
   color: var(--muted);
 }
 .template-grid button strong {
-  font-size: 11px;
+  font-size: var(--font-size-meta);
 }
 .template-grid button small {
   color: var(--muted);
@@ -10214,7 +10242,7 @@ code {
 .policy-configure-heading p {
   max-width: 58ch;
   margin-top: 8px;
-  font-size: 12px;
+  font-size: var(--font-size-meta);
   line-height: 1.5;
 }
 .policy-template-grid button {
@@ -10283,7 +10311,7 @@ code {
 }
 .policy-template-grid .policy-kind-copy small {
   max-width: 26ch;
-  font-size: 11px;
+  font-size: var(--font-size-meta);
   line-height: 1.45;
 }
 .policy-kind-meta {
@@ -10333,7 +10361,7 @@ code {
   margin-top: 24px !important;
 }
 .policy-setup-card > .field > span {
-  font-size: 12px;
+  font-size: 14px;
 }
 .policy-setup-card > .field input {
   min-height: 48px;
@@ -10358,11 +10386,11 @@ code {
 }
 .recovery-separation strong {
   color: var(--text-soft);
-  font-size: 12px;
+  font-size: 14px;
 }
 .recovery-separation small {
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--font-size-meta);
   line-height: 1.45;
 }
 
@@ -10382,8 +10410,8 @@ code {
   --panel-2: #f0f4fa;
   --border: #d9e0e9;
   --border-strong: #8392a5;
-  --muted: #52647a;
-  --muted-2: #5b6d82;
+  --muted: #455970;
+  --muted-2: #52647a;
   --accent: #795200;
   --accent-soft: #fff6df;
   --progress: #f2b705;
@@ -10822,7 +10850,7 @@ code {
     align-items: center;
     justify-content: center;
     gap: 8px;
-    font-size: 12px;
+    font-size: 14px;
     font-weight: 550;
     box-shadow: 0 7px 25px rgba(0, 0, 0, 0.28);
   }
@@ -10863,7 +10891,7 @@ code {
     max-width: 145px;
   }
   .tx-amount strong {
-    font-size: 11px;
+    font-size: var(--font-size-meta);
   }
   .receive-card,
   .form-card {
@@ -11073,7 +11101,7 @@ code {
   }
   .settings-page .subtitle {
     max-width: 34ch;
-    font-size: 12px;
+    font-size: var(--font-size-meta);
     line-height: 1.45;
   }
   .settings-page .settings-group {

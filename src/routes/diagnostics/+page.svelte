@@ -165,10 +165,7 @@
       <p class="eyebrow">{translate($locale, 'APP LOGS')}</p>
       <h1>{translate($locale, 'App logs')}</h1>
       <p class="subtitle">
-        {translate(
-          $locale,
-          'Sanitized wallet-operation history for troubleshooting. It never includes secrets or full wallet identifiers.'
-        )}
+        {translate($locale, 'Sanitized activity for troubleshooting.')}
       </p>
     </div>
     <Button variant="secondary" onclick={() => history.back()}>
@@ -551,7 +548,7 @@
     align-items: center;
     gap: 5px;
     color: var(--link);
-    font-size: 11px;
+    font-size: var(--font-size-meta);
     font-weight: 650;
     cursor: pointer;
     list-style: none;
@@ -576,7 +573,7 @@
   .diagnostic-event-catalog p {
     margin: 0;
     color: var(--muted);
-    font-size: 11px;
+    font-size: var(--font-size-meta);
   }
   .diagnostic-event-catalog ul {
     margin: 14px 0 0;
@@ -585,7 +582,7 @@
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 7px 16px;
     list-style: none;
-    font-size: 11px;
+    font-size: var(--font-size-meta);
   }
   .diagnostic-event-catalog li::before {
     content: '·';
@@ -700,7 +697,7 @@
     align-items: center;
     gap: 7px;
     color: var(--text-soft);
-    font-size: 11px;
+    font-size: var(--font-size-meta);
     font-weight: 650;
     cursor: pointer;
     list-style: none;
@@ -765,7 +762,7 @@
     gap: 8px;
     border-radius: var(--radius-control);
     color: var(--text-soft);
-    font-size: 11px;
+    font-size: var(--font-size-meta);
     cursor: pointer;
   }
   .event-filter-menu label:hover {
@@ -788,7 +785,7 @@
     color: var(--muted);
     background: transparent;
     font: inherit;
-    font-size: 11px;
+    font-size: var(--font-size-meta);
     font-weight: 650;
     cursor: pointer;
   }
@@ -918,7 +915,7 @@
     color: var(--danger);
   }
   code {
-    font-size: 11px;
+    font-size: 12px;
   }
   @media (max-width: 900px) {
     .log-controls {

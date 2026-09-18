@@ -123,7 +123,7 @@
     color: var(--text);
     background: var(--surface-control);
     font: inherit;
-    font-size: 11px;
+    font-size: var(--font-size-meta);
     font-weight: 650;
     text-align: left;
     cursor: pointer;

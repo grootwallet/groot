@@ -1,5 +1,17 @@
 # Implementation status
 
+The application-wide readability follow-up raises shared supporting copy to 13
+pixels, removes remaining sub-12-pixel non-print copy, strengthens secondary-text
+contrast in both themes, and increases the hierarchy of wallet, transaction,
+coin, settings, hardware, and recovery rows. Long optional backup-format guidance
+now follows the standard blue chevron disclosure while page-level subtitles are
+shorter. The compact desktop wallet list scrolls the selected wallet into view on
+launch and after selection. Wallet behavior, security consequences, native
+commands, persisted formats, dependencies, and protocol support are unchanged;
+no migration is required. The reviewed Mainnet source-policy hashes are refreshed
+only for the UI-only Settings and diagnostics subtitle changes; their wallet and
+network behavior is unchanged.
+
 The Mainnet hardware-signing presentation follow-up keeps the existing Ledger
 policy and transaction authorization boundary while reducing the policy modal
 to its security-relevant values and one action. Hardware-address details retain

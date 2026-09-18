@@ -97,10 +97,7 @@
       <p class="eyebrow">{translate($locale, 'DESCRIPTOR RECOVERY')}</p>
       <h1>{translate($locale, 'Recover multisig wallet')}</h1>
       <p class="subtitle">
-        {translate(
-          $locale,
-          'Validate BSMS or public descriptor text, or restore complete Groot recovery metadata.'
-        )}
+        {translate($locale, 'Restore this wallet from a public backup.')}
       </p>
     </div>
     <Button variant="secondary" href="/settings">{translate($locale, 'Cancel')}</Button>
@@ -223,7 +220,7 @@
   }
 
   .input-alternative span {
-    font-size: 9px;
+    font-size: var(--font-size-meta);
     font-weight: 650;
     letter-spacing: 0.08em;
     text-transform: uppercase;

@@ -1143,8 +1143,8 @@
         {translate(
           $locale,
           walletUnlocked
-            ? 'Wallet security and connection. Appearance is global.'
-            : 'Appearance and Bitcoin network remain available while your wallet is locked.'
+            ? 'Security and connection for this wallet.'
+            : 'Appearance and Bitcoin network.'
         )}
       </p>
     </div>

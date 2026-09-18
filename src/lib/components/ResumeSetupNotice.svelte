@@ -77,7 +77,7 @@
   .resume-setup-copy strong {
     overflow: hidden;
     color: var(--text);
-    font-size: 11px;
+    font-size: 14px;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
