@@ -939,3 +939,12 @@ recoverable session transition, verifies the already-configured node once, and
 retries the cached snapshot instead of telling the user to reconnect Bitcoin
 Core. This changes no wallet, registry, credential, node-setting, DTO, or schema
 format; no migration is required.
+
+The exact `688ff7e` owner recording confirmed unlock and remote Core refresh
+complete successfully, and exposed a presentation-only status polling race:
+an older in-flight status read could overwrite the terminal 100% result with
+its earlier 99% snapshot before the next poll restored completion. Overview now
+accepts only the newest requested status read, so progress remains monotonic and
+the completed state cannot regress. Native sync ordering, wallet data, node
+settings, DTOs, schemas, and the 35-second automatic cadence are unchanged; no
+migration or BIP-support change is required.

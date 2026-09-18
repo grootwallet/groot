@@ -108,6 +108,8 @@ describe('foreground wallet navigation', () => {
     expect(overview).toContain('syncStatusIsActive(syncStatus)');
     expect(overview).toContain('startSyncStatusPolling()');
     expect(overview).toContain('if (!syncing && !syncStatusIsActive(syncStatus)) return;');
+    expect(overview).toContain('const generation = ++syncStatusReadGeneration');
+    expect(overview).toContain('if (generation !== syncStatusReadGeneration) return syncStatus;');
     expect(unlock).toContain('walletShell.requestUnlockSync(selectedWalletId)');
     expect(overview).toContain('walletShell.consumeUnlockSync(selectedProfile.id)');
     expect(overview).not.toContain('setTimeout(resolve, 1_000)');
@@ -222,7 +224,7 @@ describe('foreground wallet navigation', () => {
   });
 
   it('does not start a second post-unlock scan after reattaching to an inherited scan', () => {
-    expect(overview).toContain('if (syncStatusIsActive(syncStatus)) inheritedSyncObserved = true;');
+    expect(overview).toContain('if (syncStatusIsActive(nextStatus)) inheritedSyncObserved = true;');
     expect(overview).toMatch(
       /walletShell\.consumeUnlockSync\(selectedProfile\.id\)[\s\S]*!inheritedSyncObserved/
     );

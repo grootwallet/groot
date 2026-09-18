@@ -108,6 +108,7 @@
   let syncSource = $state<WalletSyncSource | null>(null);
   let syncStatus = $state<WalletSyncStatus | null>(null);
   let syncPollToken = 0;
+  let syncStatusReadGeneration = 0;
   let inheritedSyncObserved = false;
   let syncClock = $state(Date.now());
   let recoverySettings = $state<RecoveryScanSettings>({ birthdayHeight: 0, gapLimit: 20 });
@@ -340,6 +341,7 @@
   onDestroy(() => {
     verifyCredential = '';
     ++loadGeneration;
+    ++syncStatusReadGeneration;
   });
   onDestroy(() => {
     initialScanCredential = '';
@@ -581,11 +583,15 @@
     };
   });
   async function refreshSyncStatus() {
+    const generation = ++syncStatusReadGeneration;
     try {
-      syncStatus = await walletService.syncStatus();
-      if (syncStatusIsActive(syncStatus)) inheritedSyncObserved = true;
-      return syncStatus;
+      const nextStatus = await walletService.syncStatus();
+      if (generation !== syncStatusReadGeneration) return syncStatus;
+      syncStatus = nextStatus;
+      if (syncStatusIsActive(nextStatus)) inheritedSyncObserved = true;
+      return nextStatus;
     } catch {
+      if (generation !== syncStatusReadGeneration) return syncStatus;
       /* The sync result remains authoritative. */
       return null;
     }
