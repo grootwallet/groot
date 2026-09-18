@@ -243,6 +243,20 @@
       updatedAt: 0
     };
   }
+  function runningScanStatus(settings: RecoveryScanSettings): RecoveryScanStatus {
+    const targetHeight = Math.max(scanTip ?? settings.birthdayHeight, settings.birthdayHeight);
+    const timestamp = Math.floor(Date.now() / 1000);
+    return {
+      status: 'running',
+      ...settings,
+      currentHeight: Math.max(settings.birthdayHeight - 1, 0),
+      targetHeight,
+      processedBlocks: 0,
+      totalBlocks: targetHeight - settings.birthdayHeight + 1,
+      startedAt: timestamp,
+      updatedAt: timestamp
+    };
+  }
   let verifyOpen = $state(false),
     verifyCredential = $state(''),
     verifyError = $state(''),
@@ -827,6 +841,10 @@
   }
   async function runFullRescan() {
     scanning = true;
+    scanStatus = runningScanStatus({
+      birthdayHeight: Number(scanDraft.birthdayHeight),
+      gapLimit: Number(scanDraft.gapLimit)
+    });
     scanError = '';
     scanErrorCode = '';
     scanErrorDetails = null;
@@ -840,6 +858,7 @@
         scanCredential
       );
       scanDraft = { ...scan };
+      scanStatus = runningScanStatus(scan);
       const rescan = walletService.fullRescan(scanCredential);
       void pollFullRescan();
       const snapshot = await rescan;
@@ -884,7 +903,8 @@
   }
   async function pollFullRescan() {
     try {
-      scanStatus = await walletService.recoveryScanStatus();
+      const status = await walletService.recoveryScanStatus();
+      if (status.status === 'running' || status.status === 'cancelling') scanStatus = status;
     } catch {
       /* The foreground result remains authoritative. */
     } finally {

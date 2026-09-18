@@ -38,4 +38,15 @@ describe('full rescan result presentation', () => {
     expect(progressCondition).toBeGreaterThan(-1);
     expect(settings).not.toContain("['cancelling', 'cancelled', 'interrupted', 'failed']");
   });
+
+  it('replaces the previous completed range before starting and ignores stale terminal polls', () => {
+    const start = settings.indexOf('async function runFullRescan()');
+    const reset = settings.indexOf('scanStatus = runningScanStatus({', start);
+    const command = settings.indexOf('walletService.fullRescan(scanCredential)', reset);
+    const poll = settings.indexOf("status.status === 'running' || status.status === 'cancelling'");
+
+    expect(reset).toBeGreaterThan(start);
+    expect(command).toBeGreaterThan(reset);
+    expect(poll).toBeGreaterThan(command);
+  });
 });

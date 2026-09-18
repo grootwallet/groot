@@ -107,6 +107,7 @@ const MAX_CREDENTIAL_BYTES: usize = 1_024;
 // cannot approach the direct-RPC or gateway response-body limit.
 const CORE_BLOCK_HASH_BATCH_SIZE: usize = 256;
 const CORE_BLOCK_FILTER_BATCH_SIZE: usize = 8;
+const CORE_SERVER_SCAN_RANGE_SIZE: u32 = 100_000;
 const MAX_CORE_SCAN_SCRIPTS: usize = 4_096;
 const MEMPOOL_RPC_BATCH_SIZE: usize = 256;
 const MIN_NEW_WALLET_PASSPHRASE_CHARACTERS: usize = 16;
@@ -3003,7 +3004,7 @@ fn core_server_scan_block_plan(
     wallet_tip: &CheckPoint,
     target_height: u32,
     cancel: Option<&AtomicBool>,
-    status: &Arc<Mutex<Option<WalletSyncStatusDto>>>,
+    mut on_progress: impl FnMut(u32) -> ApiResult<()>,
 ) -> ApiResult<CoreFilterBlockPlan> {
     let start_height = wallet_tip.height();
     if start_height >= target_height {
@@ -3027,29 +3028,35 @@ fn core_server_scan_block_plan(
     let scan_objects = core_scan_objects(wallet)?;
 
     let first_height = start_height.saturating_add(1);
-    // A lost response may leave Core's global scan running. Do not retry
-    // `start` automatically and accidentally collide with that in-flight scan.
-    let scan = scan_client
-        .call::<CoreScanBlocksResult>(
-            "scanblocks",
-            &[
-                serde_json::json!("start"),
-                serde_json::json!(scan_objects),
-                serde_json::json!(first_height),
-                serde_json::json!(target_height),
-                serde_json::json!("basic"),
-            ],
-        )
-        .map_err(rpc_api_error)?;
-    ensure_foreground_sync_not_cancelled(cancel)?;
-    if !scan.completed || scan.from_height != first_height || scan.to_height != target_height {
-        return Err(api_error(
-            "network_unavailable",
-            "Remote Bitcoin Core did not complete the requested wallet scan range.",
-        ));
+    let mut relevant = HashSet::new();
+    for (range_start, range_end) in core_server_scan_ranges(first_height, target_height) {
+        ensure_foreground_sync_not_cancelled(cancel)?;
+        // A lost response may leave Core's global scan running. Do not retry
+        // `start` automatically and accidentally collide with that in-flight scan.
+        // Bounded ranges keep each request below remote gateway timeouts and
+        // provide authoritative progress for long birthday/genesis scans.
+        let scan = scan_client
+            .call::<CoreScanBlocksResult>(
+                "scanblocks",
+                &[
+                    serde_json::json!("start"),
+                    serde_json::json!(scan_objects),
+                    serde_json::json!(range_start),
+                    serde_json::json!(range_end),
+                    serde_json::json!("basic"),
+                ],
+            )
+            .map_err(rpc_api_error)?;
+        ensure_foreground_sync_not_cancelled(cancel)?;
+        if !scan.completed || scan.from_height != range_start || scan.to_height != range_end {
+            return Err(api_error(
+                "network_unavailable",
+                "Remote Bitcoin Core did not complete the requested wallet scan range.",
+            ));
+        }
+        relevant.extend(scan.relevant_blocks);
+        on_progress(range_end)?;
     }
-
-    let relevant = scan.relevant_blocks.into_iter().collect::<HashSet<_>>();
     if relevant.len() > usize::try_from(target_height.saturating_sub(start_height)).unwrap_or(0) {
         return Err(internal(
             "Bitcoin Core returned too many relevant blocks for the scan range.",
@@ -3128,7 +3135,6 @@ fn core_server_scan_block_plan(
             "Bitcoin Core returned a conflicting target block for the scan range.",
         ));
     }
-    update_core_sync_status(status, start_height, target_height, target_height);
     ensure_foreground_sync_not_cancelled(cancel)?;
     let active_start = retry_transient_core_rpc(
         || client.get_block_hash(u64::from(start_height)),
@@ -3147,6 +3153,22 @@ fn core_server_scan_block_plan(
         checkpoint,
         matched_blocks: relevant_blocks,
     })
+}
+
+fn core_server_scan_ranges(first_height: u32, target_height: u32) -> Vec<(u32, u32)> {
+    let mut ranges = Vec::new();
+    let mut range_start = first_height;
+    while range_start <= target_height {
+        let range_end = range_start
+            .saturating_add(CORE_SERVER_SCAN_RANGE_SIZE.saturating_sub(1))
+            .min(target_height);
+        ranges.push((range_start, range_end));
+        if range_end == u32::MAX {
+            break;
+        }
+        range_start = range_end + 1;
+    }
+    ranges
 }
 
 fn sync_remote_core_mempool(
@@ -6015,7 +6037,15 @@ fn sync_wallet_with_core(
             &wallet_tip,
             target_height,
             cancel,
-            &state.sync_status,
+            |current_height| {
+                update_core_sync_status(
+                    &state.sync_status,
+                    start_height,
+                    current_height,
+                    target_height,
+                );
+                Ok(())
+            },
         )?)
     } else {
         try_core_filter_block_plan(
@@ -6336,7 +6366,6 @@ fn full_rescan_loaded_wallet(
         .map_err(internal)?;
 
     if let Some(scan_rpc) = remote_scan_rpc {
-        let status = Arc::new(Mutex::new(None));
         let plan = core_server_scan_block_plan(
             rpc.as_ref(),
             scan_rpc,
@@ -6344,7 +6373,16 @@ fn full_rescan_loaded_wallet(
             &checkpoint,
             target_height,
             Some(cancel),
-            &status,
+            |current_height| {
+                update_recovery_scan_progress(
+                    db,
+                    run_id,
+                    current_height,
+                    current_height
+                        .saturating_sub(settings.birthday_height)
+                        .saturating_add(1),
+                )
+            },
         )
         .map_err(recovery_scan_error)?;
         let mut matched_blocks = Vec::with_capacity(plan.matched_blocks.len());

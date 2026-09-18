@@ -435,6 +435,12 @@ progress presentation before an authoritative retry. Descriptor derivation,
 address discovery, BIP158 matching, transaction interpretation, PSBTs, signing,
 wallet formats, and interoperability claims are unchanged.
 
+The remote full-history range-bounding and progress correction has no BIP support
+impact. It submits the same bounded public scripts to Core's indexed BIP158
+`scanblocks` operation over sequential height ranges, unions the same relevant
+block hashes, and preserves the same descriptor derivation, matching, transaction
+interpretation, PSBT, signing, wallet-format, and interoperability behavior.
+
 Every feature, interoperability, signer, descriptor, transaction, payment request,
 backup/recovery, sync/backend, network, or dependency change must assess BIP impact.
 If it adds, removes, expands, narrows, or changes evidence for a BIP:

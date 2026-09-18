@@ -359,7 +359,6 @@ fn remote_core_scan_sends_only_bounded_raw_scripts_and_keeps_matching_blocks() {
         scan_params: Arc::clone(&scan_params),
     };
     let rpc = Client::from_jsonrpc(jsonrpc::client::Client::with_transport(fixture));
-    let status = Arc::new(Mutex::new(None));
     let plan = core_server_scan_block_plan(
         &rpc,
         &rpc,
@@ -367,7 +366,7 @@ fn remote_core_scan_sends_only_bounded_raw_scripts_and_keeps_matching_blocks() {
         &wallet.latest_checkpoint(),
         1,
         None,
-        &status,
+        |_| Ok(()),
     )
     .unwrap();
 
@@ -390,6 +389,19 @@ fn remote_core_scan_sends_only_bounded_raw_scripts_and_keeps_matching_blocks() {
         batch_methods.lock().unwrap().as_slice(),
         ["getblock"],
         "the indexed remote path must not walk every height with batched getblockhash calls"
+    );
+}
+
+#[test]
+fn remote_core_scans_large_ranges_in_gateway_safe_progress_chunks() {
+    let ranges = core_server_scan_ranges(1, 967_562);
+    assert_eq!(ranges.len(), 10);
+    assert_eq!(ranges[0], (1, 100_000));
+    assert_eq!(ranges[8], (800_001, 900_000));
+    assert_eq!(ranges[9], (900_001, 967_562));
+    assert_eq!(
+        core_server_scan_ranges(967_500, 967_562),
+        vec![(967_500, 967_562)]
     );
 }
 

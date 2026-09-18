@@ -902,9 +902,15 @@ new anchor before applying the indexed result. It also supersedes partial-run
 resume behavior: cancelled, failed, and process-interrupted scan rows are
 discarded, retries begin at zero from the saved birthday, and the Settings modal
 never displays a stale prior range. The gap-limit tooltip is contained within
-the rescan dialog. The remote transport remains one bounded `scanblocks` range,
-matching-block downloads only, and one bounded descriptor-activity mempool pass;
-no per-height HTTPS walk was reintroduced. No wallet, registry, descriptor,
+the rescan dialog. Follow-up owner evidence on `ae696ea` showed that the previous
+completed row could still win the first UI poll, and that a single genesis-to-tip
+`scanblocks` request failed after 18 seconds while the same node remained healthy.
+The correction initializes the new zero-progress range before polling, ignores
+terminal rows while that foreground command starts, and divides long indexed
+scans into sequential ranges of at most 100,000 blocks with persisted progress
+after each range. The remote transport still downloads matching blocks only and
+performs one bounded descriptor-activity mempool pass; no per-height HTTPS walk
+was reintroduced. No wallet, registry, descriptor,
 proposal, backup, node-setting, dependency, DTO, or schema format changes; no
 migration is required. Exact replacement-package repeat-scan timing and
 Mainnet hardware certification remain owner acceptance gates.
