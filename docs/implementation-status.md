@@ -928,3 +928,14 @@ wallet-independent live check completed the selected-tip 64-block range in
 indexed Core path. No wallet, registry, descriptor, proposal, backup,
 node-setting, dependency, DTO, or schema format changes; no migration is
 required. Exact replacement-package wallet-script timing remains an owner gate.
+
+The exact `78d3b4d` owner retest confirmed the saved multisig node credentials
+and indexed sync remained usable, but exposed an unlock/navigation race in the
+Overview presentation: a missed one-shot unlock hint could leave native Mainnet
+admission unrestored for the first persisted snapshot read, even while the
+route-independent synchronizer subsequently restored the session and completed.
+Overview now treats that specific `node_admission_required` result as a
+recoverable session transition, verifies the already-configured node once, and
+retries the cached snapshot instead of telling the user to reconnect Bitcoin
+Core. This changes no wallet, registry, credential, node-setting, DTO, or schema
+format; no migration is required.

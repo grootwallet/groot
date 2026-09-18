@@ -38,6 +38,7 @@
     type PaymentProposal,
     type RecoveryScanSettings,
     type RecoveryScanStatus,
+    type WalletOverview,
     type WalletProfile,
     type WalletSnapshot,
     type WalletSyncSource,
@@ -359,6 +360,7 @@
   async function loadSnapshot() {
     const generation = ++loadGeneration;
     let unlockSyncRequested = false;
+    let admissionRestored = false;
     loadError = '';
     loadErrorCode = '';
     networkSetupRequired = false;
@@ -402,7 +404,25 @@
       if (generation !== loadGeneration) return;
       if (!selectedProfile)
         throw new WalletError('wallet_not_found', 'The selected wallet does not exist.');
-      const nextSnapshot = await walletService.overview(selectedProfile.id);
+      let nextSnapshot: WalletOverview;
+      try {
+        nextSnapshot = await walletService.overview(selectedProfile.id);
+      } catch (cause) {
+        // The shell's unlock-sync handoff is deliberately ephemeral. If route
+        // timing consumes or misses that hint, recover the native Mainnet
+        // admission once instead of presenting a configured wallet as though
+        // it had no Bitcoin Core connection.
+        if (!(
+          isMainnet &&
+          nodeReady &&
+          cause instanceof WalletError &&
+          cause.code === 'node_admission_required'
+        ))
+          throw cause;
+        await walletService.testNodeConnection();
+        admissionRestored = true;
+        nextSnapshot = await walletService.overview(selectedProfile.id);
+      }
       if (generation !== loadGeneration) return;
       snapshot = nextSnapshot;
       initialDataLoading = false;
@@ -410,7 +430,7 @@
       if (syncSource.type === 'bitcoin_core' && !snapshot?.syncedAt) {
         await loadRecoveryState();
       }
-      if (unlockSyncRequested && !inheritedSyncObserved) void sync(false);
+      if ((unlockSyncRequested || admissionRestored) && !inheritedSyncObserved) void sync(false);
     } catch (cause) {
       if (generation !== loadGeneration) return;
       if (unlockSyncRequested && selectedProfile) walletShell.requestUnlockSync(selectedProfile.id);

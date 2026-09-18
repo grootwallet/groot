@@ -198,6 +198,12 @@ describe('foreground wallet navigation', () => {
     expect(overview.indexOf('if (isMainnet && nodeReady && unlockSyncRequested)')).toBeLessThan(
       overview.indexOf('walletService.overview(selectedProfile.id)')
     );
+    expect(overview).toContain("cause.code === 'node_admission_required'");
+    expect(overview).toContain('admissionRestored = true');
+    expect(overview).toMatch(
+      /cause\.code === 'node_admission_required'[\s\S]*walletService\.testNodeConnection\(\)[\s\S]*walletService\.overview\(selectedProfile\.id\)/
+    );
+    expect(overview).toContain('(unlockSyncRequested || admissionRestored)');
   });
 
   it('shows a saved-node outage instead of claiming a gated wallet never synced', () => {
