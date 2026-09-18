@@ -8,6 +8,8 @@ export type LiveSyncController = {
   runNow(): Promise<void>;
 };
 
+export const LIVE_SYNC_INTERVAL_MS = 35_000;
+
 type LiveSyncPort = Pick<WalletSnapshotPort, 'sync' | 'cancelSync' | 'syncMultisig'> & {
   syncStatus?: () => Promise<WalletSyncStatus | null>;
 };
@@ -28,7 +30,7 @@ export function isWalletSyncActive(status: WalletSyncStatus | null): boolean {
 export function createLiveSync(
   wallet: LiveSyncPort,
   selectedWalletKind: () => WalletProfile['kind'] | null,
-  intervalMs = 10_000,
+  intervalMs = LIVE_SYNC_INTERVAL_MS,
   onError: (cause: unknown) => void = () => undefined
 ): LiveSyncController {
   let enabled = false;

@@ -1,7 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createLiveSync } from './live-sync';
+import { createLiveSync, LIVE_SYNC_INTERVAL_MS } from './live-sync';
 
 describe('live wallet sync', () => {
+  it('uses a 35-second steady-state refresh cadence', () => {
+    expect(LIVE_SYNC_INTERVAL_MS).toBe(35_000);
+    expect(LIVE_SYNC_INTERVAL_MS).toBeGreaterThanOrEqual(30_000);
+    expect(LIVE_SYNC_INTERVAL_MS).toBeLessThanOrEqual(40_000);
+  });
+
   it('ignores an old wallet failure after selection restarts the scheduler', async () => {
     vi.useFakeTimers();
     let reject!: (cause: unknown) => void;

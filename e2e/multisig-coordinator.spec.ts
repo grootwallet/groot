@@ -38,6 +38,15 @@ test('routes receive address creation through the selected wallet kind', async (
   await expect(page).toHaveURL(/\/receive$/);
   await expect(page.getByRole('heading', { name: 'Receive bitcoin' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'New receive address' })).toBeVisible();
+  const refresh = page.getByRole('button', { name: 'Refresh payments' });
+  await expect(refresh).toBeVisible();
+  await refresh.click();
+  await expect(page.getByRole('button', { name: 'Refreshing payments…' })).toBeDisabled();
+  await expect(page.getByText('Incoming payments and receive addresses refreshed.')).toBeVisible();
+  await expect(page).toHaveURL(/\/receive$/);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true
+  );
 });
 
 test('disabled loading buttons keep visibly rotating until the operation ends', async ({

@@ -108,7 +108,7 @@ wallet creation, native recovery, automatic and manual sync, labeled address
 generation, receive detection, first confirmation, external send, self-spend,
 accounting, and restart-visible state. This reduces duplicate exploratory work
 but does not transfer to the corrected or signed candidate. The corrected
-onboarding, word-selection, automatic first-scan, five-second background sync,
+onboarding, word-selection, automatic first-scan, 35-second background sync,
 fee acceleration, remote HTTPS Core after IBD, and full signed lifecycle still
 require exact-candidate acceptance.
 

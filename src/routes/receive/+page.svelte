@@ -136,6 +136,7 @@
     if (syncing || busy) return;
     syncing = true;
     try {
+      await walletShell.pauseAutomaticSync();
       const [snapshot] = await Promise.all([
         walletService.sync(),
         new Promise((resolve) => setTimeout(resolve, 1_200))
@@ -160,6 +161,7 @@
       });
     } finally {
       syncing = false;
+      walletShell.resumeAutomaticSync();
     }
   }
   function applyAddresses(nextAddresses: ReceiveAddress[]) {

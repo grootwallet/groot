@@ -859,3 +859,17 @@ gateway bound. No wallet, profile, proposal, registry, backup, descriptor,
 node-settings, or diagnostic format changes; no migration is required. The live
 gateway deployment passed the bounded probe recorded above; exact-package
 Mainnet Family Test timing evidence remains required.
+
+The exact `8d67d48` multi-network package then passed the owner's Mainnet Family
+Test unlock and automatic Overview sync against that deployed path. The
+follow-up removes the redundant connection test from ordinary Overview remounts:
+Mainnet admission remains mandatory once after unlock, while returning during
+the same admitted session reads the persisted snapshot without starting network
+work. The app-shell cadence is now 35 seconds. Its reference-counted manual-sync
+pause survives read-only route navigation, and both single-key and multisig
+Receive expose the existing coordinated refresh action. No wallet, profile,
+proposal, registry, backup, descriptor, node-settings, DTO, stable-error, or
+dependency format changes; no migration is required. The reviewed mainnet
+source-policy snapshot now pins the shell, scheduler, Overview, and both Receive
+routes at these exact bytes. Exact replacement-package navigation and cadence
+evidence remains required.

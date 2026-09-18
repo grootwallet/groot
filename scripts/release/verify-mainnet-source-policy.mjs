@@ -127,7 +127,11 @@ const pinnedPolicySources = new Map([
   ],
   [
     'src/lib/components/AppShell.svelte',
-    '372801537d0bb1ab08e8cd54908580ae37c1286012fce9d9d2eb6fb63b72caca'
+    '909d13215002c713a87c5809a6bf9aec2d26ceafaa69401125684c3173671ba3'
+  ],
+  [
+    'src/lib/wallet/live-sync.ts',
+    'a3ee73c1831654eeb59cde0e6c659a9ebe5038710ff0791a043c90a727b07126'
   ],
   ['src/lib/wallet/tauri.ts', 'be2ed274f59464fa0c6f16659765118af29860eeabc793643212a322d0853375'],
   [
@@ -154,10 +158,18 @@ const pinnedPolicySources = new Map([
     'src/routes/unlock/+page.svelte',
     '32953a75c52de1df3c557ab6b6edb3a7aef88676e93fad5aa82204c742ca7b3b'
   ],
-  ['src/routes/+page.svelte', '4e7328a071e60004593ebfe0904f0bddd1ae820b1365fb88fac08f75be8a8a75'],
+  ['src/routes/+page.svelte', 'adbc3cdfcfcd32992ce0c8334e4cf0208d8d512077b39efaf09b96f6e95a09d9'],
   [
     'src/routes/activity/+page.svelte',
     '5f477d69ac0cf902845def91d3b32d9838dddf9b0aff5e11231d2c1839b9deae'
+  ],
+  [
+    'src/routes/receive/+page.svelte',
+    '8ad587785e285afb6c7244475b8195a900509be0c6755c236606b60530fc906a'
+  ],
+  [
+    'src/routes/multisig/receive/+page.svelte',
+    'b47078ad29cb0bbecf2701d5ab11ebec8832c20a67d1952bef99123ecd700ccc'
   ],
   [
     'src/routes/settings/+page.svelte',

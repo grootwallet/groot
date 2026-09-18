@@ -17,6 +17,11 @@ const activity = readFileSync(
   'utf8'
 );
 const coins = readFileSync(new URL('../../routes/coins/+page.svelte', import.meta.url), 'utf8');
+const receive = readFileSync(new URL('../../routes/receive/+page.svelte', import.meta.url), 'utf8');
+const multisigReceive = readFileSync(
+  new URL('../../routes/multisig/receive/+page.svelte', import.meta.url),
+  'utf8'
+);
 
 describe('foreground wallet navigation', () => {
   it('focuses the selected wallet credential after the locked route finishes loading', () => {
@@ -25,20 +30,18 @@ describe('foreground wallet navigation', () => {
     expect(unlock.indexOf('await tick()')).toBeLessThan(unlock.indexOf('.focus()'));
   });
 
-  it('keeps automatic sync active across receive, send, and settings routes', () => {
-    for (const route of ['/receive', '/send', '/multisig/receive', '/multisig/send']) {
-      expect(appShell).toContain(`'${route}'`);
-    }
-    expect(appShell).not.toContain(
-      'if (to && foregroundWalletRoutes.has(to.url.pathname)) liveSync?.stop();'
-    );
+  it('uses the shell cadence across routine routes and honors explicit pause ownership', () => {
+    expect(appShell).not.toContain('foregroundWalletRoutes');
     const paused = appShell.slice(
       appShell.indexOf('let syncPausedRoute'),
       appShell.indexOf('const showQuickActions')
     );
-    expect(paused).not.toContain('foregroundWalletRoutes');
     expect(paused).not.toContain("'/settings'");
-    expect(appShell).toContain('5_000');
+    expect(appShell).not.toContain('5_000');
+    expect(appShell).toContain('LIVE_SYNC_INTERVAL_MS');
+    expect(appShell).toContain('automaticSyncPauseCount === 0');
+    expect(appShell).toContain('liveSync = createLiveSync(');
+    expect(appShell).toContain('() => selectedProfile?.kind ?? null');
   });
 
   it('keeps scans alive across read-only routes and cancels before exclusive routes or lock', () => {
@@ -116,6 +119,35 @@ describe('foreground wallet navigation', () => {
     expect(overview).toContain('syncFailureDescription(syncStatus)');
   });
 
+  it('keeps a manual refresh alive across Activity navigation', () => {
+    const navigationStart = appShell.indexOf('beforeNavigate(({ to }) =>');
+    const navigationEnd = appShell.indexOf('afterNavigate(({ from }) =>', navigationStart);
+    const navigation = appShell.slice(navigationStart, navigationEnd);
+    expect(navigation).not.toContain("'/activity'");
+    expect(navigation).toContain('routeCancelsSync(to.url.pathname)');
+
+    const afterNavigation = appShell.slice(
+      appShell.indexOf('afterNavigate(({ from }) =>'),
+      appShell.indexOf('async function selectWallet')
+    );
+    expect(afterNavigation).toContain('automaticSyncPauseCount === 0');
+    expect(overview).toContain('await walletShell.pauseAutomaticSync()');
+    expect(overview).toContain('walletShell.resumeAutomaticSync()');
+    expect(activity).toContain('void observeActiveSync()');
+  });
+
+  it('offers the same coordinated manual refresh on both Receive routes', () => {
+    for (const [source, command] of [
+      [receive, 'walletService.sync()'],
+      [multisigReceive, 'walletService.syncMultisig()']
+    ]) {
+      expect(source).toContain("'Refresh payments'");
+      expect(source).toContain('await walletShell.pauseAutomaticSync()');
+      expect(source).toContain(command);
+      expect(source).toContain('walletShell.resumeAutomaticSync()');
+    }
+  });
+
   it('gives coin freezing exclusive ownership before applying its local state', () => {
     const start = coins.indexOf('async function confirmFrozenState()');
     const end = coins.indexOf('function beginObservedReceiveClaim', start);
@@ -154,19 +186,18 @@ describe('foreground wallet navigation', () => {
     expect(overview).toContain("const isMainnet = defaultConfig.network === 'mainnet'");
     expect(overview).toContain('walletService.networkSetupSources()');
     expect(overview).not.toContain('isMainnet ? Promise.resolve([])');
-    expect(overview).toContain(
-      'if (isMainnet && nodeReady) await walletService.testNodeConnection()'
-    );
+    expect(overview).toContain('if (isMainnet && nodeReady && unlockSyncRequested)');
+    expect(overview).toContain('await walletService.testNodeConnection()');
     expect(overview.indexOf("multisig = selectedProfile?.kind === 'multisig'")).toBeLessThan(
-      overview.indexOf('if (isMainnet && nodeReady) await walletService.testNodeConnection()')
+      overview.indexOf('if (isMainnet && nodeReady && unlockSyncRequested)')
     );
     expect(overview).toContain("await goto('/settings?networkSetup=1')");
-    expect(
-      overview.indexOf('if (isMainnet && nodeReady) await walletService.testNodeConnection()')
-    ).toBeLessThan(overview.indexOf('walletService.paymentDraft()'));
-    expect(
-      overview.indexOf('if (isMainnet && nodeReady) await walletService.testNodeConnection()')
-    ).toBeLessThan(overview.indexOf('walletService.overview(selectedProfile.id)'));
+    expect(overview.indexOf('if (isMainnet && nodeReady && unlockSyncRequested)')).toBeLessThan(
+      overview.indexOf('walletService.paymentDraft()')
+    );
+    expect(overview.indexOf('if (isMainnet && nodeReady && unlockSyncRequested)')).toBeLessThan(
+      overview.indexOf('walletService.overview(selectedProfile.id)')
+    );
   });
 
   it('shows a saved-node outage instead of claiming a gated wallet never synced', () => {

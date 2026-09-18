@@ -358,6 +358,7 @@
   });
   async function loadSnapshot() {
     const generation = ++loadGeneration;
+    let unlockSyncRequested = false;
     loadError = '';
     loadErrorCode = '';
     networkSetupRequired = false;
@@ -386,13 +387,18 @@
       // a retry after an offline preflight uses the single-key command for a
       // selected multisig wallet and returns `wrong_wallet_kind`.
       multisig = selectedProfile?.kind === 'multisig';
+      unlockSyncRequested = Boolean(
+        selectedProfile && walletShell.consumeUnlockSync(selectedProfile.id)
+      );
       nodeReady = Boolean(
         selectedProfile &&
         networkSetupSources.some(
           (source) => source.walletId === selectedProfile?.id && source.ready
         )
       );
-      if (isMainnet && nodeReady) await walletService.testNodeConnection();
+      // Mainnet admission is required once after unlock, not whenever the user
+      // returns to Overview. The admitted wallet session remains authoritative.
+      if (isMainnet && nodeReady && unlockSyncRequested) await walletService.testNodeConnection();
       if (generation !== loadGeneration) return;
       if (!selectedProfile)
         throw new WalletError('wallet_not_found', 'The selected wallet does not exist.');
@@ -404,14 +410,10 @@
       if (syncSource.type === 'bitcoin_core' && !snapshot?.syncedAt) {
         await loadRecoveryState();
       }
-      if (
-        selectedProfile &&
-        walletShell.consumeUnlockSync(selectedProfile.id) &&
-        !inheritedSyncObserved
-      )
-        void sync(false);
+      if (unlockSyncRequested && !inheritedSyncObserved) void sync(false);
     } catch (cause) {
       if (generation !== loadGeneration) return;
+      if (unlockSyncRequested && selectedProfile) walletShell.requestUnlockSync(selectedProfile.id);
       if (cause instanceof WalletError && cause.code === 'wallet_locked') {
         await goto('/unlock');
         return;

@@ -19,7 +19,7 @@ Satchel can hold several UUID-isolated wallets. Revoking the current unlock sess
 
 Users can move between recently used wallets without repeated PIN or passphrase prompts, while every authorization remains bound to a single immutable wallet identity. An unattended selected wallet still reaches the lock screen even though foreground polling continues. More than one wallet's protected RPC password may exist in zeroizing process memory during the bounded session window; this is an explicit usability tradeoff and never crosses the Rust/webview boundary.
 
-The timeout is enforced at the native boundary: the next trusted command removes every expired entry, and an expired selected wallet fails with `wallet_locked`. The selected wallet's ten-second scheduler supplies the normal cleanup heartbeat and prompt UI transition without adding a second timer authority. Process suspension can delay wall-clock presentation, but the first command after resume prunes the sessions before authorizing any operation.
+The timeout is enforced at the native boundary: the next trusted command removes every expired entry, and an expired selected wallet fails with `wallet_locked`. The selected wallet's 35-second scheduler supplies the normal cleanup heartbeat and prompt UI transition without adding a second timer authority. Process suspension can delay wall-clock presentation, but the first command after resume prunes the sessions before authorizing any operation.
 
 ## Clarification: global duration, independent clocks
 

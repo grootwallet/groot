@@ -253,6 +253,12 @@ The internal mainnet RC Receive refresh follow-up has no BIP impact. It exposes 
 explicit UI trigger for the existing authoritative sync operation without changing
 address derivation, mempool interpretation, descriptors, or interoperability.
 
+The multi-network sync-lifecycle follow-up has no BIP impact. It changes the
+automatic refresh cadence to 35 seconds, avoids repeating Mainnet admission when
+Overview remounts, preserves a manual sync across read-only navigation, and exposes
+the existing manual refresh on multisig Receive. Descriptor discovery, transaction
+interpretation, address derivation, and interoperability evidence are unchanged.
+
 The internal mainnet RC sync-coordination, recovery-status scheduling, and Mainnet
 explorer follow-up has no BIP impact. It serializes existing sync triggers, moves an
 existing read off the native UI thread, and permits an explicit txid-only explorer

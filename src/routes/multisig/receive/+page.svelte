@@ -8,6 +8,7 @@
     Copy,
     Plus,
     QrCode,
+    RefreshCw,
     Shield,
     ShieldCheck,
     Trash2
@@ -51,6 +52,7 @@
   let submissionLabels = $derived(permanentLabelsForSubmission(selectedLabels, label));
   let qrDataUrl = $state('');
   let busy = $state(false);
+  let syncing = $state(false);
   let ready = $state(false);
   let loadError = $state('');
   let generateError = $state('');
@@ -145,6 +147,38 @@
         if (current?.address === address) qrDataUrl = value;
       });
   });
+  async function syncNow() {
+    if (syncing || busy || !ready) return;
+    syncing = true;
+    try {
+      await walletShell.pauseAutomaticSync();
+      const [snapshot] = await Promise.all([
+        walletService.syncMultisig(),
+        new Promise((resolve) => setTimeout(resolve, 1_200))
+      ]);
+      applyAddresses(snapshot.receiveAddresses);
+      labelSuggestions = snapshot.labelSuggestions;
+      toast({
+        title: 'Wallet is up to date',
+        description: 'Incoming payments and receive addresses refreshed.',
+        tone: 'success'
+      });
+    } catch (cause) {
+      if (cause instanceof WalletError && cause.code === 'sync_cancelled') return;
+      if (cause instanceof WalletError && cause.code === 'wallet_locked') {
+        await goto('/unlock?next=/multisig/receive');
+        return;
+      }
+      toast({
+        title: 'Sync failed',
+        description: localizedError(cause, $locale),
+        tone: 'danger'
+      });
+    } finally {
+      syncing = false;
+      walletShell.resumeAutomaticSync();
+    }
+  }
   async function generate() {
     if (busy || !ready || !submissionLabels.length) return;
     busy = true;
@@ -233,7 +267,15 @@
       <h1>{translate($locale, 'Receive bitcoin')}</h1>
       <p class="subtitle">{translate($locale, 'Create a labeled address for one payment.')}</p>
     </div>
-    <Button variant="secondary" href="/">{translate($locale, 'Back to overview')}</Button>
+    <div class="page-header-actions">
+      <button class="sync-button" disabled={syncing || busy || !ready} onclick={syncNow}
+        ><RefreshCw size={15} class={syncing ? 'spin' : ''} />{translate(
+          $locale,
+          syncing ? 'Refreshing payments…' : 'Refresh payments'
+        )}</button
+      >
+      <Button variant="secondary" href="/">{translate($locale, 'Back to overview')}</Button>
+    </div>
   </header>
   {#if loadError}<section class="empty-state" role="alert">
       <h2>{translate($locale, 'Could not load wallet')}</h2>

@@ -30,7 +30,11 @@
   import { onMount } from 'svelte';
   import { afterNavigate, beforeNavigate, goto } from '$app/navigation';
   import { isPrototypeWallet, walletService, WalletError } from '$lib/wallet';
-  import { createLiveSync, type LiveSyncController } from '$lib/wallet/live-sync';
+  import {
+    createLiveSync,
+    LIVE_SYNC_INTERVAL_MS,
+    type LiveSyncController
+  } from '$lib/wallet/live-sync';
   import { createSessionMonitor, type SessionMonitorController } from '$lib/wallet/session-monitor';
   import { toast } from '$lib/stores/toasts';
   import { denomination, initDenomination } from '$lib/denomination';
@@ -60,12 +64,6 @@
     '/multisig/new',
     '/multisig/recover'
   ]);
-  const foregroundWalletRoutes = new Set([
-    '/receive',
-    '/send',
-    '/multisig/receive',
-    '/multisig/send'
-  ]);
   const routeCancelsSync = (pathname: string) =>
     walletSetupRoutes.has(pathname) || pathname === '/unlock' || pathname === '/diagnostics';
   const active = (href: string) =>
@@ -86,6 +84,8 @@
   let setupDraftReadGeneration = 0;
   let profileReadGeneration = 0;
   let liveSync: LiveSyncController | undefined;
+  let automaticSyncPauseCount = 0;
+  let automaticSyncPauseTask: Promise<void> | undefined;
   let sessionMonitor: SessionMonitorController | undefined;
   let activeHardwareReviews = 0;
   let startupState = $state<'checking' | 'ready' | 'failed'>('checking');
@@ -304,7 +304,7 @@
     }
     if (!liveSync || isPrototypeWallet) return;
     if (syncPausedRoute) liveSync.stop();
-    else liveSync.start();
+    else if (automaticSyncPauseCount === 0) liveSync.start();
   });
 
   async function selectWallet(walletId: string) {
@@ -334,7 +334,7 @@
       selectedWalletId = selection.profile.id;
       selectedWalletUnlocked = selection.unlocked;
       await goto(selection.unlocked ? '/' : '/unlock');
-      if (!isPrototypeWallet && selection.unlocked) {
+      if (!isPrototypeWallet && selection.unlocked && automaticSyncPauseCount === 0) {
         liveSync?.restart();
       } else {
         liveSync?.stop();
@@ -366,10 +366,22 @@
     return true;
   }
   async function pauseAutomaticSync() {
-    await liveSync?.stopAndWait();
+    automaticSyncPauseCount += 1;
+    if (!automaticSyncPauseTask) {
+      const task = liveSync?.stopAndWait() ?? Promise.resolve();
+      automaticSyncPauseTask = task;
+      try {
+        await task;
+      } finally {
+        if (automaticSyncPauseTask === task) automaticSyncPauseTask = undefined;
+      }
+      return;
+    }
+    await automaticSyncPauseTask;
   }
   function resumeAutomaticSync() {
-    if (!isPrototypeWallet && !syncPausedRoute) liveSync?.start();
+    automaticSyncPauseCount = Math.max(0, automaticSyncPauseCount - 1);
+    if (automaticSyncPauseCount === 0 && !isPrototypeWallet && !syncPausedRoute) liveSync?.start();
   }
   provideWalletShellContext({
     profiles: () => profiles,
@@ -430,7 +442,8 @@
       }
       await holdStartupGate();
       startupState = 'ready';
-      if (!syncPausedRoute && !isPrototypeWallet) liveSync?.start();
+      if (!syncPausedRoute && !isPrototypeWallet && automaticSyncPauseCount === 0)
+        liveSync?.start();
     } catch {
       if (!startupFailure)
         startupFailure = translate($locale, 'Groot could not verify the wallet lock state.');
@@ -463,7 +476,7 @@
     liveSync = createLiveSync(
       walletService,
       () => selectedProfile?.kind ?? null,
-      5_000,
+      LIVE_SYNC_INTERVAL_MS,
       (cause) => {
         if (cause instanceof WalletError && cause.code === 'wallet_locked') {
           liveSync?.stop();
